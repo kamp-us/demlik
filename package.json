@@ -1,0 +1,17 @@
+{
+  "name": "@b8e/tea",
+  "version": "0.0.0",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-result": "^2.5.2"
+  },
+  "devDependencies": {
+    "@binclusive/tsconfig": "workspace:^",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
