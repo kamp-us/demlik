@@ -1,17 +1,184 @@
 {
-  "name": "@b8e/tea",
-  "version": "0.0.0",
-  "main": "./src/index.ts",
+  "name": "@demlik/tea",
+  "version": "0.1.0",
+  "description": "TEA-faithful state machine substrate — one package, every host adapter. Core + subs + testing, plus React, Durable Object, Chrome extension, Node, in-memory, work-queue, devtools, and property-testing modules as subpaths.",
+  "keywords": [
+    "tea",
+    "elm-architecture",
+    "state-machine",
+    "reducer",
+    "cloudflare",
+    "durable-objects",
+    "react",
+    "effects-as-data"
+  ],
+  "homepage": "https://demlik.run",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cansirin/monorepo.git",
+    "directory": "packages/tea"
+  },
+  "license": "MIT",
+  "author": "Can Sirin",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./subs": {
+      "types": "./dist/subs/index.d.ts",
+      "import": "./dist/subs/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./do": {
+      "types": "./dist/do/index.d.ts",
+      "import": "./dist/do/index.js"
+    },
+    "./mem": {
+      "types": "./dist/mem/index.d.ts",
+      "import": "./dist/mem/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./devtools": {
+      "types": "./dist/devtools/index.d.ts",
+      "import": "./dist/devtools/index.js"
+    },
+    "./devtools/styles.css": "./dist/devtools/styles.css",
+    "./extension": {
+      "types": "./dist/extension/index.d.ts",
+      "import": "./dist/extension/index.js"
+    },
+    "./extension/react": {
+      "types": "./dist/extension/react.d.ts",
+      "import": "./dist/extension/react.js"
+    },
+    "./extension/subs": {
+      "types": "./dist/extension/subs/index.d.ts",
+      "import": "./dist/extension/subs/index.js"
+    },
+    "./extension/test-utils": {
+      "types": "./dist/extension/test-utils.d.ts",
+      "import": "./dist/extension/test-utils.js"
+    },
+    "./work-queue": {
+      "types": "./dist/work-queue/index.d.ts",
+      "import": "./dist/work-queue/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
+    },
+    "./pbt": {
+      "types": "./dist/pbt/index.d.ts",
+      "import": "./dist/pbt/index.js"
+    },
+    "./pbt/arbitraries": {
+      "types": "./dist/pbt/arbitraries/index.d.ts",
+      "import": "./dist/pbt/arbitraries/index.js"
+    },
+    "./pbt/runners": {
+      "types": "./dist/pbt/runners/index.d.ts",
+      "import": "./dist/pbt/runners/index.js"
+    },
+    "./retry-backoff": {
+      "types": "./dist/retry-backoff/index.d.ts",
+      "import": "./dist/retry-backoff/index.js"
+    },
+    "./rate-limit": {
+      "types": "./dist/rate-limit/index.d.ts",
+      "import": "./dist/rate-limit/index.js"
+    },
+    "./idempotency": {
+      "types": "./dist/idempotency/index.d.ts",
+      "import": "./dist/idempotency/index.js"
+    },
+    "./circuit-breaker": {
+      "types": "./dist/circuit-breaker/index.d.ts",
+      "import": "./dist/circuit-breaker/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "import": "./dist/cache/index.js"
+    },
+    "./deadline": {
+      "types": "./dist/deadline/index.d.ts",
+      "import": "./dist/deadline/index.js"
+    },
+    "./machine-viz": {
+      "types": "./dist/machine-viz/index.d.ts",
+      "import": "./dist/machine-viz/index.js"
+    },
+    "./debounce": {
+      "types": "./dist/debounce/index.d.ts",
+      "import": "./dist/debounce/index.js"
+    },
+    "./throttle": {
+      "types": "./dist/throttle/index.d.ts",
+      "import": "./dist/throttle/index.js"
+    },
+    "./recorder": {
+      "types": "./dist/recorder/index.d.ts",
+      "import": "./dist/recorder/index.js"
+    },
+    "./trace-replay": {
+      "types": "./dist/trace-replay/index.d.ts",
+      "import": "./dist/trace-replay/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck:examples": "tsc -p examples/tsconfig.json",
+    "prepublishOnly": "tsup"
   },
   "dependencies": {
     "better-result": "^2.5.2"
   },
+  "peerDependencies": {
+    "fast-check": "^3 || ^4",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "vitest": "^2 || ^3",
+    "ws": "^8"
+  },
+  "peerDependenciesMeta": {
+    "fast-check": { "optional": true },
+    "react": { "optional": true },
+    "react-dom": { "optional": true },
+    "vitest": { "optional": true },
+    "ws": { "optional": true }
+  },
   "devDependencies": {
-    "@binclusive/tsconfig": "workspace:^",
+    "@cloudflare/workers-types": "catalog:",
+    "@types/chrome": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/ws": "catalog:",
+    "fast-check": "^3.23.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tsup": "^8.3.5",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "ws": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

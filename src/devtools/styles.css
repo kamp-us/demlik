@@ -1,0 +1,218 @@
+/*
+ * @demlik/tea/devtools — visual defaults. All classes are .tea-dt-* so they
+ * won't collide with host styles. Override anything by re-declaring with
+ * higher specificity, or pass your own className via the `className` prop.
+ *
+ * Colors are wired to the consumer's design tokens (shadcn slots + Radix
+ * accents) so the inspector inherits whatever theme is active. Overrides
+ * can still re-declare the --tea-dt-* vars on .tea-dt-state / .tea-dt-log.
+ *
+ * Token map:
+ *   fg / key       → --foreground         (primary text)
+ *   string         → --teal-11            (accent: distinguishable green)
+ *   number         → --amber-11           (accent: warm)
+ *   bool / null    → --indigo-11          (accent: cool)
+ *   bracket / ts   → --muted-foreground   (de-emphasised)
+ *   border         → --border
+ *   log message    → --foreground
+ *   ok             → --teal-11
+ *   fail           → --crimson-11
+ *   cmd            → --amber-11
+ *   sub            → --indigo-11
+ */
+
+.tea-dt-state {
+  --tea-dt-fg: var(--foreground);
+  --tea-dt-key: var(--foreground);
+  --tea-dt-string: var(--teal-11);
+  --tea-dt-number: var(--amber-11);
+  --tea-dt-bool: var(--indigo-11);
+  --tea-dt-bracket: var(--muted-foreground);
+  --tea-dt-border: var(--border);
+  --tea-dt-flash: color-mix(in oklab, var(--teal-9) 18%, transparent);
+
+  font-family: var(
+    --font-mono,
+    "JetBrains Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 12px;
+  color: var(--tea-dt-fg);
+  border: 1px dashed var(--tea-dt-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  background: transparent;
+}
+.tea-dt-state.tea-dt-flash {
+  animation: tea-dt-flash 0.6s ease-out;
+}
+@keyframes tea-dt-flash {
+  0% {
+    background: var(--tea-dt-flash);
+    border-color: var(--tea-dt-string);
+  }
+  100% {
+    background: transparent;
+    border-color: var(--tea-dt-border);
+  }
+}
+.tea-dt-json .tea-dt-k {
+  color: var(--tea-dt-key);
+}
+.tea-dt-json .tea-dt-s {
+  color: var(--tea-dt-string);
+}
+.tea-dt-json .tea-dt-n {
+  color: var(--tea-dt-number);
+}
+.tea-dt-json .tea-dt-b {
+  color: var(--tea-dt-bool);
+}
+.tea-dt-json .tea-dt-br {
+  color: var(--tea-dt-bracket);
+}
+
+.tea-dt-log {
+  --tea-dt-log-bg: transparent;
+  --tea-dt-log-border: var(--border);
+  --tea-dt-log-ts: var(--muted-foreground);
+  --tea-dt-log-msg: var(--foreground);
+  --tea-dt-color-msg: var(--teal-11);
+  --tea-dt-color-sub: var(--indigo-11);
+  --tea-dt-color-cmd: var(--amber-11);
+  --tea-dt-color-ok: var(--teal-11);
+  --tea-dt-color-fail: var(--crimson-11);
+
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--tea-dt-log-border);
+  border-radius: var(--radius, 0.25rem);
+  background: var(--tea-dt-log-bg);
+  padding: 14px 16px;
+  font-family: var(
+    --font-mono,
+    "JetBrains Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 11.5px;
+  line-height: 1.7;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tea-dt-log-border) transparent;
+}
+.tea-dt-log::-webkit-scrollbar {
+  width: 6px;
+}
+.tea-dt-log::-webkit-scrollbar-thumb {
+  background: var(--tea-dt-log-border);
+}
+.tea-dt-row {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 12px;
+}
+.tea-dt-row .tea-dt-t {
+  color: var(--tea-dt-log-ts);
+}
+.tea-dt-row .tea-dt-m {
+  color: var(--tea-dt-log-msg);
+}
+.tea-dt-row.tea-dt-msg .tea-dt-m::before {
+  content: "↓ ";
+  color: var(--tea-dt-color-msg);
+}
+.tea-dt-row.tea-dt-sub .tea-dt-m::before {
+  content: "≈ ";
+  color: var(--tea-dt-color-sub);
+}
+.tea-dt-row.tea-dt-cmd .tea-dt-m::before {
+  content: "→ ";
+  color: var(--tea-dt-color-cmd);
+}
+.tea-dt-row.tea-dt-ok .tea-dt-m::before {
+  content: "✓ ";
+  color: var(--tea-dt-color-ok);
+}
+.tea-dt-row.tea-dt-fail .tea-dt-m::before {
+  content: "✗ ";
+  color: var(--tea-dt-color-fail);
+}
+
+/*
+ * State diff (<StateDiff>). Same token strategy as .tea-dt-state / .tea-dt-log:
+ * accents come from the consumer's Radix scales, overridable by re-declaring
+ * the --tea-dt-diff-* vars.
+ *   added   → --teal-11    (new cell)
+ *   removed → --crimson-11 (gone cell)
+ *   changed → --amber-11   (drifted leaf)
+ *   path    → --foreground
+ *   old val → --muted-foreground (de-emphasised; the "before")
+ */
+.tea-dt-diff {
+  --tea-dt-diff-added: var(--teal-11);
+  --tea-dt-diff-removed: var(--crimson-11);
+  --tea-dt-diff-changed: var(--amber-11);
+  --tea-dt-diff-path: var(--foreground);
+  --tea-dt-diff-old: var(--muted-foreground);
+  --tea-dt-diff-border: var(--border);
+
+  border: 1px solid var(--tea-dt-diff-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 14px 16px;
+  font-family: var(
+    --font-mono,
+    "JetBrains Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 11.5px;
+  line-height: 1.7;
+  background: transparent;
+}
+.tea-dt-diff-empty {
+  color: var(--tea-dt-diff-old);
+  font-style: italic;
+}
+.tea-dt-diff-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.tea-dt-diff-mark {
+  width: 1ch;
+  flex: none;
+  text-align: center;
+}
+.tea-dt-diff-path {
+  color: var(--tea-dt-diff-path);
+}
+.tea-dt-diff-old {
+  color: var(--tea-dt-diff-old);
+}
+.tea-dt-diff-arrow {
+  color: var(--tea-dt-diff-old);
+}
+.tea-dt-diff-changed .tea-dt-diff-mark,
+.tea-dt-diff-changed .tea-dt-diff-new {
+  color: var(--tea-dt-diff-changed);
+}
+.tea-dt-diff-added .tea-dt-diff-mark,
+.tea-dt-diff-added .tea-dt-diff-new {
+  color: var(--tea-dt-diff-added);
+}
+.tea-dt-diff-removed .tea-dt-diff-mark,
+.tea-dt-diff-removed .tea-dt-diff-old {
+  color: var(--tea-dt-diff-removed);
+}
