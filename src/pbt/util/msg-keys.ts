@@ -32,14 +32,16 @@ import type { Cmd, Reducer, Transitions } from "../../index";
  *   // → ["start_audit", "stop_audit", "window_created", ...]
  */
 export function msgTypeKeys<S, M extends { type: string }, C extends Cmd>(
-  update: Reducer<S, M, C> | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never),
+  update:
+    | Reducer<S, M, C>
+    | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never),
 ): readonly string[] {
   const keys = Object.keys(update as object);
   if (keys.length === 0) return [];
   // Reducer form: every top-level value is a function (the cell).
   // Transitions form: every top-level value is an object (the inner record).
   // `keys[0]` is present — the length guard above rules out the empty record.
-  const firstValue = (update as Record<string, unknown>)[keys[0]!];
+  const firstValue = (update as Record<string, unknown>)[keys[0] ?? ""];
   if (typeof firstValue === "function") {
     return keys;
   }

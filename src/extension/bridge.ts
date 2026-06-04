@@ -146,14 +146,17 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
   // Default to identity passthrough when no projection is provided. The
   // type parameter defaults `V = S` so callers with no projection see no
   // change in the wire-shape — the broadcast still carries `S`.
-  const project: (state: S) => V = serialize ?? ((state: S): V => state as unknown as V);
+  const project: (state: S) => V =
+    serialize ?? ((state: S): V => state as unknown as V);
   // Compose a history tracker only when the caller opted in. Substrate
   // (`@demlik/tea`'s `run()`) knows nothing about history — the tracker is a
   // pure composition over `runtime.observe(...)`, owned by the bridge.
   // `null` when unset means "no backlog in :hydrate replies"; the wire
   // shape stays uniform (backlog is always an array, possibly empty).
   const tracker: HistoryTracker<S, M> | null =
-    historySize !== undefined && historySize > 0 ? historyTracker(runtime, historySize) : null;
+    historySize !== undefined && historySize > 0
+      ? historyTracker(runtime, historySize)
+      : null;
 
   const unobserve = runtime.observe((msg, state) => {
     const envelope: BroadcastEnvelope<V, M | null> = {
@@ -189,7 +192,9 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
       // send `[]` — uniform wire shape means surfaces never branch on
       // "did the bridge enable history" — they always iterate.
       const backlog: BacklogEntry<V, M>[] = tracker
-        ? tracker.snapshot().map((entry) => ({ msg: entry.msg, state: project(entry.state) }))
+        ? tracker
+            .snapshot()
+            .map((entry) => ({ msg: entry.msg, state: project(entry.state) }))
         : [];
       const response: HydrateResponse<V | null, M> = { state, backlog };
       sendResponse(response);
@@ -204,7 +209,10 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
           sendResponse({ ok: true });
         })
         .catch((err: unknown) => {
-          sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
       return true; // keep channel open for async sendResponse
     }
@@ -492,7 +500,10 @@ export function bridgeTabClient<S, M extends { type: string }>({
 
     subscribe(listener: (msg: M | null, state: S) => void): () => void {
       listeners.add(listener);
-      const onMessage = (message: unknown, sender: chrome.runtime.MessageSender): void => {
+      const onMessage = (
+        message: unknown,
+        sender: chrome.runtime.MessageSender,
+      ): void => {
         if (sender.tab?.id !== tabId) return;
         if (!message || typeof message !== "object") return;
         const obj = message as Record<string, unknown>;

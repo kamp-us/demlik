@@ -175,7 +175,10 @@ describe("recorder", () => {
 
     // One step per msg, each with the POST-transition state, in order.
     expect(dumped.steps).toEqual([
-      { msg: { type: "inc", by: 5 }, state: { type: "counting", count: 5, log: [] } },
+      {
+        msg: { type: "inc", by: 5 },
+        state: { type: "counting", count: 5, log: [] },
+      },
       {
         msg: { type: "note", text: "a" },
         state: { type: "counting", count: 5, log: ["a"] },
@@ -334,7 +337,9 @@ describe("Sentry adapters", () => {
     ]);
     const crumbs = breadcrumbsFromTrace(trace, {
       serialize: (m) =>
-        m.type === "note" ? `note(${m.text})` : `${m.type}(${"by" in m ? m.by : ""})`,
+        m.type === "note"
+          ? `note(${m.text})`
+          : `${m.type}(${"by" in m ? m.by : ""})`,
     });
 
     expect(crumbs.map((c) => c.message)).toEqual(["inc(9)", "note(tag)"]);

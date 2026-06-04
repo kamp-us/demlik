@@ -30,7 +30,10 @@
 // ---------------------------------------------------------------------------
 
 export { fromChromeAlarm } from "./from-chrome-alarm";
-export { type ChromeMessageOpts, fromChromeMessage } from "./from-chrome-message";
+export {
+  type ChromeMessageOpts,
+  fromChromeMessage,
+} from "./from-chrome-message";
 export {
   type ChromeStorageChangeOpts,
   fromChromeStorageChange,

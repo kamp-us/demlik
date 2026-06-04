@@ -1,9 +1,15 @@
 /**
  * @demlik/tea/work-queue — substrate-agnostic work-queue lifecycle on `Store<S>`.
  *
- * The pure ops live in `./ops` and are NOT exported. Tests and consumers reach
- * them only through `createQueue(store)`. This mirrors `@demlik/tea/do`'s
- * one-shape-per-package rule: a single adapter is the public surface.
+ * Two public surfaces, one shape:
+ *   - `createQueue(store)` (this file) is the in-process adapter — it binds the
+ *     pure ops to an injected `Store` and runs `load → mutate → save`.
+ *   - `@demlik/tea/work-queue/ops` (`./ops`) is the BLESSED, importable surface
+ *     of those same pure ops. L2 compositions that own their own Model slice
+ *     (`monitored-run`, `idempotent-intake`, …) import the ops directly and
+ *     delegate status flips to them instead of re-rolling the transitions.
+ * Both routes call the identical ops, so the lifecycle rules live in exactly
+ * one place. This mirrors `@demlik/tea/do`'s one-shape-per-package rule.
  *
  * The package is generic in the input payload `I` (audit-specific fields go
  * here in apps/extension). `output` is a free-form side-channel correlation
@@ -13,7 +19,14 @@
  */
 
 import type { Store } from "../index";
-import { claimNextOp, enqueueOp, markDoneOp, patchItemOp, removeOp, resetRunningOp } from "./ops";
+import {
+  claimNextOp,
+  enqueueOp,
+  markDoneOp,
+  patchItemOp,
+  removeOp,
+  resetRunningOp,
+} from "./ops";
 
 /**
  * Generate a queue-item id at the adapter boundary. Reads `Date.now()` and
@@ -24,21 +37,34 @@ import { claimNextOp, enqueueOp, markDoneOp, patchItemOp, removeOp, resetRunning
  */
 function genId(): string {
   return (
-    globalThis.crypto?.randomUUID?.() ?? `q_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    globalThis.crypto?.randomUUID?.() ??
+    `q_${Date.now()}_${Math.random().toString(36).slice(2)}`
   );
 }
 
-export type QueueItemStatus = "pending" | "running" | "done" | "failed" | "cancelled";
+export type QueueItemStatus =
+  | "pending"
+  | "running"
+  | "done"
+  | "failed"
+  | "cancelled";
 
+/**
+ * A single queue entry. Every field is `readonly`: a persisted slice is
+ * immutable, so a transition returns a NEW item (the ops always spread —
+ * `{ ...item, status: … }`) rather than mutating in place. This type-enforces
+ * the durability invariant the consumers already honor by convention, and
+ * keeps a slice round-trippable through JSON unchanged across a reload.
+ */
 export interface QueueItem<I> {
-  id: string;
-  status: QueueItemStatus;
-  input: I;
-  enqueuedAt: number;
-  startedAt?: number;
-  finishedAt?: number;
-  output?: string;
-  error?: string;
+  readonly id: string;
+  readonly status: QueueItemStatus;
+  readonly input: I;
+  readonly enqueuedAt: number;
+  readonly startedAt?: number;
+  readonly finishedAt?: number;
+  readonly output?: string;
+  readonly error?: string;
 }
 
 /**

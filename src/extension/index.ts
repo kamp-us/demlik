@@ -58,7 +58,8 @@ export function chromeStorageStore<S>(
       const result = await area.get(key);
       const raw = (result as Record<string, unknown>)[key];
       if (raw === undefined || raw === null) return null;
-      if (typeof raw !== "string") throw new Error(`${MALFORMED} at key "${key}"`);
+      if (typeof raw !== "string")
+        throw new Error(`${MALFORMED} at key "${key}"`);
       // JSON.parse throws on malformed — propagate per @demlik/tea/do parity.
       // The decoded value is intentionally returned as `unknown`; the
       // substrate's `migrate` callback (forwarded from `parse`) is the

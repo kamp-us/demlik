@@ -54,7 +54,13 @@ export interface ReplayOpts<S, M, Ctx> {
  * branch on `state.type` afterwards, fall back to plain `replay` —
  * `expectFinalState` is the "exact match" tool.
  */
-export function expectFinalState<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function expectFinalState<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: NoInfer<ReplayOpts<S, M, Ctx>>,
   expected: NoInfer<S>,
@@ -74,7 +80,13 @@ export function expectFinalState<S, M extends { type: string }, C extends Cmd, U
  *   const { cmds } = replay(machine, opts);
  *   expect(cmds).toContainEqual(cmd);
  */
-export function expectCmdEmitted<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function expectCmdEmitted<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: NoInfer<ReplayOpts<S, M, Ctx>>,
   cmd: NoInfer<C>,
@@ -94,7 +106,13 @@ export function expectCmdEmitted<S, M extends { type: string }, C extends Cmd, U
  *   const { cmds } = replay(machine, opts);
  *   expect(cmds).toEqual(expected);
  */
-export function expectCmdSequence<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function expectCmdSequence<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: NoInfer<ReplayOpts<S, M, Ctx>>,
   expected: NoInfer<readonly C[]>,
@@ -112,7 +130,13 @@ export function expectCmdSequence<S, M extends { type: string }, C extends Cmd, 
  *   const { subs } = replay(machine, opts);
  *   expect(subs).toEqual(expected);
  */
-export function expectActiveSubs<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function expectActiveSubs<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: NoInfer<ReplayOpts<S, M, Ctx>>,
   expected: NoInfer<readonly U[]>,
@@ -137,7 +161,13 @@ export function expectActiveSubs<S, M extends { type: string }, C extends Cmd, U
  * step. For one-shot "final state after N msgs" assertions, prefer
  * `expectFinalState`.
  */
-export function step<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function step<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   loaded: NoInfer<S>,
   msg: NoInfer<M>,

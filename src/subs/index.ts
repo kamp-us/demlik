@@ -27,7 +27,10 @@
 // ---------------------------------------------------------------------------
 
 export { fromBroadcastChannel } from "./from-broadcast-channel";
-export { type EventSourceFactoryOpts, fromEventSource } from "./from-event-source";
+export {
+  type EventSourceFactoryOpts,
+  fromEventSource,
+} from "./from-event-source";
 export { fromEventTarget } from "./from-event-target";
 export { fromInterval } from "./from-interval";
 export { fromPort } from "./from-port";

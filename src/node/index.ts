@@ -38,8 +38,8 @@
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { Store, Sub, SubId } from "../index";
 import WebSocket, { type RawData } from "ws";
+import type { Store, Sub, SubId } from "../index";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // fileStore — `Store<S>` over a JSON file.
@@ -55,7 +55,10 @@ import WebSocket, { type RawData } from "ws";
  * substrate boots `init` with `loaded = null`. `parse` must NOT throw per the
  * `Store<S>.migrate` contract.
  */
-export function fileStore<S>(path: string, parse: (raw: unknown) => S | null): Store<S> {
+export function fileStore<S>(
+  path: string,
+  parse: (raw: unknown) => S | null,
+): Store<S> {
   return {
     async load(): Promise<unknown> {
       let raw: string;
@@ -173,7 +176,11 @@ export interface NodeSubscribeCtx {
  * of OPEN between the `readyState` check and `send()` (or `ws` can throw on an
  * errored underlying connection), and a Cmd interpreter must not crash on that.
  */
-export function sendToWebSocket(ctx: NodeSubscribeCtx, id: SubId, data: string): boolean {
+export function sendToWebSocket(
+  ctx: NodeSubscribeCtx,
+  id: SubId,
+  data: string,
+): boolean {
   const socket = ctx.wsRegistry.get(id);
   if (!socket || socket.readyState !== WebSocket.OPEN) return false;
   try {
@@ -196,9 +203,21 @@ export function sendToWebSocket(ctx: NodeSubscribeCtx, id: SubId, data: string):
  * `node_ws` handler can register its socket.
  */
 export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(): {
-  node_ws: (sub: NodeWsSub<M>, ctx: Ctx, dispatch: (msg: M) => void) => () => void;
-  node_timer: (sub: NodeTimerSub<M>, ctx: Ctx, dispatch: (msg: M) => void) => () => void;
-  node_signal: (sub: NodeSignalSub<M>, ctx: Ctx, dispatch: (msg: M) => void) => () => void;
+  node_ws: (
+    sub: NodeWsSub<M>,
+    ctx: Ctx,
+    dispatch: (msg: M) => void,
+  ) => () => void;
+  node_timer: (
+    sub: NodeTimerSub<M>,
+    ctx: Ctx,
+    dispatch: (msg: M) => void,
+  ) => () => void;
+  node_signal: (
+    sub: NodeSignalSub<M>,
+    ctx: Ctx,
+    dispatch: (msg: M) => void,
+  ) => () => void;
 } {
   return {
     node_ws: (sub, ctx, dispatch) => {

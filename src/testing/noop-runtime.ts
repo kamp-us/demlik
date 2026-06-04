@@ -65,7 +65,10 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
     observe(_observer: (msg: M | null, state: S) => void): () => void {
       return noopUnsubscribe;
     },
-    subscribePort<T>(_port: Port<T>, _listener: (value: T) => void): () => void {
+    subscribePort<T>(
+      _port: Port<T>,
+      _listener: (value: T) => void,
+    ): () => void {
       return noopUnsubscribe;
     },
     emitPort<T>(_port: Port<T>, _value: T): void {

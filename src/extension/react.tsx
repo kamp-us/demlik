@@ -144,7 +144,10 @@ export interface BackgroundRuntimeContext<S, M> {
    * `opts` is forwarded verbatim to `useBackgroundRuntime` — same channel,
    * same parse contract.
    */
-  Provider: (props: { opts: UseBackgroundRuntimeOpts<S>; children: ReactNode }) => ReactNode;
+  Provider: (props: {
+    opts: UseBackgroundRuntimeOpts<S>;
+    children: ReactNode;
+  }) => ReactNode;
   /**
    * Returns the dispatch function bound to this Provider's bridge client.
    * Reference is stable across renders (per `useBackgroundRuntime`'s

@@ -77,7 +77,9 @@ export function fromChromeTabsEvent<S extends Sub, M>(
       // a callback whose signature matches the event. Cast at the chrome
       // boundary since the factory collapses every payload shape into a
       // single `msgFn(sub)` call.
-      const emitter = chrome.tabs[event] as chrome.events.Event<AnyTabsListener>;
+      const emitter = chrome.tabs[
+        event
+      ] as chrome.events.Event<AnyTabsListener>;
       emitter.addListener(listener);
       installed.push(event);
     }
@@ -89,7 +91,9 @@ export function fromChromeTabsEvent<S extends Sub, M>(
 
     return () => {
       for (const event of installed) {
-        const emitter = chrome.tabs[event] as chrome.events.Event<AnyTabsListener>;
+        const emitter = chrome.tabs[
+          event
+        ] as chrome.events.Event<AnyTabsListener>;
         emitter.removeListener(listener);
       }
     };

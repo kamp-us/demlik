@@ -13,8 +13,8 @@
 // design doc instead of "is not a function."
 // ---------------------------------------------------------------------------
 
-import type { Cmd, Machine, Sub } from "../../index";
 import * as fc from "fast-check";
+import type { Cmd, Machine, Sub } from "../../index";
 
 /**
  * Build an arbitrary of Msg sequences over a per-Msg arbitrary. Optionally
@@ -57,11 +57,19 @@ export function arbMsgSequence<M extends { type: string }>(
  * forward-compatible; the design doc §7 ships this in Phase 6 alongside
  * shrinkers. Calling it throws.
  */
-export function arbGuidedSequence<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function arbGuidedSequence<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   _machine: Machine<S, M, C, U, Ctx>,
   _ctx: Ctx,
   _cells: {
-    [K in M["type"]]?: (state: S) => fc.Arbitrary<Extract<M, { type: K }>> | null;
+    [K in M["type"]]?: (
+      state: S,
+    ) => fc.Arbitrary<Extract<M, { type: K }>> | null;
   },
   _opts?: { maxLength?: number },
 ): fc.Arbitrary<readonly M[]> {

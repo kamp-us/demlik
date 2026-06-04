@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type DeadlineExceeded, deadlineExceeded, deadlineSub, subscribeDeadline } from "./index";
+import {
+  type DeadlineExceeded,
+  deadlineExceeded,
+  deadlineSub,
+  subscribeDeadline,
+} from "./index";
 
 // vi.useFakeTimers() mocks BOTH `setTimeout`/`clearTimeout` AND the `Date`
 // global, so `Date.now()` reads the fake clock that `vi.setSystemTime` /
@@ -74,7 +79,9 @@ describe("subscribeDeadline", () => {
     const dispatched: DeadlineExceeded[] = [];
     const sub = deadlineSub("guard", BASE + 5000);
 
-    const cleanup = subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+    const cleanup = subscribeDeadline(sub, undefined, (m) =>
+      dispatched.push(m),
+    );
     // Disarm before the timer fires (the "cancel on state exit" path).
     cleanup();
 

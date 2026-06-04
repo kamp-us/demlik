@@ -35,7 +35,9 @@ const __DEV__: boolean = (() => {
     // import.meta not available (Node CJS, service workers)
   }
   try {
-    return typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
+    return (
+      typeof process !== "undefined" && process.env?.NODE_ENV !== "production"
+    );
   } catch {
     return false;
   }
@@ -44,12 +46,14 @@ const __DEV__: boolean = (() => {
 function deepFreeze<T>(obj: T, seen?: WeakSet<object>): T {
   if (obj === null || typeof obj !== "object") return obj;
   const proto = Object.getPrototypeOf(obj);
-  if (proto !== Object.prototype && proto !== Array.prototype && proto !== null) return obj;
+  if (proto !== Object.prototype && proto !== Array.prototype && proto !== null)
+    return obj;
   const visited = seen ?? new WeakSet();
   if (visited.has(obj as object)) return obj;
   visited.add(obj as object);
   Object.freeze(obj);
-  for (const v of Object.values(obj as Record<string, unknown>)) deepFreeze(v, visited);
+  for (const v of Object.values(obj as Record<string, unknown>))
+    deepFreeze(v, visited);
   return obj;
 }
 
@@ -68,7 +72,11 @@ function assertPureResult(result: unknown, msgType: string): void {
         `update must be synchronous. Move async work to interpret.`,
     );
   }
-  if (!Array.isArray(result) || result.length < 2 || !Array.isArray(result[1])) {
+  if (
+    !Array.isArray(result) ||
+    result.length < 2 ||
+    !Array.isArray(result[1])
+  ) {
     throw new Error(
       `@demlik/tea: update cell "${msgType}" returned a non-tuple. ` +
         `Expected [State, Cmd[]], got ${typeof result}.`,
@@ -104,7 +112,10 @@ export type Cmd<T extends string = string> = { type: T };
 // `defineMachine` accepts the Reducer record form via overload. The runtime
 // dispatches via `update[msg.type](state, msg)`.
 export type Reducer<S, M extends { type: string }, C extends Cmd> = {
-  [K in M["type"]]: (state: S, msg: Extract<M, { type: K }>) => readonly [S, readonly C[]];
+  [K in M["type"]]: (
+    state: S,
+    msg: Extract<M, { type: K }>,
+  ) => readonly [S, readonly C[]];
 };
 
 // === Transitions<S, M, C>: table form of `update` for state-machine-shaped machines ===
@@ -126,7 +137,11 @@ export type Reducer<S, M extends { type: string }, C extends Cmd> = {
 // invariant 6 (runtime walks the table predictably, no hidden dispatch
 // fallback), and invariant 7 (both state.type and msg.type are load-bearing
 // at the type level).
-export type Transitions<S extends { type: string }, M extends { type: string }, C extends Cmd> = {
+export type Transitions<
+  S extends { type: string },
+  M extends { type: string },
+  C extends Cmd,
+> = {
   [P in S["type"]]: {
     [K in M["type"]]: (
       state: Extract<S, { type: P }>,
@@ -182,10 +197,10 @@ export function absurd(x: never): never {
 // Assignable to any Transitions cell regardless of S/M/C concrete types
 // (the type parameters are free) — drop it into any cell without per-type
 // casts.
-export const noop = <S, M, C extends Cmd>(state: S, _msg: M): readonly [S, readonly C[]] => [
-  state,
-  [],
-];
+export const noop = <S, M, C extends Cmd>(
+  state: S,
+  _msg: M,
+): readonly [S, readonly C[]] => [state, []];
 
 // === Cmd: namespace for conditional Cmd emission ===
 //
@@ -250,7 +265,9 @@ export const Cmd = {
    * `<const C>` keeps inline cmd literals' discriminants narrow (same
    * rationale as `when` / `whenDefined` above).
    */
-  batch: <const C extends Cmd>(...arrs: readonly (readonly C[])[]): readonly C[] => {
+  batch: <const C extends Cmd>(
+    ...arrs: readonly (readonly C[])[]
+  ): readonly C[] => {
     const out: C[] = [];
     for (const arr of arrs) out.push(...arr);
     return out;
@@ -267,7 +284,8 @@ export const Cmd = {
    * string, ... }`, and stays assignable to a discriminated-union arm
    * without `as const` at the call site.
    */
-  when: <const C extends Cmd>(cond: boolean, cmd: C): readonly C[] => (cond ? [cmd] : []),
+  when: <const C extends Cmd>(cond: boolean, cmd: C): readonly C[] =>
+    cond ? [cmd] : [],
 
   /**
    * If `value` is defined, call `build(value)` and emit the resulting cmd
@@ -448,7 +466,11 @@ export interface PortEmitter {
 // hide impurity behind) and invariant 7 (identity is explicit — the Cmd
 // variant set is load-bearing at the type level).
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
-  [K in C["type"]]: (cmd: Extract<C, { type: K }>, ctx: Ctx & PortEmitter) => Promise<M | void>;
+  [K in C["type"]]: (
+    cmd: Extract<C, { type: K }>,
+    ctx: Ctx & PortEmitter,
+    // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
+  ) => Promise<M | void>;
 };
 
 // === Subscribe<M, U, Ctx>: record-of-handlers form of `subscribe` ===
@@ -496,7 +518,13 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
 // disables distributive conditional so a real cmd union (e.g.
 // `Cmd<"a"> | Cmd<"b">`) doesn't degrade to optional just because one arm
 // happens to be `Cmd<never>`. Same trick the `update` field uses.
-export type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = {
+export type Machine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = {
   /**
    * Boot the runtime. Called once by `run(...)` with whatever `Store.load()`
    * returned: `null` on fresh boot, the persisted state on rehydrate.
@@ -688,7 +716,13 @@ export interface Runtime<S, M extends { type: string }> extends RuntimeRef<M> {
 // ...>>` (the public `satisfies` pattern) doesn't fail at the first
 // overload — it just skips to the next one because `update` becomes
 // `never`.
-export function defineMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function defineMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   m: Omit<Machine<S, M, C, U, Ctx>, "update"> & {
     // `[S]` tuple-wrap disables distributive conditional behavior — see
     // the comment on `Machine.update` for why distribution is wrong here.
@@ -697,15 +731,25 @@ export function defineMachine<S, M extends { type: string }, C extends Cmd, U ex
 ): Machine<S, M, C, U, Ctx>;
 // Reducer-form overload — `update` is a flat record keyed by Msg.type.
 // Object literals where every property is a function match this shape.
-export function defineMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function defineMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   m: Omit<Machine<S, M, C, U, Ctx>, "update"> & {
     update: Reducer<S, M, C>;
   },
 ): Machine<S, M, C, U, Ctx>;
 // Implementation signature — accepts both via the union on `Machine.update`.
-export function defineMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
-  m: Machine<S, M, C, U, Ctx>,
-): Machine<S, M, C, U, Ctx> {
+export function defineMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(m: Machine<S, M, C, U, Ctx>): Machine<S, M, C, U, Ctx> {
   return m;
 }
 
@@ -724,7 +768,13 @@ export function defineMachine<S, M extends { type: string }, C extends Cmd, U ex
 // effect phase leaves the persisted state ahead of the host's belief about
 // what executed — the Railway discipline (`tryInterpret` in handlers) makes
 // that safe in practice.
-export function run<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function run<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: { ctx: Ctx; store?: Store<S> },
 ): Runtime<S, M> {
@@ -830,6 +880,7 @@ export function run<S, M extends { type: string }, C extends Cmd, U extends Sub,
       const stateKey = (state as unknown as { type: string }).type;
       // The Transitions overload guarantees every (state.type × msg.type) cell
       // exists at the type level; the runtime lookup cannot miss.
+      // biome-ignore lint/style/noNonNullAssertion: the Transitions overload guarantees every (state.type × msg.type) cell exists at the type level; `!` is required under noUncheckedIndexedAccess and cannot miss at runtime
       const handler = table[stateKey]![msg.type]!;
       result = handler(state, msg);
     }
@@ -901,7 +952,11 @@ export function run<S, M extends { type: string }, C extends Cmd, U extends Sub,
         continue;
       }
       try {
-        const cleanup = handler(sub as Extract<U, { type: U["type"] }>, ctx, enqueueDispatch);
+        const cleanup = handler(
+          sub as Extract<U, { type: U["type"] }>,
+          ctx,
+          enqueueDispatch,
+        );
         subRegistry.set(sub.id, cleanup);
       } catch (err) {
         if (firstStartError === null) firstStartError = err;
@@ -919,7 +974,11 @@ export function run<S, M extends { type: string }, C extends Cmd, U extends Sub,
   // `if (!handler) continue` then preserves invariant-6 forward progress
   // instead of throwing on `undefined.foo`.
   type InterpretMap = {
-    [K in C["type"]]: (cmd: Extract<C, { type: K }>, ctx: Ctx & PortEmitter) => Promise<M | void>;
+    [K in C["type"]]: (
+      cmd: Extract<C, { type: K }>,
+      ctx: Ctx & PortEmitter,
+      // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
+    ) => Promise<M | void>;
   };
   const interpretMap: InterpretMap =
     (machine as { interpret?: InterpretMap }).interpret ?? ({} as InterpretMap);
@@ -936,7 +995,10 @@ export function run<S, M extends { type: string }, C extends Cmd, U extends Sub,
     for (const cmd of cmds) {
       const handler = interpretMap[cmd.type as C["type"]];
       if (!handler) continue;
-      const follow = await handler(cmd as Extract<C, { type: C["type"] }>, augmentedCtx);
+      const follow = await handler(
+        cmd as Extract<C, { type: C["type"] }>,
+        augmentedCtx,
+      );
       if (follow !== undefined && follow !== null) {
         // Schedule follow-up Msg on the tail. The current step resolves
         // first; the follow-up runs after, as a fresh transition. Swallow the
@@ -1083,7 +1145,8 @@ export function run<S, M extends { type: string }, C extends Cmd, U extends Sub,
    * - the reducer, save, sub start, or interpret throws.
    */
   function enqueueDispatch(msg: M): Promise<void> {
-    if (stopped) return Promise.reject(new Error("@demlik/tea: runtime stopped"));
+    if (stopped)
+      return Promise.reject(new Error("@demlik/tea: runtime stopped"));
     const next = tail.then(() => {
       if (bootError !== null) throw bootError;
       return stepDispatch(msg);
@@ -1315,7 +1378,13 @@ export function historyTracker<S, M extends { type: string }>(
 // `subscriptions` (the description function) IS called to derive the returned
 // `subs` array. That's intentional — it lets tests assert what would be wired
 // up without actually wiring it.
-export function replay<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function replay<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: { msgs: readonly M[]; ctx: Ctx; loaded?: S | null },
 ): { state: S; cmds: C[]; subs: U[] } {
@@ -1347,7 +1416,9 @@ export function replay<S, M extends { type: string }, C extends Cmd, U extends S
   // unit-test tool and must not depend on `run`'s internal closures.
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   type ReducerRecord = Reducer<S, M, C>;
-  type TransitionsTable = { [stateType: string]: { [msgType: string]: CellFn } };
+  type TransitionsTable = {
+    [stateType: string]: { [msgType: string]: CellFn };
+  };
   const updateForm = machine.update;
   type UpdateMode = "reducer" | "transitions";
   const updateMode: UpdateMode = (() => {
@@ -1369,6 +1440,7 @@ export function replay<S, M extends { type: string }, C extends Cmd, U extends S
     } else {
       const table = updateForm as unknown as TransitionsTable;
       const stateKey = (state as unknown as { type: string }).type;
+      // biome-ignore lint/style/noNonNullAssertion: Transitions overload guarantees the (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess
       result = table[stateKey]![msg.type]!(state, msg);
     }
 
@@ -1379,7 +1451,9 @@ export function replay<S, M extends { type: string }, C extends Cmd, U extends S
     cmds.push(...emitted);
   }
 
-  const subs: U[] = machine.subscriptions ? [...machine.subscriptions(state)] : [];
+  const subs: U[] = machine.subscriptions
+    ? [...machine.subscriptions(state)]
+    : [];
 
   return { state, cmds, subs };
 }

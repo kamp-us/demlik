@@ -103,7 +103,12 @@ export function doStore<S>(
  * subs by `id`; same id across transitions = same alarm. To reschedule, emit
  * a DIFFERENT id (e.g., `audit-timeout-v2`).
  */
-export type DoAlarmSub<M> = { id: SubId; type: "do_alarm"; firesAt: number; msg: M };
+export type DoAlarmSub<M> = {
+  id: SubId;
+  type: "do_alarm";
+  firesAt: number;
+  msg: M;
+};
 
 /**
  * A DO WebSocket sub: routes incoming messages on `socketId` through
@@ -143,7 +148,10 @@ export type DoAlarmRegistry<M> = Map<string, { firesAt: number; msg: M }>;
  * DO's `webSocketMessage(ws, data)` consults this and dispatches
  * `sub.msg(data)` for entries matching the incoming `socketId`.
  */
-export type DoWsRegistry<M> = Map<string, { socketId: string; msg: (data: string) => M }>;
+export type DoWsRegistry<M> = Map<
+  string,
+  { socketId: string; msg: (data: string) => M }
+>;
 
 /**
  * Minimum shape a cooperating DO must put on its `Ctx` for `doSubscribe`
@@ -169,7 +177,11 @@ export interface DoSubscribeCtx<M> {
  * can reach `state.storage`, `alarmRegistry`, and `wsRegistry`.
  */
 export function doSubscribe<M, Ctx extends DoSubscribeCtx<M>>(): {
-  do_alarm: (sub: DoAlarmSub<M>, ctx: Ctx, dispatch: (msg: M) => void) => () => void;
+  do_alarm: (
+    sub: DoAlarmSub<M>,
+    ctx: Ctx,
+    dispatch: (msg: M) => void,
+  ) => () => void;
   do_ws: (sub: DoWsSub<M>, ctx: Ctx, dispatch: (msg: M) => void) => () => void;
 } {
   return {

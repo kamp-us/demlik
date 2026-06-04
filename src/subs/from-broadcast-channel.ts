@@ -26,7 +26,10 @@
 // ---------------------------------------------------------------------------
 
 import type { Sub } from "../index";
-import type { MinimalBroadcastChannelCtor, MinimalMessageEvent } from "./platform";
+import type {
+  MinimalBroadcastChannelCtor,
+  MinimalMessageEvent,
+} from "./platform";
 import type { SubscribeHandler } from "./types";
 
 type BroadcastSubData = { channelName: string };

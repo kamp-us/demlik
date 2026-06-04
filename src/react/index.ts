@@ -22,8 +22,15 @@
 
 "use client";
 
-import { type Cmd, type Machine, type Runtime, run, type Store, type Sub } from "../index";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+  type Cmd,
+  type Machine,
+  type Runtime,
+  run,
+  type Store,
+  type Sub,
+} from "../index";
 
 /**
  * Options passed to `useMachine`. The shape is intentionally minimal — `ctx`
@@ -53,7 +60,13 @@ export interface UseMachineOpts<S, Ctx> {
  *
  * Returns `[state, dispatch]` shaped like `useReducer`.
  */
-export function useMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function useMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   opts: UseMachineOpts<S, Ctx>,
 ): [S, (msg: M) => Promise<void>] {
@@ -64,7 +77,10 @@ export function useMachine<S, M extends { type: string }, C extends Cmd, U exten
   // without lying about what the memo actually depends on.
   const ctx = opts.ctx;
   const store = opts.store;
-  const runtime = useMemo<Runtime<S, M>>(() => run(machine, { ctx, store }), [machine, ctx, store]);
+  const runtime = useMemo<Runtime<S, M>>(
+    () => run(machine, { ctx, store }),
+    [machine, ctx, store],
+  );
 
   // Preliminary state computed sync from `machine.init(null, ctx)`. This is
   // the snapshot React sees BEFORE the runtime finishes booting (matters
@@ -77,7 +93,10 @@ export function useMachine<S, M extends { type: string }, C extends Cmd, U exten
   // cached snapshot is also identity-stable across rerenders when the deps
   // don't change, which `useSyncExternalStore` rewards (no spurious
   // re-renders).
-  const preliminaryState = useMemo<S>(() => machine.init(null, ctx)[0], [machine, ctx]);
+  const preliminaryState = useMemo<S>(
+    () => machine.init(null, ctx)[0],
+    [machine, ctx],
+  );
 
   // `getSnapshot` reads the runtime if it has booted, else falls back to
   // the preliminary state. The runtime's `getState` throws pre-boot when a
@@ -91,7 +110,11 @@ export function useMachine<S, M extends { type: string }, C extends Cmd, U exten
     }
   };
 
-  const state = useSyncExternalStore(runtime.subscribe, getSnapshot, getSnapshot);
+  const state = useSyncExternalStore(
+    runtime.subscribe,
+    getSnapshot,
+    getSnapshot,
+  );
   useEffect(
     () => () => {
       // Fire-and-forget — `stop()` is async but `useEffect` cleanup is sync.
@@ -120,6 +143,10 @@ export function useMachine<S, M extends { type: string }, C extends Cmd, U exten
 export function useRuntime<S, M extends { type: string }>(
   runtime: Runtime<S, M>,
 ): [S, (msg: M) => Promise<void>] {
-  const state = useSyncExternalStore(runtime.subscribe, runtime.getState, runtime.getState);
+  const state = useSyncExternalStore(
+    runtime.subscribe,
+    runtime.getState,
+    runtime.getState,
+  );
   return [state, runtime.dispatch];
 }

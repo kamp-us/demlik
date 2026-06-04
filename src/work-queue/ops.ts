@@ -1,5 +1,6 @@
 /**
- * Pure queue-lifecycle ops over `QueueItem<I>[]`.
+ * Pure queue-lifecycle ops over `QueueItem<I>[]` — the BLESSED delegation
+ * surface for this package.
  *
  * Each op is `(queue, ...args) => { next, result? }`. No I/O, no Date.now
  * indirection beyond a plain call site — the adapter in `./index.ts` injects
@@ -9,12 +10,15 @@
  * Cloudflare, or any concrete persistence layer. The audit-specific shape
  * (journeyId, projectId, ...) is lifted into the caller's `I` parameter.
  *
- * NOT exported from package root. Tests reach this file only through the
- * `createQueue(memoryStore(...))` adapter — same one-shape-per-package rule as
- * `@demlik/tea/do`.
+ * Importable two ways. The `createQueue(...)` adapter in `./index.ts` binds
+ * these ops to a `Store` for in-process use (same one-shape-per-package rule
+ * as `@demlik/tea/do`). L2 compositions that own their own Model slice
+ * (`monitored-run`, `idempotent-intake`, …) instead reach these ops directly
+ * via the `@demlik/tea/work-queue/ops` subpath, so a status flip is delegated
+ * here rather than re-rolled per call site.
  */
 
-import type { QueueItem, QueueItemStatus } from "./index";
+import type { QueueItem } from "./index";
 
 /** Append a new pending item. Returns the new queue and the created item. */
 export function enqueueOp<I>(
@@ -42,10 +46,13 @@ export function claimNextOp<I>(
   now: number,
 ): { next: QueueItem<I>[]; claimed: QueueItem<I> } | null {
   const idx = queue.findIndex((i) => i.status === "pending");
-  if (idx === -1) return null;
-  // `idx !== -1` guarantees the slot is present.
+  const target = idx === -1 ? undefined : queue[idx];
+  // `target === undefined` collapses "no pending item" and the (impossible
+  // post-`findIndex`) hole into one early-out, so the element is typed
+  // `QueueItem<I>` below without a non-null assertion.
+  if (target === undefined) return null;
   const claimed: QueueItem<I> = {
-    ...queue[idx]!,
+    ...target,
     status: "running",
     startedAt: now,
   };
@@ -79,10 +86,13 @@ export function patchItemOp<I>(
   patch: (item: QueueItem<I>) => QueueItem<I>,
 ): { next: QueueItem<I>[]; changed: boolean } {
   const idx = queue.findIndex((i) => i.id === id);
-  if (idx === -1) return { next: queue.slice(), changed: false };
+  const target = idx === -1 ? undefined : queue[idx];
+  // `target === undefined` collapses the no-match case and the (impossible
+  // post-`findIndex`) hole, narrowing `target` to `QueueItem<I>` for `patch`
+  // without a non-null assertion.
+  if (target === undefined) return { next: queue.slice(), changed: false };
   const next = queue.slice();
-  // `idx !== -1` guarantees the slot is present.
-  next[idx] = patch(queue[idx]!);
+  next[idx] = patch(target);
   return { next, changed: true };
 }
 
@@ -92,10 +102,10 @@ export function resetRunningOp<I>(queue: readonly QueueItem<I>[]): {
   changed: boolean;
 } {
   let changed = false;
-  const next = queue.map((i) => {
+  const next = queue.map((i): QueueItem<I> => {
     if (i.status !== "running") return i;
     changed = true;
-    return { ...i, status: "pending" as QueueItemStatus, startedAt: undefined };
+    return { ...i, status: "pending", startedAt: undefined };
   });
   return { next, changed };
 }

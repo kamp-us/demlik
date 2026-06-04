@@ -18,8 +18,8 @@
 // shrinking automatically.
 // ---------------------------------------------------------------------------
 
-import type { Cmd, Machine, Sub } from "../../index";
 import * as fc from "fast-check";
+import type { Cmd, Machine, Sub } from "../../index";
 import { foldEvents, type Step } from "./replay-fold";
 
 /** Common options shared by every property runner. */
@@ -69,7 +69,12 @@ export function propertyTerminates<
   };
   fc.assert(
     fc.property(seqArb, (msgs) => {
-      const { finalState } = foldEvents(machine, ctx, opts?.loaded ?? null, msgs);
+      const { finalState } = foldEvents(
+        machine,
+        ctx,
+        opts?.loaded ?? null,
+        msgs,
+      );
       if (!terminal(finalState)) {
         // Throwing here (vs returning false) lets the error message carry
         // the offending final state — fast-check pretty-prints it inside
@@ -105,7 +110,13 @@ export function propertyTerminates<
  *     { loaded: auditingState, numRuns: 200 },
  *   );
  */
-export function propertyInvariant<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function propertyInvariant<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
@@ -148,7 +159,13 @@ export function propertyInvariant<S, M extends { type: string }, C extends Cmd, 
  *     { loaded: auditingState, numRuns: 500 },
  *   );
  */
-export function propertyTrace<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function propertyTrace<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   seqArb: fc.Arbitrary<readonly NoInfer<M>[]>,
@@ -164,7 +181,12 @@ export function propertyTrace<S, M extends { type: string }, C extends Cmd, U ex
   };
   fc.assert(
     fc.property(seqArb, (msgs) => {
-      const { steps, finalState } = foldEvents(machine, ctx, opts?.loaded ?? null, msgs);
+      const { steps, finalState } = foldEvents(
+        machine,
+        ctx,
+        opts?.loaded ?? null,
+        msgs,
+      );
       if (!predicate(steps, finalState)) {
         throw new Error(
           `propertyTrace: predicate failed on trace length=${steps.length}, ` +

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
+import { describe, expect, it } from "vitest";
 import {
   initBucket,
   initWindow,
@@ -31,14 +31,24 @@ describe("token bucket", () => {
 
   it("refills over elapsed time at refillPerSec", () => {
     // 5 tokens/sec, drained to 0, then 2s elapse → 10 accrued, clamped lower.
-    const drained: TokenBucket = { tokens: 0, capacity: 100, refillPerSec: 5, lastRefillMs: 0 };
+    const drained: TokenBucket = {
+      tokens: 0,
+      capacity: 100,
+      refillPerSec: 5,
+      lastRefillMs: 0,
+    };
     const r = refill(drained, 2000);
     expect(r.tokens).toBe(10);
     expect(r.lastRefillMs).toBe(2000);
   });
 
   it("never exceeds capacity on refill", () => {
-    const drained: TokenBucket = { tokens: 0, capacity: 4, refillPerSec: 100, lastRefillMs: 0 };
+    const drained: TokenBucket = {
+      tokens: 0,
+      capacity: 4,
+      refillPerSec: 100,
+      lastRefillMs: 0,
+    };
     // 1s × 100/sec = 100 accrued, clamped to capacity 4.
     expect(refill(drained, 1000).tokens).toBe(4);
   });
@@ -67,7 +77,12 @@ describe("token bucket", () => {
   });
 
   it("does not refill or remove tokens on a backwards clock", () => {
-    const b: TokenBucket = { tokens: 3, capacity: 5, refillPerSec: 10, lastRefillMs: 1000 };
+    const b: TokenBucket = {
+      tokens: 3,
+      capacity: 5,
+      refillPerSec: 10,
+      lastRefillMs: 1000,
+    };
     const r = refill(b, 500);
     expect(r.tokens).toBe(3); // floored elapsed → no change
     expect(r.lastRefillMs).toBe(500); // still tracks latest reading
@@ -138,8 +153,16 @@ describe("sliding window log", () => {
   });
 
   it("never mutates the input window", () => {
-    const w: SlidingWindow = { hits: Object.freeze([0, 100]), windowMs: 1000, limit: 5 };
-    const snapshot = { hits: [...w.hits], windowMs: w.windowMs, limit: w.limit };
+    const w: SlidingWindow = {
+      hits: Object.freeze([0, 100]),
+      windowMs: 1000,
+      limit: 5,
+    };
+    const snapshot = {
+      hits: [...w.hits],
+      windowMs: w.windowMs,
+      limit: w.limit,
+    };
     record(w, 200);
     remaining(w, 200);
     expect(w).toEqual(snapshot);

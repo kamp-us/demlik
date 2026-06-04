@@ -4,5 +4,9 @@
 // helper they all share.
 // ---------------------------------------------------------------------------
 
-export { propertyInvariant, propertyTerminates, propertyTrace } from "./property";
+export {
+  propertyInvariant,
+  propertyTerminates,
+  propertyTrace,
+} from "./property";
 export { foldEvents, type Step } from "./replay-fold";

@@ -43,7 +43,11 @@ export interface ChromeMessageOpts<S extends Sub, M> {
    * returns `true`. Cheap discriminant checks belong here.
    */
   filter?: (message: unknown) => boolean;
-  msgFn: (message: unknown, sender: chrome.runtime.MessageSender, sub: S) => M | null;
+  msgFn: (
+    message: unknown,
+    sender: chrome.runtime.MessageSender,
+    sub: S,
+  ) => M | null;
 }
 
 export function fromChromeMessage<S extends Sub, M>(

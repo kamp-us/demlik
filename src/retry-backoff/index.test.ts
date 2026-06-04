@@ -5,9 +5,9 @@ import {
   defaultRetryPolicy,
   initRetry,
   nextDelayMs,
-  recordFailure,
   type RetryPolicy,
   type RetryState,
+  recordFailure,
   shouldRetry,
 } from "./index";
 
@@ -126,8 +126,28 @@ describe("backoffDelay property: 0 <= delay <= capMs for any attempt and policy"
         // 1) subnormal d where equal-jitter rounds one ULP above capMs.
         // 2) baseMs 0 with an overflowing exponent -> 0 * Infinity === NaN.
         examples: [
-          [0, { baseMs: 5.4e-323, factor: 1, capMs: 5.4e-323, maxAttempts: 0, jitter: "equal" }, 0.9166666666666667],
-          [309, { baseMs: 0, factor: 9.944617333766892, capMs: 0, maxAttempts: 0, jitter: "none" }, 0],
+          [
+            0,
+            {
+              baseMs: 5.4e-323,
+              factor: 1,
+              capMs: 5.4e-323,
+              maxAttempts: 0,
+              jitter: "equal",
+            },
+            0.9166666666666667,
+          ],
+          [
+            309,
+            {
+              baseMs: 0,
+              factor: 9.944617333766892,
+              capMs: 0,
+              maxAttempts: 0,
+              jitter: "none",
+            },
+            0,
+          ],
         ],
       },
     );

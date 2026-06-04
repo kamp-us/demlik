@@ -24,7 +24,13 @@
 // start Subs. The reducer surface is the contract.
 // ---------------------------------------------------------------------------
 
-import { type Cmd, type Machine, type Reducer, replay, type Sub } from "../../index";
+import {
+  type Cmd,
+  type Machine,
+  type Reducer,
+  replay,
+  type Sub,
+} from "../../index";
 
 /**
  * One unit in a fold trace — the four pieces of data a property
@@ -59,7 +65,13 @@ export interface Step<S, M, C> {
  *   ]);
  *   // steps[1] = { prev: { type: "counting", n: 0 }, msg: { type: "tick" }, ... }
  */
-export function foldEvents<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+export function foldEvents<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: NoInfer<Ctx>,
   loaded: NoInfer<S> | null,
@@ -73,13 +85,19 @@ export function foldEvents<S, M extends { type: string }, C extends Cmd, U exten
   // substrate's loaded-snapshot contract (init may transform the loaded
   // value before the first Msg lands — e.g. the audit machine flips
   // `debuggerAttached: false` on resume).
-  const { state: initialState } = replay(machine, { msgs: [], ctx, loaded: loaded ?? null });
+  const { state: initialState } = replay(machine, {
+    msgs: [],
+    ctx,
+    loaded: loaded ?? null,
+  });
 
   // Per-msg dispatch mirrors the substrate's `applyUpdate` in `run()` and
   // the same loop in `replay()`. Two record forms; structural detect once.
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   type ReducerRecord = Reducer<S, M, C>;
-  type TransitionsTable = { [stateType: string]: { [msgType: string]: CellFn } };
+  type TransitionsTable = {
+    [stateType: string]: { [msgType: string]: CellFn };
+  };
 
   const updateForm = machine.update;
   type UpdateMode = "reducer" | "transitions";
@@ -106,6 +124,7 @@ export function foldEvents<S, M extends { type: string }, C extends Cmd, U exten
     } else {
       const table = updateForm as unknown as TransitionsTable;
       const stateKey = (current as unknown as { type: string }).type;
+      // biome-ignore lint/style/noNonNullAssertion: Transitions overload guarantees the cell exists; `!` required under noUncheckedIndexedAccess
       [next, emitted] = table[stateKey]![msg.type]!(current, msg);
     }
     steps.push({ prev: current, msg, next, cmds: [...emitted] });

@@ -26,12 +26,21 @@ export interface MinimalMessageEvent extends MinimalEvent {
 
 export interface MinimalEventTarget {
   addEventListener(type: string, listener: (event: MinimalEvent) => void): void;
-  removeEventListener(type: string, listener: (event: MinimalEvent) => void): void;
+  removeEventListener(
+    type: string,
+    listener: (event: MinimalEvent) => void,
+  ): void;
 }
 
 export interface MinimalBroadcastChannel {
-  addEventListener(type: "message", listener: (event: MinimalMessageEvent) => void): void;
-  removeEventListener(type: "message", listener: (event: MinimalMessageEvent) => void): void;
+  addEventListener(
+    type: "message",
+    listener: (event: MinimalMessageEvent) => void,
+  ): void;
+  removeEventListener(
+    type: "message",
+    listener: (event: MinimalMessageEvent) => void,
+  ): void;
   close(): void;
 }
 
@@ -40,10 +49,19 @@ export interface MinimalBroadcastChannelCtor {
 }
 
 export interface MinimalEventSource {
-  addEventListener(type: "message", listener: (event: MinimalMessageEvent) => void): void;
+  addEventListener(
+    type: "message",
+    listener: (event: MinimalMessageEvent) => void,
+  ): void;
   addEventListener(type: string, listener: (event: MinimalEvent) => void): void;
-  removeEventListener(type: "message", listener: (event: MinimalMessageEvent) => void): void;
-  removeEventListener(type: string, listener: (event: MinimalEvent) => void): void;
+  removeEventListener(
+    type: "message",
+    listener: (event: MinimalMessageEvent) => void,
+  ): void;
+  removeEventListener(
+    type: string,
+    listener: (event: MinimalEvent) => void,
+  ): void;
   close(): void;
 }
 

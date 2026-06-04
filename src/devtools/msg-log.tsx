@@ -17,7 +17,6 @@ export function MsgLog({ history, className }: MsgLogProps) {
     <div className={`tea-dt-log${className ? ` ${className}` : ""}`}>
       {history.map((r, i) => (
         <div
-          // biome-ignore lint/suspicious/noArrayIndexKey: log rows are stable while visible
           key={`${r.ts}-${i}`}
           className={`tea-dt-row tea-dt-${r.kind ?? "msg"}`}
         >

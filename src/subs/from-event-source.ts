@@ -40,7 +40,11 @@
 // ---------------------------------------------------------------------------
 
 import type { Sub } from "../index";
-import type { MinimalEvent, MinimalEventSourceCtor, MinimalMessageEvent } from "./platform";
+import type {
+  MinimalEvent,
+  MinimalEventSourceCtor,
+  MinimalMessageEvent,
+} from "./platform";
 import type { SubscribeHandler } from "./types";
 
 type EventSourceSubData = { url: string };

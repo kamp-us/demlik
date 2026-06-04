@@ -49,9 +49,9 @@ export interface BoundMachine<
   M extends { type: string },
   C extends Cmd,
   U extends Sub,
-  // biome-ignore lint/correctness/noUnusedVariables: Ctx is a phantom-style
-  // parameter — present on the interface for consumers that want to spell
-  // `BoundMachine<S, M, C, U, Ctx>` explicitly, mirroring `Machine`.
+  // `Ctx` is a phantom-style parameter — present for consumers that want to
+  // spell `BoundMachine<S, M, C, U, Ctx>` explicitly, mirroring `Machine`.
+  // biome-ignore lint/correctness/noUnusedVariables: phantom type param (see above)
   Ctx,
 > {
   /**
@@ -73,18 +73,28 @@ export interface BoundMachine<
    * Assert the exact ordered sequence of cmds emitted by replaying
    * `opts.msgs`. Mirrors the free `expectCmdSequence(machine, opts, expected)`.
    */
-  expectCmdSequence(opts: BoundOpts<S, M>, expected: readonly NoInfer<C>[]): void;
+  expectCmdSequence(
+    opts: BoundOpts<S, M>,
+    expected: readonly NoInfer<C>[],
+  ): void;
   /**
    * Assert the exact set of subs desired at the final state. Mirrors the
    * free `expectActiveSubs(machine, opts, expected)`.
    */
-  expectActiveSubs(opts: BoundOpts<S, M>, expected: readonly NoInfer<U>[]): void;
+  expectActiveSubs(
+    opts: BoundOpts<S, M>,
+    expected: readonly NoInfer<U>[],
+  ): void;
   /**
    * Bound `replay` — returns `{ state, cmds, subs }` for the given opts.
    * Use for the "narrow-then-assert" pattern where the test inspects a
    * specific field after `state.type === "..."` discrimination.
    */
-  replay(opts: BoundOpts<S, M>): { state: S; cmds: readonly C[]; subs: readonly U[] };
+  replay(opts: BoundOpts<S, M>): {
+    state: S;
+    cmds: readonly C[];
+    subs: readonly U[];
+  };
 }
 
 /**
@@ -97,10 +107,13 @@ export interface BoundMachine<
  * share the same machine + ctx. For one-off cross-machine calls, stick
  * with the free helpers from `./assertions.ts`.
  */
-export function bindMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
-  machine: Machine<S, M, C, U, Ctx>,
-  ctx: Ctx,
-): BoundMachine<S, M, C, U, Ctx> {
+export function bindMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(machine: Machine<S, M, C, U, Ctx>, ctx: Ctx): BoundMachine<S, M, C, U, Ctx> {
   return {
     step(loaded, msg) {
       const { state, cmds } = replay(machine, { msgs: [msg], ctx, loaded });

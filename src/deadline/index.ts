@@ -106,11 +106,11 @@ export function deadlineSub(id: string, atMs: number): DeadlineSub {
  *     deadline: subscribeDeadline,
  *   }
  */
-export const subscribeDeadline: SubscribeHandler<DeadlineSub, DeadlineExceeded, unknown> = (
-  sub,
-  ctx,
-  dispatch,
-) => {
+export const subscribeDeadline: SubscribeHandler<
+  DeadlineSub,
+  DeadlineExceeded,
+  unknown
+> = (sub, ctx, dispatch) => {
   // Recompute the remaining delay from the CURRENT clock so a late subscribe
   // (post-rehydrate) still targets the correct absolute moment. `max(0, …)`
   // keeps a past deadline at delay 0 → setTimeout(fn, 0) → fires next tick, not
@@ -121,8 +121,8 @@ export const subscribeDeadline: SubscribeHandler<DeadlineSub, DeadlineExceeded, 
   // shape it consumes (`{ ...sub, delayMs }`) and let it own setTimeout /
   // clearTimeout. The msgFn closes over the deadline's identity + target so the
   // dispatched Msg carries both.
-  return fromTimeout<DeadlineSub & { delayMs: number }, DeadlineExceeded>((armed) =>
-    deadlineExceeded(armed.id, armed.atMs),
+  return fromTimeout<DeadlineSub & { delayMs: number }, DeadlineExceeded>(
+    (armed) => deadlineExceeded(armed.id, armed.atMs),
   )({ ...sub, delayMs: remainingMs }, ctx, dispatch);
 };
 

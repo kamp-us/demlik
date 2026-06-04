@@ -77,6 +77,10 @@
       "types": "./dist/work-queue/index.d.ts",
       "import": "./dist/work-queue/index.js"
     },
+    "./work-queue/ops": {
+      "types": "./dist/work-queue/ops.d.ts",
+      "import": "./dist/work-queue/ops.js"
+    },
     "./node": {
       "types": "./dist/node/index.d.ts",
       "import": "./dist/node/index.js"
@@ -137,14 +141,78 @@
       "types": "./dist/trace-replay/index.d.ts",
       "import": "./dist/trace-replay/index.js"
     },
+    "./paginator": {
+      "types": "./dist/paginator/index.d.ts",
+      "import": "./dist/paginator/index.js"
+    },
+    "./snapshot": {
+      "types": "./dist/snapshot/index.d.ts",
+      "import": "./dist/snapshot/index.js"
+    },
+    "./token-refresh": {
+      "types": "./dist/token-refresh/index.d.ts",
+      "import": "./dist/token-refresh/index.js"
+    },
+    "./resilient-call": {
+      "types": "./dist/resilient-call/index.d.ts",
+      "import": "./dist/resilient-call/index.js"
+    },
+    "./fan-out": {
+      "types": "./dist/fan-out/index.d.ts",
+      "import": "./dist/fan-out/index.js"
+    },
+    "./idempotent-intake": {
+      "types": "./dist/idempotent-intake/index.d.ts",
+      "import": "./dist/idempotent-intake/index.js"
+    },
+    "./poller": {
+      "types": "./dist/poller/index.d.ts",
+      "import": "./dist/poller/index.js"
+    },
+    "./batch-window": {
+      "types": "./dist/batch-window/index.d.ts",
+      "import": "./dist/batch-window/index.js"
+    },
+    "./saga": {
+      "types": "./dist/saga/index.d.ts",
+      "import": "./dist/saga/index.js"
+    },
+    "./throttled-input": {
+      "types": "./dist/throttled-input/index.d.ts",
+      "import": "./dist/throttled-input/index.js"
+    },
+    "./monitored-run": {
+      "types": "./dist/monitored-run/index.d.ts",
+      "import": "./dist/monitored-run/index.js"
+    },
+    "./llm-call": {
+      "types": "./dist/llm-call/index.d.ts",
+      "import": "./dist/llm-call/index.js"
+    },
+    "./paginated-walk": {
+      "types": "./dist/paginated-walk/index.d.ts",
+      "import": "./dist/paginated-walk/index.js"
+    },
+    "./authed-call": {
+      "types": "./dist/authed-call/index.d.ts",
+      "import": "./dist/authed-call/index.js"
+    },
+    "./reconciler": {
+      "types": "./dist/reconciler/index.d.ts",
+      "import": "./dist/reconciler/index.js"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup"
   },
   "dependencies": {
     "better-result": "^2.5.2"

@@ -275,7 +275,7 @@ function emitTransitions<
   }
 
   // Legend — document the resolved-vs-structural distinction in the output.
-  lines.push("  note right of " + safeId(stateTypes[0] ?? "_empty"));
+  lines.push(`  note right of ${safeId(stateTypes[0] ?? "_empty")}`);
   lines.push("    Transitions-form machine.");
   lines.push("    Edge a --> b : msg = RESOLVED (cell executed with samples).");
   if (anyStructural) {

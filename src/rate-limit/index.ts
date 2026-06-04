@@ -52,7 +52,11 @@ export interface TokenBucket {
  * with the caller's clock so the first `refill` measures elapsed time from
  * boot, not from epoch 0.
  */
-export function initBucket(capacity: number, refillPerSec: number, nowMs: number): TokenBucket {
+export function initBucket(
+  capacity: number,
+  refillPerSec: number,
+  nowMs: number,
+): TokenBucket {
   return {
     tokens: capacity,
     capacity,
@@ -145,7 +149,10 @@ export function initWindow(windowMs: number, limit: number): SlidingWindow {
  * PURE — input window is never mutated; `hits` is rebuilt by `filter` +
  * spread.
  */
-export function record(window: SlidingWindow, nowMs: number): readonly [SlidingWindow, boolean] {
+export function record(
+  window: SlidingWindow,
+  nowMs: number,
+): readonly [SlidingWindow, boolean] {
   const cutoff = nowMs - window.windowMs;
   const pruned = window.hits.filter((t) => t > cutoff);
   if (pruned.length < window.limit) {

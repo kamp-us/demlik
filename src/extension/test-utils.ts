@@ -17,6 +17,7 @@ type RuntimeListener = (
   message: unknown,
   sender: chrome.runtime.MessageSender,
   sendResponse: (response: unknown) => void,
+  // biome-ignore lint/suspicious/noConfusingVoidType: mirrors the chrome.runtime.onMessage listener return type (boolean | undefined | void)
 ) => boolean | undefined | void;
 
 type StorageChangeListener = (
@@ -32,7 +33,10 @@ type TabUpdatedListener = (
   changeInfo: chrome.tabs.OnUpdatedInfo,
   tab: chrome.tabs.Tab,
 ) => void;
-type TabRemovedListener = (tabId: number, removeInfo: chrome.tabs.OnRemovedInfo) => void;
+type TabRemovedListener = (
+  tabId: number,
+  removeInfo: chrome.tabs.OnRemovedInfo,
+) => void;
 
 export interface FakeChrome {
   storage: {
@@ -166,7 +170,9 @@ export function fakeChrome(): FakeChrome {
     if (typeof a !== "object" || a === null || b === null) return false;
     return JSON.stringify(a) === JSON.stringify(b);
   }
-  function fireStorageChange(changes: Record<string, chrome.storage.StorageChange>): void {
+  function fireStorageChange(
+    changes: Record<string, chrome.storage.StorageChange>,
+  ): void {
     if (Object.keys(changes).length === 0) return;
     for (const listener of Array.from(storageListeners)) {
       listener(changes, "local");
@@ -189,7 +195,9 @@ export function fakeChrome(): FakeChrome {
         return v === undefined ? {} : { [keys]: v };
       }
       if (Array.isArray(keys)) {
-        return Object.fromEntries(keys.flatMap((k) => (data.has(k) ? [[k, data.get(k)]] : [])));
+        return Object.fromEntries(
+          keys.flatMap((k) => (data.has(k) ? [[k, data.get(k)]] : [])),
+        );
       }
       const out: Record<string, unknown> = {};
       for (const [k, def] of Object.entries(keys)) {
@@ -273,7 +281,10 @@ export function fakeChrome(): FakeChrome {
    *
    * `sender` controls which sender object the listeners see.
    */
-  const dispatch = (message: unknown, sender: chrome.runtime.MessageSender): Promise<unknown> => {
+  const dispatch = (
+    message: unknown,
+    sender: chrome.runtime.MessageSender,
+  ): Promise<unknown> => {
     return new Promise((resolve, reject) => {
       let responded = false;
       const sendResponse = (response: unknown): void => {
@@ -289,11 +300,16 @@ export function fakeChrome(): FakeChrome {
         if (responded) return;
       }
       if (willRespondAsync) return;
-      reject(new Error("Could not establish connection. Receiving end does not exist."));
+      reject(
+        new Error(
+          "Could not establish connection. Receiving end does not exist.",
+        ),
+      );
     });
   };
 
-  const extensionSender: chrome.runtime.MessageSender = {} as chrome.runtime.MessageSender;
+  const extensionSender: chrome.runtime.MessageSender =
+    {} as chrome.runtime.MessageSender;
 
   const runtimePartial = {
     sendMessage(message: unknown): Promise<unknown> {
@@ -462,7 +478,9 @@ export function fakeChrome(): FakeChrome {
     alarms,
     __test: {
       sendFromTab(tabId: number, message: unknown): Promise<unknown> {
-        const taggedSender = { tab: { id: tabId } } as chrome.runtime.MessageSender;
+        const taggedSender = {
+          tab: { id: tabId },
+        } as chrome.runtime.MessageSender;
         return dispatch(message, taggedSender);
       },
       removeTab(tabId: number): void {
@@ -503,7 +521,10 @@ export function fakeChrome(): FakeChrome {
           listener(tabId, changeInfo, tab);
         }
       },
-      fireTabRemoved(tabId: number, removeInfo: chrome.tabs.OnRemovedInfo): void {
+      fireTabRemoved(
+        tabId: number,
+        removeInfo: chrome.tabs.OnRemovedInfo,
+      ): void {
         for (const listener of Array.from(tabRemovedListeners)) {
           listener(tabId, removeInfo);
         }

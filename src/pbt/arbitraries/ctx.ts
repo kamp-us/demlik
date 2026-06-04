@@ -51,7 +51,12 @@ export function stubCtxThrowingProxy<Ctx>(): Ctx {
       // of conventional field names (`toJSON`, `toString`, `valueOf`,
       // `then` — the last for thenable-check). Return undefined for those
       // so the proxy doesn't fail a probe before the property body runs.
-      if (prop === "toJSON" || prop === "toString" || prop === "valueOf" || prop === "then") {
+      if (
+        prop === "toJSON" ||
+        prop === "toString" ||
+        prop === "valueOf" ||
+        prop === "then"
+      ) {
         return undefined;
       }
       throw new Error(

@@ -66,7 +66,9 @@ export type StateFactoryDefaults<S extends { type: string }> = {
  * stripUndefined below).
  */
 export type StateFactoryAPI<S extends { type: string }> = {
-  readonly [K in S["type"]]: (overrides?: Partial<RequiredFields<StateOf<S, K>>>) => StateOf<S, K>;
+  readonly [K in S["type"]]: (
+    overrides?: Partial<RequiredFields<StateOf<S, K>>>,
+  ) => StateOf<S, K>;
 };
 
 /**
@@ -111,7 +113,9 @@ export function stateFactory<S extends { type: string }>(
   // to one phase discriminator; the constructor closes over both the key
   // (for the `type` stamp) and that phase's defaults snapshot.
   const api = {} as { [k: string]: (overrides?: object) => unknown };
-  for (const key of Object.keys(defaults) as (keyof StateFactoryDefaults<S>)[]) {
+  for (const key of Object.keys(
+    defaults,
+  ) as (keyof StateFactoryDefaults<S>)[]) {
     const phaseDefaults = defaults[key];
     api[key as string] = (overrides?: object) => {
       // The strip-undefined pass lives here, not at the caller. See the

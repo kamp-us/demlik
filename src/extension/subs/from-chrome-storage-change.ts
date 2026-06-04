@@ -40,7 +40,10 @@ export interface ChromeStorageChangeOpts<S extends Sub, M> {
    * overlaps with this set. Omitting means "any key in the area".
    */
   keys?: readonly string[];
-  msgFn: (changes: Record<string, chrome.storage.StorageChange>, sub: S) => M | null;
+  msgFn: (
+    changes: Record<string, chrome.storage.StorageChange>,
+    sub: S,
+  ) => M | null;
 }
 
 export function fromChromeStorageChange<S extends Sub, M>(

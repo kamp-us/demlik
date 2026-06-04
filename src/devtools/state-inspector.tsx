@@ -3,7 +3,8 @@ import { useEffect, useRef } from "react";
 function escapeHtml(s: string): string {
   return s.replace(
     /[&<>"]/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string,
   );
 }
 
@@ -11,12 +12,15 @@ function fmtJson(obj: unknown, indent = 0): string {
   if (obj === null) return '<span class="tea-dt-b">null</span>';
   if (typeof obj === "number") return `<span class="tea-dt-n">${obj}</span>`;
   if (typeof obj === "boolean") return `<span class="tea-dt-b">${obj}</span>`;
-  if (typeof obj === "string") return `<span class="tea-dt-s">"${escapeHtml(obj)}"</span>`;
+  if (typeof obj === "string")
+    return `<span class="tea-dt-s">"${escapeHtml(obj)}"</span>`;
   if (Array.isArray(obj)) {
     if (obj.length === 0) return '<span class="tea-dt-br">[]</span>';
     return (
       '<span class="tea-dt-br">[</span>' +
-      obj.map((v) => fmtJson(v, indent + 1)).join('<span class="tea-dt-br">, </span>') +
+      obj
+        .map((v) => fmtJson(v, indent + 1))
+        .join('<span class="tea-dt-br">, </span>') +
       '<span class="tea-dt-br">]</span>'
     );
   }
@@ -26,7 +30,8 @@ function fmtJson(obj: unknown, indent = 0): string {
     const pad = "&nbsp;&nbsp;".repeat(indent + 1);
     const lines = keys.map((k, i) => {
       const v = (obj as Record<string, unknown>)[k];
-      const comma = i < keys.length - 1 ? '<span class="tea-dt-br">,</span>' : "";
+      const comma =
+        i < keys.length - 1 ? '<span class="tea-dt-br">,</span>' : "";
       return `${pad}<span class="tea-dt-k">${escapeHtml(k)}</span><span class="tea-dt-br">:</span> ${fmtJson(v, indent + 1)}${comma}`;
     });
     return [
@@ -55,7 +60,11 @@ export interface StateInspectorProps {
   className?: string;
 }
 
-export function StateInspector({ state, flashKey, className }: StateInspectorProps) {
+export function StateInspector({
+  state,
+  flashKey,
+  className,
+}: StateInspectorProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (flashKey === undefined || !boxRef.current) return;
@@ -65,7 +74,10 @@ export function StateInspector({ state, flashKey, className }: StateInspectorPro
   }, [flashKey]);
 
   return (
-    <div ref={boxRef} className={`tea-dt-state${className ? ` ${className}` : ""}`}>
+    <div
+      ref={boxRef}
+      className={`tea-dt-state${className ? ` ${className}` : ""}`}
+    >
       <div
         className="tea-dt-json"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: formatter output

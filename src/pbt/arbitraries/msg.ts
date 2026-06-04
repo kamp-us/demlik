@@ -81,7 +81,9 @@ export function arbMsg<M extends { type: string }>(
  * @example
  *   arbConstantMsg("stop") // fc.Arbitrary<{ type: "stop" }>
  */
-export function arbConstantMsg<T extends string>(type: T): fc.Arbitrary<{ type: T }> {
+export function arbConstantMsg<T extends string>(
+  type: T,
+): fc.Arbitrary<{ type: T }> {
   return fc.constant({ type });
 }
 
@@ -114,5 +116,7 @@ export function arbRecordMsg<T extends string, R>(
     type: fc.constant(type),
     ...(fields as Record<string, fc.Arbitrary<unknown>>),
   };
-  return fc.record(recordArbitraries) as unknown as fc.Arbitrary<{ type: T } & R>;
+  return fc.record(recordArbitraries) as unknown as fc.Arbitrary<
+    { type: T } & R
+  >;
 }
