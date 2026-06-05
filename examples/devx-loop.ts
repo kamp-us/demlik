@@ -9,15 +9,20 @@
  * Run it:  node packages/tea/examples/devx-loop.ts   (Node 23 strips types)
  */
 
-import { type Cmd, type Sub, defineMachine, noop, run } from "@demlik/tea";
-import { recorder, parseJSONL } from "@demlik/tea/recorder";
-import { replayTrace } from "@demlik/tea/trace-replay";
+import { type Cmd, defineMachine, noop, run, type Sub } from "@demlik/tea";
 import { toMermaid } from "@demlik/tea/machine-viz";
+import { parseJSONL, recorder } from "@demlik/tea/recorder";
+import { replayTrace } from "@demlik/tea/trace-replay";
 
 // === Domain: an order that can take items + a discount, then check out ===
 type Order =
   | { type: "open"; subtotal: number; discountPct: number }
-  | { type: "checked_out"; subtotal: number; discountPct: number; total: number };
+  | {
+      type: "checked_out";
+      subtotal: number;
+      discountPct: number;
+      total: number;
+    };
 
 type Msg =
   | { type: "add_item"; price: number }
@@ -41,9 +46,17 @@ const orderV1 = defineMachine<Order, Msg, NoCmd, NoSub, NoCtx>({
     open: {
       add_item: (s, m) => [{ ...s, subtotal: s.subtotal + m.price }, []],
       // BUG: mutates subtotal here AND records the pct.
-      apply_discount: (s, m) => [{ ...s, discountPct: m.pct, subtotal: s.subtotal * (1 - m.pct / 100) }, []],
+      apply_discount: (s, m) => [
+        { ...s, discountPct: m.pct, subtotal: s.subtotal * (1 - m.pct / 100) },
+        [],
+      ],
       checkout: (s) => [
-        { type: "checked_out", subtotal: s.subtotal, discountPct: s.discountPct, total: s.subtotal * (1 - s.discountPct / 100) },
+        {
+          type: "checked_out",
+          subtotal: s.subtotal,
+          discountPct: s.discountPct,
+          total: s.subtotal * (1 - s.discountPct / 100),
+        },
         [],
       ],
     },
@@ -59,7 +72,12 @@ const orderV2 = defineMachine<Order, Msg, NoCmd, NoSub, NoCtx>({
       add_item: (s, m) => [{ ...s, subtotal: s.subtotal + m.price }, []],
       apply_discount: (s, m) => [{ ...s, discountPct: m.pct }, []], // fixed: just record
       checkout: (s) => [
-        { type: "checked_out", subtotal: s.subtotal, discountPct: s.discountPct, total: s.subtotal * (1 - s.discountPct / 100) },
+        {
+          type: "checked_out",
+          subtotal: s.subtotal,
+          discountPct: s.discountPct,
+          total: s.subtotal * (1 - s.discountPct / 100),
+        },
         [],
       ],
     },
@@ -67,7 +85,8 @@ const orderV2 = defineMachine<Order, Msg, NoCmd, NoSub, NoCtx>({
   },
 });
 
-const line = (label: string) => console.log(`\n━━ ${label} ${"━".repeat(Math.max(0, 56 - label.length))}`);
+const line = (label: string) =>
+  console.log(`\n━━ ${label} ${"━".repeat(Math.max(0, 56 - label.length))}`);
 
 async function main() {
   // === 1. IN PROD: run v1, record everything via observe ===
@@ -82,9 +101,13 @@ async function main() {
   await runtime.dispatch({ type: "checkout" });
 
   const prod = runtime.getState() as Extract<Order, { type: "checked_out" }>;
-  console.log("dispatched: add_item 100, add_item 50, apply_discount 10%, checkout");
+  console.log(
+    "dispatched: add_item 100, add_item 50, apply_discount 10%, checkout",
+  );
   console.log("prod final:", prod);
-  console.log(`⚠  customer charged ${prod.total.toFixed(2)} on a 150 cart at 10% off — discount applied TWICE`);
+  console.log(
+    `⚠  customer charged ${prod.total.toFixed(2)} on a 150 cart at 10% off — discount applied TWICE`,
+  );
 
   // === 2. recorder captured the exact Msg sequence (portable JSONL) ===
   line("2. recorder captured the trace (JSONL — paste from a prod log)");
@@ -96,7 +119,9 @@ async function main() {
   line("3. DEBUG — replay the prod trace against v1");
   const trace = parseJSONL<Order, Msg>(jsonl);
   const onV1 = replayTrace(orderV1, trace, {});
-  console.log(`replayTrace(v1)  matches: ${onV1.matches}  → bug reproduced locally, deterministically`);
+  console.log(
+    `replayTrace(v1)  matches: ${onV1.matches}  → bug reproduced locally, deterministically`,
+  );
 
   // === 4. VERIFY THE FIX: same trace, v2 reducer — pinpoint what changed ===
   line("4. VERIFY THE FIX — replay the SAME trace against v2");
@@ -105,8 +130,12 @@ async function main() {
   if (onV2.divergence) {
     const d = onV2.divergence;
     console.log(`divergence at  ${d.path}`);
-    console.log(`   prod/v1 = ${JSON.stringify(d.expected)}   v2/fixed = ${JSON.stringify(d.actual)}`);
-    console.log("→ the fix stops v1 from corrupting that field. One field changed, nothing else.");
+    console.log(
+      `   prod/v1 = ${JSON.stringify(d.expected)}   v2/fixed = ${JSON.stringify(d.actual)}`,
+    );
+    console.log(
+      "→ the fix stops v1 from corrupting that field. One field changed, nothing else.",
+    );
   }
 
   // === 5. machine-viz: the fixed machine as a Mermaid state diagram ===
@@ -117,7 +146,12 @@ async function main() {
       samples: {
         states: {
           open: { type: "open", subtotal: 150, discountPct: 10 },
-          checked_out: { type: "checked_out", subtotal: 150, discountPct: 10, total: 135 },
+          checked_out: {
+            type: "checked_out",
+            subtotal: 150,
+            discountPct: 10,
+            total: 135,
+          },
         },
         msgs: {
           add_item: { type: "add_item", price: 10 },

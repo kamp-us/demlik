@@ -19,6 +19,12 @@
 
 import { type Cmd, defineMachine, run, tryInterpret } from "@demlik/tea";
 import {
+  get as cacheGet,
+  set as cacheSet,
+  initCache,
+  type TtlCache,
+} from "@demlik/tea/cache";
+import {
   type CircuitState,
   canPass,
   defaultCircuitPolicy,
@@ -26,20 +32,34 @@ import {
   onFailure,
   onSuccess,
 } from "@demlik/tea/circuit-breaker";
-import { type TokenBucket, initBucket, tryConsume } from "@demlik/tea/rate-limit";
 import {
-  type RetryState,
+  type DeadlineExceeded,
+  type DeadlineSub,
+  deadlineSub,
+  subscribeDeadline,
+} from "@demlik/tea/deadline";
+import {
+  initBucket,
+  type TokenBucket,
+  tryConsume,
+} from "@demlik/tea/rate-limit";
+import {
   defaultRetryPolicy,
   initRetry,
   nextDelayMs,
+  type RetryState,
   recordFailure,
   shouldRetry,
 } from "@demlik/tea/retry-backoff";
-import { type TtlCache, get as cacheGet, initCache, set as cacheSet } from "@demlik/tea/cache";
-import { type DeadlineExceeded, type DeadlineSub, deadlineSub, subscribeDeadline } from "@demlik/tea/deadline";
 
 // === Model: reliability modules composed as plain fields ===
-type Phase = "idle" | "fetching" | "waiting_retry" | "circuit_open" | "succeeded" | "failed";
+type Phase =
+  | "idle"
+  | "fetching"
+  | "waiting_retry"
+  | "circuit_open"
+  | "succeeded"
+  | "failed";
 
 interface State {
   phase: Phase;
@@ -75,11 +95,18 @@ const CACHE_TTL_MS = 60_000;
 // Shared "try to fetch now" decision — used by the initial `fetch` Msg AND by
 // the retry timer (`deadline_exceeded`). This is where four modules compose in
 // one pure function: cache read → circuit gate → rate-limit gate → emit effect.
-function attempt(state: State, url: string, at: number): readonly [State, readonly DoFetch[]] {
+function attempt(
+  state: State,
+  url: string,
+  at: number,
+): readonly [State, readonly DoFetch[]] {
   // 1) Serve from cache if still fresh — no effect at all.
   const cached = cacheGet(state.cache, url, at);
   if (cached !== undefined) {
-    return [{ ...state, phase: "succeeded", url, body: cached, error: null }, []];
+    return [
+      { ...state, phase: "succeeded", url, body: cached, error: null },
+      [],
+    ];
   }
 
   // 2) Circuit-breaker gate. canPass returns [nextCircuit, allowed] — pure.
@@ -94,16 +121,38 @@ function attempt(state: State, url: string, at: number): readonly [State, readon
     // Rate-limited: treat as a transient failure and back off via retry-backoff.
     const retry = recordFailure(state.retry, "rate_limited");
     if (!shouldRetry(retry, defaultRetryPolicy)) {
-      return [{ ...state, circuit, bucket, retry, phase: "failed", url, error: "rate limited; out of retries" }, []];
+      return [
+        {
+          ...state,
+          circuit,
+          bucket,
+          retry,
+          phase: "failed",
+          url,
+          error: "rate limited; out of retries",
+        },
+        [],
+      ];
     }
     return [
-      { ...state, circuit, bucket, retry, phase: "waiting_retry", url, retryAtMs: at + nextDelayMs(retry, defaultRetryPolicy) },
+      {
+        ...state,
+        circuit,
+        bucket,
+        retry,
+        phase: "waiting_retry",
+        url,
+        retryAtMs: at + nextDelayMs(retry, defaultRetryPolicy),
+      },
       [],
     ];
   }
 
   // 4) All gates passed — emit the effect as data.
-  return [{ ...state, circuit, bucket, phase: "fetching", url, error: null }, [{ type: "do_fetch", url }]];
+  return [
+    { ...state, circuit, bucket, phase: "fetching", url, error: null },
+    [{ type: "do_fetch", url }],
+  ];
 }
 
 export const resilientFetch = defineMachine<State, Msg, DoFetch, Sub, Ctx>({
@@ -148,17 +197,29 @@ export const resilientFetch = defineMachine<State, Msg, DoFetch, Sub, Ctx>({
         return [{ ...s, circuit, retry, phase: "failed", error: m.error }, []];
       }
       // Schedule a retry: the deadline Sub (declared below) fires at retryAtMs.
-      return [{ ...s, circuit, retry, phase: "waiting_retry", retryAtMs: m.at + nextDelayMs(retry, defaultRetryPolicy) }, []];
+      return [
+        {
+          ...s,
+          circuit,
+          retry,
+          phase: "waiting_retry",
+          retryAtMs: m.at + nextDelayMs(retry, defaultRetryPolicy),
+        },
+        [],
+      ];
     },
 
     // The retry timer fired — re-attempt (re-gates the circuit + bucket at this time).
     deadline_exceeded: (s, m) =>
-      s.phase === "waiting_retry" && s.url !== null ? attempt(s, s.url, m.atMs) : [s, []],
+      s.phase === "waiting_retry" && s.url !== null
+        ? attempt(s, s.url, m.atMs)
+        : [s, []],
   },
 
   // A Sub is active ONLY while we're waiting to retry. When the phase changes,
   // reconcile-by-id cancels the timer automatically — no manual clearTimeout.
-  subscriptions: (s) => (s.phase === "waiting_retry" ? [deadlineSub("retry", s.retryAtMs)] : []),
+  subscriptions: (s) =>
+    s.phase === "waiting_retry" ? [deadlineSub("retry", s.retryAtMs)] : [],
   subscribe: { deadline: subscribeDeadline },
 
   // The effect. tryInterpret routes Ok/Err to two Msgs — and stamps the time:
@@ -167,7 +228,12 @@ export const resilientFetch = defineMachine<State, Msg, DoFetch, Sub, Ctx>({
     do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
       (cmd, ctx) => ctx.http(cmd.url),
       (body, cmd) => ({ type: "fetch_ok", url: cmd.url, body, at: Date.now() }),
-      (err, cmd) => ({ type: "fetch_err", url: cmd.url, error: String(err), at: Date.now() }),
+      (err, cmd) => ({
+        type: "fetch_err",
+        url: cmd.url,
+        error: String(err),
+        at: Date.now(),
+      }),
     ),
   },
 });

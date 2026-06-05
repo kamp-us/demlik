@@ -22,6 +22,12 @@
 // ---------------------------------------------------------------------------
 
 export {
+  type AssertWrapperFaithfulOpts,
+  assertWrapperFaithful,
+  type InterceptingOpt,
+  type WrapperModel,
+} from "./assert-wrapper-faithful";
+export {
   expectActiveSubs,
   expectCmdEmitted,
   expectCmdSequence,

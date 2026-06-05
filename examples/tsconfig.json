@@ -1,5 +1,8 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": { "noEmit": true, "lib": ["ES2022", "DOM", "DOM.Iterable"] },
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
   "include": ["**/*.ts"]
 }

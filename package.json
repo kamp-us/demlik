@@ -157,6 +157,10 @@
       "types": "./dist/resilient-call/index.d.ts",
       "import": "./dist/resilient-call/index.js"
     },
+    "./with-telemetry": {
+      "types": "./dist/with-telemetry/index.d.ts",
+      "import": "./dist/with-telemetry/index.js"
+    },
     "./fan-out": {
       "types": "./dist/fan-out/index.d.ts",
       "import": "./dist/fan-out/index.js"
@@ -204,6 +208,14 @@
     "./agent": {
       "types": "./dist/agent/index.d.ts",
       "import": "./dist/agent/index.js"
+    },
+    "./with-deadline": {
+      "types": "./dist/with-deadline/index.d.ts",
+      "import": "./dist/with-deadline/index.js"
+    },
+    "./with-resilience": {
+      "types": "./dist/with-resilience/index.d.ts",
+      "import": "./dist/with-resilience/index.js"
     },
     "./package.json": "./package.json"
   },
