@@ -401,6 +401,82 @@ export function __resetPortRegistry(): void {
   definedPortNames.clear();
 }
 
+// === Runtime error sink (invariant 6 — no silent failures) ===
+//
+// The runtime has points where a failure has no natural caller to reject at:
+// a follow-up Msg an interpret handler enqueued (the original dispatcher
+// already resolved), and the final `store.save` during `stop()` (whose
+// contract is a resolved Promise). Historically both were swallowed —
+// `.catch(() => {})` and a bare `console.error` — which violates invariant 6:
+// the runtime must be inspectable; no silent failures.
+//
+// `RuntimeErrorContext` tags WHICH swallowed path produced the error so a sink
+// can route by phase. `OnError` is the sink itself, configured at `run(...)`.
+// When no sink is provided the runtime uses `defaultOnError`, which RE-THROWS
+// on a fresh macrotask — surfacing to the host's unhandled-rejection / global
+// error handler rather than vanishing. The default surfaces; it never swallows.
+
+/**
+ * Which otherwise-unattributable runtime path produced an error.
+ *
+ * - `"follow-up"` — a follow-up Msg an interpret handler returned rejected
+ *   when re-dispatched. The original dispatcher already resolved, so this
+ *   rejection has no caller; without the sink it was swallowed.
+ * - `"stop-save"` — the final `store.save(state)` inside `stop()` threw.
+ *   `stop()` resolves regardless (its contract), so without the sink this was
+ *   silent loss of the last write.
+ */
+export type RuntimeErrorPhase = "follow-up" | "stop-save";
+
+/** Context handed to an `OnError` sink alongside the error itself. */
+export interface RuntimeErrorContext {
+  readonly phase: RuntimeErrorPhase;
+}
+
+/**
+ * Sink for runtime failures that have no caller to reject at. Configured via
+ * `run(machine, { onError })`. Should be total — a throw inside the sink is
+ * itself surfaced via `defaultOnError`, so the sink can never re-introduce a
+ * silent failure.
+ */
+export type OnError = (error: unknown, context: RuntimeErrorContext) => void;
+
+/**
+ * Default `onError` sink: re-throw on a fresh macrotask so the failure reaches
+ * the host's global error / unhandledRejection handler instead of vanishing.
+ * Used whenever `run(...)` is called without an explicit `onError`. The least
+ * surprising default — it surfaces rather than swallows (invariant 6) without
+ * forcing every caller to wire a sink.
+ */
+function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
+  setTimeout(() => {
+    throw error;
+  }, 0);
+}
+
+/**
+ * Raised by `idle()` when the quiescence wait hits its iteration cap without
+ * the dispatch tail stabilizing. Replaces the old silent fall-through-resolve
+ * (which made "the loop quiesced" indistinguishable from "we gave up"):
+ * `idle()` now REJECTS with this so a livelocking machine surfaces instead of
+ * masquerading as quiescent.
+ *
+ * Mechanizes invariant 6 (no silent failures) at the runtime layer — the same
+ * role `PortNameCollisionError` plays for invariant 7.
+ */
+export class QuiescenceTimeoutError extends Error {
+  override readonly name = "QuiescenceTimeoutError";
+  constructor(public readonly iterations: number) {
+    super(
+      `@demlik/tea: idle() did not reach quiescence after ${iterations} ` +
+        `iterations — the dispatch tail kept advancing. The machine is ` +
+        `likely livelocking (an interpret handler enqueues a follow-up Msg ` +
+        `that enqueues another, without end). Bound the follow-up chain in ` +
+        `the reducer, or stop the runtime.`,
+    );
+  }
+}
+
 /**
  * Define a typed port. `name` is metadata (shown in devtools / debug logs);
  * port identity is by reference. Each definePort call must use a unique
@@ -693,8 +769,13 @@ export interface Runtime<S, M extends { type: string }> extends RuntimeRef<M> {
    *
    * Idempotent and re-entrant-safe: each call reads the live tail; a tail that
    * advanced during the await (a follow-up landed) is awaited again until
-   * stable. Never rejects — tail rejections are swallowed at enqueue time (a
-   * failing dispatch surfaces on its OWN returned promise, not here).
+   * stable. Tail rejections are NOT surfaced here — a failing dispatch
+   * surfaces on its OWN returned promise (and follow-up rejections route to
+   * the `onError` sink). The ONE rejection `idle()` itself produces is a
+   * `QuiescenceTimeoutError` when the wait hits its iteration cap without the
+   * tail stabilizing: that replaces the old silent fall-through-resolve so a
+   * livelocking machine is distinguishable from a genuinely quiesced one
+   * (invariant 6 — no silent failures).
    *
    * Use `idle()` for runtime-internal follow-ups; a poll is still correct when
    * waiting on an EXTERNAL event (a WS reply) the runtime cannot enqueue itself.
@@ -802,9 +883,38 @@ export function run<
   Ctx,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  opts: { ctx: Ctx; store?: Store<S> },
+  opts: {
+    ctx: Ctx;
+    store?: Store<S>;
+    onError?: OnError;
+    /**
+     * Iteration cap for `idle()`'s quiescence wait. Defaults to 100_000. Test
+     * seam only — lets a livelock test trip the `QuiescenceTimeoutError` reject
+     * path in a handful of iterations instead of 100k. Production code must not
+     * set it.
+     *
+     * @internal test-only
+     */
+    __idleCap?: number;
+  },
 ): Runtime<S, M> {
   const { ctx, store } = opts;
+  const idleCap = opts.__idleCap ?? 100_000;
+  // The error sink for paths with no caller to reject at (follow-up dispatch
+  // rejections, the final stop-save). Optional on `run`; when absent we fall
+  // back to `defaultOnError`, which re-throws on a macrotask so the failure
+  // still surfaces. Invariant 6: no silent failures.
+  const onError: OnError = opts.onError ?? defaultOnError;
+  // The sink must itself be total. If a consumer's sink throws, route THAT
+  // throw through `defaultOnError` so a buggy sink can't re-create a silent
+  // failure (or strand a teardown loop).
+  const reportError = (error: unknown, context: RuntimeErrorContext): void => {
+    try {
+      onError(error, context);
+    } catch (sinkError) {
+      defaultOnError(sinkError, context);
+    }
+  };
 
   // Holders are intentionally late-initialized: `state` is set inside the boot
   // step, which runs as the head of the tail. `getState()` before boot throws.
@@ -1027,12 +1137,15 @@ export function run<
       );
       if (follow !== undefined && follow !== null) {
         // Schedule follow-up Msg on the tail. The current step resolves
-        // first; the follow-up runs after, as a fresh transition. Swallow the
-        // returned rejection — fire-and-forget at this site; the runtime
-        // never re-throws follow-up errors at the dispatcher of the original
-        // cmd. If you need observable error handling, name a failure Msg via
-        // `tryInterpret` (Railway).
-        enqueueDispatch(follow as M).catch(() => {});
+        // first; the follow-up runs after, as a fresh transition. The
+        // returned rejection has no caller (the original dispatcher already
+        // resolved), so route it to the error sink instead of swallowing it —
+        // invariant 6: no silent failures. If you want this failure folded
+        // back into state, name a failure Msg via `tryInterpret` (Railway);
+        // the sink is the last-resort observability hook for the rest.
+        enqueueDispatch(follow as M).catch((error: unknown) => {
+          reportError(error, { phase: "follow-up" });
+        });
       }
     }
   }
@@ -1268,11 +1381,15 @@ export function run<
       // is queued. Bounded to avoid an unbounded spin on a livelocking machine
       // (the agent's own maxTurns guards real livelock; this cap is a safety
       // net, not the primary guard).
-      for (let i = 0; i < 100_000; i++) {
+      for (let i = 0; i < idleCap; i++) {
         const observed = tail;
         await observed;
         if (tail === observed) return;
       }
+      // Hitting the cap means the tail never stabilized. Rejecting (rather
+      // than the old silent fall-through-resolve) keeps "quiesced" and "gave
+      // up" distinguishable — invariant 6: no silent failures.
+      throw new QuiescenceTimeoutError(idleCap);
     },
     async stop(): Promise<void> {
       stopped = true;
@@ -1290,13 +1407,15 @@ export function run<
         }
         subRegistry.delete(id);
       }
-      // Flush final state. A save throw here is logged but does not reject
-      // `stop()` — the contract is "returns a resolved Promise".
+      // Flush final state. A save throw here does not reject `stop()` — the
+      // contract is "returns a resolved Promise" — but it IS the loss of the
+      // last write, so route it to the error sink rather than swallowing it
+      // with a bare console.error. Invariant 6: no silent failures.
       if (store && state !== undefined && bootError === null) {
         try {
           await store.save(state);
-        } catch (err) {
-          console.error(err);
+        } catch (error) {
+          reportError(error, { phase: "stop-save" });
         }
       }
     },
