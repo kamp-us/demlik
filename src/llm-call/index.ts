@@ -484,9 +484,10 @@ export function createLlmCall<
   ): Promise<LlmSucceedMsg<P, O> | LlmFailMsg<P>> {
     // `resilientRunHandler` never rejects (tryInterpret contract) — it resolves
     // to a `resilient_ok` / `resilient_err` settle Msg stamped with `Date.now()`.
-    // Its `ctx` is `tryInterpret`'s `Ctx` = `unknown`; this handler reads no ctx,
-    // so `undefined` satisfies it without a cast.
-    const settle = await resilientRunHandler(cmd, undefined);
+    // Its `ctx` slot is `NoCtx` (the resilient-call work fn reads no ctx — a
+    // DELIBERATE context-free seam, not accidental `unknown`), so the empty
+    // record satisfies it without a cast.
+    const settle = await resilientRunHandler(cmd, {});
     if (settle.type === "resilient_ok") {
       // `result` is the parsed `LlmOk` from `invokeOne`, and the narrowed
       // `SucceedMsg<LlmOk>` IS `LlmSucceedMsg` — returned as-is, no cast.

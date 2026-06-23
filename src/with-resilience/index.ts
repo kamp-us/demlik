@@ -612,7 +612,13 @@ export function withResilience<
   // — the ONE permitted clock read (interpret is impure; update is pure).
   const runHandler = tryInterpret<
     ResilienceRunCmd<C>,
-    unknown,
+    // The carried result is the base interpret handler's resolution, whose
+    // contract is `Promise<M | void>` (a follow-up base Msg or nothing — see
+    // `Interpret<M, C, Ctx>`). Carrying `M | void` here (not bare `unknown`)
+    // keeps the base's follow-up Msg type at the seam; `ResilienceOkMsg.result`
+    // then narrows from genuine looseness to "a base Msg or void".
+    // biome-ignore lint/suspicious/noConfusingVoidType: mirrors `Interpret`'s own `Promise<M | void>` — the base handler resolves to a follow-up Msg OR nothing; `M | undefined` would reject no-return bodies
+    M | void,
     ResilienceOkMsg | ResilienceErrMsg,
     unknown
   >(
@@ -621,10 +627,16 @@ export function withResilience<
       // own handler for its type. The base handler may itself return a follow-up
       // Msg or void; the resilience layer treats its RESOLUTION (resolve vs
       // throw) as the success/failure signal, and carries whatever it returned
-      // as the opaque `result`. A throw → tryInterpret routes to `$resilience:err`.
+      // as `result`. A throw → tryInterpret routes to `$resilience:err`.
       const inner = cmd.input;
+      // The base handler's own type is `Interpret<M, C, Ctx>[type]`, i.e.
+      // `(cmd, ctx & PortEmitter) => Promise<M | void>`. We read it off the
+      // erased `Record` and re-narrow to that contract — the result type is
+      // KNOWN (the base Msg union or void), so it is not widened to `unknown`.
+      // biome-ignore lint/suspicious/noConfusingVoidType: the base handler contract is `Promise<M | void>` (follow-up Msg or no-return); narrowing to `undefined` would reject void-returning base handlers
+      type BaseHandler = (c: C, ctx: Ctx) => Promise<M | void>;
       const handler = (baseInterpret as Record<string, unknown>)[inner.type] as
-        | ((c: C, ctx: Ctx) => Promise<unknown>)
+        | BaseHandler
         | undefined;
       if (handler === undefined) {
         // The target Cmd has no base interpret handler — a miswired base. Surface

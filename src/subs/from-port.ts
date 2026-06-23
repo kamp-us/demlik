@@ -39,8 +39,22 @@
 import type { Port, Runtime, Sub } from "../index";
 import type { SubscribeHandler } from "./types";
 
-export function fromPort<S extends Sub, M, Ctx, T>(
-  selectRuntime: (ctx: Ctx) => Runtime<unknown, { type: string }>,
+// `RS` / `RM` carry the sibling Runtime's concrete State and Msg through the
+// selector: a caller that selects a `Runtime<AuditState, AuditMsg>` keeps that
+// type at the seam instead of collapsing it to `Runtime<unknown, {type:string}>`.
+// They default to the prior broad pair so existing call sites that select a
+// less-specific Runtime still compile — the factory still only ever calls
+// `subscribePort`, so it does not read RS/RM, but the boundary no longer
+// hardcodes the widest type when the caller knows a narrower one.
+export function fromPort<
+  S extends Sub,
+  M,
+  Ctx,
+  T,
+  RS = unknown,
+  RM extends { type: string } = { type: string },
+>(
+  selectRuntime: (ctx: Ctx) => Runtime<RS, RM>,
   port: Port<T>,
   msgFn: (value: T, sub: S) => M | null,
 ): SubscribeHandler<S, M, Ctx> {

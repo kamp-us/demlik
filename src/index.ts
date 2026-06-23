@@ -526,6 +526,30 @@ export interface PortEmitter {
   emit<T>(port: Port<T>, value: T): void;
 }
 
+// === NoCtx: the context-free marker ===
+//
+// A handler, Sub, or machine that reads NOTHING from `ctx` says so by using
+// `NoCtx` for its Ctx slot. This is the DELIBERATE absence of context — not
+// the accidental `unknown` looseness that erodes a boundary (see issue #64).
+//
+// `unknown` at a Ctx seam is ambiguous: it can mean "I intentionally need no
+// context" OR "I gave up tightening this type." `NoCtx` resolves that
+// ambiguity at the type level. A reader (and the next agent) sees `NoCtx` and
+// knows the context-free-ness is a choice the author made, not a hole.
+//
+// Shape: an empty readonly record. A `Ctx & PortEmitter` is-a `NoCtx`, so a
+// context-free handler still composes at a richer call site. It carries no
+// own fields, so the name's claim ("reads nothing from ctx") is what callers
+// read at the seam.
+//
+// Strengthens invariant 6 (no silent looseness — a context-free seam is named,
+// not inferred) and invariant 8 (the boundary is legible; `unknown` stays
+// reserved for genuine wire-edge erasure, not for "didn't bother").
+export type NoCtx = Readonly<Record<never, never>>;
+
+/** Spelled-out alias for `NoCtx`, for sites that prefer the long name. */
+export type ContextFree = NoCtx;
+
 // === Interpret<M, C, Ctx>: record-of-handlers form of `interpret` ===
 //
 // Flat dispatch table keyed by `Cmd.type`. Each cell receives the narrowed Cmd

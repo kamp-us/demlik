@@ -87,7 +87,7 @@ import {
   deadlineSub,
   subscribeDeadline,
 } from "../deadline";
-import { type Cmd, tryInterpret } from "../index";
+import { type Cmd, type NoCtx, tryInterpret } from "../index";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
 import {
   initRetry,
@@ -669,7 +669,10 @@ export function createResilientCall<I, R>(
         RunCmd<I>,
         R,
         SucceedMsg<R> | FailMsg,
-        unknown
+        // The work fn reads nothing from ctx — it forwards `cmd.input` to the
+        // consumer-supplied `run` port. `NoCtx` (not `unknown`) marks this as a
+        // DELIBERATE context-free seam, so callers see intent, not looseness.
+        NoCtx
       >(
         (cmd) => ports.run(cmd.input, cmd.key),
         (result, cmd): SucceedMsg<R> => ({
