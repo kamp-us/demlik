@@ -91,18 +91,16 @@ function makeAgent(
     >[0]
   >,
 ) {
-  return createAgent<Stage, Purpose, Outputs, string, ToolCmd, Message>(
-    {
-      stages: STAGES,
-      model: fakeModel(async () => ({ content: "", toolCalls: [] })),
-      schemas,
-      retry,
-      turnOf,
-      toolOf,
-      ...over,
-    },
-    rngZero,
-  );
+  return createAgent<Stage, Purpose, Outputs, string, ToolCmd, Message>({
+    stages: STAGES,
+    model: fakeModel(async () => ({ content: "", toolCalls: [] })),
+    schemas,
+    retry,
+    turnOf,
+    toolOf,
+    rng: rngZero,
+    ...over,
+  });
 }
 
 // A turn with N tool calls.
@@ -413,7 +411,7 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
       string,
       ToolCmd,
       Message
-    >({ stages: STAGES, model, schemas, retry, turnOf, toolOf }, rngZero);
+    >({ stages: STAGES, model, schemas, retry, turnOf, toolOf, rng: rngZero });
 
     // A latch that resolves the moment the run reaches a terminal state, so the
     // test waits on the END STATE rather than a fixed Msg count.
@@ -720,18 +718,16 @@ describe("createAgent — payloadOf threads the conversation into the brain call
       string,
       ToolCmd,
       Message
-    >(
-      {
-        stages: STAGES,
-        model: fakeModel(async () => ({ content: "", toolCalls: [] })),
-        schemas,
-        retry,
-        turnOf,
-        toolOf,
-        payloadOf: (stage, conv) => ({ stage, turnCount: conv.turnCount }),
-      },
-      rngZero,
-    );
+    >({
+      stages: STAGES,
+      model: fakeModel(async () => ({ content: "", toolCalls: [] })),
+      schemas,
+      retry,
+      turnOf,
+      toolOf,
+      payloadOf: (stage, conv) => ({ stage, turnCount: conv.turnCount }),
+      rng: rngZero,
+    });
     const [, cmds] = agent.start(agent.init(), "r", 0);
     expect(cmds).toEqual([
       {
@@ -861,18 +857,16 @@ describe("createAgent — properties", () => {
       string,
       ToolCmd,
       Message
-    >(
-      {
-        stages: STAGES,
-        model: fakeModel(async () => ({ content: "", toolCalls: [] })),
-        schemas,
-        turnOf,
-        toolOf,
-        deadlineMs: 1000,
-        maxTurns: 4,
-      },
-      rngZero,
-    );
+    >({
+      stages: STAGES,
+      model: fakeModel(async () => ({ content: "", toolCalls: [] })),
+      schemas,
+      turnOf,
+      toolOf,
+      deadlineMs: 1000,
+      maxTurns: 4,
+      rng: rngZero,
+    });
 
     type Action =
       | { kind: "empty_turn" }
@@ -1012,16 +1006,14 @@ describe("createAgent — properties", () => {
     // 4) llm — a no-retry agent settles `failed` on the first brain failure and
     // stamps the agent `llm` failure carrying the plain-data error sentinel.
     {
-      const a = createAgent<Stage, Purpose, Outputs, string, ToolCmd, Message>(
-        {
-          stages: STAGES,
-          model: fakeModel(async () => ({ content: "", toolCalls: [] })),
-          schemas,
-          turnOf,
-          toolOf,
-        },
-        rngZero,
-      );
+      const a = createAgent<Stage, Purpose, Outputs, string, ToolCmd, Message>({
+        stages: STAGES,
+        model: fakeModel(async () => ({ content: "", toolCalls: [] })),
+        schemas,
+        turnOf,
+        toolOf,
+        rng: rngZero,
+      });
       let [s] = a.start(a.init(), "r", 0);
       [s] = a.fail(
         s,

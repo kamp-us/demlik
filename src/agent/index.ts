@@ -317,6 +317,15 @@ export interface AgentConfig<
    * turn guard (only the deadline watchdog bounds the loop).
    */
   readonly maxTurns?: number;
+
+  // ---- determinism seam ----------------------------------------------------
+  /**
+   * The impurity-injection seam for the inherited brain-call retry jitter — the
+   * ONE place this otherwise-pure machine reads randomness. Pass a fixed
+   * `() => 0` to pin backoff (tests, replay, durability proofs). Omit →
+   * `Math.random`, read only at the resilient-call verb boundary.
+   */
+  readonly rng?: () => number;
 }
 
 // ===========================================================================
@@ -441,9 +450,10 @@ export type AgentDetachedHandlers<P extends string, M> = {
 // ===========================================================================
 
 /**
- * Build an agent knob from `config`. `rng` is injected for the inherited
- * brain-call retry jitter (pass a fixed `() => 0` in tests to pin backoff;
- * defaults to `Math.random`, read only at the resilient-call verb boundary).
+ * Build an agent knob from `config`. The determinism seam — `config.rng`,
+ * injected for the inherited brain-call retry jitter — lives as a named field
+ * on the config (pass a fixed `() => 0` to pin backoff in tests; omit → defaults
+ * to `Math.random`, read only at the resilient-call verb boundary).
  *
  * Returns the uniform knob contract (`init` / verbs / `subs` / `handlers`) plus
  * `toMachine()` — a `defineMachine` wiring all of it into one runnable machine.
@@ -455,10 +465,8 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
->(
-  config: AgentConfig<Stage, P, O, R, TC, Msg>,
-  rng: () => number = Math.random,
-) {
+>(config: AgentConfig<Stage, P, O, R, TC, Msg>) {
+  const rng = config.rng ?? Math.random;
   // ---- The three composed sub-knobs --------------------------------------
 
   const run = createMonitoredRun<Stage, unknown>({

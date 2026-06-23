@@ -294,23 +294,21 @@ type ResearchMachine = Machine<
 
 /** Build the two-stage agent. `cursor` lets the caller share/reset the script. */
 function makeAgent(cursor: { i: number }): ResearchAgent {
-  return createAgent<Stage, Purpose, Outputs, string, RunTool, Msg>(
-    {
-      stages: ["research", "report"],
-      model: scriptedModel(cursor),
-      schemas,
-      turnOf,
-      toolOf,
-      retry: {
-        baseMs: 10,
-        factor: 2,
-        capMs: 50,
-        maxAttempts: 3,
-        jitter: "none",
-      },
+  return createAgent<Stage, Purpose, Outputs, string, RunTool, Msg>({
+    stages: ["research", "report"],
+    model: scriptedModel(cursor),
+    schemas,
+    turnOf,
+    toolOf,
+    retry: {
+      baseMs: 10,
+      factor: 2,
+      capMs: 50,
+      maxAttempts: 3,
+      jitter: "none",
     },
-    () => 0, // pinned jitter RNG
-  );
+    rng: () => 0, // pinned jitter RNG
+  });
 }
 
 // The consumer's tool interpret: perform the fake tool and route the result
