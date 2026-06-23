@@ -6,20 +6,25 @@
  *
  * **The recipe.** This is a Level-2 composition — it owns no primitive
  * queue/cache logic of its own, it *splices two L1 bricks into one Model slice*
- * and DELEGATES every transition to their pure ops:
+ * and DELEGATES every transition to their VERB SEAMS — `IdempotencyMemory`
+ * (`../idempotency/adapter`) and `QueueAdapter` (`../work-queue/adapter`) —
+ * so the store ops and the `QueueItem` / `IdempotencyStore` shapes stay
+ * insulated behind verbs the intake calls:
  *
- *   - `../idempotency` — the dedupe-by-key + last-result cache. The `seen`
- *     half of the slice is its `IdempotencyStore`, keyed by `keyOf(payload)`.
- *     A key is `seen` once `receive` calls `remember` to record it; `complete`
- *     calls `remember` again to swap its cached value from `pending` to the
- *     finished `result`. The cache write is the brick's, never re-rolled here.
- *   - `../work-queue/ops` — the pending-work list. The `queue` half of the
+ *   - `../idempotency/adapter` — the dedupe-by-key + last-result cache. The
+ *     `seen` half of the slice is its `IdempotencyStore`, keyed by
+ *     `keyOf(payload)`. A key is recorded once `receive` calls `memory.remember`;
+ *     `complete` calls `memory.remember` again to swap its cached value from
+ *     `pending` to the finished `result`. The cache write is the brick's, never
+ *     re-rolled here.
+ *   - `../work-queue/adapter` — the pending-work list. The `queue` half of the
  *     slice is its `QueueItem<P>[]`. Every status flip routes through the
- *     blessed ops: `receive` enqueues via `enqueueOp`, `claimNext` stamps the
- *     `running` claim via `patchItemOp`, `boot` re-arms a dead worker's claim
- *     via `patchItemOp`. Intake owns only the SELECTION (which item, gated on
- *     the done-cache reconcile below) — the array transition is the brick's.
- *     The consumer drains it (claim → process → `complete`) at its own pace.
+ *     adapter verbs: `receive` enqueues via `queue.enqueue`, `claimNext` stamps
+ *     the `running` claim via `queue.patch`, `boot` re-arms a dead worker's
+ *     claim via `queue.patch`. Intake owns only the SELECTION (which item,
+ *     gated on the done-cache reconcile below) — the array transition is the
+ *     brick's. The consumer drains it (claim → process → `complete`) at its own
+ *     pace.
  *
  * Both bricks are pure-state + pure-ops, host- and clock-agnostic by
  * construction, so the combined slice inherits TEA's two non-negotiables:
@@ -79,10 +84,11 @@
  * `@demlik/tea/work-queue` and thread them by hand.
  */
 
-import { type IdempotencyStore, initStore, remember } from "../idempotency";
+import type { IdempotencyStore } from "../idempotency";
+import { idempotencyMemory } from "../idempotency/adapter";
 import type { Cmd } from "../index";
 import type { QueueItem } from "../work-queue";
-import { enqueueOp, patchItemOp } from "../work-queue/ops";
+import { queueAdapter } from "../work-queue/adapter";
 
 /**
  * A cached intake entry: either a key whose work is still in flight
@@ -181,6 +187,13 @@ export type IntakeCmd<P, R> = IntakeProcessCmd<P> | IntakeReplayCmd<R>;
 export function createIntake<P, R>(config: IntakeConfig<P>) {
   const { keyOf, ttlMs } = config;
 
+  // The two store seams, bound once for this knob's `P`/`R`. The intake
+  // delegates every queue status flip to `queue.*` and every dedupe-cache
+  // transition to `memory.*`, so the `QueueItem<P>` / `IdempotencyStore` shapes
+  // are insulated behind the verbs rather than reached by raw ops.
+  const queue = queueAdapter<P>();
+  const memory = idempotencyMemory<IntakeEntry<R>>();
+
   /**
    * The empty slice: a TTL-free idempotency store (intake owns the TTL itself —
    * see `liveEntry`, because the store cannot tell `pending` from `done`) plus
@@ -189,7 +202,7 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
    */
   function init(): IntakeState<P, R> {
     return {
-      seen: initStore<IntakeEntry<R>>(),
+      seen: memory.init(),
       queue: [],
     };
   }
@@ -283,8 +296,8 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
     }
 
     // New path — record the key as pending, enqueue the payload, process it.
-    const seenNext = remember(state.seen, key, { phase: "pending" }, at);
-    const { next: queueNext, item } = enqueueOp<P>(
+    const seenNext = memory.remember(state.seen, key, { phase: "pending" }, at);
+    const { next: queueNext, item } = queue.enqueue(
       state.queue,
       payload,
       at,
@@ -319,7 +332,12 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
     result: R,
     at: number,
   ): readonly [IntakeState<P, R>, readonly IntakeCmd<P, R>[]] {
-    const seenNext = remember(state.seen, key, { phase: "done", result }, at);
+    const seenNext = memory.remember(
+      state.seen,
+      key,
+      { phase: "done", result },
+      at,
+    );
     return [{ ...state, seen: seenNext }, []];
   }
 
@@ -348,27 +366,27 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
     state: IntakeState<P, R>,
   ): readonly [IntakeState<P, R>, readonly IntakeCmd<P, R>[]] {
     // Selection lives HERE (the done-cache reconcile is intake's own rule); the
-    // status FLIP is delegated to `../work-queue/ops`. A blanket `resetRunningOp`
-    // would re-arm completed-then-crashed items (it cannot see the done cache),
-    // so intake picks the items and `patchItemOp` performs each transition —
-    // the same spread the work-queue lifecycle uses, not a re-rolled one.
-    let queue = state.queue;
+    // status FLIP is delegated to the `QueueAdapter`. A blanket reset would
+    // re-arm completed-then-crashed items (it cannot see the done cache), so
+    // intake picks the items and `queue.patch` performs each transition — the
+    // same spread the work-queue lifecycle uses, not a re-rolled one.
+    let items = state.queue;
     let changed = false;
     for (const it of state.queue) {
       if (it.status !== "running") continue;
       // Reconcile against the done cache: a completed-then-crashed item must
       // NOT be re-armed (it would re-run already-cached work).
       if (isAlreadyDone(state, it)) continue;
-      const flip = patchItemOp<P>(queue, it.id, (item) => ({
+      const flip = queue.patch(items, it.id, (item) => ({
         ...item,
         status: "pending",
         startedAt: undefined,
       }));
-      queue = flip.next;
+      items = flip.next;
       changed = changed || flip.changed;
     }
     if (!changed) return [state, []];
-    return [{ ...state, queue }, []];
+    return [{ ...state, queue: items }, []];
   }
 
   /**
@@ -397,11 +415,11 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
     readonly claimed: QueueItem<P>;
   } | null {
     // Selection lives HERE (skip an item whose key already resolved `done`);
-    // the status FLIP is delegated to `../work-queue/ops`. `claimNextOp` claims
-    // the first PENDING item blind to the done cache, which would re-run
-    // already-cached work — so intake selects the eligible item and `patchItemOp`
-    // performs the running-stamp transition (the work-queue lifecycle's own
-    // spread, not a re-rolled one).
+    // the status FLIP is delegated to the `QueueAdapter`. A blind `queue.claim`
+    // would take the first PENDING item regardless of the done cache, which
+    // would re-run already-cached work — so intake selects the eligible item and
+    // `queue.patch` performs the running-stamp transition (the work-queue
+    // lifecycle's own spread, not a re-rolled one).
     const target = state.queue.find(
       (it) => it.status === "pending" && !isAlreadyDone(state, it),
     );
@@ -409,7 +427,7 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
     // The patch closure is the single place the claimed item is materialized;
     // capture it here so the result needs no re-scan of the new queue.
     let claimed: QueueItem<P> = target;
-    const { next } = patchItemOp<P>(state.queue, target.id, (item) => {
+    const { next } = queue.patch(state.queue, target.id, (item) => {
       claimed = { ...item, status: "running", startedAt: at };
       return claimed;
     });

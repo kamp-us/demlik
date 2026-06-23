@@ -81,12 +81,8 @@
  */
 
 import { type DeadlineSub, deadlineSub } from "../deadline";
-import {
-  type IdempotencyStore,
-  initStore as initDedupeStore,
-  remember,
-  seen,
-} from "../idempotency";
+import type { IdempotencyStore } from "../idempotency";
+import { idempotencyMemory } from "../idempotency/adapter";
 import type { Cmd, Sub } from "../index";
 import {
   defaultRetryPolicy,
@@ -344,6 +340,11 @@ export function createPoller<State, R>(
 ): Poller<State, R> {
   const policy: RetryPolicy = config.retry ?? defaultRetryPolicy;
 
+  // The dedupe store seam, bound once. The poller delegates its dedupe-window
+  // reads (`memory.isSeen`) and the per-sighting touch (`memory.remember`) to
+  // the verbs, so the `IdempotencyStore` shape stays insulated.
+  const memory = idempotencyMemory<true>();
+
   function init(): PollerState<R> {
     return {
       tick: 0,
@@ -354,7 +355,7 @@ export function createPoller<State, R>(
       // `dedupeKey` is set, so an unconfigured poller carries an inert empty
       // store (no per-op cost, JSON-serializable, durable like the rest of
       // the slice).
-      dedupe: initDedupeStore<true>({ ttlMs: config.dedupeTtlMs }),
+      dedupe: memory.init({ ttlMs: config.dedupeTtlMs }),
     };
   }
 
@@ -426,14 +427,14 @@ export function createPoller<State, R>(
     if (!config.dedupeKey) return [next, []];
 
     const key = config.dedupeKey(result);
-    const suppress = seen(next.dedupe, key, at);
+    const suppress = memory.isSeen(next.dedupe, key, at);
     // `remember` refreshes the key's TTL clock on every sighting (the
     // idempotency "touch" semantics), so a steadily-repeating observation never
     // ages out mid-poll. The stored value is the unit `true` — the poller only
     // needs presence, not a payload.
     const deduped: PollerState<R> = {
       ...next,
-      dedupe: remember(next.dedupe, key, true, at),
+      dedupe: memory.remember(next.dedupe, key, true, at),
     };
     return [deduped, suppress ? [] : [config.onTick()]];
   }

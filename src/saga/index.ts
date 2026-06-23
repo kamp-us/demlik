@@ -9,16 +9,16 @@
  * pivots and drives `undo` backward over exactly the steps that completed.
  *
  * The recipe (which bricks it composes):
- *   - `../work-queue/ops` — the saga's forward progress IS a work-queue
+ *   - `../work-queue/adapter` — the saga's forward progress IS a work-queue
  *     lifecycle. Each step's record carries the same `{ id, status, input }`
  *     vocabulary (`pending → running → done | failed | cancelled`), so the step
  *     taxonomy is the substrate's status enum rather than a parallel invention.
  *     We reuse the pure `QueueItem` / `QueueItemStatus` types AND delegate every
- *     status flip to the blessed `../work-queue/ops` surface: `enqueueOp` stamps
- *     each fresh ledger record, and `patchItemOp` performs every
+ *     status flip to the `QueueAdapter` verbs: `wq.enqueue` stamps each fresh
+ *     ledger record, and `wq.patch` performs every
  *     `pending → running → done | failed | cancelled` transition. The status
  *     transitions are NOT re-rolled here — they live in exactly one place
- *     (`work-queue/ops`), per the package's one-shape rule. The async
+ *     behind the adapter, per the package's one-shape rule. The async
  *     `createQueue(store)` adapter is NOT used: its `load → mutate → save` reads
  *     the clock and lives at an I/O boundary, while a combinator's verbs must be
  *     pure (invariant 2). We bind the same ops to the in-Model ledger instead —
@@ -70,7 +70,7 @@
 
 import type { Cmd } from "../index";
 import type { QueueItem, QueueItemStatus } from "../work-queue";
-import { enqueueOp, patchItemOp } from "../work-queue/ops";
+import { queueAdapter } from "../work-queue/adapter";
 
 /**
  * A step's stable identity. Positional: the 0-based index into
@@ -248,10 +248,15 @@ export function initSaga<I = StepId>(): SagaState<I> {
 export function createSaga<D extends Cmd, U extends Cmd>(
   config: SagaConfig<D, U>,
 ) {
+  // The ledger seam, bound once. The saga delegates ledger construction to
+  // `wq.enqueue` and every status flip to `wq.patch`, so the `QueueItem<StepId>`
+  // shape stays insulated behind the verbs.
+  const wq = queueAdapter<StepId>();
+
   /**
    * One ledger record per configured step, keyed by its positional id. Each
-   * record is stamped by the blessed `enqueueOp` (the saga delegates ledger
-   * construction to `../work-queue/ops` rather than building records inline).
+   * record is stamped by the `QueueAdapter`'s `enqueue` (the saga delegates
+   * ledger construction to the verb rather than building records inline).
    *
    * The positional id is stringified — `QueueItem.id` is a string, the saga's
    * step identity is the index; `String(index)` keeps both the ledger's
@@ -262,24 +267,24 @@ export function createSaga<D extends Cmd, U extends Cmd>(
   function freshLedger(): QueueItem<StepId>[] {
     let items: QueueItem<StepId>[] = [];
     config.steps.forEach((_step, index) => {
-      items = enqueueOp<StepId>(items, index, 0, String(index)).next;
+      items = wq.enqueue(items, index, 0, String(index)).next;
     });
     return items;
   }
 
   /**
    * Flip the ledger record for step `index` to `status`, delegating the
-   * transition to `../work-queue/ops`' `patchItemOp` (keyed by the record's
-   * string id, `String(index)`) so the status flip is NOT re-rolled here. PURE —
-   * `patchItemOp` returns a new array; an unknown id returns a copy unchanged
-   * (the verbs guard against out-of-range, but the helper is total).
+   * transition to the `QueueAdapter`'s `patch` (keyed by the record's string
+   * id, `String(index)`) so the status flip is NOT re-rolled here. PURE —
+   * `patch` returns a new array; an unknown id returns a copy unchanged (the
+   * verbs guard against out-of-range, but the helper is total).
    */
   function setStatus(
     items: readonly QueueItem<StepId>[],
     index: number,
     status: QueueItemStatus,
   ): QueueItem<StepId>[] {
-    return patchItemOp<StepId>(items, String(index), (item) => ({
+    return wq.patch(items, String(index), (item) => ({
       ...item,
       status,
     })).next;

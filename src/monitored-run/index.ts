@@ -98,7 +98,7 @@ import {
   type SnapshotWriteCmd,
 } from "../snapshot";
 import type { QueueItem } from "../work-queue";
-import { claimNextOp, enqueueOp, markDoneOp } from "../work-queue/ops";
+import { queueAdapter } from "../work-queue/adapter";
 
 // ===========================================================================
 // Config — the knob. Every field optional; omit a field → omit its gate.
@@ -277,6 +277,11 @@ export function createMonitoredRun<Stage, V = unknown>(
   const stages = config.stages ?? [];
   const isPipeline = stages.length > 0;
 
+  // The stage-queue seam, bound once. Every stage status flip delegates to the
+  // `QueueAdapter` verbs (`wq.enqueue` / `wq.claim` / `wq.markDone`), so the
+  // `QueueItem<Stage>` shape stays insulated behind them.
+  const wq = queueAdapter<Stage>();
+
   // The snapshot sub-knob is built only when `snapshotEvery` is configured;
   // absence is `null` so the progress gate short-circuits to "no checkpoint".
   // When present, the slice still carries a default SnapshotState so the shape
@@ -317,11 +322,11 @@ export function createMonitoredRun<Stage, V = unknown>(
   function seedStages(at: number): readonly QueueItem<Stage>[] {
     let queue: readonly QueueItem<Stage>[] = [];
     stages.forEach((stage, i) => {
-      queue = enqueueOp<Stage>(queue, stage, at, `stage:${i}`).next;
+      queue = wq.enqueue(queue, stage, at, `stage:${i}`).next;
     });
     // Claim the first stage as the running position. A non-empty pipeline always
     // has a pending head here, so the claim succeeds.
-    const claimed = claimNextOp<Stage>(queue, at);
+    const claimed = wq.claim(queue, at);
     return claimed ? claimed.next : queue;
   }
 
@@ -486,9 +491,9 @@ export function createMonitoredRun<Stage, V = unknown>(
     const current = currentStage(s);
     const afterDone =
       current !== undefined
-        ? markDoneOp<Stage>(s.stepStates, current.id).next
+        ? wq.markDone(s.stepStates, current.id).next
         : s.stepStates;
-    const claimed = claimNextOp<Stage>(afterDone, at);
+    const claimed = wq.claim(afterDone, at);
 
     if (claimed === null) {
       // No more stages — the pipeline is complete.

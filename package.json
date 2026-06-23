@@ -81,6 +81,10 @@
       "types": "./dist/work-queue/ops.d.ts",
       "import": "./dist/work-queue/ops.js"
     },
+    "./work-queue/adapter": {
+      "types": "./dist/work-queue/adapter.d.ts",
+      "import": "./dist/work-queue/adapter.js"
+    },
     "./node": {
       "types": "./dist/node/index.d.ts",
       "import": "./dist/node/index.js"
@@ -108,6 +112,10 @@
     "./idempotency": {
       "types": "./dist/idempotency/index.d.ts",
       "import": "./dist/idempotency/index.js"
+    },
+    "./idempotency/adapter": {
+      "types": "./dist/idempotency/adapter.d.ts",
+      "import": "./dist/idempotency/adapter.js"
     },
     "./circuit-breaker": {
       "types": "./dist/circuit-breaker/index.d.ts",

@@ -68,7 +68,7 @@
 
 import type { Cmd, Port } from "../index";
 import type { QueueItem, QueueItemStatus } from "../work-queue";
-import { claimNextOp, enqueueOp } from "../work-queue/ops";
+import { queueAdapter } from "../work-queue/adapter";
 
 /**
  * One settled-OK item: the original `input` and the `result` its effect
@@ -274,10 +274,11 @@ function launchUpTo<I, R, C extends Cmd>(
   const stillPending = state.pending.slice(slots);
 
   // Flip the ledger records `pending → running` one launch at a time via the
-  // blessed work-queue op (positional first-pending claim per call).
+  // `QueueAdapter` (positional first-pending claim per call).
+  const queue = queueAdapter<I>();
   let items: readonly QueueItem<I>[] = state.items;
   for (let i = 0; i < toLaunch.length; i++) {
-    const claimed = claimNextOp<I>(items, 0);
+    const claimed = queue.claim(items, 0);
     if (claimed === null) break;
     items = claimed.next;
   }
@@ -406,12 +407,13 @@ export function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
     state: FanOutState<I, R>,
     items: readonly I[],
   ): readonly [FanOutState<I, R>, readonly C[]] {
-    // Append one pending ledger record per item via the blessed op. `enqueueOp`
-    // returns `status: "pending"` already typed — the cast is gone, and the
-    // lifecycle's "new work is pending" rule stays in work-queue's hands.
+    // Append one pending ledger record per item via the `QueueAdapter`.
+    // `queue.enqueue` returns `status: "pending"` already typed — no cast — and
+    // the lifecycle's "new work is pending" rule stays in work-queue's hands.
+    const queue = queueAdapter<I>();
     let ledger: readonly QueueItem<I>[] = state.items;
     for (const input of items) {
-      ledger = enqueueOp<I>(ledger, input, 0, config.idOf(input)).next;
+      ledger = queue.enqueue(ledger, input, 0, config.idOf(input)).next;
     }
     // A scatter OPENS A FRESH WAVE when nothing is in flight — either the very
     // first scatter, or a re-scatter after the previous wave fully drained. The
