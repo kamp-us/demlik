@@ -41,11 +41,49 @@
 
 import type { Store, Sub, SubId } from "../index";
 
+// The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
+// gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
+// terminal-output capture, and `dispatchToIdle`. Kept in a sibling file so this
+// module stays the durability + subs surface; the host re-exports through the
+// same `@demlik/tea/do` subpath the consumer already imports `doStore` from.
+export {
+  acceptCommandSocket,
+  agentIsResumable,
+  autoBoot,
+  broadcast,
+  captureLastTurn,
+  type DeferredGateway,
+  deferredGateway,
+  dispatchToIdle,
+  type SseHub,
+  sseHub,
+} from "./host";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // doStore — `Store<S>` over DurableObjectStorage.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_STATE_KEY = "@@state";
+
+/**
+ * The default boundary parse `doStore` uses when the caller omits one: accept
+ * any non-null object shape as `S`, treat everything else (a primitive, an
+ * array, `null`) as "no usable persisted state" → boot fresh. This is the
+ * `raw !== null && typeof raw === "object" ? (raw as S) : null` guard every
+ * agent-style consumer hand-wrote; lifting it as the default kills that
+ * ceremony for the common case (a record-shaped durable slice). A consumer that
+ * needs real schema validation (renamed variants, version migration) still
+ * passes its own `parse`.
+ *
+ * Returns `null`, never throws — honoring the `Store<S>.migrate` contract (shape
+ * mismatch is a value, not a panic; structural JSON malformation already threw
+ * at `load()`).
+ */
+function defaultParse<S>(raw: unknown): S | null {
+  return raw !== null && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as S)
+    : null;
+}
 
 /**
  * `Store<S>` over `DurableObjectStorage`.
@@ -72,7 +110,7 @@ const DEFAULT_STATE_KEY = "@@state";
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => S | null = defaultParse,
   key: string = DEFAULT_STATE_KEY,
 ): Store<S> {
   return {

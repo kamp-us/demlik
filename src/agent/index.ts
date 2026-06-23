@@ -157,6 +157,39 @@ export interface AgentTurn {
 }
 
 /**
+ * Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own
+ * structured-output type. A consumer's brain schema parses the model's output
+ * into an `AgentTurn` (the agentic purpose's output); rather than every consumer
+ * hand-rolling this guard + a `Schema<AgentTurn>` for a type the agent OWNS, the
+ * agent exports both. Checks the two load-bearing fields: `content` is a string,
+ * `toolCalls` is an array. PURE — allocates no Error.
+ */
+export function isAgentTurn(value: unknown): value is AgentTurn {
+  if (value === null || typeof value !== "object") return false;
+  const t = value as { content?: unknown; toolCalls?: unknown };
+  return typeof t.content === "string" && Array.isArray(t.toolCalls);
+}
+
+/**
+ * The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain
+ * call binds when the agentic purpose's output is a bare `AgentTurn` (the common
+ * case). Throws on a non-`AgentTurn` (the zod-style `parse` contract the
+ * llm-call handler relies on). Deletes the consumer's hand-rolled
+ * `auditSchema` / `isAgentTurn` pair.
+ *
+ * A consumer whose turn type EXTENDS `AgentTurn` with extra fields still writes
+ * its own schema (it must validate the extra fields); this is for the plain case.
+ */
+export const agentTurnSchema: Schema<AgentTurn> = {
+  parse: (value: unknown): AgentTurn => {
+    if (!isAgentTurn(value)) {
+      throw new Error("structured-output parse failed: not an AgentTurn");
+    }
+    return value;
+  },
+};
+
+/**
  * One settled tool outcome the consumer routes back into the loop — the seed's
  * `ToolOutcome`. `ok` carries the result the consumer's interpret produced;
  * `error` carries a reason the model sees (so it recovers rather than stalls —
@@ -989,11 +1022,15 @@ export function createAgent<
      * merged in below, so the consumer supplies only the rest of the closed
      * `AgentCmd<P, TC>` union.
      */
-    readonly toolInterpret?: Interpret<
-      AgentMachineMsg<P, O, R>,
-      MonitoredRunCmd<unknown> | TC,
-      Ctx
-    >;
+    readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
+      // `snapshot_write` is REQUIRED only when `snapshotEvery` is set (a real
+      // checkpoint write must be wired). With checkpointing off, no
+      // `snapshot_write` Cmd is ever emitted, so the agent defaults the cell to
+      // a no-op below — the consumer omits it. `Partial` makes it optional at
+      // the type level; the agent fills the gap.
+      Partial<
+        Interpret<AgentMachineMsg<P, O, R>, MonitoredRunCmd<unknown>, Ctx>
+      >;
   }): Machine<
     State,
     AgentMachineMsg<P, O, R>,
@@ -1012,12 +1049,26 @@ export function createAgent<
     // (`resilient_run` → the brain cell, `TC["type"]` / `snapshot_write` → the
     // consumer's cells), with the one sound mapped-type identity isolated in the
     // helper rather than laundered through `as unknown as` here.
+    // Default the `snapshot_write` cell to a no-op when the consumer omits it.
+    // With `snapshotEvery` unset the monitored-run slice never emits a
+    // `snapshot_write` Cmd, so this cell is never reached — it exists only to
+    // satisfy the closed `AgentCmd` union's interpret contract, killing the
+    // `snapshot_write: async () => undefined` ceremony every non-checkpointing
+    // consumer wrote. A checkpointing consumer (`snapshotEvery` set) supplies a
+    // real cell, which overrides this default in the spread.
+    const noopSnapshot: Interpret<M, MonitoredRunCmd<unknown>, Ctx> = {
+      snapshot_write: async () => undefined,
+    };
+    const consumerInterpret = {
+      ...noopSnapshot,
+      ...(opts?.toolInterpret ?? {}),
+    } as Interpret<M, MonitoredRunCmd<unknown> | TC, Ctx>;
     const interpret: Interpret<M, AgentCmd<P, TC>, Ctx> = mergeInterpret<
       M,
       MonitoredRunCmd<unknown> | TC,
       AgentLlmRunCmd<P>,
       Ctx
-    >(opts?.toolInterpret, brainHandlers<Ctx>());
+    >(consumerInterpret, brainHandlers<Ctx>());
 
     // Type the dispatch table explicitly so each cell gets its narrowed Msg
     // and the Reducer-form overload of `defineMachine` matches cleanly (the

@@ -677,6 +677,32 @@ export interface Runtime<S, M extends { type: string }> extends RuntimeRef<M> {
    * moment). Strengthens invariant 6 (runtime is small and inspectable).
    */
   ready: Promise<void>;
+  /**
+   * Resolves once the runtime has reached QUIESCENCE — every dispatched Msg AND
+   * every follow-up Msg an interpret handler returned has been processed, with
+   * no further step pending on the serial tail.
+   *
+   * `dispatch(msg)` resolves when that ONE transition's effects settle, but an
+   * interpret handler that returns a follow-up Msg enqueues it as a FRESH
+   * transition on the tail — `dispatch` does not await that follow-up. Callers
+   * that need "let the whole loop settle" (a tool fold that re-fires the next
+   * brain call, a boot reconcile that re-issues an effect) previously polled
+   * with an `until(() => cond)` loop. `idle()` is the direct await: it chains
+   * onto the current tail and re-checks until the tail stops advancing, so it
+   * drains the entire transitive follow-up chain.
+   *
+   * Idempotent and re-entrant-safe: each call reads the live tail; a tail that
+   * advanced during the await (a follow-up landed) is awaited again until
+   * stable. Never rejects — tail rejections are swallowed at enqueue time (a
+   * failing dispatch surfaces on its OWN returned promise, not here).
+   *
+   * Use `idle()` for runtime-internal follow-ups; a poll is still correct when
+   * waiting on an EXTERNAL event (a WS reply) the runtime cannot enqueue itself.
+   *
+   * Strengthens invariant 6 (runtime is small and inspectable — quiescence is a
+   * first-class awaitable moment, not a poll the consumer re-derives).
+   */
+  idle(): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -1233,6 +1259,21 @@ export function run<
     // same settled value. See the boot-promise note above for why this is
     // distinct from `tail`.
     ready: bootPromise,
+    async idle(): Promise<void> {
+      // Quiescence = the tail stopped advancing. Each interpret follow-up calls
+      // `enqueueDispatch`, which reassigns `tail` SYNCHRONOUSLY (before the
+      // parent step resolves), so awaiting the current `tail` and re-reading it
+      // catches every transitively-enqueued follow-up. We loop until the
+      // reference is stable across an await — that is the moment no further step
+      // is queued. Bounded to avoid an unbounded spin on a livelocking machine
+      // (the agent's own maxTurns guards real livelock; this cap is a safety
+      // net, not the primary guard).
+      for (let i = 0; i < 100_000; i++) {
+        const observed = tail;
+        await observed;
+        if (tail === observed) return;
+      }
+    },
     async stop(): Promise<void> {
       stopped = true;
       // Drain whatever is in flight before tearing down. Any rejections in

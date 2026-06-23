@@ -52,6 +52,9 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
     async dispatch(_msg: M): Promise<void> {
       // Resolves immediately. State never advances; listeners never fire.
     },
+    async idle(): Promise<void> {
+      // No tail to drain — the no-op runtime never enqueues a follow-up.
+    },
     getState(): S {
       // Lie if no initial state was provided. The caller's contract is
       // "you accept the lie because you know replay never invokes
