@@ -47,7 +47,25 @@ import type { SubscribeHandler } from "../subs/types";
  * noun that doubles as the SubId family); same shape family as the
  * `TimeoutSubData` the `fromTimeout` factory consumes.
  */
-export type DeadlineSub = Sub<"deadline"> & { readonly atMs: number };
+export type DeadlineSub = Sub<"deadline"> & {
+  readonly atMs: number;
+} & DeadlineOpts;
+
+/**
+ * Additive options the `deadlineSub` factory folds onto the Sub literal. This
+ * is the extension seam (invariant 5 — composition by reduction): future fields
+ * — `repeatMs` for a re-arming deadline, `jitterMs` for spread, etc. — land HERE
+ * as optional members, and every existing call site keeps compiling because the
+ * factory's third parameter is optional and the fields are `readonly` optionals
+ * on `DeadlineSub`. Callers are insulated from the concrete `DeadlineSub` shape:
+ * they ask for what they need by name, never positionally, so a shape extension
+ * never rewrites the ~13 `deadlineSub(id, atMs)` call sites.
+ *
+ * Empty today on purpose — the seam exists before the first extension does, so
+ * the first field is a one-line additive change, not a 13-site migration.
+ */
+// biome-ignore lint/complexity/noBannedTypes: intentional empty extension seam — fields are added additively (see doc above).
+export type DeadlineOpts = {};
 
 /**
  * The Msg the deadline dispatches when the wall clock crosses `atMs`. Exported
@@ -84,9 +102,18 @@ export type DeadlineExceeded = {
  *             deadlines on the same machine.
  * @param atMs Absolute target in epoch milliseconds (e.g. `Date.now() + 900_000`
  *             for a 15-minute guard, or a persisted `expiresAt`).
+ * @param opts Optional additive fields folded onto the Sub literal (see
+ *             {@link DeadlineOpts}). Omit it for the common case; pass it when a
+ *             future field (e.g. `repeatMs`) needs to ride on the deadline. The
+ *             optionality is the future-proofing seam — extending the shape
+ *             never breaks an existing `deadlineSub(id, atMs)` call site.
  */
-export function deadlineSub(id: string, atMs: number): DeadlineSub {
-  return { id: subId(id), type: "deadline", atMs };
+export function deadlineSub(
+  id: string,
+  atMs: number,
+  opts?: DeadlineOpts,
+): DeadlineSub {
+  return { ...opts, id: subId(id), type: "deadline", atMs };
 }
 
 /**
