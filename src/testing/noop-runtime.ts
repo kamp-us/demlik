@@ -53,6 +53,12 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
   const runtime: Runtime<S, M> = {
     async dispatch(_msg: M): Promise<void> {
       // Resolves immediately. State never advances; listeners never fire.
+      // Quiescent by default (#50), but the no-op has no follow-up chain to
+      // drain, so single-step and run-to-quiescence collapse to the same no-op.
+    },
+    async dispatchOnce(_msg: M): Promise<void> {
+      // Single-step sibling of `dispatch` (#50). Same no-op for the no-op
+      // runtime — there is no tail to leave in flight.
     },
     async idle(): Promise<void> {
       // No tail to drain — the no-op runtime never enqueues a follow-up.

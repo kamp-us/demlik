@@ -155,6 +155,181 @@ describe("follow-up dispatch failures route to the onError sink", () => {
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// Issue #50 — dispatch() runs to quiescence by default.
+//
+// Before #50, `await dispatch(msg)` settled ONE transition; a follow-up Msg an
+// interpret handler returned was fire-and-forget, so callers had to ALSO
+// `await idle()` (or `dispatchToIdle`, or a `for(i<200) sleep(5)` poll) to see
+// the consequences. The fix: `dispatch` drains the transitive follow-up chain
+// by default; `dispatchOnce` / `dispatch(msg, { settle: "once" })` is the
+// single-step escape.
+// ───────────────────────────────────────────────────────────────────────────
+describe("dispatch() runs to quiescence by default (#50)", () => {
+  // A finite follow-up chain: `kick` emits `step`; `step`'s interpret returns a
+  // `bump` follow-up; `bump` emits nothing. The chain ends after two
+  // transitions. A plain `await dispatch` must see BOTH folded in.
+  type State = { readonly steps: number; readonly bumped: boolean };
+  type Msg = { readonly type: "kick" } | { readonly type: "bump" };
+  type Cmds = { readonly type: "step" };
+
+  function chainMachine() {
+    const update: Reducer<State, Msg, Cmds> = {
+      kick: (s) => [{ ...s, steps: s.steps + 1 }, [{ type: "step" }]],
+      bump: (s) => [{ ...s, bumped: true }, []],
+    };
+    const interpret: Interpret<Msg, Cmds, undefined> = {
+      // The follow-up the pre-#50 `dispatch` did NOT await.
+      step: async () => ({ type: "bump" }),
+    };
+    return defineMachine<State, Msg, Cmds, never, undefined>({
+      init: () => [{ steps: 0, bumped: false }, []],
+      update,
+      interpret,
+    });
+  }
+
+  it("a plain await dispatch sees the follow-up Msg's consequences", async () => {
+    const runtime = await run(chainMachine(), { ctx: undefined }).ready;
+    // No `idle()`, no poll — just the dispatch. The follow-up `bump` must have
+    // landed by the time it resolves.
+    await runtime.dispatch({ type: "kick" });
+    expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
+    await runtime.stop();
+  });
+
+  // A gated chain that makes "one step vs. quiescence" deterministic: the
+  // FOLLOW-UP `bump` transition's interpret blocks on an externally-controlled
+  // promise, and the observable (`bumped`) is set by that gated interpret via a
+  // final `mark` Msg — NOT by a synchronous reducer. So while the gate is shut,
+  // `bumped` provably stays false no matter how the microtasks interleave: the
+  // single-step boundary is real, not timing luck.
+  //
+  // Chain: kick → emit `step` → step interpret returns `bump` → bump emits
+  // `await` cmd → that interpret blocks on the gate, then returns `mark` →
+  // mark reducer sets bumped. The first transition (kick) is the single step;
+  // everything past it is the follow-up chain `idle()` drains.
+  type GatedMsg =
+    | { readonly type: "kick" }
+    | { readonly type: "bump" }
+    | { readonly type: "mark" };
+  type GatedCmds = { readonly type: "step" } | { readonly type: "await" };
+
+  function gatedChainMachine(gate: Promise<void>) {
+    const update: Reducer<State, GatedMsg, GatedCmds> = {
+      kick: (s) => [{ ...s, steps: s.steps + 1 }, [{ type: "step" }]],
+      bump: (s) => [s, [{ type: "await" }]],
+      mark: (s) => [{ ...s, bumped: true }, []],
+    };
+    const interpret: Interpret<GatedMsg, GatedCmds, undefined> = {
+      step: async () => ({ type: "bump" }),
+      await: async () => {
+        await gate;
+        return { type: "mark" };
+      },
+    };
+    return defineMachine<State, GatedMsg, GatedCmds, never, undefined>({
+      init: () => [{ steps: 0, bumped: false }, []],
+      update,
+      interpret,
+    });
+  }
+
+  it("dispatchOnce settles ONE transition, leaving the follow-up in flight", async () => {
+    let openGate!: () => void;
+    const gate = new Promise<void>((res) => {
+      openGate = res;
+    });
+    const runtime = await run(gatedChainMachine(gate), { ctx: undefined })
+      .ready;
+    // Single step: kick's transition. The follow-up chain (bump → await →
+    // mark) is enqueued but stalls at the shut gate, so `bumped` stays false.
+    await runtime.dispatchOnce({ type: "kick" });
+    expect(runtime.getState()).toEqual({ steps: 1, bumped: false });
+    // Release the gate and drain the tail ourselves.
+    openGate();
+    await runtime.idle();
+    expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
+    await runtime.stop();
+  });
+
+  it("dispatch(msg, { settle: 'once' }) is equivalent to dispatchOnce", async () => {
+    let openGate!: () => void;
+    const gate = new Promise<void>((res) => {
+      openGate = res;
+    });
+    const runtime = await run(gatedChainMachine(gate), { ctx: undefined })
+      .ready;
+    await runtime.dispatch({ type: "kick" }, { settle: "once" });
+    expect(runtime.getState()).toEqual({ steps: 1, bumped: false });
+    openGate();
+    await runtime.idle();
+    expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
+    await runtime.stop();
+  });
+
+  it("dispatch(msg, { settle: 'quiescent' }) is the explicit form of the default", async () => {
+    const runtime = await run(chainMachine(), { ctx: undefined }).ready;
+    await runtime.dispatch({ type: "kick" }, { settle: "quiescent" });
+    expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
+    await runtime.stop();
+  });
+
+  it("a quiescent dispatch into a livelock rejects with QuiescenceTimeoutError", async () => {
+    // The drain shares `idle()`'s cap + reject contract (#51): a follow-up
+    // chain that never stabilizes surfaces, never silently resolves.
+    type S2 = { readonly ticks: number };
+    type M2 = { readonly type: "go" } | { readonly type: "tick" };
+    type C2 = { readonly type: "loop" };
+    const update: Reducer<S2, M2, C2> = {
+      go: (s) => [s, [{ type: "loop" }]],
+      tick: (s) => [{ ticks: s.ticks + 1 }, [{ type: "loop" }]],
+    };
+    const interpret: Interpret<M2, C2, undefined> = {
+      loop: async () => ({ type: "tick" }),
+    };
+    const machine = defineMachine<S2, M2, C2, never, undefined>({
+      init: () => [{ ticks: 0 }, []],
+      update,
+      interpret,
+    });
+    const runtime = await run(machine, {
+      ctx: undefined,
+      __idleCap: 25,
+      onError: () => {},
+    }).ready;
+    await expect(runtime.dispatch({ type: "go" })).rejects.toBeInstanceOf(
+      QuiescenceTimeoutError,
+    );
+    await runtime.stop();
+  });
+
+  it("the dispatched transition's OWN failure surfaces before the drain", async () => {
+    // A reducer throw on THIS Msg must reject the dispatch directly (phase
+    // "reduce"), not get masked by a later quiescence outcome.
+    type S2 = { readonly n: number };
+    type M2 = { readonly type: "explode" };
+    const REDUCER_ERROR = new Error("reducer threw on this very Msg");
+    const update: Reducer<S2, M2, Cmd> = {
+      explode: () => {
+        throw REDUCER_ERROR;
+      },
+    };
+    const machine = defineMachine<S2, M2, Cmd, never, undefined>({
+      init: () => [{ n: 0 }, []],
+      update,
+    });
+    const runtime = await run(machine, {
+      ctx: undefined,
+      onError: () => {},
+    }).ready;
+    await expect(runtime.dispatch({ type: "explode" })).rejects.toBe(
+      REDUCER_ERROR,
+    );
+    await runtime.stop();
+  });
+});
+
 describe("stop-save failure routes to the onError sink (no silent data loss)", () => {
   type State = { readonly n: number };
   type Msg = { readonly type: "inc" };

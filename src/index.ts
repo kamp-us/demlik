@@ -837,9 +837,27 @@ export interface Store<S> {
   migrate(raw: unknown): S | null;
 }
 
+// === DispatchSettle: how far a dispatch awaits ===
+//
+// `dispatch(msg)` settles ONE transition by default would be the dangerous
+// choice (issue #50): an `interpret` handler that returns a follow-up Msg
+// enqueues a FRESH transition on the tail, and that follow-up is fire-and-
+// forget relative to the original `dispatch`. Callers that forgot to also
+// `await idle()` saw their dispatch resolve "early", before the consequences
+// of the Msg had run — which is why the codebase grew `dispatchToIdle` and
+// tests fell back to `for (i<200) sleep(5)` polls.
+//
+// So the default is the SAFE one: `"quiescent"` — `dispatch` resolves only
+// once the entire transitive follow-up chain has drained (the same drain
+// `idle()` performs). The rare single-step case (a caller that genuinely wants
+// one transition and will await the tail itself) opts in with `"once"`, or
+// uses the `dispatchOnce` convenience.
+export type DispatchSettle = "quiescent" | "once";
+
 // === RuntimeRef<M>: typed sibling-runtime handle ===
 //
-// A `RuntimeRef<M>` exposes only the inbox of a Runtime — `dispatch(msg)`.
+// A `RuntimeRef<M>` exposes only the inbox of a Runtime — `dispatch(msg)` (and
+// its single-step sibling `dispatchOnce(msg)`).
 // Use it as the field type when one runtime holds a reference to a *sibling*
 // runtime (composition by reduction across orthogonal lifecycles — invariant
 // 5). The holder learns the Msg shape it can send, nothing about the
@@ -857,7 +875,38 @@ export interface Store<S> {
 // is small and inspectable — what a holder *can* do to a sibling runtime is
 // exactly one method, not the full surface).
 export interface RuntimeRef<M extends { type: string }> {
-  dispatch(msg: M): Promise<void>;
+  /**
+   * Put a Msg in the runtime's inbox and resolve once it has been processed.
+   *
+   * Runs to QUIESCENCE by default (issue #50): the returned promise settles
+   * only after the dispatched Msg AND every follow-up Msg its `interpret`
+   * handlers (transitively) returned have drained off the serial tail. This is
+   * the safe default — `await dispatch(msg)` means "the consequences have run",
+   * not "one transition fired and the rest are racing". Pass
+   * `{ settle: "once" }` (or call `dispatchOnce`) for the rare single-step
+   * case where the caller will await the tail itself.
+   *
+   * Rejection ordering: the ONE dispatched transition's own failure (a reducer
+   * / save / sub-start / interpret throw) surfaces first, on this promise. If
+   * that transition succeeds but the follow-up chain never stabilizes, the
+   * quiescent drain rejects with `QuiescenceTimeoutError` (same cap and same
+   * no-silent-give-up contract as `idle()` — issue #51). Follow-up Msg
+   * rejections themselves route to the `onError` sink, never here.
+   */
+  dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
+  /**
+   * Dispatch `msg` and resolve after exactly ONE transition's effects settle,
+   * WITHOUT draining the follow-up chain. Equivalent to
+   * `dispatch(msg, { settle: "once" })`.
+   *
+   * This is the old (pre-#50) `dispatch` behavior, kept as an explicit escape
+   * hatch: a caller that wants to interleave its own work between the first
+   * transition and its follow-ups, then `await runtime.idle()` itself. Prefer
+   * plain `dispatch` (run-to-quiescence) unless you specifically need the
+   * single step — the un-awaited follow-up chain is exactly the footgun #50
+   * removed from the default.
+   */
+  dispatchOnce(msg: M): Promise<void>;
 }
 
 // === BootingRuntime: handle returned SYNCHRONOUSLY from run() ===
@@ -901,7 +950,8 @@ export interface RuntimeRef<M extends { type: string }> {
 // type at the substrate.
 export interface BootingRuntime<S, M extends { type: string }>
   extends RuntimeRef<M> {
-  dispatch(msg: M): Promise<void>;
+  dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
+  dispatchOnce(msg: M): Promise<void>;
   subscribe(listener: () => void): () => void;
   observe(observer: (msg: M | null, state: S) => void): () => void;
   /**
@@ -1000,14 +1050,14 @@ export interface Runtime<S, M extends { type: string }>
    * every follow-up Msg an interpret handler returned has been processed, with
    * no further step pending on the serial tail.
    *
-   * `dispatch(msg)` resolves when that ONE transition's effects settle, but an
-   * interpret handler that returns a follow-up Msg enqueues it as a FRESH
-   * transition on the tail — `dispatch` does not await that follow-up. Callers
-   * that need "let the whole loop settle" (a tool fold that re-fires the next
-   * brain call, a boot reconcile that re-issues an effect) previously polled
-   * with an `until(() => cond)` loop. `idle()` is the direct await: it chains
-   * onto the current tail and re-checks until the tail stops advancing, so it
-   * drains the entire transitive follow-up chain.
+   * Since #50, plain `dispatch(msg)` already runs to quiescence (it awaits this
+   * same drain after its own transition), so a caller rarely needs `idle()`
+   * directly. `idle()` is still the right tool to (a) settle follow-ups left in
+   * flight by a `dispatchOnce` / `dispatch(msg, { settle: "once" })` single
+   * step, or (b) wait out a follow-up chain kicked off by a Sub or by boot
+   * `init` cmds where there was no `dispatch` call to await. It chains onto the
+   * current tail and re-checks until the tail stops advancing, draining the
+   * entire transitive follow-up chain.
    *
    * Idempotent and re-entrant-safe: each call reads the live tail; a tail that
    * advanced during the await (a follow-up landed) is awaited again until
@@ -1692,6 +1742,48 @@ export function run<
     return next;
   }
 
+  /**
+   * Drain the serial tail to quiescence. Quiescence = the tail stopped
+   * advancing: every interpret follow-up calls `enqueueDispatch`, which
+   * reassigns `tail` SYNCHRONOUSLY (before the parent step resolves), so
+   * awaiting the current `tail` and re-reading it catches every transitively
+   * enqueued follow-up. We loop until the reference is stable across an await.
+   *
+   * Bounded by `idleCap` — on cap we REJECT with `QuiescenceTimeoutError`
+   * (never a silent fall-through-resolve), so a livelocking machine stays
+   * distinguishable from a genuinely quiesced one (invariant 6 — issue #51).
+   *
+   * Shared by `runtime.idle()` and the quiescent `dispatch` default (#50): one
+   * drain definition, one cap, one reject contract.
+   */
+  async function drainToQuiescence(): Promise<void> {
+    for (let i = 0; i < idleCap; i++) {
+      const observed = tail;
+      await observed;
+      if (tail === observed) return;
+    }
+    throw new QuiescenceTimeoutError(idleCap);
+  }
+
+  /**
+   * The public `dispatch`: run-to-quiescence by default (#50). Enqueue the Msg
+   * on the tail, await its OWN transition first (so a reducer / save / interpret
+   * throw on THIS Msg surfaces here, before any drain), then — unless the caller
+   * asked for a single step — drain the transitive follow-up chain.
+   *
+   * `{ settle: "once" }` (and the `dispatchOnce` alias) skip the drain: resolve
+   * after the one transition and leave the follow-up chain racing on the tail
+   * for a caller that will `await runtime.idle()` itself.
+   */
+  async function dispatchToQuiescence(
+    msg: M,
+    opts?: { readonly settle?: DispatchSettle },
+  ): Promise<void> {
+    await enqueueDispatch(msg);
+    if (opts?.settle === "once") return;
+    await drainToQuiescence();
+  }
+
   // Kick off boot-effects immediately. Boot rejections are remembered on
   // `bootError`; they surface on every subsequent dispatch call. Note: when
   // `store` is absent the synchronous-init step above already set `state` —
@@ -1718,7 +1810,8 @@ export function run<
   const readyPromise: Promise<Runtime<S, M>> = bootPromise.then(() => runtime);
 
   const runtime: Runtime<S, M> = {
-    dispatch: enqueueDispatch,
+    dispatch: dispatchToQuiescence,
+    dispatchOnce: enqueueDispatch,
     getState(): S {
       // TOTAL (issue #45). A `Runtime` is only obtainable by awaiting `ready`,
       // which resolves AFTER boot has run `init` and set `state` — so by the
@@ -1776,24 +1869,14 @@ export function run<
     // which can't be referenced inside its own object literal). See the
     // assignment + rationale after this block.
     ready: readyPromise,
-    async idle(): Promise<void> {
-      // Quiescence = the tail stopped advancing. Each interpret follow-up calls
-      // `enqueueDispatch`, which reassigns `tail` SYNCHRONOUSLY (before the
-      // parent step resolves), so awaiting the current `tail` and re-reading it
-      // catches every transitively-enqueued follow-up. We loop until the
-      // reference is stable across an await — that is the moment no further step
-      // is queued. Bounded to avoid an unbounded spin on a livelocking machine
-      // (the agent's own maxTurns guards real livelock; this cap is a safety
-      // net, not the primary guard).
-      for (let i = 0; i < idleCap; i++) {
-        const observed = tail;
-        await observed;
-        if (tail === observed) return;
-      }
-      // Hitting the cap means the tail never stabilized. Rejecting (rather
-      // than the old silent fall-through-resolve) keeps "quiesced" and "gave
-      // up" distinguishable — invariant 6: no silent failures.
-      throw new QuiescenceTimeoutError(idleCap);
+    idle(): Promise<void> {
+      // Quiescence = the tail stopped advancing (full rationale on
+      // `drainToQuiescence`). `idle()` is the direct await of that drain; the
+      // quiescent `dispatch` default reuses the SAME helper after its own
+      // transition. The cap + `QuiescenceTimeoutError` reject (no silent
+      // fall-through-resolve) keeps "quiesced" and "gave up" distinguishable —
+      // invariant 6: no silent failures.
+      return drainToQuiescence();
     },
     result(): S | undefined {
       // TOTAL — `state` is defined for any holder of a `Runtime` (see
