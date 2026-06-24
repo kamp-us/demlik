@@ -9,5 +9,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     environment: "node",
+    // Pin fast-check's seed + raise numRuns so the property suite is
+    // reproducible and deeper — no random-seed intermittent reds. See
+    // `src/test-setup.ts`.
+    setupFiles: ["./src/test-setup.ts"],
   },
 });
