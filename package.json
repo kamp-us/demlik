@@ -239,6 +239,7 @@
     "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
     "test": "vitest run",
     "demo:raft": "vitest run src/raft/demo.test.ts",
+    "demo:raft:viz": "vitest run src/raft/timeline.test.ts",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
