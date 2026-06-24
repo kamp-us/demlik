@@ -1,15 +1,17 @@
 /**
- * @demlik/tea/raft — the ELECTION half of Raft (Figure 2) as a pure TEA
- * reducer. Slice #119 of the consensus epic (#117): the role state machine
- * (`follower → candidate → leader`), election + heartbeat timers as
- * `DeadlineSub`s, and `RequestVote` request/reply handling. Log replication
- * (`AppendEntries` payloads + commit-index advancement), persistence, the
- * safety-property suite, and the multi-node harness are LATER siblings
- * (#120/#121/#122/#123) — out of scope here.
+ * @demlik/tea/raft — Raft (Figure 2) as a pure TEA reducer. Slices #119 (the
+ * election half) + #120 (the log-replication half) of the consensus epic
+ * (#117): the role state machine (`follower → candidate → leader`), election +
+ * heartbeat timers as `DeadlineSub`s, `RequestVote` request/reply handling, and
+ * — added in #120 — the real replicated log with the Figure-2 `AppendEntries`
+ * consistency check, leader `nextIndex`/`matchIndex` bookkeeping, and
+ * `commitIndex` advancement under the Figure-8 current-term safety rule.
+ * Persistence/cold-wake (#122) and the safety-property suite + multi-node
+ * harness (#121/#123) are LATER siblings — out of scope here.
  *
  * The Raft paper ("In Search of an Understandable Consensus Algorithm",
- * raft.github.io) maps onto TEA almost 1:1, and this module is the first proof
- * of that mapping:
+ * raft.github.io) maps onto TEA almost 1:1, and this module is the proof of
+ * that mapping:
  *
  *   - **Reducer** — the Raft transition function over `RaftState`. PURE: it
  *     reads no ambient clock and no ambient RNG. Wall time arrives as the `at`
@@ -23,16 +25,31 @@
  *     (`../deadline`, the same shape `../poller` / the agent layer arm). A
  *     fired timer is a `Msg` the consumer routes back into a verb; the verb
  *     never owns a `setTimeout`.
- *   - **Cmd** — the RPCs (`RequestVote` request + reply, empty `AppendEntries`
- *     heartbeat) are `Cmd`s routed through the consumer's `interpret` over an
- *     injected transport port. This module emits the Cmd literals; it performs
- *     NO networking. Tests assert against the emitted Cmds and fake the
- *     transport.
+ *   - **Cmd** — the RPCs (`RequestVote` request + reply, `AppendEntries`
+ *     request + reply) are `Cmd`s routed through the consumer's `interpret`
+ *     over an injected transport port. This module emits the Cmd literals; it
+ *     performs NO networking. Tests assert against the emitted Cmds and fake
+ *     the transport.
  *
  * Invalid states are unrepresentable: the leader-only volatile state
  * (`nextIndex` / `matchIndex`) lives ONLY on the `leader` variant of the role
  * union, so a follower or candidate cannot carry — or be asked for — replication
  * bookkeeping it has no business holding (#119 acceptance criterion).
+ *
+ * **Persistence seam (#120 → #122).** The replicated log *is* the event log
+ * (epic Approach). The verbs here keep `log` a pure value computed by folding —
+ * a client command or a follower-side `AppendEntries` append/truncate is a
+ * deterministic function of `(state, msg)`, with no clock/RNG and no mutation.
+ * That is exactly the port the event-sourced store under `../do`
+ * (`doEventSourcedStore`) folds over: its `replay(machine, { loaded, msgs })`
+ * re-runs this same reducer to rebuild `log` byte-identically. #120 therefore
+ * routes the log through the pure-reducer seam and defers the *effectful* host
+ * wiring (async persist-before-respond, snapshot retention, cold-wake replay)
+ * to #122 — see {@link RaftState.log} and {@link RaftNode.onClientCommand}.
+ *
+ * Generic over the command payload `C` (`unknown` by default): a `LogEntry`
+ * carries an opaque `command` the consumer's state machine interprets on
+ * commit. Raft itself never inspects it.
  *
  * NOT a substrate primitive: it depends only on sibling subpaths (`../deadline`)
  * and the core `Cmd` / `Sub` types. Consumers reach it via the
@@ -96,18 +113,28 @@ export interface RaftConfig {
 }
 
 // ===========================================================================
-// Log placeholder (#120 lands the real entries)
+// Log entry — the real { term, index, command } (#120)
 // ===========================================================================
 
 /**
- * A placeholder log entry. #119 is election-only: the candidate "log at least
- * as up-to-date" check is stubbed `true` (see {@link logIsUpToDate}), so the
- * entries themselves carry no payload yet. #120 replaces this with the real
- * `{ term, index, command }` shape and the genuine up-to-date comparison.
+ * One entry in the replicated log (Figure 2). Generic over the command payload
+ * `C` (`unknown` by default): Raft itself never inspects `command` — it
+ * replicates and orders the opaque blob, and the consumer's state machine
+ * applies it once the entry commits.
+ *
+ * `index` is 1-based (Raft convention: index 0 means "before the log"; the
+ * first real entry is index 1), so an empty log has `lastLogIndex` 0. It is
+ * stored on the entry rather than derived from array position so the
+ * consistency check and the leader's per-peer bookkeeping read it directly,
+ * and so a persisted/replayed log carries its own indices.
  */
-export interface LogEntry {
-  /** The term in which this entry was created. Real entries land in #120. */
+export interface LogEntry<C = unknown> {
+  /** The term in which the leader created this entry. */
   readonly term: Term;
+  /** This entry's 1-based position in the log. */
+  readonly index: number;
+  /** The opaque command this entry replicates; applied by the consumer on commit. */
+  readonly command: C;
 }
 
 // ===========================================================================
@@ -159,12 +186,12 @@ export type Role =
 // ===========================================================================
 
 /**
- * The whole state of one Raft node. Persistent state (`currentTerm`,
- * `votedFor`, `log`) survives crashes in a real deployment (#122); volatile
- * state (`commitIndex`, the leader's `nextIndex`/`matchIndex`) is rebuilt on
- * restart. #119 holds it all in memory.
+ * The whole state of one Raft node, generic over the command payload `C`.
+ * Persistent state (`currentTerm`, `votedFor`, `log`) survives crashes in a
+ * real deployment (#122); volatile state (`commitIndex`, the leader's
+ * `nextIndex`/`matchIndex`) is rebuilt on restart.
  */
-export interface RaftState {
+export interface RaftState<C = unknown> {
   /**
    * Latest term this node has seen (Figure 2, persistent). Init 0; increases
    * monotonically — every higher-term message observed bumps it (and steps the
@@ -178,15 +205,21 @@ export interface RaftState {
    */
   readonly votedFor: NodeId | null;
   /**
-   * The replicated log (Figure 2, persistent). A placeholder array in #119 —
-   * the real entries + commit semantics land in #120. Present now so the
-   * up-to-date stub and the leader's `nextIndex` initialization have something
-   * to read.
+   * The replicated log (Figure 2, persistent). 1-based: `log[i]` has
+   * `index === i + 1`; `lastLogIndex` is `log.length`. The log *is* the event
+   * log (epic Approach): every mutation here — a leader appending a client
+   * command, a follower truncating-and-appending on `AppendEntries` — is a pure
+   * function of `(state, msg)`, so the event-sourced store under `../do` rebuilds
+   * it by folding this same reducer over the recorded Msgs (#122 wires the host;
+   * see the module header's persistence-seam note).
    */
-  readonly log: readonly LogEntry[];
+  readonly log: readonly LogEntry<C>[];
   /**
-   * Highest log index known to be committed (Figure 2, volatile). Placeholder
-   * (stays 0) in #119; #120 advances it as entries replicate to a majority.
+   * Highest log index known to be committed (Figure 2, volatile). Init 0. A
+   * follower advances it to `min(leaderCommit, lastNewEntryIndex)` on a matching
+   * `AppendEntries`; a leader advances it under the Figure-8 current-term
+   * majority rule (see {@link RaftNode.onAppendEntriesReply}). Entries up to and
+   * including `commitIndex` are durably agreed and safe for the consumer to apply.
    */
   readonly commitIndex: number;
   /** The current role + its role-specific state (see {@link Role}). */
@@ -231,13 +264,63 @@ export interface RequestVoteReply {
   readonly voteGranted: boolean;
 }
 
-/** Inbound `AppendEntries` RPC — in #119, only the empty heartbeat is modeled. */
-export interface AppendEntriesRequest {
+/**
+ * Inbound `AppendEntries` RPC (Figure 2). An empty `entries` array is a
+ * heartbeat; a non-empty one replicates log entries. The `prevLog*` pair anchors
+ * the consistency check, and `leaderCommit` carries the leader's commit index so
+ * the follower can advance its own.
+ */
+export interface AppendEntriesRequest<C = unknown> {
   readonly _tag: "append_entries_request";
   /** The leader's term. */
   readonly term: Term;
-  /** The leader sending the heartbeat (so a follower can track the leader). */
+  /** The leader sending this (so a follower can track the leader). */
   readonly leaderId: NodeId;
+  /**
+   * Index of the log entry immediately preceding `entries` (0 if `entries`
+   * starts at the head of the log). The follower must already hold an entry at
+   * this index whose term is `prevLogTerm`, or it rejects (consistency check).
+   */
+  readonly prevLogIndex: number;
+  /** Term of the entry at `prevLogIndex` (0 when `prevLogIndex` is 0). */
+  readonly prevLogTerm: Term;
+  /** The new entries to store (empty for a heartbeat). Already index-stamped. */
+  readonly entries: readonly LogEntry<C>[];
+  /** The leader's `commitIndex`, so the follower can advance its own. */
+  readonly leaderCommit: number;
+}
+
+/**
+ * Inbound `AppendEntries` reply — a follower answering this leader's
+ * replication RPC (Figure 2 reply shape). `matchIndex` is the index of the last
+ * entry the follower now agrees on (0 if none), used by the leader to advance
+ * `matchIndex`/`nextIndex` on success without re-deriving it.
+ */
+export interface AppendEntriesReply {
+  readonly _tag: "append_entries_reply";
+  /** The replier's `currentTerm`, for the leader to update itself / step down. */
+  readonly term: Term;
+  /** The follower that replied (so the leader can update its per-peer bookkeeping). */
+  readonly from: NodeId;
+  /** Whether the consistency check passed and the entries were stored. */
+  readonly success: boolean;
+  /**
+   * On success, the index of the follower's last entry covered by this RPC
+   * (`prevLogIndex + entries.length`) — the leader's new `matchIndex` for this
+   * peer. Meaningless (0) on rejection.
+   */
+  readonly matchIndex: number;
+}
+
+/**
+ * A client command submitted to this node (Figure 2 §5.3: clients send commands
+ * to the leader). The leader appends it to its log and replicates; a non-leader
+ * rejects it (the consumer would redirect the client to the known leader).
+ */
+export interface ClientCommand<C = unknown> {
+  readonly _tag: "client_command";
+  /** The opaque command to replicate (the consumer's state-machine input). */
+  readonly command: C;
 }
 
 /**
@@ -259,11 +342,13 @@ export interface HeartbeatFired {
   readonly at: number;
 }
 
-/** The full inbound-Msg union a Raft node's `update` handles in #119. */
-export type RaftMsg =
+/** The full inbound-Msg union a Raft node's `update` handles. */
+export type RaftMsg<C = unknown> =
   | RequestVoteRequest
   | RequestVoteReply
-  | AppendEntriesRequest
+  | AppendEntriesRequest<C>
+  | AppendEntriesReply
+  | ClientCommand<C>
   | ElectionTimeoutFired
   | HeartbeatFired;
 
@@ -303,21 +388,48 @@ export interface SendRequestVoteReply
   readonly voteGranted: boolean;
 }
 
-/** Send an empty `AppendEntries` (heartbeat) to one peer. */
-export interface SendAppendEntries extends Cmd<"raft:send_append_entries"> {
-  /** The peer to heartbeat. */
+/**
+ * Send an `AppendEntries` to one peer. Empty `entries` is a heartbeat; a
+ * non-empty one replicates from the leader's `nextIndex` for that peer. Carries
+ * the full Figure-2 payload so the follower can run its consistency check.
+ */
+export interface SendAppendEntries<C = unknown>
+  extends Cmd<"raft:send_append_entries"> {
+  /** The peer to send to. */
   readonly to: NodeId;
   /** The leader's term. */
   readonly term: Term;
   /** The leader's id. */
   readonly leaderId: NodeId;
+  /** Index of the entry preceding `entries` (0 at the head of the log). */
+  readonly prevLogIndex: number;
+  /** Term of the entry at `prevLogIndex` (0 when `prevLogIndex` is 0). */
+  readonly prevLogTerm: Term;
+  /** The entries to replicate (empty for a heartbeat). */
+  readonly entries: readonly LogEntry<C>[];
+  /** The leader's `commitIndex`. */
+  readonly leaderCommit: number;
 }
 
-/** The full outbound-Cmd union a Raft node emits in #119. */
-export type RaftCmd =
+/** Reply to an `AppendEntries` the original leader awaits. */
+export interface SendAppendEntriesReply
+  extends Cmd<"raft:send_append_entries_reply"> {
+  /** The leader that asked. */
+  readonly to: NodeId;
+  /** This node's `currentTerm`. */
+  readonly term: Term;
+  /** Whether the consistency check passed and the entries were stored. */
+  readonly success: boolean;
+  /** On success, this node's new last-agreed index (the leader's `matchIndex`). */
+  readonly matchIndex: number;
+}
+
+/** The full outbound-Cmd union a Raft node emits. */
+export type RaftCmd<C = unknown> =
   | SendRequestVote
   | SendRequestVoteReply
-  | SendAppendEntries;
+  | SendAppendEntries<C>
+  | SendAppendEntriesReply;
 
 // ===========================================================================
 // Subs — election + heartbeat DeadlineSubs
@@ -361,7 +473,10 @@ export function toRaftMsg(
  * the `(state, cmds)` shape the substrate's reducer cells return, so a consumer
  * threads these straight through their `update`.
  */
-export type RaftStep = readonly [RaftState, readonly RaftCmd[]];
+export type RaftStep<C = unknown> = readonly [
+  RaftState<C>,
+  readonly RaftCmd<C>[],
+];
 
 /**
  * The node handle returned by {@link createRaftNode}. Spread its hooks into a
@@ -372,15 +487,16 @@ export type RaftStep = readonly [RaftState, readonly RaftCmd[]];
  * Every verb is PURE given the injected `rng`: no clock read (time arrives as
  * `at`), no ambient randomness, no mutation, no throw.
  */
-export interface RaftNode {
+export interface RaftNode<C = unknown> {
   /** Seed a fresh node: term 0, no vote, empty log, follower. */
-  init(): RaftState;
+  init(): RaftState<C>;
 
   /**
    * The election timeout fired without a heartbeat / granted vote. Convert
    * follower OR candidate → candidate and start a NEW election: bump the term,
    * vote for self, reset the tally to `{self}`, and emit `RequestVote` to every
-   * peer. A leader ignores its own election timeout (it has a live mandate).
+   * peer (carrying the real last-log index/term). A leader ignores its own
+   * election timeout (it has a live mandate).
    *
    * `at` is the firing wall-clock (carried by the Msg) — used only so the
    * caller can re-arm the next election deadline at `at + <jittered timeout>`
@@ -390,7 +506,7 @@ export interface RaftNode {
    * one vote (self) is already a majority, so the node converts straight to
    * leader and emits the first heartbeat round (empty here — no peers).
    */
-  onElectionTimeout(state: RaftState, at: number): RaftStep;
+  onElectionTimeout(state: RaftState<C>, at: number): RaftStep<C>;
 
   /**
    * Handle an inbound `RequestVote` request (Figure 2 receiver rule).
@@ -399,14 +515,15 @@ export interface RaftNode {
    *   `votedFor`, and step down to follower BEFORE evaluating the grant.
    * - Reply `false` if `req.term < currentTerm` (stale candidate).
    * - Otherwise grant iff (`votedFor` is null OR already this candidate) AND the
-   *   candidate's log is at least as up-to-date (STUBBED `true` in #119; real
-   *   check in #120). Granting sets `votedFor = candidateId`.
+   *   candidate's log is at least as up-to-date ({@link logIsUpToDate} — the
+   *   real last-log term/index comparison, #120). Granting sets
+   *   `votedFor = candidateId`.
    *
    * Granting a vote (or stepping down) counts as "heard from a valid leader /
    * candidate", so the consumer re-arms the election timer off the resulting
    * state (`subs`).
    */
-  onRequestVote(state: RaftState, req: RequestVoteRequest): RaftStep;
+  onRequestVote(state: RaftState<C>, req: RequestVoteRequest): RaftStep<C>;
 
   /**
    * Handle an inbound `RequestVote` reply (the candidate tallying votes).
@@ -416,35 +533,74 @@ export interface RaftNode {
    * - A stale-term reply (`reply.term < currentTerm`) is dropped.
    * - A grant from a peer not yet counted adds to the tally; on reaching a
    *   majority the candidate converts to leader (initializing `nextIndex` /
-   *   `matchIndex`) and emits the first heartbeat round to every peer.
+   *   `matchIndex`) and emits the first `AppendEntries` round to every peer.
    * - A reply that arrives when the node is no longer a candidate (already
    *   leader / stepped down) is a no-op.
    */
-  onRequestVoteReply(state: RaftState, reply: RequestVoteReply): RaftStep;
+  onRequestVoteReply(state: RaftState<C>, reply: RequestVoteReply): RaftStep<C>;
 
   /**
-   * Handle an inbound `AppendEntries` (heartbeat in #119).
+   * Handle an inbound `AppendEntries` — heartbeat or replication (Figure 2
+   * receiver rules). Always emits an `AppendEntries` reply Cmd unless the term
+   * is stale-and-dropped without a state change.
    *
-   * - Reply-side rule: `req.term < currentTerm` is rejected — a stale leader; the
-   *   node holds its role (no reply Cmd modeled in #119; #120 adds the
-   *   AppendEntries reply).
-   * - `req.term >= currentTerm`: a valid leader exists for this term. Adopt the
-   *   term if higher, and revert candidate → follower (Figure 2: a candidate
-   *   that hears from a leader of term ≥ its own steps down). A follower stays
-   *   follower; a leader of the same term should not exist (election safety) but
-   *   a higher-term one steps this leader down.
+   * - Reply-side rule: `req.term < currentTerm` is rejected — a stale leader;
+   *   the node holds its role and replies `success: false`.
+   * - `req.term >= currentTerm`: a valid leader for this term. Adopt the term if
+   *   higher and revert candidate → follower (a candidate that hears from a
+   *   leader of term ≥ its own steps down). Then run the **consistency check**:
+   *   if the follower's log has no entry at `prevLogIndex` with term
+   *   `prevLogTerm`, reply `success: false` (the leader backs off `nextIndex`
+   *   and retries). On a match, delete any conflicting suffix and append the new
+   *   `entries`, then advance `commitIndex` to
+   *   `min(leaderCommit, lastNewEntryIndex)`, and reply `success: true` with the
+   *   follower's new last-agreed index as `matchIndex`.
    *
-   * Hearing a valid heartbeat resets the election timer (the consumer re-arms
-   * off the resulting state).
+   * Hearing a valid `AppendEntries` resets the election timer (the consumer
+   * re-arms off the resulting state).
    */
-  onAppendEntries(state: RaftState, req: AppendEntriesRequest): RaftStep;
+  onAppendEntries(
+    state: RaftState<C>,
+    req: AppendEntriesRequest<C>,
+  ): RaftStep<C>;
 
   /**
-   * The leader's heartbeat timer fired: emit an empty `AppendEntries` to every
-   * peer. A no-op (no Cmds) on a non-leader — a stale heartbeat fire racing a
+   * Handle an inbound `AppendEntries` reply (the leader updating its per-peer
+   * bookkeeping, Figure 2 leader rules).
+   *
+   * - Rules for all servers: a higher-term reply steps the leader down to
+   *   follower.
+   * - A reply received when no longer leader, or a stale-term reply, is a no-op.
+   * - On `success`: set `matchIndex[from]` to the reply's `matchIndex` and
+   *   `nextIndex[from]` to `matchIndex + 1`, then advance `commitIndex` under the
+   *   **Figure-8 safety rule** — to the highest N such that N is on a majority of
+   *   `matchIndex`es AND `log[N].term === currentTerm` (a leader NEVER commits a
+   *   prior-term entry by counting replicas; it commits it only transitively once
+   *   a current-term entry above it commits).
+   * - On rejection: decrement `nextIndex[from]` (floored at 1) and re-emit an
+   *   `AppendEntries` to that peer from the backed-off index (the retry).
+   */
+  onAppendEntriesReply(
+    state: RaftState<C>,
+    reply: AppendEntriesReply,
+  ): RaftStep<C>;
+
+  /**
+   * A client submitted a command. On the leader: append a new entry
+   * `{ term: currentTerm, index: lastLogIndex + 1, command }` to the log and
+   * emit an `AppendEntries` round replicating it to every peer. On a non-leader:
+   * a no-op (no append, no Cmds) — the consumer redirects the client to the
+   * leader. This is the entry point that grows the replicated/event log.
+   */
+  onClientCommand(state: RaftState<C>, msg: ClientCommand<C>): RaftStep<C>;
+
+  /**
+   * The leader's heartbeat timer fired: emit an `AppendEntries` to every peer
+   * (entries beyond that peer's `nextIndex`, empty when the peer is caught up).
+   * A no-op (no Cmds) on a non-leader — a stale heartbeat fire racing a
    * step-down the reconcile pass has not yet retired.
    */
-  onHeartbeat(state: RaftState, at: number): RaftStep;
+  onHeartbeat(state: RaftState<C>, at: number): RaftStep<C>;
 
   /**
    * The live `DeadlineSub`s for `state`, computed against the current clock
@@ -456,28 +612,34 @@ export interface RaftNode {
    * - follower / candidate → arm ONLY the election timeout.
    * - leader → arm ONLY the heartbeat (a leader does not time itself out).
    */
-  subs(state: RaftState, now: number): readonly DeadlineSub[];
+  subs(state: RaftState<C>, now: number): readonly DeadlineSub[];
 }
 
 /**
- * The candidate "log at least as up-to-date" check (Figure 2 receiver rule).
+ * The candidate "log at least as up-to-date" check (Figure 2 receiver rule,
+ * §5.4.1 election restriction). Compares the candidate's last-log
+ * (term, index) against ours: term dominates, index breaks a tie.
  *
- * STUBBED `true` in #119 — election-only slice. #120 lands the real log and
- * replaces this with the genuine comparison: the candidate's log is up-to-date
- * iff its last-log term is greater, OR equal-term-and-its-last-index is ≥ ours.
- * Until then every otherwise-eligible request is granted on the log axis, so
- * the term / `votedFor` rules (which ARE real here) are what gate the vote.
- *
- * Kept as a named exported function (not an inline `true`) so #120 is a
- * one-symbol swap and the seam is greppable.
+ * Up-to-date iff the candidate's last-log term is GREATER than ours, OR the
+ * terms are EQUAL and the candidate's last-log index is ≥ ours. (Our own
+ * last-log term/index are read from the tail of `log`; an empty log is
+ * (term 0, index 0), so any candidate is at least as up-to-date as an empty
+ * log.) This is the property that keeps a leader's log a superset of every
+ * committed entry — a node missing a committed entry can never gather a
+ * majority, so it cannot win.
  */
-// #120: replace the stub with the real last-log-term / last-log-index comparison.
 export function logIsUpToDate(
-  _log: readonly LogEntry[],
-  _candidateLastLogIndex: number,
-  _candidateLastLogTerm: Term,
+  log: readonly LogEntry[],
+  candidateLastLogIndex: number,
+  candidateLastLogTerm: Term,
 ): boolean {
-  return true;
+  const last = log.at(-1);
+  const ourLastTerm = last?.term ?? 0;
+  const ourLastIndex = last?.index ?? 0;
+  if (candidateLastLogTerm !== ourLastTerm) {
+    return candidateLastLogTerm > ourLastTerm;
+  }
+  return candidateLastLogIndex >= ourLastIndex;
 }
 
 /**
@@ -500,12 +662,21 @@ function majority(peerCount: number): number {
  * No verb body names the global RNG, so a node driven by a recorded schedule
  * replays bit-for-bit (the epic's headline payoff).
  */
-export function createRaftNode(
+export function createRaftNode<C = unknown>(
   config: RaftConfig,
   rng: () => number = Math.random,
-): RaftNode {
+): RaftNode<C> {
   const { self, peers, electionTimeout, heartbeatMs } = config;
   const quorum = majority(peers.length);
+
+  /** This node's last-log index (1-based; 0 for an empty log). */
+  function lastIndex(state: RaftState<C>): number {
+    return state.log.at(-1)?.index ?? 0;
+  }
+  /** Term of this node's last log entry (0 for an empty log). */
+  function lastTerm(state: RaftState<C>): number {
+    return state.log.at(-1)?.term ?? 0;
+  }
 
   /**
    * Adopt a strictly-higher term: bump `currentTerm`, clear `votedFor`, and
@@ -514,7 +685,7 @@ export function createRaftNode(
    * input unchanged when `term` is not higher (so callers can apply it
    * unconditionally before evaluating their own rule).
    */
-  function adoptHigherTerm(state: RaftState, term: Term): RaftState {
+  function adoptHigherTerm(state: RaftState<C>, term: Term): RaftState<C> {
     if (term <= state.currentTerm) return state;
     return {
       ...state,
@@ -526,24 +697,24 @@ export function createRaftNode(
 
   /**
    * Convert to candidate and start a fresh election. Bumps the term, votes for
-   * self, resets the tally to `{self}`, and emits `RequestVote` to every peer.
-   * Shared by `onElectionTimeout` for both follower→candidate and
-   * candidate→candidate (a new election after a split vote). The last-log
-   * index/term are stub-read from the placeholder log (real values in #120).
+   * self, resets the tally to `{self}`, and emits `RequestVote` to every peer
+   * carrying the real last-log index/term (the §5.4.1 election restriction the
+   * receiver enforces via {@link logIsUpToDate}). Shared by `onElectionTimeout`
+   * for both follower→candidate and candidate→candidate.
    */
-  function startElection(state: RaftState): RaftStep {
+  function startElection(state: RaftState<C>): RaftStep<C> {
     const newTerm = state.currentTerm + 1;
-    const lastLogIndex = state.log.length;
-    const lastLogTerm = state.log.at(-1)?.term ?? 0;
+    const lastLogIndex = lastIndex(state);
+    const lastLogTerm = lastTerm(state);
 
-    const next: RaftState = {
+    const next: RaftState<C> = {
       ...state,
       currentTerm: newTerm,
       votedFor: self,
       role: { _tag: "candidate", votesGranted: [self] },
     };
 
-    const requests: RaftCmd[] = peers.map((peer) => ({
+    const requests: RaftCmd<C>[] = peers.map((peer) => ({
       type: "raft:send_request_vote",
       to: peer,
       term: newTerm,
@@ -567,11 +738,12 @@ export function createRaftNode(
   /**
    * Convert a winning candidate to leader: initialize per-peer `nextIndex`
    * (leader's last-log index + 1) and `matchIndex` (0), then emit the first
-   * heartbeat round to every peer. Figure 2 leader-on-election rules. `nextIndex`
-   * / `matchIndex` live only on the leader variant — built here, nowhere else.
+   * `AppendEntries` round to every peer. Figure 2 leader-on-election rules.
+   * `nextIndex` / `matchIndex` live only on the leader variant — built here,
+   * nowhere else.
    */
-  function becomeLeader(state: RaftState): RaftStep {
-    const nextIdx = state.log.length + 1;
+  function becomeLeader(state: RaftState<C>): RaftStep<C> {
+    const nextIdx = lastIndex(state) + 1;
     const nextIndex: Record<NodeId, number> = {};
     const matchIndex: Record<NodeId, number> = {};
     for (const peer of peers) {
@@ -579,25 +751,89 @@ export function createRaftNode(
       matchIndex[peer] = 0;
     }
 
-    const leader: RaftState = {
+    const leader: RaftState<C> = {
       ...state,
       role: { _tag: "leader", nextIndex, matchIndex },
     };
 
-    return [leader, heartbeats(leader)];
+    return [leader, replicateAll(leader)];
   }
 
-  /** The empty-AppendEntries fanout a leader sends each heartbeat interval. */
-  function heartbeats(state: RaftState): RaftCmd[] {
-    return peers.map((peer) => ({
+  /**
+   * Build the `AppendEntries` Cmd for one peer from the leader's `nextIndex`
+   * for it: `prevLogIndex` is `nextIndex - 1`, `entries` is everything from
+   * `nextIndex` onward (empty when the peer is caught up → a heartbeat). Pure
+   * read of the leader's log + per-peer cursor. Caller guarantees `state` is a
+   * leader.
+   */
+  function appendEntriesFor(
+    state: RaftState<C>,
+    peer: NodeId,
+    next: number,
+  ): SendAppendEntries<C> {
+    const prevLogIndex = next - 1;
+    // log is 1-based and contiguous, so index i lives at log[i - 1]; `.at`
+    // keeps the access total (0 term at the head / off the end).
+    const prevLogTerm =
+      prevLogIndex > 0 ? (state.log.at(prevLogIndex - 1)?.term ?? 0) : 0;
+    const entries = state.log.slice(prevLogIndex);
+    return {
       type: "raft:send_append_entries",
       to: peer,
       term: state.currentTerm,
       leaderId: self,
-    }));
+      prevLogIndex,
+      prevLogTerm,
+      entries,
+      leaderCommit: state.commitIndex,
+    };
   }
 
-  function init(): RaftState {
+  /** The full `AppendEntries` fanout a leader sends (one Cmd per peer). */
+  function replicateAll(state: RaftState<C>): RaftCmd<C>[] {
+    if (state.role._tag !== "leader") return [];
+    const { nextIndex } = state.role;
+    // Every peer is a key of nextIndex (built in becomeLeader); `?? 1` keeps
+    // the read total for the type-checker and floors a missing cursor at the
+    // log head.
+    return peers.map((peer) =>
+      appendEntriesFor(state, peer, nextIndex[peer] ?? 1),
+    );
+  }
+
+  /**
+   * Advance a leader's `commitIndex` under the Figure-8 safety rule. Returns the
+   * highest N > commitIndex such that (a) a MAJORITY of the cluster — counting
+   * the leader's own log plus the peers whose `matchIndex >= N` — has the entry,
+   * AND (b) `log[N].term === currentTerm`. Clause (b) is the subtle correctness
+   * point: a leader must NOT commit an entry from a PRIOR term merely because it
+   * sits on a majority of logs (Figure 8 shows such an entry can still be
+   * overwritten). A prior-term entry commits only transitively, once a
+   * current-term entry above it reaches a majority. Returns the unchanged
+   * `commitIndex` when no such N exists.
+   */
+  function advanceCommitIndex(state: RaftState<C>): number {
+    if (state.role._tag !== "leader") return state.commitIndex;
+    const { matchIndex } = state.role;
+    const lastLogIndex = lastIndex(state);
+    let commit = state.commitIndex;
+    // Walk candidate indices above the current commit; the highest qualifying N
+    // wins (each higher N implies the lower ones, so we keep the max).
+    for (let n = state.commitIndex + 1; n <= lastLogIndex; n++) {
+      // Figure-8: only an entry from the current term is committable by count.
+      if (state.log.at(n - 1)?.term !== state.currentTerm) continue;
+      // The leader itself holds entry n (n <= lastLogIndex), so start the count
+      // at 1, then add every peer that has replicated up to at least n.
+      let replicas = 1;
+      for (const peer of peers) {
+        if ((matchIndex[peer] ?? 0) >= n) replicas++;
+      }
+      if (replicas >= quorum) commit = n;
+    }
+    return commit;
+  }
+
+  function init(): RaftState<C> {
     return {
       currentTerm: 0,
       votedFor: null,
@@ -607,14 +843,17 @@ export function createRaftNode(
     };
   }
 
-  function onElectionTimeout(state: RaftState, _at: number): RaftStep {
+  function onElectionTimeout(state: RaftState<C>, _at: number): RaftStep<C> {
     // A leader has a live mandate; its own election timer is never armed (see
     // `subs`), but a stale fire racing a step-up must be a no-op regardless.
     if (state.role._tag === "leader") return [state, []];
     return startElection(state);
   }
 
-  function onRequestVote(state: RaftState, req: RequestVoteRequest): RaftStep {
+  function onRequestVote(
+    state: RaftState<C>,
+    req: RequestVoteRequest,
+  ): RaftStep<C> {
     // Rules for all servers: a higher term steps us down BEFORE we decide.
     const base = adoptHigherTerm(state, req.term);
 
@@ -634,7 +873,7 @@ export function createRaftNode(
 
     // Granting records the vote (and resets the election timer via `subs`, off
     // the returned follower state).
-    const granted: RaftState = {
+    const granted: RaftState<C> = {
       ...base,
       votedFor: req.candidateId,
       role: { _tag: "follower" },
@@ -643,9 +882,9 @@ export function createRaftNode(
   }
 
   function onRequestVoteReply(
-    state: RaftState,
+    state: RaftState<C>,
     reply: RequestVoteReply,
-  ): RaftStep {
+  ): RaftStep<C> {
     // Rules for all servers: a higher-term reply steps us down (we lost).
     if (reply.term > state.currentTerm) {
       return [adoptHigherTerm(state, reply.term), []];
@@ -661,7 +900,7 @@ export function createRaftNode(
     if (state.role.votesGranted.includes(reply.from)) return [state, []];
 
     const votesGranted = [...state.role.votesGranted, reply.from];
-    const tallied: RaftState = {
+    const tallied: RaftState<C> = {
       ...state,
       role: { _tag: "candidate", votesGranted },
     };
@@ -671,28 +910,124 @@ export function createRaftNode(
   }
 
   function onAppendEntries(
-    state: RaftState,
-    req: AppendEntriesRequest,
-  ): RaftStep {
-    // Stale leader — reject by holding our role (no reply Cmd modeled in #119).
-    if (req.term < state.currentTerm) return [state, []];
+    state: RaftState<C>,
+    req: AppendEntriesRequest<C>,
+  ): RaftStep<C> {
+    // Stale leader — reject. Reply with our (higher) term so the sender steps
+    // down; no state change.
+    if (req.term < state.currentTerm) {
+      return [state, [appendReply(req.leaderId, state.currentTerm, false, 0)]];
+    }
 
     // Valid leader for term ≥ ours. Adopt a higher term (clears votedFor, steps
     // down); then ensure we are a follower for this term — a candidate that
-    // hears from a leader of term ≥ its own reverts (Figure 2). Hearing a
-    // heartbeat resets the election timer (consumer re-arms off this state).
-    const base = adoptHigherTerm(state, req.term);
-    if (base.role._tag === "follower") return [base, []];
-    return [{ ...base, role: { _tag: "follower" } }, []];
+    // hears from a leader of term ≥ its own reverts (Figure 2). Hearing a valid
+    // AppendEntries resets the election timer (consumer re-arms off this state).
+    const adopted = adoptHigherTerm(state, req.term);
+    const base: RaftState<C> =
+      adopted.role._tag === "follower"
+        ? adopted
+        : { ...adopted, role: { _tag: "follower" } };
+
+    // Consistency check (Figure 2): the follower must hold an entry at
+    // `prevLogIndex` whose term is `prevLogTerm` (prevLogIndex 0 always matches
+    // — it anchors at the head). Otherwise reject; the leader backs off.
+    const prevOk =
+      req.prevLogIndex === 0 ||
+      base.log[req.prevLogIndex - 1]?.term === req.prevLogTerm;
+    if (!prevOk) {
+      return [base, [appendReply(req.leaderId, base.currentTerm, false, 0)]];
+    }
+
+    // Match: keep the log up to prevLogIndex, then delete any conflicting suffix
+    // and append the new entries. Splicing at prevLogIndex and concatenating is
+    // the truncate-and-append in one step (an entry already present and
+    // identical is simply overwritten with itself — idempotent on a retry).
+    const kept = base.log.slice(0, req.prevLogIndex);
+    const nextLog = [...kept, ...req.entries];
+    const lastNew = req.prevLogIndex + req.entries.length;
+
+    // Advance commitIndex to min(leaderCommit, index of last new entry). Never
+    // run ahead of what this follower actually holds.
+    const commitIndex =
+      req.leaderCommit > base.commitIndex
+        ? Math.min(req.leaderCommit, lastNew)
+        : base.commitIndex;
+
+    const next: RaftState<C> = { ...base, log: nextLog, commitIndex };
+    return [next, [appendReply(req.leaderId, base.currentTerm, true, lastNew)]];
   }
 
-  function onHeartbeat(state: RaftState, _at: number): RaftStep {
+  function onAppendEntriesReply(
+    state: RaftState<C>,
+    reply: AppendEntriesReply,
+  ): RaftStep<C> {
+    // Rules for all servers: a higher-term reply steps us down.
+    if (reply.term > state.currentTerm) {
+      return [adoptHigherTerm(state, reply.term), []];
+    }
+    // Only a leader of the matching term acts on replies; anything else is a
+    // stale/misrouted reply and a no-op.
+    if (state.role._tag !== "leader") return [state, []];
+    if (reply.term < state.currentTerm) return [state, []];
+
+    const { nextIndex, matchIndex } = state.role;
+
+    if (!reply.success) {
+      // Consistency check failed at the follower: back off nextIndex (floored
+      // at 1) and retry from the lower bound. matchIndex is untouched.
+      const backed = Math.max(1, (nextIndex[reply.from] ?? 1) - 1);
+      const retried: RaftState<C> = {
+        ...state,
+        role: {
+          _tag: "leader",
+          nextIndex: { ...nextIndex, [reply.from]: backed },
+          matchIndex,
+        },
+      };
+      return [retried, [appendEntriesFor(retried, reply.from, backed)]];
+    }
+
+    // Success: this peer now agrees up to reply.matchIndex. Advance its cursors
+    // monotonically (a stale/duplicated success must never pull them backward),
+    // then re-evaluate the commit index under the Figure-8 rule.
+    const newMatch = Math.max(matchIndex[reply.from] ?? 0, reply.matchIndex);
+    const advanced: RaftState<C> = {
+      ...state,
+      role: {
+        _tag: "leader",
+        nextIndex: { ...nextIndex, [reply.from]: newMatch + 1 },
+        matchIndex: { ...matchIndex, [reply.from]: newMatch },
+      },
+    };
+    const commitIndex = advanceCommitIndex(advanced);
+    return [{ ...advanced, commitIndex }, []];
+  }
+
+  function onClientCommand(
+    state: RaftState<C>,
+    msg: ClientCommand<C>,
+  ): RaftStep<C> {
+    // Only the leader accepts client commands; a non-leader rejects (the
+    // consumer redirects to the known leader). No append, no Cmds.
+    if (state.role._tag !== "leader") return [state, []];
+
+    const entry: LogEntry<C> = {
+      term: state.currentTerm,
+      index: lastIndex(state) + 1,
+      command: msg.command,
+    };
+    const appended: RaftState<C> = { ...state, log: [...state.log, entry] };
+    return [appended, replicateAll(appended)];
+  }
+
+  function onHeartbeat(state: RaftState<C>, _at: number): RaftStep<C> {
     // Only a leader heartbeats. A stale fire racing a step-down is a no-op.
     if (state.role._tag !== "leader") return [state, []];
-    return [state, heartbeats(state)];
+    return [state, replicateAll(state)];
   }
 
-  function subs(state: RaftState, now: number): readonly DeadlineSub[] {
+  function subs(state: RaftState<C>, now: number): readonly DeadlineSub[] {
     if (state.role._tag === "leader") {
       // A leader arms ONLY the heartbeat; it never times itself out.
       return [deadlineSub(heartbeatSubId(self), now + heartbeatMs)];
@@ -713,12 +1048,30 @@ export function createRaftNode(
     return { type: "raft:send_request_vote_reply", to, term, voteGranted };
   }
 
+  /** Build an `AppendEntries` reply Cmd addressed to the asking leader. */
+  function appendReply(
+    to: NodeId,
+    term: Term,
+    success: boolean,
+    matchIndex: number,
+  ): SendAppendEntriesReply {
+    return {
+      type: "raft:send_append_entries_reply",
+      to,
+      term,
+      success,
+      matchIndex,
+    };
+  }
+
   return {
     init,
     onElectionTimeout,
     onRequestVote,
     onRequestVoteReply,
     onAppendEntries,
+    onAppendEntriesReply,
+    onClientCommand,
     onHeartbeat,
     subs,
   };
