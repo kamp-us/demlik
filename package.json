@@ -181,6 +181,10 @@
       "types": "./dist/poller/index.d.ts",
       "import": "./dist/poller/index.js"
     },
+    "./raft": {
+      "types": "./dist/raft/index.d.ts",
+      "import": "./dist/raft/index.js"
+    },
     "./batch-window": {
       "types": "./dist/batch-window/index.d.ts",
       "import": "./dist/batch-window/index.js"
