@@ -252,12 +252,17 @@ export function recordPage<Cursor>(
   // negative count would drive `seen` down (a record can never lower the gauge —
   // only `drain` does) and a non-finite count (`NaN` / `Infinity`) would poison
   // every later `seen >= highWaterMark` comparison, permanently defeating
-  // backpressure (NaN compares false, so the valve never trips). Guard the
-  // non-finite case to 0 first (mirroring retry-backoff's `Number.isNaN`
-  // discipline at backoffDelay ~:119), then floor the sum at 0 so the additive
-  // step can only hold or raise the gauge.
-  const safeCount = Number.isFinite(count) ? count : 0;
-  const seen = Math.max(0, state.seen + safeCount);
+  // backpressure (NaN compares false, so the valve never trips). Floor the
+  // CONTRIBUTION (not just the sum) at 0: clamp a non-finite count to 0
+  // (mirroring retry-backoff's `Number.isNaN` discipline at backoffDelay ~:119)
+  // and a negative count to 0. Flooring the contribution — rather than the sum —
+  // is what makes a record strictly monotonic: `Math.max(0, seen + count)` only
+  // catches a count that drags the *sum* below zero, so a small negative count
+  // (e.g. `seen=10, count=-3 → 7`) would still silently lower the gauge and
+  // break "only `drain` lowers `seen`". Clamping `count` first guarantees the
+  // additive step can only hold or raise the gauge.
+  const safeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+  const seen = state.seen + safeCount;
   const pages = state.pages + 1;
   // Loose `== null` so a *missing* next cursor (`undefined`, common for an
   // optional API field the consumer extracted as `page.nextPageToken`) finishes
