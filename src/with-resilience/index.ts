@@ -563,21 +563,6 @@ export function withResilience<
     (base as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
 
-  // Construction guard — the target Cmd MUST have a base interpret handler. This
-  // is a property of the (base, config) pair, fully known here at construction:
-  // the `$resilience:run` carrier delegates to `baseInterpret[target]`, so a
-  // missing handler means the resilient effect has nothing to perform. Surface
-  // it now — refuse to build a machine whose target can never run — rather than
-  // lazily on the first effect (errors are data, surfaced at construction, like
-  // the time-sensitive-`at` and reserved-namespace guards above/below).
-  if (!Object.hasOwn(baseInterpret as object, target)) {
-    throw new Error(
-      `withResilience: no base interpret handler for target Cmd "${target}" ` +
-        `— the resilient effect has nothing to perform. The base machine must ` +
-        `declare an interpret handler for its target Cmd type.`,
-    );
-  }
-
   // Reserved-namespace guard (mirrors withTelemetry + the substrate's
   // definePort / SubId collision asserts). The wrapper OWNS four reserved keys:
   // the `$resilience:run` carrier Cmd, the `$resilience:ok` / `$resilience:err`
@@ -587,6 +572,14 @@ export function withResilience<
   // the spread would SILENTLY clobber it (or the base's own key would shadow the
   // wrapper's). The `$resilience:` namespace is the wrapper's — refuse to wrap a
   // base that squats on any of the four across any surface.
+  //
+  // Ordered BEFORE the target-handler guard below: squatting a reserved key is a
+  // target-INDEPENDENT structural defect of the base, so it is the more
+  // fundamental rejection and must report first. Otherwise a base that BOTH
+  // squats `$resilience:*` AND omits the target handler would surface the
+  // narrower missing-target error and mask the namespace collision — exactly the
+  // regression #111's construction-time hoist introduced (the hoisted target
+  // check shadowed this guard for such a base), fixed by #112.
   //
   // `update` is checked PER FORM (the same Reducer-vs-Transitions detection the
   // wrapper already uses in `baseMsgKeys` / `runBaseUpdate`): a Reducer-form
@@ -632,6 +625,24 @@ export function withResilience<
         );
       }
     }
+  }
+
+  // Construction guard — the target Cmd MUST have a base interpret handler. This
+  // is a property of the (base, config) pair, fully known here at construction:
+  // the `$resilience:run` carrier delegates to `baseInterpret[target]`, so a
+  // missing handler means the resilient effect has nothing to perform. Surface
+  // it now — refuse to build a machine whose target can never run — rather than
+  // lazily on the first effect (errors are data, surfaced at construction, like
+  // the time-sensitive-`at` and reserved-namespace guards above). Ordered AFTER
+  // the reserved-namespace guard so a base that squats `$resilience:*` is
+  // rejected for the namespace collision first, not masked by this narrower
+  // missing-target error (#112).
+  if (!Object.hasOwn(baseInterpret as object, target)) {
+    throw new Error(
+      `withResilience: no base interpret handler for target Cmd "${target}" ` +
+        `— the resilient effect has nothing to perform. The base machine must ` +
+        `declare an interpret handler for its target Cmd type.`,
+    );
   }
 
   // The `$resilience:run` handler delegates to the BASE interpret handler for
