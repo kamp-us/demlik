@@ -11,7 +11,9 @@
  * domain: the tools, the prompts (via the llm-call message loader), the schemas,
  * and the model. `createAgent(config)` returns the uniform knob contract every
  * composition exposes (`init` / verbs returning `readonly [State, Cmd[]]` /
- * `subs` / `handlers`) AND a ready-to-`run` `defineMachine` (`toMachine`).
+ * `subs`) AND a ready-to-`run` `defineMachine` (`toMachine`) — THE one wired
+ * path. (`unsafeDetachedHandlers` is the hand-wiring escape hatch; its name
+ * advertises that it does not drive the retry loop — see #54.)
  *
  * ## The composition (three siblings wired into ONE machine)
  *
@@ -268,7 +270,29 @@ export interface Conversation<R> {
  *                 the consumer that does not care to name its tool Cmd.
  *   - `Msg`     — the model's message shape (threaded through the llm-call loader).
  */
-export interface AgentConfig<
+/**
+ * The snapshotting discriminant (#55). Checkpointing is either OFF — in which
+ * case `snapshotEvery` is structurally absent and the monitored-run slice never
+ * emits a `snapshot_write` Cmd — or ON, in which case `snapshotEvery` is a
+ * `number`. A `{ snapshotEvery?: never }` member (rather than a bare optional)
+ * makes the OFF case load-bearing: it forbids passing `snapshotEvery` at all, so
+ * `toMachine` can config-derive whether the `snapshot_write` interpret cell is
+ * REQUIRED (ON) or FORBIDDEN (OFF) instead of defaulting it to a silent no-op.
+ *
+ * This is what kills the type lie: with checkpointing off, `snapshot_write` is
+ * absent from the consumer's interpret contract entirely — never a
+ * `snapshot_write: async () => undefined` ceremony that masks a real wiring bug.
+ */
+export type AgentSnapshotConfig =
+  | { readonly snapshotEvery?: never }
+  | { readonly snapshotEvery: number };
+
+/**
+ * The core (non-snapshot) agent knob. The full `AgentConfig` intersects this
+ * with the `AgentSnapshotConfig` discriminant — see that type for why the
+ * snapshot cadence is a discriminated union rather than a bare optional.
+ */
+export interface AgentConfigCore<
   Stage,
   P extends string,
   O extends Record<P, AgentTurn>,
@@ -281,8 +305,6 @@ export interface AgentConfig<
   readonly stages?: readonly Stage[];
   /** No-progress watchdog budget, in ms. Omit → no watchdog. */
   readonly deadlineMs?: number;
-  /** Periodic durable checkpoint cadence. Omit → no checkpointing. */
-  readonly snapshotEvery?: number;
 
   // ---- llm-call seam (the brain) ------------------------------------------
   /** DI port — the model factory `(modelId) => Llm`. */
@@ -331,6 +353,21 @@ export interface AgentConfig<
    */
   readonly rng?: () => number;
 }
+
+/**
+ * The agent knob — the core seams intersected with the snapshotting discriminant
+ * (`AgentSnapshotConfig`). Type parameters are documented on `AgentConfigCore`;
+ * the only addition here is that `snapshotEvery` is the discriminant that drives
+ * whether `toMachine` requires (or forbids) the `snapshot_write` interpret cell.
+ */
+export type AgentConfig<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd = Cmd,
+  Msg = unknown,
+> = AgentConfigCore<Stage, P, O, R, TC, Msg> & AgentSnapshotConfig;
 
 // ===========================================================================
 // Slice — the Model field this knob owns. Three composed slices + the loop's
@@ -388,16 +425,161 @@ export type AgentLlmRunCmd<P extends string> = LlmRunCmd<P>;
  *   - `AgentLlmRunCmd<P>`     — the brain-call run Cmd (`resilient_run`), folded
  *                              by the wired `brainHandlers` cell.
  *   - `MonitoredRunCmd<unknown>` — the durable checkpoint write the monitored-run
- *                              slice emits when `snapshotEvery` is set (forwarded
- *                              out of `advance`). The consumer owns its interpret
- *                              (the agent never persists; it only forwards).
+ *                              slice emits, present in the union ONLY when
+ *                              checkpointing is on (`Snap = true`). With
+ *                              checkpointing off the monitored-run slice never
+ *                              emits a `snapshot_write` Cmd, so it is config-derived
+ *                              OUT of the emitted set — the consumer is never asked
+ *                              to interpret a Cmd that can never fire (#55).
  *   - `TC`                    — the consumer's per-tool effect, mapped to the
  *                              consumer's own tool interpret cell.
+ *
+ * `Snap` defaults to `true` so the verb-internal usage (which forwards whatever
+ * monitored-run emits) and the published type stay a safe superset; the wired
+ * machine `toMachine` returns is parametrized on the overload-fixed `Snap` so its
+ * Cmd set is exact (`MonitoredRunCmd` present only when checkpointing is on).
  */
-export type AgentCmd<P extends string, TC extends Cmd = Cmd> =
+export type AgentCmd<
+  P extends string,
+  TC extends Cmd = Cmd,
+  Snap extends boolean = true,
+> =
   | AgentLlmRunCmd<P>
-  | MonitoredRunCmd<unknown>
+  | (Snap extends true ? MonitoredRunCmd<unknown> : never)
   | TC;
+
+/**
+ * The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55).
+ * Resolves on the `Snap` discriminant the snapshotting overload of `createAgent`
+ * fixes (`true` checkpointing-on / `false` off):
+ *
+ *   - checkpointing ON  → a REQUIRED `snapshot_write` cell
+ *     (`Interpret<M, MonitoredRunCmd<unknown>, Ctx>`). A real checkpoint write
+ *     MUST be wired — the agent never defaults it to a no-op.
+ *   - checkpointing OFF → `{ snapshot_write?: never }`. The cell is FORBIDDEN:
+ *     the Cmd is config-derived out of the emitted set, so wiring it would be
+ *     dead code. The consumer cannot even mention `snapshot_write`.
+ *
+ * This is the type that kills the `snapshot_write: async () => undefined`
+ * ceremony: the obligation is present in the contract EXACTLY when the Cmd can
+ * fire, never as a silent gap the agent backfills.
+ */
+export type SnapshotInterpret<
+  M extends { type: string },
+  Snap extends boolean,
+  Ctx,
+> = Snap extends true
+  ? Interpret<M, MonitoredRunCmd<unknown>, Ctx>
+  : { readonly snapshot_write?: never };
+
+/**
+ * The `toMachine` signature, parametrized on the `Snap` discriminant so the
+ * snapshotting / non-snapshotting overloads of `createAgent` hand back the right
+ * obligation. The `toolInterpret` requires (Snap=true) or forbids (Snap=false)
+ * the `snapshot_write` cell via `SnapshotInterpret`, and the machine's Cmd type
+ * is the config-derived `AgentCmd<P, TC, Snap>`.
+ */
+export type AgentToMachine<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd,
+  Snap extends boolean,
+> = <Ctx = object>(opts?: {
+  readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
+    SnapshotInterpret<AgentMachineMsg<P, O, R>, Snap, Ctx>;
+}) => Machine<
+  AgentState<Stage, P, O, R>,
+  AgentMachineMsg<P, O, R>,
+  AgentCmd<P, TC, Snap>,
+  DeadlineSub,
+  Ctx
+>;
+
+/**
+ * The agent knob `createAgent` returns — the uniform verb contract every tea
+ * composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers`
+ * escape hatch. `Snap` flows ONLY into `toMachine`'s `toolInterpret` obligation
+ * (the snapshot derivation, #55); every verb is snapshot-agnostic. The model
+ * message shape `Msg` does not appear on the knob surface (it is internal to the
+ * brain call's loader), so it is not a type parameter here — only `createAgent`
+ * carries it, to thread the config's `loadMessages` / `model` ports.
+ */
+export interface AgentKnob<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd,
+  Snap extends boolean,
+> {
+  readonly init: () => AgentState<Stage, P, O, R>;
+  readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
+  readonly turn: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [result: AgentTurn, at: number]
+  >;
+  readonly toolOk: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [callId: string, result: R, at: number]
+  >;
+  readonly toolErr: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [callId: string, reason: string, at: number]
+  >;
+  readonly succeed: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [key: string, msg: AgentLlmOkMsg<P, O>, at: number]
+  >;
+  readonly fail: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [key: string, msg: AgentLlmErrMsg<P>, at: number]
+  >;
+  readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: AgentTimerMsg]>;
+  readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number]>;
+  readonly isSettled: (s: AgentState<Stage, P, O, R>) => boolean;
+  readonly currentStage: (s: AgentState<Stage, P, O, R>) => Stage | undefined;
+  readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
+  readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
+  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap>;
+  readonly unsafeDetachedHandlers: <M>(
+    ports: AgentPorts<P, O, M>,
+  ) => AgentDetachedHandlers<P, M>;
+}
+
+/** A verb taking the state + `Args`, returning the knob's `[State, Cmd[]]` tuple. */
+type AgentVerb1<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd,
+  Args extends readonly unknown[],
+> = (
+  s: AgentState<Stage, P, O, R>,
+  ...args: Args
+) => readonly [AgentState<Stage, P, O, R>, readonly AgentCmd<P, TC>[]];
 
 /** The brain-call success / failure settle Msgs, inherited from `../llm-call`. */
 export type AgentLlmOkMsg<
@@ -430,7 +612,7 @@ export type AgentPorts<
  * fire-and-forget handler with a structural `{ waitUntil, dispatch }` ctx — it
  * does not re-enter the resilient settle Msg and so does not drive the retry
  * loop. Naming the type precisely (rather than laundering it through
- * `as unknown as Interpret<...>`) keeps `agent.handlers(ports)` honest: the
+ * `as unknown as Interpret<...>`) keeps `agent.unsafeDetachedHandlers(ports)` honest: the
  * consumer that wires the verbs by hand gets the real detached shape, and its
  * `resilient_run` is callable with a plain Cmd + a `{ waitUntil, dispatch }` ctx
  * with no `as never` at the call site.
@@ -459,8 +641,19 @@ export type AgentDetachedHandlers<P extends string, M> = {
  * on the config (pass a fixed `() => 0` to pin backoff in tests; omit → defaults
  * to `Math.random`, read only at the resilient-call verb boundary).
  *
- * Returns the uniform knob contract (`init` / verbs / `subs` / `handlers`) plus
- * `toMachine()` — a `defineMachine` wiring all of it into one runnable machine.
+ * Returns the uniform knob contract (`init` / verbs / `subs`) plus `toMachine()`
+ * — a `defineMachine` wiring all of it into one runnable machine — and the
+ * `unsafeDetachedHandlers` hand-wiring escape hatch.
+ *
+ * `createAgent` is OVERLOADED on the snapshotting discriminant (#55): the
+ * `{ snapshotEvery: number }` form returns a knob whose `toMachine` REQUIRES a
+ * `snapshot_write` interpret cell; the `{ snapshotEvery?: never }` form returns
+ * one that FORBIDS it. Overload resolution reads the `config` VALUE (its
+ * `snapshotEvery` field), so the right obligation is selected even when the call
+ * site passes explicit type arguments — TS does not infer trailing type params,
+ * so a `Cfg`-inference scheme would silently fall back to "non-snapshotting" at
+ * every explicit-type-arg call site. The overload fixes `Snap` concretely
+ * instead, with no dependence on inference.
  */
 export function createAgent<
   Stage,
@@ -469,7 +662,33 @@ export function createAgent<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
->(config: AgentConfig<Stage, P, O, R, TC, Msg>) {
+>(
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+    readonly snapshotEvery: number;
+  },
+): AgentKnob<Stage, P, O, R, TC, true>;
+export function createAgent<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd = Cmd,
+  Msg = unknown,
+>(
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+    readonly snapshotEvery?: never;
+  },
+): AgentKnob<Stage, P, O, R, TC, false>;
+export function createAgent<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd = Cmd,
+  Msg = unknown,
+>(
+  config: AgentConfig<Stage, P, O, R, TC, Msg>,
+): AgentKnob<Stage, P, O, R, TC, boolean> {
   const rng = config.rng ?? Math.random;
   // ---- The three composed sub-knobs --------------------------------------
 
@@ -953,13 +1172,18 @@ export function createAgent<
    * parses, and dispatches the consumer's `onOk` / `onErr` Msg (carrying the
    * parsed `AgentTurn` for `onOk`).
    *
-   * LEGACY — kept ONLY for the consumer that wires the verbs by hand and wants
-   * the fire-and-forget dispatch shape. It does NOT drive the inherited retry
-   * loop (it never re-enters the `resilient_ok` settle Msg, so `succeed` /
-   * `fail` never run — the breaker never closes, the retry counter never
-   * resets). `toMachine` does NOT use this form; it uses the FIXED `brainHandlers`
-   * below, which returns the settle Msg for re-entry. See llm-call's `handlers`
-   * doc (the same retry-loop gap, fixed the same way).
+   * UNSAFE — kept ONLY as a deliberate escape hatch for the consumer that wires
+   * the verbs by hand and wants the fire-and-forget dispatch shape. It does NOT
+   * drive the inherited retry loop (it never re-enters the `resilient_ok` settle
+   * Msg, so `succeed` / `fail` never run — the breaker never closes, the retry
+   * counter never resets). The `unsafe` prefix is the warning the name carries:
+   * `toMachine` is THE wired path (it uses the FIXED `brainHandlers` below, which
+   * returns the settle Msg for re-entry and drives the loop correctly), and this
+   * detached form is named `unsafeDetachedHandlers` so the broken-by-design
+   * behaviour is visible at the call site, not buried in a doc-comment a consumer
+   * meets only after autocomplete already offered it. A consumer reaches for it
+   * only when it has accepted owning the retry wiring itself. See llm-call's
+   * `handlers` doc (the same retry-loop gap).
    *
    * Returns the inherited detached shape verbatim (`AgentDetachedHandlers`) — a
    * fire-and-forget `resilient_run` cell, NOT an `Interpret` (it returns `void`
@@ -973,7 +1197,7 @@ export function createAgent<
    * to `toolOk` / `toolErr`. This matches fan-out's "the consumer owns `of`'s
    * interpret" discipline.
    */
-  function handlers<M>(
+  function unsafeDetachedHandlers<M>(
     ports: AgentPorts<P, O, M>,
   ): AgentDetachedHandlers<P, M> {
     return llm.handlers(ports);
@@ -1029,55 +1253,62 @@ export function createAgent<
   function toMachine<Ctx = object>(opts?: {
     /**
      * The consumer's interpret for the non-brain Cmds — the per-tool effect
-     * `TC` plus the monitored-run `snapshot_write` checkpoint (when
-     * `snapshotEvery` is set). The brain `resilient_run` cell the agent owns is
-     * merged in below, so the consumer supplies only the rest of the closed
-     * `AgentCmd<P, TC>` union.
+     * `TC`, plus (ONLY when checkpointing is configured) the monitored-run
+     * `snapshot_write` checkpoint cell. The brain `resilient_run` cell the agent
+     * owns is merged in below, so the consumer supplies only the rest of the
+     * config-derived `AgentCmd<P, TC, Snap>` union.
+     *
+     * The snapshot obligation is CONFIG-DERIVED (#55): `SnapshotInterpret`
+     * resolves to a REQUIRED `snapshot_write` cell when `config.snapshotEvery`
+     * is set (a real checkpoint write MUST be wired — never a silent no-op), and
+     * to `{ snapshot_write?: never }` (the cell is FORBIDDEN — it can never fire)
+     * when checkpointing is off. There is no default no-op: a non-checkpointing
+     * consumer cannot even mention `snapshot_write`, and a checkpointing one must.
      */
     readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
-      // `snapshot_write` is REQUIRED only when `snapshotEvery` is set (a real
-      // checkpoint write must be wired). With checkpointing off, no
-      // `snapshot_write` Cmd is ever emitted, so the agent defaults the cell to
-      // a no-op below — the consumer omits it. `Partial` makes it optional at
-      // the type level; the agent fills the gap.
-      Partial<
-        Interpret<AgentMachineMsg<P, O, R>, MonitoredRunCmd<unknown>, Ctx>
-      >;
+      SnapshotInterpret<AgentMachineMsg<P, O, R>, boolean, Ctx>;
   }): Machine<
     State,
     AgentMachineMsg<P, O, R>,
-    AgentCmd<P, TC>,
+    AgentCmd<P, TC, boolean>,
     DeadlineSub,
     Ctx
   > {
     type M = AgentMachineMsg<P, O, R>;
+    // The implementation is typed at `Snap = boolean` — the SUPERSET that
+    // always includes the monitored-run checkpoint Cmd; the public OVERLOADS
+    // narrow it to `true` / `false` and hand the consumer the precise obligation
+    // (#55). `NonBrainCmd` is the consumer's per-tool `TC` plus that checkpoint
+    // Cmd, and `ACmd` unions it with the brain Cmd — fully concrete (no pending
+    // conditional), union-equal to `AgentCmd<P, TC, boolean>`, and built from the
+    // SAME pieces `mergeInterpret` joins so the merge result is syntactically
+    // `Interpret<M, ACmd, Ctx>` with no `Exclude`/conditional TS refuses to reduce.
+    type NonBrainCmd = TC | MonitoredRunCmd<unknown>;
+    type ACmd = AgentLlmRunCmd<P> | NonBrainCmd;
     // The FIXED brain handler returns the settle Msg for re-entry; the substrate
     // enqueues it as a follow-up dispatched back into `update` (the `resilient_*`
     // arms below). It is PRECISELY an `Interpret` over the brain Cmd
     // (`AgentLlmRunCmd<P>`); the consumer's `toolInterpret` is PRECISELY an
-    // `Interpret` over the rest of the closed union (`MonitoredRunCmd<unknown> |
-    // TC`). `mergeInterpret` joins the two disjoint halves into the full
-    // `Interpret<M, AgentCmd<P, TC>, Ctx>` — each key maps precisely
-    // (`resilient_run` → the brain cell, `TC["type"]` / `snapshot_write` → the
-    // consumer's cells), with the one sound mapped-type identity isolated in the
-    // helper rather than laundered through `as unknown as` here.
-    // Default the `snapshot_write` cell to a no-op when the consumer omits it.
-    // With `snapshotEvery` unset the monitored-run slice never emits a
-    // `snapshot_write` Cmd, so this cell is never reached — it exists only to
-    // satisfy the closed `AgentCmd` union's interpret contract, killing the
-    // `snapshot_write: async () => undefined` ceremony every non-checkpointing
-    // consumer wrote. A checkpointing consumer (`snapshotEvery` set) supplies a
-    // real cell, which overrides this default in the spread.
-    const noopSnapshot: Interpret<M, MonitoredRunCmd<unknown>, Ctx> = {
-      snapshot_write: async () => undefined,
-    };
-    const consumerInterpret = {
-      ...noopSnapshot,
-      ...(opts?.toolInterpret ?? {}),
-    } as Interpret<M, MonitoredRunCmd<unknown> | TC, Ctx>;
-    const interpret: Interpret<M, AgentCmd<P, TC>, Ctx> = mergeInterpret<
+    // `Interpret` over the rest of the config-derived union (`TC`, and
+    // `snapshot_write` only when snapshotting). `mergeInterpret` joins the two
+    // disjoint halves into the full `Interpret<M, ACmd, Ctx>` — each key maps
+    // precisely (`resilient_run` → the brain cell, `TC["type"]` / `snapshot_write`
+    // → the consumer's cells), with the one sound mapped-type identity isolated in
+    // the helper rather than laundered through `as unknown as` here.
+    //
+    // No no-op `snapshot_write` default: with checkpointing off `SnapCmd` is
+    // `never`, so the Cmd is config-derived OUT of `ACmd`, the consumer never
+    // wires it, and the monitored-run slice never emits it — the
+    // `snapshot_write: async () => undefined` ceremony (and the type lie it
+    // masked) is gone (#55).
+    const consumerInterpret = (opts?.toolInterpret ?? {}) as Interpret<
       M,
-      MonitoredRunCmd<unknown> | TC,
+      NonBrainCmd,
+      Ctx
+    >;
+    const interpret: Interpret<M, ACmd, Ctx> = mergeInterpret<
+      M,
+      NonBrainCmd,
       AgentLlmRunCmd<P>,
       Ctx
     >(consumerInterpret, brainHandlers<Ctx>());
@@ -1086,9 +1317,14 @@ export function createAgent<
     // and the Reducer-form overload of `defineMachine` matches cleanly (the
     // agent State is not a discriminated union, so the Transitions overload's
     // `update` field collapses to `never` and would otherwise mask inference).
+    // The verbs return `AgentCmd<P, TC>` — the `Snap = true` superset, because
+    // they FORWARD whatever monitored-run emits and the verbs are not themselves
+    // config-typed. The machine declares the config-derived `ACmd`; the one
+    // narrowing (`update` below) is SOUND because a non-snapshotting run's
+    // monitored-run slice provably never emits a `snapshot_write` Cmd, so the
+    // forwarded array never carries the variant `ACmd` excludes.
     const update: Reducer<State, M, AgentCmd<P, TC>> = {
       agent_start: (s, m) => start(s, m.runId, m.at),
-      agent_turn: (s, m) => turn(s, m.turn, m.at),
       agent_tool_ok: (s, m) => toolOk(s, m.callId, m.result, m.at),
       agent_tool_err: (s, m) => toolErr(s, m.callId, m.reason, m.at),
       // The re-entered brain-call settle Msgs (from `brainHandlers`): success
@@ -1104,9 +1340,17 @@ export function createAgent<
     // `Machine` type's conditional `interpret` requirement against the concrete
     // type params here; calling `defineMachine` with explicit type args instead
     // would defer that conditional over the generic `TC` and fail the overload.
-    const machine: Machine<State, M, AgentCmd<P, TC>, DeadlineSub, Ctx> = {
+    //
+    // The machine's Cmd type is the config-derived `ACmd`. `update` is the
+    // `AgentCmd<P, TC>` superset reducer; narrowing it to `Reducer<State, M,
+    // ACmd>` is the SINGLE sound assertion of the snapshot derivation — a
+    // non-snapshotting run never emits the `MonitoredRunCmd` variant `ACmd`
+    // drops, so the reducer's emitted arrays provably stay within `ACmd[]`. This
+    // is the same shape as `mergeInterpret`'s one sound mapped-type identity: the
+    // soundness lives in a documented seam, not smuggled at every verb.
+    const machine: Machine<State, M, ACmd, DeadlineSub, Ctx> = {
       init: (loaded) => (loaded !== null ? [loaded, []] : [init(), []]),
-      update,
+      update: update as Reducer<State, M, ACmd>,
       subscriptions: (s) => subs(s),
       subscribe: { deadline: subscribeDeadline },
       interpret,
@@ -1128,8 +1372,11 @@ export function createAgent<
     currentStage,
     brainCall,
     subs,
-    handlers,
+    // `toMachine` is THE wired path. `unsafeDetachedHandlers` is the
+    // hand-wiring escape hatch — named to advertise the retry-loop gap so it is
+    // never mistaken for the loop driver (#54).
     toMachine,
+    unsafeDetachedHandlers,
   };
 }
 
@@ -1146,20 +1393,19 @@ export function createAgent<
  * driving `succeed` / `fail`. Time enters via `at` on every variant — the
  * reducer never reads the clock.
  *
- * `agent_turn` stays a variant for the consumer / boot path that folds a turn by
- * hand, but the wired loop folds it INSIDE `succeed` from the re-entered
- * `resilient_ok` — so a single settle Msg advances both the retry slice and the
- * conversation (the L3 fix).
+ * There is deliberately NO `agent_turn` variant here. The wired loop folds a
+ * model turn INSIDE `succeed` from the re-entered `resilient_ok` — a single
+ * settle Msg advances both the retry slice and the conversation (the L3 fix).
+ * Exposing `agent_turn` as a dispatchable Msg re-opened the stuck-`running` bug:
+ * a hand-fed turn folds the conversation without ever re-entering `resilient_ok`,
+ * so `succeed` never runs and the resilient slice stays `running` (#54). The
+ * `turn` verb remains on the knob for the consumer that wires the verbs by hand
+ * (manual wiring), but it is not part of the one wired machine's Msg surface.
  */
 export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | {
       readonly type: "agent_start";
       readonly runId: string;
-      readonly at: number;
-    }
-  | {
-      readonly type: "agent_turn";
-      readonly turn: AgentTurn;
       readonly at: number;
     }
   | {

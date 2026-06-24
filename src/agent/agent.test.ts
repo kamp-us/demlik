@@ -634,10 +634,13 @@ describe("createAgent — boot reconcile", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The detached brain-call handler (inherited from llm-call)
+// The detached brain-call handler (inherited from llm-call) — the UNSAFE
+// hand-wiring escape hatch (`unsafeDetachedHandlers`), renamed in #54 so the
+// name advertises that it does NOT drive the retry loop. `toMachine` is the one
+// wired path; this is exercised only to pin the escape hatch's dispatch shape.
 // ---------------------------------------------------------------------------
 
-describe("createAgent — handlers (detached brain call)", () => {
+describe("createAgent — unsafeDetachedHandlers (detached brain call)", () => {
   type HostMsg =
     | { type: "agent_turn"; turn: AgentTurn; at: number }
     | { type: "llm_failed"; reason: string };
@@ -678,7 +681,7 @@ describe("createAgent — handlers (detached brain call)", () => {
         toolCalls: [tool("c1")],
       })),
     });
-    const handler = agent.handlers<HostMsg>(ports).resilient_run;
+    const handler = agent.unsafeDetachedHandlers<HostMsg>(ports).resilient_run;
     const { ctx, dispatched, settled } = fakeCtx();
     // `handlers(ports)` now returns the precise `AgentDetachedHandlers<P, HostMsg>`
     // — the `resilient_run` cell takes the brain run Cmd + a `{ waitUntil, dispatch }`
@@ -709,7 +712,7 @@ describe("createAgent — handlers (detached brain call)", () => {
         throw new Error("provider 503");
       }),
     });
-    const handler = agent.handlers<HostMsg>(ports).resilient_run;
+    const handler = agent.unsafeDetachedHandlers<HostMsg>(ports).resilient_run;
     const { ctx, dispatched, settled } = fakeCtx();
     handler(
       {
