@@ -50,7 +50,15 @@
  *   });
  */
 
-import type { Cmd, Interpret, Machine, Reducer, Sub } from "../index";
+import type {
+  Cmd,
+  Interpret,
+  Machine,
+  Reducer,
+  Sub,
+  UpdateForm,
+} from "../index";
+import { formOf } from "../index";
 
 // ===========================================================================
 // The event + the slice + the ports — the telemetry vocabulary.
@@ -162,15 +170,12 @@ function runBaseUpdate<S, M extends { type: string }, C extends Cmd>(
   // collapses under the substrate's conditional `update` type, so the wrapper
   // accepts the erased shape and dispatches on the runtime form.
   update: object,
+  // The base's update form, read once via `formOf(base)` — no local heuristic.
+  form: UpdateForm,
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
-  const firstKey = Object.keys(update)[0];
-  const firstValue =
-    firstKey === undefined
-      ? undefined
-      : (update as Record<string, unknown>)[firstKey];
-  if (firstKey === undefined || typeof firstValue === "function") {
+  if (form === "reducer") {
     // Reducer form: `update[msg.type](state, msg)`.
     const record = update as unknown as Record<string, BaseCellFn<S, M, C>>;
     // biome-ignore lint/style/noNonNullAssertion: the base machine's Reducer guarantees a cell for every dispatched Msg.type; `!` required under noUncheckedIndexedAccess and cannot miss for a Msg the base accepts
@@ -232,7 +237,10 @@ export function withTelemetry<
   // record by enumerating the base update's Msg keys: a Reducer's keys ARE the
   // Msg.type set; a Transitions table's inner keys are too (uniform across
   // phases), so we read the first phase's keys to recover them.
-  const msgKeys = telemetryMsgKeys(base.update);
+  // The base's update form, read ONCE from the `__form` tag (see `formOf`) and
+  // threaded into the per-form helpers — no structural re-derivation here.
+  const baseForm = formOf(base);
+  const msgKeys = telemetryMsgKeys(base.update, baseForm);
 
   const update = {} as Record<
     string,
@@ -246,6 +254,7 @@ export function withTelemetry<
       // 1) Run the base reducer — its result passes through UNCHANGED.
       const [nextBase, baseCmds] = runBaseUpdate<S, M, C>(
         base.update,
+        baseForm,
         state.base,
         msg,
       );
@@ -365,15 +374,15 @@ export function withTelemetry<
 // contract), so we read the first phase's inner keys. An empty update (`M` is
 // `never`) yields `[]` — the merged reducer then has no cells, which is correct
 // because no Msg can ever be dispatched.
-function telemetryMsgKeys(update: object): readonly string[] {
+function telemetryMsgKeys(update: object, form: UpdateForm): readonly string[] {
   const keys = Object.keys(update);
   const firstKey = keys[0];
   if (firstKey === undefined) return [];
-  const firstValue = (update as Record<string, unknown>)[firstKey];
-  if (typeof firstValue === "function") {
+  if (form === "reducer") {
     // Reducer form — keys are Msg.type.
     return keys;
   }
   // Transitions form — keys are state.type; inner keys are Msg.type.
+  const firstValue = (update as Record<string, unknown>)[firstKey];
   return Object.keys(firstValue as object);
 }

@@ -142,6 +142,50 @@ declare const ReducerBrand: unique symbol;
 // structural counterpart.
 export type Branded<T> = T & { readonly [ReducerBrand]: true };
 
+// === update form: Reducer vs Transitions, tagged once ===
+//
+// The substrate accepts two `update` shapes (see the `Machine.update` union and
+// the `defineMachine` overloads):
+//
+//   - "reducer"     — flat record keyed by Msg.type, every cell a function.
+//   - "transitions" — 2D table keyed by State.type then Msg.type, every cell a
+//                     record of functions.
+//
+// Which one a given machine is must be known at runtime by `run`, `replay`, and
+// the `withX` wrappers (their dispatch / key-enumeration / reserved-namespace
+// scans differ per form). Rather than re-derive it structurally at every reader
+// — a `typeof update[firstKey] === "function"` heuristic that breaks the day a
+// reducer cell is itself an object-with-a-call — `defineMachine` computes the
+// form ONCE at construction and stamps it on the machine as a non-enumerable
+// `__form` (so it never serializes, never collides with a Msg.type key, never
+// shows up in `Object.keys(machine)`). Every reader calls `formOf(machine)`.
+export type UpdateForm = "reducer" | "transitions";
+
+// The single structural heuristic, defined ONCE. Used only by `defineMachine`
+// (and `formOf`'s fallback for machines built without it, e.g. a plain object
+// literal annotated as `Machine`). A Reducer's first own value is a function; a
+// Transitions table's first own value is a record (of functions). An empty
+// record (`M` is `never`) can never dispatch a Msg, so the form is irrelevant —
+// "reducer" is returned arbitrarily.
+export function detectUpdateForm(update: object): UpdateForm {
+  const firstKey = Object.keys(update)[0];
+  if (firstKey === undefined) return "reducer";
+  const firstValue = (update as Record<string, unknown>)[firstKey];
+  return typeof firstValue === "function" ? "reducer" : "transitions";
+}
+
+// The single reader every form-sensitive site goes through. Prefers the
+// `__form` tag stamped by `defineMachine` (authoritative — computed once at the
+// typed construction boundary); falls back to `detectUpdateForm` only for a
+// machine that never passed through `defineMachine`. No reader re-implements the
+// heuristic.
+export function formOf(machine: {
+  update: object;
+  __form?: UpdateForm;
+}): UpdateForm {
+  return machine.__form ?? detectUpdateForm(machine.update);
+}
+
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
 //
 // Flat dispatch table keyed by `Msg.type`. Each cell is a pure transition for
@@ -807,6 +851,14 @@ export type Machine<
     | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
   subscriptions?: (state: S) => readonly U[];
   subscribe?: Subscribe<M, U, Ctx>;
+  /**
+   * The update form ("reducer" | "transitions"), stamped non-enumerably by
+   * `defineMachine` at construction (see `UpdateForm` / `formOf`). Optional in
+   * the type so the structural `Machine` annotation form keeps accepting plain
+   * object literals; readers go through `formOf`, which falls back to
+   * `detectUpdateForm` when the tag is absent. Never written by hand.
+   */
+  readonly __form?: UpdateForm;
 } & ([C] extends [Cmd<never>]
   ? { interpret?: Interpret<M, C, Ctx> }
   : { interpret: Interpret<M, C, Ctx> });
@@ -1229,6 +1281,19 @@ export function defineMachine<
   U extends Sub,
   Ctx,
 >(m: Machine<S, M, C, U, Ctx>): Machine<S, M, C, U, Ctx> {
+  // Tag the update form ONCE, here at the typed construction boundary, so no
+  // downstream reader (`run`, `replay`, the `withX` wrappers) re-derives it
+  // structurally. Non-enumerable: it must not serialize, must not show up in
+  // `Object.keys(machine)`, and must not collide with any Msg.type key on a
+  // flattened surface. Idempotent under re-wrap (`defineMachine(defineMachine(m))`).
+  if (m.__form === undefined) {
+    Object.defineProperty(m, "__form", {
+      value: detectUpdateForm(m.update as object),
+      enumerable: false,
+      writable: false,
+      configurable: true,
+    });
+  }
   return m;
 }
 
@@ -1443,23 +1508,11 @@ export function run<
     [stateType: string]: { [msgType: string]: CellFn };
   };
   const updateForm = machine.update;
-  type UpdateMode = "reducer" | "transitions";
-  const updateMode: UpdateMode = (() => {
-    // Inspect a single value to disambiguate. Both Reducer and Transitions
-    // are non-null objects; their values differ: Reducer's values are
-    // functions, Transitions's values are objects (of functions). Pick the
-    // first own key — order doesn't matter because the record forms are
-    // uniform (every cell has the same value shape).
-    const firstKey = Object.keys(updateForm as object)[0];
-    if (firstKey === undefined) {
-      // Empty object literal: M is `never`. No msg can ever be dispatched,
-      // so the mode is irrelevant — pick "reducer" arbitrarily. Pre-boot
-      // this never executes because the runtime never dispatches `never`.
-      return "reducer";
-    }
-    const firstValue = (updateForm as Record<string, unknown>)[firstKey];
-    return typeof firstValue === "function" ? "reducer" : "transitions";
-  })();
+  // The form is read ONCE from the `__form` tag `defineMachine` stamped (see
+  // `formOf` / `UpdateForm`); no structural re-derivation here. Cached as
+  // `updateMode`, so the per-dispatch path is a single branch + 1-or-2 property
+  // lookups.
+  const updateMode: UpdateForm = formOf(machine);
   function applyUpdate(state: S, msg: M): readonly [S, readonly C[]] {
     if (__DEV__) deepFreeze(state);
 
@@ -2276,22 +2329,16 @@ export function replay<
   const cmds: C[] = [...initCmds];
 
   // Mirror the same form-branching the runtime does (see `applyUpdate` in
-  // `run`). Detected once; reused per-msg. Keeping it inline (not factored
-  // into a shared helper) so `replay` stays standalone — it is the pure
-  // unit-test tool and must not depend on `run`'s internal closures.
+  // `run`). Read once from the `__form` tag via `formOf` — the same reader
+  // `run` uses, so `replay` and `run` agree on the form by construction
+  // (no second copy of the heuristic to drift).
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   type ReducerRecord = Reducer<S, M, C>;
   type TransitionsTable = {
     [stateType: string]: { [msgType: string]: CellFn };
   };
   const updateForm = machine.update;
-  type UpdateMode = "reducer" | "transitions";
-  const updateMode: UpdateMode = (() => {
-    const firstKey = Object.keys(updateForm as object)[0];
-    if (firstKey === undefined) return "reducer";
-    const firstValue = (updateForm as Record<string, unknown>)[firstKey];
-    return typeof firstValue === "function" ? "reducer" : "transitions";
-  })();
+  const updateMode: UpdateForm = formOf(machine);
 
   for (const msg of opts.msgs) {
     if (__DEV__) deepFreeze(state);

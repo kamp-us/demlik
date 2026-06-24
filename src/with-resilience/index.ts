@@ -63,8 +63,15 @@
  */
 
 import { type DeadlineSub, subscribeDeadline } from "../deadline";
-import type { Cmd, Interpret, Machine, Reducer, Sub } from "../index";
-import { subId, tryInterpret } from "../index";
+import type {
+  Cmd,
+  Interpret,
+  Machine,
+  Reducer,
+  Sub,
+  UpdateForm,
+} from "../index";
+import { formOf, subId, tryInterpret } from "../index";
 import { MsgType } from "../protocol";
 import {
   createResilientCall,
@@ -256,15 +263,12 @@ type BaseCellFn<S, M, C extends Cmd> = (
  */
 function runBaseUpdate<S, M extends { type: string }, C extends Cmd>(
   update: object,
+  // The base's update form, read once via `formOf(base)` — no local heuristic.
+  form: UpdateForm,
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
-  const firstKey = Object.keys(update)[0];
-  const firstValue =
-    firstKey === undefined
-      ? undefined
-      : (update as Record<string, unknown>)[firstKey];
-  if (firstKey === undefined || typeof firstValue === "function") {
+  if (form === "reducer") {
     const record = update as unknown as Record<string, BaseCellFn<S, M, C>>;
     // biome-ignore lint/style/noNonNullAssertion: the base Reducer guarantees a cell for every dispatched Msg.type; `!` is required under noUncheckedIndexedAccess and cannot miss for a Msg the base accepts
     return record[msg.type]!(state, msg);
@@ -279,12 +283,12 @@ function runBaseUpdate<S, M extends { type: string }, C extends Cmd>(
 }
 
 /** Recover the base Msg.type set from either update form (see withTelemetry). */
-function baseMsgKeys(update: object): readonly string[] {
+function baseMsgKeys(update: object, form: UpdateForm): readonly string[] {
   const keys = Object.keys(update);
   const firstKey = keys[0];
   if (firstKey === undefined) return [];
+  if (form === "reducer") return keys;
   const firstValue = (update as Record<string, unknown>)[firstKey];
-  if (typeof firstValue === "function") return keys;
   return Object.keys(firstValue as object);
 }
 
@@ -303,12 +307,15 @@ function baseMsgKeys(update: object): readonly string[] {
  *     merged update would silently clobber. Top-level `Object.hasOwn` (the
  *     old check) only sees state-type keys here and would MISS it entirely.
  */
-function updateDeclaresMsgKey(update: object, key: string): boolean {
+function updateDeclaresMsgKey(
+  update: object,
+  form: UpdateForm,
+  key: string,
+): boolean {
   const keys = Object.keys(update);
   const firstKey = keys[0];
   if (firstKey === undefined) return false;
-  const firstValue = (update as Record<string, unknown>)[firstKey];
-  if (typeof firstValue === "function") {
+  if (form === "reducer") {
     // Reducer form — msg-type keys at the top level.
     return Object.hasOwn(update, key);
   }
@@ -410,12 +417,17 @@ export function withResilience<
   type Cell = (state: WM, msg: WMsg) => readonly [WM, readonly WCmd[]];
   const update: Record<string, Cell> = {};
 
+  // The base's update form, read ONCE from the `__form` tag (see `formOf`) and
+  // threaded into the per-form helpers — no structural re-derivation here.
+  const baseForm = formOf(base);
+
   // --- Base-Msg cells: delegate, then PARTITION + retag the target Cmd. ----
-  for (const key of baseMsgKeys(base.update)) {
+  for (const key of baseMsgKeys(base.update, baseForm)) {
     update[key] = (state, msg) => {
       // 1) Run the base reducer. Its NON-target Cmds pass through unchanged.
       const [nextBase, baseCmds] = runBaseUpdate<S, M, C>(
         base.update,
+        baseForm,
         state.base,
         msg as M,
       );
@@ -582,7 +594,7 @@ export function withResilience<
     {
       name: "update",
       declares: (reserved) =>
-        updateDeclaresMsgKey(base.update as object, reserved),
+        updateDeclaresMsgKey(base.update as object, baseForm, reserved),
     },
     {
       name: "interpret",
