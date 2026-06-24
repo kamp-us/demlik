@@ -35,9 +35,9 @@
  *     onReady: (state) => { ... }, // optional, idempotent end-of-recovery hook
  *   });
  *   const runtime = run(machine, { ctx, store: es.store });
- *   // Append every applied Msg to the log. `msg === null` is the boot observe
- *   // (no event to log); skip it.
- *   runtime.observe((msg) => { if (msg !== null) es.append(msg); });
+ *   // Append every applied Msg to the log. `observe` delivers only applied
+ *   // Msgs now (#47) — boot has no event, so there is no `null` arm to skip.
+ *   runtime.observe((msg) => { es.append(msg); });
  *   await runtime.ready; // store.load() has folded; onReady has fired once.
  */
 

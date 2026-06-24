@@ -158,7 +158,11 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
       ? historyTracker(runtime, historySize)
       : null;
 
-  const unobserve = runtime.observe((msg, state) => {
+  // The broadcast wire still carries `msg: M | null` — surfaces depend on the
+  // boot frame (`msg: null`) to hydrate from the bridge. Applied transitions now
+  // arrive via `observe` with a total `msg`; the boot frame arrives via `onBoot`
+  // (#47). One helper builds the envelope for both.
+  const sendBroadcast = (msg: M | null, state: S): void => {
     const envelope: BroadcastEnvelope<V, M | null> = {
       type: channel,
       msg,
@@ -168,6 +172,12 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
       // No surface listening — drop silently. Costs are negligible at
       // typical audit-event rates; surfaces poll on hydrate on open.
     });
+  };
+  const unobserve = runtime.observe((msg, state) => {
+    sendBroadcast(msg, state);
+  });
+  const unboot = runtime.onBoot((state) => {
+    sendBroadcast(null, state);
   });
 
   const onMessage = (
@@ -224,6 +234,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
 
   return () => {
     unobserve();
+    unboot();
     chrome.runtime.onMessage.removeListener(onMessage);
     // Detach the history observer too — leaving it attached after the
     // bridge tears down would silently retain memory and keep observing

@@ -226,17 +226,20 @@ export function recorder<S, M extends { type: string }>(
   let finalState: S | undefined;
   let stopped = false;
 
+  // The boot transition — the post-init initial state the old `observe(msg ===
+  // null)` arm captured as `loaded` — now arrives via `onBoot` (#47). Always
+  // captured (boot is the replay anchor). It is also the first `finalState`
+  // until the first applied transition advances it.
+  const unboot = runtime.onBoot((state) => {
+    finalState = state;
+    loaded = state;
+    sawBoot = true;
+  });
+
   const unobserve = runtime.observe((msg, state) => {
     // finalState tracks the latest state regardless of sampling — it is the
     // run's endpoint, an anchor, not a sample.
     finalState = state;
-
-    if (msg === null) {
-      // Boot observe: the post-init initial state. Always captured.
-      loaded = state;
-      sawBoot = true;
-      return;
-    }
 
     // Sampling decision. sampleRate === 1 short-circuits to always-record so
     // the common (faithful) path pays no RNG cost. Math.random() < rate keeps
@@ -286,6 +289,7 @@ export function recorder<S, M extends { type: string }>(
       if (stopped) return;
       stopped = true;
       unobserve();
+      unboot();
     },
   };
 }

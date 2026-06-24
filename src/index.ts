@@ -937,23 +937,67 @@ export interface RuntimeRef<M extends { type: string }> {
 // `subscribe(listener)` is the React-shaped change notifier (zero-arg, paired
 // with `getState()` via `useSyncExternalStore` on the ready Runtime).
 // `observe(observer)` is the devtools-shaped trace hook: it receives `(msg,
-// state)` for every completed transition, including the boot transition where
-// `msg` is `null`. Both fire from the same point in the dispatch loop (after
-// save → reconcile → interpret), so what an observer sees is consistent with
-// what a subscriber sees via the ready Runtime's `getState()`.
+// state)` for every COMPLETED, APPLIED transition. The boot transition is NOT
+// an applied Msg — there is no event there, only the initial State — so it does
+// NOT flow through `observe`. It is delivered once via `onBoot(handler)`
+// instead, so `observe`'s `msg` is total (`M`, never `null`): a consumer no
+// longer carries a `| null` boot arm it then ignores (#47). Both `observe` and
+// `onBoot` fire from the same point in the dispatch loop (after save →
+// reconcile → interpret), so what they see is consistent with what a subscriber
+// sees via the ready Runtime's `getState()`.
 //
 // Observe is separate from subscribe because the contracts differ: React
 // consumers want "something changed, re-read state"; devtools consumers want
 // "here is the exact (msg, state) pair, append it to a log". Folding them
-// would force every React subscriber to type-check a `msg | null` arg they
-// will never use, and would couple `useSyncExternalStore` to a particular Msg
-// type at the substrate.
-export interface BootingRuntime<S, M extends { type: string }>
-  extends RuntimeRef<M> {
+// would force every React subscriber to type-check a `msg` arg they will never
+// use, and would couple `useSyncExternalStore` to a particular Msg type at the
+// substrate.
+//
+// `on(type, handler)` is the SEMANTIC event channel (#47): a typed subscription
+// to the machine-level `AgentEvent`-style union `E` a machine projects off its
+// transitions (via `run`'s `events` projector). Where `observe` hands every
+// consumer the raw `(M, S)` firehose to hand-filter — coupling a UI to the
+// machine's PRIVATE Msg vocabulary (e.g. a retry plumbing's `resilient_ok`) —
+// `on` delivers only the public, named events, narrowed to the requested
+// `type`. `E` defaults to `never`: a machine that wires no `events` projector
+// has an empty event surface and `on` is uncallable (no `E["type"]` to pass).
+export interface BootingRuntime<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> extends RuntimeRef<M> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
   subscribe(listener: () => void): () => void;
-  observe(observer: (msg: M | null, state: S) => void): () => void;
+  observe(observer: (msg: M, state: S) => void): () => void;
+  /**
+   * Subscribe to the INITIAL State — the boot transition the old `observe`
+   * `msg === null` arm carried (#47). Fires exactly once: immediately if boot
+   * has already completed when `onBoot` is called (so a late subscriber never
+   * misses it), otherwise on the boot fanout. Returns a cleanup that detaches
+   * the handler (a no-op once it has fired).
+   *
+   * This is where the boot case the `observe` firehose used to fold in went
+   * once `observe`'s `msg` became total: a consumer that needs to seed a view
+   * from the initial State wires `onBoot`; a consumer that only folds events
+   * (the common case) wires `observe` (or `on`) and is no longer handed a boot
+   * arm to skip.
+   */
+  onBoot(handler: (state: S) => void): () => void;
+  /**
+   * Subscribe to a SEMANTIC event of `type` (#47). Typed narrowing: the handler
+   * receives exactly the `E` member whose `type` matches `K`, so a consumer
+   * built on `on("TurnSettled", …)` never touches another event's shape and —
+   * critically — never references the machine's PRIVATE Msg names. Returns a
+   * cleanup that detaches the handler. Multiple handlers per type are
+   * supported; fanout is synchronous and throw-isolated (same discipline as
+   * `observe`). Fires only when the machine's `events` projector (wired on
+   * `run`) emits an event of that type for a transition.
+   */
+  on<K extends E["type"]>(
+    type: K,
+    handler: (event: Extract<E, { type: K }>) => void,
+  ): () => void;
   /**
    * Subscribe to a typed Port. Returns a cleanup function that removes the
    * listener. Multiple listeners per port are supported; fanout is synchronous
@@ -1013,7 +1057,7 @@ export interface BootingRuntime<S, M extends { type: string }>
    * Expresses canon §2.3 (the `init` contract — boot is a named, awaitable
    * moment). Strengthens invariant 6 (runtime is small and inspectable).
    */
-  ready: Promise<Runtime<S, M>>;
+  ready: Promise<Runtime<S, M, E>>;
   stop(): Promise<void>;
 }
 
@@ -1031,8 +1075,11 @@ export interface BootingRuntime<S, M extends { type: string }>
 // You never construct a `Runtime` directly from `run()`; you obtain it via
 // `await bootingRuntime.ready`. That asymmetry is the whole fix for #45 —
 // "read State before boot" is now unrepresentable, not merely discouraged.
-export interface Runtime<S, M extends { type: string }>
-  extends BootingRuntime<S, M> {
+export interface Runtime<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> extends BootingRuntime<S, M, E> {
   /**
    * The current State. TOTAL — never throws. Obtaining a `Runtime` requires
    * awaiting `ready`, which only resolves AFTER boot has run `init` and set the
@@ -1044,7 +1091,7 @@ export interface Runtime<S, M extends { type: string }>
   /**
    * Resolves to this same `Runtime` once boot completes. Idempotent.
    */
-  ready: Promise<Runtime<S, M>>;
+  ready: Promise<Runtime<S, M, E>>;
   /**
    * Resolves once the runtime has reached QUIESCENCE — every dispatched Msg AND
    * every follow-up Msg an interpret handler returned has been processed, with
@@ -1228,12 +1275,28 @@ export function run<
   C extends Cmd,
   U extends Sub,
   Ctx,
+  E extends { type: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: {
     ctx: Ctx;
     store?: Store<S>;
     onError?: OnError;
+    /**
+     * The SEMANTIC event projector (#47). Maps one APPLIED transition `(msg,
+     * state)` to zero-or-more public events of the machine-level union `E`.
+     * Returning `[]` skips the transition (it produced no event the consumer's
+     * `on(type, …)` cares about). This is where a machine maps its PRIVATE Msg
+     * vocabulary (a retry plumbing's `resilient_ok`, a tool loop's
+     * `agent_tool_ok`) to NAMED events — the private names live only inside this
+     * closure and never reach `on`'s `E` surface. Omit → the run has no event
+     * surface (`E = never`) and `on` is uncallable.
+     *
+     * PURE — called inside the dispatch loop on the freshly-folded `(msg,
+     * state)`; it must not read the clock, mutate, or throw (a throw is
+     * isolated like an observer throw, never stranding the transition).
+     */
+    events?: (msg: M, state: S) => readonly E[];
     /**
      * Declared policy for when the pure `update` (reducer) throws. The reducer
      * throw is always surfaced via `onError` (`phase: "reduce"`); the strategy
@@ -1264,9 +1327,14 @@ export function run<
      */
     __idleCap?: number;
   },
-): BootingRuntime<S, M> {
+): BootingRuntime<S, M, E> {
   const { ctx, store } = opts;
   const idleCap = opts.__idleCap ?? 100_000;
+  // The semantic-event projector (#47). Defaults to "no events" — a machine
+  // that wires none has an empty event surface (`E = never`), so `on` is
+  // uncallable and this projector never runs.
+  const projectEvents: (msg: M, state: S) => readonly E[] =
+    opts.events ?? (() => []);
   // The run-terminality predicate (#46). Defaults to "never terminal" so a
   // machine with no natural completion has a sound `result()`/`done()` (always
   // undefined / never resolves) rather than a missing one.
@@ -1299,9 +1367,24 @@ export function run<
 
   const subRegistry = new Map<string, () => void>();
   const listeners = new Set<() => void>();
-  // Observers receive (msg, state) for every completed transition. Boot fires
-  // once with msg = null. Same throw-isolation contract as listeners.
-  const observers = new Set<(msg: M | null, state: S) => void>();
+  // Observers receive (msg, state) for every completed, APPLIED transition. The
+  // boot transition has no applied Msg — it is delivered via `onBoot`, not here
+  // — so `msg` is total (`M`, never `null`) (#47). Same throw-isolation
+  // contract as listeners.
+  const observers = new Set<(msg: M, state: S) => void>();
+  // `onBoot` handlers receive the initial State once (#47). The boot case the
+  // old `observe(msg === null)` arm carried lives here now. `booted` flips on
+  // the boot fanout so a handler registered AFTER boot fires immediately with
+  // the captured initial State (never misses it).
+  const bootHandlers = new Set<(state: S) => void>();
+  let booted = false;
+  // Semantic-event handlers, keyed by event `type` (#47). Each `on(type, fn)`
+  // adds `fn` to its type's bucket; the dispatch loop projects each transition
+  // to `E[]` via `projectEvents` and fans each event to its type's handlers.
+  // Stored as `(event: { type: string }) => void` to keep the registry
+  // monomorphic; per-type safety lives at the `on` call site (the handler's `K`
+  // narrows the event via `Extract<E, { type: K }>`).
+  const eventHandlers = new Map<string, Set<(event: E) => void>>();
   // `done()` waiters (#46): each open `done()` call parks its resolver here.
   // The first transition that makes `isTerminal(state)` hold drains the set,
   // resolving every parked promise with the terminal State. A `done()` call
@@ -1550,14 +1633,65 @@ export function run<
   /**
    * Fire every observer with the just-applied msg + post-transition state.
    * Same throw-isolation contract as `fireListeners`. Called immediately
-   * after `fireListeners` so observers see exactly what subscribers see.
+   * after `fireListeners` so observers see exactly what subscribers see. Only
+   * called for APPLIED transitions — `msg` is total (the boot case routes to
+   * `fireBoot`, not here) (#47).
    */
-  function fireObservers(msg: M | null): void {
+  function fireObservers(msg: M): void {
     if (observers.size === 0 || state === undefined) return;
     const snapshot = state;
     for (const observer of observers) {
       try {
         observer(msg, snapshot);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+
+  /**
+   * Project the just-applied transition to semantic events and fan each to its
+   * type's `on(...)` handlers (#47). The projector maps the machine's private
+   * Msg vocabulary to public events; a throw in the projector OR a handler is
+   * isolated (errors-are-data) so it never strands the transition. Called right
+   * after `fireObservers` so an `on` handler sees the same post-transition State
+   * an observer would.
+   */
+  function fireEvents(msg: M): void {
+    if (eventHandlers.size === 0 || state === undefined) return;
+    let events: readonly E[];
+    try {
+      events = projectEvents(msg, state);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    for (const event of events) {
+      const bucket = eventHandlers.get(event.type);
+      if (bucket === undefined) continue;
+      for (const handler of bucket) {
+        try {
+          handler(event);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+  }
+
+  /**
+   * Fire every `onBoot` handler with the initial State, ONCE, and flip `booted`
+   * (#47). This carries the case the old `observe(msg === null)` arm did. Same
+   * throw-isolation contract. A handler registered after this runs fires
+   * immediately at its `onBoot` call site instead (it reads `booted`).
+   */
+  function fireBoot(): void {
+    booted = true;
+    if (bootHandlers.size === 0 || state === undefined) return;
+    const snapshot = state;
+    for (const handler of bootHandlers) {
+      try {
+        handler(snapshot);
       } catch (err) {
         console.error(err);
       }
@@ -1622,6 +1756,7 @@ export function run<
           // No cmds to interpret — the reducer never returned a result.
           fireListeners();
           fireObservers(msg);
+          fireEvents(msg);
           settleDoneWaiters();
           return;
         }
@@ -1648,6 +1783,7 @@ export function run<
     await runInterpret(cmds);
     fireListeners();
     fireObservers(msg);
+    fireEvents(msg);
     settleDoneWaiters();
   }
 
@@ -1712,7 +1848,10 @@ export function run<
     reconcileSubs();
     await runInterpret(pendingInitCmds);
     fireListeners();
-    fireObservers(null);
+    // The boot transition has no applied Msg — deliver the initial State via
+    // `onBoot`, not `observe` (#47). No `fireEvents` either: boot is not an
+    // applied event, so it projects no semantic event.
+    fireBoot();
     // A rehydrated boot can land in a terminal State (the run finished before
     // the last eviction) — settle any `done()` waiter parked before boot.
     settleDoneWaiters();
@@ -1807,9 +1946,11 @@ export function run<
   // microtask), well after the object literal below finishes initializing, so
   // the forward reference is safe. Built once → idempotent: the same settled
   // promise comes back on every `ready` read.
-  const readyPromise: Promise<Runtime<S, M>> = bootPromise.then(() => runtime);
+  const readyPromise: Promise<Runtime<S, M, E>> = bootPromise.then(
+    () => runtime,
+  );
 
-  const runtime: Runtime<S, M> = {
+  const runtime: Runtime<S, M, E> = {
     dispatch: dispatchToQuiescence,
     dispatchOnce: enqueueDispatch,
     getState(): S {
@@ -1833,10 +1974,49 @@ export function run<
         listeners.delete(listener);
       };
     },
-    observe(observer: (msg: M | null, state: S) => void): () => void {
+    observe(observer: (msg: M, state: S) => void): () => void {
       observers.add(observer);
       return () => {
         observers.delete(observer);
+      };
+    },
+    onBoot(handler: (state: S) => void): () => void {
+      // Already booted → fire immediately with the captured initial State so a
+      // late subscriber never misses the one-shot boot (#47). It does not park
+      // (boot is a single past event), so the returned cleanup is a no-op.
+      if (booted && state !== undefined) {
+        try {
+          handler(state);
+        } catch (err) {
+          console.error(err);
+        }
+        return () => {};
+      }
+      bootHandlers.add(handler);
+      return () => {
+        bootHandlers.delete(handler);
+      };
+    },
+    on<K extends E["type"]>(
+      type: K,
+      handler: (event: Extract<E, { type: K }>) => void,
+    ): () => void {
+      // The registry is monomorphic (`Set<(event: E) => void>`); the per-type
+      // narrowing lives at THIS call site — `handler` accepts the `K`-narrowed
+      // event, and `fireEvents` only ever routes an event to its own type's
+      // bucket, so the erased call is sound.
+      let bucket = eventHandlers.get(type);
+      if (bucket === undefined) {
+        bucket = new Set<(event: E) => void>();
+        eventHandlers.set(type, bucket);
+      }
+      const erased = handler as (event: E) => void;
+      bucket.add(erased);
+      return () => {
+        const set = eventHandlers.get(type);
+        if (set === undefined) return;
+        set.delete(erased);
+        if (set.size === 0) eventHandlers.delete(type);
       };
     },
     subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void {
@@ -2012,12 +2192,26 @@ export function historyTracker<S, M extends { type: string }>(
   const buffer: { msg: M | null; state: S }[] = [];
   let stopped = false;
 
+  const push = (entry: { msg: M | null; state: S }): void => {
+    buffer.push(entry);
+    if (buffer.length > size) buffer.shift();
+  };
+
+  // The boot transition (the `{ msg: null, state }` head entry the old
+  // `observe(msg === null)` arm recorded) now arrives via `onBoot` (#47);
+  // applied transitions arrive via `observe` with a total `msg`. The public
+  // snapshot shape (`msg: M | null`) is unchanged — boot is still `msg: null`.
   const unobserve =
     size <= 0
       ? (): void => {}
       : runtime.observe((msg, state) => {
-          buffer.push({ msg, state });
-          if (buffer.length > size) buffer.shift();
+          push({ msg, state });
+        });
+  const unboot =
+    size <= 0
+      ? (): void => {}
+      : runtime.onBoot((state) => {
+          push({ msg: null, state });
         });
 
   return {
@@ -2030,6 +2224,7 @@ export function historyTracker<S, M extends { type: string }>(
       if (stopped) return;
       stopped = true;
       unobserve();
+      unboot();
     },
   };
 }

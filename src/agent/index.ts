@@ -1572,6 +1572,110 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | AgentTimerMsg
   | { readonly type: "agent_boot"; readonly at: number };
 
+// ===========================================================================
+// AgentEvent — the SEMANTIC lifecycle event stream (issue #47).
+// ===========================================================================
+
+/**
+ * The agent's PUBLIC lifecycle events — the semantic stream a consumer
+ * subscribes to via `runtime.on(type, …)` (#47). This is the seam that
+ * DECOUPLES observability/SSE code from the agent's PRIVATE retry/loop Msg
+ * vocabulary: where the old code switched on `resilient_ok` / `agent_tool_ok`
+ * (the inherited resilient-call / tool-fan-out plumbing) off the raw `observe`
+ * firehose, a consumer now folds these named events. The private Msg names live
+ * ONLY inside `agentEvents` (the projector) — they appear nowhere in this union
+ * or any exported type, so a UI built on `TurnSettled` does not break the day
+ * the retry plumbing is renamed.
+ *
+ *   - `TurnSettled` — a brain turn settled (the model produced an `AgentTurn`).
+ *     Projected off the private `resilient_ok` settle Msg; carries the parsed
+ *     `turn` (the narration + tool calls the model asked for).
+ *   - `ToolSettled` — a tool call settled OK. Projected off the private
+ *     `agent_tool_ok` Msg; carries the `callId` and the tool `result`.
+ *   - `RunDone` — the run finished. Projected off the post-transition State
+ *     reaching `run.phase === "done"`; carries the run's `output` (the terminal
+ *     model turn, or `null`) — the same first-class result `Runtime.result()`
+ *     reads (#46), surfaced as an event for the streaming consumer.
+ */
+export type AgentEvent<R> =
+  | { readonly type: "TurnSettled"; readonly turn: AgentTurn }
+  | { readonly type: "ToolSettled"; readonly callId: string; readonly result: R }
+  | { readonly type: "RunDone"; readonly output: AgentTurn | null };
+
+/**
+ * Project one APPLIED agent transition `(msg, state)` to its semantic
+ * {@link AgentEvent}s (#47) — the `events` projector a consumer passes to
+ * `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`.
+ *
+ * This is the ONE place the agent's PRIVATE Msg names are read: it maps
+ * `resilient_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
+ * the post-transition `run.phase` for `RunDone`. The mapping is total over the
+ * Msg union (a `default`-free switch on the discriminant) and returns `[]` for
+ * the transitions that carry no public event (start / boot / timer / the error
+ * arms), so a private name never escapes into `AgentEvent`.
+ *
+ * A single transition may emit more than one event: the brain turn that retires
+ * the final stage settles a turn (`TurnSettled`) AND finishes the run
+ * (`RunDone`) — both are projected from that one `resilient_ok` transition.
+ * `RunDone` is gated on `run.phase === "done"`, which the wired loop reaches
+ * exactly once (the agent is terminal there and dispatches no further
+ * transition), so the event fires once per run.
+ *
+ * PURE — reads only the passed `(msg, state)`; no clock, no RNG, no throw.
+ *
+ * @typeParam P     Brain-call purposes.
+ * @typeParam O     Per-purpose outputs (bound to `AgentTurn`, the agentic shape).
+ * @typeParam R     Tool result type.
+ * @typeParam Stage Pipeline stage type.
+ */
+export function agentEvents<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+>(): (
+  msg: AgentMachineMsg<P, O, R>,
+  state: AgentState<Stage, P, O, R>,
+) => readonly AgentEvent<R>[] {
+  return (msg, state) => {
+    const events: AgentEvent<R>[] = [];
+    switch (msg.type) {
+      case "resilient_ok":
+        // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
+        // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
+        // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
+        // same reasoning `state.output` relies on, #46/#48).
+        events.push({ type: "TurnSettled", turn: msg.result.output });
+        break;
+      case "agent_tool_ok":
+        // The PRIVATE tool-fan-out settle Msg → the public ToolSettled.
+        events.push({
+          type: "ToolSettled",
+          callId: msg.callId,
+          result: msg.result,
+        });
+        break;
+      // start / boot / timer / the *_err arms carry no public event — return
+      // []. (No `default`: the switch is exhaustive over the Msg discriminant,
+      // so a new Msg variant forces a decision here at compile time.)
+      case "agent_start":
+      case "agent_tool_err":
+      case "resilient_err":
+      case "deadline_exceeded":
+      case "agent_boot":
+        break;
+    }
+    // RunDone is a STATE-shaped event (the run's terminal output, #46), not a
+    // Msg-shaped one: the transition that lands `done` is the final brain turn
+    // (which also emits TurnSettled above). Gate on the post-transition phase so
+    // the same projector reports both.
+    if (state.run.phase === "done") {
+      events.push({ type: "RunDone", output: state.output });
+    }
+    return events;
+  };
+}
+
 /**
  * Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over
  * the same Msg union `M` and Ctx) into the full `Interpret<M, A | B, Ctx>`. The

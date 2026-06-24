@@ -82,7 +82,21 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
     subscribe(_listener: () => void): () => void {
       return noopUnsubscribe;
     },
-    observe(_observer: (msg: M | null, state: S) => void): () => void {
+    observe(_observer: (msg: M, state: S) => void): () => void {
+      return noopUnsubscribe;
+    },
+    onBoot(_handler: (state: S) => void): () => void {
+      // Boot never fires on the inert runtime — it is "already booted" with no
+      // initial fanout, so the handler is registered and never called (#47).
+      return noopUnsubscribe;
+    },
+    on<K extends never>(
+      _type: K,
+      _handler: (event: never) => void,
+    ): () => void {
+      // The no-op runtime's event surface is `never` (no `events` projector),
+      // so `on` is structurally present but uncallable — there is no `K` to
+      // pass. The body is unreachable; it returns the shared no-op unsubscribe.
       return noopUnsubscribe;
     },
     subscribePort<T>(

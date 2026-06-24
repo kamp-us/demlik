@@ -309,23 +309,37 @@ export function projectionRegistry<
 }
 
 /**
- * Wire a {@link ProjectionRegistry} to a `runtime.observe` channel. Every
- * transition (including the boot observe, `msg === null`) is presented to all
- * registered projections with a monotonic exclusive offset. Returns the
- * `observe` cleanup (call to detach the whole registry).
+ * Wire a {@link ProjectionRegistry} to a runtime's transition stream. The boot
+ * update (the initial state, offset 0) is presented via `onBoot`; every applied
+ * transition (offset 1, 2, …) via `observe` — together they reproduce the
+ * "every transition including boot" stream the single `observe(msg | null)`
+ * channel used to carry, now that `observe`'s `msg` is total (#47). The registry
+ * still assigns its monotonic exclusive offset (boot → 0, first Msg → 1).
+ * Returns a cleanup that detaches both subscriptions.
  *
- * Typed structurally against `{ observe }` so it accepts any `Runtime<Model,
- * Msg>` without importing the substrate's `Runtime` (types-only boundary).
+ * Typed structurally against `{ observe, onBoot }` so it accepts any
+ * `Runtime<Model, Msg>` without importing the substrate's `Runtime` (types-only
+ * boundary).
  */
 export function driveProjections<Model, Msg extends { type: string }>(
   registry: ProjectionRegistry<Model, Msg>,
   runtime: {
-    observe(observer: (msg: Msg | null, model: Model) => void): () => void;
+    observe(observer: (msg: Msg, model: Model) => void): () => void;
+    onBoot(handler: (model: Model) => void): () => void;
   },
 ): () => void {
-  return runtime.observe((msg, model) => {
+  // Boot first → the registry's pre-incremented counter lands it on offset 0,
+  // exactly as the old `dispatch(null, model)` boot observe did.
+  const unboot = runtime.onBoot((model) => {
+    registry.dispatch(null, model);
+  });
+  const unobserve = runtime.observe((msg, model) => {
     registry.dispatch(msg, model);
   });
+  return () => {
+    unobserve();
+    unboot();
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

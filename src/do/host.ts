@@ -27,7 +27,12 @@
  * is the documented, deliberate choice over widening the agent's Sub union.
  */
 
-import { type AgentMachineMsg, type AgentState, status } from "../agent/index";
+import {
+  type AgentEvent,
+  type AgentMachineMsg,
+  type AgentState,
+  status,
+} from "../agent/index";
 import type { BootingRuntime, Runtime } from "../index";
 import type {
   EffectConfirmed,
@@ -506,6 +511,73 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
 // `state.output` holds the terminal turn on `done`, and `Runtime.result()` /
 // `Runtime.done()` read it. A consumer reads `runtime.result()?.output` — no
 // observer hook, no internal-Msg coupling, no state-clear race.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sseFromAgentEvents — drive an SseHub off the SEMANTIC AgentEvent stream (#47).
+//
+// The pre-#47 host fanned SSE frames off `runtime.observe` by hand-matching the
+// agent's PRIVATE Msg names (`resilient_ok` / `agent_tool_ok`) — coupling the
+// transport to the retry/loop plumbing. This wires the hub to `runtime.on`
+// instead: the runtime (built with `events: agentEvents()`) projects the public
+// `AgentEvent` union, and this helper subscribes ONE `on(type, …)` per event
+// type and pushes `toFrame(event)` (or `null` to skip) at the hub. The SSE seam
+// now reads the named lifecycle events, never the firehose, never a private Msg.
+//
+// Built on `runtime.on` (the typed semantic channel) rather than `sseProjection`
+// because SSE is the volatile, offset-free case — a live `/sse` stream has no
+// durable read model to resume — so the projection-registry's offset machinery
+// buys nothing here. A consumer wanting SSE on the SAME registry as a durable
+// report projection still uses `sseProjection`; this is the lighter path that
+// expresses "SSE = a projection of the semantic event stream" directly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Wire an {@link SseHub} to a runtime's semantic {@link AgentEvent} stream (#47).
+ * For each event `type` the runtime can emit, subscribes via `runtime.on` and
+ * pushes `toFrame(event)` at the hub (returning `null` skips that event). The
+ * runtime MUST have been built with `run(machine, { events: agentEvents() })`,
+ * which is what makes `on` deliver the `AgentEvent`s. Returns a cleanup that
+ * detaches every subscription.
+ *
+ * This is the runtime→SSE adapter expressed over the typed event channel: no
+ * `observe` firehose, no private-Msg coupling. `hub.open()` and every existing
+ * `sseHub` caller are unchanged — only the SOURCE of `hub.emit` moves from a
+ * hand-rolled Msg switch to `on`.
+ *
+ * @example
+ *   const hub = sseHub<MyFrame>();
+ *   const runtime = await run(machine, { ctx, events: agentEvents() }).ready;
+ *   const off = sseFromAgentEvents(runtime, hub, (e) =>
+ *     e.type === "RunDone" ? { kind: "done", output: e.output } : null,
+ *   );
+ *   // /sse route unchanged:
+ *   return hub.open();
+ */
+export function sseFromAgentEvents<R, Frame>(
+  runtime: {
+    on<K extends AgentEvent<R>["type"]>(
+      type: K,
+      handler: (event: Extract<AgentEvent<R>, { type: K }>) => void,
+    ): () => void;
+  },
+  hub: SseHub<Frame>,
+  toFrame: (event: AgentEvent<R>) => Frame | null,
+): () => void {
+  const push = (event: AgentEvent<R>): void => {
+    const frame = toFrame(event);
+    if (frame !== null) hub.emit(frame);
+  };
+  // One subscription per event type — the closed `AgentEvent` union enumerated
+  // here so a new variant forces a wiring decision at compile time.
+  const offs = [
+    runtime.on("TurnSettled", push),
+    runtime.on("ToolSettled", push),
+    runtime.on("RunDone", push),
+  ];
+  return () => {
+    for (const off of offs) off();
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // dispatchToIdle — run-to-quiescence (core lift).
