@@ -30,6 +30,11 @@
 import type { AgentMachineMsg, AgentState, AgentTurn } from "../agent/index";
 import { isAgentTurn } from "../agent/index";
 import type { Runtime } from "../index";
+import type {
+  EffectConfirmed,
+  EffectOwed,
+  PendingEffectsRecorder,
+} from "./durable-effects";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // deferredGateway — the deferred-tool gateway (HEADLINE).
@@ -141,6 +146,105 @@ export function deferredGateway<R>(): DeferredGateway<R> {
       return [...pending.keys()];
     },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// durableDeferredGateway — bridge `deferredGateway` to the durable ledger.
+//
+// `deferredGateway` is volatile: its `pending` Map lives in the isolate and is
+// LOST on hibernation, so a tool round-trip in flight when the DO sleeps is
+// gone — exactly the durable-effects tax (ADR 0003 #1). This bridge makes the
+// round-trip a DURABLE owed effect WITHOUT changing the gateway's fast path:
+//
+//   - the in-memory `await`/`settle`/`fail`/`inFlight` behavior is untouched
+//     (the Promise the interpret cell awaits is still resolved in-isolate);
+//   - around it, `await` records an `effect_owed` event and `settle`/`fail`
+//     record an `effect_confirmed`, which the consumer PERSISTS into the same
+//     event log the actor replays. On the next activation the rebuilt ledger's
+//     `survivingEffects` are the round-trips to re-fire — idempotent by id.
+//
+// It is OPT-IN and ADDITIVE: a consumer that wants only the volatile gateway
+// keeps calling `deferredGateway()` directly; one that wants durability wraps
+// it here. The `record*` callbacks hand the consumer the events to persist (the
+// host does not own the consumer's log, so it cannot persist them itself —
+// keeping the bridge pure of storage and faithful to "persist the intent before
+// deliver").
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A `callId`-keyed durable round-trip: maps the gateway's string id to the
+ *  ledger's monotonic delivery id so a `settle(callId)` finds the owed entry. */
+interface DurableDeferredGateway<R> extends DeferredGateway<R> {
+  /** The ledger recorder this gateway feeds (for `surviving()` on activation). */
+  readonly recorder: PendingEffectsRecorder<{ callId: string }>;
+}
+
+/**
+ * Wrap a `DeferredGateway<R>` so every round-trip is also recorded in a durable
+ * `PendingEffectsRecorder`. The in-memory gateway is the fast path; the recorder
+ * is the durability slice.
+ *
+ *   - `recordOwed(callId, event)` — fires from `await`, BEFORE `send`, carrying
+ *     the `effect_owed` event the consumer must persist (then deliver).
+ *   - `recordConfirmed(callId, event)` — fires from `settle`/`fail` for a known
+ *     id, carrying the `effect_confirmed` event to persist.
+ *   - `reissue(callId, send, deadlineMs)` — re-arm a surviving round-trip on
+ *     activation. Idempotent: the gateway's own `await` returns the open promise
+ *     without re-firing `send` for an in-flight `callId`, so re-issuing an id
+ *     that is somehow still pending is a no-op (mirrors the boot-reconcile
+ *     re-fire). The effect is already owed, so no second `effect_owed` is
+ *     recorded.
+ *
+ * The effect payload the ledger stores is the `callId` (the correlation key the
+ * consumer round-trips); the consumer maps it back to its tool-call context.
+ */
+export function durableDeferredGateway<R>(
+  inner: DeferredGateway<R>,
+  recorder: PendingEffectsRecorder<{ callId: string }>,
+  hooks: {
+    recordOwed(callId: string, event: EffectOwed<{ callId: string }>): void;
+    recordConfirmed(callId: string, event: EffectConfirmed): void;
+  },
+): DurableDeferredGateway<R> {
+  // callId → ledger deliveryId, so settle/fail can confirm the right entry.
+  const idByCallId = new Map<string, number>();
+
+  return {
+    recorder,
+
+    await(callId, send, deadlineMs) {
+      // Already owed (re-entrant await for an in-flight id) → don't re-owe;
+      // delegate so the gateway returns the SAME open promise without re-send.
+      if (!idByCallId.has(callId)) {
+        const { id, event } = recorder.owe({ callId });
+        idByCallId.set(callId, id);
+        // Persist the intent BEFORE the send fires (which `inner.await` does).
+        hooks.recordOwed(callId, event);
+      }
+      return inner.await(callId, send, deadlineMs);
+    },
+
+    settle(callId, result) {
+      confirm(callId);
+      inner.settle(callId, result);
+    },
+
+    fail(callId, reason) {
+      confirm(callId);
+      inner.fail(callId, reason);
+    },
+
+    inFlight() {
+      return inner.inFlight();
+    },
+  };
+
+  function confirm(callId: string): void {
+    const id = idByCallId.get(callId);
+    if (id === undefined) return; // unknown / already confirmed — no-op.
+    idByCallId.delete(callId);
+    const { event } = recorder.confirm(id);
+    hooks.recordConfirmed(callId, event);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

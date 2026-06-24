@@ -12,7 +12,7 @@ is noted inline as a conceptual gloss, not as product code. Covered: the `EventS
 `Effect` API, the command/event handlers, `RetentionCriteria`/`snapshotWhen`, `Recovery`, and the
 `EventSourcedSignal`s. Excluded: replicated event sourcing, persistence FSM migration, cluster
 sharding, serialization internals, and durable-state behaviors. The subject will grow — future
-sibling docs cover durable-effects, projections, and reentrancy.
+sibling docs cover projections and reentrancy.
 
 ## Index
 
@@ -22,6 +22,8 @@ sibling docs cover durable-effects, projections, and reentrancy.
 | [event-handler.md](./event-handler.md) | The fold: `(State, Event) => State` | Writing how state advances from an event |
 | [snapshotting.md](./snapshotting.md) | `RetentionCriteria` / `snapshotWhen`, deletion | Bounding recovery cost or reclaiming log space |
 | [recovery.md](./recovery.md) | Replay on start, `RecoveryCompleted`, `Recovery` strategies | Reasoning about restart, replay, and post-recovery effects |
+| [durable-effects.md](./durable-effects.md) | The unconfirmed-delivery ledger: `deliver`/`confirmDelivery`, monotonic `deliveryId`, re-emit on recovery | An outbound effect must survive a crash/passivation and the receiver must dedup |
+| [reliable-delivery.md](./reliable-delivery.md) | Typed successor: `DurableProducerQueue`, seqNr dedup, producer/consumer confirmation, bounding | Externalizing the ledger, flow-controlled delivery, capping the unconfirmed set |
 
 ## Shared conventions
 

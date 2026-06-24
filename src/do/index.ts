@@ -51,6 +51,27 @@ export {
   type EventSourcedStore,
 } from "./event-sourced-store";
 
+// Durable pending-effects ledger (ADR 0003 primitive #1 — durable effects).
+// A pure fold over `effect_owed` / `effect_confirmed` events (NOT a side
+// table): owed adds, confirmed removes, and the surviving entries re-emit on
+// activation, idempotent by monotonic delivery id. Persist the two events into
+// the same log `doEventSourcedStore` appends and the ledger rebuilds for free.
+export {
+  applyEffectEvent,
+  type DeliveryId,
+  type EffectConfirmed,
+  type EffectLedgerEvent,
+  type EffectOwed,
+  emptyLedger,
+  foldLedger,
+  isOwed,
+  type OwedEffect,
+  type PendingEffectsLedger,
+  type PendingEffectsRecorder,
+  pendingEffectsLedger,
+  survivingEffects,
+} from "./durable-effects";
+
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
 // terminal-output capture, and `dispatchToIdle`. Kept in a sibling file so this
@@ -65,6 +86,7 @@ export {
   type DeferredGateway,
   deferredGateway,
   dispatchToIdle,
+  durableDeferredGateway,
   type SseHub,
   sseHub,
 } from "./host";
