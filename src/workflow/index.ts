@@ -87,12 +87,29 @@ import type { Cmd } from "../index";
  * payload the consumer's interpret cell knows how to perform (an HTTP call, a
  * sibling-grain message, a tool round-trip). The reducer never inspects
  * `activity` — it only sequences the steps and correlates results.
+ *
+ * A step may declare a **compensation** — the inverse activity that undoes the
+ * forward one (cancel the reservation, refund the charge). Compensation is the
+ * `{ do, undo }` pair of `@demlik/tea/saga` mapped onto the workflow: the step's
+ * `activity` is the `do`, its `compensation` is the `undo`. The pair is the unit
+ * of reversibility — a step that completed (its forward activity succeeded) is
+ * exactly a step whose `compensation` must run, in reverse order, if a LATER
+ * step fails (#125). A step WITHOUT a compensation contributes nothing to the
+ * unwind: it is skipped during the reverse walk (an irreversible step — a sent
+ * email — that the saga model treats as a no-op `undo`).
  */
 export interface WorkflowStep<A> {
   /** Stable, human-readable step name — appears in the completed-step record. */
   readonly name: string;
   /** The opaque activity this step performs. Interpreted by the consumer. */
   readonly activity: A;
+  /**
+   * The opaque compensating (inverse) activity, performed in reverse order on a
+   * downstream failure (#125). Optional: a step with no compensation is skipped
+   * during the unwind. Interpreted by the consumer's interpret cell, exactly
+   * like {@link activity}.
+   */
+  readonly compensation?: A;
 }
 
 /**
@@ -127,13 +144,43 @@ export interface InFlightActivity<A> {
   readonly id: DeliveryId;
 }
 
+/**
+ * The compensation currently in flight on a `compensating` workflow (#125). The
+ * mirror of {@link InFlightActivity} for the reverse walk: exactly one
+ * compensation is owed at a time, on the SAME #67 ledger, with its own monotonic
+ * delivery id. `index` is the index (into `completed`/`steps`) of the step being
+ * undone — the unwind walks these from high to low (strict reverse order).
+ */
+export interface InFlightCompensation<A> {
+  /** The 0-based index (into the step sequence) of the step being compensated. */
+  readonly index: number;
+  /** The step whose compensation is in flight. */
+  readonly step: WorkflowStep<A>;
+  /** The #67 ledger delivery id this compensation was owed under (the dedup key). */
+  readonly id: DeliveryId;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WorkflowState — the discriminated union. Invalid states unrepresentable.
 //
 // `status` is the discriminant. The in-flight `current` activity exists ONLY on
-// `running`; `completed` carries the final `output`; `failed` carries the
-// `failure`. There is no representable state with a current activity that is not
-// running, nor a completed/failed state still holding one (acceptance crit. 1).
+// `running` and `compensating`; `completed` carries the final `output`;
+// `failed` / `failed_compensated` / `compensation_failed` carry the failure.
+// There is no representable state with a current activity that is neither
+// running nor compensating, nor a terminal state still holding one
+// (acceptance crit. 1).
+//
+// The failure path (#125), mirroring `@demlik/tea/saga`'s phases:
+//
+//   running ──activity_err with completed steps──▶ compensating
+//   running ──activity_err with NO completed steps──▶ failed   (empty rollback)
+//   compensating ──all compensations confirmed──▶ failed_compensated
+//   compensating ──a compensation itself fails──▶ compensation_failed
+//
+// `compensating` is the analogue of saga's `compensating`; `failed_compensated`
+// of saga's `aborted` (fully unwound); `compensation_failed` of saga's
+// `compensation_failed` (an `undo` bounced, partially unwound — visible state,
+// never a workflow wedged in `compensating` forever).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -166,18 +213,19 @@ export interface CompletedWorkflow<A, R> {
 }
 
 /**
- * A workflow that failed on an activity. `failedStep` is the step whose
- * activity reported the failure; `failure` is the opaque failure payload; the
- * `completed` steps before it are preserved (this is the history #125's
- * compensation will roll back in reverse). No activity is in flight.
- *
- * #124 reaches this state and STOPS — forward-only. #125 turns this into the
- * entry point of compensation (see {@link reduceActivityErr}).
+ * A workflow that failed on an activity with NOTHING to compensate — the
+ * forward failure happened with zero completed steps (the first activity
+ * failed). `failedStep` is the step whose activity reported the failure;
+ * `failure` is the opaque failure payload. `completed` is empty by construction:
+ * a failure WITH completed steps pivots into {@link CompensatingWorkflow}
+ * instead, so `failed` is precisely the empty-rollback terminal (the analogue
+ * of saga's `aborted` reached straight from the first step). No activity is in
+ * flight; this is terminal (#125 acceptance criterion 3).
  */
 export interface FailedWorkflow<A, R, F> {
   readonly status: "failed";
   readonly steps: readonly WorkflowStep<A>[];
-  /** Steps that succeeded before the failure, in execution order. */
+  /** Empty by construction — a failure with completed steps compensates instead. */
   readonly completed: readonly CompletedStep<A, R>[];
   /** The step whose activity failed. */
   readonly failedStep: WorkflowStep<A>;
@@ -186,14 +234,96 @@ export interface FailedWorkflow<A, R, F> {
 }
 
 /**
+ * A workflow unwinding after a forward failure (#125): the compensations of the
+ * `completed` steps are being emitted in STRICT REVERSE order, one at a time, on
+ * the same #67 ledger. The analogue of saga's `compensating` phase.
+ *
+ * `current` is the single compensation in flight (the mirror of `running`'s
+ * in-flight activity). `compensated` records, in unwind order, the completed
+ * steps whose compensation has confirmed — the reverse-walk's progress log, so
+ * a cold wake resumes mid-rollback exactly. `failedStep`/`failure` carry the
+ * forward failure that triggered the unwind (verbatim, never interpreted),
+ * preserved for the consumer to read and to fold onto the terminal state.
+ *
+ * Invariant: the unwind walks `completed` from its tail toward index 0, skipping
+ * steps with no compensation, so `current.index` is strictly below the index of
+ * every entry in `compensated`.
+ */
+export interface CompensatingWorkflow<A, R, F> {
+  readonly status: "compensating";
+  readonly steps: readonly WorkflowStep<A>[];
+  /** The completed forward steps, in execution order — the history being unwound. */
+  readonly completed: readonly CompletedStep<A, R>[];
+  /** The step whose forward activity failed, triggering the unwind. */
+  readonly failedStep: WorkflowStep<A>;
+  /** The opaque forward failure that triggered the unwind. Carried, never interpreted. */
+  readonly failure: F;
+  /** The single compensation in flight right now. */
+  readonly current: InFlightCompensation<A>;
+  /** Completed steps whose compensation has confirmed, in unwind (reverse) order. */
+  readonly compensated: readonly CompletedStep<A, R>[];
+}
+
+/**
+ * A workflow that failed forward and then fully unwound: every completed step's
+ * compensation confirmed, in reverse order. Terminal. The analogue of saga's
+ * `aborted` (fully unwound) — named `failed_compensated` to align with #125's
+ * vocabulary. No activity or compensation is in flight.
+ */
+export interface FailedCompensatedWorkflow<A, R, F> {
+  readonly status: "failed_compensated";
+  readonly steps: readonly WorkflowStep<A>[];
+  /** The forward steps that completed (and were each compensated), in execution order. */
+  readonly completed: readonly CompletedStep<A, R>[];
+  /** The step whose forward activity failed, triggering the (now-finished) unwind. */
+  readonly failedStep: WorkflowStep<A>;
+  /** The opaque forward failure that triggered compensation. Carried, never interpreted. */
+  readonly failure: F;
+}
+
+/**
+ * A workflow whose ROLLBACK itself failed: a compensation activity reported a
+ * failure mid-unwind. Terminal, PARTIALLY unwound — the analogue of saga's
+ * `compensation_failed`. A failed compensation is a real-world fact (a refund
+ * that bounced, a hold that won't release) that must become visible terminal
+ * state, never a workflow wedged in `compensating` forever.
+ *
+ * `compensated` is left intact (the steps already rolled back); `uncompensated`
+ * is the step whose compensation bounced PLUS the steps still owed a
+ * compensation behind it — exactly what the consumer must reconcile by hand.
+ * `compensationFailure` is the rollback failure (distinct from `failure`, the
+ * forward failure that started the unwind), carried verbatim.
+ */
+export interface CompensationFailedWorkflow<A, R, F> {
+  readonly status: "compensation_failed";
+  readonly steps: readonly WorkflowStep<A>[];
+  /** The full completed-forward history, in execution order. */
+  readonly completed: readonly CompletedStep<A, R>[];
+  /** The step whose forward activity failed, triggering the unwind. */
+  readonly failedStep: WorkflowStep<A>;
+  /** The opaque forward failure that triggered compensation. Carried, never interpreted. */
+  readonly failure: F;
+  /** Completed steps successfully compensated before the rollback broke, in unwind order. */
+  readonly compensated: readonly CompletedStep<A, R>[];
+  /** The step whose compensation bounced. Its forward effect stands un-reversed. */
+  readonly failedCompensationStep: WorkflowStep<A>;
+  /** The opaque rollback failure (distinct from {@link failure}). Carried, never interpreted. */
+  readonly compensationFailure: F;
+}
+
+/**
  * The workflow's state — a discriminated union on `status`. The current
- * in-flight activity is reachable ONLY through the `running` variant, making
- * "an activity exists only while running" unrepresentable to violate.
+ * in-flight activity is reachable ONLY through `running`, and the in-flight
+ * compensation ONLY through `compensating`, making "an in-flight effect exists
+ * only while the workflow is actively driving one" unrepresentable to violate.
  */
 export type WorkflowState<A, R, F> =
   | RunningWorkflow<A, R>
   | CompletedWorkflow<A, R>
-  | FailedWorkflow<A, R, F>;
+  | FailedWorkflow<A, R, F>
+  | CompensatingWorkflow<A, R, F>
+  | FailedCompensatedWorkflow<A, R, F>
+  | CompensationFailedWorkflow<A, R, F>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cmds — the activity dispatch. Recorded on the #67 ledger as an owed effect.
@@ -219,11 +349,32 @@ export interface ActivityCmd<A> extends Cmd<"workflow_activity"> {
   readonly activity: A;
 }
 
-/** The Cmd union this module emits. The owed/confirmed ledger events are not
+/**
+ * Dispatch a compensation (#125). Same shape + ledger discipline as
+ * {@link ActivityCmd} — a compensation is just another durable owed effect on
+ * the same #67 ledger, with its own delivery id — but the consumer's interpret
+ * cell performs the inverse `compensation` payload, and the result is dispatched
+ * back as a {@link CompensationOk}/{@link CompensationErr} carrying the SAME id.
+ * Distinguished by `type` so the consumer routes forward vs. inverse work to the
+ * right port, and the re-emit-on-wake stays type-correct.
+ */
+export interface CompensationCmd<A> extends Cmd<"workflow_compensation"> {
+  /** The 0-based step index whose compensation this is. */
+  readonly index: number;
+  /** The #67 delivery id the result Msg must echo (the dedup key). */
+  readonly id: DeliveryId;
+  /** The opaque compensating (inverse) activity to perform. */
+  readonly compensation: A;
+}
+
+/** The Cmd union this module emits: forward activity dispatches AND (#125)
+ *  reverse compensation dispatches. The owed/confirmed ledger events are not
  *  `WorkflowCmd`s — they are Msg variants persisted into the event log (see
  *  {@link EffectLedgerEvent}); the {@link WorkflowStep0} tuple carries them out
- *  alongside the dispatch Cmd so the host persists owed-before-dispatch. */
-export type WorkflowCmd<A> = ActivityCmd<A>;
+ *  alongside the dispatch Cmd so the host persists owed-before-dispatch. Both
+ *  Cmd kinds are owed effects on the same ledger, so `survivingActivities`
+ *  re-emits either kind on cold wake. */
+export type WorkflowCmd<A> = ActivityCmd<A> | CompensationCmd<A>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Msgs — activity results the consumer routes back into the reducer.
@@ -240,15 +391,42 @@ export interface ActivityOk<R> {
 
 /** An activity failed (retries already exhausted by the consumer's interpret
  *  cell — this module does not retry). `id` echoes the {@link ActivityCmd};
- *  the reducer flips to `failed`. #125 will instead begin compensation here. */
+ *  the reducer begins compensation (or settles `failed` when nothing has
+ *  completed). */
 export interface ActivityErr<F> {
   readonly type: "activity_err";
   readonly id: DeliveryId;
   readonly failure: F;
 }
 
-/** The Msg union the reducer folds. */
-export type WorkflowMsg<R, F> = ActivityOk<R> | ActivityErr<F>;
+/** A compensation succeeded (#125): the inverse activity took. `id` echoes the
+ *  {@link CompensationCmd} it answers; the reducer matches it against the
+ *  in-flight compensation's id, records the step as compensated, and either
+ *  emits the next compensation (continuing in reverse) or settles
+ *  `failed_compensated` when the unwind is complete. A compensation produces no
+ *  result the workflow carries — its only signal is "the undo took". */
+export interface CompensationOk {
+  readonly type: "compensation_ok";
+  readonly id: DeliveryId;
+}
+
+/** A compensation itself failed (#125): the inverse activity bounced (a refund
+ *  that won't go through). `id` echoes the {@link CompensationCmd}; the reducer
+ *  halts the rollback at the terminal `compensation_failed` state — never wedged
+ *  in `compensating` forever. */
+export interface CompensationErr<F> {
+  readonly type: "compensation_err";
+  readonly id: DeliveryId;
+  readonly failure: F;
+}
+
+/** The Msg union the reducer folds: forward activity results AND (#125) reverse
+ *  compensation results. */
+export type WorkflowMsg<R, F> =
+  | ActivityOk<R>
+  | ActivityErr<F>
+  | CompensationOk
+  | CompensationErr<F>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The step tuple — the reducer's output shape.
@@ -272,7 +450,7 @@ export type WorkflowMsg<R, F> = ActivityOk<R> | ActivityErr<F>;
 export interface WorkflowStep0<A, R, F> {
   readonly state: WorkflowState<A, R, F>;
   /** Ledger events to persist into the event log, in order, BEFORE `cmds`. */
-  readonly ledger: readonly EffectLedgerEvent<ActivityCmd<A>>[];
+  readonly ledger: readonly EffectLedgerEvent<WorkflowCmd<A>>[];
   /** Activity dispatch Cmds, after the ledger events are durable. */
   readonly cmds: readonly WorkflowCmd<A>[];
 }
@@ -319,12 +497,14 @@ export interface Workflow<A, R, F> {
   ): WorkflowStep0<A, R, F>;
 
   /**
-   * Fold an activity failure. Same id-match idempotency guard as
-   * {@link onActivityOk}. On a match: confirm the owed activity on the ledger
-   * and transition to `failed`, preserving the completed-step history.
-   *
-   * #124 STOPS here (forward-only). #125 replaces the `failed` transition with
-   * the start of compensation — see the `// #125:` seam in the implementation.
+   * Fold an activity failure (#125). Same id-match idempotency guard as
+   * {@link onActivityOk}. On a match: confirm the owed activity on the ledger,
+   * then PIVOT into compensation — walk the completed-step history in strict
+   * reverse and owe the first declared compensation as a durable effect on the
+   * same ledger, transitioning to `compensating`. If NO completed step declares
+   * a compensation (the empty-rollback edge — the first activity failed, or
+   * every completed step is irreversible), settle `failed` directly with
+   * nothing to unwind.
    */
   onActivityErr(
     state: WorkflowState<A, R, F>,
@@ -332,15 +512,42 @@ export interface Workflow<A, R, F> {
   ): WorkflowStep0<A, R, F>;
 
   /**
-   * The owed-but-unconfirmed activity dispatch(es) to re-emit on activation,
-   * rebuilt by folding the persisted ledger events. On a fresh / fully-advanced
-   * workflow this is empty. The re-fired Cmd carries the SAME delivery id, so a
-   * duplicate result is a no-op at the reducer (the id-match guard). This is the
-   * cold-wake re-emit that makes activities exactly-once-observable despite the
-   * at-least-once transport (acceptance criterion 3).
+   * Fold a compensation success (#125). Same id-match idempotency guard against
+   * the in-flight compensation. On a match: confirm the owed compensation,
+   * record the step as compensated, and continue the reverse walk — owe the
+   * next declared compensation strictly below the step just undone, or settle
+   * `failed_compensated` when the unwind is complete. Only meaningful on
+   * `compensating`; a result for a terminal/forward workflow is a no-op.
+   */
+  onCompensationOk(
+    state: WorkflowState<A, R, F>,
+    msg: CompensationOk,
+  ): WorkflowStep0<A, R, F>;
+
+  /**
+   * Fold a compensation failure (#125). Same id-match idempotency guard. On a
+   * match: confirm the owed compensation and HALT the rollback at the terminal
+   * `compensation_failed` state — a bounced compensation is visible terminal
+   * state to reconcile by hand, never a workflow wedged in `compensating`
+   * forever. Mirrors `@demlik/tea/saga`'s `undoErr`.
+   */
+  onCompensationErr(
+    state: WorkflowState<A, R, F>,
+    msg: CompensationErr<F>,
+  ): WorkflowStep0<A, R, F>;
+
+  /**
+   * The owed-but-unconfirmed dispatch(es) to re-emit on activation — a forward
+   * activity OR (#125) a compensation, rebuilt by folding the persisted ledger
+   * events. On a fresh / fully-settled workflow this is empty. The re-fired Cmd
+   * carries the SAME delivery id, so a duplicate result is a no-op at the
+   * reducer (the id-match guard). This is the cold-wake re-emit that makes both
+   * activities AND compensations exactly-once-observable despite the
+   * at-least-once transport (acceptance criterion 2 & 3) — including a
+   * compensation owed mid-rollback when the actor was evicted.
    */
   survivingActivities(
-    ledgerEvents: Iterable<EffectLedgerEvent<ActivityCmd<A>>>,
+    ledgerEvents: Iterable<EffectLedgerEvent<WorkflowCmd<A>>>,
   ): readonly WorkflowCmd<A>[];
 }
 
@@ -356,14 +563,14 @@ export interface Workflow<A, R, F> {
  *   fresh workflow.
  */
 export function createWorkflow<A, R, F>(restore?: {
-  readonly events?: Iterable<EffectLedgerEvent<ActivityCmd<A>>>;
+  readonly events?: Iterable<EffectLedgerEvent<WorkflowCmd<A>>>;
   readonly lastId?: DeliveryId;
 }): Workflow<A, R, F> {
   // The #67 monotonic-id recorder. It owns the gap-free `deliveryId` and folds
   // an in-memory mirror of the ledger from the same owed/confirmed events the
-  // host persists. Reused verbatim — activities ARE owed effects (do NOT
-  // reinvent the ledger).
-  const recorder = pendingEffectsLedger<ActivityCmd<A>>(restore);
+  // host persists. Reused verbatim — activities AND compensations ARE owed
+  // effects on this one ledger (do NOT reinvent the ledger).
+  const recorder = pendingEffectsLedger<WorkflowCmd<A>>(restore);
 
   /**
    * Owe + dispatch the activity for `step` at `index`: allocate its delivery
@@ -391,29 +598,31 @@ export function createWorkflow<A, R, F>(restore?: {
     return step;
   }
 
-  function oweActivity(
-    step: WorkflowStep<A>,
-    index: number,
+  /**
+   * Predict the next delivery id, build the FINAL dispatch Cmd with it via
+   * `build`, owe that exact Cmd on the #67 ledger, and assert the issued id
+   * equals the prediction.
+   *
+   * The dispatch Cmd needs the delivery id, and the ledger event carries that
+   * Cmd as its `effect` payload — so the id and the Cmd are mutually dependent.
+   * Resolve the cycle by predicting the next id (`lastId() + 1`, the recorder's
+   * gap-free monotonic rule), building the final Cmd, then handing that exact
+   * Cmd to `recorder.owe`. The recorder issues the predicted id and folds the
+   * final Cmd into its mirror — so the mirror, the persisted `effect_owed`
+   * event, and the dispatch Cmd all carry one identical id and payload (no
+   * placeholder, no rebuild). Shared by the forward owe ({@link oweActivity})
+   * and the reverse owe ({@link oweCompensation}) so both halves of the
+   * transaction allocate ids on the SAME monotonic ledger.
+   */
+  function oweOnLedger<C extends WorkflowCmd<A>>(
+    build: (id: DeliveryId) => C,
   ): {
-    readonly current: InFlightActivity<A>;
-    readonly owed: EffectOwed<ActivityCmd<A>>;
-    readonly cmd: ActivityCmd<A>;
+    readonly id: DeliveryId;
+    readonly owed: EffectOwed<WorkflowCmd<A>>;
+    readonly cmd: C;
   } {
-    // The dispatch Cmd needs the delivery id, and the ledger event carries that
-    // Cmd as its `effect` payload — so the id and the Cmd are mutually
-    // dependent. Resolve the cycle by predicting the next id (`lastId() + 1`,
-    // the recorder's gap-free monotonic rule), building the FINAL dispatch Cmd
-    // with it, then handing that exact Cmd to `recorder.owe`. The recorder
-    // issues that predicted id and folds the final Cmd into its mirror — so the
-    // mirror, the persisted `effect_owed` event, and the dispatch Cmd all carry
-    // one identical id and payload (no placeholder, no rebuild).
     const id = (recorder.lastId() + 1) as DeliveryId;
-    const cmd: ActivityCmd<A> = {
-      type: "workflow_activity",
-      index,
-      id,
-      activity: step.activity,
-    };
+    const cmd = build(id);
     const { id: issued, event } = recorder.owe(cmd);
     // Defensive: the prediction must equal the issued id, or the ledger mirror
     // and the dispatch Cmd would diverge. This holds by the recorder's gap-free
@@ -426,8 +635,86 @@ export function createWorkflow<A, R, F>(restore?: {
           "violation, not a recoverable condition.",
       );
     }
+    return { id, owed: event, cmd };
+  }
+
+  function oweActivity(
+    step: WorkflowStep<A>,
+    index: number,
+  ): {
+    readonly current: InFlightActivity<A>;
+    readonly owed: EffectOwed<WorkflowCmd<A>>;
+    readonly cmd: ActivityCmd<A>;
+  } {
+    const { id, owed, cmd } = oweOnLedger<ActivityCmd<A>>((id) => ({
+      type: "workflow_activity",
+      index,
+      id,
+      activity: step.activity,
+    }));
     const current: InFlightActivity<A> = { index, step, id };
-    return { current, owed: event, cmd };
+    return { current, owed, cmd };
+  }
+
+  /**
+   * Owe + dispatch the COMPENSATION for the completed step at `index` (#125):
+   * the reverse-walk mirror of {@link oweActivity}. The compensation is a
+   * durable owed effect on the SAME #67 ledger, so a cold wake mid-rollback
+   * re-emits the identical compensation dispatch by folding the ledger
+   * (acceptance criterion 2). `step.compensation` is required to be present —
+   * the caller (the reverse walk) only owes compensations for steps that
+   * declared one, skipping the rest.
+   */
+  function oweCompensation(
+    step: WorkflowStep<A>,
+    compensation: A,
+    index: number,
+  ): {
+    readonly current: InFlightCompensation<A>;
+    readonly owed: EffectOwed<WorkflowCmd<A>>;
+    readonly cmd: CompensationCmd<A>;
+  } {
+    const { id, owed, cmd } = oweOnLedger<CompensationCmd<A>>((id) => ({
+      type: "workflow_compensation",
+      index,
+      id,
+      compensation,
+    }));
+    const current: InFlightCompensation<A> = { index, step, id };
+    return { current, owed, cmd };
+  }
+
+  /**
+   * Begin (or continue) the reverse walk from `completed`, owing the next
+   * compensation strictly BELOW `belowIndex` (exclusive) that declares one. The
+   * single source of truth for "what to undo next", shared by the failure pivot
+   * ({@link Workflow.onActivityErr}) and each `compensation_ok` step
+   * ({@link Workflow.onCompensationOk}). Steps with no compensation are SKIPPED
+   * (they contribute nothing to the unwind — saga's no-op `undo`).
+   *
+   * Returns the next compensation to owe (its in-flight record + ledger event +
+   * dispatch Cmd), or `null` when no compensable step remains below `belowIndex`
+   * — the unwind is complete and the caller settles `failed_compensated`.
+   */
+  function oweNextCompensation(
+    completed: readonly CompletedStep<A, R>[],
+    belowIndex: number,
+  ): {
+    readonly current: InFlightCompensation<A>;
+    readonly owed: EffectOwed<WorkflowCmd<A>>;
+    readonly cmd: CompensationCmd<A>;
+  } | null {
+    // Walk the completed history from just below `belowIndex` toward 0 (strict
+    // reverse order), stopping at the first step that declares a compensation.
+    for (let i = belowIndex - 1; i >= 0; i--) {
+      const entry = completed[i];
+      // `completed[i]` is the i-th completed step; `i` is also its step index
+      // (completed is in execution order, contiguous from 0 up to the failure).
+      if (entry !== undefined && entry.step.compensation !== undefined) {
+        return oweCompensation(entry.step, entry.step.compensation, i);
+      }
+    }
+    return null;
   }
 
   return {
@@ -502,36 +789,140 @@ export function createWorkflow<A, R, F>(restore?: {
       }
       const confirmed: EffectConfirmed = confirm(state.current.id);
 
-      // #125: COMPENSATION SEAM. Forward-only #124 transitions straight to
-      // `failed`. The #125 compensation slice replaces this with a transition
-      // to a `compensating` state that emits the completed steps' compensating
-      // activities in REVERSE order (each itself a durable owed effect on this
-      // same ledger) — `state.completed` is preserved here precisely so that
-      // reverse walk has its history. Do NOT implement compensation in #124.
-      const failed: FailedWorkflow<A, R, F> = {
-        status: "failed",
+      // #125: the forward failure PIVOTS into compensation. Mirroring saga's
+      // `stepErr`: walk the completed history in strict reverse, owing the
+      // first declared compensation as a durable effect on this SAME ledger.
+      // `state.completed` is preserved precisely so this reverse walk has its
+      // history.
+      const next = oweNextCompensation(state.completed, state.completed.length);
+
+      if (next === null) {
+        // Empty rollback: no completed step declares a compensation (the first
+        // activity failed, OR every completed step is irreversible). The
+        // analogue of saga aborting straight from the first step — settle
+        // `failed` directly, nothing to unwind (acceptance criterion 3).
+        const failed: FailedWorkflow<A, R, F> = {
+          status: "failed",
+          steps: state.steps,
+          completed: state.completed,
+          failedStep: state.current.step,
+          failure: msg.failure,
+        };
+        return { state: failed, ledger: [confirmed], cmds: [] };
+      }
+
+      // Pivot to `compensating`, emitting the first compensation. Confirm the
+      // failed forward activity AND owe the first compensation, in that order,
+      // before dispatching it (the same confirm-then-owe ledger discipline as
+      // the forward advance — at most one in-flight effect per workflow).
+      const compensating: CompensatingWorkflow<A, R, F> = {
+        status: "compensating",
         steps: state.steps,
         completed: state.completed,
         failedStep: state.current.step,
         failure: msg.failure,
+        current: next.current,
+        compensated: [],
       };
-      return { state: failed, ledger: [confirmed], cmds: [] };
+      return {
+        state: compensating,
+        ledger: [confirmed, next.owed],
+        cmds: [next.cmd],
+      };
+    },
+
+    onCompensationOk(state, msg) {
+      // A compensation result for a non-compensating workflow, or one whose id
+      // does not match the in-flight compensation, is a no-op — idempotent by
+      // delivery id, the same re-emit-on-wake guard as the forward verbs.
+      if (state.status !== "compensating" || msg.id !== state.current.id) {
+        return { state, ledger: [], cmds: [] };
+      }
+
+      // Confirm the owed compensation and record the step as compensated.
+      const confirmed: EffectConfirmed = confirm(state.current.id);
+      const undoneStep = state.completed[state.current.index];
+      if (undoneStep === undefined) {
+        throw new Error(
+          `createWorkflow.onCompensationOk: compensation index ` +
+            `${state.current.index} has no completed step — a reverse-walk ` +
+            "bounds proof was violated.",
+        );
+      }
+      const compensated = [...state.compensated, undoneStep];
+
+      // Continue the reverse walk strictly below the step just undone, skipping
+      // steps with no compensation.
+      const next = oweNextCompensation(state.completed, state.current.index);
+
+      if (next === null) {
+        // Fully unwound → `failed_compensated` (saga's `aborted`).
+        const settled: FailedCompensatedWorkflow<A, R, F> = {
+          status: "failed_compensated",
+          steps: state.steps,
+          completed: state.completed,
+          failedStep: state.failedStep,
+          failure: state.failure,
+        };
+        return { state: settled, ledger: [confirmed], cmds: [] };
+      }
+
+      const compensating: CompensatingWorkflow<A, R, F> = {
+        status: "compensating",
+        steps: state.steps,
+        completed: state.completed,
+        failedStep: state.failedStep,
+        failure: state.failure,
+        current: next.current,
+        compensated,
+      };
+      return {
+        state: compensating,
+        ledger: [confirmed, next.owed],
+        cmds: [next.cmd],
+      };
+    },
+
+    onCompensationErr(state, msg) {
+      // Same id-match idempotency guard as the other verbs.
+      if (state.status !== "compensating" || msg.id !== state.current.id) {
+        return { state, ledger: [], cmds: [] };
+      }
+      // Confirm the owed compensation (the dispatch is no longer owed — it was
+      // delivered and answered, just with a failure), then HALT the rollback at
+      // the terminal `compensation_failed` state. Mirroring saga's `undoErr`: a
+      // bounced compensation is a real-world fact the consumer must reconcile by
+      // hand, never a workflow wedged in `compensating` forever. `compensated`
+      // (already rolled back) is left intact for the consumer to read.
+      const confirmed: EffectConfirmed = confirm(state.current.id);
+      const halted: CompensationFailedWorkflow<A, R, F> = {
+        status: "compensation_failed",
+        steps: state.steps,
+        completed: state.completed,
+        failedStep: state.failedStep,
+        failure: state.failure,
+        compensated: state.compensated,
+        failedCompensationStep: state.current.step,
+        compensationFailure: msg.failure,
+      };
+      return { state: halted, ledger: [confirmed], cmds: [] };
     },
 
     survivingActivities(ledgerEvents) {
       // Rebuild the ledger by folding the persisted events (NOT a side table),
-      // then the surviving owed effects ARE the dispatch Cmds to re-fire —
-      // each owed effect's payload is its dispatch Cmd, carrying the same id.
-      const ledger: PendingEffectsLedger<ActivityCmd<A>> =
+      // then the surviving owed effects ARE the dispatch Cmds to re-fire — each
+      // owed effect's payload is its dispatch Cmd (a forward activity OR a
+      // compensation), carrying the same id.
+      const ledger: PendingEffectsLedger<WorkflowCmd<A>> =
         foldLedger(ledgerEvents);
       return survivingEffects(ledger).map((owed) => owed.effect);
     },
   };
 
-  /** Confirm an owed activity on the recorder's ledger, returning the
-   *  `effect_confirmed` event to persist. The boolean (was-owed) is not needed
-   *  by the reducer — the id-match guard above already gates on the in-flight
-   *  activity — so it is discarded here. */
+  /** Confirm an owed activity (or compensation) on the recorder's ledger,
+   *  returning the `effect_confirmed` event to persist. The boolean (was-owed)
+   *  is not needed by the reducer — the id-match guard above already gates on
+   *  the in-flight effect — so it is discarded here. */
   function confirm(id: DeliveryId): EffectConfirmed {
     return recorder.confirm(id).event;
   }
@@ -572,10 +963,26 @@ export function foldWorkflow<A, R, F>(
   const wf = createWorkflow<A, R, F>();
   let { state } = wf.init(steps);
   for (const msg of msgs) {
-    const step =
-      msg.type === "activity_ok"
-        ? wf.onActivityOk(state, msg)
-        : wf.onActivityErr(state, msg);
+    // Route each result Msg to its verb. The forward results (`activity_*`) and
+    // the reverse compensation results (`compensation_*`, #125) are folded by
+    // the same fresh recorder, so a replay across a failure+compensation
+    // sequence re-issues every delivery id in identical order — byte-identity
+    // holds end to end (acceptance criterion 4).
+    let step: WorkflowStep0<A, R, F>;
+    switch (msg.type) {
+      case "activity_ok":
+        step = wf.onActivityOk(state, msg);
+        break;
+      case "activity_err":
+        step = wf.onActivityErr(state, msg);
+        break;
+      case "compensation_ok":
+        step = wf.onCompensationOk(state, msg);
+        break;
+      case "compensation_err":
+        step = wf.onCompensationErr(state, msg);
+        break;
+    }
     state = step.state;
   }
   return state;

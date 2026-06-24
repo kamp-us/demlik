@@ -70,11 +70,11 @@ import {
   type Store,
 } from "../index";
 import {
-  type ActivityCmd,
   type ActivityErr,
   type ActivityOk,
   createWorkflow,
   type Workflow,
+  type WorkflowCmd,
   type WorkflowMsg,
   type WorkflowState,
   type WorkflowStep,
@@ -85,16 +85,18 @@ import {
 // ===========================================================================
 
 /**
- * The outbound activity performer. The grain hands each owed {@link ActivityCmd}
+ * The outbound effect performer. The grain hands each owed {@link WorkflowCmd}
  * to `perform`; the consumer performs it (an HTTP call, a sibling-grain message,
- * a tool round-trip) and returns the activity-result `Msg` — an {@link ActivityOk}
- * or {@link ActivityErr} carrying the SAME delivery id the Cmd named. Retries
- * are the performer's business (#124 does not retry); it surfaces a terminal
- * outcome. PURE-data in, result out — the reducer never names this; only the
- * grain's `deliver` step does, and only AFTER the persist.
+ * a tool round-trip) and returns the result `Msg`. The owed cmd is either a
+ * forward activity (→ {@link ActivityOk}/{@link ActivityErr}) or — once #125's
+ * compensation is wired — a reverse compensation (→ `CompensationOk`/`Err`); both
+ * carry the SAME delivery id the Cmd named. Retries are the performer's business
+ * (the engine does not retry); it surfaces a terminal outcome. PURE-data in,
+ * result out — the reducer never names this; only the grain's `deliver` step
+ * does, and only AFTER the persist.
  */
 export interface ActivityPerformer<A, R, F> {
-  perform(cmd: ActivityCmd<A>): Promise<WorkflowMsg<R, F>>;
+  perform(cmd: WorkflowCmd<A>): Promise<WorkflowMsg<R, F>>;
 }
 
 /**
@@ -144,7 +146,7 @@ export interface WorkflowGrainOptions<A> {
 interface WorkflowGrainState<A, R, F> {
   readonly workflow: WorkflowState<A, R, F>;
   /** The ordered owe/confirm events emitted so far — folds the #67 ledger. */
-  readonly ledgerEvents: readonly EffectLedgerEvent<ActivityCmd<A>>[];
+  readonly ledgerEvents: readonly EffectLedgerEvent<WorkflowCmd<A>>[];
 }
 
 // ===========================================================================
@@ -160,7 +162,7 @@ type WorkflowGrainSub = never;
  * machine) performs the activity, and only AFTER the persist (persist-before-
  * deliver lives entirely in the host).
  */
-type WorkflowGrainCmd<A> = ActivityCmd<A>;
+type WorkflowGrainCmd<A> = WorkflowCmd<A>;
 
 /** The grain's machine type alias. */
 type WorkflowMachine<A, R, F> = Machine<
@@ -233,11 +235,21 @@ function workflowMachine<A, R, F>(
         stepState(s, ref.current.onActivityOk(s.workflow, m)),
       activity_err: (s, m) =>
         stepState(s, ref.current.onActivityErr(s.workflow, m)),
+      // #125 compensation: a failed activity pivots to reverse-order rollback;
+      // each compensation result advances the unwind. Same stepState fold — the
+      // verb returns the same { state, ledger, cmds } shape, and the dispatch
+      // Cmd (a `workflow_compensation`) is performed post-persist like an activity.
+      compensation_ok: (s, m) =>
+        stepState(s, ref.current.onCompensationOk(s.workflow, m)),
+      compensation_err: (s, m) =>
+        stepState(s, ref.current.onCompensationErr(s.workflow, m)),
     },
-    // No Cmds are interpreted in-runtime: the grain performs the activity
-    // post-persist. The empty cell keeps the dispatch Cmd a pure data intent.
+    // No Cmds are interpreted in-runtime: the grain performs the activity OR
+    // compensation post-persist. The empty cells keep the dispatch Cmds pure
+    // data intents (one per WorkflowCmd member, #125 widened the union).
     interpret: {
       workflow_activity: async () => {},
+      workflow_compensation: async () => {},
     },
   });
 }
@@ -256,7 +268,7 @@ function stepState<A, R, F>(
   prev: WorkflowGrainState<A, R, F>,
   step: {
     readonly state: WorkflowState<A, R, F>;
-    readonly ledger: readonly EffectLedgerEvent<ActivityCmd<A>>[];
+    readonly ledger: readonly EffectLedgerEvent<WorkflowCmd<A>>[];
     readonly cmds: readonly WorkflowGrainCmd<A>[];
   },
 ): readonly [WorkflowGrainState<A, R, F>, readonly WorkflowGrainCmd<A>[]] {
@@ -352,10 +364,10 @@ export async function workflowGrain<A, R, F>(
   // Cmd/Sub to the substrate base unions (its factory comment: "pinning the
   // machine's concrete C/U would force every caller to thread them through").
   // The `interpret` map is contravariant in its Cmd param, so a concrete
-  // `ActivityCmd<A>` machine is not STRUCTURALLY assignable to the erased
+  // `WorkflowCmd<A>` machine is not STRUCTURALLY assignable to the erased
   // `Machine<S, M, Cmd, Sub, Ctx>` parameter even though it is sound for the
   // fold; the cast crosses that erasure boundary deliberately (the live `run`
-  // below keeps the machine's precise `ActivityCmd<A>` / `never` types).
+  // below keeps the machine's precise `WorkflowCmd<A>` / `never` types).
   const es: EventSourcedStore<
     WorkflowGrainState<A, R, F>,
     WorkflowMsg<R, F>
@@ -405,7 +417,7 @@ export async function workflowGrain<A, R, F>(
    * At most one is owed at a time (confirm-then-owe keeps the ledger holding one
    * in-flight activity), so the array is 0- or 1-length.
    */
-  function owedActivities(): readonly ActivityCmd<A>[] {
+  function owedActivities(): readonly WorkflowCmd<A>[] {
     return ref.current.survivingActivities(runtime.getState().ledgerEvents);
   }
 
@@ -511,11 +523,11 @@ function parseWorkflowMsg<R, F>(raw: unknown): WorkflowMsg<R, F> | null {
 // Re-export the workflow-facing types a consumer wiring the grain needs, so they
 // need not also import from `./index`.
 export type {
-  ActivityCmd,
   ActivityErr,
   ActivityOk,
   Cmd,
   DeliveryId,
+  WorkflowCmd,
   WorkflowMsg,
   WorkflowState,
   WorkflowStep,
