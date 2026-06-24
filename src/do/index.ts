@@ -77,15 +77,19 @@ export {
 // module stays the durability + subs surface; the host re-exports through the
 // same `@demlik/tea/do` subpath the consumer already imports `doStore` from.
 export {
+  type AgentHost,
+  type AgentHostConfig,
   acceptCommandSocket,
   agentIsResumable,
   autoBoot,
   broadcast,
+  createAgentHost,
   type DeferredGateway,
   deferredGateway,
   dispatchToIdle,
   durableDeferredGateway,
   type SseHub,
+  sseFromAgentEvents,
   sseHub,
   sseProjection,
 } from "./host";
