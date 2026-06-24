@@ -371,8 +371,9 @@ describe("withDeadline — real run() with fake timers", () => {
 
   it("auto-fails after `ms` of inactivity (armed → exceeded)", async () => {
     const base = makeBase();
-    const runtime = run(withDeadline(base, { ms: 5000 }), { ctx: makeCtx() });
-    await runtime.ready;
+    const runtime = await run(withDeadline(base, { ms: 5000 }), {
+      ctx: makeCtx(),
+    }).ready;
 
     // Armed on boot.
     expect(runtime.getState().$deadline).toEqual({ phase: "armed", seq: 0 });
@@ -390,8 +391,9 @@ describe("withDeadline — real run() with fake timers", () => {
 
   it("re-arms on progress — the timer RESTARTS so the old window never fires", async () => {
     const base = makeBase();
-    const runtime = run(withDeadline(base, { ms: 5000 }), { ctx: makeCtx() });
-    await runtime.ready;
+    const runtime = await run(withDeadline(base, { ms: 5000 }), {
+      ctx: makeCtx(),
+    }).ready;
 
     // 3s in: a progress Msg re-arms (seq 0 → 1). The generation-0 timer is
     // retired by the reconcile pass; a fresh 5s countdown starts.
@@ -413,8 +415,9 @@ describe("withDeadline — real run() with fake timers", () => {
 
   it("repeated progress keeps the machine alive indefinitely", async () => {
     const base = makeBase();
-    const runtime = run(withDeadline(base, { ms: 5000 }), { ctx: makeCtx() });
-    await runtime.ready;
+    const runtime = await run(withDeadline(base, { ms: 5000 }), {
+      ctx: makeCtx(),
+    }).ready;
 
     // Tick progress every 4s for 5 rounds (20s total, well past one 5s window).
     for (let i = 0; i < 5; i++) {
@@ -434,8 +437,7 @@ describe("withDeadline — real run() with fake timers", () => {
   it("base effects still run while the deadline observes (no interception)", async () => {
     const base = makeBase();
     const ctx = makeCtx();
-    const runtime = run(withDeadline(base, { ms: 5000 }), { ctx });
-    await runtime.ready;
+    const runtime = await run(withDeadline(base, { ms: 5000 }), { ctx }).ready;
 
     await runtime.dispatch({ type: "inc", by: 4 });
     await runtime.dispatch({ type: "inc", by: 3 });

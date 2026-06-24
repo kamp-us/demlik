@@ -690,8 +690,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
     // The port always resolves page 0 as the LAST page → the walk finishes done
     // with PAGE_KEY settled `succeeded` and the breaker untouched.
     const { machine } = wiredMachine(oneShotConfig, async () => page(0, true));
-    const rt = run(machine, { ctx });
-    await rt.ready;
+    const rt = await run(machine, { ctx }).ready;
 
     // Drive: start → fetch(0) → port resolves → resilient_ok re-enters → done.
     await rt.dispatch({ type: "start", at: 0 });
@@ -735,8 +734,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
       { ...baseConfig, rateLimit: undefined, highWaterMark: 1 },
       async (cursor) => page(cursor, cursor >= 2),
     );
-    const rt = run(machine, { ctx });
-    await rt.ready;
+    const rt = await run(machine, { ctx }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     await settleUntil(
@@ -774,8 +772,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
         throw boom;
       },
     );
-    const rt = run(machine, { ctx });
-    await rt.ready;
+    const rt = await run(machine, { ctx }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     // Drive until the fetch slot terminally fails (re-entered via interpret's

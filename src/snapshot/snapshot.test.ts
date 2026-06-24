@@ -669,8 +669,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
   it("recovers the checkpointed run state: a fresh boot + dispatch(boot) restores step from the store", async () => {
     // The store already holds a checkpoint from a previous (crashed) run.
     const store = makeStore({ key: "run/cp", value: { step: 17 } });
-    const runtime = run(recoveryMachine(store), { ctx: undefined });
-    await runtime.ready;
+    const runtime = await run(recoveryMachine(store), { ctx: undefined }).ready;
 
     // Fresh init started at step 0 — prove the precondition.
     expect(runtime.getState().run.step).toBe(0);
@@ -688,8 +687,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
 
   it("keeps the fresh-init state when the store has no checkpoint (null payload)", async () => {
     const store = makeStore(); // empty — no prior checkpoint
-    const runtime = run(recoveryMachine(store), { ctx: undefined });
-    await runtime.ready;
+    const runtime = await run(recoveryMachine(store), { ctx: undefined }).ready;
 
     await runtime.dispatch({ type: "boot" });
     await runtime.stop();
@@ -702,16 +700,15 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
     const store = makeStore();
 
     // Phase 1: a run that checkpoints. every:2 → the 2nd progress writes step 2.
-    const writer = run(recoveryMachine(store), { ctx: undefined });
-    await writer.ready;
+    const writer = await run(recoveryMachine(store), { ctx: undefined }).ready;
     await writer.dispatch({ type: "progress", at: 1 });
     await writer.dispatch({ type: "progress", at: 2 }); // emits snapshot_write(step 2)
     await writer.stop(); // drains the write → store now holds { step: 2 }
 
     // Phase 2: a brand-new runtime (simulating a restart) recovers from the
     // durable checkpoint the first run left behind.
-    const restarted = run(recoveryMachine(store), { ctx: undefined });
-    await restarted.ready;
+    const restarted = await run(recoveryMachine(store), { ctx: undefined })
+      .ready;
     expect(restarted.getState().run.step).toBe(0); // fresh before recovery
     await restarted.dispatch({ type: "boot" });
     await restarted.stop();

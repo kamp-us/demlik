@@ -23,7 +23,9 @@
 //     return a no-op unsubscribe. The listener is never fired because the
 //     state never changes.
 //   - `emitPort`: no-op.
-//   - `ready`: resolved Promise<void>.
+//   - `ready`: a Promise that resolves to the no-op runtime itself (the #45
+//     `ready: Promise<Runtime<S, M>>` shape — already booted, nothing to wait
+//     for).
 //   - `stop`: resolved Promise<void>.
 //
 // Strengthens invariant 9 (the testing surface is named and small).
@@ -48,7 +50,7 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
   // subscribe call sites share the same function instance — purely cosmetic
   // (the function would be a no-op either way).
   const noopUnsubscribe = (): void => {};
-  return {
+  const runtime: Runtime<S, M> = {
     async dispatch(_msg: M): Promise<void> {
       // Resolves immediately. State never advances; listeners never fire.
     },
@@ -77,9 +79,14 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
     emitPort<T>(_port: Port<T>, _value: T): void {
       // No-op. No subscribers to fan out to; nothing to do.
     },
-    ready: Promise.resolve(),
+    // Assigned just below — `ready` must resolve to `runtime` itself, which
+    // can't be referenced inside its own object literal.
+    ready: undefined as unknown as Promise<Runtime<S, M>>,
     async stop(): Promise<void> {
       // Resolves immediately. No in-flight tail to drain, no subs to clean.
     },
   };
+  // Already "booted" — `ready` hands back the same runtime synchronously.
+  runtime.ready = Promise.resolve(runtime);
+  return runtime;
 }

@@ -53,22 +53,22 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
     // `__idleCap` keeps this fast — the production default is 100_000. The
     // no-op `onError` absorbs the expected "runtime stopped" follow-up
     // rejection that the in-flight livelock produces once we tear down.
-    const runtime = run(livelockMachine(), {
+    const runtime = await run(livelockMachine(), {
       ctx: undefined,
       __idleCap: 25,
       onError: () => {},
-    });
+    }).ready;
 
     await expect(runtime.idle()).rejects.toBeInstanceOf(QuiescenceTimeoutError);
     await runtime.stop();
   });
 
   it("the rejection carries the iteration count it gave up at", async () => {
-    const runtime = run(livelockMachine(), {
+    const runtime = await run(livelockMachine(), {
       ctx: undefined,
       __idleCap: 25,
       onError: () => {},
-    });
+    }).ready;
 
     await runtime.idle().then(
       () => {
@@ -100,7 +100,7 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       update,
       interpret,
     });
-    const runtime = run(machine, { ctx: undefined, __idleCap: 25 });
+    const runtime = await run(machine, { ctx: undefined, __idleCap: 25 }).ready;
     await runtime.dispatch({ type: "step" });
     await expect(runtime.idle()).resolves.toBeUndefined();
     await runtime.stop();
@@ -137,10 +137,10 @@ describe("follow-up dispatch failures route to the onError sink", () => {
     });
 
     const seen: { error: unknown; context: RuntimeErrorContext }[] = [];
-    const runtime = run(machine, {
+    const runtime = await run(machine, {
       ctx: undefined,
       onError: (error, context) => seen.push({ error, context }),
-    });
+    }).ready;
 
     // The original dispatch resolves (its own transition + the `trigger`
     // interpret succeed). The FOLLOW-UP `boom` is what fails, with no caller.
@@ -185,12 +185,11 @@ describe("stop-save failure routes to the onError sink (no silent data loss)", (
     };
 
     const seen: { error: unknown; context: RuntimeErrorContext }[] = [];
-    const runtime = run(counterMachine(), {
+    const runtime = await run(counterMachine(), {
       ctx: undefined,
       store,
       onError: (error, context) => seen.push({ error, context }),
-    });
-    await runtime.ready;
+    }).ready;
     await runtime.dispatch({ type: "inc" });
 
     // Arm the failure for the stop-flush save only.
@@ -214,8 +213,11 @@ describe("stop-save failure routes to the onError sink (no silent data loss)", (
       },
     };
     const onError = vi.fn();
-    const runtime = run(counterMachine(), { ctx: undefined, store, onError });
-    await runtime.ready;
+    const runtime = await run(counterMachine(), {
+      ctx: undefined,
+      store,
+      onError,
+    }).ready;
     await runtime.dispatch({ type: "inc" });
     await runtime.stop();
     expect(onError).not.toHaveBeenCalled();
@@ -266,7 +268,7 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
     }) as typeof setTimeout);
 
     try {
-      const runtime = run(machine(), { ctx: undefined });
+      const runtime = await run(machine(), { ctx: undefined }).ready;
       // Original dispatch resolves; the caller-less follow-up fails and is
       // handed to defaultOnError → scheduled here.
       await expect(runtime.dispatch({ type: "kick" })).resolves.toBeUndefined();

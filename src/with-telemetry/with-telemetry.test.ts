@@ -195,8 +195,7 @@ describe("withTelemetry — real runtime drives the sink", () => {
   it("delivers a projected, clock-stamped event to the sink per dispatch", async () => {
     const base = makeBase();
     const { ctx, events, persisted } = makeCtx();
-    const runtime = run(withTelemetry(base), { ctx });
-    await runtime.ready;
+    const runtime = await run(withTelemetry(base), { ctx }).ready;
 
     await runtime.dispatch({ type: "inc", by: 4 });
     await runtime.dispatch({ type: "reset" });
@@ -250,7 +249,7 @@ describe("withTelemetry — real runtime drives the sink", () => {
   it("leaves event.at unset when no clock port is supplied", async () => {
     const base = makeBase();
     const events: TelemetryEvent[] = [];
-    const runtime = run(withTelemetry(base), {
+    const runtime = await run(withTelemetry(base), {
       ctx: {
         persist: async () => {},
         telemetrySink: (e: TelemetryEvent) => {
@@ -258,8 +257,7 @@ describe("withTelemetry — real runtime drives the sink", () => {
         },
         // no `clock`
       },
-    });
-    await runtime.ready;
+    }).ready;
     await runtime.dispatch({ type: "inc", by: 1 });
     expect(events).toEqual([{ seq: 1, msgType: "inc" }]);
     await runtime.stop();
@@ -280,15 +278,14 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
     // A sink that returns a forever-pending Promise. If the handler awaited it,
     // the dispatch loop would hang here and the second dispatch would never run.
     const hung = new Promise<void>(() => {}); // never resolves, never rejects
-    const runtime = run(withTelemetry(base), {
+    const runtime = await run(withTelemetry(base), {
       ctx: {
         persist: async (count: number) => {
           persisted.push(count);
         },
         telemetrySink: () => hung,
       },
-    });
-    await runtime.ready;
+    }).ready;
 
     // Each dispatch resolves promptly despite the pending sink. A timeout race
     // makes "did it block?" a hard failure rather than a hung test.
@@ -320,7 +317,7 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
   it("a sink that REJECTS does not crash the machine — the run continues and state advances", async () => {
     const base = makeBase();
     const persisted: number[] = [];
-    const runtime = run(withTelemetry(base), {
+    const runtime = await run(withTelemetry(base), {
       ctx: {
         persist: async (count: number) => {
           persisted.push(count);
@@ -329,8 +326,7 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
           throw new Error("sink exploded (async reject)");
         },
       },
-    });
-    await runtime.ready;
+    }).ready;
 
     // If the rejection escaped the handler it would propagate out of the
     // dispatch and reject this await; if it became an unhandled rejection it
@@ -351,7 +347,7 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
   it("a sink that THROWS SYNCHRONOUSLY does not crash the machine either", async () => {
     const base = makeBase();
     const persisted: number[] = [];
-    const runtime = run(withTelemetry(base), {
+    const runtime = await run(withTelemetry(base), {
       ctx: {
         persist: async (count: number) => {
           persisted.push(count);
@@ -361,8 +357,7 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
           throw new Error("sink exploded (sync throw)");
         },
       },
-    });
-    await runtime.ready;
+    }).ready;
 
     await runtime.dispatch({ type: "inc", by: 2 });
     await runtime.dispatch({ type: "inc", by: 3 });
@@ -385,15 +380,14 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
     const onUnhandled = (reason: unknown) => rejections.push(reason);
     process.on("unhandledRejection", onUnhandled);
     try {
-      const runtime = run(withTelemetry(base), {
+      const runtime = await run(withTelemetry(base), {
         ctx: {
           persist: async () => {},
           telemetrySink: async () => {
             throw new Error("boom");
           },
         },
-      });
-      await runtime.ready;
+      }).ready;
       await runtime.dispatch({ type: "inc", by: 1 });
       await runtime.dispatch({ type: "inc", by: 1 });
       // Give any stray microtask/macrotask a chance to surface a rejection.

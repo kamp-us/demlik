@@ -462,8 +462,7 @@ describe("withResilience — real runtime: fail, retry-timer, succeed", () => {
       () => 0.5,
     );
 
-    const runtime = run(wrapped, { ctx });
-    await runtime.ready;
+    const runtime = await run(wrapped, { ctx }).ready;
 
     // Drive the first attempt. The base emits `log` (fires immediately) + the
     // target `do_fetch` (retagged → run → base interpret throws → $resilience:err).

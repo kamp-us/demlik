@@ -858,8 +858,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     vi.spyOn(Date, "now").mockImplementation(() => ctx.now.value);
 
     const machine = wiredMachine(ctx);
-    const runtime = run(machine, { ctx });
-    await runtime.ready;
+    const runtime = await run(machine, { ctx }).ready;
 
     // (1) attempt key "a" — reaches the backend, comes back 401, parks + asks
     // for a refresh; the refresh port re-enters with a fresh token and re-issues
@@ -926,8 +925,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     // breaker, so the re-issue after refresh can reach the backend. This test is
     // about the dropped refresh, not the breaker.
     const machine = wiredMachine(ctx, 5);
-    const runtime = run(machine, { ctx });
-    await runtime.ready;
+    const runtime = await run(machine, { ctx }).ready;
 
     // (1) attempt "a" — backend FAILS generically → retry brick backs it off
     // into waiting_retry (NOT running). The breaker (threshold 5) does NOT trip.

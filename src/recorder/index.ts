@@ -30,7 +30,7 @@
 // This module OWNS the `Trace` type. `../trace-replay` imports it.
 // ---------------------------------------------------------------------------
 
-import type { Runtime } from "../index";
+import type { BootingRuntime } from "../index";
 
 /**
  * A recorded run, sufficient to reproduce it via `../trace-replay`.
@@ -188,12 +188,15 @@ export interface Recorder<S, M> {
  *     await runtime.ready;            // boot observe has fired
  *     const trace = rec.dump();       // { loaded, msgs, finalState }
  *
- * @param runtime - any `Runtime<S, M>`. The recorder uses only `observe`.
+ * @param runtime - any `BootingRuntime<S, M>` (a full `Runtime` satisfies it).
+ *                  The recorder uses only `observe`, which is total before boot
+ *                  — so you attach it to the synchronous `run()` handle to
+ *                  capture the boot transition as `loaded`.
  * @param opts    - see {@link RecorderOptions}. Default records everything,
  *                  no step retention.
  */
 export function recorder<S, M extends { type: string }>(
-  runtime: Runtime<S, M>,
+  runtime: BootingRuntime<S, M>,
   opts?: RecorderOptions,
 ): Recorder<S, M> {
   // Clamp sampleRate into (0, 1]. A non-positive or NaN rate would record

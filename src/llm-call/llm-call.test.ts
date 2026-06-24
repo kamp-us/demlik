@@ -676,8 +676,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
   it("fail → retry timer → succeed: the slice reaches succeeded and retry[key] resets", async () => {
     vi.spyOn(Date, "now").mockReturnValue(0);
     const ctx: WCtx = { outcomes: ["fail", "ok"], calls: { count: 0 } };
-    const runtime = run(wiredMachine(ctx), { ctx });
-    await runtime.ready;
+    const runtime = await run(wiredMachine(ctx), { ctx }).ready;
 
     const input: LlmCall<Purpose> = {
       purpose: "plan",
@@ -709,8 +708,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
       outcomes: ["fail", "fail", "fail"],
       calls: { count: 0 },
     };
-    const runtime = run(wiredMachine(ctx), { ctx });
-    await runtime.ready;
+    const runtime = await run(wiredMachine(ctx), { ctx }).ready;
 
     const input: LlmCall<Purpose> = {
       purpose: "report",

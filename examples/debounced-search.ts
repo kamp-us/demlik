@@ -91,10 +91,9 @@ function fakeSearch(searchLog: string[]): Ctx["search"] {
 
 async function main(): Promise<void> {
   const searchLog: string[] = [];
-  const runtime = run(debouncedSearch, {
+  const runtime = await run(debouncedSearch, {
     ctx: { search: fakeSearch(searchLog) },
-  });
-  await runtime.ready;
+  }).ready;
 
   const QUIET_MS = 200;
   const fireSettled = debounce((query: string) => {

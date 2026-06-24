@@ -150,8 +150,7 @@ async function main() {
     };
   };
 
-  const runtime = run(webhookIntake, { ctx: { charge } });
-  await runtime.ready;
+  const runtime = await run(webhookIntake, { ctx: { charge } }).ready;
 
   const inbox: readonly { event: PaymentEvent; at: number }[] = [
     {

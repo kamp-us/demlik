@@ -860,15 +860,38 @@ export interface RuntimeRef<M extends { type: string }> {
   dispatch(msg: M): Promise<void>;
 }
 
-// === Runtime: handle returned from run() ===
+// === BootingRuntime: handle returned SYNCHRONOUSLY from run() ===
+//
+// `run()` returns a `BootingRuntime<S, M>` the instant it is called — boot
+// (store.load → init → save → reconcile → interpret-of-init-cmds → first
+// fanout) is still in flight. A BootingRuntime exposes exactly the surface
+// that is TOTAL before boot completes: you may queue a dispatch, subscribe a
+// listener, attach an observer, wire a Port, or stop the runtime — none of
+// those need the initial State to exist yet. What you may NOT do is read the
+// State (`getState`) or wait for quiescence (`idle`): there is no State to
+// read until boot has run `init`, and a half-booted runtime has no meaningful
+// "quiescence" to await. Those two are the difference between a BootingRuntime
+// and a `Runtime` — and that difference is enforced at the type level.
+//
+// `ready` resolves to the FULL `Runtime<S, M>` once boot completes (or rejects
+// with the boot error). It is the ONLY way to obtain a `Runtime`:
+//
+//   const runtime = await run(machine, opts).ready;
+//   runtime.getState(); // total — boot has run, State exists
+//
+// This closes issue #45: `getState(): S` used to be declared on the handle
+// `run()` returned synchronously, yet it THREW before boot under a store. The
+// type claimed total; the value was partial, and only JSDoc told you to await.
+// Splitting the booting handle from the ready runtime makes "read State before
+// boot" a COMPILE error rather than a runtime throw — the type no longer lies.
 //
 // `subscribe(listener)` is the React-shaped change notifier (zero-arg, paired
-// with `getState()` via `useSyncExternalStore`). `observe(observer)` is the
-// devtools-shaped trace hook: it receives `(msg, state)` for every completed
-// transition, including the boot transition where `msg` is `null`. Both fire
-// from the same point in the dispatch loop (after save → reconcile →
-// interpret), so what an observer sees is consistent with what a subscriber
-// sees via `getState()`.
+// with `getState()` via `useSyncExternalStore` on the ready Runtime).
+// `observe(observer)` is the devtools-shaped trace hook: it receives `(msg,
+// state)` for every completed transition, including the boot transition where
+// `msg` is `null`. Both fire from the same point in the dispatch loop (after
+// save → reconcile → interpret), so what an observer sees is consistent with
+// what a subscriber sees via the ready Runtime's `getState()`.
 //
 // Observe is separate from subscribe because the contracts differ: React
 // consumers want "something changed, re-read state"; devtools consumers want
@@ -876,9 +899,9 @@ export interface RuntimeRef<M extends { type: string }> {
 // would force every React subscriber to type-check a `msg | null` arg they
 // will never use, and would couple `useSyncExternalStore` to a particular Msg
 // type at the substrate.
-export interface Runtime<S, M extends { type: string }> extends RuntimeRef<M> {
+export interface BootingRuntime<S, M extends { type: string }>
+  extends RuntimeRef<M> {
   dispatch(msg: M): Promise<void>;
-  getState(): S;
   subscribe(listener: () => void): () => void;
   observe(observer: (msg: M | null, state: S) => void): () => void;
   /**
@@ -913,24 +936,65 @@ export interface Runtime<S, M extends { type: string }> extends RuntimeRef<M> {
    */
   emitPort<T>(port: Port<T>, value: T): void;
   /**
-   * Resolves after boot completes — i.e. after `store.load()` (if any), `init`,
-   * `store.save()` of the initial state, `reconcileSubs`, `interpret` of any
-   * init-emitted cmds, and the initial listener / observer fanout. Rejects with
-   * the boot error if boot fails (the same error every subsequent `dispatch`
-   * call rejects with).
+   * Resolves to the booted `Runtime<S, M>` after boot completes — i.e. after
+   * `store.load()` (if any), `init`, `store.save()` of the initial state,
+   * `reconcileSubs`, `interpret` of any init-emitted cmds, and the initial
+   * listener / observer fanout. Rejects with the boot error if boot fails (the
+   * same error every subsequent `dispatch` call rejects with).
+   *
+   * This is the ONLY way to obtain a `Runtime<S, M>` — and a `Runtime` is the
+   * only handle whose `getState()` is total. Awaiting `ready` is therefore the
+   * single gate between "boot in flight" and "State exists":
+   *
+   * ```ts
+   * const runtime = await run(machine, opts).ready;
+   * runtime.getState(); // total — never throws-before-boot
+   * ```
    *
    * Idempotent — subsequent reads return the same settled promise. The runtime
-   * holds exactly one `ready` promise per `run()` call.
+   * holds exactly one `ready` promise per `run()` call; it resolves to the same
+   * `Runtime` object every time.
    *
-   * Closes the v1 boot-await gap previously documented in `stepBootEffects`:
-   * components that need synchronous initial state under a store (e.g.,
-   * `useSyncExternalStore` consumers) can `await runtime.ready` instead of
-   * `runtime.dispatch(noopMsg)`.
+   * Closes issue #45 (the `getState()` lie) and the v1 boot-await gap once
+   * documented in `stepBootEffects`: components that need synchronous initial
+   * state under a store (e.g. `useSyncExternalStore` consumers) await `ready`
+   * for the booted runtime instead of dispatching a no-op Msg.
    *
    * Expresses canon §2.3 (the `init` contract — boot is a named, awaitable
    * moment). Strengthens invariant 6 (runtime is small and inspectable).
    */
-  ready: Promise<void>;
+  ready: Promise<Runtime<S, M>>;
+  stop(): Promise<void>;
+}
+
+// === Runtime: the BOOTED handle `ready` resolves to ===
+//
+// A `Runtime<S, M>` is a `BootingRuntime<S, M>` whose boot has completed. It
+// adds the two members that are only meaningful once the initial State exists:
+// `getState()` (total — boot ran `init`, so State is always present) and
+// `idle()` (quiescence is only definable on a runtime that has booted). It
+// also narrows `ready` to `Promise<Runtime<S, M>>` resolving to itself — a
+// booted runtime awaited again hands back the same booted runtime, so consumer
+// code that re-awaits (e.g. a cached `getRuntime()` accessor) keeps a total
+// `getState`.
+//
+// You never construct a `Runtime` directly from `run()`; you obtain it via
+// `await bootingRuntime.ready`. That asymmetry is the whole fix for #45 —
+// "read State before boot" is now unrepresentable, not merely discouraged.
+export interface Runtime<S, M extends { type: string }>
+  extends BootingRuntime<S, M> {
+  /**
+   * The current State. TOTAL — never throws. Obtaining a `Runtime` requires
+   * awaiting `ready`, which only resolves AFTER boot has run `init` and set the
+   * initial State; a `Runtime` therefore always has a State to return. (Before
+   * #45 this was declared on the synchronously-returned handle and threw under
+   * a store until boot finished — the type lied. It no longer does.)
+   */
+  getState(): S;
+  /**
+   * Resolves to this same `Runtime` once boot completes. Idempotent.
+   */
+  ready: Promise<Runtime<S, M>>;
   /**
    * Resolves once the runtime has reached QUIESCENCE — every dispatched Msg AND
    * every follow-up Msg an interpret handler returned has been processed, with
@@ -962,7 +1026,6 @@ export interface Runtime<S, M extends { type: string }> extends RuntimeRef<M> {
    * first-class awaitable moment, not a poll the consumer re-derives).
    */
   idle(): Promise<void>;
-  stop(): Promise<void>;
 }
 
 // === defineMachine: identity-typed pass-through ===
@@ -1104,7 +1167,7 @@ export function run<
      */
     __idleCap?: number;
   },
-): Runtime<S, M> {
+): BootingRuntime<S, M> {
   const { ctx, store } = opts;
   const idleCap = opts.__idleCap ?? 100_000;
   // The error sink for paths with no caller to reject at (follow-up dispatch
@@ -1556,7 +1619,7 @@ export function run<
   // `store` is present, the full async path runs here.
   //
   // `bootPromise` is the original (un-swallowed) promise — it is what
-  // `runtime.ready` exposes so callers see the boot error directly. `tail`
+  // `runtime.ready` chains off so callers see the boot error directly. `tail`
   // gets the swallowed branch so a boot failure does NOT poison every
   // subsequent dispatch's `.then` chain (each dispatch surfaces `bootError`
   // explicitly inside `enqueueDispatch`).
@@ -1565,21 +1628,31 @@ export function run<
     bootError = err;
   });
 
+  // `ready` resolves to the booted `Runtime` (issue #45). It chains off the
+  // un-swallowed `bootPromise` so boot failures reject it directly — meaning a
+  // failed boot never hands out a `Runtime`, which is what keeps `getState()`
+  // total. The `runtime` reference resolves at `.then` time (a later
+  // microtask), well after the object literal below finishes initializing, so
+  // the forward reference is safe. Built once → idempotent: the same settled
+  // promise comes back on every `ready` read.
+  const readyPromise: Promise<Runtime<S, M>> = bootPromise.then(() => runtime);
+
   const runtime: Runtime<S, M> = {
     dispatch: enqueueDispatch,
     getState(): S {
-      if (bootError !== null) throw bootError;
-      // Synchronous-init path (no store): `state` is set inside `run()`
-      // before this getter can ever be called → returns immediately. Resumed
-      // path (store present): `state` becomes defined after
-      // `stepBootEffects` awaits `store.load()`; calls before that throw.
-      // The `booted` flag is no longer a precondition — `state !==
-      // undefined` is the single source of truth that init information is
-      // available.
-      if (state === undefined) {
-        throw new Error("@demlik/tea: getState() called before runtime booted");
-      }
-      return state;
+      // TOTAL (issue #45). A `Runtime` is only obtainable by awaiting `ready`,
+      // which resolves AFTER boot has run `init` and set `state` — so by the
+      // time any holder of this object can call `getState()`, `state` is
+      // defined. No `state === undefined` throw branch: that was the old lie
+      // (declared total on the synchronously-returned handle, threw under a
+      // store pre-boot). Boot failures never reach here either — `ready`
+      // rejects, so no `Runtime` is ever handed out on a failed boot.
+      //
+      // The cast encodes that invariant. The lone way to reach it with `state`
+      // still undefined would be to cast the BootingRuntime to Runtime and call
+      // `getState()` before `ready` — which the type system now forbids without
+      // an explicit, deliberate cast.
+      return state as S;
     },
     subscribe(listener: () => void): () => void {
       listeners.add(listener);
@@ -1619,11 +1692,10 @@ export function run<
       // without spawning a "tell the outside world" Cmd per transition.
       portEmit(port, value);
     },
-    // `ready` is the original (un-swallowed) boot promise. Idempotency
-    // comes for free — promises settle exactly once; every read returns the
-    // same settled value. See the boot-promise note above for why this is
-    // distinct from `tail`.
-    ready: bootPromise,
+    // `ready` is assigned just below (it must resolve to `runtime` itself,
+    // which can't be referenced inside its own object literal). See the
+    // assignment + rationale after this block.
+    ready: readyPromise,
     async idle(): Promise<void> {
       // Quiescence = the tail stopped advancing. Each interpret follow-up calls
       // `enqueueDispatch`, which reassigns `tail` SYNCHRONOUSLY (before the
@@ -1737,7 +1809,10 @@ export interface HistoryTracker<S, M extends { type: string }> {
  * to the runtime via `observe(...)` and retains the last `size` `(msg,
  * state)` transitions in a FIFO ring buffer.
  *
- * @param runtime  Any `Runtime<S, M>`. The tracker uses only `observe`.
+ * @param runtime  Any `BootingRuntime<S, M>` (a full `Runtime` satisfies it).
+ *                 The tracker uses only `observe`, which is total before boot —
+ *                 attach it to the synchronous `run()` handle to record the
+ *                 boot transition.
  * @param size     Buffer cap. `size <= 0` produces a tracker whose
  *                 snapshot is always `[]` (the observer is still attached
  *                 but pushes a no-op; cheaper to skip the tracker entirely
@@ -1748,7 +1823,7 @@ export interface HistoryTracker<S, M extends { type: string }> {
  * in-memory only, no persistence.
  */
 export function historyTracker<S, M extends { type: string }>(
-  runtime: Runtime<S, M>,
+  runtime: BootingRuntime<S, M>,
   size: number,
 ): HistoryTracker<S, M> {
   const buffer: { msg: M | null; state: S }[] = [];

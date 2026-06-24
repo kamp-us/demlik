@@ -592,8 +592,7 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
       },
     });
 
-    const runtime = run(machine, { ctx: undefined });
-    await runtime.ready;
+    const runtime = await run(machine, { ctx: undefined }).ready;
 
     // Kick the poller off. `start` arms the first deadline at BASE + 5_000 and
     // emits NOTHING — so no read has happened yet.

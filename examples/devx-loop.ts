@@ -91,9 +91,8 @@ const line = (label: string) =>
 async function main() {
   // === 1. IN PROD: run v1, record everything via observe ===
   line("1. IN PROD — running order machine v1");
-  const runtime = run(orderV1, { ctx: {} });
+  const runtime = await run(orderV1, { ctx: {} }).ready;
   const rec = recorder(runtime);
-  await runtime.ready;
 
   await runtime.dispatch({ type: "add_item", price: 100 });
   await runtime.dispatch({ type: "add_item", price: 50 });

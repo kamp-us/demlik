@@ -25,8 +25,8 @@ import { defineMachine, type Reducer, run } from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
 import { sseHub, sseProjection } from "./host";
 import {
-  type Projection,
   driveProjections,
+  type Projection,
   projectionRegistry,
   rebuildProjection,
   runProjection,
@@ -148,9 +148,7 @@ function stateProjection(
 // Build the ordered `(msg, model)` update stream a live run would observe:
 // the boot update (msg = null, model = INITIAL) then one entry per applied Msg
 // with the post-transition model. This is the oracle `rebuildProjection` folds.
-function streamOf(
-  msgs: readonly Msg[],
-): { msg: Msg | null; model: State }[] {
+function streamOf(msgs: readonly Msg[]): { msg: Msg | null; model: State }[] {
   const stream: { msg: Msg | null; model: State }[] = [
     { msg: null, model: INITIAL },
   ];
@@ -215,7 +213,10 @@ describe("Projection — rebuild-equivalence", () => {
       { type: "note", text: "x" },
       { type: "reset" },
     ];
-    const r = rebuildProjection(countProjection(() => {}), streamOf(msgs));
+    const r = rebuildProjection(
+      countProjection(() => {}),
+      streamOf(msgs),
+    );
     expect(r.view()).toEqual({ total: 0, notes: 1 });
   });
 });
@@ -227,8 +228,16 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     const emitted: CountView[] = [];
     const runner = runProjection(countProjection((v) => emitted.push(v)));
 
-    const u1 = { msg: { type: "inc", by: 3 } as Msg, model: INITIAL, offset: 1 };
-    const u2 = { msg: { type: "inc", by: 4 } as Msg, model: INITIAL, offset: 2 };
+    const u1 = {
+      msg: { type: "inc", by: 3 } as Msg,
+      model: INITIAL,
+      offset: 1,
+    };
+    const u2 = {
+      msg: { type: "inc", by: 4 } as Msg,
+      model: INITIAL,
+      offset: 2,
+    };
 
     expect(runner.present(u1)).toBe(true); // applied → offset 1, total 3
     expect(runner.present(u2)).toBe(true); // applied → offset 2, total 7
@@ -262,15 +271,26 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     // RESUME: a fresh runner that loaded the stored offset (3) and the view at
     // that point (total 16). It must NOT re-apply offset 3 — the stored offset
     // is EXCLUSIVE. Hand it back the SAME offset and a re-presented event 3.
-    const resumed = runProjection(countProjection(() => {}), storedOffset);
+    const resumed = runProjection(
+      countProjection(() => {}),
+      storedOffset,
+    );
     // The runner does not carry the view across the simulated eviction (it would
     // be loaded from storage); seed it by presenting the next REAL event only.
     expect(
-      resumed.present({ msg: stream[3]!.msg, model: stream[3]!.model, offset: 3 }),
+      resumed.present({
+        msg: stream[3]!.msg,
+        model: stream[3]!.model,
+        offset: 3,
+      }),
     ).toBe(false); // offset 3 ≤ stored 3 → exclusive guard drops it (no reprocess)
     // A new event strictly after the stored offset DOES apply.
     expect(
-      resumed.present({ msg: { type: "inc", by: 100 } as Msg, model: INITIAL, offset: 4 }),
+      resumed.present({
+        msg: { type: "inc", by: 100 } as Msg,
+        model: INITIAL,
+        offset: 4,
+      }),
     ).toBe(true);
     expect(resumed.offset()).toBe(4);
   });
@@ -335,7 +355,9 @@ describe("Projection — one model, many projections", () => {
     };
 
     const registry = projectionRegistry<State, Msg>();
-    const goodRunner = registry.register(countProjection((v) => goodEmits.push(v)));
+    const goodRunner = registry.register(
+      countProjection((v) => goodEmits.push(v)),
+    );
     const poisonRunner = registry.register(poison);
 
     registry.dispatch(null, INITIAL); // offset 0 — boot update (both projections skip)
@@ -419,7 +441,11 @@ describe("sseProjection — sseHub as one projection over the seam", () => {
     const runner = runProjection(projection);
 
     runner.present({ msg: { type: "inc", by: 1 }, model: INITIAL, offset: 1 });
-    runner.present({ msg: { type: "note", text: "hi" }, model: INITIAL, offset: 2 });
+    runner.present({
+      msg: { type: "note", text: "hi" },
+      model: INITIAL,
+      offset: 2,
+    });
     runner.present({ msg: { type: "reset" }, model: INITIAL, offset: 3 });
 
     expect(received).toEqual([{ kind: "note", text: "hi" }]);

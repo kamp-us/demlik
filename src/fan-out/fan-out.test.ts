@@ -637,7 +637,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
     runtime: Runtime<WiredState, WiredMsg> | null;
   }
 
-  function buildWired() {
+  async function buildWired() {
     const fan = createFanOut(withJoin);
     const ctx: WiredCtx = { runtime: null };
 
@@ -685,7 +685,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
       },
     });
 
-    const runtime = run(machine, { ctx });
+    const runtime = await run(machine, { ctx }).ready;
     ctx.runtime = runtime;
     return runtime;
   }
@@ -703,8 +703,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
   }
 
   it("drives TWO waves end-to-end; each wave's report carries only its own results", async () => {
-    const runtime = buildWired();
-    await runtime.ready;
+    const runtime = await buildWired();
 
     // Wave 1: scatter 3 items (concurrency 2 → c backfills). The crawl handler
     // re-enters with each result; the verbs fold and fire join once.

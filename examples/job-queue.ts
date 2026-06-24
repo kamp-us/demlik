@@ -206,8 +206,7 @@ async function main() {
     console.log(`  ${item.input.name}  payload=${item.input.payload}`);
   }
 
-  const runtime = run(jobQueue, { ctx });
-  await runtime.ready;
+  const runtime = await run(jobQueue, { ctx }).ready;
 
   const drained = new Promise<void>((resolve) => {
     const off = runtime.subscribe(() => {

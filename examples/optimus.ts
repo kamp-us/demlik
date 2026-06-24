@@ -307,8 +307,7 @@ async function runCrawlSubRun(): Promise<readonly string[]> {
     if (page === undefined) throw new Error(`no sitemap page ${cursor}`);
     return page;
   };
-  const runtime = run(walkMachine, { ctx: { fetchPage } });
-  await runtime.ready;
+  const runtime = await run(walkMachine, { ctx: { fetchPage } }).ready;
   const discovered: string[] = [];
   runtime.observe((msg) => {
     if (msg !== null && msg.type === "resilient_ok") {
@@ -428,8 +427,7 @@ async function runAuditSubRun(url: string): Promise<AuditFinding> {
       }
     );
   };
-  const runtime = run(auditMachine, { ctx: { callAuditEngine } });
-  await runtime.ready;
+  const runtime = await run(auditMachine, { ctx: { callAuditEngine } }).ready;
   auditClock += 1;
   await runtime.dispatch({ type: "audit_start", url, at: auditClock });
   await until(() => {
@@ -664,9 +662,8 @@ async function main() {
 
   line("the agent loop, narrated");
 
-  const runtime = run(agentMachine, { ctx });
+  const runtime = await run(agentMachine, { ctx }).ready;
   const rec = recorder(runtime);
-  await runtime.ready;
 
   let lastStage: Stage | undefined;
   runtime.observe((msg, _state) => {
@@ -778,15 +775,14 @@ async function main() {
     return `receipt:${report.length}`;
   };
 
-  const uploaderRuntime = run(optimusUploader, {
+  const uploaderRuntime = await run(optimusUploader, {
     ctx: {
       shipReport,
       telemetrySink: (e) => {
         uploaderMetrics.push({ seq: e.seq, msgType: e.msgType });
       },
     },
-  });
-  await uploaderRuntime.ready;
+  }).ready;
 
   await uploaderRuntime.dispatch({
     type: "ship",

@@ -29,7 +29,7 @@
 
 import type { AgentMachineMsg, AgentState, AgentTurn } from "../agent/index";
 import { isAgentTurn } from "../agent/index";
-import type { Runtime } from "../index";
+import type { BootingRuntime, Runtime } from "../index";
 import type {
   EffectConfirmed,
   EffectOwed,
@@ -290,10 +290,14 @@ export async function autoBoot<
   O extends Record<P, unknown>,
   R,
 >(
-  runtime: Runtime<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>>,
+  booting: BootingRuntime<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>>,
   now: () => number = Date.now,
 ): Promise<void> {
-  await runtime.ready;
+  // `await ready` is the single boot gate (issue #45): it resolves to the
+  // booted `Runtime` whose `getState()` is total. Reading the rehydrated slice
+  // off `run()`'s synchronous handle is no longer possible — and that is the
+  // point: we cannot inspect state before boot has populated it.
+  const runtime = await booting.ready;
   if (agentIsResumable(runtime.getState())) {
     await runtime.dispatch({ type: "agent_boot", at: now() });
   }
@@ -534,7 +538,10 @@ export function captureLastTurn<
   O extends Record<P, unknown>,
   R,
 >(
-  runtime: Runtime<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>>,
+  // Accepts a `BootingRuntime` (it only needs `observe`, which is total before
+  // boot) so a host can wire transition capture on the synchronous `run()`
+  // handle, before awaiting `ready`. A full `Runtime` also satisfies it.
+  runtime: BootingRuntime<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>>,
 ): { last(): AgentTurn | null; stop(): void } {
   let lastTurn: AgentTurn | null = null;
   const unobserve = runtime.observe((msg) => {

@@ -1,4 +1,10 @@
-import { type Cmd, defineMachine, run, tryInterpret } from "@demlik/tea";
+import {
+  type Cmd,
+  defineMachine,
+  run,
+  type Runtime,
+  tryInterpret,
+} from "@demlik/tea";
 import { createSaga, type SagaState } from "@demlik/tea/saga";
 
 type DoCmd =
@@ -164,7 +170,7 @@ function makeCtx(cardWorks: boolean): Ctx {
 }
 
 function settled(
-  runtime: ReturnType<typeof run<State, Msg, StepCmd, never, Ctx>>,
+  runtime: Runtime<State, Msg>,
 ): Promise<void> {
   return new Promise((resolve) => {
     const stop = runtime.subscribe(() => {
@@ -178,8 +184,7 @@ function settled(
 
 async function drive(title: string, cardWorks: boolean): Promise<void> {
   console.log(`\n=== ${title} ===`);
-  const runtime = run(checkout, { ctx: makeCtx(cardWorks) });
-  await runtime.ready;
+  const runtime = await run(checkout, { ctx: makeCtx(cardWorks) }).ready;
   const done = settled(runtime);
   await runtime.dispatch({ type: "begin" });
   await done;

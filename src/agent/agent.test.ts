@@ -468,7 +468,7 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
     };
 
     const machine = agent.toMachine<object>({ toolInterpret });
-    const runtime = run(machine, { ctx: {} as object });
+    const runtime = await run(machine, { ctx: {} as object }).ready;
 
     // Stop driving once the run is terminal.
     const off = runtime.observe((_msg, state) => {
@@ -477,7 +477,6 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
       }
     });
 
-    await runtime.ready;
     await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
     await reachedDone;
     // Drain the tail so the final transition's effects all settle.

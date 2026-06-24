@@ -106,10 +106,9 @@ async function main() {
   let now = 1_000_000;
   const clock = () => now;
 
-  const runtime = run(statusPoller, {
+  const runtime = await run(statusPoller, {
     ctx: { readStatus: fakeSource(), clock },
-  });
-  await runtime.ready;
+  }).ready;
 
   let polls = 0;
   runtime.observe((msg) => {

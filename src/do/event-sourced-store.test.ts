@@ -99,7 +99,7 @@ async function liveRun(
     ctx,
     { snapshotEvery, onReady: () => readyCalls++ },
   );
-  const runtime = run(counter(), { ctx, store: es.store });
+  const runtime = await run(counter(), { ctx, store: es.store }).ready;
   // Append every applied (non-null) msg to the log — the documented wiring.
   // The runtime's observe is sync (it can't await us), so we collect the
   // append promises and await them after dispatch to make the test

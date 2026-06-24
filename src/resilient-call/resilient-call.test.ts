@@ -879,8 +879,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
       rateLimit: { capacity: 1, refillPerSec: 1 },
     };
     const machine = wiredMachine(config, ctx);
-    const runtime = run(machine, { ctx });
-    await runtime.ready;
+    const runtime = await run(machine, { ctx }).ready;
 
     // (1) t=0 — first attempt reaches the backend and FAILS. threshold 1 → the
     // breaker trips OPEN. Bucket now empty.

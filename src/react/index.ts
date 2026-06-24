@@ -22,8 +22,9 @@
 
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import {
+  type BootingRuntime,
   type Cmd,
   type Machine,
   type Runtime,
@@ -77,16 +78,29 @@ export function useMachine<
   // without lying about what the memo actually depends on.
   const ctx = opts.ctx;
   const store = opts.store;
-  const runtime = useMemo<Runtime<S, M>>(
+  // `run()` returns a `BootingRuntime<S, M>` SYNCHRONOUSLY (issue #45) — exactly
+  // what `useMemo` needs. We never `await` here: awaiting would force an async
+  // memo, a null first-commit state, and a resolved-flag dance. Instead we hold
+  // the booting handle and capture the booted `Runtime` (the only thing with a
+  // total `getState`) once `ready` resolves.
+  const booting = useMemo<BootingRuntime<S, M>>(
     () => run(machine, { ctx, store }),
     [machine, ctx, store],
   );
 
+  // Captures the booted `Runtime` once `ready` resolves. Until then it is
+  // `null` and `getSnapshot` serves `preliminaryState`. A ref (not state)
+  // because the booted runtime arrives via a subscription notification, not a
+  // render: `subscribe` fires the boot fanout, React re-reads `getSnapshot`,
+  // and by then `ready` has populated the ref. Reset whenever the booting
+  // handle identity changes (a new machine/ctx/store mount).
+  const readyRef = useRef<Runtime<S, M> | null>(null);
+
   // Preliminary state computed sync from `machine.init(null, ctx)`. This is
   // the snapshot React sees BEFORE the runtime finishes booting (matters
   // only when `opts.store` is present — without a store, the substrate
-  // already sets state synchronously inside `run()`). Once the runtime
-  // boots, `runtime.getState()` returns the real (possibly loaded) state.
+  // already sets state synchronously inside `run()`, so the boot fanout that
+  // captures `readyRef` lands on the same microtask as the first commit).
   //
   // We deliberately recompute on each render but cache by `[machine,
   // opts.ctx]` — `init` is pure by convention, so cost is negligible. The
@@ -98,33 +112,44 @@ export function useMachine<
     [machine, ctx],
   );
 
-  // `getSnapshot` reads the runtime if it has booted, else falls back to
-  // the preliminary state. The runtime's `getState` throws pre-boot when a
-  // store is configured — we catch that and substitute the preliminary
-  // value.
-  const getSnapshot = (): S => {
-    try {
-      return runtime.getState();
-    } catch {
-      return preliminaryState;
-    }
-  };
+  // `getSnapshot` reads the booted runtime if `ready` has resolved (the ref is
+  // populated), else falls back to the preliminary state. No try/catch dance
+  // anymore — pre-boot there is simply no booted `Runtime` to read from, so
+  // the fallback is structural, not exception-driven.
+  const getSnapshot = (): S =>
+    readyRef.current !== null ? readyRef.current.getState() : preliminaryState;
 
   const state = useSyncExternalStore(
-    runtime.subscribe,
+    booting.subscribe,
     getSnapshot,
     getSnapshot,
   );
-  useEffect(
-    () => () => {
+
+  useEffect(() => {
+    let live = true;
+    // Capture the booted runtime when `ready` resolves. The boot fanout
+    // (`fireListeners`) runs as part of boot, so the `useSyncExternalStore`
+    // subscriber is notified right after this ref is set — React re-reads
+    // `getSnapshot` and swaps preliminary → real state with no extra render
+    // plumbing. Boot rejections are swallowed: a failed boot surfaces on every
+    // `dispatch`, which is where the consumer handles it.
+    booting.ready.then(
+      (r) => {
+        if (live) readyRef.current = r;
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+      readyRef.current = null;
       // Fire-and-forget — `stop()` is async but `useEffect` cleanup is sync.
       // The runtime swallows in-flight rejections internally, so this never
       // rejects in practice; we still attach `.catch` for safety.
-      runtime.stop().catch(() => {});
-    },
-    [runtime],
-  );
-  return [state, runtime.dispatch];
+      booting.stop().catch(() => {});
+    };
+  }, [booting]);
+
+  return [state, booting.dispatch];
 }
 
 /**

@@ -730,8 +730,7 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
       },
     });
 
-    const runtime = run(machine, { ctx });
-    await runtime.ready;
+    const runtime = await run(machine, { ctx }).ready;
 
     const payload: Hook = { id: "evt_1", amount: 5 };
     // First receive at t=0 → enqueued, worker "starts" (pending), never done.
@@ -757,8 +756,7 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
     // --- First boot: receive → claim → work (count 1) → complete. The queue
     // item is left RUNNING (host never reached markDone) but the key is DONE
     // in the cache. Then the DO evicts. ---
-    const r1 = run(wiredMachine(intake), { ctx, store });
-    await r1.ready;
+    const r1 = await run(wiredMachine(intake), { ctx, store }).ready;
     const payload: Hook = { id: "evt_1", amount: 5 };
     await r1.dispatch({ type: "receive", payload, at: 0, id: "q1" });
     await settle(r1, ctx);
@@ -778,8 +776,7 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
     // --- CRASH + reboot from the SAME persisted bytes. The host dispatches a
     // `boot` Msg, then resumes the drain with `claim`. A correct intake must
     // skip the already-done item on BOTH paths → the worker never re-runs. ---
-    const r2 = run(wiredMachine(intake), { ctx, store });
-    await r2.ready;
+    const r2 = await run(wiredMachine(intake), { ctx, store }).ready;
     await r2.dispatch({ type: "boot" });
     await settle(r2, ctx);
     await r2.dispatch({ type: "claim", at: 100 }); // resume drain

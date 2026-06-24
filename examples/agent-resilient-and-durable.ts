@@ -152,8 +152,7 @@ async function act1Reliability() {
   );
   const guarded = withDeadline(resilient, { ms: 10_000 });
 
-  const runtime = run(guarded, { ctx });
-  await runtime.ready;
+  const runtime = await run(guarded, { ctx }).ready;
 
   say("the agent dispatched ONE tool call: weather('Istanbul')");
   await runtime.dispatch({ type: "call", city: "Istanbul", at: Date.now() });
@@ -401,11 +400,10 @@ async function act2Durability() {
   //     research); in production the prompt is rebuilt from the durable turns. ---
   const agentB = makeAgent({ i: 1 });
   const machineB = agentB.toMachine<object>({ toolInterpret: toolInterpret() });
-  const runtimeB = run(machineB, {
+  const runtimeB = await run(machineB, {
     ctx: {} as object,
     store: snapshotStore(snapshot),
-  });
-  await runtimeB.ready;
+  }).ready;
 
   const resumed = runtimeB.getState();
   say(
@@ -447,9 +445,8 @@ async function act3Replay() {
   const cursor = { i: 0 };
   const agent = makeAgent(cursor);
   const machine = agent.toMachine<object>({ toolInterpret: toolInterpret() });
-  const runtime = run(machine, { ctx: {} as object });
+  const runtime = await run(machine, { ctx: {} as object }).ready;
   const rec = recorder<ResearchState, AgentMsg>(runtime);
-  await runtime.ready;
 
   say("prod: recording the Msg trace of a full agent run...");
   await runtime.dispatch({ type: "agent_start", runId: "run-99", at: 0 });

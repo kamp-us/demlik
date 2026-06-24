@@ -58,8 +58,8 @@ function collectErrors() {
 describe("supervision: stop (the safe default)", () => {
   it("default (no supervision) surfaces the reduce throw and halts the runtime", async () => {
     const { seen, onError } = collectErrors();
-    const runtime = run(throwingMachine(), { ctx: undefined, onError });
-    await runtime.ready;
+    const runtime = await run(throwingMachine(), { ctx: undefined, onError })
+      .ready;
 
     // The throwing dispatch rejects with the reducer error — the halt is
     // observable, never a silent resume.
@@ -84,12 +84,11 @@ describe("supervision: stop (the safe default)", () => {
   it("explicit { strategy: 'stop' } behaves identically to the default", async () => {
     const { seen, onError } = collectErrors();
     const supervision: Supervision<State, Msg> = { strategy: "stop" };
-    const runtime = run(throwingMachine(), {
+    const runtime = await run(throwingMachine(), {
       ctx: undefined,
       onError,
       supervision,
-    });
-    await runtime.ready;
+    }).ready;
 
     await expect(runtime.dispatch({ type: "boom" })).rejects.toBe(REDUCE_BOOM);
     expect(seen[0]?.context.phase).toBe("reduce");
@@ -103,12 +102,11 @@ describe("supervision: stop (the safe default)", () => {
 describe("supervision: escalate (surface + propagate, runtime stays live)", () => {
   it("surfaces via onError, rejects the dispatch, but does NOT halt the runtime", async () => {
     const { seen, onError } = collectErrors();
-    const runtime = run(throwingMachine(), {
+    const runtime = await run(throwingMachine(), {
       ctx: undefined,
       onError,
       supervision: "escalate",
-    });
-    await runtime.ready;
+    }).ready;
 
     // First advance state so we can prove the runtime keeps folding afterward.
     await runtime.dispatch({ type: "inc" });
@@ -135,12 +133,11 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
       (_state: State, _msg: Msg, _error: unknown): State => lastGood,
     );
 
-    const runtime = run(throwingMachine(), {
+    const runtime = await run(throwingMachine(), {
       ctx: undefined,
       onError,
       supervision: { strategy: "restart", rehydrate },
-    });
-    await runtime.ready;
+    }).ready;
 
     // The throwing dispatch RESOLVES — restart recovered.
     await expect(runtime.dispatch({ type: "boom" })).resolves.toBeUndefined();
@@ -181,13 +178,12 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
       },
     };
     const lastGood: State = { n: 7 };
-    const runtime = run(throwingMachine(), {
+    const runtime = await run(throwingMachine(), {
       ctx: undefined,
       store,
       onError,
       supervision: { strategy: "restart", rehydrate: () => lastGood },
-    });
-    await runtime.ready;
+    }).ready;
     saved.length = 0; // drop the boot save
 
     await runtime.dispatch({ type: "boom" });
@@ -200,7 +196,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
   it("a throw inside rehydrate itself propagates (recovery source is broken)", async () => {
     const { seen, onError } = collectErrors();
     const REHYDRATE_FAIL = new Error("snapshot source unreachable");
-    const runtime = run(throwingMachine(), {
+    const runtime = await run(throwingMachine(), {
       ctx: undefined,
       onError,
       supervision: {
@@ -209,8 +205,7 @@ describe("supervision: restart (re-init from host last-known-good, keep folding)
           throw REHYDRATE_FAIL;
         },
       },
-    });
-    await runtime.ready;
+    }).ready;
 
     // The original reduce failure is still surfaced as data ...
     await expect(runtime.dispatch({ type: "boom" })).rejects.toBe(
@@ -232,12 +227,11 @@ describe("supervision: a non-throwing reducer is unaffected", () => {
       "escalate",
       { strategy: "restart", rehydrate: () => ({ n: 0 }) },
     ] as const) {
-      const runtime = run(throwingMachine(), {
+      const runtime = await run(throwingMachine(), {
         ctx: undefined,
         onError: () => {},
         supervision,
-      });
-      await runtime.ready;
+      }).ready;
       await runtime.dispatch({ type: "inc" });
       await runtime.dispatch({ type: "inc" });
       expect(runtime.getState()).toEqual({ n: 2 });
