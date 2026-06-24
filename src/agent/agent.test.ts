@@ -13,8 +13,10 @@ import {
   type LlmRunCmd,
   type MonitoredRunCmd,
   type Schema,
+  status,
   type ToolCall,
 } from "./index";
+import { agentIsResumable } from "../do/host";
 
 // ---------------------------------------------------------------------------
 // Fixtures — a two-stage agent ("plan" → "act") whose brain calls both return
@@ -1066,5 +1068,139 @@ describe("createAgent — properties", () => {
       expect(s.failure).toEqual({ reason: "llm", error: llmErr, at: 10 });
       roundTrips(s);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// status — THE single typed lifecycle channel (issue #49). One discriminated
+// union replacing the private-shape re-derivation every caller reached into.
+// ---------------------------------------------------------------------------
+
+describe("createAgent — status (the typed lifecycle channel, #49)", () => {
+  const llmErr: LlmErr<Purpose> = {
+    key: "plan_turn",
+    purpose: "plan_turn",
+    reason: "e",
+    error: { _tag: "boom" },
+  };
+
+  it("running, not awaiting tools → { kind: 'running' }", () => {
+    const agent = makeAgent();
+    // Just started: a fresh conversation awaiting the first brain call (llm).
+    const [s] = agent.start(agent.init(), "r", 0);
+    expect(s.conversation?.awaiting.kind).toBe("llm");
+    expect(status(s)).toEqual({ kind: "running" });
+  });
+
+  it("never-run init slice → { kind: 'running' } (live, no conversation)", () => {
+    const agent = makeAgent();
+    expect(status(agent.init())).toEqual({ kind: "running" });
+  });
+
+  it("running + awaiting tools → { kind: 'suspended', pending } with the outstanding calls", () => {
+    const agent = makeAgent();
+    let [s] = agent.start(agent.init(), "r", 0);
+    // A turn with two tools: serial dispatch leaves c1 running, c2 pending —
+    // `pending` reports the in-flight fan-out batch (`tools.running`).
+    [s] = agent.turn(s, turnWith(tool("c1"), tool("c2")), 10);
+    expect(s.conversation?.awaiting.kind).toBe("tools");
+    const st = status(s);
+    expect(st.kind).toBe("suspended");
+    if (st.kind !== "suspended") throw new Error("expected suspended");
+    expect(st.pending.map((c) => c.callId)).toEqual(["c1"]);
+    expect(st.pending).toBe(s.tools.running);
+  });
+
+  it("done → { kind: 'done', output } reading state.run.output (#46)", () => {
+    const agent = makeAgent();
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(), 10); // plan → act
+    [s] = agent.turn(s, turnWith(), 20); // act → done
+    expect(s.run.phase).toBe("done");
+    expect(status(s)).toEqual({
+      kind: "done",
+      output: { content: "thinking", toolCalls: [] },
+    });
+    // The output matches state.output exactly.
+    const st = status(s);
+    if (st.kind !== "done") throw new Error("expected done");
+    expect(st.output).toBe(s.output);
+  });
+
+  it("failed via the AGENT channel (turn_limit) → { kind: 'failed', failure }", () => {
+    const agent = makeAgent({ maxTurns: 1 });
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(tool("c1")), 10);
+    [s] = agent.toolOk(s, "c1", "x", 20); // turnCount 1 == maxTurns → fail
+    // turn_limit leaves run.phase === "running" but failure non-null; status
+    // must NOT misreport this as running.
+    expect(s.run.phase).toBe("running");
+    expect(s.failure).toEqual({ reason: "turn_limit", at: 20 });
+    expect(status(s)).toEqual({
+      kind: "failed",
+      failure: { reason: "turn_limit", at: 20 },
+    });
+  });
+
+  it("failed via the AGENT channel (llm) → { kind: 'failed', failure } carrying the error", () => {
+    const agent = makeAgent({ retry: undefined }); // no retry → first failure is terminal
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.fail(
+      s,
+      "plan_turn",
+      { type: "resilient_err", key: "plan_turn", error: llmErr, at: 10 },
+      10,
+    );
+    expect(s.failure).toEqual({ reason: "llm", error: llmErr, at: 10 });
+    expect(status(s)).toEqual({
+      kind: "failed",
+      failure: { reason: "llm", error: llmErr, at: 10 },
+    });
+  });
+
+  it("failed via the MONITORED-RUN channel (deadline) → unified failure from run.failure", () => {
+    const agent = makeAgent({ deadlineMs: 1000 });
+    const [s0] = agent.start(agent.init(), "r", 100);
+    const safety = agent
+      .subs(s0)
+      .find((sub) => sub.id.startsWith("monitored:safety:"));
+    const [s] = agent.onTimer(s0, {
+      type: "deadline_exceeded",
+      id: safety?.id ?? "",
+      atMs: 2000,
+    });
+    expect(s.run.phase).toBe("failed");
+    expect(s.failure).toBeNull(); // the AGENT channel is empty here
+    // The unified failure absorbs the run.failure channel — callers no longer
+    // union state.failure vs state.run.failure by hand.
+    expect(status(s)).toEqual({
+      kind: "failed",
+      failure: { reason: "deadline", at: 2000 },
+    });
+  });
+
+  it("agentIsResumable(s) === (status(s).kind === 'suspended') for representative states", () => {
+    const agent = makeAgent({ maxTurns: 1 });
+    // running (awaiting llm)
+    const [running] = agent.start(agent.init(), "r", 0);
+    // suspended (awaiting tools)
+    const [suspended] = agent.turn(running, turnWith(tool("c1"), tool("c2")), 10);
+    // done
+    let [done] = agent.start(makeAgent().init(), "r", 0);
+    [done] = makeAgent().turn(done, turnWith(), 10);
+    [done] = makeAgent().turn(done, turnWith(), 20);
+    // failed (turn_limit)
+    let [failed] = agent.start(agent.init(), "r", 0);
+    [failed] = agent.turn(failed, turnWith(tool("c9")), 10);
+    [failed] = agent.toolOk(failed, "c9", "x", 20);
+
+    for (const s of [running, suspended, done, failed, agent.init()]) {
+      expect(agentIsResumable(s)).toBe(status(s).kind === "suspended");
+    }
+    // And sanity: exactly the suspended state is resumable.
+    expect(agentIsResumable(suspended)).toBe(true);
+    expect(agentIsResumable(running)).toBe(false);
+    expect(agentIsResumable(done)).toBe(false);
+    expect(agentIsResumable(failed)).toBe(false);
   });
 });

@@ -123,6 +123,7 @@ import {
   type DeadlineSub,
   type MonitoredRunCmd,
   type MonitoredRunState,
+  type RunFailure,
 } from "../monitored-run";
 import type { RetryPolicy } from "../retry-backoff";
 
@@ -429,6 +430,106 @@ export interface AgentState<
    * total without a purpose-indexing narrow.
    */
   readonly output: AgentTurn | null;
+}
+
+// ===========================================================================
+// Lifecycle status — the ONE typed channel callers read instead of re-deriving
+// the private slice shape (issue #49).
+// ===========================================================================
+
+/**
+ * The unified terminal failure (issue #49). The agent terminates `failed`
+ * through TWO independent slice channels:
+ *
+ *   - `state.failure` (`AgentFailure`) — the AGENT'S OWN annotation
+ *     (`turn_limit` livelock guard / `llm` exhausted-retry). Set WITHOUT moving
+ *     `run.phase` (it stays `running`); `isSettled` treats a non-null `failure`
+ *     as terminal regardless of `run.phase`.
+ *   - `state.run.failure` (`RunFailure`) — the monitored-run channel
+ *     (`deadline` watchdog / `stage` failure), present iff `run.phase` is
+ *     `"failed"`.
+ *
+ * Callers used to union these by hand at every status question. `status`
+ * collapses them into ONE `failure`, so a consumer reads `status(s).failure`
+ * without knowing which channel produced it.
+ */
+export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
+
+/**
+ * The agent's lifecycle status — THE single typed channel for "what is this run
+ * doing?" (issue #49). A discriminated union on `kind` so any change to the
+ * private slice shape (`Awaiting`, the failure channels, `run.phase`) forces a
+ * compile error at the call sites that switch on it, instead of silently
+ * breaking a hand-rolled re-derivation. Make-invalid-states-unrepresentable:
+ *
+ *   - `running`   — live, NOT awaiting tools (a brain call is in flight, or the
+ *                   run is between stages). Not resumable on cold wake by
+ *                   itself — the in-flight brain call re-fires from `boot`.
+ *   - `suspended` — the RESUMABLE case: running + a live conversation +
+ *                   `awaiting.kind === "tools"`. `pending` is the outstanding
+ *                   tool calls (`conversation.awaiting` … the in-flight batch),
+ *                   read off `tools.running`. This is exactly the shape
+ *                   `agentIsResumable` re-derived by hand.
+ *   - `done`      — the pipeline finished; `output` is the terminal model turn
+ *                   stamped on `state.output` (issue #46), `null` if the run
+ *                   produced no turn.
+ *   - `failed`    — terminal failure; `failure` is the UNIFIED channel
+ *                   (`AgentTerminalFailure`), absorbing the `state.failure` vs
+ *                   `state.run.failure` dual channel so callers stop unioning.
+ */
+export type AgentStatus<Stage> =
+  | { readonly kind: "running" }
+  | { readonly kind: "suspended"; readonly pending: readonly ToolCall[] }
+  | { readonly kind: "done"; readonly output: AgentTurn | null }
+  | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> };
+
+/**
+ * Derive the agent's lifecycle `status` from its durable slice — the pure
+ * status function that REPLACES every caller's hand re-derivation of the private
+ * shape (issue #49). PURE — reads no clock / RNG, allocates one small record.
+ *
+ * Ordering is terminal-first so a settled run never reports `running`:
+ *
+ *   1. `state.failure` (the agent's own annotation, set WITHOUT moving
+ *      `run.phase`) → `failed`. Checked first because `turn_limit` / `llm`
+ *      leave `run.phase === "running"`; reading `run.phase` first would
+ *      misreport such a run as `running`. This is the canonical failure source
+ *      when present.
+ *   2. `run.phase === "failed"` → `failed`, carrying `run.failure` (deadline /
+ *      stage). The fallback channel.
+ *   3. `run.phase === "done"` → `done` with `state.output` (#46).
+ *   4. running + conversation + `awaiting.kind === "tools"` → `suspended` with
+ *      the outstanding tool calls (`tools.running`). THE resumability condition.
+ *   5. otherwise → `running`.
+ */
+export function status<Stage, P extends string, O extends Record<P, unknown>, R>(
+  s: AgentState<Stage, P, O, R>,
+): AgentStatus<Stage> {
+  // 1) The agent's own failure annotation is canonical — it is set without
+  //    moving `run.phase` (turn_limit / llm leave the run `running`), so it
+  //    MUST be read before `run.phase` or such a failure reports as `running`.
+  if (s.failure !== null) {
+    return { kind: "failed", failure: s.failure };
+  }
+  // 2) The monitored-run terminal failure (deadline / stage). `run.failure` is
+  //    non-null exactly when `phase === "failed"` (the run-state invariant), so
+  //    the `!== null` guard narrows it with no assertion and no fabricated
+  //    fallback — the unreachable phase-failed-yet-failure-null state falls
+  //    through rather than inventing a failure to report.
+  if (s.run.phase === "failed" && s.run.failure !== null) {
+    return { kind: "failed", failure: s.run.failure };
+  }
+  // 3) The pipeline finished — the terminal output landed on `state.output`.
+  if (s.run.phase === "done") {
+    return { kind: "done", output: s.output };
+  }
+  // 4) Running + a live conversation awaiting tools → suspended (resumable).
+  //    The outstanding calls are the in-flight fan-out batch (`tools.running`).
+  if (s.conversation !== null && s.conversation.awaiting.kind === "tools") {
+    return { kind: "suspended", pending: s.tools.running };
+  }
+  // 5) Otherwise the run is live and not awaiting tools.
+  return { kind: "running" };
 }
 
 // ===========================================================================
@@ -1540,4 +1641,8 @@ export type {
   // a consumer wiring `toMachine`'s `toolInterpret` for a snapshotting agent
   // needs it to type the `snapshot_write` cell.
   MonitoredRunCmd,
+  // `RunFailure` is half of the unified `AgentTerminalFailure` (#49) — a
+  // consumer narrowing `status(s).failure` needs to name the monitored-run
+  // failure channel.
+  RunFailure,
 };

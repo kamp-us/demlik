@@ -27,7 +27,7 @@
  * is the documented, deliberate choice over widening the agent's Sub union.
  */
 
-import type { AgentMachineMsg, AgentState } from "../agent/index";
+import { type AgentMachineMsg, type AgentState, status } from "../agent/index";
 import type { BootingRuntime, Runtime } from "../index";
 import type {
   EffectConfirmed,
@@ -258,9 +258,13 @@ export function durableDeferredGateway<R>(
 
 /**
  * True iff an agent slice loaded from storage is mid-loop (running + awaiting
- * tools) — the resumable case `agent_boot` re-fires. This is the agent's own
- * suspend predicate, lifted out of the consumer so it stops re-deriving the
- * `awaiting.kind === "tools"` shape by hand.
+ * tools) — the resumable case `agent_boot` re-fires.
+ *
+ * The resumability question IS "is the run suspended on tools?" — so this
+ * delegates to the agent's own typed `status` channel (issue #49) rather than
+ * re-deriving the private `run.phase` / `conversation.awaiting` shape by hand.
+ * The host no longer leaks the agent's internal slice structure; a change to
+ * `Awaiting` surfaces as a compile error in `status`, not a silent break here.
  */
 export function agentIsResumable<
   Stage,
@@ -268,11 +272,7 @@ export function agentIsResumable<
   O extends Record<P, unknown>,
   R,
 >(state: AgentState<Stage, P, O, R>): boolean {
-  return (
-    state.run.phase === "running" &&
-    state.conversation !== null &&
-    state.conversation.awaiting.kind === "tools"
-  );
+  return status(state).kind === "suspended";
 }
 
 /**
