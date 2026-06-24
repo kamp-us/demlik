@@ -408,6 +408,27 @@ export interface AgentState<
   readonly tools: FanOutState<ToolCall, ToolOutcome<R>>;
   readonly conversation: Conversation<R> | null;
   readonly failure: AgentFailure | null;
+  /**
+   * The run's terminal output — the FIRST-CLASS result (issue #46). `null`
+   * until the pipeline finishes; set to the last model turn (the empty-tool
+   * turn that retired the final stage) the instant `run.phase` becomes `"done"`.
+   *
+   * This survives the `conversation` clear on stage retire: clearing the
+   * conversation is correct durability hygiene (a finished stage's transcript
+   * is not live state), but the run's PRODUCT is, so it lives here on the
+   * durable slice rather than being scraped off the `observe` firehose by
+   * matching the private `resilient_ok` Msg and racing the clear (the old
+   * `captureLastTurn` dance this field deletes). A consumer reads
+   * `runtime.result()?.output` / `(await runtime.done()).output`.
+   *
+   * Typed `AgentTurn | null` (not `O[P]`): the run's output is always a model
+   * turn — the `O extends Record<P, AgentTurn>` knob bound pins every purpose's
+   * output to an `AgentTurn`, and the terminating turn is the one with no tool
+   * calls. The wider `Record<P, unknown>` bound on `AgentState` itself does not
+   * constrain `O[P]`, so naming the concrete `AgentTurn` keeps this field's type
+   * total without a purpose-indexing narrow.
+   */
+  readonly output: AgentTurn | null;
 }
 
 // ===========================================================================
@@ -740,6 +761,7 @@ export function createAgent<
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
       conversation: null,
       failure: null,
+      output: null,
     };
   }
 
@@ -806,6 +828,9 @@ export function createAgent<
       run: runSlice,
       conversation,
       failure: null,
+      // A restart clears the prior run's terminal output — `result()` reads
+      // `undefined` again until THIS run finishes (#46).
+      output: null,
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
     };
     const call = brainCall(withRun);
@@ -844,8 +869,10 @@ export function createAgent<
     };
 
     // ── No tool calls → the stage's loop is done → advance the pipeline. ──
+    // `result` is the terminating turn — threaded into `advanceStage` so it can
+    // be stamped as the run's `output` when this retire finishes the pipeline.
     if (result.toolCalls.length === 0) {
-      return advanceStage({ ...s, conversation: withTurn }, at);
+      return advanceStage({ ...s, conversation: withTurn }, result, at);
     }
 
     // ── Tool calls → scatter across fan-out (serial by default). ──
@@ -876,9 +903,15 @@ export function createAgent<
    * seed a fresh conversation for the next stage and fire its first brain call.
    * Shared by `turn` (empty tool calls) so the loop-end → next-stage move lives
    * in one place. PURE.
+   *
+   * `terminatingTurn` is the empty-tool model turn that ended the current
+   * stage's loop. When THIS retire finishes the whole pipeline (`done`), it is
+   * the run's terminal output — stamped on `state.output` so it survives the
+   * conversation clear and `runtime.result()` can read it (#46).
    */
   function advanceStage(
     s: State,
+    terminatingTurn: AgentTurn,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const [runSlice, runCmds] = run.advance(
@@ -887,9 +920,15 @@ export function createAgent<
       { kind: "ok" },
       at,
     );
-    // Pipeline finished (or single-shot done) → no further brain call.
+    // Pipeline finished (or single-shot done) → no further brain call. The
+    // terminating turn is the run's output; record it before clearing the
+    // conversation so the result survives the retire (the field the deleted
+    // `captureLastTurn` host hook used to reconstruct off the stream).
     if (runSlice.phase === "done") {
-      return [{ ...s, run: runSlice, conversation: null }, runCmds];
+      return [
+        { ...s, run: runSlice, conversation: null, output: terminatingTurn },
+        runCmds,
+      ];
     }
     // Next stage → fresh conversation + its first brain call.
     const conversation = freshConversation();

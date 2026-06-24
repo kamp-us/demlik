@@ -3,9 +3,11 @@
  * @demlik/tea/do — CQRS projections as a first-class seam.
  *
  * TODAY (`./host`), "Model → views" is ad-hoc: `sseHub` is a hand-rolled
- * sink-set fanning `runtime.observe` events out; `captureLastTurn` is another
- * observe-driven read model. Each one re-derives the same shape: subscribe to
- * `observe`, fold each update into a private view, push the view at a sink.
+ * sink-set fanning `runtime.observe` events out. It re-derives a common shape:
+ * subscribe to `observe`, fold each update into a private view, push the view
+ * at a sink. (The run's terminal output was once another such observe-driven
+ * read model — `captureLastTurn` — but that is now modelled first-class on the
+ * write model itself as `state.output` / `runtime.result()`, #46.)
  *
  * This file names that shape. A `Projection<Model, View>` is the canon's
  * "one write model, many projections" contract made concrete on the tea
@@ -40,8 +42,7 @@
  * Relationship to `./host`: `sseHub` is re-expressed here as ONE projection
  * (`sseProjection`) WITHOUT changing its public API — `host.sseHub()` keeps
  * working for existing callers (it is the volatile, offset-free case: a live
- * SSE stream has no durable read model to resume). `captureLastTurn` is another
- * projection in spirit (its view is "the last AgentTurn"); it is left as-is.
+ * SSE stream has no durable read model to resume).
  *
  * Relationship to `./event-sourced-store`: a durable projection resumes over
  * the SAME append-only event log `doEventSourcedStore` (#68) writes. The fold

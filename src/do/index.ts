@@ -81,7 +81,6 @@ export {
   agentIsResumable,
   autoBoot,
   broadcast,
-  captureLastTurn,
   type DeferredGateway,
   deferredGateway,
   dispatchToIdle,

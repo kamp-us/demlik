@@ -27,8 +27,7 @@
  * is the documented, deliberate choice over widening the agent's Sub union.
  */
 
-import type { AgentMachineMsg, AgentState, AgentTurn } from "../agent/index";
-import { isAgentTurn } from "../agent/index";
+import type { AgentMachineMsg, AgentState } from "../agent/index";
 import type { BootingRuntime, Runtime } from "../index";
 import type {
   EffectConfirmed,
@@ -500,70 +499,13 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// captureLastTurn — clean terminal-output access (seam E).
-//
-// CAUSE: the agent's `advanceStage` clears `conversation` to `null` when a stage
-// retires (and the whole pipeline finishes `done`), so a consumer that reads
-// `state.conversation` after the run completes sees nothing — it was forced to
-// scrape the verdict off the transition stream (`lastVerdict`).
-//
-// FIX (host-side, no agent change): the agent already RE-ENTERS every brain turn
-// as a `resilient_ok` Msg whose `result.output` is the parsed `AgentTurn`. That
-// Msg fires on the runtime's observe channel BEFORE `succeed` advances + clears
-// the conversation. So the host attaches one `observe` hook that snapshots the
-// last `AgentTurn` the agent produced — the run's terminal output survives the
-// stage retire. The consumer reads `lastTurn()` instead of scraping the stream.
-//
-// (We keep the fix in the host rather than the agent: clearing `conversation`
-// on retire is correct durability hygiene — a finished stage's transcript is not
-// live state. The right place to PRESERVE a terminal read is the observability
-// layer the host already owns, not the durable slice.)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Capture the last `AgentTurn` an agent runtime produces, off its `resilient_ok`
- * settle Msg. Returns `{ last, stop }`:
- *   - `last()` — the most recent `AgentTurn` the brain produced, or `null` before
- *     the first turn settles. Survives the conversation clear on stage retire.
- *   - `stop()` — detach the observer (idempotent).
- *
- * Deletes the consumer's `lastVerdict` field + the `resilient_ok` branch in its
- * `streamTransition` that snapshotted it. The consumer maps the captured turn to
- * its own terminal shape (e.g. a verdict = the turn with no tool calls).
- */
-export function captureLastTurn<
-  Stage,
-  P extends string,
-  O extends Record<P, unknown>,
-  R,
->(
-  // Accepts a `BootingRuntime` (it only needs `observe`, which is total before
-  // boot) so a host can wire transition capture on the synchronous `run()`
-  // handle, before awaiting `ready`. A full `Runtime` also satisfies it.
-  runtime: BootingRuntime<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>>,
-): { last(): AgentTurn | null; stop(): void } {
-  let lastTurn: AgentTurn | null = null;
-  const unobserve = runtime.observe((msg) => {
-    if (msg !== null && msg.type === "resilient_ok") {
-      // `result.output` is the parsed brain turn (the agentic purpose's output
-      // is an `AgentTurn` per the agent's config contract). Validate rather than
-      // cast — this is the one spot that reads an unknown off the settle Msg, so
-      // it uses the exported `isAgentTurn` witness instead of trusting the shape.
-      const output: unknown = msg.result.output;
-      if (isAgentTurn(output)) lastTurn = output;
-    }
-  });
-  let stopped = false;
-  return {
-    last: () => lastTurn,
-    stop: () => {
-      if (stopped) return;
-      stopped = true;
-      unobserve();
-    },
-  };
-}
+// captureLastTurn DELETED (issue #46). It existed only to reconstruct the run's
+// terminal output off the `observe` firehose — match the private `resilient_ok`
+// Msg, validate `result.output`, and snapshot it BEFORE `succeed` cleared the
+// conversation on stage retire. The agent now models termination first-class:
+// `state.output` holds the terminal turn on `done`, and `Runtime.result()` /
+// `Runtime.done()` read it. A consumer reads `runtime.result()?.output` — no
+// observer hook, no internal-Msg coupling, no state-clear race.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // dispatchToIdle — run-to-quiescence (core lift).

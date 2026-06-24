@@ -218,6 +218,23 @@ describe("createAgent — turn (empty tool calls → advance the pipeline)", () 
     expect(done.run.phase).toBe("done");
     expect(done.conversation).toBeNull();
     expect(cmds).toEqual([]); // no further brain call
+    // #46: the terminating turn is stamped on `output`, surviving the
+    // conversation clear — the first-class result a consumer reads.
+    expect(done.output).toEqual({ content: "thinking", toolCalls: [] });
+  });
+
+  it("output is null before the run finishes and is the final turn on done (#46)", () => {
+    const agent = makeAgent();
+    const fresh = agent.init();
+    expect(fresh.output).toBeNull(); // never-run agent → no result
+    let [s] = agent.start(fresh, "r", 0);
+    expect(s.output).toBeNull(); // mid-run → still no result
+    [s] = agent.turn(s, turnWith(), 10); // plan → act (still running)
+    expect(s.run.phase).toBe("running");
+    expect(s.output).toBeNull();
+    [s] = agent.turn(s, turnWith(), 20); // act → done
+    expect(s.run.phase).toBe("done");
+    expect(s.output).toEqual({ content: "thinking", toolCalls: [] });
   });
 });
 

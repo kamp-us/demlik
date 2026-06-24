@@ -1026,6 +1026,40 @@ export interface Runtime<S, M extends { type: string }>
    * first-class awaitable moment, not a poll the consumer re-derives).
    */
   idle(): Promise<void>;
+  /**
+   * The terminal State of the run, or `undefined` while it is still in flight.
+   * A run is "terminal" exactly when the `terminal` predicate passed to `run()`
+   * returns `true` for the current State; with no predicate supplied a run is
+   * never terminal and this always returns `undefined`.
+   *
+   * This is the FIRST-CLASS result read (issue #46): the outcome of running the
+   * thing, off the State the machine already owns — NOT scraped off the
+   * `observe` firehose by matching an internal Msg name (`resilient_ok`) and
+   * racing a state-clear. The consumer reads the run's product (e.g. an agent's
+   * `state.output`) off the returned `S`, with no coupling to the machine's
+   * private retry / loop vocabulary.
+   *
+   * Total — never throws (a `Runtime` always has a State; see `getState`).
+   */
+  result(): S | undefined;
+  /**
+   * Resolves with the terminal State the first time the run reaches a terminal
+   * State (per the `terminal` predicate passed to `run()`). If the run is
+   * ALREADY terminal when `done()` is called, resolves immediately with the
+   * current State; otherwise resolves on the transition that first makes
+   * `terminal` hold.
+   *
+   * The awaitable companion to `result()` — "wait for the run to finish, then
+   * hand me what it produced" in one call, instead of polling `result()` or
+   * hand-rolling an `observe` loop that watches for a private terminal Msg.
+   * With no `terminal` predicate supplied the run is never terminal, so this
+   * promise never resolves (a non-terminating machine has no result to await).
+   *
+   * Idempotent and multi-caller safe: every call observes the live State, so a
+   * call made after the run already terminated resolves at once, and concurrent
+   * callers all settle on the same terminal transition.
+   */
+  done(): Promise<S>;
 }
 
 // === defineMachine: identity-typed pass-through ===
@@ -1158,6 +1192,19 @@ export function run<
      */
     supervision?: Supervision<S, M>;
     /**
+     * The run-terminality predicate — what makes the run's outcome first-class
+     * (issue #46). Returns `true` for a State the run has finished in (e.g. an
+     * agent's `state.run.phase === "done"`). The runtime feeds it to
+     * `Runtime.result()` (the terminal State, or `undefined` in flight) and
+     * `Runtime.done()` (resolves with the terminal State when it first holds).
+     *
+     * PURE — the runtime calls it inside the dispatch loop on the freshly-folded
+     * State; it must not read the clock, mutate, or throw. Omit → the run is
+     * never terminal: `result()` always returns `undefined` and `done()` never
+     * resolves (the right behavior for a machine with no natural completion).
+     */
+    terminal?: (state: S) => boolean;
+    /**
      * Iteration cap for `idle()`'s quiescence wait. Defaults to 100_000. Test
      * seam only — lets a livelock test trip the `QuiescenceTimeoutError` reject
      * path in a handful of iterations instead of 100k. Production code must not
@@ -1170,6 +1217,10 @@ export function run<
 ): BootingRuntime<S, M> {
   const { ctx, store } = opts;
   const idleCap = opts.__idleCap ?? 100_000;
+  // The run-terminality predicate (#46). Defaults to "never terminal" so a
+  // machine with no natural completion has a sound `result()`/`done()` (always
+  // undefined / never resolves) rather than a missing one.
+  const isTerminal: (state: S) => boolean = opts.terminal ?? (() => false);
   // The error sink for paths with no caller to reject at (follow-up dispatch
   // rejections, the final stop-save). Optional on `run`; when absent we fall
   // back to `defaultOnError`, which re-throws on a macrotask so the failure
@@ -1201,6 +1252,12 @@ export function run<
   // Observers receive (msg, state) for every completed transition. Boot fires
   // once with msg = null. Same throw-isolation contract as listeners.
   const observers = new Set<(msg: M | null, state: S) => void>();
+  // `done()` waiters (#46): each open `done()` call parks its resolver here.
+  // The first transition that makes `isTerminal(state)` hold drains the set,
+  // resolving every parked promise with the terminal State. A `done()` call
+  // made AFTER the run is already terminal resolves immediately and never
+  // parks (so it can never miss the terminal transition).
+  const doneWaiters = new Set<(state: S) => void>();
 
   // Port subscriber registry. Keyed by Port reference (NOT name) — port
   // identity is nominal/by-reference per Elm semantics. Each port can have
@@ -1458,6 +1515,24 @@ export function run<
   }
 
   /**
+   * Resolve every parked `done()` waiter iff the just-folded State is terminal
+   * (#46). Called once per completed transition (including boot), right after
+   * the observer fanout, so a `done()` promise settles on the SAME transition a
+   * synchronous `result()` would first return non-`undefined`. Drains the set
+   * before resolving (a resolver enqueued anew during the drain belongs to the
+   * next call, not this one — but a terminal State stays terminal, so the new
+   * waiter's own `done()` call already resolved it immediately).
+   */
+  function settleDoneWaiters(): void {
+    if (doneWaiters.size === 0 || state === undefined) return;
+    if (!isTerminal(state)) return;
+    const snapshot = state;
+    const parked = [...doneWaiters];
+    doneWaiters.clear();
+    for (const resolve of parked) resolve(snapshot);
+  }
+
+  /**
    * One full transition: update → save → reconcile subs → interpret → fire
    * listeners. Save-before-effects is the hard ordering; tests pin it.
    *
@@ -1497,6 +1572,7 @@ export function run<
           // No cmds to interpret — the reducer never returned a result.
           fireListeners();
           fireObservers(msg);
+          settleDoneWaiters();
           return;
         }
         case "escalate":
@@ -1522,6 +1598,7 @@ export function run<
     await runInterpret(cmds);
     fireListeners();
     fireObservers(msg);
+    settleDoneWaiters();
   }
 
   /**
@@ -1586,6 +1663,9 @@ export function run<
     await runInterpret(pendingInitCmds);
     fireListeners();
     fireObservers(null);
+    // A rehydrated boot can land in a terminal State (the run finished before
+    // the last eviction) — settle any `done()` waiter parked before boot.
+    settleDoneWaiters();
   }
 
   /**
@@ -1714,6 +1794,26 @@ export function run<
       // than the old silent fall-through-resolve) keeps "quiesced" and "gave
       // up" distinguishable — invariant 6: no silent failures.
       throw new QuiescenceTimeoutError(idleCap);
+    },
+    result(): S | undefined {
+      // TOTAL — `state` is defined for any holder of a `Runtime` (see
+      // `getState`). The terminal predicate is the ONLY thing that decides
+      // "finished"; with none supplied `isTerminal` is `() => false`, so a
+      // non-terminating machine reads `undefined` forever (#46).
+      const current = state as S;
+      return isTerminal(current) ? current : undefined;
+    },
+    done(): Promise<S> {
+      // Already terminal → resolve at once with the live State (never parks, so
+      // a post-termination call can't miss the terminal transition).
+      const current = state as S;
+      if (isTerminal(current)) return Promise.resolve(current);
+      // Otherwise park a resolver; `settleDoneWaiters` drains it on the
+      // transition that first makes `isTerminal` hold. With no predicate this
+      // promise never resolves — the documented "no natural completion" case.
+      return new Promise<S>((resolve) => {
+        doneWaiters.add(resolve);
+      });
     },
     async stop(): Promise<void> {
       stopped = true;

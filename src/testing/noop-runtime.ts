@@ -57,6 +57,15 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
     async idle(): Promise<void> {
       // No tail to drain — the no-op runtime never enqueues a follow-up.
     },
+    result(): S | undefined {
+      // The no-op runtime never advances, so it is never terminal (#46).
+      return undefined;
+    },
+    done(): Promise<S> {
+      // Never terminal → the awaitable never settles, matching `run()` with no
+      // `terminal` predicate. Returned as a never-resolving promise.
+      return new Promise<S>(() => {});
+    },
     getState(): S {
       // Lie if no initial state was provided. The caller's contract is
       // "you accept the lie because you know replay never invokes
