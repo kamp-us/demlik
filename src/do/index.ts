@@ -2,7 +2,7 @@
 /**
  * @demlik/tea/do — Durable Object adapter for `@demlik/tea`.
  *
- * Two exports drive the integration:
+ * The integration is built on ONE transport model and one durability primitive:
  *
  *   1. `doStore<S>(storage, parse, key?)` — `Store<S>` impl backed by
  *      `DurableObjectStorage`. JSON-stringifies on save, JSON-parses on load
@@ -14,32 +14,28 @@
  *      synchronously"). Shape mismatch is NOT a throw — `parse` returns
  *      `null` and the substrate boots fresh.
  *
- *   2. `doSubscribe<M, Ctx>()` — handler registry for the two DO-native sub
- *      types this package owns:
- *        - `do_alarm` — schedules a real DO alarm via `state.storage.setAlarm`;
- *          the cooperating DO's `alarm()` lifecycle method dispatches the sub's
- *          msg. Cleanup clears the alarm.
- *        - `do_ws`   — registers a WebSocket-id'd listener in a per-DO registry
- *          that the cooperating DO's `webSocketMessage()` consults. Cleanup
- *          deregisters.
+ *   2. `deferredGateway` + `createAgentHost` (from `./host`) — THE transport for
+ *      a DO-hosted agent. A `createAgent().toMachine()` machine owns exactly one
+ *      Sub type, `DeadlineSub` (the agent's own retry + watchdog timers); it has
+ *      no DO-native Sub variant to compose, and it needs none. The gateway owns
+ *      each deferred tool round-trip as a Promise the interpret cell awaits:
+ *        - Inbound WebSocket frames are bridged straight into `gateway.settle(...)`
+ *          from the DO's `webSocketMessage` lifecycle method — a direct dispatch,
+ *          NOT a Sub.
+ *        - The per-tool deadline is a `setTimeout` inside the gateway, NOT a DO
+ *          alarm.
+ *      One model: the transport lives outside the Sub system, bridged into
+ *      `dispatch` by the gateway. See `./host`'s module doc for the full rationale
+ *      and `.patterns/tea/durable-actors.md` for the host-layer north star.
  *
- * BOTH `do_alarm` and `do_ws` rely on the host DO cooperating: alarm and
- * webSocketMessage are DO lifecycle methods, not JS events the handler can
- * subscribe to from the outside. The cooperating DO must:
- *
- *   - Maintain a `Ctx` that exposes `state: DurableObjectState` AND the
- *     subscriber registries (`wsRegistry`, `alarmRegistry`). The handlers read
- *     from `ctx`.
- *   - Forward `alarm()` callbacks into the alarm registry by id, dispatching
- *     the registered msg.
- *   - Forward `webSocketMessage(ws, data)` callbacks into the ws registry,
- *     dispatching `sub.msg(data)` for matching `socketId`s.
- *
- * `src/test-worker.ts` is the canonical example of this cooperation. See
- * `test/README.md` for the convention.
+ * (Historical note: this module previously also shipped `do_ws` / `do_alarm`
+ * Subs + a `doSubscribe` registry. Because `toMachine` fixes the agent machine's
+ * Sub type to `DeadlineSub`, those Subs could never union into an agent host's
+ * Sub set — they were structurally unusable by the flagship consumer and had no
+ * callers. They were dropped in favor of the gateway as the single transport.)
  */
 
-import type { Store, Sub, SubId } from "../index";
+import type { Store } from "../index";
 
 // Durable pending-effects ledger (ADR 0003 primitive #1 — durable effects).
 // A pure fold over `effect_owed` / `effect_confirmed` events (NOT a side
@@ -164,155 +160,4 @@ export function doStore<S>(
       return parse(raw);
     },
   };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DoSub — the two DO-native subscription variants, locked in the PRD.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * A DO alarm sub: fires `msg` at `firesAt` (epoch ms). The substrate diffs
- * subs by `id`; same id across transitions = same alarm. To reschedule, emit
- * a DIFFERENT id (e.g., `audit-timeout-v2`).
- */
-export type DoAlarmSub<M> = {
-  id: SubId;
-  type: "do_alarm";
-  firesAt: number;
-  msg: M;
-};
-
-/**
- * A DO WebSocket sub: routes incoming messages on `socketId` through
- * `sub.msg(data)` to dispatch.
- */
-export type DoWsSub<M> = {
-  id: SubId;
-  type: "do_ws";
-  socketId: string;
-  msg: (data: string) => M;
-};
-
-export type DoSub<M> = DoAlarmSub<M> | DoWsSub<M>;
-
-// Compile-time guarantee: `DoSub<M>` is structurally a `Sub` (has `id`+`type`).
-// Erased at runtime — the `extends Sub` constraint on the alias's type
-// parameter fails to compile if `DoSub` ever drifts off the `Sub` shape.
-export type AssertDoSubIsSub<T extends Sub = DoSub<unknown>> = T;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ctx contract — what the cooperating DO must expose to `doSubscribe`.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Registry of pending alarm dispatches keyed by sub `id`. The cooperating DO's
- * `alarm()` lifecycle method drains this and dispatches each msg.
- *
- * One alarm-queue cell at a time per DO (DO has exactly one alarm slot). We
- * still key by `id` so multiple alarm subs scheduled in the same reconcile
- * pass don't clobber each other — the earliest `firesAt` wins (DO native
- * behavior) and `alarm()` drains everything due by the fire time.
- */
-export type DoAlarmRegistry<M> = Map<string, { firesAt: number; msg: M }>;
-
-/**
- * Registry of WebSocket message subscribers keyed by sub `id`. The cooperating
- * DO's `webSocketMessage(ws, data)` consults this and dispatches
- * `sub.msg(data)` for entries matching the incoming `socketId`.
- */
-export type DoWsRegistry<M> = Map<
-  string,
-  { socketId: string; msg: (data: string) => M }
->;
-
-/**
- * Minimum shape a cooperating DO must put on its `Ctx` for `doSubscribe`
- * handlers to wire up. Users may extend with anything else they like.
- */
-export interface DoSubscribeCtx<M> {
-  state: DurableObjectState;
-  alarmRegistry: DoAlarmRegistry<M>;
-  wsRegistry: DoWsRegistry<M>;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// doSubscribe — the handler registry.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Build the `subscribe` handler registry for `do_alarm` and `do_ws` subs.
- *
- * Returned object shape matches `Machine#subscribe`'s `[K in U['type']]:
- * (sub, ctx, dispatch) => () => void` contract for `U = DoSub<M>`.
- *
- * Generic `Ctx` is user-defined and must extend `DoSubscribeCtx<M>` so handlers
- * can reach `state.storage`, `alarmRegistry`, and `wsRegistry`.
- */
-export function doSubscribe<M, Ctx extends DoSubscribeCtx<M>>(): {
-  do_alarm: (
-    sub: DoAlarmSub<M>,
-    ctx: Ctx,
-    dispatch: (msg: M) => void,
-  ) => () => void;
-  do_ws: (sub: DoWsSub<M>, ctx: Ctx, dispatch: (msg: M) => void) => () => void;
-} {
-  return {
-    do_alarm: (sub, ctx, _dispatch) => {
-      // Register the msg so the DO's `alarm()` lifecycle method can find it.
-      // `dispatch` itself is not captured here — the DO's alarm() drains the
-      // registry and calls dispatch via the runtime it owns. That keeps the
-      // cleanup race-free: clearing the registry entry is the only thing
-      // cleanup needs to do.
-      ctx.alarmRegistry.set(sub.id, { firesAt: sub.firesAt, msg: sub.msg });
-
-      // Recompute the next alarm wall-clock target. DO supports exactly one
-      // alarm slot; the earliest firesAt across all registered subs wins.
-      const earliest = earliestFiresAt(ctx.alarmRegistry);
-      // `earliestFiresAt` returns null only when the registry is empty, which
-      // cannot happen here (we just inserted). The null branch is for cleanup.
-      if (earliest !== null) {
-        // `setAlarm` is a Promise; we don't await — the substrate's subscribe
-        // signature is sync. Attach `.catch` so an unhandled rejection doesn't
-        // tear down the DO isolate silently (DO isolates terminate on
-        // unhandled rejections — silent failure in an alarm scheduler would
-        // vanish without trace otherwise).
-        ctx.state.storage
-          .setAlarm(earliest)
-          .catch((err) => console.error("[tea-do] setAlarm failed", err));
-      }
-
-      return () => {
-        ctx.alarmRegistry.delete(sub.id);
-        const nextEarliest = earliestFiresAt(ctx.alarmRegistry);
-        if (nextEarliest === null) {
-          // No registered alarms left — clear the slot. `deleteAlarm` returns
-          // a Promise we don't await for the same reason as above; `.catch`
-          // for the same isolate-safety reason.
-          ctx.state.storage
-            .deleteAlarm()
-            .catch((err) => console.error("[tea-do] deleteAlarm failed", err));
-        } else {
-          ctx.state.storage
-            .setAlarm(nextEarliest)
-            .catch((err) => console.error("[tea-do] setAlarm failed", err));
-        }
-      };
-    },
-
-    do_ws: (sub, ctx, _dispatch) => {
-      ctx.wsRegistry.set(sub.id, { socketId: sub.socketId, msg: sub.msg });
-      return () => {
-        ctx.wsRegistry.delete(sub.id);
-      };
-    },
-  };
-}
-
-// Pure utility: lowest `firesAt` in a non-empty alarm registry, or `null`.
-function earliestFiresAt<M>(registry: DoAlarmRegistry<M>): number | null {
-  let earliest: number | null = null;
-  for (const { firesAt } of registry.values()) {
-    if (earliest === null || firesAt < earliest) earliest = firesAt;
-  }
-  return earliest;
 }

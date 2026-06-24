@@ -10,21 +10,25 @@
  * run's terminal output. Each export below names exactly the hand-rolled piece
  * it deletes from the consumer.
  *
- * ## The Sub-composition decision (why this host has no `do_ws` / `do_alarm`)
+ * ## The transport model: ONE Sub type, gateway-bridged I/O
  *
  * `createAgent().toMachine()` fixes the machine's Sub type to `DeadlineSub` —
- * the agent owns the retry + watchdog timers and nothing else. The DO-native
- * `do_ws` / `do_alarm` subs in `./index` therefore CANNOT union into an agent
- * machine's Sub set without the consumer hand-rolling a wider machine.
+ * the agent owns the retry + watchdog timers and nothing else. That is the
+ * WHOLE Sub model for a DO-hosted agent, and it is coherent because the
+ * transport deliberately does NOT live in the Sub system:
  *
- * This host RESOLVES the seam by sidestepping it: the deferred-tool gateway
- * already owns each tool round-trip as a Promise the interpret cell awaits, and
- * the per-tool deadline is a `setTimeout`. So the host needs NEITHER `do_ws`
- * (inbound frames are bridged straight into `gateway.settle(...)` from the DO's
- * `webSocketMessage`, no Sub) NOR `do_alarm` (the deadline is a timer, not a DO
- * alarm). The agent's Sub type stays exactly `DeadlineSub`; the transport lives
- * outside the Sub system entirely, bridged into `dispatch` by the gateway. This
- * is the documented, deliberate choice over widening the agent's Sub union.
+ *   - Inbound WebSocket frames are bridged straight into `gateway.settle(...)`
+ *     from the DO's `webSocketMessage` lifecycle method — a direct dispatch,
+ *     not a Sub.
+ *   - The per-tool deadline is a `setTimeout` inside the gateway — a timer, not
+ *     a DO alarm.
+ *
+ * The deferred-tool gateway owns each tool round-trip as a Promise the interpret
+ * cell awaits; the transport bridges results into `dispatch` from outside the
+ * Sub system. The agent's Sub type stays exactly `DeadlineSub` — there is no
+ * competing DO-native Sub variant to union in, and the host needs none. This is
+ * the single transport model for `@demlik/tea/do` (#52); see
+ * `.patterns/tea/durable-actors.md` for the host-layer north star.
  */
 
 import {

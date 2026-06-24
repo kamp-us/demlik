@@ -157,10 +157,9 @@ export type NodeWsRegistry = Map<SubId, WebSocket>;
  * The Ctx fields the node Subs depend on. A consumer's Ctx must extend this so
  * `node_ws` can register the live socket and Cmd handlers can reach it.
  *
- * Deliberately NOT parameterized by Msg (unlike tea-do's `DoSubscribeCtx<M>`):
- * the registry holds raw `WebSocket`s, and each Sub variant carries its own
- * Msg-typed callbacks. Trip-wire: if a future node Sub holds a Msg-typed
- * callback on ctx (the way tea-do's registries do), this becomes
+ * Deliberately NOT parameterized by Msg: the registry holds raw `WebSocket`s,
+ * and each Sub variant carries its own Msg-typed callbacks. Trip-wire: if a
+ * future node Sub holds a Msg-typed callback on ctx, this becomes
  * `NodeSubscribeCtx<M>`.
  */
 export interface NodeSubscribeCtx {
