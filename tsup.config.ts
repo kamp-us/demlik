@@ -46,6 +46,8 @@ export default defineConfig({
     "poller/index": "src/poller/index.ts",
     "batch-window/index": "src/batch-window/index.ts",
     "saga/index": "src/saga/index.ts",
+    "raft/index": "src/raft/index.ts",
+    "workflow/index": "src/workflow/index.ts",
     "throttled-input/index": "src/throttled-input/index.ts",
     "monitored-run/index": "src/monitored-run/index.ts",
     "llm-call/index": "src/llm-call/index.ts",

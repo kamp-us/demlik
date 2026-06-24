@@ -185,6 +185,10 @@
       "types": "./dist/raft/index.d.ts",
       "import": "./dist/raft/index.js"
     },
+    "./workflow": {
+      "types": "./dist/workflow/index.d.ts",
+      "import": "./dist/workflow/index.js"
+    },
     "./batch-window": {
       "types": "./dist/batch-window/index.d.ts",
       "import": "./dist/batch-window/index.js"
