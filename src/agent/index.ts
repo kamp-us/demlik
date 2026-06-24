@@ -253,8 +253,11 @@ export interface Conversation<R> {
  * The agent knob. Type parameters:
  *   - `Stage`   — the consumer's pipeline stage id (any JSON value).
  *   - `P`       — the brain-call purpose union (`"plan" | "act" | ...`).
- *   - `O`       — the purpose→output map; the agentic purpose's output MUST be
- *                 an `AgentTurn` (that is what the loop folds).
+ *   - `O`       — the purpose→output map. Every purpose drives the agentic loop,
+ *                 so each output is pinned to `AgentTurn` (or a subtype) by the
+ *                 `O extends Record<P, AgentTurn>` bound — that is what the loop
+ *                 folds. An `Outputs` whose purpose output is NOT an `AgentTurn`
+ *                 fails to compile here; the rule lives in the type, not a cast.
  *   - `R`       — the consumer's tool-result type (what `toolOk` carries).
  *   - `TC`      — the consumer's per-tool effect Cmd, the discriminated variant
  *                 `toolOf` produces. Kept PRECISE (a closed Cmd variant, not the
@@ -268,7 +271,7 @@ export interface Conversation<R> {
 export interface AgentConfig<
   Stage,
   P extends string,
-  O extends Record<P, unknown>,
+  O extends Record<P, AgentTurn>,
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
@@ -301,7 +304,8 @@ export interface AgentConfig<
   /**
    * Which brain-call purpose a given stage runs. The agent fires
    * `call_llm{ turnOf(stage) }` to drive the agentic stage's loop. The purpose's
-   * schema output MUST be an `AgentTurn`.
+   * schema output is an `AgentTurn` — enforced by the `O extends Record<P,
+   * AgentTurn>` bound, not left to a doc-comment.
    */
   readonly turnOf: (stage: Stage | undefined) => P;
   /** Build the per-purpose brain-call payload from the conversation. Omit → `null`. */
@@ -461,7 +465,7 @@ export type AgentDetachedHandlers<P extends string, M> = {
 export function createAgent<
   Stage,
   P extends string,
-  O extends Record<P, unknown>,
+  O extends Record<P, AgentTurn>,
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
@@ -821,11 +825,11 @@ export function createAgent<
     const [resilience, retryCmds] = llm.succeed(s.resilience, key, msg);
     const settled: State = { ...s, resilience };
     // 2) Fold the parsed turn into the loop (scatter tools / advance the stage).
-    const [withTurn, turnCmds] = turn(
-      settled,
-      msg.result.output as AgentTurn,
-      at,
-    );
+    //    `msg.result.output` is `O[P]`, and the `O extends Record<P, AgentTurn>`
+    //    bound pins every purpose's output to an `AgentTurn` — so it feeds `turn`
+    //    with NO cast. The rule lives in the type (invariant 8: no `as` past the
+    //    boundary), not in a doc-comment the compiler cannot enforce.
+    const [withTurn, turnCmds] = turn(settled, msg.result.output, at);
     return [withTurn, [...retryCmds, ...turnCmds]];
   }
 

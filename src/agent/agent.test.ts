@@ -32,6 +32,27 @@ interface Outputs extends Record<Purpose, unknown> {
   readonly act_turn: AgentTurn;
 }
 
+// Type-level guard (issue #48): the agentic purpose's output is pinned to
+// `AgentTurn` by the `O extends Record<P, AgentTurn>` bound on `createAgent` /
+// `AgentConfig`. An `Outputs` whose purpose output is NOT an `AgentTurn` must
+// fail to compile — the invalid state is unrepresentable, not laundered through
+// an `as AgentTurn` cast inside the reducer. The `@ts-expect-error` below IS the
+// assertion: if the bound were ever loosened back to `Record<P, unknown>`, this
+// directive would go unused and `tsc` would fail (TS2578).
+interface BadOutputs extends Record<Purpose, unknown> {
+  readonly plan_turn: { readonly notATurn: true };
+  readonly act_turn: { readonly notATurn: true };
+}
+// @ts-expect-error — BadOutputs[purpose] is not assignable to AgentTurn.
+type _RejectsNonTurnOutput = typeof createAgent<
+  Stage,
+  Purpose,
+  BadOutputs,
+  string,
+  ToolCmd,
+  Message
+>;
+
 type Message = { readonly role: string; readonly text: string };
 
 // A schema that just narrows to AgentTurn (the model resolves the turn directly).
