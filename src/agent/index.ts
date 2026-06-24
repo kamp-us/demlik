@@ -126,6 +126,7 @@ import {
   type RunFailure,
 } from "../monitored-run";
 import { MsgType } from "../protocol";
+import { createResilientCall } from "../resilient-call";
 import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================
@@ -207,10 +208,19 @@ export type ToolOutcome<R> =
  * A folded tool record kept on the conversation once a tool settles — the
  * call + its outcome, in settle order. The consumer's message loader reads
  * these (plus `turns`) to assemble the next brain call's prompt.
+ *
+ * `turn` is the `turnCount` at the time the record was folded — the association
+ * compaction needs to drop the RIGHT records (#85 / design A1). When compaction
+ * folds `turns[0..N]` into a summary, it must also drop every tool record that
+ * belonged to those turns; without a turn stamp on the record there is no honest
+ * way to know which. It is the round-trip index, not a wall clock — small and
+ * JSON-stable, preserving the durability invariant.
  */
 export interface ToolRecord<R> {
   readonly call: ToolCall;
   readonly outcome: ToolOutcome<R>;
+  /** The `turnCount` at fold time — which round-trip this record belongs to (#85, A1). */
+  readonly turn: number;
 }
 
 // ===========================================================================
@@ -218,14 +228,22 @@ export interface ToolRecord<R> {
 // ===========================================================================
 
 /**
- * Whether the agentic stage is waiting on the model (`llm`) or on tools
- * (`tools`). The in-flight fan-out batch exists ONLY in the `tools` variant —
- * "awaiting llm with tools pending" is structurally impossible (the seed's
- * canon §2.6 / Rule 1 impossible-states pin). Discriminated on `kind`.
+ * Whether the agentic stage is waiting on the model (`llm`), on tools
+ * (`tools`), or on a compaction round-trip (`compacting`, #85). The in-flight
+ * fan-out batch exists ONLY in the `tools` variant — "awaiting llm with tools
+ * pending" is structurally impossible (the seed's canon §2.6 / Rule 1
+ * impossible-states pin). Discriminated on `kind`.
+ *
+ * `compacting` is the honest state for the dedicated compaction round-trip
+ * (design B1): the transcript grew, the policy asked to fold `folding` of the
+ * OLDEST turns, and the summarize call is in flight INSTEAD of the next brain
+ * call. `folding` is the count `planCompaction` returned — the fold-back
+ * (`compact_ok`) drops exactly that many head turns + their tool records.
  */
 export type Awaiting =
   | { readonly kind: "llm" }
-  | { readonly kind: "tools"; readonly batchTurn: number };
+  | { readonly kind: "tools"; readonly batchTurn: number }
+  | { readonly kind: "compacting"; readonly folding: number };
 
 /**
  * The agentic-stage conversation — durable inside the agent slice so an
@@ -289,10 +307,125 @@ export type AgentSnapshotConfig =
   | { readonly snapshotEvery?: never }
   | { readonly snapshotEvery: number };
 
+// ===========================================================================
+// Context-compaction seam (#85) — the opt-in transcript snapshot-and-compact
+// policy, shaped exactly like `AgentSnapshotConfig` so a short agent pays
+// nothing and cannot even mention the machinery.
+// ===========================================================================
+
 /**
- * The core (non-snapshot) agent knob. The full `AgentConfig` intersects this
- * with the `AgentSnapshotConfig` discriminant — see that type for why the
- * snapshot cadence is a discriminated union rather than a bare optional.
+ * The reserved purpose the compaction round-trip runs under (#85). Compaction
+ * is a DEDICATED resilient LLM call (design B1), NOT one of the consumer's brain
+ * purposes `P` — so it carries its own purpose literal, kept in the agent's
+ * private `$`-namespace (the same reserved-namespace discipline `with-resilience`
+ * uses) so it never collides with a consumer purpose. A consumer never names it.
+ */
+export type CompactionPurpose = "$compact";
+
+/** The reserved compaction purpose's value — the single in-flight summarize call's key. */
+export const COMPACTION_PURPOSE: CompactionPurpose = "$compact";
+
+/**
+ * The purpose→output map for the compaction LLM call — the single reserved
+ * `$compact` purpose mapping to a {@link CompactionSummary}. Mirrors the brain
+ * call's `O` map, scoped to the one compaction purpose, so the composed
+ * `createLlmCall` parses the summarize output under the same structured-output
+ * contract the brain call uses.
+ */
+export interface CompactionOutputs extends Record<CompactionPurpose, unknown> {
+  readonly $compact: CompactionSummary;
+}
+
+/**
+ * Narrow an unknown to a {@link CompactionSummary} — the runtime witness for the
+ * compaction call's structured output. Checks the one load-bearing field
+ * (`summary` is a string). PURE — allocates no Error.
+ */
+export function isCompactionSummary(
+  value: unknown,
+): value is CompactionSummary {
+  if (value === null || typeof value !== "object") return false;
+  return typeof (value as { summary?: unknown }).summary === "string";
+}
+
+/**
+ * The `Schema<CompactionSummary>` the compaction call binds — tea's own parse
+ * target for the summarize round-trip (it OWNS the `$compact` purpose's output).
+ * Throws on a non-summary (the zod-style `parse` contract the llm-call handler
+ * relies on), so a malformed summary is a `compact_err` (errors are data), never
+ * a corrupt fold-back.
+ */
+export const compactionSummarySchema: Schema<CompactionSummary> = {
+  parse: (value: unknown): CompactionSummary => {
+    if (!isCompactionSummary(value)) {
+      throw new Error(
+        "structured-output parse failed: not a CompactionSummary",
+      );
+    }
+    return value;
+  },
+};
+
+/**
+ * The result a compaction round-trip produces — the model's summary of the
+ * folded-away turns. Tea OWNS this shape (the `$compact` purpose's output): the
+ * fold-back (`compact_ok`) writes `summary` into a synthetic head `AgentTurn`
+ * (design A1), so a consumer's `loadMessages` reads it as a normal turn with no
+ * watermark to learn. Generic-free — the summary is always plain text.
+ */
+export interface CompactionSummary {
+  /** The model's summary of the folded-away (oldest) turns + their tool records. */
+  readonly summary: string;
+}
+
+/**
+ * The consumer's compaction policy (#85). One PURE trigger; the impure
+ * summarize round-trip is composed by the agent (a dedicated resilient LLM call
+ * under the reserved `$compact` purpose, inheriting retry/backoff — design B1),
+ * so the policy never reaches the model itself.
+ *
+ *   - `planCompaction` — PURE: given the live conversation ABOUT to fire a brain
+ *     call, return how many of the OLDEST turns to fold into a summary, or `0`
+ *     to skip. No clock, no RNG → replay re-decides identically (design D). A
+ *     char-length / turn-count / real deterministic-tokenizer heuristic all
+ *     qualify. Returning `>= turns.length` is clamped to "fold all but keep the
+ *     loop alive" by the trigger (it never folds the turn currently in flight).
+ *   - `payloadOf` — build the per-call prompt payload the compaction
+ *     `MessageLoader` reads (the turns being folded). Omit → `null` (the loader,
+ *     if any, reads the conversation off the agent's own state). Opaque to the
+ *     agent, exactly like the brain call's `payloadOf`.
+ */
+export interface CompactionPolicy<R, Msg = unknown> {
+  /** PURE trigger: how many OLDEST turns to fold (`0` = skip). No clock/RNG. */
+  readonly planCompaction: (conversation: Conversation<R>) => number;
+  /** Build the summarize call's prompt payload from the turns being folded. Omit → `null`. */
+  readonly payloadOf?: (
+    conversation: Conversation<R>,
+    folding: number,
+  ) => unknown;
+  /** DI port — the SDK / message loader for the summarize call. Omit → invoke with `[]`. */
+  readonly loadMessages?: MessageLoader<CompactionPurpose, Msg>;
+}
+
+/**
+ * The compaction discriminant (#85), shaped exactly like {@link
+ * AgentSnapshotConfig}. Compaction is either OFF — `compaction` is structurally
+ * absent and the agent never emits a `compact_run` Cmd — or ON, in which case
+ * `compaction` is a {@link CompactionPolicy}. A `{ compaction?: never }` member
+ * (rather than a bare optional) makes the OFF case load-bearing: it forbids
+ * passing `compaction` at all, so `toMachine` config-derives whether the
+ * `compact_run` interpret cell is REQUIRED (ON) or FORBIDDEN (OFF) — never a
+ * silent no-op cell, the #55 type-lie-killer reused.
+ */
+export type AgentCompactionConfig<R, Msg> =
+  | { readonly compaction?: never }
+  | { readonly compaction: CompactionPolicy<R, Msg> };
+
+/**
+ * The core (non-snapshot, non-compaction) agent knob. The full `AgentConfig`
+ * intersects this with the `AgentSnapshotConfig` + `AgentCompactionConfig`
+ * discriminants — see those types for why the cadence / policy are discriminated
+ * unions rather than bare optionals.
  */
 export interface AgentConfigCore<
   Stage,
@@ -369,7 +502,9 @@ export type AgentConfig<
   R,
   TC extends Cmd = Cmd,
   Msg = unknown,
-> = AgentConfigCore<Stage, P, O, R, TC, Msg> & AgentSnapshotConfig;
+> = AgentConfigCore<Stage, P, O, R, TC, Msg> &
+  AgentSnapshotConfig &
+  AgentCompactionConfig<R, Msg>;
 
 // ===========================================================================
 // Slice — the Model field this knob owns. Three composed slices + the loop's
@@ -409,6 +544,18 @@ export interface AgentState<
   readonly resilience: ResilientState<LlmCall<P>, LlmOk<P, O>>;
   readonly tools: FanOutState<ToolCall, ToolOutcome<R>>;
   readonly conversation: Conversation<R> | null;
+  /**
+   * The compaction round-trip's resilient slice (#85, design B1) — a DEDICATED
+   * resilient-call slice for the reserved `$compact` purpose, separate from the
+   * brain `resilience` slice so a compaction retry/backoff never disturbs the
+   * brain call's breaker or retry counter. Always present (empty `calls` when no
+   * compaction is in flight, or when no policy is configured) so the slice stays
+   * a flat plain-data record — durable + replayable like every composed brick.
+   */
+  readonly compaction: ResilientState<
+    LlmCall<CompactionPurpose>,
+    LlmOk<CompactionPurpose, CompactionOutputs>
+  >;
   readonly failure: AgentFailure | null;
   /**
    * The run's terminal output — the FIRST-CLASS result (issue #46). `null`
@@ -543,6 +690,43 @@ export function status<
 /** The brain-call effect Cmd, inherited from `../llm-call`. */
 export type AgentLlmRunCmd<P extends string> = LlmRunCmd<P>;
 
+// ---------------------------------------------------------------------------
+// The compaction round-trip's Cmd + settle Msgs (#85, design B1). DEDICATED
+// discriminants (`compact_run` / `compact_ok` / `compact_err`) — re-keyed off
+// the composed resilient call's `resilient_run` / `resilient_ok` / `resilient_err`
+// at the agent boundary (the `with-resilience` re-keying discipline) so the
+// compaction interpret cell is its OWN cell, never the brain `resilient_run` one.
+// ---------------------------------------------------------------------------
+
+/**
+ * The "summarize the oldest N turns" effect Cmd — the compaction round-trip's
+ * carrier (#85). It mirrors the brain `resilient_run` Cmd's shape (a `key` + the
+ * plain `LlmCall<CompactionPurpose>` input, no closures) but under the dedicated
+ * `compact_run` discriminant so it routes to the compaction interpret cell, not
+ * the brain one. The cell composes the resilient brick (retry/backoff) and
+ * returns the re-keyed `compact_ok` / `compact_err` settle for re-entry.
+ */
+export type AgentCompactRunCmd = Cmd<typeof MsgType.CompactRun> & {
+  readonly key: CompactionPurpose;
+  readonly input: LlmCall<CompactionPurpose>;
+};
+
+/** The compaction round-trip success settle Msg — carries the parsed {@link CompactionSummary}. */
+export type AgentCompactOkMsg = {
+  readonly type: typeof MsgType.CompactOk;
+  readonly key: CompactionPurpose;
+  readonly result: LlmOk<CompactionPurpose, CompactionOutputs>;
+  readonly at: number;
+};
+
+/** The compaction round-trip failure settle Msg — carries the typed {@link LlmErr}. */
+export type AgentCompactErrMsg = {
+  readonly type: typeof MsgType.CompactErr;
+  readonly key: CompactionPurpose;
+  readonly error: LlmErr<CompactionPurpose>;
+  readonly at: number;
+};
+
 /**
  * The Cmd union the agent emits, as a CLOSED discriminated union (precise `TC`,
  * not the open `Cmd`) so `Interpret<M, AgentCmd<P, TC>, Ctx>` maps each key
@@ -569,9 +753,11 @@ export type AgentCmd<
   P extends string,
   TC extends Cmd = Cmd,
   Snap extends boolean = true,
+  Compact extends boolean = true,
 > =
   | AgentLlmRunCmd<P>
   | (Snap extends true ? MonitoredRunCmd<unknown> : never)
+  | (Compact extends true ? AgentCompactRunCmd : never)
   | TC;
 
 /**
@@ -599,11 +785,35 @@ export type SnapshotInterpret<
   : { readonly snapshot_write?: never };
 
 /**
- * The `toMachine` signature, parametrized on the `Snap` discriminant so the
- * snapshotting / non-snapshotting overloads of `createAgent` hand back the right
- * obligation. The `toolInterpret` requires (Snap=true) or forbids (Snap=false)
- * the `snapshot_write` cell via `SnapshotInterpret`, and the machine's Cmd type
- * is the config-derived `AgentCmd<P, TC, Snap>`.
+ * The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret`
+ * (#85), the exact twin of {@link SnapshotInterpret}. Resolves on the `Compact`
+ * discriminant the compaction overload of `createAgent` fixes:
+ *
+ *   - compaction ON  → a REQUIRED `compact_run` cell
+ *     (`Interpret<M, AgentCompactRunCmd, Ctx>`). The summarize round-trip MUST be
+ *     wired — the agent never defaults it to a no-op.
+ *   - compaction OFF → `{ compact_run?: never }`. The cell is FORBIDDEN: with no
+ *     policy the agent never emits a `compact_run` Cmd, so wiring it would be
+ *     dead code. The consumer cannot even mention `compact_run`.
+ *
+ * Same type-lie-killer as the snapshot derivation: the obligation is present
+ * EXACTLY when the Cmd can fire, never as a silent gap the agent backfills.
+ */
+export type CompactInterpret<
+  M extends { type: string },
+  Compact extends boolean,
+  Ctx,
+> = Compact extends true
+  ? Interpret<M, AgentCompactRunCmd, Ctx>
+  : { readonly compact_run?: never };
+
+/**
+ * The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants
+ * so the snapshotting / compaction overloads of `createAgent` hand back the right
+ * obligations. The `toolInterpret` requires (ON) or forbids (OFF) the
+ * `snapshot_write` cell via {@link SnapshotInterpret} and the `compact_run` cell
+ * via {@link CompactInterpret}, and the machine's Cmd type is the config-derived
+ * `AgentCmd<P, TC, Snap, Compact>`.
  */
 export type AgentToMachine<
   Stage,
@@ -612,13 +822,15 @@ export type AgentToMachine<
   R,
   TC extends Cmd,
   Snap extends boolean,
+  Compact extends boolean,
 > = <Ctx = object>(opts?: {
   readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
-    SnapshotInterpret<AgentMachineMsg<P, O, R>, Snap, Ctx>;
+    SnapshotInterpret<AgentMachineMsg<P, O, R>, Snap, Ctx> &
+    CompactInterpret<AgentMachineMsg<P, O, R>, Compact, Ctx>;
 }) => Machine<
   AgentState<Stage, P, O, R>,
   AgentMachineMsg<P, O, R>,
-  AgentCmd<P, TC, Snap>,
+  AgentCmd<P, TC, Snap, Compact>,
   DeadlineSub,
   Ctx
 >;
@@ -639,6 +851,7 @@ export interface AgentKnob<
   R,
   TC extends Cmd,
   Snap extends boolean,
+  Compact extends boolean,
 > {
   readonly init: () => AgentState<Stage, P, O, R>;
   readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
@@ -682,13 +895,29 @@ export interface AgentKnob<
     TC,
     [key: string, msg: AgentLlmErrMsg<P>, at: number]
   >;
+  readonly compactOk: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [key: string, msg: AgentCompactOkMsg, at: number]
+  >;
+  readonly compactErr: AgentVerb1<
+    Stage,
+    P,
+    O,
+    R,
+    TC,
+    [key: string, msg: AgentCompactErrMsg, at: number]
+  >;
   readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: AgentTimerMsg]>;
   readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number]>;
   readonly isSettled: (s: AgentState<Stage, P, O, R>) => boolean;
   readonly currentStage: (s: AgentState<Stage, P, O, R>) => Stage | undefined;
   readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
   readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
-  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap>;
+  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
   readonly unsafeDetachedHandlers: <M>(
     ports: AgentPorts<P, O, M>,
   ) => AgentDetachedHandlers<P, M>;
@@ -771,15 +1000,16 @@ export type AgentDetachedHandlers<P extends string, M> = {
  * — a `defineMachine` wiring all of it into one runnable machine — and the
  * `unsafeDetachedHandlers` hand-wiring escape hatch.
  *
- * `createAgent` is OVERLOADED on the snapshotting discriminant (#55): the
- * `{ snapshotEvery: number }` form returns a knob whose `toMachine` REQUIRES a
- * `snapshot_write` interpret cell; the `{ snapshotEvery?: never }` form returns
- * one that FORBIDS it. Overload resolution reads the `config` VALUE (its
- * `snapshotEvery` field), so the right obligation is selected even when the call
- * site passes explicit type arguments — TS does not infer trailing type params,
- * so a `Cfg`-inference scheme would silently fall back to "non-snapshotting" at
- * every explicit-type-arg call site. The overload fixes `Snap` concretely
- * instead, with no dependence on inference.
+ * `createAgent` is OVERLOADED on TWO independent discriminants — the snapshotting
+ * (#55) and the compaction (#85) one — so each `toMachine` obligation is derived
+ * from the `config` VALUE, never inferred. `{ snapshotEvery: number }` REQUIRES
+ * the `snapshot_write` cell, `{ snapshotEvery?: never }` FORBIDS it; `{ compaction:
+ * policy }` REQUIRES the `compact_run` cell, `{ compaction?: never }` FORBIDS it.
+ * The four overloads enumerate the snapshot × compaction grid: overload resolution
+ * reads the two fields off `config`, so the right `Snap`/`Compact` pair is fixed
+ * even when the call site passes explicit type arguments (TS does not infer
+ * trailing type params — a `Cfg`-inference scheme would silently fall back to OFF
+ * at every explicit-type-arg call site). The overloads fix both concretely.
  */
 export function createAgent<
   Stage,
@@ -791,8 +1021,22 @@ export function createAgent<
 >(
   config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
     readonly snapshotEvery: number;
+    readonly compaction: CompactionPolicy<R, Msg>;
   },
-): AgentKnob<Stage, P, O, R, TC, true>;
+): AgentKnob<Stage, P, O, R, TC, true, true>;
+export function createAgent<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd = Cmd,
+  Msg = unknown,
+>(
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+    readonly snapshotEvery: number;
+    readonly compaction?: never;
+  },
+): AgentKnob<Stage, P, O, R, TC, true, false>;
 export function createAgent<
   Stage,
   P extends string,
@@ -803,8 +1047,22 @@ export function createAgent<
 >(
   config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
     readonly snapshotEvery?: never;
+    readonly compaction: CompactionPolicy<R, Msg>;
   },
-): AgentKnob<Stage, P, O, R, TC, false>;
+): AgentKnob<Stage, P, O, R, TC, false, true>;
+export function createAgent<
+  Stage,
+  P extends string,
+  O extends Record<P, AgentTurn>,
+  R,
+  TC extends Cmd = Cmd,
+  Msg = unknown,
+>(
+  config: AgentConfigCore<Stage, P, O, R, TC, Msg> & {
+    readonly snapshotEvery?: never;
+    readonly compaction?: never;
+  },
+): AgentKnob<Stage, P, O, R, TC, false, false>;
 export function createAgent<
   Stage,
   P extends string,
@@ -814,7 +1072,7 @@ export function createAgent<
   Msg = unknown,
 >(
   config: AgentConfig<Stage, P, O, R, TC, Msg>,
-): AgentKnob<Stage, P, O, R, TC, boolean> {
+): AgentKnob<Stage, P, O, R, TC, boolean, boolean> {
   const rng = config.rng ?? Math.random;
   // ---- The three composed sub-knobs --------------------------------------
 
@@ -839,6 +1097,21 @@ export function createAgent<
     },
     rng,
   );
+
+  // The DEDICATED compaction round-trip's resilient slice (#85, design B1) — a
+  // SECOND resilient-call slice keyed on the reserved `$compact` purpose, so the
+  // summarize call inherits the SAME retry/backoff machinery as the brain call
+  // WITHOUT sharing its slice (a compaction retry never touches the brain breaker
+  // / retry counter). The agent owns the retry ORCHESTRATION (trigger → settle →
+  // backoff → re-issue); the consumer's `compact_run` interpret cell owns the
+  // summarize I/O (the model round-trip + parse), exactly as the consumer owns
+  // tool I/O via `toolOf`. The slice's `input` is the plain `LlmCall<$compact>`
+  // request, its `result` the parsed `LlmOk` the consumer's cell returns. Always
+  // built; never driven when no policy is configured (the trigger never fires).
+  const compactRc = createResilientCall<
+    LlmCall<CompactionPurpose>,
+    LlmOk<CompactionPurpose, CompactionOutputs>
+  >({ ...(config.retry !== undefined ? { retry: config.retry } : {}) }, rng);
 
   // Tools fan out at `toolConcurrency` (default 1 = the seed's serial dispatch).
   // The fan-out item is the `ToolCall`; its identity is `callId`; each launch is
@@ -865,6 +1138,7 @@ export function createAgent<
       resilience: llm.init(),
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
       conversation: null,
+      compaction: compactRc.init(),
       failure: null,
       output: null,
     };
@@ -896,6 +1170,37 @@ export function createAgent<
       out.push(call);
     }
     return out;
+  }
+
+  /**
+   * Fold the oldest `folding` turns of a conversation into a single synthetic
+   * `summaryTurn` (#85, design A1) — PURE. The summary becomes the new head turn
+   * (index 0); the surviving turns (`turns.slice(folding)`) follow. Every tool
+   * record whose producing turn was folded (`turn < folding`) is DROPPED; each
+   * survivor's `turn` is RE-INDEXED by `-folding + 1` so it still equals the new
+   * index in `turns` of its producing turn (the summary occupies one slot where
+   * `folding` turns stood, so survivors shift left by `folding` then right by 1).
+   * `turnCount` is UNCHANGED — compaction is not a model round-trip (decision C).
+   *
+   * Caller guarantees `2 <= folding <= turns.length` (the trigger clamps + skips
+   * `< 2`), so the result is strictly shorter (`length - folding + 1`).
+   */
+  function foldSummary(
+    conv: Conversation<R>,
+    folding: number,
+    summaryTurn: AgentTurn,
+  ): Conversation<R> {
+    const shift = folding - 1; // survivors move left by this many slots.
+    const survivingTurns = conv.turns.slice(folding);
+    const survivingRecords = conv.toolRecords
+      .filter((rec) => rec.turn >= folding)
+      .map((rec) => ({ ...rec, turn: rec.turn - shift }));
+    return {
+      ...conv,
+      turns: [summaryTurn, ...survivingTurns],
+      toolRecords: survivingRecords,
+      awaiting: { kind: "llm" },
+    };
   }
 
   /** The current pipeline stage value (`undefined` for a single-shot run). */
@@ -937,6 +1242,9 @@ export function createAgent<
       // `undefined` again until THIS run finishes (#46).
       output: null,
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
+      // A restart also clears any prior compaction slice — a fresh run never
+      // inherits the previous run's summarize retry bookkeeping (#85).
+      compaction: compactRc.init(),
     };
     const call = brainCall(withRun);
     const [resilience, cmds] = llm.attempt(withRun.resilience, call, at);
@@ -1108,7 +1416,16 @@ export function createAgent<
 
     const foldedConv: Conversation<R> = {
       ...conv,
-      toolRecords: [...conv.toolRecords, { call, outcome }],
+      // Stamp the producing-turn index on the record (#85, A1). At settle time
+      // `conv.turnCount` equals the index in `turns` of the turn that scattered
+      // this batch (each prior drained batch bumped `turnCount` exactly once, and
+      // each tool-bearing turn appended exactly one entry to `turns`), so a record
+      // carrying `turn: conv.turnCount` is dropped iff its producing turn is folded
+      // (`turn < N`) — the association the fold-back relies on.
+      toolRecords: [
+        ...conv.toolRecords,
+        { call, outcome, turn: conv.turnCount },
+      ],
     };
 
     // Batch still draining → record + keep launching the next queued tool.
@@ -1135,17 +1452,103 @@ export function createAgent<
       return failTurnLimit({ ...s, tools, conversation: turnedConv }, at);
     }
 
-    // An advance of the loop is progress — bump the watchdog, then fire.
-    const [runSlice] = run.progress(s.run, undefined, at);
-    const fired: State = {
+    // The tool ledger resets for the next turn's batch regardless of which
+    // effect (compaction or brain call) fires next.
+    const drained: State = {
       ...s,
-      run: runSlice,
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
       conversation: turnedConv,
     };
+
+    // ── Compaction trigger (#85, design B1). BEFORE the next brain call, ask
+    // the PURE policy how many oldest turns to fold. N > 0 → fire the dedicated
+    // compaction round-trip INSTEAD of the brain call and flip awaiting to
+    // `compacting`; the fold-back (`compact_ok`) then fires the brain call. The
+    // trigger bumps the watchdog (compaction IS liveness, decision C) but does
+    // NOT bump `turnCount` — it already bumped once for this drained batch, and
+    // compaction is not model reasoning progress, so it never trips `maxTurns`.
+    const compacting = maybeCompact(drained, at);
+    if (compacting !== null) return compacting;
+
+    // ── No compaction → fire the next brain call. ──
+    // An advance of the loop is progress — bump the watchdog, then fire.
+    const [runSlice] = run.progress(drained.run, undefined, at);
+    const fired: State = { ...drained, run: runSlice };
     const nextCall = brainCall(fired);
     const [resilience, llmCmds] = llm.attempt(fired.resilience, nextCall, at);
     return [{ ...fired, resilience }, [...launchCmds, ...llmCmds]];
+  }
+
+  /**
+   * The compaction trigger (#85, design B1) — PURE. Given the drained-batch
+   * state about to fire a brain call, consult `config.compaction.planCompaction`
+   * (the consumer's PURE heuristic). Returns:
+   *
+   *   - `null` — no policy, or the policy returned `0`, or there is nothing to
+   *     fold (`< 2` turns: folding 0 or 1 turns into a summary cannot shrink the
+   *     transcript, so it is a no-op the trigger skips rather than spend a round
+   *     trip). The caller fires the brain call as normal.
+   *   - `[state, cmds]` — fire the dedicated compaction round-trip: flip
+   *     `awaiting` to `compacting { folding: N }`, bump the watchdog (liveness,
+   *     decision C — NOT `turnCount`, so `maxTurns` is untouched), and emit the
+   *     re-keyed `compact_run` Cmd. `compact_ok` folds the summary back; the loop
+   *     resumes with the next brain call there.
+   *
+   * `folding` is clamped to `turns.length` so a policy returning a count larger
+   * than the transcript folds the WHOLE transcript into one summary (never more).
+   * The launched `launchCmds` from the final tool settle are NOT this function's
+   * concern — the caller composes them.
+   */
+  function maybeCompact(
+    s: State,
+    at: number,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] | null {
+    const policy = config.compaction;
+    const conv = s.conversation;
+    if (policy === undefined || conv === null) return null;
+    const requested = policy.planCompaction(conv);
+    // Nothing to gain: a fold of 0 or 1 turns cannot shrink the transcript
+    // (`turns[0..N]` → one summary turn only shrinks when N >= 2).
+    const folding = Math.min(requested, conv.turns.length);
+    if (folding < 2) return null;
+
+    const compactConv: Conversation<R> = {
+      ...conv,
+      awaiting: { kind: "compacting", folding },
+    };
+    // Compaction is forward progress (liveness) — bump the watchdog, NOT the
+    // turn count (decision C: it is not model reasoning, must not trip maxTurns).
+    const [runSlice] = run.progress(s.run, undefined, at);
+    const input: LlmCall<CompactionPurpose> = {
+      purpose: COMPACTION_PURPOSE,
+      model: config.modelId ?? null,
+      payload: policy.payloadOf ? policy.payloadOf(conv, folding) : null,
+    };
+    const [compaction, runCmds] = compactRc.attempt(
+      s.compaction,
+      COMPACTION_PURPOSE,
+      input,
+      at,
+    );
+    // Re-key the composed `resilient_run` Cmd(s) to the dedicated `compact_run`
+    // discriminant so they route to the compaction interpret cell, never the
+    // brain `resilient_run` one (the `with-resilience` boundary-re-key pattern).
+    const cmds = runCmds.map(toCompactRunCmd);
+    return [
+      { ...s, run: runSlice, conversation: compactConv, compaction },
+      cmds,
+    ];
+  }
+
+  /** Re-key a composed compaction `resilient_run` Cmd to the dedicated `compact_run`. */
+  function toCompactRunCmd(
+    cmd: LlmRunCmd<CompactionPurpose>,
+  ): AgentCompactRunCmd {
+    return {
+      type: MsgType.CompactRun,
+      key: COMPACTION_PURPOSE,
+      input: cmd.input,
+    };
   }
 
   /** Terminal: the livelock guard tripped. Settle the run failed. PURE. */
@@ -1220,19 +1623,136 @@ export function createAgent<
     return [{ ...s, resilience, failure }, cmds];
   }
 
+  // === Verb: compactOk / compactErr (compaction resilient settles) =========
+
+  /**
+   * Fold the compaction SUMMARY back (#85, design A1) — the entry the re-entered
+   * `compact_ok` settle Msg drives. Two halves, in order:
+   *
+   *   1. The RETRY layer: `compactRc.succeed` closes the compaction breaker and
+   *      DROPS the `$compact` retry counter (the same reset the brain `succeed`
+   *      does, on the dedicated compaction slice).
+   *   2. The FOLD-BACK: replace `turns[0..folding]` AND every `toolRecord` whose
+   *      `turn < folding` with a SINGLE synthetic summary `AgentTurn` (no tool
+   *      calls, carrying the summary text), then RE-INDEX the surviving records'
+   *      `turn` so the new head (the summary) is index 0. `turnCount` is
+   *      UNCHANGED (compaction is not a model round-trip — decision C), and
+   *      `awaiting` flips back to `llm`. The next brain call fires on the shrunk
+   *      transcript — the loop the trigger paused resumes here.
+   *
+   * A no-op if the run is settled or not awaiting compaction (a stale settle).
+   * PURE — `at` is the only clock.
+   */
+  function compactOk(
+    s: State,
+    key: string,
+    msg: AgentCompactOkMsg,
+    at: number,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    // 1) Advance the compaction retry layer — resets retry[$compact], closes the
+    //    compaction breaker. Reuses llm-call's `succeed` on the dedicated slice;
+    //    the enriched `LlmSucceedMsg` is the `compact_ok` payload as-is.
+    const [compaction, retryCmds] = compactRc.succeed(s.compaction, key, {
+      type: MsgType.ResilientOk,
+      key: msg.key,
+      result: msg.result,
+      at: msg.at,
+    });
+    const settledRetry: State = { ...s, compaction };
+
+    if (isSettled(settledRetry)) return [settledRetry, []];
+    const conv = settledRetry.conversation;
+    if (conv === null || conv.awaiting.kind !== "compacting") {
+      // Stale settle (the run advanced/rebooted past this compaction). The retry
+      // slice still resets above; emit only its cmds (normally none).
+      return [settledRetry, retryCmds.map(toCompactRunCmd)];
+    }
+
+    // 2) Fold-back. `folding` is the count the trigger pinned on `awaiting`; the
+    //    summary turn replaces those oldest turns + their records.
+    const folding = conv.awaiting.folding;
+    const summaryTurn: AgentTurn = {
+      content: msg.result.output.summary,
+      toolCalls: [],
+    };
+    const foldedConv = foldSummary(conv, folding, summaryTurn);
+    const fired: State = { ...settledRetry, conversation: foldedConv };
+    // Resume the loop: fire the next brain call on the shrunk transcript.
+    const nextCall = brainCall(fired);
+    const [resilience, llmCmds] = llm.attempt(fired.resilience, nextCall, at);
+    return [
+      { ...fired, resilience },
+      [...retryCmds.map(toCompactRunCmd), ...llmCmds],
+    ];
+  }
+
+  /**
+   * Record a compaction FAILURE (#85). Back off via the compaction slice's
+   * inherited retry (re-arming the `$compact` retry timer), or — when retry is
+   * exhausted / absent — PROCEED WITHOUT COMPACTING: flip `awaiting` back to
+   * `llm` and fire the brain call on the (un-compacted) transcript. Compaction is
+   * an OPTIMIZATION, not correctness: a failed summarize must not wedge or fail
+   * the whole run (errors are data). This is the chosen option of design B1's
+   * `compact_err` fork — it is strictly weaker than failing the run, and the
+   * brain call's OWN resilient retry / the deadline watchdog still bound the
+   * un-compacted continuation. A consumer that wants compaction failure to be
+   * terminal can detect it on the `compaction` slice's `failed` phase. PURE.
+   */
+  function compactErr(
+    s: State,
+    key: string,
+    msg: AgentCompactErrMsg,
+    at: number,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const [compaction, cmds] = compactRc.fail(s.compaction, key, {
+      type: MsgType.ResilientErr,
+      key: msg.key,
+      error: msg.error,
+      at: msg.at,
+    });
+    const settledRetry: State = { ...s, compaction };
+    const call = compaction.calls[key];
+
+    // A retry is armed (`waiting_retry`) → not terminal → keep awaiting the
+    // re-issued compaction call (the re-keyed run Cmd, if any, rides here).
+    if (call?.phase === "waiting_retry") {
+      return [settledRetry, cmds.map(toCompactRunCmd)];
+    }
+
+    if (isSettled(settledRetry)) return [settledRetry, []];
+    const conv = settledRetry.conversation;
+    if (conv === null || conv.awaiting.kind !== "compacting") {
+      return [settledRetry, cmds.map(toCompactRunCmd)];
+    }
+
+    // Exhausted retry (or no retry) → proceed WITHOUT compacting: drop the
+    // `compacting` state, fire the next brain call on the un-compacted transcript.
+    const resumedConv: Conversation<R> = { ...conv, awaiting: { kind: "llm" } };
+    const fired: State = { ...settledRetry, conversation: resumedConv };
+    const nextCall = brainCall(fired);
+    const [resilience, llmCmds] = llm.attempt(fired.resilience, nextCall, at);
+    return [
+      { ...fired, resilience },
+      [...cmds.map(toCompactRunCmd), ...llmCmds],
+    ];
+  }
+
   // === Verb: onTimer =======================================================
 
   /**
-   * A timer fired — disambiguated by Sub id across the two composed bricks:
+   * A timer fired — disambiguated by Sub id across the composed bricks:
    *
-   *   - a `resilient:*` id → a brain-call retry timer → re-run the brain call
-   *     via the inherited llm-call `onTimer`.
    *   - a `monitored:safety:*` id → the no-progress watchdog → fail the run via
    *     the inherited monitored-run `onDeadline`.
+   *   - a `resilient:*:$compact` id → a COMPACTION retry/deadline timer →
+   *     re-run the compaction call via the compaction slice's `onTimer`, re-keying
+   *     its re-issued `resilient_run` to the dedicated `compact_run` (#85).
+   *   - any other `resilient:*` id → a brain-call retry timer → re-run the brain
+   *     call via the inherited llm-call `onTimer`.
    *
-   * The two brick `onTimer` / `onDeadline` verbs each tolerate a stale fire for
-   * the other's id (they no-op on a non-matching id), so threading the Msg
-   * through both is safe. PURE.
+   * Each brick `onTimer` / `onDeadline` verb tolerates a stale fire for another's
+   * id (it no-ops on a non-matching id), so the routing is by id prefix/suffix.
+   * PURE.
    */
   function onTimer(
     s: State,
@@ -1241,6 +1761,13 @@ export function createAgent<
     if (msg.id.startsWith("monitored:")) {
       const [runSlice] = run.onDeadline(s.run, msg);
       return [{ ...s, run: runSlice }, []];
+    }
+    // The compaction slice's timers are keyed on the reserved `$compact` purpose
+    // (`resilient:retry:$compact` / `resilient:deadline:$compact`), distinct from
+    // every brain purpose, so the suffix routes the fire to the right slice.
+    if (msg.id.endsWith(`:${COMPACTION_PURPOSE}`)) {
+      const [compaction, cmds] = compactRc.onTimer(s.compaction, msg);
+      return [{ ...s, compaction }, cmds.map(toCompactRunCmd)];
     }
     const [resilience, cmds] = llm.onTimer(s.resilience, msg);
     return [{ ...s, resilience }, cmds];
@@ -1259,6 +1786,8 @@ export function createAgent<
    *     advanced + persisted, so boot re-emits the NEXT effect).
    *   - awaiting `tools` → re-fire every in-flight tool Cmd (idempotent via
    *     `callId` — the consumer's tool runner dedupes a re-issued call).
+   *   - awaiting `compacting` → re-fire the in-flight compaction call (#85),
+   *     idempotent at the compaction slice's gate exactly like the brain call.
    *   - no conversation (between stages / settled) → no effect.
    *
    * A no-op on a settled run. PURE.
@@ -1282,6 +1811,26 @@ export function createAgent<
       return [{ ...rebooted, resilience }, cmds];
     }
 
+    if (conv.awaiting.kind === "compacting") {
+      // Re-fire the in-flight compaction round-trip (#85). The compaction slice
+      // already tracks `$compact` running; re-issuing the same key is idempotent
+      // at the gate, and the re-emitted `resilient_run` is re-keyed to `compact_run`.
+      const input: LlmCall<CompactionPurpose> = {
+        purpose: COMPACTION_PURPOSE,
+        model: config.modelId ?? null,
+        payload: config.compaction?.payloadOf
+          ? config.compaction.payloadOf(conv, conv.awaiting.folding)
+          : null,
+      };
+      const [compaction, cmds] = compactRc.attempt(
+        rebooted.compaction,
+        COMPACTION_PURPOSE,
+        input,
+        at,
+      );
+      return [{ ...rebooted, compaction }, cmds.map(toCompactRunCmd)];
+    }
+
     // awaiting tools → re-fire every running tool's effect Cmd.
     const cmds = rebooted.tools.running.map((call) => config.toolOf(call));
     return [rebooted, cmds];
@@ -1299,13 +1848,19 @@ export function createAgent<
   // === Subs ================================================================
 
   /**
-   * The merged subscription set — the brain-call retry timers (`../llm-call`)
-   * and the no-progress safety deadline (`../monitored-run`). Both are
-   * `DeadlineSub`s reconciled by id, wired with one `subscribe: { deadline:
+   * The merged subscription set — the brain-call retry timers (`../llm-call`),
+   * the COMPACTION retry timers (the dedicated `$compact` slice, #85), and the
+   * no-progress safety deadline (`../monitored-run`). All are `DeadlineSub`s
+   * reconciled by id (the compaction timers are keyed `resilient:*:$compact`,
+   * distinct from every brain timer), wired with one `subscribe: { deadline:
    * subscribeDeadline }` cell. PURE.
    */
   function subs(s: State): readonly DeadlineSub[] {
-    return [...llm.subs(s.resilience), ...run.subs(s.run)];
+    return [
+      ...llm.subs(s.resilience),
+      ...compactRc.subs(s.compaction),
+      ...run.subs(s.run),
+    ];
   }
 
   // === Handlers ============================================================
@@ -1410,11 +1965,12 @@ export function createAgent<
      * consumer cannot even mention `snapshot_write`, and a checkpointing one must.
      */
     readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
-      SnapshotInterpret<AgentMachineMsg<P, O, R>, boolean, Ctx>;
+      SnapshotInterpret<AgentMachineMsg<P, O, R>, boolean, Ctx> &
+      CompactInterpret<AgentMachineMsg<P, O, R>, boolean, Ctx>;
   }): Machine<
     State,
     AgentMachineMsg<P, O, R>,
-    AgentCmd<P, TC, boolean>,
+    AgentCmd<P, TC, boolean, boolean>,
     DeadlineSub,
     Ctx
   > {
@@ -1427,7 +1983,14 @@ export function createAgent<
     // conditional), union-equal to `AgentCmd<P, TC, boolean>`, and built from the
     // SAME pieces `mergeInterpret` joins so the merge result is syntactically
     // `Interpret<M, ACmd, Ctx>` with no `Exclude`/conditional TS refuses to reduce.
-    type NonBrainCmd = TC | MonitoredRunCmd<unknown>;
+    // `NonBrainCmd` is the consumer's half of the merged interpret — the per-tool
+    // `TC`, the monitored-run checkpoint Cmd, AND the compaction `compact_run`
+    // Cmd (#85). The consumer owns the `compact_run` cell (the summarize I/O,
+    // returning `compact_ok` / `compact_err` for re-entry), exactly as it owns the
+    // tool cells; the agent owns only the retry ORCHESTRATION (the slice verbs).
+    // At `boolean` this is the SUPERSET; the overloads config-derive `compact_run`
+    // IN (policy) or OUT (`{ compact_run?: never }`) of the obligation (#55 reuse).
+    type NonBrainCmd = TC | MonitoredRunCmd<unknown> | AgentCompactRunCmd;
     type ACmd = AgentLlmRunCmd<P> | NonBrainCmd;
     // The FIXED brain handler returns the settle Msg for re-entry; the substrate
     // enqueues it as a follow-up dispatched back into `update` (the `resilient_*`
@@ -1475,6 +2038,12 @@ export function createAgent<
       // runs `succeed` (reset retry + fold the turn), failure runs `fail`.
       [MsgType.ResilientOk]: (s, m) => succeed(s, m.key, m, m.at),
       [MsgType.ResilientErr]: (s, m) => fail(s, m.key, m, m.at),
+      // The re-entered compaction settle Msgs (from the consumer's `compact_run`
+      // cell, #85): `compact_ok` folds the summary back (drop oldest turns +
+      // their records, fire the next brain call), `compact_err` backs off via the
+      // compaction retry or proceeds without compacting.
+      [MsgType.CompactOk]: (s, m) => compactOk(s, m.key, m, m.at),
+      [MsgType.CompactErr]: (s, m) => compactErr(s, m.key, m, m.at),
       deadline_exceeded: (s, m) => onTimer(s, m),
       [MsgType.AgentBoot]: (s, m) => boot(s, m.at),
     };
@@ -1510,6 +2079,8 @@ export function createAgent<
     toolErr,
     succeed,
     fail,
+    compactOk,
+    compactErr,
     onTimer,
     boot,
     isSettled,
@@ -1603,6 +2174,14 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   // llm-call settle shape, dispatched verbatim by the substrate's re-entry.
   | AgentLlmOkMsg<P, O>
   | AgentLlmErrMsg<P>
+  // The compaction settle Msgs RE-ENTER from the compaction interpret cell
+  // (#85) — `compact_ok` folds the summary back (drops the oldest N turns +
+  // their tool records, then fires the next brain call), `compact_err` backs off
+  // via the compaction slice's retry or — on exhaustion — proceeds without
+  // compacting (errors are data). Dedicated discriminants, re-keyed off the
+  // composed resilient settle at the cell boundary.
+  | AgentCompactOkMsg
+  | AgentCompactErrMsg
   // The timer Msg is `DeadlineExceeded` itself (not wrapped) so the
   // `subscribeDeadline` cell dispatches it straight into `update`, exactly as
   // the resilient-call / llm-call / monitored-run gold standards wire it.
@@ -1696,12 +2275,16 @@ export function agentEvents<
           result: msg.result,
         });
         break;
-      // start / boot / timer / the *_err arms carry no public event — return
-      // []. (No `default`: the switch is exhaustive over the Msg discriminant,
-      // so a new Msg variant forces a decision here at compile time.)
+      // start / boot / timer / the *_err arms / the compaction settles carry no
+      // public event — return []. (No `default`: the switch is exhaustive over
+      // the Msg discriminant, so a new Msg variant forces a decision here at
+      // compile time.) Compaction is an internal optimization, not a semantic
+      // lifecycle moment a UI folds — its settles are deliberately silent here.
       case MsgType.AgentStart:
       case MsgType.AgentToolErr:
       case MsgType.ResilientErr:
+      case MsgType.CompactOk:
+      case MsgType.CompactErr:
       case "deadline_exceeded":
       case MsgType.AgentBoot:
         break;

@@ -56,6 +56,19 @@ export const MsgType = {
    */
   AgentBoot: "agent_boot",
 
+  // --- agent: the context-compaction round-trip (#85) ----------------------
+  /**
+   * The "summarize the oldest N turns" effect Cmd the agent emits when its
+   * `CompactionPolicy` asks to compact before a brain call. A DEDICATED
+   * round-trip (design B1), distinct from the brain call's `resilient_run`, so
+   * compaction is its own honest `Awaiting` state — see `../agent`.
+   */
+  CompactRun: "compact_run",
+  /** Compaction round-trip resolved — carries the summary text the fold-back folds. */
+  CompactOk: "compact_ok",
+  /** Compaction round-trip failed (exhausted retry) — surfaced as data, not a stall. */
+  CompactErr: "compact_err",
+
   // --- token-refresh: the two refresh-result Msgs --------------------------
   /** Refresh port resolved — carries the fresh `Token`. */
   TokenRefreshed: "token_refreshed",

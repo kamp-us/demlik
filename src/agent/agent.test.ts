@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { deadlineSub } from "../deadline";
+import { agentIsResumable } from "../do/host";
 import { type Interpret, run } from "../index";
 import { bindMachine } from "../testing";
 import {
@@ -16,7 +17,6 @@ import {
   status,
   type ToolCall,
 } from "./index";
-import { agentIsResumable } from "../do/host";
 
 // ---------------------------------------------------------------------------
 // Fixtures — a two-stage agent ("plan" → "act") whose brain calls both return
@@ -285,9 +285,9 @@ describe("createAgent — tool settle (serial drain → fold → next brain call
     [s] = agent.turn(s, turnWith(tool("c1"), tool("c2")), 10);
     const [next, cmds] = agent.toolOk(s, "c1", "ok-1", 20);
     s = next;
-    // c1 recorded; c2 launched.
+    // c1 recorded (turn 0 — the producing turn's index); c2 launched.
     expect(s.conversation?.toolRecords).toEqual([
-      { call: tool("c1"), outcome: { kind: "ok", result: "ok-1" } },
+      { call: tool("c1"), outcome: { kind: "ok", result: "ok-1" }, turn: 0 },
     ]);
     expect(cmds).toEqual([toolOf(tool("c2"))]);
     expect(s.conversation?.awaiting).toEqual({ kind: "tools", batchTurn: 0 });
@@ -300,10 +300,11 @@ describe("createAgent — tool settle (serial drain → fold → next brain call
     [s] = agent.toolOk(s, "c1", "ok-1", 20);
     const [next, cmds] = agent.toolOk(s, "c2", "ok-2", 30);
     s = next;
-    // Both tool outcomes folded onto the conversation.
+    // Both tool outcomes folded onto the conversation (turn 0 — both from the
+    // single producing turn before the drain bumped turnCount).
     expect(s.conversation?.toolRecords).toEqual([
-      { call: tool("c1"), outcome: { kind: "ok", result: "ok-1" } },
-      { call: tool("c2"), outcome: { kind: "ok", result: "ok-2" } },
+      { call: tool("c1"), outcome: { kind: "ok", result: "ok-1" }, turn: 0 },
+      { call: tool("c2"), outcome: { kind: "ok", result: "ok-2" }, turn: 0 },
     ]);
     // The turn count bumped and awaiting flipped back to llm.
     expect(s.conversation?.turnCount).toBe(1);
@@ -322,7 +323,7 @@ describe("createAgent — tool settle (serial drain → fold → next brain call
     const [next, cmds] = agent.toolErr(s, "c1", "boom", 20);
     s = next;
     expect(s.conversation?.toolRecords).toEqual([
-      { call: tool("c1"), outcome: { kind: "error", reason: "boom" } },
+      { call: tool("c1"), outcome: { kind: "error", reason: "boom" }, turn: 0 },
     ]);
     // Single tool batch drained → next brain call fires.
     expect(cmds).toEqual([brainRunCmd("plan_turn")]);
@@ -1184,7 +1185,11 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
     // running (awaiting llm)
     const [running] = agent.start(agent.init(), "r", 0);
     // suspended (awaiting tools)
-    const [suspended] = agent.turn(running, turnWith(tool("c1"), tool("c2")), 10);
+    const [suspended] = agent.turn(
+      running,
+      turnWith(tool("c1"), tool("c2")),
+      10,
+    );
     // done
     let [done] = agent.start(makeAgent().init(), "r", 0);
     [done] = makeAgent().turn(done, turnWith(), 10);
