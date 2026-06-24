@@ -97,6 +97,51 @@ function assertPureResult(result: unknown, msgType: string): void {
 // === Cmd: tagged-union, one-shot effect ===
 export type Cmd<T extends string = string> = { type: T };
 
+// === SyncReturn<S, C>: the compile-time reentrancy guard (ADR 0003 #5) ===
+//
+// The canon rule (`.patterns/tea-do/reentrancy.md`,
+// `.patterns/tea-do/reentrancy-deadlock.md`): a reducer must never
+// inline-`await` a re-entrant result. "Non-reentrant by default" ≡ "the reducer
+// is pure AND synchronous": a reducer that returns a `Promise` (because it is
+// `async`, or inline-`await`s) is the suspended-but-still-blocking turn Orleans
+// serializes against — it occupies the single-writer slot across a suspension
+// point and can be re-entered mid-flight → deadlock.
+//
+// So the guard is purely type-level: every reducer/transition cell returns
+// `SyncReturn<S, C>` — the synchronous result tuple, intersected with `{ then?:
+// never }` to make it *non-thenable*. A `Promise<readonly [S, readonly C[]]>`
+// is an object with a `then` method, so it fails to satisfy `then?: never`; an
+// `async (s, m) => [...]` (or one that inline-`await`s) is therefore
+// unrepresentable at compile time — `tsc` rejects it *at the cell*, not at a
+// runtime hang. A plain synchronous tuple `[next, cmds]` has no `then` property,
+// so the optional-absent `then?: never` is satisfied and existing pure reducers
+// compile unchanged. `SyncReturn<S, C>` is also assignable *to* `readonly [S,
+// readonly C[]]` (the intersection is narrower), so the runtime dispatch in
+// `run`/`replay` consumes a cell result exactly as before.
+//
+// This mirrors `retry-backoff`'s `Rng` brand (#63): the obligation lives in the
+// type at the construction boundary ("parse, don't validate"), not in a comment.
+export type SyncReturn<S, C extends Cmd> = readonly [S, readonly C[]] & {
+  // A thenable carries a callable `then`; forbidding it rejects every Promise.
+  // Optional + `never` means "absent on a sync tuple, impossible on a Promise".
+  readonly then?: never;
+};
+
+// The nominal brand minted ONLY through the validated construction path
+// (`asReducer` / `defineMachine`). Mirrors `retry-backoff`'s `RngBrand`: a raw
+// record of handlers is a structural `Reducer<S, M, C>`, but a `Reducer` that
+// also carries this phantom brand is one that has passed through the single
+// minting boundary. The brand is an *optional* phantom so the structural
+// `Reducer<S, M, C>` annotation form (`const update: Reducer<...> = { ... }`)
+// keeps accepting plain object literals — the guard that actually rejects an
+// async reducer is `SyncReturn`'s non-thenable return, enforced on every cell.
+declare const ReducerBrand: unique symbol;
+
+// A `Reducer` (or `Transitions`) that has been minted through `asReducer` /
+// `defineMachine`. Carries the phantom brand; otherwise identical to its
+// structural counterpart.
+export type Branded<T> = T & { readonly [ReducerBrand]: true };
+
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
 //
 // Flat dispatch table keyed by `Msg.type`. Each cell is a pure transition for
@@ -115,7 +160,11 @@ export type Reducer<S, M extends { type: string }, C extends Cmd> = {
   [K in M["type"]]: (
     state: S,
     msg: Extract<M, { type: K }>,
-  ) => readonly [S, readonly C[]];
+    // `SyncReturn<S, C>` (not `readonly [S, readonly C[]]`) is the reentrancy
+    // guard: a non-thenable return type, so an `async`/inline-`await`ing cell —
+    // which returns `Promise<...>` — fails to compile at the cell. See the
+    // `SyncReturn` doc above.
+  ) => SyncReturn<S, C>;
 };
 
 // === Transitions<S, M, C>: table form of `update` for state-machine-shaped machines ===
@@ -146,7 +195,10 @@ export type Transitions<
     [K in M["type"]]: (
       state: Extract<S, { type: P }>,
       msg: Extract<M, { type: K }>,
-    ) => readonly [S, readonly C[]];
+      // Same reentrancy guard as `Reducer`: a transition cell that returns a
+      // Promise (async / inline-await) is the suspended-blocking turn the canon
+      // forbids, so its return is the non-thenable `SyncReturn<S, C>`.
+    ) => SyncReturn<S, C>;
   };
 };
 
@@ -882,6 +934,28 @@ export function defineMachine<
   Ctx,
 >(m: Machine<S, M, C, U, Ctx>): Machine<S, M, C, U, Ctx> {
   return m;
+}
+
+// === asReducer: the validated minting path for a reducer (ADR 0003 #5) ===
+//
+// The single entry point that turns a raw record of handlers into a branded
+// `Reducer<S, M, C>` — the exact role `asRng` plays for `Rng` in
+// `retry-backoff`. The parameter type is `Reducer<S, M, C>`, whose every cell
+// returns the non-thenable `SyncReturn<S, C>`, so the reentrancy guard fires
+// HERE, at construction: an `async` cell (or one that inline-`await`s) returns
+// `Promise<...>`, which is not assignable to `SyncReturn`, and `tsc` rejects the
+// call at the offending cell. A pure synchronous reducer passes through
+// untouched and gains the phantom `ReducerBrand`.
+//
+// PURE: identity at runtime (the brand is phantom). `defineMachine` brands its
+// `update` internally the same way, so callers that pass an object literal
+// straight to `defineMachine` never need to call `asReducer` — it exists for
+// the standalone `const update = asReducer<...>({ ... })` form, mirroring how a
+// caller can mint an `Rng` with `asRng` before wiring it.
+export function asReducer<S, M extends { type: string }, C extends Cmd>(
+  reducer: Reducer<S, M, C>,
+): Branded<Reducer<S, M, C>> {
+  return reducer as Branded<Reducer<S, M, C>>;
 }
 
 // === run: implemented in task 2 ===

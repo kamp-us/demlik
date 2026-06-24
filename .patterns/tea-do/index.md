@@ -11,13 +11,20 @@ The docs themselves teach **Akka's** pattern; the mapping to a pure reducer (`st
 is noted inline as a conceptual gloss, not as product code. Covered: the `EventSourcedBehavior`
 `Effect` API, the command/event handlers, `RetentionCriteria`/`snapshotWhen`, `Recovery`, and the
 `EventSourcedSignal`s. Excluded: replicated event sourcing, persistence FSM migration, cluster
-sharding, serialization internals, and durable-state behaviors. The subject will grow — future
-sibling docs cover reentrancy.
+sharding, serialization internals, and durable-state behaviors. The subject has grown beyond
+event-sourcing to also cover durable effects, projections, and reentrancy (below).
 
-The projection docs below are prior art for the first-class CQRS projections of `@demlik/tea/do`
-(issue #69, ADR 0003 primitive #3), extracted from **Akka Projections** + **Akka Persistence Query**
-(the read side). They teach Akka's projection model; the mapping to a pure `Model → View` fold is an
-inline gloss, never product code.
+The durable-effects and projection docs are prior art for the durable-effects ledger (issue #67) and
+the first-class CQRS projections (issue #69) of `@demlik/tea/do`, extracted from **Akka
+AtLeastOnceDelivery** / **Akka Projections** + **Akka Persistence Query** (the read side). They teach
+Akka's models; the mapping to a pure `Model → View` / pending-effects fold is an inline gloss, never
+product code.
+
+The reentrancy docs are mined from a different reference implementation — **Microsoft Orleans** grain
+reentrancy, the virtual-actor reference for one-request-at-a-time scheduling. They teach Orleans' model
+(the serial mailbox and the attributes that relax it); the mapping to a pure, synchronous reducer is
+noted inline as a conceptual gloss, not as product code. The product (`@demlik/tea/do`, issue #71,
+ADR 0003) is named only as the motivation.
 
 ## Index
 
@@ -32,6 +39,8 @@ inline gloss, never product code.
 | [projections.md](./projections.md) | The CQRS read side: `SourceProvider` (by tag/slice) → `Handler` → a named view; `ProjectionId` | Building a view from the write model's events; one write model, many projections |
 | [offset-tracking.md](./offset-tracking.md) | `Offset` (`Sequence`/`TimeBasedUUID`/`NoOffset`), exclusive resume, `SourceProvider` thunk | Making a projection durable/restartable; resuming from the last processed position |
 | [delivery-semantics.md](./delivery-semantics.md) | `atLeastOnce`/`exactlyOnce`/`atMostOnce`, `groupedWithin`, idempotency | Choosing when the offset is stored vs the view write; whether the handler must be idempotent |
+| [reentrancy.md](./reentrancy.md) | One request at a time; `[Reentrant]`/`[ReadOnly]`/`[AlwaysInterleave]`/`[MayInterleave]` and call-chain reentrancy (Orleans) | Deciding whether a grain serializes requests or opts into interleaving, and the shared-state hazard it costs |
+| [reentrancy-deadlock.md](./reentrancy-deadlock.md) | The A→B→A cycle on a non-reentrant grain; the "likely stuck" deactivation (Orleans) | A re-entrant call hangs an activation, or you're choosing how to admit one safely |
 
 ## Shared conventions
 
