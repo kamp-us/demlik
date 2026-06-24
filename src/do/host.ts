@@ -35,6 +35,7 @@ import type {
   EffectOwed,
   PendingEffectsRecorder,
 } from "./durable-effects";
+import type { Projection } from "./projection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // deferredGateway — the deferred-tool gateway (HEADLINE).
@@ -417,6 +418,80 @@ export function sseHub<E>(): SseHub<E> {
       return () => {
         sinks.delete(sink);
       };
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sseProjection — express `sseHub` as ONE projection over the seam (#69).
+//
+// `sseHub` (above) is the ad-hoc form: a sink-set the consumer fans
+// `runtime.observe` events out to by hand. `sseProjection` names it: the SSE
+// view is ONE projection (`name: "sse"`) over the `Projection<Model, View>`
+// seam in `./projection`. Its `apply` maps the write-model update to the
+// consumer's SSE event shape; its `emit` is `hub.emit` — the SAME hub, the SAME
+// public API. Register it on a `projectionRegistry` (driven off `observe`) and
+// the host's runtime→SSE plumbing is one projection among many, not a special
+// case.
+//
+// ADDITIVE, not a replacement: `sseHub()` keeps working untouched for every
+// existing caller (it is the volatile, offset-free case — a live `/sse` stream
+// has no durable read model to resume). `sseProjection` is the seam expression
+// of it for a consumer that wants SSE to sit on the same registry as a durable
+// report/storage projection.
+//
+// The SSE view is the most-recently-emitted event (a "latest" read model); the
+// fold ignores the previous view and re-derives from each update via
+// `toEvent`. `toEvent` returns `null` to SKIP an update the SSE view does not
+// care about (the canon's `Future.successful(Done)` skip) — the fold then keeps
+// the prior view and does not re-emit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Express an {@link SseHub} as a {@link Projection}. The projection's view is
+ * the latest emitted SSE event (or `null` before the first); `apply` maps each
+ * write-model update to an event via `toEvent` and emits it through `hub.emit`,
+ * so the SSE stream is driven by the SAME hub `sseHub()` returns — no API
+ * change for the `/sse` route (`hub.open()`) or any existing caller.
+ *
+ *   - `toEvent(msg, model)` returns the SSE event for this update, or `null` to
+ *     skip it (the view stays, nothing is emitted).
+ *   - `name`/`key` default to `"sse"`/`"main"`; override for a second SSE view.
+ *
+ * @example
+ *   const hub = sseHub<MyEvent>();
+ *   const registry = projectionRegistry<MyState, MyMsg>();
+ *   registry.register(sseProjection(hub, (msg) =>
+ *     msg?.type === "turn_done" ? { kind: "turn", ... } : null,
+ *   ));
+ *   driveProjections(registry, runtime); // SSE is now one projection
+ *   // /sse route unchanged:
+ *   return hub.open();
+ */
+export function sseProjection<Model, Msg extends { type: string }, E>(
+  hub: SseHub<E>,
+  toEvent: (msg: Msg | null, model: Model) => E | null,
+  id: { name?: string; key?: string } = {},
+): Projection<Model, Msg, E | null> {
+  // The SSE view is "the latest event to push, or null when the update was a
+  // skip". `apply` derives it; `emit` pushes the non-null case at the hub. The
+  // fold stays pure (no side effect in `apply`); the sink stays the hub (no API
+  // change). A skip resolves to a `null` view → `emit` pushes nothing.
+  return {
+    id: { name: id.name ?? "sse", key: id.key ?? "main" },
+    initial: null,
+    apply(_view, update) {
+      // Each SSE update re-derives from the write model — the view is the
+      // latest event, not an accumulation, so the prior view is ignored.
+      // Idempotent by construction: re-deriving the same update yields the same
+      // event (the exclusive-offset guard already drops re-presented offsets).
+      return toEvent(update.msg, update.model);
+    },
+    emit(view) {
+      // The runner calls `emit` after every APPLIED update (offset strictly past
+      // the stored one). `null` is the skip — push nothing. A real event is
+      // pushed through the hub, so `hub.open()` / existing callers are unchanged.
+      if (view !== null) hub.emit(view);
     },
   };
 }

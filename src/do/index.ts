@@ -89,7 +89,27 @@ export {
   durableDeferredGateway,
   type SseHub,
   sseHub,
+  sseProjection,
 } from "./host";
+
+// CQRS projections as a first-class seam (#69). One write model, many
+// projections: each is an independent `(events|Model) → view` fold into its own
+// id-scoped read model with an EXCLUSIVE offset (resume + idempotent apply are
+// one unit). `sseHub` (re-exported above) is now expressible as ONE projection
+// via `sseProjection`. See `.patterns/tea-do/projections.md`,
+// `offset-tracking.md`, `delivery-semantics.md`.
+export {
+  type Projection,
+  projectionIdString,
+  type ProjectionId,
+  type ProjectionRegistry,
+  projectionRegistry,
+  type ProjectionRunner,
+  type ProjectionUpdate,
+  driveProjections,
+  rebuildProjection,
+  runProjection,
+} from "./projection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // doStore — `Store<S>` over DurableObjectStorage.

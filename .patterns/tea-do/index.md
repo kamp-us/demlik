@@ -12,7 +12,12 @@ is noted inline as a conceptual gloss, not as product code. Covered: the `EventS
 `Effect` API, the command/event handlers, `RetentionCriteria`/`snapshotWhen`, `Recovery`, and the
 `EventSourcedSignal`s. Excluded: replicated event sourcing, persistence FSM migration, cluster
 sharding, serialization internals, and durable-state behaviors. The subject will grow — future
-sibling docs cover projections and reentrancy.
+sibling docs cover reentrancy.
+
+The projection docs below are prior art for the first-class CQRS projections of `@demlik/tea/do`
+(issue #69, ADR 0003 primitive #3), extracted from **Akka Projections** + **Akka Persistence Query**
+(the read side). They teach Akka's projection model; the mapping to a pure `Model → View` fold is an
+inline gloss, never product code.
 
 ## Index
 
@@ -24,6 +29,9 @@ sibling docs cover projections and reentrancy.
 | [recovery.md](./recovery.md) | Replay on start, `RecoveryCompleted`, `Recovery` strategies | Reasoning about restart, replay, and post-recovery effects |
 | [durable-effects.md](./durable-effects.md) | The unconfirmed-delivery ledger: `deliver`/`confirmDelivery`, monotonic `deliveryId`, re-emit on recovery | An outbound effect must survive a crash/passivation and the receiver must dedup |
 | [reliable-delivery.md](./reliable-delivery.md) | Typed successor: `DurableProducerQueue`, seqNr dedup, producer/consumer confirmation, bounding | Externalizing the ledger, flow-controlled delivery, capping the unconfirmed set |
+| [projections.md](./projections.md) | The CQRS read side: `SourceProvider` (by tag/slice) → `Handler` → a named view; `ProjectionId` | Building a view from the write model's events; one write model, many projections |
+| [offset-tracking.md](./offset-tracking.md) | `Offset` (`Sequence`/`TimeBasedUUID`/`NoOffset`), exclusive resume, `SourceProvider` thunk | Making a projection durable/restartable; resuming from the last processed position |
+| [delivery-semantics.md](./delivery-semantics.md) | `atLeastOnce`/`exactlyOnce`/`atMostOnce`, `groupedWithin`, idempotency | Choosing when the offset is stored vs the view write; whether the handler must be idempotent |
 
 ## Shared conventions
 
