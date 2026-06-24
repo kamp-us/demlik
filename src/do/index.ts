@@ -95,7 +95,6 @@ export {
   sseHub,
   sseProjection,
 } from "./host";
-
 // CQRS projections as a first-class seam (#69). One write model, many
 // projections: each is an independent `(events|Model) → view` fold into its own
 // id-scoped read model with an EXCLUSIVE offset (resume + idempotent apply are
@@ -114,6 +113,32 @@ export {
   rebuildProjection,
   runProjection,
 } from "./projection";
+// The HTTP-PULL control carrier (#92) — a hibernation-correct SIBLING to
+// `acceptCommandSocket`. The hands drive a `/step` loop (execute a tool, POST
+// the result, get the next tool); each POST wakes the DO, settles the result
+// idempotently, resumes from the durable checkpoint, returns the next step, and
+// lets the DO hibernate. Carrier-selection rule lives in the `step-host.ts`
+// header: PULL for the cold-between-steps control plane, PUSH (WS/SSE above)
+// for unsolicited view/fan-out. Both commonly run in one DO.
+export {
+  type AlarmStorage,
+  constantTimeEqual,
+  type ExecuteStep,
+  mintRunToken,
+  type NextStep,
+  type RunStepLoopConfig,
+  runStepLoop,
+  type StepCtx,
+  type StepEngine,
+  type StepHostConfig,
+  type StepLoopOutcome,
+  type StepOutcome,
+  type StepRequest,
+  type StepResponse,
+  type StepResult,
+  type StepTransport,
+  stepHost,
+} from "./step-host";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // doStore — `Store<S>` over DurableObjectStorage.
