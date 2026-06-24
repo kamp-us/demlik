@@ -279,9 +279,22 @@ export function createTokenRefresh(config: TokenRefreshConfig = {}) {
    * `token_refreshed` Msg: after it, `needsRefresh(state, at)` is false for any
    * `at` below the new skewed expiry, and the stale flag is gone (the new
    * credential supersedes whatever the 401 rejected).
+   *
+   * This is the slice's WRITE boundary for a credential, so it is where the
+   * durability invariant is paid for: it normalizes a negative-zero `expiresAt`
+   * to `+0` before the value enters the slice. `-0` is the one finite double
+   * JSON cannot round-trip — `JSON.stringify(-0)` is `"0"`, which parses back as
+   * `+0`, so a slice carrying `-0` would diverge from its persisted form across
+   * a Durable Object eviction / page reload (invariant: the boundary parses, the
+   * core trusts). `-0` and `+0` denote the same epoch-ms instant, so collapsing
+   * them loses no information and makes the un-round-trippable state
+   * unrepresentable in the slice by construction.
    */
   function refreshed(state: TokenState, token: Token): TokenState {
-    return { ...state, token, stale: false };
+    const normalized: Token = Object.is(token.expiresAt, -0)
+      ? { ...token, expiresAt: 0 }
+      : token;
+    return { ...state, token: normalized, stale: false };
   }
 
   /**
