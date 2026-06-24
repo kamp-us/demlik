@@ -1,0 +1,3 @@
+# Python bytecode from the cast generators
+__pycache__/
+*.pyc
