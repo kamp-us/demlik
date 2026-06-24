@@ -132,6 +132,23 @@ export type SimEvent =
       readonly kind: "settle";
       /** Max deliveries to run (the drain is FIFO; stops early when empty). */
       readonly bound: number;
+    }
+  | {
+      /**
+       * Set the cluster's *partitioned* node set (a network fault, NOT a state
+       * change). A node in `down` is isolated: the transport DROPS every message
+       * to OR from it (both directions, as a real partition does) while its
+       * timers still fire — so a crashed/partitioned leader stops being able to
+       * heartbeat and the surviving majority elects a new leader. This is the
+       * "kill the leader" / "heal the partition" move the failover demo needs.
+       *
+       * It names the WHOLE down-set absolutely (not a toggle): `{ down: [n0] }`
+       * isolates n0; a later `{ down: [] }` heals every partition. Recorded as
+       * one step (clock advances, no message moves), so it replays deterministically.
+       */
+      readonly kind: "partition";
+      /** The nodes that are currently isolated (drop all their traffic). */
+      readonly down: readonly NodeId[];
     };
 
 /** A whole schedule: the finite event stream the driver folds. */
@@ -232,6 +249,12 @@ interface SimWorld {
   states: Record<NodeId, RaftState<number>>;
   pending: InFlight[];
   clock: number;
+  /**
+   * The currently-partitioned nodes (a `partition` event sets this absolutely).
+   * The transport drops any in-flight message to OR from a down node — its
+   * timers still fire, but its RPCs never land and it never hears the cluster.
+   */
+  down: Set<NodeId>;
 }
 
 /**
@@ -341,6 +364,12 @@ function deliverOne(world: SimWorld, index: number): boolean {
   const [inFlight] = world.pending.splice(i, 1);
   if (!inFlight) return false;
   const target = inFlight.cmd.to;
+  // Partition: a message to OR from an isolated node is dropped — consumed from
+  // the pool (so a `settle` still terminates) but never applied (the packet was
+  // lost on the wire). Both directions, as a real partition severs.
+  if (world.down.has(target) || world.down.has(inFlight.from)) {
+    return true;
+  }
   const node = world.handles.get(target);
   const state = world.states[target];
   if (node && state) {
@@ -360,6 +389,20 @@ function deliverOne(world: SimWorld, index: number): boolean {
  * `states` / `pending` / `clock` in place (the local fold bag).
  */
 function applyEvent(world: SimWorld, event: SimEvent, steps: SimStep[]): void {
+  if (event.kind === "partition") {
+    // A pure network-fault move: replace the down-set, advance the clock, record
+    // a step. No message moves and no node state changes — the effect surfaces
+    // later when `deliverOne` drops traffic to/from a down node.
+    world.clock += 1;
+    world.down = new Set(event.down);
+    steps.push({
+      event,
+      pending: world.pending.length,
+      states: snapshot(world.states),
+    });
+    return;
+  }
+
   if (event.kind === "settle") {
     // Drain FIFO (index 0) until empty or the bound is hit. Each delivery is its
     // own recorded step, tagged as the deliver-index-0 it actually is.
@@ -427,7 +470,13 @@ export function runSchedule(
     states[config.self] = node.init();
   });
 
-  const world: SimWorld = { handles, states, pending: [], clock: 0 };
+  const world: SimWorld = {
+    handles,
+    states,
+    pending: [],
+    clock: 0,
+    down: new Set(),
+  };
   const steps: SimStep[] = [];
 
   for (const event of schedule) {
