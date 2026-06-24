@@ -178,6 +178,24 @@ export interface InFlight {
 /** A snapshot of every node's state, keyed by id. */
 export type ClusterStates = Readonly<Record<NodeId, RaftState<number>>>;
 
+/**
+ * A read-off of the message a `deliver` step actually pulled off the pending
+ * pool — sender, target, and the {@link RaftCmd} discriminant (`cmd.type`). This
+ * is a pure projection of what the fold *already did* (the InFlight that
+ * {@link deliverOne} consumed), recorded so a renderer can draw the RPC flow.
+ * It is NOT a new input and changes NO simulation behavior. Recorded even when
+ * the packet is dropped by a partition (the RPC was still attempted), so the
+ * arrow shows the intent while the greyed node shows the drop.
+ */
+export interface DeliveredMessage {
+  /** The node that emitted the delivered Cmd (the inbound Msg's sender). */
+  readonly from: NodeId;
+  /** The node the Cmd was addressed to (`cmd.to`). */
+  readonly to: NodeId;
+  /** The delivered Cmd's discriminant (`RaftCmd["type"]`). */
+  readonly kind: RaftCmd<number>["type"];
+}
+
 /** One recorded step: the event applied and the cluster state it produced. */
 export interface SimStep {
   /** The event applied at this step. */
@@ -186,6 +204,14 @@ export interface SimStep {
   readonly pending: number;
   /** Every node's state after the event. */
   readonly states: ClusterStates;
+  /**
+   * On a `deliver` step (incl. each delivery a `settle` drains), the message
+   * that was actually pulled off the pool. ABSENT on every other step kind and
+   * on a `deliver` against an empty pool — additive + backward-compatible, so a
+   * trace recorded before this field still folds and renders identically (field
+   * absent ⇒ no arrow). Purely a read-off of {@link deliverOne}'s work.
+   */
+  readonly delivered?: DeliveredMessage;
 }
 
 /**
@@ -347,14 +373,20 @@ function park(
 
 /**
  * Deliver the pending message at `index` (modulo the pool size) to its target,
- * parking whatever it emits. Advances the clock and returns `true` if a message
- * was actually delivered (the pool was non-empty), `false` otherwise. A single
- * atomic unit of simulated work — one trace step.
+ * parking whatever it emits. Advances the clock and returns the {@link InFlight}
+ * it consumed from the pool (so a caller can record what was delivered),
+ * or `null` when the pool was empty (a recorded no-op). A single atomic unit of
+ * simulated work — one trace step.
+ *
+ * The return value is a PURE read-off of work the function already does (the
+ * splice was always there); returning it instead of a `boolean` adds no
+ * behavior — every existing call-site path (apply, partition-drop, empty-pool)
+ * is byte-for-byte unchanged.
  */
-function deliverOne(world: SimWorld, index: number): boolean {
+function deliverOne(world: SimWorld, index: number): InFlight | null {
   if (world.pending.length === 0) {
     world.clock += 1;
-    return false;
+    return null;
   }
   world.clock += 1;
   const at = world.clock;
@@ -362,13 +394,13 @@ function deliverOne(world: SimWorld, index: number): boolean {
     ((index % world.pending.length) + world.pending.length) %
     world.pending.length;
   const [inFlight] = world.pending.splice(i, 1);
-  if (!inFlight) return false;
+  if (!inFlight) return null;
   const target = inFlight.cmd.to;
   // Partition: a message to OR from an isolated node is dropped — consumed from
   // the pool (so a `settle` still terminates) but never applied (the packet was
   // lost on the wire). Both directions, as a real partition severs.
   if (world.down.has(target) || world.down.has(inFlight.from)) {
-    return true;
+    return inFlight;
   }
   const node = world.handles.get(target);
   const state = world.states[target];
@@ -378,7 +410,12 @@ function deliverOne(world: SimWorld, index: number): boolean {
     world.states[target] = next;
     park(world, target, cmds);
   }
-  return true;
+  return inFlight;
+}
+
+/** Project a consumed {@link InFlight} into the additive {@link DeliveredMessage} read-off. */
+function deliveredOf(inFlight: InFlight): DeliveredMessage {
+  return { from: inFlight.from, to: inFlight.cmd.to, kind: inFlight.cmd.type };
 }
 
 /**
@@ -408,18 +445,26 @@ function applyEvent(world: SimWorld, event: SimEvent, steps: SimStep[]): void {
     // own recorded step, tagged as the deliver-index-0 it actually is.
     const bound = Math.max(0, event.bound);
     for (let n = 0; n < bound && world.pending.length > 0; n++) {
-      deliverOne(world, 0);
+      const inFlight = deliverOne(world, 0);
       steps.push({
         event: { kind: "deliver", index: 0 },
         pending: world.pending.length,
         states: snapshot(world.states),
+        // Each drained delivery is its OWN step, so record that step's own
+        // delivered message (not "the last of the settle"). The pool was
+        // non-empty (loop guard), so `inFlight` is never null here.
+        ...(inFlight ? { delivered: deliveredOf(inFlight) } : {}),
       });
     }
     return;
   }
 
+  // The message a top-level `deliver` consumed (null on an empty-pool no-op);
+  // read off below into the step's additive `delivered` field. `undefined` for
+  // every non-deliver event kind.
+  let delivered: InFlight | null = null;
   if (event.kind === "deliver") {
-    deliverOne(world, event.index);
+    delivered = deliverOne(world, event.index);
   } else {
     // timer / client: drive the acting node's verb directly.
     world.clock += 1;
@@ -444,6 +489,10 @@ function applyEvent(world: SimWorld, event: SimEvent, steps: SimStep[]): void {
     event,
     pending: world.pending.length,
     states: snapshot(world.states),
+    // Additive read-off: present only when a `deliver` actually consumed a
+    // message. Absent (key omitted) for timer/client and empty-pool delivers,
+    // so the step is structurally identical to a pre-#144 trace.
+    ...(delivered ? { delivered: deliveredOf(delivered) } : {}),
   });
 }
 
