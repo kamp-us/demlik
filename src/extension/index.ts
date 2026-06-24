@@ -25,7 +25,12 @@ export type {
 // Re-export the runtime bridge primitives. The React adapter lives at
 // `@demlik/tea/extension/react` so the main entry stays react-free for the
 // background service-worker side.
-export { bridgeClient, bridgeRuntime, bridgeTabClient } from "./bridge";
+export {
+  bridgeClient,
+  bridgeRuntime,
+  bridgeTabClient,
+  passThroughMsg,
+} from "./bridge";
 
 const MALFORMED = "chromeStorageStore: stored value is not a string";
 

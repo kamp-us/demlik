@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  asRng,
   backoffDelay,
   defaultRetryPolicy,
   initRetry,
@@ -22,8 +23,8 @@ const noJitter: RetryPolicy = {
 };
 
 // Deterministic RNGs pinning the jitter to each extreme of [0, 1).
-const rngZero = () => 0;
-const rngNearOne = () => 0.9999999;
+const rngZero = asRng(() => 0);
+const rngNearOne = asRng(() => 0.9999999);
 
 describe("backoffDelay", () => {
   it("grows exponentially by `factor` per attempt (no jitter)", () => {
@@ -117,7 +118,7 @@ describe("backoffDelay property: 0 <= delay <= capMs for any attempt and policy"
         // rng is contractually in [0, 1); max:0.9999999 stays below 1.
         fc.double({ min: 0, max: 0.9999999, noNaN: true }),
         (attempt, policy, r) => {
-          const delay = backoffDelay(attempt, policy, () => r);
+          const delay = backoffDelay(attempt, policy, asRng(() => r));
           return delay >= 0 && delay <= policy.capMs;
         },
       ),

@@ -242,6 +242,21 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
 // vitest without happy-dom + React renderers.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The explicit opt-out of inbound msg parsing: an identity pass-through that
+ * casts the raw `unknown` to `M`. Surfaces that gate only on state and treat
+ * the broadcast msg as advisory pass this as `parseMsg` to acknowledge — at
+ * the call site, in the types — that they are NOT parsing the msg boundary.
+ *
+ * This is the same behavior the old optional-`parseMsg` default had, but the
+ * unsound cast now lives at one named, greppable, opt-in seam instead of being
+ * the silent default for everyone. (Inv 8: the boundary parses; this helper is
+ * the documented exception, chosen explicitly.)
+ */
+export function passThroughMsg<M>(raw: unknown): M | null {
+  return raw as M;
+}
+
 export interface BridgeClient<S, M> {
   /** Send the hydrate request; resolves with the initial snapshot (or null
    * if the host is still booting OR the response failed to parse). Also
@@ -251,9 +266,9 @@ export interface BridgeClient<S, M> {
   /** Send a dispatch envelope; resolves once the host's dispatch settles. */
   dispatch(msg: M): Promise<void>;
   /** Subscribe to broadcasts. Returns a cleanup function. Broadcasts whose
-   * payload fails `parseState` (or, if provided, `parseMsg`) are dropped
-   * silently — the listener is not called. Each successful broadcast
-   * updates `getSnapshot()`. */
+   * payload fails `parseState` or `parseMsg` are dropped silently — the
+   * listener is not called. Each successful broadcast updates
+   * `getSnapshot()`. */
   subscribe(listener: (msg: M | null, state: S) => void): () => void;
   /** Synchronous accessor for the latest known state, or `null` until the
    * first successful hydrate or broadcast lands. Required reference stability
@@ -274,13 +289,17 @@ export interface BridgeClientOpts<S, M> {
    */
   parseState: (raw: unknown) => S | null;
   /**
-   * Optional parse for inbound `msg` payloads on broadcasts. Defaults to a
-   * pass-through cast — most surfaces only need to gate on state and treat
-   * the msg union as advisory. Provide this when malformed msgs must be
-   * dropped (e.g. when the host's M is a real wire enum, not a local type).
-   * Returning `null` drops the broadcast silently.
+   * REQUIRED parse for inbound `msg` payloads on broadcasts. Chrome runtime
+   * messages are an `unknown` boundary (Inv 8) just like the `state` payload,
+   * so the msg crosses the same JSON serialization seam and must be parsed —
+   * never cast. Returning `null` drops the broadcast silently.
+   *
+   * Surfaces that treat the msg union as advisory and only gate on state opt
+   * out EXPLICITLY by passing the {@link passThroughMsg} helper — the opt-out
+   * is now a visible call-site decision, not a hidden default that lets an
+   * unparsed `unknown` reach listeners typed as `M`.
    */
-  parseMsg?: (raw: unknown) => M | null;
+  parseMsg: (raw: unknown) => M | null;
 }
 
 export function bridgeClient<S, M extends { type: string }>({
@@ -341,17 +360,16 @@ export function bridgeClient<S, M extends { type: string }>({
         // Boundary parse (Inv 8): chrome runtime messages are `unknown`.
         // A failed state parse drops the broadcast — null state would
         // be indistinguishable from "host still booting" and is not a
-        // useful signal to surfaces. Same for msg when parseMsg is set.
+        // useful signal to surfaces. The msg is parsed through the
+        // (required) `parseMsg`; a null result drops the broadcast too.
         const state = parseState(obj.state);
         if (state === null) return;
         let msg: M | null;
         if (obj.msg === null || obj.msg === undefined) {
           msg = null;
-        } else if (parseMsg !== undefined) {
+        } else {
           msg = parseMsg(obj.msg);
           if (msg === null) return;
-        } else {
-          msg = obj.msg as M;
         }
         latestState = state;
         listener(msg, state);
@@ -375,10 +393,10 @@ export function bridgeClient<S, M extends { type: string }>({
  * Shared backlog-replay helper used by both `bridgeClient` and
  * `bridgeTabClient`. Iterates raw entries from the wire, runs each through
  * the same boundary-parse rules a live broadcast would (parseState +
- * optional parseMsg, both returning `null` to drop), and fires the listeners
- * with the parsed `(msg, state)` pair. Updates the closure-held `latestState`
- * via `commitState` so post-replay `getSnapshot()` returns the most recent
- * backlog state if the current-state marker is absent or unparseable.
+ * parseMsg, both returning `null` to drop), and fires the listeners with the
+ * parsed `(msg, state)` pair. Updates the closure-held `latestState` via
+ * `commitState` so post-replay `getSnapshot()` returns the most recent backlog
+ * state if the current-state marker is absent or unparseable.
  *
  * Extracted so the two clients can't drift in how they parse backlog
  * payloads — both must stay symmetric with their live `subscribe` parse.
@@ -386,7 +404,7 @@ export function bridgeClient<S, M extends { type: string }>({
 function replayBacklog<S, M extends { type: string }>(
   raw: unknown,
   parseState: (raw: unknown) => S | null,
-  parseMsg: ((raw: unknown) => M | null) | undefined,
+  parseMsg: (raw: unknown) => M | null,
   listeners: Set<(msg: M | null, state: S) => void>,
   commitState: (next: S) => void,
 ): void {
@@ -399,11 +417,9 @@ function replayBacklog<S, M extends { type: string }>(
     let msg: M | null;
     if (entry.msg === null || entry.msg === undefined) {
       msg = null;
-    } else if (parseMsg !== undefined) {
+    } else {
       msg = parseMsg(entry.msg);
       if (msg === null) continue;
-    } else {
-      msg = entry.msg as M;
     }
     commitState(state);
     for (const l of listeners) l(msg, state);
@@ -438,10 +454,11 @@ export interface BridgeTabClientOpts<S, M> {
    */
   parseState: (raw: unknown) => S | null;
   /**
-   * Optional parse for inbound `msg` payloads. See
-   * `BridgeClientOpts.parseMsg`.
+   * REQUIRED parse for inbound `msg` payloads. See `BridgeClientOpts.parseMsg`
+   * — same contract, same rationale. Opt out of msg parsing with
+   * {@link passThroughMsg}.
    */
-  parseMsg?: (raw: unknown) => M | null;
+  parseMsg: (raw: unknown) => M | null;
 }
 
 /**
@@ -514,11 +531,9 @@ export function bridgeTabClient<S, M extends { type: string }>({
         let msg: M | null;
         if (obj.msg === null || obj.msg === undefined) {
           msg = null;
-        } else if (parseMsg !== undefined) {
+        } else {
           msg = parseMsg(obj.msg);
           if (msg === null) return;
-        } else {
-          msg = obj.msg as M;
         }
         latestState = state;
         listener(msg, state);

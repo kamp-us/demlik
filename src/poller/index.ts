@@ -85,6 +85,7 @@ import type { IdempotencyStore } from "../idempotency";
 import { idempotencyMemory } from "../idempotency/adapter";
 import type { Cmd, Sub } from "../index";
 import {
+  asRng,
   defaultRetryPolicy,
   initRetry,
   nextDelayMs,
@@ -338,6 +339,11 @@ export function createPoller<State, R>(
   config: PollerConfig<State, R>,
   rng: () => number = Math.random,
 ): Poller<State, R> {
+  // Re-affirm the `[0, 1)` contract at the seam where the injected generator
+  // enters the backoff math (brand from `../retry-backoff`). The factory's
+  // public param stays a plain `() => number` so transitive callers are
+  // unchanged; `asRng` is the single point where it's branded for `nextDelayMs`.
+  const rngBranded = asRng(rng);
   const policy: RetryPolicy = config.retry ?? defaultRetryPolicy;
 
   // The dedupe store seam, bound once. The poller delegates its dedupe-window
@@ -461,7 +467,7 @@ export function createPoller<State, R>(
     // curve here instead of `everyMs`. `rng` is the value injected once at
     // `createPoller`; the verb body never names the global RNG, so a fixed
     // `rng` makes the backoff target replay bit-for-bit.
-    const delayMs = nextDelayMs(retry, policy, rng);
+    const delayMs = nextDelayMs(retry, policy, rngBranded);
     return [{ ...failed, phase: "polling", nextAtMs: at + delayMs }, []];
   }
 

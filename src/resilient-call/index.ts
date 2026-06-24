@@ -90,6 +90,7 @@ import {
 import { type Cmd, type NoCtx, tryInterpret } from "../index";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
 import {
+  asRng,
   initRetry,
   nextDelayMs,
   type RetryPolicy,
@@ -299,6 +300,11 @@ export function createResilientCall<I, R>(
   rng: () => number = Math.random,
 ) {
   const cPolicy = circuitPolicy(config);
+  // Re-affirm the `[0, 1)` contract at the seam where the injected generator
+  // feeds the backoff math (brand from `../retry-backoff`). The factory's
+  // public param stays a plain `() => number` so transitive callers are
+  // unchanged; `asRng` is the single point it's branded for `nextDelayMs`.
+  const rngBranded = asRng(rng);
 
   /** The starting slice. Bricks not in `config` still get a default value. */
   function init(): ResilientState<I, R> {
@@ -442,7 +448,7 @@ export function createResilientCall<I, R>(
     if (!shouldRetry(retry, config.retry)) {
       return [setCall(withRetry, key, { phase: "failed", error }), []];
     }
-    const retryAtMs = at + nextDelayMs(retry, config.retry, rng);
+    const retryAtMs = at + nextDelayMs(retry, config.retry, rngBranded);
     return [
       setCall(withRetry, key, {
         phase: "waiting_retry",

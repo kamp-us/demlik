@@ -47,6 +47,54 @@
  */
 export type Jitter = "none" | "full" | "equal";
 
+declare const RngBrand: unique symbol;
+
+/**
+ * A source of uniform randomness in `[0, 1)` — the `Math.random` contract.
+ *
+ * Nominally branded so the `[0, 1)` range is enforced at *construction*, not
+ * by a comment. A raw `() => number` does NOT satisfy `Rng`: a stray `() => 5`
+ * or `() => -1` is rejected by the type before it can ever feed the jitter
+ * math and breach the `0 <= delay <= capMs` postcondition. The only way to
+ * mint an `Rng` is {@link asRng} (or the {@link defaultRng} const), so the
+ * range obligation lives at the boundary where randomness enters the module —
+ * "parse, don't validate" applied to a function value.
+ */
+export type Rng = (() => number) & { readonly [RngBrand]: true };
+
+/**
+ * Brand a `[0, 1)` generator as an {@link Rng}. The single entry point for
+ * randomness into this module: callers (production wiring and tests alike)
+ * pass their raw generator through here, which optionally asserts the contract
+ * and tags the value. The probe is a cheap guard against the most common
+ * misuse (returning a non-unit value); it does not — and cannot — prove
+ * uniformity.
+ *
+ * PURE with respect to the module: it neither reads the clock nor calls the
+ * generator on the module's behalf unless `probe` is set. The probe is opt-in
+ * (default off) so wrapping a hot generator stays allocation- and call-free.
+ *
+ * @throws RangeError if `probe` is enabled and a sampled value is outside `[0, 1)`.
+ */
+export function asRng(fn: () => number, probe = false): Rng {
+  if (probe) {
+    const sample = fn();
+    if (!(sample >= 0 && sample < 1)) {
+      throw new RangeError(
+        `asRng: generator returned ${sample}, outside the [0, 1) contract`,
+      );
+    }
+  }
+  return fn as Rng;
+}
+
+/**
+ * The production default: `Math.random`, branded. Used wherever an `Rng` is
+ * required but the caller omits one — at the effect boundary, never inside a
+ * reducer.
+ */
+export const defaultRng: Rng = Math.random as Rng;
+
 /**
  * A retry policy is pure configuration — the knobs of the backoff curve. It
  * carries no mutable state; `RetryState` does. One policy is shared across all
@@ -90,8 +138,9 @@ export const defaultRetryPolicy: RetryPolicy = {
  * default reads `Math.random` only when the caller omits it (at the effect
  * boundary, never inside a reducer).
  *
- * `rng` must return a value in `[0, 1)` (the `Math.random` contract). The
- * returned delay is always in `[0, capMs]` regardless of jitter strategy:
+ * `rng` is an {@link Rng} — a `[0, 1)` generator branded at construction via
+ * {@link asRng}, so a raw `() => 5` can't be passed here. The returned delay
+ * is always in `[0, capMs]` regardless of jitter strategy:
  *   - `"none"`  → exactly the capped exponential `d`.
  *   - `"full"`  → `rng() * d`, uniform in `[0, d]`.
  *   - `"equal"` → `d/2 + rng() * d/2`, uniform in `[d/2, d]`.
@@ -104,7 +153,7 @@ export const defaultRetryPolicy: RetryPolicy = {
 export function backoffDelay(
   attempt: number,
   policy: RetryPolicy,
-  rng: () => number = Math.random,
+  rng: Rng = defaultRng,
 ): number {
   // Clamp the attempt to >= 0 so factor ** attempt is never a fractional /
   // negative exponent. The exponential can overflow to Infinity for large
@@ -181,7 +230,7 @@ export function shouldRetry(state: RetryState, policy: RetryPolicy): boolean {
 export function nextDelayMs(
   state: RetryState,
   policy: RetryPolicy,
-  rng: () => number = Math.random,
+  rng: Rng = defaultRng,
 ): number {
   return backoffDelay(state.attempt, policy, rng);
 }

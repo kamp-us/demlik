@@ -151,19 +151,41 @@ export type DeadlineDecisionCmd = Cmd<"$deadline:decision"> & {
 };
 
 /**
+ * A predicate over a Msg that decides whether it re-arms the deadline.
+ *
+ * The argument is `Readonly<M>` and the result is `boolean`: this is the
+ * STRONGEST purity TS can express here. `Readonly<M>` removes the most common
+ * impurity at compile time — the predicate cannot reassign the Msg's own
+ * fields — and `boolean` pins the return so a side-effecting `(msg) => { … }`
+ * with an implicit `undefined`/`void` return is rejected.
+ *
+ * What the type system CANNOT encode (TS has no effect tracking): observational
+ * purity. A body that reads `Date.now()`, calls `Math.random()`, performs IO,
+ * or closes over and mutates external state still type-checks. Those remain a
+ * CONVENTION enforced by review, not the compiler — the predicate runs inside
+ * the pure merged `update` (invariant 2), so it must be a pure function of the
+ * Msg alone: no clock, no RNG, no IO, no captured mutable state.
+ */
+export type ProgressPredicate<M extends { type: string }> = (
+  msg: Readonly<M>,
+) => boolean;
+
+/**
  * The deadline knob. `ms` is the inactivity window; `progress` is an OPTIONAL
  * predicate picking which base Msgs count as activity (default: EVERY base Msg
  * re-arms). The predicate runs INSIDE the pure merged `update`, so it must be a
- * pure function of the Msg — no clock, no RNG.
+ * pure function of the Msg — see {@link ProgressPredicate} for what the type
+ * enforces vs. what stays a convention.
  */
 export interface DeadlineConfig<M extends { type: string }> {
   /** The inactivity window in milliseconds. Auto-fail after `ms` with no progress. */
   readonly ms: number;
   /**
    * Predicate picking which base Msgs re-arm the timer. Default: every base Msg
-   * counts as progress. Pure — a function of the Msg alone.
+   * counts as progress. Pure — a function of the Msg alone (see
+   * {@link ProgressPredicate}).
    */
-  readonly progress?: (msg: M) => boolean;
+  readonly progress?: ProgressPredicate<M>;
 }
 
 // ===========================================================================

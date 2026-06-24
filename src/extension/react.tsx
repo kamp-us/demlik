@@ -59,7 +59,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { bridgeClient } from "./bridge";
+import { bridgeClient, passThroughMsg } from "./bridge";
 
 export interface UseBackgroundRuntimeOpts<S> {
   channel: string;
@@ -91,7 +91,14 @@ export function useBackgroundRuntime<S, M extends { type: string }>({
   // the client every render would re-register listeners every render too.
   const clientRef = useRef<ReturnType<typeof bridgeClient<S, M>> | null>(null);
   if (clientRef.current === null) {
-    clientRef.current = bridgeClient<S, M>({ channel, parseState });
+    // This hook surfaces only `state`; the broadcast msg is unused, so it
+    // explicitly opts out of msg parsing via `passThroughMsg`. Same behavior
+    // as the former optional-`parseMsg` default, now a visible decision.
+    clientRef.current = bridgeClient<S, M>({
+      channel,
+      parseState,
+      parseMsg: passThroughMsg,
+    });
   }
   const client = clientRef.current;
 

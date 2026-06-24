@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  asRng,
   backoffDelay,
   initRetry,
   nextDelayMs,
@@ -40,8 +41,8 @@ import {
 
 // Deterministic RNGs pinning the jitter to each extreme of [0, 1). Matches the
 // style of the sibling `index.test.ts`.
-const rngZero = () => 0;
-const rngNearOne = () => 0.9999999;
+const rngZero = asRng(() => 0);
+const rngNearOne = asRng(() => 0.9999999);
 
 // ---------------------------------------------------------------------------
 // R1 — exponential schedule with NO jitter (the canonical delay vector).
@@ -136,7 +137,7 @@ describe("R2 — jitter bounds per strategy (rng swept to extremes)", () => {
         (jitter, attempt, r) => {
           const policy: RetryPolicy = { ...base, jitter };
           const d = backoffDelay(attempt, base);
-          const delay = backoffDelay(attempt, policy, () => r);
+          const delay = backoffDelay(attempt, policy, asRng(() => r));
           expect(Number.isNaN(delay)).toBe(false);
           expect(delay).toBeGreaterThanOrEqual(0);
           expect(delay).toBeLessThanOrEqual(d);
