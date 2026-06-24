@@ -102,6 +102,7 @@ import {
   resume as resumeWalk,
   start as startWalk,
 } from "../paginator";
+import { MsgType } from "../protocol";
 import {
   type CircuitConfig,
   createResilientCall,
@@ -375,7 +376,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
   ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
     // 1) Settle the underlying resilient call as a success.
     const [resilience] = rc.succeed(s.resilience, PAGE_KEY, {
-      type: "resilient_ok",
+      type: MsgType.ResilientOk,
       key: PAGE_KEY,
       result: page,
       at,
@@ -438,7 +439,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
       return [s, []];
     }
     const [resilience, cmds] = rc.fail(s.resilience, PAGE_KEY, {
-      type: "resilient_err",
+      type: MsgType.ResilientErr,
       key: PAGE_KEY,
       error,
       at,

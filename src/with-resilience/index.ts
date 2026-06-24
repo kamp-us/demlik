@@ -65,6 +65,7 @@
 import { type DeadlineSub, subscribeDeadline } from "../deadline";
 import type { Cmd, Interpret, Machine, Reducer, Sub } from "../index";
 import { subId, tryInterpret } from "../index";
+import { MsgType } from "../protocol";
 import {
   createResilientCall,
   type ResilientConfig,
@@ -473,7 +474,7 @@ export function withResilience<
   update["$resilience:ok"] = (state, msg) => {
     const m = msg as ResilienceOkMsg;
     const [slice, runCmds] = rc.succeed(state.$resilience, m.key, {
-      type: "resilient_ok",
+      type: MsgType.ResilientOk,
       key: m.key,
       result: m.result,
       at: m.at,
@@ -485,7 +486,7 @@ export function withResilience<
   update["$resilience:err"] = (state, msg) => {
     const m = msg as ResilienceErrMsg;
     const [slice, runCmds] = rc.fail(state.$resilience, m.key, {
-      type: "resilient_err",
+      type: MsgType.ResilientErr,
       key: m.key,
       error: m.error,
       at: m.at,

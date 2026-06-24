@@ -85,6 +85,7 @@
  */
 
 import type { Cmd } from "../index";
+import type { MsgType } from "../protocol";
 import {
   createResilientCall,
   type DeadlineExceeded,
@@ -174,7 +175,7 @@ export type AuthedCmd<I> = RunCmd<I> | RefreshTokenCmd;
  * when a guarded call comes back unauthorized.
  */
 export type Unauthorized = {
-  readonly type: "unauthorized";
+  readonly type: typeof MsgType.Unauthorized;
   readonly key: string;
   readonly at: number;
 };

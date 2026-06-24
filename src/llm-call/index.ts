@@ -90,6 +90,7 @@
  */
 
 import type { Cmd } from "../index";
+import { MsgType } from "../protocol";
 import {
   createResilientCall,
   type DeadlineExceeded,
@@ -488,7 +489,7 @@ export function createLlmCall<
     // DELIBERATE context-free seam, not accidental `unknown`), so the empty
     // record satisfies it without a cast.
     const settle = await resilientRunHandler(cmd, {});
-    if (settle.type === "resilient_ok") {
+    if (settle.type === MsgType.ResilientOk) {
       // `result` is the parsed `LlmOk` from `invokeOne`, and the narrowed
       // `SucceedMsg<LlmOk>` IS `LlmSucceedMsg` — returned as-is, no cast.
       return settle;
@@ -504,7 +505,7 @@ export function createLlmCall<
       error: rawError,
     };
     return {
-      type: "resilient_err",
+      type: MsgType.ResilientErr,
       key: settle.key,
       error: err,
       at: settle.at,
@@ -561,7 +562,7 @@ export function createLlmCall<
       ): void => {
         const fired = (async () => {
           const settle = await settleOf(cmd);
-          if (settle.type === "resilient_ok") {
+          if (settle.type === MsgType.ResilientOk) {
             const msg = ports.onOk(settle.result);
             if (msg !== undefined) await ctx.dispatch(msg);
             return;

@@ -75,6 +75,7 @@
  */
 
 import { type Cmd, type Interpret, tryInterpret } from "../index";
+import { MsgType } from "../protocol";
 
 /**
  * A minted credential: the opaque `value` to send on the wire, and the absolute
@@ -167,13 +168,13 @@ export function refreshTokenCmd(): RefreshTokenCmd {
  * folding `refreshed(state, msg.token)` into the slice.
  */
 export interface TokenRefreshedMsg {
-  readonly type: "token_refreshed";
+  readonly type: typeof MsgType.TokenRefreshed;
   readonly token: Token;
 }
 
 /** Construct a `token_refreshed` Msg carrying the new token. */
 export function tokenRefreshedMsg(token: Token): TokenRefreshedMsg {
-  return { type: "token_refreshed", token };
+  return { type: MsgType.TokenRefreshed, token };
 }
 
 /**
@@ -185,13 +186,13 @@ export function tokenRefreshedMsg(token: Token): TokenRefreshedMsg {
  * policy, expressed in their reducer.
  */
 export interface TokenRefreshFailedMsg {
-  readonly type: "token_refresh_failed";
+  readonly type: typeof MsgType.TokenRefreshFailed;
   readonly error: unknown;
 }
 
 /** Construct a `token_refresh_failed` Msg carrying the rejection. */
 export function tokenRefreshFailedMsg(error: unknown): TokenRefreshFailedMsg {
-  return { type: "token_refresh_failed", error };
+  return { type: MsgType.TokenRefreshFailed, error };
 }
 
 /** The two Msgs the refresh port can produce. Union for a consumer's Msg type. */

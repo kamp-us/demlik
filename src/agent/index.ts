@@ -125,6 +125,7 @@ import {
   type MonitoredRunState,
   type RunFailure,
 } from "../monitored-run";
+import { MsgType } from "../protocol";
 import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================
@@ -502,9 +503,12 @@ export type AgentStatus<Stage> =
  *      the outstanding tool calls (`tools.running`). THE resumability condition.
  *   5. otherwise → `running`.
  */
-export function status<Stage, P extends string, O extends Record<P, unknown>, R>(
-  s: AgentState<Stage, P, O, R>,
-): AgentStatus<Stage> {
+export function status<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+>(s: AgentState<Stage, P, O, R>): AgentStatus<Stage> {
   // 1) The agent's own failure annotation is canonical — it is set without
   //    moving `run.phase` (turn_limit / llm leave the run `running`), so it
   //    MUST be read before `run.phase` or such a failure reports as `running`.
@@ -1464,15 +1468,15 @@ export function createAgent<
     // monitored-run slice provably never emits a `snapshot_write` Cmd, so the
     // forwarded array never carries the variant `ACmd` excludes.
     const update: Reducer<State, M, AgentCmd<P, TC>> = {
-      agent_start: (s, m) => start(s, m.runId, m.at),
-      agent_tool_ok: (s, m) => toolOk(s, m.callId, m.result, m.at),
-      agent_tool_err: (s, m) => toolErr(s, m.callId, m.reason, m.at),
+      [MsgType.AgentStart]: (s, m) => start(s, m.runId, m.at),
+      [MsgType.AgentToolOk]: (s, m) => toolOk(s, m.callId, m.result, m.at),
+      [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
       // The re-entered brain-call settle Msgs (from `brainHandlers`): success
       // runs `succeed` (reset retry + fold the turn), failure runs `fail`.
-      resilient_ok: (s, m) => succeed(s, m.key, m, m.at),
-      resilient_err: (s, m) => fail(s, m.key, m, m.at),
+      [MsgType.ResilientOk]: (s, m) => succeed(s, m.key, m, m.at),
+      [MsgType.ResilientErr]: (s, m) => fail(s, m.key, m, m.at),
       deadline_exceeded: (s, m) => onTimer(s, m),
-      agent_boot: (s, m) => boot(s, m.at),
+      [MsgType.AgentBoot]: (s, m) => boot(s, m.at),
     };
 
     // Build the machine as a fully-typed `Machine<...>` const, then pass it
@@ -1521,6 +1525,39 @@ export function createAgent<
 }
 
 // ===========================================================================
+// AgentBootPort — the typed do↔agent boot seam (issue #60).
+// ===========================================================================
+//
+// A run that rehydrated mid-loop must re-fire its one outstanding effect on
+// activation. `do/host`'s `autoBoot` is the firing side; this agent reducer's
+// `boot` verb is the receiving side. The coupling used to be a RAW string:
+// host built `{ type: "agent_boot", at }` by hand and the agent string-matched
+// it — a literal duplicated across the seam with nothing tying the two ends.
+//
+// `AgentBootPort` promotes that coupling to a typed contract OWNED by the agent
+// (which owns the boot Msg shape): the `AgentBootMsg` type and the
+// `agentBootMsg` constructor. `do/host` imports the constructor instead of
+// hand-writing the literal. Adding a field to boot (or renaming it) is now a
+// one-file change here with the constructor's signature flagging every caller,
+// not a silent cross-module string drift.
+
+/** The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. */
+export type AgentBootMsg = {
+  readonly type: typeof MsgType.AgentBoot;
+  readonly at: number;
+};
+
+/**
+ * The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches
+ * on a resumable rehydrate. The agent owns this constructor so the boot Msg
+ * shape lives in ONE place — the host fires it through here, never as a raw
+ * `{ type: "agent_boot" }` literal.
+ */
+export function agentBootMsg(at: number): AgentBootMsg {
+  return { type: MsgType.AgentBoot, at };
+}
+
+// ===========================================================================
 // The machine Msg union — the closed set of verb entry points `toMachine` wires.
 // ===========================================================================
 
@@ -1544,18 +1581,18 @@ export function createAgent<
  */
 export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | {
-      readonly type: "agent_start";
+      readonly type: typeof MsgType.AgentStart;
       readonly runId: string;
       readonly at: number;
     }
   | {
-      readonly type: "agent_tool_ok";
+      readonly type: typeof MsgType.AgentToolOk;
       readonly callId: string;
       readonly result: R;
       readonly at: number;
     }
   | {
-      readonly type: "agent_tool_err";
+      readonly type: typeof MsgType.AgentToolErr;
       readonly callId: string;
       readonly reason: string;
       readonly at: number;
@@ -1570,7 +1607,7 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   // `subscribeDeadline` cell dispatches it straight into `update`, exactly as
   // the resilient-call / llm-call / monitored-run gold standards wire it.
   | AgentTimerMsg
-  | { readonly type: "agent_boot"; readonly at: number };
+  | AgentBootMsg;
 
 // ===========================================================================
 // AgentEvent — the SEMANTIC lifecycle event stream (issue #47).
@@ -1599,7 +1636,11 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  */
 export type AgentEvent<R> =
   | { readonly type: "TurnSettled"; readonly turn: AgentTurn }
-  | { readonly type: "ToolSettled"; readonly callId: string; readonly result: R }
+  | {
+      readonly type: "ToolSettled";
+      readonly callId: string;
+      readonly result: R;
+    }
   | { readonly type: "RunDone"; readonly output: AgentTurn | null };
 
 /**
@@ -1640,14 +1681,14 @@ export function agentEvents<
   return (msg, state) => {
     const events: AgentEvent<R>[] = [];
     switch (msg.type) {
-      case "resilient_ok":
+      case MsgType.ResilientOk:
         // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
         // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
         // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
         // same reasoning `state.output` relies on, #46/#48).
         events.push({ type: "TurnSettled", turn: msg.result.output });
         break;
-      case "agent_tool_ok":
+      case MsgType.AgentToolOk:
         // The PRIVATE tool-fan-out settle Msg → the public ToolSettled.
         events.push({
           type: "ToolSettled",
@@ -1658,11 +1699,11 @@ export function agentEvents<
       // start / boot / timer / the *_err arms carry no public event — return
       // []. (No `default`: the switch is exhaustive over the Msg discriminant,
       // so a new Msg variant forces a decision here at compile time.)
-      case "agent_start":
-      case "agent_tool_err":
-      case "resilient_err":
+      case MsgType.AgentStart:
+      case MsgType.AgentToolErr:
+      case MsgType.ResilientErr:
       case "deadline_exceeded":
-      case "agent_boot":
+      case MsgType.AgentBoot:
         break;
     }
     // RunDone is a STATE-shaped event (the run's terminal output, #46), not a

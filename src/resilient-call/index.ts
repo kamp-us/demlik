@@ -88,6 +88,7 @@ import {
   subscribeDeadline,
 } from "../deadline";
 import { type Cmd, type NoCtx, tryInterpret } from "../index";
+import { MsgType } from "../protocol";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
 import {
   asRng,
@@ -216,20 +217,20 @@ export interface ResilientState<I, R> {
  * consumer's `handlers(ports)` interprets it; it carries no closure — `input`
  * is plain data (invariant 3).
  */
-export type RunCmd<I> = Cmd<"resilient_run"> & {
+export type RunCmd<I> = Cmd<typeof MsgType.ResilientRun> & {
   readonly key: string;
   readonly input: I;
 };
 
 /** Settle Msgs the `handlers` port dispatches back. `at` is stamped at the boundary. */
 export type SucceedMsg<R> = {
-  readonly type: "resilient_ok";
+  readonly type: typeof MsgType.ResilientOk;
   readonly key: string;
   readonly result: R;
   readonly at: number;
 };
 export type FailMsg = {
-  readonly type: "resilient_err";
+  readonly type: typeof MsgType.ResilientErr;
   readonly key: string;
   readonly error: unknown;
   readonly at: number;
@@ -422,7 +423,7 @@ export function createResilientCall<I, R>(
         circuit,
         bucket,
       },
-      [{ type: "resilient_run", key, input }],
+      [{ type: MsgType.ResilientRun, key, input }],
     ];
   }
 
@@ -682,13 +683,13 @@ export function createResilientCall<I, R>(
       >(
         (cmd) => ports.run(cmd.input, cmd.key),
         (result, cmd): SucceedMsg<R> => ({
-          type: "resilient_ok",
+          type: MsgType.ResilientOk,
           key: cmd.key,
           result,
           at: Date.now(),
         }),
         (error, cmd): FailMsg => ({
-          type: "resilient_err",
+          type: MsgType.ResilientErr,
           key: cmd.key,
           error,
           at: Date.now(),

@@ -31,6 +31,7 @@ import {
   type AgentEvent,
   type AgentMachineMsg,
   type AgentState,
+  agentBootMsg,
   status,
 } from "../agent/index";
 import type { BootingRuntime, Runtime } from "../index";
@@ -303,7 +304,9 @@ export async function autoBoot<
   // point: we cannot inspect state before boot has populated it.
   const runtime = await booting.ready;
   if (agentIsResumable(runtime.getState())) {
-    await runtime.dispatch({ type: "agent_boot", at: now() });
+    // Fire through the agent-owned `agentBootMsg` port (issue #60) — the boot
+    // Msg shape lives in the agent, not as a raw literal hand-built here.
+    await runtime.dispatch(agentBootMsg(now()));
   }
 }
 
