@@ -563,6 +563,21 @@ export function withResilience<
     (base as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
 
+  // Construction guard — the target Cmd MUST have a base interpret handler. This
+  // is a property of the (base, config) pair, fully known here at construction:
+  // the `$resilience:run` carrier delegates to `baseInterpret[target]`, so a
+  // missing handler means the resilient effect has nothing to perform. Surface
+  // it now — refuse to build a machine whose target can never run — rather than
+  // lazily on the first effect (errors are data, surfaced at construction, like
+  // the time-sensitive-`at` and reserved-namespace guards above/below).
+  if (!Object.hasOwn(baseInterpret as object, target)) {
+    throw new Error(
+      `withResilience: no base interpret handler for target Cmd "${target}" ` +
+        `— the resilient effect has nothing to perform. The base machine must ` +
+        `declare an interpret handler for its target Cmd type.`,
+    );
+  }
+
   // Reserved-namespace guard (mirrors withTelemetry + the substrate's
   // definePort / SubId collision asserts). The wrapper OWNS four reserved keys:
   // the `$resilience:run` carrier Cmd, the `$resilience:ok` / `$resilience:err`
@@ -652,9 +667,11 @@ export function withResilience<
         | BaseHandler
         | undefined;
       if (handler === undefined) {
-        // The target Cmd has no base interpret handler — a miswired base. Surface
-        // it as a resilience failure (routes to `fail`) rather than silently
-        // succeeding: errors are data, never swallowed.
+        // Unreachable in practice: the construction guard above already refused
+        // to build this machine if `baseInterpret[target]` was missing, and the
+        // retagged inner Cmd's type is always the target. Kept as defense in
+        // depth on the erased-Record read — if it ever fires it routes to
+        // `$resilience:err` (errors are data, never swallowed).
         throw new Error(
           `withResilience: no base interpret handler for target Cmd ` +
             `"${inner.type}" — the resilient effect has nothing to perform.`,

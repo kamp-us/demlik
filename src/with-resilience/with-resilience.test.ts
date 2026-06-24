@@ -406,6 +406,66 @@ describe("withResilience — construction guard: time-sensitive brick needs `at`
 });
 
 // ===========================================================================
+// Construction guard — the target Cmd MUST have a base interpret handler. This
+// is a property of the (base, config) pair, fully known at construction: the
+// `$resilience:run` carrier delegates to `baseInterpret[target]`, so a missing
+// handler means the resilient effect has nothing to perform. The error is
+// surfaced at construction (refuse to build the machine), NOT lazily on the
+// first effect — errors are data, surfaced as early as they are knowable.
+// ===========================================================================
+
+describe("withResilience — construction guard: target needs a base interpret handler", () => {
+  // A base whose interpret omits the `do_fetch` handler — the target Cmd has
+  // nothing to perform. (Built by hand rather than via makeBase so the gap is
+  // explicit.)
+  function makeBaseWithoutTargetHandler() {
+    return defineMachine<FetchState, FetchMsg, FetchCmd, never, FetchCtx>({
+      init: (loaded) => [loaded ?? { url: null, body: null }, []],
+      update: {
+        load: (_s, m) => [
+          { url: m.url, body: null },
+          [{ type: "do_fetch", url: m.url }],
+        ],
+        loaded: (s, m) => [{ ...s, body: m.body }, []],
+        note: (s) => [s, [{ type: "log", line: "noted" }]],
+      },
+      // Only the NON-target `log` handler — the target `do_fetch` is missing.
+      interpret: {
+        log: async (cmd, ctx) => {
+          ctx.logLine(cmd.line);
+        },
+      },
+    });
+  }
+
+  it("throws at construction when the target has no base interpret handler", () => {
+    const base = makeBaseWithoutTargetHandler();
+    expect(() =>
+      withResilience(base, { target: "do_fetch", at: atOf }),
+    ).toThrow(/no base interpret handler for target Cmd "do_fetch"/);
+  });
+
+  it("throws at construction — NOT lazily on the first effect", () => {
+    const base = makeBaseWithoutTargetHandler();
+    // The throw must happen inside `withResilience(...)` itself, before any
+    // Machine is returned to dispatch the first effect through.
+    let built = false;
+    expect(() => {
+      withResilience(base, { target: "do_fetch", at: atOf });
+      built = true;
+    }).toThrow();
+    expect(built).toBe(false);
+  });
+
+  it("does NOT throw when the target DOES have a base interpret handler", () => {
+    const base = makeBase();
+    expect(() =>
+      withResilience(base, { target: "do_fetch", at: atOf }),
+    ).not.toThrow();
+  });
+});
+
+// ===========================================================================
 // Real run() — fail → retry-timer → succeed END TO END. The target Cmd is
 // actually performed via the composed base.interpret; the breaker opens on the
 // failure, then recovers (half-open probe succeeds → closed) on the retry, and

@@ -2229,10 +2229,11 @@ export interface HistoryTracker<S, M extends { type: string }> {
  *                 The tracker uses only `observe`, which is total before boot —
  *                 attach it to the synchronous `run()` handle to record the
  *                 boot transition.
- * @param size     Buffer cap. `size <= 0` produces a tracker whose
- *                 snapshot is always `[]` (the observer is still attached
- *                 but pushes a no-op; cheaper to skip the tracker entirely
- *                 in that case).
+ * @param size     Buffer cap. `size <= 0` produces an inert no-op tracker:
+ *                 no observer is attached to the runtime, `snapshot()` is
+ *                 always `[]`, and `stop()` is a no-op. (Prefer skipping the
+ *                 tracker entirely in that case — this arm just makes a
+ *                 non-positive `size` harmless rather than an error.)
  *
  * Memory cost: O(size × avg(msg + state size)). For audit-extension's
  * inspector use case (size 100, audit state ~5KB), ~500KB max — held
