@@ -41,16 +41,6 @@
 
 import type { Store, Sub, SubId } from "../index";
 
-// Opt-in event-sourcing persistence mode. `doStore` below stays the DEFAULT
-// (snapshot-only, byte-for-byte unchanged); `doEventSourcedStore` is the
-// explicit alternative that appends each Msg to a log, snapshots periodically,
-// and rebuilds state by folding the log on the latest snapshot at activation.
-export {
-  doEventSourcedStore,
-  type EventSourcedOptions,
-  type EventSourcedStore,
-} from "./event-sourced-store";
-
 // Durable pending-effects ledger (ADR 0003 primitive #1 — durable effects).
 // A pure fold over `effect_owed` / `effect_confirmed` events (NOT a side
 // table): owed adds, confirmed removes, and the surviving entries re-emit on
@@ -71,6 +61,15 @@ export {
   pendingEffectsLedger,
   survivingEffects,
 } from "./durable-effects";
+// Opt-in event-sourcing persistence mode. `doStore` below stays the DEFAULT
+// (snapshot-only, byte-for-byte unchanged); `doEventSourcedStore` is the
+// explicit alternative that appends each Msg to a log, snapshots periodically,
+// and rebuilds state by folding the log on the latest snapshot at activation.
+export {
+  doEventSourcedStore,
+  type EventSourcedOptions,
+  type EventSourcedStore,
+} from "./event-sourced-store";
 
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
@@ -99,14 +98,14 @@ export {
 // via `sseProjection`. See `.patterns/tea-do/projections.md`,
 // `offset-tracking.md`, `delivery-semantics.md`.
 export {
+  driveProjections,
   type Projection,
-  projectionIdString,
   type ProjectionId,
   type ProjectionRegistry,
-  projectionRegistry,
   type ProjectionRunner,
   type ProjectionUpdate,
-  driveProjections,
+  projectionIdString,
+  projectionRegistry,
   rebuildProjection,
   runProjection,
 } from "./projection";
@@ -116,26 +115,6 @@ export {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_STATE_KEY = "@@state";
-
-/**
- * The default boundary parse `doStore` uses when the caller omits one: accept
- * any non-null object shape as `S`, treat everything else (a primitive, an
- * array, `null`) as "no usable persisted state" → boot fresh. This is the
- * `raw !== null && typeof raw === "object" ? (raw as S) : null` guard every
- * agent-style consumer hand-wrote; lifting it as the default kills that
- * ceremony for the common case (a record-shaped durable slice). A consumer that
- * needs real schema validation (renamed variants, version migration) still
- * passes its own `parse`.
- *
- * Returns `null`, never throws — honoring the `Store<S>.migrate` contract (shape
- * mismatch is a value, not a panic; structural JSON malformation already threw
- * at `load()`).
- */
-function defaultParse<S>(raw: unknown): S | null {
-  return raw !== null && typeof raw === "object" && !Array.isArray(raw)
-    ? (raw as S)
-    : null;
-}
 
 /**
  * `Store<S>` over `DurableObjectStorage`.
@@ -162,7 +141,7 @@ function defaultParse<S>(raw: unknown): S | null {
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
-  parse: (raw: unknown) => S | null = defaultParse,
+  parse: (raw: unknown) => S | null,
   key: string = DEFAULT_STATE_KEY,
 ): Store<S> {
   return {
