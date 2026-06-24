@@ -62,7 +62,9 @@ describe("R1 — exact exponential schedule (no jitter), cap clamp at k=8", () =
   };
 
   it("reproduces cockatiel's canonical [128..16384,30000,30000,30000] for k=0..10", () => {
-    const expected = [128, 256, 512, 1024, 2048, 4096, 8192, 16384, 30000, 30000, 30000];
+    const expected = [
+      128, 256, 512, 1024, 2048, 4096, 8192, 16384, 30000, 30000, 30000,
+    ];
     const actual = expected.map((_, k) => backoffDelay(k, policy));
     expect(actual).toEqual(expected);
   });
@@ -137,7 +139,11 @@ describe("R2 — jitter bounds per strategy (rng swept to extremes)", () => {
         (jitter, attempt, r) => {
           const policy: RetryPolicy = { ...base, jitter };
           const d = backoffDelay(attempt, base);
-          const delay = backoffDelay(attempt, policy, asRng(() => r));
+          const delay = backoffDelay(
+            attempt,
+            policy,
+            asRng(() => r),
+          );
           expect(Number.isNaN(delay)).toBe(false);
           expect(delay).toBeGreaterThanOrEqual(0);
           expect(delay).toBeLessThanOrEqual(d);
@@ -215,7 +221,9 @@ describe("R4 — attempt cap drives give-up (off-by-one normalized to tea)", () 
   it("R4a — retries until success within the cap (give-up never reached)", () => {
     // Succeeds on the 3rd attempt under maxAttempts:5: only 2 failures recorded,
     // shouldRetry is still true when we stop. tea convention: 0-based attempt.
-    const policy: RetryPolicy = { ...{ baseMs: 1, factor: 2, capMs: 1, maxAttempts: 5, jitter: "none" } };
+    const policy: RetryPolicy = {
+      ...{ baseMs: 1, factor: 2, capMs: 1, maxAttempts: 5, jitter: "none" },
+    };
     let state = initRetry();
     state = recordFailure(state, new Error("fail 1"));
     state = recordFailure(state, new Error("fail 2"));
@@ -226,7 +234,13 @@ describe("R4 — attempt cap drives give-up (off-by-one normalized to tea)", () 
   it("R4b — give-up after exactly maxAttempts failures (cockatiel callCount 6 ⇄ tea maxAttempts 6)", () => {
     // cockatiel maxAttempts:5 ⇒ 6 invocations. tea maxAttempts:6 ⇒ 6 recorded
     // failures, then shouldRetry flips false. Assert tea's number: 6.
-    const policy: RetryPolicy = { baseMs: 100, factor: 2, capMs: 30_000, maxAttempts: 6, jitter: "none" };
+    const policy: RetryPolicy = {
+      baseMs: 100,
+      factor: 2,
+      capMs: 30_000,
+      maxAttempts: 6,
+      jitter: "none",
+    };
     const { state, attempts } = runToGiveUp(policy);
     expect(attempts).toBe(6); // tea's real invocation count
     expect(state.attempt).toBe(6);
@@ -234,7 +248,13 @@ describe("R4 — attempt cap drives give-up (off-by-one normalized to tea)", () 
   });
 
   it("R4c — give-up bubbles the last failure (the carried lastError survives)", () => {
-    const policy: RetryPolicy = { baseMs: 1, factor: 2, capMs: 1, maxAttempts: 3, jitter: "none" };
+    const policy: RetryPolicy = {
+      baseMs: 1,
+      factor: 2,
+      capMs: 1,
+      maxAttempts: 3,
+      jitter: "none",
+    };
     const last = new Error("the last one");
     let state = initRetry();
     state = recordFailure(state, new Error("first"));
@@ -245,7 +265,13 @@ describe("R4 — attempt cap drives give-up (off-by-one normalized to tea)", () 
   });
 
   it("shouldRetry boundary: true for attempt 0..maxAttempts-1, false at maxAttempts", () => {
-    const policy: RetryPolicy = { baseMs: 1, factor: 2, capMs: 1, maxAttempts: 4, jitter: "none" };
+    const policy: RetryPolicy = {
+      baseMs: 1,
+      factor: 2,
+      capMs: 1,
+      maxAttempts: 4,
+      jitter: "none",
+    };
     for (let a = 0; a < 4; a++) {
       expect(shouldRetry({ attempt: a }, policy)).toBe(true);
     }
@@ -306,7 +332,13 @@ describe("R5 — nextDelayMs reproduces the per-attempt delay sequence", () => {
 // ---------------------------------------------------------------------------
 describe("R6 — attempt index per retry (cockatiel 1-based onRetry ⇄ tea attempt count)", () => {
   it("state.attempt is 1,2,3 after the 1st,2nd,3rd recordFailure", () => {
-    const policy: RetryPolicy = { baseMs: 1, factor: 2, capMs: 1, maxAttempts: 3, jitter: "none" };
+    const policy: RetryPolicy = {
+      baseMs: 1,
+      factor: 2,
+      capMs: 1,
+      maxAttempts: 3,
+      jitter: "none",
+    };
     const indices: number[] = [];
     let state = initRetry();
     expect(state.attempt).toBe(0); // initRetry: 0-based, no failures yet
@@ -328,7 +360,13 @@ describe("R6 — attempt index per retry (cockatiel 1-based onRetry ⇄ tea atte
 // ---------------------------------------------------------------------------
 describe("R7 — terminal give-up carries the final failure (lastError + shouldRetry=false)", () => {
   it("on give-up, lastError is the final error and shouldRetry is false", () => {
-    const policy: RetryPolicy = { baseMs: 1, factor: 2, capMs: 1, maxAttempts: 5, jitter: "none" };
+    const policy: RetryPolicy = {
+      baseMs: 1,
+      factor: 2,
+      capMs: 1,
+      maxAttempts: 5,
+      jitter: "none",
+    };
     const err = new Error("MyErrorA");
     let state = initRetry();
     while (shouldRetry(state, policy)) {
@@ -348,7 +386,9 @@ describe("GAPS — cockatiel behaviors with no tea retry-verb counterpart", () =
   // signal halts the loop after the in-flight attempt. tea's retry reducer has
   // no `signal`; cancellation is an effect-boundary decision (the host stops
   // calling shouldRetry). Not a pure-verb vector. See gaps.md G-RT3.
-  it.todo("R8: abort mid-retry stops the loop — GAP (effect boundary, no reducer verb), see gaps.md G-RT3");
+  it.todo(
+    "R8: abort mid-retry stops the loop — GAP (effect boundary, no reducer verb), see gaps.md G-RT3",
+  );
 
   // Decorrelated jitter (Polly DecorrelatedJitterV2) is cockatiel's DEFAULT
   // generator: stateful, history-dependent (next delay depends on the previous
@@ -356,5 +396,7 @@ describe("GAPS — cockatiel behaviors with no tea retry-verb counterpart", () =
   // sequence cannot be reproduced; only its bounds + no-NaN invariant port —
   // and those ARE covered by R2 (bounds) and R3 (no-NaN/#86) above. See
   // gaps.md G-RT1.
-  it.todo("decorrelated-jitter exact sequence — GAP (stateful, no tea counterpart); bounds covered by R2/R3, see gaps.md G-RT1");
+  it.todo(
+    "decorrelated-jitter exact sequence — GAP (stateful, no tea counterpart); bounds covered by R2/R3, see gaps.md G-RT1",
+  );
 });

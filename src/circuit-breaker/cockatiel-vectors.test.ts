@@ -103,7 +103,10 @@ describe("B2 — open → half_open after cooldown, probe SUCCESS closes", () =>
     expect(allowed).toBe(true);
     expect(halfOpen).toEqual({ phase: "half_open", probes: 1 });
     // Probe succeeds → fully closed, failures reset.
-    expect(onSuccess(halfOpen, policy)).toEqual({ phase: "closed", failures: 0 });
+    expect(onSuccess(halfOpen, policy)).toEqual({
+      phase: "closed",
+      failures: 0,
+    });
   });
 
   it("the boundary is inclusive: elapsed === cooldownMs admits (tea >=, matches cockatiel)", () => {
@@ -132,7 +135,9 @@ describe("B3 — half_open probe FAILURE re-opens", () => {
     const reopened = onFailure({ phase: "half_open", probes: 1 }, policy, 5000);
     expect(reopened).toEqual({ phase: "open", openedAtMs: 5000 });
     // 999ms into the new window → still cooling.
-    expect(canPass(reopened, policy, 5000 + policy.cooldownMs - 1)[1]).toBe(false);
+    expect(canPass(reopened, policy, 5000 + policy.cooldownMs - 1)[1]).toBe(
+      false,
+    );
     // Exactly cooldownMs into the new window → probe admitted again.
     expect(canPass(reopened, policy, 5000 + policy.cooldownMs)).toEqual([
       { phase: "half_open", probes: 1 },

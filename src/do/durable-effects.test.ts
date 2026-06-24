@@ -68,6 +68,7 @@ function driveRecorder(ops: readonly Op[]): {
     } else {
       const owed = rec.surviving();
       if (owed.length === 0) continue; // nothing to confirm yet
+      // biome-ignore lint/style/noNonNullAssertion: owed.length > 0 guarded above, so (which % length) is always a valid in-bounds index under noUncheckedIndexedAccess
       const target = owed[op.which % owed.length]!;
       const { event } = rec.confirm(target.id);
       events.push(event);
@@ -102,9 +103,7 @@ describe("foldLedger — the pure fold (no side table)", () => {
           events.filter((e) => e.type === "effect_owed").map((e) => e.id),
         );
         const confirmedIds = new Set(
-          events
-            .filter((e) => e.type === "effect_confirmed")
-            .map((e) => e.id),
+          events.filter((e) => e.type === "effect_confirmed").map((e) => e.id),
         );
         const expectedSurviving = [...owedIds]
           .filter((id) => !confirmedIds.has(id))
@@ -236,7 +235,11 @@ describe("pendingEffectsLedger — live recorder", () => {
     const a = rec.owe({ callId: "a" });
     const b = rec.owe({ callId: "b" });
     rec.confirm(a.id);
-    const persisted = [a.event, b.event, { type: "effect_confirmed", id: a.id } as const];
+    const persisted = [
+      a.event,
+      b.event,
+      { type: "effect_confirmed", id: a.id } as const,
+    ];
 
     // Simulated activation: rebuild from the log + carry lastId across.
     const revived = pendingEffectsLedger<ToolCall>({

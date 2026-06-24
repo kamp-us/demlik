@@ -118,7 +118,11 @@ describe("backoffDelay property: 0 <= delay <= capMs for any attempt and policy"
         // rng is contractually in [0, 1); max:0.9999999 stays below 1.
         fc.double({ min: 0, max: 0.9999999, noNaN: true }),
         (attempt, policy, r) => {
-          const delay = backoffDelay(attempt, policy, asRng(() => r));
+          const delay = backoffDelay(
+            attempt,
+            policy,
+            asRng(() => r),
+          );
           return delay >= 0 && delay <= policy.capMs;
         },
       ),

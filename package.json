@@ -249,6 +249,7 @@
   },
   "scripts": {
     "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
+    "lint": "biome check src package.json",
     "test": "vitest run",
     "demo:raft": "vitest run src/raft/demo.test.ts",
     "demo:raft:viz": "vitest run src/raft/timeline.test.ts",
@@ -268,11 +269,21 @@
     "ws": "^8"
   },
   "peerDependenciesMeta": {
-    "fast-check": { "optional": true },
-    "react": { "optional": true },
-    "react-dom": { "optional": true },
-    "vitest": { "optional": true },
-    "ws": { "optional": true }
+    "fast-check": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    },
+    "ws": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",

@@ -262,9 +262,9 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     ]);
     // stream offsets: 0 boot, 1 inc10, 2 inc5, 3 inc1.
     const live = runProjection(countProjection(() => {}));
-    stream.forEach((s, i) =>
-      live.present({ msg: s.msg, model: s.model, offset: i }),
-    );
+    stream.forEach((s, i) => {
+      live.present({ msg: s.msg, model: s.model, offset: i });
+    });
     expect(live.view()).toEqual({ total: 16, notes: 0 });
     const storedOffset = live.offset(); // 3 — the last applied position.
 
@@ -279,7 +279,9 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     // be loaded from storage); seed it by presenting the next REAL event only.
     expect(
       resumed.present({
+        // biome-ignore lint/style/noNonNullAssertion: stream has 4 entries (offsets 0..3, see comment above); index 3 is guaranteed present under noUncheckedIndexedAccess
         msg: stream[3]!.msg,
+        // biome-ignore lint/style/noNonNullAssertion: same fixed 4-entry stream; index 3 is guaranteed present
         model: stream[3]!.model,
         offset: 3,
       }),
@@ -302,9 +304,9 @@ describe("Projection — exclusive offset + idempotent apply", () => {
       { type: "dec", by: 1 },
     ]);
     const runner = runProjection(countProjection(() => {}));
-    stream.forEach((s, i) =>
-      runner.present({ msg: s.msg, model: s.model, offset: i }),
-    );
+    stream.forEach((s, i) => {
+      runner.present({ msg: s.msg, model: s.model, offset: i });
+    });
     const before = runner.view();
     expect(runner.offset()).toBe(3);
 
@@ -314,9 +316,9 @@ describe("Projection — exclusive offset + idempotent apply", () => {
     expect(runner.offset()).toBe(0);
 
     // Replay from the start → identical view.
-    stream.forEach((s, i) =>
-      runner.present({ msg: s.msg, model: s.model, offset: i }),
-    );
+    stream.forEach((s, i) => {
+      runner.present({ msg: s.msg, model: s.model, offset: i });
+    });
     expect(runner.view()).toEqual(before);
   });
 });
@@ -333,6 +335,7 @@ describe("Projection — one model, many projections", () => {
         // same arithmetic, so the live write-model count IS the oracle for
         // the state view. The count view tracks notes the state view ignores.
         const stream = streamOf(msgs);
+        // biome-ignore lint/style/noNonNullAssertion: streamOf always emits a boot event, so the stream is non-empty and its last element exists under noUncheckedIndexedAccess
         expect(state.count).toBe(stream[stream.length - 1]!.model.count);
         expect(count.notes).toBe(msgs.filter((m) => m.type === "note").length);
       }),

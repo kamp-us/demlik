@@ -246,15 +246,17 @@ describe("#47 — observe drops the boot null arm; onBoot carries it", () => {
     const turns: AgentTurn[] = [turnWith()];
     let i = 0;
     const model = fakeModel(async () => turns[i++] ?? turnWith());
-    const agent = createAgent<Stage, Purpose, Outputs, string, ToolCmd, string>({
-      stages: STAGES,
-      model,
-      schemas,
-      retry,
-      turnOf,
-      toolOf,
-      rng: rngZero,
-    });
+    const agent = createAgent<Stage, Purpose, Outputs, string, ToolCmd, string>(
+      {
+        stages: STAGES,
+        model,
+        schemas,
+        retry,
+        turnOf,
+        toolOf,
+        rng: rngZero,
+      },
+    );
     const bootToolInterpret: Interpret<M, ToolCmd, object> = {
       run_tool: async (cmd) => ({
         type: "agent_tool_ok",
