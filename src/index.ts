@@ -477,8 +477,13 @@ export function __resetPortRegistry(): void {
  * - `"stop-save"` — the final `store.save(state)` inside `stop()` threw.
  *   `stop()` resolves regardless (its contract), so without the sink this was
  *   silent loss of the last write.
+ * - `"reduce"` — the pure `update` (reducer) threw synchronously while folding
+ *   a Msg. #71's reentrancy brand makes a reducer provably synchronous, so this
+ *   throw is catchable in the dispatch loop; the configured `Supervision`
+ *   strategy decides what the runtime does next (`stop` / `escalate` /
+ *   `restart`), but the failure is ALWAYS surfaced here as data first.
  */
-export type RuntimeErrorPhase = "follow-up" | "stop-save";
+export type RuntimeErrorPhase = "follow-up" | "stop-save" | "reduce";
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
@@ -504,6 +509,103 @@ function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
   setTimeout(() => {
     throw error;
   }, 0);
+}
+
+// === Supervision: declared policy for a reducer throw (ADR 0003 #4) ===
+//
+// The resilience kit (retry, circuit-breaker, …) covers *effect* failures —
+// throws inside `interpret`. A throw inside the pure `update` (the reducer) had
+// no declared policy: it simply rejected the dispatch promise and left the
+// runtime in an ambiguous "did we halt or not?" state. #71's reentrancy brand
+// makes a reducer provably synchronous, so a reducer throw is now a synchronous
+// throw catchable in the dispatch loop. This is the seam Akka supervisor
+// strategies / Erlang-OTP supervision trees occupy: "let it crash" becomes
+// CONFIG, not hope.
+//
+// Every strategy routes the failure to the `onError` sink with `phase:
+// "reduce"` FIRST (invariant 6 — errors are data, never silently swallowed),
+// then differs in what the runtime does next:
+//
+//   - `stop`    — halt the runtime. State is NOT advanced; the dispatch promise
+//                 rejects with the reducer error; every subsequent dispatch
+//                 rejects ("runtime stopped"). The SAFE DEFAULT: a reducer that
+//                 violated its own invariants does not get to keep folding.
+//                 Never a silent resume.
+//   - `escalate`— surface via `onError` AND propagate: the dispatch promise
+//                 rejects with the reducer error so the failure bubbles to the
+//                 caller/parent supervisor. The runtime is NOT halted (a parent
+//                 may choose to keep dispatching) — escalation is "tell someone
+//                 above me", not "die".
+//   - `restart` — re-initialize from a host-provided last-known-good state and
+//                 keep folding. The core does NOT own snapshot logic; the host
+//                 supplies `rehydrate()`, the core invokes it, installs its
+//                 result as the new state, and continues the transition
+//                 (save → reconcile → interpret → fire) from there. The
+//                 original failure is still surfaced as data via `onError`.
+//
+// The restart rehydrate is a host callback by design: the core has no opinion
+// on where last-known-good state lives (a snapshot Store, an in-memory cache, a
+// recomputed default). Mirrors how `Store` keeps persistence out of core.
+
+/** The three declared reducer-throw supervision strategies. */
+export type SupervisionStrategy = "stop" | "escalate" | "restart";
+
+/**
+ * Declared supervision policy for a reducer (`update`) throw, configured at
+ * `run(machine, { supervision })`.
+ *
+ * - `{ strategy: "stop" }` — halt + surface (the safe default; also the bare
+ *   shorthand `"stop"`).
+ * - `{ strategy: "escalate" }` — surface + propagate, runtime stays live (also
+ *   the bare shorthand `"escalate"`).
+ * - `{ strategy: "restart", rehydrate }` — surface, then re-init from the
+ *   host-supplied last-known-good `S` and keep folding. `rehydrate` receives
+ *   the failing `(state, msg, error)` so the host can log / pick a snapshot;
+ *   it MUST return a valid `S` synchronously (the reducer is synchronous, so
+ *   recovery is too — no suspension across the single-writer slot).
+ *
+ * The bare-string shorthands (`"stop"` / `"escalate"`) are accepted for the two
+ * strategies that need no host data; `restart` MUST be the object form because
+ * it carries the `rehydrate` callback.
+ */
+export type Supervision<S, M extends { type: string }> =
+  | "stop"
+  | "escalate"
+  | { readonly strategy: "stop" }
+  | { readonly strategy: "escalate" }
+  | {
+      readonly strategy: "restart";
+      /**
+       * Host-provided rehydration to last-known-good state. Invoked by the core
+       * when the reducer throws; its return value becomes the new state and the
+       * transition continues from there. Receives the pre-throw `state`, the
+       * `msg` that triggered the throw, and the thrown `error` so the host can
+       * route by cause.
+       */
+      readonly rehydrate: (state: S, msg: M, error: unknown) => S;
+    };
+
+/**
+ * Normalize the `Supervision` config (bare string or object) into a single
+ * object shape so the dispatch loop branches on `.strategy` once. The default
+ * — applied when `run(...)` is called without `supervision` — is `stop`: the
+ * explicit, safe choice. It surfaces via `onError` and halts; it never silently
+ * resumes a machine whose reducer just violated an invariant (invariant 6).
+ */
+type NormalizedSupervision<S, M extends { type: string }> =
+  | { readonly strategy: "stop" }
+  | { readonly strategy: "escalate" }
+  | {
+      readonly strategy: "restart";
+      readonly rehydrate: (state: S, msg: M, error: unknown) => S;
+    };
+
+function normalizeSupervision<S, M extends { type: string }>(
+  supervision: Supervision<S, M> | undefined,
+): NormalizedSupervision<S, M> {
+  if (supervision === undefined) return { strategy: "stop" };
+  if (typeof supervision === "string") return { strategy: supervision };
+  return supervision;
 }
 
 /**
@@ -986,6 +1088,13 @@ export function run<
     store?: Store<S>;
     onError?: OnError;
     /**
+     * Declared policy for when the pure `update` (reducer) throws. The reducer
+     * throw is always surfaced via `onError` (`phase: "reduce"`); the strategy
+     * decides what the runtime does next. Defaults to `"stop"` — the explicit,
+     * safe choice (surface + halt, never a silent resume). See `Supervision`.
+     */
+    supervision?: Supervision<S, M>;
+    /**
      * Iteration cap for `idle()`'s quiescence wait. Defaults to 100_000. Test
      * seam only — lets a livelock test trip the `QuiescenceTimeoutError` reject
      * path in a handful of iterations instead of 100k. Production code must not
@@ -1013,6 +1122,10 @@ export function run<
       defaultOnError(sinkError, context);
     }
   };
+  // The declared policy for a reducer throw (ADR 0003 #4). Default `stop`:
+  // surface via `onError` + halt, never a silent resume. Normalized once here
+  // so `stepDispatch` branches on `.strategy` without re-parsing the shorthand.
+  const supervision = normalizeSupervision<S, M>(opts.supervision);
 
   // Holders are intentionally late-initialized: `state` is set inside the boot
   // step, which runs as the head of the tail. `getState()` before boot throws.
@@ -1295,7 +1408,48 @@ export function run<
       // This should never happen — boot always runs before any dispatch.
       throw new Error("@demlik/tea: runtime not booted");
     }
-    const [next, cmds] = applyUpdate(state, msg);
+    // The reducer is the only synchronous user code in the step, and #71's
+    // brand guarantees it cannot suspend — so a throw here is a clean,
+    // catchable synchronous throw with `state` still at its pre-transition
+    // value. Route it to the declared supervision strategy (ADR 0003 #4).
+    let next: S;
+    let cmds: readonly C[];
+    try {
+      [next, cmds] = applyUpdate(state, msg);
+    } catch (reduceError) {
+      // Invariant 6 — surface the failure as data FIRST, for every strategy.
+      reportError(reduceError, { phase: "reduce" });
+      switch (supervision.strategy) {
+        case "restart": {
+          // Host supplies last-known-good state; core installs it and KEEPS
+          // FOLDING from there. State did not advance to the (never-produced)
+          // reducer result — it is replaced by the rehydrated value. The
+          // transition continues below with no cmds, since the throwing reduce
+          // produced none. A throw inside `rehydrate` itself is NOT caught here
+          // — it propagates as a genuine recovery failure (the host's
+          // last-good source is broken), surfacing to the dispatch caller.
+          state = supervision.rehydrate(state, msg, reduceError);
+          if (store) await store.save(state);
+          reconcileSubs();
+          // No cmds to interpret — the reducer never returned a result.
+          fireListeners();
+          fireObservers(msg);
+          return;
+        }
+        case "escalate":
+          // Surface + propagate. The runtime stays live (a parent supervisor
+          // may keep dispatching); the failure bubbles out the dispatch
+          // promise so the caller above sees it.
+          throw reduceError;
+        default:
+          // `stop` (the safe default): halt the runtime. State is NOT advanced;
+          // every subsequent dispatch rejects ("runtime stopped"). Propagate so
+          // THIS dispatch promise also rejects — the halt is observable, never
+          // a silent resume.
+          stopped = true;
+          throw reduceError;
+      }
+    }
     state = next;
     if (store) await store.save(state);
     // Subscriptions reconcile against the new state; throws propagate AFTER
