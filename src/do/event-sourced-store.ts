@@ -1,0 +1,318 @@
+/// <reference types="@cloudflare/workers-types" />
+/**
+ * @demlik/tea/do — event-sourced persistence mode for a Durable Object actor.
+ *
+ * `doStore` (sibling, `./index`) is the DEFAULT and stays snapshot-only: it
+ * writes the whole `S` blob to one cell on every transition and reads it back
+ * on boot. That is byte-for-byte unchanged by this file.
+ *
+ * `doEventSourcedStore` is the OPT-IN alternative. Instead of (only)
+ * checkpointing the latest state, it:
+ *
+ *   1. APPENDS each applied `Msg` to an append-only log in `DurableObjectStorage`
+ *      (one cell per event, monotonically keyed).
+ *   2. Takes a PERIODIC SNAPSHOT every `snapshotEvery` events (count-based
+ *      retention — mirrors Akka `RetentionCriteria.snapshotEvery`) so the log
+ *      that must replay on the next activation is bounded.
+ *   3. On activation REBUILDS state by FOLDING the log on top of the latest
+ *      snapshot. The fold is the substrate's own `replay` — `init(snapshot)`
+ *      then one reducer step per logged Msg. `replay` returns Cmds as data and
+ *      never interprets them, so **side effects are suppressed on replay**
+ *      (recovery.md). This is the same primitive `foldEvents` / the recorder
+ *      use; it is reused here, not reinvented (ADR 0003: "the fold already
+ *      exists; wire it to Store").
+ *
+ * The "recovered/ready" signal (recovery.md `RecoveryCompleted`) is delivered
+ * exactly once per activation via `onReady`, EVEN for a fresh actor with an
+ * empty log, and is documented to be idempotent (it may fire again on a later
+ * activation, so the handler must tolerate repeats).
+ *
+ * Integration with the cooperating DO:
+ *
+ *   const es = doEventSourcedStore(storage, machine, ctx, {
+ *     snapshotEvery: 100,
+ *     parse,                       // optional boundary parse for the snapshot
+ *     onReady: (state) => { ... }, // optional, idempotent end-of-recovery hook
+ *   });
+ *   const runtime = run(machine, { ctx, store: es.store });
+ *   // Append every applied Msg to the log. `msg === null` is the boot observe
+ *   // (no event to log); skip it.
+ *   runtime.observe((msg) => { if (msg !== null) es.append(msg); });
+ *   await runtime.ready; // store.load() has folded; onReady has fired once.
+ */
+
+import type { Cmd, Machine, Store, Sub } from "../index";
+import { replay } from "../index";
+
+/** Default cell prefixes. Chosen to sort log keys lexicographically by seq. */
+const DEFAULT_SNAPSHOT_KEY = "@@es/snapshot";
+const DEFAULT_META_KEY = "@@es/meta";
+const DEFAULT_EVENT_PREFIX = "@@es/evt/";
+/** Zero-pad seq numbers so `storage.list({ prefix })` returns them in order. */
+const SEQ_WIDTH = 16;
+
+function eventKey(prefix: string, seq: number): string {
+  return prefix + String(seq).padStart(SEQ_WIDTH, "0");
+}
+
+/**
+ * Persisted snapshot envelope. `seq` is the highest event sequence number the
+ * snapshot's state already folds in — events strictly after it are the replay
+ * tail. `state` is the folded `S` at that point.
+ */
+interface SnapshotCell<S> {
+  readonly seq: number;
+  readonly state: S;
+}
+
+/** Persisted meta cell: the highest sequence number ever appended. */
+interface MetaCell {
+  readonly lastSeq: number;
+}
+
+/**
+ * Options for {@link doEventSourcedStore}.
+ */
+export interface EventSourcedOptions<S, M> {
+  /**
+   * Take a snapshot every N appended events (count-based retention, mirrors
+   * Akka `RetentionCriteria.snapshotEvery`). A snapshot bounds how many events
+   * replay on the next activation — it never changes the fold's result, only
+   * its length (recovery.md). Must be >= 1. Default 100.
+   */
+  readonly snapshotEvery?: number;
+  /**
+   * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Same
+   * contract as `doStore`'s `parse`: returns `S` on a recognized shape, `null`
+   * on an unrecognized one (boot fresh), and must NOT throw. Default accepts
+   * any non-null, non-array object as `S`.
+   */
+  readonly parse?: (raw: unknown) => S | null;
+  /**
+   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
+   * a recognized shape; returning `null` DROPS the event from replay (use for a
+   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
+   * string `type` as `M`.
+   */
+  readonly parseEvent?: (raw: unknown) => M | null;
+  /**
+   * End-of-recovery hook (recovery.md `RecoveryCompleted`). Fires EXACTLY ONCE
+   * per activation, after the fold completes, carrying the recovered state —
+   * even when the log was empty (fresh actor). It may fire again on a later
+   * activation, so it MUST be idempotent. Side effects that belong "once after
+   * recovery" go here, never in the reducer (the reducer re-runs on every
+   * replay).
+   */
+  readonly onReady?: (state: S) => void;
+  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
+  readonly keys?: {
+    readonly snapshot?: string;
+    readonly meta?: string;
+    readonly eventPrefix?: string;
+  };
+}
+
+/**
+ * The handle returned by {@link doEventSourcedStore}: a `Store<S>` to hand to
+ * `run(...)`, plus the append + recovery surface the cooperating DO drives.
+ */
+export interface EventSourcedStore<S, M> {
+  /**
+   * The `Store<S>` to pass as `run(machine, { ctx, store })`. Its `load()`
+   * performs the fold (snapshot + log replay); its `save(state)` is the
+   * count-based snapshot writer. `migrate` forwards to `parse`.
+   */
+  readonly store: Store<S>;
+  /**
+   * Append one applied `Msg` to the log. Call from `runtime.observe` for every
+   * non-null msg. Resolves once the event is durably written. Triggers a
+   * snapshot when the event count crosses a `snapshotEvery` boundary.
+   */
+  append(msg: M): Promise<void>;
+}
+
+const defaultParse = <S>(raw: unknown): S | null =>
+  raw !== null && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as S)
+    : null;
+
+const defaultParseEvent = <M>(raw: unknown): M | null =>
+  raw !== null &&
+  typeof raw === "object" &&
+  !Array.isArray(raw) &&
+  typeof (raw as { type?: unknown }).type === "string"
+    ? (raw as M)
+    : null;
+
+/**
+ * Build an event-sourced `Store<S>` over `DurableObjectStorage`.
+ *
+ * The substrate calls `store.load()` once at boot — that is where the fold
+ * happens — and `store.save(state)` after every transition — that is where the
+ * count-based snapshot is taken. The cooperating DO additionally calls
+ * `append(msg)` from `runtime.observe` to grow the log.
+ *
+ * `machine` and `ctx` are required because the fold is `replay(machine, {
+ * loaded: snapshot, msgs: log, ctx })` — the same pure reducer the live runtime
+ * uses, so the rebuilt state is identical to the never-evicted state by
+ * construction. `ctx` is only used to satisfy `init`'s signature during the
+ * fold; an event-sourced machine's `init` rehydrate branch is a pure
+ * passthrough (TEA invariant 2), so the fold touches nothing in `ctx`.
+ */
+// Cmd/Sub are erased to the substrate's base unions here: the fold only needs
+// `init` + `update`, and pinning the machine's concrete C/U would force every
+// caller to thread them through this factory. A `Machine<S, M, Cmd, Sub, Ctx>`
+// accepts any machine whose Cmd/Sub are subtypes (they always are), and the
+// machine keeps its precise types at its own definition site.
+export function doEventSourcedStore<S, M extends { type: string }, Ctx>(
+  storage: DurableObjectStorage,
+  machine: Machine<S, M, Cmd, Sub, Ctx>,
+  ctx: Ctx,
+  opts: EventSourcedOptions<S, M> = {},
+): EventSourcedStore<S, M> {
+  const snapshotEvery = opts.snapshotEvery ?? 100;
+  if (snapshotEvery < 1 || !Number.isInteger(snapshotEvery)) {
+    throw new Error(
+      `@demlik/tea/do: snapshotEvery must be an integer >= 1, got ${snapshotEvery}`,
+    );
+  }
+  const parse = opts.parse ?? defaultParse;
+  const parseEvent = opts.parseEvent ?? defaultParseEvent;
+  const snapshotKey = opts.keys?.snapshot ?? DEFAULT_SNAPSHOT_KEY;
+  const metaKey = opts.keys?.meta ?? DEFAULT_META_KEY;
+  const eventPrefix = opts.keys?.eventPrefix ?? DEFAULT_EVENT_PREFIX;
+
+  // In-memory mirror of the durable seq counter, set during load() and kept in
+  // step by append(). Before load() it is unknown; append() lazily reads it.
+  let lastSeq: number | null = null;
+  // The seq the latest snapshot already folds (so we know the replay tail).
+  let snapshotSeq = 0;
+  // The latest state the substrate handed us via save(). The substrate calls
+  // save(state) BEFORE the observer fires append(msg) for the same transition
+  // (run()'s order: state=next → save → reconcile → interpret → observers), so
+  // at append(N) time this holds the post-event-N state. The snapshot is taken
+  // from the append path (not save) so its recorded `seq` and its `state` agree
+  // on the same event boundary — recording seq at save time would lag the state
+  // by one event and re-apply that event on recovery.
+  let latestState: S | null = null;
+  // Idempotency latch for onReady within a single activation.
+  let readyFired = false;
+
+  async function readMeta(): Promise<number> {
+    const raw = await storage.get<string>(metaKey);
+    if (raw === undefined || raw === null) return 0;
+    const meta = JSON.parse(raw) as MetaCell;
+    return typeof meta.lastSeq === "number" ? meta.lastSeq : 0;
+  }
+
+  /**
+   * Read the persisted snapshot cell, parsed through the boundary. Returns the
+   * folded state + the seq it covers, or `{ state: null, seq: 0 }` when absent
+   * or unrecognized (fold then starts from a fresh `init`).
+   */
+  async function readSnapshot(): Promise<{ state: S | null; seq: number }> {
+    const raw = await storage.get<string>(snapshotKey);
+    if (raw === undefined || raw === null) return { state: null, seq: 0 };
+    // Structural JSON malformation throws here, as in doStore — infra error,
+    // not a schema mismatch.
+    const cell = JSON.parse(raw) as SnapshotCell<unknown>;
+    const parsed = parse(cell.state);
+    if (parsed === null) return { state: null, seq: 0 };
+    const seq = typeof cell.seq === "number" ? cell.seq : 0;
+    return { state: parsed, seq };
+  }
+
+  /** Read the logged events strictly after `afterSeq`, in seq order. */
+  async function readLog(afterSeq: number): Promise<M[]> {
+    // list() returns keys in lexicographic order; zero-padded seq keys sort by
+    // sequence. `start` is exclusive-of-nothing, so filter by parsed seq.
+    const rows = await storage.list<string>({ prefix: eventPrefix });
+    const events: M[] = [];
+    for (const [key, value] of rows) {
+      const seq = Number(key.slice(eventPrefix.length));
+      if (!Number.isFinite(seq) || seq <= afterSeq) continue;
+      const decoded = parseEvent(JSON.parse(value));
+      // A `null` decode drops a retired Msg variant from replay (documented in
+      // parseEvent). Keep the fold going.
+      if (decoded !== null) events.push(decoded);
+    }
+    return events;
+  }
+
+  const store: Store<S> = {
+    async load(): Promise<unknown> {
+      const { state: snapshot, seq: snapSeq } = await readSnapshot();
+      snapshotSeq = snapSeq;
+      lastSeq = await readMeta();
+
+      const events = await readLog(snapSeq);
+
+      // THE FOLD. `replay` boots `init(snapshot, ctx)` then applies one reducer
+      // step per event. It returns Cmds as data and never interprets them, so
+      // no side effect fires on replay (recovery.md). The result is identical
+      // to the live runtime's state for the same (snapshot, events) — same
+      // reducer, same order.
+      const { state } = replay(machine, {
+        msgs: events,
+        ctx,
+        loaded: snapshot,
+      });
+
+      // RecoveryCompleted: fire once per activation, AFTER the fold, even when
+      // the log + snapshot were both empty (fresh actor). Idempotent within the
+      // activation via `readyFired`; may fire again on a future activation.
+      if (!readyFired) {
+        readyFired = true;
+        opts.onReady?.(state);
+      }
+
+      // Returned as `unknown` and re-validated through `migrate` (= parse), same
+      // boundary discipline as doStore. The substrate feeds it to `init` as
+      // `loaded`, so the live `init` rehydrate branch runs on the folded state.
+      return state;
+    },
+
+    async save(state: S): Promise<void> {
+      // The substrate calls save() after every transition, BEFORE the observer
+      // fires append() for that same transition. We don't snapshot here — we
+      // only hold the latest state so the append path can pair it with the
+      // freshly-advanced seq (see `latestState`). Holding (not snapshotting)
+      // here is what keeps the snapshot's seq and state on the same boundary.
+      latestState = state;
+    },
+
+    migrate(raw: unknown): S | null {
+      return parse(raw);
+    },
+  };
+
+  async function append(msg: M): Promise<void> {
+    // Lazily learn the durable seq if append fires before any load() in this
+    // isolate (defensive; the documented flow loads first).
+    if (lastSeq === null) lastSeq = await readMeta();
+    const seq = lastSeq + 1;
+    lastSeq = seq;
+    // Write the event then advance the meta cell. DO storage is transactional
+    // within a single `alarm`/fetch turn; both puts land together.
+    await storage.put(eventKey(eventPrefix, seq), JSON.stringify(msg));
+    await storage.put(
+      metaKey,
+      JSON.stringify({ lastSeq: seq } satisfies MetaCell),
+    );
+
+    // Count-based retention (Akka `RetentionCriteria.snapshotEvery`). When the
+    // events since the last snapshot reach `snapshotEvery`, checkpoint the
+    // post-this-event state under THIS seq. `latestState` was set by the
+    // save(state) that ran earlier in this same transition, so its state folds
+    // exactly events 1..seq — recording `seq` here is consistent, and the
+    // recovery fold replays only events strictly after `seq`. A snapshot bounds
+    // replay length; it never changes the fold's result (snapshotting.md).
+    if (seq - snapshotSeq >= snapshotEvery && latestState !== null) {
+      const cell: SnapshotCell<S> = { seq, state: latestState };
+      await storage.put(snapshotKey, JSON.stringify(cell));
+      snapshotSeq = seq;
+    }
+  }
+
+  return { store, append };
+}

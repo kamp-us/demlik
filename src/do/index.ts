@@ -41,6 +41,16 @@
 
 import type { Store, Sub, SubId } from "../index";
 
+// Opt-in event-sourcing persistence mode. `doStore` below stays the DEFAULT
+// (snapshot-only, byte-for-byte unchanged); `doEventSourcedStore` is the
+// explicit alternative that appends each Msg to a log, snapshots periodically,
+// and rebuilds state by folding the log on the latest snapshot at activation.
+export {
+  doEventSourcedStore,
+  type EventSourcedOptions,
+  type EventSourcedStore,
+} from "./event-sourced-store";
+
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
 // terminal-output capture, and `dispatchToIdle`. Kept in a sibling file so this
