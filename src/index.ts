@@ -2310,6 +2310,60 @@ export function historyTracker<S, M extends { type: string }>(
   };
 }
 
+// === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
+//
+// Folds `machine.update` over `msgs` from `initialState`, branching on
+// `formOf(machine)` — the same reader `run` uses — so every fold site agrees
+// on the reducer-vs-transitions form by construction (no second copy of the
+// heuristic to drift). Returns the final state plus the Cmds the cells emitted
+// along the way; the caller keeps them (`replay`) or discards them (`foldMsgs`).
+//
+// Touches no `Store`, no `interpret` handler, and starts no subscription — it
+// only calls `update` cells. The two public folds differ only in how they
+// enter and what they return: `replay` enters via `init` and returns
+// `{ state, cmds, subs }`; `foldMsgs` enters from a base state and returns `S`.
+function foldUpdates<S, M extends { type: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  initialState: S,
+  msgs: readonly M[],
+): { state: S; cmds: C[] } {
+  type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
+  type ReducerRecord = Reducer<S, M, C>;
+  type TransitionsTable = {
+    [stateType: string]: { [msgType: string]: CellFn };
+  };
+  const updateForm = machine.update;
+  const updateMode: UpdateForm = formOf(machine);
+
+  let state: S = initialState;
+  const cmds: C[] = [];
+
+  for (const msg of msgs) {
+    if (__DEV__) deepFreeze(state);
+
+    let result: readonly [S, readonly C[]];
+    if (updateMode === "reducer") {
+      result = (updateForm as ReducerRecord)[msg.type as M["type"]](
+        state,
+        msg as Extract<M, { type: M["type"] }>,
+      );
+    } else {
+      const table = updateForm as unknown as TransitionsTable;
+      const stateKey = (state as unknown as { type: string }).type;
+      // biome-ignore lint/style/noNonNullAssertion: Transitions overload guarantees the (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess
+      result = table[stateKey]![msg.type]!(state, msg);
+    }
+
+    if (__DEV__) assertPureResult(result, msg.type);
+
+    const [next, emitted] = result;
+    state = next;
+    cmds.push(...emitted);
+  }
+
+  return { state, cmds };
+}
+
 // === replay: pure unit-test helper ===
 //
 // Composes `init(loaded ?? null, ctx)` then `update(state, msg)` for each msg.
@@ -2353,49 +2407,61 @@ export function replay<
     );
   }
 
-  let state: S = initialState;
-  const cmds: C[] = [...initCmds];
-
-  // Mirror the same form-branching the runtime does (see `applyUpdate` in
-  // `run`). Read once from the `__form` tag via `formOf` — the same reader
-  // `run` uses, so `replay` and `run` agree on the form by construction
-  // (no second copy of the heuristic to drift).
-  type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
-  type ReducerRecord = Reducer<S, M, C>;
-  type TransitionsTable = {
-    [stateType: string]: { [msgType: string]: CellFn };
-  };
-  const updateForm = machine.update;
-  const updateMode: UpdateForm = formOf(machine);
-
-  for (const msg of opts.msgs) {
-    if (__DEV__) deepFreeze(state);
-
-    let result: readonly [S, readonly C[]];
-    if (updateMode === "reducer") {
-      result = (updateForm as ReducerRecord)[msg.type as M["type"]](
-        state,
-        msg as Extract<M, { type: M["type"] }>,
-      );
-    } else {
-      const table = updateForm as unknown as TransitionsTable;
-      const stateKey = (state as unknown as { type: string }).type;
-      // biome-ignore lint/style/noNonNullAssertion: Transitions overload guarantees the (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess
-      result = table[stateKey]![msg.type]!(state, msg);
-    }
-
-    if (__DEV__) assertPureResult(result, msg.type);
-
-    const [next, emitted] = result;
-    state = next;
-    cmds.push(...emitted);
-  }
+  // `replay` and `foldMsgs` share ONE internal fold (`foldUpdates`), keyed on
+  // `formOf` — the same reader `run` uses — so all three agree on the
+  // reducer-vs-transitions form by construction. `replay` wraps it with the
+  // `init` entry + Cmd/Sub collection; `foldMsgs` calls it from a base state
+  // and returns the state only.
+  const { state, cmds: foldedCmds } = foldUpdates<S, M, C>(
+    machine,
+    initialState,
+    opts.msgs,
+  );
+  const cmds: C[] = [...initCmds, ...foldedCmds];
 
   const subs: U[] = machine.subscriptions
     ? [...machine.subscriptions(state)]
     : [];
 
   return { state, cmds, subs };
+}
+
+// === foldMsgs: runtime-free client-prediction fold seam (ADR 0006, #211) ===
+//
+// Folds `machine.update` over an ordered `Msg[]` starting from a caller-supplied
+// `base` state and returns the resulting state ONLY. This is the client-side
+// replay primitive a prediction loop needs (the Gambetta/Valve
+// authoritative-server reconcile step): re-simulate a queue of un-acked inputs
+// on top of an authoritative snapshot —
+// `foldMsgs(machine, snapshot, pendingInputs)`.
+//
+// Distinct from `replay` (the test idiom), by design (ADR 0006):
+// - Enters from a direct `base` parameter, NOT via `init`/`loaded` — so
+//   reconciliation correctness never depends on the machine author's `init`
+//   rehydrate discipline. Takes no `ctx` (the fold calls `update` only).
+// - Returns just the final `S` — not `{ state, cmds, subs }`. During prediction
+//   the inputs' effects were already sent to the server; re-emitting their Cmds
+//   on the client would double-fire, and `subs` are a runtime concern. Returning
+//   only `S` makes "replay fires no effects" structural, not caller discipline.
+//   A caller that wants the emitted Cmds for assertions uses `replay`.
+//
+// Invokes no `Store`, no `interpret` handler, and starts no subscription — it
+// shares `replay`'s `foldUpdates` fold, which only calls `update` cells, and
+// reads the reducer-vs-transitions form via the same `formOf(machine)` reader
+// `run`/`replay` use, so it agrees with them by construction.
+//
+// Per ADR 0006 the runtime-free *guarantee* lives on a dedicated
+// `@demlik/tea/pure` subpath whose module graph never reaches `run`; that
+// subpath export + import-graph guard are #213's scope. Here `foldMsgs` ships
+// as a reachable public API from root; #213 formalizes the boundary.
+export function foldMsgs<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(machine: Machine<S, M, C, U, Ctx>, base: S, msgs: readonly M[]): S {
+  return foldUpdates<S, M, C>(machine, base, msgs).state;
 }
 
 // === tryInterpret: Railway sugar over `Result.tryPromise` ===
