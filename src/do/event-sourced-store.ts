@@ -238,14 +238,29 @@ const defaultParseEvent = <M>(raw: unknown): M | null =>
  * fold; an event-sourced machine's `init` rehydrate branch is a pure
  * passthrough (TEA invariant 2), so the fold touches nothing in `ctx`.
  */
-// Cmd/Sub are erased to the substrate's base unions here: the fold only needs
-// `init` + `update`, and pinning the machine's concrete C/U would force every
-// caller to thread them through this factory. A `Machine<S, M, Cmd, Sub, Ctx>`
-// accepts any machine whose Cmd/Sub are subtypes (they always are), and the
-// machine keeps its precise types at its own definition site.
-export function doEventSourcedStore<S, M extends { type: string }, Ctx>(
+// Cmd/Sub are INFERRED type params (`C`/`U`) that DEFAULT to the substrate's
+// base unions, not pinned to them. The fold itself only ever touches `init` +
+// `update`, so the body never depends on the concrete C/U — but pinning the
+// machine param to the base `Cmd` made `interpret` *structurally required* via
+// the `Machine` conditional (`[C] extends [Cmd<never>] ? { interpret? } : {
+// interpret }`): a CMDLESS grain (`Cmd = never`, which legitimately declares no
+// `interpret`) then could not satisfy the param without a cast (#195). Threading
+// `C`/`U` lets TS infer `C = never` for such a grain, relaxing `interpret` to
+// optional exactly as `run`/`replay` already do for a `Cmd = never` machine — so
+// a cmdless machine type-checks with no cast and no no-op `interpret`. The
+// defaults keep inference byte-for-byte identical for a commandful machine (and
+// for the existing `<S, M, Ctx>`-explicit callers, whose C/U fall to the base
+// defaults exactly as before); the machine keeps its precise types at its own
+// definition site.
+export function doEventSourcedStore<
+  S,
+  M extends { type: string },
+  Ctx,
+  C extends Cmd = Cmd,
+  U extends Sub = Sub,
+>(
   storage: DurableObjectStorage,
-  machine: Machine<S, M, Cmd, Sub, Ctx>,
+  machine: Machine<S, M, C, U, Ctx>,
   ctx: Ctx,
   opts: EventSourcedOptions<S, M> = {},
 ): EventSourcedStore<S, M> {
