@@ -219,6 +219,36 @@ describe("Projection — rebuild-equivalence", () => {
     );
     expect(r.view()).toEqual({ total: 0, notes: 1 });
   });
+
+  // Regression for #197: rebuildProjection presented `updates[i]` at offset `i`
+  // against a runner whose stored offset starts at 0, so `updates[0]` (offset 0)
+  // was skipped by the exclusive-offset guard and the FIRST event was silently
+  // dropped. This exercises the naive-consumer path the bug hit: a plain ordered
+  // EVENT list (no boot prepend) — the first event MUST be folded.
+  it("includes the FIRST event of a rebuild stream (no boot prepend) — #197", () => {
+    // A single `inc by 7`: if `updates[0]` is dropped, the total is 0; it must be 7.
+    const single = rebuildProjection(
+      countProjection(() => {}),
+      [{ msg: { type: "inc", by: 7 }, model: INITIAL }],
+    );
+    expect(single.view()).toEqual({ total: 7, notes: 0 });
+
+    // And the first of several: the leading `note` must be counted, not skipped.
+    const several = rebuildProjection(
+      countProjection(() => {}),
+      [
+        { msg: { type: "note", text: "first" }, model: INITIAL },
+        { msg: { type: "inc", by: 2 }, model: INITIAL },
+        { msg: { type: "inc", by: 3 }, model: INITIAL },
+      ],
+    );
+    expect(several.view()).toEqual({ total: 5, notes: 1 });
+
+    // The runner's stored offset reflects every event applied (first included):
+    // three events fold to offset 3 (offsets 1,2,3), not 2 — which a dropped
+    // first event (the #197 bug) would yield.
+    expect(several.offset()).toBe(3);
+  });
 });
 
 // ── Property 2: idempotent apply + exclusive offset. ────────────────────────

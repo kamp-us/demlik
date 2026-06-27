@@ -353,12 +353,19 @@ export function driveProjections<Model, Msg extends { type: string }>(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Rebuild a projection's view by folding an ordered `(msg, model)` stream from
- * the `NoOffset` start. `updates[i]` is presented at offset `i + 1` (the boot
- * update, if any, is `updates[0]` with `msg === null` — present it at offset 0
- * by including it; or omit it and start the events at offset 1). Returns the
- * rebuilt runner whose `view()` equals the live runner's view for the same
+ * Rebuild a projection's view by folding an ordered event stream from the
+ * `NoOffset` start. The runner is seeded to `projection.initial` (the implicit
+ * boot / `NoOffset` state), then each `updates[i]` is presented at offset
+ * `i + 1` — so the FIRST event (`updates[0]`) lands at offset 1 and is folded,
+ * exactly mirroring the live driver, which assigns the first applied `Msg`
+ * offset 1 (the boot observe is offset 0 and never enters this list). Returns
+ * the rebuilt runner whose `view()` equals the live runner's view for the same
  * ordered stream.
+ *
+ * Pass the ordered events only; do NOT prepend a boot (`msg === null`) entry.
+ * With the `i + 1` offsets a leading boot entry would be applied at offset 1
+ * like any event (the seed already covers the `NoOffset` start), not skipped —
+ * the offset-0 skip that drops the boot is the live driver's, not this fold's.
  *
  * This is the rebuild-equivalence oracle: a view cleared and replayed from the
  * stream equals the live view.
@@ -369,7 +376,12 @@ export function rebuildProjection<Model, Msg extends { type: string }, View>(
 ): ProjectionRunner<Model, Msg, View> {
   const runner = runProjection(projection, 0);
   updates.forEach((u, i) => {
-    runner.present({ msg: u.msg, model: u.model, offset: i });
+    // Present at offset `i + 1`, NOT `i`: the runner's stored offset starts at 0
+    // (the `NoOffset` seed) and `present` skips any update with `offset <= 0`, so
+    // an offset-`i` first event (offset 0) would be silently dropped. Offsetting
+    // by one starts the stream at offset 1 — the live driver's first-Msg offset —
+    // so `updates[0]` is folded and the rebuild mirrors the live view.
+    runner.present({ msg: u.msg, model: u.model, offset: i + 1 });
   });
   return runner;
 }
