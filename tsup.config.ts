@@ -60,6 +60,7 @@ export default defineConfig({
     "agent/index": "src/agent/index.ts",
     "with-deadline/index": "src/with-deadline/index.ts",
     "with-resilience/index": "src/with-resilience/index.ts",
+    "prediction/index": "src/prediction/index.ts",
   },
   format: ["esm"],
   dts: true,

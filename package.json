@@ -245,6 +245,10 @@
       "types": "./dist/with-resilience/index.d.ts",
       "import": "./dist/with-resilience/index.js"
     },
+    "./prediction": {
+      "types": "./dist/prediction/index.d.ts",
+      "import": "./dist/prediction/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
