@@ -76,8 +76,10 @@ export {
 // and rebuilds state by folding the log on the latest snapshot at activation.
 export {
   doEventSourcedStore,
+  type EventLogRange,
   type EventSourcedOptions,
   type EventSourcedStore,
+  type PersistedEvent,
 } from "./event-sourced-store";
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the

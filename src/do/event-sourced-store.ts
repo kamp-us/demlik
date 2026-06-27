@@ -113,6 +113,32 @@ export interface EventSourcedOptions<S, M> {
 }
 
 /**
+ * One persisted log entry handed to a {@link EventSourcedStore.readEvents}
+ * consumer: the monotonic `seq` the event was appended under, paired with the
+ * decoded `event`. `seq` is the store's own append counter (the key the event
+ * lives under), so it both orders the stream and bounds an {@link EventLogRange}.
+ */
+export interface PersistedEvent<M> {
+  /** The append sequence number this event was logged under (1-based, gap-free). */
+  readonly seq: number;
+  /** The decoded `Msg`, parsed through the store's `parseEvent` boundary. */
+  readonly event: M;
+}
+
+/**
+ * Optional inclusive bounds for {@link EventSourcedStore.readEvents}. Both ends
+ * are inclusive and match against the event's `seq`; omitting an end leaves it
+ * unbounded. `{ fromSeq: 5, toSeq: 10 }` yields seqs 5..10; `{}` (or no
+ * argument) yields the whole log.
+ */
+export interface EventLogRange {
+  /** Lowest `seq` to include (inclusive). Default: the first event. */
+  readonly fromSeq?: number;
+  /** Highest `seq` to include (inclusive). Default: the last event. */
+  readonly toSeq?: number;
+}
+
+/**
  * The handle returned by {@link doEventSourcedStore}: a `Store<S>` to hand to
  * `run(...)`, plus the append + recovery surface the cooperating DO drives.
  */
@@ -129,6 +155,25 @@ export interface EventSourcedStore<S, M> {
    * snapshot when the event count crosses a `snapshotEvery` boundary.
    */
   append(msg: M): Promise<void>;
+  /**
+   * Stream the persisted event log in `seq` order, optionally bounded by an
+   * inclusive {@link EventLogRange}. This is the PUBLIC read side of the
+   * event-sourced write model — the surface replay / projection / audit
+   * consumers (CQRS reads, recovery.md / projections.md) read through, instead
+   * of mirroring the store's private `@@es/evt/` key convention.
+   *
+   * The log is APPEND-ONLY and is never truncated by snapshotting (a snapshot
+   * only bounds the *replay* tail, never the log), so this yields EVERY event
+   * in range — including ones a snapshot already folds. Each entry carries its
+   * `seq`, so a consumer can resume from a known offset (`{ fromSeq }`) or read
+   * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
+   * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
+   * are dropped, identical to the recovery fold.
+   *
+   * Read-only: it never appends, snapshots, or mutates store state, so streaming
+   * the log can never perturb the live actor.
+   */
+  readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
 }
 
 const defaultParse = <S>(raw: unknown): S | null =>
@@ -222,19 +267,38 @@ export function doEventSourcedStore<S, M extends { type: string }, Ctx>(
     return { state: parsed, seq };
   }
 
-  /** Read the logged events strictly after `afterSeq`, in seq order. */
-  async function readLog(afterSeq: number): Promise<M[]> {
+  /**
+   * Stream the persisted event log in `seq` order, bounded by the optional
+   * inclusive `[fromSeq, toSeq]` range. The single owner of the `@@es/evt/`
+   * key convention on the read side — both the public {@link EventSourcedStore.readEvents}
+   * and the private fold's `readLog` flow through it, so the prefix/decode rule
+   * lives in exactly one place.
+   */
+  async function* readEvents(
+    range: EventLogRange = {},
+  ): AsyncGenerator<PersistedEvent<M>> {
+    const fromSeq = range.fromSeq ?? Number.NEGATIVE_INFINITY;
+    const toSeq = range.toSeq ?? Number.POSITIVE_INFINITY;
     // list() returns keys in lexicographic order; zero-padded seq keys sort by
-    // sequence. `start` is exclusive-of-nothing, so filter by parsed seq.
+    // sequence, so this is already seq-ascending. Bounds are matched on the
+    // parsed seq (inclusive both ends).
     const rows = await storage.list<string>({ prefix: eventPrefix });
-    const events: M[] = [];
     for (const [key, value] of rows) {
       const seq = Number(key.slice(eventPrefix.length));
-      if (!Number.isFinite(seq) || seq <= afterSeq) continue;
+      if (!Number.isFinite(seq) || seq < fromSeq || seq > toSeq) continue;
       const decoded = parseEvent(JSON.parse(value));
-      // A `null` decode drops a retired Msg variant from replay (documented in
-      // parseEvent). Keep the fold going.
-      if (decoded !== null) events.push(decoded);
+      // A `null` decode drops a retired Msg variant (documented in parseEvent).
+      if (decoded !== null) yield { seq, event: decoded };
+    }
+  }
+
+  /** Read the logged events strictly after `afterSeq`, in seq order. */
+  async function readLog(afterSeq: number): Promise<M[]> {
+    // The replay tail is the public reader bounded to seqs > afterSeq — one
+    // shared source for the key convention, no second `storage.list` walk.
+    const events: M[] = [];
+    for await (const { event } of readEvents({ fromSeq: afterSeq + 1 })) {
+      events.push(event);
     }
     return events;
   }
@@ -314,5 +378,5 @@ export function doEventSourcedStore<S, M extends { type: string }, Ctx>(
     }
   }
 
-  return { store, append };
+  return { store, append, readEvents };
 }

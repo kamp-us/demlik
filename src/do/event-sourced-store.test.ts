@@ -284,3 +284,151 @@ describe("doEventSourcedStore — boundary cases", () => {
     ).toThrow(/snapshotEvery/);
   });
 });
+
+// ── Public log reader: readEvents (the #198 read-side surface). ──────────────
+// The CQRS read of the append-only write model: a consumer streams the
+// persisted log in seq order, optionally bounded, WITHOUT mirroring the private
+// `@@es/evt/` key convention. Backed by the same DI'd fake storage.
+
+async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
+  const out: T[] = [];
+  for await (const x of it) out.push(x);
+  return out;
+}
+
+// A reader-only store over already-persisted bytes — the eviction/replay shape:
+// the live actor that wrote the log is gone; a fresh handle reads it back.
+function readerOver(backing: Map<string, string>, snapshotEvery = 100) {
+  const { storage } = fakeStorage(backing);
+  return doEventSourcedStore<State, Msg, typeof ctx>(storage, counter(), ctx, {
+    snapshotEvery,
+  });
+}
+
+// Five distinct events the counter applies, so each lands as one log cell at
+// seqs 1..5 in dispatch order.
+const sampleMsgs: Msg[] = [
+  { type: "inc", by: 1 },
+  { type: "inc", by: 2 },
+  { type: "note", text: "x" },
+  { type: "dec", by: 1 },
+  { type: "reset" },
+];
+
+describe("doEventSourcedStore — readEvents (public log reader)", () => {
+  it("reads every event in seq order, 1-based and gap-free", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+
+    const rows = await collect(readerOver(backing).readEvents());
+
+    expect(rows.map((r) => r.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(rows.map((r) => r.event)).toEqual(sampleMsgs);
+  });
+
+  it("empty log yields nothing", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, [], 100); // fresh actor, no events appended
+
+    expect(await collect(readerOver(backing).readEvents())).toEqual([]);
+    // explicit range over an empty log is also empty
+    expect(
+      await collect(readerOver(backing).readEvents({ fromSeq: 1, toSeq: 10 })),
+    ).toEqual([]);
+  });
+
+  it("respects an inclusive fromSeq lower bound", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+
+    const rows = await collect(readerOver(backing).readEvents({ fromSeq: 3 }));
+    expect(rows.map((r) => r.seq)).toEqual([3, 4, 5]);
+    expect(rows.map((r) => r.event)).toEqual(sampleMsgs.slice(2));
+  });
+
+  it("respects an inclusive toSeq upper bound", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+
+    const rows = await collect(readerOver(backing).readEvents({ toSeq: 2 }));
+    expect(rows.map((r) => r.seq)).toEqual([1, 2]);
+    expect(rows.map((r) => r.event)).toEqual(sampleMsgs.slice(0, 2));
+  });
+
+  it("respects a bounded [fromSeq, toSeq] window (both inclusive)", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+
+    const rows = await collect(
+      readerOver(backing).readEvents({ fromSeq: 2, toSeq: 4 }),
+    );
+    expect(rows.map((r) => r.seq)).toEqual([2, 3, 4]);
+  });
+
+  it("an entirely out-of-range window yields nothing", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+
+    expect(
+      await collect(readerOver(backing).readEvents({ fromSeq: 10 })),
+    ).toEqual([]);
+    expect(
+      await collect(readerOver(backing).readEvents({ fromSeq: 4, toSeq: 2 })),
+    ).toEqual([]);
+  });
+
+  it("reads across snapshot boundaries — the log is never truncated by snapshotting", async () => {
+    // snapshotEvery=4 over 13 events takes snapshots at seq 4, 8, 12; the reader
+    // must still surface ALL 13 events (a snapshot bounds replay, not the log).
+    const backing = new Map<string, string>();
+    const msgs: Msg[] = Array.from({ length: 13 }, (_, i) => ({
+      type: "inc" as const,
+      by: i + 1,
+    }));
+    await liveRun(backing, msgs, 4);
+    // a snapshot cell exists, proving we crossed a boundary
+    expect(backing.has("@@es/snapshot")).toBe(true);
+
+    const rows = await collect(readerOver(backing).readEvents());
+    expect(rows.map((r) => r.seq)).toEqual(
+      Array.from({ length: 13 }, (_, i) => i + 1),
+    );
+    expect(rows.map((r) => r.event)).toEqual(msgs);
+  });
+
+  it("drops events whose parseEvent returns null (a retired Msg variant)", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+
+    // A reader that no longer recognizes `reset` (seq 5) drops it, leaving a gap.
+    const { storage } = fakeStorage(backing);
+    const reader = doEventSourcedStore<State, Msg, typeof ctx>(
+      storage,
+      counter(),
+      ctx,
+      {
+        parseEvent: (raw) => {
+          const m = raw as { type?: unknown };
+          if (m?.type === "reset") return null;
+          return typeof m?.type === "string" ? (raw as Msg) : null;
+        },
+      },
+    );
+
+    const rows = await collect(reader.readEvents());
+    expect(rows.map((r) => r.seq)).toEqual([1, 2, 3, 4]); // seq 5 (reset) dropped
+    expect(rows.some((r) => r.event.type === "reset")).toBe(false);
+  });
+
+  it("is read-only — streaming the log mutates no storage", async () => {
+    const backing = new Map<string, string>();
+    await liveRun(backing, sampleMsgs, 100);
+    const before = new Map(backing);
+
+    await collect(readerOver(backing).readEvents());
+    await collect(readerOver(backing).readEvents({ fromSeq: 2, toSeq: 3 }));
+
+    expect(backing.size).toBe(before.size);
+    for (const [k, v] of before) expect(backing.get(k)).toBe(v);
+  });
+});
