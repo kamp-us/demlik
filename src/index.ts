@@ -1334,6 +1334,28 @@ export function asReducer<S, M extends { type: string }, C extends Cmd>(
 // effect phase leaves the persisted state ahead of the host's belief about
 // what executed — the Railway discipline (`tryInterpret` in handlers) makes
 // that safe in practice.
+
+// === CtxArg<Ctx>: the `ctx` field of `run`'s opts, conditionally optional ===
+//
+// A PURE machine reads nothing from `ctx` — its `Ctx` is `NoCtx`
+// (`Record<never, never>`), `Record<string, never>` (the vortex arena grain,
+// #182), or `unknown`. Forcing such a machine to write `ctx: {}` is ceremony
+// for a value the type already pins as empty — the same friction the
+// `Machine.interpret` field removed for cmdless machines. So `ctx` is
+// CONDITIONALLY optional: when the empty object satisfies `Ctx` it may be
+// OMITTED (the runtime defaults it to `{}`), so a pure reducer runs as
+// `run(machine)`; when `Ctx` carries a field a handler reads, `ctx` stays
+// REQUIRED so a context-bearing machine can't silently forget it.
+//
+// `[Record<never, never>] extends [Ctx]` reads as "is `{}` assignable to
+// `Ctx`" — true for the context-free shapes above, false for `{ db: … }`. The
+// tuple-wrap disables distributive conditional behavior, the same trick the
+// `Machine.interpret`/`update` fields use. Existing callers that pass `ctx`
+// are unaffected — an optional field still accepts a present value.
+export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
+  ? { ctx?: Ctx }
+  : { ctx: Ctx };
+
 export function run<
   S,
   M extends { type: string },
@@ -1343,8 +1365,7 @@ export function run<
   E extends { type: string } = never,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  opts: {
-    ctx: Ctx;
+  opts: CtxArg<Ctx> & {
     store?: Store<S>;
     onError?: OnError;
     /**
@@ -1393,7 +1414,13 @@ export function run<
     __idleCap?: number;
   },
 ): BootingRuntime<S, M, E> {
-  const { ctx, store } = opts;
+  const { store } = opts;
+  // `ctx` is conditionally optional (see `CtxArg`): a pure machine omits it.
+  // Default the absent/nullish case to an empty object so the augmented-ctx
+  // spread and `init(loaded, ctx)` get a value, never `undefined`. Callers that
+  // pass a real `ctx` (or `ctx: undefined` for a `Ctx = undefined` machine that
+  // ignores it) are unchanged.
+  const ctx = (opts.ctx ?? {}) as Ctx;
   const idleCap = opts.__idleCap ?? 100_000;
   // The semantic-event projector (#47). Defaults to "no events" — a machine
   // that wires none has an empty event surface (`E = never`), so `on` is

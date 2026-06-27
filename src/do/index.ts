@@ -182,6 +182,26 @@ export {
 const DEFAULT_STATE_KEY = "@@state";
 
 /**
+ * Options for {@link doStore}. Mirrors the optional-bag shape
+ * `doEventSourcedStore` already uses for its `parse`/`keys`, so the two DO
+ * stores read alike.
+ */
+export interface DoStoreOptions<S> {
+  /** Storage key the snapshot cell lives at. Defaults to `@@state`. */
+  readonly key?: string;
+  /**
+   * The serialize half of the boundary (#182) — the INVERSE of `doStore`'s
+   * `parse`. Maps the live `S` to a JSON-safe carrier before `JSON.stringify`,
+   * so a Model holding a `Map`/`Set`/`Date` (which `JSON.stringify` would
+   * silently flatten) round-trips: `parse` reconstructs the rich `S` from the
+   * carrier on load. Omit for a plain-JSON Model (the identity default — the
+   * `Record`-not-`Map` constraint, unchanged). When present, `parse` MUST
+   * accept whatever `serialize` produces.
+   */
+  readonly serialize?: (state: S) => unknown;
+}
+
+/**
  * `Store<S>` over `DurableObjectStorage`.
  *
  * `parse` is REQUIRED because DO storage is a real serialization boundary —
@@ -203,12 +223,38 @@ const DEFAULT_STATE_KEY = "@@state";
  * behavior in `init`/`update`. After this, the boundary parse rejects the
  * old shape (returns null) and the DO boots fresh, picking up its new
  * schema from the next dispatch onward.
+ *
+ * Serialization sharp edge (#182): `save` JSON-serializes the Model, and
+ * `JSON.stringify` does NOT survive a `Map`/`Set`/`Date` (a `Map` stringifies
+ * to `{}`, silently losing every entry). A Model that wants a `Map` (the
+ * natural "roster keyed by id") therefore supplies a `serialize` hook — the
+ * INVERSE of `parse` — so the boundary owns both directions: `serialize` turns
+ * the live `S` into a JSON-safe carrier on the way out, `parse` reconstructs
+ * the rich `S` from that carrier on the way back in. They are a matched pair:
+ * `parse(JSON.parse(JSON.stringify(serialize(state))))` must round-trip to a
+ * value equal to `state`. Omit `serialize` and the Model must stay plain-JSON
+ * (the `Record`-not-`Map` constraint the default imposes, unchanged).
+ *
+ * @param parse - boundary parse, the deserialize half (`unknown -> S | null`).
+ * @param keyOrOptions - either the storage key (legacy positional form,
+ *   defaults to `@@state`) or a {@link DoStoreOptions} bag carrying `key`
+ *   and/or the `serialize` hook. A bare string is treated as `{ key }`.
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => S | null,
-  key: string = DEFAULT_STATE_KEY,
+  keyOrOptions: string | DoStoreOptions<S> = DEFAULT_STATE_KEY,
 ): Store<S> {
+  // Normalize the legacy positional `key` string and the options bag to one
+  // shape, so the body reads a single `key` + `serialize` regardless of which
+  // call form the caller used. Backward-compatible: a string `keyOrOptions`
+  // is exactly the old behavior with the identity serializer.
+  const options: DoStoreOptions<S> =
+    typeof keyOrOptions === "string" ? { key: keyOrOptions } : keyOrOptions;
+  const key = options.key ?? DEFAULT_STATE_KEY;
+  // Identity by default: the Model is serialized as-is (the plain-JSON path).
+  const serialize: (state: S) => unknown =
+    options.serialize ?? ((state: S): unknown => state);
   return {
     async load(): Promise<unknown> {
       const raw = await storage.get<string>(key);
@@ -220,7 +266,9 @@ export function doStore<S>(
       return JSON.parse(raw);
     },
     async save(state: S): Promise<void> {
-      await storage.put(key, JSON.stringify(state));
+      // `serialize` is the inverse of `parse` — it maps the live `S` (which may
+      // hold a Map/Set) to a JSON-safe carrier before `JSON.stringify` (#182).
+      await storage.put(key, JSON.stringify(serialize(state)));
     },
     migrate(raw: unknown): S | null {
       return parse(raw);
