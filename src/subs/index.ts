@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // @demlik/tea/subs — universal Sub factories.
 //
-// Seven factories absorb the recurring `(sub, ctx, dispatch) => cleanup`
+// Eight factories absorb the recurring `(sub, ctx, dispatch) => cleanup`
 // shape of every cross-cutting Sub topology: timers, DOM events,
 // BroadcastChannel pub/sub, cross-runtime Ports, SSE streams, and
-// bidirectional WebSocket streams. Callers compose them into
+// bidirectional WebSocket streams — one-shot (`fromWebSocket`) and
+// auto-reconnecting with capped backoff (`fromReconnectingWebSocket`).
+// Callers compose them into
 // `machine.subscribe[type]` cells — the factory absorbs the lifecycle
 // (subscribe + cleanup), the caller keeps the intent (which Msg, which
 // channel/port/runtime).
@@ -34,6 +36,11 @@ export {
 export { fromEventTarget } from "./from-event-target";
 export { fromInterval } from "./from-interval";
 export { fromPort } from "./from-port";
+export {
+  type CancelTimer,
+  fromReconnectingWebSocket,
+  type ReconnectingWebSocketFactoryOpts,
+} from "./from-reconnecting-web-socket";
 export { fromTimeout } from "./from-timeout";
 export {
   fromWebSocket,
