@@ -21,10 +21,11 @@
  */
 
 export type { Ack, AckPartition, Seq, SeqTagged } from "../prediction";
-// The client-prediction ack primitive — cross-referenced here so a prediction
-// loop imports the fold seam AND the ack from one client-safe path (ADR 0006
-// coherence note). `@demlik/tea/prediction` remains the focused standalone leaf.
-export { ack, nextSeq, partitionByAck, tagSeq } from "../prediction";
+// The client-prediction ack primitive + the reconciliation helper —
+// cross-referenced here so a prediction loop imports the fold seam, the ack, AND
+// the reconcile step from one client-safe path (ADR 0006 coherence note).
+// `@demlik/tea/prediction` remains the focused standalone leaf.
+export { ack, nextSeq, partitionByAck, reconcile, tagSeq } from "../prediction";
 export type {
   ContextFree,
   Interpret,

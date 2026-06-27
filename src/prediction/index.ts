@@ -20,7 +20,17 @@
  * This is the read/ack side of the primitive; `tagSeq`/`nextSeq` are the write
  * side, letting a client mint monotonic seqs from its pending buffer alone —
  * again with no counter field on the Model.
+ *
+ * `reconcile` (the read side's payoff, #214) composes this ack partition with
+ * the pure fold seam `foldMsgs` (#211) to perform the whole Gambetta/Valve
+ * reconciliation step in one call. The `foldMsgs` import is the ONLY dependency
+ * this leaf takes, and it reaches into the pure-core leaf (`../pure/core`) — NOT
+ * the runtime root — so the module stays runtime-free and the `@demlik/tea/pure`
+ * import-graph guard (ADR 0006, #213) still holds.
  */
+
+import type { Cmd, Machine, Sub } from "../pure/core";
+import { foldMsgs } from "../pure/core";
 
 /**
  * A monotonic, non-negative sequence number tagging one client-predicted
@@ -95,3 +105,45 @@ export const partitionByAck = <T>(
  */
 export const nextSeq = <T>(buffer: readonly SeqTagged<T>[]): Seq =>
   buffer.reduce((max, item) => (item.seq > max ? item.seq : max), -1) + 1;
+
+/**
+ * The client prediction/reconciliation helper — the Gambetta/Valve
+ * authoritative-server loop's reconcile step, generalized (#214, epic #186).
+ *
+ * Given the latest `authoritativeState` from the server, the server's
+ * `lastAppliedSeq` ack, and the client's `pending` buffer of seq-tagged inputs,
+ * it returns the corrected predicted state: drop the inputs the server has
+ * already applied (`seq <= lastAppliedSeq`) and replay ONLY the un-acked tail
+ * (`seq > lastAppliedSeq`) over the authoritative snapshot.
+ *
+ * It is **composed, not re-derived** (ADR 0006): the drop is {@link partitionByAck}
+ * (the ack primitive, #212) and the replay is `foldMsgs` (the pure fold seam,
+ * #211) — there is no second copy of the partition logic and no second copy of
+ * the fold. `lastAppliedSeq` accepts either an {@link Ack} or a bare `Seq`, so a
+ * caller passes whichever it holds, matching `partitionByAck`.
+ *
+ * Pure and host-agnostic: it takes the `machine` (which `foldMsgs` needs to
+ * dispatch `update`) but touches no `Store`, `interpret`, or subscription, and
+ * imports nothing from the runtime — so it ships on `@demlik/tea/prediction`
+ * and the client-safe `@demlik/tea/pure` umbrella without dragging `run` into a
+ * client bundle.
+ */
+export function reconcile<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  authoritativeState: S,
+  lastAppliedSeq: Ack | Seq,
+  pending: readonly SeqTagged<M>[],
+): S {
+  const { pending: unacked } = partitionByAck(pending, lastAppliedSeq);
+  return foldMsgs(
+    machine,
+    authoritativeState,
+    unacked.map((tagged) => tagged.value),
+  );
+}
