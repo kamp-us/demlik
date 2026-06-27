@@ -57,6 +57,19 @@ export {
   pendingEffectsLedger,
   survivingEffects,
 } from "./durable-effects";
+// The first-class durable-timer / alarm-carrier (#180). Every native-DO grain
+// (raft's election/heartbeat deadline, vortex's game tick) hand-rolled the same
+// compute-next-deadline → `setAlarm` → `alarm()` → fire → re-arm loop after the
+// `do_alarm` Sub was dropped (see the historical note above). `durableTimer`
+// owns that loop in ONE tested place: idle-when-no-work (`nextDeadline` → null),
+// eviction-safe across hibernation (the deadline is a pure function of persisted
+// state, re-armed on cold wake), alarm injected as the same minimal
+// `AlarmStorage` port `stepHost` takes. See `./durable-timer`.
+export {
+  type DurableTimer,
+  type DurableTimerConfig,
+  durableTimer,
+} from "./durable-timer";
 // Opt-in event-sourcing persistence mode. `doStore` below stays the DEFAULT
 // (snapshot-only, byte-for-byte unchanged); `doEventSourcedStore` is the
 // explicit alternative that appends each Msg to a log, snapshots periodically,
@@ -66,7 +79,6 @@ export {
   type EventSourcedOptions,
   type EventSourcedStore,
 } from "./event-sourced-store";
-
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
 // terminal-output capture, and `dispatchToIdle`. Kept in a sibling file so this
