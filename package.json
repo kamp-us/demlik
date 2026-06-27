@@ -249,6 +249,10 @@
       "types": "./dist/prediction/index.d.ts",
       "import": "./dist/prediction/index.js"
     },
+    "./pure": {
+      "types": "./dist/pure/index.d.ts",
+      "import": "./dist/pure/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

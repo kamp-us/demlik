@@ -61,6 +61,7 @@ export default defineConfig({
     "with-deadline/index": "src/with-deadline/index.ts",
     "with-resilience/index": "src/with-resilience/index.ts",
     "prediction/index": "src/prediction/index.ts",
+    "pure/index": "src/pure/index.ts",
   },
   format: ["esm"],
   dts: true,
