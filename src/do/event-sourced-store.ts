@@ -13,7 +13,9 @@
  *      (one cell per event, monotonically keyed).
  *   2. Takes a PERIODIC SNAPSHOT every `snapshotEvery` events (count-based
  *      retention — mirrors Akka `RetentionCriteria.snapshotEvery`) so the log
- *      that must replay on the next activation is bounded.
+ *      that must replay on the next activation is bounded. A grain that needs
+ *      replay bounded by ELAPSED TIME/TICKS rather than raw event count drives
+ *      `snapshotNow()` instead (or alongside) — see that method.
  *   3. On activation REBUILDS state by FOLDING the log on top of the latest
  *      snapshot. The fold is the substrate's own `replay` — `init(snapshot)`
  *      then one reducer step per logged Msg. `replay` returns Cmds as data and
@@ -39,6 +41,15 @@
  *   // Msgs now (#47) — boot has no event, so there is no `null` arm to skip.
  *   runtime.observe((msg) => { es.append(msg); });
  *   await runtime.ready; // store.load() has folded; onReady has fired once.
+ *
+ * A time/tick-driven grain (e.g. one that derives simulation ticks between
+ * sparse intents) bounds its cold-wake replay by ELAPSED TIME rather than event
+ * count by calling `es.snapshotNow()` on its own cadence — every N derived ticks
+ * or on a wall-clock interval — so a quiet span that never trips `snapshotEvery`
+ * is still snapshotted before its replay tail grows unbounded (#190):
+ *
+ *   // in the grain's tick loop, after the turn's appends have settled:
+ *   if (tick % SNAPSHOT_EVERY_TICKS === 0) await es.snapshotNow();
  */
 
 import type { Cmd, Machine, Store, Sub } from "../index";
@@ -155,6 +166,29 @@ export interface EventSourcedStore<S, M> {
    * snapshot when the event count crosses a `snapshotEvery` boundary.
    */
   append(msg: M): Promise<void>;
+  /**
+   * Take a snapshot NOW, independent of the count-based `snapshotEvery` trigger
+   * (a time/tick-based retention trigger, #190). The count-based trigger bounds
+   * the replay tail by raw EVENT COUNT; a grain that derives many state
+   * transitions per logged event (e.g. simulation ticks between sparse intents)
+   * needs the tail bounded by ELAPSED TIME instead — so it calls `snapshotNow()`
+   * on its own cadence (every N derived ticks, or on a wall-clock interval) to
+   * checkpoint the current folded state without injecting filler events purely
+   * to advance the counter.
+   *
+   * It checkpoints the latest state the substrate handed `save()` at the current
+   * highest sequence, then advances the count-based baseline (`snapshotEvery`
+   * counts afresh from here, so a manual snapshot defers the next automatic one).
+   *
+   * Returns `true` if a snapshot was written, `false` on a no-op: nothing has
+   * been applied yet (fresh actor), or no new event exists since the last
+   * snapshot (already current). Like the count-based path, it pairs the held
+   * state with the highest sequence, so the caller MUST invoke it between
+   * settled transitions — after the turn's `append()`s have resolved — never
+   * mid-transition (the same boundary discipline `append`'s own snapshot relies
+   * on). Resolves once the snapshot is durably written.
+   */
+  snapshotNow(): Promise<boolean>;
   /**
    * Stream the persisted event log in `seq` order, optionally bounded by an
    * inclusive {@link EventLogRange}. This is the PUBLIC read side of the
@@ -350,6 +384,20 @@ export function doEventSourcedStore<S, M extends { type: string }, Ctx>(
     },
   };
 
+  /**
+   * Durably write the snapshot cell pairing `seq` with `state`, then advance the
+   * in-memory `snapshotSeq` so the recovery fold replays only events strictly
+   * after `seq`. Shared by the count-based path (in `append`) and the
+   * time/tick-based path (`snapshotNow`) so both record the boundary the one,
+   * identical way — a snapshot bounds replay length; it never changes the fold's
+   * result (snapshotting.md).
+   */
+  async function writeSnapshot(seq: number, state: S): Promise<void> {
+    const cell: SnapshotCell<S> = { seq, state };
+    await storage.put(snapshotKey, JSON.stringify(cell));
+    snapshotSeq = seq;
+  }
+
   async function append(msg: M): Promise<void> {
     // Lazily learn the durable seq if append fires before any load() in this
     // isolate (defensive; the documented flow loads first).
@@ -372,11 +420,26 @@ export function doEventSourcedStore<S, M extends { type: string }, Ctx>(
     // recovery fold replays only events strictly after `seq`. A snapshot bounds
     // replay length; it never changes the fold's result (snapshotting.md).
     if (seq - snapshotSeq >= snapshotEvery && latestState !== null) {
-      const cell: SnapshotCell<S> = { seq, state: latestState };
-      await storage.put(snapshotKey, JSON.stringify(cell));
-      snapshotSeq = seq;
+      await writeSnapshot(seq, latestState);
     }
   }
 
-  return { store, append, readEvents };
+  /**
+   * Time/tick-based snapshot trigger (#190) — checkpoint NOW, independent of the
+   * count-based `snapshotEvery`. See {@link EventSourcedStore.snapshotNow}.
+   */
+  async function snapshotNow(): Promise<boolean> {
+    // Lazily learn the durable seq if this fires before any load()/append() in
+    // this isolate (defensive; the documented flow loads first).
+    if (lastSeq === null) lastSeq = await readMeta();
+    // No-op when there is nothing new to checkpoint: a fresh actor with no
+    // applied state yet (`latestState === null`), or no event appended since the
+    // last snapshot (`lastSeq <= snapshotSeq`). Both keep the snapshot's `seq`
+    // and `state` paired on the same boundary the count-based path guarantees.
+    if (latestState === null || lastSeq <= snapshotSeq) return false;
+    await writeSnapshot(lastSeq, latestState);
+    return true;
+  }
+
+  return { store, append, snapshotNow, readEvents };
 }

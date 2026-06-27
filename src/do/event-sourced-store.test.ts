@@ -142,6 +142,49 @@ function snapshotOnlyFold(msgs: readonly Msg[]): State {
   return replay(counter(), { msgs, ctx, loaded: null }).state;
 }
 
+// Drive a runtime that snapshots on a TIME/TICK cadence (#190): the count-based
+// trigger is effectively disabled (`snapshotEvery` huge), and `es.snapshotNow()`
+// is called after every `tickEvery` applied msgs — the grain-driven, clock-free
+// trigger. This simulates "snapshot every N derived ticks", isolating the new
+// path from the count-based one. Returns the live final state + how many
+// snapshots `snapshotNow()` actually wrote (it no-ops when nothing is new).
+async function liveRunTickSnapshots(
+  backing: Map<string, string>,
+  msgs: readonly Msg[],
+  tickEvery: number,
+): Promise<{ state: State; snapshotsWritten: number }> {
+  const { storage } = fakeStorage(backing);
+  const es = doEventSourcedStore<State, Msg, typeof ctx>(
+    storage,
+    counter(),
+    ctx,
+    // Count trigger never fires; only snapshotNow() drives retention here.
+    { snapshotEvery: 1_000_000 },
+  );
+  const runtime = await run(counter(), { ctx, store: es.store }).ready;
+  const appends: Promise<void>[] = [];
+  runtime.observe((msg) => {
+    if (msg !== null) appends.push(es.append(msg));
+  });
+  await runtime.ready;
+  let snapshotsWritten = 0;
+  let applied = 0;
+  for (const m of msgs) {
+    await runtime.dispatch(m);
+    // Settle THIS turn's append before snapshotting — snapshotNow() pairs the
+    // held state with the highest seq, so it must run between settled
+    // transitions (the documented contract).
+    await Promise.all(appends.splice(0));
+    applied++;
+    if (applied % tickEvery === 0 && (await es.snapshotNow())) {
+      snapshotsWritten++;
+    }
+  }
+  const state = runtime.getState();
+  await runtime.stop();
+  return { state, snapshotsWritten };
+}
+
 // ── Arbitraries. ────────────────────────────────────────────────────────────
 
 const msgTable: MsgArbitraryTable<Msg> = {
@@ -430,5 +473,174 @@ describe("doEventSourcedStore — readEvents (public log reader)", () => {
 
     expect(backing.size).toBe(before.size);
     for (const [k, v] of before) expect(backing.get(k)).toBe(v);
+  });
+});
+
+// ── The time/tick-based snapshot trigger (#190). ────────────────────────────
+// snapshotNow() bounds the replay tail by ELAPSED TIME/TICKS instead of raw
+// event count: a grain calls it on its own cadence so a quiet span that never
+// trips `snapshotEvery` is still checkpointed. These tests prove (a) it writes
+// a snapshot independent of the count trigger, (b) cold-wake replay after such a
+// snapshot rebuilds the SAME state as live and as the snapshot-only fold, and
+// (c) its no-op contract.
+
+describe("doEventSourcedStore — time/tick-based snapshot trigger (snapshotNow)", () => {
+  it("writes a snapshot independent of event count, and cold-wake replay after it rebuilds correctly", async () => {
+    // 10 events, count trigger disabled (snapshotEvery 1e6). snapshotNow() fires
+    // after ticks 3, 6, 9 — so a snapshot exists even though the count threshold
+    // was never crossed. The last one covers seq 9 (highest 3-multiple <= 10).
+    const backing = new Map<string, string>();
+    const msgs: Msg[] = Array.from({ length: 10 }, (_, i) => ({
+      type: "inc" as const,
+      by: i + 1,
+    }));
+    const live = await liveRunTickSnapshots(backing, msgs, 3);
+
+    // A snapshot WAS written purely on the tick cadence, not the count trigger.
+    expect(live.snapshotsWritten).toBe(3);
+    const snapRaw = backing.get("@@es/snapshot");
+    expect(snapRaw).toBeDefined();
+    const snap = JSON.parse(snapRaw as string) as { seq: number };
+    expect(snap.seq).toBe(9);
+
+    // Cold-wake: a fresh store over the same bytes folds (snapshot @ seq 9) + the
+    // single tail event (seq 10) and rebuilds the identical state.
+    const rebuilt = await rehydrate(backing, 1_000_000);
+    expect(rebuilt.state).toEqual(live.state);
+    expect(rebuilt.state).toEqual(snapshotOnlyFold(msgs));
+    expect(rebuilt.readyCalls).toBe(1);
+  });
+
+  it("count-based path still works when snapshotNow is never called (regression)", async () => {
+    // Same scenario as the count-based boundary test, untouched by the new API:
+    // snapshotEvery=4, 13 events → snapshot at seq 12, replay folds snapshot + 1.
+    const backing = new Map<string, string>();
+    const msgs: Msg[] = Array.from({ length: 13 }, (_, i) => ({
+      type: "inc" as const,
+      by: i + 1,
+    }));
+    const live = await liveRun(backing, msgs, 4);
+    const rebuilt = await rehydrate(backing, 4);
+    const snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
+      seq: number;
+    };
+    expect(snap.seq).toBe(12);
+    expect(rebuilt.state).toEqual(live.state);
+    expect(rebuilt.state).toEqual(snapshotOnlyFold(msgs));
+  });
+
+  it("rebuild after a snapshotNow-driven retention equals live and snapshot-only fold (property)", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        arbMsgs(40),
+        // Snapshot every 1..7 ticks while the count trigger stays disabled, so an
+        // arbitrary sequence is snapshotted purely on the tick cadence and the
+        // replay tail varies in length across runs.
+        fc.integer({ min: 1, max: 7 }),
+        async (msgs, tickEvery) => {
+          const backing = new Map<string, string>();
+          const live = await liveRunTickSnapshots(backing, msgs, tickEvery);
+          const rebuilt = await rehydrate(backing, 1_000_000);
+          // (a) rebuilt-by-fold == never-evicted live state
+          expect(rebuilt.state).toEqual(live.state);
+          // (b) rebuilt-by-fold == snapshot-only fold of the same msgs
+          expect(rebuilt.state).toEqual(snapshotOnlyFold(msgs));
+          expect(rebuilt.readyCalls).toBe(1);
+        },
+      ),
+      { numRuns: 60 },
+    );
+  });
+
+  it("no-ops on a fresh actor and when nothing new since the last snapshot", async () => {
+    const backing = new Map<string, string>();
+    const { storage } = fakeStorage(backing);
+    const es = doEventSourcedStore<State, Msg, typeof ctx>(
+      storage,
+      counter(),
+      ctx,
+      { snapshotEvery: 1_000_000 },
+    );
+    const runtime = await run(counter(), { ctx, store: es.store }).ready;
+    const appends: Promise<void>[] = [];
+    runtime.observe((msg) => {
+      if (msg !== null) appends.push(es.append(msg));
+    });
+    await runtime.ready;
+
+    // Fresh actor: nothing applied → no-op, no snapshot cell written.
+    expect(await es.snapshotNow()).toBe(false);
+    expect(backing.has("@@es/snapshot")).toBe(false);
+
+    // Apply one event, then snapshotNow() writes at seq 1.
+    await runtime.dispatch({ type: "inc", by: 5 });
+    await Promise.all(appends.splice(0));
+    expect(await es.snapshotNow()).toBe(true);
+    const snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
+      seq: number;
+    };
+    expect(snap.seq).toBe(1);
+
+    // Immediately again with no new event → no-op (already current).
+    expect(await es.snapshotNow()).toBe(false);
+
+    await runtime.stop();
+  });
+
+  it("advances the count-based baseline so a manual snapshot defers the next automatic one", async () => {
+    // snapshotEvery=5. Apply 3 events, snapshotNow() at seq 3 (manual). Because
+    // it moves snapshotSeq to 3, the count trigger now needs seq >= 8 (3+5), not
+    // 5, to fire — proving the two triggers share one retention baseline.
+    const backing = new Map<string, string>();
+    const { storage } = fakeStorage(backing);
+    const es = doEventSourcedStore<State, Msg, typeof ctx>(
+      storage,
+      counter(),
+      ctx,
+      { snapshotEvery: 5 },
+    );
+    const runtime = await run(counter(), { ctx, store: es.store }).ready;
+    const appends: Promise<void>[] = [];
+    runtime.observe((msg) => {
+      if (msg !== null) appends.push(es.append(msg));
+    });
+    await runtime.ready;
+
+    const dispatch = async (n: number) => {
+      for (let i = 0; i < n; i++) {
+        await runtime.dispatch({ type: "inc", by: 1 });
+        await Promise.all(appends.splice(0));
+      }
+    };
+
+    await dispatch(3);
+    expect(await es.snapshotNow()).toBe(true);
+    let snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
+      seq: number;
+    };
+    expect(snap.seq).toBe(3);
+
+    // Two more events (seq 5): WITHOUT the rebaselining this would have tripped
+    // the seq>=5 count trigger; with it, the baseline is 3 so 5-3=2 < 5 → no new
+    // automatic snapshot. The cell still reads seq 3.
+    await dispatch(2);
+    snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
+      seq: number;
+    };
+    expect(snap.seq).toBe(3);
+
+    // Three more (seq 8): 8-3=5 >= 5 → the count trigger fires at seq 8.
+    await dispatch(3);
+    snap = JSON.parse(backing.get("@@es/snapshot") as string) as {
+      seq: number;
+    };
+    expect(snap.seq).toBe(8);
+
+    // Cold-wake still rebuilds the right state (8 events of +1 → count 8).
+    const rebuilt = await rehydrate(backing, 5);
+    expect(rebuilt.state).toEqual(runtime.getState());
+    expect(rebuilt.state?.count).toBe(8);
+
+    await runtime.stop();
   });
 });
