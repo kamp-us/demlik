@@ -109,6 +109,27 @@ export {
   sseHub,
   sseProjection,
 } from "./host";
+// Generic hibernatable PRESENCE + BROADCAST for a NATIVE (non-agent) DO grain
+// (#181). The `./host` broadcast/accept helpers above are framed for the
+// LLM-agent deferred-tool gateway (`createAgentHost`); these are the decoupled,
+// transport/Msg-agnostic equivalents a game / presence / collab grain uses —
+// `broadcastFrame` takes the socket SET as input (DI-friendly, pure, testable
+// with fakes), and `acceptPresenceSocket` / `registerHibernatableSocket` lift
+// the `WebSocketPair` + `ctx.acceptWebSocket` + `serializeAttachment` boilerplate.
+export {
+  type AttachableSocket,
+  acceptPresenceSocket,
+  type BroadcastOptions,
+  type BroadcastReport,
+  broadcastFrame,
+  type PresenceCtx,
+  type PresenceSocket,
+  type PresenceUpgrade,
+  presenceCount,
+  type RegisterOptions,
+  registerHibernatableSocket,
+  WS_READY_STATE_OPEN,
+} from "./presence";
 // CQRS projections as a first-class seam (#69). One write model, many
 // projections: each is an independent `(events|Model) → view` fold into its own
 // id-scoped read model with an EXCLUSIVE offset (resume + idempotent apply are
