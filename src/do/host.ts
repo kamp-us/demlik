@@ -267,13 +267,63 @@ export function durableDeferredGateway<R>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// agentIsResumable + autoBoot — auto-boot on rehydrate (seam B).
+// bootResume + agentIsResumable + autoBoot — cold-wake resume on rehydrate (seam B).
 //
 // A run that loaded from storage mid-loop must re-fire its one outstanding
-// effect (`agent_boot`). Lift the consumer's `isResumable` predicate + the
-// post-`ready` dispatch so the host owns it — no consumer code reaching into
-// agent internals.
+// effect. `bootResume` is the GENERALIZED helper (issue #231): after
+// `runtime.ready`, it derives a single resume Msg from the rehydrated State via
+// a caller-supplied `ResumePort` and dispatches it exactly once — a no-op on a
+// fresh DO. `autoBoot` is the AGENT specialization of it (the `agentIsResumable`
+// predicate + the `agentBootMsg` typed port, issue #60), so no divergent second
+// resume pattern is left standing.
+//
+// It leans on the init-purity contract (Invariant 2, enforced by `replay` in
+// `../index`): `init(loaded)` returns ZERO Cmds on rehydrate, so effects never
+// re-fire from boot — `bootResume`, NOT `init`, is the boot-effect hook. See
+// `.patterns/tea-do/recovery.md`.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The typed cold-wake resume port `bootResume` fires through — the agent's
+ * `AgentBootPort` (issue #60) generalized to any DO-hosted machine (issue #231).
+ *
+ * - `isResumable(state)` — true iff the rehydrated State is mid-loop and needs a
+ *   resume dispatch. False on a fresh boot, which makes `bootResume` a no-op.
+ * - `resumeMsg(now)` — the TYPED constructor for the single resume Msg (never a
+ *   hand-built `{ type: … }` literal); the `agentBootMsg` shape lifted out so a
+ *   non-agent grain supplies its own boot Msg constructor.
+ */
+export interface ResumePort<S, M extends { type: string }> {
+  readonly isResumable: (state: S) => boolean;
+  readonly resumeMsg: (now: number) => M;
+}
+
+/**
+ * After `runtime.ready`, derive the single resume Msg from the rehydrated State
+ * via `port` and dispatch it exactly once — the generalized AgentBoot. On a
+ * fresh (non-rehydrated) machine `port.isResumable` is false and this is a
+ * no-op. Call once right after building the runtime; it standardizes the
+ * hand-written `if (isResumable(state)) await runtime.dispatch(bootMsg(now()))`
+ * every DO-hosted machine otherwise re-derives.
+ *
+ * `await ready` is the single boot gate (issue #45): `getState()` is total only
+ * on the booted `Runtime`, so state cannot be inspected before boot populates
+ * it. `now` is injected (the sole boot clock read) so a test can pin it.
+ */
+export async function bootResume<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+>(
+  booting: BootingRuntime<S, M, E>,
+  port: ResumePort<S, M>,
+  now: () => number = Date.now,
+): Promise<void> {
+  const runtime = await booting.ready;
+  if (port.isResumable(runtime.getState())) {
+    await runtime.dispatch(port.resumeMsg(now()));
+  }
+}
 
 /**
  * True iff an agent slice loaded from storage is mid-loop (running + awaiting
@@ -295,10 +345,12 @@ export function agentIsResumable<
 }
 
 /**
- * After `runtime.ready`, self-dispatch `agent_boot` iff the rehydrated slice is
- * resumable. On a fresh DO this is a no-op. Call this once right after building
- * the runtime; it replaces the consumer's hand-written
- * `if (this.isResumable(...)) await runtime.dispatch({ type: "agent_boot", ... })`.
+ * The AGENT specialization of {@link bootResume} (issue #231): after
+ * `runtime.ready`, self-dispatch `agent_boot` iff the rehydrated slice is
+ * resumable, a no-op on a fresh DO. Wires the agent slice's `agentIsResumable`
+ * predicate + the agent-owned `agentBootMsg` typed port (issue #60) into the
+ * generalized helper, so the resume dispatch lives in ONE place — see
+ * `bootResume`'s docblock for the boot-gate / init-purity rationale.
  *
  * `now` is injected (the host's only clock read for boot) so a test can pin it.
  */
@@ -316,16 +368,11 @@ export async function autoBoot<
   >,
   now: () => number = Date.now,
 ): Promise<void> {
-  // `await ready` is the single boot gate (issue #45): it resolves to the
-  // booted `Runtime` whose `getState()` is total. Reading the rehydrated slice
-  // off `run()`'s synchronous handle is no longer possible — and that is the
-  // point: we cannot inspect state before boot has populated it.
-  const runtime = await booting.ready;
-  if (agentIsResumable(runtime.getState())) {
-    // Fire through the agent-owned `agentBootMsg` port (issue #60) — the boot
-    // Msg shape lives in the agent, not as a raw literal hand-built here.
-    await runtime.dispatch(agentBootMsg(now()));
-  }
+  await bootResume(
+    booting,
+    { isResumable: agentIsResumable, resumeMsg: agentBootMsg },
+    now,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
