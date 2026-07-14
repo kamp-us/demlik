@@ -109,6 +109,28 @@ export {
   sseHub,
   sseProjection,
 } from "./host";
+// The receiver/effect-side dedup half of durable effects (#227). The ledger
+// above is at-least-once (surviving owed effects re-fire on activation); this
+// brick swallows the duplicate at the external write, keyed by a caller-supplied
+// durable `EffectKey` folded into the Store alongside State (an `effect_applied`
+// marker, pruned by `effect_forgotten` — the ledger's confirm-removes-entry
+// retention). Together: effectively-once. See `./idempotent-effect`.
+export {
+  type AppliedEffects,
+  type AppliedEffectsEvent,
+  type AppliedEffectsGuard,
+  appliedEffects,
+  applyAppliedEvent,
+  type EffectApplied,
+  type EffectForgotten,
+  type EffectKey,
+  emptyApplied,
+  foldApplied,
+  type IdempotentEffect,
+  type IdempotentOutcome,
+  idempotentEffect,
+  isApplied,
+} from "./idempotent-effect";
 // Generic hibernatable PRESENCE + BROADCAST for a NATIVE (non-agent) DO grain
 // (#181). The `./host` broadcast/accept helpers above are framed for the
 // LLM-agent deferred-tool gateway (`createAgentHost`); these are the decoupled,
