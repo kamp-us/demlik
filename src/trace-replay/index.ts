@@ -92,6 +92,17 @@ export function replayTrace<
   return { matches: false, expected, actual, divergence };
 }
 
+/**
+ * Order-insensitive structural deep-equality — the single comparator this
+ * package owns, exposed so consumers (e.g. `@demlik/tea/parity`'s `diff`)
+ * reuse it rather than adding a second deep-compare. `true` iff `a` and `b`
+ * are structurally equal under {@link firstDivergence}'s walk (object keys
+ * compared order-insensitively, arrays index-by-index).
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  return firstDivergence(a, b, "state") === null;
+}
+
 // === self-contained deep-equal + first-divergence path finder ===
 //
 // One walk does both jobs: it returns the FIRST point where `expected` and

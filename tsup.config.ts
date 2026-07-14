@@ -63,6 +63,7 @@ export default defineConfig({
     "with-resilience/index": "src/with-resilience/index.ts",
     "prediction/index": "src/prediction/index.ts",
     "pure/index": "src/pure/index.ts",
+    "parity/index": "src/parity/index.ts",
   },
   format: ["esm"],
   dts: true,
