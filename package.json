@@ -129,6 +129,10 @@
       "types": "./dist/deadline/index.d.ts",
       "import": "./dist/deadline/index.js"
     },
+    "./await-terminal": {
+      "types": "./dist/await-terminal/index.d.ts",
+      "import": "./dist/await-terminal/index.js"
+    },
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
       "import": "./dist/machine-viz/index.js"
