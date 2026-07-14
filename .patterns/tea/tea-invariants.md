@@ -119,17 +119,22 @@ init: (loaded, ctx) =>
 **Note on `Date`** — `Date.now()` and `new Date()` (no args) read current
 time and are impure. `new Date("2026-01-15T12:00:00Z")` and
 `new Date(epochMs)` construct a known instant deterministically and are
-pure. The lint rule bans the `Date` global outright in production reducer
-files (the glob excludes `*.test.ts` / `*.helpers.ts`); if a reducer
-genuinely needs a constant date, define it at module scope as
-`const FOO_DATE = new Date("...")` in a non-reducer module and import the
-value.
+pure. The fold-purity guard (#228) flags the zero-arg `new Date()` and
+`Date.now()` reached inside a reducer body (test / helper files excluded);
+a constant `new Date("…")` is deterministic and permitted, but the clean
+habit is to define it once at module scope as `const FOO_DATE = new
+Date("...")` and read the value in the fold.
 
 **Enforcement today**
 
-- Lint (Phase 1.4): banned globals (`Date`, `fetch`, `crypto`, …) and
-  banned imports (`uuid`, `nanoid`, `node:*`) in any file matching
-  reducer / phase globs.
+- Static guard (#228): `packages/tea/src/pure/reducer-purity.ts` +
+  `reducer-purity.test.ts` scan production `update` reducer **bodies** for the
+  banned id/timestamp mints (`Math.random`, `Date.now`, zero-arg `new Date()`,
+  `crypto.randomUUID` / `crypto.getRandomValues`) and id-mint imports (`uuid`,
+  `nanoid`), failing the suite with a message that names the call site and the
+  fix (move it to `interpret`). Scoped to reducer bodies, so the same call at an
+  interpret/config boundary is not flagged; ids/timestamps read from Msg payload
+  are permitted.
 - Substrate: `update` return type forces a new `[S, C[]]`.
 - Substrate: `replay` throws if `init(loaded)` returns non-empty Cmds with
   non-null `loaded` — catches the violation at the first test that runs.
@@ -164,8 +169,10 @@ function update(state: State, msg: Msg): [State, Cmd[]] {
 
 **Enforcement today**
 
-- Lint (Phase 1.4): same banned-globals list catches `fetch`,
-  `localStorage`, etc.
+- Static guard (#228): the fold-purity scan (invariant 2) points every
+  banned reducer-body call at `interpret` — impurity handed back as Msg data
+  is exactly this invariant. (Extending the banned set to `fetch` /
+  `localStorage` is a follow-on.)
 - Substrate: `Cmd` is a tagged variant; reducer return is
   `readonly C[]`.
 - Type system: `interpret[K]` signature forces async handler shape.
