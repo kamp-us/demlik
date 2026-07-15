@@ -92,17 +92,19 @@ The grain skeleton is **correct and already shipped**. Verified in-tree:
   streams. The event-sourcing *machinery* is built — it just isn't wired to durable
   persistence yet.
 
-**Estimate: ~70% of the way to event-sourced virtual actors.** What remains is a
-small set of named primitives, below.
+**Estimate: ~75% of the way to event-sourced virtual actors** (primitive 1,
+durable effects, now shipped). What remains is a small set of named primitives,
+below.
 
 ---
 
 ## The gap: five primitives that complete the target
 
-Each turns an ad-hoc practice into a substrate guarantee. Two are already in the
-tea-hardening backlog wearing different hats; three are net-new.
+Each turns an ad-hoc practice into a substrate guarantee. One is now **shipped**;
+two more are already in the tea-hardening backlog wearing different hats; two are
+net-new.
 
-### 1. Durable effects — the one real tax
+### 1. Durable effects — the one real tax ✅ SHIPPED
 
 **The problem.** Durable *state* ≠ durable *effects*. State is saved every turn,
 but a `Cmd` interpreted inside an activation that hibernates mid-flight is lost.
@@ -111,9 +113,16 @@ but a `Cmd` interpreted inside an activation that hibernates mid-flight is lost.
 that is re-emitted on activation and made idempotent by key. This is Akka's
 `AtLeastOnceDelivery` / at-least-once + dedup, expressed in TEA.
 
-**Today.** `idempotency`, `idempotent-intake`, `work-queue` are the building
-blocks; the pull model does this by hand per consumer. **Net-new** as a substrate
-primitive. *This is the single highest-leverage gap.*
+**Shipped** (was the single highest-leverage gap; landed `221efa6`, PR #86 / issue
+#67, 2026-06-23). The pending-command ledger is a first-class `@demlik/tea/do`
+primitive: `packages/tea/src/do/durable-effects.ts` folds `effect_owed` /
+`effect_confirmed` events (`foldLedger`), re-emits survivors on activation
+(`survivingEffects`), keyed by a monotonic `DeliveryId` — exported from the `do`
+barrel, test-backed. Receiver-side dedup across a resume re-fire is the
+idempotent-effect brick (`idempotent-effect.ts`, #236); cold-wake resume dispatch
+is `bootResume` (#235); a record→replay→assert-once parity gate guards it (#233).
+The `idempotency` / `idempotent-intake` / `work-queue` bricks remain the lower-level
+building blocks it assembles from.
 
 ### 2. Event-sourcing mode in `@demlik/tea/do`
 
@@ -205,8 +214,9 @@ systems in the presence of software errors* — for the "let it crash" foundatio
 
 - **Building a DO machine:** read the concept map; name your grain's mailbox,
   fold, and projections before writing code.
-- **Extending the substrate:** the five primitives are the roadmap. Check the
-  backlog link before starting — two are already in flight.
+- **Extending the substrate:** the five primitives are the roadmap. Primitive 1
+  (durable effects) is **shipped** — import it, don't rebuild it (`durable-effects.ts`).
+  Check the backlog link before starting the rest — two more are already in flight.
 - **In review:** "is this programming the grain as a resident process?" is a
   load-bearing question. Fighting hibernation is the tell.
 
@@ -216,8 +226,8 @@ systems in the presence of software errors* — for the "let it crash" foundatio
 
 Net: we are not inventing a paradigm — we are re-implementing event-sourced
 virtual actors (Akka Persistence + Orleans grains) in TypeScript on Durable
-Objects, and the grain skeleton already lines up. The remaining work is the five
-named primitives above.
+Objects, and the grain skeleton already lines up. The remaining work is the
+named primitives above — one (durable effects) shipped, four to go.
 
 Tracked in the backlog as the tea-hardening epic's substrate wave. This doc is
 the authority for *what the DO host is becoming*; [`elm-canon.md`](./elm-canon.md)
