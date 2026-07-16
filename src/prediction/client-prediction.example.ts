@@ -47,6 +47,7 @@ import {
   type Ack,
   foldMsgs,
   type Machine,
+  NO_ACK,
   nextSeq,
   partitionByAck,
   type Reducer,
@@ -117,18 +118,11 @@ export interface ServerState {
   readonly lastAppliedSeq: Seq;
 }
 
-/**
- * "Applied nothing yet" cursor. Client seqs are minted 0-based by `nextSeq`, so
- * the empty-ack sentinel must sit BELOW seq 0 — otherwise `partitionByAck`'s
- * inclusive `seq <= lastAppliedSeq` would falsely ack the seq-0 input before the
- * server ever applied it. `-1` is "before any seq."
- */
-const NOTHING_APPLIED: Seq = -1;
-
-/** A fresh server at the origin, having applied nothing. */
+/** A fresh server at the origin, having applied nothing (`NO_ACK`, the shipped
+ * "nothing applied yet" sentinel — below seq 0 so no input is falsely acked). */
 export const initServer = (): ServerState => ({
   authoritative: ORIGIN,
-  lastAppliedSeq: NOTHING_APPLIED,
+  lastAppliedSeq: NO_ACK,
 });
 
 /**

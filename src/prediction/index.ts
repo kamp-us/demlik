@@ -62,6 +62,29 @@ export interface Ack {
 /** Construct an `Ack` for a last-applied sequence number. */
 export const ack = (lastAppliedSeq: Seq): Ack => ({ lastAppliedSeq });
 
+/**
+ * The "nothing applied yet" cursor — the ack value for a server that has applied
+ * no client input at all. Because `nextSeq` mints **0-based** seqs and
+ * `partitionByAck` acks **inclusively** (`seq <= lastAppliedSeq`), the pre-first
+ * cursor must sit strictly *below* seq 0: `lastAppliedSeq = 0` would falsely ack
+ * the seq-0 input before the server ever saw it. `-1` is "before any seq", and
+ * `partitionByAck(buffer, NO_ACK)` therefore leaves the whole buffer PENDING.
+ *
+ * This names the boundary value on the seam so no consumer has to re-discover it
+ * as a magic number: it is the primitive's own design (0-based mint + inclusive
+ * partition) that creates the trap, so it is the primitive's job to name the
+ * escape. Pair with {@link initAck} when an {@link Ack} is wanted instead of the
+ * bare `Seq`.
+ */
+export const NO_ACK: Seq = -1;
+
+/**
+ * The `Ack` for a server that has applied nothing yet — `ack(NO_ACK)`. The `Ack`
+ * counterpart to the {@link NO_ACK} `Seq` sentinel, for a consumer that carries
+ * an `Ack` rather than a bare `lastAppliedSeq`.
+ */
+export const initAck = (): Ack => ack(NO_ACK);
+
 /** The result of splitting a seq-tagged buffer against an ack. */
 export interface AckPartition<T> {
   /** Inputs the authoritative side has applied (`seq <= lastAppliedSeq`). */

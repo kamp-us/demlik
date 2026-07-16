@@ -4,6 +4,8 @@ import {
   type Ack,
   type AckPartition,
   ack,
+  initAck,
+  NO_ACK,
   nextSeq,
   partitionByAck,
   type Seq,
@@ -34,6 +36,41 @@ describe("ack", () => {
   it("represents the authoritative last-applied-seq", () => {
     const a: Ack = ack(42);
     expect(a.lastAppliedSeq).toBe(42);
+  });
+});
+
+describe('NO_ACK / initAck — the "nothing applied yet" sentinel', () => {
+  it("is -1, strictly below the 0-based seq nextSeq mints for an empty buffer", () => {
+    // The seam invariant: seqs start at 0, the ack is inclusive, so the
+    // pre-first cursor MUST sit below 0. This pins the exact value.
+    expect(NO_ACK).toBe(-1);
+    expect(NO_ACK).toBeLessThan(nextSeq<Move>([]));
+  });
+
+  it("initAck() is the Ack form of NO_ACK", () => {
+    expect(initAck()).toEqual(ack(NO_ACK));
+    expect(initAck().lastAppliedSeq).toBe(NO_ACK);
+  });
+
+  it("leaves a seq-0 item PENDING — acks nothing against the sentinel (deterministic boundary)", () => {
+    // Deterministic counterpart to the stochastic `deliver == 0` fast-check
+    // draw: a fresh buffer whose lowest seq is 0 partitions ENTIRELY as pending
+    // against NO_ACK. If the sentinel were 0, the inclusive `<=` would falsely
+    // ack the seq-0 input before the server ever saw it.
+    const buffer: readonly SeqTagged<Move>[] = [tagSeq(0, move(1, 0))];
+    const { acked, pending } = partitionByAck(buffer, NO_ACK);
+    expect(acked).toEqual([]);
+    expect(pending.map((t) => t.seq)).toEqual([0]);
+  });
+
+  it("partitions equivalently whether passed the NO_ACK Seq or the initAck() Ack", () => {
+    const buffer: readonly SeqTagged<Move>[] = [
+      tagSeq(0, move(1, 0)),
+      tagSeq(1, move(0, 1)),
+    ];
+    expect(partitionByAck(buffer, NO_ACK)).toEqual(
+      partitionByAck(buffer, initAck()),
+    );
   });
 });
 

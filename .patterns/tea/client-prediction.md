@@ -115,8 +115,9 @@ buffer, or 0 when empty"), and `partitionByAck` acks **inclusively**
 - **The "applied nothing yet" cursor is below seq 0.** Since seqs start at 0 and
   the ack is inclusive, a server that has applied nothing must report
   `lastAppliedSeq = -1`, not `0` — otherwise reconciliation falsely acks the seq-0
-  input before the server ever saw it. The worked example names this sentinel
-  `NOTHING_APPLIED`.
+  input before the server ever saw it. The primitive ships this boundary value as
+  the exported `NO_ACK` sentinel (with `initAck()` for the `Ack` form); consume it
+  rather than re-declaring a local `-1`.
 - **`nextSeq` is monotonic only while the pending buffer retains its high-water
   mark.** The client prunes only acked inputs (`seq <= lastAppliedSeq`) and always
   appends the newest, so the highest un-acked seq stays in the buffer — except if
