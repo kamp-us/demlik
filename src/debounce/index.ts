@@ -9,6 +9,12 @@
  * coalesce-vs-drop policies are different enough that sharing code would hide
  * the distinction. Read one to understand the other; do not couple them.
  *
+ * Layering with `@demlik/tea/throttled-input`: `debounce` and `throttle` are
+ * the two host-boundary PRIMITIVES — two distinct algorithms (collapse-a-burst
+ * vs at-most-once-per-window) behind one signature shape. `throttled-input` is
+ * NOT a third primitive: it is a TEA machine composed OVER them that
+ * re-exports both (see its module doc for the full layering map).
+ *
  * WHAT THIS IS NOT — and why it lives outside `update`:
  *
  *   - NOT a reducer / Transitions cell. Reducers are PURE (invariant 2 — same

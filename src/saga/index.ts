@@ -8,6 +8,19 @@
  * the saga drives `do` forward one step at a time, and on the first failure it
  * pivots and drives `undo` backward over exactly the steps that completed.
  *
+ * **Boundary with `@demlik/tea/workflow` — the compensation test.** Both drive
+ * an ordered multi-step transaction with reverse-order compensation; the line
+ * between them is whether every step carries a true inverse. Here
+ * `SagaStep<D, U>` REQUIRES both `do` and `undo` — a step without its inverse
+ * is unrepresentable, so full reversibility is a type-level guarantee.
+ * Workflow's `WorkflowStep.compensation` is OPTIONAL — an irreversible step (a
+ * sent email) is skipped during the unwind. Pick by the test: **every step
+ * must be reversible → saga; some steps are irreversible but the run must
+ * finish → workflow.** Cross to workflow when the transaction includes steps
+ * that can't be undone (or when you want each activity recorded as a durable
+ * owed effect on the `../do` ledger); stay here when the type system should
+ * enforce that every step can be undone.
+ *
  * The recipe (which bricks it composes):
  *   - `../work-queue/adapter` — the saga's forward progress IS a work-queue
  *     lifecycle. Each step's record carries the same `{ id, status, input }`

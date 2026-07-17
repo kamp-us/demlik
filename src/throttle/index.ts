@@ -13,6 +13,15 @@
  *   - **throttle** enforces a rate — fires AT MOST once per `ms` while the
  *     burst is ongoing, dropping the calls in between.
  *
+ * Layering with `@demlik/tea/throttled-input`: `throttle` and `debounce` are
+ * the two host-boundary PRIMITIVES — two distinct algorithms
+ * (at-most-once-per-window vs collapse-a-burst) behind one signature shape.
+ * `throttled-input` is NOT a third primitive: it is a TEA machine composed
+ * OVER them (the same semantics, reimplemented as pure, durable Model state)
+ * that re-exports both. Wrapping a raw host event → these primitives; durable, replayable
+ * gating inside a machine → `throttled-input` (see its module doc for the full
+ * layering map).
+ *
  * WHAT THIS IS NOT — and why it lives outside `update`:
  *
  *   - NOT a reducer / Transitions cell. Reducers are PURE (invariant 2 — same

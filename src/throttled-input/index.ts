@@ -3,6 +3,14 @@
  * SETTLED, RATE-CAPPED, optionally DEDUPED sequence of emits, as a TEA knob: one
  * config object + a few pre-wired hooks you spread into your machine.
  *
+ * Layering (the throttle-family map): `../throttle` and `../debounce` are the
+ * two host-boundary PRIMITIVES — two distinct algorithms
+ * (at-most-once-per-window vs collapse-a-burst) behind one signature shape.
+ * THIS module is the third name but NOT a third primitive: a TEA machine
+ * composed OVER them that re-exports both. Three exports, one layering — not
+ * duplication. The reuse list below spells out composition vs reimplemented
+ * semantic per sibling.
+ *
  * What it reuses, and HOW (composition vs. reimplemented semantic — the two are
  * not the same, so this list keeps them apart):
  *

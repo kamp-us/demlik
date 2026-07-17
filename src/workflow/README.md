@@ -15,6 +15,13 @@ compensations in **strict reverse order** (the Saga pattern). The reducer reads 
 clock and no RNG; all impurity lives in the consumer's *interpret cell* — the thing
 that actually performs the activity `Cmd` and dispatches its result `Msg`.
 
+**Boundary with [`@demlik/tea/saga`](../saga/index.ts) — the compensation test.**
+Here `WorkflowStep.compensation` is *optional*: an irreversible step (a sent email)
+is skipped during the unwind, and the run still reaches a terminal state. Saga's
+`SagaStep<D, U>` *requires* both `do` and `undo` — a step without its inverse is
+unrepresentable. Pick by the test: **every step must be reversible → saga; some
+steps are irreversible but the run must finish → workflow.**
+
 | File | What it is |
 |------|------------|
 | `index.ts` | The pure engine: `WorkflowStep` (+ optional `compensation`), the `WorkflowState` union, `createWorkflow`'s verbs (`init`, `onActivityOk/Err`, `onCompensationOk/Err`), `survivingActivities` (cold-wake re-emit), and `foldWorkflow` (the replay fold). No clock, no RNG, no IO. (#124 core + #125 compensation.) |

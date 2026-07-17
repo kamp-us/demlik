@@ -41,14 +41,20 @@
  * activity exists only while running" is a type-level guarantee, not a runtime
  * convention (acceptance criterion 1).
  *
- * **Forward-only (#124 scope).** This core advances FORWARD on success. A step
- * failure transitions to `failed` — a deliberate placeholder. Compensation /
- * Saga rollback (the reverse-ordered sequence of compensating activities) is
- * #125; the `// #125:` seam in {@link Workflow.onActivityErr} marks exactly
- * where that slice hooks in. DO-grain host wrapping is #126; the Saga demo is
- * #127.
+ * **Boundary with `@demlik/tea/saga` — the compensation test.** Both drive an
+ * ordered multi-step transaction with reverse-order compensation (#125 here);
+ * the line between them is whether every step carries a true inverse. Here
+ * {@link WorkflowStep.compensation} is OPTIONAL — an irreversible step (a sent
+ * email) is simply SKIPPED during the unwind, and the run still reaches a
+ * terminal state. Saga's `SagaStep<D, U>` REQUIRES both `do` and `undo` — a
+ * step without its inverse is unrepresentable, so full reversibility is a
+ * type-level guarantee. Pick by the test: **every step must be reversible →
+ * saga; some steps are irreversible but the run must finish → workflow.**
+ * Cross to saga when you want the type system to enforce that every step can
+ * be undone; stay here when the transaction includes steps that can't be.
+ *
  * This module is the pure reducer only — like `../raft/index.ts` is the pure
- * Raft reducer with the DO grain deferred to its `./do` sibling.
+ * Raft reducer with the DO grain deferred to its `./do` sibling (here #126).
  *
  * Generic over three opaque payloads, like raft's command generic: the activity
  * descriptor `A` (what a step asks to do — the consumer's interpret cell knows
