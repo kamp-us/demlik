@@ -37,18 +37,6 @@ describe.runIf(WRITE)("reference docs — regenerate (TEA_DOCS_WRITE=1)", () => 
 
 describe.skipIf(WRITE)("reference docs — drift gate", () => {
   it(
-    "committed pages match the generated typedoc model",
-    async () => {
-      const drift = await collectReferenceDrift();
-      expect(
-        drift,
-        `Reference docs are out of date (${drift.join(", ")}). Run \`pnpm --filter @demlik/tea docs:reference\` and commit the regenerated docs/reference/.`,
-      ).toEqual([]);
-    },
-    TIMEOUT,
-  );
-
-  it(
     "the drift guard fires when a committed page is tampered",
     async () => {
       const docs = await generateReferenceDocs();

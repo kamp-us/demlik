@@ -9,4 +9,5 @@ Understanding-oriented discussion of how `@demlik/tea` works and why it is shape
 - [ADR 0005 — Web timeline player: hosting + render primitive](./adr/0005-web-timeline-player-hosting-and-render-primitive.md) — where the devtools timeline is hosted and how it renders.
 - [ADR 0006 — Client-prediction fold seam + runtime-free import boundary](./adr/0006-client-prediction-fold-seam-and-pure-boundary.md) — reusing the authoritative reducer on the client, and keeping the runtime out of that bundle.
 - [ADR 0007 — Docs are a source-generated, drift-gated Diátaxis factory](./adr/0007-source-generated-diataxis-docs-factory.md) — why these docs are structured this way.
+- [ADR 0008 — The reference drift gate fails with the patch, single-sourced](./adr/0008-reference-drift-gate-fails-with-the-patch.md) — how a stale reference tells you exactly what to regenerate.
 - [TEA discipline & patterns](../../../../.patterns/tea/patterns/README.md) — the conceptual canon the library implements.
