@@ -190,8 +190,34 @@ export function __resetPortRegistry(): void {
  *   throw is catchable in the dispatch loop; the configured `Supervision`
  *   strategy decides what the runtime does next (`stop` / `escalate` /
  *   `restart`), but the failure is ALWAYS surfaced here as data first.
+ *
+ * The fanout phases (#277). Every fanout is throw-isolated so one bad
+ * consumer never strands its siblings — and the isolated throw routes here
+ * rather than to a bare `console.error`, so a sink wired to e.g. Sentry sees
+ * every "no caller to reject at" failure:
+ *
+ * - `"listener"` — a `runtime.subscribe(...)` listener threw during the
+ *   post-transition fanout.
+ * - `"observer"` — a `runtime.observe(...)` observer threw during the
+ *   post-transition fanout.
+ * - `"event"` — the semantic-event path threw: either the `events` projector
+ *   itself, or an `on(type, ...)` handler.
+ * - `"boot"` — an `onBoot` handler threw (at the boot fanout, or on the
+ *   immediate fire of a late post-boot registration).
+ * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
+ * - `"sub-cleanup"` — a subscription's cleanup threw (on reconcile-removal,
+ *   or during `stop()` teardown).
  */
-export type RuntimeErrorPhase = "follow-up" | "stop-save" | "reduce";
+export type RuntimeErrorPhase =
+  | "follow-up"
+  | "stop-save"
+  | "reduce"
+  | "listener"
+  | "observer"
+  | "event"
+  | "boot"
+  | "port-emit"
+  | "sub-cleanup";
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
@@ -1007,7 +1033,8 @@ export function run<
 
   // The `emit` function injected onto ctx. Synchronous fanout — same shape as
   // `observe`. No-op when the port has no subscribers. Listener throws are
-  // isolated + logged so one bad subscriber does not strand the others.
+  // isolated (one bad subscriber does not strand the others) and routed to
+  // the error sink (invariant 6; #277).
   function portEmit<T>(port: Port<T>, value: T): void {
     const subscribers = portRegistry.get(port as Port<unknown>);
     if (!subscribers || subscribers.size === 0) return;
@@ -1015,7 +1042,7 @@ export function run<
       try {
         listener(value);
       } catch (err) {
-        console.error(err);
+        reportError(err, { phase: "port-emit" });
       }
     }
   }
@@ -1047,7 +1074,8 @@ export function run<
    * Reconcile subscriptions against `state`. Called after every save.
    *
    * - Same id present in old + new → leave running.
-   * - Removed id → call cleanup. Swallow cleanup throws + `console.error`.
+   * - Removed id → call cleanup. Cleanup throws are isolated and routed to
+   *   the error sink (`phase: "sub-cleanup"`; #277).
    * - New id → call subscribe[type]; on success store cleanup. On throw, the
    *   sub is NOT registered; throw is remembered and re-thrown after the loop
    *   so all other new subs still register.
@@ -1082,7 +1110,7 @@ export function run<
         try {
           cleanup();
         } catch (err) {
-          console.error(err);
+          reportError(err, { phase: "sub-cleanup" });
         }
         subRegistry.delete(id);
       }
@@ -1173,7 +1201,7 @@ export function run<
       try {
         listener();
       } catch (err) {
-        console.error(err);
+        reportError(err, { phase: "listener" });
       }
     }
   }
@@ -1192,7 +1220,7 @@ export function run<
       try {
         observer(msg, snapshot);
       } catch (err) {
-        console.error(err);
+        reportError(err, { phase: "observer" });
       }
     }
   }
@@ -1211,7 +1239,7 @@ export function run<
     try {
       events = projectEvents(msg, state);
     } catch (err) {
-      console.error(err);
+      reportError(err, { phase: "event" });
       return;
     }
     for (const event of events) {
@@ -1221,7 +1249,7 @@ export function run<
         try {
           handler(event);
         } catch (err) {
-          console.error(err);
+          reportError(err, { phase: "event" });
         }
       }
     }
@@ -1241,7 +1269,7 @@ export function run<
       try {
         handler(snapshot);
       } catch (err) {
-        console.error(err);
+        reportError(err, { phase: "boot" });
       }
     }
   }
@@ -1536,7 +1564,7 @@ export function run<
         try {
           handler(state);
         } catch (err) {
-          console.error(err);
+          reportError(err, { phase: "boot" });
         }
         return () => {};
       }
@@ -1632,13 +1660,13 @@ export function run<
       // the tail were already swallowed at enqueue time, so this await
       // always resolves.
       await tail;
-      // Run every active sub cleanup. Throws are swallowed + logged so one
-      // bad cleanup does not strand the others.
+      // Run every active sub cleanup. Throws are isolated (one bad cleanup
+      // does not strand the others) and routed to the error sink (#277).
       for (const [id, cleanup] of subRegistry) {
         try {
           cleanup();
         } catch (err) {
-          console.error(err);
+          reportError(err, { phase: "sub-cleanup" });
         }
         subRegistry.delete(id);
       }
