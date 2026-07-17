@@ -314,6 +314,7 @@
     "@types/react-dom": "catalog:",
     "@types/ws": "catalog:",
     "fast-check": "^3.23.0",
+    "happy-dom": "^20.9.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tsup": "^8.3.5",

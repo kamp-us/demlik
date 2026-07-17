@@ -22,7 +22,13 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import {
   type BootingRuntime,
   type Cmd,
@@ -89,12 +95,20 @@ export function useMachine<
   );
 
   // Captures the booted `Runtime` once `ready` resolves. Until then it is
-  // `null` and `getSnapshot` serves `preliminaryState`. A ref (not state)
-  // because the booted runtime arrives via a subscription notification, not a
-  // render: `subscribe` fires the boot fanout, React re-reads `getSnapshot`,
-  // and by then `ready` has populated the ref. Reset whenever the booting
-  // handle identity changes (a new machine/ctx/store mount).
+  // `null` and `getSnapshot` serves `preliminaryState`. Reset whenever the
+  // booting handle identity changes (a new machine/ctx/store mount).
+  //
+  // The boot race the paired `bootedTick` bump exists for: the substrate's
+  // boot fanout fires BEFORE `ready` resolves (fireListeners runs inside the
+  // boot step; `ready` chains off the boot promise), so at notification time
+  // this ref is still null and `getSnapshot` returns the same
+  // `preliminaryState` reference — React sees an unchanged snapshot and
+  // skips the re-render. Nothing re-notifies after the ref is set, so a
+  // store-backed mount would stay stuck on the preliminary state until the
+  // next unrelated transition. Bumping a reducer when we capture the booted
+  // runtime forces the render that swaps preliminary → real state.
   const readyRef = useRef<Runtime<S, M> | null>(null);
+  const [, markBooted] = useReducer((tick: number) => tick + 1, 0);
 
   // Preliminary state computed sync from `machine.init(null, ctx)`. This is
   // the snapshot React sees BEFORE the runtime finishes booting (matters
@@ -127,15 +141,17 @@ export function useMachine<
 
   useEffect(() => {
     let live = true;
-    // Capture the booted runtime when `ready` resolves. The boot fanout
-    // (`fireListeners`) runs as part of boot, so the `useSyncExternalStore`
-    // subscriber is notified right after this ref is set — React re-reads
-    // `getSnapshot` and swaps preliminary → real state with no extra render
-    // plumbing. Boot rejections are swallowed: a failed boot surfaces on every
-    // `dispatch`, which is where the consumer handles it.
+    // Capture the booted runtime when `ready` resolves, then force the
+    // render that swaps preliminary → real state (see the boot-race note on
+    // `readyRef` — the boot fanout fires too early to do it for us). Boot
+    // rejections are swallowed: a failed boot surfaces on every `dispatch`,
+    // which is where the consumer handles it.
     booting.ready.then(
       (r) => {
-        if (live) readyRef.current = r;
+        if (live) {
+          readyRef.current = r;
+          markBooted();
+        }
       },
       () => {},
     );
