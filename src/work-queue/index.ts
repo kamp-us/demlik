@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/work-queue — substrate-agnostic work-queue lifecycle on `Store<S>`.
  *
  * Two public surfaces, one shape:

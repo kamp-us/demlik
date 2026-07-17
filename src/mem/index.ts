@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/mem — in-memory `Store<S>` adapter for `@demlik/tea`.
  *
  * The standard test adapter — used everywhere a Worker or DO would be

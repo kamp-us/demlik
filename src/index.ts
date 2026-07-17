@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea — TEA-faithful state machine substrate.
  *
  * Root barrel. The runtime surface is split across three concern modules —

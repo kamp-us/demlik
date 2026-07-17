@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/saga — a forward-then-compensate transaction over an ordered list
  * of reversible steps.
  *

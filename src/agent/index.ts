@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/agent — THE headline Level-3 machine: a durable, crash-recoverable
  * AI agent that runs an ordered stage pipeline, and inside the agentic stage
  * drives the classic loop `llm → tools → fold → llm` until the model stops

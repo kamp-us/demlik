@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/react — React host adapter for `@demlik/tea`.
  *
  * The thinnest possible adapter that makes a tea machine consumable from a

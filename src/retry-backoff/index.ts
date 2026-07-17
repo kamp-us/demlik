@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/retry-backoff — exponential backoff with jitter + cap, and the
  * retry-attempt state every fallible `interpret` handler folds over.
  *

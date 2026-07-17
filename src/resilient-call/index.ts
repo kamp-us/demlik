@@ -1,4 +1,6 @@
 /**
+ * @packageDocumentation
+ *
  * @deprecated `@demlik/tea/resilient-call` is deprecated in favor of
  * `@demlik/tea/with-resilience` — the higher-order `withResilience(base,
  * config)` wrapper (TEA-idiomatic: it wraps any existing machine instead of
@@ -33,9 +35,7 @@
  * `llm-call`, `authed-call`, `reconciler`, `paginated-walk`) intentionally keep
  * importing `../resilient-call` — the deprecation targets the PUBLISHED export,
  * not the module's internal role.
- */
-
-/**
+ *
  * @demlik/tea/resilient-call — the ROOT composition: a single resilience knob
  * that bundles cache → circuit-breaker → rate-limit → exponential-backoff retry
  * (with a deadline-driven retry timer) around any fallible `(input) => Promise`

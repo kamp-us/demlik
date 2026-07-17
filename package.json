@@ -258,6 +258,8 @@
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
+    "docs:reference": "TEA_DOCS_WRITE=1 vitest run src/docs/reference/generate-reference.test.ts",
+    "docs:reference:check": "vitest run src/docs/reference/generate-reference.test.ts",
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
     "verify-exports": "node scripts/verify-exports.mjs"
   },
@@ -300,6 +302,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "tsup": "^8.3.5",
+    "typedoc": "0.28.20",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "ws": "catalog:"

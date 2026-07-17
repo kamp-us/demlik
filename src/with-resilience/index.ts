@@ -1,4 +1,6 @@
 /**
+ * @packageDocumentation
+ *
  * @demlik/tea/with-resilience — the INTERCEPTING wrapper of the wrapper tier.
  *
  * `withResilience(base, config)` is a **pure function over machine data**: it

@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/pbt — Property-based testing primitives for `@demlik/tea` machines.
  *
  * The sibling-package shape to `@demlik/tea/testing`. Where the testing subpath

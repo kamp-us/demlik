@@ -1,0 +1,32 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPointStrategy": "resolve",
+  "entryPoints": [
+    "src/index.ts",
+    "src/subs/index.ts",
+    "src/react/index.ts",
+    "src/do/index.ts",
+    "src/node/index.ts",
+    "src/mem/index.ts",
+    "src/extension/index.ts",
+    "src/work-queue/index.ts",
+    "src/agent/index.ts",
+    "src/workflow/index.ts",
+    "src/saga/index.ts",
+    "src/with-resilience/index.ts",
+    "src/llm-call/index.ts",
+    "src/retry-backoff/index.ts",
+    "src/circuit-breaker/index.ts",
+    "src/resilient-call/index.ts",
+    "src/testing/index.ts",
+    "src/pbt/index.ts",
+    "src/devtools/index.ts"
+  ],
+  "tsconfig": "tsconfig.json",
+  "json": ".typedoc/model.json",
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "readme": "none",
+  "logLevel": "Warn"
+}

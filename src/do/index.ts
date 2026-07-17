@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 /**
+ * @packageDocumentation
  * @demlik/tea/do — Durable Object adapter for `@demlik/tea`.
  *
  * The integration is built on ONE transport model and one durability primitive:

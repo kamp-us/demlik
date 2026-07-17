@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/node — Node host adapter for `@demlik/tea`.
  *
  * Every host adapter ships two halves (mirrors `@demlik/tea/do`):

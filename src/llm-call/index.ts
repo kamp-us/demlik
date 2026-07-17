@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/llm-call — `resilient-call` + structured-output parse + a typed
  * failure variant, around a purpose-discriminated LLM invocation.
  *

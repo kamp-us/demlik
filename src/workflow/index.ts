@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/workflow — the durable-workflow runtime core (#124, the first
  * Phase-1 slice of the Temporal-style durable-workflow engine, epic #118).
  *

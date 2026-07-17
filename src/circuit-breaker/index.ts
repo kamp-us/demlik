@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/circuit-breaker — per-target failure tracking as pure state + ops.
  *
  * Same shape as `@demlik/tea/work-queue`'s `ops.ts`, `@demlik/tea/rate-limit`,

@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/devtools — presentational inspector for any tea machine.
  *
  * Three pieces, fully decoupled from the runtime:

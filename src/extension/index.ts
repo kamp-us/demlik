@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/extension — Chrome service-worker host adapter for @demlik/tea.
  *
  * Substrate-level companion to @demlik/tea/do (Durable Objects) and

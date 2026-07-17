@@ -7,7 +7,7 @@
   `agentIsResumable`, `captureLastTurn`), and the substrate primitives the host
   still needs. Records the *target* ADR [0002](./0002-do-host-layer.md)'s host
   layer is building toward. The long-form canon is
-  [`.patterns/tea/durable-actors.md`](../../../../.patterns/tea/durable-actors.md).
+  [`.patterns/tea/durable-actors.md`](../../../../../.patterns/tea/durable-actors.md).
 
 ## Context
 
