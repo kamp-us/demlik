@@ -189,22 +189,6 @@
       "types": "./dist/poller/index.d.ts",
       "import": "./dist/poller/index.js"
     },
-    "./raft": {
-      "types": "./dist/raft/index.d.ts",
-      "import": "./dist/raft/index.js"
-    },
-    "./raft/sim": {
-      "types": "./dist/raft/sim.d.ts",
-      "import": "./dist/raft/sim.js"
-    },
-    "./raft/demo": {
-      "types": "./dist/raft/demo.d.ts",
-      "import": "./dist/raft/demo.js"
-    },
-    "./raft/timeline": {
-      "types": "./dist/raft/timeline.d.ts",
-      "import": "./dist/raft/timeline.js"
-    },
     "./workflow": {
       "types": "./dist/workflow/index.d.ts",
       "import": "./dist/workflow/index.js"
@@ -271,8 +255,6 @@
     "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
     "lint": "biome check src package.json",
     "test": "vitest run",
-    "demo:raft": "vitest run src/raft/demo.test.ts",
-    "demo:raft:viz": "vitest run src/raft/timeline.test.ts",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p examples/tsconfig.json",

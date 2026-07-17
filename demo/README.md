@@ -27,8 +27,9 @@ asciinema play packages/tea/demo/raft.cast      # ~62s · live
 bash packages/tea/demo/record-raft.sh           # rebuild gif + cast
 ```
 
-The underlying demo is `pnpm demo:raft` (with `pnpm demo:raft:viz` for the
-full 35-step ASCII timeline).
+The underlying demo is `pnpm demo:raft` in `packages/raft-showcase` (with
+`pnpm demo:raft:viz` there for the full 35-step ASCII timeline) — the raft
+showcase is a private workspace package consuming `@demlik/tea`.
 
 ## 2. Saga rollback you can replay  ·  `saga`
 

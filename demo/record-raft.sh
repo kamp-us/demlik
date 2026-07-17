@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# record-raft.sh — one command to (re)build the "@demlik/tea/raft consensus" demo.
+# record-raft.sh — one command to (re)build the raft consensus demo (the raft
+# showcase lives in packages/raft-showcase, a private consumer of @demlik/tea).
 #   1. run the REAL demo (runDemo + narrateDemo) and capture its authentic bytes
 #      — every phase, leader, term, commit index, and committed log on screen
 #   2. synthesize demo/raft.cast (make-raft-cast.py) — adds title/voiceover/pacing
@@ -11,14 +12,14 @@
 # Present live:  asciinema play packages/tea/demo/raft.cast
 set -u
 DEMO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"     # packages/tea/demo
-PKG="$(cd "$DEMO/.." && pwd)"                            # packages/tea
+PKG="$(cd "$DEMO/../../raft-showcase" && pwd)"           # packages/raft-showcase
 CAP="${CAP:-/tmp/raft}"
 mkdir -p "$CAP"
 
 # 1 · capture the REAL demo output (the exact bytes `pnpm demo:raft` prints).
 #     tsx isn't a workspace dependency, so resolve it via `pnpm dlx` (cached).
 ( cd "$PKG" && pnpm dlx tsx@4.21.0 -e "
-import { runDemo, narrateDemo } from './src/raft/demo.ts';
+import { runDemo, narrateDemo } from './src/demo.ts';
 process.stdout.write(narrateDemo(runDemo()));
 " ) > "$CAP/narrate.txt"
 
