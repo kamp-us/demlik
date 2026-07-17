@@ -122,10 +122,50 @@ export interface NextStep<I> {
  * A `/step` response — a discriminated union on `done`:
  *   - `{ done: false, step }` — execute `step`, POST its result, ask again.
  *   - `{ done: true, output }` — the run is terminal; `output` is its result.
+ *
+ * This is the ORIGINAL 2-arm INLINE contract, kept byte-identical: a host that
+ * resolves each step inside the held request returns exactly these two shapes.
+ * The not-ready arm ({@link StepWorking}) is a SEPARATE, opt-in type reachable
+ * only through the defer-resume hook — see {@link DeferredStepResponse}. Keeping
+ * `StepResponse` a strict subset is what makes inline adopters unaffected: their
+ * `if (r.done) … else r.step` narrowing never sees a third member.
  */
 export type StepResponse<I, O> =
   | { readonly done: false; readonly step: NextStep<I> }
   | { readonly done: true; readonly output: O };
+
+/**
+ * The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host
+ * (Binclusive ADR 0035 / prod incident #1873: a non-blocking pull carrier must
+ * answer a pull with an explicit "computing, poll again" instead of holding the
+ * request across a multi-second step). The held `/step` request returns this
+ * IMMEDIATELY instead of inline-awaiting `engine.resume`; the hands re-poll
+ * (optionally after `retryAfterMs`) until the deferred compute lands in the
+ * durable checkpoint and a real {@link StepResponse} step/done arm is returned.
+ *
+ * It is a first-class discriminated member (`working: true`), NOT a hollow
+ * `{ done: false }` with an absent/stale `step` — the not-ready state is made
+ * representable so it can never be confused with a real pending step.
+ */
+export interface StepWorking {
+  readonly done: false;
+  readonly working: true;
+  /**
+   * Advisory earliest re-poll delay as a hint to the hands (ms to wait before
+   * the next pull). Purely advisory — a host may omit it and the hands fall back
+   * to their own backoff curve.
+   */
+  readonly retryAfterMs?: number;
+}
+
+/**
+ * The 3-arm response a DEFER-RESUME host returns — the inline {@link StepResponse}
+ * arms PLUS {@link StepWorking}. A superset of `StepResponse`, so a 2-arm value is
+ * assignable to it (the widening is safe for existing transports); discriminate
+ * with `if (r.done)` for terminal, then `"working" in r` for the not-ready arm,
+ * else the step arm.
+ */
+export type DeferredStepResponse<I, O> = StepResponse<I, O> | StepWorking;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Capability token (#92.3) — a per-run bearer secret, constant-time compared.
@@ -259,6 +299,53 @@ export interface StepHostConfig {
 }
 
 /**
+ * The DEFER-RESUME hook — the opt-in seam that drives `engine.resume` OUT of the
+ * held `/step` request. A non-blocking host (Binclusive audit carrier, ADR 0035)
+ * cannot inline-await a multi-second step inside the held request, so instead of
+ * `stepHost` calling `engine.resume` inline it hands the posted result to this
+ * hook to SETTLE-AND-ENQUEUE (record it durably, schedule the compute in a
+ * returning activation) and returns the {@link StepWorking} arm PROMPTLY. A later
+ * pull re-reads the durable next-step once {@link DeferResumeHook.settled} reports
+ * the enqueued compute has landed.
+ *
+ * Providing this hook is what flips `stepHost` from the 2-arm inline contract to
+ * the 3-arm deferred contract — see the `stepHost` overloads. Omit it and the
+ * host stays byte-identical inline.
+ */
+export interface DeferResumeHook<R> {
+  /**
+   * SETTLE-AND-ENQUEUE the posted result to resume OUT of the held request:
+   * durably record it and schedule the compute (e.g. `ctx.storage.setAlarm` or a
+   * queue) so a returning activation runs `engine.resume`. MUST return promptly —
+   * it never awaits the step compute. Called at most once per distinct `callId`
+   * (`stepHost` dedupes re-POSTs through `idempotent-intake` first), so a re-POST
+   * of the same step does not re-enqueue.
+   */
+  enqueue(runId: string, posted: StepResult<R>): void | Promise<void>;
+  /**
+   * Has the enqueued resume for `callId` COMPLETED and been written to the
+   * durable checkpoint? `false` ⇒ the held request returns {@link StepWorking}
+   * (poll again); `true` ⇒ `stepHost` reads the next step / terminal output off
+   * the now-advanced checkpoint, exactly as the inline path does.
+   */
+  settled(runId: string, callId: string): boolean | Promise<boolean>;
+  /**
+   * Optional advisory re-poll delay (ms) surfaced on the {@link StepWorking} arm
+   * so the hands can back off to the host's expected step latency.
+   */
+  retryAfterMs?: number;
+}
+
+/**
+ * `StepHostConfig` with the defer-resume hook engaged — the presence of
+ * `deferResume` is the type-level switch that selects the 3-arm response (see the
+ * `stepHost` overloads). Extends the inline config, so the alarm tuning is shared.
+ */
+export interface DeferStepHostConfig<R> extends StepHostConfig {
+  readonly deferResume: DeferResumeHook<R>;
+}
+
+/**
  * A structured `/step` outcome `stepHost` returns — the response body plus the
  * HTTP status the consumer's route should send. Kept transport-agnostic (no
  * `Response`) so the same handler is unit-testable without a live `fetch`.
@@ -267,7 +354,28 @@ export type StepOutcome<I, O> =
   | { readonly status: 200; readonly body: StepResponse<I, O> }
   | { readonly status: 401 | 404; readonly body: { readonly error: string } };
 
+/**
+ * The `/step` outcome a DEFER-RESUME host returns — like {@link StepOutcome} but
+ * its 200 body is the 3-arm {@link DeferredStepResponse} (it can carry the
+ * not-ready arm). Returned only from the `deferResume` overload of `stepHost`;
+ * the inline overload keeps the narrower {@link StepOutcome}.
+ */
+export type DeferredStepOutcome<I, O> =
+  | { readonly status: 200; readonly body: DeferredStepResponse<I, O> }
+  | { readonly status: 401 | 404; readonly body: { readonly error: string } };
+
 const DEFAULT_GIVE_UP_MS = 5 * 60_000;
+
+/**
+ * Build the {@link StepWorking} arm, attaching `retryAfterMs` only when the host
+ * supplied one — so the wire body stays minimal (`{ done, working }`) unless a
+ * re-poll hint is offered.
+ */
+function workingBody(retryAfterMs?: number): StepWorking {
+  return retryAfterMs === undefined
+    ? { done: false, working: true }
+    : { done: false, working: true, retryAfterMs };
+}
 
 /**
  * Build the `/step` handler for a DO that drives one or more runs over the pull
@@ -286,14 +394,43 @@ const DEFAULT_GIVE_UP_MS = 5 * 60_000;
  * @param engine the run-specific operations
  * @param config alarm tuning
  */
+// Overloads (specific → general): a config carrying `deferResume` selects the
+// 3-arm deferred handler; every other call — no config, or alarm-only config —
+// keeps the 2-arm inline handler, byte-and-type-identical to before this change.
 export function stepHost<R, I, O>(
   ctx: StepCtx,
   engine: StepEngine<R, I, O>,
-  config: StepHostConfig = {},
+  config: DeferStepHostConfig<R>,
+): {
+  handle(
+    request: StepRequest<R>,
+    now: number,
+  ): Promise<DeferredStepOutcome<I, O>>;
+};
+export function stepHost<R, I, O>(
+  ctx: StepCtx,
+  engine: StepEngine<R, I, O>,
+  config?: StepHostConfig,
 ): {
   handle(request: StepRequest<R>, now: number): Promise<StepOutcome<I, O>>;
+};
+export function stepHost<R, I, O>(
+  ctx: StepCtx,
+  engine: StepEngine<R, I, O>,
+  config: StepHostConfig | DeferStepHostConfig<R> = {},
+): {
+  handle(
+    request: StepRequest<R>,
+    now: number,
+  ): Promise<DeferredStepOutcome<I, O>>;
 } {
   const giveUpAfterMs = config.giveUpAfterMs ?? DEFAULT_GIVE_UP_MS;
+  // The opt-in defer-resume hook. Present ⇒ resume runs OUT of the held request
+  // and a not-ready pull returns the working arm; absent ⇒ the inline path below
+  // runs unchanged. `"deferResume" in config` is the runtime switch matching the
+  // type-level overload split.
+  const deferResume: DeferResumeHook<R> | null =
+    "deferResume" in config ? config.deferResume : null;
 
   // The receive-once settle ledger. Key = the posted result's `callId`, so a
   // re-POST of the SAME step lands as a duplicate and replays the cached
@@ -312,7 +449,7 @@ export function stepHost<R, I, O>(
   async function handle(
     request: StepRequest<R>,
     now: number,
-  ): Promise<StepOutcome<I, O>> {
+  ): Promise<DeferredStepOutcome<I, O>> {
     // 1 — VALIDATE the capability token (constant-time). A missing run is 404;
     //     a present run with a wrong/missing token is 401. The constant-time
     //     compare runs regardless of whether the stored token exists (compare
@@ -332,38 +469,54 @@ export function stepHost<R, I, O>(
     //     not a machine Sub.)
     await ctx.storage.setAlarm(now + giveUpAfterMs);
 
-    // 3 — SETTLE the posted result idempotently (skip on the first request,
-    //     where there is nothing to settle). `intake.receive` decides
-    //     new-vs-duplicate and emits the decision as a Cmd; we interpret that
-    //     Cmd HERE — a genuinely-new callId runs `resume` exactly once, a
-    //     duplicate replays (no re-settle). Either way step 4 re-reads the next
-    //     step off the durable checkpoint, so a duplicate POST returns the SAME
-    //     next step.
+    // 3 — SETTLE the posted result (skip on the first request, where there is
+    //     nothing to settle). Two shapes, chosen by whether the defer-resume
+    //     hook is engaged:
     const posted = request.posted;
     if (posted !== null) {
-      const [nextIntake, cmds] = intake.receive(
-        intakeState,
-        posted,
-        now,
-        posted.callId,
-      );
-      intakeState = nextIntake;
-      for (const cmd of cmds) {
-        if (cmd.type === "intake:process") {
-          // First sighting of this callId — settle + resume once, then mark the
-          // ledger entry done so a later duplicate replays instead of re-running.
-          await engine.resume(request.runId, posted);
-          const [completed] = intake.complete(
-            intakeState,
-            cmd.key,
-            "settled",
-            now,
-          );
-          intakeState = completed;
+      if (deferResume === null) {
+        // INLINE (default, unchanged) — settle + resume idempotently INSIDE the
+        // held request. `intake.receive` decides new-vs-duplicate and emits the
+        // decision as a Cmd; a genuinely-new callId runs `resume` exactly once, a
+        // duplicate replays (no re-settle). Either way step 4 re-reads the next
+        // step off the durable checkpoint, so a duplicate POST returns the SAME
+        // next step.
+        const [nextIntake, cmds] = intake.receive(
+          intakeState,
+          posted,
+          now,
+          posted.callId,
+        );
+        intakeState = nextIntake;
+        for (const cmd of cmds) {
+          if (cmd.type === "intake:process") {
+            await engine.resume(request.runId, posted);
+            const [completed] = intake.complete(
+              intakeState,
+              cmd.key,
+              "settled",
+              now,
+            );
+            intakeState = completed;
+          }
+          // `intake:replay` (a duplicate) needs no action: `resume` already ran
+          // for this callId, and step 4 re-derives the next step below.
         }
-        // `intake:replay` (a duplicate) carries the cached "settled" marker and
-        // needs no action: `resume` already ran for this callId, and step 4
-        // re-derives the next step from the idempotent checkpoint below.
+      } else {
+        // DEFER (opt-in) — resume runs OUT of the held request. Readiness is the
+        // gate: if the enqueued resume has already landed in the durable
+        // checkpoint, fall through to step 4 and read the next step (identical to
+        // the inline tail). If not, (idempotently) enqueue the resume to run in a
+        // returning activation and return the WORKING arm — the held request
+        // never awaits the step compute (Binclusive ADR 0035 / #1873). The
+        // per-callId enqueue is idempotent host-side, so re-POSTs across cold
+        // wakes do not re-enqueue; the in-isolate `intake` ledger is not used on
+        // this path because it cannot survive the eviction between pulls.
+        const ready = await deferResume.settled(request.runId, posted.callId);
+        if (!ready) {
+          await deferResume.enqueue(request.runId, posted);
+          return { status: 200, body: workingBody(deferResume.retryAfterMs) };
+        }
       }
     }
 
@@ -391,10 +544,16 @@ export function stepHost<R, I, O>(
 // standalone async driver (the hands are not a TEA machine; they drive one).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The `/step` transport the hands POST through (injected; faked in tests). */
+/**
+ * The `/step` transport the hands POST through (injected; faked in tests).
+ * Returns the 3-arm {@link DeferredStepResponse} — a defer-resume host may answer
+ * with the not-ready arm, which {@link runStepLoop} re-polls. An inline host's
+ * 2-arm transport (`=> Promise<StepResponse>`) is assignable here (the narrower
+ * return widens), so existing inline adopters are unaffected.
+ */
 export type StepTransport<R, I, O> = (
   request: StepRequest<R>,
-) => Promise<StepResponse<I, O>>;
+) => Promise<DeferredStepResponse<I, O>>;
 
 /** Execute one tool call and produce its result (the consumer's hands). */
 export type ExecuteStep<I, R> = (step: NextStep<I>) => Promise<R> | R;
@@ -440,6 +599,11 @@ export type StepLoopOutcome<O> =
  *     not re-executed; its prior result is re-POSTed. Closes the "the host
  *     re-handed the same step after a duplicate settle" path (the host side is
  *     idempotent; the hands match it).
+ *   - **not-ready re-poll** — a {@link StepWorking} arm (a defer-resume host
+ *     computing the step out-of-band) is not a step: the loop re-POSTs the SAME
+ *     `posted` after a backoff (honoring the host's advisory `retryAfterMs`),
+ *     until a real step / done arrives. Bounded only by the absolute deadline —
+ *     an inline host never returns this arm, so its drive is unchanged.
  */
 export async function runStepLoop<R, I, O>(
   token: string,
@@ -458,12 +622,16 @@ export async function runStepLoop<R, I, O>(
   const executed = new Map<string, R>();
   // The result to POST on the NEXT request (null on the first request).
   let posted: StepResult<R> | null = null;
+  // Consecutive not-ready ("working") polls, driving the re-poll backoff curve.
+  // Reset on any real step / terminal response. Bounded by the absolute deadline,
+  // NOT by `maxAttempts` — a host may legitimately compute for many polls.
+  let pollRetry = initRetry();
 
   for (;;) {
     if (now() >= config.deadlineMs) return { kind: "deadline_exceeded" };
 
     // POST `/step` with backoff on transport failure.
-    let response: StepResponse<I, O>;
+    let response: DeferredStepResponse<I, O>;
     let retry = initRetry();
     for (;;) {
       try {
@@ -478,6 +646,19 @@ export async function runStepLoop<R, I, O>(
     }
 
     if (response.done) return { kind: "done", output: response.output };
+
+    // NOT-READY arm — a defer-resume host is computing the step OUT-OF-BAND. Do
+    // NOT execute anything: re-poll with the SAME `posted` (idempotent re-POST)
+    // after a backoff, until the host yields a real step / done. Honor the host's
+    // advisory `retryAfterMs` when present, else fall back to the poll backoff
+    // curve. The absolute deadline is the only terminal bound here.
+    if ("working" in response) {
+      pollRetry = recordFailure(pollRetry, "working");
+      if (now() >= config.deadlineMs) return { kind: "deadline_exceeded" };
+      await sleep(response.retryAfterMs ?? nextDelayMs(pollRetry, policy, rng));
+      continue;
+    }
+    pollRetry = initRetry(); // a real step resets the poll backoff
 
     // Execute the next step (dedupe: a callId already run in this drive re-POSTs
     // its cached result rather than executing twice).

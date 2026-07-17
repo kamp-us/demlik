@@ -181,6 +181,10 @@ export {
 export {
   type AlarmStorage,
   constantTimeEqual,
+  type DeferResumeHook,
+  type DeferredStepOutcome,
+  type DeferredStepResponse,
+  type DeferStepHostConfig,
   type ExecuteStep,
   mintRunToken,
   type NextStep,
@@ -195,6 +199,7 @@ export {
   type StepResponse,
   type StepResult,
   type StepTransport,
+  type StepWorking,
   stepHost,
 } from "./step-host";
 

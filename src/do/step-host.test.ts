@@ -27,6 +27,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   constantTimeEqual,
+  type DeferResumeHook,
   mintRunToken,
   type NextStep,
   runStepLoop,
@@ -394,3 +395,276 @@ function neverDoneTransport(): Promise<StepResponse<ToolInput, RunOutput>> {
     step: { callId: "x", tool: "alpha", input: { arg: "a" } },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// defer-resume working arm — the behavioral tracer on a REAL host, end to end
+//
+// A NON-BLOCKING host cannot resolve a step inside the held request. It adopts
+// the defer-resume hook: a `/step` POST ENQUEUES the resume to run out-of-band
+// and returns the WORKING (not-ready) arm immediately; a returning activation
+// runs the compute and lands it in the durable checkpoint; a subsequent pull
+// reads the next step, then done. This drives that full round-trip on a real
+// cold-wake host — NOT a per-unit mock of the arm — and proves the held request
+// never inline-awaits the step compute (the engine's inline `resume` throws if
+// the defer path ever calls it).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("stepHost — defer-resume working arm (real host, end to end)", () => {
+  it("pull returns working-not-ready; the deferred compute lands in the durable next-step; a later pull returns the step, then done", async () => {
+    const runId = "run-defer";
+    const token = mintRunToken();
+    const durable = freshDurable(token);
+    // Out-of-band defer state — ALSO durable (survives a cold wake): the
+    // enqueued-but-unrun resumes, and the callIds whose resume has LANDED.
+    const pending = new Map<string, StepResult<ToolResult>>();
+    const settledIds = new Set<string>();
+
+    // The settle the RETURNING ACTIVATION runs — the SAME cursor advance the
+    // inline `resume` does, but driven out-of-band, not by the held request.
+    const applySettle = (posted: StepResult<ToolResult>) => {
+      durable.settleCount += 1;
+      durable.collected.push(posted.result);
+      durable.cursor += 1;
+      settledIds.add(posted.callId);
+    };
+
+    // A COLD-WAKE defer host: a fresh `stepHost` per pull over the shared durable
+    // + defer state, wired with the defer-resume hook. The engine's inline
+    // `resume` THROWS — proving the defer path never inline-runs the compute.
+    const coldWakeDefer = () => {
+      const ctx: StepCtx = {
+        storage: {
+          setAlarm(at) {
+            durable.alarmAt = at;
+          },
+        },
+      };
+      const engine: StepEngine<ToolResult, ToolInput, RunOutput> = {
+        tokenFor: () => durable.token,
+        resume: () => {
+          throw new Error("inline resume must not run on the defer path");
+        },
+        nextStep(rid): NextStep<ToolInput> | null {
+          if (durable.cursor >= SCRIPT.length) return null;
+          const entry = SCRIPT[durable.cursor];
+          return {
+            callId: callIdFor(rid, durable.cursor),
+            tool: entry.tool,
+            input: entry.input,
+          };
+        },
+        terminalOutput: () => durable.collected.join("|"),
+      };
+      const deferResume: DeferResumeHook<ToolResult> = {
+        // Settle-and-enqueue: record the resume to run out-of-band. Idempotent —
+        // a re-POST of a callId already settled or already queued is a no-op.
+        enqueue(_rid, posted) {
+          if (!settledIds.has(posted.callId))
+            pending.set(posted.callId, posted);
+        },
+        settled: (_rid, callId) => settledIds.has(callId),
+        retryAfterMs: 250,
+      };
+      return stepHost<ToolResult, ToolInput, RunOutput>(ctx, engine, {
+        deferResume,
+      });
+    };
+
+    // The RETURNING ACTIVATION — drains the out-of-band inbox, running the settle
+    // that lands each resume in the durable checkpoint.
+    const drainOutOfBand = () => {
+      for (const [callId, posted] of pending) {
+        applySettle(posted);
+        pending.delete(callId);
+      }
+    };
+
+    let now = 1_000;
+
+    // Pull 1 — first request (posted null): hand out the first step, no settle.
+    const first = await coldWakeDefer().handle(
+      { token, runId, posted: null },
+      now,
+    );
+    expect(first.status).toBe(200);
+    if (first.status !== 200 || first.body.done || "working" in first.body)
+      throw new Error("expected the first step");
+    const step0 = first.body.step;
+    expect(step0.tool).toBe("alpha");
+    const posted0: StepResult<ToolResult> = {
+      callId: step0.callId,
+      result: "A",
+    };
+
+    // Pull 2 — posts step0's result. The host DEFERS: it enqueues the resume and
+    // returns WORKING-NOT-READY. The held request did NOT advance the checkpoint.
+    now += 100;
+    const working = await coldWakeDefer().handle(
+      { token, runId, posted: posted0 },
+      now,
+    );
+    expect(working.status).toBe(200);
+    if (working.status !== 200 || !("working" in working.body))
+      throw new Error("expected the working arm");
+    expect(working.body.working).toBe(true);
+    expect(working.body.retryAfterMs).toBe(250);
+    // PROOF the compute did NOT run inline: cursor unchanged, nothing settled,
+    // and the resume is sitting in the out-of-band inbox.
+    expect(durable.cursor).toBe(0);
+    expect(durable.settleCount).toBe(0);
+    expect(pending.has(step0.callId)).toBe(true);
+
+    // A re-poll BEFORE the out-of-band compute lands is STILL working (idempotent
+    // enqueue — no double settle, cursor still 0).
+    now += 100;
+    const stillWorking = await coldWakeDefer().handle(
+      { token, runId, posted: posted0 },
+      now,
+    );
+    if (stillWorking.status !== 200 || !("working" in stillWorking.body))
+      throw new Error("expected still-working");
+    expect(durable.cursor).toBe(0);
+
+    // OUT-OF-BAND: the returning activation runs the deferred compute — it lands
+    // in the durable next-step (cursor advances, result collected).
+    drainOutOfBand();
+    expect(durable.cursor).toBe(1);
+    expect(durable.settleCount).toBe(1);
+
+    // Pull 3 — re-posts the SAME result. Now settled ⇒ the host reads the NEXT
+    // step off the advanced checkpoint (no re-settle).
+    now += 100;
+    const afterReady = await coldWakeDefer().handle(
+      { token, runId, posted: posted0 },
+      now,
+    );
+    if (
+      afterReady.status !== 200 ||
+      afterReady.body.done ||
+      "working" in afterReady.body
+    )
+      throw new Error("expected the next step");
+    expect(afterReady.body.step.tool).toBe("beta");
+    expect(durable.settleCount).toBe(1); // no double settle on the re-post
+
+    // Drive the remaining steps the same working → drain → step round-trip to
+    // terminal, proving the full arc lands `done` with the collected output.
+    let pending2 = afterReady.body.step;
+    let output: string | null = null;
+    for (let i = 1; i < SCRIPT.length; i++) {
+      const posted: StepResult<ToolResult> = {
+        callId: pending2.callId,
+        result: pending2.tool[0].toUpperCase(),
+      };
+      now += 100;
+      const w = await coldWakeDefer().handle({ token, runId, posted }, now);
+      if (w.status !== 200 || !("working" in w.body))
+        throw new Error("expected working before drain");
+      drainOutOfBand();
+      now += 100;
+      const r = await coldWakeDefer().handle({ token, runId, posted }, now);
+      if (r.status !== 200) throw new Error("unexpected status");
+      if (r.body.done) {
+        output = r.body.output;
+        break;
+      }
+      if ("working" in r.body) throw new Error("should be ready after drain");
+      pending2 = r.body.step;
+    }
+
+    expect(output).toBe("A|B|G");
+    expect(durable.cursor).toBe(SCRIPT.length);
+    expect(durable.settleCount).toBe(SCRIPT.length);
+  });
+
+  it("runStepLoop drives a defer host end to end — re-polling the working arm until each step is ready", async () => {
+    const runId = "loop-defer";
+    const token = mintRunToken();
+    const durable = freshDurable(token);
+    const pending = new Map<string, StepResult<ToolResult>>();
+    const settledIds = new Set<string>();
+
+    // Cold-wake defer host, same shape as above. Here the out-of-band compute is
+    // driven synchronously by the `settled` probe: the first probe for a callId
+    // records it as "in flight"; the second probe reports it ready — modelling a
+    // returning activation that completes between two polls. This lets the loop
+    // observe a real working → ready transition without an external scheduler.
+    const inFlight = new Set<string>();
+    const coldWakeDefer = () => {
+      const ctx: StepCtx = { storage: { setAlarm() {} } };
+      const engine: StepEngine<ToolResult, ToolInput, RunOutput> = {
+        tokenFor: () => durable.token,
+        resume: () => {
+          throw new Error("inline resume must not run on the defer path");
+        },
+        nextStep(rid): NextStep<ToolInput> | null {
+          if (durable.cursor >= SCRIPT.length) return null;
+          const entry = SCRIPT[durable.cursor];
+          return {
+            callId: callIdFor(rid, durable.cursor),
+            tool: entry.tool,
+            input: entry.input,
+          };
+        },
+        terminalOutput: () => durable.collected.join("|"),
+      };
+      const deferResume: DeferResumeHook<ToolResult> = {
+        enqueue(_rid, posted) {
+          if (!settledIds.has(posted.callId))
+            pending.set(posted.callId, posted);
+        },
+        settled(_rid, callId) {
+          if (settledIds.has(callId)) return true;
+          // Second sighting → the returning activation has completed: land it.
+          if (inFlight.has(callId)) {
+            const posted = pending.get(callId);
+            if (posted) {
+              durable.settleCount += 1;
+              durable.collected.push(posted.result);
+              durable.cursor += 1;
+              settledIds.add(callId);
+              pending.delete(callId);
+              inFlight.delete(callId);
+            }
+            return true;
+          }
+          inFlight.add(callId);
+          return false; // first sighting → still working
+        },
+      };
+      return stepHost<ToolResult, ToolInput, RunOutput>(ctx, engine, {
+        deferResume,
+      });
+    };
+
+    const transport = (req: StepRequest<ToolResult>) =>
+      coldWakeDefer()
+        .handle(req, 0)
+        .then((outcome) => {
+          if (outcome.status !== 200) throw new Error(`HTTP ${outcome.status}`);
+          return outcome.body;
+        });
+
+    const executed: string[] = [];
+    const outcome = await runStepLoop<ToolResult, ToolInput, RunOutput>(
+      token,
+      runId,
+      transport,
+      (step) => {
+        executed.push(step.tool);
+        return step.tool[0].toUpperCase();
+      },
+      {
+        deadlineMs: Number.POSITIVE_INFINITY,
+        now: () => 0,
+        sleep: () => Promise.resolve(),
+      },
+    );
+
+    expect(outcome.kind).toBe("done");
+    if (outcome.kind !== "done") throw new Error("expected done");
+    expect(outcome.output).toBe("A|B|G");
+    expect(executed).toEqual(["alpha", "beta", "gamma"]);
+    expect(durable.cursor).toBe(SCRIPT.length);
+  });
+});
