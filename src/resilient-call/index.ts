@@ -1,4 +1,41 @@
 /**
+ * @deprecated `@demlik/tea/resilient-call` is deprecated in favor of
+ * `@demlik/tea/with-resilience` — the higher-order `withResilience(base,
+ * config)` wrapper (TEA-idiomatic: it wraps any existing machine instead of
+ * forcing a bespoke embedded slice; epic consolidation verdict, survivor
+ * `with-resilience`). The APIs are NOT drop-in; migration map:
+ *
+ *   - `createResilientCall(config, rng)` + hand-wiring `init` / the verbs /
+ *     `subs` / `handlers` into your machine → `withResilience(base, { target,
+ *     ...bricks }, rng)`. Nothing is wired by hand anymore: the wrapper
+ *     intercepts the `target` base Cmd and routes it through the gate.
+ *   - `ResilientConfig` bricks (`retry` / `circuit` / `rateLimit` / `cache` /
+ *     `deadline`) → unchanged; `ResilienceConfig` extends the same knob and
+ *     adds `target` (required), `keyOf?` (per-call key — was `attempt`'s `key`
+ *     argument), and `at?` (time-as-data reader — REQUIRED with any
+ *     time-sensitive brick; `withResilience` throws at construction without it).
+ *   - The slice at your chosen Model field + `liftResilience` → the wrapper
+ *     owns `model.$resilience`; there is nothing to lift.
+ *   - Verbs `attempt` / `succeed` / `fail` / `onTimer` → internal to the
+ *     wrapper; results route as `$resilience:ok` / `$resilience:err` /
+ *     `$resilience:timer` Msgs through the merged `update` (the old
+ *     `resilient_run` / `resilient_ok` / `resilient_err` vocabulary is renamed
+ *     into the `$resilience:` namespace).
+ *   - `settleFailed` → NO equivalent. It exists for embedded-slice consumers
+ *     (`authed-call`, `paginated-walk`) that settle a call without touching the
+ *     breaker; the wrapper exposes no caller-facing settle verb.
+ *   - `handlers(ports)` / `subs(state)` / the `subscribeDeadline` re-export →
+ *     handled by the wrapper; run the returned machine like any other.
+ *
+ * Removal window ("deprecate, don't delete"): the `./resilient-call` subpath
+ * export survives one minor release after this deprecation ships, then is
+ * removed. Internal sibling modules (`with-resilience` itself, `agent`,
+ * `llm-call`, `authed-call`, `reconciler`, `paginated-walk`) intentionally keep
+ * importing `../resilient-call` — the deprecation targets the PUBLISHED export,
+ * not the module's internal role.
+ */
+
+/**
  * @demlik/tea/resilient-call — the ROOT composition: a single resilience knob
  * that bundles cache → circuit-breaker → rate-limit → exponential-backoff retry
  * (with a deadline-driven retry timer) around any fallible `(input) => Promise`
@@ -295,6 +332,9 @@ function deadlineTimerId(key: string): string {
  *
  * Returns the uniform L2 knob contract. `I` is the port input type, `R` the
  * port result type.
+ *
+ * @deprecated Use `withResilience` from `@demlik/tea/with-resilience` — not
+ * drop-in; see the migration map at the top of this module.
  */
 export function createResilientCall<I, R>(
   config: ResilientConfig,
@@ -715,6 +755,10 @@ export function createResilientCall<I, R>(
  * slice lives at `state.resilience`. A convenience for the common single-slice
  * host; consumers with a differently-named field spread by hand. Pure — a thin
  * record rebuild, no clock / RNG.
+ *
+ * @deprecated Use `withResilience` from `@demlik/tea/with-resilience` — the
+ * wrapper owns `model.$resilience`, so there is nothing to lift; see the
+ * migration map at the top of this module.
  */
 export function liftResilience<
   S extends { resilience: ResilientState<I, R> },
