@@ -1293,6 +1293,27 @@ export function run<
   }
 
   /**
+   * The post-transition commit tail: install the new state, then save →
+   * reconcile subs → interpret → fire fanout → settle done-waiters.
+   * Save-before-effects is the hard ordering; tests pin it. Both the normal
+   * transition and the `restart` supervision branch end here, so
+   * `fireEvents`/`settleDoneWaiters` live on exactly one path (#279).
+   */
+  async function commit(next: S, msg: M, cmds: readonly C[]): Promise<void> {
+    state = next;
+    if (store) await store.save(next);
+    // Subscriptions reconcile against the new state; throws propagate AFTER
+    // the entire diff pass completes (so other subs still register / clean
+    // up correctly). Cleanup throws are swallowed inside reconcileSubs.
+    reconcileSubs();
+    await runInterpret(cmds);
+    fireListeners();
+    fireObservers(msg);
+    fireEvents(msg);
+    settleDoneWaiters();
+  }
+
+  /**
    * One full transition: update → save → reconcile subs → interpret → fire
    * listeners. Save-before-effects is the hard ordering; tests pin it.
    *
@@ -1326,14 +1347,8 @@ export function run<
           // produced none. A throw inside `rehydrate` itself is NOT caught here
           // — it propagates as a genuine recovery failure (the host's
           // last-good source is broken), surfacing to the dispatch caller.
-          state = supervision.rehydrate(state, msg, reduceError);
-          if (store) await store.save(state);
-          reconcileSubs();
           // No cmds to interpret — the reducer never returned a result.
-          fireListeners();
-          fireObservers(msg);
-          fireEvents(msg);
-          settleDoneWaiters();
+          await commit(supervision.rehydrate(state, msg, reduceError), msg, []);
           return;
         }
         case "escalate":
@@ -1350,17 +1365,7 @@ export function run<
           throw reduceError;
       }
     }
-    state = next;
-    if (store) await store.save(state);
-    // Subscriptions reconcile against the new state; throws propagate AFTER
-    // the entire diff pass completes (so other subs still register / clean
-    // up correctly). Cleanup throws are swallowed inside reconcileSubs.
-    reconcileSubs();
-    await runInterpret(cmds);
-    fireListeners();
-    fireObservers(msg);
-    fireEvents(msg);
-    settleDoneWaiters();
+    await commit(next, msg, cmds);
   }
 
   /**
