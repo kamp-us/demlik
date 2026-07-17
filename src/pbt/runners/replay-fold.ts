@@ -5,29 +5,27 @@
 // step-shaped invariants. The substrate's `replay(machine, opts)` returns
 // only final state + cumulative cmds — insufficient. We use `replay` for
 // the boot step (calls `machine.init(loaded, ctx)` faithfully) then walk
-// msgs ourselves using the SAME cell-dispatch shape the substrate uses in
-// both `run()` and `replay()`.
+// msgs ourselves through `applyCell`, the substrate's own cell dispatch.
 //
-// Why duplicate the cell-dispatch (5 LOC) instead of looping `replay` once
-// per msg with `loaded: prevState`? Because `init(loaded)` runs every
-// call, and on machines with non-trivial init transforms (e.g. the audit
-// machine's `auditing → attach_debugger` resume cell) that would either
-// (a) re-fire the transform on every step, or (b) require fragile cmd-
-// subtraction to isolate this step's cmds. Calling `update` directly
-// keeps the fold pure and the cmds per-step exactly.
+// Why walk cells directly instead of looping `replay` once per msg with
+// `loaded: prevState`? Because `init(loaded)` runs every call, and on
+// machines with non-trivial init transforms (e.g. the audit machine's
+// `auditing → attach_debugger` resume cell) that would either (a) re-fire
+// the transform on every step, or (b) require fragile cmd-subtraction to
+// isolate this step's cmds. Calling the cells directly keeps the fold pure
+// and the cmds per-step exactly.
 //
-// Mirrors the dispatch in `packages/tea/src/index.ts` `applyUpdate` and
-// `replay`. The form-detect is identical, the same single-property lookup,
-// the same `as unknown as` cast at the table boundary.
+// Dispatches through `applyCell` — the single primitive `run`/`replay` use —
+// so form classification agrees with production by construction (#275).
 //
 // `foldEvents` does NOT call `interpret`, does NOT touch a Store, does NOT
 // start Subs. The reducer surface is the contract.
 // ---------------------------------------------------------------------------
 
 import {
+  applyCell,
   type Cmd,
   type Machine,
-  type Reducer,
   replay,
   type Sub,
 } from "../../index";
@@ -91,42 +89,15 @@ export function foldEvents<
     loaded: loaded ?? null,
   });
 
-  // Per-msg dispatch mirrors the substrate's `applyUpdate` in `run()` and
-  // the same loop in `replay()`. Two record forms; structural detect once.
-  type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
-  type ReducerRecord = Reducer<S, M, C>;
-  type TransitionsTable = {
-    [stateType: string]: { [msgType: string]: CellFn };
-  };
-
-  const updateForm = machine.update;
-  type UpdateMode = "reducer" | "transitions";
-  const updateMode: UpdateMode = (() => {
-    const firstKey = Object.keys(updateForm as object)[0];
-    if (firstKey === undefined) return "reducer";
-    const firstValue = (updateForm as Record<string, unknown>)[firstKey];
-    return typeof firstValue === "function" ? "reducer" : "transitions";
-  })();
-
+  // Per-msg dispatch goes through `applyCell` — the same primitive `run` and
+  // `replay` use — so this runner classifies the update form identically to
+  // production (`formOf` honors the `__form` tag; #275).
   const states: S[] = [initialState];
   const steps: Step<S, M, C>[] = [];
   let current = initialState;
 
   for (const msg of msgs) {
-    let next: S;
-    let emitted: readonly C[];
-    if (updateMode === "reducer") {
-      const record = updateForm as ReducerRecord;
-      [next, emitted] = record[msg.type as M["type"]](
-        current,
-        msg as Extract<M, { type: M["type"] }>,
-      );
-    } else {
-      const table = updateForm as unknown as TransitionsTable;
-      const stateKey = (current as unknown as { type: string }).type;
-      // biome-ignore lint/style/noNonNullAssertion: Transitions overload guarantees the cell exists; `!` required under noUncheckedIndexedAccess
-      [next, emitted] = table[stateKey]![msg.type]!(current, msg);
-    }
+    const [next, emitted] = applyCell<S, M, C>(machine, current, msg);
     steps.push({ prev: current, msg, next, cmds: [...emitted] });
     states.push(next);
     current = next;

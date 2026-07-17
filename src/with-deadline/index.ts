@@ -55,15 +55,15 @@
  */
 
 import {
+  applyCell,
   type Cmd,
-  formOf,
   type Interpret,
   type Machine,
+  msgKeysOf,
   type Reducer,
   type Sub,
   type Subscribe,
   subId,
-  type UpdateForm,
 } from "../index";
 import { fromTimeout } from "../subs/from-timeout";
 
@@ -191,64 +191,6 @@ export interface DeadlineConfig<M extends { type: string }> {
 }
 
 // ===========================================================================
-// update-form dispatch — run the base reducer regardless of its shape.
-// ===========================================================================
-
-// The base `update` is either a Reducer (flat record keyed by Msg.type) or a
-// Transitions table (keyed by state.type then Msg.type). The merged machine is
-// always a Reducer over the NON-discriminated `DeadlineModel<S>`, so the merged
-// reducer must invoke the base's update through whichever shape it has. Mirrors
-// `withTelemetry`'s inline form-branching (kept standalone, not pre-abstracted).
-type BaseCellFn<S, M, C extends Cmd> = (
-  state: S,
-  msg: M,
-) => readonly [S, readonly C[]];
-
-/**
- * Invoke the base machine's `update` for `msg` against base `state`, returning
- * the base's `[nextBase, baseCmds]` UNCHANGED. Pure — it only routes to the
- * base cell; it never reads the clock, allocates an Error, or mutates state.
- */
-function runBaseUpdate<S, M extends { type: string }, C extends Cmd>(
-  // Typed `object` (not `Machine[...]["update"]`) because the field is inspected
-  // structurally and re-cast; the precise union (Reducer | Transitions)
-  // collapses under the substrate's conditional `update` type.
-  update: object,
-  // The base's update form, read once via `formOf(base)` — no local heuristic.
-  form: UpdateForm,
-  state: S,
-  msg: M,
-): readonly [S, readonly C[]] {
-  if (form === "reducer") {
-    // Reducer form: `update[msg.type](state, msg)`.
-    const record = update as unknown as Record<string, BaseCellFn<S, M, C>>;
-    // biome-ignore lint/style/noNonNullAssertion: the base machine's Reducer guarantees a cell for every dispatched Msg.type; `!` required under noUncheckedIndexedAccess and cannot miss for a Msg the base accepts
-    return record[msg.type]!(state, msg);
-  }
-  // Transitions form: `update[state.type][msg.type](state, msg)`.
-  const table = update as unknown as Record<
-    string,
-    Record<string, BaseCellFn<S, M, C>>
-  >;
-  const stateKey = (state as unknown as { type: string }).type;
-  // biome-ignore lint/style/noNonNullAssertion: the base machine's Transitions table guarantees every (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess and cannot miss at runtime
-  return table[stateKey]![msg.type]!(state, msg);
-}
-
-// Recover the base Msg.type set from either update form. A Reducer's own keys
-// ARE the Msg.type set. A Transitions table's keys are state.type; its INNER
-// keys are the Msg.type set (uniform across phases), so we read the first
-// phase's inner keys. An empty update (`M` is `never`) yields `[]`.
-function deadlineMsgKeys(update: object, form: UpdateForm): readonly string[] {
-  const keys = Object.keys(update);
-  const firstKey = keys[0];
-  if (firstKey === undefined) return [];
-  if (form === "reducer") return keys;
-  const firstValue = (update as Record<string, unknown>)[firstKey];
-  return Object.keys(firstValue as object);
-}
-
-// ===========================================================================
 // withDeadline — the wrapper.
 // ===========================================================================
 
@@ -308,10 +250,9 @@ export function withDeadline<
   // `$deadline:` namespace, that assignment — or this loop — would SILENTLY
   // clobber / be clobbered by a base cell. The `$deadline:` Msg namespace is
   // the wrapper's: refuse to wrap a base that squats on it.
-  // The base's update form, read ONCE from the `__form` tag (see `formOf`) and
-  // threaded into the per-form helpers — no structural re-derivation here.
-  const baseForm = formOf(base);
-  const baseMsgKeys = deadlineMsgKeys(base.update, baseForm);
+  // Base Msg keys enumerated via `msgKeysOf(base)` — keyed on the
+  // authoritative `__form` tag, no structural re-derivation here (#275).
+  const baseMsgKeys = msgKeysOf(base);
   for (const key of baseMsgKeys) {
     if (key.startsWith("$deadline:")) {
       throw new Error(
@@ -325,9 +266,8 @@ export function withDeadline<
   for (const key of baseMsgKeys) {
     update[key] = (state, msg) => {
       // 1) Run the base reducer — its result passes through UNCHANGED.
-      const [nextBase, baseCmds] = runBaseUpdate<S, M, C>(
-        base.update,
-        baseForm,
+      const [nextBase, baseCmds] = applyCell<S, M, C>(
+        base,
         state.base,
         msg as M,
       );

@@ -71,7 +71,7 @@ import type {
   Sub,
   UpdateForm,
 } from "../index";
-import { formOf, subId, tryInterpret } from "../index";
+import { applyCell, formOf, msgKeysOf, subId, tryInterpret } from "../index";
 import { MsgType } from "../protocol";
 import {
   createResilientCall,
@@ -245,57 +245,10 @@ function toRcTimerId(wxId: string): string {
   return wxId;
 }
 
-// ===========================================================================
-// update-form dispatch — run the base reducer regardless of its shape.
-// (Mirrors withTelemetry's inline form-branching so the wrapper stays
-// standalone; the composed Model is never discriminated on `.type`.)
-// ===========================================================================
-
-type BaseCellFn<S, M, C extends Cmd> = (
-  state: S,
-  msg: M,
-) => readonly [S, readonly C[]];
-
 /**
- * Invoke the base machine's `update` for `msg` against base `state`, returning
- * the base's `[nextBase, baseCmds]` UNCHANGED. Pure — routes to the base cell;
- * never reads the clock, allocates an Error, or mutates state.
- */
-function runBaseUpdate<S, M extends { type: string }, C extends Cmd>(
-  update: object,
-  // The base's update form, read once via `formOf(base)` — no local heuristic.
-  form: UpdateForm,
-  state: S,
-  msg: M,
-): readonly [S, readonly C[]] {
-  if (form === "reducer") {
-    const record = update as unknown as Record<string, BaseCellFn<S, M, C>>;
-    // biome-ignore lint/style/noNonNullAssertion: the base Reducer guarantees a cell for every dispatched Msg.type; `!` is required under noUncheckedIndexedAccess and cannot miss for a Msg the base accepts
-    return record[msg.type]!(state, msg);
-  }
-  const table = update as unknown as Record<
-    string,
-    Record<string, BaseCellFn<S, M, C>>
-  >;
-  const stateKey = (state as unknown as { type: string }).type;
-  // biome-ignore lint/style/noNonNullAssertion: the base Transitions table guarantees every (state.type × msg.type) cell exists; `!` is required under noUncheckedIndexedAccess and cannot miss at runtime
-  return table[stateKey]![msg.type]!(state, msg);
-}
-
-/** Recover the base Msg.type set from either update form (see withTelemetry). */
-function baseMsgKeys(update: object, form: UpdateForm): readonly string[] {
-  const keys = Object.keys(update);
-  const firstKey = keys[0];
-  if (firstKey === undefined) return [];
-  if (form === "reducer") return keys;
-  const firstValue = (update as Record<string, unknown>)[firstKey];
-  return Object.keys(firstValue as object);
-}
-
-/**
- * Does `update` declare `key` as a Msg.type cell, in EITHER update form? The
- * reserved-namespace guard checks the correct level per form (the same
- * detection `baseMsgKeys` / `runBaseUpdate` use):
+ * Does the base machine declare `key` as a Msg.type cell, in EITHER update
+ * form? The reserved-namespace guard checks the correct level per form (keyed
+ * on `formOf`, the same classification `applyCell` / `msgKeysOf` use):
  *
  *   - Reducer form (`{ [msgType]: cell }`, values are functions) — the
  *     msg-type keys live at the TOP level, so `Object.hasOwn(update, key)`.
@@ -308,23 +261,20 @@ function baseMsgKeys(update: object, form: UpdateForm): readonly string[] {
  *     old check) only sees state-type keys here and would MISS it entirely.
  */
 function updateDeclaresMsgKey(
-  update: object,
-  form: UpdateForm,
+  machine: { update: object; __form?: UpdateForm },
   key: string,
 ): boolean {
-  const keys = Object.keys(update);
-  const firstKey = keys[0];
-  if (firstKey === undefined) return false;
-  if (form === "reducer") {
+  if (formOf(machine) === "reducer") {
     // Reducer form — msg-type keys at the top level.
-    return Object.hasOwn(update, key);
+    return Object.hasOwn(machine.update, key);
   }
-  // Transitions form — msg-type keys live in each inner state-type table.
-  for (const stateKey of keys) {
-    const innerTable = (update as Record<string, unknown>)[stateKey];
+  // Transitions form — msg-type keys live in each inner state-type table. An
+  // inner table can be a callable object (the shape `__form` disambiguates),
+  // so accept "function" alongside "object" here.
+  for (const innerTable of Object.values(machine.update)) {
     if (
       innerTable !== null &&
-      typeof innerTable === "object" &&
+      (typeof innerTable === "object" || typeof innerTable === "function") &&
       Object.hasOwn(innerTable, key)
     ) {
       return true;
@@ -417,17 +367,14 @@ export function withResilience<
   type Cell = (state: WM, msg: WMsg) => readonly [WM, readonly WCmd[]];
   const update: Record<string, Cell> = {};
 
-  // The base's update form, read ONCE from the `__form` tag (see `formOf`) and
-  // threaded into the per-form helpers — no structural re-derivation here.
-  const baseForm = formOf(base);
-
   // --- Base-Msg cells: delegate, then PARTITION + retag the target Cmd. ----
-  for (const key of baseMsgKeys(base.update, baseForm)) {
+  // Base Msg keys enumerated via `msgKeysOf(base)` — keyed on the
+  // authoritative `__form` tag, no structural re-derivation here (#275).
+  for (const key of msgKeysOf(base)) {
     update[key] = (state, msg) => {
       // 1) Run the base reducer. Its NON-target Cmds pass through unchanged.
-      const [nextBase, baseCmds] = runBaseUpdate<S, M, C>(
-        base.update,
-        baseForm,
+      const [nextBase, baseCmds] = applyCell<S, M, C>(
+        base,
         state.base,
         msg as M,
       );
@@ -581,8 +528,8 @@ export function withResilience<
   // regression #111's construction-time hoist introduced (the hoisted target
   // check shadowed this guard for such a base), fixed by #112.
   //
-  // `update` is checked PER FORM (the same Reducer-vs-Transitions detection the
-  // wrapper already uses in `baseMsgKeys` / `runBaseUpdate`): a Reducer-form
+  // `update` is checked PER FORM (the same `formOf` classification the wrapper
+  // already uses via `msgKeysOf` / `applyCell`): a Reducer-form
   // base keys its msg-types at the TOP level, but a Transitions-form base keys
   // them in the INNER `{ [stateType]: { [msgType]: cell } }` tables — so a flat
   // top-level `Object.hasOwn` would MISS a reserved msg-type squatting inside an
@@ -601,8 +548,7 @@ export function withResilience<
   }[] = [
     {
       name: "update",
-      declares: (reserved) =>
-        updateDeclaresMsgKey(base.update as object, baseForm, reserved),
+      declares: (reserved) => updateDeclaresMsgKey(base, reserved),
     },
     {
       name: "interpret",

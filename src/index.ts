@@ -20,16 +20,15 @@ import type {
   Reducer,
   Sub,
   Transitions,
-  UpdateForm,
 } from "./pure/core";
 import {
   __DEV__,
+  applyCell,
   assertPureResult,
   type Cmd,
   deepFreeze,
   detectUpdateForm,
   foldUpdates,
-  formOf,
 } from "./pure/core";
 
 export type {
@@ -49,7 +48,15 @@ export type {
 } from "./pure/core";
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives on `@demlik/tea/pure`).
-export { Cmd, detectUpdateForm, foldMsgs, formOf, subId } from "./pure/core";
+export {
+  applyCell,
+  Cmd,
+  detectUpdateForm,
+  foldMsgs,
+  formOf,
+  msgKeysOf,
+  subId,
+} from "./pure/core";
 
 // The nominal brand minted ONLY through the validated construction path
 // (`asReducer` / `defineMachine`). Mirrors `retry-backoff`'s `RngBrand`: a raw
@@ -1019,57 +1026,12 @@ export function run<
 
   // === update dispatch ===
   //
-  // The substrate accepts two `update` shapes (see `defineMachine` overloads):
-  //
-  //   1. Reducer:     `{ [msg.type]: (state, msg) => [S, C[]] }`
-  //   2. Transitions: `{ [state.type]: { [msg.type]: (state, msg) => [S, C[]] } }`
-  //
-  // Branch is structural: an object's first inspected handler tells us
-  // flat-vs-nested — if `update[msg.type]` is itself a function it's a
-  // Reducer; if it's an object whose value is a function it's a Transitions
-  // table. No runtime tag added to the Machine — the form is detectable from
-  // the value shape, and the type system guarantees `update` matches one of
-  // the two shapes at the `defineMachine` boundary.
-  //
-  // The form is detected ONCE per `run()` call (here, at runtime setup) and
-  // cached as `updateMode`. The per-dispatch path is then a single branch +
-  // 1-or-2 property lookups — no per-call shape inspection.
-  type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
-  type ReducerRecord = Reducer<S, M, C>;
-  type TransitionsTable = {
-    [stateType: string]: { [msgType: string]: CellFn };
-  };
-  const updateForm = machine.update;
-  // The form is read ONCE from the `__form` tag `defineMachine` stamped (see
-  // `formOf` / `UpdateForm`); no structural re-derivation here. Cached as
-  // `updateMode`, so the per-dispatch path is a single branch + 1-or-2 property
-  // lookups.
-  const updateMode: UpdateForm = formOf(machine);
+  // The substrate accepts two `update` shapes (see `defineMachine` overloads);
+  // dispatch goes through `applyCell`, the single reducer-vs-transitions
+  // primitive keyed on `formOf` (see `pure/core.ts`, #275).
   function applyUpdate(state: S, msg: M): readonly [S, readonly C[]] {
     if (__DEV__) deepFreeze(state);
-
-    let result: readonly [S, readonly C[]];
-    if (updateMode === "reducer") {
-      // Flat record dispatch. Mapped type (`Reducer<S, M, C>`) guarantees
-      // every Msg variant has a handler at the type level; runtime is a
-      // single property lookup with no fallback default branch.
-      const record = updateForm as ReducerRecord;
-      const handler = record[msg.type as M["type"]];
-      result = handler(state, msg as Extract<M, { type: M["type"] }>);
-    } else {
-      // Transitions table dispatch. `state` is constrained to
-      // `{ type: string }` by the `defineMachine` Transitions overload; the
-      // table guarantees every (state.type × msg.type) cell exists at the
-      // type level. Runtime is two property lookups + the call.
-      const table = updateForm as unknown as TransitionsTable;
-      const stateKey = (state as unknown as { type: string }).type;
-      // The Transitions overload guarantees every (state.type × msg.type) cell
-      // exists at the type level; the runtime lookup cannot miss.
-      // biome-ignore lint/style/noNonNullAssertion: the Transitions overload guarantees every (state.type × msg.type) cell exists at the type level; `!` is required under noUncheckedIndexedAccess and cannot miss at runtime
-      const handler = table[stateKey]![msg.type]!;
-      result = handler(state, msg);
-    }
-
+    const result = applyCell<S, M, C>(machine, state, msg);
     if (__DEV__) assertPureResult(result, msg.type);
     return result;
   }

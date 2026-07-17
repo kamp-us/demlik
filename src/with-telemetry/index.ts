@@ -50,15 +50,8 @@
  *   });
  */
 
-import type {
-  Cmd,
-  Interpret,
-  Machine,
-  Reducer,
-  Sub,
-  UpdateForm,
-} from "../index";
-import { formOf } from "../index";
+import type { Cmd, Interpret, Machine, Reducer, Sub } from "../index";
+import { applyCell, msgKeysOf } from "../index";
 
 // ===========================================================================
 // The event + the slice + the ports — the telemetry vocabulary.
@@ -145,53 +138,6 @@ export interface TelemetryConfig<S, M extends { type: string }> {
 }
 
 // ===========================================================================
-// update-form dispatch — run the base reducer regardless of its shape.
-// ===========================================================================
-
-// The base `update` is either a Reducer (flat record keyed by Msg.type) or a
-// Transitions table (keyed by state.type then Msg.type). The merged machine is
-// always a Reducer over the NON-discriminated `TelemetryModel<S>`, so the merged
-// reducer must invoke the base's update through whichever shape it has. This
-// mirrors the form-branching `run` and `replay` do internally; we keep it inline
-// (not factored into a shared helper) so the wrapper stays standalone.
-type BaseCellFn<S, M, C extends Cmd> = (
-  state: S,
-  msg: M,
-) => readonly [S, readonly C[]];
-
-/**
- * Invoke the base machine's `update` for `msg` against base `state`, returning
- * the base's `[nextBase, baseCmds]` UNCHANGED. Pure — it only routes to the
- * base cell; it never reads the clock, allocates an Error, or mutates state.
- */
-function runBaseUpdate<S, M extends { type: string }, C extends Cmd>(
-  // Typed `object` (not `Machine[...]["update"]`) because the field is inspected
-  // structurally and re-cast below; the precise union (Reducer | Transitions)
-  // collapses under the substrate's conditional `update` type, so the wrapper
-  // accepts the erased shape and dispatches on the runtime form.
-  update: object,
-  // The base's update form, read once via `formOf(base)` — no local heuristic.
-  form: UpdateForm,
-  state: S,
-  msg: M,
-): readonly [S, readonly C[]] {
-  if (form === "reducer") {
-    // Reducer form: `update[msg.type](state, msg)`.
-    const record = update as unknown as Record<string, BaseCellFn<S, M, C>>;
-    // biome-ignore lint/style/noNonNullAssertion: the base machine's Reducer guarantees a cell for every dispatched Msg.type; `!` required under noUncheckedIndexedAccess and cannot miss for a Msg the base accepts
-    return record[msg.type]!(state, msg);
-  }
-  // Transitions form: `update[state.type][msg.type](state, msg)`.
-  const table = update as unknown as Record<
-    string,
-    Record<string, BaseCellFn<S, M, C>>
-  >;
-  const stateKey = (state as unknown as { type: string }).type;
-  // biome-ignore lint/style/noNonNullAssertion: the base machine's Transitions table guarantees every (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess and cannot miss at runtime
-  return table[stateKey]![msg.type]!(state, msg);
-}
-
-// ===========================================================================
 // withTelemetry — the wrapper.
 // ===========================================================================
 
@@ -233,14 +179,9 @@ export function withTelemetry<
 
   // The merged update is a flat Reducer over the composed Model. The composed
   // Model is NOT discriminated on `.type`, so the Transitions form is never an
-  // option here — every base Msg variant gets exactly one cell. We build the
-  // record by enumerating the base update's Msg keys: a Reducer's keys ARE the
-  // Msg.type set; a Transitions table's inner keys are too (uniform across
-  // phases), so we read the first phase's keys to recover them.
-  // The base's update form, read ONCE from the `__form` tag (see `formOf`) and
-  // threaded into the per-form helpers — no structural re-derivation here.
-  const baseForm = formOf(base);
-  const msgKeys = telemetryMsgKeys(base.update, baseForm);
+  // option here — every base Msg variant gets exactly one cell, enumerated via
+  // `msgKeysOf(base)` (keyed on the authoritative `__form` tag; #275).
+  const msgKeys = msgKeysOf(base);
 
   const update = {} as Record<
     string,
@@ -252,12 +193,7 @@ export function withTelemetry<
   for (const key of msgKeys) {
     update[key] = (state, msg) => {
       // 1) Run the base reducer — its result passes through UNCHANGED.
-      const [nextBase, baseCmds] = runBaseUpdate<S, M, C>(
-        base.update,
-        baseForm,
-        state.base,
-        msg,
-      );
+      const [nextBase, baseCmds] = applyCell<S, M, C>(base, state.base, msg);
       // 2) Advance the wrapper slice (monotonic counter). New object — no mutation.
       const $telemetry: TelemetrySlice = { seq: state.$telemetry.seq + 1 };
       const next: TelemetryModel<S> = { base: nextBase, $telemetry };
@@ -366,23 +302,4 @@ export function withTelemetry<
     U,
     Ctx & TelemetryPorts
   >;
-}
-
-// Recover the base Msg.type set from either update form. A Reducer's own keys
-// ARE the Msg.type set. A Transitions table's keys are state.type; its INNER
-// keys are the Msg.type set (uniform across phases by the mapped-type
-// contract), so we read the first phase's inner keys. An empty update (`M` is
-// `never`) yields `[]` — the merged reducer then has no cells, which is correct
-// because no Msg can ever be dispatched.
-function telemetryMsgKeys(update: object, form: UpdateForm): readonly string[] {
-  const keys = Object.keys(update);
-  const firstKey = keys[0];
-  if (firstKey === undefined) return [];
-  if (form === "reducer") {
-    // Reducer form — keys are Msg.type.
-    return keys;
-  }
-  // Transitions form — keys are state.type; inner keys are Msg.type.
-  const firstValue = (update as Record<string, unknown>)[firstKey];
-  return Object.keys(firstValue as object);
 }

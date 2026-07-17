@@ -172,6 +172,56 @@ export function formOf(machine: {
   return machine.__form ?? detectUpdateForm(machine.update);
 }
 
+// === applyCell: THE single reducer-vs-transitions dispatch primitive ===
+//
+// Applies the one update cell selected by `(formOf(machine), state, msg)` and
+// returns its `[nextState, cmds]` verbatim. Every site that steps a machine —
+// `run`'s applyUpdate, `foldUpdates` (replay/foldMsgs), the PBT fold runner,
+// and the withX wrappers — dispatches through THIS function, so production and
+// the verification tools agree on the update form by construction (#275).
+// Pure and dev-check-free: `deepFreeze`/`assertPureResult` stay at the call
+// sites that want them.
+export function applyCell<S, M extends { type: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+  msg: M,
+): readonly [S, readonly C[]] {
+  type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
+  if (formOf(machine) === "reducer") {
+    const record = machine.update as Record<string, CellFn>;
+    // biome-ignore lint/style/noNonNullAssertion: the Reducer mapped type guarantees a cell for every dispatched Msg.type; `!` required under noUncheckedIndexedAccess and cannot miss for a Msg the machine accepts
+    return record[msg.type]!(state, msg);
+  }
+  const table = machine.update as Record<string, Record<string, CellFn>>;
+  // The ONE sanctioned `state as unknown as { type }` read: the Transitions
+  // overload constrains S to `{ type: string }` at the `defineMachine`
+  // boundary, but that constraint is erased on the runtime-facing `object`
+  // here — every former per-site copy of this double-cast collapsed into
+  // this line (#275).
+  const stateKey = (state as unknown as { type: string }).type;
+  // biome-ignore lint/style/noNonNullAssertion: the Transitions overload guarantees every (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess and cannot miss at runtime
+  return table[stateKey]![msg.type]!(state, msg);
+}
+
+// === msgKeysOf: recover the Msg.type set from either update form ===
+//
+// A Reducer's own keys ARE the Msg.type set. A Transitions table's keys are
+// state.type; its INNER keys are the Msg.type set (uniform across phases by
+// the mapped-type contract), so the first phase's inner keys are read. An
+// empty update (`M` is `never`) yields `[]`. Keyed on `formOf` — the withX
+// wrappers and the PBT `msgTypeKeys` all read through this one helper (#275).
+export function msgKeysOf(machine: {
+  update: object;
+  __form?: UpdateForm;
+}): readonly string[] {
+  const keys = Object.keys(machine.update);
+  const firstKey = keys[0];
+  if (firstKey === undefined) return [];
+  if (formOf(machine) === "reducer") return keys;
+  const firstValue = (machine.update as Record<string, unknown>)[firstKey];
+  return Object.keys(firstValue as object);
+}
+
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
 //
 // Flat dispatch table keyed by `Msg.type`. Each cell is a pure transition for
@@ -549,10 +599,10 @@ export type Machine<
 
 // === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
 //
-// Folds `machine.update` over `msgs` from `initialState`, branching on
-// `formOf(machine)` — the same reader `run` uses — so every fold site agrees
-// on the reducer-vs-transitions form by construction (no second copy of the
-// heuristic to drift). Returns the final state plus the Cmds the cells emitted
+// Folds `machine.update` over `msgs` from `initialState`, dispatching each
+// Msg through `applyCell` — the same primitive `run` uses — so every fold site
+// agrees on the reducer-vs-transitions form by construction (no second copy of
+// the dispatch to drift). Returns the final state plus the Cmds the cells emitted
 // along the way; the caller keeps them (`replay`) or discards them (`foldMsgs`).
 //
 // Touches no `Store`, no `interpret` handler, and starts no subscription — it
@@ -564,32 +614,13 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
   initialState: S,
   msgs: readonly M[],
 ): { state: S; cmds: C[] } {
-  type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
-  type ReducerRecord = Reducer<S, M, C>;
-  type TransitionsTable = {
-    [stateType: string]: { [msgType: string]: CellFn };
-  };
-  const updateForm = machine.update;
-  const updateMode: UpdateForm = formOf(machine);
-
   let state: S = initialState;
   const cmds: C[] = [];
 
   for (const msg of msgs) {
     if (__DEV__) deepFreeze(state);
 
-    let result: readonly [S, readonly C[]];
-    if (updateMode === "reducer") {
-      result = (updateForm as ReducerRecord)[msg.type as M["type"]](
-        state,
-        msg as Extract<M, { type: M["type"] }>,
-      );
-    } else {
-      const table = updateForm as unknown as TransitionsTable;
-      const stateKey = (state as unknown as { type: string }).type;
-      // biome-ignore lint/style/noNonNullAssertion: Transitions overload guarantees the (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess
-      result = table[stateKey]![msg.type]!(state, msg);
-    }
+    const result = applyCell<S, M, C>(machine, state, msg);
 
     if (__DEV__) assertPureResult(result, msg.type);
 

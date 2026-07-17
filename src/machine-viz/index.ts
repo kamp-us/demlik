@@ -12,9 +12,9 @@
  * back to a STRUCTURAL self-edge annotated with `?` — visually distinct from a
  * resolved edge and documented in the diagram's legend.
  *
- * Form detection mirrors `run`/`replay` (the `updateMode` logic): inspect the
- * first own key of `update`; a value that is a function ⇒ Reducer form, a value
- * that is a record ⇒ Transitions form. We do NOT add a runtime tag to Machine.
+ * Form detection is `formOf(machine)` — the same reader `run`/`replay` use,
+ * honoring the authoritative `__form` tag `defineMachine` stamps (falling back
+ * to the structural heuristic for machines built without it; #275).
  *
  * What we MUST NOT do (these are the effectful paths, off-limits here):
  *   - call `interpret[*]` handlers (perform I/O)
@@ -25,6 +25,7 @@
  */
 
 import type { Cmd, Machine, Sub } from "../index";
+import { formOf } from "../index";
 
 // === Public options ===
 
@@ -80,25 +81,6 @@ function safeLabel(raw: string): string {
   return raw.replace(/["\n\r;:]/g, " ").trim();
 }
 
-// === Form detection (mirrors run/replay updateMode) ===
-
-type UpdateMode = "reducer" | "transitions";
-
-/**
- * Detect Reducer-vs-Transitions form from the value shape — identical logic to
- * `run`/`replay`'s `updateMode`. Inspect the first own key: a function value ⇒
- * Reducer (flat `{ [msg.type]: fn }`), a record value ⇒ Transitions (nested
- * `{ [state.type]: { [msg.type]: fn } }`). Empty object ⇒ M is `never`; the
- * mode is moot, default `"reducer"`.
- */
-function detectMode(update: unknown): UpdateMode {
-  const keys = Object.keys(update as object);
-  const firstKey = keys[0];
-  if (firstKey === undefined) return "reducer";
-  const firstValue = (update as Record<string, unknown>)[firstKey];
-  return typeof firstValue === "function" ? "reducer" : "transitions";
-}
-
 // === Edge model ===
 
 type Edge =
@@ -146,7 +128,7 @@ export function toMermaid<
   const msgSamples = opts.samples?.msgs ?? {};
   const hasCtx = opts.samples !== undefined && "ctx" in opts.samples;
 
-  const mode = detectMode(machine.update);
+  const mode = formOf(machine);
   const lines: string[] = [];
 
   // Front matter — Mermaid reads a YAML `title:` block before the diagram.

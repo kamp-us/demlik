@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// msgTypeKeys — read the Msg discriminant set at runtime from a Reducer
-// record or a Transitions table.
+// msgTypeKeys — read the Msg discriminant set at runtime from a machine's
+// Reducer record or Transitions table.
 //
 // TS Msg unions only exist at the type level; the discriminant strings are
 // erased at runtime. The reducer record / transitions table is the load-
@@ -13,12 +13,22 @@
 // without runtime introspection of the type system.
 // ---------------------------------------------------------------------------
 
-import type { Cmd, Reducer, Transitions } from "../../index";
+import {
+  type Cmd,
+  msgKeysOf,
+  type Reducer,
+  type Transitions,
+  type UpdateForm,
+} from "../../index";
 
 /**
- * Extract the Msg discriminant set at runtime from a Reducer record or a
- * Transitions table. Useful for asserting that a user-supplied
- * `MsgArbitraryTable<M>` covers every variant the reducer can handle.
+ * Extract the Msg discriminant set at runtime from a machine. Useful for
+ * asserting that a user-supplied `MsgArbitraryTable<M>` covers every variant
+ * the reducer can handle.
+ *
+ * Takes the MACHINE (not the bare `update` record) so the reducer-vs-
+ * transitions branch honors the authoritative `__form` tag via `msgKeysOf` —
+ * the same classification production `run` uses (#275).
  *
  * - **Reducer form** — keys of the top-level record ARE the Msg variants.
  * - **Transitions form** — keys of any single state's inner record. Every
@@ -28,23 +38,18 @@ import type { Cmd, Reducer, Transitions } from "../../index";
  *
  * @example
  *   import { auditBackgroundMachine } from "./reducer";
- *   msgTypeKeys(auditBackgroundMachine.update);
+ *   msgTypeKeys(auditBackgroundMachine);
  *   // → ["start_audit", "stop_audit", "window_created", ...]
  */
-export function msgTypeKeys<S, M extends { type: string }, C extends Cmd>(
+export function msgTypeKeys<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+>(machine: {
   update:
     | Reducer<S, M, C>
-    | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never),
-): readonly string[] {
-  const keys = Object.keys(update as object);
-  if (keys.length === 0) return [];
-  // Reducer form: every top-level value is a function (the cell).
-  // Transitions form: every top-level value is an object (the inner record).
-  // `keys[0]` is present — the length guard above rules out the empty record.
-  const firstValue = (update as Record<string, unknown>)[keys[0] ?? ""];
-  if (typeof firstValue === "function") {
-    return keys;
-  }
-  // Transitions form — read inner record.
-  return Object.keys(firstValue as object);
+    | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
+  __form?: UpdateForm;
+}): readonly string[] {
+  return msgKeysOf(machine);
 }
