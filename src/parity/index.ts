@@ -19,7 +19,7 @@
 //   recordRun(runtime)            → Recording        // wraps the recorder
 //   goldenReplay(machine, rec)    → State            // wraps replay
 //   normalizeForParity(schema)    → (finding) => norm // strip + stable-sort
-//   diff(a, b)                    → boolean           // normalized deep-equal
+//   parityEqual(a, b)             → boolean           // normalized deep-equal
 // ---------------------------------------------------------------------------
 
 import type { BootingRuntime, Cmd, Machine, Sub } from "../index";
@@ -138,7 +138,7 @@ const DEFAULT_SORT_KEYS: readonly string[] = ["ruleId", "selector", "url"];
  * schema's `stripKeys`, recursively sorts object keys, and stable-key-sorts
  * arrays by the schema's `sortKeys`. Two runs that differ only in generated
  * ids/timestamps or intra-effect ordering normalize to a byte-identical value,
- * so {@link diff} on the normalized pair reflects behavioural (not incidental)
+ * so {@link parityEqual} on the normalized pair reflects behavioural (not incidental)
  * difference.
  */
 export function normalizeForParity(
@@ -213,6 +213,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * package owns) rather than adding a second one — feed it the pair produced by
  * {@link normalizeForParity} for the normalized-JSON equality the gate rests on.
  */
-export function diff(a: unknown, b: unknown): boolean {
+export function parityEqual(a: unknown, b: unknown): boolean {
   return deepEqual(a, b);
 }
+
+/**
+ * @deprecated Inverted name — it returns `true` when the values are EQUAL, so
+ * `if (diff(old, new))` reads backwards (#278). Use {@link parityEqual}.
+ * Alias kept for one minor, then removed.
+ */
+export const diff = parityEqual;

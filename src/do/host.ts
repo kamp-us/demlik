@@ -43,10 +43,12 @@ import {
 } from "../agent/index";
 import {
   type BootingRuntime,
+  type Cmd,
   type Machine,
   type Runtime,
   run,
   type Store,
+  type Sub,
 } from "../index";
 import type {
   EffectConfirmed,
@@ -857,6 +859,9 @@ export function sseFromAgentEvents<R, Frame>(
  * What the consumer supplies to {@link createAgentHost} — the domain mappings,
  * nothing of the wiring. `Stage`/`P`/`O`/`R` are the agent slice's type
  * parameters (the consumer names them once); `Frame` is its SSE event shape.
+ * `C`/`U`/`Ctx` are the machine's own Cmd/Sub/Ctx — inferred from
+ * `buildMachine` at the `createAgentHost` call site (never name them by hand;
+ * an erased `any` here cost consumers all checking on this layer — #278).
  */
 export interface AgentHostConfig<
   Stage,
@@ -864,6 +869,9 @@ export interface AgentHostConfig<
   O extends Record<P, AgentTurn>,
   R,
   Frame,
+  C extends Cmd = Cmd,
+  U extends Sub = Sub,
+  Ctx = unknown,
 > {
   /**
    * Build the wired agent machine. Called once per host build (per activation),
@@ -873,20 +881,14 @@ export interface AgentHostConfig<
   readonly buildMachine: () => Machine<
     AgentState<Stage, P, O, R>,
     AgentMachineMsg<P, O, R>,
-    // The host does not name the consumer's Cmd / Sub / Ctx — `run` infers them
-    // from the machine. `never`/`unknown` here keep the host Cmd/Sub-agnostic
-    // while the machine itself stays fully typed at the consumer's call site.
-    // biome-ignore lint/suspicious/noExplicitAny: host is Cmd/Sub/Ctx-agnostic; the machine carries the real types.
-    any,
-    // biome-ignore lint/suspicious/noExplicitAny: see above.
-    any,
-    // biome-ignore lint/suspicious/noExplicitAny: see above.
-    any
+    C,
+    U,
+    Ctx
   >;
   /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
   readonly store: Store<AgentState<Stage, P, O, R>>;
-  /** The Ctx the machine threads to its interpret cells. */
-  readonly ctx: unknown;
+  /** The Ctx the machine threads to its interpret cells — checked against `buildMachine`'s. */
+  readonly ctx: Ctx;
   /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
@@ -983,8 +985,11 @@ export function createAgentHost<
   O extends Record<P, AgentTurn>,
   R,
   Frame,
+  C extends Cmd = Cmd,
+  U extends Sub = Sub,
+  Ctx = unknown,
 >(
-  config: AgentHostConfig<Stage, P, O, R, Frame>,
+  config: AgentHostConfig<Stage, P, O, R, Frame, C, U, Ctx>,
 ): AgentHost<Stage, P, O, R, Frame> {
   type S = AgentState<Stage, P, O, R>;
   type M = AgentMachineMsg<P, O, R>;

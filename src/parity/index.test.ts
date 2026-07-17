@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Cmd, defineMachine, run } from "../index";
-import { diff, goldenReplay, normalizeForParity, recordRun } from "./index";
+import {
+  diff,
+  goldenReplay,
+  normalizeForParity,
+  parityEqual,
+  recordRun,
+} from "./index";
 
 // ---------------------------------------------------------------------------
 // An audit-shaped machine: an effect (outside TEA) mints each finding's id +
@@ -155,7 +161,7 @@ describe("the gate has teeth", () => {
     );
 
     // The seeded drift is CAUGHT.
-    expect(diff(golden, divergent)).toBe(false);
+    expect(parityEqual(golden, divergent)).toBe(false);
 
     // A behaviourally-equivalent run — same rule/selector/severity, but fresh
     // ids/timestamps and a SHUFFLED dispatch order — normalizes equal.
@@ -167,7 +173,11 @@ describe("the gate has teeth", () => {
     const trace2 = await recordAudit(auditMachine(), shuffled, "g1");
     const golden2 = normalize(goldenReplay(auditMachine(), trace2, {}));
 
-    expect(diff(golden, golden2)).toBe(true);
+    expect(parityEqual(golden, golden2)).toBe(true);
+  });
+
+  it("keeps `diff` as a deprecated alias of parityEqual for one minor", () => {
+    expect(diff).toBe(parityEqual);
   });
 });
 
