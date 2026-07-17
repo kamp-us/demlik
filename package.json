@@ -133,6 +133,10 @@
       "types": "./dist/await-terminal/index.d.ts",
       "import": "./dist/await-terminal/index.js"
     },
+    "./retry-to-success": {
+      "types": "./dist/retry-to-success/index.d.ts",
+      "import": "./dist/retry-to-success/index.js"
+    },
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
       "import": "./dist/machine-viz/index.js"

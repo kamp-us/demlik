@@ -32,6 +32,7 @@ export default defineConfig({
     "cache/index": "src/cache/index.ts",
     "deadline/index": "src/deadline/index.ts",
     "await-terminal/index": "src/await-terminal/index.ts",
+    "retry-to-success/index": "src/retry-to-success/index.ts",
     "machine-viz/index": "src/machine-viz/index.ts",
     "debounce/index": "src/debounce/index.ts",
     "throttle/index": "src/throttle/index.ts",
