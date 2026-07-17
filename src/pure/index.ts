@@ -50,4 +50,11 @@ export type {
   UpdateForm,
 } from "./core";
 // The client-prediction fold seam + the pure type vocabulary (ADR 0006).
-export { Cmd, detectUpdateForm, foldMsgs, formOf, subId } from "./core";
+export {
+  Cmd,
+  detectUpdateForm,
+  foldMsgs,
+  formOf,
+  NoCellError,
+  subId,
+} from "./core";

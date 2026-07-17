@@ -172,6 +172,39 @@ export function formOf(machine: {
   return machine.__form ?? detectUpdateForm(machine.update);
 }
 
+// === NoCellError: the named cell-lookup failure (#276) ===
+//
+// An unknown `msg.type` (wire data reaching dispatch) or a type-bypassed
+// missing cell used to surface as a bare `TypeError: ... is not a function`
+// deep inside dispatch — no msg.type, no state name, nothing actionable. The
+// guard lives in `applyCell` because it is the single dispatch primitive
+// every stepping site goes through (#275), so one guard covers `run`,
+// replay/foldMsgs, the PBT fold runner, and the withX wrappers.
+export class NoCellError extends Error {
+  override readonly name = "NoCellError";
+  constructor(
+    public readonly msgType: string,
+    public readonly stateName: string,
+  ) {
+    super(
+      `@demlik/tea: no update cell for msg.type "${msgType}" in state ` +
+        `"${stateName}" — the machine's update does not handle this Msg ` +
+        `(an unknown wire msg.type, or a missing cell reached by bypassing ` +
+        `the mapped types).`,
+    );
+  }
+}
+
+// Reducer-form State carries no mandatory discriminant; best-effort read of a
+// string `state.type` for the error, else a placeholder.
+function stateNameOf(state: unknown): string {
+  if (typeof state === "object" && state !== null && "type" in state) {
+    const t = (state as { type: unknown }).type;
+    if (typeof t === "string") return t;
+  }
+  return "(untagged state)";
+}
+
 // === applyCell: THE single reducer-vs-transitions dispatch primitive ===
 //
 // Applies the one update cell selected by `(formOf(machine), state, msg)` and
@@ -180,7 +213,8 @@ export function formOf(machine: {
 // and the withX wrappers — dispatches through THIS function, so production and
 // the verification tools agree on the update form by construction (#275).
 // Pure and dev-check-free: `deepFreeze`/`assertPureResult` stay at the call
-// sites that want them.
+// sites that want them. A missing cell throws `NoCellError` (#276), never a
+// bare TypeError.
 export function applyCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
@@ -188,19 +222,28 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
 ): readonly [S, readonly C[]] {
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   if (formOf(machine) === "reducer") {
-    const record = machine.update as Record<string, CellFn>;
-    // biome-ignore lint/style/noNonNullAssertion: the Reducer mapped type guarantees a cell for every dispatched Msg.type; `!` required under noUncheckedIndexedAccess and cannot miss for a Msg the machine accepts
-    return record[msg.type]!(state, msg);
+    const record = machine.update as Record<string, CellFn | undefined>;
+    const cell = record[msg.type];
+    if (typeof cell !== "function") {
+      throw new NoCellError(msg.type, stateNameOf(state));
+    }
+    return cell(state, msg);
   }
-  const table = machine.update as Record<string, Record<string, CellFn>>;
+  const table = machine.update as Record<
+    string,
+    Record<string, CellFn | undefined> | undefined
+  >;
   // The ONE sanctioned `state as unknown as { type }` read: the Transitions
   // overload constrains S to `{ type: string }` at the `defineMachine`
   // boundary, but that constraint is erased on the runtime-facing `object`
   // here — every former per-site copy of this double-cast collapsed into
   // this line (#275).
   const stateKey = (state as unknown as { type: string }).type;
-  // biome-ignore lint/style/noNonNullAssertion: the Transitions overload guarantees every (state.type × msg.type) cell exists; `!` required under noUncheckedIndexedAccess and cannot miss at runtime
-  return table[stateKey]![msg.type]!(state, msg);
+  const cell = table[stateKey]?.[msg.type];
+  if (typeof cell !== "function") {
+    throw new NoCellError(msg.type, String(stateKey));
+  }
+  return cell(state, msg);
 }
 
 // === msgKeysOf: recover the Msg.type set from either update form ===
@@ -595,7 +638,21 @@ export type Machine<
   readonly __form?: UpdateForm;
 } & ([C] extends [Cmd<never>]
   ? { interpret?: Interpret<M, C, Ctx> }
-  : { interpret: Interpret<M, C, Ctx> });
+  : { interpret: Interpret<M, C, Ctx> }) &
+  // `subscribe`/`subscriptions` are conditionally REQUIRED the same way
+  // `interpret` is (#276): a machine declaring a real Sub union without a
+  // subscribe map compiled and silently wired no subs (`reconcileSubs` skips
+  // undefined handlers) — the exact silent-failure class the `interpret`
+  // conditional prevents. The optional declarations above stay as U's
+  // inference sites (a conditional type is not an inference site); this
+  // intersection only adds requiredness when U is a real union. Same
+  // tuple-wrap trick as `interpret` to disable distribution.
+  ([U] extends [Sub<never>]
+    ? unknown
+    : {
+        subscriptions: (state: S) => readonly U[];
+        subscribe: Subscribe<M, U, Ctx>;
+      });
 
 // === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
 //

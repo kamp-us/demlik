@@ -55,6 +55,7 @@ export {
   foldMsgs,
   formOf,
   msgKeysOf,
+  NoCellError,
   subId,
 } from "./pure/core";
 
