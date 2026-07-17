@@ -522,7 +522,14 @@ export interface PortEmitter {
 // reserved for genuine wire-edge erasure, not for "didn't bother").
 export type NoCtx = Readonly<Record<never, never>>;
 
-/** Spelled-out alias for `NoCtx`, for sites that prefer the long name. */
+/**
+ * Spelled-out alias for `NoCtx`.
+ *
+ * @deprecated Use {@link NoCtx}. One Way to Do Each Thing — `NoCtx` is the
+ * single non-deprecated name for the context-free-ctx marker (this alias has
+ * no in-tree uses). Kept as a re-export for one minor per the deprecate-don't-
+ * delete policy in `MAINTAINING.md`, then removed.
+ */
 export type ContextFree = NoCtx;
 
 // === Interpret<M, C, Ctx>: record-of-handlers form of `interpret` ===

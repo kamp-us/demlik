@@ -90,6 +90,27 @@ export is not done until it has a row here.
 | `./llm-call` | experimental | agent layer |
 | `./prediction` | experimental | client prediction |
 
+## Store factory per host
+
+Each host adapter ships one factory that builds a `Store<S>` over that host's
+persistence primitive. The names carry a **deliberate split**: three are
+*mechanism*-named (they name the backing store) and one is *host*-named (it
+names the DO host). Renaming any of them is a breaking change to a `stable`
+subpath, so the split is documented here rather than flattened.
+
+| Host adapter (subpath) | Store factory | Backing primitive | Signature | Naming |
+|---|---|---|---|---|
+| `./node` | `fileStore` | JSON file on disk | `fileStore<S>(path, parse)` | mechanism |
+| `./mem` | `memoryStore` | in-process cell | `memoryStore<S>(initial?, parse?)` | mechanism |
+| `./extension` | `chromeStorageStore` | `chrome.storage` area | `chromeStorageStore<S>(key, area?)` | mechanism |
+| `./do` | `doStore` | `DurableObjectStorage` | `doStore<S>(storage, parse, key?)` | host |
+
+`./react` is a host adapter but binds the runtime to a view; it owns no `Store`
+factory and so has no row. If a future factory is added, prefer the
+mechanism-named form for consistency with the majority — but do **not** rename
+the existing four to converge; that break is not worth the churn (this table is
+the cheaper fix).
+
 ## Semver policy
 
 The package is at 0.x. Semver's 0.x escape hatch is not the policy — the tier stamp is:

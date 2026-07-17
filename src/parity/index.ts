@@ -209,9 +209,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * The parity verdict: `true` iff `a` and `b` are structurally equal. Reuses
- * `trace-replay`'s order-insensitive deep-equal (the single comparator this
- * package owns) rather than adding a second one — feed it the pair produced by
- * {@link normalizeForParity} for the normalized-JSON equality the gate rests on.
+ * `trace-replay`'s order-insensitive deep-equal (the comparator the
+ * record/replay lane owns) rather than adding another boolean deep-compare —
+ * feed it the pair produced by {@link normalizeForParity} for the
+ * normalized-JSON equality the gate rests on.
  */
 export function parityEqual(a: unknown, b: unknown): boolean {
   return deepEqual(a, b);
