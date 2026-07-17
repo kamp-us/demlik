@@ -182,6 +182,7 @@ export function formOf(machine: {
 // replay/foldMsgs, the PBT fold runner, and the withX wrappers.
 export class NoCellError extends Error {
   override readonly name = "NoCellError";
+  readonly _tag = "NoCellError" as const;
   constructor(
     public readonly msgType: string,
     public readonly stateName: string,

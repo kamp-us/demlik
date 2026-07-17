@@ -65,6 +65,7 @@ const definedPortNames = new Set<string>();
  */
 export class PortNameCollisionError extends Error {
   override readonly name = "PortNameCollisionError";
+  readonly _tag = "PortNameCollisionError" as const;
   constructor(portName: string) {
     super(
       `definePort: a port named "${portName}" was already defined. ` +
@@ -183,6 +184,7 @@ export type Supervision<S, M extends { type: string }> =
  */
 export class QuiescenceTimeoutError extends Error {
   override readonly name = "QuiescenceTimeoutError";
+  readonly _tag = "QuiescenceTimeoutError" as const;
   constructor(public readonly iterations: number) {
     super(
       `@demlik/tea: idle() did not reach quiescence after ${iterations} ` +
