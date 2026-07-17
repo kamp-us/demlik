@@ -408,8 +408,8 @@ export interface Store<S> {
 // enqueues a FRESH transition on the tail, and that follow-up is fire-and-
 // forget relative to the original `dispatch`. Callers that forgot to also
 // `await idle()` saw their dispatch resolve "early", before the consequences
-// of the Msg had run — which is why the codebase grew `dispatchToIdle` and
-// tests fell back to `for (i<200) sleep(5)` polls.
+// of the Msg had run — which is why the codebase grew a dispatch+`idle()`
+// wrapper and tests fell back to `for (i<200) sleep(5)` polls.
 //
 // So the default is the SAFE one: `"quiescent"` — `dispatch` resolves only
 // once the entire transitive follow-up chain has drained (the same drain

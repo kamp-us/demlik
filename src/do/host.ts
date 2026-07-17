@@ -825,35 +825,6 @@ export function sseFromAgentEvents<R, Frame>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// dispatchToIdle — run-to-quiescence (core lift).
-//
-// `runtime.dispatch(msg)` resolves when that ONE transition's effects settle,
-// but an interpret handler that returns a follow-up Msg enqueues it as a fresh
-// transition on the tail — `dispatch` does NOT await that follow-up. This is the
-// "dispatch + `runtime.idle()`" pair as one call, so hosts/tests stop pairing
-// the two by hand after every kick. Built on the core `runtime.idle()` (added to
-// the `Runtime` interface) — no tail-poll hack.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Dispatch `msg` and resolve only once the runtime has drained every follow-up
- * Msg the transition (transitively) enqueued — run-to-quiescence. Sugar over
- * `await runtime.dispatch(msg); await runtime.idle();`.
- *
- * Replaces the consumer's / test's `until(() => cond)` poll after a `dispatch`
- * for the common "dispatch, then let the loop settle" case. (A poll is still
- * the right tool when waiting on an EXTERNAL event — e.g. a WS reply — that the
- * runtime cannot enqueue itself.)
- */
-export async function dispatchToIdle<M extends { type: string }>(
-  runtime: Runtime<unknown, M>,
-  msg: M,
-): Promise<void> {
-  await runtime.dispatch(msg);
-  await runtime.idle();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // createAgentHost — the runtime+events+autoBoot assembly + the test seam, ONCE
 // (issue #53).
 //

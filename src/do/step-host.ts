@@ -227,7 +227,8 @@ export interface StepEngine<R, I, O> {
   /**
    * Settle the posted tool result into the run, then RESUME from the durable
    * checkpoint: dispatch the settle and run to DISPATCH-QUIESCENCE (e.g.
-   * `dispatchToIdle(runtime, settleMsg)`). Called at most once per distinct
+   * `await runtime.dispatch(settleMsg)` — dispatch drains the follow-up chain
+   * by default, #50). Called at most once per distinct
    * `callId` — `stepHost` dedupes re-POSTs via `idempotent-intake` BEFORE
    * calling this, so the side effect runs exactly once. On the first request
    * (`posted === null`) `stepHost` skips settle and calls {@link nextStep}

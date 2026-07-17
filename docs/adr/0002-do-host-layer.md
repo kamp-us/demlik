@@ -4,8 +4,8 @@
 - **Date:** 2026-06-22
 - **Scope:** the `@demlik/tea/do` subpath — `host.ts` (`deferredGateway`,
   `autoBoot`/`agentIsResumable`, `acceptCommandSocket`/`broadcast`, `sseHub`,
-  `captureLastTurn`) plus the core lifts it required (`runtime.idle()` /
-  `dispatchToIdle`, exported `agentTurnSchema`/`isAgentTurn`, optional
+  `captureLastTurn`) plus the core lifts it required (`runtime.idle()`,
+  exported `agentTurnSchema`/`isAgentTurn`, optional
   `snapshot_write`).
 
 ## Context

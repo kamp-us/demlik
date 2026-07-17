@@ -160,7 +160,7 @@ describe("follow-up dispatch failures route to the onError sink", () => {
 //
 // Before #50, `await dispatch(msg)` settled ONE transition; a follow-up Msg an
 // interpret handler returned was fire-and-forget, so callers had to ALSO
-// `await idle()` (or `dispatchToIdle`, or a `for(i<200) sleep(5)` poll) to see
+// `await idle()` (or a dispatch+idle wrapper, or a `for(i<200) sleep(5)` poll) to see
 // the consequences. The fix: `dispatch` drains the transitive follow-up chain
 // by default; `dispatchOnce` / `dispatch(msg, { settle: "once" })` is the
 // single-step escape.

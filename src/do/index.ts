@@ -83,7 +83,7 @@ export {
 } from "./event-sourced-store";
 // The minimum-viable DO HOST for a `createAgent` runtime — the deferred-tool
 // gateway, auto-boot, WS accept + inbound bridge, runtime→SSE plumbing, the
-// terminal-output capture, and `dispatchToIdle`. Kept in a sibling file so this
+// terminal-output capture. Kept in a sibling file so this
 // module stays the durability + subs surface; the host re-exports through the
 // same `@demlik/tea/do` subpath the consumer already imports `doStore` from.
 export {
@@ -100,7 +100,6 @@ export {
   type DeferredGateway,
   type DurableCommandCarrier,
   deferredGateway,
-  dispatchToIdle,
   durableCommandCarrier,
   durableDeferredGateway,
   type HibernatableCtx,
