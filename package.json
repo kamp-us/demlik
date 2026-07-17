@@ -276,7 +276,8 @@
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
-    "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup"
+    "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
+    "verify-exports": "node scripts/verify-exports.mjs"
   },
   "dependencies": {
     "better-result": "^2.5.2"
