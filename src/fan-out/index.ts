@@ -14,19 +14,19 @@
  *     partitions over that one lifecycle, so the work-queue's status taxonomy
  *     is the substrate rather than a parallel invention. We reuse its
  *     `QueueItem<I>` / `QueueItemStatus` TYPES and delegate the ledger
- *     transitions to its BLESSED pure ops (`@demlik/tea/work-queue/ops`):
- *     `scatter` mints each pending record with `enqueueOp`, and `launchUpTo`
- *     flips `pending → running` with `claimNextOp` (one positional claim per
+ *     transitions to the `QueueAdapter` verbs (`../work-queue/adapter`):
+ *     `scatter` mints each pending record with `queue.enqueue`, and `launchUpTo`
+ *     flips `pending → running` with `queue.claim` (one positional claim per
  *     launch). The lone exception is `settleOne`'s `running → done|failed`
  *     flip — it must match "first id-match that is still `running`" to settle
- *     exactly one of a DUPLICATE id, a status predicate the ops surface can't
+ *     exactly one of a DUPLICATE id, a status predicate the adapter verbs can't
  *     express, so fan-out owns that one index (see `settleOne`). The async
  *     `createQueue(store)` adapter is NOT used here because its `load → mutate
  *     → save` reads the clock and lives at an I/O boundary, while a combinator's
- *     verbs must be pure (invariant 2) — fan-out reaches the underlying ops
- *     directly instead, the same route `monitored-run` / `idempotent-intake`
- *     take. The slice lives in the Model instead — durable + replayable, the
- *     two non-negotiables every knob preserves.
+ *     verbs must be pure (invariant 2) — fan-out binds the pure `QueueAdapter`
+ *     to its in-Model ledger instead, the same route `monitored-run` /
+ *     `idempotent-intake` / `saga` take. The slice lives in the Model instead —
+ *     durable + replayable, the two non-negotiables every knob preserves.
  *
  * Typical wiring (combinator form — splice the hooks into your machine):
  *
@@ -240,11 +240,11 @@ function inFlight<I, R>(state: FanOutState<I, R>): number {
  * Move up to `budget - inFlight` items from `pending` to `running`, emitting
  * `of(item)` for each launched item. PURE — returns the new slice and the
  * launch Cmds. The work-queue `items` ledger flips each launched item's status
- * `pending → running` via the BLESSED `claimNextOp`, in lockstep with the
+ * `pending → running` via the `QueueAdapter`'s `claim`, in lockstep with the
  * projected arrays.
  *
- * Delegation, not re-rolling: each launch is one `claimNextOp` call — the same
- * `pending → running` transition `@demlik/tea/work-queue` owns. `claimNextOp`
+ * Delegation, not re-rolling: each launch is one `queue.claim` call — the same
+ * `pending → running` transition `@demlik/tea/work-queue` owns. `queue.claim`
  * flips the FIRST pending ledger record positionally, and fan-out's `pending`
  * array is appended in lockstep with the ledger, so the first `slots` pending
  * inputs map to the first `slots` pending records — claiming one-per-launch
@@ -311,11 +311,11 @@ function launchUpTo<I, R, C extends Cmd>(
  * flips a single record. The OTHER duplicate stays `running`, awaiting its own
  * settle Msg.
  *
- * This flip is NOT delegated to `patchItemOp`: the blessed op matches the FIRST
- * record by id, but the record fan-out must flip is "first id-match that is
- * still `running`" — and after a dup-id's first settle the first id-match is
- * the already-terminal record. The status predicate is load-bearing here and
- * the ops surface can't express it, so fan-out owns this one index. The flipped
+ * This flip is NOT delegated to the `QueueAdapter`'s `patch`: the verb matches
+ * the FIRST record by id, but the record fan-out must flip is "first id-match
+ * that is still `running`" — and after a dup-id's first settle the first id-match
+ * is the already-terminal record. The status predicate is load-bearing here and
+ * the adapter verbs can't express it, so fan-out owns this one index. The flipped
  * record is still built the work-queue way (spread + new `status`), and there
  * is no `as` cast: `status` arrives already typed `QueueItemStatus`.
  */
@@ -394,8 +394,8 @@ export function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
    * effects, which `isComplete`'s empty-batch rule already declines to treat as
    * completion).
    *
-   * Each pending ledger record is minted by the blessed `enqueueOp` — the same
-   * `pending` append `@demlik/tea/work-queue` owns — rather than re-rolled
+   * Each pending ledger record is minted by the `QueueAdapter`'s `enqueue` — the
+   * same `pending` append `@demlik/tea/work-queue` owns — rather than re-rolled
    * inline, so the `status: "pending"` literal lives in exactly one place (no
    * `as QueueItemStatus` cast here).
    *

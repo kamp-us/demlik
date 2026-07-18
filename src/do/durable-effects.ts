@@ -45,8 +45,8 @@
  *   - Re-firing every historical effect during replay. Only `survivingEffects`
  *     (post-fold) re-emits.
  *   - Assuming the receiver gets each effect exactly once. At-least-once: dedup
- *     by `id` at the receiver (`hasOwed` / `isConfirmed` here are the sender's
- *     view; the receiver owns its own dedup).
+ *     by `id` at the receiver (`isOwed` here is the sender's view; the receiver
+ *     owns its own dedup).
  */
 
 import type { Cmd } from "../index";

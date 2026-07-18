@@ -362,7 +362,7 @@ export const WORKFLOW_STATUSES: ReadonlySet<string> = new Set(
 // step `index`, and the result you dispatch back must carry delivery id `id`".
 // The consumer's interpret cell performs `activity` and dispatches an
 // `ActivityOk`/`ActivityErr` Msg carrying the SAME id. The owed/confirmed
-// ledger events ride alongside (see {@link WorkflowStep0}/the step tuple).
+// ledger events ride alongside (see {@link WorkflowReducerStep}/the step tuple).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -400,7 +400,7 @@ export interface CompensationCmd<A> extends Cmd<"workflow_compensation"> {
 /** The Cmd union this module emits: forward activity dispatches AND (#125)
  *  reverse compensation dispatches. The owed/confirmed ledger events are not
  *  `WorkflowCmd`s — they are Msg variants persisted into the event log (see
- *  {@link EffectLedgerEvent}); the {@link WorkflowStep0} tuple carries them out
+ *  {@link EffectLedgerEvent}); the {@link WorkflowReducerStep} tuple carries them out
  *  alongside the dispatch Cmd so the host persists owed-before-dispatch. Both
  *  Cmd kinds are owed effects on the same ledger, so `survivingActivities`
  *  re-emits either kind on cold wake. */
@@ -497,7 +497,7 @@ export const WORKFLOW_MSG_TYPES: ReadonlySet<string> = new Set(
 
 /** A workflow reducer step: the next state, the ledger events to persist
  *  (owed-before-dispatch), and the activity Cmds to dispatch. */
-export interface WorkflowStep0<A, R, F> {
+export interface WorkflowReducerStep<A, R, F> {
   readonly state: WorkflowState<A, R, F>;
   /** Ledger events to persist into the event log, in order, BEFORE `cmds`. */
   readonly ledger: readonly EffectLedgerEvent<WorkflowCmd<A>>[];
@@ -527,7 +527,7 @@ export interface Workflow<A, R, F> {
    *   never reaches `completed` without a final result to carry.
    * - Otherwise → `running` with `current` = step 0, owed on the ledger.
    */
-  init(steps: readonly WorkflowStep<A>[]): WorkflowStep0<A, R, F>;
+  init(steps: readonly WorkflowStep<A>[]): WorkflowReducerStep<A, R, F>;
 
   /**
    * Fold an activity success. If `msg.id` does not match the in-flight
@@ -544,7 +544,7 @@ export interface Workflow<A, R, F> {
   onActivityOk(
     state: WorkflowState<A, R, F>,
     msg: ActivityOk<R>,
-  ): WorkflowStep0<A, R, F>;
+  ): WorkflowReducerStep<A, R, F>;
 
   /**
    * Fold an activity failure (#125). Same id-match idempotency guard as
@@ -559,7 +559,7 @@ export interface Workflow<A, R, F> {
   onActivityErr(
     state: WorkflowState<A, R, F>,
     msg: ActivityErr<F>,
-  ): WorkflowStep0<A, R, F>;
+  ): WorkflowReducerStep<A, R, F>;
 
   /**
    * Fold a compensation success (#125). Same id-match idempotency guard against
@@ -572,7 +572,7 @@ export interface Workflow<A, R, F> {
   onCompensationOk(
     state: WorkflowState<A, R, F>,
     msg: CompensationOk,
-  ): WorkflowStep0<A, R, F>;
+  ): WorkflowReducerStep<A, R, F>;
 
   /**
    * Fold a compensation failure (#125). Same id-match idempotency guard. On a
@@ -584,7 +584,7 @@ export interface Workflow<A, R, F> {
   onCompensationErr(
     state: WorkflowState<A, R, F>,
     msg: CompensationErr<F>,
-  ): WorkflowStep0<A, R, F>;
+  ): WorkflowReducerStep<A, R, F>;
 
   /**
    * The owed-but-unconfirmed dispatch(es) to re-emit on activation — a forward
@@ -784,7 +784,7 @@ export function createWorkflow<A, R, F>(restore?: {
       readonly cmd: CompensationCmd<A>;
     },
     confirmed: EffectConfirmed,
-  ): WorkflowStep0<A, R, F> {
+  ): WorkflowReducerStep<A, R, F> {
     const compensating: CompensatingWorkflow<A, R, F> = {
       ...base,
       current: next.current,

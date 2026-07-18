@@ -3,8 +3,9 @@
  * `@demlik/tea/workflow/do` — a durable workflow as a virtual actor on a
  * Durable Object (#126, child of the durable-workflow epic #118).
  *
- * The pure reducer lives in `./index` (`createWorkflow` — #124's forward-only
- * core). This file is the HOST/persistence wiring only: it reuses the `../do`
+ * The pure reducer lives in `./index` (`createWorkflow` — the forward activity
+ * core plus live reverse compensation). This file is the HOST/persistence wiring
+ * only: it reuses the `../do`
  * event-sourced store, threads persist-before-deliver, rebuilds the workflow by
  * replaying the persisted log on cold wake, and re-emits the owed-but-
  * unconfirmed activity on activation. The reducer stays pure — the store and
@@ -91,8 +92,8 @@ import { routeWorkflowMsg } from "./route";
  * The outbound effect performer. The grain hands each owed {@link WorkflowCmd}
  * to `perform`; the consumer performs it (an HTTP call, a sibling-grain message,
  * a tool round-trip) and returns the result `Msg`. The owed cmd is either a
- * forward activity (→ {@link ActivityOk}/{@link ActivityErr}) or — once #125's
- * compensation is wired — a reverse compensation (→ `CompensationOk`/`Err`); both
+ * forward activity (→ {@link ActivityOk}/{@link ActivityErr}) or a reverse
+ * compensation (→ `CompensationOk`/`Err`); both
  * carry the SAME delivery id the Cmd named. Retries are the performer's business
  * (the engine does not retry); it surfaces a terminal outcome. PURE-data in,
  * result out — the reducer never names this; only the grain's `deliver` step

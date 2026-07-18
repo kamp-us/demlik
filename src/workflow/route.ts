@@ -15,15 +15,15 @@
 import type {
   Workflow,
   WorkflowMsg,
+  WorkflowReducerStep,
   WorkflowState,
-  WorkflowStep0,
 } from "./index";
 
 export function routeWorkflowMsg<A, R, F>(
   wf: Workflow<A, R, F>,
   state: WorkflowState<A, R, F>,
   msg: WorkflowMsg<R, F>,
-): WorkflowStep0<A, R, F> {
+): WorkflowReducerStep<A, R, F> {
   switch (msg.type) {
     case "activity_ok":
       return wf.onActivityOk(state, msg);

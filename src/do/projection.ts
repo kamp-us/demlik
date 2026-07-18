@@ -195,9 +195,11 @@ export interface ProjectionRunner<Model, Msg extends { type: string }, View> {
  * `startOffset` (the driver's offset guard enforces exclusivity even if an
  * already-applied update is re-presented).
  *
- * `emitOnStart`/`emitOnReset` default false: a fresh runner holds `initial` but
- * does not push it at the sink until the first real update lands (an SSE client
- * that just connected wants the next event, not a replay of the seed).
+ * The runner never emits the seed: a fresh runner holds `initial` but does not
+ * push it at the sink until the first real update lands (an SSE client that just
+ * connected wants the next event, not a replay of the seed), and `reset()`
+ * likewise re-seeds `view`/`offset` silently — `emit` fires only from `present`
+ * when a strictly-newer update is folded.
  */
 export function runProjection<Model, Msg extends { type: string }, View>(
   projection: Projection<Model, Msg, View>,

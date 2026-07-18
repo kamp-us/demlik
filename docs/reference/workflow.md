@@ -38,7 +38,7 @@ import { … } from "@demlik/tea/workflow";
 | `WorkflowCmd` | Type | The Cmd union this module emits: forward activity dispatches AND (#125) reverse compensation dispatches. |
 | `WorkflowMsg` | Type | The Msg union the reducer folds: forward activity results AND (#125) reverse compensation results. |
 | `WorkflowMsgType` | Type | Every `type` discriminant tag of the WorkflowMsg union. |
+| `WorkflowReducerStep` | Interface | A workflow reducer step: the next state, the ledger events to persist (owed-before-dispatch), and the activity Cmds to dispatch. |
 | `WorkflowState` | Type | The workflow's state — a discriminated union on `status`. |
 | `WorkflowStatus` | Type | Every `status` discriminant of the WorkflowState union. |
 | `WorkflowStep` | Interface | One step of a workflow: a named activity descriptor. |
-| `WorkflowStep0` | Interface | A workflow reducer step: the next state, the ledger events to persist (owed-before-dispatch), and the activity Cmds to dispatch. |
