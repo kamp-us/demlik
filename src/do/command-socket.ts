@@ -6,6 +6,8 @@
  * transport-model rationale (ONE Sub type, gateway-bridged I/O).
  */
 
+import { broadcastFrame } from "./presence";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // acceptCommandSocket — WS host + inbound bridge (seam C).
 //
@@ -41,16 +43,14 @@ export function acceptCommandSocket(
  * Broadcast a JSON frame to every connected command-runner socket. A dead
  * socket is skipped (dropped on its own `close` event). Lifts the consumer's
  * fan-out loop in `sendCommand`.
+ *
+ * Thin delegation to {@link broadcastFrame} — the general fan-out (serialize
+ * once, send to every OPEN socket, skip a closed/errored one). The
+ * {@link BroadcastReport} it returns is discarded here to keep the `void`
+ * command-socket signature.
  */
 export function broadcast(clients: Set<WebSocket>, frame: unknown): void {
-  const json = JSON.stringify(frame);
-  for (const ws of clients) {
-    try {
-      ws.send(json);
-    } catch {
-      /* dead socket — dropped on its close event */
-    }
-  }
+  broadcastFrame(clients, frame);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,17 +125,15 @@ export function acceptDurableCommandSocket(ctx: HibernatableCtx): Response {
  * set is read from `ctx.getWebSockets()` (the runtime repopulates it after a
  * wake), NOT a resident `Set<WebSocket>` — so it is correct immediately after an
  * eviction, before any other lifecycle method has run. A dead socket is skipped.
+ *
+ * Thin delegation to {@link broadcastFrame} over `ctx.getWebSockets()` — the
+ * general fan-out (serialize once, send to every OPEN socket, skip a
+ * closed/errored one). The {@link BroadcastReport} it returns is discarded here
+ * to keep the `void` command-socket signature.
  */
 export function broadcastHibernatable(
   ctx: HibernatableCtx,
   frame: unknown,
 ): void {
-  const json = JSON.stringify(frame);
-  for (const ws of ctx.getWebSockets()) {
-    try {
-      ws.send(json);
-    } catch {
-      /* dead socket — dropped by the runtime on its close */
-    }
-  }
+  broadcastFrame(ctx.getWebSockets(), frame);
 }
