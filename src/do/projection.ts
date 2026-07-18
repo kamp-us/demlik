@@ -74,6 +74,35 @@ export function projectionIdString(id: ProjectionId): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ProjectionErrorContext / ProjectionOnError — the isolation sink.
+//
+// A projection's `apply`/`emit` may throw. The driver isolates that throw so it
+// never strands sibling projections — but isolation is NOT swallowing
+// (errors-are-data). The caught throw routes to an injected `onError` sink,
+// tagged with the id of the projection that failed, so a broken projection
+// surfaces instead of vanishing. The runtime layer's `OnError`/`RuntimeError
+// Context` twin, kept here so `do/projection` stays a types-only boundary that
+// imports nothing from the substrate.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Context handed to a {@link ProjectionOnError} sink alongside the throw. */
+export interface ProjectionErrorContext {
+  /** The id of the projection whose `apply`/`emit` threw. */
+  readonly id: ProjectionId;
+}
+
+/**
+ * Sink for a projection `apply`/`emit` throw the driver isolated. Injected into
+ * {@link projectionRegistry}; called with the original error and the id of the
+ * failing projection so a broken projection surfaces instead of being silently
+ * discarded (errors-are-data). Should be total.
+ */
+export type ProjectionOnError = (
+  error: unknown,
+  context: ProjectionErrorContext,
+) => void;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Update — the envelope a projection folds.
 //
 // What flows past `runtime.observe(observer)` is `(msg, state)` — the applied
@@ -264,7 +293,8 @@ export interface ProjectionRegistry<Model, Msg extends { type: string }> {
    * Present one update to EVERY registered runner. Each folds independently; an
    * `apply`/`emit` throw in one runner is caught so it cannot strand the others
    * (errors-are-data: a broken projection is dropped from THIS update, not
-   * allowed to corrupt siblings). Returns the offset assigned to this update.
+   * allowed to corrupt siblings) and routed to the registry's `onError` sink so
+   * it surfaces rather than vanishing. Returns the offset assigned to this update.
    */
   dispatch(msg: Msg | null, model: Model): number;
   /** The current monotonic offset (the last dispatched update's position). */
@@ -273,11 +303,15 @@ export interface ProjectionRegistry<Model, Msg extends { type: string }> {
   runners(): readonly ProjectionRunner<Model, Msg, unknown>[];
 }
 
-/** Build an empty {@link ProjectionRegistry}. */
-export function projectionRegistry<
-  Model,
-  Msg extends { type: string },
->(): ProjectionRegistry<Model, Msg> {
+/**
+ * Build an empty {@link ProjectionRegistry}. Pass an `onError` sink to receive
+ * any `apply`/`emit` throw the driver isolates — without it a broken projection
+ * is still isolated from its siblings, but its failure is not surfaced (the
+ * substrate's `run(machine, { onError })` is the natural source to forward).
+ */
+export function projectionRegistry<Model, Msg extends { type: string }>(
+  onError?: ProjectionOnError,
+): ProjectionRegistry<Model, Msg> {
   const runners = new Set<ProjectionRunner<Model, Msg, unknown>>();
   // The boot observe is offset 0; the first applied Msg is offset 1. We start at
   // -1 and pre-increment so `dispatch(null, initialState)` (the boot fanout)
@@ -296,11 +330,14 @@ export function projectionRegistry<
       for (const runner of runners) {
         try {
           runner.present(update);
-        } catch {
+        } catch (err) {
           // A projection's apply/emit threw. Isolate it — the sibling runners
           // still see this update. The broken runner keeps its prior view +
           // offset (it did not advance), so it self-heals on a later update or
-          // a rebuild. (errors-are-data: surface via the sink, never strand.)
+          // a rebuild. Isolation is NOT swallowing: route the throw to the
+          // injected `onError` sink, tagged with the failing projection's id, so
+          // it surfaces (errors-are-data: surface via the sink, never strand).
+          onError?.(err, { id: runner.id });
         }
       }
       return offset;

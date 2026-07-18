@@ -17,7 +17,7 @@ import type {
   Store,
   Supervision,
 } from "./runtime-types";
-import { QuiescenceTimeoutError } from "./runtime-types";
+import { QuiescenceTimeoutError, SubIdCollisionError } from "./runtime-types";
 
 // Default `onError` sink: re-throw on a fresh macrotask so the failure reaches
 // the host's global error handler instead of vanishing — surface, not swallow
@@ -207,9 +207,7 @@ export function run<
     for (const sub of desired) {
       const existing = desiredTypeById.get(sub.id);
       if (existing !== undefined && existing !== sub.type) {
-        throw new Error(
-          `@demlik/tea: Sub.id collision: id="${sub.id}" declared as type="${existing}" and type="${sub.type}"`,
-        );
+        throw new SubIdCollisionError(sub.id, existing, sub.type);
       }
       desiredTypeById.set(sub.id, sub.type);
     }

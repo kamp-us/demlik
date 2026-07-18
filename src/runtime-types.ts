@@ -59,7 +59,7 @@ const definedPortNames = new Set<string>();
 
 /**
  * Thrown by `definePort` when a name has already been registered in the current
- * process. Symmetric with the `Sub.id` collision assert in `reconcileSubs` —
+ * process. Symmetric with `SubIdCollisionError` (thrown by `reconcileSubs`) —
  * both mechanize invariant 7 (identity is explicit) at the runtime layer the
  * type system cannot reach (string names compared at runtime).
  */
@@ -71,6 +71,25 @@ export class PortNameCollisionError extends Error {
       `definePort: a port named "${portName}" was already defined. ` +
         `Each definePort call must use a unique name. ` +
         `If two modules need the same port, export it from one module and import it.`,
+    );
+  }
+}
+
+/**
+ * Thrown by `reconcileSubs` when, within ONE desired subscription set, two subs
+ * share an `id` but declare different `type`s — a silent bug class the type
+ * system cannot reach (ids are strings compared at runtime). The symmetric twin
+ * of `PortNameCollisionError`: both mechanize invariant 7 (identity is explicit)
+ * at the runtime layer. Same id across transitions is the no-churn case and does
+ * NOT throw; only a within-set type conflict does.
+ */
+export class SubIdCollisionError extends Error {
+  override readonly name = "SubIdCollisionError";
+  readonly _tag = "SubIdCollisionError" as const;
+  constructor(id: string, declaredType: string, conflictingType: string) {
+    super(
+      `@demlik/tea: Sub.id collision: id="${id}" declared as ` +
+        `type="${declaredType}" and type="${conflictingType}"`,
     );
   }
 }

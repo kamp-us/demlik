@@ -27,6 +27,7 @@ import { sseHub, sseProjection } from "./host";
 import {
   driveProjections,
   type Projection,
+  type ProjectionId,
   projectionRegistry,
   rebuildProjection,
   runProjection,
@@ -410,6 +411,35 @@ describe("Projection — one model, many projections", () => {
 
     // `good` standalone runner is untouched by the registry's runners.
     expect(good.view()).toEqual({ total: 0, notes: 0 });
+  });
+
+  it("an isolated apply/emit throw surfaces via the injected onError sink", () => {
+    const surfaced: { error: unknown; id: ProjectionId }[] = [];
+    const poison: Projection<State, Msg, number> = {
+      id: { name: "poison", key: "main" },
+      initial: 0,
+      apply(view, u) {
+        if (u.msg?.type === "dec") throw new Error("boom");
+        return view + 1;
+      },
+      emit: () => {},
+    };
+
+    const registry = projectionRegistry<State, Msg>((error, ctx) => {
+      surfaced.push({ error, id: ctx.id });
+    });
+    registry.register(poison);
+
+    registry.dispatch(null, INITIAL); // offset 0 — boot (skipped)
+    registry.dispatch({ type: "inc", by: 1 }, INITIAL); // offset 1 — folds cleanly
+    registry.dispatch({ type: "dec", by: 1 }, INITIAL); // offset 2 — throws
+
+    // The throw did not strand the loop, but it did NOT vanish: exactly one
+    // error surfaced, tagged with the failing projection's id (errors-are-data).
+    expect(surfaced).toHaveLength(1);
+    expect(surfaced[0]?.error).toBeInstanceOf(Error);
+    expect((surfaced[0]?.error as Error).message).toBe("boom");
+    expect(surfaced[0]?.id).toEqual({ name: "poison", key: "main" });
   });
 
   it("resetting one projection does not corrupt the other", () => {

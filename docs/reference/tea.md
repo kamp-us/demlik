@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (46)
+## Exports (47)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -49,6 +49,7 @@ import { … } from "@demlik/tea";
 | `Sub` | Type |  |
 | `subId` | Function |  |
 | `SubId` | Type |  |
+| `SubIdCollisionError` | Class | Thrown by `reconcileSubs` when, within ONE desired subscription set, two subs share an `id` but declare different `type`s — a silent bug class the type system cannot reach (ids are strings compared at runtime). |
 | `Subscribe` | Type |  |
 | `Supervision` | Type | Declared supervision policy for a reducer (`update`) throw, at `run(machine, { supervision })`. |
 | `SupervisionStrategy` | Type | The three declared reducer-throw supervision strategies. |

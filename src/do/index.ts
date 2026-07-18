@@ -163,7 +163,9 @@ export {
 export {
   driveProjections,
   type Projection,
+  type ProjectionErrorContext,
   type ProjectionId,
+  type ProjectionOnError,
   type ProjectionRegistry,
   type ProjectionRunner,
   type ProjectionUpdate,

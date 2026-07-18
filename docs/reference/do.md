@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/do";
 ```
 
-## Exports (103)
+## Exports (105)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -82,8 +82,10 @@ import { … } from "@demlik/tea/do";
 | `PresenceSocket` | Interface | The minimal "send a string frame" surface broadcastFrame needs. |
 | `PresenceUpgrade` | Interface | What acceptPresenceSocket hands back: the live server end (to send initial frames on) and the 101 upgrade `Response` (to return from `fetch`). |
 | `Projection` | Interface | A named CQRS projection: an independent fold of the write model's `(Msg\|Model)` stream into a private `View`, plus a sink to publish it. |
+| `ProjectionErrorContext` | Interface | Context handed to a ProjectionOnError sink alongside the throw. |
 | `ProjectionId` | Interface | A projection's identity: `name` (the view) + `key` (the instance). |
 | `projectionIdString` | Function |  |
+| `ProjectionOnError` | Type | Sink for a projection `apply`/`emit` throw the driver isolated. |
 | `projectionRegistry` | Function |  |
 | `ProjectionRegistry` | Interface | A driver over a set of projections sharing one write-model stream. |
 | `ProjectionRunner` | Interface | A live, running projection instance: the projection's current `View`, its exclusive stored `offset`, and the `present`/`reset` operations the driver (or a rebuild) calls. |
