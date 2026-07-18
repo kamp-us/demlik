@@ -296,6 +296,13 @@ export function createMonitoredRun<Stage, V = unknown>(
         })
       : null;
 
+  // The snapshot knob to actually drive: `snap` when configured, else a single
+  // inert default (`every: 1`) bound ONCE here. Its `record` is never invoked
+  // (the progress gate short-circuits when `snap` is null), so the cadence value
+  // is immaterial — one shared stateless knob of pure functions stands in for
+  // the disabled-checkpoint case across init/boot/handlers.
+  const activeSnap = snap ?? createSnapshot<V>({ every: 1 });
+
   /** The starting slice for a never-started run. `runId` is filled at `start`. */
   function init(): MonitoredRunState<Stage> {
     return {
@@ -307,9 +314,9 @@ export function createMonitoredRun<Stage, V = unknown>(
       progressSeq: 0,
       failure: null,
       // A default snapshot slice even without the brick → uniform shape. When
-      // `snap` is null the slice is created with a throwaway cadence; its
-      // `record` is never called, so the cadence value is inert.
-      snapshot: (snap ?? createSnapshot<V>({ every: 1 })).init(),
+      // `snap` is null the inert `activeSnap` default supplies the slice; its
+      // `record` is never called, so the cadence value is immaterial.
+      snapshot: activeSnap.init(),
     };
   }
 
@@ -590,9 +597,7 @@ export function createMonitoredRun<Stage, V = unknown>(
     // (uniform across every sibling knob); a boot emits no Cmd, so take only the
     // slice. Assigning the tuple itself would put an ARRAY where a SnapshotState
     // belongs — a type error AND a non-round-trippable slice.
-    const [bootedSnapshot] = (snap ?? createSnapshot<V>({ every: 1 })).boot(
-      s.snapshot,
-    );
+    const [bootedSnapshot] = activeSnap.boot(s.snapshot);
     const reseeded: MonitoredRunState<Stage> = {
       ...s,
       phase: "running",
@@ -661,8 +666,7 @@ export function createMonitoredRun<Stage, V = unknown>(
     SnapshotWriteCmd<V> | SnapshotLoadCmd,
     unknown
   > {
-    const active = snap ?? createSnapshot<V>({ every: 1 });
-    return active.handlers({ store: ports.store });
+    return activeSnap.handlers({ store: ports.store });
   }
 
   /**
