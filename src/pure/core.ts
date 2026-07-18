@@ -95,6 +95,23 @@ export function assertPureResult(result: unknown, msgType: string): void {
   }
 }
 
+/**
+ * Drop one `key` from a `Record` immutably — returns a new record with `key`
+ * omitted, leaving the input untouched. The immutable-record-key-drop the L2
+ * resilience bricks reach for whenever a settled/restarted call must forget its
+ * per-key bookkeeping (a retry counter, a parked input). A plain
+ * object-rest spread, lifted here so `resilient-call` and `authed-call` share
+ * one definition instead of open-coding `const { [key]: _drop, ...rest } = rec`
+ * at each site.
+ */
+export function without<V>(
+  rec: Readonly<Record<string, V>>,
+  key: string,
+): Readonly<Record<string, V>> {
+  const { [key]: _dropped, ...rest } = rec;
+  return rest;
+}
+
 // === Cmd: tagged-union, one-shot effect ===
 export type Cmd<T extends string = string> = { type: T };
 

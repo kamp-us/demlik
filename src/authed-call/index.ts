@@ -86,6 +86,7 @@
 
 import type { Cmd } from "../index";
 import type { MsgType } from "../protocol";
+import { without } from "../pure/core";
 import {
   createResilientCall,
   type DeadlineExceeded,
@@ -246,13 +247,17 @@ export function createAuthedCall<I, R>(
     return [{ ...s, resilience }, cmds];
   }
 
-  // Drop a key from a `Record` immutably.
-  function without<V>(
-    rec: Readonly<Record<string, V>>,
-    key: string,
-  ): Readonly<Record<string, V>> {
-    const { [key]: _dropped, ...rest } = rec;
-    return rest;
+  // Forget a key's auth bookkeeping: the 401 budget (`authRetry`) and any
+  // parked input (`pendingAuthRetry`) that a settled or restarted call must
+  // clear TOGETHER. These two records form a coupled invariant — a call that
+  // settles, restarts, or gives up on its 401 dance drops both — so the joint
+  // clear lives in one place rather than being open-coded at each site.
+  function clearAuthKey(s: AuthedState<I, R>, key: string): AuthedState<I, R> {
+    return {
+      ...s,
+      authRetry: without(s.authRetry, key),
+      pendingAuthRetry: without(s.pendingAuthRetry, key),
+    };
   }
 
   // === Verb: attempt =======================================================
@@ -276,11 +281,7 @@ export function createAuthedCall<I, R>(
     input: I,
     at: number,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
-    const cleared: AuthedState<I, R> = {
-      ...s,
-      authRetry: without(s.authRetry, key),
-      pendingAuthRetry: without(s.pendingAuthRetry, key),
-    };
+    const cleared = clearAuthKey(s, key);
     return liftResilient(
       cleared,
       rc.attempt(cleared.resilience, key, input, at),
@@ -300,11 +301,7 @@ export function createAuthedCall<I, R>(
     key: string,
     msg: SucceedMsg<R>,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
-    const settled: AuthedState<I, R> = {
-      ...s,
-      authRetry: without(s.authRetry, key),
-      pendingAuthRetry: without(s.pendingAuthRetry, key),
-    };
+    const settled = clearAuthKey(s, key);
     return liftResilient(settled, rc.succeed(settled.resilience, key, msg));
   }
 
@@ -380,15 +377,7 @@ export function createAuthedCall<I, R>(
     if (spent >= 1 || input === undefined) {
       const error: UnauthorizedError = { _tag: "unauthorized", key };
       const [settled] = rc.settleFailed(s.resilience, key, error);
-      return [
-        {
-          ...s,
-          resilience: settled,
-          authRetry: without(s.authRetry, key),
-          pendingAuthRetry: without(s.pendingAuthRetry, key),
-        },
-        [],
-      ];
+      return [{ ...clearAuthKey(s, key), resilience: settled }, []];
     }
 
     // First 401: mark stale, park the call, ask for a fresh token.
@@ -472,17 +461,15 @@ export function createAuthedCall<I, R>(
     onlyKey: string | undefined,
     resilience: ResilientState<I, R>,
   ): AuthedState<I, R> {
-    let authRetry = s.authRetry;
-    let pendingAuthRetry = s.pendingAuthRetry;
-    const keys = onlyKey !== undefined ? [onlyKey] : Object.keys(authRetry);
+    const keys = onlyKey !== undefined ? [onlyKey] : Object.keys(s.authRetry);
+    let next = s;
     for (const key of keys) {
       const phase = resilience.calls[key]?.phase;
       if (phase === "succeeded" || phase === "failed") {
-        authRetry = without(authRetry, key);
-        pendingAuthRetry = without(pendingAuthRetry, key);
+        next = clearAuthKey(next, key);
       }
     }
-    return { ...s, authRetry, pendingAuthRetry };
+    return next;
   }
 
   // === Subs ================================================================

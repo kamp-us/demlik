@@ -126,6 +126,7 @@ import {
 } from "../deadline";
 import { type Cmd, type NoCtx, tryInterpret } from "../index";
 import { MsgType } from "../protocol";
+import { without } from "../pure/core";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
 import {
   asRng,
@@ -546,7 +547,7 @@ export function createResilientCall<I, R>(
         ? cacheSet(s.cache, key, msg.result, msg.at, config.cache.ttlMs)
         : s.cache;
     // Drop this key's retry counter — a success ends the retry run.
-    const { [key]: _dropped, ...retry } = s.retry;
+    const retry = without(s.retry, key);
     return [
       {
         ...setCall(s, key, { phase: "succeeded", result: msg.result }),
