@@ -8,9 +8,12 @@
 // (for Reducer) or any one cell's inner keys (for Transitions) are exactly
 // the set we need to build an `arbMsg` table without hand-listing them.
 //
-// Used by `arbMsg` to assert (in dev) that the user-supplied table covers
-// every Msg variant the reducer claims to handle. Strict drift detection
-// without runtime introspection of the type system.
+// Standalone helper: hand it a machine and it returns the Msg variants the
+// reducer/transitions record carries at runtime. `arbMsg` does NOT call it —
+// `MsgArbitraryTable<M>` enforces table coverage at compile time (adding a
+// variant without an arbitrary fails to compile, not at runtime). This helper
+// is for callers that want the discriminant set explicitly at runtime — e.g.
+// a test asserting a table covers every variant.
 // ---------------------------------------------------------------------------
 
 import {
