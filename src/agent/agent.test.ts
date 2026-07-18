@@ -155,8 +155,10 @@ describe("createAgent — init + start", () => {
   it("init produces every brick's starting slice and no conversation", () => {
     const agent = makeAgent();
     const s = agent.init();
-    expect(s.run.phase).toBe("running");
-    expect(s.run.runId).toBe("");
+    // The monitored-run starts in its never-started `idle` phase (no host-minted
+    // runId until `start`).
+    expect(s.run.phase).toBe("idle");
+    expect("runId" in s.run).toBe(false);
     expect(s.resilience.calls).toEqual({});
     expect(s.resilience.circuit).toEqual({ phase: "closed", failures: 0 });
     expect(s.tools).toEqual({

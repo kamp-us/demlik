@@ -141,8 +141,9 @@ async function main() {
   }
 
   const final = runtime.getState().poll;
+  const finalTarget = final.phase === "polling" ? final.nextAtMs : null;
   console.log(
-    `\nphase=${final.phase}  ticks=${final.tick}  nextAtMs=${final.nextAtMs}`,
+    `\nphase=${final.phase}  ticks=${final.tick}  nextAtMs=${finalTarget}`,
   );
   console.log(`final result: ${JSON.stringify(final.lastResult)}`);
   console.log(`total polls fired: ${polls}`);

@@ -236,7 +236,9 @@ describe("#47 — observe drops the boot null arm; onBoot carries it", () => {
     await runtime.done();
     await runtime.stop();
 
-    expect(boots).toEqual([{ phase: "running" }]);
+    // onBoot carries the INITIAL state — the never-started `idle` run (the
+    // agent_start dispatched below only moves it to `running` afterward).
+    expect(boots).toEqual([{ phase: "idle" }]);
     expect(nullSeen).toBe(false);
   });
 

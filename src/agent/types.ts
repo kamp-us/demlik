@@ -469,12 +469,12 @@ export function status<
   if (s.failure !== null) {
     return { kind: "failed", failure: s.failure };
   }
-  // 2) The monitored-run terminal failure (deadline / stage). `run.failure` is
-  //    non-null exactly when `phase === "failed"` (the run-state invariant), so
-  //    the `!== null` guard narrows it with no assertion and no fabricated
-  //    fallback — the unreachable phase-failed-yet-failure-null state falls
-  //    through rather than inventing a failure to report.
-  if (s.run.phase === "failed" && s.run.failure !== null) {
+  // 2) The monitored-run terminal failure (deadline / stage). `run.failure` now
+  //    rides ONLY the `failed` arm of the discriminated union, so narrowing on
+  //    `phase === "failed"` surfaces it with no nullable side field and no
+  //    fabricated fallback — the old "failed-yet-failure-null" state is
+  //    unrepresentable.
+  if (s.run.phase === "failed") {
     return { kind: "failed", failure: s.run.failure };
   }
   // 3) The pipeline finished — the terminal output landed on `state.output`.

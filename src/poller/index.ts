@@ -151,9 +151,9 @@ export interface PollerConfig<State, R> {
 }
 
 /**
- * The Model field the poller knob owns — its visible slice (the knob principle:
- * managed state lives in the Model, never a closure, so it is durable and
- * replayable).
+ * The bookkeeping every poller phase carries in common, split out so each arm of
+ * the `PollerState` discriminated union names only what it adds (`nextAtMs` on
+ * `polling`) — the same discipline the sibling `PaginatorState` uses.
  *
  * - `tick`       — count of ticks recorded so far (success or failure). Doubles
  *                  as an observability cursor and a stable per-tick discriminant.
@@ -162,22 +162,42 @@ export interface PollerConfig<State, R> {
  *                  consumer's Model), but the knob never interprets it.
  * - `retry`      — the `../retry-backoff` counter for consecutive failures.
  *                  Reset to `initRetry()` on every success.
- * - `nextAtMs`   — the ABSOLUTE target the interval/backoff timer is armed
- *                  against, or `null` when the poller is done / not yet started.
- *                  Persisted so a resumed poller re-arms the same moment.
- * - `phase`      — `"polling"` while ticks are scheduled, `"done"` once `until`
- *                  held, `"gave_up"` once backoff exhausted `maxAttempts`.
  * - `dedupe`     — the `../idempotency` store backing `dedupeKey`. An empty,
  *                  unbounded store when `dedupeKey` is unset (never written).
  */
-export interface PollerState<R> {
+interface PollerCore<R> {
   readonly tick: number;
   readonly lastResult?: R;
   readonly retry: RetryState;
-  readonly nextAtMs: number | null;
-  readonly phase: "polling" | "done" | "gave_up";
   readonly dedupe: IdempotencyStore<true>;
 }
+
+/**
+ * The Model field the poller knob owns — its visible slice (the knob principle:
+ * managed state lives in the Model, never a closure, so it is durable and
+ * replayable). A discriminated union on `phase` so the armed-timer target lives
+ * ONLY where it is meaningful and impossible combinations are unrepresentable
+ * (pattern 11), the sibling `PaginatorState` idiom:
+ *
+ * - `polling`  — ticks are scheduled. Carries `nextAtMs`, the ABSOLUTE target
+ *                the interval/backoff timer is armed against (persisted so a
+ *                resumed poller re-arms the same moment), or `null` before the
+ *                first `start` primes it.
+ * - `done`     — `until` held; the poll is finished. Carries NO `nextAtMs` — a
+ *                finished poll can never sit on an armed target.
+ * - `gave_up`  — backoff exhausted `maxAttempts`. Carries NO `nextAtMs` either.
+ *
+ * Because only `polling` carries `nextAtMs`, `subs` guards on `phase` alone to
+ * decide whether a timer is desired — a `done`/`gave_up` state with a live target
+ * (the old flat record's hazard) simply cannot be built.
+ */
+export type PollerState<R> =
+  | (PollerCore<R> & {
+      readonly phase: "polling";
+      readonly nextAtMs: number | null;
+    })
+  | (PollerCore<R> & { readonly phase: "done" })
+  | (PollerCore<R> & { readonly phase: "gave_up" });
 
 /**
  * The poller Sub type — a `../deadline` Sub under a fixed id family. One id per
@@ -353,10 +373,10 @@ export function createPoller<State, R>(
 
   function init(): PollerState<R> {
     return {
+      phase: "polling",
       tick: 0,
       retry: initRetry(),
       nextAtMs: null,
-      phase: "polling",
       // The dedupe store is created regardless; it is only WRITTEN when
       // `dedupeKey` is set, so an unconfigured poller carries an inert empty
       // store (no per-op cost, JSON-serializable, durable like the rest of
@@ -375,8 +395,20 @@ export function createPoller<State, R>(
     // mechanism racing the timer (it would fire as fast as the source responds,
     // never honoring `everyMs`). The first observation fires when the deadline
     // crosses `at + everyMs` and the consumer routes `deadline_exceeded` → the
-    // `tick` verb (which emits `onTick`). No drift, no double-fire.
-    return [{ ...state, phase: "polling", nextAtMs: at + config.everyMs }, []];
+    // `tick` verb (which emits `onTick`). No drift, no double-fire. Build the
+    // `polling` arm explicitly so a (re)start from a terminal state adopts a live
+    // target rather than spreading a terminal arm that never had one.
+    return [
+      {
+        phase: "polling",
+        tick: state.tick,
+        lastResult: state.lastResult,
+        retry: state.retry,
+        nextAtMs: at + config.everyMs,
+        dedupe: state.dedupe,
+      },
+      [],
+    ];
   }
 
   function tick(
@@ -399,18 +431,24 @@ export function createPoller<State, R>(
     untilHeld: boolean,
   ): readonly [PollerState<R>, readonly Cmd[]] {
     // A success always clears consecutive-failure state and records the datum.
-    const base: PollerState<R> = {
-      ...state,
-      tick: state.tick + 1,
-      lastResult: result,
-      retry: initRetry(),
-    };
+    // The next arm is built explicitly (not spread from `state`) so `done`
+    // carries no `nextAtMs` — a finished poll can never sit on an armed target.
+    const tick = state.tick + 1;
 
     // Stop condition first: if the consumer's `until` held against the
     // post-result Model, we are DONE — disarm and emit nothing, regardless of
     // dedupe (the final observation is still recorded as `lastResult`).
     if (untilHeld) {
-      return [{ ...base, phase: "done", nextAtMs: null }, []];
+      return [
+        {
+          phase: "done",
+          tick,
+          lastResult: result,
+          retry: initRetry(),
+          dedupe: state.dedupe,
+        },
+        [],
+      ];
     }
 
     // Re-arm the steady cadence: the next observation fires when THIS deadline
@@ -419,9 +457,12 @@ export function createPoller<State, R>(
     // is the single next-tick mechanism (recording a result is not a reason to
     // immediately re-fetch; that would poll as fast as the source responds).
     const next: PollerState<R> = {
-      ...base,
       phase: "polling",
+      tick,
+      lastResult: result,
+      retry: initRetry(),
       nextAtMs: at + config.everyMs,
+      dedupe: state.dedupe,
     };
 
     // Dedupe is an OPT-IN follow-up, orthogonal to the cadence above. When
@@ -451,13 +492,23 @@ export function createPoller<State, R>(
     at: number,
   ): readonly [PollerState<R>, readonly Cmd[]] {
     const retry = recordFailure(state.retry, error);
-    const failed: PollerState<R> = { ...state, tick: state.tick + 1, retry };
+    const tick = state.tick + 1;
 
-    // Backoff exhausted → give up: disarm and emit nothing. `shouldRetry`
-    // reads the just-advanced `retry`, so the (maxAttempts)-th failure is the
-    // one that stops the poller.
+    // Backoff exhausted → give up: emit nothing. `shouldRetry` reads the
+    // just-advanced `retry`, so the (maxAttempts)-th failure is the one that
+    // stops the poller. The `gave_up` arm carries no `nextAtMs` — there is no
+    // next attempt to arm.
     if (!shouldRetry(retry, policy)) {
-      return [{ ...failed, phase: "gave_up", nextAtMs: null }, []];
+      return [
+        {
+          phase: "gave_up",
+          tick,
+          lastResult: state.lastResult,
+          retry,
+          dedupe: state.dedupe,
+        },
+        [],
+      ];
     }
 
     // Back off: arm the next attempt at `at + backoff(retry)` rather than the
@@ -468,7 +519,17 @@ export function createPoller<State, R>(
     // `createPoller`; the verb body never names the global RNG, so a fixed
     // `rng` makes the backoff target replay bit-for-bit.
     const delayMs = nextDelayMs(retry, policy, rngBranded);
-    return [{ ...failed, phase: "polling", nextAtMs: at + delayMs }, []];
+    return [
+      {
+        phase: "polling",
+        tick,
+        lastResult: state.lastResult,
+        retry,
+        nextAtMs: at + delayMs,
+        dedupe: state.dedupe,
+      },
+      [],
+    ];
   }
 
   function subs(state: PollerState<R>): readonly Sub[] {

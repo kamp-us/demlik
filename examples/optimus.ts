@@ -754,7 +754,8 @@ async function main() {
 
   line("final report from the agent");
   const agentSlice = finalAgent;
-  console.log(`run.runId  : ${agentSlice.run.runId}`);
+  const runId = "runId" in agentSlice.run ? agentSlice.run.runId : "(idle)";
+  console.log(`run.runId  : ${runId}`);
   console.log(`run.phase  : ${agentSlice.run.phase}`);
   console.log(`failure    : ${JSON.stringify(agentSlice.failure)}`);
   console.log(`settled?   : ${agent.isSettled(agentSlice)}`);

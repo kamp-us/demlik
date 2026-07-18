@@ -353,7 +353,8 @@ async function main() {
   // === The terminal Model — plain, serializable JSON ===
   line("final Model (plain serializable JSON)");
   const final = runtime.getState();
-  console.log(`run.runId        : ${final.run.runId}`);
+  const runId = "runId" in final.run ? final.run.runId : "(idle)";
+  console.log(`run.runId        : ${runId}`);
   console.log(`run.phase        : ${final.run.phase}`);
   console.log(
     `run.progressSeq  : ${final.run.progressSeq}  (watchdog saw the loop advance, never wedged)`,

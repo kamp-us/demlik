@@ -146,7 +146,7 @@ describe("createPoller — tickResult (steady cadence)", () => {
     );
 
     expect(done.phase).toBe("done");
-    expect(done.nextAtMs).toBeNull();
+    expect("nextAtMs" in done).toBe(false); // done arm carries no target (unrepresentable)
     expect(done.lastResult).toEqual({ status: "ready" }); // final datum still recorded
     expect(cmds).toEqual([]);
   });
@@ -195,7 +195,7 @@ describe("createPoller — tickErr (backoff)", () => {
 
     expect(givenUp.retry.attempt).toBe(3);
     expect(givenUp.phase).toBe("gave_up");
-    expect(givenUp.nextAtMs).toBeNull();
+    expect("nextAtMs" in givenUp).toBe(false); // gave_up arm carries no target
     expect(cmds).toEqual([]);
   });
 
@@ -630,7 +630,7 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
     // END STATE: terminal `done`, the timer disarmed, the final datum recorded.
     const end = runtime.getState();
     expect(end.poll.phase).toBe("done");
-    expect(end.poll.nextAtMs).toBeNull();
+    expect("nextAtMs" in end.poll).toBe(false); // done arm carries no target
     expect(end.poll.lastResult).toEqual({ status: "ready" });
 
     // The poll is settled: no further reads no matter how long we wait.
@@ -701,14 +701,15 @@ describe("createPoller — properties", () => {
               : p.tickErr(s, "e", at)[0];
         }
         if (s.phase !== "polling") {
-          // Already gave up mid-sequence: must be disarmed with no future tick.
-          return s.nextAtMs === null && p.subs(s).length === 0;
+          // Already gave up mid-sequence: a terminal arm carries no target at all
+          // (unrepresentable), and nothing is scheduled.
+          return !("nextAtMs" in s) && p.subs(s).length === 0;
         }
         // Otherwise force a terminal success (until held) and assert it disarms.
         const [done, cmds] = p.tickResult(s, { status: "ready" }, at + 1, true);
         return (
           done.phase === "done" &&
-          done.nextAtMs === null &&
+          !("nextAtMs" in done) &&
           cmds.length === 0 &&
           p.subs(done).length === 0
         );

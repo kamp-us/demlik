@@ -36,9 +36,10 @@
  *
  * ## Why the run lifecycle is INLINE (run-tracker not extracted)
  *
- * The phase union (`running` / `done` / `failed` / `stale`) and its
- * bookkeeping (`runId`, `startedAt`, `lastProgressAt`, `progressSeq`) live
- * directly on this slice rather than behind a `run-tracker` sub-knob.
+ * The phase union (`idle` / `running` / `stale` / `done` / `failed`, a
+ * discriminated union carrying only each phase's own data) and its bookkeeping
+ * (`runId`, `startedAt`, `lastProgressAt`, `progressSeq`) live directly on this
+ * slice rather than behind a `run-tracker` sub-knob.
  * Extraction earns its keep when two independent axes vary; here the lifecycle
  * has exactly one anchoring axis (this run), so a separate module would be a
  * premature seam. The two genuinely independent axes — the safety DEADLINE and
@@ -173,26 +174,12 @@ export type RunFailure<Stage> =
     };
 
 /**
- * Run lifecycle phase. Discriminated on `phase`:
+ * The run bookkeeping every phase carries in common, split out so each arm of
+ * the `MonitoredRunState` discriminated union names only the data it ADDS
+ * (`runId` on started phases, `failure` on `failed`) — the same discipline the
+ * sibling `PaginatorState` uses for its shared `seen` / `pages` counters. Plain
+ * data end to end so the whole slice survives DO eviction / reload:
  *
- *   - `running` — the run is live. Carries the current pipeline position
- *     (`stepStates` is the stage queue; the single `running` item in it is the
- *     current stage, `undefined` for a single-shot run) and the watchdog
- *     bookkeeping (`lastProgressAt` / `progressSeq` keying the safety alarm).
- *   - `stale`   — a soft "no progress observed" mark the consumer can set and
- *     clear; the run is still resumable (a `progress` clears it back to
- *     `running`). Distinct from a fired deadline, which is terminal.
- *   - `done`    — every stage retired (or the single-shot `advance` landed).
- *   - `failed`  — terminal failure; `failure` carries why.
- */
-export type RunPhase = "running" | "stale" | "done" | "failed";
-
-/**
- * The slice. Plain data end to end:
- *   - `phase`          — the lifecycle discriminant.
- *   - `runId`          — host-minted run identity, stamped at `start` (the
- *                        machine never mints — see the audit seed's
- *                        "run identity is host-minted").
  *   - `stepStates`     — the stage pipeline as a `work-queue` of stage items.
  *                        Empty for a single-shot run. The ONE `running` item is
  *                        the current stage; `done` items are retired stages
@@ -206,21 +193,63 @@ export type RunPhase = "running" | "stale" | "done" | "failed";
  *   - `progressSeq`    — monotonic progress counter; keys the safety alarm Sub
  *                        id so every bump retires the old alarm and arms a new
  *                        one (the audit subs' `safety:{progressSeq}` discipline).
- *   - `failure`        — present iff `phase === "failed"`; the typed reason.
  *   - `snapshot`       — the `../snapshot` slice (cadence counter + durable
  *                        watermark). Always present (uniform shape); the gate
  *                        is simply never driven when `snapshotEvery` is omitted.
  */
-export interface MonitoredRunState<Stage> {
-  readonly phase: RunPhase;
-  readonly runId: string;
+interface RunCore<Stage> {
   readonly stepStates: readonly QueueItem<Stage>[];
   readonly startedAt: number;
   readonly lastProgressAt: number;
   readonly progressSeq: number;
-  readonly failure: RunFailure<Stage> | null;
   readonly snapshot: SnapshotState;
 }
+
+/**
+ * The slice — a discriminated union on `phase` so each phase carries ONLY its
+ * own data and impossible combinations are unrepresentable (pattern 11), the
+ * same idiom the sibling `CircuitState` / `PaginatorState` / `RunFailure` follow:
+ *
+ *   - `idle`    — created but never started. Carries no `runId` (identity is
+ *                 host-minted at `start`) and no `failure`: "not started" is its
+ *                 OWN phase, not a `running` run wearing an empty-string `runId`
+ *                 sentinel. `start` is the only transition out, so no verb has to
+ *                 guard "has this actually started?" — `phase === "idle"` says it.
+ *   - `running` — the run is live. Carries the host-minted `runId` and the
+ *                 `RunCore` pipeline position + watchdog bookkeeping.
+ *   - `stale`   — a soft "no progress observed" mark the consumer can set and
+ *                 clear; still resumable (a `progress` clears it back to
+ *                 `running`). Distinct from a fired deadline, which is terminal.
+ *   - `done`    — every stage retired (or the single-shot `advance` landed).
+ *   - `failed`  — terminal failure; the typed `failure` reason rides ONLY this
+ *                 arm, so it is present iff `phase === "failed"` BY CONSTRUCTION —
+ *                 there is no nullable side field to keep in sync.
+ *
+ * `runId` is the host-minted run identity, stamped at `start` (the machine never
+ * mints — see the audit seed's "run identity is host-minted"). It rides every
+ * started phase, but not `idle`.
+ */
+export type MonitoredRunState<Stage> =
+  | (RunCore<Stage> & { readonly phase: "idle" })
+  | (RunCore<Stage> & { readonly phase: "running"; readonly runId: string })
+  | (RunCore<Stage> & { readonly phase: "stale"; readonly runId: string })
+  | (RunCore<Stage> & { readonly phase: "done"; readonly runId: string })
+  | (RunCore<Stage> & {
+      readonly phase: "failed";
+      readonly runId: string;
+      readonly failure: RunFailure<Stage>;
+    });
+
+/**
+ * The live (still-timed) phases — `running` or `stale`. The verbs narrow to this
+ * before touching the watchdog bookkeeping (`runId` / `progressSeq`), so a
+ * settled (`done` / `failed`) or never-started (`idle`) slice can never be bumped
+ * — the narrow replaces the old `runId === ""` born-live guard.
+ */
+type LiveRun<Stage> = Extract<
+  MonitoredRunState<Stage>,
+  { readonly phase: "running" | "stale" }
+>;
 
 /**
  * The outcome a consumer reports to `advance`: the current stage either
@@ -303,16 +332,14 @@ export function createMonitoredRun<Stage, V = unknown>(
   // the disabled-checkpoint case across init/boot/handlers.
   const activeSnap = snap ?? createSnapshot<V>({ every: 1 });
 
-  /** The starting slice for a never-started run. `runId` is filled at `start`. */
+  /** The starting slice for a never-started run: the `idle` phase, no `runId`. */
   function init(): MonitoredRunState<Stage> {
     return {
-      phase: "running",
-      runId: "",
+      phase: "idle",
       stepStates: [],
       startedAt: 0,
       lastProgressAt: 0,
       progressSeq: 0,
-      failure: null,
       // A default snapshot slice even without the brick → uniform shape. When
       // `snap` is null the inert `activeSnap` default supplies the slice; its
       // `record` is never called, so the cadence value is immaterial.
@@ -357,15 +384,18 @@ export function createMonitoredRun<Stage, V = unknown>(
     runId: string,
     at: number,
   ): readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]] {
+    // Build the `running` arm explicitly rather than spreading `...s`: a restart
+    // from `failed` must NOT carry the old `failure` field forward (the `running`
+    // arm has none), and a start from `idle` has no `runId` to preserve. Only the
+    // snapshot slice threads through.
     const next: MonitoredRunState<Stage> = {
-      ...s,
       phase: "running",
       runId,
       stepStates: isPipeline ? seedStages(at) : [],
       startedAt: at,
       lastProgressAt: at,
       progressSeq: 0,
-      failure: null,
+      snapshot: s.snapshot,
     };
     return [next, []];
   }
@@ -375,10 +405,7 @@ export function createMonitoredRun<Stage, V = unknown>(
    * alarm Sub id changes and the substrate re-arms a fresh deadline. Shared by
    * `progress` and `advance`. PURE.
    */
-  function bumpProgress(
-    s: MonitoredRunState<Stage>,
-    at: number,
-  ): MonitoredRunState<Stage> {
+  function bumpProgress(s: LiveRun<Stage>, at: number): LiveRun<Stage> {
     return { ...s, lastProgressAt: at, progressSeq: s.progressSeq + 1 };
   }
 
@@ -406,16 +433,16 @@ export function createMonitoredRun<Stage, V = unknown>(
   /**
    * Record forward progress: bump the watchdog (re-arming the safety alarm),
    * clear any `stale` mark back to `running`, and account a snapshot unit
-   * (emitting a checkpoint Cmd on a cadence hit). A no-op on a settled run
-   * (`done` / `failed`) — a late progress event after the run ended is ignored.
-   * PURE.
+   * (emitting a checkpoint Cmd on a cadence hit). A no-op unless the run is live
+   * (`running` / `stale`) — a late progress event on a settled (`done` /
+   * `failed`) or never-started (`idle`) run is ignored. PURE.
    */
   function progress(
     s: MonitoredRunState<Stage>,
     payload: V,
     at: number,
   ): readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]] {
-    if (s.phase === "done" || s.phase === "failed") return [s, []];
+    if (s.phase !== "running" && s.phase !== "stale") return [s, []];
     const bumped: MonitoredRunState<Stage> = {
       ...bumpProgress(s, at),
       phase: "running",
@@ -457,7 +484,8 @@ export function createMonitoredRun<Stage, V = unknown>(
    *
    * An advance is itself a progress event, so it bumps the watchdog (re-arming
    * the alarm at the new stage) and accounts a snapshot unit. A no-op on a
-   * settled run. PURE — `at` is the only clock, ids are positional.
+   * settled (`done` / `failed`) or never-started (`idle`) run. PURE — `at` is the
+   * only clock, ids are positional.
    */
   function advance(
     s: MonitoredRunState<Stage>,
@@ -465,7 +493,7 @@ export function createMonitoredRun<Stage, V = unknown>(
     result: StageResult,
     at: number,
   ): readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]] {
-    if (s.phase === "done" || s.phase === "failed") return [s, []];
+    if (s.phase !== "running" && s.phase !== "stale") return [s, []];
 
     // Stage failure → hard terminal. Carry the failing stage VALUE (stable),
     // `undefined` for a single-shot run with no stage.
@@ -548,7 +576,7 @@ export function createMonitoredRun<Stage, V = unknown>(
    *     tolerate a fire still in flight defensively).
    *
    * A no-op on a settled run (its alarm was reconciled away; tolerate a stale
-   * fire) and on a NEVER-STARTED run (empty `runId` → `subs` armed nothing, so
+   * fire) and on a NEVER-STARTED (`idle`) run (`subs` armed nothing for it, so
    * any alarm reaching it is a rogue fire that must not un-start it). PURE —
    * `msg.atMs` stamps the failure.
    */
@@ -556,11 +584,12 @@ export function createMonitoredRun<Stage, V = unknown>(
     s: MonitoredRunState<Stage>,
     msg: MonitoredRunTimerMsg,
   ): readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]] {
-    if (s.phase === "done" || s.phase === "failed") return [s, []];
-    // A never-started run has no host-minted runId, so `subs` never armed a
-    // watchdog for it. Any alarm reaching this slice is a born-live/rogue fire;
-    // refuse to auto-fail a run that was never started.
-    if (s.runId === "") return [s, []];
+    // Only a live (`running` / `stale`) run is watched. A settled (`done` /
+    // `failed`) run's alarm was reconciled away, and a never-started (`idle`) run
+    // — which has no host-minted `runId` and armed nothing — must not be
+    // un-started by a born-live/rogue fire. The phase narrow IS the guard the old
+    // `runId === ""` sentinel stood in for.
+    if (s.phase !== "running" && s.phase !== "stale") return [s, []];
     // Only the alarm armed against the current progressSeq is live. A bumped
     // seq means progress re-armed it; an older fire is stale.
     if (msg.id !== safetyTimerId(s.runId, s.progressSeq)) return [s, []];
@@ -584,15 +613,16 @@ export function createMonitoredRun<Stage, V = unknown>(
    * checkpoint). The pipeline POSITION (`stepStates`) is preserved untouched —
    * that is the whole point of staging: resume at the same stage.
    *
-   * A no-op on a settled run. Emits NO Cmd — re-emitting the current stage's
-   * outstanding effect is the CONSUMER's job (it knows the per-stage Cmd), the
-   * audit machine's `outstandingEffect(stage)` pattern. PURE.
+   * A no-op on a settled (`done` / `failed`) or never-started (`idle`) run. Emits
+   * NO Cmd — re-emitting the current stage's outstanding effect is the CONSUMER's
+   * job (it knows the per-stage Cmd), the audit machine's `outstandingEffect(stage)`
+   * pattern. PURE.
    */
   function boot(
     s: MonitoredRunState<Stage>,
     at: number,
   ): readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]] {
-    if (s.phase === "done" || s.phase === "failed") return [s, []];
+    if (s.phase !== "running" && s.phase !== "stale") return [s, []];
     // `snap.boot` returns the reducer-cell shape `[SnapshotState, Cmd[]]`
     // (uniform across every sibling knob); a boot emits no Cmd, so take only the
     // slice. Assigning the tuple itself would put an ARRAY where a SnapshotState
@@ -623,17 +653,16 @@ export function createMonitoredRun<Stage, V = unknown>(
    * deadlineMs` — a self-rearming watchdog with no manual `clearTimeout`. A
    * settled run desires no subs. Wire `subscribe: { deadline: subscribeDeadline }`.
    *
-   * A NEVER-STARTED slice (`init()`) is `running` with an empty `runId` and a
-   * zero `lastProgressAt`. Without the `runId` gate it would arm a deadline at
-   * `0 + deadlineMs` — already in the past — which fires immediately and
-   * auto-fails a run that never began (the "born live" defect). `start` is the
-   * only verb that stamps a host-minted `runId`, so `runId !== ""` is the exact
-   * "has this run actually been started?" predicate: a pre-start slice arms
-   * nothing, and the watchdog only exists once a real run is in flight.
+   * A NEVER-STARTED slice (`init()`) is its OWN `idle` phase, not a `running` run
+   * with an empty `runId`. The `phase !== "running" && phase !== "stale"` narrow
+   * therefore excludes it structurally — no separate `runId === ""` sentinel gate
+   * is needed. Were `idle` armed, it would fire a deadline at `0 + deadlineMs`
+   * (already in the past) and auto-fail a run that never began — the "born live"
+   * defect. `start` is the only transition out of `idle`, so the watchdog exists
+   * exactly once a real run is in flight.
    */
   function subs(s: MonitoredRunState<Stage>): readonly DeadlineSub[] {
     if (config.deadlineMs === undefined) return [];
-    if (s.runId === "") return [];
     if (s.phase !== "running" && s.phase !== "stale") return [];
     return [
       deadlineSub(

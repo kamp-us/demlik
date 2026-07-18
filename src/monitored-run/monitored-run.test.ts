@@ -43,16 +43,18 @@ function deepFreeze<T>(value: T): T {
 // ---------------------------------------------------------------------------
 
 describe("createMonitoredRun — init", () => {
-  it("starts running with no runId, empty stages, primed counters", () => {
+  it("starts idle with no runId or failure, empty stages, primed counters", () => {
     const run = createMonitoredRun<Stage, Checkpoint>({ stages: STAGES });
     const s = run.init();
-    expect(s.phase).toBe("running");
-    expect(s.runId).toBe("");
+    // A never-started run is its OWN `idle` phase, not `running` with an empty
+    // runId. `runId` and `failure` are unrepresentable on `idle` by construction.
+    expect(s.phase).toBe("idle");
+    expect("runId" in s).toBe(false);
+    expect("failure" in s).toBe(false);
     expect(s.stepStates).toEqual([]);
     expect(s.startedAt).toBe(0);
     expect(s.lastProgressAt).toBe(0);
     expect(s.progressSeq).toBe(0);
-    expect(s.failure).toBeNull();
     // The snapshot slice is always present (uniform shape) even with no brick.
     expect(s.snapshot).toEqual({
       sinceLast: 0,
@@ -106,7 +108,9 @@ describe("createMonitoredRun — start", () => {
     // Restart wipes the slate.
     const [restarted] = run.start(s, "run-2", 10);
     expect(restarted.phase).toBe("running");
-    expect(restarted.failure).toBeNull();
+    // The restarted `running` arm carries no `failure` field at all — the prior
+    // stage failure cannot survive the restart.
+    expect("failure" in restarted).toBe(false);
     expect(restarted.progressSeq).toBe(0);
     expect(runningStage(restarted)).toBe("plan");
   });
@@ -704,8 +708,8 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
       const bound = bindMachine(machine, ctx);
       // Fresh boot, no `begin` — exactly `subs(init())`.
       const { state, subs } = bound.replay({ msgs: [] });
-      expect(state.run.phase).toBe("running");
-      expect(state.run.runId).toBe(""); // never started → no host-minted id
+      expect(state.run.phase).toBe("idle"); // never started → its OWN phase
+      expect("runId" in state.run).toBe(false); // no host-minted id on idle
       expect(subs).toEqual([]); // <- pre-fix this is the born-live deadline
     });
 
@@ -733,11 +737,12 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
 
       const { state } = bound.replay({ msgs: [alarm] });
 
-      // 3. END STATE: a never-started run must NOT be `failed`. Pre-fix this is
-      //    `failed { reason: "deadline" }` because the born-live watchdog armed
-      //    and its alarm matched `safetyTimerId("", 0)`.
-      expect(state.run.phase).toBe("running");
-      expect(state.run.failure).toBeNull();
+      // 3. END STATE: a never-started run must NOT be `failed`. It stays `idle`
+      //    (onDeadline no-ops on it). Pre-fix this was `failed { reason:
+      //    "deadline" }` because the born-live watchdog armed and its alarm
+      //    matched `safetyTimerId("", 0)`.
+      expect(state.run.phase).toBe("idle");
+      expect("failure" in state.run).toBe(false);
     });
   });
 });
