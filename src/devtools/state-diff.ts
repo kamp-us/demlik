@@ -16,6 +16,13 @@
 // view (`./state-diff.tsx`) is the only React-touching layer.
 // ---------------------------------------------------------------------------
 
+import {
+  indexPath,
+  keyPath,
+  typeOf,
+  unionKeys,
+} from "../trace-replay/state-walk";
+
 /**
  * A single differing cell between two states.
  *
@@ -35,17 +42,6 @@ export interface StateChange {
   expected: unknown;
   /** The value on the `actual` side (`undefined` when `removed`). */
   actual: unknown;
-}
-
-/** Coarse type tag used by the walk to decide how to recurse. Mirrors trace-replay. */
-function typeOf(
-  v: unknown,
-): "null" | "undefined" | "array" | "object" | "primitive" {
-  if (v === null) return "null";
-  if (v === undefined) return "undefined";
-  if (Array.isArray(v)) return "array";
-  if (typeof v === "object") return "object";
-  return "primitive";
 }
 
 /**
@@ -115,7 +111,7 @@ function walk(
     // detail.
     const len = Math.max(ae.length, aa.length);
     for (let i = 0; i < len; i++) {
-      walk(ae[i], aa[i], `${path}[${i}]`, out);
+      walk(ae[i], aa[i], indexPath(path, i), out);
     }
     return;
   }
@@ -126,9 +122,8 @@ function walk(
     // Sorted union of keys — deterministic regardless of insertion order, so
     // two states with the same data in different key order produce no changes,
     // and the reported order is reproducible run-to-run.
-    const keys = [...new Set([...Object.keys(oe), ...Object.keys(oa)])].sort();
-    for (const key of keys) {
-      walk(oe[key], oa[key], `${path}.${key}`, out);
+    for (const key of unionKeys(oe, oa)) {
+      walk(oe[key], oa[key], keyPath(path, key), out);
     }
     return;
   }
@@ -138,10 +133,12 @@ function walk(
   out.push({ path, kind: "changed", expected, actual });
 }
 
-/** Render a single value compactly for the text diff. Strings get quotes so
+/** Render a single value compactly for a diff cell. Strings get quotes so
  * `"3"` is visibly distinct from `3`; everything else is JSON-ish, with the
- * `undefined`/`NaN`/`BigInt` cases JSON.stringify mishandles spelled out. */
-function fmtValue(v: unknown): string {
+ * `undefined`/`NaN`/`BigInt` cases JSON.stringify mishandles spelled out.
+ * Exported (though not re-exported from `./index`) so the React `<StateDiff>`
+ * view renders each cell with this exact formatter rather than a copy. */
+export function fmtValue(v: unknown): string {
   if (v === undefined) return "undefined";
   if (typeof v === "number" && Number.isNaN(v)) return "NaN";
   if (typeof v === "bigint") return `${v}n`;

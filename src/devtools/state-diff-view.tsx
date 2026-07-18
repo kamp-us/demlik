@@ -1,4 +1,9 @@
-import { diffState, formatDiff, type StateChange } from "./state-diff";
+import {
+  diffState,
+  fmtValue,
+  formatDiff,
+  type StateChange,
+} from "./state-diff";
 
 export interface StateDiffProps {
   /**
@@ -28,9 +33,9 @@ function changeRow(c: StateChange) {
         <div key={c.path} className="tea-dt-diff-row tea-dt-diff-changed">
           <span className="tea-dt-diff-mark">~</span>
           <span className="tea-dt-diff-path">{c.path}</span>
-          <span className="tea-dt-diff-old">{fmt(c.expected)}</span>
+          <span className="tea-dt-diff-old">{fmtValue(c.expected)}</span>
           <span className="tea-dt-diff-arrow">→</span>
-          <span className="tea-dt-diff-new">{fmt(c.actual)}</span>
+          <span className="tea-dt-diff-new">{fmtValue(c.actual)}</span>
         </div>
       );
     case "removed":
@@ -38,7 +43,7 @@ function changeRow(c: StateChange) {
         <div key={c.path} className="tea-dt-diff-row tea-dt-diff-removed">
           <span className="tea-dt-diff-mark">-</span>
           <span className="tea-dt-diff-path">{c.path}</span>
-          <span className="tea-dt-diff-old">{fmt(c.expected)}</span>
+          <span className="tea-dt-diff-old">{fmtValue(c.expected)}</span>
         </div>
       );
     case "added":
@@ -46,25 +51,9 @@ function changeRow(c: StateChange) {
         <div key={c.path} className="tea-dt-diff-row tea-dt-diff-added">
           <span className="tea-dt-diff-mark">+</span>
           <span className="tea-dt-diff-path">{c.path}</span>
-          <span className="tea-dt-diff-new">{fmt(c.actual)}</span>
+          <span className="tea-dt-diff-new">{fmtValue(c.actual)}</span>
         </div>
       );
-  }
-}
-
-/** Compact value render for a row cell. Strings get quotes; objects/arrays a
- * JSON-ish one-liner — the diff already names the leaf path, so a deep render
- * isn't needed here. */
-function fmt(v: unknown): string {
-  if (v === undefined) return "undefined";
-  if (typeof v === "number" && Number.isNaN(v)) return "NaN";
-  if (typeof v === "bigint") return `${v}n`;
-  if (typeof v === "string") return JSON.stringify(v);
-  if (typeof v === "function" || typeof v === "symbol") return String(v);
-  try {
-    return JSON.stringify(v) ?? String(v);
-  } catch {
-    return String(v);
   }
 }
 

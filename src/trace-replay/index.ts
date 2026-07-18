@@ -24,6 +24,7 @@
 
 import { type Cmd, type Machine, replay, type Sub } from "../index";
 import type { Trace } from "../recorder";
+import { indexPath, keyPath, typeOf, unionKeys } from "./state-walk";
 
 /**
  * The outcome of {@link replayTrace}.
@@ -108,7 +109,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return firstDivergence(a, b, "state") === null;
 }
 
-// === self-contained deep-equal + first-divergence path finder ===
+// === deep-equal + first-divergence path finder ===
 //
 // One walk does both jobs: it returns the FIRST point where `expected` and
 // `actual` differ (as a path + the two values), or `null` when they are
@@ -117,6 +118,11 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 // order; object keys sorted so the result does not depend on insertion
 // order — two states with the same data but different key order are equal,
 // and the reported path for a real mismatch is reproducible run-to-run).
+//
+// The path grammar (`typeOf`, `indexPath`/`keyPath` segments, `unionKeys`
+// order) is shared with devtools' `diffState` via `./state-walk`, so the two
+// walkers print the SAME path for the same cell by construction. Only the leaf
+// policy differs, on purpose: first-hit here, collect-all there.
 //
 // Scope: TEA state is plain JSON-shaped data (the substrate's __DEV__ guards
 // reject closures in Cmds, and states are conventionally serializable). So
@@ -153,7 +159,7 @@ function firstDivergence(
       return { path, expected, actual };
     }
     for (let i = 0; i < ae.length; i++) {
-      const d = firstDivergence(ae[i], aa[i], `${path}[${i}]`);
+      const d = firstDivergence(ae[i], aa[i], indexPath(path, i));
       if (d !== null) return d;
     }
     return null;
@@ -162,12 +168,11 @@ function firstDivergence(
   if (te === "object") {
     const oe = expected as Record<string, unknown>;
     const oa = actual as Record<string, unknown>;
-    // Union of keys, sorted for deterministic traversal. A key present in one
+    // Sorted union of keys for deterministic traversal. A key present in one
     // but absent in the other diverges at that child path (its value is
     // `undefined` on the missing side).
-    const keys = [...new Set([...Object.keys(oe), ...Object.keys(oa)])].sort();
-    for (const key of keys) {
-      const d = firstDivergence(oe[key], oa[key], `${path}.${key}`);
+    for (const key of unionKeys(oe, oa)) {
+      const d = firstDivergence(oe[key], oa[key], keyPath(path, key));
       if (d !== null) return d;
     }
     return null;
@@ -176,15 +181,4 @@ function firstDivergence(
   // Primitives (string/number/boolean/bigint/symbol/function) that failed the
   // Object.is fast path, or null/undefined that differ — this node diverges.
   return { path, expected, actual };
-}
-
-/** Coarse type tag used by the divergence walk to decide how to recurse. */
-function typeOf(
-  v: unknown,
-): "null" | "undefined" | "array" | "object" | "primitive" {
-  if (v === null) return "null";
-  if (v === undefined) return "undefined";
-  if (Array.isArray(v)) return "array";
-  if (typeof v === "object") return "object";
-  return "primitive";
 }
