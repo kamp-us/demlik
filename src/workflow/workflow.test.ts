@@ -333,10 +333,9 @@ describe("reaching completed at the end of the sequence", () => {
     expect(done.cmds).toEqual([]); // terminal: no further dispatch
   });
 
-  it("init rejects an empty step sequence (no resultless terminal state)", () => {
-    const wf = createWorkflow<Activity, Result, Failure>();
-    expect(() => wf.init([])).toThrow(/at least one step/);
-  });
+  // An empty step sequence is no longer a runtime throw — `init` takes a
+  // non-empty `WorkflowSteps` tuple, so `wf.init([])` is a COMPILE error. The
+  // invariant is pinned by the type-level test `steps-nonempty.test-d.ts`.
 });
 
 // ───────────────────────────────────────────────────────────────────────────

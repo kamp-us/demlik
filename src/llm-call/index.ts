@@ -492,9 +492,13 @@ export function createLlmCall<
     // record satisfies it without a cast.
     const settle = await resilientRunHandler(cmd, {});
     if (settle.type === MsgType.ResilientOk) {
-      // `result` is the parsed `LlmOk` from `invokeOne`, and the narrowed
-      // `SucceedMsg<LlmOk>` IS `LlmSucceedMsg` — returned as-is, no cast.
-      return settle;
+      // `result` is the parsed `LlmOk` from `invokeOne`, which hardcoded its
+      // `key` to `purpose` (the port receives no key). Re-key it to `cmd.key` —
+      // the fan-out key `attempt` threaded in — so a fanned-out success carries
+      // the SAME key its failure would (`settleOf`'s err path below uses
+      // `cmd.key`), never the collapsed purpose. `settle.key` is already
+      // `cmd.key`; this aligns the enriched `LlmOk.key` inside it.
+      return { ...settle, result: { ...settle.result, key: cmd.key } };
     }
     // resilient_err — enrich the raw throw into the typed `LlmErr`, keeping the
     // resilient Msg's `key` / `at` so the host reducer's `fail` verb re-issues

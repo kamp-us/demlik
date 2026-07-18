@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/workflow";
 ```
 
-## Exports (32)
+## Exports (33)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -42,3 +42,4 @@ import { … } from "@demlik/tea/workflow";
 | `WorkflowState` | Type | The workflow's state — a discriminated union on `status`. |
 | `WorkflowStatus` | Type | Every `status` discriminant of the WorkflowState union. |
 | `WorkflowStep` | Interface | One step of a workflow: a named activity descriptor. |
+| `WorkflowSteps` | Type | A workflow's step sequence at construction — a NON-EMPTY tuple. |

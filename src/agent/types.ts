@@ -62,17 +62,43 @@ export interface AgentTurn {
 }
 
 /**
+ * Narrow an unknown to a `ToolCall` — the per-element witness `isAgentTurn`
+ * folds over the `toolCalls` array. Checks the three load-bearing fields:
+ * `callId`/`name` are strings, `args` is a non-null object. PURE — allocates no
+ * Error. Without this the array-of-`ToolCall` narrow would be validation
+ * masquerading as parse: `toolCalls: [1, 2, 3]` would pass, then the downstream
+ * `dedupeByCallId` / `fan.scatter` read an `undefined` `callId` and wedge the
+ * fan-out batch.
+ */
+function isToolCall(value: unknown): value is ToolCall {
+  if (value === null || typeof value !== "object") return false;
+  const t = value as { callId?: unknown; name?: unknown; args?: unknown };
+  return (
+    typeof t.callId === "string" &&
+    typeof t.name === "string" &&
+    t.args !== null &&
+    typeof t.args === "object"
+  );
+}
+
+/**
  * Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own
  * structured-output type. A consumer's brain schema parses the model's output
  * into an `AgentTurn` (the agentic purpose's output); rather than every consumer
  * hand-rolling this guard + a `Schema<AgentTurn>` for a type the agent OWNS, the
- * agent exports both. Checks the two load-bearing fields: `content` is a string,
- * `toolCalls` is an array. PURE — allocates no Error.
+ * agent exports both. Checks the load-bearing fields: `content` is a string and
+ * `toolCalls` is an array of `ToolCall` (each element guarded — the narrow is a
+ * real parse of the boundary, not a shallow `Array.isArray`). PURE — allocates
+ * no Error.
  */
 export function isAgentTurn(value: unknown): value is AgentTurn {
   if (value === null || typeof value !== "object") return false;
   const t = value as { content?: unknown; toolCalls?: unknown };
-  return typeof t.content === "string" && Array.isArray(t.toolCalls);
+  return (
+    typeof t.content === "string" &&
+    Array.isArray(t.toolCalls) &&
+    t.toolCalls.every(isToolCall)
+  );
 }
 
 /**

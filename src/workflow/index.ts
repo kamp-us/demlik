@@ -121,6 +121,17 @@ export interface WorkflowStep<A> {
 }
 
 /**
+ * A workflow's step sequence at construction — a NON-EMPTY tuple. A workflow
+ * with nothing to do reaches `completed` only by carrying a final result, and an
+ * empty sequence produces none, so "≥ 1 step" is a precondition. Encoding it as
+ * `readonly [WorkflowStep<A>, ...WorkflowStep<A>[]]` makes the empty case a
+ * COMPILE error at every construction boundary (`init`, `foldWorkflow`,
+ * `workflowGrain`) — parse-don't-validate, so the reducer never needs a runtime
+ * throw to reject a resultless workflow.
+ */
+export type WorkflowSteps<A> = readonly [WorkflowStep<A>, ...WorkflowStep<A>[]];
+
+/**
  * A completed step: the step that ran plus the result its activity produced.
  * The `running` state accumulates these in execution order, so the full
  * forward history is available to the consumer (and to #125's compensation,
@@ -519,15 +530,14 @@ export interface WorkflowReducerStep<A, R, F> {
  *  owed-but-unconfirmed dispatch on cold wake (idempotent by delivery id). */
 export interface Workflow<A, R, F> {
   /**
-   * Seed a fresh workflow over `steps` and dispatch its first activity.
-   *
-   * - Empty `steps` ⇒ a workflow with nothing to do completes only when it has
-   *   an output; with no steps there is no output, so an empty sequence is
-   *   rejected as a misuse (a workflow must have at least one step). The reducer
-   *   never reaches `completed` without a final result to carry.
-   * - Otherwise → `running` with `current` = step 0, owed on the ledger.
+   * Seed a fresh workflow over `steps` (a NON-EMPTY {@link WorkflowSteps}) and
+   * dispatch its first activity → `running` with `current` = step 0, owed on the
+   * ledger. The "≥ 1 step" precondition is carried by the tuple type: an empty
+   * sequence is a compile error at the call site, not a runtime throw here — a
+   * workflow with nothing to do could never reach `completed` (no final result
+   * to carry), so it is unrepresentable by construction.
    */
-  init(steps: readonly WorkflowStep<A>[]): WorkflowReducerStep<A, R, F>;
+  init(steps: WorkflowSteps<A>): WorkflowReducerStep<A, R, F>;
 
   /**
    * Fold an activity success. If `msg.id` does not match the in-flight
@@ -798,14 +808,8 @@ export function createWorkflow<A, R, F>(restore?: {
 
   return {
     init(steps) {
-      if (steps.length === 0) {
-        throw new Error(
-          "createWorkflow.init: a workflow must have at least one step. An " +
-            "empty step sequence has no final result to carry into `completed`, " +
-            "so it is unrepresentable as a completed workflow — reject it at the " +
-            "boundary rather than admit a resultless terminal state.",
-        );
-      }
+      // `steps` is a non-empty `WorkflowSteps` (the empty case is a compile
+      // error at the call site), so step 0 always exists — no runtime guard.
       const { current, owed, cmd } = oweActivity(stepAt(steps, 0), 0);
       const state: RunningWorkflow<A, R> = {
         status: "running",
@@ -1036,7 +1040,7 @@ export function createWorkflow<A, R, F>(restore?: {
  * results are the only thing the consumer records and replays.
  */
 export function foldWorkflow<A, R, F>(
-  steps: readonly WorkflowStep<A>[],
+  steps: WorkflowSteps<A>,
   msgs: Iterable<WorkflowMsg<R, F>>,
 ): WorkflowState<A, R, F> {
   const wf = createWorkflow<A, R, F>();

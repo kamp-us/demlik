@@ -42,7 +42,7 @@ import {
   type WorkflowCmd,
   type WorkflowMsg,
   type WorkflowState,
-  type WorkflowStep,
+  type WorkflowSteps,
 } from "./index";
 
 // ===========================================================================
@@ -78,7 +78,6 @@ export interface SagaFailure {
   readonly reason: string;
 }
 
-type SagaStep = WorkflowStep<SagaActivity>;
 type SagaState = WorkflowState<SagaActivity, SagaReceipt, SagaFailure>;
 
 /**
@@ -95,7 +94,7 @@ type SagaState = WorkflowState<SagaActivity, SagaReceipt, SagaFailure>;
  *                       step to compensate — its `compensation` is here only to
  *                       show a fully-symmetric saga definition.)
  */
-export const SAGA_STEPS: readonly SagaStep[] = [
+export const SAGA_STEPS: WorkflowSteps<SagaActivity> = [
   {
     name: "order",
     activity: { op: "order", label: "place the order" },

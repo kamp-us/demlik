@@ -433,8 +433,8 @@ export function createReconciler<
     // Scan exhausted → plan + begin applying. `walk.isComplete` is the honest
     // "the API returned a null next cursor" signal.
     if (walk.isComplete(scanned.walk)) {
-      const [planned, applyCmds] = beginPlan(scanned, at);
-      return [planned, [...cmds, ...applyCmds]];
+      const [plannedState, applyCmds] = planned(scanned, at);
+      return [plannedState, [...cmds, ...applyCmds]];
     }
 
     return [scanned, cmds];
@@ -472,7 +472,7 @@ export function createReconciler<
   /**
    * Compute the remediation plan from the accumulated `actual` snapshot and the
    * configured `desired`, store it, and enter `applying`. Normally driven
-   * internally by `pageOk` when the scan finishes (`beginPlan`), but exposed as a
+   * internally by `pageOk` when the scan finishes, but exposed as a
    * verb so a consumer can force planning from an externally-supplied actual
    * snapshot (e.g. a single-shot actual fetch outside the paginated scan), or
    * re-plan after a desired change. An empty plan settles straight to `done`
@@ -495,14 +495,6 @@ export function createReconciler<
       appliedCursor: 0,
     };
     return applyNext(planning, at);
-  }
-
-  /** Internal: compute + install the plan and kick off the apply loop. */
-  function beginPlan(
-    s: State,
-    at: number,
-  ): readonly [State, readonly OutCmd[]] {
-    return planned(s, at);
   }
 
   // === Verb: applyNext =====================================================

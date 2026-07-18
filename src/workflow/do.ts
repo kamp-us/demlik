@@ -81,6 +81,7 @@ import {
   type WorkflowMsg,
   type WorkflowState,
   type WorkflowStep,
+  type WorkflowSteps,
 } from "./index";
 import { routeWorkflowMsg } from "./route";
 
@@ -117,8 +118,9 @@ export interface WorkflowGrainCtx<A, R, F> {
 
 /** Construction options for {@link workflowGrain}. */
 export interface WorkflowGrainOptions<A> {
-  /** The static, ordered step sequence the workflow runs (>= 1 step). */
-  readonly steps: readonly WorkflowStep<A>[];
+  /** The static, ordered step sequence the workflow runs — a NON-EMPTY
+   *  {@link WorkflowSteps} (the ≥ 1 step precondition is a compile check). */
+  readonly steps: WorkflowSteps<A>;
   /**
    * Snapshot retention — take a snapshot every N appended events (forwarded to
    * `doEventSourcedStore`; default 100). Bounds replay length; never changes the
@@ -209,7 +211,7 @@ interface WorkflowRef<A, R, F> {
  */
 function workflowMachine<A, R, F>(
   ref: WorkflowRef<A, R, F>,
-  steps: readonly WorkflowStep<A>[],
+  steps: WorkflowSteps<A>,
 ): WorkflowMachine<A, R, F> {
   return defineMachine<
     WorkflowGrainState<A, R, F>,
@@ -528,4 +530,5 @@ export type {
   WorkflowMsg,
   WorkflowState,
   WorkflowStep,
+  WorkflowSteps,
 };
