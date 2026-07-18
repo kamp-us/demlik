@@ -284,16 +284,21 @@ function keyOf<V, C extends Cmd>(
 /**
  * Narrow `config` to its dedupe variant iff a cache slice is actually wired —
  * `cacheTtlMs` set AND a `cache` store present. Returns the narrowed config
- * (carrying the required `cacheKey`) or `null` when no dedupe is configured.
- * The single place the union is discriminated, so `isCacheHit` / `commitEmit`
- * share one narrowing rather than re-deriving the predicate.
+ * (carrying the required `cacheKey`) paired with the resolved `cache` store, or
+ * `null` when no dedupe is configured. The single place the union is
+ * discriminated, so `isCacheHit` / `commitEmit` share one narrowing — and reuse
+ * the resolved `cache` — rather than re-deriving the predicate and re-narrowing
+ * `state.cache`.
  */
 function cacheConfig<V, C extends Cmd>(
   config: ThrottledInputConfig<V, C>,
   state: ThrottledInput<V>,
-): ThrottledInputWithCache<V, C> | null {
+): {
+  readonly config: ThrottledInputWithCache<V, C>;
+  readonly cache: TtlCache<V>;
+} | null {
   return config.cacheTtlMs !== undefined && state.cache !== undefined
-    ? config
+    ? { config, cache: state.cache }
     : null;
 }
 
@@ -310,8 +315,8 @@ function isCacheHit<V, C extends Cmd>(
   at: number,
 ): boolean {
   const cached = cacheConfig(config, state);
-  if (cached === null || state.cache === undefined) return false;
-  return cacheGet(state.cache, keyOf(cached, value), at) !== undefined;
+  if (cached === null) return false;
+  return cacheGet(cached.cache, keyOf(cached.config, value), at) !== undefined;
 }
 
 /**
@@ -334,13 +339,13 @@ function commitEmit<V, C extends Cmd>(
 ): readonly [ThrottledInput<V>, readonly C[]] {
   const cached = cacheConfig(config, state);
   const cache =
-    cached !== null && state.cache !== undefined
+    cached !== null
       ? cacheSet(
-          state.cache,
-          keyOf(cached, value),
+          cached.cache,
+          keyOf(cached.config, value),
           value,
           at,
-          cached.cacheTtlMs,
+          cached.config.cacheTtlMs,
         )
       : state.cache;
   const next: ThrottledInput<V> = {

@@ -94,8 +94,3 @@ export interface MinimalWebSocket {
 export interface MinimalWebSocketCtor {
   new (url: string): MinimalWebSocket;
 }
-
-// `setInterval` / `clearInterval` are typed by ES2020 lib; we declare the
-// MV3 / Node return-shape opaquely so this module doesn't depend on
-// `number` (browser) vs `NodeJS.Timeout` (node) discrimination.
-export type TimerHandle = ReturnType<typeof setInterval>;

@@ -263,7 +263,6 @@ function launchUpTo<I, R, C extends Cmd>(
   state: FanOutState<I, R>,
   config: {
     concurrency: number;
-    idOf: (item: I) => string;
     of: (item: I) => C;
   },
 ): readonly [FanOutState<I, R>, readonly C[]] {
