@@ -177,6 +177,28 @@ export function isAgentTurn(value: unknown): value is AgentTurn {
 }
 
 /**
+ * Build a `Schema<T>` from a type guard — the zod-style `parse` throw-wrapper the
+ * llm-call handler relies on, factored so tea's two owned structured-output
+ * schemas ({@link agentTurnSchema}, {@link compactionSummarySchema}) share one
+ * shape. On a value the guard rejects it throws `structured-output parse failed:
+ * not <name>` (a `*_err` at the boundary — errors are data); otherwise it
+ * narrows through. `name` is the full noun phrase incl. article ("an AgentTurn").
+ */
+function schemaFromGuard<T>(
+  guard: (value: unknown) => value is T,
+  name: string,
+): Schema<T> {
+  return {
+    parse: (value: unknown): T => {
+      if (!guard(value)) {
+        throw new Error(`structured-output parse failed: not ${name}`);
+      }
+      return value;
+    },
+  };
+}
+
+/**
  * The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain
  * call binds when the agentic purpose's output is a bare `AgentTurn` (the common
  * case). Throws on a non-`AgentTurn` (the zod-style `parse` contract the
@@ -186,14 +208,10 @@ export function isAgentTurn(value: unknown): value is AgentTurn {
  * A consumer whose turn type EXTENDS `AgentTurn` with extra fields still writes
  * its own schema (it must validate the extra fields); this is for the plain case.
  */
-export const agentTurnSchema: Schema<AgentTurn> = {
-  parse: (value: unknown): AgentTurn => {
-    if (!isAgentTurn(value)) {
-      throw new Error("structured-output parse failed: not an AgentTurn");
-    }
-    return value;
-  },
-};
+export const agentTurnSchema: Schema<AgentTurn> = schemaFromGuard(
+  isAgentTurn,
+  "an AgentTurn",
+);
 
 /**
  * One settled tool outcome the consumer routes back into the loop — the seed's
@@ -356,16 +374,8 @@ export function isCompactionSummary(
  * relies on), so a malformed summary is a `compact_err` (errors are data), never
  * a corrupt fold-back.
  */
-export const compactionSummarySchema: Schema<CompactionSummary> = {
-  parse: (value: unknown): CompactionSummary => {
-    if (!isCompactionSummary(value)) {
-      throw new Error(
-        "structured-output parse failed: not a CompactionSummary",
-      );
-    }
-    return value;
-  },
-};
+export const compactionSummarySchema: Schema<CompactionSummary> =
+  schemaFromGuard(isCompactionSummary, "a CompactionSummary");
 
 /**
  * The result a compaction round-trip produces — the model's summary of the
@@ -1220,6 +1230,118 @@ export function createAgent<
     };
   }
 
+  /**
+   * Fire the current stage's brain call: build the request ({@link brainCall}),
+   * thread it through the resilient retry layer, and return the resilience-updated
+   * state + the llm run Cmds. THE shared epilogue of every verb that (re-)enters
+   * the brain path — `start`, `advanceStage`, `settleTool`'s drain, `compactOk`,
+   * `compactErr`, `boot` — each concats its OWN leading Cmds onto the returned llm
+   * Cmds. PURE — `at` is the only clock.
+   */
+  function fireBrainCall(
+    s: State,
+    at: number,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const call = brainCall(s);
+    const [resilience, cmds] = llm.attempt(s.resilience, call, at);
+    return [{ ...s, resilience }, cmds];
+  }
+
+  /**
+   * Build the compaction summarize request for a conversation + fold count — the
+   * `$compact` sibling of {@link brainCall}, so the summarize-request shape lives
+   * in ONE spot and both the trigger (`maybeCompact`) and the boot re-fire emit a
+   * byte-identical `LlmCall<$compact>`. PURE.
+   */
+  function compactionCall(
+    conv: Conversation<R>,
+    folding: number,
+  ): LlmCall<CompactionPurpose> {
+    const payloadOf = config.compaction?.payloadOf;
+    return {
+      purpose: COMPACTION_PURPOSE,
+      model: config.modelId ?? null,
+      payload: payloadOf ? payloadOf(conv, folding) : null,
+    };
+  }
+
+  /** The narrowed `awaiting` variant for a given `kind`. */
+  type AwaitingOf<K extends Awaiting["kind"]> = Extract<Awaiting, { kind: K }>;
+
+  /**
+   * The stale-settle guard shared by the awaiting-scoped verbs (`turn` /
+   * `settleTool` / `compactOk` / `compactErr`): return the live conversation
+   * ALREADY narrowed to the given `awaiting.kind`, or `null` when the verb must
+   * no-op — the run is settled, there is no conversation, or it is awaiting
+   * something else (a stale settle after boot / advance). Collapses the
+   * `isSettled → conv === null → awaiting.kind` triple that recurred verbatim
+   * across the four verbs; each caller supplies its own no-op return. PURE.
+   */
+  function requireAwaiting<K extends Awaiting["kind"]>(
+    s: State,
+    kind: K,
+  ): (Conversation<R> & { readonly awaiting: AwaitingOf<K> }) | null {
+    if (isSettled(s)) return null;
+    const conv = s.conversation;
+    if (conv === null || conv.awaiting.kind !== kind) return null;
+    return conv as Conversation<R> & { readonly awaiting: AwaitingOf<K> };
+  }
+
+  /** The dedicated compaction round-trip's resilient slice type (#85, design B1). */
+  type CompactionSlice = ResilientState<
+    LlmCall<CompactionPurpose>,
+    LlmOk<CompactionPurpose, CompactionOutputs>
+  >;
+
+  /**
+   * Re-key a compaction verb's `[slice, resilient_run Cmds]` result so the emitted
+   * Cmds carry the dedicated `compact_run` discriminant. The one place the
+   * `with-resilience` boundary re-key ({@link toCompactRunCmd}) lives.
+   */
+  function reKeyCompactCmds(
+    result: readonly [CompactionSlice, readonly LlmRunCmd<CompactionPurpose>[]],
+  ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] {
+    const [slice, cmds] = result;
+    return [slice, cmds.map(toCompactRunCmd)];
+  }
+
+  /**
+   * The compaction slice's four cmd-emitting verbs, wrapped so each returns its
+   * `resilient_run` Cmds ALREADY re-keyed to the dedicated `compact_run`
+   * discriminant. The re-key is an INVARIANT of talking to `compactRc` — its Cmds
+   * must route to the compaction interpret cell, never the brain `resilient_run`
+   * one — so it lives here ONCE instead of at every call boundary, where a single
+   * forgotten `.map` would misroute a compaction run Cmd to the brain cell. PURE —
+   * pure delegation + re-key. (`init` / `subs` emit no run Cmds → used on
+   * `compactRc` directly.)
+   */
+  const compact = {
+    attempt: (
+      slice: CompactionSlice,
+      key: CompactionPurpose,
+      input: LlmCall<CompactionPurpose>,
+      at: number,
+    ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
+      reKeyCompactCmds(compactRc.attempt(slice, key, input, at)),
+    succeed: (
+      slice: CompactionSlice,
+      key: string,
+      msg: Parameters<typeof compactRc.succeed>[2],
+    ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
+      reKeyCompactCmds(compactRc.succeed(slice, key, msg)),
+    fail: (
+      slice: CompactionSlice,
+      key: string,
+      msg: Parameters<typeof compactRc.fail>[2],
+    ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
+      reKeyCompactCmds(compactRc.fail(slice, key, msg)),
+    onTimer: (
+      slice: CompactionSlice,
+      msg: Parameters<typeof compactRc.onTimer>[1],
+    ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
+      reKeyCompactCmds(compactRc.onTimer(slice, msg)),
+  };
+
   // === Verb: start =========================================================
 
   /**
@@ -1247,9 +1369,7 @@ export function createAgent<
       // inherits the previous run's summarize retry bookkeeping (#85).
       compaction: compactRc.init(),
     };
-    const call = brainCall(withRun);
-    const [resilience, cmds] = llm.attempt(withRun.resilience, call, at);
-    return [{ ...withRun, resilience }, cmds];
+    return fireBrainCall(withRun, at);
   }
 
   // === Verb: turn ==========================================================
@@ -1273,9 +1393,8 @@ export function createAgent<
     result: AgentTurn,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    if (isSettled(s)) return [s, []];
-    const conv = s.conversation;
-    if (conv === null || conv.awaiting.kind !== "llm") return [s, []];
+    const conv = requireAwaiting(s, "llm");
+    if (conv === null) return [s, []];
 
     const withTurn: Conversation<R> = {
       ...conv,
@@ -1352,9 +1471,8 @@ export function createAgent<
       conversation,
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
     };
-    const call = brainCall(moved);
-    const [resilience, llmCmds] = llm.attempt(moved.resilience, call, at);
-    return [{ ...moved, resilience }, [...runCmds, ...llmCmds]];
+    const [fired, llmCmds] = fireBrainCall(moved, at);
+    return [fired, [...runCmds, ...llmCmds]];
   }
 
   // === Verb: toolOk / toolErr ==============================================
@@ -1401,9 +1519,8 @@ export function createAgent<
     outcome: ToolOutcome<R>,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    if (isSettled(s)) return [s, []];
-    const conv = s.conversation;
-    if (conv === null || conv.awaiting.kind !== "tools") return [s, []];
+    const conv = requireAwaiting(s, "tools");
+    if (conv === null) return [s, []];
 
     // Find the original call (by id) so the folded record carries it. A settle
     // for an unknown / already-settled id is a no-op (fan-out also no-ops it).
@@ -1474,10 +1591,8 @@ export function createAgent<
     // ── No compaction → fire the next brain call. ──
     // An advance of the loop is progress — bump the watchdog, then fire.
     const [runSlice] = run.progress(drained.run, undefined, at);
-    const fired: State = { ...drained, run: runSlice };
-    const nextCall = brainCall(fired);
-    const [resilience, llmCmds] = llm.attempt(fired.resilience, nextCall, at);
-    return [{ ...fired, resilience }, [...launchCmds, ...llmCmds]];
+    const [fired, llmCmds] = fireBrainCall({ ...drained, run: runSlice }, at);
+    return [fired, [...launchCmds, ...llmCmds]];
   }
 
   /**
@@ -1520,21 +1635,17 @@ export function createAgent<
     // Compaction is forward progress (liveness) — bump the watchdog, NOT the
     // turn count (decision C: it is not model reasoning, must not trip maxTurns).
     const [runSlice] = run.progress(s.run, undefined, at);
-    const input: LlmCall<CompactionPurpose> = {
-      purpose: COMPACTION_PURPOSE,
-      model: config.modelId ?? null,
-      payload: policy.payloadOf ? policy.payloadOf(conv, folding) : null,
-    };
-    const [compaction, runCmds] = compactRc.attempt(
+    const input = compactionCall(conv, folding);
+    // The `compact` adapter re-keys the composed `resilient_run` Cmd(s) to the
+    // dedicated `compact_run` discriminant so they route to the compaction
+    // interpret cell, never the brain `resilient_run` one (the `with-resilience`
+    // boundary-re-key pattern).
+    const [compaction, cmds] = compact.attempt(
       s.compaction,
       COMPACTION_PURPOSE,
       input,
       at,
     );
-    // Re-key the composed `resilient_run` Cmd(s) to the dedicated `compact_run`
-    // discriminant so they route to the compaction interpret cell, never the
-    // brain `resilient_run` one (the `with-resilience` boundary-re-key pattern).
-    const cmds = runCmds.map(toCompactRunCmd);
     return [
       { ...s, run: runSlice, conversation: compactConv, compaction },
       cmds,
@@ -1653,7 +1764,7 @@ export function createAgent<
     // 1) Advance the compaction retry layer — resets retry[$compact], closes the
     //    compaction breaker. Reuses llm-call's `succeed` on the dedicated slice;
     //    the enriched `LlmSucceedMsg` is the `compact_ok` payload as-is.
-    const [compaction, retryCmds] = compactRc.succeed(s.compaction, key, {
+    const [compaction, retryCmds] = compact.succeed(s.compaction, key, {
       type: MsgType.ResilientOk,
       key: msg.key,
       result: msg.result,
@@ -1661,13 +1772,11 @@ export function createAgent<
     });
     const settledRetry: State = { ...s, compaction };
 
-    if (isSettled(settledRetry)) return [settledRetry, []];
-    const conv = settledRetry.conversation;
-    if (conv === null || conv.awaiting.kind !== "compacting") {
-      // Stale settle (the run advanced/rebooted past this compaction). The retry
-      // slice still resets above; emit only its cmds (normally none).
-      return [settledRetry, retryCmds.map(toCompactRunCmd)];
-    }
+    // Stale settle (the run is settled, or advanced/rebooted past this
+    // compaction). The retry slice still resets above; emit only its cmds
+    // (`succeed` never emits a run Cmd, so `retryCmds` is empty here).
+    const conv = requireAwaiting(settledRetry, "compacting");
+    if (conv === null) return [settledRetry, retryCmds];
 
     // 2) Fold-back. `folding` is the count the trigger pinned on `awaiting`; the
     //    summary turn replaces those oldest turns + their records.
@@ -1677,14 +1786,12 @@ export function createAgent<
       toolCalls: [],
     };
     const foldedConv = foldSummary(conv, folding, summaryTurn);
-    const fired: State = { ...settledRetry, conversation: foldedConv };
     // Resume the loop: fire the next brain call on the shrunk transcript.
-    const nextCall = brainCall(fired);
-    const [resilience, llmCmds] = llm.attempt(fired.resilience, nextCall, at);
-    return [
-      { ...fired, resilience },
-      [...retryCmds.map(toCompactRunCmd), ...llmCmds],
-    ];
+    const [fired, llmCmds] = fireBrainCall(
+      { ...settledRetry, conversation: foldedConv },
+      at,
+    );
+    return [fired, [...retryCmds, ...llmCmds]];
   }
 
   /**
@@ -1705,7 +1812,7 @@ export function createAgent<
     msg: AgentCompactErrMsg,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    const [compaction, cmds] = compactRc.fail(s.compaction, key, {
+    const [compaction, cmds] = compact.fail(s.compaction, key, {
       type: MsgType.ResilientErr,
       key: msg.key,
       error: msg.error,
@@ -1717,25 +1824,22 @@ export function createAgent<
     // A retry is armed (`waiting_retry`) → not terminal → keep awaiting the
     // re-issued compaction call (the re-keyed run Cmd, if any, rides here).
     if (call?.phase === "waiting_retry") {
-      return [settledRetry, cmds.map(toCompactRunCmd)];
+      return [settledRetry, cmds];
     }
 
-    if (isSettled(settledRetry)) return [settledRetry, []];
-    const conv = settledRetry.conversation;
-    if (conv === null || conv.awaiting.kind !== "compacting") {
-      return [settledRetry, cmds.map(toCompactRunCmd)];
-    }
+    // Stale settle (run settled, or advanced/rebooted past this compaction).
+    // Past the `waiting_retry` guard `fail` emits no run Cmd, so `cmds` is empty.
+    const conv = requireAwaiting(settledRetry, "compacting");
+    if (conv === null) return [settledRetry, cmds];
 
     // Exhausted retry (or no retry) → proceed WITHOUT compacting: drop the
     // `compacting` state, fire the next brain call on the un-compacted transcript.
     const resumedConv: Conversation<R> = { ...conv, awaiting: { kind: "llm" } };
-    const fired: State = { ...settledRetry, conversation: resumedConv };
-    const nextCall = brainCall(fired);
-    const [resilience, llmCmds] = llm.attempt(fired.resilience, nextCall, at);
-    return [
-      { ...fired, resilience },
-      [...cmds.map(toCompactRunCmd), ...llmCmds],
-    ];
+    const [fired, llmCmds] = fireBrainCall(
+      { ...settledRetry, conversation: resumedConv },
+      at,
+    );
+    return [fired, [...cmds, ...llmCmds]];
   }
 
   // === Verb: onTimer =======================================================
@@ -1767,8 +1871,8 @@ export function createAgent<
     // (`resilient:retry:$compact` / `resilient:deadline:$compact`), distinct from
     // every brain purpose, so the suffix routes the fire to the right slice.
     if (msg.id.endsWith(`:${COMPACTION_PURPOSE}`)) {
-      const [compaction, cmds] = compactRc.onTimer(s.compaction, msg);
-      return [{ ...s, compaction }, cmds.map(toCompactRunCmd)];
+      const [compaction, cmds] = compact.onTimer(s.compaction, msg);
+      return [{ ...s, compaction }, cmds];
     }
     const [resilience, cmds] = llm.onTimer(s.resilience, msg);
     return [{ ...s, resilience }, cmds];
@@ -1807,29 +1911,21 @@ export function createAgent<
     if (conv.awaiting.kind === "llm") {
       // Re-fire the brain call. The resilient slice already tracks it `running`;
       // re-issuing the same key is idempotent at the gate (re-emits the run Cmd).
-      const call = brainCall(rebooted);
-      const [resilience, cmds] = llm.attempt(rebooted.resilience, call, at);
-      return [{ ...rebooted, resilience }, cmds];
+      return fireBrainCall(rebooted, at);
     }
 
     if (conv.awaiting.kind === "compacting") {
       // Re-fire the in-flight compaction round-trip (#85). The compaction slice
       // already tracks `$compact` running; re-issuing the same key is idempotent
       // at the gate, and the re-emitted `resilient_run` is re-keyed to `compact_run`.
-      const input: LlmCall<CompactionPurpose> = {
-        purpose: COMPACTION_PURPOSE,
-        model: config.modelId ?? null,
-        payload: config.compaction?.payloadOf
-          ? config.compaction.payloadOf(conv, conv.awaiting.folding)
-          : null,
-      };
-      const [compaction, cmds] = compactRc.attempt(
+      const input = compactionCall(conv, conv.awaiting.folding);
+      const [compaction, cmds] = compact.attempt(
         rebooted.compaction,
         COMPACTION_PURPOSE,
         input,
         at,
       );
-      return [{ ...rebooted, compaction }, cmds.map(toCompactRunCmd)];
+      return [{ ...rebooted, compaction }, cmds];
     }
 
     // awaiting tools → re-fire every running tool's effect Cmd.
