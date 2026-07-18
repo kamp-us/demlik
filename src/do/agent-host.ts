@@ -202,11 +202,17 @@ export function createAgentHost<
     config.terminal ??
     ((s: S) => s.run.phase === "done" || s.run.phase === "failed");
 
-  let cached: Runtime<S, M, E> | null = null;
+  // The build-once cell memoizes the IN-FLIGHT build (a Promise), not just the
+  // settled runtime (#313). Were it the settled handle, two concurrent
+  // activations — e.g. an `/sse` open and an inbound dispatch arriving in the
+  // same wake — would each pass the fast-path guard (the cell is empty until
+  // after the boot await) and each `run(buildMachine(), …)` + wire SSE + autoBoot
+  // against the same storage: a double boot with duplicate SSE wiring, not the
+  // build-once-boot-once this host promises. Assigning the promise synchronously,
+  // before the first await, means the second caller shares the one build.
+  let cached: Promise<Runtime<S, M, E>> | null = null;
 
-  async function runtime(): Promise<Runtime<S, M, E>> {
-    if (cached !== null) return cached;
-
+  async function build(): Promise<Runtime<S, M, E>> {
     // `run()` hands back a `BootingRuntime` synchronously (#45). Wire the
     // SEMANTIC event projector (#47) so `runtime.on(...)` lights up, then drive
     // the SSE hub off that named stream (never the private-Msg firehose). The
@@ -227,7 +233,19 @@ export function createAgentHost<
     // Re-fire the one outstanding tool effect IFF this wake rehydrated a
     // suspended run (no-op on a fresh DO). `autoBoot` awaits the same boot gate.
     await autoBoot(booting, now);
-    cached = await booting.ready;
+    return booting.ready;
+  }
+
+  function runtime(): Promise<Runtime<S, M, E>> {
+    if (cached !== null) return cached;
+    const building = build();
+    cached = building;
+    // A failed build clears the cell so a later call retries rather than
+    // caching the rejection forever (matches the pre-#313 `cached`-stays-null
+    // semantics). Guard on identity so a reset+rebuild isn't clobbered.
+    building.catch(() => {
+      if (cached === building) cached = null;
+    });
     return cached;
   }
 
@@ -242,8 +260,12 @@ export function createAgentHost<
     sse,
     async reset(): Promise<void> {
       if (cached === null) return;
-      await cached.stop();
+      // Await the settled build before tearing down — a reset racing an
+      // in-flight build still drains the one runtime rather than orphaning it.
+      // A failed build has no runtime to stop.
+      const built = await cached.catch(() => null);
       cached = null;
+      await built?.stop();
     },
   };
 }
