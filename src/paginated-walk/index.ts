@@ -318,6 +318,32 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     return [withResilience(s, resilience), cmds];
   }
 
+  /**
+   * Issue the page fetch for a freshly-armed paginator transition, else a pure
+   * no-op. `walk` is the result of a paginator verb (`startWalk` / `resumeWalk`)
+   * applied to `s.walk`; this states the arm-and-fetch contract ONCE for the two
+   * verbs that share it (`start`, `resume`).
+   *
+   * A paginator verb is a pure no-op on any phase it does not act on — it returns
+   * the SAME state object. Reference identity (not phase) is the honest "did the
+   * verb arm a fresh fetch?" check: a walk already `fetching` would also satisfy
+   * `phase === "fetching"` yet must NOT re-issue a fetch (page-one skip /
+   * double-fetch). So we proceed ONLY when the verb produced a fresh state. The
+   * `phase === "fetching"` narrow that follows is therefore always true here
+   * (both verbs only ever produce a `fetching` arm), and also narrows `.cursor`
+   * for the type checker. PURE — `at` threads into the fetch gate.
+   */
+  function armAndFetch(
+    s: PaginatedWalkState<Cursor, Page>,
+    walk: PaginatorState<Cursor>,
+    at: number,
+  ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
+    if (walk === s.walk || walk.phase !== "fetching") {
+      return [s, []];
+    }
+    return fetch({ ...s, walk }, walk.cursor, at);
+  }
+
   // === Verb: start =========================================================
 
   /**
@@ -331,20 +357,9 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     s: PaginatedWalkState<Cursor, Page>,
     at: number,
   ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
-    const walk = startWalk(s.walk, paginatorPolicy);
-    // `startWalk` is a pure no-op on any non-`idle` phase: it returns the SAME
-    // state object. Reference identity (not phase) is the honest "did anything
-    // arm?" check — a walk already `fetching` would also satisfy
-    // `phase === "fetching"` yet must NOT re-issue a fetch (page-one skip /
-    // double-fetch). So we proceed ONLY when start produced a fresh state. The
-    // `phase === "fetching"` narrow that follows is therefore always true here
-    // (start only ever produces a `fetching` arm), and also narrows `.cursor`
-    // for the type checker.
-    if (walk === s.walk || walk.phase !== "fetching") {
-      return [s, []];
-    }
-    // Armed `fetching(firstCursor)` → issue the first page fetch.
-    return fetch({ ...s, walk }, walk.cursor, at);
+    // `startWalk` is a pure no-op on any non-`idle` phase (same reference); a
+    // fresh `fetching(firstCursor)` arm → issue the first page fetch.
+    return armAndFetch(s, startWalk(s.walk, paginatorPolicy), at);
   }
 
   // === Verb: pageOk ========================================================
@@ -527,14 +542,10 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     s: PaginatedWalkState<Cursor, Page>,
     at: number,
   ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
-    const walk = resumeWalk(s.walk, paginatorPolicy);
     // `resumeWalk` is a pure no-op (same reference) on any phase but `paused`, or
     // when `seen` is still at/over the mark. Only a fresh `fetching` arm means
     // the valve actually re-opened — issue the page fetch only then.
-    if (walk === s.walk || walk.phase !== "fetching") {
-      return [s, []];
-    }
-    return fetch({ ...s, walk }, walk.cursor, at);
+    return armAndFetch(s, resumeWalk(s.walk, paginatorPolicy), at);
   }
 
   // === Derived predicates ==================================================
