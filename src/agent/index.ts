@@ -94,7 +94,7 @@
  *   const runtime = run(machine, { ctx, store });
  */
 
-import { createFanOut, type FanOutState, initFanOut } from "../fan-out";
+import { createFanOut, initFanOut } from "../fan-out";
 import {
   type Cmd,
   defineMachine,
@@ -106,896 +106,70 @@ import {
   createLlmCall,
   deadlineSub,
   type LlmCall,
-  type LlmCallPorts,
-  type LlmErr,
   type LlmFailMsg,
   type LlmOk,
   type LlmRunCmd,
   type LlmSucceedMsg,
-  type LlmTimerMsg,
-  type MessageLoader,
-  type ModelFactory,
   type ResilientState,
-  type Schema,
   subscribeDeadline,
 } from "../llm-call";
 import {
   createMonitoredRun,
   type DeadlineSub,
   type MonitoredRunCmd,
-  type MonitoredRunState,
-  type RunFailure,
 } from "../monitored-run";
 import { MsgType } from "../protocol";
 import { createResilientCall } from "../resilient-call";
-import type { RetryPolicy } from "../retry-backoff";
+import {
+  type AgentCompactErrMsg,
+  type AgentCompactOkMsg,
+  type AgentCompactRunCmd,
+  COMPACTION_PURPOSE,
+  type CompactInterpret,
+  type CompactionOutputs,
+  type CompactionPolicy,
+  type CompactionPurpose,
+} from "./compaction";
+import {
+  currentStage,
+  dedupeByCallId,
+  foldSummary,
+  freshConversation,
+  isSettled,
+  requireAwaiting,
+  toCompactRunCmd,
+} from "./internal";
+import {
+  type AgentCmd,
+  type AgentDetachedHandlers,
+  type AgentKnob,
+  type AgentLlmErrMsg,
+  type AgentLlmOkMsg,
+  type AgentLlmRunCmd,
+  type AgentMachineMsg,
+  type AgentPorts,
+  type AgentTimerMsg,
+  mergeInterpret,
+  type SnapshotInterpret,
+} from "./machine";
+import type {
+  AgentConfig,
+  AgentConfigCore,
+  AgentFailure,
+  AgentState,
+  AgentTurn,
+  Conversation,
+  ToolCall,
+  ToolOutcome,
+} from "./types";
 
-// ===========================================================================
-// Domain seams the consumer supplies — the tool + turn shapes.
-// ===========================================================================
-
-/**
- * One tool the model asked to call this turn — the seed's `ToolCall`, stripped
- * of the audit-specific args typing. Plain data so it round-trips through the
- * durable fan-out ledger: a stable `callId` (the fan-out identity), the tool
- * `name`, and the opaque `args` the consumer's own interpret reads.
- */
-export interface ToolCall {
-  /** Stable id the model minted; the fan-out item identity (`idOf`). */
-  readonly callId: string;
-  /** The tool to invoke. The consumer's `toolOf` maps it to an effect Cmd. */
-  readonly name: string;
-  /** Args the model emitted, opaque to the agent. */
-  readonly args: Readonly<Record<string, unknown>>;
-}
-
-/**
- * One model turn — the seed's `AiTurn`, generalized: the narration `content`
- * the model produced and the `toolCalls` it asked us to run. An empty
- * `toolCalls` means the model is done with this stage (advance the pipeline).
- * This is the parsed output of a brain call; the consumer's schema produces it.
- */
-export interface AgentTurn {
-  /** Free-text narration the model produced this turn (folded into the conversation). */
-  readonly content: string;
-  /** The tools the model asked us to run; empty = stage done. */
-  readonly toolCalls: readonly ToolCall[];
-}
-
-/**
- * Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own
- * structured-output type. A consumer's brain schema parses the model's output
- * into an `AgentTurn` (the agentic purpose's output); rather than every consumer
- * hand-rolling this guard + a `Schema<AgentTurn>` for a type the agent OWNS, the
- * agent exports both. Checks the two load-bearing fields: `content` is a string,
- * `toolCalls` is an array. PURE — allocates no Error.
- */
-export function isAgentTurn(value: unknown): value is AgentTurn {
-  if (value === null || typeof value !== "object") return false;
-  const t = value as { content?: unknown; toolCalls?: unknown };
-  return typeof t.content === "string" && Array.isArray(t.toolCalls);
-}
-
-/**
- * Build a `Schema<T>` from a type guard — the zod-style `parse` throw-wrapper the
- * llm-call handler relies on, factored so tea's two owned structured-output
- * schemas ({@link agentTurnSchema}, {@link compactionSummarySchema}) share one
- * shape. On a value the guard rejects it throws `structured-output parse failed:
- * not <name>` (a `*_err` at the boundary — errors are data); otherwise it
- * narrows through. `name` is the full noun phrase incl. article ("an AgentTurn").
- */
-function schemaFromGuard<T>(
-  guard: (value: unknown) => value is T,
-  name: string,
-): Schema<T> {
-  return {
-    parse: (value: unknown): T => {
-      if (!guard(value)) {
-        throw new Error(`structured-output parse failed: not ${name}`);
-      }
-      return value;
-    },
-  };
-}
-
-/**
- * The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain
- * call binds when the agentic purpose's output is a bare `AgentTurn` (the common
- * case). Throws on a non-`AgentTurn` (the zod-style `parse` contract the
- * llm-call handler relies on). Deletes the consumer's hand-rolled
- * `auditSchema` / `isAgentTurn` pair.
- *
- * A consumer whose turn type EXTENDS `AgentTurn` with extra fields still writes
- * its own schema (it must validate the extra fields); this is for the plain case.
- */
-export const agentTurnSchema: Schema<AgentTurn> = schemaFromGuard(
-  isAgentTurn,
-  "an AgentTurn",
-);
-
-/**
- * One settled tool outcome the consumer routes back into the loop — the seed's
- * `ToolOutcome`. `ok` carries the result the consumer's interpret produced;
- * `error` carries a reason the model sees (so it recovers rather than stalls —
- * "errors are data").
- */
-export type ToolOutcome<R> =
-  | { readonly kind: "ok"; readonly result: R }
-  | { readonly kind: "error"; readonly reason: string };
-
-/**
- * A folded tool record kept on the conversation once a tool settles — the
- * call + its outcome, in settle order. The consumer's message loader reads
- * these (plus `turns`) to assemble the next brain call's prompt.
- *
- * `turn` is the `turnCount` at the time the record was folded — the association
- * compaction needs to drop the RIGHT records (#85 / design A1). When compaction
- * folds `turns[0..N]` into a summary, it must also drop every tool record that
- * belonged to those turns; without a turn stamp on the record there is no honest
- * way to know which. It is the round-trip index, not a wall clock — small and
- * JSON-stable, preserving the durability invariant.
- */
-export interface ToolRecord<R> {
-  readonly call: ToolCall;
-  readonly outcome: ToolOutcome<R>;
-  /** The `turnCount` at fold time — which round-trip this record belongs to (#85, A1). */
-  readonly turn: number;
-}
-
-// ===========================================================================
-// Conversation — the agentic-stage loop state (the seed's `Conversation`).
-// ===========================================================================
-
-/**
- * Whether the agentic stage is waiting on the model (`llm`), on tools
- * (`tools`), or on a compaction round-trip (`compacting`, #85). The in-flight
- * fan-out batch exists ONLY in the `tools` variant — "awaiting llm with tools
- * pending" is structurally impossible (the seed's canon §2.6 / Rule 1
- * impossible-states pin). Discriminated on `kind`.
- *
- * `compacting` is the honest state for the dedicated compaction round-trip
- * (design B1): the transcript grew, the policy asked to fold `folding` of the
- * OLDEST turns, and the summarize call is in flight INSTEAD of the next brain
- * call. `folding` is the count `planCompaction` returned — the fold-back
- * (`compact_ok`) drops exactly that many head turns + their tool records.
- */
-export type Awaiting =
-  | { readonly kind: "llm" }
-  | { readonly kind: "tools"; readonly batchTurn: number }
-  | { readonly kind: "compacting"; readonly folding: number };
-
-/**
- * The agentic-stage conversation — durable inside the agent slice so an
- * eviction mid-loop resumes the exact turn. The model turns + folded tool
- * records are the consumer's prompt source (via the llm-call message loader);
- * `turnCount` drives the livelock guard; `awaiting` carries the ONE outstanding
- * effect for the agentic stage.
- *
- * Generic over the consumer's tool-result type `R` (what `toolOk` carries).
- */
-export interface Conversation<R> {
-  /** Model turns this stage has produced, in order. */
-  readonly turns: readonly AgentTurn[];
-  /** Settled tool records, in settle order — the model sees these next turn. */
-  readonly toolRecords: readonly ToolRecord<R>[];
-  /** Monotonic round-trip count; the livelock guard compares it to `maxTurns`. */
-  readonly turnCount: number;
-  /** What the loop is waiting for next. */
-  readonly awaiting: Awaiting;
-}
-
-// ===========================================================================
-// Config — the knob. The domain seams (tools / schemas / model / stages) are
-// required; everything cross-cutting (retry / deadline / concurrency / loader /
-// maxTurns) is optional, per the resilient-call "omit a brick → omit its gate".
-// ===========================================================================
-
-/**
- * The agent knob. Type parameters:
- *   - `Stage`   — the consumer's pipeline stage id (any JSON value).
- *   - `P`       — the brain-call purpose union (`"plan" | "act" | ...`).
- *   - `O`       — the purpose→output map. Every purpose drives the agentic loop,
- *                 so each output is pinned to `AgentTurn` (or a subtype) by the
- *                 `O extends Record<P, AgentTurn>` bound — that is what the loop
- *                 folds. An `Outputs` whose purpose output is NOT an `AgentTurn`
- *                 fails to compile here; the rule lives in the type, not a cast.
- *   - `R`       — the consumer's tool-result type (what `toolOk` carries).
- *   - `TC`      — the consumer's per-tool effect Cmd, the discriminated variant
- *                 `toolOf` produces. Kept PRECISE (a closed Cmd variant, not the
- *                 open `Cmd`) so `AgentCmd<P, TC>` stays a closed discriminated
- *                 union and the wired machine's interpret merge type-checks per
- *                 key — the brain cell maps to `resilient_run`, the tool cell to
- *                 `TC["type"]` — with no laundering cast. Defaults to `Cmd` for
- *                 the consumer that does not care to name its tool Cmd.
- *   - `Msg`     — the model's message shape (threaded through the llm-call loader).
- */
-/**
- * The snapshotting discriminant (#55). Checkpointing is either OFF — in which
- * case `snapshotEvery` is structurally absent and the monitored-run slice never
- * emits a `snapshot_write` Cmd — or ON, in which case `snapshotEvery` is a
- * `number`. A `{ snapshotEvery?: never }` member (rather than a bare optional)
- * makes the OFF case load-bearing: it forbids passing `snapshotEvery` at all, so
- * `toMachine` can config-derive whether the `snapshot_write` interpret cell is
- * REQUIRED (ON) or FORBIDDEN (OFF) instead of defaulting it to a silent no-op.
- *
- * This is what kills the type lie: with checkpointing off, `snapshot_write` is
- * absent from the consumer's interpret contract entirely — never a
- * `snapshot_write: async () => undefined` ceremony that masks a real wiring bug.
- */
-export type AgentSnapshotConfig =
-  | { readonly snapshotEvery?: never }
-  | { readonly snapshotEvery: number };
-
-// ===========================================================================
-// Context-compaction seam (#85) — the opt-in transcript snapshot-and-compact
-// policy, shaped exactly like `AgentSnapshotConfig` so a short agent pays
-// nothing and cannot even mention the machinery.
-// ===========================================================================
-
-/**
- * The reserved purpose the compaction round-trip runs under (#85). Compaction
- * is a DEDICATED resilient LLM call (design B1), NOT one of the consumer's brain
- * purposes `P` — so it carries its own purpose literal, kept in the agent's
- * private `$`-namespace (the same reserved-namespace discipline `with-resilience`
- * uses) so it never collides with a consumer purpose. A consumer never names it.
- */
-export type CompactionPurpose = "$compact";
-
-/** The reserved compaction purpose's value — the single in-flight summarize call's key. */
-export const COMPACTION_PURPOSE: CompactionPurpose = "$compact";
-
-/**
- * The purpose→output map for the compaction LLM call — the single reserved
- * `$compact` purpose mapping to a {@link CompactionSummary}. Mirrors the brain
- * call's `O` map, scoped to the one compaction purpose, so the composed
- * `createLlmCall` parses the summarize output under the same structured-output
- * contract the brain call uses.
- */
-export interface CompactionOutputs extends Record<CompactionPurpose, unknown> {
-  readonly $compact: CompactionSummary;
-}
-
-/**
- * Narrow an unknown to a {@link CompactionSummary} — the runtime witness for the
- * compaction call's structured output. Checks the one load-bearing field
- * (`summary` is a string). PURE — allocates no Error.
- */
-export function isCompactionSummary(
-  value: unknown,
-): value is CompactionSummary {
-  if (value === null || typeof value !== "object") return false;
-  return typeof (value as { summary?: unknown }).summary === "string";
-}
-
-/**
- * The `Schema<CompactionSummary>` the compaction call binds — tea's own parse
- * target for the summarize round-trip (it OWNS the `$compact` purpose's output).
- * Throws on a non-summary (the zod-style `parse` contract the llm-call handler
- * relies on), so a malformed summary is a `compact_err` (errors are data), never
- * a corrupt fold-back.
- */
-export const compactionSummarySchema: Schema<CompactionSummary> =
-  schemaFromGuard(isCompactionSummary, "a CompactionSummary");
-
-/**
- * The result a compaction round-trip produces — the model's summary of the
- * folded-away turns. Tea OWNS this shape (the `$compact` purpose's output): the
- * fold-back (`compact_ok`) writes `summary` into a synthetic head `AgentTurn`
- * (design A1), so a consumer's `loadMessages` reads it as a normal turn with no
- * watermark to learn. Generic-free — the summary is always plain text.
- */
-export interface CompactionSummary {
-  /** The model's summary of the folded-away (oldest) turns + their tool records. */
-  readonly summary: string;
-}
-
-/**
- * The consumer's compaction policy (#85). One PURE trigger; the impure
- * summarize round-trip is composed by the agent (a dedicated resilient LLM call
- * under the reserved `$compact` purpose, inheriting retry/backoff — design B1),
- * so the policy never reaches the model itself.
- *
- *   - `planCompaction` — PURE: given the live conversation ABOUT to fire a brain
- *     call, return how many of the OLDEST turns to fold into a summary, or `0`
- *     to skip. No clock, no RNG → replay re-decides identically (design D). A
- *     char-length / turn-count / real deterministic-tokenizer heuristic all
- *     qualify. Returning `>= turns.length` is clamped to "fold all but keep the
- *     loop alive" by the trigger (it never folds the turn currently in flight).
- *   - `payloadOf` — build the per-call prompt payload the compaction
- *     `MessageLoader` reads (the turns being folded). Omit → `null` (the loader,
- *     if any, reads the conversation off the agent's own state). Opaque to the
- *     agent, exactly like the brain call's `payloadOf`.
- */
-export interface CompactionPolicy<R, Msg = unknown> {
-  /** PURE trigger: how many OLDEST turns to fold (`0` = skip). No clock/RNG. */
-  readonly planCompaction: (conversation: Conversation<R>) => number;
-  /** Build the summarize call's prompt payload from the turns being folded. Omit → `null`. */
-  readonly payloadOf?: (
-    conversation: Conversation<R>,
-    folding: number,
-  ) => unknown;
-  /** DI port — the SDK / message loader for the summarize call. Omit → invoke with `[]`. */
-  readonly loadMessages?: MessageLoader<CompactionPurpose, Msg>;
-}
-
-/**
- * The compaction discriminant (#85), shaped exactly like {@link
- * AgentSnapshotConfig}. Compaction is either OFF — `compaction` is structurally
- * absent and the agent never emits a `compact_run` Cmd — or ON, in which case
- * `compaction` is a {@link CompactionPolicy}. A `{ compaction?: never }` member
- * (rather than a bare optional) makes the OFF case load-bearing: it forbids
- * passing `compaction` at all, so `toMachine` config-derives whether the
- * `compact_run` interpret cell is REQUIRED (ON) or FORBIDDEN (OFF) — never a
- * silent no-op cell, the #55 type-lie-killer reused.
- */
-export type AgentCompactionConfig<R, Msg> =
-  | { readonly compaction?: never }
-  | { readonly compaction: CompactionPolicy<R, Msg> };
-
-/**
- * The core (non-snapshot, non-compaction) agent knob. The full `AgentConfig`
- * intersects this with the `AgentSnapshotConfig` + `AgentCompactionConfig`
- * discriminants — see those types for why the cadence / policy are discriminated
- * unions rather than bare optionals.
- */
-export interface AgentConfigCore<
-  Stage,
-  P extends string,
-  O extends Record<P, AgentTurn>,
-  R,
-  TC extends Cmd = Cmd,
-  Msg = unknown,
-> {
-  // ---- monitored-run seam (the outer pipeline) ----------------------------
-  /** The ordered stages. Omit / empty → a single-shot run (one agentic stage). */
-  readonly stages?: readonly Stage[];
-  /** No-progress watchdog budget, in ms. Omit → no watchdog. */
-  readonly deadlineMs?: number;
-
-  // ---- llm-call seam (the brain) ------------------------------------------
-  /** DI port — the model factory `(modelId) => Llm`. */
-  readonly model: ModelFactory<Msg>;
-  /** One structured-output schema per purpose; the parse target per brain call. */
-  readonly schemas: { readonly [K in P]: Schema<O[K]> };
-  /** Backoff policy for brain calls, composed into `../llm-call`. Omit → no backoff. */
-  readonly retry?: RetryPolicy;
-  /** DI port — the SDK / message loader. Omit → brain calls invoke with `[]`. */
-  readonly loadMessages?: MessageLoader<P, Msg>;
-
-  // ---- fan-out seam (the tools) -------------------------------------------
-  /** Map one tool call to the effect Cmd the consumer's interpret performs. */
-  readonly toolOf: (call: ToolCall) => TC;
-  /** Max tools in flight at once. Omit / `1` → serial dispatch (the seed's behavior). */
-  readonly toolConcurrency?: number;
-
-  // ---- the loop wiring -----------------------------------------------------
-  /**
-   * Which brain-call purpose a given stage runs. The agent fires
-   * `call_llm{ turnOf(stage) }` to drive the agentic stage's loop. The purpose's
-   * schema output is an `AgentTurn` — enforced by the `O extends Record<P,
-   * AgentTurn>` bound, not left to a doc-comment.
-   */
-  readonly turnOf: (stage: Stage | undefined) => P;
-  /** Build the per-purpose brain-call payload from the conversation. Omit → `null`. */
-  readonly payloadOf?: (
-    stage: Stage | undefined,
-    conversation: Conversation<R>,
-  ) => unknown;
-  /** The model id every brain call invokes. Omit → `null` (the host's default). */
-  readonly modelId?: string | null;
-  /**
-   * Livelock guard: bound on model round-trips within one run. On
-   * `turnCount >= maxTurns` the run fails `{ reason: "turn_limit" }`. Omit → no
-   * turn guard (only the deadline watchdog bounds the loop).
-   */
-  readonly maxTurns?: number;
-
-  // ---- determinism seam ----------------------------------------------------
-  /**
-   * The impurity-injection seam for the inherited brain-call retry jitter — the
-   * ONE place this otherwise-pure machine reads randomness. Pass a fixed
-   * `() => 0` to pin backoff (tests, replay, durability proofs). Omit →
-   * `Math.random`, read only at the resilient-call verb boundary.
-   */
-  readonly rng?: () => number;
-}
-
-/**
- * The agent knob — the core seams intersected with the snapshotting discriminant
- * (`AgentSnapshotConfig`). Type parameters are documented on `AgentConfigCore`;
- * the only addition here is that `snapshotEvery` is the discriminant that drives
- * whether `toMachine` requires (or forbids) the `snapshot_write` interpret cell.
- */
-export type AgentConfig<
-  Stage,
-  P extends string,
-  O extends Record<P, AgentTurn>,
-  R,
-  TC extends Cmd = Cmd,
-  Msg = unknown,
-> = AgentConfigCore<Stage, P, O, R, TC, Msg> &
-  AgentSnapshotConfig &
-  AgentCompactionConfig<R, Msg>;
-
-// ===========================================================================
-// Slice — the Model field this knob owns. Three composed slices + the loop's
-// conversation. Plain data end to end → durable + replayable.
-// ===========================================================================
-
-/**
- * Why a run terminated as `failed`, beyond monitored-run's own reasons. The
- * `turn_limit` reason is the agent's livelock guard; deadline / stage failures
- * surface through the monitored-run slice's own `failure`.
- */
-export type AgentFailure =
-  | { readonly reason: "turn_limit"; readonly at: number }
-  | { readonly reason: "llm"; readonly error: unknown; readonly at: number };
-
-/**
- * The agent slice — every composed brick's slice plus the loop's conversation
- * and the agent-specific failure annotation.
- *
- *   - `run`          — the `../monitored-run` slice (pipeline position +
- *                      lifecycle + watchdog). The OUTER lifecycle truth.
- *   - `resilience`   — the `../llm-call` (= resilient-call) slice (brain-call
- *                      retry / backoff). Per-purpose retry lives here.
- *   - `tools`        — the `../fan-out` ledger for the current turn's tools.
- *   - `conversation` — the agentic-stage loop state. `null` until the loop is
- *                      entered (the consumer seeds it at the agentic stage).
- *   - `failure`      — the agent-specific terminal annotation (turn-limit /
- *                      llm), null otherwise. Distinct from `run.failure`.
- */
-export interface AgentState<
-  Stage,
-  P extends string,
-  O extends Record<P, unknown>,
-  R,
-> {
-  readonly run: MonitoredRunState<Stage>;
-  readonly resilience: ResilientState<LlmCall<P>, LlmOk<P, O>>;
-  readonly tools: FanOutState<ToolCall, ToolOutcome<R>>;
-  readonly conversation: Conversation<R> | null;
-  /**
-   * The compaction round-trip's resilient slice (#85, design B1) — a DEDICATED
-   * resilient-call slice for the reserved `$compact` purpose, separate from the
-   * brain `resilience` slice so a compaction retry/backoff never disturbs the
-   * brain call's breaker or retry counter. Always present (empty `calls` when no
-   * compaction is in flight, or when no policy is configured) so the slice stays
-   * a flat plain-data record — durable + replayable like every composed brick.
-   */
-  readonly compaction: ResilientState<
-    LlmCall<CompactionPurpose>,
-    LlmOk<CompactionPurpose, CompactionOutputs>
-  >;
-  readonly failure: AgentFailure | null;
-  /**
-   * The run's terminal output — the FIRST-CLASS result (issue #46). `null`
-   * until the pipeline finishes; set to the last model turn (the empty-tool
-   * turn that retired the final stage) the instant `run.phase` becomes `"done"`.
-   *
-   * This survives the `conversation` clear on stage retire: clearing the
-   * conversation is correct durability hygiene (a finished stage's transcript
-   * is not live state), but the run's PRODUCT is, so it lives here on the
-   * durable slice rather than being scraped off the `observe` firehose by
-   * matching the private `resilient_ok` Msg and racing the clear (the old
-   * `captureLastTurn` dance this field deletes). A consumer reads
-   * `runtime.result()?.output` / `(await runtime.done()).output`.
-   *
-   * Typed `AgentTurn | null` (not `O[P]`): the run's output is always a model
-   * turn — the `O extends Record<P, AgentTurn>` knob bound pins every purpose's
-   * output to an `AgentTurn`, and the terminating turn is the one with no tool
-   * calls. The wider `Record<P, unknown>` bound on `AgentState` itself does not
-   * constrain `O[P]`, so naming the concrete `AgentTurn` keeps this field's type
-   * total without a purpose-indexing narrow.
-   */
-  readonly output: AgentTurn | null;
-}
-
-// ===========================================================================
-// Lifecycle status — the ONE typed channel callers read instead of re-deriving
-// the private slice shape (issue #49).
-// ===========================================================================
-
-/**
- * The unified terminal failure (issue #49). The agent terminates `failed`
- * through TWO independent slice channels:
- *
- *   - `state.failure` (`AgentFailure`) — the AGENT'S OWN annotation
- *     (`turn_limit` livelock guard / `llm` exhausted-retry). Set WITHOUT moving
- *     `run.phase` (it stays `running`); `isSettled` treats a non-null `failure`
- *     as terminal regardless of `run.phase`.
- *   - `state.run.failure` (`RunFailure`) — the monitored-run channel
- *     (`deadline` watchdog / `stage` failure), present iff `run.phase` is
- *     `"failed"`.
- *
- * Callers used to union these by hand at every status question. `status`
- * collapses them into ONE `failure`, so a consumer reads `status(s).failure`
- * without knowing which channel produced it.
- */
-export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
-
-/**
- * The agent's lifecycle status — THE single typed channel for "what is this run
- * doing?" (issue #49). A discriminated union on `kind` so any change to the
- * private slice shape (`Awaiting`, the failure channels, `run.phase`) forces a
- * compile error at the call sites that switch on it, instead of silently
- * breaking a hand-rolled re-derivation. Make-invalid-states-unrepresentable:
- *
- *   - `running`   — live, NOT awaiting tools (a brain call is in flight, or the
- *                   run is between stages). Not resumable on cold wake by
- *                   itself — the in-flight brain call re-fires from `boot`.
- *   - `suspended` — the RESUMABLE case: running + a live conversation +
- *                   `awaiting.kind === "tools"`. `pending` is the outstanding
- *                   tool calls (`conversation.awaiting` … the in-flight batch),
- *                   read off `tools.running`. This is exactly the shape
- *                   `agentIsResumable` re-derived by hand.
- *   - `done`      — the pipeline finished; `output` is the terminal model turn
- *                   stamped on `state.output` (issue #46), `null` if the run
- *                   produced no turn.
- *   - `failed`    — terminal failure; `failure` is the UNIFIED channel
- *                   (`AgentTerminalFailure`), absorbing the `state.failure` vs
- *                   `state.run.failure` dual channel so callers stop unioning.
- */
-export type AgentStatus<Stage> =
-  | { readonly kind: "running" }
-  | { readonly kind: "suspended"; readonly pending: readonly ToolCall[] }
-  | { readonly kind: "done"; readonly output: AgentTurn | null }
-  | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> };
-
-/**
- * Derive the agent's lifecycle `status` from its durable slice — the pure
- * status function that REPLACES every caller's hand re-derivation of the private
- * shape (issue #49). PURE — reads no clock / RNG, allocates one small record.
- *
- * Ordering is terminal-first so a settled run never reports `running`:
- *
- *   1. `state.failure` (the agent's own annotation, set WITHOUT moving
- *      `run.phase`) → `failed`. Checked first because `turn_limit` / `llm`
- *      leave `run.phase === "running"`; reading `run.phase` first would
- *      misreport such a run as `running`. This is the canonical failure source
- *      when present.
- *   2. `run.phase === "failed"` → `failed`, carrying `run.failure` (deadline /
- *      stage). The fallback channel.
- *   3. `run.phase === "done"` → `done` with `state.output` (#46).
- *   4. running + conversation + `awaiting.kind === "tools"` → `suspended` with
- *      the outstanding tool calls (`tools.running`). THE resumability condition.
- *   5. otherwise → `running`.
- */
-export function status<
-  Stage,
-  P extends string,
-  O extends Record<P, unknown>,
-  R,
->(s: AgentState<Stage, P, O, R>): AgentStatus<Stage> {
-  // 1) The agent's own failure annotation is canonical — it is set without
-  //    moving `run.phase` (turn_limit / llm leave the run `running`), so it
-  //    MUST be read before `run.phase` or such a failure reports as `running`.
-  if (s.failure !== null) {
-    return { kind: "failed", failure: s.failure };
-  }
-  // 2) The monitored-run terminal failure (deadline / stage). `run.failure` is
-  //    non-null exactly when `phase === "failed"` (the run-state invariant), so
-  //    the `!== null` guard narrows it with no assertion and no fabricated
-  //    fallback — the unreachable phase-failed-yet-failure-null state falls
-  //    through rather than inventing a failure to report.
-  if (s.run.phase === "failed" && s.run.failure !== null) {
-    return { kind: "failed", failure: s.run.failure };
-  }
-  // 3) The pipeline finished — the terminal output landed on `state.output`.
-  if (s.run.phase === "done") {
-    return { kind: "done", output: s.output };
-  }
-  // 4) Running + a live conversation awaiting tools → suspended (resumable).
-  //    The outstanding calls are the in-flight fan-out batch (`tools.running`).
-  if (s.conversation !== null && s.conversation.awaiting.kind === "tools") {
-    return { kind: "suspended", pending: s.tools.running };
-  }
-  // 5) Otherwise the run is live and not awaiting tools.
-  return { kind: "running" };
-}
-
-// ===========================================================================
-// Cmds + Msgs the knob speaks. Generic over the composed bricks' shapes.
-// ===========================================================================
-
-/** The brain-call effect Cmd, inherited from `../llm-call`. */
-export type AgentLlmRunCmd<P extends string> = LlmRunCmd<P>;
-
-// ---------------------------------------------------------------------------
-// The compaction round-trip's Cmd + settle Msgs (#85, design B1). DEDICATED
-// discriminants (`compact_run` / `compact_ok` / `compact_err`) — re-keyed off
-// the composed resilient call's `resilient_run` / `resilient_ok` / `resilient_err`
-// at the agent boundary (the `with-resilience` re-keying discipline) so the
-// compaction interpret cell is its OWN cell, never the brain `resilient_run` one.
-// ---------------------------------------------------------------------------
-
-/**
- * The "summarize the oldest N turns" effect Cmd — the compaction round-trip's
- * carrier (#85). It mirrors the brain `resilient_run` Cmd's shape (a `key` + the
- * plain `LlmCall<CompactionPurpose>` input, no closures) but under the dedicated
- * `compact_run` discriminant so it routes to the compaction interpret cell, not
- * the brain one. The cell composes the resilient brick (retry/backoff) and
- * returns the re-keyed `compact_ok` / `compact_err` settle for re-entry.
- */
-export type AgentCompactRunCmd = Cmd<typeof MsgType.CompactRun> & {
-  readonly key: CompactionPurpose;
-  readonly input: LlmCall<CompactionPurpose>;
-};
-
-/** The compaction round-trip success settle Msg — carries the parsed {@link CompactionSummary}. */
-export type AgentCompactOkMsg = {
-  readonly type: typeof MsgType.CompactOk;
-  readonly key: CompactionPurpose;
-  readonly result: LlmOk<CompactionPurpose, CompactionOutputs>;
-  readonly at: number;
-};
-
-/** The compaction round-trip failure settle Msg — carries the typed {@link LlmErr}. */
-export type AgentCompactErrMsg = {
-  readonly type: typeof MsgType.CompactErr;
-  readonly key: CompactionPurpose;
-  readonly error: LlmErr<CompactionPurpose>;
-  readonly at: number;
-};
-
-/**
- * The Cmd union the agent emits, as a CLOSED discriminated union (precise `TC`,
- * not the open `Cmd`) so `Interpret<M, AgentCmd<P, TC>, Ctx>` maps each key
- * precisely and `toMachine` merges the interpret halves with no laundering cast:
- *
- *   - `AgentLlmRunCmd<P>`     — the brain-call run Cmd (`resilient_run`), folded
- *                              by the wired `brainHandlers` cell.
- *   - `MonitoredRunCmd<unknown>` — the durable checkpoint write the monitored-run
- *                              slice emits, present in the union ONLY when
- *                              checkpointing is on (`Snap = true`). With
- *                              checkpointing off the monitored-run slice never
- *                              emits a `snapshot_write` Cmd, so it is config-derived
- *                              OUT of the emitted set — the consumer is never asked
- *                              to interpret a Cmd that can never fire (#55).
- *   - `TC`                    — the consumer's per-tool effect, mapped to the
- *                              consumer's own tool interpret cell.
- *
- * `Snap` defaults to `true` so the verb-internal usage (which forwards whatever
- * monitored-run emits) and the published type stay a safe superset; the wired
- * machine `toMachine` returns is parametrized on the overload-fixed `Snap` so its
- * Cmd set is exact (`MonitoredRunCmd` present only when checkpointing is on).
- */
-export type AgentCmd<
-  P extends string,
-  TC extends Cmd = Cmd,
-  Snap extends boolean = true,
-  Compact extends boolean = true,
-> =
-  | AgentLlmRunCmd<P>
-  | (Snap extends true ? MonitoredRunCmd<unknown> : never)
-  | (Compact extends true ? AgentCompactRunCmd : never)
-  | TC;
-
-/**
- * The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55).
- * Resolves on the `Snap` discriminant the snapshotting overload of `createAgent`
- * fixes (`true` checkpointing-on / `false` off):
- *
- *   - checkpointing ON  → a REQUIRED `snapshot_write` cell
- *     (`Interpret<M, MonitoredRunCmd<unknown>, Ctx>`). A real checkpoint write
- *     MUST be wired — the agent never defaults it to a no-op.
- *   - checkpointing OFF → `{ snapshot_write?: never }`. The cell is FORBIDDEN:
- *     the Cmd is config-derived out of the emitted set, so wiring it would be
- *     dead code. The consumer cannot even mention `snapshot_write`.
- *
- * This is the type that kills the `snapshot_write: async () => undefined`
- * ceremony: the obligation is present in the contract EXACTLY when the Cmd can
- * fire, never as a silent gap the agent backfills.
- */
-export type SnapshotInterpret<
-  M extends { type: string },
-  Snap extends boolean,
-  Ctx,
-> = Snap extends true
-  ? Interpret<M, MonitoredRunCmd<unknown>, Ctx>
-  : { readonly snapshot_write?: never };
-
-/**
- * The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret`
- * (#85), the exact twin of {@link SnapshotInterpret}. Resolves on the `Compact`
- * discriminant the compaction overload of `createAgent` fixes:
- *
- *   - compaction ON  → a REQUIRED `compact_run` cell
- *     (`Interpret<M, AgentCompactRunCmd, Ctx>`). The summarize round-trip MUST be
- *     wired — the agent never defaults it to a no-op.
- *   - compaction OFF → `{ compact_run?: never }`. The cell is FORBIDDEN: with no
- *     policy the agent never emits a `compact_run` Cmd, so wiring it would be
- *     dead code. The consumer cannot even mention `compact_run`.
- *
- * Same type-lie-killer as the snapshot derivation: the obligation is present
- * EXACTLY when the Cmd can fire, never as a silent gap the agent backfills.
- */
-export type CompactInterpret<
-  M extends { type: string },
-  Compact extends boolean,
-  Ctx,
-> = Compact extends true
-  ? Interpret<M, AgentCompactRunCmd, Ctx>
-  : { readonly compact_run?: never };
-
-/**
- * The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants
- * so the snapshotting / compaction overloads of `createAgent` hand back the right
- * obligations. The `toolInterpret` requires (ON) or forbids (OFF) the
- * `snapshot_write` cell via {@link SnapshotInterpret} and the `compact_run` cell
- * via {@link CompactInterpret}, and the machine's Cmd type is the config-derived
- * `AgentCmd<P, TC, Snap, Compact>`.
- */
-export type AgentToMachine<
-  Stage,
-  P extends string,
-  O extends Record<P, AgentTurn>,
-  R,
-  TC extends Cmd,
-  Snap extends boolean,
-  Compact extends boolean,
-> = <Ctx = object>(opts?: {
-  readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
-    SnapshotInterpret<AgentMachineMsg<P, O, R>, Snap, Ctx> &
-    CompactInterpret<AgentMachineMsg<P, O, R>, Compact, Ctx>;
-}) => Machine<
-  AgentState<Stage, P, O, R>,
-  AgentMachineMsg<P, O, R>,
-  AgentCmd<P, TC, Snap, Compact>,
-  DeadlineSub,
-  Ctx
->;
-
-/**
- * The agent knob `createAgent` returns — the uniform verb contract every tea
- * composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers`
- * escape hatch. `Snap` flows ONLY into `toMachine`'s `toolInterpret` obligation
- * (the snapshot derivation, #55); every verb is snapshot-agnostic. The model
- * message shape `Msg` does not appear on the knob surface (it is internal to the
- * brain call's loader), so it is not a type parameter here — only `createAgent`
- * carries it, to thread the config's `loadMessages` / `model` ports.
- */
-export interface AgentKnob<
-  Stage,
-  P extends string,
-  O extends Record<P, AgentTurn>,
-  R,
-  TC extends Cmd,
-  Snap extends boolean,
-  Compact extends boolean,
-> {
-  readonly init: () => AgentState<Stage, P, O, R>;
-  readonly start: AgentVerb1<Stage, P, O, R, TC, [runId: string, at: number]>;
-  readonly turn: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [result: AgentTurn, at: number]
-  >;
-  readonly toolOk: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [callId: string, result: R, at: number]
-  >;
-  readonly toolErr: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [callId: string, reason: string, at: number]
-  >;
-  readonly succeed: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [key: string, msg: AgentLlmOkMsg<P, O>, at: number]
-  >;
-  readonly fail: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [key: string, msg: AgentLlmErrMsg<P>, at: number]
-  >;
-  readonly compactOk: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [key: string, msg: AgentCompactOkMsg, at: number]
-  >;
-  readonly compactErr: AgentVerb1<
-    Stage,
-    P,
-    O,
-    R,
-    TC,
-    [key: string, msg: AgentCompactErrMsg, at: number]
-  >;
-  readonly onTimer: AgentVerb1<Stage, P, O, R, TC, [msg: AgentTimerMsg]>;
-  readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number]>;
-  readonly isSettled: (s: AgentState<Stage, P, O, R>) => boolean;
-  readonly currentStage: (s: AgentState<Stage, P, O, R>) => Stage | undefined;
-  readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
-  readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
-  readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
-  readonly unsafeDetachedHandlers: <M>(
-    ports: AgentPorts<P, O, M>,
-  ) => AgentDetachedHandlers<P, M>;
-}
-
-/** A verb taking the state + `Args`, returning the knob's `[State, Cmd[]]` tuple. */
-type AgentVerb1<
-  Stage,
-  P extends string,
-  O extends Record<P, AgentTurn>,
-  R,
-  TC extends Cmd,
-  Args extends readonly unknown[],
-> = (
-  s: AgentState<Stage, P, O, R>,
-  ...args: Args
-) => readonly [AgentState<Stage, P, O, R>, readonly AgentCmd<P, TC>[]];
-
-/** The brain-call success / failure settle Msgs, inherited from `../llm-call`. */
-export type AgentLlmOkMsg<
-  P extends string,
-  O extends Record<P, unknown>,
-> = LlmSucceedMsg<P, O>;
-export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
-
-/**
- * The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared
- * shape of both bricks' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg`
- * are both `DeadlineExceeded`). One Msg variant covers both timers; `onTimer`
- * disambiguates by Sub id. This is also the machine Msg the `subscribeDeadline`
- * cell dispatches directly (no wrapping), matching the sibling gold standard.
- */
-export type AgentTimerMsg = LlmTimerMsg;
-
-/** Ports the consumer supplies to the llm-call handler — re-exported shape. */
-export type AgentPorts<
-  P extends string,
-  O extends Record<P, unknown>,
-  M,
-> = LlmCallPorts<P, O, M>;
-
-/**
- * The LEGACY detached brain-call handler dictionary `handlers(ports)` returns —
- * the inherited `../llm-call` detached form's exact shape, NOT an `Interpret`.
- * The `resilient_run` cell runs the invoke inside `ctx.waitUntil` and dispatches
- * the consumer's `onOk` / `onErr` Msg directly (returning `void`), so it is a
- * fire-and-forget handler with a structural `{ waitUntil, dispatch }` ctx — it
- * does not re-enter the resilient settle Msg and so does not drive the retry
- * loop. Naming the type precisely (rather than laundering it through
- * `as unknown as Interpret<...>`) keeps `agent.unsafeDetachedHandlers(ports)` honest: the
- * consumer that wires the verbs by hand gets the real detached shape, and its
- * `resilient_run` is callable with a plain Cmd + a `{ waitUntil, dispatch }` ctx
- * with no `as never` at the call site.
- */
-export type AgentDetachedHandlers<P extends string, M> = {
-  readonly resilient_run: (
-    cmd: AgentLlmRunCmd<P>,
-    ctx: {
-      waitUntil(p: Promise<unknown>): void;
-      dispatch(msg: M): unknown;
-    },
-  ) => void;
-};
-
-// ===========================================================================
-// Sub-id helpers — the agent owns no NEW sub ids; it merges the two bricks'.
-// ===========================================================================
+// Re-export the concern modules so the public `@demlik/tea/agent` barrel is
+// unchanged after the split into `./types` (domain + conversation + config +
+// state/status), `./compaction` (the #85 seam), and `./machine` (the Cmd/Msg
+// vocabulary + wiring helpers). The reducer core — `createAgent` — stays here.
+export * from "./compaction";
+export * from "./machine";
+export * from "./types";
 
 // ===========================================================================
 // The knob factory.
@@ -1155,74 +329,10 @@ export function createAgent<
     };
   }
 
-  /** A fresh conversation entering the agentic loop — awaiting the first brain call. */
-  function freshConversation(): Conversation<R> {
-    return {
-      turns: [],
-      toolRecords: [],
-      turnCount: 0,
-      awaiting: { kind: "llm" },
-    };
-  }
-
-  /**
-   * Collapse a turn's tool calls to one per `callId` (first occurrence wins).
-   * `callId` is the fan-out identity (`idOf`); duplicates in one batch are a
-   * model defect that, un-deduped, would double-execute the tool and wedge the
-   * batch (one settle Msg cannot close two same-id `running` entries). PURE —
-   * preserves order, allocates no Error.
-   */
-  function dedupeByCallId(calls: readonly ToolCall[]): readonly ToolCall[] {
-    const seen = new Set<string>();
-    const out: ToolCall[] = [];
-    for (const call of calls) {
-      if (seen.has(call.callId)) continue;
-      seen.add(call.callId);
-      out.push(call);
-    }
-    return out;
-  }
-
-  /**
-   * Fold the oldest `folding` turns of a conversation into a single synthetic
-   * `summaryTurn` (#85, design A1) — PURE. The summary becomes the new head turn
-   * (index 0); the surviving turns (`turns.slice(folding)`) follow. Every tool
-   * record whose producing turn was folded (`turn < folding`) is DROPPED; each
-   * survivor's `turn` is RE-INDEXED by `-folding + 1` so it still equals the new
-   * index in `turns` of its producing turn (the summary occupies one slot where
-   * `folding` turns stood, so survivors shift left by `folding` then right by 1).
-   * `turnCount` is UNCHANGED — compaction is not a model round-trip (decision C).
-   *
-   * Caller guarantees `2 <= folding <= turns.length` (the trigger clamps + skips
-   * `< 2`), so the result is strictly shorter (`length - folding + 1`).
-   */
-  function foldSummary(
-    conv: Conversation<R>,
-    folding: number,
-    summaryTurn: AgentTurn,
-  ): Conversation<R> {
-    const shift = folding - 1; // survivors move left by this many slots.
-    const survivingTurns = conv.turns.slice(folding);
-    const survivingRecords = conv.toolRecords
-      .filter((rec) => rec.turn >= folding)
-      .map((rec) => ({ ...rec, turn: rec.turn - shift }));
-    return {
-      ...conv,
-      turns: [summaryTurn, ...survivingTurns],
-      toolRecords: survivingRecords,
-      awaiting: { kind: "llm" },
-    };
-  }
-
-  /** The current pipeline stage value (`undefined` for a single-shot run). */
-  function currentStage(s: State): Stage | undefined {
-    return s.run.stepStates.find((i) => i.status === "running")?.input;
-  }
-
   /** Build the brain-call request for the current stage + conversation. PURE. */
   function brainCall(s: State): LlmCall<P> {
     const stage = currentStage(s);
-    const conversation = s.conversation ?? freshConversation();
+    const conversation = s.conversation ?? freshConversation<R>();
     return {
       purpose: config.turnOf(stage),
       model: config.modelId ?? null,
@@ -1263,28 +373,6 @@ export function createAgent<
       model: config.modelId ?? null,
       payload: payloadOf ? payloadOf(conv, folding) : null,
     };
-  }
-
-  /** The narrowed `awaiting` variant for a given `kind`. */
-  type AwaitingOf<K extends Awaiting["kind"]> = Extract<Awaiting, { kind: K }>;
-
-  /**
-   * The stale-settle guard shared by the awaiting-scoped verbs (`turn` /
-   * `settleTool` / `compactOk` / `compactErr`): return the live conversation
-   * ALREADY narrowed to the given `awaiting.kind`, or `null` when the verb must
-   * no-op — the run is settled, there is no conversation, or it is awaiting
-   * something else (a stale settle after boot / advance). Collapses the
-   * `isSettled → conv === null → awaiting.kind` triple that recurred verbatim
-   * across the four verbs; each caller supplies its own no-op return. PURE.
-   */
-  function requireAwaiting<K extends Awaiting["kind"]>(
-    s: State,
-    kind: K,
-  ): (Conversation<R> & { readonly awaiting: AwaitingOf<K> }) | null {
-    if (isSettled(s)) return null;
-    const conv = s.conversation;
-    if (conv === null || conv.awaiting.kind !== kind) return null;
-    return conv as Conversation<R> & { readonly awaiting: AwaitingOf<K> };
   }
 
   /** The dedicated compaction round-trip's resilient slice type (#85, design B1). */
@@ -1355,7 +443,7 @@ export function createAgent<
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const [runSlice] = run.start(s.run, runId, at);
-    const conversation = freshConversation();
+    const conversation = freshConversation<R>();
     const withRun: State = {
       ...s,
       run: runSlice,
@@ -1464,7 +552,7 @@ export function createAgent<
       ];
     }
     // Next stage → fresh conversation + its first brain call.
-    const conversation = freshConversation();
+    const conversation = freshConversation<R>();
     const moved: State = {
       ...s,
       run: runSlice,
@@ -1650,17 +738,6 @@ export function createAgent<
       { ...s, run: runSlice, conversation: compactConv, compaction },
       cmds,
     ];
-  }
-
-  /** Re-key a composed compaction `resilient_run` Cmd to the dedicated `compact_run`. */
-  function toCompactRunCmd(
-    cmd: LlmRunCmd<CompactionPurpose>,
-  ): AgentCompactRunCmd {
-    return {
-      type: MsgType.CompactRun,
-      key: COMPACTION_PURPOSE,
-      input: cmd.input,
-    };
   }
 
   /** Terminal: the livelock guard tripped. Settle the run failed. PURE. */
@@ -1933,15 +1010,6 @@ export function createAgent<
     return [rebooted, cmds];
   }
 
-  // === Derived ============================================================
-
-  /** True iff the run is in a terminal state (monitored-run done/failed, or agent failure). */
-  function isSettled(s: State): boolean {
-    return (
-      s.run.phase === "done" || s.run.phase === "failed" || s.failure !== null
-    );
-  }
-
   // === Subs ================================================================
 
   /**
@@ -2192,259 +1260,6 @@ export function createAgent<
   };
 }
 
-// ===========================================================================
-// AgentBootPort — the typed do↔agent boot seam (issue #60).
-// ===========================================================================
-//
-// A run that rehydrated mid-loop must re-fire its one outstanding effect on
-// activation. `do/host`'s `autoBoot` is the firing side; this agent reducer's
-// `boot` verb is the receiving side. The coupling used to be a RAW string:
-// host built `{ type: "agent_boot", at }` by hand and the agent string-matched
-// it — a literal duplicated across the seam with nothing tying the two ends.
-//
-// `AgentBootPort` promotes that coupling to a typed contract OWNED by the agent
-// (which owns the boot Msg shape): the `AgentBootMsg` type and the
-// `agentBootMsg` constructor. `do/host` imports the constructor instead of
-// hand-writing the literal. Adding a field to boot (or renaming it) is now a
-// one-file change here with the constructor's signature flagging every caller,
-// not a silent cross-module string drift.
-
-/** The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. */
-export type AgentBootMsg = {
-  readonly type: typeof MsgType.AgentBoot;
-  readonly at: number;
-};
-
-/**
- * The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches
- * on a resumable rehydrate. The agent owns this constructor so the boot Msg
- * shape lives in ONE place — the host fires it through here, never as a raw
- * `{ type: "agent_boot" }` literal.
- */
-export function agentBootMsg(at: number): AgentBootMsg {
-  return { type: MsgType.AgentBoot, at };
-}
-
-// ===========================================================================
-// The machine Msg union — the closed set of verb entry points `toMachine` wires.
-// ===========================================================================
-
-/**
- * The agent machine's Msg union — one variant per reducer entry point. A
- * consumer using `toMachine` dispatches `agent_start` to begin and `agent_tool_ok`
- * / `agent_tool_err` to route settled tools back; the brain-call settle Msgs
- * (`resilient_ok` / `resilient_err`) RE-ENTER from the FIXED `brainHandlers`
- * (the substrate enqueues an interpret handler's returned Msg as a follow-up),
- * driving `succeed` / `fail`. Time enters via `at` on every variant — the
- * reducer never reads the clock.
- *
- * There is deliberately NO `agent_turn` variant here. The wired loop folds a
- * model turn INSIDE `succeed` from the re-entered `resilient_ok` — a single
- * settle Msg advances both the retry slice and the conversation (the L3 fix).
- * Exposing `agent_turn` as a dispatchable Msg re-opened the stuck-`running` bug:
- * a hand-fed turn folds the conversation without ever re-entering `resilient_ok`,
- * so `succeed` never runs and the resilient slice stays `running` (#54). The
- * `turn` verb remains on the knob for the consumer that wires the verbs by hand
- * (manual wiring), but it is not part of the one wired machine's Msg surface.
- */
-export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
-  | {
-      readonly type: typeof MsgType.AgentStart;
-      readonly runId: string;
-      readonly at: number;
-    }
-  | {
-      readonly type: typeof MsgType.AgentToolOk;
-      readonly callId: string;
-      readonly result: R;
-      readonly at: number;
-    }
-  | {
-      readonly type: typeof MsgType.AgentToolErr;
-      readonly callId: string;
-      readonly reason: string;
-      readonly at: number;
-    }
-  // The brain-call settle Msgs RE-ENTER straight from `brainHandlers` (no
-  // wrapping) — `resilient_ok` runs `succeed` (reset retry + fold the turn),
-  // `resilient_err` runs `fail` (back off via retry). This is the inherited
-  // llm-call settle shape, dispatched verbatim by the substrate's re-entry.
-  | AgentLlmOkMsg<P, O>
-  | AgentLlmErrMsg<P>
-  // The compaction settle Msgs RE-ENTER from the compaction interpret cell
-  // (#85) — `compact_ok` folds the summary back (drops the oldest N turns +
-  // their tool records, then fires the next brain call), `compact_err` backs off
-  // via the compaction slice's retry or — on exhaustion — proceeds without
-  // compacting (errors are data). Dedicated discriminants, re-keyed off the
-  // composed resilient settle at the cell boundary.
-  | AgentCompactOkMsg
-  | AgentCompactErrMsg
-  // The timer Msg is `DeadlineExceeded` itself (not wrapped) so the
-  // `subscribeDeadline` cell dispatches it straight into `update`, exactly as
-  // the resilient-call / llm-call / monitored-run gold standards wire it.
-  | AgentTimerMsg
-  | AgentBootMsg;
-
-// ===========================================================================
-// AgentEvent — the SEMANTIC lifecycle event stream (issue #47).
-// ===========================================================================
-
-/**
- * The agent's PUBLIC lifecycle events — the semantic stream a consumer
- * subscribes to via `runtime.on(type, …)` (#47). This is the seam that
- * DECOUPLES observability/SSE code from the agent's PRIVATE retry/loop Msg
- * vocabulary: where the old code switched on `resilient_ok` / `agent_tool_ok`
- * (the inherited resilient-call / tool-fan-out plumbing) off the raw `observe`
- * firehose, a consumer now folds these named events. The private Msg names live
- * ONLY inside `agentEvents` (the projector) — they appear nowhere in this union
- * or any exported type, so a UI built on `TurnSettled` does not break the day
- * the retry plumbing is renamed.
- *
- *   - `TurnSettled` — a brain turn settled (the model produced an `AgentTurn`).
- *     Projected off the private `resilient_ok` settle Msg; carries the parsed
- *     `turn` (the narration + tool calls the model asked for).
- *   - `ToolSettled` — a tool call settled OK. Projected off the private
- *     `agent_tool_ok` Msg; carries the `callId` and the tool `result`.
- *   - `RunDone` — the run finished. Projected off the post-transition State
- *     reaching `run.phase === "done"`; carries the run's `output` (the terminal
- *     model turn, or `null`) — the same first-class result `Runtime.result()`
- *     reads (#46), surfaced as an event for the streaming consumer.
- */
-export type AgentEvent<R> =
-  | { readonly type: "TurnSettled"; readonly turn: AgentTurn }
-  | {
-      readonly type: "ToolSettled";
-      readonly callId: string;
-      readonly result: R;
-    }
-  | { readonly type: "RunDone"; readonly output: AgentTurn | null };
-
-/**
- * Project one APPLIED agent transition `(msg, state)` to its semantic
- * {@link AgentEvent}s (#47) — the `events` projector a consumer passes to
- * `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`.
- *
- * This is the ONE place the agent's PRIVATE Msg names are read: it maps
- * `resilient_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
- * the post-transition `run.phase` for `RunDone`. The mapping is total over the
- * Msg union (a `default`-free switch on the discriminant) and returns `[]` for
- * the transitions that carry no public event (start / boot / timer / the error
- * arms), so a private name never escapes into `AgentEvent`.
- *
- * A single transition may emit more than one event: the brain turn that retires
- * the final stage settles a turn (`TurnSettled`) AND finishes the run
- * (`RunDone`) — both are projected from that one `resilient_ok` transition.
- * `RunDone` is gated on `run.phase === "done"`, which the wired loop reaches
- * exactly once (the agent is terminal there and dispatches no further
- * transition), so the event fires once per run.
- *
- * PURE — reads only the passed `(msg, state)`; no clock, no RNG, no throw.
- *
- * @typeParam P     Brain-call purposes.
- * @typeParam O     Per-purpose outputs (bound to `AgentTurn`, the agentic shape).
- * @typeParam R     Tool result type.
- * @typeParam Stage Pipeline stage type.
- */
-export function agentEvents<
-  Stage,
-  P extends string,
-  O extends Record<P, AgentTurn>,
-  R,
->(): (
-  msg: AgentMachineMsg<P, O, R>,
-  state: AgentState<Stage, P, O, R>,
-) => readonly AgentEvent<R>[] {
-  return (msg, state) => {
-    const events: AgentEvent<R>[] = [];
-    switch (msg.type) {
-      case MsgType.ResilientOk:
-        // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
-        // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
-        // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
-        // same reasoning `state.output` relies on, #46/#48).
-        events.push({ type: "TurnSettled", turn: msg.result.output });
-        break;
-      case MsgType.AgentToolOk:
-        // The PRIVATE tool-fan-out settle Msg → the public ToolSettled.
-        events.push({
-          type: "ToolSettled",
-          callId: msg.callId,
-          result: msg.result,
-        });
-        break;
-      // start / boot / timer / the *_err arms / the compaction settles carry no
-      // public event — return []. (No `default`: the switch is exhaustive over
-      // the Msg discriminant, so a new Msg variant forces a decision here at
-      // compile time.) Compaction is an internal optimization, not a semantic
-      // lifecycle moment a UI folds — its settles are deliberately silent here.
-      case MsgType.AgentStart:
-      case MsgType.AgentToolErr:
-      case MsgType.ResilientErr:
-      case MsgType.CompactOk:
-      case MsgType.CompactErr:
-      case "deadline_exceeded":
-      case MsgType.AgentBoot:
-        break;
-    }
-    // RunDone is a STATE-shaped event (the run's terminal output, #46), not a
-    // Msg-shaped one: the transition that lands `done` is the final brain turn
-    // (which also emits TurnSettled above). Gate on the post-transition phase so
-    // the same projector reports both.
-    if (state.run.phase === "done") {
-      events.push({ type: "RunDone", output: state.output });
-    }
-    return events;
-  };
-}
-
-/**
- * Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over
- * the same Msg union `M` and Ctx) into the full `Interpret<M, A | B, Ctx>`. The
- * agent uses it to merge the consumer's per-tool / snapshot interpret (`A`) with
- * the agent-owned brain-call handler (`B = AgentLlmRunCmd`) into the wired
- * machine's single interpret table.
- *
- * The runtime result is exactly the spread of the two key-disjoint records. The
- * single `as` is a SOUND mapped-type identity, not a laundering cast: `Interpret`
- * is a homomorphic mapped type keyed by `Cmd["type"]`, so
- * `Interpret<M, A, Ctx> & Interpret<M, B, Ctx>` IS `Interpret<M, A | B, Ctx>`
- * (`(A | B)["type"] = A["type"] | B["type"]`). TypeScript does not reduce that
- * intersection of two GENERIC mapped types on its own, so the equality is
- * asserted ONCE here — preserving `M` and `Ctx` exactly — rather than smuggled
- * through `as unknown as Interpret<...>` at every wiring site. Pure.
- */
-export function mergeInterpret<
-  M extends { type: string },
-  A extends Cmd,
-  B extends Cmd,
-  Ctx,
->(
-  a: Interpret<M, A, Ctx> | undefined,
-  b: Interpret<M, B, Ctx>,
-): Interpret<M, A | B, Ctx> {
-  return { ...(a ?? {}), ...b } as Interpret<M, A | B, Ctx>;
-}
-
-/**
- * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
- * lives at `state.agent`. Convenience for a host that nests the agent slice
- * under a named field; the single-slice host uses the verbs' tuple directly.
- * PURE — a thin record rebuild, no clock / RNG.
- */
-export function liftAgent<
-  S extends { agent: AgentState<Stage, P, O, R> },
-  Stage,
-  P extends string,
-  O extends Record<P, unknown>,
-  R,
-  C extends Cmd,
->(
-  state: S,
-  [slice, cmds]: readonly [AgentState<Stage, P, O, R>, readonly C[]],
-): readonly [S, readonly C[]] {
-  return [{ ...state, agent: slice }, cmds];
-}
-
 /**
  * Re-export the deadline Sub primitives so consumers (and tests) wire one
  * import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the
@@ -2452,22 +1267,18 @@ export function liftAgent<
  */
 export { subscribeDeadline, deadlineSub };
 export type {
-  DeadlineSub,
   LlmCall,
   LlmErr,
+  LlmFailMsg,
   LlmOk,
   LlmRunCmd,
   LlmSucceedMsg,
-  LlmFailMsg,
-  Schema,
-  ModelFactory,
   MessageLoader,
-  // The monitored-run checkpoint Cmd is part of the public `AgentCmd` surface —
-  // a consumer wiring `toMachine`'s `toolInterpret` for a snapshotting agent
-  // needs it to type the `snapshot_write` cell.
+  ModelFactory,
+  Schema,
+} from "../llm-call";
+export type {
+  DeadlineSub,
   MonitoredRunCmd,
-  // `RunFailure` is half of the unified `AgentTerminalFailure` (#49) — a
-  // consumer narrowing `status(s).failure` needs to name the monitored-run
-  // failure channel.
   RunFailure,
-};
+} from "../monitored-run";
