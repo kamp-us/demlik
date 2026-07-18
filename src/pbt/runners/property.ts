@@ -32,6 +32,54 @@ interface PropertyOpts<S> {
   readonly seed?: number;
 }
 
+/** The `foldEvents` result a runner's `check` inspects. */
+type FoldResult<S, M, C> = {
+  readonly states: readonly S[];
+  readonly steps: readonly Step<S, M, C>[];
+  readonly finalState: S;
+};
+
+/**
+ * Build the fast-check parameters shared by every runner: the 200-default
+ * `numRuns` plus an optional `seed`. Single source of truth so a change to
+ * the default lands in one place.
+ */
+function resolveFcParams<M>(
+  opts: PropertyOpts<unknown> | undefined,
+): fc.Parameters<[readonly M[]]> {
+  return {
+    numRuns: opts?.numRuns ?? 200,
+    ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
+  };
+}
+
+/**
+ * The fold+assert core every runner shares: assert `check` over each
+ * generated Msg sequence, folded once through the machine via `foldEvents`.
+ * `check` throws on failure so the error message carries the offending
+ * shape into fast-check's shrunk counter-example.
+ */
+function runProperty<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  ctx: Ctx,
+  seqArb: fc.Arbitrary<readonly M[]>,
+  opts: PropertyOpts<S> | undefined,
+  check: (result: FoldResult<S, M, C>) => void,
+): void {
+  fc.assert(
+    fc.property(seqArb, (msgs) => {
+      check(foldEvents(machine, ctx, opts?.loaded ?? null, msgs));
+    }),
+    resolveFcParams<M>(opts),
+  );
+}
+
 /**
  * Assert every generated Msg sequence ends in a terminal state. `terminal`
  * is the predicate that names the acceptable final states (often
@@ -63,30 +111,17 @@ export function propertyTerminates<
   terminal: (state: NoInfer<S>) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
 ): void {
-  const fcParams: fc.Parameters<[readonly M[]]> = {
-    numRuns: opts?.numRuns ?? 200,
-    ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
-  };
-  fc.assert(
-    fc.property(seqArb, (msgs) => {
-      const { finalState } = foldEvents(
-        machine,
-        ctx,
-        opts?.loaded ?? null,
-        msgs,
+  runProperty(machine, ctx, seqArb, opts, ({ finalState }) => {
+    if (!terminal(finalState)) {
+      // Throwing here (vs returning false) lets the error message carry
+      // the offending final state — fast-check pretty-prints it inside
+      // the shrunk counter-example.
+      throw new Error(
+        `propertyTerminates: final state did not match terminal predicate. ` +
+          `Final: ${JSON.stringify(finalState)}`,
       );
-      if (!terminal(finalState)) {
-        // Throwing here (vs returning false) lets the error message carry
-        // the offending final state — fast-check pretty-prints it inside
-        // the shrunk counter-example.
-        throw new Error(
-          `propertyTerminates: final state did not match terminal predicate. ` +
-            `Final: ${JSON.stringify(finalState)}`,
-        );
-      }
-    }),
-    fcParams,
-  );
+    }
+  });
 }
 
 /**
@@ -123,25 +158,17 @@ export function propertyInvariant<
   invariant: (step: Step<NoInfer<S>, NoInfer<M>, NoInfer<C>>) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
 ): void {
-  const fcParams: fc.Parameters<[readonly M[]]> = {
-    numRuns: opts?.numRuns ?? 200,
-    ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
-  };
-  fc.assert(
-    fc.property(seqArb, (msgs) => {
-      const { steps } = foldEvents(machine, ctx, opts?.loaded ?? null, msgs);
-      for (const step of steps) {
-        if (!invariant(step)) {
-          throw new Error(
-            `propertyInvariant: failed at step msg=${JSON.stringify(step.msg)} ` +
-              `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
-              `cmds=${JSON.stringify(step.cmds)}`,
-          );
-        }
+  runProperty(machine, ctx, seqArb, opts, ({ steps }) => {
+    for (const step of steps) {
+      if (!invariant(step)) {
+        throw new Error(
+          `propertyInvariant: failed at step msg=${JSON.stringify(step.msg)} ` +
+            `prev=${JSON.stringify(step.prev)} next=${JSON.stringify(step.next)} ` +
+            `cmds=${JSON.stringify(step.cmds)}`,
+        );
       }
-    }),
-    fcParams,
-  );
+    }
+  });
 }
 
 /**
@@ -175,25 +202,12 @@ export function propertyTrace<
   ) => boolean,
   opts?: NoInfer<PropertyOpts<S>>,
 ): void {
-  const fcParams: fc.Parameters<[readonly M[]]> = {
-    numRuns: opts?.numRuns ?? 200,
-    ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
-  };
-  fc.assert(
-    fc.property(seqArb, (msgs) => {
-      const { steps, finalState } = foldEvents(
-        machine,
-        ctx,
-        opts?.loaded ?? null,
-        msgs,
+  runProperty(machine, ctx, seqArb, opts, ({ steps, finalState }) => {
+    if (!predicate(steps, finalState)) {
+      throw new Error(
+        `propertyTrace: predicate failed on trace length=${steps.length}, ` +
+          `final=${JSON.stringify(finalState)}`,
       );
-      if (!predicate(steps, finalState)) {
-        throw new Error(
-          `propertyTrace: predicate failed on trace length=${steps.length}, ` +
-            `final=${JSON.stringify(finalState)}`,
-        );
-      }
-    }),
-    fcParams,
-  );
+    }
+  });
 }
