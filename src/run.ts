@@ -4,14 +4,8 @@
  * live in `./runtime-types`.
  */
 
-import type { Machine, Port, PortEmitter, Sub } from "./pure/core";
-import {
-  __DEV__,
-  applyCell,
-  assertPureResult,
-  type Cmd,
-  deepFreeze,
-} from "./pure/core";
+import type { Interpret, Machine, Port, PortEmitter, Sub } from "./pure/core";
+import { applyCellChecked, type Cmd } from "./pure/core";
 import type {
   BootingRuntime,
   CtxArg,
@@ -19,6 +13,7 @@ import type {
   OnError,
   Runtime,
   RuntimeErrorContext,
+  RuntimeErrorPhase,
   Store,
   Supervision,
 } from "./runtime-types";
@@ -34,14 +29,13 @@ function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
 }
 
 // Normalize `Supervision` (bare string or object) so the dispatch loop branches
-// on `.strategy` once. Default `stop`.
-type NormalizedSupervision<S, M extends { type: string }> =
-  | { readonly strategy: "stop" }
-  | { readonly strategy: "escalate" }
-  | {
-      readonly strategy: "restart";
-      readonly rehydrate: (state: S, msg: M, error: unknown) => S;
-    };
+// on `.strategy` once. Default `stop`. Derived from `Supervision` — the object
+// arms are exactly its non-string members, so the restart `rehydrate` payload
+// has a single source of truth.
+type NormalizedSupervision<S, M extends { type: string }> = Extract<
+  Supervision<S, M>,
+  object
+>;
 
 function normalizeSupervision<S, M extends { type: string }>(
   supervision: Supervision<S, M> | undefined,
@@ -122,6 +116,24 @@ export function run<
       defaultOnError(sinkError, context);
     }
   };
+
+  // Throw-isolated fanout: run `fn` for every item, routing any throw to the
+  // sink under `phase` so one bad consumer never strands its siblings
+  // (invariant 6). The single home for that isolation discipline — every
+  // synchronous listener/observer/handler fanout goes through here.
+  function fanout<T>(
+    items: Iterable<T>,
+    phase: RuntimeErrorPhase,
+    fn: (item: T) => void,
+  ): void {
+    for (const item of items) {
+      try {
+        fn(item);
+      } catch (err) {
+        reportError(err, { phase });
+      }
+    }
+  }
   const supervision = normalizeSupervision<S, M>(opts.supervision);
 
   // `state` is late-initialized inside the boot step (the head of the tail).
@@ -150,30 +162,32 @@ export function run<
   function portEmit<T>(port: Port<T>, value: T): void {
     const subscribers = portRegistry.get(port as Port<unknown>);
     if (!subscribers || subscribers.size === 0) return;
-    for (const listener of subscribers) {
-      try {
-        listener(value);
-      } catch (err) {
-        reportError(err, { phase: "port-emit" });
-      }
-    }
+    fanout(subscribers, "port-emit", (listener) => listener(value));
   }
 
   // Spread into a fresh object so handlers get a Ctx & PortEmitter without
   // mutating the caller's ctx (which may be shared across runtimes / tests).
   const augmentedCtx: Ctx & PortEmitter = { ...ctx, emit: portEmit };
 
-  // Dispatch goes through `applyCell`, the single reducer-vs-transitions
-  // primitive keyed on `formOf` (see `pure/core.ts`).
-  function applyUpdate(state: S, msg: M): readonly [S, readonly C[]] {
-    if (__DEV__) deepFreeze(state);
-    const result = applyCell<S, M, C>(machine, state, msg);
-    if (__DEV__) assertPureResult(result, msg.type);
-    return result;
-  }
-
   // Every step chains onto `tail` — the single concurrency gate.
   let tail: Promise<void> = Promise.resolve();
+
+  // Tear down each named sub: run its cleanup (throws isolated + routed to the
+  // sink under `"sub-cleanup"`), then drop it from the registry regardless of a
+  // cleanup throw. The single home for the cleanup-and-delete discipline shared
+  // by `reconcileSubs`'s removal pass and `stop()`.
+  function stopSubs(ids: Iterable<string>): void {
+    for (const id of ids) {
+      const cleanup = subRegistry.get(id);
+      if (cleanup === undefined) continue;
+      try {
+        cleanup();
+      } catch (err) {
+        reportError(err, { phase: "sub-cleanup" });
+      }
+      subRegistry.delete(id);
+    }
+  }
 
   /**
    * Reconcile subscriptions against `state`, after every save. Same id old+new →
@@ -202,16 +216,7 @@ export function run<
 
     // Removals first — anything in the registry not in `desired` should stop.
     for (const sub of desired) desiredIds.add(sub.id);
-    for (const [id, cleanup] of subRegistry) {
-      if (!desiredIds.has(id)) {
-        try {
-          cleanup();
-        } catch (err) {
-          reportError(err, { phase: "sub-cleanup" });
-        }
-        subRegistry.delete(id);
-      }
-    }
+    stopSubs([...subRegistry.keys()].filter((id) => !desiredIds.has(id)));
 
     // Additions — anything in `desired` not in the registry should start.
     let firstStartError: unknown = null;
@@ -240,15 +245,9 @@ export function run<
   // `interpret` is optional when `C extends Cmd<never>`; default a missing map to
   // `{}` — the per-cmd `if (!handler) continue` preserves invariant-6 forward
   // progress for a miswired consumer.
-  type InterpretMap = {
-    [K in C["type"]]: (
-      cmd: Extract<C, { type: K }>,
-      ctx: Ctx & PortEmitter,
-      // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
-    ) => Promise<M | void>;
-  };
-  const interpretMap: InterpretMap =
-    (machine as { interpret?: InterpretMap }).interpret ?? ({} as InterpretMap);
+  const interpretMap: Interpret<M, C, Ctx> =
+    (machine as { interpret?: Interpret<M, C, Ctx> }).interpret ??
+    ({} as Interpret<M, C, Ctx>);
 
   /**
    * Run `interpret` for each emitted cmd. A returned follow-up Msg is enqueued
@@ -276,13 +275,7 @@ export function run<
 
   // Throws isolated so one bad listener does not strand the others.
   function fireListeners(): void {
-    for (const listener of listeners) {
-      try {
-        listener();
-      } catch (err) {
-        reportError(err, { phase: "listener" });
-      }
-    }
+    fanout(listeners, "listener", (listener) => listener());
   }
 
   // After `fireListeners` so observers see what subscribers see. APPLIED
@@ -290,13 +283,7 @@ export function run<
   function fireObservers(msg: M): void {
     if (observers.size === 0 || state === undefined) return;
     const snapshot = state;
-    for (const observer of observers) {
-      try {
-        observer(msg, snapshot);
-      } catch (err) {
-        reportError(err, { phase: "observer" });
-      }
-    }
+    fanout(observers, "observer", (observer) => observer(msg, snapshot));
   }
 
   // Project the transition to semantic events and fan each to its `on(...)`
@@ -313,13 +300,7 @@ export function run<
     for (const event of events) {
       const bucket = eventHandlers.get(event.type);
       if (bucket === undefined) continue;
-      for (const handler of bucket) {
-        try {
-          handler(event);
-        } catch (err) {
-          reportError(err, { phase: "event" });
-        }
-      }
+      fanout(bucket, "event", (handler) => handler(event));
     }
   }
 
@@ -328,13 +309,7 @@ export function run<
     booted = true;
     if (bootHandlers.size === 0 || state === undefined) return;
     const snapshot = state;
-    for (const handler of bootHandlers) {
-      try {
-        handler(snapshot);
-      } catch (err) {
-        reportError(err, { phase: "boot" });
-      }
-    }
+    fanout(bootHandlers, "boot", (handler) => handler(snapshot));
   }
 
   // Resolve every parked `done()` waiter iff the just-folded State is terminal —
@@ -375,11 +350,13 @@ export function run<
     }
     // The reducer is the only synchronous user code; the reentrancy brand
     // guarantees it cannot suspend, so a throw here is clean with `state` still
-    // pre-transition. Route it to the supervision strategy.
+    // pre-transition. Route it to the supervision strategy. Dispatch goes
+    // through `applyCellChecked` — the single dev-checked reducer-vs-transitions
+    // primitive `foldUpdates` also folds through (see `pure/core.ts`).
     let next: S;
     let cmds: readonly C[];
     try {
-      [next, cmds] = applyUpdate(state, msg);
+      [next, cmds] = applyCellChecked<S, M, C>(machine, state, msg);
     } catch (reduceError) {
       // Invariant 6 — surface the failure as data FIRST, for every strategy.
       reportError(reduceError, { phase: "reduce" });
@@ -532,11 +509,8 @@ export function run<
       // Already booted → fire immediately (cleanup is a no-op) so a late
       // subscriber never misses the one-shot boot.
       if (booted && state !== undefined) {
-        try {
-          handler(state);
-        } catch (err) {
-          reportError(err, { phase: "boot" });
-        }
+        const snapshot = state;
+        fanout([handler], "boot", (h) => h(snapshot));
         return () => {};
       }
       bootHandlers.add(handler);
@@ -611,14 +585,7 @@ export function run<
       // this await always resolves.
       await tail;
       // Run every active sub cleanup; throws isolated and routed to the sink.
-      for (const [id, cleanup] of subRegistry) {
-        try {
-          cleanup();
-        } catch (err) {
-          reportError(err, { phase: "sub-cleanup" });
-        }
-        subRegistry.delete(id);
-      }
+      stopSubs([...subRegistry.keys()]);
       // Flush final state. A save throw here does not reject `stop()` (contract:
       // resolves regardless) but IS loss of the last write, so route it to the
       // sink rather than swallowing it (invariant 6).

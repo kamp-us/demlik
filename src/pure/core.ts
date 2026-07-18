@@ -247,6 +247,25 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
   return cell(state, msg);
 }
 
+// === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
+//
+// The dev-mode discipline every fold site shares: `deepFreeze` the input `state`
+// so a reducer that mutates it in place trips synchronously, then
+// `assertPureResult` the returned `[state, cmds]` shape. Both guards compile out
+// of production (`__DEV__`). `run`'s dispatch loop and `foldUpdates` both step
+// through THIS wrapper so the invariant enforcement lives in exactly one place
+// and cannot drift between the runtime and the pure fold.
+export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+  msg: M,
+): readonly [S, readonly C[]] {
+  if (__DEV__) deepFreeze(state);
+  const result = applyCell<S, M, C>(machine, state, msg);
+  if (__DEV__) assertPureResult(result, msg.type);
+  return result;
+}
+
 // === msgKeysOf: recover the Msg.type set from either update form ===
 //
 // A Reducer's own keys ARE the Msg.type set. A Transitions table's keys are
@@ -683,13 +702,7 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
   const cmds: C[] = [];
 
   for (const msg of msgs) {
-    if (__DEV__) deepFreeze(state);
-
-    const result = applyCell<S, M, C>(machine, state, msg);
-
-    if (__DEV__) assertPureResult(result, msg.type);
-
-    const [next, emitted] = result;
+    const [next, emitted] = applyCellChecked<S, M, C>(machine, state, msg);
     state = next;
     cmds.push(...emitted);
   }
