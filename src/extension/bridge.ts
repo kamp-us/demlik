@@ -95,8 +95,22 @@ interface HydrateResponse<S, M> {
 // Background side — bridgeRuntime(runtime, { channel, serialize? })
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface BridgeRuntimeOpts<S, V = S> {
+export interface BridgeRuntimeOpts<S, M, V = S> {
   channel: string;
+  /**
+   * REQUIRED parse for inbound `msg` payloads on `:dispatch` envelopes.
+   * Chrome runtime messages are an `unknown` boundary (Inv 8) — the same
+   * JSON/chrome serialization seam the symmetric client side parses via
+   * `BridgeClientOpts.parseMsg`. An untrusted surface can drive the host
+   * reducer with an arbitrary `M`, so the host parses too — never casts. A
+   * `msg` that parses to `null` is dropped: the dispatch never reaches the
+   * reducer and the surface's `dispatch()` rejects with `{ ok: false }`.
+   *
+   * Hosts that trust the dispatch channel and treat the msg as opaque opt
+   * out EXPLICITLY by passing the {@link passThroughMsg} helper — the unsound
+   * cast is then a visible call-site decision, not a silent default.
+   */
+  parseMsg: (raw: unknown) => M | null;
   /**
    * Optional projection from the runtime's live state `S` to a JSON-safe
    * view `V` that goes over the wire (broadcast + hydrate). Required when
@@ -150,13 +164,16 @@ export interface BridgeRuntimeOpts<S, V = S> {
  *   is mid-boot (store load not yet resolved), `getState()` throws — we
  *   swallow and reply with `state: null`; surfaces should treat null as
  *   "not ready yet" and wait for the first broadcast.
- * - **Dispatch:** `{ type: ":dispatch", msg }` routes to `runtime.dispatch`.
- *   Returns `true` from the listener so chrome keeps the message channel
- *   open until dispatch's promise settles (we ack with `{ ok: true }`).
+ * - **Dispatch:** `{ type: ":dispatch", msg }` is parsed through `parseMsg`
+ *   (Inv 8 — inbound msgs are an `unknown` boundary) and, if non-null, routes
+ *   to `runtime.dispatch`. Returns `true` from the listener so chrome keeps the
+ *   message channel open until dispatch's promise settles (we ack with
+ *   `{ ok: true }`). A msg that fails the parse is dropped — the reducer never
+ *   sees it and we reply `{ ok: false }`.
  */
 export function bridgeRuntime<S, M extends { type: string }, V = S>(
   runtime: Runtime<S, M>,
-  { channel, serialize, historySize }: BridgeRuntimeOpts<S, V>,
+  { channel, parseMsg, serialize, historySize }: BridgeRuntimeOpts<S, M, V>,
 ): () => void {
   const { dispatchType, hydrateType } = channelTypes(channel);
   // Default to identity passthrough when no projection is provided. The
@@ -228,7 +245,15 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
     }
 
     if (obj.type === dispatchType) {
-      const msg = obj.msg as M;
+      // Inv 8: the inbound msg crosses the same JSON/chrome boundary the
+      // client side parses — parse here too, never cast. A null parse drops
+      // the dispatch (the reducer never sees an arbitrary/malformed `M`) and
+      // the surface's dispatch() rejects on the `{ ok: false }` reply.
+      const msg = parseMsg(obj.msg);
+      if (msg === null) {
+        sendResponse({ ok: false, error: "dispatch msg failed parse" });
+        return false;
+      }
       runtime
         .dispatch(msg)
         .then(() => {

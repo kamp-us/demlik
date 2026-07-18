@@ -145,7 +145,10 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
   async function bootBridgedHost() {
     installFakeChrome();
     host = await run(counterMachine(), { ctx: undefined }).ready;
-    disposeBridge = bridgeRuntime(host, { channel: "test" });
+    disposeBridge = bridgeRuntime(host, {
+      channel: "test",
+      parseMsg: parseCounterMsg,
+    });
     return host;
   }
 
@@ -219,6 +222,23 @@ describe("bridgeRuntime ↔ bridgeClient", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(called).toBe(0);
     expect(client.getSnapshot()).toBeNull();
+  });
+
+  it("a dispatch whose msg fails the host boundary parse is dropped, never reaching the reducer", async () => {
+    const h = await bootBridgedHost();
+    const client = bridgeClient<CounterState, CounterMsg>({
+      channel: "test",
+      parseState: parseCounter,
+      // Bypass the client-side parse so a malformed msg reaches the host wire —
+      // it is the HOST's parseMsg (Inv 8) that must reject it.
+      parseMsg: passThroughMsg,
+    });
+
+    // dispatch() resolves (the host replies { ok: false } rather than
+    // rejecting the send), but the reducer never ran — state is untouched.
+    await client.dispatch({ type: "bogus" } as unknown as CounterMsg);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.getState()).toEqual({ n: 0 });
   });
 
   it("the disposer detaches the host: a later dispatch finds no receiver", async () => {
