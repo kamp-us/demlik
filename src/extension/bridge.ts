@@ -61,6 +61,22 @@ interface BacklogEntry<V, M> {
   state: V;
 }
 
+/**
+ * Single source for the two derived wire-type strings. The `:dispatch` /
+ * `:hydrate` suffix convention lives here and nowhere else — `bridgeRuntime`
+ * and both clients derive their type constants from this so the convention
+ * can't drift across the three functions (or the wire-shape comments above).
+ */
+function channelTypes(channel: string): {
+  dispatchType: string;
+  hydrateType: string;
+} {
+  return {
+    dispatchType: `${channel}:dispatch`,
+    hydrateType: `${channel}:hydrate`,
+  };
+}
+
 interface HydrateResponse<S, M> {
   state: S;
   /**
@@ -141,8 +157,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
   runtime: Runtime<S, M>,
   { channel, serialize, historySize }: BridgeRuntimeOpts<S, V>,
 ): () => void {
-  const dispatchType = `${channel}:dispatch`;
-  const hydrateType = `${channel}:hydrate`;
+  const { dispatchType, hydrateType } = channelTypes(channel);
   // Default to identity passthrough when no projection is provided. The
   // type parameter defaults `V = S` so callers with no projection see no
   // change in the wire-shape — the broadcast still carries `S`.
@@ -313,13 +328,102 @@ export interface BridgeClientOpts<S, M> {
   parseMsg: (raw: unknown) => M | null;
 }
 
-export function bridgeClient<S, M extends { type: string }>({
+/**
+ * The state+msg boundary parse (Inv 8) for one inbound envelope, in ONE
+ * place. Chrome runtime messages are an `unknown` boundary: a failed
+ * `parseState` drops the envelope (null state is indistinguishable from
+ * "host still booting" and is not a useful signal), and a non-null `msg`
+ * that fails `parseMsg` drops it too. `msg: null | undefined` on the wire is
+ * the boot/current-state marker and passes through as `null`.
+ *
+ * Returns `null` to signal "drop"; callers translate that to `return`
+ * (live `subscribe`) or `continue` (backlog replay). Living here keeps the
+ * live-broadcast and backlog-replay paths from drifting apart.
+ */
+function parseEnvelope<S, M extends { type: string }>(
+  obj: Record<string, unknown>,
+  parseState: (raw: unknown) => S | null,
+  parseMsg: (raw: unknown) => M | null,
+): { msg: M | null; state: S } | null {
+  const state = parseState(obj.state);
+  if (state === null) return null;
+  let msg: M | null;
+  if (obj.msg === null || obj.msg === undefined) {
+    msg = null;
+  } else {
+    msg = parseMsg(obj.msg);
+    if (msg === null) return null;
+  }
+  return { msg, state };
+}
+
+/**
+ * Shared backlog-replay helper used by both bridge clients. Iterates raw
+ * entries from the wire, runs each through the same boundary-parse rules a
+ * live broadcast would (via {@link parseEnvelope}), and fires the listeners
+ * with the parsed `(msg, state)` pair. Updates the closure-held `latestState`
+ * via `commitState` so post-replay `getSnapshot()` returns the most recent
+ * backlog state if the current-state marker is absent or unparseable.
+ *
+ * Extracted so the two clients can't drift in how they parse backlog
+ * payloads — both must stay symmetric with their live `subscribe` parse.
+ */
+function replayBacklog<S, M extends { type: string }>(
+  raw: unknown,
+  parseState: (raw: unknown) => S | null,
+  parseMsg: (raw: unknown) => M | null,
+  listeners: Set<(msg: M | null, state: S) => void>,
+  commitState: (next: S) => void,
+): void {
+  if (!Array.isArray(raw)) return;
+  for (const entryRaw of raw) {
+    if (!entryRaw || typeof entryRaw !== "object") continue;
+    const entry = entryRaw as Record<string, unknown>;
+    const parsed = parseEnvelope(entry, parseState, parseMsg);
+    if (parsed === null) continue;
+    commitState(parsed.state);
+    for (const l of listeners) l(parsed.msg, parsed.state);
+  }
+}
+
+/**
+ * Options for the shared client factory. On top of the public
+ * `BridgeClient` contract (channel + the two boundary parsers), the factory
+ * takes the two axes on which the runtime and tab clients actually differ:
+ *
+ * - `send` abstracts the request transport — `chrome.runtime.sendMessage`
+ *   for the runtime client, `chrome.tabs.sendMessage(tabId, …)` for the tab
+ *   client — used by both `hydrate()` and `dispatch()`.
+ * - `senderMatches` filters inbound broadcasts by their `sender`. Defaults
+ *   to accept-all (runtime client); the tab client passes
+ *   `sender => sender.tab?.id === tabId` so a per-tab client only sees its
+ *   own tab's broadcasts.
+ */
+interface MakeBridgeClientOpts<S, M> {
+  channel: string;
+  parseState: (raw: unknown) => S | null;
+  parseMsg: (raw: unknown) => M | null;
+  send: (message: unknown) => Promise<unknown>;
+  senderMatches?: (sender: chrome.runtime.MessageSender) => boolean;
+}
+
+/**
+ * The single client implementation behind {@link bridgeClient} and
+ * {@link bridgeTabClient}. Both public constructors are thin wrappers that
+ * pick the transport (`send`) and, for the tab client, the sender filter.
+ * Everything else — the `latestState`/`listeners` closures, the hydrate
+ * round-trip + backlog replay, dispatch, the live-broadcast parse, and
+ * `getSnapshot` reference stability — lives here so the two clients cannot
+ * drift.
+ */
+function makeBridgeClient<S, M extends { type: string }>({
   channel,
   parseState,
   parseMsg,
-}: BridgeClientOpts<S, M>): BridgeClient<S, M> {
-  const dispatchType = `${channel}:dispatch`;
-  const hydrateType = `${channel}:hydrate`;
+  send,
+  senderMatches = () => true,
+}: MakeBridgeClientOpts<S, M>): BridgeClient<S, M> {
+  const { dispatchType, hydrateType } = channelTypes(channel);
   // Closure-held latest snapshot. `useSyncExternalStore` reads this via
   // `getSnapshot`; the reference is stable across calls until a hydrate
   // reply or broadcast overwrites it. Identity matters: returning a new
@@ -335,7 +439,7 @@ export function bridgeClient<S, M extends { type: string }>({
   const client: BridgeClient<S, M> = {
     async hydrate(): Promise<S | null> {
       const req: HydrateRequest = { type: hydrateType };
-      const res = (await chrome.runtime.sendMessage(req)) as
+      const res = (await send(req)) as
         | { state: unknown; backlog?: unknown }
         | undefined;
       // Replay the backlog FIRST — listeners observing for a msg log see
@@ -359,31 +463,23 @@ export function bridgeClient<S, M extends { type: string }>({
 
     async dispatch(msg: M): Promise<void> {
       const env: DispatchEnvelope<M> = { type: dispatchType, msg };
-      await chrome.runtime.sendMessage(env);
+      await send(env);
     },
 
     subscribe(listener: (msg: M | null, state: S) => void): () => void {
       listeners.add(listener);
-      const onMessage = (message: unknown): void => {
+      const onMessage = (
+        message: unknown,
+        sender: chrome.runtime.MessageSender,
+      ): void => {
+        if (!senderMatches(sender)) return;
         if (!message || typeof message !== "object") return;
         const obj = message as Record<string, unknown>;
         if (obj.type !== channel) return;
-        // Boundary parse (Inv 8): chrome runtime messages are `unknown`.
-        // A failed state parse drops the broadcast — null state would
-        // be indistinguishable from "host still booting" and is not a
-        // useful signal to surfaces. The msg is parsed through the
-        // (required) `parseMsg`; a null result drops the broadcast too.
-        const state = parseState(obj.state);
-        if (state === null) return;
-        let msg: M | null;
-        if (obj.msg === null || obj.msg === undefined) {
-          msg = null;
-        } else {
-          msg = parseMsg(obj.msg);
-          if (msg === null) return;
-        }
-        latestState = state;
-        listener(msg, state);
+        const parsed = parseEnvelope(obj, parseState, parseMsg);
+        if (parsed === null) return;
+        latestState = parsed.state;
+        listener(parsed.msg, parsed.state);
       };
       chrome.runtime.onMessage.addListener(onMessage);
       return () => {
@@ -400,41 +496,17 @@ export function bridgeClient<S, M extends { type: string }>({
   return client;
 }
 
-/**
- * Shared backlog-replay helper used by both `bridgeClient` and
- * `bridgeTabClient`. Iterates raw entries from the wire, runs each through
- * the same boundary-parse rules a live broadcast would (parseState +
- * parseMsg, both returning `null` to drop), and fires the listeners with the
- * parsed `(msg, state)` pair. Updates the closure-held `latestState` via
- * `commitState` so post-replay `getSnapshot()` returns the most recent backlog
- * state if the current-state marker is absent or unparseable.
- *
- * Extracted so the two clients can't drift in how they parse backlog
- * payloads — both must stay symmetric with their live `subscribe` parse.
- */
-function replayBacklog<S, M extends { type: string }>(
-  raw: unknown,
-  parseState: (raw: unknown) => S | null,
-  parseMsg: (raw: unknown) => M | null,
-  listeners: Set<(msg: M | null, state: S) => void>,
-  commitState: (next: S) => void,
-): void {
-  if (!Array.isArray(raw)) return;
-  for (const entryRaw of raw) {
-    if (!entryRaw || typeof entryRaw !== "object") continue;
-    const entry = entryRaw as Record<string, unknown>;
-    const state = parseState(entry.state);
-    if (state === null) continue;
-    let msg: M | null;
-    if (entry.msg === null || entry.msg === undefined) {
-      msg = null;
-    } else {
-      msg = parseMsg(entry.msg);
-      if (msg === null) continue;
-    }
-    commitState(state);
-    for (const l of listeners) l(msg, state);
-  }
+export function bridgeClient<S, M extends { type: string }>({
+  channel,
+  parseState,
+  parseMsg,
+}: BridgeClientOpts<S, M>): BridgeClient<S, M> {
+  return makeBridgeClient({
+    channel,
+    parseState,
+    parseMsg,
+    send: (message) => chrome.runtime.sendMessage(message),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -494,72 +566,16 @@ export function bridgeTabClient<S, M extends { type: string }>({
   parseState,
   parseMsg,
 }: BridgeTabClientOpts<S, M>): BridgeClient<S, M> {
-  const dispatchType = `${channel}:dispatch`;
-  const hydrateType = `${channel}:hydrate`;
-  let latestState: S | null = null;
-  const listeners = new Set<(msg: M | null, state: S) => void>();
-
-  const client: BridgeClient<S, M> = {
-    async hydrate(): Promise<S | null> {
-      const req: HydrateRequest = { type: hydrateType };
-      const res = (await chrome.tabs.sendMessage(tabId, req)) as
-        | { state: unknown; backlog?: unknown }
-        | undefined;
-      // Mirror bridgeClient.hydrate's backlog replay: same parse rules,
-      // same oldest-first ordering, same current-state-marker semantics.
-      // The two helpers diverge only in transport (tabs vs runtime), not
-      // in protocol shape.
-      replayBacklog(res?.backlog, parseState, parseMsg, listeners, (next) => {
-        latestState = next;
-      });
-      const raw = res?.state;
-      if (raw === undefined || raw === null) return null;
-      const parsed = parseState(raw);
-      if (parsed === null) return null;
-      latestState = parsed;
-      for (const l of listeners) l(null, parsed);
-      return parsed;
-    },
-
-    async dispatch(msg: M): Promise<void> {
-      const env: DispatchEnvelope<M> = { type: dispatchType, msg };
-      await chrome.tabs.sendMessage(tabId, env);
-    },
-
-    subscribe(listener: (msg: M | null, state: S) => void): () => void {
-      listeners.add(listener);
-      const onMessage = (
-        message: unknown,
-        sender: chrome.runtime.MessageSender,
-      ): void => {
-        if (sender.tab?.id !== tabId) return;
-        if (!message || typeof message !== "object") return;
-        const obj = message as Record<string, unknown>;
-        if (obj.type !== channel) return;
-        // Boundary parse (Inv 8) — mirror bridgeClient.
-        const state = parseState(obj.state);
-        if (state === null) return;
-        let msg: M | null;
-        if (obj.msg === null || obj.msg === undefined) {
-          msg = null;
-        } else {
-          msg = parseMsg(obj.msg);
-          if (msg === null) return;
-        }
-        latestState = state;
-        listener(msg, state);
-      };
-      chrome.runtime.onMessage.addListener(onMessage);
-      return () => {
-        chrome.runtime.onMessage.removeListener(onMessage);
-        listeners.delete(listener);
-      };
-    },
-
-    getSnapshot(): S | null {
-      return latestState;
-    },
-  };
-
-  return client;
+  return makeBridgeClient({
+    channel,
+    parseState,
+    parseMsg,
+    // SW → content transport: `chrome.runtime.sendMessage` does NOT reach a
+    // tab's content script; `chrome.tabs.sendMessage(tabId, …)` does.
+    send: (message) => chrome.tabs.sendMessage(tabId, message),
+    // Every tab's content script broadcasts through the same SW
+    // `chrome.runtime.onMessage`; filter to this tab so a client subscribed
+    // to one tab never sees another's broadcasts.
+    senderMatches: (sender) => sender.tab?.id === tabId,
+  });
 }
