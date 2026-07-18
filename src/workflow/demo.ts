@@ -378,15 +378,9 @@ function summarize(
     .filter((t) => t.kind === "compensation_ok")
     .map((t) => t.step);
 
-  const committed =
-    state.status === "completed" ||
-    state.status === "failed_compensated" ||
-    state.status === "compensation_failed" ||
-    state.status === "compensating"
-      ? committedNames(state.completed)
-      : state.status === "running"
-        ? committedNames(state.completed)
-        : []; // `failed` (empty rollback) carries an empty `completed`.
+  // Every WorkflowState variant carries `completed`; `failed` carries an empty
+  // one by construction, so this reads correctly across all statuses.
+  const committed = committedNames(state.completed);
 
   const output = state.status === "completed" ? state.output : null;
 
