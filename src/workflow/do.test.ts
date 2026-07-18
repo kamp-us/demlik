@@ -34,7 +34,11 @@ import {
   type WorkflowMsg,
   workflowGrain,
 } from "./do";
-import type { WorkflowStep } from "./index";
+import {
+  WORKFLOW_MSG_TYPES,
+  WORKFLOW_STATUSES,
+  type WorkflowStep,
+} from "./index";
 
 // The opaque workflow payloads. A three-step booking workflow: each step's
 // activity is a label, each result is a string, each failure a string.
@@ -363,5 +367,42 @@ describe("cold-wake replay byte-identity", () => {
       "issue-ticket",
     ]);
     await g2.close();
+  });
+});
+
+// ===========================================================================
+// Regression — boundary parse accept-sets cover the #125 compensation half (#312)
+// ===========================================================================
+
+describe("boundary parse accept-sets track the whole vocabulary (#312)", () => {
+  // Before #312 these sets listed only {running, completed, failed} and
+  // {activity_ok, activity_err}, so a grain hibernated mid-rollback failed
+  // parseWorkflowGrainState (silent re-seed) and persisted compensation results
+  // failed parseWorkflowMsg (dropped from replay). They are now derived from the
+  // index.ts union discriminants and cannot drift.
+  it("WORKFLOW_STATUSES carries every #125 compensation status", () => {
+    for (const s of [
+      "running",
+      "completed",
+      "failed",
+      "compensating",
+      "failed_compensated",
+      "compensation_failed",
+    ]) {
+      expect(WORKFLOW_STATUSES.has(s)).toBe(true);
+    }
+    expect(WORKFLOW_STATUSES.size).toBe(6);
+  });
+
+  it("WORKFLOW_MSG_TYPES carries every #125 compensation result tag", () => {
+    for (const t of [
+      "activity_ok",
+      "activity_err",
+      "compensation_ok",
+      "compensation_err",
+    ]) {
+      expect(WORKFLOW_MSG_TYPES.has(t)).toBe(true);
+    }
+    expect(WORKFLOW_MSG_TYPES.size).toBe(4);
   });
 });

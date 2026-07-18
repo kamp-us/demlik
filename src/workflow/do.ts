@@ -73,6 +73,8 @@ import {
   type ActivityErr,
   type ActivityOk,
   createWorkflow,
+  WORKFLOW_MSG_TYPES,
+  WORKFLOW_STATUSES,
   type Workflow,
   type WorkflowCmd,
   type WorkflowMsg,
@@ -470,18 +472,9 @@ export async function workflowGrain<A, R, F>(
 // Boundary parses — the persisted snapshot + event cells (never throw)
 // ===========================================================================
 
-/** The `WorkflowState` status discriminants — the snapshot parse's accept set. */
-const WORKFLOW_STATUSES: ReadonlySet<string> = new Set([
-  "running",
-  "completed",
-  "failed",
-]);
-
-/** The `WorkflowMsg` discriminant tags — the replay parse's accept set. */
-const WORKFLOW_MSG_TYPES: ReadonlySet<string> = new Set([
-  "activity_ok",
-  "activity_err",
-]);
+// The snapshot parse's status accept-set (`WORKFLOW_STATUSES`) and the replay
+// parse's Msg-tag accept-set (`WORKFLOW_MSG_TYPES`) are derived from the union
+// discriminants in `./index`, so they can never drift from the vocabulary (#312).
 
 /**
  * Boundary parse for the persisted SNAPSHOT cell. Accepts a recovered

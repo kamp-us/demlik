@@ -332,6 +332,28 @@ export type WorkflowState<A, R, F> =
   | FailedCompensatedWorkflow<A, R, F>
   | CompensationFailedWorkflow<A, R, F>;
 
+/** Every `status` discriminant of the {@link WorkflowState} union. */
+export type WorkflowStatus = WorkflowState<unknown, unknown, unknown>["status"];
+
+/**
+ * The runtime accept-set of every {@link WorkflowStatus} — the single source of
+ * truth the boundary snapshot parse keys off (see `do.ts`). Built from an
+ * exhaustive `Record<WorkflowStatus, true>`, so adding a variant to the union
+ * above without listing it here is a COMPILE error: the set can never silently
+ * drift from the union again (the #312 regression, where the #125 compensation
+ * statuses were missing and evicted-mid-rollback grains re-seeded fresh).
+ */
+export const WORKFLOW_STATUSES: ReadonlySet<string> = new Set(
+  Object.keys({
+    running: true,
+    completed: true,
+    failed: true,
+    compensating: true,
+    failed_compensated: true,
+    compensation_failed: true,
+  } satisfies Record<WorkflowStatus, true>),
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Cmds — the activity dispatch. Recorded on the #67 ledger as an owed effect.
 //
@@ -434,6 +456,26 @@ export type WorkflowMsg<R, F> =
   | ActivityErr<F>
   | CompensationOk
   | CompensationErr<F>;
+
+/** Every `type` discriminant tag of the {@link WorkflowMsg} union. */
+export type WorkflowMsgType = WorkflowMsg<unknown, unknown>["type"];
+
+/**
+ * The runtime accept-set of every {@link WorkflowMsgType} — the single source of
+ * truth the boundary replay parse keys off (see `do.ts`). Built from an
+ * exhaustive `Record<WorkflowMsgType, true>`, so adding a Msg variant to the
+ * union above without listing it here is a COMPILE error: the set can never
+ * silently drift from the union again (the #312 regression, where the #125
+ * compensation result tags were missing and dropped from replay).
+ */
+export const WORKFLOW_MSG_TYPES: ReadonlySet<string> = new Set(
+  Object.keys({
+    activity_ok: true,
+    activity_err: true,
+    compensation_ok: true,
+    compensation_err: true,
+  } satisfies Record<WorkflowMsgType, true>),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The step tuple — the reducer's output shape.
