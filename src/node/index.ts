@@ -41,6 +41,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import WebSocket, { type RawData } from "ws";
 import type { Store, Sub, SubId } from "../index";
+import { dispatchIfPresent } from "../subs/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // fileStore — `Store<S>` over a JSON file.
@@ -228,8 +229,7 @@ export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(): {
         if (sub.onOpen) dispatch(sub.onOpen());
       });
       socket.on("message", (data: RawData) => {
-        const msg = sub.onMessage(data.toString());
-        if (msg !== null) dispatch(msg);
+        dispatchIfPresent(dispatch, sub.onMessage(data.toString()));
       });
       socket.on("close", (code: number, reason: Buffer) => {
         if (sub.onClose) dispatch(sub.onClose(code, reason.toString()));

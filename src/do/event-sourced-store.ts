@@ -300,6 +300,17 @@ export function doEventSourcedStore<
   }
 
   /**
+   * Return the durable `lastSeq`, lazily learning it from meta if a write
+   * (`append`/`snapshotNow`) fires before any `load()` in this isolate
+   * (defensive; the documented flow loads first). The guard lives here once so
+   * `append` and `snapshotNow` can't drift on the append-before-load path.
+   */
+  async function ensureLastSeq(): Promise<number> {
+    if (lastSeq === null) lastSeq = await readMeta();
+    return lastSeq;
+  }
+
+  /**
    * Read the persisted snapshot cell, parsed through the boundary. Returns the
    * folded state + the seq it covers, or `{ state: null, seq: 0 }` when absent
    * or unrecognized (fold then starts from a fresh `init`).
@@ -414,10 +425,7 @@ export function doEventSourcedStore<
   }
 
   async function append(msg: M): Promise<void> {
-    // Lazily learn the durable seq if append fires before any load() in this
-    // isolate (defensive; the documented flow loads first).
-    if (lastSeq === null) lastSeq = await readMeta();
-    const seq = lastSeq + 1;
+    const seq = (await ensureLastSeq()) + 1;
     lastSeq = seq;
     // Write the event then advance the meta cell. DO storage is transactional
     // within a single `alarm`/fetch turn; both puts land together.
@@ -444,15 +452,13 @@ export function doEventSourcedStore<
    * count-based `snapshotEvery`. See {@link EventSourcedStore.snapshotNow}.
    */
   async function snapshotNow(): Promise<boolean> {
-    // Lazily learn the durable seq if this fires before any load()/append() in
-    // this isolate (defensive; the documented flow loads first).
-    if (lastSeq === null) lastSeq = await readMeta();
+    const seq = await ensureLastSeq();
     // No-op when there is nothing new to checkpoint: a fresh actor with no
     // applied state yet (`latestState === null`), or no event appended since the
-    // last snapshot (`lastSeq <= snapshotSeq`). Both keep the snapshot's `seq`
+    // last snapshot (`seq <= snapshotSeq`). Both keep the snapshot's `seq`
     // and `state` paired on the same boundary the count-based path guarantees.
-    if (latestState === null || lastSeq <= snapshotSeq) return false;
-    await writeSnapshot(lastSeq, latestState);
+    if (latestState === null || seq <= snapshotSeq) return false;
+    await writeSnapshot(seq, latestState);
     return true;
   }
 

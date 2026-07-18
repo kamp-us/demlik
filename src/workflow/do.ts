@@ -81,6 +81,7 @@ import {
   type WorkflowState,
   type WorkflowStep,
 } from "./index";
+import { routeWorkflowMsg } from "./route";
 
 // ===========================================================================
 // Ports — the impure edges the grain injects (kept OUT of the pure reducer)
@@ -232,19 +233,21 @@ function workflowMachine<A, R, F>(
       const { state, ledger, cmds } = ref.current.init(steps);
       return [{ workflow: state, ledgerEvents: ledger }, cmds];
     },
+    // Every cell delegates to `routeWorkflowMsg` — the ONE WorkflowMsg → verb
+    // routing table, shared with the pure replay `foldWorkflow`. #125
+    // compensation folds the same way: a failed activity pivots to reverse-order
+    // rollback and each compensation result advances the unwind, the verb
+    // returning the same { state, ledger, cmds } shape whose dispatch Cmd (a
+    // `workflow_activity` OR `workflow_compensation`) is performed post-persist.
     update: {
       activity_ok: (s, m) =>
-        stepState(s, ref.current.onActivityOk(s.workflow, m)),
+        stepState(s, routeWorkflowMsg(ref.current, s.workflow, m)),
       activity_err: (s, m) =>
-        stepState(s, ref.current.onActivityErr(s.workflow, m)),
-      // #125 compensation: a failed activity pivots to reverse-order rollback;
-      // each compensation result advances the unwind. Same stepState fold — the
-      // verb returns the same { state, ledger, cmds } shape, and the dispatch
-      // Cmd (a `workflow_compensation`) is performed post-persist like an activity.
+        stepState(s, routeWorkflowMsg(ref.current, s.workflow, m)),
       compensation_ok: (s, m) =>
-        stepState(s, ref.current.onCompensationOk(s.workflow, m)),
+        stepState(s, routeWorkflowMsg(ref.current, s.workflow, m)),
       compensation_err: (s, m) =>
-        stepState(s, ref.current.onCompensationErr(s.workflow, m)),
+        stepState(s, routeWorkflowMsg(ref.current, s.workflow, m)),
     },
     // No Cmds are interpreted in-runtime: the grain performs the activity OR
     // compensation post-persist. The empty cells keep the dispatch Cmds pure

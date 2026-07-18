@@ -45,7 +45,7 @@ import { … } from "@demlik/tea/do";
 | `DoStoreOptions` | Interface | Options for doStore. |
 | `driveProjections` | Function |  |
 | `durableCommandCarrier` | Function |  |
-| `DurableCommandCarrier` | Interface | The durable command carrier — a DurableDeferredGateway whose every tool round-trip is also a durable owed effect. |
+| `DurableCommandCarrier` | Type | The durable command carrier — a DurableDeferredGateway whose every tool round-trip is also a durable owed effect. |
 | `durableDeferredGateway` | Function |  |
 | `durableTimer` | Function |  |
 | `DurableTimer` | Interface | The activated durable timer. |

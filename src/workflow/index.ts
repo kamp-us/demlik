@@ -79,6 +79,7 @@ import {
   survivingEffects,
 } from "../do/durable-effects";
 import type { Cmd } from "../index";
+import { routeWorkflowMsg } from "./route";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Steps — the static definition of a workflow.
@@ -766,6 +767,35 @@ export function createWorkflow<A, R, F>(restore?: {
     return null;
   }
 
+  /**
+   * Assemble the next `compensating` step from a `base` (everything but the
+   * in-flight compensation — carried identically from the failure pivot OR from
+   * the prior compensating state) and the `next` compensation to owe. Both the
+   * failure pivot ({@link Workflow.onActivityErr}) and each `compensation_ok`
+   * advance ({@link Workflow.onCompensationOk}) continue the unwind the same way,
+   * so the confirm-then-owe ledger discipline (`[confirmed, next.owed]`, dispatch
+   * `[next.cmd]`) lives here once instead of mirrored at both call sites.
+   */
+  function continueCompensating(
+    base: Omit<CompensatingWorkflow<A, R, F>, "current">,
+    next: {
+      readonly current: InFlightCompensation<A>;
+      readonly owed: EffectOwed<WorkflowCmd<A>>;
+      readonly cmd: CompensationCmd<A>;
+    },
+    confirmed: EffectConfirmed,
+  ): WorkflowStep0<A, R, F> {
+    const compensating: CompensatingWorkflow<A, R, F> = {
+      ...base,
+      current: next.current,
+    };
+    return {
+      state: compensating,
+      ledger: [confirmed, next.owed],
+      cmds: [next.cmd],
+    };
+  }
+
   return {
     init(steps) {
       if (steps.length === 0) {
@@ -863,21 +893,21 @@ export function createWorkflow<A, R, F>(restore?: {
       // Pivot to `compensating`, emitting the first compensation. Confirm the
       // failed forward activity AND owe the first compensation, in that order,
       // before dispatching it (the same confirm-then-owe ledger discipline as
-      // the forward advance — at most one in-flight effect per workflow).
-      const compensating: CompensatingWorkflow<A, R, F> = {
-        status: "compensating",
-        steps: state.steps,
-        completed: state.completed,
-        failedStep: state.current.step,
-        failure: msg.failure,
-        current: next.current,
-        compensated: [],
-      };
-      return {
-        state: compensating,
-        ledger: [confirmed, next.owed],
-        cmds: [next.cmd],
-      };
+      // the forward advance — at most one in-flight effect per workflow). The
+      // `base` here is FRESH from the failing activity (failedStep/failure from
+      // `state.current`/`msg`, empty `compensated`).
+      return continueCompensating(
+        {
+          status: "compensating",
+          steps: state.steps,
+          completed: state.completed,
+          failedStep: state.current.step,
+          failure: msg.failure,
+          compensated: [],
+        },
+        next,
+        confirmed,
+      );
     },
 
     onCompensationOk(state, msg) {
@@ -916,20 +946,20 @@ export function createWorkflow<A, R, F>(restore?: {
         return { state: settled, ledger: [confirmed], cmds: [] };
       }
 
-      const compensating: CompensatingWorkflow<A, R, F> = {
-        status: "compensating",
-        steps: state.steps,
-        completed: state.completed,
-        failedStep: state.failedStep,
-        failure: state.failure,
-        current: next.current,
-        compensated,
-      };
-      return {
-        state: compensating,
-        ledger: [confirmed, next.owed],
-        cmds: [next.cmd],
-      };
+      // Continue the unwind. The `base` here CARRIES failedStep/failure from the
+      // prior compensating `state` and the accumulated `compensated` list.
+      return continueCompensating(
+        {
+          status: "compensating",
+          steps: state.steps,
+          completed: state.completed,
+          failedStep: state.failedStep,
+          failure: state.failure,
+          compensated,
+        },
+        next,
+        confirmed,
+      );
     },
 
     onCompensationErr(state, msg) {
@@ -1012,27 +1042,13 @@ export function foldWorkflow<A, R, F>(
   const wf = createWorkflow<A, R, F>();
   let { state } = wf.init(steps);
   for (const msg of msgs) {
-    // Route each result Msg to its verb. The forward results (`activity_*`) and
-    // the reverse compensation results (`compensation_*`, #125) are folded by
-    // the same fresh recorder, so a replay across a failure+compensation
-    // sequence re-issues every delivery id in identical order — byte-identity
-    // holds end to end (acceptance criterion 4).
-    let step: WorkflowStep0<A, R, F>;
-    switch (msg.type) {
-      case "activity_ok":
-        step = wf.onActivityOk(state, msg);
-        break;
-      case "activity_err":
-        step = wf.onActivityErr(state, msg);
-        break;
-      case "compensation_ok":
-        step = wf.onCompensationOk(state, msg);
-        break;
-      case "compensation_err":
-        step = wf.onCompensationErr(state, msg);
-        break;
-    }
-    state = step.state;
+    // Route each result Msg to its verb via the shared dispatcher. The forward
+    // results (`activity_*`) and the reverse compensation results
+    // (`compensation_*`, #125) are folded by the same fresh recorder, so a
+    // replay across a failure+compensation sequence re-issues every delivery id
+    // in identical order — byte-identity holds end to end (acceptance
+    // criterion 4).
+    state = routeWorkflowMsg(wf, state, msg).state;
   }
   return state;
 }

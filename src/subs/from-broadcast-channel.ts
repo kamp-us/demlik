@@ -30,7 +30,7 @@ import type {
   MinimalBroadcastChannelCtor,
   MinimalMessageEvent,
 } from "./platform";
-import type { SubscribeHandler } from "./types";
+import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 type BroadcastSubData = { channelName: string };
 
@@ -42,8 +42,7 @@ export function fromBroadcastChannel<S extends Sub & BroadcastSubData, M>(
   return (sub, _ctx, dispatch) => {
     const channel = new BroadcastChannel(sub.channelName);
     const listener = (event: MinimalMessageEvent): void => {
-      const msg = msgFn(event, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, msgFn(event, sub));
     };
     channel.addEventListener("message", listener);
     return () => {

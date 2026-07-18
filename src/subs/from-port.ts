@@ -37,7 +37,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Port, Runtime, Sub } from "../index";
-import type { SubscribeHandler } from "./types";
+import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 // `RS` / `RM` carry the sibling Runtime's concrete State and Msg through the
 // selector: a caller that selects a `Runtime<AuditState, AuditMsg>` keeps that
@@ -61,8 +61,7 @@ export function fromPort<
   return (sub, ctx, dispatch) => {
     const runtime = selectRuntime(ctx);
     return runtime.subscribePort(port, (value) => {
-      const msg = msgFn(value, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, msgFn(value, sub));
     });
   };
 }

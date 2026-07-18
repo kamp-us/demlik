@@ -32,6 +32,7 @@
 
 import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/index";
+import { dispatchIfPresent } from "../../subs/types";
 
 export interface ChromeStorageChangeOpts<S extends Sub, M> {
   area: chrome.storage.AreaName;
@@ -69,8 +70,7 @@ export function fromChromeStorageChange<S extends Sub, M>(
         }
         if (!overlap) return;
       }
-      const msg = opts.msgFn(changes, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, opts.msgFn(changes, sub));
     };
     chrome.storage.onChanged.addListener(listener);
     return () => {

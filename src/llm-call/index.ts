@@ -90,6 +90,7 @@
  *   interpret: llm.handlers(),
  */
 
+import { describeError } from "../describe-error";
 import type { Cmd } from "../index";
 import { MsgType } from "../protocol";
 import {
@@ -502,7 +503,7 @@ export function createLlmCall<
     const err: LlmErr<P> = {
       key: cmd.key,
       purpose: cmd.input.purpose,
-      reason: rawError instanceof Error ? rawError.message : String(rawError),
+      reason: describeError(rawError),
       error: rawError,
     };
     return {

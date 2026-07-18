@@ -136,13 +136,26 @@ export function initWindow(windowMs: number, limit: number): SlidingWindow {
 }
 
 /**
+ * The window-edge rule, in one place: keep only the hits still live at `nowMs`.
+ * The cutoff is half-open — a hit exactly `windowMs` old is dropped (`> cutoff`,
+ * not `>=`), so a hit recorded at `t` no longer counts at `t + windowMs` and the
+ * window's capacity fully recovers `windowMs` after the last hit. `record` (the
+ * writer) and `remaining` (the read helper) both prune through here so a change
+ * to the edge semantics can't leave the reader disagreeing with the writer.
+ */
+function prune(window: SlidingWindow, nowMs: number): readonly number[] {
+  const cutoff = nowMs - window.windowMs;
+  return window.hits.filter((t) => t > cutoff);
+}
+
+/**
  * Prune hits older than `nowMs - windowMs`, then record `nowMs` if there is
  * room. Returns `[next, true]` with the hit appended when `hits.length < limit`
  * after pruning, else `[pruned, false]` — the pruned window (capacity recovers
  * as old hits age out) with nothing appended.
  *
- * The cutoff is half-open: a hit exactly `windowMs` old is pruned (`<= cutoff`
- * drops it), so a hit recorded at `t` no longer counts at `t + windowMs`. That
+ * The cutoff is half-open (see {@link prune}): a hit exactly `windowMs` old is
+ * pruned, so a hit recorded at `t` no longer counts at `t + windowMs`. That
  * makes the window's capacity fully recover `windowMs` after the last hit, the
  * behavior tests pin.
  *
@@ -153,8 +166,7 @@ export function record(
   window: SlidingWindow,
   nowMs: number,
 ): readonly [SlidingWindow, boolean] {
-  const cutoff = nowMs - window.windowMs;
-  const pruned = window.hits.filter((t) => t > cutoff);
+  const pruned = prune(window, nowMs);
   if (pruned.length < window.limit) {
     return [{ ...window, hits: [...pruned, nowMs] }, true];
   }
@@ -168,7 +180,6 @@ export function record(
  * "N requests remaining" affordance without committing a hit.
  */
 export function remaining(window: SlidingWindow, nowMs: number): number {
-  const cutoff = nowMs - window.windowMs;
-  const live = window.hits.filter((t) => t > cutoff).length;
+  const live = prune(window, nowMs).length;
   return Math.max(0, window.limit - live);
 }

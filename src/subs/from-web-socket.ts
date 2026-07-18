@@ -50,7 +50,7 @@ import type {
   MinimalMessageEvent,
   MinimalWebSocketCtor,
 } from "./platform";
-import type { SubscribeHandler } from "./types";
+import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 export type WebSocketSubData = { wsUrl: string };
 
@@ -72,31 +72,27 @@ export function fromWebSocket<S extends Sub & WebSocketSubData, M>(
     ws.onmessage = (event: MinimalMessageEvent): void => {
       // The platform delivers `data` as `unknown` — the factory hands it
       // through untouched and the caller chooses the parse strategy.
-      const msg = opts.onMessage(event.data, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, opts.onMessage(event.data, sub));
     };
 
     const onOpen = opts.onOpen;
     if (onOpen) {
       ws.onopen = (): void => {
-        const msg = onOpen(sub);
-        if (msg !== null) dispatch(msg);
+        dispatchIfPresent(dispatch, onOpen(sub));
       };
     }
 
     const onError = opts.onError;
     if (onError) {
       ws.onerror = (event: MinimalEvent): void => {
-        const msg = onError(event, sub);
-        if (msg !== null) dispatch(msg);
+        dispatchIfPresent(dispatch, onError(event, sub));
       };
     }
 
     const onClose = opts.onClose;
     if (onClose) {
       ws.onclose = (event: MinimalCloseEvent): void => {
-        const msg = onClose(event.code, event.reason, sub);
-        if (msg !== null) dispatch(msg);
+        dispatchIfPresent(dispatch, onClose(event.code, event.reason, sub));
       };
     }
 

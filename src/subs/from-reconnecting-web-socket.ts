@@ -56,7 +56,7 @@ import type {
   MinimalWebSocket,
   MinimalWebSocketCtor,
 } from "./platform";
-import type { SubscribeHandler } from "./types";
+import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 declare const WebSocket: MinimalWebSocketCtor;
 
@@ -108,9 +108,7 @@ export function fromReconnectingWebSocket<S extends Sub & WebSocketSubData, M>(
     let closedByCaller = false;
     let cancelReconnect: CancelTimer | null = null;
 
-    const emit = (msg: M | null): void => {
-      if (msg !== null) dispatch(msg);
-    };
+    const emit = (msg: M | null): void => dispatchIfPresent(dispatch, msg);
 
     const handleClose = (code: number, reason: string): void => {
       ws = null;

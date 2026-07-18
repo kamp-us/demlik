@@ -234,14 +234,13 @@ export function durableDeferredGateway<R>(
  * the consumer reads its persisted ledger events back and calls
  * `reissueSurvivingEffects` (see `./resume`) to re-fire the survivors.
  *
- * It extends `DurableDeferredGateway` (so it is a drop-in for the gateway the
+ * It IS a `DurableDeferredGateway` (so it is a drop-in for the gateway the
  * interpret cell already awaits) and exposes the underlying `recorder` for a
- * host that wants to read `surviving()` directly.
+ * host that wants to read `surviving()` directly. The #91 "command carrier"
+ * concept is exactly the durable gateway under a domain name — a type alias, not
+ * a second byte-identical interface that could drift.
  */
-export interface DurableCommandCarrier<R> extends DeferredGateway<R> {
-  /** The ledger recorder backing this carrier (for `surviving()` introspection). */
-  readonly recorder: PendingEffectsRecorder<{ callId: string }>;
-}
+export type DurableCommandCarrier<R> = DurableDeferredGateway<R>;
 
 /**
  * Build a durable command carrier over a (volatile) `DeferredGateway<R>` and a

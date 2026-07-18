@@ -29,6 +29,7 @@
  * delivery guarantees should layer their own retry, not bake it here.
  */
 
+import { describeError } from "../describe-error";
 import { type HistoryTracker, historyTracker, type Runtime } from "../index";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ export function bridgeRuntime<S, M extends { type: string }, V = S>(
         .catch((err: unknown) => {
           sendResponse({
             ok: false,
-            error: err instanceof Error ? err.message : String(err),
+            error: describeError(err),
           });
         });
       return true; // keep channel open for async sendResponse

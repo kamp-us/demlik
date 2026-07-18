@@ -413,17 +413,12 @@ export function withResilience<
         const callKey = keyOf(cmd);
         const [nextSlice, runCmds] = rc.attempt(resilience, callKey, cmd, at);
         resilience = nextSlice;
-        // rc.attempt emits 0 or 1 `resilient_run` carriers. Rename each to the
-        // `$resilience:run` namespace, preserving the retagged `input` (the
-        // ORIGINAL base Cmd). Zero carriers = the gate recorded a divergence in
-        // `nextSlice` (cache/circuit/backoff) — visible in the slice + log.
-        for (const rcRun of runCmds) {
-          outCmds.push({
-            type: "$resilience:run",
-            key: rcRun.key,
-            input: rcRun.input,
-          });
-        }
+        // rc.attempt emits 0 or 1 `resilient_run` carriers. `renameRunCmds`
+        // renames each into the `$resilience:run` namespace, preserving the
+        // retagged `input` (the ORIGINAL base Cmd). Zero carriers = the gate
+        // recorded a divergence in `nextSlice` (cache/circuit/backoff) —
+        // visible in the slice + log.
+        outCmds.push(...renameRunCmds(runCmds));
       }
 
       const next: WM = { base: nextBase, $resilience: resilience };
@@ -743,13 +738,8 @@ export function withResilience<
         const callKey = keyOf(cmd);
         const [nextSlice, runCmds] = rc.attempt(resilience, callKey, cmd, 0);
         resilience = nextSlice;
-        for (const rcRun of runCmds) {
-          initCmds.push({
-            type: "$resilience:run",
-            key: rcRun.key,
-            input: rcRun.input,
-          });
-        }
+        // Same `$resilience:run` retag as the update loop — one helper.
+        initCmds.push(...renameRunCmds(runCmds));
       }
       const model: WM = { base: base0, $resilience: resilience };
       return [model, initCmds];

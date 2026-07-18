@@ -25,6 +25,7 @@
 
 import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/index";
+import { dispatchIfPresent } from "../../subs/types";
 
 type AlarmSubData = { alarmName: string };
 
@@ -37,8 +38,7 @@ export function fromChromeAlarm<S extends Sub & AlarmSubData, M>(
       // extension, not just ours. Without this filter, two Subs with
       // different alarmName values would cross-dispatch.
       if (alarm.name !== sub.alarmName) return;
-      const msg = msgFn(alarm, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, msgFn(alarm, sub));
     };
     chrome.alarms.onAlarm.addListener(listener);
     return () => chrome.alarms.onAlarm.removeListener(listener);

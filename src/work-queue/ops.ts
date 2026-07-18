@@ -18,6 +18,7 @@
  * here rather than re-rolled per call site.
  */
 
+import { at } from "../at";
 import type { QueueItem } from "./index";
 
 /** Append a new pending item. Returns the new queue and the created item. */
@@ -46,10 +47,10 @@ export function claimNextOp<I>(
   now: number,
 ): { next: QueueItem<I>[]; claimed: QueueItem<I> } | null {
   const idx = queue.findIndex((i) => i.status === "pending");
-  const target = idx === -1 ? undefined : queue[idx];
-  // `target === undefined` collapses "no pending item" and the (impossible
-  // post-`findIndex`) hole into one early-out, so the element is typed
-  // `QueueItem<I>` below without a non-null assertion.
+  // `at` collapses "no pending item" (idx === -1) into the same `undefined`
+  // early-out, so the element is typed `QueueItem<I>` below without a non-null
+  // assertion; `idx` stays around for the write.
+  const target = at(queue, idx);
   if (target === undefined) return null;
   const claimed: QueueItem<I> = {
     ...target,
@@ -86,10 +87,10 @@ export function patchItemOp<I>(
   patch: (item: QueueItem<I>) => QueueItem<I>,
 ): { next: QueueItem<I>[]; changed: boolean } {
   const idx = queue.findIndex((i) => i.id === id);
-  const target = idx === -1 ? undefined : queue[idx];
-  // `target === undefined` collapses the no-match case and the (impossible
-  // post-`findIndex`) hole, narrowing `target` to `QueueItem<I>` for `patch`
-  // without a non-null assertion.
+  // `at` collapses the no-match case into an `undefined` early-out, narrowing
+  // `target` to `QueueItem<I>` for `patch` without a non-null assertion; `idx`
+  // stays around for the write.
+  const target = at(queue, idx);
   if (target === undefined) return { next: queue.slice(), changed: false };
   const next = queue.slice();
   next[idx] = patch(target);

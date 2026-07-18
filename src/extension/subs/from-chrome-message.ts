@@ -36,6 +36,7 @@
 
 import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/index";
+import { dispatchIfPresent } from "../../subs/types";
 
 export interface ChromeMessageOpts<S extends Sub, M> {
   /**
@@ -60,8 +61,7 @@ export function fromChromeMessage<S extends Sub, M>(
       _sendResponse: (response: unknown) => void,
     ): void => {
       if (opts.filter !== undefined && !opts.filter(message)) return;
-      const msg = opts.msgFn(message, sender, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, opts.msgFn(message, sender, sub));
       // We intentionally do not return `true` here — that's the
       // request/response posture, not the broadcast posture. See the
       // module comment for the rationale.

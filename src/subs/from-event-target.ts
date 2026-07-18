@@ -30,7 +30,7 @@
 
 import type { Sub } from "../index";
 import type { MinimalEvent, MinimalEventTarget } from "./platform";
-import type { SubscribeHandler } from "./types";
+import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 export function fromEventTarget<S extends Sub, M>(
   getTarget: () => MinimalEventTarget,
@@ -40,8 +40,7 @@ export function fromEventTarget<S extends Sub, M>(
   return (sub, _ctx, dispatch) => {
     const target = getTarget();
     const listener = (event: MinimalEvent): void => {
-      const msg = msgFn(event, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, msgFn(event, sub));
     };
     target.addEventListener(eventName, listener);
     return () => {

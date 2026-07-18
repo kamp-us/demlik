@@ -41,6 +41,7 @@
 
 import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/index";
+import { dispatchIfPresent } from "../../subs/types";
 
 export type TabsEventName = "onActivated" | "onUpdated" | "onRemoved";
 
@@ -68,8 +69,7 @@ export function fromChromeTabsEvent<S extends Sub, M>(
   return (sub, _ctx, dispatch) => {
     const installed: TabsEventName[] = [];
     const listener: AnyTabsListener = () => {
-      const msg = opts.msgFn(sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, opts.msgFn(sub));
     };
 
     for (const event of opts.events) {
@@ -85,8 +85,7 @@ export function fromChromeTabsEvent<S extends Sub, M>(
     }
 
     if (opts.fireOnMount === true) {
-      const msg = opts.msgFn(sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, opts.msgFn(sub));
     }
 
     return () => {

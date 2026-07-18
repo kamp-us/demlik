@@ -45,7 +45,7 @@ import type {
   MinimalEventSourceCtor,
   MinimalMessageEvent,
 } from "./platform";
-import type { SubscribeHandler } from "./types";
+import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
 type EventSourceSubData = { url: string };
 
@@ -67,16 +67,14 @@ export function fromEventSource<S extends Sub & EventSourceSubData, M>(
       // The SSE `data` payload is a string per the platform contract.
       // Cast at the boundary: callers express `(data: string) => M | null`
       // and never see `unknown` flowing in from the platform global.
-      const msg = opts.onMessage(event.data as string, sub);
-      if (msg !== null) dispatch(msg);
+      dispatchIfPresent(dispatch, opts.onMessage(event.data as string, sub));
     };
     source.addEventListener("message", messageListener);
 
     const onError = opts.onError;
     const errorListener = onError
       ? (event: MinimalEvent): void => {
-          const msg = onError(event, sub);
-          if (msg !== null) dispatch(msg);
+          dispatchIfPresent(dispatch, onError(event, sub));
         }
       : undefined;
     if (errorListener) source.addEventListener("error", errorListener);
@@ -84,8 +82,7 @@ export function fromEventSource<S extends Sub & EventSourceSubData, M>(
     const onOpen = opts.onOpen;
     const openListener = onOpen
       ? (): void => {
-          const msg = onOpen(sub);
-          if (msg !== null) dispatch(msg);
+          dispatchIfPresent(dispatch, onOpen(sub));
         }
       : undefined;
     if (openListener) source.addEventListener("open", openListener);

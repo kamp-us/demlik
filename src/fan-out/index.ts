@@ -66,6 +66,7 @@
  * `@demlik/tea/fan-out` subpath.
  */
 
+import { at } from "../at";
 import type { Cmd, Port } from "../index";
 import type { QueueItem, QueueItemStatus } from "../work-queue";
 import { queueAdapter } from "../work-queue/adapter";
@@ -327,10 +328,10 @@ function settleOne<I, R>(
   | { input: I; running: readonly I[]; items: readonly QueueItem<I>[] }
   | undefined {
   const runIdx = state.running.findIndex((item) => idOf(item) === id);
-  const input = runIdx === -1 ? undefined : state.running[runIdx];
-  // `input === undefined` collapses "no running entry for this id" and the
-  // (impossible post-`findIndex`) hole into one early-out, narrowing `input`
-  // to `I` below without a non-null assertion (the pattern `ops.ts` uses).
+  // `at` collapses "no running entry for this id" into an `undefined` early-out,
+  // narrowing `input` to `I` below without a non-null assertion (the pattern
+  // `ops.ts` uses); `runIdx` stays around for the splice.
+  const input = at(state.running, runIdx);
   if (input === undefined) return undefined;
 
   const running = [
@@ -341,9 +342,9 @@ function settleOne<I, R>(
   const ledgerIdx = state.items.findIndex(
     (item) => item.id === id && item.status === "running",
   );
-  const ledger = ledgerIdx === -1 ? undefined : state.items[ledgerIdx];
-  // Same early-out: `ledger === undefined` narrows the record to `QueueItem<I>`
-  // for the spread below without a non-null assertion.
+  // Same early-out via `at`: `ledger === undefined` narrows the record to
+  // `QueueItem<I>` for the spread below without a non-null assertion.
+  const ledger = at(state.items, ledgerIdx);
   const items =
     ledger === undefined
       ? state.items
