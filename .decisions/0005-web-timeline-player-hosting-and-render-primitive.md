@@ -1,4 +1,4 @@
-# ADR 0005 — Web timeline player: hosting + render primitive
+# 0005 — Web timeline player: hosting + render primitive
 
 - **Status:** Accepted
 - **Date:** 2026-06-24

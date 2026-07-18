@@ -1,4 +1,4 @@
-# ADR 0006 — Client-prediction fold seam + runtime-free import boundary
+# 0006 — Client-prediction fold seam + runtime-free import boundary
 
 - **Status:** Accepted
 - **Date:** 2026-06-27
@@ -7,7 +7,7 @@
   runtime-free import boundary is enforced**. No implementation; this records the
   choices the build children cite: #211 (seam), #212 (ack), #213 (boundary +
   guard), #214 (reconcile). The long-form purity canon is
-  [`.patterns/tea/tea-invariants.md`](../../../../../.patterns/tea/tea-invariants.md).
+  [`.patterns/tea/tea-invariants.md`](../.patterns/tea/tea-invariants.md).
 
 ## Context
 

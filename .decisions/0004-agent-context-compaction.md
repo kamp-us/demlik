@@ -1,4 +1,4 @@
-# ADR 0004 — An opt-in context-compaction seam on `createAgent`
+# 0004 — An opt-in context-compaction seam on `createAgent`
 
 - **Status:** Accepted
 - **Date:** 2026-06-23

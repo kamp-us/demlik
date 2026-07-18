@@ -1,4 +1,4 @@
-# ADR 0001 — Resilience is built in-house, not installed
+# 0001 — Resilience is built in-house, not installed
 
 - **Status:** Accepted
 - **Date:** 2026-06-09

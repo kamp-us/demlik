@@ -1,4 +1,4 @@
-# ADR 0008 — The reference drift gate fails with the patch, single-sourced
+# 0008 — The reference drift gate fails with the patch, single-sourced
 
 - **Status:** Accepted
 - **Date:** 2026-07-17

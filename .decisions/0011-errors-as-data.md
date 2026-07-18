@@ -1,13 +1,13 @@
-# ADR 0008 — Errors are data; a throw is reserved for a contract breach
+# 0011 — Errors are data; a throw is reserved for a contract breach
 
 - **Status:** Accepted
 - **Date:** 2026-07-17
 - **Scope:** how `@demlik/tea` represents a failure. One principle decides it —
   is the failure recoverable, or is it a bug? Records the idiom landed in PR #307
   (issue #283), locked by
-  [`../../src/error-idiom.test.ts`](../../src/error-idiom.test.ts). The two
+  [`../../src/error-idiom.test.ts`](../packages/tea/src/error-idiom.test.ts). The two
   resulting shapes are canonized as **settled-value error** / **thrown error** in
-  [`../../../../.glossary/TERMS.md`](../../../../.glossary/TERMS.md).
+  [`../../../../.glossary/TERMS.md`](../.glossary/TERMS.md).
 
 ## Context
 
@@ -90,7 +90,7 @@ recoverable/bug boundary, because the two kinds want opposite handling.
 - The choice is mechanical, not stylistic: *does the caller have a next move?*
   Yes → a `{ _tag }` value in Model. No → throw a tagged `Error` at the boundary.
 - The invariant is locked by
-  [`../../src/error-idiom.test.ts`](../../src/error-idiom.test.ts): settled errors
+  [`../../src/error-idiom.test.ts`](../packages/tea/src/error-idiom.test.ts): settled errors
   JSON-round-trip-equal, with a contrast test proving a class member would not.
 - **Banned:** throwing a recoverable failure (the caller needs it as a value);
   putting a `class extends Error` into Model (reloads as `{}`); relying on

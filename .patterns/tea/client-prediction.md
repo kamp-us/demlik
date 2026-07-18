@@ -12,7 +12,7 @@ cursor, any optimistic-UI surface) over a tea machine and you want the predictio
 math to be a guarantee, not a hand-roll.
 
 The seam shipped in epic #186 (ADR
-[0006](../../packages/tea/docs/adr/0006-client-prediction-fold-seam-and-pure-boundary.md)).
+[0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md)).
 The worked, tested code is
 [`packages/tea/src/prediction/client-prediction.example.ts`](../../packages/tea/src/prediction/client-prediction.example.ts)
 (+ `.test.ts`); the consumer-facing version that imports the public boundary is
@@ -146,6 +146,6 @@ the roadmap — `foldMsgs` (#211), the ack primitive (#212), the import boundary
 | Task | Read / do |
 |---|---|
 | Building a predicting client over a tea machine | This doc → the worked example → import from `@demlik/tea/pure`. |
-| Deciding the seam's name/signature/return shape | ADR [0006](../../packages/tea/docs/adr/0006-client-prediction-fold-seam-and-pure-boundary.md) (it settled all three). |
+| Deciding the seam's name/signature/return shape | ADR [0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md) (it settled all three). |
 | The exact API of each helper | [`.glossary/TERMS.md`](../../.glossary/TERMS.md) — `foldMsgs`, `reconcile`, `partitionByAck`, `tagSeq`, `nextSeq`, `Seq`/`SeqTagged`/`Ack`. |
 | Verifying the boundary didn't regress | Run `packages/tea/src/pure/import-graph.test.ts`. |

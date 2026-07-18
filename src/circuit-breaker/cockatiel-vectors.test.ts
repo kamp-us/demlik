@@ -5,7 +5,7 @@
  * `.patterns/cockatiel/circuit-breaker-vectors.md` (with brick↔verb routing in
  * `.patterns/cockatiel/index.md` and the no-counterpart list in
  * `.patterns/cockatiel/gaps.md`). The motivation is ADR 0001
- * (`packages/tea/docs/adr/0001-no-offtheshelf-resilience.md`, consequence #1):
+ * (`.decisions/0001-no-offtheshelf-resilience.md`, consequence #1):
  * tea builds resilience in-house, so it must inherit cockatiel's battle-tested
  * edge cases rather than its code.
  *

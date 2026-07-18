@@ -1,4 +1,4 @@
-# ADR 0002 — A Durable-Object host layer, not a DO framework
+# 0002 — A Durable-Object host layer, not a DO framework
 
 - **Status:** Accepted
 - **Date:** 2026-06-22

@@ -3,7 +3,7 @@
  *
  * Source canon: `.patterns/cockatiel/timeout-vectors.md` (cockatiel
  * `src/TimeoutPolicy.test.ts`). ADR rationale:
- * `packages/tea/docs/adr/0001-no-offtheshelf-resilience.md`, consequence #1 —
+ * `.decisions/0001-no-offtheshelf-resilience.md`, consequence #1 —
  * tea reuses cockatiel's battle-tested timeout EDGE CASES without cloning
  * cockatiel.
  *

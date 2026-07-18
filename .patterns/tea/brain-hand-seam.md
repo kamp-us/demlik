@@ -2,7 +2,7 @@
 
 The one structural move that turns a "huge, complex, messed-up" codebase into a
 legible one: **separate the brain from the hands.** This doc is the worked recipe.
-Its authority is [ADR 0001](../../.decisions/0001-brain-hand-seam-and-strangler-migration.md);
+Its authority is [ADR 0009](../../.decisions/0009-brain-hand-seam-and-strangler-migration.md);
 its reference implementation is [`packages/audit`](../../packages/audit).
 
 ## The idea in one picture
@@ -88,12 +88,12 @@ Do this to **one** tangled module at a time — never the whole repo at once.
 | `if (vendor === "x")` in the core | client-specifics leaked into the brain | Resolve it inside the adapter behind the port |
 | Big-bang rewrite of the messy module | too large; ships a rewrite-and-pray | Strangle: clean seam alongside, parity-gate, cut over |
 | Swapping many stubs for real at once | you can't tell which adapter broke it | One seam in flight; prove each against the same brain |
-| Homebrewing auth / retry / a store | reinventing a solved slot | Reinvention gate → copy Best-in-Slot (ADR 0001) |
+| Homebrewing auth / retry / a store | reinventing a solved slot | Reinvention gate → copy Best-in-Slot (ADR 0009) |
 | Storing the same fact in two places | dual source of truth drifts | Single store + a read projection |
 
 ## See also
 
-- [ADR 0001](../../.decisions/0001-brain-hand-seam-and-strangler-migration.md) — the decision this pattern serves.
+- [ADR 0009](../../.decisions/0009-brain-hand-seam-and-strangler-migration.md) — the decision this pattern serves.
 - [`durable-actors.md`](./durable-actors.md) — the TEA substrate the brain runs on (event-sourced virtual actors).
 - [`tea-invariants.md`](./tea-invariants.md) — the purity/effects-as-data invariants the brain must hold.
 - [`packages/audit`](../../packages/audit) — the end-to-end worked reference.
