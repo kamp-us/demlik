@@ -240,16 +240,21 @@ export function pendingEffectsLedger<E>(restore?: {
   readonly events?: Iterable<EffectLedgerEvent<E>>;
   readonly lastId?: DeliveryId;
 }): PendingEffectsRecorder<E> {
-  let mirror: PendingEffectsLedger<E> = restore?.events
-    ? foldLedger(restore.events)
+  // Materialize the restore events ONCE — `restore.events` is only an
+  // `Iterable`, so a single-use generator would be exhausted by `foldLedger`
+  // and yield nothing on a second walk (seeding the counter to 0 and reissuing
+  // colliding ids). Folding and counter-seeding both read this array.
+  const events = restore?.events ? [...restore.events] : undefined;
+  let mirror: PendingEffectsLedger<E> = events
+    ? foldLedger(events)
     : emptyLedger<E>();
 
   // Seed the monotonic counter. Prefer an explicit `lastId` (gap-free across
   // pruned ids); else the highest id observed in the restore events; else the
   // highest surviving id; else 0 (fresh).
   let counter = restore?.lastId ?? 0;
-  if (restore?.lastId === undefined && restore?.events) {
-    for (const e of restore.events) if (e.id > counter) counter = e.id;
+  if (restore?.lastId === undefined && events) {
+    for (const e of events) if (e.id > counter) counter = e.id;
   } else if (restore?.lastId === undefined) {
     for (const id of mirror.keys()) if (id > counter) counter = id;
   }

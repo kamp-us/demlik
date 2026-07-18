@@ -252,4 +252,33 @@ describe("pendingEffectsLedger — live recorder", () => {
     const c = revived.owe({ callId: "c" });
     expect(c.id).toBe(3);
   });
+
+  it("restore from a single-use generator seeds the counter (no id reuse)", () => {
+    const rec = pendingEffectsLedger<ToolCall>();
+    const a = rec.owe({ callId: "a" });
+    const b = rec.owe({ callId: "b" });
+    rec.confirm(a.id);
+    const persisted: readonly EffectLedgerEvent<ToolCall>[] = [
+      a.event,
+      b.event,
+      { type: "effect_confirmed", id: a.id },
+    ];
+
+    // A generator is single-pass: a naive double walk of `events` (fold, then
+    // counter-seed) would exhaust it on the first pass and seed the counter to
+    // 0, reissuing colliding ids. No explicit `lastId`, so the counter must be
+    // derived from the events themselves.
+    function* once(): Generator<EffectLedgerEvent<ToolCall>> {
+      yield* persisted;
+    }
+    const revived = pendingEffectsLedger<ToolCall>({ events: once() });
+
+    // b still surviving from the fold.
+    expect(revived.surviving().map((s) => s.id)).toEqual([b.id]);
+    // Next id resumes past the highest id in the events — it must NOT collide
+    // with the still-owed b (id 2) by restarting at 1.
+    const c = revived.owe({ callId: "c" });
+    expect(c.id).toBe(b.id + 1);
+    expect(revived.surviving().map((s) => s.id)).toEqual([b.id, c.id]);
+  });
 });
