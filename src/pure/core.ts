@@ -113,7 +113,7 @@ export function without<V>(
 }
 
 // === Cmd: tagged-union, one-shot effect ===
-export type Cmd<T extends string = string> = { type: T };
+export type Cmd<T extends string = string> = { readonly type: T };
 
 // === SyncReturn<S, C>: the compile-time reentrancy guard (ADR 0003 #5) ===
 //
@@ -489,7 +489,10 @@ export function subId(s: string): SubId {
 }
 
 // === Sub: tagged-union, continuous source of msgs; stable id used for diff/reconcile ===
-export type Sub<T extends string = string> = { id: SubId; type: T };
+export type Sub<T extends string = string> = {
+  readonly id: SubId;
+  readonly type: T;
+};
 
 // === Port<T>: typed escape hatch for "data leaving the runtime" ===
 //

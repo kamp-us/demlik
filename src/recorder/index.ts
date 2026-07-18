@@ -48,15 +48,15 @@ export interface Trace<S, M> {
    * reproduces the exact starting point. `null` only if the recorder attached
    * AFTER boot (it missed the boot observe) — replay then re-runs fresh `init`.
    */
-  loaded: S | null;
+  readonly loaded: S | null;
   /** The ordered, non-null msgs as observed. The replay input sequence. */
-  msgs: readonly M[];
+  readonly msgs: readonly M[];
   /**
    * The last observed state. The oracle: `replayTrace` deep-compares its
    * recomputed final state against this. Equal ⇒ the reducer still produces
    * the same result for this input.
    */
-  finalState: S;
+  readonly finalState: S;
   /**
    * Per-transition `(msg, post-state)` pairs, in dispatch order, for human
    * inspection (e.g. "show me the state after step 3"). When present, there
@@ -71,7 +71,7 @@ export interface Trace<S, M> {
    * line had a non-null state). A trace dumped with `captureSteps: false` has
    * `steps === undefined`.
    */
-  steps?: readonly { msg: M; state: S }[];
+  readonly steps?: readonly { readonly msg: M; readonly state: S }[];
 }
 
 /** Options for {@link recorder}. */
@@ -88,7 +88,7 @@ export interface RecorderOptions {
    * The boot observe (`msg === null`) is ALWAYS recorded regardless of
    * `sampleRate` — `loaded` and `finalState` are anchors, not samples.
    */
-  sampleRate?: number;
+  readonly sampleRate?: number;
   /**
    * When `true`, retain a per-transition `(msg, post-state)` pair in
    * {@link Trace.steps} for EVERY recorded transition. Default `false`.
@@ -119,7 +119,7 @@ export interface RecorderOptions {
    * `loaded` + `msgs` + `finalState` only and never touches `steps`. The
    * choice is purely "do I also want to inspect intermediate states?".
    */
-  captureSteps?: boolean;
+  readonly captureSteps?: boolean;
 }
 
 /**
@@ -296,8 +296,8 @@ export function recorder<S, M extends { type: string }>(
 
 /** One line of the JSONL format produced by {@link Recorder.toJSONL}. */
 type JsonlLine<S, M> =
-  | { kind: "boot"; state: S | null }
-  | { kind: "step"; msg: M; state: S | null };
+  | { readonly kind: "boot"; readonly state: S | null }
+  | { readonly kind: "step"; readonly msg: M; readonly state: S | null };
 
 /**
  * Re-hydrate a {@link Trace} from the JSONL produced by
@@ -421,9 +421,9 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
  *                   newline-delimited JSON.
  */
 export interface TraceAttachment {
-  filename: string;
-  data: string;
-  contentType: string;
+  readonly filename: string;
+  readonly data: string;
+  readonly contentType: string;
 }
 
 /**
@@ -458,11 +458,11 @@ export function traceAttachment<S, M extends { type: string }>(
 
 /** A Sentry-shaped breadcrumb. Matches the fields of Sentry's `Breadcrumb`. */
 export interface TraceBreadcrumb {
-  category: string;
-  type: string;
-  level: string;
-  message: string;
-  data?: Record<string, unknown>;
+  readonly category: string;
+  readonly type: string;
+  readonly level: string;
+  readonly message: string;
+  readonly data?: Record<string, unknown>;
 }
 
 /** Options for {@link breadcrumbsFromTrace}. */
@@ -473,14 +473,14 @@ export interface BreadcrumbsOptions<M> {
    * the returned list is the newest-last tail, matching how a Sentry
    * breadcrumb ring buffer behaves (the crash context is the recent past).
    */
-  limit?: number;
+  readonly limit?: number;
   /**
    * Customize each breadcrumb's `message`. Default uses `msg.type`. Provide a
    * serializer to surface a richer one-liner (e.g. include an id). The msg is
    * ALSO always attached verbatim under `data.msg` regardless of this option,
    * so the structured payload is never lost to the string rendering.
    */
-  serialize?: (msg: M) => string;
+  readonly serialize?: (msg: M) => string;
 }
 
 /**

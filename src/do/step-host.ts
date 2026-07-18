@@ -333,7 +333,7 @@ export interface DeferResumeHook<R> {
    * Optional advisory re-poll delay (ms) surfaced on the {@link StepWorking} arm
    * so the hands can back off to the host's expected step latency.
    */
-  retryAfterMs?: number;
+  readonly retryAfterMs?: number;
 }
 
 /**

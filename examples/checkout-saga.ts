@@ -1,8 +1,8 @@
 import {
   type Cmd,
   defineMachine,
-  run,
   type Runtime,
+  run,
   tryInterpret,
 } from "@demlik/tea";
 import { createSaga, type SagaState } from "@demlik/tea/saga";
@@ -169,9 +169,7 @@ function makeCtx(cardWorks: boolean): Ctx {
   };
 }
 
-function settled(
-  runtime: Runtime<State, Msg>,
-): Promise<void> {
+function settled(runtime: Runtime<State, Msg>): Promise<void> {
   return new Promise((resolve) => {
     const stop = runtime.subscribe(() => {
       if (saga.isSettled(runtime.getState().saga)) {
