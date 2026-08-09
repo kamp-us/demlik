@@ -13,7 +13,11 @@
 export * from "./observability";
 export type {
   ContextFree,
+  DepKeyedSub,
+  Dispose,
+  Identity,
   Interpret,
+  InterpretDetached,
   Machine,
   NoCtx,
   Port,
@@ -36,6 +40,7 @@ export {
   formOf,
   msgKeysOf,
   NoCellError,
+  structuralHash,
   subId,
 } from "./pure/core";
 export * from "./run";

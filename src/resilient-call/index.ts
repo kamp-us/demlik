@@ -82,6 +82,12 @@
  * by default. The ONLY clock read is `Date.now()` inside the `handlers` port
  * (the effect boundary), exactly as `resilient-fetch.ts` stamps its result Msgs.
  *
+ * That same `at` is what makes a DURATION-bounded retry budget reachable here:
+ * `recordFailure` / `shouldRetry` are fed the failure's observation instant,
+ * so `config.retry` accepts any `AnyRetryPolicy` — a count, a wall-clock outage
+ * budget (`maxElapsedMs`), or explicit `unbounded: true` — with no new argument
+ * on any verb and no clock read inside one.
+ *
  * ## Typical wiring
  *
  *   const rc = createResilientCall<string, Result>({
@@ -129,10 +135,10 @@ import { MsgType } from "../protocol";
 import { without } from "../pure/core";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
 import {
+  type AnyRetryPolicy,
   asRng,
   initRetry,
   nextDelayMs,
-  type RetryPolicy,
   type RetryState,
   recordFailure,
   shouldRetry,
@@ -183,7 +189,18 @@ export interface DeadlineConfig {
  * config `{}` is a valid pass-through — a bare effect with no resilience at all.
  */
 export interface ResilientConfig {
-  readonly retry?: RetryPolicy;
+  /**
+   * The backoff brick. Omit and a failure is terminal (no backoff, no timer).
+   *
+   * Any bound the `../retry-backoff` union admits: a count (`RetryPolicy`), a
+   * wall-clock outage budget (`DurationRetryPolicy`), or explicit
+   * `unbounded: true`. A duration bound needs no extra wiring: every path that
+   * records a failure already holds the instant it was observed as DATA —
+   * `fail`'s `msg.at` (stamped at the interpret boundary) and `gate`'s `at`
+   * (the caller's `attempt` / the retry timer's `atMs`) — so the streak clock
+   * is fed from a Msg, never from a `Date.now()` inside a verb (invariant 2).
+   */
+  readonly retry?: AnyRetryPolicy;
   readonly circuit?: CircuitConfig;
   readonly rateLimit?: RateLimitConfig;
   readonly cache?: CacheConfig;
@@ -241,6 +258,13 @@ export type CallPhase<I, R> =
 export interface ResilientState<I, R> {
   readonly circuit: CircuitState;
   readonly bucket: TokenBucket;
+  /**
+   * Per-key backoff counter. Entries minted by `backoff` are `TimedRetryState`s
+   * (they carry the streak's `firstFailureAtMs`, since every failure path holds
+   * the observation instant); the field is typed at the `RetryState` supertype
+   * because a key that has never failed has no streak, and a slice persisted
+   * before the origin existed rehydrates without one. Still plain data.
+   */
   readonly retry: Readonly<Record<string, RetryState>>;
   readonly cache: TtlCache<R>;
   readonly calls: Readonly<Record<string, CallPhase<I, R>>>;
@@ -473,6 +497,13 @@ export function createResilientCall<I, R>(
    * another attempt, enter `waiting_retry` with the retry timer armed; else
    * settle `failed`. When no `retry` brick is configured the call fails on the
    * first failure (no backoff, no timer). PURE.
+   *
+   * `at` is both the backoff anchor AND the streak clock: it is passed to
+   * `recordFailure` (which starts `firstFailureAtMs` on the streak's first
+   * failure and preserves it on every later one) and to `shouldRetry`, so a
+   * `DurationRetryPolicy` on `config.retry` is honoured with no extra wiring.
+   * A success drops `retry[key]` entirely, which drops the origin with it —
+   * only an unbroken run of failures grows toward a duration budget.
    */
   function backoff(
     s: ResilientState<I, R>,
@@ -485,9 +516,9 @@ export function createResilientCall<I, R>(
     if (config.retry === undefined) {
       return [setCall(s, key, { phase: "failed", error }), []];
     }
-    const retry = recordFailure(retryOf(s, key), error);
+    const retry = recordFailure(retryOf(s, key), error, at);
     const withRetry = { ...s, retry: { ...s.retry, [key]: retry } };
-    if (!shouldRetry(retry, config.retry)) {
+    if (!shouldRetry(retry, config.retry, at)) {
       return [setCall(withRetry, key, { phase: "failed", error }), []];
     }
     const retryAtMs = at + nextDelayMs(retry, config.retry, rngBranded);

@@ -494,6 +494,181 @@ export type Sub<T extends string = string> = {
   readonly type: T;
 };
 
+// === Dispose: the cleanup a dep-keyed Sub's source returns ===
+//
+// A `source` opens a resource and returns the function that closes it. The
+// substrate's reconcile calls it when the Sub's `deps` go null (torn down) or
+// change (re-armed: old `Dispose` then a fresh `source`). Same contract as the
+// `() => void` cleanup every `subscribe[type]` handler returns — named so a
+// dep-keyed Sub's `source` reads as "open → returns close".
+export type Dispose = () => void;
+
+// === structuralHash: deterministic, order-independent id from a deps value ===
+//
+// The id of a dep-keyed Sub (invariant 7 — identity is explicit) is DERIVED
+// from the slice of state the Sub depends on, never hand-authored. So adding a
+// field to `deps` changes the id exactly when that field changes, and a
+// churning id — the named #1 Sub bug (a Sub that remounts every tick, so its
+// timer never fires) — becomes impossible by construction: the author cannot
+// build the id wrong because the author does not build it.
+//
+// Determinism is load-bearing (invariant 2 — the reconcile pass runs inside
+// the pure-transition path's reconcile step; the same `deps` must always hash
+// to the same id). So: NO `Date`, NO random, NO insertion-order dependence.
+// Object keys are sorted so `{ runId, phase }` and `{ phase, runId }` hash
+// identically — the canonical "name the slice → stable key" adaptation FoldKit
+// makes for TS (its `modelToDependencies`), which Elm gets free from its
+// structural compare.
+//
+// The supported `deps` shape is plain JSON-compatible data (string / number /
+// boolean / null / array / plain object). A function, class instance, symbol,
+// or bigint in `deps` is a programming error — `deps` names a state SLICE, and
+// state is a value (invariant 1); such a value would also break the
+// determinism this hash promises. The walk throws on a function to surface
+// that loudly rather than silently producing an unstable id.
+//
+// It is also the ONE "turn this key value into a stable string" primitive the
+// `@demlik/tea/subs` batteries address their interpret-local handle tables
+// with, so a battery's key rendering and the kernel's Sub identity can never
+// drift into two hashes for one fact.
+export function structuralHash(deps: unknown): string {
+  return stableStringify(deps);
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null) return "null";
+  const t = typeof value;
+  if (t === "string") return JSON.stringify(value);
+  if (t === "number" || t === "boolean") return String(value);
+  if (t === "undefined") return "undefined";
+  if (t === "function") {
+    throw new Error(
+      "@demlik/tea: structuralHash received a function in `deps`. " +
+        "A dep-keyed Sub's `deps` must be a plain state slice (string / number / " +
+        "boolean / null / array / object), not a closure — see invariant 1.",
+    );
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (t === "object") {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
+  }
+  // bigint / symbol — not JSON-representable; same class of error as function.
+  throw new Error(
+    `@demlik/tea: structuralHash received an unsupported \`deps\` value of type "${t}". ` +
+      "Use plain JSON-compatible data for a dep-keyed Sub's `deps`.",
+  );
+}
+
+// === DepKeyedSub<S, M, Ctx>: a Sub whose identity AND gate fall out of `deps` ===
+//
+// The author declares the slice of state the Sub depends on (`deps`) and how
+// to open the resource for that slice (`source`). The substrate derives BOTH:
+//
+//   - the **id** = `structuralHash(deps(state))` — changes exactly when the
+//     slice changes (re-arm), stable otherwise (no churn). The author never
+//     writes `subId(...)` — the hand-written subId was the drift away from
+//     Elm's structural identity, which this restores.
+//   - the **gate** = `deps(state)` returning `null` ⇒ inactive in this state
+//     (dispose if running); non-null ⇒ active. The substrate folds every
+//     `DepKeyedSub` into its own active set, so the author deletes the central
+//     `subscriptions(state)` aggregate — there is no list to forget to edit
+//     when a new phase is added (a per-Sub gate travels with the Sub).
+//
+// This is the FoldKit `modelToDependencies` shape: a Sub names the state slice
+// it depends on, the kernel keys on that slice. The manual `subscriptions?:`
+// field stays as the documented escape hatch (see `Machine`).
+//
+// `source` returns a `Dispose`. On a `deps` change the substrate runs the old
+// `Dispose` then re-runs `source` with the new deps (re-arm); on `deps` going
+// null it runs `Dispose` (teardown). The same reconcile machinery the manual
+// `Sub` path uses (`reconcileSubs` in `../run.ts`) — no second loop.
+//
+// Strengthens invariant 4 (external lifecycle owned by the substrate — the
+// dep-keyed Sub is reconciled, never hand-driven) and invariant 7 (identity is
+// explicit — derived deterministically from `deps`, never an ad-hoc string).
+export interface DepKeyedSub<S, M, Ctx = unknown> {
+  /**
+   * The slice of state this Sub depends on. `null` ⇒ the Sub is inactive in
+   * this state (the substrate disposes it if it was running). Non-null ⇒ the
+   * Sub is active, keyed on `structuralHash(deps)`.
+   *
+   * Pure (invariant 2). Plain JSON-compatible data only (invariant 1) — the
+   * structural hash walks it deterministically.
+   */
+  readonly deps: (state: S) => unknown;
+  /**
+   * Open the resource for the current `state` (whose `deps` the kernel just
+   * found non-null). Receives `dispatch` to fire follow-up Msgs (a timer's
+   * fire, an inbound frame) and the machine's `ctx` (the host's transport
+   * factory, storage handles). Returns the `Dispose` the substrate runs on
+   * teardown / re-arm. Same role as a `subscribe[type]` handler's returned
+   * cleanup.
+   *
+   * `source` takes `state` (not the deps slice) so the slice type `D` never
+   * escapes the entry — each battery's `.depKeyed` closes over its own typed
+   * deps internally (cast-free existential: the entry that produced the deps
+   * is the entry that consumes them).
+   */
+  readonly source: (state: S, dispatch: (msg: M) => void, ctx: Ctx) => Dispose;
+}
+
+// === Identity<S, M>: declare the instance's identity once; the kernel drops
+//     mis-addressed messages before they reach `update` ===
+//
+// Without this: the substrate dispatches EVERY message to `update`, so an
+// author who needs "this message is for THIS run" must repeat
+// `if (msg.runId !== state.runId) return [state, []]` in every reducer cell.
+// Forget one cell and a stale or foreign run's message is applied → silent
+// corruption. That per-cell check is a rung-4 runtime stand-in for invariant 7
+// (identity is explicit): the identity invariant the host already holds (one
+// instance per run — `idFromName(runId)`) is re-asserted, cell by cell, where
+// it can be forgotten.
+//
+// `Identity<S, M>` lifts that to ONE declaration the kernel enforces. The
+// machine names two projections:
+//
+//   - `ofState(state)`  → the identity THIS instance owns, derived from state.
+//   - `ofMsg(msg)`       → the identity a message is ADDRESSED to, or
+//                          `undefined` when the message carries no identity
+//                          (lifecycle messages like `boot`, or `start_audit`
+//                          before the run exists — those are never dropped).
+//
+// Per transition the kernel compares `ofMsg(msg)` to `ofState(state)` by
+// `structuralHash` (so the identity can be any plain value, same machinery the
+// dep-keyed Sub id uses). A message addressed to a DIFFERENT identity is
+// dropped BEFORE `update` runs — the reducer never sees it, so no cell needs a
+// guard. A message with `ofMsg === undefined` is identity-agnostic and always
+// reaches `update`.
+//
+// Two projections rather than a single `(state) => state.runId`: the kernel
+// needs BOTH the state's identity AND the message's to compare, and splitting
+// them keeps the comparison `K`-to-`K` with no `as` cast (a message union
+// carries its identity field on only SOME arms — `ofMsg` narrows per arm in
+// author-land, returning `undefined` on the arms that have none, instead of
+// the substrate reaching into `msg.runId` it cannot type).
+//
+// Opt-in (escape hatch): a machine that declares no `identity` skips the filter
+// entirely — every message reaches `update`, exactly as before.
+//
+// Strengthens invariant 7 (identity is explicit — declared once, derived
+// deterministically, kernel-enforced rather than re-checked per cell) and
+// invariant 6 (the runtime is small and inspectable — a mis-addressed message
+// is dropped at ONE observable point, not silently mishandled in N cells).
+export interface Identity<S, M> {
+  /** The identity THIS instance owns. Pure (invariant 2); plain value. */
+  readonly ofState: (state: S) => unknown;
+  /**
+   * The identity a message is addressed to, or `undefined` when the message
+   * carries no identity (lifecycle / pre-identity messages — never dropped).
+   * Pure (invariant 2); plain value when defined.
+   */
+  readonly ofMsg: (msg: M) => unknown;
+}
+
 // === Port<T>: typed escape hatch for "data leaving the runtime" ===
 //
 // A Port is a named, typed channel that Cmd handlers can `emit` to via the
@@ -580,6 +755,26 @@ export type ContextFree = NoCtx;
 // handler a compile error — `defineMachine` cannot accept the dictionary until
 // every Cmd variant has one.
 //
+// **The injected `dispatch` — the typed Cmd→Msg edge.** A leaf handler that
+// resolves on its own returns its follow-up Msg (`Promise<M | void>`) and
+// IGNORES the third argument. A DETACHED handler (one that hands long-running
+// work to `ctx.waitUntil` and CANNOT return its terminal Msg inline — awaiting
+// it would deadlock the serial dispatch tail) fires its terminal Msg through
+// this injected `dispatch` instead. Today such a handler reaches for a
+// host-wired `ctx.dispatch` typed to the FULL Msg union — so a typo'd or wrong
+// terminal Msg from a detached site compiles silently (rung 5: the allowed set
+// lives only in a comment). `wrapDetached<C, Allowed>` (in `../runtime-types`)
+// narrows THIS injected `dispatch` to the Cmd's declared result-Msg set, so a
+// wrong terminal Msg fails to compile (rung 2).
+//
+// Additive: the third arg is OPTIONAL (`dispatch?: (msg: M) => void`), so a
+// handler declaring only `(cmd, ctx)` stays assignable, and a unit test that
+// invokes a handler directly with two args still typechecks. The kernel ALWAYS
+// passes the dispatch (see `runInterpret` in `../run.ts`); the optionality is
+// purely a backward-compatibility affordance on the TYPE, not a runtime "maybe
+// absent". A handler authored via `wrapDetached` receives a NARROWER view of
+// this dispatch (only its declared result-Msg set).
+//
 // Hoisted out of `Machine.interpret` so consumers can type a free-standing
 // handler dictionary with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
 // re-declaring the mapped type at every effects module.
@@ -591,9 +786,36 @@ export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: (
     cmd: Extract<C, { type: K }>,
     ctx: Ctx & PortEmitter,
+    dispatch?: (msg: M) => void,
     // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
   ) => Promise<M | void>;
 };
+
+// === InterpretDetached<C, Allowed, Ctx>: a detached interpret handler ===
+//
+// A handler that detaches long-running work (`ctx.waitUntil(...)`) and therefore
+// CANNOT return its terminal Msg inline (awaiting it would deadlock the serial
+// dispatch tail). It returns `Promise<void>` and fires its terminal Msg through
+// the kernel-injected `dispatch`, which is NARROWED to `Allowed` — the subset
+// of the Msg union this Cmd is permitted to produce. A wrong / typo'd terminal
+// Msg then fails to compile.
+//
+// `Allowed extends { type: string }` is the declared result-Msg set (e.g.
+// `GraphFinished | GraphFailed`). `dispatch: (msg: Allowed) => void` is the
+// narrowed edge. The handler still receives `ctx` (carrying `waitUntil`).
+//
+// Authored via `wrapDetached` (in `../runtime-types`), which adapts this shape
+// back into a plain `Interpret` cell so it drops into the existing `interpret`
+// dictionary with no kernel change at the call site.
+export type InterpretDetached<
+  C extends Cmd,
+  Allowed extends { type: string },
+  Ctx,
+> = (
+  cmd: C,
+  ctx: Ctx & PortEmitter,
+  dispatch: (msg: Allowed) => void,
+) => Promise<void>;
 
 // === Subscribe<M, U, Ctx>: record-of-handlers form of `subscribe` ===
 //
@@ -673,6 +895,48 @@ export type Machine<
     // mapping over the full union of state types, not separate tables per
     // member.
     | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
+  /**
+   * Dep-keyed Subs. Each declares the state slice it depends on; the substrate
+   * derives the id (`structuralHash(deps)`) and the gate (`deps` non-null) and
+   * folds them into the SAME reconcile loop `subscriptions` feeds. The author
+   * never writes `subId(...)` and never lists Subs in a central
+   * `subscriptions(state)` aggregate — a per-Sub gate travels with the Sub, so
+   * a new phase can't silently forget to arm it.
+   *
+   * The deps slice type is erased to `unknown` per entry — each Sub's slice
+   * differs, but the slice type never crosses this field (the kernel only needs
+   * to hash it and pass `state` back to that same entry's `source`).
+   *
+   * Optional and independent of `subscriptions` / `subscribe`: a machine that
+   * omits `subs` reconciles exactly as before.
+   *
+   * Strengthens invariant 4 (lifecycle owned by the substrate) and invariant 7
+   * (identity derived, not hand-authored).
+   */
+  subs?: ReadonlyArray<DepKeyedSub<S, M, Ctx>>;
+  /**
+   * Instance-identity filter. Declares THIS instance's identity once; the
+   * substrate drops any message addressed to a DIFFERENT identity before it
+   * reaches `update`. Replaces the per-cell `if (msg.runId !== state.runId)`
+   * guard entirely — the reducer never sees a foreign-instance message, so no
+   * cell needs to check.
+   *
+   * Opt-in: a machine that omits `identity` skips the filter (every message
+   * reaches `update`, exactly as before). A message whose `ofMsg` returns
+   * `undefined` is identity-agnostic and always reaches `update` (lifecycle /
+   * pre-identity messages).
+   *
+   * Strengthens invariant 7 (identity is explicit — declared once, enforced by
+   * the substrate) and invariant 6 (mis-addressed messages dropped at one
+   * observable point, not per cell).
+   */
+  identity?: Identity<S, M>;
+  /**
+   * Manual Sub aggregate — the documented escape hatch, KEPT alongside `subs`.
+   * The machine that needs cross-Sub logic the per-Sub `deps` fold can't
+   * express lists Subs here; the substrate reconciles them via `subscribe`.
+   * Both paths feed ONE reconcile pass.
+   */
   subscriptions?: (state: S) => readonly U[];
   subscribe?: Subscribe<M, U, Ctx>;
   /**

@@ -8,8 +8,21 @@
  */
 
 import { Result } from "better-result";
-import type { Machine, Port, Reducer, Sub, Transitions } from "./pure/core";
-import { type Cmd, detectUpdateForm, foldUpdates } from "./pure/core";
+import type {
+  InterpretDetached,
+  Machine,
+  Port,
+  PortEmitter,
+  Reducer,
+  Sub,
+  Transitions,
+} from "./pure/core";
+import {
+  type Cmd,
+  detectUpdateForm,
+  foldUpdates,
+  structuralHash,
+} from "./pure/core";
 
 // The nominal brand minted ONLY through the validated construction path
 // (`asReducer` / `defineMachine`). A raw record of handlers is a structural
@@ -269,6 +282,59 @@ export interface Store<S> {
   load(): Promise<unknown>;
   save(state: S): Promise<void>;
   migrate(raw: unknown): S | null;
+}
+
+// === Schema-derived migrate: single-source the durable State ===
+//
+// The boundary parse `migrate(raw)` is two jobs glued together:
+//   1. STRUCTURAL VALIDATION — "is this the current shape?" 100% derivable
+//      from the State type, pure boilerplate, the part that drifts when a
+//      field is added to a variant but the hand-written parser isn't updated.
+//   2. VERSION MIGRATION — "upgrade an OLD shape to the current one" (default a
+//      missing field, drop a dead one, remap a removed enum). Genuine logic.
+//      Encodes decisions about how past rows map forward. NOT derivable.
+//
+// `schemaMigrate` derives job 1 from a schema and isolates job 2 in a thin,
+// explicit `upcast` run BEFORE the parse. When the State type is itself
+// `Schema<S>`-inferred (`type S = SchemaOutput<typeof schema>`), the type and
+// the validator are the SAME declaration — you cannot add a field to the type
+// without it being in the schema, so the parse always enforces the current
+// shape. The `as S` an adapter would otherwise write on `safeParse().data` is
+// deleted: the schema's output IS `S`.
+//
+// The kernel stays library-agnostic — `Schema<S>` is the minimal Standard-
+// Schema-shaped surface (`safeParse`) that both zod 3 and zod 4 satisfy. No
+// validator is imported here; the consumer supplies one.
+//
+// Strengthens invariant 8 (the boundary parses; the core trusts) and invariant
+// 1 (state is a value — one declaration sources both type and parser).
+export interface Schema<S> {
+  safeParse(raw: unknown): { success: true; data: S } | { success: false };
+}
+
+/**
+ * Build a `Store.migrate` from a schema (job 1) and an optional thin `upcast`
+ * (job 2). `upcast` maps a recognized-but-OLD raw shape forward into the shape
+ * the schema validates; it defaults to identity (no version migration yet).
+ *
+ * Never throws — a shape the schema rejects returns `null`, the substrate's
+ * fresh-boot path, per the `Store.migrate` contract. An `upcast` that itself
+ * throws on a corrupt blob is caught and collapses to `null` (same posture).
+ */
+export function schemaMigrate<S>(
+  schema: Schema<S>,
+  upcast: (raw: unknown) => unknown = (raw) => raw,
+): (raw: unknown) => S | null {
+  return (raw: unknown): S | null => {
+    let migrated: unknown;
+    try {
+      migrated = upcast(raw);
+    } catch {
+      return null;
+    }
+    const parsed = schema.safeParse(migrated);
+    return parsed.success ? parsed.data : null;
+  };
 }
 
 // === DispatchSettle: how far a dispatch awaits ===
@@ -539,6 +605,13 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
 // `interpret[type]` handler, does NOT touch `Store`, and does NOT start any
 // subscription. `subscriptions` IS called to derive `subs` — that lets tests
 // assert what would be wired up without actually wiring it.
+//
+// Dep-keyed Subs are reported in `depSubs`: for each `machine.subs` entry
+// active at the FINAL state (its `deps` non-null), the entry's `index` and the
+// derived `id` (`structuralHash(deps)`) — so a test can assert "the deadline +
+// checkpoint + bridge dep-subs are armed in `running`" without wiring any
+// source. Same intent as `subs` for the manual path: assert the desired set
+// purely. `source` is NEVER called (replay starts no subscription).
 export function replay<
   S,
   M extends { type: string },
@@ -548,7 +621,12 @@ export function replay<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   opts: { msgs: readonly M[]; ctx: Ctx; loaded?: S | null },
-): { state: S; cmds: C[]; subs: U[] } {
+): {
+  state: S;
+  cmds: C[];
+  subs: U[];
+  depSubs: { index: number; id: string }[];
+} {
   // Coerce undefined → null so `replay` with `loaded: undefined` calls
   // `init(null, ctx)`.
   const loaded = opts.loaded ?? null;
@@ -582,7 +660,82 @@ export function replay<
     ? [...machine.subscriptions(state)]
     : [];
 
-  return { state, cmds, subs };
+  // The dep-keyed desired set at the final state — `deps` only, never `source`.
+  const depSubs: { index: number; id: string }[] = [];
+  if (machine.subs) {
+    for (const [index, entry] of machine.subs.entries()) {
+      const deps = entry.deps(state);
+      if (deps !== null) depSubs.push({ index, id: structuralHash(deps) });
+    }
+  }
+
+  return { state, cmds, subs, depSubs };
+}
+
+// === wrapDetached: the typed Cmd→Msg edge for a detached interpret handler ===
+//
+// Adapts an `InterpretDetached<C, Allowed, Ctx>` — a handler that detaches its
+// long-running work (`ctx.waitUntil(...)`) and fires its TERMINAL Msg through
+// the kernel-injected `dispatch` — into a plain `Interpret` cell that drops into
+// the `interpret` dictionary unchanged. The point is the NARROWING: `Allowed`
+// is the subset of the Msg union this Cmd is permitted to produce, and the
+// `dispatch` the handler sees is typed `(msg: Allowed) => void`. A wrong /
+// typo'd terminal Msg from the detached site then fails to compile (rung 2),
+// where today it reaches for a host-wired `ctx.dispatch` typed to the full
+// union and compiles silently (rung 5 — the allowed set on a comment).
+//
+// `Allowed extends M` is the constraint that makes this SOUND at the kernel:
+// the kernel injects the WIDE `dispatch: (msg: M) => void`, the handler only
+// ever calls it with `Allowed` values (its own narrowed signature enforces
+// that), and every `Allowed` is a valid `M`. So passing the wide dispatch into
+// the narrow-expecting handler is type-correct in one direction (the values the
+// handler produces are all `M`) — the narrowing constrains the AUTHOR, not the
+// kernel. No `as` on data: the only widen is the function reference itself
+// (`dispatch` accepting `M` is usable where one accepting `Allowed` is wanted
+// because `Allowed extends M` — contravariant parameter, sound here because the
+// handler never sees a non-`Allowed` value), expressed by the explicit
+// `Allowed`/`M` generic relation, not a cast.
+//
+// Opt-in / additive: a leaf handler that resolves on its own keeps returning
+// `Promise<M | void>` and never touches `wrapDetached`. Only the detached sites
+// adopt it. The wrapped result is structurally a plain cell, so the `interpret`
+// map type is unchanged.
+//
+// Strengthens invariant 3 (effects are data — the detached effect's terminal
+// result feeds back as a Msg, now a TYPED edge) and invariant 7 (identity is
+// explicit — a Cmd's allowed result-Msg set is load-bearing at the type level).
+export function wrapDetached<
+  C extends Cmd,
+  M extends { type: string },
+  Allowed extends M,
+  Ctx,
+>(
+  handler: InterpretDetached<C, Allowed, Ctx>,
+): (
+  cmd: C,
+  ctx: Ctx & PortEmitter,
+  dispatch?: (msg: M) => void,
+) => Promise<void> {
+  // The injected `dispatch` accepts the full `M`. The handler's signature only
+  // lets it call `dispatch` with `Allowed` (⊆ M) values, so handing it the
+  // wide fn is sound: `(msg: M) => void` is callable wherever
+  // `(msg: Allowed) => void` is wanted, and every value the handler passes is a
+  // valid `M`. No data cast — the relation is carried by `Allowed extends M`.
+  //
+  // `dispatch` is OPTIONAL on the signature to match the `Interpret` cell type
+  // (additive — see `Interpret`). The kernel ALWAYS passes it from
+  // `runInterpret`; a detached handler invoked WITHOUT a dispatch (only a
+  // mis-wired direct caller could do this) has no way to fire its terminal Msg,
+  // so we fail loudly (rung 4) rather than silently dropping the seam's result.
+  return (cmd, ctx, dispatch) => {
+    if (dispatch === undefined) {
+      throw new Error(
+        "@demlik/tea: a wrapDetached handler was invoked without the injected dispatch. " +
+          "The kernel always supplies it; call the handler through the runtime, not directly.",
+      );
+    }
+    return handler(cmd, ctx, dispatch);
+  };
 }
 
 // === tryInterpret: Railway sugar over `Result.tryPromise` ===

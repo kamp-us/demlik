@@ -4,8 +4,15 @@
  * live in `./runtime-types`.
  */
 
-import type { Interpret, Machine, Port, PortEmitter, Sub } from "./pure/core";
-import { applyCellChecked, type Cmd } from "./pure/core";
+import type {
+  Dispose,
+  Interpret,
+  Machine,
+  Port,
+  PortEmitter,
+  Sub,
+} from "./pure/core";
+import { applyCellChecked, type Cmd, structuralHash } from "./pure/core";
 import type {
   BootingRuntime,
   CtxArg,
@@ -142,6 +149,16 @@ export function run<
   let stopped = false;
 
   const subRegistry = new Map<string, () => void>();
+  // Dep-keyed Sub registry. One slot per `machine.subs[i]`, keyed by the entry's
+  // array index (its stable identity across reconciles — a dep-keyed Sub has no
+  // author-supplied id). `runningId` is the `structuralHash(deps)` of the live
+  // source; an absent slot means the entry is currently inactive (its `deps`
+  // returned null). The same dispose-on-change / dispose-on-null machinery the
+  // manual Sub path uses, with the id DERIVED instead of author-supplied.
+  const depSubRegistry = new Map<
+    number,
+    { runningId: string; dispose: Dispose }
+  >();
   const listeners = new Set<() => void>();
   // Observers get (msg, state) for every APPLIED transition (boot goes via `onBoot`).
   const observers = new Set<(msg: M, state: S) => void>();
@@ -189,6 +206,73 @@ export function run<
     }
   }
 
+  // Dispose each named dep-keyed slot: run its `Dispose` (throws isolated +
+  // routed to the sink under `"sub-cleanup"`, exactly as `stopSubs` does for the
+  // manual path), then drop the slot regardless of a throw. The single home for
+  // the dispose-and-delete discipline shared by `reconcileDepSubs`'s teardown /
+  // re-arm passes and `stop()`.
+  function disposeDepSubs(indices: Iterable<number>): void {
+    for (const index of indices) {
+      const running = depSubRegistry.get(index);
+      if (running === undefined) continue;
+      try {
+        running.dispose();
+      } catch (err) {
+        reportError(err, { phase: "sub-cleanup" });
+      }
+      depSubRegistry.delete(index);
+    }
+  }
+
+  /**
+   * Reconcile the dep-keyed Subs (`machine.subs`) against `state`. Runs as the
+   * first pass of `reconcileSubs`, sharing the dispose-on-change /
+   * dispose-on-null machinery with the manual Sub path. For each entry:
+   *
+   *   - `deps(state)` is null → the Sub is inactive in this state; dispose it
+   *     if it was running.
+   *   - `deps(state)` is non-null → `id = structuralHash(deps)`; if no source
+   *     is running for this entry, or the running id differs (re-arm), dispose
+   *     the old source and run `source(state, dispatch, ctx)` to open a fresh
+   *     one (the entry re-derives its own typed slice from `state`).
+   *   - Unchanged id → leave the source running (the no-churn case).
+   *
+   * Start throws are collected and returned rather than thrown here (same
+   * contract as the manual path) so one bad source doesn't strand the others.
+   * A machine that declares no `subs` returns immediately — the pass is inert.
+   */
+  function reconcileDepSubs(): unknown {
+    let firstError: unknown = null;
+    const subs = machine.subs;
+    if (!subs) return firstError;
+    for (const [i, entry] of subs.entries()) {
+      const deps = entry.deps(state as S);
+
+      if (deps === null) {
+        // Inactive in this state — tear down if running.
+        disposeDepSubs([i]);
+        continue;
+      }
+
+      const id = structuralHash(deps);
+      const running = depSubRegistry.get(i);
+      if (running !== undefined && running.runningId === id) {
+        // No-churn case: same deps → leave the source running.
+        continue;
+      }
+      // Re-arm (id changed) or first arm — dispose the stale source first.
+      disposeDepSubs([i]);
+      try {
+        const dispose = entry.source(state as S, enqueueDispatch, ctx);
+        depSubRegistry.set(i, { runningId: id, dispose });
+      } catch (err) {
+        if (firstError === null) firstError = err;
+        // Do NOT register; continue so other dep-keyed sources still arm.
+      }
+    }
+    return firstError;
+  }
+
   /**
    * Reconcile subscriptions against `state`, after every save. Same id old+new →
    * leave running; removed id → cleanup (throws isolated, routed to the sink);
@@ -196,7 +280,15 @@ export function run<
    * new subs still register).
    */
   function reconcileSubs(): void {
-    if (!machine.subscriptions) return;
+    // Dep-keyed pass FIRST, then the manual aggregate — ONE reconcile pass over
+    // both paths. Its start error is remembered (it happened first) and thrown
+    // after the manual pass so a bad dep-keyed source never strands the manual
+    // subs, and vice versa.
+    const depError = reconcileDepSubs();
+    if (!machine.subscriptions) {
+      if (depError !== null) throw depError;
+      return;
+    }
     const desired = machine.subscriptions(state as S);
     const desiredIds = new Set<string>();
 
@@ -217,7 +309,7 @@ export function run<
     stopSubs([...subRegistry.keys()].filter((id) => !desiredIds.has(id)));
 
     // Additions — anything in `desired` not in the registry should start.
-    let firstStartError: unknown = null;
+    let firstStartError: unknown = depError;
     for (const sub of desired) {
       if (subRegistry.has(sub.id)) continue;
       const handler = machine.subscribe?.[sub.type as U["type"]];
@@ -247,6 +339,20 @@ export function run<
     (machine as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
 
+  // The injected dispatch for DETACHED handlers. Same serial-tail enqueue every
+  // other dispatch uses (`enqueueDispatch` chains on `tail`), wrapped to a sync
+  // `(msg) => void` so a detached handler's `ctx.waitUntil(...)` tail can fire
+  // its terminal Msg without awaiting the runtime. The rejection has no caller
+  // (the original dispatcher already resolved), so it routes to the sink under
+  // `"follow-up"` — the same phase the returned-follow-up path uses. A handler
+  // authored via `wrapDetached` receives a NARROWED view of this fn (only its
+  // declared result-Msg set); a plain leaf handler ignores it entirely.
+  const interpretDispatch = (msg: M): void => {
+    enqueueDispatch(msg).catch((error: unknown) => {
+      reportError(error, { phase: "follow-up" });
+    });
+  };
+
   /**
    * Run `interpret` for each emitted cmd. A returned follow-up Msg is enqueued
    * onto the tail (NOT dispatched re-entrantly). The first error stops further
@@ -259,6 +365,7 @@ export function run<
       const follow = await handler(
         cmd as Extract<C, { type: C["type"] }>,
         augmentedCtx,
+        interpretDispatch,
       );
       if (follow !== undefined && follow !== null) {
         // The follow-up's rejection has no caller (the original dispatcher
@@ -345,6 +452,31 @@ export function run<
   async function stepDispatch(msg: M): Promise<void> {
     if (state === undefined) {
       throw new Error("@demlik/tea: runtime not booted");
+    }
+    // Instance-identity filter. When the machine declares an `identity`, a
+    // message addressed to a DIFFERENT identity is dropped here — before
+    // `update` runs, so the reducer never sees a foreign-instance message and
+    // no cell needs a `msg.runId !== state.runId` guard. A message with no
+    // identity (`ofMsg` undefined) is identity-agnostic and always proceeds.
+    // The drop resolves the dispatch (no throw) and advances nothing: no save,
+    // no reconcile, no interpret, no listener/observer/event fire, no
+    // done-waiter settle. Identity is explicit (invariant 7) and the drop is
+    // the one observable enforcement point (invariant 6).
+    if (machine.identity !== undefined) {
+      const addressed = machine.identity.ofMsg(msg);
+      if (addressed !== undefined) {
+        const own = machine.identity.ofState(state);
+        // `own === undefined` ⇒ this instance has no identity to defend yet
+        // (e.g. an `idle` state before any run is established). An addressed
+        // message in that state is identity-establishing, not foreign — never
+        // dropped. Drop only when BOTH identities are present and differ.
+        if (
+          own !== undefined &&
+          structuralHash(addressed) !== structuralHash(own)
+        ) {
+          return;
+        }
+      }
     }
     // The reducer is the only synchronous user code; the reentrancy brand
     // guarantees it cannot suspend, so a throw here is clean with `state` still
@@ -584,6 +716,8 @@ export function run<
       await tail;
       // Run every active sub cleanup; throws isolated and routed to the sink.
       stopSubs([...subRegistry.keys()]);
+      // Dispose every live dep-keyed source too (same throw-isolation).
+      disposeDepSubs([...depSubRegistry.keys()]);
       // Flush final state. A save throw here does not reject `stop()` (contract:
       // resolves regardless) but IS loss of the last write, so route it to the
       // sink rather than swallowing it (invariant 6).

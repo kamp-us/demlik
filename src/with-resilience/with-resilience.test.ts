@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Cmd, defineMachine, replay, run, type subId } from "../index";
+import type { DurationRetryPolicy } from "../retry-backoff";
 import { assertWrapperFaithful } from "../testing";
 import { type ResilienceRunCmd, withResilience } from "./index";
 
@@ -1009,5 +1010,139 @@ describe("withResilience — properties", () => {
       now.mockRestore();
       rand.mockRestore();
     }
+  });
+});
+
+// ===========================================================================
+// DURATION-BOUNDED RETRY — the outage budget reaches the wrapper.
+//
+// Nothing new is wired here and nothing new is asked of the base machine: rule
+// 5 already made the clock arrive as DATA on exactly the two Msgs a failure
+// streak is measured from — `$resilience:err.at` (stamped by the wrapper's own
+// `$resilience:run` handler at the interpret boundary) and
+// `$resilience:timer.atMs` (the Sub's fire instant). Feeding those to
+// `recordFailure` / `shouldRetry` is what makes `config.retry` accept a
+// `DurationRetryPolicy`.
+//
+// Note the config below carries NO `at`: a duration bound does NOT make
+// `config.at` required, because the cold attempt is not a failure observation.
+//
+// Failure ladder (jitter "none", origin `T`): T+0, +500, +1500, +3500, +7500,
+// then every 4000ms (the cap). The 18th failure lands at T+59500 (inside the
+// 60s budget → another retry armed); the 19th at T+63500 (outside → failed).
+// ===========================================================================
+
+const outageBudget: DurationRetryPolicy = {
+  baseMs: 250,
+  factor: 2,
+  capMs: 4_000,
+  maxElapsedMs: 60_000,
+  jitter: "none",
+};
+
+const OUTAGE_LADDER: readonly number[] = (() => {
+  const out = [0];
+  let delay = 500; // 250 * 2**1 — the delay after the FIRST failure
+  for (;;) {
+    const next = (out[out.length - 1] as number) + delay;
+    out.push(next);
+    delay = Math.min(outageBudget.capMs, delay * outageBudget.factor);
+    if (next > 70_000) break;
+  }
+  return out;
+})();
+const LAST_INSIDE = OUTAGE_LADDER.filter(
+  (t) => t < outageBudget.maxElapsedMs,
+).length; // 18
+const GIVE_UP_AT = OUTAGE_LADDER[LAST_INSIDE] as number; // 63500
+
+describe("withResilience — real runtime: duration-bounded outage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const flush = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+  };
+
+  // Drive the wrapped machine through a total outage and return the instants
+  // the BASE port was actually reached at — the ground-truth ledger.
+  async function driveOutage(
+    retry: NonNullable<Parameters<typeof withResilience>[1]["retry"]>,
+  ): Promise<readonly number[]> {
+    const hitAt: number[] = [];
+    const ctx: FetchCtx = {
+      // The target is DOWN for the whole run — every call throws.
+      fetchUrl: async (url: string) => {
+        hitAt.push(Date.now());
+        throw new Error(`peer unreachable for ${url}`);
+      },
+      logLine: () => {},
+    };
+    const base = makeBase();
+    // No `at` in the config: retry alone is not a time-sensitive brick, and the
+    // streak clock comes off `$resilience:err` / `$resilience:timer`, not the
+    // cold gate.
+    const wrapped = withResilience(
+      base,
+      { target: "do_fetch", retry },
+      () => 0,
+    );
+
+    const runtime = await run(wrapped, { ctx }).ready;
+    await runtime.dispatch({ type: "load", url: "/x", at: 0 });
+    await flush();
+
+    for (let i = 0; i < 80; i++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush();
+    }
+
+    // Terminal, and nothing left armed.
+    expect(runtime.getState().$resilience.calls.do_fetch?.phase).toBe("failed");
+    expect(wrapped.subscriptions?.(runtime.getState())).toEqual([]);
+
+    // Settled: no further port hit however long we wait.
+    const settled = hitAt.length;
+    await vi.advanceTimersByTimeAsync(600_000);
+    await flush();
+    expect(hitAt.length).toBe(settled);
+
+    await runtime.stop();
+    return hitAt;
+  }
+
+  it("retries a 63.5s outage far past any count bound, and settles failed at the 60s budget", async () => {
+    const hitAt = await driveOutage(outageBudget);
+
+    // The observed ladder is the backoff curve, driven entirely by the
+    // wrapper's own `$resilience:timer` Sub.
+    expect(hitAt).toEqual(OUTAGE_LADDER.slice(0, LAST_INSIDE + 1));
+    expect(hitAt.length).toBe(LAST_INSIDE + 1);
+    expect(hitAt[hitAt.length - 1]).toBe(GIVE_UP_AT);
+    expect(GIVE_UP_AT).toBeGreaterThanOrEqual(outageBudget.maxElapsedMs);
+    // The last retry admitted was inside the budget — the bound stopped it, not
+    // an off-by-one.
+    expect(hitAt[hitAt.length - 2] as number).toBeLessThan(
+      outageBudget.maxElapsedMs,
+    );
+  });
+
+  it("the same curve under a COUNT bound quits after maxAttempts — the bound is what differs", async () => {
+    const hitAt = await driveOutage({
+      baseMs: outageBudget.baseMs,
+      factor: outageBudget.factor,
+      capMs: outageBudget.capMs,
+      maxAttempts: 3,
+      jitter: "none",
+    });
+    // Same ladder, but it stops at attempt 3 — 1.5s of patience against a
+    // minute-long outage. That gap is the whole reason the duration bound
+    // needed to reach this wrapper.
+    expect(hitAt).toEqual([0, 500, 1_500]);
   });
 });

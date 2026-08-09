@@ -6,7 +6,12 @@ import {
   subscribeDeadline,
 } from "../deadline";
 import { type Cmd, defineMachine, run } from "../index";
-import { defaultRetryPolicy, type RetryPolicy } from "../retry-backoff";
+import {
+  type DurationRetryPolicy,
+  defaultRetryPolicy,
+  type RetryPolicy,
+  type TimedRetryState,
+} from "../retry-backoff";
 import { bindMachine } from "../testing";
 import { createPoller, type PollerState } from "./index";
 
@@ -741,5 +746,269 @@ describe("createPoller — properties", () => {
         );
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DURATION-BOUNDED RETRY — the outage budget reaches the poller.
+//
+// `tickErr` already carried `at` (the failure's observation instant), so the
+// streak clock is Msg data, not a clock read: `recordFailure` mints the origin
+// and `shouldRetry` is told `now`. The bound a `config.retry` declares may
+// therefore be temporal. The curve below is the downstream one from the
+// retry-backoff commit — 250ms → 4s, budget 60s — where a count bound is the
+// wrong bound because how many attempts fit in an outage is the carrier's
+// business, not the policy's.
+//
+// Failure ladder (jitter "none", first failure at the streak origin `T`):
+//   T+0  T+500  T+1500  T+3500  T+7500, then every 4000ms (the cap).
+// The 18th failure sits at T+59500 (inside the 60s budget → retried); the 19th
+// at T+63500 (outside → gave_up). A `maxAttempts` bound on the same curve quits
+// at attempt 3 or 5 — a few seconds of patience against a minute of outage.
+// ---------------------------------------------------------------------------
+
+const outageBudget: DurationRetryPolicy = {
+  baseMs: 250,
+  factor: 2,
+  capMs: 4_000,
+  maxElapsedMs: 60_000,
+  jitter: "none",
+};
+
+// The absolute instants the failure ladder above lands on, relative to the
+// streak origin. Derived once so the unit fold and the wired run assert the
+// SAME ladder rather than two hand-copied number lists.
+const OUTAGE_LADDER: readonly number[] = (() => {
+  const out = [0];
+  let delay = 500; // 250 * 2**1 — the delay after the FIRST failure
+  while (out[out.length - 1] !== undefined) {
+    const next = (out[out.length - 1] as number) + delay;
+    out.push(next);
+    delay = Math.min(outageBudget.capMs, delay * outageBudget.factor);
+    if (next > 70_000) break;
+  }
+  return out;
+})();
+
+// The last failure still inside the budget, and the first one outside it.
+const LAST_INSIDE = OUTAGE_LADDER.filter(
+  (t) => t < outageBudget.maxElapsedMs,
+).length; // 18
+const GIVE_UP_AT = OUTAGE_LADDER[LAST_INSIDE] as number; // 63500
+
+describe("createPoller — duration-bounded retry (the outage budget)", () => {
+  it("keeps retrying past where a count bound would have quit, then stops at the declared duration", () => {
+    const poll = makePoller({ retry: outageBudget });
+    let s = poll.start(poll.init(), BASE)[0];
+
+    // Fold the whole outage: each failure is observed at the instant the
+    // poller's own backoff target armed, so the ladder IS the schedule.
+    let failures = 0;
+    for (const offset of OUTAGE_LADDER) {
+      if (s.phase !== "polling") break;
+      const at = BASE + offset;
+      // The armed target is exactly where the next failure is observed.
+      expect(s.nextAtMs).toBe(failures === 0 ? BASE + 5_000 : at);
+      const [next, cmds] = poll.tickErr(s, "peer_unreachable", at);
+      expect(cmds).toEqual([]); // backoff never emits; the timer re-fires
+      s = next;
+      failures += 1;
+    }
+
+    // Stopped at the DURATION, not at a count: 19 consecutive failures, where
+    // the count-bounded control policy (`noJitter`, maxAttempts 3) quits at 3.
+    expect(s.phase).toBe("gave_up");
+    expect(failures).toBe(LAST_INSIDE + 1);
+    expect(failures).toBeGreaterThan(noJitter.maxAttempts);
+    expect(failures).toBeGreaterThan(defaultRetryPolicy.maxAttempts);
+    expect(s.retry.attempt).toBe(LAST_INSIDE + 1);
+
+    // The give-up instant is the FIRST failure observed at or past the budget,
+    // and the one before it was admitted from inside the budget.
+    const origin = (s.retry as TimedRetryState).firstFailureAtMs;
+    // The origin is the streak's FIRST failure — here `BASE + LADDER[0]` — not
+    // `start`, and not the most recent failure.
+    expect(origin).toBe(BASE + (OUTAGE_LADDER[0] as number));
+    expect(GIVE_UP_AT).toBeGreaterThanOrEqual(outageBudget.maxElapsedMs);
+    expect(OUTAGE_LADDER[LAST_INSIDE - 1] as number).toBeLessThan(
+      outageBudget.maxElapsedMs,
+    );
+  });
+
+  it("the same curve under a COUNT bound quits after maxAttempts — the bound is what differs", () => {
+    // Control for the test above: identical curve, count bound instead. Proves
+    // the extra patience comes from the BOUND, not from the ladder.
+    const counted: RetryPolicy = {
+      baseMs: outageBudget.baseMs,
+      factor: outageBudget.factor,
+      capMs: outageBudget.capMs,
+      maxAttempts: 3,
+      jitter: "none",
+    };
+    const poll = makePoller({ retry: counted });
+    let s = poll.start(poll.init(), BASE)[0];
+    let failures = 0;
+    for (const offset of OUTAGE_LADDER) {
+      if (s.phase !== "polling") break;
+      s = poll.tickErr(s, "peer_unreachable", BASE + offset)[0];
+      failures += 1;
+    }
+    expect(s.phase).toBe("gave_up");
+    expect(failures).toBe(3);
+  });
+
+  it("a success drops the streak origin, so intermittent failures never accumulate outage", () => {
+    const poll = makePoller({ retry: outageBudget });
+    let s = poll.start(poll.init(), BASE)[0];
+
+    // A long, BROKEN run: fail, succeed, fail, succeed … well past the budget.
+    for (let i = 0; i < 40; i++) {
+      s = poll.tickErr(s, "blip", BASE + i * 5_000)[0];
+      expect(s.phase).toBe("polling"); // never gives up — each streak is 1 long
+      expect((s.retry as TimedRetryState).firstFailureAtMs).toBe(
+        BASE + i * 5_000,
+      );
+      s = poll.tickResult(
+        s,
+        { status: "pending" },
+        BASE + i * 5_000 + 1,
+        false,
+      )[0];
+      expect(s.retry).toEqual({ attempt: 0 }); // origin dropped with the streak
+    }
+  });
+
+  it("the streak origin is set ONCE and preserved across the whole outage", () => {
+    const poll = makePoller({ retry: outageBudget });
+    let s = poll.start(poll.init(), BASE)[0];
+    s = poll.tickErr(s, "e", BASE + 1_000)[0];
+    const origin = (s.retry as TimedRetryState).firstFailureAtMs;
+    expect(origin).toBe(BASE + 1_000);
+    for (const offset of [2_000, 4_000, 9_000, 20_000]) {
+      s = poll.tickErr(s, "e", BASE + offset)[0];
+      expect((s.retry as TimedRetryState).firstFailureAtMs).toBe(origin);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WIRED END-TO-END — a duration-bounded poller driven by the REAL deadline
+// timer across a REAL (fake-clock) 63.5-second outage. The source is down for
+// the whole run; nothing but the poller's own backoff ladder and the outage
+// budget decides when it stops.
+// ---------------------------------------------------------------------------
+
+describe("createPoller — wired into a REAL runtime (duration-bounded outage)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const flush = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+  };
+
+  it("retries a 63.5s outage far past any count bound, and gives up at the 60s budget", async () => {
+    // Every read fails; record WHEN the runtime actually performed it so the
+    // backoff ladder is asserted from observed behaviour, not from the slice.
+    const readAt: number[] = [];
+    const durationPoll = createPoller<AppState, Status>(
+      {
+        everyMs: 5_000,
+        until: (s) => s.poll.lastResult?.status === "ready",
+        onTick: () => FETCH,
+        retry: outageBudget,
+      },
+      rngZero,
+    );
+
+    const machine = defineMachine<
+      AppState,
+      AppMsg,
+      Cmd<"fetch_status">,
+      DeadlineExceeded,
+      undefined
+    >({
+      init: () => [{ poll: durationPoll.init() }, []],
+      update: {
+        begin: (s, m) => {
+          const [slice, cmds] = durationPoll.start(s.poll, m.at);
+          return [{ ...s, poll: slice }, cmds];
+        },
+        deadline_exceeded: (s) => {
+          const [slice, cmds] = durationPoll.tick(s.poll);
+          return [{ ...s, poll: slice }, cmds];
+        },
+        tick_ok: (s, m) => {
+          const [slice, cmds] = durationPoll.tickResult(
+            s.poll,
+            m.result,
+            m.at,
+            true,
+          );
+          return [{ ...s, poll: slice }, cmds];
+        },
+        tick_err: (s, m) => {
+          const [slice, cmds] = durationPoll.tickErr(s.poll, m.error, m.at);
+          return [{ ...s, poll: slice }, cmds];
+        },
+      },
+      subscriptions: (s) => durationPoll.subs(s.poll),
+      subscribe: { deadline: subscribeDeadline },
+      interpret: {
+        // The source is DOWN for the entire run — every observation fails.
+        fetch_status: async (): Promise<AppMsg> => {
+          readAt.push(Date.now());
+          return {
+            type: "tick_err",
+            error: "peer_unreachable",
+            at: Date.now(),
+          };
+        },
+      },
+    });
+
+    const runtime = await run(machine, { ctx: undefined }).ready;
+    await runtime.dispatch({ type: "begin", at: Date.now() });
+    await flush();
+    expect(readAt).toEqual([]); // the timer is the only next-tick mechanism
+
+    // Drive 80 simulated seconds — comfortably past the 60s budget AND past the
+    // 63.5s instant the ladder's out-of-budget failure lands on.
+    for (let i = 0; i < 80; i++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush();
+    }
+
+    // END STATE — gave up on the DURATION.
+    const end = runtime.getState();
+    expect(end.poll.phase).toBe("gave_up");
+    expect("nextAtMs" in end.poll).toBe(false);
+
+    // The observed ladder: the first read on the `everyMs` cadence, then the
+    // backoff curve, offset by the streak origin.
+    const origin = readAt[0] as number;
+    expect(origin).toBe(BASE + 5_000);
+    expect(readAt.map((t) => t - origin)).toEqual(
+      OUTAGE_LADDER.slice(0, LAST_INSIDE + 1),
+    );
+
+    // The whole point: 19 reads across a 63.5s outage, where a count bound on
+    // the same curve would have stopped at 3 (or the default 5) — seconds of
+    // patience against a minute of outage.
+    expect(readAt.length).toBe(LAST_INSIDE + 1);
+    expect(readAt.length).toBeGreaterThan(defaultRetryPolicy.maxAttempts);
+    // …and it did STOP: the last read is the first one at/after the budget, and
+    // no further read happens however long we wait.
+    expect((readAt[readAt.length - 1] as number) - origin).toBe(GIVE_UP_AT);
+    const settled = readAt.length;
+    await vi.advanceTimersByTimeAsync(600_000);
+    await flush();
+    expect(readAt.length).toBe(settled);
+
+    await runtime.stop();
   });
 });

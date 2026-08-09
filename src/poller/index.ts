@@ -17,7 +17,10 @@
  *                            cadence; it backs off. The next attempt is armed
  *                            `nextDelayMs(retry, policy)` from now, the retry
  *                            counter advances, and `shouldRetry` decides whether
- *                            the poller keeps trying or gives up.
+ *                            the poller keeps trying or gives up. The bound may
+ *                            be a COUNT or a wall-clock OUTAGE DURATION — see
+ *                            `PollerConfig.retry`; `tickErr`'s `at` is the
+ *                            streak clock, so both flow through unchanged.
  *   - `../idempotency`     — successive ticks against a flaky source can deliver
  *                            the SAME observation twice (a retried fetch, a
  *                            duplicate webhook the poll re-reads). `dedupeKey`
@@ -85,11 +88,11 @@ import type { IdempotencyStore } from "../idempotency";
 import { idempotencyMemory } from "../idempotency/adapter";
 import type { Cmd, Sub } from "../index";
 import {
+  type AnyRetryPolicy,
   asRng,
   defaultRetryPolicy,
   initRetry,
   nextDelayMs,
-  type RetryPolicy,
   type RetryState,
   recordFailure,
   shouldRetry,
@@ -131,8 +134,15 @@ export interface PollerConfig<State, R> {
    * Backoff policy for FAILED ticks. Omit to use `defaultRetryPolicy`
    * (full-jitter, 5 attempts). A success resets the retry counter, so the
    * policy only governs consecutive failures.
+   *
+   * Any bound the `../retry-backoff` union admits: a count (`RetryPolicy`), a
+   * wall-clock outage budget (`DurationRetryPolicy`), or explicit
+   * `unbounded: true`. The duration bound needs no extra wiring here — every
+   * failure already arrives through `tickErr(state, error, at)` carrying the
+   * instant it was observed, so the streak clock is fed from the Msg's own
+   * data and the poller never reads a clock of its own (invariant 2).
    */
-  readonly retry?: RetryPolicy;
+  readonly retry?: AnyRetryPolicy;
   /**
    * Optional dedupe key derived from a tick result. When provided, a result
    * whose key was already `seen` records the observation but emits NO fresh
@@ -161,7 +171,12 @@ export interface PollerConfig<State, R> {
  *                  before the first success. `until` typically reads it (via the
  *                  consumer's Model), but the knob never interprets it.
  * - `retry`      — the `../retry-backoff` counter for consecutive failures.
- *                  Reset to `initRetry()` on every success.
+ *                  Reset to `initRetry()` on every success. Once a failure has
+ *                  been recorded it is a `TimedRetryState` (it carries the
+ *                  streak's `firstFailureAtMs`, minted from `tickErr`'s `at`);
+ *                  the field is typed at the `RetryState` supertype because a
+ *                  poller that has never failed has no streak, and a slice
+ *                  persisted before the origin existed rehydrates without one.
  * - `dedupe`     — the `../idempotency` store backing `dedupeKey`. An empty,
  *                  unbounded store when `dedupeKey` is unset (never written).
  */
@@ -320,6 +335,13 @@ export interface Poller<
    * - If backoff is exhausted (`!shouldRetry`), enters `"gave_up"`, disarms
    *   (`nextAtMs: null`), and emits no Cmd.
    *
+   * `at` is both the backoff anchor AND the streak clock: it is passed to
+   * `recordFailure` (starting / preserving `firstFailureAtMs`) and to
+   * `shouldRetry`, so a `DurationRetryPolicy` on `config.retry` is honoured
+   * with no extra wiring. Under a duration bound the poller keeps retrying
+   * however many attempts the outage takes, and stops at the declared
+   * wall-clock budget measured from the streak's FIRST failure.
+   *
    * The backoff jitter uses the `rng` injected ONCE at `createPoller` (default
    * `Math.random` at the effect boundary, a fixed value in tests); the verb
    * body never names the global RNG, so a poller built with a fixed `rng`
@@ -364,7 +386,7 @@ export function createPoller<State, R>(
   // public param stays a plain `() => number` so transitive callers are
   // unchanged; `asRng` is the single point where it's branded for `nextDelayMs`.
   const rngBranded = asRng(rng);
-  const policy: RetryPolicy = config.retry ?? defaultRetryPolicy;
+  const policy: AnyRetryPolicy = config.retry ?? defaultRetryPolicy;
 
   // The dedupe store seam, bound once. The poller delegates its dedupe-window
   // reads (`memory.isSeen`) and the per-sighting touch (`memory.remember`) to
@@ -491,14 +513,21 @@ export function createPoller<State, R>(
     error: unknown,
     at: number,
   ): readonly [PollerState<R>, readonly Cmd[]] {
-    const retry = recordFailure(state.retry, error);
+    // `at` is the failure's OBSERVATION instant, already carried in from the
+    // Msg — so it doubles as the streak clock a duration bound is measured
+    // against. The first failure of a streak sets `firstFailureAtMs`; every
+    // later one preserves it, and a success resets to `initRetry()` (dropping
+    // the origin with it). Nothing here reads a clock: `at` is Msg data,
+    // exactly as `rng` is factory-injected data (invariant 2).
+    const retry = recordFailure(state.retry, error, at);
     const tick = state.tick + 1;
 
     // Backoff exhausted → give up: emit nothing. `shouldRetry` reads the
-    // just-advanced `retry`, so the (maxAttempts)-th failure is the one that
-    // stops the poller. The `gave_up` arm carries no `nextAtMs` — there is no
-    // next attempt to arm.
-    if (!shouldRetry(retry, policy)) {
+    // just-advanced `retry`, so under a count bound the (maxAttempts)-th
+    // failure is the one that stops the poller, and under a duration bound the
+    // first failure observed at or past `firstFailureAtMs + maxElapsedMs` is.
+    // The `gave_up` arm carries no `nextAtMs` — there is no next attempt to arm.
+    if (!shouldRetry(retry, policy, at)) {
       return [
         {
           phase: "gave_up",

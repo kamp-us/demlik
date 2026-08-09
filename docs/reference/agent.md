@@ -66,7 +66,7 @@ import { … } from "@demlik/tea/agent";
 | `Schema` | Reference |  |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |
 | `status` | Function |  |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` cell. |
+| `subscribeDeadline` | Variable | The `subscribe["deadline"]` cell for the DEFAULT `setTimeout` backing. |
 | `ToolCall` | Interface | One tool the model asked to call this turn — the seed's `ToolCall`, stripped of the audit-specific args typing. |
 | `ToolOutcome` | Type | One settled tool outcome the consumer routes back into the loop — the seed's `ToolOutcome`. |
 | `ToolRecord` | Interface | A folded tool record kept on the conversation once a tool settles — the call + its outcome, in settle order. |

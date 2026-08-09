@@ -26,13 +26,28 @@
  * (invariant 2) — and is exercised in tests via vitest fake timers, matching
  * the no-injection convention of the `fromTimeout` / `fromInterval` exemplars.
  *
+ * WHAT BACKS THE TIMER IS THE HOST'S CHOICE. `setTimeout` is the universal
+ * default, but it is not universal: a Durable Object that hibernates has no
+ * live `setTimeout` to wake it, so its deadline must be backed by a `do_alarm`
+ * registered on the alarm registry; a test host wants a fake-timer schedule.
+ * That backing is the `ArmTimer` seam — `subscribeWith(armTimer)` builds the
+ * `subscribe.deadline` cell from a host-plugged timer, and `subscribeDeadline`
+ * IS `subscribeWith(setTimeoutArmTimer())`. One deadline surface, three hosts;
+ * there is no second Sub type and no second `atMs` anchor to keep in sync.
+ *
+ * The anchor is what makes the seam safe. `atMs` is ABSOLUTE, so whatever backs
+ * it arms to a fixed wall-clock instant: the host computes the gap itself
+ * (`atMs - Date.now()`), and on a host that just rehydrated after hibernation
+ * that gap is the SHRUNKEN remainder — the deadline honours the original target
+ * rather than resetting to a fresh full-length window.
+ *
  * Strengthens invariant 4 (external time is a subscription — the deadline is a
  * `Sub` the runtime reconciles, never a `setTimeout` leaked into a reducer) and
  * invariant 7 (identity is explicit — the Sub carries a stable `SubId`, so the
  * reconcile pass leaves it running across transitions instead of churning it).
  */
 
-import { type Sub, subId } from "../index";
+import { type Sub, type SubId, subId } from "../index";
 import { fromTimeout } from "../subs/from-timeout";
 import type { SubscribeHandler } from "../subs/types";
 
@@ -117,15 +132,88 @@ export function deadlineSub(
 }
 
 /**
- * The `subscribe["deadline"]` cell. Arms a one-shot timer for the remaining
- * delay `max(0, atMs - Date.now())` and dispatches `deadlineExceeded(...)` when
- * it fires; returns a cleanup that clears the pending timer.
+ * The host-plugged timer backing. Given the deadline's stable `id`, its
+ * absolute `atMs`, and the Msg to fire, arm the platform-appropriate timer
+ * (DO alarm registry, `setTimeout`, fake timer) and return a cleanup that
+ * cancels the pending fire.
  *
- * Composes on `fromTimeout`: it adapts the absolute `atMs` on the Sub to the
- * relative `delayMs` that `fromTimeout` schedules against, then hands off the
- * `setTimeout` / `clearTimeout` lifecycle wholesale. A past deadline collapses
- * to `delayMs: 0`, so `fromTimeout` fires on the next tick — asynchronously,
- * never inside the reconcile pass.
+ * `id` is the Sub's reconcile id — a registry-backed host (the DO alarm slot)
+ * keys its entry on `id` so the cleanup deletes the EXACT entry the substrate
+ * reconciled. A `setTimeout`-backed host ignores `id` (the closure holds the
+ * handle).
+ *
+ * The host computes the gap itself: `atMs - Date.now()` is the REMAINING time.
+ * On a host that just rehydrated after hibernation that gap is the shrunken
+ * remainder — the deadline is NOT reset to its full length. That recomputation
+ * is the reason `atMs` rides on the Sub as an absolute instant rather than a
+ * delay: the anchor is what every backing agrees on.
+ */
+export type ArmTimer<M> = (
+  id: SubId,
+  atMs: number,
+  msg: M,
+  dispatch: (msg: M) => void,
+) => () => void;
+
+/**
+ * Build the `subscribe["deadline"]` cell from a host-plugged `armTimer`. This
+ * module owns the Sub shape, the anchor, and the Msg; the HOST owns what backs
+ * the timer. The returned handler reads `id` + `atMs` off the Sub, builds the
+ * `deadlineExceeded(...)` Msg, and hands all three to `armTimer`.
+ *
+ * Use it when `setTimeout` is the wrong backing — most concretely a Durable
+ * Object, which hibernates and must register a `do_alarm` instead:
+ *
+ *   subscribe: {
+ *     deadline: subscribeWith((id, atMs, msg, dispatch) =>
+ *       alarms.register(id, atMs, () => dispatch(msg)),
+ *     ),
+ *   }
+ *
+ * For the `setTimeout` default, use {@link subscribeDeadline} — it is exactly
+ * `subscribeWith(setTimeoutArmTimer())`, so there is one deadline surface and
+ * one anchor, not a second one per host.
+ */
+export function subscribeWith(
+  armTimer: ArmTimer<DeadlineExceeded>,
+): SubscribeHandler<DeadlineSub, DeadlineExceeded, unknown> {
+  return (sub, _ctx, dispatch) =>
+    armTimer(sub.id, sub.atMs, deadlineExceeded(sub.id, sub.atMs), dispatch);
+}
+
+/**
+ * The `setTimeout` timer backing — for node / browser / any host whose timer is
+ * a plain `setTimeout`. Arms for the REMAINING time (`max(0, atMs - Date.now())`,
+ * floored at 0 so an already-past deadline fires on the NEXT tick rather than
+ * synchronously inside the reconcile pass), so a deadline re-derived after a
+ * rehydrate fires at the original instant, not a fresh full window.
+ *
+ * Composes on `fromTimeout` rather than redrawing `setTimeout` /
+ * `clearTimeout`: this package has ONE timer lifecycle, and the arm-timer seam
+ * plugs into it instead of forking it. A hibernating host does NOT use this —
+ * it plugs its own `armTimer` (a `do_alarm` registration) into
+ * {@link subscribeWith}.
+ */
+export function setTimeoutArmTimer(): ArmTimer<DeadlineExceeded> {
+  return (id, atMs, msg, dispatch) => {
+    // Recompute the remaining delay from the CURRENT clock so a late subscribe
+    // (post-rehydrate) still targets the correct absolute moment.
+    const delayMs = Math.max(0, atMs - Date.now());
+    return fromTimeout<Sub<"deadline"> & { delayMs: number }, DeadlineExceeded>(
+      () => msg,
+    )({ id, type: "deadline", delayMs }, undefined, dispatch);
+  };
+}
+
+/**
+ * The `subscribe["deadline"]` cell for the DEFAULT `setTimeout` backing. Arms a
+ * one-shot timer for the remaining delay `max(0, atMs - Date.now())` and
+ * dispatches `deadlineExceeded(...)` when it fires; returns a cleanup that
+ * clears the pending timer.
+ *
+ * It is `subscribeWith(setTimeoutArmTimer())` — the default backing named, not
+ * a separate implementation, so the host-plugged path and the default path can
+ * never disagree about the anchor.
  *
  * Assign directly to a `Subscribe` cell:
  *
@@ -137,21 +225,7 @@ export const subscribeDeadline: SubscribeHandler<
   DeadlineSub,
   DeadlineExceeded,
   unknown
-> = (sub, ctx, dispatch) => {
-  // Recompute the remaining delay from the CURRENT clock so a late subscribe
-  // (post-rehydrate) still targets the correct absolute moment. `max(0, …)`
-  // keeps a past deadline at delay 0 → setTimeout(fn, 0) → fires next tick, not
-  // synchronously.
-  const remainingMs = Math.max(0, sub.atMs - Date.now());
-
-  // Delegate the timer lifecycle to fromTimeout: build the relative-delay Sub
-  // shape it consumes (`{ ...sub, delayMs }`) and let it own setTimeout /
-  // clearTimeout. The msgFn closes over the deadline's identity + target so the
-  // dispatched Msg carries both.
-  return fromTimeout<DeadlineSub & { delayMs: number }, DeadlineExceeded>(
-    (armed) => deadlineExceeded(armed.id, armed.atMs),
-  )({ ...sub, delayMs: remainingMs }, ctx, dispatch);
-};
+> = subscribeWith(setTimeoutArmTimer());
 
 /**
  * Construct the Msg the deadline dispatches. Exported so consumers can build /

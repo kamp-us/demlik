@@ -62,6 +62,23 @@
  *      the only clock read is `Date.now()` at the interpret boundary (the
  *      `$resilience:run` handler stamps the ok/err Msg `at`) and in the timer
  *      Sub. The merged `update` is PURE — `at` arrives as Msg data.
+ *
+ * ## The retry bound may be a DURATION, not only a count
+ *
+ * `config.retry` is resilient-call's `AnyRetryPolicy`: a count (`RetryPolicy`),
+ * a wall-clock outage budget (`DurationRetryPolicy`, `maxElapsedMs`), or an
+ * explicit `unbounded: true`. Nothing extra is wired for the duration bound and
+ * nothing extra is required of the base machine — rule 5 already made the clock
+ * arrive as DATA on exactly the Msgs the streak is measured from:
+ * `$resilience:err.at` (stamped by the wrapper's own `$resilience:run` handler
+ * at the interpret boundary) and `$resilience:timer.atMs` (the Sub's fire
+ * instant). Those are the two instants `recordFailure` / `shouldRetry` are fed,
+ * so an outage budget is measured against true wall time even when
+ * `config.at` is absent — the cold gate's `at` never records a failure.
+ *
+ * `config.at` therefore stays REQUIRED-when-time-sensitive-brick and OPTIONAL
+ * otherwise, unchanged: a duration-bounded retry does NOT make it required,
+ * because the cold attempt is not a failure observation.
  */
 
 import { type DeadlineSub, subscribeDeadline } from "../deadline";

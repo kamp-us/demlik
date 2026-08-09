@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (47)
+## Exports (55)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -21,13 +21,17 @@ import { … } from "@demlik/tea";
 | `CtxArg` | Type |  |
 | `defineMachine` | Function |  |
 | `definePort` | Function |  |
+| `DepKeyedSub` | Interface |  |
 | `detectUpdateForm` | Function |  |
 | `DispatchSettle` | Type |  |
+| `Dispose` | Type |  |
 | `foldMsgs` | Function |  |
 | `formOf` | Function |  |
 | `historyTracker` | Function |  |
 | `HistoryTracker` | Interface |  |
+| `Identity` | Interface |  |
 | `Interpret` | Type |  |
+| `InterpretDetached` | Type |  |
 | `Machine` | Type |  |
 | `msgKeysOf` | Function |  |
 | `NoCellError` | Class |  |
@@ -45,7 +49,10 @@ import { … } from "@demlik/tea";
 | `RuntimeErrorContext` | Interface | Context handed to an `OnError` sink alongside the error itself. |
 | `RuntimeErrorPhase` | Type | Which otherwise-unattributable runtime path produced an error. |
 | `RuntimeRef` | Interface |  |
+| `Schema` | Interface |  |
+| `schemaMigrate` | Function |  |
 | `Store` | Interface |  |
+| `structuralHash` | Function |  |
 | `Sub` | Type |  |
 | `subId` | Function |  |
 | `SubId` | Type |  |
@@ -57,3 +64,4 @@ import { … } from "@demlik/tea";
 | `Transitions` | Type |  |
 | `tryInterpret` | Function |  |
 | `UpdateForm` | Type |  |
+| `wrapDetached` | Function |  |

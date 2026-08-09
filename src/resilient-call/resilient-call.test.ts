@@ -1,6 +1,11 @@
 import * as fc from "fast-check";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineMachine, replay, run } from "../index";
+import type {
+  DurationRetryPolicy,
+  RetryPolicy,
+  TimedRetryState,
+} from "../retry-backoff";
 import { bindMachine } from "../testing";
 import {
   createResilientCall,
@@ -11,6 +16,7 @@ import {
   type ResilientTimerMsg,
   type RunCmd,
   type SucceedMsg,
+  subscribeDeadline,
 } from "./index";
 
 // ---------------------------------------------------------------------------
@@ -925,6 +931,248 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     // And the recovery probe actually reached the backend (proving it was not
     // fast-failed by a wedged half-open breaker).
     expect(ctx.calls.count).toBe(2);
+
+    await runtime.stop();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DURATION-BOUNDED RETRY — the outage budget reaches the knob.
+//
+// Every path that records a failure already holds the instant it was observed
+// as DATA: `fail`'s `msg.at` (stamped by `handlers` at the interpret boundary)
+// and `gate`'s `at` (the caller's `attempt`, or the retry timer's `atMs`). That
+// instant is now fed to `recordFailure` / `shouldRetry`, so `config.retry` may
+// declare a wall-clock outage budget instead of an attempt count — with no new
+// verb argument and no clock read inside a verb.
+//
+// Failure ladder (jitter "none", origin `T`): T+0, +500, +1500, +3500, +7500,
+// then every 4000ms (the cap). The 18th failure lands at T+59500 (inside the
+// 60s budget → another retry armed); the 19th at T+63500 (outside → settled
+// `failed`). A count bound on the SAME curve quits at 3.
+// ---------------------------------------------------------------------------
+
+const outageBudget: DurationRetryPolicy = {
+  baseMs: 250,
+  factor: 2,
+  capMs: 4_000,
+  maxElapsedMs: 60_000,
+  jitter: "none",
+};
+
+// The ladder derived from the curve, so the fold and the wired run assert the
+// same schedule rather than two hand-copied number lists.
+const OUTAGE_LADDER: readonly number[] = (() => {
+  const out = [0];
+  let delay = 500; // 250 * 2**1 — the delay after the FIRST failure
+  for (;;) {
+    const next = (out[out.length - 1] as number) + delay;
+    out.push(next);
+    delay = Math.min(outageBudget.capMs, delay * outageBudget.factor);
+    if (next > 70_000) break;
+  }
+  return out;
+})();
+const LAST_INSIDE = OUTAGE_LADDER.filter(
+  (t) => t < outageBudget.maxElapsedMs,
+).length; // 18
+const GIVE_UP_AT = OUTAGE_LADDER[LAST_INSIDE] as number; // 63500
+
+describe("createResilientCall — duration-bounded retry (the outage budget)", () => {
+  // Fold one failure at `at` through `fail`, returning the new slice.
+  const failAt = (
+    rc: ReturnType<typeof createResilientCall<string, string>>,
+    s: ResilientState<string, string>,
+    at: number,
+  ) =>
+    rc.fail(s, "k", {
+      type: "resilient_err",
+      key: "k",
+      error: "peer_unreachable",
+      at,
+    })[0];
+
+  it("keeps retrying past where a count bound would have quit, then settles at the declared duration", () => {
+    const rc = createResilientCall<string, string>(
+      { retry: outageBudget },
+      rngZero,
+    );
+    let s = rc.attempt(rc.init(), "k", "in", 0)[0];
+
+    let failures = 0;
+    for (const at of OUTAGE_LADDER) {
+      if (s.calls.k?.phase !== "running") break;
+      s = failAt(rc, s, at);
+      failures += 1;
+      if (s.calls.k?.phase !== "waiting_retry") break;
+      // The armed retry timer IS the next rung of the ladder.
+      expect(s.calls.k.retryAtMs).toBe(OUTAGE_LADDER[failures] as number);
+      // Re-enter the gate exactly when that timer fires (what `onTimer` does).
+      s = rc.onTimer(s, {
+        type: "deadline_exceeded",
+        id: `resilient:retry:k`,
+        atMs: s.calls.k.retryAtMs,
+      })[0];
+    }
+
+    // Settled on the DURATION, not on a count.
+    expect(s.calls.k).toEqual({ phase: "failed", error: "peer_unreachable" });
+    expect(failures).toBe(LAST_INSIDE + 1);
+    expect(s.retry.k?.attempt).toBe(LAST_INSIDE + 1);
+    expect((s.retry.k as TimedRetryState).firstFailureAtMs).toBe(0);
+    expect(GIVE_UP_AT).toBeGreaterThanOrEqual(outageBudget.maxElapsedMs);
+  });
+
+  it("the same curve under a COUNT bound quits after maxAttempts — the bound is what differs", () => {
+    const counted: RetryPolicy = {
+      baseMs: outageBudget.baseMs,
+      factor: outageBudget.factor,
+      capMs: outageBudget.capMs,
+      maxAttempts: 3,
+      jitter: "none",
+    };
+    const rc = createResilientCall<string, string>({ retry: counted }, rngZero);
+    let s = rc.attempt(rc.init(), "k", "in", 0)[0];
+    let failures = 0;
+    for (const at of OUTAGE_LADDER) {
+      if (s.calls.k?.phase !== "running") break;
+      s = failAt(rc, s, at);
+      failures += 1;
+      if (s.calls.k?.phase !== "waiting_retry") break;
+      s = rc.onTimer(s, {
+        type: "deadline_exceeded",
+        id: `resilient:retry:k`,
+        atMs: s.calls.k.retryAtMs,
+      })[0];
+    }
+    expect(s.calls.k?.phase).toBe("failed");
+    expect(failures).toBe(3);
+  });
+
+  it("a success drops the key's streak origin, so intermittent failures never accumulate outage", () => {
+    const rc = createResilientCall<string, string>(
+      { retry: outageBudget },
+      rngZero,
+    );
+    let s = rc.init();
+    for (let i = 0; i < 40; i++) {
+      const at = i * 5_000;
+      s = rc.attempt(s, "k", "in", at)[0];
+      s = failAt(rc, s, at);
+      // Each streak is exactly one failure long, so the budget is never neared.
+      expect(s.calls.k?.phase).toBe("waiting_retry");
+      expect((s.retry.k as TimedRetryState).firstFailureAtMs).toBe(at);
+      s = rc.succeed(s, "k", {
+        type: "resilient_ok",
+        key: "k",
+        result: "VALUE",
+        at: at + 1,
+      })[0];
+      expect(s.retry.k).toBeUndefined(); // origin dropped with the streak
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WIRED END-TO-END — a duration-bounded knob driven by the REAL retry-timer Sub
+// across a REAL (fake-clock) 63.5-second outage. Nothing hand-steps the loop:
+// the port throws, `handlers` stamps the failure `at` at the interpret
+// boundary, `fail` backs off, the deadline Sub re-fires, `onTimer` re-gates.
+// ---------------------------------------------------------------------------
+
+describe("createResilientCall — wired end-to-end: duration-bounded outage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const flush = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+  };
+
+  it("retries a 63.5s outage far past any count bound, and settles failed at the 60s budget", async () => {
+    const callAt: number[] = [];
+
+    interface DState {
+      readonly resilience: ResilientState<string, string>;
+    }
+    type DMsg =
+      | { type: "attempt"; key: string; input: string; at: number }
+      | SucceedMsg<string>
+      | FailMsg
+      | ResilientTimerMsg;
+
+    const rc = createResilientCall<string, string>(
+      { retry: outageBudget },
+      rngZero,
+    );
+    const machine = defineMachine<
+      DState,
+      DMsg,
+      RunCmd<string>,
+      ReturnType<typeof rc.subs>[number],
+      object
+    >({
+      init: (loaded) =>
+        loaded !== null ? [loaded, []] : [{ resilience: rc.init() }, []],
+      update: {
+        attempt: (s, m) => {
+          const [slice, cmds] = rc.attempt(s.resilience, m.key, m.input, m.at);
+          return [{ resilience: slice }, cmds];
+        },
+        resilient_ok: (s, m) => {
+          const [slice, cmds] = rc.succeed(s.resilience, m.key, m);
+          return [{ resilience: slice }, cmds];
+        },
+        resilient_err: (s, m) => {
+          const [slice, cmds] = rc.fail(s.resilience, m.key, m);
+          return [{ resilience: slice }, cmds];
+        },
+        deadline_exceeded: (s, m) => {
+          const [slice, cmds] = rc.onTimer(s.resilience, m);
+          return [{ resilience: slice }, cmds];
+        },
+      },
+      subscriptions: (s) => rc.subs(s.resilience),
+      // The REAL timer cell — the retry Sub actually arms a setTimeout against
+      // the (fake) wall clock, so the outage advances by itself.
+      subscribe: { deadline: subscribeDeadline },
+      interpret: rc.handlers({
+        run: async () => {
+          callAt.push(Date.now());
+          throw { _tag: "peer_unreachable" };
+        },
+      }),
+    });
+
+    const runtime = await run(machine, { ctx: {} }).ready;
+    await runtime.dispatch({ type: "attempt", key: "k", input: "in", at: 0 });
+    await flush();
+
+    for (let i = 0; i < 80; i++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush();
+    }
+
+    // END STATE — settled on the DURATION, with no timer left armed.
+    const end = runtime.getState();
+    expect(end.resilience.calls.k?.phase).toBe("failed");
+    expect(rc.subs(end.resilience)).toEqual([]);
+
+    // The observed ladder — read off the backend ledger, not the slice.
+    expect(callAt).toEqual(OUTAGE_LADDER.slice(0, LAST_INSIDE + 1));
+    expect(callAt.length).toBe(LAST_INSIDE + 1);
+    expect(callAt.length).toBeGreaterThan(3); // a count bound quits at 3
+    expect(callAt[callAt.length - 1]).toBe(GIVE_UP_AT);
+
+    // And it STOPPED: no further backend call however long we wait.
+    const settled = callAt.length;
+    await vi.advanceTimersByTimeAsync(600_000);
+    await flush();
+    expect(callAt.length).toBe(settled);
 
     await runtime.stop();
   });
