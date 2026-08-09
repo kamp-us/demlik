@@ -24,12 +24,37 @@ import type {
   Store,
   Supervision,
 } from "./runtime-types";
-import { QuiescenceTimeoutError, SubIdCollisionError } from "./runtime-types";
+import {
+  DispatchDiscardedError,
+  QuiescenceTimeoutError,
+  RuntimeDiscardedError,
+  RuntimeDiscardNotice,
+  SubIdCollisionError,
+} from "./runtime-types";
 
 // Default `onError` sink: re-throw on a fresh macrotask so the failure reaches
 // the host's global error handler instead of vanishing — surface, not swallow
 // (invariant 6).
+//
+// A `RuntimeDiscardNotice` is NOT a failure of the runtime's own contract — a
+// host tearing a runtime down with Cmds in flight (a React ctx-identity change,
+// a navigation) is legal, merely lossy. Rethrowing it would make every
+// unmount-during-fetch an uncaught error for consumers who never configured a
+// sink, so the default WARNS: loud enough that the silent discard #365 describes
+// cannot happen again, never fatal. A configured `onError` sees `"discard"` like
+// any other phase and can route or ignore it.
+//
+// The branch keys on the ERROR CLASS, never on `context.phase`: the phase is
+// attached by the report site, and `reportError` hands a THROWING consumer sink's
+// own error back here with the phase it was handling — so a phase-keyed branch
+// would warn away a broken sink and re-create the very silent failure this
+// mechanism exists to remove. The class is the one thing a sink's own defect
+// cannot forge.
 function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
+  if (error instanceof RuntimeDiscardNotice) {
+    console.warn(error);
+    return;
+  }
   setTimeout(() => {
     throw error;
   }, 0);
@@ -115,7 +140,10 @@ export function run<
   // Absent sink → `defaultOnError` (invariant 6).
   const onError: OnError = opts.onError ?? defaultOnError;
   // A throwing sink routes THAT throw through `defaultOnError` so it can't
-  // re-create a silent failure.
+  // re-create a silent failure. It arrives with the context the sink was
+  // handling, so `defaultOnError` must not decide fatality from the phase — the
+  // sink's own error is not the runtime's teardown notice, whatever phase it
+  // inherits.
   const reportError = (error: unknown, context: RuntimeErrorContext): void => {
     try {
       onError(error, context);
@@ -146,7 +174,28 @@ export function run<
   // `state` is late-initialized inside the boot step (the head of the tail).
   let state: S | undefined;
   let bootError: unknown = null;
-  let stopped = false;
+  // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
+  // `"closed"` — so the discard window can never re-open under a second `stop()`.
+  //
+  //   "open"     — normal operation; `enqueueDispatch` accepts.
+  //   "draining" — inside `stop()`, before the tail has settled. New work is
+  //                still refused (the stop barrier is absolute, and refusing is
+  //                what makes the drain terminate), but a Msg refused HERE was
+  //                discarded BY the teardown: it is an in-flight Cmd's follow-up,
+  //                a detached handler's terminal Msg, or a Sub that is still live
+  //                because subs are torn down only after the drain. So the
+  //                rejection is a `DispatchDiscardedError` and it reports under
+  //                `phase: "discard"` — lossy, legal, warn-only.
+  //   "closed"   — halted: a `stop` supervision halt, or `stop()` has returned.
+  //                A dispatch refused here is a consumer using a runtime it
+  //                already retired — a real error, and it stays loud.
+  let gate: "open" | "draining" | "closed" = "open";
+  // Interpret handlers currently awaiting — "how many Cmds are in flight?".
+  // Maintained in `runInterpret` (its only writer) and read by `stop()` to make
+  // a mid-flight teardown LOUD instead of silent (issue #365). Not a second
+  // representation of the serial `tail`: the tail is a promise chain, which
+  // cannot be asked synchronously whether it has outstanding work.
+  let inFlightCmds = 0;
 
   const subRegistry = new Map<string, () => void>();
   // Dep-keyed Sub registry. One slot per `machine.subs[i]`, keyed by the entry's
@@ -348,10 +397,36 @@ export function run<
   // authored via `wrapDetached` receives a NARROWED view of this fn (only its
   // declared result-Msg set); a plain leaf handler ignores it entirely.
   const interpretDispatch = (msg: M): void => {
-    enqueueDispatch(msg).catch((error: unknown) => {
-      reportError(error, { phase: "follow-up" });
-    });
+    enqueueDispatch(msg).catch(reportUndelivered);
   };
+
+  /**
+   * Report a re-dispatch that nobody can await. The phase is DERIVED from the
+   * rejection the gate produced, so the two call sites cannot drift: a
+   * `DispatchDiscardedError` means the teardown refused the Msg (`"discard"` —
+   * warn-only), anything else is a genuine failure of the follow-up itself
+   * (`"follow-up"` — the default sink rethrows it).
+   */
+  function reportUndelivered(error: unknown): void {
+    reportError(error, {
+      phase: error instanceof DispatchDiscardedError ? "discard" : "follow-up",
+    });
+  }
+
+  /**
+   * Count an interpret handler's work as in flight for exactly the lifetime of
+   * its promise. The ONE writer of `inFlightCmds`, so "how many Cmds are
+   * outstanding?" has a single definition; `finally`-balanced, so a rejecting
+   * handler can never strand the count above zero. A handler that throws
+   * SYNCHRONOUSLY never reaches here, which is correct — it was never in
+   * flight.
+   */
+  function trackInFlight<T>(work: T | Promise<T>): Promise<T> {
+    inFlightCmds++;
+    return Promise.resolve(work).finally(() => {
+      inFlightCmds--;
+    });
+  }
 
   /**
    * Run `interpret` for each emitted cmd. A returned follow-up Msg is enqueued
@@ -362,18 +437,18 @@ export function run<
     for (const cmd of cmds) {
       const handler = interpretMap[cmd.type as C["type"]];
       if (!handler) continue;
-      const follow = await handler(
-        cmd as Extract<C, { type: C["type"] }>,
-        augmentedCtx,
-        interpretDispatch,
+      const follow = await trackInFlight(
+        handler(
+          cmd as Extract<C, { type: C["type"] }>,
+          augmentedCtx,
+          interpretDispatch,
+        ),
       );
       if (follow !== undefined && follow !== null) {
         // The follow-up's rejection has no caller (the original dispatcher
         // resolved), so route it to the sink (invariant 6); name a failure Msg
         // via `tryInterpret` to fold it back into state.
-        enqueueDispatch(follow as M).catch((error: unknown) => {
-          reportError(error, { phase: "follow-up" });
-        });
+        enqueueDispatch(follow as M).catch(reportUndelivered);
       }
     }
   }
@@ -504,7 +579,7 @@ export function run<
         default:
           // `stop` (safe default): halt. State is NOT advanced; propagate so THIS
           // dispatch also rejects — the halt is observable, never a silent resume.
-          stopped = true;
+          gate = "closed";
           throw reduceError;
       }
     }
@@ -550,12 +625,20 @@ export function run<
 
   /**
    * Enqueue a dispatch on the tail — the single gate re-entrant interpret /
-   * subscribe calls also go through. Rejects when the runtime is stopped, boot
-   * failed, or the reducer / save / sub start / interpret throws.
+   * subscribe calls also go through. Rejects when the gate is not open (with a
+   * `DispatchDiscardedError` while `stop()` drains, a plain stopped Error once it
+   * has), boot failed, or the reducer / save / sub start / interpret throws.
    */
   function enqueueDispatch(msg: M): Promise<void> {
-    if (stopped)
-      return Promise.reject(new Error("@demlik/tea: runtime stopped"));
+    if (gate !== "open") {
+      // The gate's state at refusal time IS the classification — the report
+      // sites read the error class, never the message.
+      return Promise.reject(
+        gate === "draining"
+          ? new DispatchDiscardedError(msg.type)
+          : new Error("@demlik/tea: runtime stopped"),
+      );
+    }
     const next = tail.then(() => {
       if (bootError !== null) throw bootError;
       return stepDispatch(msg);
@@ -710,10 +793,29 @@ export function run<
       });
     },
     async stop(): Promise<void> {
-      stopped = true;
+      // Open the discard window unless the gate is already `"closed"` (a
+      // supervision halt, or a redundant second `stop()`): the gate only
+      // advances, so a Msg refused after a halt or after `stop()` returned stays
+      // a loud error rather than being re-labelled a teardown discard.
+      if (gate === "open") gate = "draining";
+      // Report BEFORE the drain: after `await tail` the count is zero by
+      // construction, and the fact worth surfacing is what was outstanding at
+      // the moment the host let go. `stop()` drains, but every consumer of the
+      // resulting transitions (listeners, observers, event handlers) is being
+      // torn down with it, so those Cmds' results reach nobody (issue #365).
+      if (inFlightCmds > 0) {
+        reportError(new RuntimeDiscardedError(inFlightCmds), {
+          phase: "discard",
+        });
+      }
       // Drain in-flight work. Tail rejections were swallowed at enqueue time, so
-      // this await always resolves.
+      // this await always resolves. The drain TERMINATES because the gate refuses
+      // the follow-ups those handlers return — allowing them in instead would let
+      // a handler chain extend the tail without end.
       await tail;
+      // The barrier is now absolute: everything that was in flight has settled,
+      // so a dispatch from here on is a consumer using a retired runtime.
+      gate = "closed";
       // Run every active sub cleanup; throws isolated and routed to the sink.
       stopSubs([...subRegistry.keys()]);
       // Dispose every live dep-keyed source too (same throw-isolation).

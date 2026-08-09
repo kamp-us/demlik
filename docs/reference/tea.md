@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (55)
+## Exports (58)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -23,6 +23,7 @@ import { … } from "@demlik/tea";
 | `definePort` | Function |  |
 | `DepKeyedSub` | Interface |  |
 | `detectUpdateForm` | Function |  |
+| `DispatchDiscardedError` | Class | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
 | `DispatchSettle` | Type |  |
 | `Dispose` | Type |  |
 | `foldMsgs` | Function |  |
@@ -46,6 +47,8 @@ import { … } from "@demlik/tea";
 | `replay` | Function |  |
 | `run` | Function |  |
 | `Runtime` | Interface |  |
+| `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
+| `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |
 | `RuntimeErrorContext` | Interface | Context handed to an `OnError` sink alongside the error itself. |
 | `RuntimeErrorPhase` | Type | Which otherwise-unattributable runtime path produced an error. |
 | `RuntimeRef` | Interface |  |

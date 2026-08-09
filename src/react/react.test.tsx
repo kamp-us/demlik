@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   defineMachine,
+  type Interpret,
   type Reducer,
+  RuntimeDiscardedError,
   run,
   type Store,
   type Sub,
@@ -196,6 +198,119 @@ describe("useMachine", () => {
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(container.textContent).toBe("2");
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Issue #365 — a ctx re-derived mid-flight rebuilds the runtime, and the
+// in-flight Cmd's response arrives for a runtime nobody renders. The UI
+// silently rewinds. The substrate now reports that teardown
+// (`RuntimeDiscardedError`, `phase: "discard"`); with no `onError` configured
+// — which is every `useMachine` caller, since the hook takes no sink — the
+// default sink warns. This is the reproduction, driven through a real React
+// commit rather than a direct `stop()` call.
+// ───────────────────────────────────────────────────────────────────────────
+describe("useMachine — loud on discard", () => {
+  type WizardCtx = { readonly userId: string };
+  type WizardState = { readonly step: number };
+  type WizardMsg = { readonly type: "next" };
+  type SaveCmd = { readonly type: "save" };
+
+  // The parked Cmd returns NO follow-up: re-dispatching into a stopped runtime
+  // is a separate (pre-existing) `phase: "follow-up"` rejection, and the
+  // default sink rethrows that one — noise this test must not conflate with
+  // the discard warning it asserts.
+  function wizardMachine(park: Promise<void>) {
+    const update: Reducer<WizardState, WizardMsg, SaveCmd> = {
+      next: (s) => [{ step: s.step + 1 }, [{ type: "save" }]],
+    };
+    const interpret: Interpret<WizardMsg, SaveCmd, WizardCtx> = {
+      save: async () => {
+        await park;
+      },
+    };
+    return defineMachine<WizardState, WizardMsg, SaveCmd, never, WizardCtx>({
+      init: () => [{ step: 0 }, []],
+      update,
+      interpret,
+    });
+  }
+
+  function mountWizard(machine: ReturnType<typeof wizardMachine>) {
+    let dispatch: ((msg: WizardMsg) => Promise<void>) | null = null;
+    function Wizard({ userId }: { userId: string }) {
+      // The defect's exact shape: the ctx is DERIVED from a value the flow
+      // itself moves, memoized correctly on that value — so it is stable
+      // across renders and mints exactly one fresh identity when `userId`
+      // changes, which is the moment the runtime is replaced.
+      const ctx = useMemo<WizardCtx>(() => ({ userId }), [userId]);
+      const [state, d] = useMachine(machine, { ctx });
+      dispatch = d;
+      return <span>{state.step}</span>;
+    }
+    return {
+      Wizard,
+      dispatch: (msg: WizardMsg) => dispatch?.(msg),
+    };
+  }
+
+  it("warns when a ctx identity change replaces a runtime with a Cmd in flight", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let release = (): void => {};
+    const park = new Promise<void>((resolve) => {
+      release = () => {
+        resolve();
+      };
+    });
+    const { Wizard, dispatch } = mountWizard(wizardMachine(park));
+
+    await act(async () => {
+      root.render(<Wizard userId="u1" />);
+    });
+    // Fire and forget — the Cmd parks, so this never settles before the
+    // re-render below.
+    await act(async () => {
+      void dispatch({ type: "next" });
+    });
+    expect(warn).not.toHaveBeenCalled();
+
+    // The mid-flight ctx churn: a new `userId` re-derives the ctx object, the
+    // memo rebuilds, and the old runtime is dropped with `save` still awaiting.
+    await act(async () => {
+      root.render(<Wizard userId="u2" />);
+    });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toBeInstanceOf(RuntimeDiscardedError);
+    expect((warn.mock.calls[0]?.[0] as RuntimeDiscardedError).pendingCmds).toBe(
+      1,
+    );
+
+    release();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    warn.mockRestore();
+  });
+
+  it("stays silent when the replaced runtime had nothing in flight", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Already-resolved park: every dispatched Cmd settles within its
+    // transition, so the replacement below is a clean handover.
+    const { Wizard, dispatch } = mountWizard(wizardMachine(Promise.resolve()));
+
+    await act(async () => {
+      root.render(<Wizard userId="u1" />);
+    });
+    await act(async () => {
+      await dispatch({ type: "next" });
+    });
+    await act(async () => {
+      root.render(<Wizard userId="u2" />);
+    });
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

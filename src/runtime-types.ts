@@ -125,6 +125,8 @@ export function __resetPortRegistry(): void {
  *
  * - `"follow-up"` — a follow-up Msg an interpret handler returned rejected when
  *   re-dispatched (the original dispatcher already resolved, so no caller).
+ *   A rejection caused by `stop()`'s own teardown is NOT this phase — see
+ *   `"discard"`.
  * - `"stop-save"` — the final `store.save(state)` inside `stop()` threw
  *   (`stop()` resolves regardless, so without the sink this was silent loss).
  * - `"reduce"` — the pure `update` (reducer) threw synchronously; the configured
@@ -137,6 +139,17 @@ export function __resetPortRegistry(): void {
  * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
  * - `"sub-cleanup"` — a subscription's cleanup threw (reconcile-removal or
  *   `stop()` teardown).
+ * - `"discard"` — work lost to a teardown the host asked for. Two witnesses,
+ *   both carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
+ *   handlers were still awaiting (`RuntimeDiscardedError`), and a Msg that
+ *   arrived DURING `stop()`'s drain and so could not be delivered
+ *   (`DispatchDiscardedError`). The one phase that is a LIFECYCLE report rather
+ *   than a failure: legal, merely lossy.
+ *
+ * The phase never decides fatality — the ERROR CLASS does (`RuntimeDiscardNotice`
+ * warns, everything else rethrows). A phase is attached by the report site, so a
+ * consumer sink that throws while handling a `"discard"` report inherits that
+ * phase; keying the warn-only path on it would make the sink's own defect vanish.
  */
 export type RuntimeErrorPhase =
   | "follow-up"
@@ -147,7 +160,8 @@ export type RuntimeErrorPhase =
   | "event"
   | "boot"
   | "port-emit"
-  | "sub-cleanup";
+  | "sub-cleanup"
+  | "discard";
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
@@ -224,6 +238,80 @@ export class QuiescenceTimeoutError extends Error {
         `likely livelocking (an interpret handler enqueues a follow-up Msg ` +
         `that enqueues another, without end). Bound the follow-up chain in ` +
         `the reducer, or stop the runtime.`,
+    );
+  }
+}
+
+/**
+ * Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting
+ * go of a runtime that still had something outstanding. Reported under
+ * `phase: "discard"`, never raised.
+ *
+ * It exists so "is this fatal?" has ONE definition — `error instanceof
+ * RuntimeDiscardNotice` — that the default sink can ask about any error from any
+ * site. The phase cannot answer it: a report site attaches the phase, so a
+ * consumer sink that throws while handling a `"discard"` report carries that
+ * phase into the sink-failure path, and a phase-keyed warn branch would swallow
+ * the sink's own defect. Sub-classing is how a new teardown fact opts into the
+ * warn-only treatment; nothing else can.
+ */
+export abstract class RuntimeDiscardNotice extends Error {}
+
+/**
+ * Reported to the `OnError` sink under `phase: "discard"` when `stop()` is
+ * called while `interpret` handlers are still awaiting. The host is dropping
+ * its only handle on that work: `stop()` drains the tail, but the listeners,
+ * observers and event handlers that would have consumed the resulting
+ * transitions are gone, so the Cmds' results reach nobody.
+ *
+ * The motivating shape is `@demlik/tea/react`'s `useMachine`, which memoizes on
+ * `[machine, ctx, store]` — a ctx re-derived mid-flight replaces the runtime,
+ * and the in-flight mutation's response arrives for a runtime the UI no longer
+ * renders, silently rewinding the visible state. Never a throw: tearing a
+ * runtime down mid-flight is legal (a navigation does it every time), so this
+ * is surfaced as data, not raised. Mechanizes invariant 6 (no silent failures)
+ * at the teardown seam, the role `QuiescenceTimeoutError` plays for `idle()`.
+ */
+export class RuntimeDiscardedError extends RuntimeDiscardNotice {
+  override readonly name = "RuntimeDiscardedError";
+  readonly _tag = "RuntimeDiscardedError" as const;
+  constructor(public readonly pendingCmds: number) {
+    super(
+      `@demlik/tea: runtime stopped with ${pendingCmds} Cmd(s) in flight — ` +
+        `their results will reach no listener. In React this is usually a ` +
+        `ctx-identity change rebuilding useMachine's runtime mid-flight: ` +
+        `stabilize the ctx (useMemo / useState) so the runtime outlives the ` +
+        `Cmds it started. An intentional teardown (unmount, navigation) can ` +
+        `silence this with a run({ onError }) sink that ignores ` +
+        `phase: "discard".`,
+    );
+  }
+}
+
+/**
+ * The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight
+ * interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub
+ * that is still live because subs are torn down only after the drain. The stop
+ * barrier is absolute (the Msg is refused, never folded), so this names the loss.
+ *
+ * It is the SECOND witness of `RuntimeDiscardedError`'s fact, and it is why the
+ * drain window is a distinct runtime state rather than a plain `stopped` flag:
+ * a Msg refused inside the window was discarded BY the teardown, while the same
+ * refusal after `stop()` has returned is a consumer dispatching into a runtime it
+ * already retired — a real error, and still loud (`phase: "follow-up"`, or the
+ * caller's own rejection). The distinction is the state at refusal time, never
+ * the message text.
+ */
+export class DispatchDiscardedError extends RuntimeDiscardNotice {
+  override readonly name = "DispatchDiscardedError";
+  readonly _tag = "DispatchDiscardedError" as const;
+  constructor(public readonly msgType: string) {
+    super(
+      `@demlik/tea: Msg "${msgType}" arrived while the runtime was stopping ` +
+        `and was discarded — stop() refuses new work so the drain terminates. ` +
+        `It is the result of a Cmd that outlived its runtime; keep the runtime ` +
+        `alive until the Cmd settles (in React: stabilize useMachine's ctx) if ` +
+        `the transition matters.`,
     );
   }
 }

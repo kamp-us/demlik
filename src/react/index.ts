@@ -48,6 +48,10 @@ import {
  * **Identity matters.** The runtime is memoized on `[machine, opts.ctx,
  * opts.store]`. A new `ctx` reference rebuilds the runtime. Always `useMemo`
  * (or otherwise stabilize) the ctx at the call site. See README.
+ *
+ * Forgetting to is no longer silent: the replaced runtime's `stop()` reports
+ * `RuntimeDiscardedError` under `phase: "discard"` when Cmds were still in
+ * flight, which the substrate's default sink warns about (issue #365).
  */
 export interface UseMachineOpts<S, Ctx> {
   ctx: Ctx;
@@ -64,7 +68,9 @@ export interface UseMachineOpts<S, Ctx> {
  *   runtime.getState)` — tearing-free under React 18 concurrent rendering.
  * - On unmount (or any dep change), `useEffect` cleanup calls
  *   `runtime.stop()` — drains the queue, runs every active sub cleanup,
- *   flushes state.
+ *   flushes state, and — if Cmds were still in flight — reports
+ *   `RuntimeDiscardedError` (`phase: "discard"`) rather than dropping them
+ *   silently.
  *
  * Returns `[state, dispatch]` shaped like `useReducer`.
  */
