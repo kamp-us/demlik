@@ -1,6 +1,6 @@
 {
   "name": "@demlik/tea",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TEA-faithful state machine substrate — one package, every host adapter. Core + subs + testing, plus React, Durable Object, Chrome extension, Node, in-memory, work-queue, devtools, and property-testing modules as subpaths.",
   "keywords": [
     "tea",

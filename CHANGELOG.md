@@ -1,5 +1,42 @@
 # @demlik/tea
 
+## 0.4.0
+
+### Minor Changes
+
+- a82bec2: Loud on discard: `stop()` now reports a runtime torn down with Cmds in flight
+
+  A runtime stopped while `interpret` handlers were still awaiting used to go
+  quiet — `stop()` drains the tail, but every consumer of the resulting
+  transitions is being torn down with it, so those Cmds' results reached nobody
+  and nothing said so. The shape that bites is `@demlik/tea/react`'s `useMachine`,
+  memoized on `[machine, ctx, store]`: a `ctx` re-derived mid-flight replaces the
+  runtime, the in-flight mutation's response arrives for a runtime the UI no
+  longer renders, and the visible state silently rewinds.
+
+  `stop()` now samples the in-flight Cmd count before draining and, when it is
+  non-zero, reports `new RuntimeDiscardedError(pendingCmds)` through the existing
+  `OnError` sink under the new `RuntimeErrorPhase` member `"discard"`.
+
+  The teardown is loud end to end, not just at its first instant. A Msg that
+  arrives while `stop()` is draining — an in-flight Cmd's follow-up, a detached
+  handler's terminal Msg, a Sub that is still live — is refused (the stop barrier
+  is absolute, and refusing is what makes the drain terminate) and reported as
+  `DispatchDiscardedError` under the same `"discard"` phase. The same refusal
+  AFTER `stop()` has returned stays a loud error: that is a consumer dispatching
+  into a runtime it already retired. The distinction is the runtime's own state at
+  refusal time, so it never depends on reading an error message.
+
+  Additive and non-fatal. A discard is a lifecycle report, not a contract failure
+  — tearing a runtime down mid-flight is legal — so the default sink
+  `console.warn`s the new `RuntimeDiscardNotice` errors instead of rethrowing on a
+  macrotask the way it does for everything else; a consumer who never configured
+  `onError` gains a warning, never a crash, for the whole teardown. A configured
+  sink sees `"discard"` like any other phase and may route or ignore it. The
+  default sink decides fatality from the ERROR CLASS rather than the phase, so a
+  consumer sink that itself throws while handling a discard report still surfaces
+  to the host instead of being demoted to a warning.
+
 ## 0.3.0
 
 ### Minor Changes
