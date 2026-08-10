@@ -1,5 +1,96 @@
 # @demlik/tea
 
+## 0.5.0
+
+### Minor Changes
+
+- e469edb: Close eight silent-failure paths in the kernel: `structuralHash` collisions, the
+  teardown dispatch, and the identity drop
+
+  An adversarial review of 0.3.0/0.4.0 reproduced eight defects with runnable
+  tests. All eight are fixed, each with the reproduction ported into the suite.
+
+  **`structuralHash` collapsed every non-plain object onto one id (F1).** The
+  `typeof value === "object"` branch walked `Object.keys`, which reports no own
+  enumerable property on a `Date`, `Map`, `Set`, `Error`, or class instance — so
+  all of them, and `{}`, hashed to `"{}"`. Three call sites already documented
+  this as impossible ("non-JSON keys throw loudly"); the code never reached the
+  throw. Three proven consequences fall out of the one bug: the `Identity` filter
+  compared a foreign run's identity as EQUAL and applied its message (corruption
+  with the guard switched on), a dep-keyed Sub keyed on a slice containing a
+  `Date` never re-armed (it presented as the no-churn success case), and
+  `defineManagedResource`'s handle table returned the previous key's handle.
+
+  The walk now rejects any object whose prototype is neither `Object.prototype`
+  nor `null`, naming the constructor. **This is a behaviour change:** a `deps`
+  slice, an `Identity` projection, or a battery key that previously hashed
+  silently now THROWS. That is the point — the previous behaviour was a collision,
+  not a wrong-looking key — and with no known adopters of these primitives it is
+  the right moment to make it loud. Project such a value to plain data first
+  (`startedAt.toISOString()`). The guard is on the prototype rather than a list of
+  known classes, so a user-defined key class is caught by the same rule. Rendering
+  `Date`/`Map`/`Set` structurally was considered and rejected: `Map`/`Set`
+  iteration is insertion-ordered, so any faithful rendering re-introduces the
+  churn the hash exists to prevent.
+
+  **A Sub dispatching during teardown produced an unhandled rejection (F2).**
+  Dep-keyed sources and `subscribe[type]` handlers were handed the raw
+  `enqueueDispatch`, whose promise rejects while the stop gate is shut — so a
+  Sub firing during `stop()`'s drain bypassed `onError` entirely and surfaced as
+  an `unhandledRejection` on the host. Both now receive the same wrapped
+  `(msg) => void` interpret handlers get, so the rejection lands on the sink with
+  its phase derived from the error class (`DispatchDiscardedError` → `"discard"`).
+
+  **`fromTransport` leaked a socket per failed wiring (F3).** `live.set` ran
+  BEFORE `onMessage`/`onClose` were wired, so an adapter over an already-CLOSING
+  socket left the transport in the handle table with no sub registered: no cleanup
+  ever ran, `send` wrote into a half-wired seam, and every reconcile opened
+  another one. Wiring now happens first and the table is written last; a throw
+  detaches what it wired, closes the transport, and rethrows — the
+  acquire-as-success-value discipline `defineManagedResource` already followed.
+
+  **The identity drop is now observable (F4).** A message addressed to another
+  instance was dropped by a bare `return`: the dispatch RESOLVED, so the caller
+  could not tell applied from discarded, and a reusable Durable Object serving run
+  A then run B lost run B while reporting success. The drop now reports a new
+  `IdentityDropNotice` (a `RuntimeDiscardNotice` — warn by default, never fatal)
+  under the new `RuntimeErrorPhase` member `"identity-drop"`.
+
+  **`stop()` waits for async teardown (F5).** `defineManagedResource` fired an
+  async `release` and only attached `.catch`, and `stop()` returned without
+  awaiting it — so a host doing `await runtime.stop(); env.evict()` dropped the
+  isolate mid-release, which is the leak the battery exists to prevent, relocated
+  to shutdown. The cleanup now RETURNS the release promise, the runtime tracks
+  every async disposal (from `stop()` and from mid-run reconciles alike), and
+  `stop()` drains them before resolving. Bounded by the new
+  `run({ disposeTimeoutMs })` (default 5000ms) so a release that never settles
+  cannot hang the host; on expiry `stop()` reports a `DisposeTimeoutNotice` and
+  resolves anyway. A rejected teardown now reaches `onError` under
+  `phase: "sub-cleanup"` instead of a `console.warn` at the battery.
+
+  **The identity projection is supervised like the reducer (F6).** It ran ABOVE
+  the `try` around the reducer, so a throwing `ofMsg` / `ofState` was neither
+  reported nor supervised while an identical throw one line later was both — and
+  since `structuralHash` throws on a bigint, a snowflake-style run id put EVERY
+  dispatch on that unprotected path. Both halves of the transition's synchronous
+  user code are now inside one `try`.
+
+  **A throwing `deps` no longer strands its siblings (F7).** `reconcileDepSubs`
+  guarded `entry.source` but not `entry.deps`, so one bad projection stranded
+  every later dep-keyed entry and the manual `subscriptions` aggregate, which is
+  only reached after the loop. `deps` and the hash are now collected into the same
+  `firstError` the source path uses.
+
+  **A nullish `deps` gates the Sub off (F8).** The gate was `deps === null`, so
+  `(s) => s.optionalRunId` — the natural projection over an optional field —
+  returned `undefined`, hashed to `"undefined"`, and ARMED the Sub, acquiring a
+  resource under one shared key in a state that meant inactive. The gate is now
+  `depsInactive` (nullish), single-sourced between the runtime's reconcile and
+  `replay`'s desired-set projection.
+
+  `Dispose` and the `Subscribe` cleanup are now typed `() => void | Promise<void>`
+  (source-compatible: every existing `() => void` cleanup still fits).
+
 ## 0.4.0
 
 ### Minor Changes
