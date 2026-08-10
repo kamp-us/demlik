@@ -91,3 +91,57 @@ describe("structuralHash — loud failure on unstable values", () => {
     expect(() => structuralHash(10n)).toThrow(/unsupported/);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// The non-plain object family. `Object.keys` sees NO own enumerable property
+// on a Date, a Map, a Set, an Error or a typical class instance — so a walk
+// that trusts it renders every one of them as `"{}"`, the same string an empty
+// plain object produces. That is the silent-collision shape three call sites
+// already document as impossible ("non-JSON keys throw loudly"): the identity
+// filter would admit a foreign run, a dep-keyed Sub would never re-arm, and a
+// battery's handle table would hand back the previous key's handle. The guard
+// is on the PROTOTYPE, not on a list of known classes, so a user-defined class
+// is caught by the same rule as `Date`.
+// ───────────────────────────────────────────────────────────────────────────
+describe("structuralHash — loud failure on non-plain objects", () => {
+  it("throws on a Date instead of hashing it to `{}`", () => {
+    expect(() => structuralHash(new Date(0))).toThrow(/non-plain object/);
+  });
+
+  it("throws on a Map instead of collapsing two distinct maps into one key", () => {
+    expect(() => structuralHash(new Map([[1, 2]]))).toThrow(/non-plain object/);
+  });
+
+  it("throws on a Set", () => {
+    expect(() => structuralHash(new Set([1, 2, 3]))).toThrow(
+      /non-plain object/,
+    );
+  });
+
+  it("throws on an Error", () => {
+    expect(() => structuralHash(new Error("boom"))).toThrow(/non-plain object/);
+  });
+
+  it("throws on a class instance, whatever its own fields", () => {
+    class RunKey {
+      constructor(readonly value: string) {}
+    }
+    expect(() => structuralHash(new RunKey("A"))).toThrow(/non-plain object/);
+  });
+
+  it("throws on a non-plain value NESTED in an otherwise plain slice", () => {
+    expect(() =>
+      structuralHash({ runId: "r1", startedAt: new Date(0) }),
+    ).toThrow(/non-plain object/);
+  });
+
+  it("names the offending constructor so the fix site is obvious", () => {
+    expect(() => structuralHash(new Date(0))).toThrow(/Date/);
+  });
+
+  it("still accepts a null-prototype object (a plain bag by any other name)", () => {
+    const bag = Object.create(null) as Record<string, unknown>;
+    bag.runId = "r1";
+    expect(structuralHash(bag)).toBe(structuralHash({ runId: "r1" }));
+  });
+});

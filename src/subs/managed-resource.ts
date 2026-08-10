@@ -44,7 +44,7 @@
 // desired set, visible in the Sub topology, and an unroutable one throws).
 // ---------------------------------------------------------------------------
 
-import type { DepKeyedSub, Sub, SubId } from "../index";
+import type { DepKeyedSub, Dispose, Sub, SubId } from "../index";
 import { structuralHash, subId } from "../index";
 
 /**
@@ -92,7 +92,7 @@ export interface GatedManagedResource<S, TKey, Ctx> {
     sub: ManagedResourceSub<TKey>,
     ctx: Ctx,
     dispatch: (msg: never) => void,
-  ) => () => void;
+  ) => Dispose;
 
   /**
    * Does this entry own the given Sub? `sub.id === subIdFor(sub.key)` encodes
@@ -124,7 +124,7 @@ export interface CombinedManagedResources<S, TKey, Ctx> {
     sub: ManagedResourceSub<TKey>,
     ctx: Ctx,
     dispatch: (msg: never) => void,
-  ) => () => void;
+  ) => Dispose;
 }
 
 export interface DefineManagedResourceOpts<TKey, Handle, Ctx> {
@@ -147,9 +147,16 @@ export interface DefineManagedResourceOpts<TKey, Handle, Ctx> {
   /**
    * Tear the resource down. Runs when the Sub leaves the desired set (phase
    * exited) or when its key changes. MANDATORY — the guaranteed teardown is
-   * the reason this battery exists. May be sync or async; the substrate's
-   * cleanup is fire-and-forget (Rule 2), so a rejected teardown is logged at
-   * the boundary, not surfaced as a Msg.
+   * the reason this battery exists.
+   *
+   * May be sync or async, and an async one is really awaited: the promise is
+   * returned to the substrate, which tracks it and drains it inside `stop()`
+   * (bounded by `run({ disposeTimeoutMs })`). So `await runtime.stop()` means
+   * the release finished — the reading a host evicting an isolate acts on.
+   * MID-RUN teardown (a phase exit, a key change) is still fire-and-forget
+   * (Rule 2): the reconcile pass is synchronous by construction, so it starts
+   * the release and moves on. A rejection is never a Msg — it reaches the
+   * runtime's `onError` sink under `phase: "sub-cleanup"`.
    */
   readonly release: (handle: Handle) => void | Promise<void>;
 }
@@ -223,7 +230,7 @@ export interface ManagedResourceBattery<TKey, Handle, Ctx> {
     // lifecycle. `dispatch` is accepted to match the substrate's
     // `subscribe[type]` shape and is intentionally unused.
     dispatch: (msg: never) => void,
-  ) => () => void;
+  ) => Dispose;
 
   /**
    * Accessor for the live Handle, keyed on `key`. Returns `undefined` when
@@ -288,7 +295,7 @@ export function defineManagedResource<TKey, Handle, Ctx>(
     sub: ManagedResourceSub<TKey>,
     ctx: Ctx,
     _dispatch: (msg: never) => void,
-  ): (() => void) => {
+  ): Dispose => {
     // Acquire. A throw here propagates out of reconcileSubs (the substrate
     // records it and re-throws after the diff pass) and the Sub is NOT
     // registered — so no cleanup runs and `held` stays clean. The
@@ -300,20 +307,17 @@ export function defineManagedResource<TKey, Handle, Ctx>(
     // Cleanup runs when the substrate's reconcileSubs leaves the phase OR
     // the key changes. Forget the Handle first so a concurrent `get` after
     // teardown begins sees `undefined`, then release.
+    //
+    // An async `release` is RETURNED, not swallowed: the substrate tracks the
+    // promise and `stop()` awaits it (bounded), so `await runtime.stop()` means
+    // the release finished. Attaching a `.catch` here and returning `void` was
+    // the defect — a host doing `await stop(); env.evict()` dropped the isolate
+    // mid-release, which is the leak this battery exists to prevent, moved to
+    // shutdown. A rejection now reaches the runtime's `onError` under
+    // `phase: "sub-cleanup"` instead of a `console.warn` nobody configured.
     return () => {
       held.delete(k);
-      try {
-        const result = opts.release(handle);
-        if (result instanceof Promise) {
-          result.catch((err) => {
-            // Boundary log: teardown failures are fire-and-forget (Rule 2).
-            // The reducer is already past caring (the phase was left).
-            console.warn(`[managed:${opts.name}] release failed`, err);
-          });
-        }
-      } catch (err) {
-        console.warn(`[managed:${opts.name}] release threw`, err);
-      }
+      return opts.release(handle);
     };
   };
 

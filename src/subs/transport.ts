@@ -240,28 +240,57 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
     // Open the transport. The battery owns the lifetime.
     const t = opts.openTransport(s.key, ctx);
     const k = keyString(s.key);
+
+    // ACQUIRE-AS-SUCCESS-VALUE: wire EVERYTHING first, publish to the handle
+    // table last. An adapter over an already-CLOSING socket throws while
+    // wiring; when `live.set` ran first, that left the transport in the table
+    // with NO sub registered — so no cleanup ever ran, `send` wrote into a
+    // half-wired seam with no inbound listener, and every subsequent reconcile
+    // opened another one: an unbounded leak from one recoverable throw. On the
+    // way out we undo exactly what we did (drop the listeners, close the
+    // transport) and rethrow, so the substrate records the failure and the
+    // battery holds nothing. Same discipline `defineManagedResource` states in
+    // its own header — no Handle, no release.
+    let offMessage: (() => void) | undefined;
+    let offClose: (() => void) | undefined;
+    try {
+      // Wire inbound. Parse boundary lives here per invariant 8.
+      offMessage = t.onMessage((raw) => {
+        const parsed = opts.parseInbound(raw, s.key);
+        if (parsed === null) return;
+        const msg = opts.onInbound(parsed, s.key);
+        if (msg === null) return;
+        dispatch(msg);
+      });
+
+      // Wire close. ONE Msg arm — `*_lost`. No heartbeat, no sequence
+      // numbers, no "is the peer still alive" derivation: the transport's
+      // own close IS the liveness signal.
+      offClose = t.onClose(() => {
+        dispatch(opts.lostMsg(s.key));
+      });
+    } catch (err) {
+      offMessage?.();
+      offClose?.();
+      try {
+        t.close();
+      } catch (closeErr) {
+        // Boundary log: the wiring failure is the fact worth surfacing, and it
+        // is about to be rethrown. A close that also fails must not replace it.
+        console.warn(
+          `[fromTransport:${opts.name}] close during failed wiring failed`,
+          closeErr,
+        );
+      }
+      throw err;
+    }
+
     live.set(k, t);
-
-    // Wire inbound. Parse boundary lives here per invariant 8.
-    const offMessage = t.onMessage((raw) => {
-      const parsed = opts.parseInbound(raw, s.key);
-      if (parsed === null) return;
-      const msg = opts.onInbound(parsed, s.key);
-      if (msg === null) return;
-      dispatch(msg);
-    });
-
-    // Wire close. ONE Msg arm — `*_lost`. No heartbeat, no sequence
-    // numbers, no "is the peer still alive" derivation: the transport's
-    // own close IS the liveness signal.
-    const offClose = t.onClose(() => {
-      dispatch(opts.lostMsg(s.key));
-    });
 
     // Cleanup runs when the substrate's reconcileSubs leaves the phase.
     return () => {
-      offMessage();
-      offClose();
+      offMessage?.();
+      offClose?.();
       live.delete(k);
       try {
         t.close();

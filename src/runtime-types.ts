@@ -19,6 +19,7 @@ import type {
 } from "./pure/core";
 import {
   type Cmd,
+  depsInactive,
   detectUpdateForm,
   foldUpdates,
   structuralHash,
@@ -143,8 +144,14 @@ export function __resetPortRegistry(): void {
  *   both carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
  *   handlers were still awaiting (`RuntimeDiscardedError`), and a Msg that
  *   arrived DURING `stop()`'s drain and so could not be delivered
- *   (`DispatchDiscardedError`). The one phase that is a LIFECYCLE report rather
- *   than a failure: legal, merely lossy.
+ *   (`DispatchDiscardedError`), and teardown work that did not settle inside
+ *   `disposeTimeoutMs` (`DisposeTimeoutNotice`). The one phase that is a
+ *   LIFECYCLE report rather than a failure: legal, merely lossy.
+ * - `"identity-drop"` — the `Identity` filter dropped a message addressed to a
+ *   different instance (`IdentityDropNotice`). Its own phase rather than
+ *   `"discard"`: the loss is the FILTER WORKING, not a teardown, and a host
+ *   routing it (a metric, a 409 back to the caller) wants it apart from
+ *   unmount-time noise. Warn-only, like every `RuntimeDiscardNotice`.
  *
  * The phase never decides fatality — the ERROR CLASS does (`RuntimeDiscardNotice`
  * warns, everything else rethrows). A phase is attached by the report site, so a
@@ -161,7 +168,8 @@ export type RuntimeErrorPhase =
   | "boot"
   | "port-emit"
   | "sub-cleanup"
-  | "discard";
+  | "discard"
+  | "identity-drop";
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
@@ -284,6 +292,63 @@ export class RuntimeDiscardedError extends RuntimeDiscardNotice {
         `Cmds it started. An intentional teardown (unmount, navigation) can ` +
         `silence this with a run({ onError }) sink that ignores ` +
         `phase: "discard".`,
+    );
+  }
+}
+
+/**
+ * Reported to the `OnError` sink under `phase: "identity-drop"` when the
+ * `Identity` filter drops a message addressed to a different instance.
+ *
+ * The drop itself is the feature — it is what lets a reducer stop repeating
+ * `if (msg.runId !== state.runId) return`. What was missing is that it was
+ * INVISIBLE: the dispatch resolved exactly like an applied one, so a reusable
+ * Durable Object serving run A and then run B lost every run-B message and
+ * reported success to each caller. The comment claiming "the one observable
+ * enforcement point" described this notice before it existed.
+ *
+ * Never fatal (`RuntimeDiscardNotice`): a mis-addressed message is a normal
+ * consequence of instance reuse, not a defect. A host that wants to act on it
+ * — a metric, a 409 to the caller, a re-route — reads `phase: "identity-drop"`
+ * in its own sink.
+ */
+export class IdentityDropNotice extends RuntimeDiscardNotice {
+  override readonly name = "IdentityDropNotice";
+  readonly _tag = "IdentityDropNotice" as const;
+  constructor(public readonly msgType: string) {
+    super(
+      `@demlik/tea: Msg "${msgType}" was addressed to a different instance ` +
+        `than this state owns and was dropped before \`update\` ran — the ` +
+        `machine's \`identity\` filter working as declared. If this Msg was ` +
+        `meant for THIS instance, its \`ofMsg\` projection disagrees with ` +
+        `\`ofState\`; if the instance is being reused across runs, route the ` +
+        `message to the run that owns it.`,
+    );
+  }
+}
+
+/**
+ * Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait
+ * for async teardown work hits `disposeTimeoutMs`.
+ *
+ * `stop()` awaits the disposals it started so `await runtime.stop()` can mean
+ * "safe to evict". A `release` that never settles must not turn that guarantee
+ * into a host that never shuts down, so the wait is bounded and expiry is
+ * REPORTED rather than silently tolerated — the resource is genuinely still
+ * open at that point, and only the host can decide what that costs.
+ */
+export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
+  override readonly name = "DisposeTimeoutNotice";
+  readonly _tag = "DisposeTimeoutNotice" as const;
+  constructor(
+    public readonly pendingDisposals: number,
+    public readonly timeoutMs: number,
+  ) {
+    super(
+      `@demlik/tea: stop() gave up waiting for ${pendingDisposals} async ` +
+        `teardown(s) after ${timeoutMs}ms — the resources they release may ` +
+        `still be open. Make \`release\` / the Sub cleanup settle (bound its ` +
+        `own IO), or raise run({ disposeTimeoutMs }).`,
     );
   }
 }
@@ -753,7 +818,10 @@ export function replay<
   if (machine.subs) {
     for (const [index, entry] of machine.subs.entries()) {
       const deps = entry.deps(state);
-      if (deps !== null) depSubs.push({ index, id: structuralHash(deps) });
+      // Same gate the runtime reconciles on (`depsInactive`), not a second
+      // spelling of it — a `deps` returning `undefined` means inactive here too.
+      if (!depsInactive(deps))
+        depSubs.push({ index, id: structuralHash(deps) });
     }
   }
 

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   defineMachine,
   type Identity,
+  IdentityDropNotice,
   type Interpret,
   type Reducer,
+  RuntimeDiscardNotice,
   run,
 } from "./index";
 
@@ -135,6 +137,169 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
     // …and a genuinely different composite identity IS dropped.
     await rt.dispatch({ type: "hit", key: { b: "9", a: "1" } });
     expect(rt.getState().hits).toBe(1);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// The drop is REPORTED. A dispatch that was filtered out resolves like an
+// applied one, so the caller cannot tell them apart — a reusable Durable
+// Object serving run A and then run B would lose run B and report success.
+// The drop rides the `OnError` sink as an `IdentityDropNotice`
+// (`RuntimeDiscardNotice` — warn-by-default, never fatal), which is what makes
+// "the ONE observable enforcement point" true rather than aspirational.
+// ───────────────────────────────────────────────────────────────────────────
+describe("Identity — the drop is observable", () => {
+  it("reports a mis-addressed drop to the `onError` sink", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    const rt = await run(machine(true), {
+      ctx: undefined,
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
+    await rt.dispatch({ type: "claim", runId: "r1" });
+
+    await rt.dispatch({ type: "work", runId: "r2" });
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.phase).toBe("identity-drop");
+    const error = reports[0]?.error;
+    // A `RuntimeDiscardNotice` subclass is what makes the default sink WARN
+    // instead of rethrowing — an identity drop must never take a host down.
+    expect(error).toBeInstanceOf(IdentityDropNotice);
+    expect(error).toBeInstanceOf(RuntimeDiscardNotice);
+    if (!(error instanceof IdentityDropNotice)) throw new Error("unreachable");
+    expect(error.msgType).toBe("work");
+  });
+
+  it("is NOT fatal — the dispatch still resolves and the runtime keeps folding", async () => {
+    const reports: unknown[] = [];
+    const rt = await run(machine(true), {
+      ctx: undefined,
+      onError: (error) => reports.push(error),
+    }).ready;
+    await rt.dispatch({ type: "claim", runId: "r1" });
+
+    await expect(
+      rt.dispatch({ type: "work", runId: "r2" }),
+    ).resolves.toBeUndefined();
+    await rt.dispatch({ type: "work", runId: "r1" });
+    expect(rt.getState().applied).toEqual(["claim", "work"]);
+    expect(reports).toHaveLength(1);
+  });
+
+  it("reports nothing when the message is delivered", async () => {
+    const reports: unknown[] = [];
+    const rt = await run(machine(true), {
+      ctx: undefined,
+      onError: (error) => reports.push(error),
+    }).ready;
+    await rt.dispatch({ type: "claim", runId: "r1" });
+    await rt.dispatch({ type: "work", runId: "r1" });
+    await rt.dispatch({ type: "ping" });
+    expect(reports).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// The identity projection is user code, so it can throw — and it must be
+// supervised exactly like the reducer is. `structuralHash` throwing on a
+// non-plain identity (a Date, a bigint snowflake id) puts EVERY dispatch on
+// this path, so an unprotected projection would take the runtime down with no
+// report and no strategy.
+// ───────────────────────────────────────────────────────────────────────────
+describe("Identity — a throwing projection is supervised, not raw", () => {
+  const throwing = (which: "ofState" | "ofMsg") =>
+    defineMachine<State, Msg, never, never, undefined>({
+      init: () => [{ runId: "r1", applied: [] }, []],
+      update,
+      identity: {
+        ofState: (s) => {
+          if (which === "ofState") throw new Error("projection blew up");
+          return s.runId ?? undefined;
+        },
+        ofMsg: (m) => {
+          if (which === "ofMsg") throw new Error("projection blew up");
+          return m.type === "ping" ? undefined : m.runId;
+        },
+      },
+      interpret: {} as Interpret<Msg, never, undefined>,
+    });
+
+  it('routes an `ofMsg` throw through the sink under `phase: "reduce"`', async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    const rt = await run(throwing("ofMsg"), {
+      ctx: undefined,
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
+
+    await expect(rt.dispatch({ type: "work", runId: "r1" })).rejects.toThrow(
+      /projection blew up/,
+    );
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.phase).toBe("reduce");
+  });
+
+  it("routes an `ofState` throw through the declared supervision strategy", async () => {
+    const reports: unknown[] = [];
+    const rt = await run(throwing("ofState"), {
+      ctx: undefined,
+      onError: (error) => reports.push(error),
+      supervision: {
+        strategy: "restart",
+        rehydrate: (s) => ({ ...s, applied: [...s.applied, "rehydrated"] }),
+      },
+    }).ready;
+
+    // `restart` means the transition CONTINUES from host-supplied state — the
+    // dispatch resolves, exactly as it does for a throwing reducer.
+    await rt.dispatch({ type: "work", runId: "r1" });
+    expect(rt.getState().applied).toEqual(["rehydrated"]);
+    expect(reports).toHaveLength(1);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// F1a: with a non-plain identity every value hashed to `"{}"`, so the filter
+// admitted EVERY foreign message while reporting itself as enabled — data
+// corruption with the guard switched on. The hash now refuses the value, so
+// the failure is loud instead.
+// ───────────────────────────────────────────────────────────────────────────
+describe("Identity — a non-plain identity fails loudly, never permissively", () => {
+  type DateState = {
+    readonly startedAt: Date | null;
+    readonly applied: number;
+  };
+  type DateMsg = { readonly type: "work"; readonly startedAt: Date };
+
+  const dateMachine = defineMachine<
+    DateState,
+    DateMsg,
+    never,
+    never,
+    undefined
+  >({
+    init: () => [{ startedAt: new Date(1_000), applied: 0 }, []],
+    update: { work: (s) => [{ ...s, applied: s.applied + 1 }, []] },
+    identity: {
+      ofState: (s) => s.startedAt ?? undefined,
+      ofMsg: (m) => m.startedAt,
+    },
+    interpret: {} as Interpret<DateMsg, never, undefined>,
+  });
+
+  it("does not admit a foreign run's message just because both identities are Dates", async () => {
+    const reports: unknown[] = [];
+    const rt = await run(dateMachine, {
+      ctx: undefined,
+      onError: (error) => reports.push(error),
+    }).ready;
+
+    await expect(
+      rt.dispatch({ type: "work", startedAt: new Date(9_999) }),
+    ).rejects.toThrow(/non-plain object/);
+    expect(rt.getState().applied).toBe(0);
+    expect(reports).toHaveLength(1);
   });
 });
 

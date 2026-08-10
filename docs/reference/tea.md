@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (58)
+## Exports (60)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -26,11 +26,13 @@ import { … } from "@demlik/tea";
 | `DispatchDiscardedError` | Class | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
 | `DispatchSettle` | Type |  |
 | `Dispose` | Type |  |
+| `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `foldMsgs` | Function |  |
 | `formOf` | Function |  |
 | `historyTracker` | Function |  |
 | `HistoryTracker` | Interface |  |
 | `Identity` | Interface |  |
+| `IdentityDropNotice` | Class | Reported to the `OnError` sink under `phase: "identity-drop"` when the `Identity` filter drops a message addressed to a different instance. |
 | `Interpret` | Type |  |
 | `InterpretDetached` | Type |  |
 | `Machine` | Type |  |

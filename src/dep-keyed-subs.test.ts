@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   type DepKeyedSub,
+  DispatchDiscardedError,
   defineMachine,
   type Interpret,
   type Reducer,
@@ -13,7 +14,7 @@ import {
 // ───────────────────────────────────────────────────────────────────────────
 // Dep-keyed Subs: the author declares the state slice a Sub depends on, and
 // the kernel derives BOTH the id (`structuralHash(deps)`) and the active-set
-// gate (`deps === null` ⇒ inactive). What the tests here pin is the reconcile
+// gate (a nullish `deps` ⇒ inactive). What the tests here pin is the reconcile
 // contract — arm / no-churn / re-arm / teardown — plus the additivity claim:
 // a machine with no `subs` field behaves exactly as before, and a machine that
 // uses BOTH `subs` and the manual `subscriptions` escape hatch runs both
@@ -280,6 +281,232 @@ describe("dep-keyed Subs — additivity", () => {
     );
     // …and the manual sub still armed despite the dep-keyed failure.
     expect(log).toEqual(["arm:manual"]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// The gate is "no slice", not "the literal null". `(s) => s.runId` over an
+// OPTIONAL field yields `undefined`, which used to sail past `deps === null`
+// and arm the Sub under the id `"undefined"` — a resource acquired for a state
+// that meant "inactive", and one shared key for every such state.
+// ───────────────────────────────────────────────────────────────────────────
+describe("dep-keyed Subs — `undefined` deps mean inactive, exactly like null", () => {
+  type OptState = { readonly runId?: string };
+  type OptMsg =
+    | { readonly type: "start"; readonly runId: string }
+    | { readonly type: "clear" };
+
+  function optMachine(
+    entry: DepKeyedSub<OptState, OptMsg, undefined>,
+  ): ReturnType<
+    typeof defineMachine<OptState, OptMsg, never, never, undefined>
+  > {
+    return defineMachine<OptState, OptMsg, never, never, undefined>({
+      init: () => [{}, []],
+      update: {
+        start: (_s, m) => [{ runId: m.runId }, []],
+        clear: () => [{}, []],
+      },
+      subs: [entry],
+      interpret: {} as Interpret<OptMsg, never, undefined>,
+    });
+  }
+
+  const optEntry = (
+    log: string[],
+  ): DepKeyedSub<OptState, OptMsg, undefined> => ({
+    // The natural projection over an optional field: `undefined` when absent.
+    deps: (s) => s.runId,
+    source: (s) => {
+      log.push(`arm:${s.runId}`);
+      return () => log.push(`dispose:${s.runId}`);
+    },
+  });
+
+  it("does not arm when `deps` returns undefined", async () => {
+    const log: string[] = [];
+    const rt = await run(optMachine(optEntry(log)), { ctx: undefined }).ready;
+    expect(log).toEqual([]);
+    await rt.stop();
+  });
+
+  it("arms on a real slice and tears down when the field goes away again", async () => {
+    const log: string[] = [];
+    const rt = await run(optMachine(optEntry(log)), { ctx: undefined }).ready;
+
+    await rt.dispatch({ type: "start", runId: "r1" });
+    expect(log).toEqual(["arm:r1"]);
+
+    await rt.dispatch({ type: "clear" });
+    expect(log).toEqual(["arm:r1", "dispose:r1"]);
+  });
+
+  it("`replay` projects the same gate — no entry for an undefined slice", () => {
+    const idle = replay(optMachine(optEntry([])), { msgs: [], ctx: undefined });
+    expect(idle.depSubs).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// F7: `deps` is user code on the same footing as `source`. The reconcile pass
+// isolated a throwing `source` but not a throwing `deps`, so one bad projection
+// stranded every LATER dep-keyed entry — and the manual `subscriptions`
+// aggregate, which is reached only after the loop.
+// ───────────────────────────────────────────────────────────────────────────
+describe("dep-keyed Subs — a throwing `deps` is isolated like a throwing `source`", () => {
+  // Throws only once the machine is live, so boot succeeds and the failure
+  // lands on a reconcile the test drives — the shape a real projection has
+  // (`s.runId.slice(...)` on a phase where `runId` is absent).
+  const boomDeps: DepKeyedSub<State, Msg, undefined> = {
+    deps: (s) => {
+      if (s.phase === "live") throw new Error("deps failed");
+      return null;
+    },
+    source: () => () => {},
+  };
+
+  it("does not strand the entries that come after it", async () => {
+    const log: string[] = [];
+    const rt = await run(machineWith([boomDeps, recordingEntry(log)]), {
+      ctx: undefined,
+    }).ready;
+
+    await expect(rt.dispatch({ type: "start", runId: "r1" })).rejects.toThrow(
+      "deps failed",
+    );
+    expect(log).toEqual(["arm:r1"]);
+  });
+
+  it("does not strand the manual `subscriptions` aggregate after the loop", async () => {
+    const log: string[] = [];
+    type ManualSub = Sub<"manual">;
+    const both = defineMachine<State, Msg, never, ManualSub, undefined>({
+      init: () => [{ runId: null, phase: "idle" }, []],
+      update,
+      subs: [boomDeps],
+      subscriptions: (s) =>
+        s.phase === "live" ? [{ id: subId("manual"), type: "manual" }] : [],
+      subscribe: {
+        manual: () => {
+          log.push("arm:manual");
+          return () => log.push("dispose:manual");
+        },
+      },
+      interpret: {} as Interpret<Msg, never, undefined>,
+    });
+
+    const rt = await run(both, { ctx: undefined }).ready;
+    await expect(rt.dispatch({ type: "start", runId: "r1" })).rejects.toThrow(
+      "deps failed",
+    );
+    expect(log).toEqual(["arm:manual"]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// F1b: a non-plain deps slice (the everyday `Date` in a state slice) hashed to
+// `"{}"` for every value, so the id never changed: the Sub stayed armed on the
+// FIRST slice forever and presented as the no-churn success case. The hash now
+// refuses it, and the refusal surfaces through the same path a source throw
+// does.
+// ───────────────────────────────────────────────────────────────────────────
+describe("dep-keyed Subs — a non-plain deps slice fails loudly, never silently sticks", () => {
+  type ClockState = { readonly startedAt: Date | null };
+  type ClockMsg = { readonly type: "restart"; readonly startedAt: Date };
+
+  it("refuses to key a Sub on a Date instead of collapsing every slice into one id", async () => {
+    const log: string[] = [];
+    const clock = defineMachine<ClockState, ClockMsg, never, never, undefined>({
+      init: () => [{ startedAt: null }, []],
+      update: { restart: (_s, m) => [{ startedAt: m.startedAt }, []] },
+      subs: [
+        {
+          deps: (s) => s.startedAt,
+          source: (s) => {
+            log.push(`arm:${s.startedAt?.getTime()}`);
+            return () => log.push("dispose");
+          },
+        },
+      ],
+      interpret: {} as Interpret<ClockMsg, never, undefined>,
+    });
+
+    const rt = await run(clock, { ctx: undefined }).ready;
+    await expect(
+      rt.dispatch({ type: "restart", startedAt: new Date(1_000) }),
+    ).rejects.toThrow(/non-plain object/);
+    expect(log).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// F2: a dep-keyed source got the RAW `enqueueDispatch`, whose promise rejects
+// when the gate is shut. A source that dispatches during teardown therefore
+// produced an unhandled rejection that bypassed `onError` entirely — the sink
+// saw nothing and the host saw an `unhandledRejection`. Sources dispatch
+// through the same `(msg) => void` wrapper interpret handlers use, so the
+// rejection lands on the sink with the phase DERIVED from the error class.
+// ───────────────────────────────────────────────────────────────────────────
+describe("dep-keyed Subs — a dispatch during teardown reaches the sink, not the host", () => {
+  it("reports a source's teardown-window dispatch as a discard", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    let fire: (() => void) | undefined;
+    const entry: DepKeyedSub<State, Msg, undefined> = {
+      deps: (s) => (s.phase === "live" ? { runId: s.runId } : null),
+      source: (_s, dispatch) => {
+        fire = () => dispatch({ type: "noop" });
+        return () => {};
+      },
+    };
+    const rt = await run(machineWith([entry]), {
+      ctx: undefined,
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
+    await rt.dispatch({ type: "start", runId: "r1" });
+
+    // The window `stop()` opens: the gate refuses new work while the tail
+    // drains, and a still-live Sub can fire into it.
+    const stopping = rt.stop();
+    fire?.();
+    await stopping;
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.phase).toBe("discard");
+    expect(reports[0]?.error).toBeInstanceOf(DispatchDiscardedError);
+  });
+
+  it("reports a manual subscribe handler's teardown-window dispatch too", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    let fire: (() => void) | undefined;
+    type ManualSub = Sub<"manual">;
+    const manual = defineMachine<State, Msg, never, ManualSub, undefined>({
+      init: () => [{ runId: null, phase: "idle" }, []],
+      update,
+      subscriptions: (s) =>
+        s.phase === "live" ? [{ id: subId("manual"), type: "manual" }] : [],
+      subscribe: {
+        manual: (_sub, _ctx, dispatch) => {
+          fire = () => dispatch({ type: "noop" });
+          return () => {};
+        },
+      },
+      interpret: {} as Interpret<Msg, never, undefined>,
+    });
+    const rt = await run(manual, {
+      ctx: undefined,
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
+    await rt.dispatch({ type: "start", runId: "r1" });
+
+    const stopping = rt.stop();
+    fire?.();
+    await stopping;
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.phase).toBe("discard");
+    expect(reports[0]?.error).toBeInstanceOf(DispatchDiscardedError);
   });
 });
 

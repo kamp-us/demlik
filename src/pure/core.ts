@@ -501,7 +501,25 @@ export type Sub<T extends string = string> = {
 // change (re-armed: old `Dispose` then a fresh `source`). Same contract as the
 // `() => void` cleanup every `subscribe[type]` handler returns — named so a
 // dep-keyed Sub's `source` reads as "open → returns close".
-export type Dispose = () => void;
+export type Dispose = () => void | Promise<void>;
+
+// === depsInactive: the dep-keyed gate, defined ONCE ===
+//
+// "This Sub has no slice in this state" is one fact read by two places — the
+// runtime's `reconcileDepSubs` and `replay`'s desired-set projection — so it
+// gets one definition rather than a `deps === null` written twice.
+//
+// It reads NULLISH, not `null`. `(s) => s.runId` over an optional field is the
+// natural projection an author writes, and it yields `undefined` on the states
+// that mean "inactive"; a `=== null` gate armed the Sub there and hashed the
+// slice to the string `"undefined"` — one shared key under which a resource
+// was acquired for a state that had none. The typed alternative (`deps: (s) =>
+// {} | null`) would reject that projection at compile time, but it also rejects
+// every battery's `(state) => TKey | null` for an unconstrained `TKey`, so the
+// gate is widened instead of the type narrowed.
+export function depsInactive(deps: unknown): boolean {
+  return deps === null || deps === undefined;
+}
 
 // === structuralHash: deterministic, order-independent id from a deps value ===
 //
@@ -524,8 +542,26 @@ export type Dispose = () => void;
 // boolean / null / array / plain object). A function, class instance, symbol,
 // or bigint in `deps` is a programming error — `deps` names a state SLICE, and
 // state is a value (invariant 1); such a value would also break the
-// determinism this hash promises. The walk throws on a function to surface
-// that loudly rather than silently producing an unstable id.
+// determinism this hash promises. The walk throws on all of them to surface
+// that loudly rather than silently producing an unstable — or, worse, a
+// COLLIDING — id.
+//
+// The non-plain OBJECT case is the one that bites: `Object.keys` reports no own
+// enumerable property on a `Date`, `Map`, `Set`, `Error`, or a typical class
+// instance, so a walk that trusts it renders every one of them — and `{}` —
+// as `"{}"`. That is not an unstable id, it is ONE id for every value, which
+// defeats the identity filter (a foreign run's message compares equal), pins a
+// dep-keyed Sub to its first slice forever, and makes a battery's handle table
+// return the previous key's handle. The guard is therefore on the PROTOTYPE
+// (`Object.prototype` or `null`), not on a list of known classes: a
+// user-defined `RunKey` is refused by the same rule as `Date`, and no future
+// exotic builtin slips through.
+//
+// Rendering `Date`/`Map`/`Set` structurally was the alternative. It was
+// rejected: it buys a second rule to remember for a value the author can
+// project in one call (`startedAt.toISOString()`), and `Map`/`Set` iteration is
+// INSERTION-ordered, so any faithful rendering is order-sensitive — exactly the
+// churn this hash exists to prevent. One rule, stated once: plain data only.
 //
 // It is also the ONE "turn this key value into a stable string" primitive the
 // `@demlik/tea/subs` batteries address their interpret-local handle tables
@@ -552,6 +588,23 @@ function stableStringify(value: unknown): string {
     return `[${value.map(stableStringify).join(",")}]`;
   }
   if (t === "object") {
+    // Plain-object gate. `Object.keys` is only a faithful reading of a value
+    // whose prototype is `Object.prototype` (or `null` — a bag built with
+    // `Object.create(null)` is plain by every measure that matters here).
+    // Anything else keeps its data somewhere `Object.keys` cannot see, and
+    // would render as `"{}"` — one id for every such value.
+    const proto = Object.getPrototypeOf(value) as object | null;
+    if (proto !== Object.prototype && proto !== null) {
+      const ctor = (value as { constructor?: { name?: string } }).constructor;
+      const label = ctor?.name ?? "object";
+      throw new Error(
+        `@demlik/tea: structuralHash received a non-plain object (${label}) in \`deps\`. ` +
+          "A `Date`, `Map`, `Set`, `Error` or class instance carries no own enumerable " +
+          "properties, so every one of them would hash to the same id as `{}` — a silent " +
+          "collision, not a wrong-looking key. Project it to plain data first " +
+          "(e.g. `startedAt.toISOString()`, `[...set].sort()`) — see invariant 1.",
+      );
+    }
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
@@ -592,12 +645,15 @@ function stableStringify(value: unknown): string {
 // explicit — derived deterministically from `deps`, never an ad-hoc string).
 export interface DepKeyedSub<S, M, Ctx = unknown> {
   /**
-   * The slice of state this Sub depends on. `null` ⇒ the Sub is inactive in
-   * this state (the substrate disposes it if it was running). Non-null ⇒ the
+   * The slice of state this Sub depends on. `null` OR `undefined` ⇒ the Sub is
+   * inactive in this state (the substrate disposes it if it was running) — see
+   * `depsInactive`, so `(s) => s.optionalRunId` gates correctly. Otherwise the
    * Sub is active, keyed on `structuralHash(deps)`.
    *
    * Pure (invariant 2). Plain JSON-compatible data only (invariant 1) — the
-   * structural hash walks it deterministically.
+   * structural hash walks it deterministically and THROWS on a `Date`, `Map`,
+   * `Set`, `Error` or class instance rather than collapsing them all onto one
+   * id. Project such a value first (`startedAt.toISOString()`).
    */
   readonly deps: (state: S) => unknown;
   /**
@@ -825,6 +881,12 @@ export type InterpretDetached<
 // transitioned away). The mapped type guarantees every Sub variant has a
 // handler at the type level; runtime dispatch is a single property lookup.
 //
+// The cleanup shares `Dispose`'s shape: a returned Promise is AWAITED by
+// `stop()` (bounded), so an async teardown a host relies on before evicting the
+// isolate actually completes. Mid-run reconcile does not await it — the
+// reconcile pass is synchronous by construction (invariant 2) — but the promise
+// is tracked from the moment it exists, so `stop()` catches it either way.
+//
 // Hoisted out of `Machine.subscribe` so consumers can type a free-standing
 // handler dictionary with `Subscribe<MyMsg, MySub, MyCtx>` instead of
 // re-declaring the mapped type at every subs module.
@@ -836,7 +898,7 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
     sub: Extract<U, { type: K }>,
     ctx: Ctx,
     dispatch: (msg: M) => void,
-  ) => () => void;
+  ) => Dispose;
 };
 
 // === Machine: pure data, host-agnostic ===

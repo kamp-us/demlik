@@ -1,5 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type NoCtx, type Reducer, run } from "../index";
+import { describe, expect, it } from "vitest";
+import {
+  DisposeTimeoutNotice,
+  defineMachine,
+  type NoCtx,
+  type Reducer,
+  run,
+} from "../index";
 import {
   combineManagedResources,
   defineManagedResource,
@@ -180,8 +186,12 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
     expect(battery.get("run-1")).toBeUndefined();
   });
 
-  it("a release that throws is swallowed at the boundary (Rule 2)", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  // A failing teardown is not a Msg and never rejects the transition — but it
+  // is not a `console.warn` at the battery either. The release rides the
+  // substrate's cleanup path, so its failure reaches the runtime's ONE sink
+  // under `phase: "sub-cleanup"`, the same place a Sub cleanup throw lands.
+  it("a release that throws is routed to the sink, not surfaced as a Msg", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
     const battery = defineManagedResource<string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
@@ -189,31 +199,39 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
         throw new Error("teardown failed");
       },
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await run(machineFor(battery), {
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
 
     await expect(rt.dispatch({ type: "finish" })).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalled();
+    expect(reports).toEqual([
+      { error: expect.any(Error), phase: "sub-cleanup" },
+    ]);
     // Forgotten regardless: the handle table is cleaned before release runs.
     expect(battery.get("run-1")).toBeUndefined();
 
-    warn.mockRestore();
     await rt.stop();
   });
 
-  it("a rejected async release is logged, not surfaced as a Msg", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("a rejected async release is routed to the sink, not surfaced as a Msg", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
     const battery = defineManagedResource<string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: () => Promise.reject(new Error("async teardown failed")),
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await run(machineFor(battery), {
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
 
     await expect(rt.dispatch({ type: "finish" })).resolves.toBeUndefined();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(warn).toHaveBeenCalled();
+    expect(reports).toEqual([
+      { error: expect.any(Error), phase: "sub-cleanup" },
+    ]);
 
-    warn.mockRestore();
     await rt.stop();
   });
 
@@ -463,5 +481,138 @@ describe("defineManagedResource.depKeyed — one subs entry, no router", () => {
     expect(b.released.map((h) => h.key)).toEqual(["run-1"]);
 
     await rt.stop();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// F1c: the handle table is keyed on `structuralHash(key)`. A non-plain key
+// (a `Date`, a branded class, a `RunId` value object — the shapes a run
+// identity actually takes) rendered as `"{}"`, so EVERY key was one key: no
+// release on re-key, no re-acquire, and `.get(newKey)` handing back the
+// previous run's handle. The key is refused instead.
+// ───────────────────────────────────────────────────────────────────────────
+describe("defineManagedResource — a non-plain key is refused, never collapsed", () => {
+  class RunKey {
+    constructor(readonly value: string) {}
+  }
+
+  function keyedBattery() {
+    return defineManagedResource<RunKey, Handle, NoCtx>({
+      name: "checkpoint",
+      acquire: (key) => ({ key: key.value, released: false }),
+      release: (h) => {
+        h.released = true;
+      },
+    });
+  }
+
+  it("throws on `subIdFor` rather than deriving one id for every key", () => {
+    const battery = keyedBattery();
+    expect(() => battery.subIdFor(new RunKey("A"))).toThrow(/non-plain object/);
+  });
+
+  it("throws on `get` rather than returning the previous key's handle", () => {
+    const battery = keyedBattery();
+    expect(() => battery.get(new RunKey("B"))).toThrow(/non-plain object/);
+  });
+
+  it("still keys happily on the plain projection of that identity", () => {
+    const battery = defineManagedResource<
+      { readonly runId: string },
+      Handle,
+      NoCtx
+    >({
+      name: "checkpoint",
+      acquire: (key) => ({ key: key.runId, released: false }),
+      release: (h) => {
+        h.released = true;
+      },
+    });
+    expect(battery.subIdFor({ runId: "A" })).not.toBe(
+      battery.subIdFor({ runId: "B" }),
+    );
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// F5: `release` may be async, and the whole reason this battery exists is that
+// teardown is GUARANTEED. `stop()` used to fire the release and return, so a
+// host doing `await runtime.stop(); env.evict()` dropped the isolate mid-flush
+// — the leak the battery prevents, relocated to shutdown. `stop()` now awaits
+// the disposals it started, bounded so a release that never settles cannot
+// hang the host.
+// ───────────────────────────────────────────────────────────────────────────
+describe("defineManagedResource — `stop()` awaits an async release", () => {
+  it("does not resolve `stop()` before an async release has settled", async () => {
+    let released = false;
+    const battery = defineManagedResource<string, Handle, NoCtx>({
+      name: "checkpoint",
+      acquire: (key) => ({ key, released: false }),
+      release: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        released = true;
+      },
+    });
+    const rt = await run(machineFor(battery), {}).ready;
+
+    await rt.stop();
+    expect(released).toBe(true);
+  });
+
+  it("awaits the release a re-key started, not only the one `stop()` starts", async () => {
+    const settled: string[] = [];
+    const battery = defineManagedResource<string, Handle, NoCtx>({
+      name: "checkpoint",
+      acquire: (key) => ({ key, released: false }),
+      release: async (h) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        settled.push(h.key);
+      },
+    });
+    const rt = await run(machineFor(battery), {}).ready;
+
+    // Re-key: the old handle's release starts mid-run, outside `stop()`.
+    await rt.dispatch({ type: "switch", runId: "run-2" });
+    await rt.stop();
+    expect(settled.sort()).toEqual(["run-1", "run-2"]);
+  });
+
+  it("reports a rejected release to the sink instead of the console", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    const battery = defineManagedResource<string, Handle, NoCtx>({
+      name: "checkpoint",
+      acquire: (key) => ({ key, released: false }),
+      release: async () => {
+        throw new Error("flush failed");
+      },
+    });
+    const rt = await run(machineFor(battery), {
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
+
+    await rt.stop();
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.phase).toBe("sub-cleanup");
+    expect(reports[0]?.error).toBeInstanceOf(Error);
+  });
+
+  it("cannot hang forever on a release that never settles", async () => {
+    const reports: Array<{ error: unknown; phase: string }> = [];
+    const battery = defineManagedResource<string, Handle, NoCtx>({
+      name: "checkpoint",
+      acquire: (key) => ({ key, released: false }),
+      release: () => new Promise<void>(() => {}),
+    });
+    const rt = await run(machineFor(battery), {
+      disposeTimeoutMs: 10,
+      onError: (error, context) =>
+        reports.push({ error, phase: context.phase }),
+    }).ready;
+
+    await rt.stop();
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.phase).toBe("discard");
+    expect(reports[0]?.error).toBeInstanceOf(DisposeTimeoutNotice);
   });
 });

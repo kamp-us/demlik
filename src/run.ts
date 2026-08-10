@@ -12,7 +12,12 @@ import type {
   PortEmitter,
   Sub,
 } from "./pure/core";
-import { applyCellChecked, type Cmd, structuralHash } from "./pure/core";
+import {
+  applyCellChecked,
+  type Cmd,
+  depsInactive,
+  structuralHash,
+} from "./pure/core";
 import type {
   BootingRuntime,
   CtxArg,
@@ -26,6 +31,8 @@ import type {
 } from "./runtime-types";
 import {
   DispatchDiscardedError,
+  DisposeTimeoutNotice,
+  IdentityDropNotice,
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
@@ -119,6 +126,20 @@ export function run<
      */
     terminal?: (state: S) => boolean;
     /**
+     * How long `stop()` waits for teardown work that returned a Promise (an
+     * async `release` in `defineManagedResource`, an async Sub cleanup) before
+     * giving up on it. Defaults to 5_000ms.
+     *
+     * `stop()` awaits those disposals so a host doing
+     * `await runtime.stop(); env.evict()` cannot drop the isolate mid-release —
+     * the leak the managed-resource battery exists to prevent, relocated to
+     * shutdown. The bound is what keeps a release that never settles from
+     * hanging the host: on expiry `stop()` reports a `DisposeTimeoutNotice`
+     * (warn-only, like every `RuntimeDiscardNotice`) and resolves anyway,
+     * because `stop()` resolving is a contract.
+     */
+    disposeTimeoutMs?: number;
+    /**
      * Iteration cap for `idle()`'s quiescence wait. Defaults to 100_000. Test
      * seam only. Production code must not set it.
      *
@@ -132,6 +153,7 @@ export function run<
   // `{}` so the augmented-ctx spread and `init(loaded, ctx)` get a value.
   const ctx = (opts.ctx ?? {}) as Ctx;
   const idleCap = opts.__idleCap ?? 100_000;
+  const disposeTimeoutMs = opts.disposeTimeoutMs ?? 5_000;
   // No projector → `E = never` and `on` is uncallable.
   const projectEvents: (msg: M, state: S) => readonly E[] =
     opts.events ?? (() => []);
@@ -197,7 +219,7 @@ export function run<
   // cannot be asked synchronously whether it has outstanding work.
   let inFlightCmds = 0;
 
-  const subRegistry = new Map<string, () => void>();
+  const subRegistry = new Map<string, Dispose>();
   // Dep-keyed Sub registry. One slot per `machine.subs[i]`, keyed by the entry's
   // array index (its stable identity across reconciles — a dep-keyed Sub has no
   // author-supplied id). `runningId` is the `structuralHash(deps)` of the live
@@ -247,11 +269,67 @@ export function run<
       const cleanup = subRegistry.get(id);
       if (cleanup === undefined) continue;
       try {
-        cleanup();
+        trackDisposal(cleanup());
       } catch (err) {
         reportError(err, { phase: "sub-cleanup" });
       }
       subRegistry.delete(id);
+    }
+  }
+
+  // Teardown work that returned a Promise and has not settled. A cleanup /
+  // `Dispose` may be async (`defineManagedResource`'s `release` is typed
+  // `void | Promise<void>` precisely so a flush can be awaited), and the
+  // reconcile pass CANNOT await it — reconcile runs inside the synchronous
+  // transition path (invariant 2). So every async disposal is remembered here
+  // the moment it starts, wherever it started, and `stop()` drains the set
+  // before resolving: `await runtime.stop()` then means "teardown is done", which
+  // is the only reading a host evicting an isolate can act on.
+  //
+  // The rejection is attached HERE, once, so a failing teardown reaches the sink
+  // under `"sub-cleanup"` (the same phase a synchronous cleanup throw uses)
+  // instead of a `console.warn` at each battery, and can never become an
+  // unhandled rejection.
+  const pendingDisposals = new Set<Promise<void>>();
+
+  function trackDisposal(result: void | Promise<void>): void {
+    if (!(result instanceof Promise)) return;
+    const settling: Promise<void> = result
+      .catch((err) => {
+        reportError(err, { phase: "sub-cleanup" });
+      })
+      .finally(() => {
+        pendingDisposals.delete(settling);
+      });
+    pendingDisposals.add(settling);
+  }
+
+  /**
+   * Wait for the disposals started so far, bounded by `disposeTimeoutMs`. On
+   * expiry report a `DisposeTimeoutNotice` and return anyway — `stop()` resolves
+   * regardless (contract), and a release that never settles must not become a
+   * host that never shuts down. Warn-only, like every `RuntimeDiscardNotice`:
+   * the host asked for this teardown, the loss is legal, and it is now visible.
+   */
+  async function drainDisposals(): Promise<void> {
+    if (pendingDisposals.size === 0) return;
+    const outstanding = [...pendingDisposals];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const outcome = await Promise.race([
+        Promise.all(outstanding).then(() => "settled" as const),
+        new Promise<"timeout">((resolve) => {
+          timer = setTimeout(() => resolve("timeout"), disposeTimeoutMs);
+        }),
+      ]);
+      if (outcome === "timeout") {
+        reportError(
+          new DisposeTimeoutNotice(outstanding.length, disposeTimeoutMs),
+          { phase: "discard" },
+        );
+      }
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
 
@@ -265,7 +343,7 @@ export function run<
       const running = depSubRegistry.get(index);
       if (running === undefined) continue;
       try {
-        running.dispose();
+        trackDisposal(running.dispose());
       } catch (err) {
         reportError(err, { phase: "sub-cleanup" });
       }
@@ -278,16 +356,19 @@ export function run<
    * first pass of `reconcileSubs`, sharing the dispose-on-change /
    * dispose-on-null machinery with the manual Sub path. For each entry:
    *
-   *   - `deps(state)` is null → the Sub is inactive in this state; dispose it
-   *     if it was running.
-   *   - `deps(state)` is non-null → `id = structuralHash(deps)`; if no source
-   *     is running for this entry, or the running id differs (re-arm), dispose
-   *     the old source and run `source(state, dispatch, ctx)` to open a fresh
-   *     one (the entry re-derives its own typed slice from `state`).
+   *   - `deps(state)` is nullish (`depsInactive`) → the Sub is inactive in this
+   *     state; dispose it if it was running.
+   *   - otherwise → `id = structuralHash(deps)`; if no source is running for
+   *     this entry, or the running id differs (re-arm), dispose the old source
+   *     and run `source(state, dispatch, ctx)` to open a fresh one (the entry
+   *     re-derives its own typed slice from `state`).
    *   - Unchanged id → leave the source running (the no-churn case).
    *
-   * Start throws are collected and returned rather than thrown here (same
-   * contract as the manual path) so one bad source doesn't strand the others.
+   * Throws are collected and returned rather than thrown here (same contract as
+   * the manual path) so one bad entry doesn't strand the others. That covers
+   * `deps` and the hash, not just `source`: `deps` is user code on exactly the
+   * same footing, and an unguarded throw there stranded every LATER entry AND
+   * the manual `subscriptions` aggregate, which is only reached after this loop.
    * A machine that declares no `subs` returns immediately — the pass is inert.
    */
   function reconcileDepSubs(): unknown {
@@ -295,15 +376,25 @@ export function run<
     const subs = machine.subs;
     if (!subs) return firstError;
     for (const [i, entry] of subs.entries()) {
-      const deps = entry.deps(state as S);
-
-      if (deps === null) {
-        // Inactive in this state — tear down if running.
-        disposeDepSubs([i]);
+      // `deps` + `structuralHash` in ONE guarded step: both are pure user-data
+      // reads whose failure means "this entry's slice is unknowable", and the
+      // recovery is identical — remember the error, leave the slot untouched,
+      // keep reconciling the siblings.
+      let deps: unknown;
+      let id: string;
+      try {
+        deps = entry.deps(state as S);
+        if (depsInactive(deps)) {
+          // Inactive in this state — tear down if running.
+          disposeDepSubs([i]);
+          continue;
+        }
+        id = structuralHash(deps);
+      } catch (err) {
+        if (firstError === null) firstError = err;
         continue;
       }
 
-      const id = structuralHash(deps);
       const running = depSubRegistry.get(i);
       if (running !== undefined && running.runningId === id) {
         // No-churn case: same deps → leave the source running.
@@ -312,7 +403,12 @@ export function run<
       // Re-arm (id changed) or first arm — dispose the stale source first.
       disposeDepSubs([i]);
       try {
-        const dispose = entry.source(state as S, enqueueDispatch, ctx);
+        // `dispatchUnawaited`, never the raw `enqueueDispatch`: a source's
+        // dispatch has no caller to reject at, and the gate rejects during
+        // teardown — handing it the raw promise-returning form turned every
+        // Sub that fired while `stop()` drained into an unhandled rejection
+        // that bypassed `onError` entirely.
+        const dispose = entry.source(state as S, dispatchUnawaited, ctx);
         depSubRegistry.set(i, { runningId: id, dispose });
       } catch (err) {
         if (firstError === null) firstError = err;
@@ -367,10 +463,12 @@ export function run<
         continue;
       }
       try {
+        // Same reasoning as the dep-keyed source above: a subscribe handler's
+        // dispatch is unawaited by construction, so it gets the wrapped form.
         const cleanup = handler(
           sub as Extract<U, { type: U["type"] }>,
           ctx,
-          enqueueDispatch,
+          dispatchUnawaited,
         );
         subRegistry.set(sub.id, cleanup);
       } catch (err) {
@@ -388,15 +486,21 @@ export function run<
     (machine as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
 
-  // The injected dispatch for DETACHED handlers. Same serial-tail enqueue every
-  // other dispatch uses (`enqueueDispatch` chains on `tail`), wrapped to a sync
-  // `(msg) => void` so a detached handler's `ctx.waitUntil(...)` tail can fire
-  // its terminal Msg without awaiting the runtime. The rejection has no caller
-  // (the original dispatcher already resolved), so it routes to the sink under
-  // `"follow-up"` — the same phase the returned-follow-up path uses. A handler
-  // authored via `wrapDetached` receives a NARROWED view of this fn (only its
-  // declared result-Msg set); a plain leaf handler ignores it entirely.
-  const interpretDispatch = (msg: M): void => {
+  // The ONE `(msg) => void` handed to every producer that cannot await its own
+  // dispatch: a detached interpret handler's `ctx.waitUntil(...)` tail, a
+  // dep-keyed Sub's `source`, a `subscribe[type]` handler. Same serial-tail
+  // enqueue every other dispatch uses (`enqueueDispatch` chains on `tail`),
+  // wrapped so the rejection — which has no caller, the original dispatcher
+  // having already resolved — routes to the sink with the phase DERIVED from
+  // the error class (`reportUndelivered`).
+  //
+  // Handing any of those sites the raw `enqueueDispatch` is the defect this
+  // shape exists to prevent: its promise REJECTS whenever the gate is shut, so
+  // a Sub that fires during `stop()`'s drain produced an unhandled rejection
+  // that reached the host's global handler while `onError` saw nothing. A
+  // handler authored via `wrapDetached` receives a NARROWED view of this fn
+  // (only its declared result-Msg set); a plain leaf handler ignores it.
+  const dispatchUnawaited = (msg: M): void => {
     enqueueDispatch(msg).catch(reportUndelivered);
   };
 
@@ -441,7 +545,7 @@ export function run<
         handler(
           cmd as Extract<C, { type: C["type"] }>,
           augmentedCtx,
-          interpretDispatch,
+          dispatchUnawaited,
         ),
       );
       if (follow !== undefined && follow !== null) {
@@ -519,6 +623,31 @@ export function run<
   }
 
   /**
+   * Instance-identity filter: is this message addressed to a DIFFERENT instance
+   * than the one this state owns? When the machine declares an `identity`, a
+   * `true` here drops the message before `update` runs, so the reducer never
+   * sees a foreign-instance message and no cell needs a
+   * `msg.runId !== state.runId` guard.
+   *
+   * A message with no identity (`ofMsg` → undefined) is identity-agnostic and
+   * always proceeds. `ofState` → undefined means this instance has no identity
+   * to defend yet (an `idle` state before any run is established), so an
+   * addressed message there is identity-ESTABLISHING, not foreign. Drop only
+   * when both identities are present and differ.
+   *
+   * Pure and synchronous; a throw is the caller's to supervise (see
+   * `stepDispatch`).
+   */
+  function isMisaddressed(msg: M, current: S): boolean {
+    if (machine.identity === undefined) return false;
+    const addressed = machine.identity.ofMsg(msg);
+    if (addressed === undefined) return false;
+    const own = machine.identity.ofState(current);
+    if (own === undefined) return false;
+    return structuralHash(addressed) !== structuralHash(own);
+  }
+
+  /**
    * One full transition: update → save → reconcile subs → interpret → fire.
    * Save-before-effects is the hard ordering; tests pin it. A `save` throw
    * propagates after the in-memory `state` is advanced; reconcile/interpret
@@ -528,39 +657,38 @@ export function run<
     if (state === undefined) {
       throw new Error("@demlik/tea: runtime not booted");
     }
-    // Instance-identity filter. When the machine declares an `identity`, a
-    // message addressed to a DIFFERENT identity is dropped here — before
-    // `update` runs, so the reducer never sees a foreign-instance message and
-    // no cell needs a `msg.runId !== state.runId` guard. A message with no
-    // identity (`ofMsg` undefined) is identity-agnostic and always proceeds.
-    // The drop resolves the dispatch (no throw) and advances nothing: no save,
-    // no reconcile, no interpret, no listener/observer/event fire, no
-    // done-waiter settle. Identity is explicit (invariant 7) and the drop is
-    // the one observable enforcement point (invariant 6).
-    if (machine.identity !== undefined) {
-      const addressed = machine.identity.ofMsg(msg);
-      if (addressed !== undefined) {
-        const own = machine.identity.ofState(state);
-        // `own === undefined` ⇒ this instance has no identity to defend yet
-        // (e.g. an `idle` state before any run is established). An addressed
-        // message in that state is identity-establishing, not foreign — never
-        // dropped. Drop only when BOTH identities are present and differ.
-        if (
-          own !== undefined &&
-          structuralHash(addressed) !== structuralHash(own)
-        ) {
-          return;
-        }
-      }
-    }
-    // The reducer is the only synchronous user code; the reentrancy brand
-    // guarantees it cannot suspend, so a throw here is clean with `state` still
-    // pre-transition. Route it to the supervision strategy. Dispatch goes
-    // through `applyCellChecked` — the single dev-checked reducer-vs-transitions
-    // primitive `foldUpdates` also folds through (see `pure/core.ts`).
+    // The identity filter and the reducer are ONE synchronous user-code step,
+    // and they are protected as one. The projections used to run above this
+    // `try`, so a throwing `ofMsg` / `ofState` was neither reported nor
+    // supervised while an identical throw one line later was both — and since
+    // `structuralHash` throws on a bigint or a non-plain value, a snowflake-style
+    // run id put EVERY dispatch on that unprotected path.
+    //
+    // The reentrancy brand guarantees this whole step cannot suspend, so a throw
+    // here is clean with `state` still pre-transition; it routes to the declared
+    // supervision strategy under `phase: "reduce"` — the transition's own
+    // synchronous code failed, whichever half of it that was. Folding goes
+    // through `applyCellChecked` — the single dev-checked
+    // reducer-vs-transitions primitive `foldUpdates` also folds through (see
+    // `pure/core.ts`).
     let next: S;
     let cmds: readonly C[];
     try {
+      if (isMisaddressed(msg, state)) {
+        // The drop advances nothing: no save, no reconcile, no interpret, no
+        // listener/observer/event fire, no done-waiter settle — and it RESOLVES
+        // the dispatch, because a mis-addressed message is not the caller's
+        // error. That is exactly why it must be reported: without this the
+        // caller cannot tell "applied" from "silently discarded", and a reusable
+        // Durable Object serving run A then run B lost run B while reporting
+        // success. `IdentityDropNotice` is a `RuntimeDiscardNotice` — warn by
+        // default, never fatal (invariant 6: the enforcement point is
+        // observable, which is what makes it ONE point).
+        reportError(new IdentityDropNotice(msg.type), {
+          phase: "identity-drop",
+        });
+        return;
+      }
       [next, cmds] = applyCellChecked<S, M, C>(machine, state, msg);
     } catch (reduceError) {
       // Invariant 6 — surface the failure as data FIRST, for every strategy.
@@ -820,6 +948,14 @@ export function run<
       stopSubs([...subRegistry.keys()]);
       // Dispose every live dep-keyed source too (same throw-isolation).
       disposeDepSubs([...depSubRegistry.keys()]);
+      // …then WAIT for the teardown work that is still settling — the ones
+      // above, plus any async cleanup a mid-run reconcile started. `stop()`
+      // resolving has to mean "teardown is done", or a host doing
+      // `await stop(); env.evict()` drops the isolate mid-release and re-creates
+      // the exact leak the managed-resource battery exists to prevent. Bounded
+      // by `disposeTimeoutMs` so a release that never settles cannot hold the
+      // host open (see `drainDisposals`).
+      await drainDisposals();
       // Flush final state. A save throw here does not reject `stop()` (contract:
       // resolves regardless) but IS loss of the last write, so route it to the
       // sink rather than swallowing it (invariant 6).

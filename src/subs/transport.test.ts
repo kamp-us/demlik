@@ -341,3 +341,80 @@ describe("fromTransport.depKeyed — the seam as a dep-keyed Sub", () => {
     await rt.stop();
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// F3: acquire-as-success-value. The handle table used to be written BEFORE the
+// inbound/close listeners were wired, so an adapter that throws while wiring
+// (a socket already CLOSING is the everyday case) left the transport IN the
+// table with no sub registered — nothing to clean it up, `send` writing into a
+// half-wired seam, and every subsequent reconcile opening another one. Wiring
+// comes first and the table is written last, exactly as `defineManagedResource`
+// already does it: no fully-wired transport, no table entry.
+// ───────────────────────────────────────────────────────────────────────────
+describe("fromTransport — a transport that fails to wire leaks nothing", () => {
+  /** A transport whose `onClose` wiring throws, as an already-CLOSING socket does. */
+  function unwireableTransport() {
+    const base = stubTransport();
+    let closed = false;
+    return {
+      ...base,
+      get closed() {
+        return closed;
+      },
+      onMessage: base.onMessage,
+      onClose(): () => void {
+        throw new Error("socket is CLOSING");
+      },
+      close() {
+        closed = true;
+      },
+      get listenerCount() {
+        return base.listenerCount;
+      },
+    };
+  }
+
+  it("closes the transport and rethrows rather than registering a half-wired seam", () => {
+    const seam = seamBattery();
+    const transport = unwireableTransport();
+
+    expect(() =>
+      seam.subscribe(seam.sub("run-1"), { transport }, () => {}),
+    ).toThrow(/socket is CLOSING/);
+    expect(transport.closed).toBe(true);
+    // The inbound listener it DID wire is gone too — no dangling callback into
+    // a runtime that never learned about this seam.
+    expect(transport.listenerCount).toBe(0);
+  });
+
+  it("leaves the handle table empty, so a later `send` drops honestly", () => {
+    const seam = seamBattery();
+    const transport = unwireableTransport();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(() =>
+      seam.subscribe(seam.sub("run-1"), { transport }, () => {}),
+    ).toThrow();
+    seam.send("run-1", { say: "hi" });
+
+    expect(transport.sent).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not accumulate a transport per retry, so the leak cannot grow", () => {
+    const seam = seamBattery();
+    const opened: Array<ReturnType<typeof unwireableTransport>> = [];
+
+    for (let i = 0; i < 3; i++) {
+      const transport = unwireableTransport();
+      opened.push(transport);
+      expect(() =>
+        seam.subscribe(seam.sub("run-1"), { transport }, () => {}),
+      ).toThrow();
+    }
+    // Every failed attempt closed its own transport — an unbounded reconcile
+    // retry loop can no longer strand one socket per pass.
+    expect(opened.every((t) => t.closed)).toBe(true);
+  });
+});
