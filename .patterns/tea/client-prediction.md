@@ -133,8 +133,8 @@ This seam generalizes the `lastAckedSeq`-on-the-Model + `seq`-threaded-through-t
 loop the (now archived) `vortex` consumer hand-rolled. The original dogfooding
 consumer is **not on `main`** — it lives only in branch history — so the proof is
 the in-package reference example + integration test above, exactly as the epic's
-resolved questions decided. The lesson is the dogfooding lesson from
-[`dogfooding.md`](./dogfooding.md): a real consumer hit a seam the substrate didn't
+resolved questions decided. The lesson is the dogfooding lesson:
+a real consumer hit a seam the substrate did not
 cover (reusing the authoritative reducer on the client), and the finding became
 the roadmap — `foldMsgs` (#211), the ack primitive (#212), the import boundary
 (#213), `reconcile` (#214), and this worked example (#215).

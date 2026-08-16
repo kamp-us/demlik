@@ -110,7 +110,7 @@ export interface FakeChrome {
      * undefined if no alarm with that name exists. Mirrors the contract
      * the `ensureQueueAlarm` SW-module-top-level helper checks ("is this
      * alarm already present with the right period?") — see
-     * `apps/extension/extension/entrypoints/background.ts`.
+     * the extension's background entrypoint.
      */
     get(name: string): Promise<chrome.alarms.Alarm | undefined>;
     clear(name: string): Promise<boolean>;

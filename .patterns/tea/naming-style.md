@@ -21,7 +21,7 @@ for the variant names *inside* each.
 
 | Position    | Canon reference                   | Style rule                                                       |
 | ----------- | --------------------------------- | ---------------------------------------------------------------- |
-| State variant | `vision.md` §"5 named pieces"   | Way of being (noun / gerund-noun)                                |
+| State variant | the 5 named pieces               | Way of being (noun / gerund-noun)                                |
 | Msg variant   | canon §2.4                      | **Who** did **what** (and optionally **where/how**) — past tense |
 | Cmd variant   | canon §2.4, Invariant 3         | Imperative verb-phrase; `into` carries the result Msg constructor |
 | Sub variant   | canon §2.5, Invariant 4         | Source noun (lowercase short name; also the `SubId`)             |

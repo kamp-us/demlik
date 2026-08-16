@@ -16,7 +16,7 @@
 - **Engineers** read it when designing a new machine, reviewing a TEA PR, or evaluating an agent's recommendation.
 - **The doc is anchored.** Every rule cites the commit (hash) that exemplifies it. If a rule's exemplar commit is reverted or contradicted, the rule is reviewed.
 
-This is the **what** of TEA discipline. The **why** lives in `vision.md`. The **canon** of operations lives in `elm-canon.md`. The **invariants** (1–8, cited throughout) live in `tea-invariants.md`. This doc is the bridge between principle and code.
+This is the **what** of TEA discipline. The **canon** of operations, and the why behind it, lives in `elm-canon.md`. The **invariants** (1–8, cited throughout) live in `tea-invariants.md`. This doc is the bridge between principle and code.
 
 **Canonical TEA patterns** — `.patterns/tea/patterns/` — 17 pattern files grounded in the official Elm guide, elm-spa-example, elm-community examples, and Elm Radio. Read them for the universal TEA answers; read this doc for how we apply them in this codebase. Start a new machine from `.patterns/tea/machine-template.ts`.
 
@@ -353,9 +353,8 @@ Every agent prompt that asks an agent to audit, refactor, build, or review TEA c
 ```
 1. .patterns/tea/tea-discipline.md    (this file — discipline rules)
 2. .patterns/tea/tea-invariants.md    (the 9 invariants in detail)
-3. .patterns/tea/vision.md            (the philosophy)
 4. .patterns/tea/elm-canon.md         (the operations canon)
-5. packages/tea/src/index.ts     (the substrate's actual code)
+5. src/index.ts                       (the substrate's actual code)
 6. The specific machine files being touched
 7. The relevant tests so the agent doesn't duplicate or break them
 ```

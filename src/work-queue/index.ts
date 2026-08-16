@@ -13,7 +13,7 @@
  * one place. This mirrors `@demlik/tea/do`'s one-shape-per-package rule.
  *
  * The package is generic in the input payload `I` (audit-specific fields go
- * here in apps/extension). `output` is a free-form side-channel correlation
+ * here in the extension host). `output` is a free-form side-channel correlation
  * token (a backend id, URL, trace id) — typed as `string` because that's its
  * only honest type. Consumers that need structured per-item data persist it in
  * their own store and put the foreign-key string in `output`.

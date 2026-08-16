@@ -51,10 +51,10 @@ export function arbMsgSequence<M extends { type: string }>(
 /**
  * State-aware Msg sequence arbitrary — generates only msgs whose
  * precondition holds in the current state. Backed by `fc.commands`
- * internally (Phase 6 of `.patterns/tea/tea-pbt-design.md`).
+ * internally. Planned for a later phase.
  *
  * **NOT IMPLEMENTED IN v1.** The export exists today so the surface is
- * forward-compatible; the design doc §7 ships this in Phase 6 alongside
+ * forward-compatible; this ships in a later phase alongside
  * shrinkers. Calling it throws.
  */
 export function arbGuidedSequence<
@@ -74,8 +74,8 @@ export function arbGuidedSequence<
   _opts?: { maxLength?: number },
 ): fc.Arbitrary<readonly M[]> {
   throw new Error(
-    "@demlik/tea/pbt: arbGuidedSequence is not implemented in v1 — see " +
-      ".patterns/tea/tea-pbt-design.md §7 (Phase 6). Use arbMsgSequence with " +
+    "@demlik/tea/pbt: arbGuidedSequence is not implemented in v1. " +
+      "Use arbMsgSequence with " +
       "an unguided arbMsg table for now; states that don't accept a given " +
       "msg should noop in the reducer (mapped-type discipline).",
   );

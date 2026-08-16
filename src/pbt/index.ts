@@ -13,7 +13,7 @@
  *   - `stubCtxThrowingProxy<Ctx>()` — type-shaped Ctx value whose every access
  *     throws (PBT runs the reducer; Ctx must never be touched).
  *
- * Resolves the decoupling target named in `.patterns/tea/vision.md:205` — PBT
+ * Resolves the decoupling target: PBT
  * lives as a sibling package, never inside the substrate.
  *
  * Substrate dependency: types only (`Machine`, `Cmd`, `Sub`, `replay`). The

@@ -57,7 +57,7 @@ each with current status (full detail and grounding in the canon):
    enforced only at runtime via the serial mailbox) encoded in types. *Net-new
    at the type level.*
 
-This reopens two `vision.md` v1 non-goals — devtools time-travel and DO-side
+This reopens two v1 non-goals — devtools time-travel and DO-side
 WebSocket subs — **scoped to the host, not the core**: time-travel becomes a
 free consequence of primitive 2, and `DoWsSub` is already load-bearing through
 the gateway. The core stays a pure reducer; the *host* grows toward

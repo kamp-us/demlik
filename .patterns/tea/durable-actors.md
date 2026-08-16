@@ -166,9 +166,9 @@ path fail to compile), this is the guard worth having.
 
 ---
 
-## Reconciling with `vision.md` non-goals
+## Reconciling with the v1 non-goals
 
-`vision.md` lists, as **v1** non-goals: a devtools time-travel debugger, and
+The v1 non-goals list, as **v1** non-goals: a devtools time-travel debugger, and
 DO-side WebSocket Subs ("deferred indefinitely"). This doc deliberately reopens
 both — **scoped to the DO host, not the core**:
 
