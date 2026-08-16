@@ -2,8 +2,10 @@
 
 The one structural move that turns a "huge, complex, messed-up" codebase into a
 legible one: **separate the brain from the hands.** This doc is the worked recipe.
-Its authority is [ADR 0009](../../.decisions/0009-brain-hand-seam-and-strangler-migration.md);
-its reference implementation is [`packages/audit`](../../packages/audit).
+Its authority is ADR 0009 ("The brain/hand seam + strangler migration untangles a
+codebase"), which is a repo-wide decision of the monorepo this package was
+extracted from and stayed there; its reference implementation is that repo's
+audit package.
 
 ## The idea in one picture
 
@@ -93,7 +95,8 @@ Do this to **one** tangled module at a time — never the whole repo at once.
 
 ## See also
 
-- [ADR 0009](../../.decisions/0009-brain-hand-seam-and-strangler-migration.md) — the decision this pattern serves.
+- ADR 0009 — the decision this pattern serves. It is a decision of the monorepo
+  this package came out of, not of this repo, so it is not in `.decisions/` here.
 - [`durable-actors.md`](./durable-actors.md) — the TEA substrate the brain runs on (event-sourced virtual actors).
 - [`tea-invariants.md`](./tea-invariants.md) — the purity/effects-as-data invariants the brain must hold.
-- [`packages/audit`](../../packages/audit) — the end-to-end worked reference.
+- That monorepo's audit package — the end-to-end worked reference.

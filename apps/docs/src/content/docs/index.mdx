@@ -1,0 +1,124 @@
+---
+title: "@demlik/tea"
+description: The Elm Architecture as a TypeScript substrate — one pure reducer, every host adapter. Durable, replayable state machines for React, Cloudflare Durable Objects, Node, work queues and Chrome extensions.
+template: splash
+hero:
+  tagline: One small loop — Model, Msg, Update, Cmd — running the same way in a browser tab, a Worker, a Durable Object, an extension service worker. Write it once. Plug it in anywhere.
+  actions:
+    - text: Build your first machine
+      link: /tutorial/
+      icon: right-arrow
+      variant: primary
+    - text: API reference
+      link: /reference/
+      icon: open-book
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/kamp-us/demlik
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+```sh
+pnpm add @demlik/tea
+```
+
+## The whole idea, in three lines
+
+- A reducer is a **function**.
+- A side effect is **data**.
+- A bug is a **replayable trace**.
+
+Every stateful thing — a Durable Object, a workflow, a React page, a queue consumer, a
+cron, a widget, an extension — is the same loop wearing a different jacket. `@demlik/tea`
+is that loop, written once: a pure reducer over discriminated unions, a typed effect
+channel (`Cmd`), and a state-driven subscription topology (`Sub`). The runtime performs
+the effects and sends the results back as messages. That separation is the whole game.
+
+Because the reducer is pure and the effects are values, the same machine **replays**:
+`replay()` re-decides every step identically from a recorded schedule, so tests need no
+mocks and a production trace is a reproduction.
+
+## Start here
+
+<CardGrid>
+	<LinkCard
+		title="Tutorials"
+		description="Learning-oriented lessons. Build a real machine end to end, then drive it from React."
+		href="/tutorial/"
+	/>
+	<LinkCard
+		title="How-to Guides"
+		description="Goal-oriented recipes: add resilience, make a machine durable, replay one in a test."
+		href="/how-to/"
+	/>
+	<LinkCard
+		title="Reference"
+		description="The precise public surface, generated from source and drift-gated in CI so it cannot go stale."
+		href="/reference/"
+	/>
+	<LinkCard
+		title="Explanation"
+		description="Why the library is shaped this way — the architecture decisions behind the substrate."
+		href="/explanation/"
+	/>
+</CardGrid>
+
+## Every host, one machine
+
+The substrate is host-agnostic. The host adapters are subpath imports you add only for
+the surface you use.
+
+<CardGrid>
+	<Card title="React" icon="seti:react">
+		`useMachine` on `useSyncExternalStore` — `[state, dispatch]` with full exhaustiveness.
+		Tests use `replay()`, not React Testing Library.
+	</Card>
+	<Card title="Durable Objects" icon="cloudflare">
+		An event-sourced store that rebuilds state by folding the same reducer, plus durable
+		timers, presence and hibernation-safe sockets.
+	</Card>
+	<Card title="Node & work queues" icon="node">
+		WebSocket subscriptions, a substrate-agnostic queue lifecycle, and reliable delivery
+		over any `Store<S>`.
+	</Card>
+	<Card title="Chrome extensions" icon="puzzle">
+		`chromeStorageStore` survives service-worker restarts; `bridgeRuntime` gives typed
+		cross-context dispatch with no `onMessage` boilerplate.
+	</Card>
+</CardGrid>
+
+## Batteries, not bespoke try-catch
+
+Resilience and flow are **wrappers over the same machine**, not features bolted into your
+domain logic: retry with backoff, circuit breaker, rate limit, deadline, cache,
+idempotency, debounce, throttle, saga compensation, pagination, polling and token refresh.
+Each is a published subpath with its own semver promise.
+
+<CardGrid>
+	<LinkCard
+		title="The canon"
+		description="TEA discipline, the invariants, the architecture canon, and naming conventions — the conceptual ground the library implements."
+		href="/patterns/tea/tea-discipline/"
+	/>
+	<LinkCard
+		title="Durable actors"
+		description="Event sourcing, snapshotting, recovery, projections and the reentrancy guard — the prior art the Durable Object host converges toward."
+		href="/patterns/tea-do/"
+	/>
+</CardGrid>
+
+## Why it is shaped this way
+
+Every meaningful decision is written down and linked from the
+[Explanation quadrant](/explanation/) — resilience built in-house rather than installed,
+a Durable Object host layer rather than a DO framework, errors as data with a throw
+reserved for a contract breach.
+
+<LinkCard
+	title="Architecture decisions"
+	description="The full ADR log, one row per decision."
+	href="/decisions/"
+/>

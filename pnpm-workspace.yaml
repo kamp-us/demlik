@@ -1,0 +1,6 @@
+# The published package (@demlik/tea) is the workspace ROOT — its package.json,
+# src/ and docs/ sit at the top level, and `pnpm pack` at the root is what the
+# publish workflow ships. Everything under apps/ is a private sibling that
+# consumes those docs; nothing in apps/ is ever published.
+packages:
+  - "apps/*"

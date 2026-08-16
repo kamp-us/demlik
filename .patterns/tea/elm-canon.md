@@ -667,7 +667,7 @@ The discipline that matters from this chapter: *every `T | null` in a
 parameter signature is a question the schema is dodging.* Elm forces
 the question by making `Nothing` a syntactic variant; we do it by review.
 
-See [`docs/design-patterns.md#nullable-is-two-functions-in-disguise`](../design-patterns.md#nullable-is-two-functions-in-disguise) — the rule that catches this at API-design time, before nullable propagates.
+See `docs/design-patterns.md` — "Nullable Is Two Functions in Disguise" — the rule that catches this at API-design time, before nullable propagates.
 
 ### 2.16 Error handling: Result
 

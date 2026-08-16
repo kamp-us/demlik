@@ -52,5 +52,14 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      # Building the docs site is a CONTENT gate, not just a deploy step. The site
+      # projects docs/, .patterns/ and .decisions/ into Starlight, and
+      # starlight-links-validator fails the build on any internal link pointing at a
+      # route that does not exist — so a cross-doc link broken by a rename or a moved
+      # file is caught here instead of shipping as a 404. The sync step fails
+      # separately, and louder, on a link whose target file is missing outright.
+      - name: Build docs site (link-integrity gate)
+        run: pnpm --filter @demlik/docs build
+
       - name: Build
         run: pnpm run build

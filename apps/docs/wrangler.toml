@@ -1,0 +1,21 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "demlik"
+
+compatibility_date = "2026-08-16"
+
+# Static Starlight build served directly from Workers Assets. There is NO `main`
+# worker, NO @astrojs/cloudflare adapter and NO nodejs_compat flag — every page is
+# prerendered (Starlight's default), so `dist/` is a self-contained static bundle
+# (HTML + CSS + JS + the Pagefind search index).
+assets = { directory = "./dist" }
+
+# Custom Domains: wrangler provisions the DNS record + TLS cert on deploy.
+# Requires demlik.run to be a zone on the same Cloudflare account.
+routes = [
+  { pattern = "demlik.run", custom_domain = true },
+  { pattern = "www.demlik.run", custom_domain = true }
+]
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.1
