@@ -46,7 +46,7 @@ and each tier binds its own semver promise.**
 
 **Showcases are OFF the export map.** An integration proof like the Raft showcase
 is **not** a published subpath: it lives in `packages/raft-showcase` and is
-consumed by `services/site` like any external customer, so a kernel break breaks
+consumed like any external customer, so a kernel break breaks
 the site build — the honest signal a demo is supposed to give.
 
 The tier table (every subpath → its stamp), the per-tier semver policy, the

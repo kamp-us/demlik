@@ -1,3 +1,22 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+
+# Testing
+coverage
+
 # typedoc JSON model — regenerated on every docs:reference run, never committed.
 # Only the derived markdown under docs/reference/ is the drift baseline.
 .typedoc/
+
+# Debug
+npm-debug.log*
+
+# Misc
+.DS_Store
+*.pem
+
+# Claude Code local settings (per-machine)
+.claude/settings.local.json

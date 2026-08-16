@@ -193,7 +193,7 @@ PBT generates random Msg sequences, folds them through the reducer, and
 asserts a predicate over the resulting trace. It is a precise tool, and
 it earns its keep — but only on the right kind of property. Reaching for
 it on the wrong shape produces over-engineered tests that drift from the
-reducer and surface as CI flakes (see `Binclusive/monorepo#1535`).
+reducer and surface as CI flakes (observed in production).
 
 ### The decision rule
 
@@ -258,6 +258,6 @@ property is in the wrong shape:
 
 ### Reference
 
-`Binclusive/monorepo#1535` — flake from a flat `Set<MsgType>` over
+A production flake from a flat `Set<MsgType>` over
 two-dimensional cell semantics, plus `propertyTrace` with a carve-out
 that softened the predicate enough to hide the drift on most seeds.

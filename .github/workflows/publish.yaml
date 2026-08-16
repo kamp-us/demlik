@@ -1,0 +1,122 @@
+name: publish
+
+# Per-merge publishing for @demlik/tea. Trusted publishing can only ship a NEW version
+# number, so this job is changeset-gated: a merge to main republishes ONLY when a pending
+# changeset declares a bump. `changeset version` consumes the changeset (deleting it), so
+# the version-bump commit this job pushes back leaves no pending changeset — the next
+# triggered run is a clean no-op, no publish loop.
+#
+# WHY scripted, not `changesets/action`: the standard changesets action opens a
+# "Version Packages" PR, and bot-PR creation is org-gated here ("Actions not permitted
+# to create PRs"). We sidestep that wall entirely by versioning + publishing inline and
+# pushing the bump commit straight to main (a push, not a PR).
+on:
+  push:
+    branches:
+      - main
+  # Manual trigger so a re-run doesn't need an empty [skip ci]-dodging commit.
+  workflow_dispatch:
+
+# Least privilege: contents:write to push the version-bump commit back to main;
+# id-token:write for npm trusted publishing (OIDC — tokenless, no NODE_AUTH_TOKEN).
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      # npm trusted publishing (OIDC, tokenless) needs npm CLI >= 11.5. Node 22 ships
+      # npm 10.x, so upgrade and hard-assert the floor before anything relies on it.
+      - name: Upgrade npm to >= 11.5 (trusted-publishing floor)
+        run: |
+          npm install -g npm@latest
+          NPM_VER="$(npm --version)"
+          echo "npm ${NPM_VER}"
+          MIN=11.5.0
+          if [ "$(printf '%s\n%s\n' "$MIN" "$NPM_VER" | sort -V | head -n1)" != "$MIN" ]; then
+            echo "::error::npm >= ${MIN} required for OIDC trusted publishing, got ${NPM_VER}"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Detect pending changesets
+        id: changesets
+        run: |
+          shopt -s nullglob
+          pending=()
+          for f in .changeset/*.md; do
+            [ "$(basename "$f")" = "README.md" ] && continue
+            pending+=("$f")
+          done
+          if [ "${#pending[@]}" -gt 0 ]; then
+            echo "has_changesets=true" >> "$GITHUB_OUTPUT"
+            printf 'Pending changesets: %s\n' "${pending[*]}"
+          else
+            echo "has_changesets=false" >> "$GITHUB_OUTPUT"
+            echo "No pending changesets — nothing to version or publish."
+          fi
+
+      - name: Version (consume changesets, bump @demlik/tea)
+        if: steps.changesets.outputs.has_changesets == 'true'
+        run: pnpm changeset version
+
+      - name: Build
+        if: steps.changesets.outputs.has_changesets == 'true'
+        run: pnpm run build
+
+      # OIDC trusted publishing via pack + `npm publish <tarball>`. `pnpm publish` shells
+      # `npm@latest` and FORWARDS its pnpm-only `--no-git-checks` flag to npm, which rejects
+      # the unknown flag and dies at flag-parse BEFORE the OIDC handshake. We sidestep that
+      # wall by packing first, then `npm publish` ships the tarball directly — no git-checks
+      # concept, no flag to forward. npm >= 11.5 (asserted above) exchanges the id-token
+      # automatically on tarball publish — tokenless, no NODE_AUTH_TOKEN.
+      #
+      # REQUIRES the npmjs.com trusted-publisher registration for @demlik/tea to point at
+      # kamp-us/demlik + this workflow file (owner-only, manual) or npm rejects the token.
+      # The registration that shipped 0.5.0 pointed at cansirin/monorepo and does NOT carry
+      # over — re-point it before the first release from here.
+      #
+      # No `--provenance` yet: it was disabled because the old home was a PRIVATE repo. This
+      # repo is public, so provenance can be re-enabled as a deliberate follow-up.
+      - name: Publish to npm (pack + npm publish tarball, OIDC trusted publishing)
+        if: steps.changesets.outputs.has_changesets == 'true'
+        run: |
+          pnpm pack --pack-destination "$RUNNER_TEMP"
+          npm publish "$RUNNER_TEMP"/demlik-tea-*.tgz --access public
+
+      # Persist the consumed changeset + version bump. A push (not a PR) sidesteps the
+      # org bot-PR gate; [skip ci] keeps it from re-triggering (a re-trigger would find
+      # no pending changeset and no-op anyway).
+      - name: Commit version bump back to main
+        if: steps.changesets.outputs.has_changesets == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: release via changesets [skip ci]"
+          git push origin HEAD:main

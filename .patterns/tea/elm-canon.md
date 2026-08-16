@@ -323,7 +323,7 @@ type Model = Failure | Loading | Success String
 ```
 
 That's the entire `Model` for the book-loader example. We do exactly the
-same — see `packages/widget-engine`, `services/audit-agents/src/state.ts`.
+same.
 Loading states *are* model variants. Adding a `isLoading: boolean` field
 next to optional `result?: String` is the anti-pattern this section exists
 to prevent.

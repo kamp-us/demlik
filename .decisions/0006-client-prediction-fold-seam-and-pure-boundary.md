@@ -15,7 +15,7 @@ Implementing client-side prediction + server reconciliation (the Gambetta/Valve
 authoritative-server netcode pattern) over a `@demlik/tea` machine surfaced a
 gap: there is no blessed way to **reuse the authoritative reducer on the client
 to replay a queue of un-acked inputs**. The reducer is reachable only through
-`run(...).dispatch`; a consumer (vortex) had to reach *past* it to a
+`run(...).dispatch`; a consumer had to reach *past* it to a
 hand-extracted pure sub-step and a hand-rolled `lastAckedSeq`. tea's whole thesis
 is "one pure reducer, both sides," so this must become a guarantee, not a
 hand-roll. Two coupled forks block the build children, and this ADR settles both.

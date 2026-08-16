@@ -112,6 +112,6 @@ import { … } from "@demlik/tea/do";
 | `StepResponse` | Type | A `/step` response — a discriminated union on `done`: - `{ done: false, step }` — execute `step`, POST its result, ask again. |
 | `StepResult` | Interface | The tool result the hands POST back for the step they just executed. |
 | `StepTransport` | Type | The `/step` transport the hands POST through (injected; faked in tests). |
-| `StepWorking` | Interface | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (Binclusive ADR 0035 / prod incident #1873: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
+| `StepWorking` | Interface | The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host (a production incident: a non-blocking pull carrier must answer a pull with an explicit "computing, poll again" instead of holding the request across a multi-second step). |
 | `survivingEffects` | Function |  |
 | `WS_READY_STATE_OPEN` | Variable | The OPEN `readyState` value (`WebSocket.READY_STATE_OPEN` in the Cloudflare runtime). |

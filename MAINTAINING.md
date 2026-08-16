@@ -4,8 +4,7 @@ Maintainer policy for the published contract surface. The npm export map **is** 
 contract: every subpath in `package.json` `exports` carries a semver promise and a
 servicing cost. This file states that promise per tier and stamps every subpath.
 
-Vocabulary (**tier stamp**, **battery**, **showcase**) is canonized in
-[`.glossary/TERMS.md`](../../.glossary/TERMS.md).
+Vocabulary (**tier stamp**, **battery**, **showcase**) is defined below.
 
 ## Tiers
 
@@ -23,7 +22,7 @@ Every published subpath carries exactly one **tier stamp**:
 
 Not a tier: a **showcase** — an integration proof (the Raft showcase) that consumes the
 published package like any customer. Showcases are **not published**; they live in the
-workspace (`packages/raft-showcase`, consumed by `services/site`), off the export map.
+a separate consumer repo, off the export map.
 
 ### Tier table — every published subpath
 

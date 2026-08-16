@@ -155,7 +155,7 @@ variant completes *"We are **X**."*
 
 > "We are **Idle**." ✓  "We are **Auditing**." ✓  "We are **Connect**." ✗
 
-Examples from `apps/extension/extension/lib/phases.ts`:
+Examples from a production audit-extension phase union:
 
 ```
 Idle | CreatingWindow | Connecting | Initializing | Auditing | Done
@@ -188,8 +188,8 @@ declaration and read naturally in topology tables like `subscriptions(state)`.
 ## Wire vs machine vocabulary
 
 The wire protocol (`client:hello`, `tool:call`, `audit:done`, `video:frame`)
-is duplicated **verbatim** in `apps/extension/extension/lib/protocol.ts` and
-`services/audit-agents/src/types/protocol.ts`. That duplication IS the
+is duplicated **verbatim** on both sides of the wire — the client's `protocol.ts` and
+the server's. That duplication IS the
 contract — neither side may rename without breaking the other. The wire
 vocabulary is **shared and stable**.
 
@@ -226,7 +226,7 @@ only the past-tense PascalCase form.
 
 ## Worked example
 
-From `apps/extension/extension/lib/events.ts`. The full rename:
+From a production extension's `events.ts`. The full rename:
 
 ```ts
 // Before — wire-mirror dialect + snake_case + no actors

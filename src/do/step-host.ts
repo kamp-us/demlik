@@ -24,7 +24,7 @@
  * The rule in one line: **pull when the client drives a cold-between-steps
  * control loop; push when the DO drives unsolicited fan-out.** A hibernating
  * agent whose only traffic is "run the next tool" wants pull — that is the case
- * Binclusive #1812 / #1814 adopted this carrier for.
+ * a production consumer adopted this carrier for.
  *
  * ## Why pull is hibernation-correct
  *
@@ -136,7 +136,7 @@ export type StepResponse<I, O> =
 
 /**
  * The NOT-READY arm — the run is computing OUT-OF-BAND under a defer-resume host
- * (Binclusive ADR 0035 / prod incident #1873: a non-blocking pull carrier must
+ * (a production incident: a non-blocking pull carrier must
  * answer a pull with an explicit "computing, poll again" instead of holding the
  * request across a multi-second step). The held `/step` request returns this
  * IMMEDIATELY instead of inline-awaiting `engine.resume`; the hands re-poll
@@ -300,7 +300,7 @@ export interface StepHostConfig {
 
 /**
  * The DEFER-RESUME hook — the opt-in seam that drives `engine.resume` OUT of the
- * held `/step` request. A non-blocking host (Binclusive audit carrier, ADR 0035)
+ * held `/step` request. A non-blocking host (a non-blocking production audit carrier)
  * cannot inline-await a multi-second step inside the held request, so instead of
  * `stepHost` calling `engine.resume` inline it hands the posted result to this
  * hook to SETTLE-AND-ENQUEUE (record it durably, schedule the compute in a
@@ -508,7 +508,7 @@ export function stepHost<R, I, O>(
         // checkpoint, fall through to step 4 and read the next step (identical to
         // the inline tail). If not, (idempotently) enqueue the resume to run in a
         // returning activation and return the WORKING arm — the held request
-        // never awaits the step compute (Binclusive ADR 0035 / #1873). The
+        // never awaits the step compute (the same production incident). The
         // per-callId enqueue is idempotent host-side, so re-POSTs across cold
         // wakes do not re-enqueue; the in-isolate `intake` ledger is not used on
         // this path because it cannot survive the eviction between pulls.

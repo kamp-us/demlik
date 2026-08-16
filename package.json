@@ -15,8 +15,7 @@
   "homepage": "https://demlik.run",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cansirin/monorepo.git",
-    "directory": "packages/tea"
+    "url": "git+https://github.com/kamp-us/demlik.git"
   },
   "license": "MIT",
   "author": "Can Sirin",
@@ -261,7 +260,8 @@
     "docs:reference": "TEA_DOCS_WRITE=1 vitest run src/docs/reference/generate-reference.test.ts",
     "docs:reference:check": "pnpm run docs:reference && git diff --exit-code -- docs/reference",
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
-    "verify-exports": "node scripts/verify-exports.mjs"
+    "verify-exports": "node scripts/verify-exports.mjs",
+    "release": "changeset"
   },
   "dependencies": {
     "better-result": "^2.5.2"
@@ -291,23 +291,38 @@
     }
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@types/chrome": "catalog:",
-    "@types/node": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
-    "@types/ws": "catalog:",
+    "@biomejs/biome": "2.3.14",
+    "@changesets/cli": "^2.27.11",
+    "@cloudflare/workers-types": "4.20260312.1",
+    "@types/chrome": "^0.1.42",
+    "@types/node": "^22",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "@types/ws": "8.5.14",
     "fast-check": "^3.23.0",
     "happy-dom": "^20.9.0",
-    "react": "catalog:",
-    "react-dom": "catalog:",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "tsup": "^8.3.5",
     "typedoc": "0.28.20",
-    "typescript": "catalog:",
-    "vitest": "catalog:",
-    "ws": "catalog:"
+    "typescript": "5.7.3",
+    "vitest": "~3.0.7",
+    "ws": "8.18.1"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/kamp-us/demlik/issues"
+  },
+  "packageManager": "pnpm@10.2.1",
+  "volta": {
+    "node": "23.7.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild"
+    ]
   }
 }

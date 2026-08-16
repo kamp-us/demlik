@@ -11,8 +11,8 @@
 ## Context
 
 The first real consumer to drive a `createAgent` runtime inside a Durable Object
-over a remote transport (`services/sr-graph-tea`: an accessibility-audit agent
-whose tools run NVDA / Playwright on remote WebSocket clients) hand-rolled the
+over a remote transport (a production agent
+whose tools run on remote WebSocket clients) hand-rolled the
 same five concerns LangGraph + the Cloudflare Agents SDK provide off the shelf:
 
 1. a deferred-tool round-trip (a tool ships to a client and the run parks until

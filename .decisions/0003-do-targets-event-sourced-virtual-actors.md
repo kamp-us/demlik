@@ -14,7 +14,7 @@
 ADR [0002](./0002-do-host-layer.md) committed to a *host layer, not a framework*
 for running a `tea` machine inside a Durable Object. It left the larger question
 open: **what is that host converging toward?** Without a named target, each
-consumer (`sr-graph-tea` first) re-derives the wiring, and the backlog of host
+consumer re-derives the wiring, and the backlog of host
 seams reads as a pile of unrelated papercuts rather than one trajectory.
 
 There are two distinct flavours of durable actor, and conflating them is the
