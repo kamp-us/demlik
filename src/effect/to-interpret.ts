@@ -49,8 +49,15 @@ export type EffectHandlers<M, C extends Cmd, R = never> = {
 
 /** Wiring `toInterpret` / `effectCell` need to lower a handler. */
 export interface LoweringOptions<M, Ctx, R> {
-  /** The runner that discharges the app's `R` (typically a `ManagedRuntime`). */
-  readonly runtime: EffectRunner<R | TeaEnv>;
+  /**
+   * The runner that discharges the app's `R` (typically a `ManagedRuntime`).
+   *
+   * `R`, NOT `R | TeaEnv`: `effectCell` provides `TeaCtx` / `TeaDispatch`
+   * itself before handing the program to the runner, so the runner only ever
+   * sees the app's own environment. Asking for `R | TeaEnv` here made the
+   * obvious call site — `ManagedRuntime.make(AppLayer)` — fail to assign.
+   */
+  readonly runtime: EffectRunner<R>;
   /** The keys from `teaServices<M, Ctx>()`. */
   readonly services: TeaServices<M, Ctx>;
   /**
