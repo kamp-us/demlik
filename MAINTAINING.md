@@ -89,9 +89,14 @@ export is not done until it has a row here.
 | `./llm-call` | experimental | agent layer |
 | `./prediction` | experimental | client prediction |
 | `./chart` | experimental | machines authored as config; the type machinery IS the surface |
+<<<<<<< HEAD
 | `./chart/inspect` | experimental | the chart read as data — headless; the debugger UI's substrate |
 | `./chart/inspect/react` | experimental | `<ChartInspector>`; React binding of `./chart/inspect` |
 | `./chart/inspect/styles.css` | experimental | asset of `./chart/inspect/react` |
+||||||| e239a65
+=======
+| `./chart/report` | experimental | imports a fabrika `workflow.json` into charts and renders a lane as markdown; tracks an external tool's document format |
+>>>>>>> can/chart-report
 
 ## Store factory per host
 

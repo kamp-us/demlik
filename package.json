@@ -261,6 +261,10 @@
       "import": "./dist/chart/inspect/react.js"
     },
     "./chart/inspect/styles.css": "./dist/chart/inspect/styles.css",
+    "./chart/report": {
+      "types": "./dist/chart/report/index.d.ts",
+      "import": "./dist/chart/report/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

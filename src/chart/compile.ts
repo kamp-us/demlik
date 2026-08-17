@@ -342,8 +342,11 @@ export function compile<
         // the type layer forbids, so it is the only case that throws.
         const scope = scopeList(c.events[e]?.scope ?? "edges");
         const live = scope.includes("all") || scope.includes(group);
+        // `end` is `true` (success) or `"error"`; BOTH are final, and the type
+        // layer's `IsEndOf` reads both. Testing `=== true` here would put an
+        // error final back under the totality obligation at runtime only.
         const refused =
-          node.end === true || !live || (node.ignore ?? []).includes(e);
+          node.end !== undefined || !live || (node.ignore ?? []).includes(e);
         row[key] = refused
           ? (st) => [st, []]
           : () => {
@@ -656,7 +659,9 @@ export function chartMermaid<const C extends Chart<C>>(
         }
       }
     }
-    if (node.end === true) lines.push(`  ${from} --> [*]`);
+    // Both polarities terminate, so both draw the `[*]` edge — an error final
+    // that stopped drawing one would read as a state the machine can leave.
+    if (node.end !== undefined) lines.push(`  ${from} --> [*]`);
   }
 
   // The highlight, last: a `classDef` must exist before the `class` line that
