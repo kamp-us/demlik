@@ -23,3 +23,6 @@ npm-debug.log*
 
 # Claude Code local settings (per-machine)
 .claude/settings.local.json
+
+# Agent worktrees (never part of the repo)
+.claude/worktrees
