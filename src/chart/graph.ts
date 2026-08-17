@@ -648,15 +648,58 @@ export type Cmds<C, S extends { type: string }, M extends { type: string }> = {
  * chart admits, so the chart stays a truthful drawing of the machine.
  */
 export type Cells<C, S extends { type: string }, M extends { type: string }> = {
-  [N in CellName<C>]: (
-    ...args: SiteArgs<SitesWhere<C, "cell", N>, S, M>
-  ) => readonly [CellTarget<C, SitesWhere<C, "cell", N>, S>, readonly CmdOf<C>[]];
+  [N in CellName<C>]: CellForm<C, SitesWhere<C, "cell", N>, S, M>;
 };
 
 /** The `to` union of every site `N` is used at, resolved to real State members. */
 type CellTarget<C, Sites, S> = Sites extends `${infer From}.${infer Ev}`
   ? Narrow<S, ToOf<EdgeAt<C, From, Ev>>>
   : never;
+
+type CellReturn<C, Sites, S> = readonly [
+  CellTarget<C, Sites, S>,
+  readonly CmdOf<C>[],
+];
+
+/**
+ * THE MULTI-SITE RETURN, EXACTLY. One entry per use site, each a lone tuple of
+ * parameters and each clamped to THAT site's `to` — so `a.X` returning a `c` is
+ * rejected at `a.X` rather than waved through because some OTHER site admits a
+ * `c`. The `at` element is still passed (the walk hands it over uniformly), and
+ * is simply redundant here: the key already says which site this is.
+ */
+type CellBySite<C, Sites, S, M> = {
+  readonly [K in Extract<Sites, string>]: (
+    ...args: SiteArgs<K, S, M>
+  ) => CellReturn<C, K, S>;
+};
+
+/**
+ * A cell is written in ONE of two forms, and the choice is the precision dial.
+ *
+ *   the FUNCTION form — one body, `switch (at)` inside. Parameters narrow per
+ *     site (the `SiteArgs` correlator); the RETURN does not, because the whole
+ *     thing is one rest signature over a union of tuples and TypeScript has no
+ *     dependent return type over that (5.7: a union of function types is
+ *     reduced back to exactly this shape, an intersection loses the parameter
+ *     correlation, and a generic on the site key correlates nothing and merely
+ *     rejects every body — all three measured, none of them work). The clamp is
+ *     therefore the union of every site's `to`.
+ *
+ *   the PER-SITE form — one entry per site, each exact in both directions.
+ *
+ * The second is offered ONLY when the cell is genuinely multi-site: with one
+ * site the function form is already exact in both directions, so its type stays
+ * byte-for-byte what it was and the common case cannot regress.
+ *
+ * The looseness the function form keeps is closed at RUNTIME instead: the walk
+ * checks the returned `type` against the edge's declared `to` and throws
+ * `CellTargetError`. Worth less than a compile error, worth more than nothing —
+ * and `to` is right there, so it costs one `includes`.
+ */
+type CellForm<C, Sites, S, M> =
+  | ((...args: SiteArgs<Sites, S, M>) => CellReturn<C, Sites, S>)
+  | ([IsUnion<Sites>] extends [true] ? CellBySite<C, Sites, S, M> : never);
 
 // ── 11. identity assertion helpers ─────────────────────────────────────────
 export type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends <

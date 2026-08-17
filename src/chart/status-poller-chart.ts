@@ -17,10 +17,10 @@ import { compile, initFrom } from "./compile";
 import {
   type Cells,
   type CmdOf,
+  defineChart,
   type MsgOf,
   type Namespaced,
   type StateOf,
-  defineChart,
   ty,
 } from "./graph";
 
@@ -32,19 +32,28 @@ export type JobStatus = {
 const JOB_ID = "job-7f3a";
 const EVERY_MS = 5_000;
 
-const poll = createPoller<{ readonly poll: PollerState<JobStatus> }, JobStatus>({
-  everyMs: EVERY_MS,
-  until: (s) => s.poll.lastResult?.status === "ready",
-  onTick: (): ReadStatus => ({ type: "read_status", jobId: JOB_ID }),
-});
+const poll = createPoller<{ readonly poll: PollerState<JobStatus> }, JobStatus>(
+  {
+    everyMs: EVERY_MS,
+    until: (s) => s.poll.lastResult?.status === "ready",
+    onTick: (): ReadStatus => ({ type: "read_status", jobId: JOB_ID }),
+  },
+);
 
-// FINDING — `to` can be no tighter than the battery's own return type. Every
-// poller verb is declared `PollerState<R>`, the WHOLE phase union, so
-// `slice.phase` is the whole union at every site and a narrower `to` (say
-// `["polling"]` on `start`) is a claim the compiler cannot check and correctly
-// rejects. The precision of the declared fan-out is bounded by the precision of
-// the code it delegates to — which is the honest answer, not a gap in `to`.
-const ALL = ["polling", "done", "gave_up"] as const;
+// `to` can be no tighter than the battery's own return type — the fan-out the
+// chart draws is bounded by the precision of the code it delegates to, and no
+// declaration on this side can tighten it. So it was tightened on the OTHER
+// side: each poller verb now DECLARES the phases it can actually reach (they
+// were always true of the bodies — `start` only ever builds `polling`,
+// `tickResult` never builds `gave_up`, `tickErr` never builds `done`, `tick`
+// returns its argument), and the four edges below inherit that precision for
+// free. `chartMermaid` draws 16 edges where it drew 30.
+//
+// What is NOT reachable this way is a fork the battery makes internally and
+// reports only through the phase — there is no such fork left here, but if
+// there were, its range would be exactly what these unions say and no smaller.
+const RESULT = ["polling", "done"] as const;
+const ERROR = ["polling", "gave_up"] as const;
 
 export const pollerChart = defineChart({
   ctx: ty<{
@@ -81,24 +90,24 @@ export const pollerChart = defineChart({
       polling: {
         initial: true,
         on: {
-          start_polling: { to: ALL, cell: "start" },
-          deadline_exceeded: { to: ALL, cell: "tick" },
-          poll_result: { to: ALL, cell: "onResult" },
-          poll_failed: { to: ALL, cell: "onError" },
+          start_polling: { to: ["polling"], cell: "start" },
+          deadline_exceeded: { to: ["polling"], cell: "tick" },
+          poll_result: { to: RESULT, cell: "onResult" },
+          poll_failed: { to: ERROR, cell: "onError" },
         },
       },
       done: {
         on: {
-          start_polling: { to: ALL, cell: "start" },
-          poll_result: { to: ALL, cell: "onResult" },
-          poll_failed: { to: ALL, cell: "onError" },
+          start_polling: { to: ["polling"], cell: "start" },
+          poll_result: { to: RESULT, cell: "onResult" },
+          poll_failed: { to: ERROR, cell: "onError" },
         },
       },
       gave_up: {
         on: {
-          start_polling: { to: ALL, cell: "start" },
-          poll_result: { to: ALL, cell: "onResult" },
-          poll_failed: { to: ALL, cell: "onError" },
+          start_polling: { to: ["polling"], cell: "start" },
+          poll_result: { to: RESULT, cell: "onResult" },
+          poll_failed: { to: ERROR, cell: "onError" },
         },
       },
     },
@@ -126,9 +135,21 @@ export const cells: Cells<PollerG, PollState, PollMsg> = {
     const [slice, cs] = poll.start(s.poll, m.at);
     return [{ ...s, poll: slice, type: slice.phase }, reads(cs)];
   },
+  // `tick` is the one verb whose reachable set is not readable off its return
+  // type alone: it returns its ARGUMENT (`tick<S>(s: S) => [S, …]`), so the
+  // fan-out is whatever the slice's phase already was. The chart routes
+  // `deadline_exceeded` only out of `polling`, and every cell here writes
+  // `type: slice.phase`, so `s.type === "polling"` implies `s.poll.phase ===
+  // "polling"` by construction — but that is a correlation between two
+  // properties of one state, which TypeScript cannot carry (#30581). Narrowing
+  // the slice locally makes the invariant checkable instead of assumed, and the
+  // dead arm is the battery's own `phase !== "polling"` no-op, said once here so
+  // the edge can declare the single target it really has.
   tick: (s) => {
-    const [slice, cs] = poll.tick(s.poll);
-    return [{ ...s, poll: slice, type: slice.phase }, reads(cs)];
+    const slice = s.poll;
+    if (slice.phase !== "polling") return [s, []];
+    const [next, cs] = poll.tick(slice);
+    return [{ ...s, poll: next, type: next.phase }, reads(cs)];
   },
   onResult: (s, m, _at) => {
     const untilHeld = m.result.status === "ready";

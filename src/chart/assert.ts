@@ -2,6 +2,13 @@
 // IDENTITY ASSERTIONS — each one fails to compile if the derivation is wrong.
 // `Eq<A,B>` is the invariant-position trick, so `any`/`never` do NOT slip past.
 // ═══════════════════════════════════════════════════════════════════════════
+
+import type {
+  Poller,
+  PollerDone,
+  PollerGaveUp,
+  PollerPolling,
+} from "../poller";
 import type { Cmd, SyncReturn, Transitions } from "../pure/core";
 import { compile } from "./compile";
 import {
@@ -13,6 +20,7 @@ import {
   type CmdName,
   type CmdOf,
   type Cmds,
+  defineChart,
   type EdgeKey,
   type Eq,
   type EventName,
@@ -30,27 +38,33 @@ import {
   type ResumeTargets,
   type StateName,
   type StateOf,
-  type UsedCmdName,
-  defineChart,
   ty,
+  type UsedCmdName,
 } from "./graph";
-import {
-  type LaneCmd,
-  type LaneG,
-  type LaneMsg,
-  type LaneMsgIn,
-  type LaneState,
+import type {
   issue42,
+  LaneCmd,
+  LaneG,
+  LaneMsg,
+  LaneMsgIn,
+  LaneState,
   region,
 } from "./lane";
+import type { FG, FMsg, FState } from "./resilient-fetch-chart";
+import type {
+  JobStatus,
+  PollerG,
+  PollMsg,
+  PollState,
+} from "./status-poller-chart";
 import {
   type UCmd,
   type UG,
   type UMsg,
   type UState,
   uCmds,
-  uploadMachine,
-  uploader,
+  type uploader,
+  type uploadMachine,
 } from "./upload";
 
 /** Local narrowing shorthands for the upload demo's unions. */
@@ -78,7 +92,10 @@ export type A1 = Assert<
 >;
 
 export type A2 = Assert<
-  Eq<EventName<LaneG>, "WIP" | "BLOCKED" | "DONE" | "PASS" | "FAIL" | "UNBLOCKED">
+  Eq<
+    EventName<LaneG>,
+    "WIP" | "BLOCKED" | "DONE" | "PASS" | "FAIL" | "UNBLOCKED"
+  >
 >;
 
 // the phases are declared by BEING keys of `states` — no separate registry.
@@ -194,7 +211,9 @@ export type A7 = Assert<
 >;
 
 // ── §5 the resume derivation ───────────────────────────────────────────────
-export type A8 = Assert<Eq<ParkingState<LaneG>, "blocked" | "human:cp-approval">>;
+export type A8 = Assert<
+  Eq<ParkingState<LaneG>, "blocked" | "human:cp-approval">
+>;
 // states with an edge INTO `blocked`, plus the declared fallback `queued`
 export type A9 = Assert<Eq<BlockedWas, "queued" | "build" | "review">>;
 // only `ship` blocks into cp-approval; `queued` is the fallback
@@ -213,7 +232,10 @@ export type A12 = Assert<
 >;
 // …and a NON-parking state has no `was` at all.
 export type A12a = Assert<
-  Eq<"was" extends keyof Extract<LaneState, { type: "build" }> ? true : false, false>
+  Eq<
+    "was" extends keyof Extract<LaneState, { type: "build" }> ? true : false,
+    false
+  >
 >;
 
 // ── §6 namespace-as-type-parameter: a LITERAL union, never `string` ────────
@@ -242,9 +264,14 @@ export type A14 = Assert<
 >;
 // a DIFFERENT namespace is a different literal union — not collapsed
 export type A15 = Assert<
-  Eq<ReturnType<typeof region<"PR_99">>, Transitions<LaneState, LaneMsgIn<"PR_99">, LaneCmd>>
+  Eq<
+    ReturnType<typeof region<"PR_99">>,
+    Transitions<LaneState, LaneMsgIn<"PR_99">, LaneCmd>
+  >
 >;
-export type A16 = Assert<Eq<LaneMsgIn<"A">["type"] & LaneMsgIn<"B">["type"], never>>;
+export type A16 = Assert<
+  Eq<LaneMsgIn<"A">["type"] & LaneMsgIn<"B">["type"], never>
+>;
 
 // ── §4 guard parameters DERIVED FROM USE SITES (the xstate#4686 gap) ───────
 type RetriesGuard = Guards<LaneG, LaneState, LaneMsg>["retriesRemaining"];
@@ -355,7 +382,10 @@ export type A31 = Assert<
 >;
 // the payload owed is exactly what the `cmds` section declared
 export type A32 = Assert<
-  Eq<ReturnType<UCmds["verify_object"]>, { readonly key: string; readonly etag: string }>
+  Eq<
+    ReturnType<UCmds["verify_object"]>,
+    { readonly key: string; readonly etag: string }
+  >
 >;
 // and the emitted cell genuinely returns `[nextState, cmds]` as a SyncReturn
 export type A33 = Assert<
@@ -375,7 +405,9 @@ export type A36 = Assert<
     { readonly retries: number; readonly maxRetries: number }
   >
 >;
-export type A37 = Assert<Eq<InitialData<UG, UState>, { readonly tries: number }>>;
+export type A37 = Assert<
+  Eq<InitialData<UG, UState>, { readonly tries: number }>
+>;
 // a chart with NO entry marked gets a NAMED marker, not a silent `never`
 const noEntry = defineChart({
   events: { go: { scope: "edges" } },
@@ -391,7 +423,10 @@ export type A38 = Assert<
 const twoEntries = defineChart({
   events: { go: { scope: "edges" } },
   states: {
-    only: { a: { initial: true, on: { go: "b" } }, b: { initial: true, end: true } },
+    only: {
+      a: { initial: true, on: { go: "b" } },
+      b: { initial: true, end: true },
+    },
   },
 });
 export type A39 = Assert<
@@ -401,7 +436,9 @@ export type A39 = Assert<
   >
 >;
 // the derived `init` is exactly `Machine["init"]`'s shape, rehydrate included
-export type A40 = Assert<Eq<Parameters<typeof uploadMachine.init>[0], UState | null>>;
+export type A40 = Assert<
+  Eq<Parameters<typeof uploadMachine.init>[0], UState | null>
+>;
 
 // ═══ §9 a third chart: ONE guard referenced from TWO sites ═════════════════════
 // The single-site case above is exact by construction. The multi-site case is
@@ -417,11 +454,23 @@ const retry = defineChart({
     trying: {
       fetching: {
         data: ty<{ readonly attempt: number; readonly url: string }>(),
-        on: { TIMEOUT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+        on: {
+          TIMEOUT: {
+            target: "fetching",
+            when: "worthRetrying",
+            otherwise: "dead",
+          },
+        },
       },
       parsing: {
         data: ty<{ readonly attempt: number; readonly bytes: number }>(),
-        on: { CORRUPT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+        on: {
+          CORRUPT: {
+            target: "fetching",
+            when: "worthRetrying",
+            otherwise: "dead",
+          },
+        },
       },
     },
     finished: {
@@ -495,7 +544,7 @@ export const retrier = compile<RG, RState, RMsg, Cmd<never>, "r">(retry, "r", {
 // the cell's params come from its use sites (same `SitesWhere`/`SiteArgs` the
 // guards use, not a second mechanism), its RETURN is clamped to each site's
 // declared `to`, and the pair still counts as handled for totality.
-const picker = defineChart({
+export const picker = defineChart({
   ctx: ty<{ readonly n: number }>(),
   cmds: { beep: ty<{ readonly n: number }>() },
   events: {
@@ -528,7 +577,12 @@ export type A59 = Assert<Eq<MissingPairs<PG>, never>>;
 // builder is not merely optional, it is not a key of the bag at all.
 export type A60 = Assert<Eq<keyof Assigns<PG, PState, PMsg>, never>>;
 
-type Decide = Cells<PG, PState, PMsg>["decide"];
+// a MULTI-SITE cell may be written in either form, so its type is a two-member
+// union: the one-body FUNCTION form, and the exact PER-SITE form.
+type DecideForm = Cells<PG, PState, PMsg>["decide"];
+type Decide = Extract<DecideForm, (...args: never[]) => unknown>;
+type DecideBySite = Exclude<DecideForm, (...args: never[]) => unknown>;
+
 // THE POINT (params): two sites → a union of tuples with the `at` correlator,
 // identical in construction to a two-site guard's.
 export type A61 = Assert<
@@ -538,10 +592,149 @@ export type A61 = Assert<
     | [state: P<"b">, msg: PM<"Y">, at: "b.Y"]
   >
 >;
-// THE POINT (return): the states the edges DECLARED, and nothing else — the
-// union of both sites' `to`, paired with the chart's own Cmd union.
+// THE POINT (return), function form: the states the edges DECLARED, and nothing
+// else — but the UNION of both sites' `to`, not each site's own. This is the
+// residual looseness: `a.X` declares only `["a","b"]`, yet a `c` returned from
+// inside the `at === "a.X"` branch type-checks, because one rest signature over
+// a union of tuples has no dependent return in TS 5.7. `CellTargetError` closes
+// it at runtime; `A67`/`A68` close it at compile time for authors who want it.
 export type A62 = Assert<
-  Eq<ReturnType<Decide>, readonly [P<"a"> | P<"b"> | P<"c">, readonly CmdOf<PG>[]]>
+  Eq<
+    ReturnType<Decide>,
+    readonly [P<"a"> | P<"b"> | P<"c">, readonly CmdOf<PG>[]]
+  >
+>;
+
+// ── the PER-SITE form: exact in BOTH directions, one entry per use site ─────
+export type A67 = Assert<Eq<keyof DecideBySite, "a.X" | "b.Y">>;
+// `a.X` declares `to: ["a","b"]` — so `c` is not in ITS return, only in `b.Y`'s.
+export type A68 = Assert<
+  Eq<
+    ReturnType<DecideBySite["a.X"]>,
+    readonly [P<"a"> | P<"b">, readonly CmdOf<PG>[]]
+  >
+>;
+export type A69 = Assert<
+  Eq<
+    ReturnType<DecideBySite["b.Y"]>,
+    readonly [P<"a"> | P<"c">, readonly CmdOf<PG>[]]
+  >
+>;
+// each entry's parameters are that ONE site's lone tuple — no union to
+// discriminate, because the key already said which site this is.
+export type A70 = Assert<
+  Eq<Parameters<DecideBySite["a.X"]>, [state: P<"a">, msg: PM<"X">, at: "a.X"]>
+>;
+
+// A SINGLE-SITE cell is offered NO second form: it is already exact in both
+// directions, so its type is a lone function, byte-for-byte what it always was.
+// `retryNow` in the resilient-fetch chart is reached from exactly one edge…
+type FCells = Cells<FG, FState, FMsg>;
+export type A71 = Assert<
+  Eq<Exclude<FCells["retryNow"], (...args: never[]) => unknown>, never>
+>;
+export type A72 = Assert<
+  Eq<
+    Parameters<FCells["retryNow"]>,
+    [
+      state: Extract<FState, { type: "waiting_retry" }>,
+      msg: Extract<FMsg, { type: "deadline_exceeded" }>,
+      at: "waiting_retry.deadline_exceeded",
+    ]
+  >
+>;
+// …while `onErr` is reached from six, so IT gets the per-site form offered.
+export type A73 = Assert<
+  Eq<
+    keyof Exclude<FCells["onErr"], (...args: never[]) => unknown>,
+    | "idle.fetch_err"
+    | "fetching.fetch_err"
+    | "waiting_retry.fetch_err"
+    | "circuit_open.fetch_err"
+    | "failed.fetch_err"
+    | "succeeded.fetch_err"
+  >
+>;
+
+// …and the per-site form really does compile, and really is exact.
+export const pCellsBySite: Cells<PG, PState, PMsg> = {
+  decide: {
+    "a.X": (s, m) => [{ ...s, type: m.lo > 0 ? "b" : "a" }, []],
+    "b.Y": (s, m) => [
+      { ...s, type: m.hi === "" ? "a" : "c" },
+      [{ type: "beep", n: s.n }],
+    ],
+  },
+};
+export const pickedBySite = compile<PG, PState, PMsg, CmdOf<PG>, "q">(
+  picker,
+  "q",
+  {
+    assign: {},
+    cells: pCellsBySite,
+  },
+);
+
+// ═══ §11 `to` IS BOUNDED BY THE DELEGATE'S RETURN TYPE ═════════════════════
+// The chart cannot declare a fan-out narrower than the code it delegates to can
+// prove. When every `@demlik/tea/poller` verb returned the whole `PollerState`
+// union, `slice.phase` was the whole union at every site and all four poller
+// edges had to say `["polling","done","gave_up"]` — honest, but a drawing of 30
+// edges where 16 are reachable. The fix is not on the chart's side: it is the
+// verbs declaring the phases they actually reach. These assertions pin that
+// down, so re-widening a verb's return type turns THIS red rather than silently
+// re-widening the picture.
+declare const pollVerbs: Poller<unknown, JobStatus>;
+type PollCells = Cells<PollerG, PollState, PollMsg>;
+/** The function form of a cell entry — see `A61`/`A67` for why it is a union. */
+type FnForm<T> = Extract<T, (...args: never[]) => unknown>;
+
+export type A74 = Assert<
+  Eq<ReturnType<typeof pollVerbs.start>[0], PollerPolling<JobStatus>>
+>;
+// `tickResult` never builds `gave_up`…
+export type A75 = Assert<
+  Eq<
+    ReturnType<typeof pollVerbs.tickResult>[0],
+    PollerPolling<JobStatus> | PollerDone<JobStatus>
+  >
+>;
+// …and `tickErr` never builds `done`.
+export type A76 = Assert<
+  Eq<
+    ReturnType<typeof pollVerbs.tickErr>[0],
+    PollerPolling<JobStatus> | PollerGaveUp<JobStatus>
+  >
+>;
+// `tick` returns its ARGUMENT — the identity a generic states and a
+// `PollerState<R>` return type cannot.
+export type A77 = Assert<
+  Eq<
+    ReturnType<typeof pollVerbs.tick<PollerDone<JobStatus>>>[0],
+    PollerDone<JobStatus>
+  >
+>;
+// and the fan-out the chart now declares is the narrow one, per edge.
+export type A78 = Assert<
+  Eq<
+    ReturnType<FnForm<PollCells["start"]>>[0],
+    Extract<PollState, { type: "polling" }>
+  >
+>;
+export type A79 = Assert<
+  Eq<
+    ReturnType<FnForm<PollCells["onResult"]>>[0],
+    Extract<PollState, { type: "polling" | "done" }>
+  >
+>;
+export type A80 = Assert<
+  Eq<
+    ReturnType<FnForm<PollCells["onError"]>>[0],
+    Extract<PollState, { type: "polling" | "gave_up" }>
+  >
+>;
+export type A81 = Assert<
+  Eq<ReturnType<PollCells["tick"]>[0], Extract<PollState, { type: "polling" }>>
 >;
 // `c` is reachable ONLY through a cell edge's `to`, and the derivations that
 // read the graph's shape see it — the hatch does not blind them.
@@ -559,7 +752,10 @@ export const pCells: Cells<PG, PState, PMsg> = {
       case "a.X":
         return m.lo > 0 ? [{ ...s, type: "b" }, []] : [{ ...s, type: "a" }, []];
       case "b.Y":
-        return [{ ...s, type: m.hi === "" ? "a" : "c" }, [{ type: "beep", n: s.n }]];
+        return [
+          { ...s, type: m.hi === "" ? "a" : "c" },
+          [{ type: "beep", n: s.n }],
+        ];
     }
   },
 };
