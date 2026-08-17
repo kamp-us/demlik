@@ -16,11 +16,10 @@
  * and "dead"; that ambiguity is the bug this demo is about.
  */
 
-import { retryDelayMs } from "./machine";
+import { FLAKY_ATTEMPTS, paymentRetryPolicy, retryDelayMs } from "./machine";
 
-/** Matches the Effect-side fake provider so both lanes fail identically. */
-const FLAKY_ATTEMPTS = 2;
-const MAX_ATTEMPTS = 4;
+// Shared with the tea lane so the two can never drift into an unfair race.
+const MAX_ATTEMPTS = paymentRetryPolicy.maxAttempts;
 
 export interface NaiveRow {
   readonly phase: "idle" | "paying" | "reserving" | "settled" | "failed";
@@ -91,20 +90,30 @@ export class NaiveOrderDO implements DurableObject {
    * `for` loop's `attempt` binding and in `await sleep(delay)`. Neither is
    * written down anywhere durable, and neither survives the isolate.
    */
-  #start(orderId: string, amountCents: number): void {
+  async #start(orderId: string, amountCents: number): Promise<NaiveRow> {
     this.#looping = true;
-    const work = (async () => {
-      let row = await this.#read();
-      row = await this.#note(row, `order ${orderId} started`, {
+    // Land the opening row BEFORE returning, so the response to `/start`
+    // describes the started order. Reading the row while the fire-and-forget
+    // loop was still on its first write made `/start` answer with an empty,
+    // idle order — which read as "start wiped my lanes".
+    const opening = await this.#note(
+      await this.#read(),
+      `order ${orderId} started`,
+      {
         phase: "paying",
         orderId,
         amountCents,
-        attempt: 0,
+        // The loop charges attempt 1 immediately; saying so up front keeps the
+        // two lanes reporting the same rung from the very first response.
+        attempt: 1,
         nextRetryAt: null,
         paymentRef: null,
         failure: null,
-      });
+      },
+    );
 
+    const work = (async () => {
+      let row = opening;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         row = await this.#note(row, `charging (attempt ${attempt})`, {
           attempt,
@@ -163,6 +172,7 @@ export class NaiveOrderDO implements DurableObject {
     // `waitUntil` keeps the isolate alive across the sleeps, so the lane is a
     // FAIR comparison: uncrashed, it settles exactly like the tea lane.
     this.ctx.waitUntil(work);
+    return opening;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -172,10 +182,14 @@ export class NaiveOrderDO implements DurableObject {
       const orderId = url.searchParams.get("order") ?? "order-1";
       const amountCents = Number(url.searchParams.get("cents") ?? "4200");
       const row = await this.#read();
-      if (!this.#looping && row.phase !== "reserving") {
-        this.#start(orderId, amountCents);
+      // An explicit start always restarts, matching the tea lane's reducer —
+      // except for a genuine double-click, which the tea lane also ignores.
+      const recentlyStarted =
+        this.#looping && Date.now() - row.updatedAt < 1_500;
+      if (!recentlyStarted) {
+        return json(this.#view(await this.#start(orderId, amountCents)));
       }
-      return json(this.#view(await this.#read()));
+      return json(this.#view(row));
     }
 
     if (url.pathname === "/state") {

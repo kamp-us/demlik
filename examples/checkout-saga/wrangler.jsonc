@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "checkout-saga",
+  "name": "demlik-checkout-saga",
   "main": "src/worker.ts",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -10,9 +10,21 @@
       { "name": "NAIVE", "class_name": "NaiveOrderDO" }
     ]
   },
+  // SQLite-backed Durable Objects. `new_sqlite_classes` (not `new_classes`) is
+  // what the Workers free tier supports, and it is the recommended storage
+  // backend for new classes regardless of plan. This worker has never been
+  // deployed, so it is declared this way from its first migration — there is no
+  // key-value-backed class to migrate away from.
+  //
+  // NOTE for whoever runs `wrangler deploy`: if you have local `wrangler dev`
+  // state from before this change, delete `examples/checkout-saga/.wrangler`
+  // first. Local state remembers the old migration kind and miniflare will
+  // refuse to start against a changed backend.
   "migrations": [
-    { "tag": "v1", "new_classes": ["CheckoutSaga"] },
-    { "tag": "v2", "new_classes": ["NaiveOrderDO"] }
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CheckoutSaga", "NaiveOrderDO"]
+    }
   ],
   "observability": { "enabled": true }
 }

@@ -97,17 +97,27 @@ export type Ctx = Record<string, never>;
 
 // ── Retry ladder ────────────────────────────────────────────────────────────
 
+/** Window in which a second `start` for the same order reads as a double-click. */
+const DOUBLE_CLICK_MS = 1_500;
+
 /**
- * Jitter is "none" so the demo's timing is legible (2.5s, then 5s) and the
+ * Jitter is "none" so the demo's timing is legible (3s, 6s, 12s) and the
  * reducer stays a pure function of `(state, msg)` with no rng at all.
+ *
+ * The ladder is deliberately SLOW. A presenter has to be able to talk over it
+ * and still hit the kill button without sniping — ~21s of waiting across three
+ * declines, versus the ~7s this used to run in, which was unclickable live.
  */
 export const paymentRetryPolicy: RetryPolicy = {
-  baseMs: 2_500,
+  baseMs: 3_000,
   factor: 2,
-  capMs: 20_000,
-  maxAttempts: 4,
+  capMs: 30_000,
+  maxAttempts: 5,
   jitter: "none",
 };
+
+/** Attempts the fake provider declines before it accepts. Mirrored in `naive.ts`. */
+export const FLAKY_ATTEMPTS = 3;
 
 /** Delay before retrying after `attempt` (1-based) has failed. PURE. */
 export function retryDelayMs(attempt: number): number {
@@ -138,9 +148,27 @@ export function initialState(): State {
 
 export const update: Reducer<State, Msg, Cmd> = {
   start: (state, msg) => {
-    // Restarting a finished order is a fresh saga; restarting an in-flight one
-    // is a no-op, so a double-click can't fork the ladder.
-    if (state.phase !== "idle" && !isTerminal(state)) return [state, []];
+    // An explicit start ALWAYS starts a fresh saga, from any state.
+    //
+    // This used to no-op on an in-flight saga to keep a double-click from
+    // forking the ladder. That was wrong for the case that actually matters:
+    // an order killed mid-retry is still "in flight" as far as State knows, so
+    // restarting it silently did nothing while the other lane restarted at
+    // attempt 1 — two lanes on different ladders, and a demo that looks broken
+    // rather than a demo that looks convincing. Double-click protection is a
+    // host concern (it now runs on a fresh order id each time); reducer-level
+    // it is just a lost Msg.
+    // A genuine double-click lands within a moment of the first start's own
+    // events. A restart of a killed order lands seconds or minutes later. The
+    // log's own timestamps tell the two apart without a clock in the reducer.
+    const lastAt = state.log.at(-1)?.at ?? 0;
+    if (
+      state.orderId === msg.orderId &&
+      state.phase === "paying" &&
+      msg.at - lastAt < DOUBLE_CLICK_MS
+    ) {
+      return [state, []];
+    }
     const fresh: State = {
       ...initialState(),
       phase: "paying",

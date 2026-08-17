@@ -5,6 +5,7 @@
  */
 
 import { Context, Data, Effect, Layer } from "effect";
+import { FLAKY_ATTEMPTS } from "./machine";
 
 export class PaymentDeclined extends Data.TaggedError("PaymentDeclined")<{
   readonly orderId: string;
@@ -46,8 +47,9 @@ export class Inventory extends Context.Service<Inventory, InventoryApi>()(
   "checkout/Inventory",
 ) {}
 
-/** Attempts at or below this are declined by the fake provider. */
-export const FLAKY_ATTEMPTS = 2;
+// `FLAKY_ATTEMPTS` — attempts at or below which the fake provider declines —
+// lives in the machine module so the pure saga, this layer and the naive lane
+// cannot drift apart into an unfair race.
 
 /**
  * The fake provider. Deterministic in `attempt`, which the reducer carries in

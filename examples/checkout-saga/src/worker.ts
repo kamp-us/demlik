@@ -56,10 +56,15 @@ export class CheckoutSaga extends DurableObject<Env> {
    * `ctx.abort()` ends. After a crash the next request lands on a fresh
    * isolate, `#booting` is null again, and the machine rebuilds itself from
    * `doStore`.
+   *
+   * A FAILED boot is not memoized. Caching the rejected promise turned one bad
+   * boot into a permanently poisoned object — every later request re-awaited
+   * the same rejection and the DO answered 503 until the runtime recycled the
+   * isolate. Clearing the slot on failure makes the next request retry.
    */
   #boot(): Promise<CheckoutRuntime> {
     if (this.#booting !== null) return this.#booting;
-    this.#booting = (async () => {
+    const booting = (async () => {
       const managed = ManagedRuntime.make(CheckoutLayer);
       this.#managed = managed;
       const rt = await run(checkoutMachine(checkoutInterpret(managed)), {
@@ -81,7 +86,12 @@ export class CheckoutSaga extends DurableObject<Env> {
       await this.#timer.rearm();
       return rt;
     })();
-    return this.#booting;
+    this.#booting = booting;
+    booting.catch(() => {
+      // Let the next request try again instead of inheriting this failure.
+      if (this.#booting === booting) this.#booting = null;
+    });
+    return booting;
   }
 
   override async alarm(): Promise<void> {
@@ -208,7 +218,13 @@ async function callLane(
     );
     return await res.json();
   } catch (error) {
-    if (action === "crash") return { crashed: true, lane, order: orderId };
+    // `crashedAt` on the client is derived from this: the worker's clock is the
+    // same clock that stamps the event log, so the feed divider lands exactly
+    // between the last pre-crash event and the first post-crash one — which
+    // anchoring on "newest event I had polled" could not guarantee.
+    if (action === "crash") {
+      return { crashed: true, lane, order: orderId, at: Date.now() };
+    }
     throw error;
   }
 }

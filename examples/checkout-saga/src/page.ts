@@ -107,7 +107,42 @@ export const PAGE = `<!doctype html>
   .feed .after { color: #a8dcbc; }
 
   .hint { color: #6b7685; font-size: 13px; margin-top: 20px; }
-  code { color: #b6c2d1; }
+  code { color: #b6c2d1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+
+  /* ── implementation notes ─────────────────────────────────────────────── */
+  .notes { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 22px; }
+  .notes h2 { font-size: 15px; margin: 0 0 12px; color: var(--dim); font-weight: 600; }
+  .notes details {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; margin-bottom: 8px;
+  }
+  .notes summary {
+    cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px;
+    list-style: none; display: flex; align-items: center; gap: 9px;
+  }
+  .notes summary::-webkit-details-marker { display: none; }
+  .notes summary::before {
+    content: "+"; color: var(--dim); font-weight: 700; font-size: 15px;
+    width: 12px; flex: none; text-align: center;
+  }
+  .notes details[open] summary::before { content: "\\2013"; }
+  .notes summary:hover { background: #1a212a; border-radius: 10px; }
+  .notes details[open] summary { border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+  .notes .body, .notes details > p, .notes details > pre { margin: 0; }
+  .notes details > p {
+    padding: 12px 16px 0; color: #b3bfcd; font-size: 13.5px; line-height: 1.62; max-width: 78ch;
+  }
+  .notes details > p:last-child { padding-bottom: 15px; }
+  .notes details > pre {
+    margin: 12px 16px 4px; padding: 12px 14px; background: #0c1015;
+    border: 1px solid var(--line); border-radius: 8px; overflow-x: auto;
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #9fb0c3;
+  }
+  footer {
+    margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--line);
+    color: #6b7685; font-size: 13px;
+  }
+  footer a { color: #9db4cc; }
 
   /*
    * The kill is deliberately UNDRAMATIC: no shake, no flash, no animation on
@@ -127,9 +162,9 @@ export const PAGE = `<!doctype html>
 <main>
   <h1>What happens to your retries when the server dies</h1>
   <p class="lede">
-    Two copies of the same checkout. The card issuer declines the first two attempts,
-    so both have to wait and retry. Start them, then press the red button to destroy
-    the machine they are running on. One of them finishes anyway.
+    Two copies of the same checkout. The card issuer declines the first three attempts,
+    so both have to wait and retry — about 20 seconds of it. Start them, then press the
+    red button to destroy the machine they are running on. One of them finishes anyway.
   </p>
 
   <div class="bar">
@@ -177,15 +212,106 @@ export const PAGE = `<!doctype html>
   </div>
 
   <p class="hint">
-    An order id containing <code>oos</code> is out of stock — that runs the refund path instead.
+    Each <strong>Start</strong> mints a fresh order id, so every run begins on a clean
+    Durable Object. Type your own id to reuse one — an id containing <code>oos</code>
+    is out of stock, which runs the refund path instead.
+    <strong>Reset</strong> wipes the state of the id currently in the box.
   </p>
+
+  <section class="notes">
+    <h2>How this works</h2>
+
+    <details>
+      <summary>What the two lanes actually are</summary>
+      <p>
+        Both lanes run the same three steps — take the payment, reserve the stock, settle —
+        and both talk to the same fake card processor, which declines the first three
+        attempts and then accepts.
+      </p>
+      <p>
+        <strong>Lane A</strong> keeps its retry ladder in memory. Which attempt it is on is a
+        loop variable, and the wait before the next attempt is a <code>sleep</code> inside a
+        function that is still running. It writes a status row to storage so a dashboard can
+        read it, but the row is a report about the work, not the work itself.
+      </p>
+      <p>
+        <strong>Lane B</strong> keeps the ladder in its state: the attempt number and the
+        timestamp the next attempt is due are ordinary fields, and every change to them is
+        saved to Durable Object storage before anything else happens. The wait is not a sleep
+        — it is a Durable Object alarm set for that timestamp. Nothing is holding the retry
+        in memory, because nothing needs to.
+      </p>
+    </details>
+
+    <details>
+      <summary>What the kill button really does</summary>
+      <p>
+        It calls <code>ctx.abort()</code> inside the Durable Object. That is not a simulated
+        failure or a thrown error — it destroys the isolate immediately. Running functions do
+        not get to finish, pending timers never fire, and nothing gets a chance to clean up
+        or flush.
+      </p>
+      <p>
+        Lane A loses the only thing that was going to continue the order, so its status row
+        stays at "retrying…" forever. Lane B loses nothing that mattered: the state was
+        already saved and the alarm was already registered with the platform. When the alarm
+        comes due, the platform starts a brand new isolate, that isolate loads the saved state
+        back through the Store, and the saga carries on from the attempt it was on.
+      </p>
+      <p>
+        This is why the two lanes diverge from one button press. The difference is not
+        reliability engineering — it is where the retry was written down.
+      </p>
+    </details>
+
+    <details>
+      <summary>Where Effect fits in</summary>
+      <p>
+        Lane B's side effects are Effect programs. Taking the payment is an
+        <code>Effect.gen</code> that pulls a <code>Payments</code> service out of the context,
+        calls it, and folds the typed failure into a message the state machine understands:
+      </p>
+      <pre>Effect.gen(function* () {
+  const payments = yield* Payments
+  const ref = yield* payments.charge({ orderId, amountCents, attempt })
+  return { type: "payment_ok", ref, at: Date.now() }
+}).pipe(
+  Effect.catchTag("PaymentDeclined", (e) =>
+    Effect.succeed({ type: "payment_failed", reason: e.reason, at: Date.now() })
+  )
+)</pre>
+      <p>
+        The services come from a <code>Layer</code>, and the Durable Object builds one
+        <code>ManagedRuntime</code> from that Layer per instance.
+        <code>toInterpret</code> from <code>@demlik/tea/effect</code> lowers the whole
+        dictionary of these programs into the handler table tea already knows how to run. The
+        bridge insists every handler's error channel is discharged inside the effect, which is
+        why <code>catchTag</code> is there: a declined card is not an exception, it is a
+        transition.
+      </p>
+      <p>
+        What Effect does <em>not</em> own here is the retrying. There is no
+        <code>Schedule</code>, no <code>retry</code> combinator, no long-lived fiber holding
+        the ladder — because all of those live in the process, and the whole point of the demo
+        is the process dying. The decision to retry, the attempt count and the due time are
+        state in a pure reducer; Effect is used for the one thing it is genuinely better at,
+        which is describing a single effectful call and its typed failures.
+      </p>
+    </details>
+  </section>
+
+  <footer>
+    Source: <a href="https://github.com/kamp-us/demlik">github.com/kamp-us/demlik</a>
+    — the demo lives in <code>examples/checkout-saga</code>, built on
+    <code>@demlik/tea</code> and its <code>/effect</code> bridge.
+  </footer>
 </main>
 
 <script>
 (function () {
   var PHASES = ["idle", "paying", "reserving", "refunding", "settled", "failed"];
   var LANES = ["naive", "tea"];
-  var MAX_ATTEMPTS = 4;
+  var MAX_ATTEMPTS = 5;
 
   var SUB_BASE = {
     naive: "The retry is a timer held in the server's memory — a sleep inside a running function.",
@@ -206,6 +332,29 @@ export const PAGE = `<!doctype html>
   var killingUntil = 0;
 
   function crashKey() { return "crash:" + order(); }
+  function ss(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
+
+  /**
+   * Every run gets a FRESH order id.
+   *
+   * Reusing an id meant inheriting the previous run's Durable Object — its
+   * persisted saga, its armed alarm, and (across a wrangler restart) its
+   * leftover .wrangler state. That made every second demo start from a
+   * half-dead order instead of from nothing. A new id is a new object, which
+   * is the only reliably clean slate.
+   *
+   * The id is persisted so a RELOAD keeps showing the run you were watching
+   * (crash chrome included); only pressing Start mints a new one.
+   */
+  function freshOrderId() {
+    var alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+    var out = "";
+    for (var i = 0; i < 4; i++) {
+      out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+    }
+    return "order-" + out;
+  }
   function loadCrash() {
     var raw = null;
     try { raw = sessionStorage.getItem(crashKey()); } catch (e) { raw = null; }
@@ -257,16 +406,13 @@ export const PAGE = `<!doctype html>
   // ── the kill: recorded immediately, reported calmly ─────────────────────
   // No shake, no flash. The viewer is told what happened in words and colour,
   // and the telling survives every subsequent render.
-  function detonate() {
-    // Anchor the crash to the SERVER's clock, not the browser's: the divider
-    // is placed by comparing against server-stamped log entries, and a browser
-    // a few seconds off would otherwise file post-crash events before it.
-    // The newest event we had seen at kill time is exactly that boundary.
-    var anchor = Math.max(
-      (last.naive && last.naive.lastSeenAt) || 0,
-      (last.tea && last.tea.lastSeenAt) || 0
-    ) || Date.now();
-    saveCrash(anchor);
+  function detonate(serverAt) {
+    // Anchor on the SERVER's clock — the same clock that stamps the event log,
+    // so the divider lands exactly between the last pre-crash event and the
+    // first post-crash one. The old anchor ("newest event I had polled") put
+    // anything that happened between the last poll and the kill on the wrong
+    // side of the divider.
+    saveCrash(serverAt || Date.now());
     killingUntil = Date.now() + 600;
     setTimeout(renderChrome, 650);
 
@@ -462,7 +608,14 @@ export const PAGE = `<!doctype html>
 
   // ── controls ─────────────────────────────────────────────────────────────
   q("#start").onclick = function () {
+    // Mint a fresh id unless the viewer typed their own (the oos- path). The
+    // last id we set is remembered, so "unchanged" is exactly "not typed over".
+    if (order() === (ss("order") || "")) {
+      q("#order").value = freshOrderId();
+    }
+    ssSet("order", order());
     forgetCrash();
+    killingUntil = 0;
     renderChrome();
     fetch("/both/start?order=" + encodeURIComponent(order()), { method: "POST" })
       .then(function (r) { return r.json(); })
@@ -480,11 +633,21 @@ export const PAGE = `<!doctype html>
       return;
     }
     // Fire the visuals BEFORE the request. The explosion is not something the
-    // viewer should have to wait for a poll to believe.
-    detonate();
+    // viewer should have to wait for a poll to believe. The provisional anchor
+    // is the browser clock; the server's own instant replaces it a moment
+    // later, and since every visual is derived, re-anchoring is free.
+    detonate(null);
     renderChrome();
     fetch("/both/crash?order=" + encodeURIComponent(order()), { method: "POST" })
-      .then(function () { schedule(250); })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var at = (d && d.tea && d.tea.at) || (d && d.naive && d.naive.at);
+        if (at) {
+          saveCrash(at);
+          LANES.forEach(function (lane) { renderLane(lane, last[lane]); });
+        }
+        schedule(250);
+      })
       .catch(function () {
         notice("The kill request failed — the server may already be gone. Still polling.", "#f0a5a5");
         schedule(250);
@@ -504,6 +667,13 @@ export const PAGE = `<!doctype html>
     renderChrome();
     schedule(0);
   };
+
+  // Restore the run we were watching, so a reload keeps its crash chrome.
+  // With nothing to restore, start from a fresh id rather than a hardcoded one
+  // that may already carry a previous session's Durable Object.
+  var savedOrder = ss("order");
+  q("#order").value = savedOrder || freshOrderId();
+  ssSet("order", order());
 
   loadCrash();
   renderChrome();

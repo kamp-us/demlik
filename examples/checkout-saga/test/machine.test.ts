@@ -5,11 +5,13 @@ import { checkoutInterpret } from "../src/handlers";
 import type { State } from "../src/machine";
 import {
   checkoutMachine,
+  FLAKY_ATTEMPTS,
   parseState,
+  paymentRetryPolicy,
   retryDelayMs,
   update,
 } from "../src/machine";
-import { CheckoutLayer, FLAKY_ATTEMPTS } from "../src/services";
+import { CheckoutLayer } from "../src/services";
 
 /**
  * A Store that round-trips through JSON exactly like `doStore` does, so the
@@ -64,14 +66,19 @@ describe("checkout saga", () => {
     expect(due - Date.now()).toBeLessThanOrEqual(retryDelayMs(1));
     expect(due - Date.now()).toBeGreaterThan(retryDelayMs(1) - 500);
 
-    await fireRetry(rt);
-    expect(rt.getState().attempt).toBe(2);
-    expect(rt.getState().phase).toBe("paying");
+    // Walk the whole declined stretch of the ladder.
+    for (let n = 2; n <= FLAKY_ATTEMPTS; n++) {
+      await fireRetry(rt);
+      expect(rt.getState().attempt).toBe(n);
+      expect(rt.getState().phase).toBe("paying");
+    }
 
     await fireRetry(rt);
     expect(rt.getState().attempt).toBe(FLAKY_ATTEMPTS + 1);
     expect(rt.getState().phase).toBe("settled");
-    expect(rt.getState().paymentRef).toMatch(/^pay_order-1_4200_a3$/);
+    expect(rt.getState().paymentRef).toBe(
+      `pay_order-1_4200_a${FLAKY_ATTEMPTS + 1}`,
+    );
 
     await rt.stop();
     await managed.dispose();
@@ -87,8 +94,7 @@ describe("checkout saga", () => {
       amountCents: 999,
       at: 0,
     });
-    await fireRetry(rt);
-    await fireRetry(rt);
+    for (let n = 1; n <= FLAKY_ATTEMPTS; n++) await fireRetry(rt);
 
     // Payment succeeded, reservation did not, so the money went back.
     expect(rt.getState().paymentRef).not.toBeNull();
@@ -126,12 +132,74 @@ describe("checkout saga", () => {
     expect(second.rt.getState().attempt).toBe(2);
     expect(second.rt.getState().nextRetryAt).not.toBeNull();
 
-    await fireRetry(second.rt);
+    // Finish the ladder on the far side of the crash.
+    for (let n = 2; n <= FLAKY_ATTEMPTS; n++) await fireRetry(second.rt);
     expect(second.rt.getState().phase).toBe("settled");
-    expect(second.rt.getState().attempt).toBe(3);
+    expect(second.rt.getState().attempt).toBe(FLAKY_ATTEMPTS + 1);
 
     await second.rt.stop();
     await second.managed.dispose();
+  });
+
+  it("restarts a saga that was killed mid-ladder", async () => {
+    // The regression: an order killed mid-retry is still "paying" as far as
+    // State knows, and `start` used to no-op on any non-terminal saga. Pressing
+    // Start again did nothing — silently — while the other lane restarted, so
+    // the two lanes ended up on different rungs and the demo looked broken.
+    const cell = { raw: null as string | null };
+    const { rt, managed } = await boot(cell);
+
+    await rt.dispatch({
+      type: "start",
+      orderId: "order-4",
+      amountCents: 700,
+      at: 0,
+    });
+    await fireRetry(rt);
+    expect(rt.getState().attempt).toBe(2);
+    expect(rt.getState().phase).toBe("paying");
+
+    // A later, deliberate restart of the SAME order id.
+    const wellAfter = (rt.getState().log.at(-1)?.at ?? 0) + 60_000;
+    await rt.dispatch({
+      type: "start",
+      orderId: "order-4",
+      amountCents: 700,
+      at: wellAfter,
+    });
+    expect(rt.getState().attempt).toBe(1);
+    expect(rt.getState().phase).toBe("paying");
+    expect(rt.getState().nextRetryAt).not.toBeNull();
+
+    await rt.stop();
+    await managed.dispose();
+  });
+
+  it("ignores a double-click on start", async () => {
+    const cell = { raw: null as string | null };
+    const { rt, managed } = await boot(cell);
+
+    await rt.dispatch({
+      type: "start",
+      orderId: "order-5",
+      amountCents: 700,
+      at: 0,
+    });
+    await fireRetry(rt);
+    const before = rt.getState();
+
+    // A second start moments after the first one's events: the same click twice.
+    await rt.dispatch({
+      type: "start",
+      orderId: "order-5",
+      amountCents: 700,
+      at: (before.log.at(-1)?.at ?? 0) + 10,
+    });
+    expect(rt.getState().attempt).toBe(before.attempt);
+    expect(rt.getState().log.length).toBe(before.log.length);
+
+    await rt.stop();
+    await managed.dispose();
   });
 
   it("gives up after the retry budget and never charges again", async () => {
@@ -146,12 +214,12 @@ describe("checkout saga", () => {
       amountCents: 10,
       at: 0,
     });
-    // attempts 1 and 2 are declined, 3 succeeds — so to see the give-up arm we
-    // assert the reducer directly instead of fighting the fake provider.
+    // The fake provider accepts once past FLAKY_ATTEMPTS, so the give-up arm is
+    // unreachable through it. Assert the reducer directly instead.
     const stuck: State = {
       ...rt.getState(),
       phase: "paying",
-      attempt: 4,
+      attempt: paymentRetryPolicy.maxAttempts,
       nextRetryAt: null,
     };
     const [next, cmds] = update.payment_failed(stuck, {
