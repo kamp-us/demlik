@@ -50,19 +50,22 @@ type KnownEdgeField =
   | "when"
   | "otherwise"
   | "resume";
+type EdgeCheck<X> = X extends string
+  ? unknown
+  : [Exclude<keyof X, KnownEdgeField>] extends [never]
+    ? // `otherwiseCmd` is meaningless without a guard to have an "otherwise":
+      // it would sit on an unguarded edge and silently never fire.
+      X extends { readonly otherwiseCmd: unknown }
+      ? X extends { readonly when: string }
+        ? unknown
+        : { readonly __otherwiseCmdWithoutAGuard: true }
+      : unknown
+    : { readonly __edgeHasUnknownField: Exclude<keyof X, KnownEdgeField> };
+
 export type StrictEdges<G> = {
   readonly [S in keyof G]: {
     readonly on?: {
-      readonly [E in keyof On<G, S>]: On<G, S>[E] extends string
-        ? unknown
-        : [Exclude<keyof On<G, S>[E], KnownEdgeField>] extends [never]
-          ? unknown
-          : {
-              readonly __edgeHasUnknownField: Exclude<
-                keyof On<G, S>[E],
-                KnownEdgeField
-              >;
-            };
+      readonly [E in keyof On<G, S>]: EdgeCheck<On<G, S>[E]>;
     };
   };
 };

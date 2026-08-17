@@ -5,7 +5,7 @@
 // where effects get exercised: 0..n Cmds per edge, per-guard-arm emission, one
 // builder shared by several sites, and a derived `init`.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, Machine, Sub } from "../pure/core";
+import type { Cmd, Sub } from "../pure/core";
 import { defineMachine } from "../runtime-types";
 import { compile, initFrom } from "./compile";
 import {
@@ -103,13 +103,13 @@ export const uploader = compile<UG, UState, UMsg, UCmd, "up">(upload, "up", {
 
 export type UMsgIn = Namespaced<UMsg, "up">;
 
-export const uploadMachine: Machine<
+export const uploadMachine = defineMachine<
   UState,
   UMsgIn,
   UCmd,
   Sub<never>,
   Record<never, never>
-> = defineMachine<UState, UMsgIn, UCmd, Sub<never>, Record<never, never>>({
+>({
   init: initFrom<UG, UState, UCmd>(upload, () => ({ tries: 0 })),
   update: uploader,
   interpret: {

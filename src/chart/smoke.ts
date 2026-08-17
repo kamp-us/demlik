@@ -11,7 +11,6 @@ import {
   type UState,
   upload,
   uploadMachine,
-  uploader,
 } from "./upload";
 
 type M = LaneMsgIn<"ISSUE_42">;
@@ -130,9 +129,10 @@ try {
 // ═══════════════════════════════════════════════════════════════════════════
 // CMDS — the effect half. `lane` emits none, so this runs the `upload` graph.
 // ═══════════════════════════════════════════════════════════════════════════
-const up = { update: uploader as object, __form: "transitions" as const };
+// no hand-built `{ update, __form }` shim: a `Machine` already satisfies
+// `applyCell`'s parameter, and `defineMachine` stamped `__form` for us.
 const fire = (s: UState, m: UMsgIn): readonly [UState, readonly UCmd[]] =>
-  applyCell<UState, UMsgIn, UCmd>(up, s, m);
+  applyCell<UState, UMsgIn, UCmd>(uploadMachine, s, m);
 
 const idle: UState = { type: "idle", tries: 0 };
 
