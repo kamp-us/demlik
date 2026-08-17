@@ -7,6 +7,9 @@ import { compile } from "./compile";
 import {
   type Assert,
   type Assigns,
+  type CellEdgeKey,
+  type CellName,
+  type Cells,
   type CmdName,
   type CmdOf,
   type Cmds,
@@ -27,6 +30,7 @@ import {
   type ResumeTargets,
   type StateName,
   type StateOf,
+  type UsedCmdName,
   defineChart,
   ty,
 } from "./graph";
@@ -484,3 +488,86 @@ export const retrier = compile<RG, RState, RMsg, Cmd<never>, "r">(retry, "r", {
   },
   guards: rGuards,
 });
+
+// ═══ §10 THE ESCAPE HATCH — `{ to, cell }` ═════════════════════════════════
+// A chart whose ONE cell is reached from TWO sites with DIFFERENT msgs and
+// DIFFERENT `to` sets. Everything the hatch claims is asserted off this shape:
+// the cell's params come from its use sites (same `SitesWhere`/`SiteArgs` the
+// guards use, not a second mechanism), its RETURN is clamped to each site's
+// declared `to`, and the pair still counts as handled for totality.
+const picker = defineChart({
+  ctx: ty<{ readonly n: number }>(),
+  cmds: { beep: ty<{ readonly n: number }>() },
+  events: {
+    X: { data: ty<{ readonly lo: number }>(), scope: "edges" },
+    Y: { data: ty<{ readonly hi: string }>(), scope: "edges" },
+  },
+  states: {
+    open: {
+      a: { initial: true, on: { X: { to: ["a", "b"], cell: "decide" } } },
+      b: { on: { Y: { to: ["a", "c"], cell: "decide" } } },
+    },
+    shut: { c: { end: true } },
+  },
+});
+export type PG = typeof picker;
+export type PState = StateOf<PG>;
+export type PMsg = MsgOf<PG>;
+type P<K extends string> = Extract<PState, { type: K }>;
+type PM<K extends string> = Extract<PMsg, { type: K }>;
+
+// the cell alphabet is DERIVED from the edges that name a cell — one site or
+// twenty, the name is written once as a reference and never as a declaration.
+export type A56 = Assert<Eq<CellName<PG>, "decide">>;
+export type A57 = Assert<Eq<CellEdgeKey<PG>, "a.X" | "b.Y">>;
+// a cell edge is a real edge for every other derivation…
+export type A58 = Assert<Eq<EdgeKey<PG>, "a.X" | "b.Y">>;
+// …and TOTALITY counts it as handled, so the chart is total.
+export type A59 = Assert<Eq<MissingPairs<PG>, never>>;
+// …but it owes NO `assign`: the cell returns the whole next state, so the
+// builder is not merely optional, it is not a key of the bag at all.
+export type A60 = Assert<Eq<keyof Assigns<PG, PState, PMsg>, never>>;
+
+type Decide = Cells<PG, PState, PMsg>["decide"];
+// THE POINT (params): two sites → a union of tuples with the `at` correlator,
+// identical in construction to a two-site guard's.
+export type A61 = Assert<
+  Eq<
+    Parameters<Decide>,
+    | [state: P<"a">, msg: PM<"X">, at: "a.X"]
+    | [state: P<"b">, msg: PM<"Y">, at: "b.Y"]
+  >
+>;
+// THE POINT (return): the states the edges DECLARED, and nothing else — the
+// union of both sites' `to`, paired with the chart's own Cmd union.
+export type A62 = Assert<
+  Eq<ReturnType<Decide>, readonly [P<"a"> | P<"b"> | P<"c">, readonly CmdOf<PG>[]]>
+>;
+// `c` is reachable ONLY through a cell edge's `to`, and the derivations that
+// read the graph's shape see it — the hatch does not blind them.
+export type A63 = Assert<Eq<ParkingState<PG>, never>>;
+// a cmd DECLARED but never named by an edge owes no builder: only a cell can
+// emit it, and a cell builds its own payload.
+export type A64 = Assert<Eq<CmdName<PG>, "beep">>;
+export type A65 = Assert<Eq<UsedCmdName<PG>, never>>;
+
+// …and it all actually compiles: one `switch (at)` collapses the tuple union,
+// and each branch may return only ITS site's declared targets.
+export const pCells: Cells<PG, PState, PMsg> = {
+  decide: (s, m, at) => {
+    switch (at) {
+      case "a.X":
+        return m.lo > 0 ? [{ ...s, type: "b" }, []] : [{ ...s, type: "a" }, []];
+      case "b.Y":
+        return [{ ...s, type: m.hi === "" ? "a" : "c" }, [{ type: "beep", n: s.n }]];
+    }
+  },
+};
+
+export const picked = compile<PG, PState, PMsg, CmdOf<PG>, "p">(picker, "p", {
+  assign: {},
+  cells: pCells,
+});
+export type A66 = Assert<
+  Eq<typeof picked, Transitions<PState, Namespaced<PMsg, "p">, CmdOf<PG>>>
+>;
