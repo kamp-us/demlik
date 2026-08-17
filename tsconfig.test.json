@@ -1,0 +1,90 @@
+// The TEST program. `tsconfig.json` excludes `**/*.test.ts(x)`, so the shipped
+// build never compiles a test file — but for a package whose whole value is a
+// compile-time guarantee, the DEMONSTRATIONS of that guarantee have to be
+// typechecked too. `src/chart/smoke-*.test.ts` are exactly that: they are the
+// files that prove a chart's narrowing arrives at the call site, and when they
+// were renamed from `smoke-*.ts` they silently left the typechecked program.
+//
+// Same compiler options, same tree, with the test exclusion dropped. Run as
+// `pnpm run typecheck:test`, gated in CI beside `pnpm run typecheck`.
+//
+// TWO exclusions, and they are different in kind:
+//
+//   1. `src/chart/__probes__` — those files are SUPPOSED to fail. `probes.test.ts`
+//      compiles each one on its own and checks it fails for its declared reason.
+//      Permanent.
+//
+//   2. The `-- pre-existing debt --` list below. Turning the test program on for
+//      the first time surfaced 489 errors across 51 test files, none of them in
+//      `src/chart` and none a live regression (`vitest` runs them green; these
+//      are missing parameter annotations and un-narrowed discriminated-union
+//      reads that the runtime never sees). Fixing them is real work with no
+//      behavioural payoff, and doing it inside the change that INTRODUCED the
+//      gate would bury the gate. So they are quarantined, by name, here.
+//
+//      This list is a RATCHET: it only ever shrinks. A file is removed from it
+//      by fixing its errors, never added to it by writing new ones — a NEW test
+//      file anywhere under `src/` is covered by default, which is the property
+//      that matters going forward.
+{
+  "extends": "./tsconfig.json",
+  "include": ["src"],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/chart/__probes__",
+
+    // ── pre-existing debt — shrink only ──────────────────────────────────
+    "src/agent/agent.test.ts",
+    "src/agent/compaction.test.ts",
+    "src/apply-cell-tracer.test.ts",
+    "src/authed-call/authed-call.test.ts",
+    "src/await-terminal/await-terminal.test.ts",
+    "src/batch-window/batch-window.test.ts",
+    "src/deadline/index.test.ts",
+    "src/dep-keyed-subs.test.ts",
+    "src/do/agent-host.test.ts",
+    "src/do/durable-timer.test.ts",
+    "src/do/event-sourced-store.test.ts",
+    "src/do/idempotent-effect.test.ts",
+    "src/do/presence.test.ts",
+    "src/do/step-host.test.ts",
+    "src/error-idiom.test.ts",
+    "src/fan-out/fan-out.test.ts",
+    "src/fold-msgs.test.ts",
+    "src/idempotent-intake/idempotent-intake.test.ts",
+    "src/llm-call/llm-call.test.ts",
+    "src/machine-viz/index.test.ts",
+    "src/monitored-run/monitored-run.test.ts",
+    "src/node/node.test.ts",
+    "src/onerror-fanout.test.ts",
+    "src/paginated-walk/paginated-walk.test.ts",
+    "src/paginator/paginator.test.ts",
+    "src/poller/poller.test.ts",
+    "src/pure/import-graph.test.ts",
+    "src/react/react.test.tsx",
+    "src/reconciler/reconciler.test.ts",
+    "src/recorder/index.test.ts",
+    "src/resilient-call/resilient-call.test.ts",
+    "src/run-discard.test.ts",
+    "src/run-errors.test.ts",
+    "src/saga/saga.test.ts",
+    "src/snapshot/snapshot.test.ts",
+    "src/subs/from-broadcast-channel.test.ts",
+    "src/subs/from-event-source.test.ts",
+    "src/subs/from-reconnecting-web-socket.test.ts",
+    "src/subs/from-web-socket.test.ts",
+    "src/supervision.test.ts",
+    "src/throttled-input/throttled-input.test.ts",
+    "src/token-refresh/token-refresh.test.ts",
+    "src/try-apply-cell.test.ts",
+    "src/update-form-tag.test.ts",
+    "src/with-deadline/with-deadline.test.ts",
+    "src/with-resilience/with-resilience.test.ts",
+    "src/with-telemetry/with-telemetry.test.ts",
+    "src/workflow/compensation.test.ts",
+    "src/workflow/do.test.ts",
+    "src/workflow/workflow.test.ts",
+    "src/wrap-detached.test.ts"
+  ]
+}
