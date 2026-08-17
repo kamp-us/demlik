@@ -27,7 +27,7 @@
  *   defineChart(graph)              → C            // the grid form: state × event
  *   compile(C, parts, ns?)          → Transitions  // drops into `defineMachine`
  *   initFrom(C, boot)               → init         // entry state read off the graph
- *   chartMermaid(C)                 → string
+ *   chartMermaid(C, opts?)          → string       // highlight / phases / title
  *
  *   defineReducerChart(graph)       → C            // no phase dimension: |M| edges
  *   compileReducer(C, parts, ns?)   → Reducer
@@ -57,6 +57,12 @@
  * (`JOB_A.START` vs `JOB_B.START`), while an event marked `foreign: true` — a
  * library's Msg, `deadline_exceeded` say — keeps its bare name, because it is
  * not ours to decorate. `MsgIn<C, NS>` is the resulting inbound union.
+ *
+ * INSPECTING ONE. Because all of that is data, a chart can be read back:
+ * `@demlik/tea/chart/inspect` turns it into phases, states, edges and every
+ * explicit REFUSAL, and answers "what is legal at this state, and which branch
+ * would that guard take right now"; `@demlik/tea/chart/inspect/react` is the
+ * whole debugger page over it, with no page code.
  *
  * @packageDocumentation
  */
