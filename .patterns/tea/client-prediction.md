@@ -14,9 +14,9 @@ math to be a guarantee, not a hand-roll.
 The seam shipped in epic #186 (ADR
 [0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md)).
 The worked, tested code is
-[`packages/tea/src/prediction/client-prediction.example.ts`](../../packages/tea/src/prediction/client-prediction.example.ts)
+[`src/prediction/client-prediction.example.ts`](../../src/prediction/client-prediction.example.ts)
 (+ `.test.ts`); the consumer-facing version that imports the public boundary is
-[`packages/tea/examples/client-prediction.ts`](../../packages/tea/examples/client-prediction.ts).
+[`examples/client-prediction.ts`](../../examples/client-prediction.ts).
 
 ---
 
@@ -89,7 +89,7 @@ guarantee, not a tree-shaking accident**:
   reconcile.
 - The pure-core module imports **nothing** from the runtime; the runtime imports
   *from* it. That dependency direction is the actual decoupling.
-- [`packages/tea/src/pure/import-graph.test.ts`](../../packages/tea/src/pure/import-graph.test.ts)
+- [`src/pure/import-graph.test.ts`](../../src/pure/import-graph.test.ts)
   BFS-walks the transitive import graph rooted at `@demlik/tea/pure` and **fails
   if it ever reaches `run`/the host**. That is the regression fence.
 
@@ -147,5 +147,5 @@ the roadmap — `foldMsgs` (#211), the ack primitive (#212), the import boundary
 |---|---|
 | Building a predicting client over a tea machine | This doc → the worked example → import from `@demlik/tea/pure`. |
 | Deciding the seam's name/signature/return shape | ADR [0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md) (it settled all three). |
-| The exact API of each helper | [`.glossary/TERMS.md`](../../.glossary/TERMS.md) — `foldMsgs`, `reconcile`, `partitionByAck`, `tagSeq`, `nextSeq`, `Seq`/`SeqTagged`/`Ack`. |
-| Verifying the boundary didn't regress | Run `packages/tea/src/pure/import-graph.test.ts`. |
+| The exact API of each helper | `.glossary/TERMS.md` (in the originating monorepo) — `foldMsgs`, `reconcile`, `partitionByAck`, `tagSeq`, `nextSeq`, `Seq`/`SeqTagged`/`Ack`. |
+| Verifying the boundary didn't regress | Run `src/pure/import-graph.test.ts`. |

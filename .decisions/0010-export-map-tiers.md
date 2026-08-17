@@ -8,7 +8,7 @@
   (#268/#269), the `./resilient-call` deprecation (#270), and the tier stamps
   (#272). The full tier table, per-tier semver policy, deprecate-don't-delete
   ritual, and store-factory-per-host table are the living contract in
-  [`../../MAINTAINING.md`](../packages/tea/MAINTAINING.md) — this ADR records *why* the map
+  [`MAINTAINING.md`](../MAINTAINING.md) — this ADR records *why* the map
   is tiered, not the table itself.
 
 ## Context
@@ -53,7 +53,7 @@ The tier table (every subpath → its stamp), the per-tier semver policy, the
 deprecate-don't-delete ritual (stamp `@deprecated` + mark the row, then remove
 per the tier's rule — live example `./resilient-call` → `./with-resilience`), and
 the store-factory-per-host table are the single source of truth in
-[`../../MAINTAINING.md`](../packages/tea/MAINTAINING.md). This ADR does not duplicate them.
+[`MAINTAINING.md`](../MAINTAINING.md). This ADR does not duplicate them.
 
 ### Consolidation verdicts — which near-duplicate subpaths collapse, and why
 

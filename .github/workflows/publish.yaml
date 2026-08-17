@@ -85,6 +85,15 @@ jobs:
         if: steps.changesets.outputs.has_changesets == 'true'
         run: pnpm changeset version
 
+      # The generated reference stamps the package version, so `changeset version`
+      # invalidates it on every release. Without this, main lands stale the moment a
+      # release merges and the NEXT unrelated PR fails the drift gate holding a diff
+      # it did not cause — which is exactly how 0.5.1 shipped carrying a v0.5.0
+      # stamp. Regenerate here so the bump commit below carries the fresh pages.
+      - name: Regenerate the reference for the new version
+        if: steps.changesets.outputs.has_changesets == 'true'
+        run: pnpm run docs:reference
+
       - name: Build
         if: steps.changesets.outputs.has_changesets == 'true'
         run: pnpm run build
