@@ -24,7 +24,11 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["CheckoutSaga", "NaiveOrderDO", "RecipeDO"]
+      "new_sqlite_classes": ["CheckoutSaga", "NaiveOrderDO"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RecipeDO"]
     }
   ],
   "observability": { "enabled": true }
