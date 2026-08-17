@@ -15,11 +15,22 @@ import {
 } from "./graph";
 
 // ── the graph. No `as const`. Every target checked against these same keys. ──
+// Every (state × event) pair is DECLARED in `on` or REFUSED — named in
+// `ignore`, or dismissed for the whole row by `end: true`. There is no third
+// case: `Total<G>` fails to compile on one. Add a seventh event and every row
+// that has not decided about it goes red.
 export const lane = defineGraph({
   // the entry point is DATA on the graph — `init` is derived from it, and
   // `machine-viz` draws `[*] --> queued` off the same fact.
-  queued: { initial: true, on: { WIP: "build", BLOCKED: "blocked" } },
-  build: { on: { DONE: "review", BLOCKED: "blocked" } },
+  queued: {
+    initial: true,
+    on: { WIP: "build", BLOCKED: "blocked" },
+    ignore: ["DONE", "PASS", "FAIL", "UNBLOCKED"],
+  },
+  build: {
+    on: { DONE: "review", BLOCKED: "blocked" },
+    ignore: ["WIP", "PASS", "FAIL", "UNBLOCKED"],
+  },
   review: {
     on: {
       PASS: "ship",
@@ -27,15 +38,25 @@ export const lane = defineGraph({
       // the one guarded edge: retries left → back to build, else freeze.
       FAIL: { target: "build", when: "retriesRemaining", otherwise: "frozen" },
     },
+    ignore: ["WIP", "DONE", "UNBLOCKED"],
   },
-  ship: { on: { DONE: "shipped", BLOCKED: "human:cp-approval" } },
+  ship: {
+    on: { DONE: "shipped", BLOCKED: "human:cp-approval" },
+    ignore: ["WIP", "PASS", "FAIL", "UNBLOCKED"],
+  },
   // `hist` is not a pseudostate — it is a property OF THE EDGE.
-  blocked: { on: { UNBLOCKED: { resume: { fallback: "queued" } } } },
+  // A parked lane is deaf to lane traffic until it is unblocked.
+  blocked: {
+    on: { UNBLOCKED: { resume: { fallback: "queued" } } },
+    ignore: ["WIP", "DONE", "BLOCKED", "PASS", "FAIL"],
+  },
   "human:cp-approval": {
     on: { UNBLOCKED: { resume: { fallback: "queued" } } },
+    ignore: ["WIP", "DONE", "BLOCKED", "PASS", "FAIL"],
   },
-  shipped: {},
-  frozen: {},
+  // terminal: declared, not inferred from "has no outgoing edges".
+  shipped: { end: true },
+  frozen: { end: true },
 });
 
 export type LaneG = typeof lane;
@@ -116,7 +137,6 @@ export function region<const NS extends string>(
   return compile<LaneG, LaneState, LaneMsg, LaneCmd, NS>(lane, ns, {
     assign,
     guards,
-    unhandled: "ignore",
   });
 }
 

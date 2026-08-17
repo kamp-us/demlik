@@ -103,9 +103,9 @@ eq(
   "ship",
 );
 
-// terminals + unlisted pairs: policy "ignore" self-loops
+// refused pairs self-loop: `end: true` on a terminal, `ignore` on a live state
 eq(
-  "shipped -WIP-> shipped (unhandled: ignore)",
+  "shipped -WIP-> shipped (end: true)",
   step({ type: "shipped", retries: 0, maxRetries: 2 }, {
     type: "ISSUE_42.WIP",
     at: 14,
@@ -113,7 +113,7 @@ eq(
   "shipped",
 );
 eq(
-  "queued -PASS-> queued (undeclared edge, ignored)",
+  "queued -PASS-> queued (declared refusal: ignore)",
   step(start, { type: "ISSUE_42.PASS", at: 15 }).type,
   "queued",
 );
@@ -199,7 +199,7 @@ eq("upload init(null) → idle", uploadMachine.init(null, ctx), [
 
 // a graph with no entry marked fails LOUDLY at construction, not at boot
 try {
-  initialStateOf(defineGraph({ a: { on: { go: "b" } }, b: {} }));
+  initialStateOf(defineGraph({ a: { on: { go: "b" } }, b: { end: true } }));
   console.log("FAIL missing `initial` should have thrown");
 } catch (e) {
   eq(

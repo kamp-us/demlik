@@ -16,6 +16,8 @@ import {
   type Guards,
   type InitialData,
   type InitialState,
+  type MissingAt,
+  type MissingPairs,
   type MsgOf,
   type Namespaced,
   type ParkingState,
@@ -89,6 +91,33 @@ export type A3 = Assert<
 
 export type A4 = Assert<Eq<GuardName<LaneG>, "retriesRemaining">>;
 export type A5 = Assert<Eq<CmdName<LaneG>, never>>;
+
+// ── §2b TOTALITY: every pair declared-or-refused ───────────────────────────
+// The real lane graph is total — nothing falls through.
+export type A43 = Assert<Eq<MissingPairs<LaneG>, never>>;
+// row by row: declared ∪ ignored ∪ end covers all six events, per state.
+export type A44 = Assert<Eq<MissingAt<LaneG, "review">, never>>;
+export type A45 = Assert<Eq<MissingAt<LaneG, "shipped">, never>>;
+
+// A deliberately INCOMPLETE graph, built WITHOUT `defineGraph` (which would
+// refuse it) so the derivation itself can be asserted on. `open.B` is declared,
+// `open.A` is ignored, `open.C` is neither — and `MissingPairs` names it.
+type Holey = {
+  open: { on: { B: "shut" }; ignore: ["A"] };
+  shut: { on: { A: "open"; C: "open" } };
+};
+export type A46 = Assert<Eq<EventName<Holey>, "B" | "A" | "C">>;
+export type A47 = Assert<Eq<MissingAt<Holey, "open">, "C">>;
+export type A48 = Assert<Eq<MissingAt<Holey, "shut">, "B">>;
+export type A49 = Assert<Eq<MissingPairs<Holey>, "open.C" | "shut.B">>;
+
+// `end: true` dismisses a whole row in one token — the six-event row is refused
+// without naming a single event.
+type Sealed = { a: { on: { X: "b" } }; b: { end: true } };
+export type A50 = Assert<Eq<MissingPairs<Sealed>, never>>;
+// …and dropping the `end` re-opens exactly that pair.
+type Unsealed = { a: { on: { X: "b" } }; b: Record<never, never> };
+export type A51 = Assert<Eq<MissingPairs<Unsealed>, "b.X">>;
 
 // ── §3 discriminated unions ────────────────────────────────────────────────
 export type A6 = Assert<
@@ -216,6 +245,7 @@ export type A25 = Assert<
 >;
 
 
+
 // ═══ §7 the CMD surface (the lane region emits none — see `upload.ts`) ═══════
 export type A26 = Assert<
   Eq<
@@ -224,6 +254,7 @@ export type A26 = Assert<
   >
 >;
 export type A27 = Assert<Eq<ParkingState<UG>, never>>;
+
 export type A28 = Assert<
   Eq<typeof uploader, Transitions<UState, Namespaced<UMsg, "up">, UCmd>>
 >;
@@ -272,7 +303,7 @@ export type A36 = Assert<
 >;
 export type A37 = Assert<Eq<InitialData<UG, UState>, { readonly tries: number }>>;
 // a graph with NO entry marked gets a NAMED marker, not a silent `never`
-const noEntry = defineGraph({ a: { on: { go: "b" } }, b: {} });
+const noEntry = defineGraph({ a: { on: { go: "b" } }, b: { end: true } });
 export type A38 = Assert<
   Eq<
     InitialData<typeof noEntry, StateOf<typeof noEntry, { a: object; b: object }>>,
@@ -282,7 +313,7 @@ export type A38 = Assert<
 // …and so does a graph with TWO
 const twoEntries = defineGraph({
   a: { initial: true, on: { go: "b" } },
-  b: { initial: true },
+  b: { initial: true, end: true },
 });
 export type A39 = Assert<
   Eq<
@@ -306,11 +337,13 @@ export type A40 = Assert<
 const retry = defineGraph({
   fetching: {
     on: { TIMEOUT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+    ignore: ["CORRUPT"],
   },
   parsing: {
     on: { CORRUPT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+    ignore: ["TIMEOUT"],
   },
-  dead: {},
+  dead: { end: true },
 });
 export type RG = typeof retry;
 export type RState = StateOf<
@@ -383,6 +416,5 @@ export const retrier = compile<RG, RState, RMsg, Cmd<never>, "r">(retry, "r", {
     },
   },
   guards: rGuards,
-  unhandled: "ignore",
 });
 

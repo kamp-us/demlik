@@ -28,11 +28,22 @@ export type EdgeSpec<SN extends string> =
 
 // F-bounded: `SN` is instantiated with `keyof G`, so every `target` /
 // `otherwise` / `fallback` is validated against the SAME object's own keys.
+//
+// A state node carries the edges it accepts (`on`) plus its REFUSALS — the
+// pairs it deliberately does not handle. Two refusal forms, because a terminal
+// state and a state that shrugs at one event are different situations:
+//
+//   `end: true`      — this state accepts NOTHING. One token dismisses the row.
+//   `ignore: [...]`  — this state deliberately drops these events, named.
+//
+// Anything neither declared nor refused is a compile error (see `Total`).
 export type Graph<G> = {
   readonly [S in keyof G]: {
     /** Exactly one state in a machine-bearing graph marks itself the entry. */
     readonly initial?: true;
     readonly on?: Readonly<Record<string, EdgeSpec<Extract<keyof G, string>>>>;
+    readonly ignore?: readonly EventName<G>[];
+    readonly end?: true;
   };
 };
 
@@ -70,6 +81,62 @@ export type StrictEdges<G> = {
   };
 };
 
+// ── 1b. TOTALITY — the |S| × |M| property, restored ────────────────────────
+//
+// Hand-written `Transitions<S, M, C>` forces a cell for EVERY (state × msg)
+// pair: add a Msg variant and every phase fails to compile until you decide
+// what it does there. A graph declares only its EDGES, so on its own it buys
+// `|declared edges|` — an undeclared pair would fall through to a global
+// policy, which is exactly the `_ -> (state, [])` default `Transitions` was
+// built to forbid (`.patterns/tea/tea-invariants.md` invariant 2).
+//
+// `Total<G>` closes the gap without asking for 48 cells: every pair must be
+// DECLARED (an edge in `on`), or REFUSED — named in `ignore`, or covered by
+// the state's `end: true`. Refusal is a statement, not a silence.
+
+/** Events this state refuses on purpose. `end: true` refuses the whole row. */
+type RefusedAt<G, S extends keyof G> = G[S] extends { readonly end: true }
+  ? EventName<G>
+  : G[S] extends { readonly ignore: readonly (infer I)[] }
+    ? Extract<I, string>
+    : never;
+
+/** Pairs at state `S` that are neither declared nor refused. Empty = total. */
+export type MissingAt<G, S extends keyof G> = Exclude<
+  EventName<G>,
+  Extract<keyof On<G, S>, string> | RefusedAt<G, S>
+>;
+
+/** Every unhandled pair in the whole graph — `never` when the graph is total. */
+export type MissingPairs<G> = {
+  [S in keyof G]: `${Extract<S, string>}.${MissingAt<G, S>}`;
+}[keyof G];
+
+// The diagnostic IS the property name: tsc reports the missing property
+// verbatim, so the author reads which pair and what the three fixes are
+// without decoding a type. Value `never` so it cannot be silenced by writing
+// the key out.
+type Demand<S extends string, E extends string> = E extends string
+  ? `unhandled pair "${S}.${E}" — declare it in \`on\`, or list it in \`ignore\`, or mark "${S}" as \`end: true\``
+  : never;
+
+/**
+ * Third F-bound layer. Sits on the PARAMETER for the same reason `StrictEdges`
+ * does — a constraint failure here would collapse the far more common typo'd-
+ * target diagnostic into an index-signature complaint.
+ */
+export type Total<G> = {
+  readonly [S in keyof G]: ([MissingAt<G, S>] extends [never]
+    ? unknown
+    : { readonly [K in Demand<Extract<S, string>, MissingAt<G, S>>]: never }) &
+    // `end: true` means "accepts nothing" — it cannot also accept something.
+    ([Extract<keyof On<G, S>, string>] extends [never]
+      ? unknown
+      : G[S] extends { readonly end: true }
+        ? { readonly __endStateCannotDeclareEdges: keyof On<G, S> }
+        : unknown);
+};
+
 // `const G` preserves the nested literals with no `as const` at the call site
 // (without it the edge VALUES — targets, guard names — widen to `string` and
 // every derivation below collapses); `extends Graph<G> & StrictEdges<G>` closes
@@ -80,7 +147,9 @@ export type StrictEdges<G> = {
 // '"review"'?" suggestion. On the parameter, the constraint failure is reported
 // first and cleanly, and the unknown-field check still fires on well-formed
 // graphs.
-export function defineGraph<const G extends Graph<G>>(g: G & StrictEdges<G>): G {
+export function defineGraph<const G extends Graph<G>>(
+  g: G & StrictEdges<G> & Total<G>,
+): G {
   return g;
 }
 

@@ -1,4 +1,4 @@
-// PROBE 8: a Cmd payload builder returning the wrong shape for its variant.
+// PROBE 10: a Cmd payload builder returning the wrong shape for its variant.
 // The builder owes `Omit<Extract<C, {type:"verify_object"}>, "type">` — the
 // variant the NAME picks out, not whatever the author happens to return.
 import type { Cmds } from "../graph";

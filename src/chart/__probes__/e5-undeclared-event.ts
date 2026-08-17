@@ -2,7 +2,7 @@
 import { type MsgOf, defineGraph } from "../graph";
 const g = defineGraph({
   queued: { on: { WIP: "build", ESCALATE: "build" } }, // ← ESCALATE has no payload
-  build: {},
+  build: { end: true },
 });
 export type Msg = MsgOf<
   typeof g,

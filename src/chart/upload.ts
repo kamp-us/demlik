@@ -18,7 +18,11 @@ import {
 
 export const upload = defineGraph({
   // `initial: true` — the one place the entry state is written down.
-  idle: { initial: true, on: { pick: { target: "sending", cmd: "put_object" } } },
+  idle: {
+    initial: true,
+    on: { pick: { target: "sending", cmd: "put_object" } },
+    ignore: ["done", "fail", "ok"],
+  },
   sending: {
     on: {
       // an ORDERED LIST: two Cmds off one edge, in declaration order.
@@ -33,10 +37,11 @@ export const upload = defineGraph({
         otherwiseCmd: ["log", "alert_human"],
       },
     },
+    ignore: ["pick", "ok"],
   },
   // an edge with no `cmd` at all → zero Cmds.
-  checking: { on: { ok: "idle" } },
-  dead: {},
+  checking: { on: { ok: "idle" }, ignore: ["pick", "done", "fail"] },
+  dead: { end: true },
 });
 
 export type UG = typeof upload;
@@ -99,7 +104,6 @@ export const uploader = compile<UG, UState, UMsg, UCmd, "up">(upload, "up", {
   },
   guards: { hasBudget: (s) => s.tries < 3 },
   cmds: uCmds,
-  unhandled: "error",
 });
 
 export type UMsgIn = Namespaced<UMsg, "up">;
