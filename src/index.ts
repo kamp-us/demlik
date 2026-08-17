@@ -19,6 +19,7 @@ export type {
   Interpret,
   InterpretDetached,
   Machine,
+  MachineShape,
   NoCtx,
   Port,
   PortEmitter,
@@ -33,8 +34,10 @@ export type {
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives on `@demlik/tea/pure`).
 export {
+  acceptsOf,
   applyCell,
   Cmd,
+  describeMachine,
   detectUpdateForm,
   foldMsgs,
   formOf,
