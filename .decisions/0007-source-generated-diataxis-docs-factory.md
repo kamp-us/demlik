@@ -4,7 +4,7 @@
 - **Date:** 2026-07-17
 - **Scope:** packages/tea/docs
 
-> Superseded in part by [0012](./0012-all-adrs-in-root-decisions.md): ADRs now live in root .decisions/, not the explanation quadrant.
+> Superseded in part by 0012 (in the originating monorepo): ADRs now live in root .decisions/, not the explanation quadrant.
 
 ## Context
 

@@ -292,8 +292,8 @@ That's the poem the convention exists to produce.
 
 - Cmd algebra, Sub lifecycle, `Transitions` mapped-type semantics — see
   [`tea-invariants.md`](./tea-invariants.md) and the substrate API in
-  [`packages/tea/README.md`](../../packages/tea/README.md).
-- GraphQL schema design — see `docs/design-patterns.md` (Domain-Driven Schema row).
+  [`packages/tea/README.md`](../../README.md).
+- GraphQL schema design — see the Domain-Driven Schema guidance in the originating monorepo.
   Both docs are about naming things that cross a boundary; they apply to
   different boundaries.
 
