@@ -1,59 +1,208 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPE MACHINERY — everything in this file is erased at runtime.
+//
+// ONE CHART, ONE SITE PER FACT.
+//
+// The chart is a single value with four sections. Each fact is DECLARED in
+// exactly one of them and everything else is derived:
+//
+//   ctx     — the data every state carries.                          (1 site)
+//   events  — the event alphabet: name, payload, and SCOPE.          (1 site)
+//   cmds    — the effect alphabet: name and payload.                 (1 site)
+//   states  — states grouped into named PHASES, each with its edges. (1 site)
+//
+// The Msg union, the State union, the Cmd union, the guard signatures, the cmd
+// builder signatures, the `was` field on parking states, the entry state and
+// the totality obligation are all DERIVED from that one value. Nothing in the
+// author's file names a state, an event or a cmd twice as a *declaration*; the
+// only repeats are *references* (an edge naming its target, an `assign` key
+// naming the edge it implements), which are the facts themselves.
 // ═══════════════════════════════════════════════════════════════════════════
 import type { Cmd } from "../pure/core";
 
-// ── 1. the graph shape ─────────────────────────────────────────────────────
-// An edge is either a bare target name, a target with optional cmd, a GUARDED
-// target (`when` + `otherwise`), or a RESUME edge (go back to `was ?? fallback`).
+// ── 0. the phantom-type carrier ────────────────────────────────────────────
 /**
- * A cmd reference on an edge: one name, or an ORDERED list of names. The list
- * is what buys `Cmd.batch` — an edge that fires N effects in a fixed order.
+ * A type smuggled through a value position. `ty<{ at: number }>()` is an empty
+ * object at runtime whose TYPE remembers `{ at: number }` — which is what lets
+ * an event declare its payload IN the chart instead of in a parallel type map
+ * the author has to keep in step.
  */
-export type CmdRef = string | readonly string[];
+export interface Ty<T> {
+  readonly __ty: T;
+}
+export const ty = <T>(): Ty<T> => ({}) as unknown as Ty<T>;
 
-export type EdgeSpec<SN extends string> =
+/** `Ty<T>` → `T`; anything else (an absent `data`) → the neutral `unknown`. */
+type Payload<X> = X extends Ty<infer T> ? T : unknown;
+
+// ── 1. section accessors ───────────────────────────────────────────────────
+type EvMap<C> = C extends { readonly events: infer E } ? E : never;
+type CmdMap<C> = C extends { readonly cmds: infer M } ? M : Record<never, never>;
+type Groups<C> = C extends { readonly states: infer G } ? G : never;
+type CtxOf<C> = C extends { readonly ctx: infer T } ? Payload<T> : unknown;
+
+export type EventName<C> = Extract<keyof EvMap<C>, string>;
+export type CmdName<C> = Extract<keyof CmdMap<C>, string>;
+/** The named phases — `keyof states`. A group name is declared by BEING a key. */
+export type GroupName<C> = Extract<keyof Groups<C>, string>;
+
+export type StateName<C> = Extract<
+  { [G in keyof Groups<C>]: keyof Groups<C>[G] }[keyof Groups<C>],
+  string
+>;
+
+/** The node for state `S`, found by scanning the groups. Groups partition. */
+type NodeAt<C, S> = {
+  [G in keyof Groups<C>]: S extends keyof Groups<C>[G] ? Groups<C>[G][S] : never;
+}[keyof Groups<C>];
+
+/** The phase `S` lives in. A union here means `S` was declared twice. */
+export type GroupOf<C, S> = Extract<
+  {
+    [G in keyof Groups<C>]: S extends keyof Groups<C>[G] ? G : never;
+  }[keyof Groups<C>],
+  string
+>;
+
+// naked-parameter helpers: a conditional distributes only over a bare `X`.
+type OnOf<X> = X extends { readonly on: infer O } ? O : Record<never, never>;
+type IgnoreOf<X> = X extends { readonly ignore: readonly (infer I)[] }
+  ? Extract<I, string>
+  : never;
+type DataOf<X> = X extends { readonly data: infer D } ? Payload<D> : unknown;
+type IsEndOf<X> = X extends { readonly end: true } ? true : false;
+type IsInitialOf<X> = X extends { readonly initial: true } ? true : false;
+type ScopeOf<X> = X extends { readonly scope: infer S }
+  ? S extends readonly string[]
+    ? S[number]
+    : S
+  : never;
+
+type On<C, S> = OnOf<NodeAt<C, S>>;
+type IgnoredAt<C, S> = IgnoreOf<NodeAt<C, S>>;
+
+// ── 2. the edge shape ──────────────────────────────────────────────────────
+/** A cmd reference on an edge: one declared name, or an ORDERED list of them. */
+export type CmdRef<N extends string> = N | readonly N[];
+
+export type EdgeSpec<SN extends string, CN extends string> =
   | SN
-  | { readonly target: SN; readonly cmd?: CmdRef }
+  | { readonly target: SN; readonly cmd?: CmdRef<CN> }
   | {
       readonly target: SN;
       readonly when: string;
       readonly otherwise: SN;
       /** Fires only when the guard HOLDS. */
-      readonly cmd?: CmdRef;
+      readonly cmd?: CmdRef<CN>;
       /** Fires only when the guard FAILS — `Cmd.when` lifted onto the edge. */
-      readonly otherwiseCmd?: CmdRef;
+      readonly otherwiseCmd?: CmdRef<CN>;
     }
-  | { readonly resume: { readonly fallback: SN }; readonly cmd?: CmdRef };
+  | { readonly resume: { readonly fallback: SN }; readonly cmd?: CmdRef<CN> };
 
-// F-bounded: `SN` is instantiated with `keyof G`, so every `target` /
-// `otherwise` / `fallback` is validated against the SAME object's own keys.
+// ── 3. SCOPE — the answer to the |S| × |M| enumeration problem ─────────────
 //
-// A state node carries the edges it accepts (`on`) plus its REFUSALS — the
-// pairs it deliberately does not handle. Two refusal forms, because a terminal
-// state and a state that shrugs at one event are different situations:
+// The old design made every state list the events it deliberately drops. That
+// is correct and it scales as |S| × |M|: 30 states × 12 events is ~300 hand-
+// typed strings, which the author produces by pasting the tsc error back.
 //
-//   `end: true`      — this state accepts NOTHING. One token dismisses the row.
-//   `ignore: [...]`  — this state deliberately drops these events, named.
+// The fact being written 300 times is really |M| facts, one per event: WHERE
+// DOES THIS EVENT MEAN ANYTHING? So it is declared once, on the event, as its
+// `scope` — a dial with three settings:
 //
-// Anything neither declared nor refused is a compile error (see `Total`).
-export type Graph<G> = {
-  readonly [S in keyof G]: {
-    /** Exactly one state in a machine-bearing graph marks itself the entry. */
-    readonly initial?: true;
-    readonly on?: Readonly<Record<string, EdgeSpec<Extract<keyof G, string>>>>;
-    readonly ignore?: readonly EventName<G>[];
-    readonly end?: true;
+//   "edges"   — targeted. Live exactly where it is routed; everywhere else it
+//               is not "ignored", it is simply not addressed to that state.
+//               Obligation: none. Cost: one word.
+//   <phase>   — broadcast within a phase (or a list of phases). Every state in
+//               that phase must handle it or `ignore` it BY NAME. Adding a
+//               state to the phase turns that state red, naming the pair.
+//   "all"     — broadcast machine-wide. Every state must decide. This is the
+//               old behaviour, still available, now opt-in per event.
+//
+// Totality is unchanged in form: a pair that is neither handled nor covered by
+// a decision fails to compile, naming the pair. What changed is that the
+// decision may be QUANTIFIED (one word, on the event) instead of ENUMERATED
+// (one string per cell). See `.decisions` note in the report: forcing a
+// per-pair reconsideration on every new event *requires* |S| × |M| author-owned
+// sites — that is the one thing the two goals genuinely trade against.
+type ScopeRef<C> = "edges" | "all" | GroupName<C>;
+
+/**
+ * The event's declared scope — with one guard. When some OTHER error in the
+ * chart literal (a typo'd target, say) defeats inference of `C`, tsc falls back
+ * to the constraint, where `scope` is the whole `ScopeRef<C>` universe. Left
+ * alone that makes every event look live in every phase and buries the one real
+ * diagnostic under a wall of spurious unhandled-pair demands. A scope that
+ * spans the entire universe is not a scope, so it is read as no scope at all.
+ */
+type ScopeAt<C, E extends keyof EvMap<C>> = [ScopeRef<C>] extends [
+  ScopeOf<EvMap<C>[E]>,
+]
+  ? never
+  : ScopeOf<EvMap<C>[E]>;
+
+/** The events that are LIVE at `S` — i.e. that `S` owes a decision about. */
+type LiveAt<C, S> = {
+  [E in EventName<C>]: "all" extends ScopeAt<C, E>
+    ? E
+    : [GroupOf<C, S>] extends [ScopeAt<C, E>]
+      ? E
+      : never;
+}[EventName<C>];
+
+/** Pairs at `S` that are live, unhandled and unrefused. Empty = total. */
+export type MissingAt<C, S> = [IsEndOf<NodeAt<C, S>>] extends [true]
+  ? never
+  : Exclude<LiveAt<C, S>, Extract<keyof On<C, S>, string> | IgnoredAt<C, S>>;
+
+/** Every unhandled pair in the whole chart — `never` when the chart is total. */
+export type MissingPairs<C> = {
+  [S in StateName<C>]: `${S}.${Extract<MissingAt<C, S>, string>}`;
+}[StateName<C>];
+
+// ── 4. the chart shape (F-bounded: every reference checked against itself) ──
+export type Chart<C> = {
+  /** Data EVERY state carries. Declared once; intersected into all of them. */
+  readonly ctx?: Ty<object>;
+  readonly events: {
+    readonly [E in keyof EvMap<C>]: {
+      readonly data?: Ty<object>;
+      // written out rather than aliased: tsc prints the alias NAME in the
+      // diagnostic, and the author needs to see the phase names themselves
+      // (and get tsc's "Did you mean …?" against them).
+      readonly scope:
+        | "edges"
+        | "all"
+        | GroupName<C>
+        | readonly ("edges" | "all" | GroupName<C>)[];
+    };
+  };
+  readonly cmds?: { readonly [N in keyof CmdMap<C>]: Ty<object> };
+  readonly states: {
+    readonly [G in keyof Groups<C>]: {
+      readonly [S in keyof Groups<C>[G]]: {
+        /** Exactly one state in a machine-bearing chart marks itself the entry. */
+        readonly initial?: true;
+        /** Extra data only THIS state carries, on top of `ctx`. */
+        readonly data?: Ty<object>;
+        readonly on?: {
+          readonly [E in EventName<C>]?: EdgeSpec<StateName<C>, CmdName<C>>;
+        };
+        /** Per-state exception: refuse a live event by name. */
+        readonly ignore?: readonly EventName<C>[];
+        readonly end?: true;
+      };
+    };
   };
 };
 
-/**
- * Second F-bound layer. Constraint checking is plain assignability — it does
- * NOT run excess-property checks — so `{ target, whn, otherwise }` structurally
- * satisfies `{ target: SN; cmd?: string }` and a typo'd `when` would silently
- * drop the guard. This maps each edge to `unknown` (fine) or to a marker object
- * naming the offending field, which the object-literal check then rejects.
- */
+// ── 5. the strictness layers that assignability alone does not buy ─────────
+//
+// Constraint checking is plain assignability — it does NOT run excess-property
+// checks — so `{ target, whn, otherwise }` structurally satisfies
+// `{ target: SN; cmd?: … }` and a typo'd `when` would silently drop the guard,
+// and a typo'd EVENT key in `on` would silently invent an edge for an event
+// that does not exist. These map the offending shape to a marker object naming
+// the offender, which the object-literal check then rejects.
 type KnownEdgeField =
   | "target"
   | "cmd"
@@ -61,6 +210,7 @@ type KnownEdgeField =
   | "when"
   | "otherwise"
   | "resume";
+
 type EdgeCheck<X> = X extends string
   ? unknown
   : [Exclude<keyof X, KnownEdgeField>] extends [never]
@@ -73,129 +223,106 @@ type EdgeCheck<X> = X extends string
       : unknown
     : { readonly __edgeHasUnknownField: Exclude<keyof X, KnownEdgeField> };
 
-export type StrictEdges<G> = {
-  readonly [S in keyof G]: {
-    readonly on?: {
-      readonly [E in keyof On<G, S>]: EdgeCheck<On<G, S>[E]>;
+type StrictNode<C, N> = {
+  readonly on?: {
+    readonly [E in keyof OnOf<N>]: E extends EventName<C>
+      ? EdgeCheck<OnOf<N>[E]>
+      : { readonly __onDeclaresAnUndeclaredEvent: E };
+  };
+};
+
+export type Strict<C> = {
+  readonly states: {
+    readonly [G in keyof Groups<C>]: {
+      readonly [S in keyof Groups<C>[G]]: StrictNode<C, Groups<C>[G][S]>;
     };
   };
 };
 
-// ── 1b. TOTALITY — the |S| × |M| property, restored ────────────────────────
-//
-// Hand-written `Transitions<S, M, C>` forces a cell for EVERY (state × msg)
-// pair: add a Msg variant and every phase fails to compile until you decide
-// what it does there. A graph declares only its EDGES, so on its own it buys
-// `|declared edges|` — an undeclared pair would fall through to a global
-// policy, which is exactly the `_ -> (state, [])` default `Transitions` was
-// built to forbid (`.patterns/tea/tea-invariants.md` invariant 2).
-//
-// `Total<G>` closes the gap without asking for 48 cells: every pair must be
-// DECLARED (an edge in `on`), or REFUSED — named in `ignore`, or covered by
-// the state's `end: true`. Refusal is a statement, not a silence.
-
-/** Events this state refuses on purpose. `end: true` refuses the whole row. */
-type RefusedAt<G, S extends keyof G> = G[S] extends { readonly end: true }
-  ? EventName<G>
-  : G[S] extends { readonly ignore: readonly (infer I)[] }
-    ? Extract<I, string>
-    : never;
-
-/** Pairs at state `S` that are neither declared nor refused. Empty = total. */
-export type MissingAt<G, S extends keyof G> = Exclude<
-  EventName<G>,
-  Extract<keyof On<G, S>, string> | RefusedAt<G, S>
->;
-
-/** Every unhandled pair in the whole graph — `never` when the graph is total. */
-export type MissingPairs<G> = {
-  [S in keyof G]: `${Extract<S, string>}.${MissingAt<G, S>}`;
-}[keyof G];
-
 // The diagnostic IS the property name: tsc reports the missing property
-// verbatim, so the author reads which pair and what the three fixes are
-// without decoding a type. Value `never` so it cannot be silenced by writing
-// the key out.
+// verbatim, so the author reads which pair and what the fixes are without
+// decoding a type. Value `never` so it cannot be silenced by writing the key.
 type Demand<S extends string, E extends string> = E extends string
-  ? `unhandled pair "${S}.${E}" — declare it in \`on\`, or list it in \`ignore\`, or mark "${S}" as \`end: true\``
+  ? `unhandled pair "${S}.${E}" — declare it in \`on\`, or list "${E}" in this state's \`ignore\`, or narrow the \`scope\` of event "${E}"`
   : never;
 
-/**
- * Third F-bound layer. Sits on the PARAMETER for the same reason `StrictEdges`
- * does — a constraint failure here would collapse the far more common typo'd-
- * target diagnostic into an index-signature complaint.
- */
-export type Total<G> = {
-  readonly [S in keyof G]: ([MissingAt<G, S>] extends [never]
-    ? unknown
-    : { readonly [K in Demand<Extract<S, string>, MissingAt<G, S>>]: never }) &
-    // `end: true` means "accepts nothing" — it cannot also accept something.
-    ([Extract<keyof On<G, S>, string>] extends [never]
-      ? unknown
-      : G[S] extends { readonly end: true }
-        ? { readonly __endStateCannotDeclareEdges: keyof On<G, S> }
-        : unknown);
+type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
+
+export type Total<C> = {
+  readonly states: {
+    readonly [G in keyof Groups<C>]: {
+      readonly [S in keyof Groups<C>[G]]: ([MissingAt<C, S>] extends [never]
+        ? unknown
+        : {
+            readonly [K in Demand<
+              Extract<S, string>,
+              Extract<MissingAt<C, S>, string>
+            >]: never;
+          }) &
+        // `end: true` means "accepts nothing" — it cannot also accept something.
+        ([Extract<keyof On<C, S>, string>] extends [never]
+          ? unknown
+          : [IsEndOf<Groups<C>[G][S]>] extends [true]
+            ? { readonly __endStateCannotDeclareEdges: keyof On<C, S> }
+            : unknown) &
+        // a state may live in exactly one phase.
+        ([IsUnion<GroupOf<C, S>>] extends [true]
+          ? { readonly __stateDeclaredInTwoPhases: GroupOf<C, S> }
+          : unknown) &
+        // an `ignore` entry that refuses an event which is not live here
+        // refuses nothing — the paste-the-error-back loop, caught.
+        ([Exclude<IgnoredAt<C, S>, LiveAt<C, S>>] extends [never]
+          ? unknown
+          : {
+              readonly __refusalRefusesNothing: Exclude<
+                IgnoredAt<C, S>,
+                LiveAt<C, S>
+              >;
+            });
+    };
+  };
 };
 
-// `const G` preserves the nested literals with no `as const` at the call site
-// (without it the edge VALUES — targets, guard names — widen to `string` and
-// every derivation below collapses); `extends Graph<G> & StrictEdges<G>` closes
-// the loop on target validity and on unknown edge fields.
-// `StrictEdges` sits on the PARAMETER, not on the constraint: intersecting it
-// into the constraint made the typo'd-target diagnostic collapse to a 4-line
-// index-signature complaint about `string` and lose tsc's "Did you mean
-// '"review"'?" suggestion. On the parameter, the constraint failure is reported
-// first and cleanly, and the unknown-field check still fires on well-formed
-// graphs.
-export function defineGraph<const G extends Graph<G>>(
-  g: G & StrictEdges<G> & Total<G>,
-): G {
-  return g;
+/**
+ * `const C` preserves the nested literals with no `as const` at the call site
+ * (without it every edge value widens to `string` and every derivation below
+ * collapses). `Strict` and `Total` sit on the PARAMETER, not on the constraint:
+ * intersecting them into the constraint makes the typo'd-target diagnostic
+ * collapse to an index-signature complaint about `string` and lose tsc's
+ * "Did you mean '"review"'?" suggestion.
+ */
+export function defineChart<const C extends Chart<C>>(
+  c: C & Strict<C> & Total<C>,
+): C {
+  return c;
 }
 
-// ── 2. derivations off the graph ───────────────────────────────────────────
-type On<G, S extends keyof G> = G[S] extends { readonly on: infer O }
-  ? O
-  : Record<never, never>;
-
-type EdgeAt<G, S extends keyof G, E> = E extends keyof On<G, S>
-  ? On<G, S>[E]
-  : never;
-
-export type StateName<G> = Extract<keyof G, string>;
-
-export type EventName<G> = Extract<
-  { [S in keyof G]: keyof On<G, S> }[keyof G],
-  string
->;
+// ── 6. derivations off the chart ───────────────────────────────────────────
+type EdgeAt<C, S, E> = E extends keyof On<C, S> ? On<C, S>[E] : never;
 
 /** The `State.Event` pairs that are ACTUALLY declared — not the cross product. */
-export type EdgeKey<G> = {
-  [S in keyof G]: `${Extract<S, string>}.${Extract<keyof On<G, S>, string>}`;
-}[keyof G];
+export type EdgeKey<C> = {
+  [S in StateName<C>]: `${S}.${Extract<keyof On<C, S>, string>}`;
+}[StateName<C>];
 
-/**
- * The state marked `initial: true` — the graph's entry. Declared ON the graph
- * so the entry edge is data (`machine-viz` can draw `[*] --> queued`) instead
- * of a fact the author repeats in the hand-written `init`.
- */
-export type InitialState<G> = Extract<
+/** The state marked `initial: true` — the chart's entry, as data. */
+export type InitialState<C> = Extract<
   {
-    [S in keyof G]: G[S] extends { readonly initial: true } ? S : never;
-  }[keyof G],
+    [S in StateName<C>]: [IsInitialOf<NodeAt<C, S>>] extends [true] ? S : never;
+  }[StateName<C>],
   string
 >;
 
-// ── 3. the resume ("hist") derivation ──────────────────────────────────────
+// ── 7. the resume ("hist") derivation ──────────────────────────────────────
 /** States that carry a `resume` edge out of them — the parking states. */
-export type ParkingState<G> = Extract<
+export type ParkingState<C> = Extract<
   {
-    [S in keyof G]: {
-      [E in keyof On<G, S>]: On<G, S>[E] extends { readonly resume: unknown }
+    [S in StateName<C>]: {
+      [E in keyof On<C, S>]: On<C, S>[E] extends { readonly resume: unknown }
         ? S
         : never;
-    }[keyof On<G, S>];
-  }[keyof G],
+    }[keyof On<C, S>];
+  }[StateName<C>],
   string
 >;
 
@@ -206,41 +333,53 @@ type TargetOf<X> = X extends string
     ? T | (X extends { readonly otherwise: infer O } ? O : never)
     : never;
 
-/** States with an edge INTO `P` — i.e. the states you could have been parked from. */
-type ResumeSource<G, P> = {
-  [S in keyof G]: {
-    [E in keyof On<G, S>]: P extends TargetOf<On<G, S>[E]> ? S : never;
-  }[keyof On<G, S>];
-}[keyof G];
+/** States with an edge INTO `P` — i.e. the states you could be parked from. */
+type ResumeSource<C, P> = {
+  [S in StateName<C>]: {
+    [E in keyof On<C, S>]: P extends TargetOf<On<C, S>[E]> ? S : never;
+  }[keyof On<C, S>];
+}[StateName<C>];
 
 /** The `fallback` declared on `P`'s resume edge — Umut's `?? initial`. */
-type FallbackOf<G, P extends keyof G> = {
-  [E in keyof On<G, P>]: On<G, P>[E] extends {
+type FallbackOf<C, P> = {
+  [E in keyof On<C, P>]: On<C, P>[E] extends {
     readonly resume: { readonly fallback: infer F };
   }
     ? F
     : never;
-}[keyof On<G, P>];
+}[keyof On<C, P>];
 
 /**
- * Where a resume edge out of parking state `P` can land: any state that has an
- * edge into `P`, plus the declared fallback. This is `was ?? initial` lifted to
- * a type — and it is DERIVED, so adding a `BLOCKED` edge from a new state
- * automatically widens the legal `was`.
+ * Where a resume edge out of parking state `P` can land: any state with an edge
+ * into `P`, plus the declared fallback. `was ?? initial` lifted to a type — and
+ * DERIVED, so adding a `BLOCKED` edge from a new state widens the legal `was`.
  */
-export type ResumeTargets<G, P extends keyof G> = Extract<
-  ResumeSource<G, P> | FallbackOf<G, P>,
+export type ResumeTargets<C, P> = Extract<
+  ResumeSource<C, P> | FallbackOf<C, P>,
   string
 >;
 
-// ── 4. state / msg unions ──────────────────────────────────────────────────
-export type StateOf<G, D extends Record<StateName<G>, object>> = {
-  [S in StateName<G>]: { readonly type: S } & D[S];
-}[StateName<G>];
+// ── 8. the three unions, all derived from the one chart ────────────────────
+/**
+ * `was` is INJECTED here, not authored: a parking state is one with a `resume`
+ * edge, which the chart already says. Writing `blocked: Ctx & { was: … }` by
+ * hand would be that same fact a second time.
+ */
+export type StateOf<C> = {
+  [S in StateName<C>]: { readonly type: S } & CtxOf<C> &
+    DataOf<NodeAt<C, S>> &
+    (S extends ParkingState<C> ? { readonly was: ResumeTargets<C, S> } : unknown);
+}[StateName<C>];
 
-export type MsgOf<G, P extends Record<EventName<G>, object>> = {
-  [E in EventName<G>]: { readonly type: E } & P[E];
-}[EventName<G>];
+export type MsgOf<C> = {
+  [E in EventName<C>]: { readonly type: E } & DataOf<EvMap<C>[E]>;
+}[EventName<C>];
+
+export type CmdOf<C> = [CmdName<C>] extends [never]
+  ? Cmd<never>
+  : {
+      [N in CmdName<C>]: { readonly type: N } & Payload<CmdMap<C>[N]>;
+    }[CmdName<C>];
 
 /** Namespace a Msg union at the TYPE level — stays a literal union, never `string`. */
 export type Namespaced<
@@ -250,7 +389,7 @@ export type Namespaced<
   ? Omit<M, "type"> & { readonly type: `${NS}.${M["type"]}` }
   : never;
 
-// ── 5. the parts the config cannot own ─────────────────────────────────────
+// ── 9. the parts the chart cannot own ──────────────────────────────────────
 type Narrow<U, K> = Extract<U, { type: K }>;
 type Data<S, K> = K extends string ? Omit<Narrow<S, K>, "type"> : never;
 
@@ -265,86 +404,71 @@ type UnionToIntersection<U> = (
  * target is a parking state: the compiler injects it from `state.type`, so the
  * author can neither forget it nor type it wrong.
  */
-type Assigned<G, S, T> = T extends string
-  ? T extends ParkingState<G>
+type Assigned<C, S, T> = T extends string
+  ? T extends ParkingState<C>
     ? Omit<Data<S, T>, "was">
     : Data<S, T>
   : never;
 
-type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
-
 /**
  * What `boot()` must return: the initial state's payload, minus the `type` the
- * compiler stamps on. The two degenerate graphs get a NAMED marker type rather
+ * compiler stamps on. The two degenerate charts get a NAMED marker type rather
  * than a silent `never`, so the diagnostic says which rule was broken.
  */
-export type InitialData<G, S extends { type: string }> = [
-  InitialState<G>,
+export type InitialData<C, S extends { type: string }> = [
+  InitialState<C>,
 ] extends [never]
-  ? { readonly __graphDeclaresNoInitialState: true }
-  : [IsUnion<InitialState<G>>] extends [true]
-    ? { readonly __graphDeclaresManyInitialStates: InitialState<G> }
-    : Data<S, InitialState<G>>;
+  ? { readonly __chartDeclaresNoInitialState: true }
+  : [IsUnion<InitialState<C>>] extends [true]
+    ? { readonly __chartDeclaresManyInitialStates: InitialState<C> }
+    : Data<S, InitialState<C>>;
 
 type Fn<S, M, From, Ev, R> = (state: Narrow<S, From>, msg: Narrow<M, Ev>) => R;
 
-type Cell<G, X, S, M, From extends keyof G, Ev> = X extends {
-  readonly resume: unknown;
-}
+type Cell<C, X, S, M, From, Ev> = X extends { readonly resume: unknown }
   ? // a resume edge may land on ANY resume target → the payload must satisfy
     // all of them, hence the intersection (not the union).
-    Fn<S, M, From, Ev, UnionToIntersection<Assigned<G, S, ResumeTargets<G, From>>>>
+    Fn<S, M, From, Ev, UnionToIntersection<Assigned<C, S, ResumeTargets<C, From>>>>
   : X extends { readonly target: infer T; readonly otherwise: infer O }
     ? {
-        readonly then: Fn<S, M, From, Ev, Assigned<G, S, T>>;
-        readonly else: Fn<S, M, From, Ev, Assigned<G, S, O>>;
+        readonly then: Fn<S, M, From, Ev, Assigned<C, S, T>>;
+        readonly else: Fn<S, M, From, Ev, Assigned<C, S, O>>;
       }
     : X extends { readonly target: infer T }
-      ? Fn<S, M, From, Ev, Assigned<G, S, T>>
+      ? Fn<S, M, From, Ev, Assigned<C, S, T>>
       : X extends string
-        ? Fn<S, M, From, Ev, Assigned<G, S, X>>
+        ? Fn<S, M, From, Ev, Assigned<C, S, X>>
         : never;
 
 export type Assigns<
-  G,
+  C,
   S extends { type: string },
   M extends { type: string },
 > = {
-  [K in EdgeKey<G>]: K extends `${infer From}.${infer Ev}`
-    ? From extends keyof G
-      ? Cell<G, EdgeAt<G, From, Ev>, S, M, From, Ev>
-      : never
+  [K in EdgeKey<C>]: K extends `${infer From}.${infer Ev}`
+    ? Cell<C, EdgeAt<C, From, Ev>, S, M, From, Ev>
     : never;
 };
 
-// ── 6. guards / cmds, typed FROM THEIR USE SITES ───────────────────────────
-export type GuardName<G> = Extract<
+// ── 10. guards / cmds, typed FROM THEIR USE SITES ──────────────────────────
+export type GuardName<C> = Extract<
   {
-    [S in keyof G]: {
-      [E in keyof On<G, S>]: On<G, S>[E] extends { readonly when: infer W }
+    [S in StateName<C>]: {
+      [E in keyof On<C, S>]: On<C, S>[E] extends { readonly when: infer W }
         ? W
         : never;
-    }[keyof On<G, S>];
-  }[keyof G],
+    }[keyof On<C, S>];
+  }[StateName<C>],
   string
 >;
 
 /** Flatten a `CmdRef` — one name, or every name in an ordered list. */
-type Flatten<C> = C extends readonly string[] ? C[number] : C;
+type Flatten<X> = X extends readonly string[] ? X[number] : X;
 
 /** Every cmd an edge can fire, across BOTH guard arms. */
 type EdgeCmds<X> =
-  | (X extends { readonly cmd: infer C } ? Flatten<C> : never)
-  | (X extends { readonly otherwiseCmd: infer C } ? Flatten<C> : never);
-
-export type CmdName<G> = Extract<
-  {
-    [S in keyof G]: {
-      [E in keyof On<G, S>]: EdgeCmds<On<G, S>[E]>;
-    }[keyof On<G, S>];
-  }[keyof G],
-  string
->;
+  | (X extends { readonly cmd: infer Q } ? Flatten<Q> : never)
+  | (X extends { readonly otherwiseCmd: infer Q } ? Flatten<Q> : never);
 
 /** What field `F` on an edge REFERENCES — a guard name, or its cmd names. */
 type Referenced<X, F extends "when" | "cmd"> = F extends "when"
@@ -354,17 +478,17 @@ type Referenced<X, F extends "when" | "cmd"> = F extends "when"
   : EdgeCmds<X>;
 
 /**
- * Scan the graph for every edge that references `Name` through field `F`.
+ * Scan the chart for every edge that references `Name` through field `F`.
  * `[Name] extends [Referenced<…>]` rather than an equality check, because an
  * edge's cmd list references SEVERAL names at once.
  */
-type SitesWhere<G, F extends "when" | "cmd", Name> = {
-  [S in keyof G]: {
-    [E in keyof On<G, S>]: [Name] extends [Referenced<On<G, S>[E], F>]
-      ? `${Extract<S, string>}.${Extract<E, string>}`
+type SitesWhere<C, F extends "when" | "cmd", Name> = {
+  [S in StateName<C>]: {
+    [E in keyof On<C, S>]: [Name] extends [Referenced<On<C, S>[E], F>]
+      ? `${S}.${Extract<E, string>}`
       : never;
-  }[keyof On<G, S>];
-}[keyof G];
+  }[keyof On<C, S>];
+}[StateName<C>];
 
 /**
  * `"review.FAIL"` → `[state: ReviewState, msg: FailMsg, at: "review.FAIL"]`.
@@ -375,14 +499,11 @@ type SitesWhere<G, F extends "when" | "cmd", Name> = {
  * discriminant, and TypeScript's dependent-parameter control-flow analysis
  * (TS 4.6, microsoft/TypeScript#47109) only re-narrows sibling parameters from
  * a discriminant that is a DIRECT, literal-typed element of the union. `at` is
- * exactly that: one `switch (at)` / `if (at === …)` collapses the tuple union
- * to a single member, and `state` AND `msg` both narrow with it — in either
- * direction, since the tag determines both.
+ * exactly that: one `switch (at)` collapses the tuple union to a single member,
+ * and `state` AND `msg` both narrow with it.
  *
  * For a single-site name `K` is not a union, so this is a lone tuple and the
- * author may keep writing `(s, m) => …`: a shorter parameter list is
- * assignable to a longer non-union rest signature. `at` only becomes
- * mandatory where it is the only thing that can carry the correlation.
+ * author may keep writing `(s, m) => …`.
  */
 type SiteArgs<K, S, M> = K extends `${infer From}.${infer Ev}`
   ? [state: Narrow<S, From>, msg: Narrow<M, Ev>, at: K]
@@ -393,36 +514,23 @@ type SiteArgs<K, S, M> = K extends `${infer From}.${infer Ev}`
  * from a standalone registry declaration — so `retriesRemaining`, used only at
  * `review.FAIL`, receives exactly `review`'s state and `FAIL`'s msg.
  */
-export type Guards<G, S extends { type: string }, M extends { type: string }> = {
-  [N in GuardName<G>]: (...args: SiteArgs<SitesWhere<G, "when", N>, S, M>) => boolean;
+export type Guards<C, S extends { type: string }, M extends { type: string }> = {
+  [N in GuardName<C>]: (...args: SiteArgs<SitesWhere<C, "when", N>, S, M>) => boolean;
 };
 
 /**
- * The payload a builder owes: its Cmd variant minus the `type` the compiler
- * stamps on. A name with NO matching variant in `C` would otherwise collapse
- * to `Omit<never, "type">` — which accepts anything — so it gets a marker.
+ * Same technique: a cmd's parameters come from the edges that REFERENCE it, and
+ * the payload it owes is the one DECLARED in the chart's `cmds` section — the
+ * single site where the effect alphabet lives. A cmd fired from two edges gets
+ * the union of both sites' `[state, msg]` tuples.
  */
-type CmdPayload<C extends Cmd, N> = [Narrow<C, N>] extends [never]
-  ? { readonly __noCmdVariantNamed: N }
-  : Omit<Narrow<C, N>, "type">;
-
-/**
- * Same technique as `Guards`: a cmd's parameters come from the edges that
- * REFERENCE it. A cmd fired from two edges gets the union of both sites'
- * `[state, msg]` tuples, so its builder must handle both.
- */
-export type Cmds<
-  G,
-  S extends { type: string },
-  M extends { type: string },
-  C extends Cmd,
-> = {
-  [N in CmdName<G>]: (
-    ...args: SiteArgs<SitesWhere<G, "cmd", N>, S, M>
-  ) => CmdPayload<C, N>;
+export type Cmds<C, S extends { type: string }, M extends { type: string }> = {
+  [N in CmdName<C>]: (
+    ...args: SiteArgs<SitesWhere<C, "cmd", N>, S, M>
+  ) => Payload<CmdMap<C>[N]>;
 };
 
-// ── 7. identity assertion helpers ──────────────────────────────────────────
+// ── 11. identity assertion helpers ─────────────────────────────────────────
 export type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends <
   T,
 >() => T extends B ? 1 : 2

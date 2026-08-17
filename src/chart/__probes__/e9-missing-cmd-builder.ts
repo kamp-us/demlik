@@ -1,19 +1,30 @@
-// PROBE 9: an edge names a Cmd, but the `cmds` table has no builder for it.
-// `Parts` makes `cmds` REQUIRED the moment `CmdName<G>` is non-`never`, and the
-// mapped type is total over the names the graph references.
+// PROBE 9: an edge names a Cmd, but the `cmds` parts bag has no builder for it.
+// `Parts` makes `cmds` REQUIRED the moment `CmdName<C>` is non-`never`, and the
+// mapped type is total over the names the chart declares.
 import { compile } from "../compile";
-import { type MsgOf, type StateOf, defineGraph } from "../graph";
-import type { Cmd } from "../../pure/core";
+import { type CmdOf, type MsgOf, type StateOf, defineChart, ty } from "../graph";
 
-const g = defineGraph({
-  idle: { initial: true, on: { pick: { target: "busy", cmd: ["put_object", "log"] } } },
-  busy: { end: true },
+const g = defineChart({
+  events: { pick: { data: ty<{ readonly key: string }>(), scope: "edges" } },
+  cmds: {
+    put_object: ty<{ readonly key: string }>(),
+    log: ty<{ readonly line: string }>(),
+  },
+  states: {
+    only: {
+      idle: {
+        initial: true,
+        data: ty<{ readonly n: number }>(),
+        on: { pick: { target: "busy", cmd: ["put_object", "log"] } },
+      },
+      busy: { data: ty<{ readonly n: number }>(), end: true },
+    },
+  },
 });
-type S = StateOf<typeof g, { idle: { readonly n: number }; busy: { readonly n: number } }>;
-type M = MsgOf<typeof g, { pick: { readonly key: string } }>;
-type C = (Cmd<"put_object"> & { readonly key: string }) | (Cmd<"log"> & { readonly line: string });
+type S = StateOf<typeof g>;
+type M = MsgOf<typeof g>;
 
-export const t = compile<typeof g, S, M, C, "x">(g, "x", {
+export const t = compile<typeof g, S, M, CmdOf<typeof g>, "x">(g, "x", {
   assign: { "idle.pick": (s) => ({ n: s.n }) },
   cmds: {
     put_object: (_s, m) => ({ key: m.key }),

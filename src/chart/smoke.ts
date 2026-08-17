@@ -2,7 +2,7 @@
 import { toMermaid } from "../machine-viz";
 import { applyCell } from "../pure/core";
 import { initialStateOf } from "./compile";
-import { defineGraph } from "./graph";
+import { defineChart } from "./graph";
 import { type LaneMsgIn, type LaneState, issue42, lane } from "./lane";
 import { laneMachine } from "./machine";
 import {
@@ -113,7 +113,7 @@ eq(
   "shipped",
 );
 eq(
-  "queued -PASS-> queued (declared refusal: ignore)",
+  "queued -PASS-> queued (refused by the event's scope)",
   step(start, { type: "ISSUE_42.PASS", at: 15 }).type,
   "queued",
 );
@@ -197,9 +197,14 @@ eq("upload init(null) → idle", uploadMachine.init(null, ctx), [
   [],
 ]);
 
-// a graph with no entry marked fails LOUDLY at construction, not at boot
+// a chart with no entry marked fails LOUDLY at construction, not at boot
 try {
-  initialStateOf(defineGraph({ a: { on: { go: "b" } }, b: { end: true } }));
+  initialStateOf(
+    defineChart({
+      events: { go: { scope: "edges" } },
+      states: { only: { a: { on: { go: "b" } }, b: { end: true } } },
+    }),
+  );
   console.log("FAIL missing `initial` should have thrown");
 } catch (e) {
   eq(

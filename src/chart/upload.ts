@@ -1,82 +1,86 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// THE CMD SURFACE — a second, deliberately effectful graph.
+// THE CMD SURFACE — a second, deliberately effectful chart.
 //
 // Umut's lane region emits no Cmds, so it stays clean (see `lane.ts`). This is
 // where effects get exercised: 0..n Cmds per edge, per-guard-arm emission, one
 // builder shared by several sites, and a derived `init`.
+//
+// The Cmd union is DERIVED from the chart's `cmds` section: a cmd name is
+// written once as a declaration (with its payload), then only referenced —
+// on the edges that fire it, and by the builder that constructs its payload.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, Sub } from "../pure/core";
+import type { Sub } from "../pure/core";
 import { defineMachine } from "../runtime-types";
 import { compile, initFrom } from "./compile";
 import {
+  type CmdOf,
   type Cmds,
   type MsgOf,
   type Namespaced,
   type StateOf,
-  defineGraph,
+  defineChart,
+  ty,
 } from "./graph";
 
-export const upload = defineGraph({
-  // `initial: true` — the one place the entry state is written down.
-  idle: {
-    initial: true,
-    on: { pick: { target: "sending", cmd: "put_object" } },
-    ignore: ["done", "fail", "ok"],
+export const upload = defineChart({
+  events: {
+    pick: { data: ty<{ readonly key: string }>(), scope: "edges" },
+    done: { data: ty<{ readonly etag: string }>(), scope: "edges" },
+    fail: { data: ty<{ readonly error: string }>(), scope: "edges" },
+    ok: { scope: "edges" },
   },
-  sending: {
-    on: {
-      // an ORDERED LIST: two Cmds off one edge, in declaration order.
-      done: { target: "checking", cmd: ["verify_object", "log"] },
-      // per-arm emission: the guard decides WHICH effects fire, and that
-      // decision is visible in the graph instead of inside a cell body.
-      fail: {
-        target: "idle",
-        when: "hasBudget",
-        otherwise: "dead",
-        cmd: "log",
-        otherwiseCmd: ["log", "alert_human"],
+  cmds: {
+    put_object: ty<{ readonly key: string }>(),
+    verify_object: ty<{ readonly key: string; readonly etag: string }>(),
+    log: ty<{ readonly line: string }>(),
+    alert_human: ty<{ readonly reason: string }>(),
+  },
+  states: {
+    live: {
+      // `initial: true` — the one place the entry state is written down.
+      idle: {
+        initial: true,
+        data: ty<{ readonly tries: number }>(),
+        on: { pick: { target: "sending", cmd: "put_object" } },
+      },
+      sending: {
+        data: ty<{ readonly key: string; readonly tries: number }>(),
+        on: {
+          // an ORDERED LIST: two Cmds off one edge, in declaration order.
+          done: { target: "checking", cmd: ["verify_object", "log"] },
+          // per-arm emission: the guard decides WHICH effects fire, and that
+          // decision is visible in the chart instead of inside a cell body.
+          fail: {
+            target: "idle",
+            when: "hasBudget",
+            otherwise: "dead",
+            cmd: "log",
+            otherwiseCmd: ["log", "alert_human"],
+          },
+        },
+      },
+      // an edge with no `cmd` at all → zero Cmds.
+      checking: {
+        data: ty<{
+          readonly key: string;
+          readonly etag: string;
+          readonly tries: number;
+        }>(),
+        on: { ok: "idle" },
       },
     },
-    ignore: ["pick", "ok"],
+    finished: {
+      dead: { data: ty<{ readonly tries: number }>(), end: true },
+    },
   },
-  // an edge with no `cmd` at all → zero Cmds.
-  checking: { on: { ok: "idle" }, ignore: ["pick", "done", "fail"] },
-  dead: { end: true },
 });
 
 export type UG = typeof upload;
+export type UState = StateOf<UG>;
+export type UMsg = MsgOf<UG>;
+export type UCmd = CmdOf<UG>;
 
-export type UState = StateOf<
-  UG,
-  {
-    idle: { readonly tries: number };
-    sending: { readonly key: string; readonly tries: number };
-    checking: {
-      readonly key: string;
-      readonly etag: string;
-      readonly tries: number;
-    };
-    dead: { readonly tries: number };
-  }
->;
-
-export type UMsg = MsgOf<
-  UG,
-  {
-    pick: { readonly key: string };
-    done: { readonly etag: string };
-    fail: { readonly error: string };
-    ok: Record<never, never>;
-  }
->;
-
-export type UCmd =
-  | (Cmd<"put_object"> & { readonly key: string })
-  | (Cmd<"verify_object"> & { readonly key: string; readonly etag: string })
-  | (Cmd<"log"> & { readonly line: string })
-  | (Cmd<"alert_human"> & { readonly reason: string });
-
-export const uCmds: Cmds<UG, UState, UMsg, UCmd> = {
+export const uCmds: Cmds<UG, UState, UMsg> = {
   // ONE site (`idle.pick`) → exactly the idle state + the pick msg.
   put_object: (_s, m) => ({ key: m.key }),
   // ONE site (`sending.done`) → the sending state + the done msg.

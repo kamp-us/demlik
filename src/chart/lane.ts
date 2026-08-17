@@ -1,102 +1,95 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // THE REAL INPUT — Umut's lane region (kamp-us/phoenix
 // packages/fabrika-cli/src/lane/emit.ts) expressed in the config form.
+//
+// Every name below is written ONCE as a declaration. States are declared by
+// being keys under a phase; events by being keys under `events`; their payloads
+// travel with them. The Msg union, the State union, `was`, the entry state and
+// the totality obligation are all derived from this one value.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, Transitions } from "../pure/core";
+import type { Transitions } from "../pure/core";
 import { compile } from "./compile";
 import {
   type Assigns,
+  type CmdOf,
   type Guards,
   type MsgOf,
   type Namespaced,
-  type ResumeTargets,
   type StateOf,
-  defineGraph,
+  defineChart,
+  ty,
 } from "./graph";
 
-// ── the graph. No `as const`. Every target checked against these same keys. ──
-// Every (state × event) pair is DECLARED in `on` or REFUSED — named in
-// `ignore`, or dismissed for the whole row by `end: true`. There is no third
-// case: `Total<G>` fails to compile on one. Add a seventh event and every row
-// that has not decided about it goes red.
-export const lane = defineGraph({
-  // the entry point is DATA on the graph — `init` is derived from it, and
-  // `machine-viz` draws `[*] --> queued` off the same fact.
-  queued: {
-    initial: true,
-    on: { WIP: "build", BLOCKED: "blocked" },
-    ignore: ["DONE", "PASS", "FAIL", "UNBLOCKED"],
-  },
-  build: {
-    on: { DONE: "review", BLOCKED: "blocked" },
-    ignore: ["WIP", "PASS", "FAIL", "UNBLOCKED"],
-  },
-  review: {
-    on: {
-      PASS: "ship",
-      BLOCKED: "blocked",
-      // the one guarded edge: retries left → back to build, else freeze.
-      FAIL: { target: "build", when: "retriesRemaining", otherwise: "frozen" },
+export const lane = defineChart({
+  // carried by every state — one declaration, not one per state.
+  ctx: ty<{ readonly retries: number; readonly maxRetries: number }>(),
+
+  // `scope` answers "where does this event mean anything?" once, on the event.
+  // "edges"  → targeted: live exactly where it is routed, dead elsewhere.
+  // <phase>  → live in that phase; EVERY state there must handle or `ignore` it.
+  events: {
+    WIP: { data: ty<{ readonly at: number }>(), scope: "edges" },
+    DONE: { data: ty<{ readonly at: number }>(), scope: "edges" },
+    // a block can arrive at any point in the work — and every working state
+    // routes it. Adding a state to `working` without a BLOCKED edge goes red.
+    BLOCKED: {
+      data: ty<{ readonly at: number; readonly reason: string }>(),
+      scope: "working",
     },
-    ignore: ["WIP", "DONE", "UNBLOCKED"],
+    PASS: { data: ty<{ readonly at: number }>(), scope: "edges" },
+    FAIL: {
+      data: ty<{ readonly at: number; readonly reason: string }>(),
+      scope: "edges",
+    },
+    // only a parked lane can be unblocked — and both parked states route it.
+    UNBLOCKED: { data: ty<{ readonly at: number }>(), scope: "parked" },
   },
-  ship: {
-    on: { DONE: "shipped", BLOCKED: "human:cp-approval" },
-    ignore: ["WIP", "PASS", "FAIL", "UNBLOCKED"],
+
+  states: {
+    working: {
+      // the entry point is DATA on the chart — `init` is derived from it, and
+      // `machine-viz` draws `[*] --> queued` off the same fact.
+      queued: { initial: true, on: { WIP: "build", BLOCKED: "blocked" } },
+      build: { on: { DONE: "review", BLOCKED: "blocked" } },
+      review: {
+        on: {
+          PASS: "ship",
+          BLOCKED: "blocked",
+          // the one guarded edge: retries left → back to build, else freeze.
+          FAIL: { target: "build", when: "retriesRemaining", otherwise: "frozen" },
+        },
+      },
+      ship: { on: { DONE: "shipped", BLOCKED: "human:cp-approval" } },
+    },
+    // `hist` is not a pseudostate — it is a property OF THE EDGE. A parked lane
+    // is deaf to lane traffic until it is unblocked, and that deafness is the
+    // `scope` of the lane events, not 10 strings written out here.
+    parked: {
+      blocked: { on: { UNBLOCKED: { resume: { fallback: "queued" } } } },
+      "human:cp-approval": { on: { UNBLOCKED: { resume: { fallback: "queued" } } } },
+    },
+    // terminal: declared, not inferred from "has no outgoing edges".
+    done: {
+      shipped: { end: true },
+      frozen: { end: true },
+    },
   },
-  // `hist` is not a pseudostate — it is a property OF THE EDGE.
-  // A parked lane is deaf to lane traffic until it is unblocked.
-  blocked: {
-    on: { UNBLOCKED: { resume: { fallback: "queued" } } },
-    ignore: ["WIP", "DONE", "BLOCKED", "PASS", "FAIL"],
-  },
-  "human:cp-approval": {
-    on: { UNBLOCKED: { resume: { fallback: "queued" } } },
-    ignore: ["WIP", "DONE", "BLOCKED", "PASS", "FAIL"],
-  },
-  // terminal: declared, not inferred from "has no outgoing edges".
-  shipped: { end: true },
-  frozen: { end: true },
 });
 
 export type LaneG = typeof lane;
 
-// ── the per-state / per-event payloads (types can't come from a value) ──────
-/** Where a `blocked` resume can land — DERIVED, not written by hand. */
-export type BlockedWas = ResumeTargets<LaneG, "blocked">;
-export type CpWas = ResumeTargets<LaneG, "human:cp-approval">;
-
-type Ctx = { readonly retries: number; readonly maxRetries: number };
-
-type LaneData = {
-  queued: Ctx;
-  build: Ctx;
-  review: Ctx;
-  ship: Ctx;
-  blocked: Ctx & { readonly was: BlockedWas };
-  "human:cp-approval": Ctx & { readonly was: CpWas };
-  shipped: Ctx;
-  frozen: Ctx;
-};
-
-type LanePayload = {
-  WIP: { readonly at: number };
-  DONE: { readonly at: number };
-  BLOCKED: { readonly at: number; readonly reason: string };
-  PASS: { readonly at: number };
-  FAIL: { readonly at: number; readonly reason: string };
-  UNBLOCKED: { readonly at: number };
-};
-
-export type LaneState = StateOf<LaneG, LaneData>;
+export type LaneState = StateOf<LaneG>;
 /** The BARE msg union — what the parts below are authored against. */
-export type LaneMsg = MsgOf<LaneG, LanePayload>;
+export type LaneMsg = MsgOf<LaneG>;
 /** The namespaced msg union — what the compiled machine actually consumes. */
 export type LaneMsgIn<NS extends string> = Namespaced<LaneMsg, NS>;
-export type LaneCmd = Cmd<never>;
+export type LaneCmd = CmdOf<LaneG>;
 
 // ── the parts ───────────────────────────────────────────────────────────────
-const ctx = (s: { retries: number; maxRetries: number }): Ctx => ({
+const ctx = (s: {
+  readonly retries: number;
+  readonly maxRetries: number;
+}): { readonly retries: number; readonly maxRetries: number } => ({
   retries: s.retries,
   maxRetries: s.maxRetries,
 });

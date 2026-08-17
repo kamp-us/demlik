@@ -1,7 +1,12 @@
 // PROBE 14: `end: true` means "accepts nothing", so it cannot also accept
 // something. Declaring both is an invalid state, and unrepresentable.
-import { defineGraph } from "../graph";
-export const g = defineGraph({
-  queued: { on: { WIP: "shipped" }, ignore: ["REOPEN"] },
-  shipped: { end: true, on: { REOPEN: "queued" } }, // ← both
+import { defineChart } from "../graph";
+export const g = defineChart({
+  events: { WIP: { scope: "edges" }, REOPEN: { scope: "edges" } },
+  states: {
+    only: {
+      queued: { on: { WIP: "shipped" } },
+      shipped: { end: true, on: { REOPEN: "queued" } }, // ← both
+    },
+  },
 });

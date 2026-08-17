@@ -8,10 +8,13 @@ import {
   type Assert,
   type Assigns,
   type CmdName,
+  type CmdOf,
   type Cmds,
   type EdgeKey,
   type Eq,
   type EventName,
+  type GroupName,
+  type GroupOf,
   type GuardName,
   type Guards,
   type InitialData,
@@ -24,11 +27,10 @@ import {
   type ResumeTargets,
   type StateName,
   type StateOf,
-  defineGraph,
+  defineChart,
+  ty,
 } from "./graph";
 import {
-  type BlockedWas,
-  type CpWas,
   type LaneCmd,
   type LaneG,
   type LaneMsg,
@@ -50,7 +52,11 @@ import {
 /** Local narrowing shorthands for the upload demo's unions. */
 type U<K extends string> = Extract<UState, { type: K }>;
 type UM<K extends string> = Extract<UMsg, { type: K }>;
-type UCmds = Cmds<UG, UState, UMsg, UCmd>;
+type UCmds = Cmds<UG, UState, UMsg>;
+
+/** Where a `blocked` resume can land — DERIVED, not written by hand. */
+export type BlockedWas = ResumeTargets<LaneG, "blocked">;
+export type CpWas = ResumeTargets<LaneG, "human:cp-approval">;
 
 // ── §2 derivations ──────────────────────────────────────────────────────────
 export type A1 = Assert<
@@ -70,6 +76,11 @@ export type A1 = Assert<
 export type A2 = Assert<
   Eq<EventName<LaneG>, "WIP" | "BLOCKED" | "DONE" | "PASS" | "FAIL" | "UNBLOCKED">
 >;
+
+// the phases are declared by BEING keys of `states` — no separate registry.
+export type A2a = Assert<Eq<GroupName<LaneG>, "working" | "parked" | "done">>;
+export type A2b = Assert<Eq<GroupOf<LaneG, "review">, "working">>;
+export type A2c = Assert<Eq<GroupOf<LaneG, "human:cp-approval">, "parked">>;
 
 // only the DECLARED pairs — not the 8×6 = 48 cross product, but the 11 edges.
 export type A3 = Assert<
@@ -91,33 +102,75 @@ export type A3 = Assert<
 
 export type A4 = Assert<Eq<GuardName<LaneG>, "retriesRemaining">>;
 export type A5 = Assert<Eq<CmdName<LaneG>, never>>;
+// no `cmds` section → the Cmd union is the empty one, derived not written.
+export type A5a = Assert<Eq<LaneCmd, Cmd<never>>>;
 
 // ── §2b TOTALITY: every pair declared-or-refused ───────────────────────────
-// The real lane graph is total — nothing falls through.
+// The real lane chart is total — nothing falls through.
 export type A43 = Assert<Eq<MissingPairs<LaneG>, never>>;
-// row by row: declared ∪ ignored ∪ end covers all six events, per state.
+// row by row: declared ∪ out-of-scope ∪ end covers all six events, per state.
 export type A44 = Assert<Eq<MissingAt<LaneG, "review">, never>>;
 export type A45 = Assert<Eq<MissingAt<LaneG, "shipped">, never>>;
 
-// A deliberately INCOMPLETE graph, built WITHOUT `defineGraph` (which would
-// refuse it) so the derivation itself can be asserted on. `open.B` is declared,
-// `open.A` is ignored, `open.C` is neither — and `MissingPairs` names it.
+// A deliberately INCOMPLETE chart, built WITHOUT `defineChart` (which would
+// refuse it) so the derivation itself can be asserted on. All three events are
+// `scope: "all"` — the old machine-wide obligation, still available per event.
+// `open.B` is declared, `open.A` is ignored, `open.C` is neither.
 type Holey = {
-  open: { on: { B: "shut" }; ignore: ["A"] };
-  shut: { on: { A: "open"; C: "open" } };
+  events: {
+    A: { scope: "all" };
+    B: { scope: "all" };
+    C: { scope: "all" };
+  };
+  states: {
+    only: {
+      open: { on: { B: "shut" }; ignore: ["A"] };
+      shut: { on: { A: "open"; C: "open" } };
+    };
+  };
 };
 export type A46 = Assert<Eq<EventName<Holey>, "B" | "A" | "C">>;
 export type A47 = Assert<Eq<MissingAt<Holey, "open">, "C">>;
 export type A48 = Assert<Eq<MissingAt<Holey, "shut">, "B">>;
 export type A49 = Assert<Eq<MissingPairs<Holey>, "open.C" | "shut.B">>;
 
-// `end: true` dismisses a whole row in one token — the six-event row is refused
-// without naming a single event.
-type Sealed = { a: { on: { X: "b" } }; b: { end: true } };
+// `end: true` dismisses a whole row in one token.
+type Sealed = {
+  events: { X: { scope: "all" } };
+  states: { only: { a: { on: { X: "b" } }; b: { end: true } } };
+};
 export type A50 = Assert<Eq<MissingPairs<Sealed>, never>>;
 // …and dropping the `end` re-opens exactly that pair.
-type Unsealed = { a: { on: { X: "b" } }; b: Record<never, never> };
+type Unsealed = {
+  events: { X: { scope: "all" } };
+  states: { only: { a: { on: { X: "b" } }; b: Record<never, never> } };
+};
 export type A51 = Assert<Eq<MissingPairs<Unsealed>, "b.X">>;
+
+// ── §2c SCOPE: the |S| × |M| enumeration, replaced by |M| declarations ─────
+// The dial, asserted at each of its three settings on ONE chart shape.
+type Scoped<S extends string> = {
+  events: { PING: { scope: S } };
+  states: {
+    hot: { a: { on: { PING: "a" } }; b: Record<never, never> };
+    cold: { c: Record<never, never> };
+  };
+};
+// "edges": live exactly where routed → no obligation anywhere.
+export type A52 = Assert<Eq<MissingPairs<Scoped<"edges">>, never>>;
+// a phase name: every state IN that phase owes a decision, and only those.
+export type A53 = Assert<Eq<MissingPairs<Scoped<"hot">>, "b.PING">>;
+// "all": the old machine-wide obligation, now opt-in per event.
+export type A54 = Assert<Eq<MissingPairs<Scoped<"all">>, "b.PING" | "c.PING">>;
+// …and the obligation is discharged by `ignore` naming the pair, as before.
+type ScopedIgnored = {
+  events: { PING: { scope: "hot" } };
+  states: {
+    hot: { a: { on: { PING: "a" } }; b: { ignore: ["PING"] } };
+    cold: { c: Record<never, never> };
+  };
+};
+export type A55 = Assert<Eq<MissingPairs<ScopedIgnored>, never>>;
 
 // ── §3 discriminated unions ────────────────────────────────────────────────
 export type A6 = Assert<
@@ -145,12 +198,18 @@ export type A10 = Assert<Eq<CpWas, "ship" | "queued">>;
 export type A11 = Assert<
   Eq<ResumeTargets<LaneG, "blocked">, "queued" | "build" | "review">
 >;
-// the parking state's payload really does carry `was`
+// the parking state's payload really does carry `was` — INJECTED by `StateOf`,
+// never written in the author's file: "blocked is a parking state" is already
+// said by its resume edge.
 export type A12 = Assert<
   Eq<
     Extract<LaneState, { type: "blocked" }>["was"],
     "queued" | "build" | "review"
   >
+>;
+// …and a NON-parking state has no `was` at all.
+export type A12a = Assert<
+  Eq<"was" extends keyof Extract<LaneState, { type: "build" }> ? true : false, false>
 >;
 
 // ── §6 namespace-as-type-parameter: a LITERAL union, never `string` ────────
@@ -237,14 +296,10 @@ export type A23 = Assert<
   >
 >;
 // the table is TOTAL: every state × every namespaced event, incl. terminals
-export type A24 = Assert<
-  Eq<keyof typeof issue42, StateName<LaneG>>
->;
+export type A24 = Assert<Eq<keyof typeof issue42, StateName<LaneG>>>;
 export type A25 = Assert<
   Eq<keyof (typeof issue42)["shipped"], LaneMsgIn<"ISSUE_42">["type"]>
 >;
-
-
 
 // ═══ §7 the CMD surface (the lane region emits none — see `upload.ts`) ═══════
 export type A26 = Assert<
@@ -259,10 +314,25 @@ export type A28 = Assert<
   Eq<typeof uploader, Transitions<UState, Namespaced<UMsg, "up">, UCmd>>
 >;
 // every name reachable from ANY edge, through `cmd` (scalar OR list) and
-// through `otherwiseCmd`.
+// through `otherwiseCmd` — and it agrees with the `cmds` DECLARATION, because
+// the edges are constrained to reference only declared names.
 export type A29 = Assert<
   Eq<CmdName<UG>, "put_object" | "verify_object" | "log" | "alert_human">
 >;
+// the whole Cmd union, DERIVED from the one `cmds` section — not hand-written.
+export type A29a = Assert<
+  Eq<
+    UCmd,
+    | ({ readonly type: "put_object" } & { readonly key: string })
+    | ({ readonly type: "verify_object" } & {
+        readonly key: string;
+        readonly etag: string;
+      })
+    | ({ readonly type: "log" } & { readonly line: string })
+    | ({ readonly type: "alert_human" } & { readonly reason: string })
+  >
+>;
+export type A29b = Assert<Eq<UCmd, CmdOf<UG>>>;
 // a builder's params are the UNION of its use sites — `log` fires from
 // `sending.done` and from both arms of `sending.fail`.
 export type A30 = Assert<
@@ -279,7 +349,7 @@ export type A31 = Assert<
     [state: U<"sending">, msg: UM<"fail">, at: "sending.fail"]
   >
 >;
-// the payload owed is the Cmd variant MINUS `type` — the compiler stamps it
+// the payload owed is exactly what the `cmds` section declared
 export type A32 = Assert<
   Eq<ReturnType<UCmds["verify_object"]>, { readonly key: string; readonly etag: string }>
 >;
@@ -291,7 +361,7 @@ export type A33 = Assert<
   >
 >;
 
-// ═══ §8 `init`, DERIVED from the graph ══════════════════════════════════════
+// ═══ §8 `init`, DERIVED from the chart ══════════════════════════════════════
 export type A34 = Assert<Eq<InitialState<LaneG>, "queued">>;
 export type A35 = Assert<Eq<InitialState<UG>, "idle">>;
 // `boot()` owes EXACTLY the entry state's data — no `type`, nothing else
@@ -302,65 +372,62 @@ export type A36 = Assert<
   >
 >;
 export type A37 = Assert<Eq<InitialData<UG, UState>, { readonly tries: number }>>;
-// a graph with NO entry marked gets a NAMED marker, not a silent `never`
-const noEntry = defineGraph({ a: { on: { go: "b" } }, b: { end: true } });
+// a chart with NO entry marked gets a NAMED marker, not a silent `never`
+const noEntry = defineChart({
+  events: { go: { scope: "edges" } },
+  states: { only: { a: { on: { go: "b" } }, b: { end: true } } },
+});
 export type A38 = Assert<
   Eq<
-    InitialData<typeof noEntry, StateOf<typeof noEntry, { a: object; b: object }>>,
-    { readonly __graphDeclaresNoInitialState: true }
+    InitialData<typeof noEntry, StateOf<typeof noEntry>>,
+    { readonly __chartDeclaresNoInitialState: true }
   >
 >;
-// …and so does a graph with TWO
-const twoEntries = defineGraph({
-  a: { initial: true, on: { go: "b" } },
-  b: { initial: true, end: true },
+// …and so does a chart with TWO
+const twoEntries = defineChart({
+  events: { go: { scope: "edges" } },
+  states: {
+    only: { a: { initial: true, on: { go: "b" } }, b: { initial: true, end: true } },
+  },
 });
 export type A39 = Assert<
   Eq<
-    InitialData<
-      typeof twoEntries,
-      StateOf<typeof twoEntries, { a: object; b: object }>
-    >,
-    { readonly __graphDeclaresManyInitialStates: "a" | "b" }
+    InitialData<typeof twoEntries, StateOf<typeof twoEntries>>,
+    { readonly __chartDeclaresManyInitialStates: "a" | "b" }
   >
 >;
 // the derived `init` is exactly `Machine["init"]`'s shape, rehydrate included
-export type A40 = Assert<
-  Eq<Parameters<typeof uploadMachine.init>[0], UState | null>
->;
+export type A40 = Assert<Eq<Parameters<typeof uploadMachine.init>[0], UState | null>>;
 
-// ═══ §9 a third graph: ONE guard referenced from TWO sites ═════════════════════
+// ═══ §9 a third chart: ONE guard referenced from TWO sites ═════════════════════
 // The single-site case above is exact by construction. The multi-site case is
 // the one that needs the `at` correlator: `SiteArgs` distributes, so the guard's
 // parameters are a UNION OF TUPLES, and narrowing `s.type` is a NESTED
 // discriminant that TypeScript will not propagate to the sibling `m`.
-const retry = defineGraph({
-  fetching: {
-    on: { TIMEOUT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
-    ignore: ["CORRUPT"],
+const retry = defineChart({
+  events: {
+    TIMEOUT: { data: ty<{ readonly afterMs: number }>(), scope: "edges" },
+    CORRUPT: { data: ty<{ readonly offset: number }>(), scope: "edges" },
   },
-  parsing: {
-    on: { CORRUPT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
-    ignore: ["TIMEOUT"],
+  states: {
+    trying: {
+      fetching: {
+        data: ty<{ readonly attempt: number; readonly url: string }>(),
+        on: { TIMEOUT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+      },
+      parsing: {
+        data: ty<{ readonly attempt: number; readonly bytes: number }>(),
+        on: { CORRUPT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+      },
+    },
+    finished: {
+      dead: { data: ty<{ readonly attempt: number }>(), end: true },
+    },
   },
-  dead: { end: true },
 });
 export type RG = typeof retry;
-export type RState = StateOf<
-  RG,
-  {
-    fetching: { readonly attempt: number; readonly url: string };
-    parsing: { readonly attempt: number; readonly bytes: number };
-    dead: { readonly attempt: number };
-  }
->;
-export type RMsg = MsgOf<
-  RG,
-  {
-    TIMEOUT: { readonly afterMs: number };
-    CORRUPT: { readonly offset: number };
-  }
->;
+export type RState = StateOf<RG>;
+export type RMsg = MsgOf<RG>;
 
 // the guard is named from TWO edges, so `at` is a two-member literal union…
 export type A41 = Assert<Eq<GuardName<RG>, "worthRetrying">>;
@@ -417,4 +484,3 @@ export const retrier = compile<RG, RState, RMsg, Cmd<never>, "r">(retry, "r", {
   },
   guards: rGuards,
 });
-

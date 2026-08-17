@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// RUNTIME — the graph walk that emits a real `Transitions<S, M, C>`.
+// RUNTIME — the chart walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
 import { Cmd, NoCellError, type Transitions } from "../pure/core";
 import type {
   Assigns,
+  Chart,
   CmdName,
   Cmds,
-  Graph,
   GuardName,
   Guards,
   InitialData,
@@ -21,25 +21,25 @@ function cmdNames(ref: string | readonly string[] | undefined): readonly string[
 }
 
 // There is no `unhandled` policy any more. A pair is DECLARED (an edge), or
-// REFUSED in the graph (`ignore` / `end: true`) — `Total<G>` refuses to compile
-// on any third case. The refusal is a self-loop with no cmds; the throw below
-// is the safety net under the compile-time refusal (`.decisions/0011`), reached
-// only when the mapped types were bypassed with a cast.
+// REFUSED — by the event's `scope`, or by this state's `ignore`, or by
+// `end: true` — and `Total<C>` refuses to compile on any third case. The
+// refusal is a self-loop with no cmds; the throw below is the safety net under
+// the compile-time refusal (`.decisions/0011`), reached only when the mapped
+// types were bypassed with a cast.
 export type Parts<
-  G,
+  C,
   S extends { type: string },
   M extends { type: string },
-  C extends Cmd,
 > = {
-  readonly assign: Assigns<G, S, M>;
-} & ([GuardName<G>] extends [never]
+  readonly assign: Assigns<C, S, M>;
+} & ([GuardName<C>] extends [never]
   ? { readonly guards?: undefined }
-  : { readonly guards: Guards<G, S, M> }) &
-  ([CmdName<G>] extends [never]
+  : { readonly guards: Guards<C, S, M> }) &
+  ([CmdName<C>] extends [never]
     ? { readonly cmds?: undefined }
-    : { readonly cmds: Cmds<G, S, M, C> });
+    : { readonly cmds: Cmds<C, S, M> });
 
-// ── runtime views of the config (the shapes the walk actually reads) ───────
+// ── runtime views of the chart (the shapes the walk actually reads) ────────
 type RtEdge =
   | string
   | {
@@ -50,25 +50,46 @@ type RtEdge =
       readonly otherwiseCmd?: string | readonly string[];
       readonly resume?: { readonly fallback: string };
     };
-type RtGraph = Readonly<
-  Record<
+type RtNode = {
+  readonly initial?: true;
+  readonly on?: Record<string, RtEdge>;
+  readonly ignore?: readonly string[];
+  readonly end?: true;
+};
+type RtChart = {
+  readonly events: Record<
     string,
-    {
-      readonly initial?: true;
-      readonly on?: Record<string, RtEdge>;
-      readonly ignore?: readonly string[];
-      readonly end?: true;
-    }
-  >
->;
+    { readonly scope: string | readonly string[] }
+  >;
+  readonly states: Record<string, Record<string, RtNode>>;
+};
 type RtState = { readonly type: string; readonly was?: string };
 type RtMsg = { readonly type: string };
 type RtCell = (s: RtState, m: RtMsg) => readonly [RtState, readonly Cmd[]];
 type RtFn = (s: RtState, m: RtMsg) => object;
 type RtAssign = RtFn | { readonly then: RtFn; readonly else: RtFn };
 
+/** State name → its node and its phase, flattened out of the grouped shape. */
+type Flat = { readonly node: RtNode; readonly group: string };
+
+function flatten(c: RtChart): Map<string, Flat> {
+  const out = new Map<string, Flat>();
+  for (const group of Object.keys(c.states)) {
+    const members = c.states[group] ?? {};
+    for (const s of Object.keys(members)) {
+      const node = members[s];
+      if (node !== undefined) out.set(s, { node, group });
+    }
+  }
+  return out;
+}
+
+function scopeList(scope: string | readonly string[]): readonly string[] {
+  return typeof scope === "string" ? [scope] : scope;
+}
+
 /**
- * Compile a graph + the code parts into a genuine `Transitions<S, M, C>`.
+ * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
  *
  * `NS` namespaces the emitted table keys AND the Msg union at the type level:
  * the table is keyed `${ns}.${event}`, and the returned type is
@@ -77,17 +98,17 @@ type RtAssign = RtFn | { readonly then: RtFn; readonly else: RtFn };
  * the namespace before calling them (Umut's `bareEvent`).
  */
 export function compile<
-  const G extends Graph<G>,
+  const C extends Chart<C>,
   S extends { type: string },
   M extends { type: string },
-  C extends Cmd,
+  K extends Cmd,
   const NS extends string,
 >(
-  graph: G,
+  chart: C,
   ns: NS,
-  parts: Parts<G, S, M, C>,
-): Transitions<S, Namespaced<M, NS>, C> {
-  const g = graph as unknown as RtGraph;
+  parts: Parts<C, S, M>,
+): Transitions<S, Namespaced<M, NS>, K> {
+  const c = chart as unknown as RtChart;
   const assign = parts.assign as unknown as Record<string, RtAssign>;
   const guards = (parts.guards ?? {}) as unknown as Record<
     string,
@@ -98,32 +119,32 @@ export function compile<
     (s: RtState, m: RtMsg, at: string) => object
   >;
 
-  const stateKeys = Object.keys(g);
-  const events = new Set<string>();
+  const flat = flatten(c);
+  const events = Object.keys(c.events);
   const parking = new Set<string>();
-  for (const s of stateKeys) {
-    const on = g[s]?.on ?? {};
-    for (const e of Object.keys(on)) {
-      events.add(e);
-      const spec = on[e];
+  for (const [s, { node }] of flat) {
+    for (const spec of Object.values(node.on ?? {})) {
       if (typeof spec === "object" && spec.resume !== undefined) parking.add(s);
     }
   }
 
   const table: Record<string, Record<string, RtCell>> = {};
 
-  for (const s of stateKeys) {
+  for (const [s, { node, group }] of flat) {
     const row: Record<string, RtCell> = {};
-    const on = g[s]?.on ?? {};
+    const on = node.on ?? {};
 
     for (const e of events) {
       const key = `${ns}.${e}`;
       const spec = on[e];
 
       if (spec === undefined) {
-        const node = g[s];
+        // the mirror of `MissingAt<C, S>`: live-but-undecided is the only case
+        // the type layer forbids, so it is the only case that throws.
+        const scope = scopeList(c.events[e]?.scope ?? "edges");
+        const live = scope.includes("all") || scope.includes(group);
         const refused =
-          node?.end === true || (node?.ignore ?? []).includes(e) === true;
+          node.end === true || !live || (node.ignore ?? []).includes(e);
         row[key] = refused
           ? (st) => [st, []]
           : () => {
@@ -162,7 +183,7 @@ export function compile<
 
         const data = payloadFn(st, msg);
         // `was` is INJECTED, never authored: entering a parking state records
-        // where you came from. The type of `was` is `ResumeTargets<G, target>`,
+        // where you came from. The type of `was` is `ResumeTargets<C, target>`,
         // and `st.type` is in that set by construction.
         const next: RtState = parking.has(target)
           ? { ...data, type: target, was: st.type }
@@ -170,7 +191,7 @@ export function compile<
 
         // 0..n Cmds, in declaration order. A guarded edge picks its arm's
         // list — `Cmd.when` lifted onto the edge, so which effects fire is
-        // visible in the graph rather than buried in a cell body.
+        // visible in the chart rather than buried in a cell body.
         const emitted = cmdNames(fired ? edge.cmd : edge.otherwiseCmd).map(
           (n): Cmd => {
             const build = cmds[n];
@@ -192,13 +213,13 @@ export function compile<
   // ── THE ONE CAST ────────────────────────────────────────────────────────
   // Inside the library, at the construction boundary. `Transitions` is a
   // mapped type over `S["type"] × M["type"]`; the walk builds the same keys
-  // from `Object.keys(graph)` × `${ns}.${event}`, but tsc cannot see that a
+  // from the flattened chart × `${ns}.${event}`, but tsc cannot see that a
   // string-keyed record built in a loop is total over those unions.
-  return table as unknown as Transitions<S, Namespaced<M, NS>, C>;
+  return table as unknown as Transitions<S, Namespaced<M, NS>, K>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// `init`, DERIVED FROM THE GRAPH
+// `init`, DERIVED FROM THE CHART
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -206,40 +227,37 @@ export function compile<
  * marked — the runtime half of what `InitialData`'s marker types say at the
  * type level.
  */
-export function initialStateOf<const G extends Graph<G>>(graph: G): InitialState<G> {
-  const g = graph as unknown as RtGraph;
-  const marked = Object.keys(g).filter((s) => g[s]?.initial === true);
+export function initialStateOf<const C extends Chart<C>>(chart: C): InitialState<C> {
+  const flat = flatten(chart as unknown as RtChart);
+  const marked = [...flat].filter(([, f]) => f.node.initial === true);
   const only = marked[0];
   if (marked.length !== 1 || only === undefined) {
     throw new Error(
-      `@demlik/tea: graph must mark exactly one state \`initial: true\` (found ${marked.length})`,
+      `@demlik/tea: chart must mark exactly one state \`initial: true\` (found ${marked.length})`,
     );
   }
   // `Object.keys` yields `string`; the type-level answer is the same key.
-  return only as InitialState<G>;
+  return only[0] as InitialState<C>;
 }
 
 /**
- * Build a `Machine["init"]` from the graph's declared entry state plus a
+ * Build a `Machine["init"]` from the chart's declared entry state plus a
  * `boot()` that supplies ONLY that state's data. The state NAME is never
  * repeated by the author — it comes from the same `initial: true` that
  * `machine-viz` reads to draw the `[*] -->` edge.
  *
  * Rehydrate is honoured verbatim: a non-null `loaded` is returned untouched
- * with NO cmds, which is exactly Invariant 2's contract (init's rehydrate
- * branch is the migration boundary, not the boot-effect hook). Boot cmds are
- * therefore NOT expressible here, deliberately — the substrate's own answer is
- * a `boot` Msg dispatched once after `run(...)`.
+ * with NO cmds, which is exactly Invariant 2's contract.
  */
 export function initFrom<
-  const G extends Graph<G>,
+  const C extends Chart<C>,
   S extends { type: string },
-  C extends Cmd,
->(graph: G, boot: () => InitialData<G, S>): (loaded: S | null) => readonly [S, readonly C[]] {
-  const type: string = initialStateOf(graph);
+  K extends Cmd,
+>(chart: C, boot: () => InitialData<C, S>): (loaded: S | null) => readonly [S, readonly K[]] {
+  const type: string = initialStateOf(chart);
   return (loaded) => [
     // The one cast this helper needs: `{ ...InitialData, type: <the initial
-    // name> }` IS `Extract<S, { type: InitialState<G> }>`, but tsc cannot
+    // name> }` IS `Extract<S, { type: InitialState<C> }>`, but tsc cannot
     // rebuild a union member from a spread plus a `string`-typed discriminant.
     loaded ?? ({ ...boot(), type } as unknown as S),
     Cmd.none,
