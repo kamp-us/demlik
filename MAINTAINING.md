@@ -93,6 +93,7 @@ export is not done until it has a row here.
 | `./chart/inspect/react` | experimental | `<ChartInspector>`; React binding of `./chart/inspect` |
 | `./chart/inspect/styles.css` | experimental | asset of `./chart/inspect/react` |
 | `./chart/report` | experimental | imports a fabrika `workflow.json` into charts and renders a lane as markdown; tracks an external tool's document format |
+| `./chart/lane` | experimental | N chart instances in parallel, grouped into phases that sequence — describe, fold and draw a lane; tracks an external tool's document format |
 
 ## Store factory per host
 
