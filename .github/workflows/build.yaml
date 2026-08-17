@@ -60,3 +60,12 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      # The dist walker that makes the v0.1.1 failure class (an export map entry
+      # with no matching dist/ output — a broken published subpath) unshippable.
+      # It is ALSO wired to `prepublishOnly`, but that hook never fires on the
+      # release path: publish.yaml packs a tarball and runs `npm publish <tgz>`,
+      # and neither `pnpm pack` nor a tarball publish runs `prepublishOnly`. So
+      # this step is the one place the guard actually executes on every change.
+      - name: Verify every export resolves in dist
+        run: node scripts/verify-exports.mjs

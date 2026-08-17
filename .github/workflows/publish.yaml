@@ -98,6 +98,15 @@ jobs:
         if: steps.changesets.outputs.has_changesets == 'true'
         run: pnpm run build
 
+      # Last gate before the tarball is cut. `prepublishOnly` carries this same
+      # walker, but nothing on this path triggers it — `pnpm pack` runs
+      # prepack/prepare, and `npm publish <tarball>` skips the publish lifecycle
+      # entirely. Without this step the guard written for the v0.1.1 stale-dist
+      # incident does not run on the job that publishes.
+      - name: Verify every export resolves in dist
+        if: steps.changesets.outputs.has_changesets == 'true'
+        run: node scripts/verify-exports.mjs
+
       # OIDC trusted publishing via pack + `npm publish <tarball>`. `pnpm publish` shells
       # `npm@latest` and FORWARDS its pnpm-only `--no-git-checks` flag to npm, which rejects
       # the unknown flag and dies at flag-parse BEFORE the OIDC handshake. We sidestep that
