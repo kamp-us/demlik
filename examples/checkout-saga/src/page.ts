@@ -41,6 +41,11 @@ export const PAGE = `<!doctype html>
     border: 1px solid #2c343f; background: #11161c; color: var(--ink); width: 140px;
   }
   #notice { min-height: 22px; margin: 0 0 18px; font-size: 13px; font-weight: 600; color: var(--amber); }
+  .offline {
+    border: 1px solid #7e3232; background: #2a1719; color: #f0a5a5;
+    border-radius: 9px; padding: 11px 14px; margin: 0 0 18px; font-size: 13px;
+  }
+  .offline strong { color: #ffc9c9; }
 
   /* ── lanes ────────────────────────────────────────────────────────────── */
   .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 18px; }
@@ -187,6 +192,12 @@ export const PAGE = `<!doctype html>
     <button id="reset">Reset</button>
   </div>
   <p id="notice"></p>
+
+  <div id="offline" class="offline" hidden>
+    <strong>Can't reach the demo backend.</strong>
+    If this persists, the free-tier daily Durable Object limit may be hit — it resets at
+    midnight UTC. The lanes below show the last state they managed to read.
+  </div>
 
   <div class="lanes">
     <section class="lane" id="lane-naive">
@@ -529,6 +540,19 @@ export const PAGE = `<!doctype html>
    */
   function renderChrome() {
     var kill = q("#kill");
+    // Everything here needs the server. Disabled with a reason beats a button
+    // that looks live and then fails on click.
+    ["#start-settle", "#start-refund", "#reset"].forEach(function (sel) {
+      var b = q(sel);
+      b.disabled = offline;
+      b.title = offline ? OFFLINE_TEXT : "";
+    });
+    if (offline) {
+      kill.disabled = true;
+      kill.title = OFFLINE_TEXT;
+      return;
+    }
+    kill.title = "";
     if (crashedAt !== null) {
       kill.disabled = true;
       kill.classList.add("spent");
@@ -685,11 +709,53 @@ export const PAGE = `<!doctype html>
   function inFlight(s) { return s && s.phase !== "idle" && !s.terminal && !s.frozen; }
   function settledOrDead(s) { return s && (s.terminal || s.frozen); }
 
-  // ── polling ──────────────────────────────────────────────────────────────
+  // ── talking to the backend ───────────────────────────────────────────────
+  // Responses get VALIDATED, not just awaited. Over the Durable Object quota the
+  // EDGE answers instead of the worker, with the body "error code: 1101" —
+  // JSON.parse throws, and the old code swallowed that and re-polled anyway.
+  var offline = false;
+  var OFFLINE_TEXT =
+    "Can't reach the demo backend \u2014 if this persists, the free-tier daily limit may be hit (resets at midnight UTC).";
+
+  function ask(url, method) {
+    return fetch(url, method ? { method: method } : undefined).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.text().then(function (body) {
+        var parsed;
+        try {
+          parsed = JSON.parse(body);
+        } catch (e) {
+          throw new Error("not json");
+        }
+        if (!parsed || typeof parsed !== "object") throw new Error("unexpected shape");
+        return parsed;
+      });
+    });
+  }
+
+  function setOffline(down) {
+    offline = down;
+    document.getElementById("offline").hidden = !down;
+    renderChrome();
+    if (down) {
+      notice(OFFLINE_TEXT, "#f0a5a5");
+      // Keep whatever the lanes last showed; just re-render so their captions
+      // and buttons reflect that nothing further is coming.
+      LANES.forEach(function (lane) {
+        if (last[lane]) renderLane(lane, last[lane]);
+      });
+    }
+  }
+
+  // ── polling, on a diet ───────────────────────────────────────────────────
+  // Poll only while a lane is actually moving. Both idle, both finished, or one
+  // frozen and the other finished → zero requests. There is no idle poll at all
+  // any more; a button press is what re-arms it. The countdown no longer needs
+  // a fast poll either — it is interpolated client-side below.
   function tick() {
-    fetch("/both/state?order=" + encodeURIComponent(order()))
-      .then(function (r) { return r.json(); })
+    ask("/both/state?order=" + encodeURIComponent(order()))
       .then(function (d) {
+        if (offline) setOffline(false);
         renderLane("naive", d.naive);
         renderLane("tea", d.tea);
         renderChrome();
@@ -704,10 +770,31 @@ export const PAGE = `<!doctype html>
           }
           return;
         }
-        schedule(inFlight(a) || inFlight(b) ? 500 : 2000);
+        if (inFlight(a) || inFlight(b)) schedule(1000);
+        else { clearTimeout(pollTimer); pollTimer = null; }
       })
-      .catch(function () { schedule(2000); });
+      .catch(function () {
+        // Do NOT reschedule. Retrying into a quota wall is what made the
+        // outage worse; the buttons are how a viewer retries.
+        clearTimeout(pollTimer); pollTimer = null;
+        setOffline(true);
+      });
   }
+
+  // The countdown, interpolated from the last known deadline. No network.
+  setInterval(function () {
+    if (offline) return;
+    LANES.forEach(function (lane) {
+      var s = last[lane];
+      if (!s || s.terminal || s.dueAt === null || s.frozen) return;
+      if (crashedAt !== null && !progressedSinceCrash(s)) return;
+      var cd = document.querySelector('[data-cd="' + lane + '"]');
+      var left = Math.max(0, s.dueAt - Date.now());
+      var what = WAITING_FOR[s.phase] || "next step";
+      cd.innerHTML = what + " in <b>" + (left / 1000).toFixed(1) + "s</b>";
+    });
+  }, 250);
+
   function schedule(ms) {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(tick, ms);
@@ -721,15 +808,16 @@ export const PAGE = `<!doctype html>
    */
   function startScenario(kind) {
     var typed = order() !== (ss("order") || "");
+    if (offline) { notice(OFFLINE_TEXT, "#f0a5a5"); return; }
     // A typed id wins, so the box stays useful for re-running a specific order.
     if (!typed) q("#order").value = freshOrderId(kind);
     ssSet("order", order());
     forgetCrash();
     killingUntil = 0;
     renderChrome();
-    fetch("/both/start?order=" + encodeURIComponent(order()), { method: "POST" })
-      .then(function (r) { return r.json(); })
+    ask("/both/start?order=" + encodeURIComponent(order()), "POST")
       .then(function (d) {
+        setOffline(false);
         notice(
           kind === "refund"
             ? "Started. The card clears on the second try, then the warehouse comes back out of stock."
@@ -739,13 +827,14 @@ export const PAGE = `<!doctype html>
         renderLane("naive", d.naive); renderLane("tea", d.tea);
         schedule(300);
       })
-      .catch(function () { notice("Could not start the order.", "#f0a5a5"); });
+      .catch(function () { setOffline(true); });
   }
 
   q("#start-settle").onclick = function () { startScenario("settle"); };
   q("#start-refund").onclick = function () { startScenario("refund"); };
 
   q("#kill").onclick = function () {
+    if (offline) { notice(OFFLINE_TEXT, "#f0a5a5"); return; }
     if (!inFlight(last.naive) && !inFlight(last.tea)) {
       notice("Start an order first — there is nothing in flight to interrupt.", "#f0a5a5");
       return;
@@ -756,8 +845,7 @@ export const PAGE = `<!doctype html>
     // later, and since every visual is derived, re-anchoring is free.
     detonate(null);
     renderChrome();
-    fetch("/both/crash?order=" + encodeURIComponent(order()), { method: "POST" })
-      .then(function (r) { return r.json(); })
+    ask("/both/crash?order=" + encodeURIComponent(order()), "POST")
       .then(function (d) {
         var at = (d && d.tea && d.tea.at) || (d && d.naive && d.naive.at);
         if (at) {
@@ -767,12 +855,15 @@ export const PAGE = `<!doctype html>
         schedule(250);
       })
       .catch(function () {
-        notice("The kill request failed — the server may already be gone. Still polling.", "#f0a5a5");
-        schedule(250);
+        // A crash request failing is EXPECTED when the abort lands, so give the
+        // object a moment and let the poll decide whether the backend is really
+        // gone or just the isolate.
+        schedule(600);
       });
   };
 
   q("#reset").onclick = function () {
+    if (offline) { notice(OFFLINE_TEXT, "#f0a5a5"); return; }
     forgetCrash();
     fetch("/both/reset?order=" + encodeURIComponent(order()), { method: "POST" })
       .then(function () { location.reload(); })

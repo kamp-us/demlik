@@ -11,7 +11,7 @@ import { RECIPES } from "./registry";
 
 const PANELS = RECIPES.map(
   (r) => `
-    <section class="panel" data-recipe="${r.id}">
+    <section class="panel" data-recipe="${r.id}" data-start-label="${r.startLabel}">
       <header>
         <h2>${r.title}</h2>
         <span class="pill" data-el="phase">—</span>
@@ -88,6 +88,12 @@ export const RECIPES_PAGE = `<!doctype html>
   .wait { font-size: 12.5px; color: var(--dim); margin-bottom: 10px; min-height: 18px; font-variant-numeric: tabular-nums; }
   .wait b { color: var(--amber); }
 
+  .offline {
+    border: 1px solid #7e3232; background: #2a1719; color: #f0a5a5;
+    border-radius: 9px; padding: 11px 14px; margin: 0 0 20px; font-size: 13px;
+  }
+  .offline strong { color: #ffc9c9; }
+
   .banner-slot:empty { display: none; }
   .banner {
     border-radius: 7px; padding: 8px 11px; font-size: 12.5px; font-weight: 600; margin-bottom: 10px;
@@ -138,6 +144,12 @@ export const RECIPES_PAGE = `<!doctype html>
   </p>
   <nav class="top"><a href="/">← back to the checkout demo</a></nav>
 
+  <div id="offline" class="offline" hidden>
+    <strong>Can't reach the demo backend.</strong>
+    If this persists, the free-tier daily Durable Object limit may be hit — it resets at
+    midnight UTC. The panels below show the last state they managed to read.
+  </div>
+
   <div class="grid">${PANELS}</div>
 </main>
 
@@ -145,6 +157,9 @@ export const RECIPES_PAGE = `<!doctype html>
 (function () {
   var PANELS = Array.prototype.slice.call(document.querySelectorAll(".panel"));
   var timers = {};
+  var last = {};
+  var OFFLINE_TEXT =
+    "Can't reach the demo backend \u2014 if this persists, the free-tier daily limit may be hit (resets at midnight UTC).";
 
   function ss(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
   function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
@@ -238,13 +253,18 @@ export const RECIPES_PAGE = `<!doctype html>
       b.textContent = a.label;
       b.className = a.kind === "primary" ? "primary" : a.kind === "time" ? "time"
         : a.kind === "danger" ? "danger" : "";
-      b.disabled = !a.enabled;
+      // Every one of these needs the server. Disabled WITH a reason beats
+      // omitted, or worse, offered and then failing on click.
+      b.disabled = !a.enabled || offline;
+      if (offline) b.title = OFFLINE_TEXT;
       b.onclick = function () { act(recipe, a.id); };
       actions.appendChild(b);
     });
     var reset = document.createElement("button");
     reset.textContent = "Reset";
     reset.className = "reset";
+    reset.disabled = offline;
+    if (offline) reset.title = OFFLINE_TEXT;
     reset.onclick = function () { doReset(recipe); };
     actions.appendChild(reset);
 
@@ -284,6 +304,7 @@ export const RECIPES_PAGE = `<!doctype html>
     panel.classList.toggle("revived", c !== null && revived);
     var banner = el(panel, "banner");
     banner.innerHTML = "";
+    if (offline) banner.appendChild(offlineBanner());
     if (c !== null) {
       var b = document.createElement("div");
       if (revived) {
@@ -309,61 +330,192 @@ export const RECIPES_PAGE = `<!doctype html>
     return (ms / 1000).toFixed(1) + "s";
   }
 
+  // ── talking to the backend ───────────────────────────────────────────────
+  // Every response has to be VALIDATED, not just awaited. When the account is
+  // over its Durable Object quota the EDGE answers instead of the worker, with
+  // the body "error code: 1101". JSON.parse throws on that, and the old code
+  // swallowed the throw and re-polled anyway — a hot retry loop against a
+  // backend already refusing us. A bad answer is now a first-class UI state.
+  var offline = false;
+
+  function ask(url, method) {
+    return fetch(url, method ? { method: method } : undefined).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.text().then(function (body) {
+        var parsed;
+        try {
+          parsed = JSON.parse(body);
+        } catch (e) {
+          throw new Error("not json");
+        }
+        if (parsed && (parsed.crashed || parsed.reset)) return parsed;
+        if (!parsed || typeof parsed.phase !== "string") {
+          throw new Error("unexpected shape");
+        }
+        return parsed;
+      });
+    });
+  }
+
+  function setOffline(down) {
+    if (offline === down) return;
+    offline = down;
+    document.getElementById("offline").hidden = !down;
+    // Re-render EVERY panel, so each one carries the warning and the disabled
+    // buttons. "Obvious in one glance" has to mean every panel, not just a bar.
+    PANELS.forEach(function (p) {
+      var s = last[p.dataset.recipe];
+      if (s) render(p, s);
+      else renderBlank(p);
+    });
+  }
+
+  /** Nothing was ever fetched, so say why instead of showing an empty shell. */
+  function renderBlank(panel) {
+    var pill = el(panel, "phase");
+    pill.textContent = offline ? "unreachable" : "—";
+    pill.className = "pill" + (offline ? " bad" : "");
+    el(panel, "chips").innerHTML = "";
+    el(panel, "facts").innerHTML = "";
+    el(panel, "wait").textContent = "";
+    el(panel, "feed").textContent = offline ? "" : "nothing yet";
+    // Buttons stay VISIBLE and disabled, with the reason on hover. A panel with
+    // no buttons at all reads as broken markup; a disabled button with a
+    // tooltip reads as a backend that is down.
+    var actions = el(panel, "actions");
+    actions.innerHTML = "";
+    [panel.dataset.startLabel, "Reset"].forEach(function (label) {
+      var b = document.createElement("button");
+      b.textContent = label;
+      b.className = label === "Reset" ? "reset" : "primary";
+      b.disabled = true;
+      if (offline) b.title = OFFLINE_TEXT;
+      actions.appendChild(b);
+    });
+    var banner = el(panel, "banner");
+    banner.innerHTML = "";
+    if (offline) banner.appendChild(offlineBanner());
+  }
+
+  function offlineBanner() {
+    var b = document.createElement("div");
+    b.className = "banner bad";
+    b.textContent = OFFLINE_TEXT;
+    return b;
+  }
+
+  // ── polling, on a diet ───────────────────────────────────────────────────
+  // The rule: poll a panel ONLY while something will happen on its own, and
+  // soon. A machine parked on a human approval, sitting idle, already finished,
+  // or waiting on a deadline three days out changes only when someone clicks —
+  // and a click re-renders from the action's own response. Those panels get zero
+  // requests. Five idle panels used to cost five requests a second forever.
+  var IMMINENT_MS = 60000;
+
+  function shouldPoll(s) {
+    if (!s || s.terminal) return false;
+    if (s.dueAt === null || s.waitInMs === null) return false;
+    return s.waitInMs < IMMINENT_MS;
+  }
+
+  function schedule(recipe, s) {
+    clearTimeout(timers[recipe]);
+    if (shouldPoll(s)) {
+      timers[recipe] = setTimeout(function () {
+        poll(recipe);
+      }, 2000);
+    }
+  }
+
   function poll(recipe) {
     var panel = document.querySelector('[data-recipe="' + recipe + '"]');
-    fetch("/recipe/state?" + qs(recipe))
-      .then(function (r) { return r.json(); })
+    ask("/recipe/state?" + qs(recipe))
       .then(function (s) {
+        setOffline(false);
+        last[recipe] = s;
         render(panel, s);
-        clearTimeout(timers[recipe]);
-        if (!s.terminal) timers[recipe] = setTimeout(function () { poll(recipe); }, 1000);
+        schedule(recipe, s);
       })
       .catch(function () {
+        // Keep the last-known UI, say the backend is unreachable, and STOP.
+        // Retrying into a quota wall is what made the outage worse.
         clearTimeout(timers[recipe]);
-        timers[recipe] = setTimeout(function () { poll(recipe); }, 2000);
+        setOffline(true);
       });
   }
 
   function act(recipe, action) {
+    if (offline) return;
     if (action === "crash") {
       ssSet(crashKey(recipe), String(Date.now()));
-      fetch("/recipe/crash?" + qs(recipe), { method: "POST" })
-        .then(function (r) { return r.json(); })
+      ask("/recipe/crash?" + qs(recipe), "POST")
         .then(function (d) {
           if (d && d.at) ssSet(crashKey(recipe), String(d.at));
         })
         .catch(function () {})
-        .then(function () { setTimeout(function () { poll(recipe); }, 300); });
+        .then(function () {
+          setTimeout(function () {
+            poll(recipe);
+          }, 300);
+        });
       return;
     }
-    if (action === "start" || action === "desire@a" || action === "desire@b") {
-      // A start is a new story: new instance id, and no stale crash chrome.
-      if (action === "start") {
-        ssDel(crashKey(recipe));
-        ssSet(instKey(recipe), freshInst());
-      }
+    if (action === "start") {
+      // A start is a new story: new instance id, no stale crash chrome.
+      ssDel(crashKey(recipe));
+      ssSet(instKey(recipe), freshInst());
     }
-    fetch("/recipe/act?" + qs(recipe, "action=" + encodeURIComponent(action)), { method: "POST" })
-      .then(function (r) { return r.json(); })
+    ask("/recipe/act?" + qs(recipe, "action=" + encodeURIComponent(action)), "POST")
       .then(function (s) {
+        setOffline(false);
+        last[recipe] = s;
         render(document.querySelector('[data-recipe="' + recipe + '"]'), s);
-        clearTimeout(timers[recipe]);
-        timers[recipe] = setTimeout(function () { poll(recipe); }, 400);
+        // An action can start something running — that is what re-arms polling.
+        schedule(recipe, s);
       })
-      .catch(function () { poll(recipe); });
+      .catch(function () {
+        clearTimeout(timers[recipe]);
+        setOffline(true);
+      });
   }
 
   function doReset(recipe) {
-    fetch("/recipe/reset?" + qs(recipe), { method: "POST" })
+    if (offline) return;
+    ask("/recipe/reset?" + qs(recipe), "POST")
       .then(function () {
         ssDel(crashKey(recipe));
         ssSet(instKey(recipe), freshInst());
         poll(recipe);
       })
-      .catch(function () { poll(recipe); });
+      .catch(function () {
+        clearTimeout(timers[recipe]);
+        setOffline(true);
+      });
   }
 
-  PANELS.forEach(function (p) { poll(p.dataset.recipe); });
+  // ── the countdown ────────────────────────────────────────────────────────
+  // Interpolated from the last known deadline, entirely client-side. The
+  // countdown used to be the reason for a fast poll; it never needed the
+  // network at all.
+  setInterval(function () {
+    if (offline) return;
+    PANELS.forEach(function (p) {
+      var s = last[p.dataset.recipe];
+      if (!s || s.terminal || s.dueAt === null) return;
+      var left = Math.max(0, s.dueAt - (Date.now() + (s.skewMs || 0)));
+      el(p, "wait").innerHTML =
+        "next deadline in <b>" +
+        fmt(left) +
+        "</b>" +
+        (s.skewMs > 0 ? " \u00b7 clock fast-forwarded " + fmt(s.skewMs) : "");
+    });
+  }, 250);
+
+  // ONE fetch per panel on load. Polling only arms itself for panels where
+  // something is actually running.
+  PANELS.forEach(function (p) {
+    poll(p.dataset.recipe);
+  });
 })();
 </script>
 </body>

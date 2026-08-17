@@ -74,6 +74,13 @@ export interface RecipeAdapter {
   readonly realWorld: string;
   /** The insight the recipe exists to show. */
   readonly insight: string;
+  /**
+   * The label of this recipe's opening action. Needed when the backend is
+   * unreachable on a cold load: the panel still has to show its buttons
+   * (disabled, with a reason) rather than nothing at all, and at that point
+   * there is no state to derive labels from.
+   */
+  readonly startLabel: string;
   readonly phases: readonly string[];
   boot(storage: DurableObjectStorage): Promise<RecipeInstance>;
 }
@@ -119,6 +126,7 @@ const AGENT_SCRIPT: readonly agentServices.ScriptedStep[] = [
 
 const agentRunAdapter: RecipeAdapter = {
   id: "durable-agent-run",
+  startLabel: "Start the run",
   title: "Durable agent run",
   realWorld:
     "An AI agent working a support ticket over several model calls, with a spend cap and a human approval in the middle.",
@@ -240,6 +248,7 @@ const agentRunAdapter: RecipeAdapter = {
 
 const dunningAdapter: RecipeAdapter = {
   id: "dunning",
+  startLabel: "Card declined — open dunning",
   title: "Dunning",
   realWorld:
     "A subscription whose card was declined: billing retries on day 1, day 3 and day 7, then a 14-day grace period, then a downgrade.",
@@ -395,6 +404,7 @@ const APPROVERS = ["dept-head", "finance", "cfo"] as const;
 
 const approvalAdapter: RecipeAdapter = {
   id: "approval-chain",
+  startLabel: "Submit the expense report",
   title: "Approval chain",
   realWorld:
     "An expense report walking three approvers in order, each chased with a reminder after two days and an escalation after seven.",
@@ -571,6 +581,7 @@ const approvalAdapter: RecipeAdapter = {
 
 const dripAdapter: RecipeAdapter = {
   id: "onboarding-drip",
+  startLabel: "Enrol a new signup",
   title: "Onboarding drip",
   realWorld:
     "A new signup gets a welcome on day 1, a tip on day 3 and a check-in on day 7 — and the moment they actually use the product, the rest are cancelled.",
@@ -702,6 +713,7 @@ const PUSH_FAILURES = 2;
 
 const fleetAdapter: RecipeAdapter = {
   id: "fleet-reconcile",
+  startLabel: "Set desired config",
   title: "Fleet reconcile",
   realWorld:
     "One device with a desired config and a reported config: push when they differ, back off when the push fails, stop when the device confirms.",
