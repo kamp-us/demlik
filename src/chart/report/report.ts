@@ -252,8 +252,8 @@ export function laneReport(input: LaneReportInput): LaneReport {
       continue;
     }
     out.push(phaseLine(stand, states));
+    out.push("");
   }
-  out.push("");
 
   // ── the timeline ────────────────────────────────────────────────────────
   out.push("### timeline");

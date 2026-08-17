@@ -2,6 +2,12 @@
 // to end by fabrika's own verbs' output.
 import { describe, expect, it } from "vitest";
 import {
+  EPIC_LANE,
+  EPIC_RUN_COMPLETE,
+  EPIC_RUN_TRIPPED,
+  runEvents,
+} from "./__fixtures__/epic";
+import {
   CODER_EVENTS_FROZEN_JSONL,
   CODER_EVENTS_JSONL,
 } from "./__fixtures__/events";
@@ -186,5 +192,109 @@ describe("laneReport — a chore lane", () => {
 
   it("titles itself from the document's own id", () => {
     expect(markdown.startsWith("## park-sweep — active")).toBe(true);
+  });
+});
+
+// ── A MULTI-PHASE LANE, DRAWN ──────────────────────────────────────────────
+//
+// The editorial call the module opened with, extended to the phase dimension:
+// diagrams for the ACTIVE phase's tasks, one line for every phase that is
+// already finished or has not started. The lane is fabrika's own emitted epic
+// (`__fixtures__/epic.ts`), so nothing below may name one of its states.
+describe("laneReport — more than one phase", () => {
+  const phaseNames = EPIC_LANE.phases.map((p) => p.name);
+  const midway = laneReport({
+    workflow: EPIC_LANE,
+    entries: EPIC_RUN_COMPLETE.slice(0, 12),
+  }).markdown;
+
+  it("draws ONLY the active phase's tasks", () => {
+    const active = EPIC_LANE.phases[1];
+    if (active === undefined) throw new Error("expected a second phase");
+    const fences = midway.split("```mermaid").length - 1;
+    expect(fences).toBe(active.tasks.length);
+    for (const taskId of active.tasks) {
+      expect(midway).toContain(`### ${taskId} —`);
+    }
+    for (const taskId of EPIC_LANE.phases[0]?.tasks ?? []) {
+      expect(midway).not.toContain(`### ${taskId} —`);
+    }
+  });
+
+  it("gives a finished phase one line — with WHICH ending each task reached", () => {
+    expect(midway).toContain(`**${phaseNames[0]}:** complete — 2 tasks:`);
+    for (const taskId of EPIC_LANE.phases[0]?.tasks ?? []) {
+      expect(midway).toMatch(new RegExp(`\`${taskId}\` = \`[a-z_:]+\``));
+    }
+  });
+
+  it("gives a phase that has not started one line, and no leaves", () => {
+    expect(midway).toContain(
+      `**${phaseNames[2]}:** waiting — 1 task, not started.`,
+    );
+    for (const taskId of EPIC_LANE.phases[2]?.tasks ?? []) {
+      expect(midway).not.toContain(`\`${taskId}\` = \``);
+    }
+  });
+
+  it("keeps the phases in their declared order — finished, active, not started", () => {
+    // Anchored on each phase's own BLOCK, not on its name: the name also occurs
+    // in the title and in the `where it is` line, and a bare `indexOf` reads
+    // those instead.
+    const positions = [
+      midway.indexOf(`**${phaseNames[0]}:**`),
+      midway.indexOf("### "),
+      midway.indexOf(`**${phaseNames[2]}:**`),
+    ];
+    expect(positions.every((at) => at >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  it("marks a tripped phase as tripped, and marks WHICH of its tasks tripped", () => {
+    const report = laneReport({
+      workflow: EPIC_LANE,
+      entries: EPIC_RUN_TRIPPED,
+    }).markdown;
+    const tripped = EPIC_LANE.phases[1];
+    if (tripped === undefined) throw new Error("expected a second phase");
+    expect(report).toContain(`**${tripped.name}:** tripped —`);
+    expect(report).toContain("**(tripped)**");
+    // The phases below it never ran — `stateValue` collapsed to the terminal
+    // name and cannot say so, which is why the standings are derived instead.
+    expect(report).toContain(`**${phaseNames[2]}:** waiting —`);
+    expect(report).toContain(
+      `the lane lands on \`${EPIC_LANE.terminals.tripped}\``,
+    );
+  });
+
+  it("marks a tripped region distinctly from a finished one, in the ACTIVE phase", () => {
+    // One region of the first phase freezes while its sibling is still moving,
+    // so the phase is still active and both are drawn — the case where the
+    // `end: "error"` polarity is worth having and `end: true` would not do.
+    const first = EPIC_LANE.phases[0]?.tasks[0];
+    if (first === undefined) throw new Error("expected a first task");
+    const entries = runEvents(EPIC_LANE, { outcomes: { [first]: "error" } });
+    const report = laneReport({
+      workflow: EPIC_LANE,
+      entries: entries.slice(0, 7),
+    }).markdown;
+    expect(report).toContain(`### ${first} —`);
+    expect(report).toContain("— TRIPPED");
+    expect(report).toContain("landed on the error final");
+    expect(report).toContain(
+      `\`${phaseNames[0]}\` will trip the lane when its siblings finish`,
+    );
+  });
+
+  it("still shows the phase breakdown once the lane is done", () => {
+    const done = laneReport({
+      workflow: EPIC_LANE,
+      entries: EPIC_RUN_COMPLETE,
+    }).markdown;
+    expect(done).toContain("— done");
+    expect(done).not.toContain("```mermaid");
+    for (const name of phaseNames) {
+      expect(done).toContain(`**${name}:** complete —`);
+    }
   });
 });
