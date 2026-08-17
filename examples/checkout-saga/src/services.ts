@@ -5,7 +5,7 @@
  */
 
 import { Context, Data, Effect, Layer } from "effect";
-import { FLAKY_ATTEMPTS } from "./machine";
+import { declinesFor, isRefundScenario } from "./machine";
 
 export class PaymentDeclined extends Data.TaggedError("PaymentDeclined")<{
   readonly orderId: string;
@@ -28,7 +28,12 @@ export interface PaymentsApi {
     readonly amountCents: number;
     readonly attempt: number;
   }) => Effect.Effect<string, PaymentDeclined>;
-  readonly refund: (input: {
+  /** Lodge the refund. Returns once the processor has ACCEPTED it. */
+  readonly submitRefund: (input: {
+    readonly paymentRef: string;
+  }) => Effect.Effect<void, RefundRejected>;
+  /** Ask whether the lodged refund has cleared. Runs after the wait. */
+  readonly confirmRefund: (input: {
     readonly paymentRef: string;
   }) => Effect.Effect<void, RefundRejected>;
 }
@@ -38,7 +43,16 @@ export class Payments extends Context.Service<Payments, PaymentsApi>()(
 ) {}
 
 export interface InventoryApi {
-  readonly reserve: (input: {
+  /** Lodge the reservation request. Returns once the warehouse has it. */
+  readonly requestReservation: (input: {
+    readonly orderId: string;
+  }) => Effect.Effect<void, never>;
+  /**
+   * Ask the warehouse what it decided. Deliberately a SECOND round trip: the
+   * answer arrives after a wait the saga has to survive, which is what makes
+   * "killed while reserving" a real case rather than an instantaneous blip.
+   */
+  readonly reservationOutcome: (input: {
     readonly orderId: string;
   }) => Effect.Effect<void, OutOfStock>;
 }
@@ -47,9 +61,9 @@ export class Inventory extends Context.Service<Inventory, InventoryApi>()(
   "checkout/Inventory",
 ) {}
 
-// `FLAKY_ATTEMPTS` — attempts at or below which the fake provider declines —
-// lives in the machine module so the pure saga, this layer and the naive lane
-// cannot drift apart into an unfair race.
+// How many declines each scenario gets, and which scenario an order id names,
+// both live in the machine module — so the pure saga, this layer and the naive
+// lane cannot drift apart into an unfair race.
 
 /**
  * The fake provider. Deterministic in `attempt`, which the reducer carries in
@@ -59,7 +73,7 @@ export class Inventory extends Context.Service<Inventory, InventoryApi>()(
  */
 export const PaymentsFake = Layer.succeed(Payments)({
   charge: ({ orderId, amountCents, attempt }) =>
-    attempt <= FLAKY_ATTEMPTS
+    attempt <= declinesFor(orderId)
       ? Effect.fail(
           new PaymentDeclined({
             orderId,
@@ -68,15 +82,17 @@ export const PaymentsFake = Layer.succeed(Payments)({
           }),
         )
       : Effect.succeed(`pay_${orderId}_${amountCents}_a${attempt}`),
-  refund: () => Effect.void,
+  submitRefund: () => Effect.void,
+  confirmRefund: () => Effect.void,
 });
 
 /**
- * An order id containing `oos` is out of stock — the compensation path.
+ * The refund-scenario order id is the one the warehouse cannot fill.
  */
 export const InventoryFake = Layer.succeed(Inventory)({
-  reserve: ({ orderId }) =>
-    orderId.includes("oos")
+  requestReservation: () => Effect.void,
+  reservationOutcome: ({ orderId }) =>
+    isRefundScenario(orderId)
       ? Effect.fail(new OutOfStock({ orderId }))
       : Effect.void,
 });

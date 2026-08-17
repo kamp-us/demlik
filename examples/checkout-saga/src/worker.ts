@@ -76,9 +76,9 @@ export class CheckoutSaga extends DurableObject<Env> {
         alarm: this.ctx.storage,
         // A pure function of persisted State — which is what makes the
         // cold-wake re-arm identical to the never-evicted one.
-        nextDeadline: () => rt.getState().nextRetryAt,
+        nextDeadline: () => rt.getState().dueAt,
         onFire: async () => {
-          await rt.dispatch({ type: "retry_now", at: Date.now() });
+          await rt.dispatch({ type: "tick", at: Date.now() });
         },
       });
       // Cold-wake re-arm. A retry that came due while the isolate was dead
@@ -148,9 +148,13 @@ interface StateView {
   readonly orderId: string;
   readonly amountCents: number;
   readonly attempt: number;
-  readonly nextRetryAt: number | null;
+  readonly dueAt: number | null;
+  /** Time left in the CURRENT wait, whatever phase it belongs to. */
+  readonly waitInMs: number | null;
+  /** Same number, but only while the wait is a payment retry. */
   readonly retryInMs: number | null;
   readonly paymentRef: string | null;
+  readonly refunded: boolean;
   readonly failure: string | null;
   readonly terminal: boolean;
   /**
@@ -160,6 +164,7 @@ interface StateView {
    */
   readonly loopAlive: boolean;
   readonly frozen: boolean;
+  readonly strandedMoney: boolean;
   readonly lastSeenAt: number;
   readonly staleForMs: number | null;
   readonly log: readonly { readonly at: number; readonly text: string }[];
@@ -173,16 +178,20 @@ function view(state: State): StateView {
     orderId: state.orderId,
     amountCents: state.amountCents,
     attempt: state.attempt,
-    nextRetryAt: state.nextRetryAt,
+    dueAt: state.dueAt,
+    waitInMs:
+      state.dueAt === null ? null : Math.max(0, state.dueAt - Date.now()),
     retryInMs:
-      state.nextRetryAt === null
+      state.dueAt === null || state.phase !== "paying"
         ? null
-        : Math.max(0, state.nextRetryAt - Date.now()),
+        : Math.max(0, state.dueAt - Date.now()),
     paymentRef: state.paymentRef,
+    refunded: state.refunded,
     failure: state.failure,
     terminal: isTerminal(state),
     loopAlive: true,
     frozen: false,
+    strandedMoney: false,
     lastSeenAt,
     staleForMs: lastSeenAt === 0 ? null : Date.now() - lastSeenAt,
     log: state.log,

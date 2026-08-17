@@ -29,6 +29,8 @@ export const PAGE = `<!doctype html>
   }
   button:hover:not(:disabled) { background: #222b35; }
   button:disabled { cursor: not-allowed; }
+  button.scenario { border-color: #2f4a63; background: #16222d; }
+  button.scenario:hover:not(:disabled) { background: #1d2c3a; }
   button.kill {
     border-color: #7e3232; background: #35181c; color: #ffb4b4; font-size: 16px; padding: 10px 20px;
   }
@@ -162,14 +164,16 @@ export const PAGE = `<!doctype html>
 <main>
   <h1>What happens to your retries when the server dies</h1>
   <p class="lede">
-    Two copies of the same checkout. The card issuer declines the first three attempts,
-    so both have to wait and retry — about 20 seconds of it. Start them, then press the
-    red button to destroy the machine they are running on. One of them finishes anyway.
+    Two copies of the same checkout, running side by side. Both wait: for a card that
+    keeps declining, for a warehouse that takes its time, and — when the order cannot be
+    filled — for a refund to clear. Pick a scenario, then press the red button to destroy
+    the machine they are both running on. One of them finishes anyway.
   </p>
 
   <div class="bar">
+    <button id="start-settle" class="scenario">Start: order that settles</button>
+    <button id="start-refund" class="scenario">Start: order that gets refunded</button>
     <input id="order" value="order-1" aria-label="order id" />
-    <button id="start">Start both orders</button>
     <button id="kill" class="kill">💥 Kill the server</button>
     <button id="reset">Reset</button>
   </div>
@@ -212,10 +216,11 @@ export const PAGE = `<!doctype html>
   </div>
 
   <p class="hint">
-    Each <strong>Start</strong> mints a fresh order id, so every run begins on a clean
-    Durable Object. Type your own id to reuse one — an id containing <code>oos</code>
-    is out of stock, which runs the refund path instead.
-    <strong>Reset</strong> wipes the state of the id currently in the box.
+    <strong>Settles:</strong> the card clears on the fourth try, the warehouse has stock,
+    the order completes. <strong>Gets refunded:</strong> the card clears sooner, but the
+    warehouse is out of stock — so the money that was already taken has to be given back.
+    Between them the order walks all six states. Each start mints a fresh order id so every
+    run begins on a clean Durable Object; <strong>Reset</strong> wipes the id in the box.
   </p>
 
   <section class="notes">
@@ -262,6 +267,17 @@ export const PAGE = `<!doctype html>
         This is why the two lanes diverge from one button press. The difference is not
         reliability engineering — it is where the retry was written down.
       </p>
+      <p>
+        <strong>The worst moment to be killed is during the refund.</strong> By then the
+        customer has been charged and the order is known to be unfillable, so the only thing
+        left is the obligation to give the money back. In lane A that obligation exists as a
+        function that is currently sleeping, so killing the process destroys it: the row
+        still says <em>refunding</em>, no refund is scheduled, and nothing will ever notice —
+        the customer is out the money and the only alarm is the one they raise themselves. In
+        lane B the obligation is a field in saved state with a due time attached, so a
+        completely different isolate picks it up and finishes it. Try the refund scenario and
+        kill it mid-refund; that is the case worth watching.
+      </p>
     </details>
 
     <details>
@@ -298,6 +314,55 @@ export const PAGE = `<!doctype html>
         which is describing a single effectful call and its typed failures.
       </p>
     </details>
+
+    <details>
+      <summary>Where tea fits in</summary>
+      <p>
+        tea is the substrate underneath lane B, and its one rule is that the machine is a
+        plain function: you hand it the current state and something that happened, and it
+        hands back the next state plus a list of things it wants done.
+      </p>
+      <pre>(state, msg) -> [state, cmds]</pre>
+      <p>
+        Because that function is pure, the entire order lives in the state value. How many
+        payment attempts have been made, when the next one is due, which phase we are in,
+        whether a refund is owed and against which payment — all of it is ordinary data:
+      </p>
+      <pre>{ phase: "refunding", attempt: 2, dueAt: 1786952955102, paymentRef: "pay_...", refunded: false }</pre>
+      <p>
+        Compare that to the usual arrangement, where the same facts are implied by
+        <em>where a paused function is sitting</em> — which line of which loop, inside which
+        await. That position cannot be written down, copied, or reloaded. A value can.
+      </p>
+      <p>
+        The things the saga wants done — take the payment, ask the warehouse, submit the
+        refund — never happen inside the reducer. It only <em>asks</em> for them, by
+        returning them as data, and the handlers carry them out afterwards. So nothing
+        important is sitting in a stack frame: the decisions are in the state, and the work
+        is a list of requests.
+      </p>
+      <p>
+        After every single transition, tea writes the new state to Durable Object storage
+        <em>before</em> it runs any of the requested effects. That ordering is the whole
+        trick. The saved state is never behind reality, so when a fresh isolate loads it and
+        re-arms the alarm, it resumes exactly where the dead one was — mid ladder, mid
+        reservation, mid refund. Nothing has to be reconstructed or guessed.
+      </p>
+      <p>
+        The retry policy is one of tea's small built-in batteries, and its state is
+        inspectable rather than hidden. The attempt dots and the countdown on this page are
+        not a separate UI model — they are read straight off the same fields the machine
+        makes its decisions from, which is why they cannot drift out of sync with what the
+        saga is actually doing.
+      </p>
+      <p>
+        The saga is <code>src/machine.ts</code> — a couple of hundred lines with no Effect,
+        no Durable Object and no clock in sight, which is also why it is testable without any
+        of them. See the
+        <a href="https://github.com/kamp-us/demlik">@demlik/tea README</a> for the substrate
+        itself.
+      </p>
+    </details>
   </section>
 
   <footer>
@@ -312,6 +377,21 @@ export const PAGE = `<!doctype html>
   var PHASES = ["idle", "paying", "reserving", "refunding", "settled", "failed"];
   var LANES = ["naive", "tea"];
   var MAX_ATTEMPTS = 5;
+
+  // What the current wait is FOR, so the countdown reads as the phase it
+  // belongs to rather than always claiming to be a payment retry.
+  var WAITING_FOR = {
+    paying: "next payment attempt",
+    reserving: "warehouse answers",
+    refunding: "refund clears"
+  };
+
+  // What was lost when the naive lane died, in the phase it died in.
+  var STRANDED = {
+    paying: "Nothing is coming. The retry died with the process — the order says \u201cretrying\u2026\u201d and will say it forever.",
+    reserving: "Payment captured, reservation never confirmed. Nothing will finish this order and nothing will refund it.",
+    refunding: "Payment captured, refund never coming — the money is stuck. Nothing is scheduled to give it back."
+  };
 
   var SUB_BASE = {
     naive: "The retry is a timer held in the server's memory — a sleep inside a running function.",
@@ -347,13 +427,15 @@ export const PAGE = `<!doctype html>
    * The id is persisted so a RELOAD keeps showing the run you were watching
    * (crash chrome included); only pressing Start mints a new one.
    */
-  function freshOrderId() {
+  function freshOrderId(kind) {
     var alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
     var out = "";
     for (var i = 0; i < 4; i++) {
       out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
     }
-    return "order-" + out;
+    // "oos-" is the out-of-stock scenario flag the saga reads. It is an
+    // implementation detail of the fake warehouse, not something to type.
+    return (kind === "refund" ? "oos-" : "order-") + out;
   }
   function loadCrash() {
     var raw = null;
@@ -465,7 +547,7 @@ export const PAGE = `<!doctype html>
       if (i < s.attempt) dot.classList.add("failed");
       else if (i === s.attempt) {
         if (s.paymentRef) dot.classList.add("ok");
-        else if (s.nextRetryAt !== null) dot.classList.add("failed");
+        else if (s.retryInMs !== null) dot.classList.add("failed");
         else if (!s.terminal) dot.classList.add("pending");
         else dot.classList.add("failed");
       }
@@ -477,13 +559,14 @@ export const PAGE = `<!doctype html>
     } else if (crashedAt !== null && !revived && s.phase !== "idle") {
       cd.textContent =
         lane === "tea" ? "waiting for a fresh isolate…" : "no one is holding this";
-    } else if (s.nextRetryAt !== null) {
-      var left = Math.max(0, s.nextRetryAt - Date.now());
+    } else if (s.dueAt !== null) {
+      var left = Math.max(0, s.dueAt - Date.now());
+      var what = WAITING_FOR[s.phase] || "next step";
       cd.innerHTML = s.frozen
-        ? "next retry was due <b>" +
+        ? what + " was due <b>" +
           (left === 0 ? "already" : "in " + (left / 1000).toFixed(1) + "s") +
           "</b> — but no one is holding it"
-        : "next retry in <b>" + (left / 1000).toFixed(1) + "s</b>";
+        : what + " in <b>" + (left / 1000).toFixed(1) + "s</b>";
     } else if (s.phase === "idle") {
       cd.textContent = "not started";
     } else {
@@ -506,7 +589,9 @@ export const PAGE = `<!doctype html>
 
     var frozenForGood = s.frozen && crashedAt !== null;
     sub.classList.toggle("hardened", frozenForGood);
-    sub.textContent = frozenForGood ? SUB_DEAD : SUB_BASE[lane];
+    sub.textContent = frozenForGood
+      ? (STRANDED[s.phase] || SUB_DEAD)
+      : SUB_BASE[lane];
 
     if (crashedAt === null) { setBanner(lane, "good", null); return; }
 
@@ -529,7 +614,9 @@ export const PAGE = `<!doctype html>
 
     if (s.frozen) {
       setBanner("naive", "bad",
-        "☠️ frozen at attempt " + s.attempt + " — no timer, no alarm, nobody scheduled to continue");
+        s.strandedMoney
+          ? "☠️ frozen while " + s.phase + " — the customer has been charged and no refund is scheduled"
+          : "☠️ frozen at attempt " + s.attempt + " — no timer, no alarm, nobody scheduled to continue");
     } else if (s.terminal) {
       setBanner("naive", revived ? "good" : "bad",
         revived ? "finished — " + s.phase : "finished before the crash — " + s.phase);
@@ -607,12 +694,15 @@ export const PAGE = `<!doctype html>
   }
 
   // ── controls ─────────────────────────────────────────────────────────────
-  q("#start").onclick = function () {
-    // Mint a fresh id unless the viewer typed their own (the oos- path). The
-    // last id we set is remembered, so "unchanged" is exactly "not typed over".
-    if (order() === (ss("order") || "")) {
-      q("#order").value = freshOrderId();
-    }
+  /**
+   * Start a scenario. The scenario IS the order id — an "oos-" id is the one the
+   * warehouse cannot fill — but nobody has to know that: the two buttons mint
+   * the right id, and the box just shows which order is running.
+   */
+  function startScenario(kind) {
+    var typed = order() !== (ss("order") || "");
+    // A typed id wins, so the box stays useful for re-running a specific order.
+    if (!typed) q("#order").value = freshOrderId(kind);
     ssSet("order", order());
     forgetCrash();
     killingUntil = 0;
@@ -620,12 +710,20 @@ export const PAGE = `<!doctype html>
     fetch("/both/start?order=" + encodeURIComponent(order()), { method: "POST" })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        notice("Both orders started. First two payment attempts will be declined.", "var(--dim)");
+        notice(
+          kind === "refund"
+            ? "Started. The card clears on the second try, then the warehouse comes back out of stock."
+            : "Started. The card is declined three times before it clears.",
+          "var(--dim)"
+        );
         renderLane("naive", d.naive); renderLane("tea", d.tea);
         schedule(300);
       })
       .catch(function () { notice("Could not start the order.", "#f0a5a5"); });
-  };
+  }
+
+  q("#start-settle").onclick = function () { startScenario("settle"); };
+  q("#start-refund").onclick = function () { startScenario("refund"); };
 
   q("#kill").onclick = function () {
     if (!inFlight(last.naive) && !inFlight(last.tea)) {
@@ -672,7 +770,7 @@ export const PAGE = `<!doctype html>
   // With nothing to restore, start from a fresh id rather than a hardcoded one
   // that may already carry a previous session's Durable Object.
   var savedOrder = ss("order");
-  q("#order").value = savedOrder || freshOrderId();
+  q("#order").value = savedOrder || freshOrderId("settle");
   ssSet("order", order());
 
   loadCrash();

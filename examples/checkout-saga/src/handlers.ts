@@ -50,10 +50,20 @@ export function checkoutInterpret(
           ),
         ),
 
+      // Lodge the reservation. The warehouse's ANSWER is a separate round trip
+      // (below), separated by a wait the saga records as State — so the wait is
+      // survivable rather than a stack frame holding a promise.
       reserve: (cmd) =>
         Effect.gen(function* () {
           const inventory = yield* Inventory;
-          yield* inventory.reserve({ orderId: cmd.orderId });
+          yield* inventory.requestReservation({ orderId: cmd.orderId });
+          return { type: "reserve_accepted", at: now() } as const;
+        }),
+
+      reserve_confirm: (cmd) =>
+        Effect.gen(function* () {
+          const inventory = yield* Inventory;
+          yield* inventory.reservationOutcome({ orderId: cmd.orderId });
           return { type: "reserve_ok", at: now() } as const;
         }).pipe(
           Effect.catchTag("OutOfStock", (error) =>
@@ -68,7 +78,22 @@ export function checkoutInterpret(
       refund: (cmd) =>
         Effect.gen(function* () {
           const payments = yield* Payments;
-          yield* payments.refund({ paymentRef: cmd.paymentRef });
+          yield* payments.submitRefund({ paymentRef: cmd.paymentRef });
+          return { type: "refund_accepted", at: now() } as const;
+        }).pipe(
+          Effect.catchTag("RefundRejected", (error) =>
+            Effect.succeed({
+              type: "refund_failed",
+              reason: error.reason,
+              at: now(),
+            } as const),
+          ),
+        ),
+
+      refund_confirm: (cmd) =>
+        Effect.gen(function* () {
+          const payments = yield* Payments;
+          yield* payments.confirmRefund({ paymentRef: cmd.paymentRef });
           return { type: "refund_ok", at: now() } as const;
         }).pipe(
           Effect.catchTag("RefundRejected", (error) =>

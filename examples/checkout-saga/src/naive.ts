@@ -16,18 +16,32 @@
  * and "dead"; that ambiguity is the bug this demo is about.
  */
 
-import { FLAKY_ATTEMPTS, paymentRetryPolicy, retryDelayMs } from "./machine";
+import {
+  declinesFor,
+  isRefundScenario,
+  paymentRetryPolicy,
+  REFUND_WAIT_MS,
+  RESERVE_WAIT_MS,
+  retryDelayMs,
+} from "./machine";
 
 // Shared with the tea lane so the two can never drift into an unfair race.
 const MAX_ATTEMPTS = paymentRetryPolicy.maxAttempts;
 
 export interface NaiveRow {
-  readonly phase: "idle" | "paying" | "reserving" | "settled" | "failed";
+  readonly phase:
+    | "idle"
+    | "paying"
+    | "reserving"
+    | "refunding"
+    | "settled"
+    | "failed";
   readonly orderId: string;
   readonly amountCents: number;
   readonly attempt: number;
-  readonly nextRetryAt: number | null;
+  readonly dueAt: number | null;
   readonly paymentRef: string | null;
+  readonly refunded: boolean;
   readonly failure: string | null;
   readonly updatedAt: number;
   readonly log: readonly { readonly at: number; readonly text: string }[];
@@ -38,8 +52,9 @@ const FRESH: NaiveRow = {
   orderId: "",
   amountCents: 0,
   attempt: 0,
-  nextRetryAt: null,
+  dueAt: null,
   paymentRef: null,
+  refunded: false,
   failure: null,
   updatedAt: 0,
   log: [],
@@ -106,29 +121,32 @@ export class NaiveOrderDO implements DurableObject {
         // The loop charges attempt 1 immediately; saying so up front keeps the
         // two lanes reporting the same rung from the very first response.
         attempt: 1,
-        nextRetryAt: null,
+        dueAt: null,
         paymentRef: null,
+        refunded: false,
         failure: null,
       },
     );
 
     const work = (async () => {
       let row = opening;
+      const declines = declinesFor(orderId);
+
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         row = await this.#note(row, `charging (attempt ${attempt})`, {
           attempt,
-          nextRetryAt: null,
+          dueAt: null,
         });
 
-        if (attempt <= FLAKY_ATTEMPTS) {
+        if (attempt <= declines) {
           if (attempt === MAX_ATTEMPTS) break;
           const delay = retryDelayMs(attempt);
           row = await this.#note(
             row,
             `payment attempt ${attempt} declined (issuer timeout (attempt ${attempt})) — retry in ${delay}ms`,
-            { nextRetryAt: Date.now() + delay },
+            { dueAt: Date.now() + delay },
           );
-          // ── the entire retry ladder, right here, in RAM ──────────────────
+          // ── the retry ladder, right here, in RAM ─────────────────────────
           await sleep(delay);
           continue;
         }
@@ -136,28 +154,48 @@ export class NaiveOrderDO implements DurableObject {
         const ref = `pay_${orderId}_${amountCents}_a${attempt}`;
         row = await this.#note(
           row,
-          `payment captured (${ref}) — reserving stock`,
-          {
-            phase: "reserving",
-            paymentRef: ref,
-            nextRetryAt: null,
-          },
+          `payment captured (${ref}) — asking the warehouse`,
+          { phase: "reserving", paymentRef: ref, dueAt: null },
         );
 
-        if (orderId.includes("oos")) {
-          row = await this.#note(
-            row,
-            `reservation failed (out of stock: ${orderId}) — refunding ${ref}`,
-            { failure: `out of stock: ${orderId}` },
-          );
-          row = await this.#note(row, "refund issued — order failed cleanly", {
-            phase: "failed",
+        // ── the reservation wait, also in RAM ────────────────────────────
+        row = await this.#note(
+          row,
+          `reserving stock… (warehouse answers in ${RESERVE_WAIT_MS}ms)`,
+          { dueAt: Date.now() + RESERVE_WAIT_MS },
+        );
+        await sleep(RESERVE_WAIT_MS);
+        row = await this.#note(row, "warehouse is answering…", { dueAt: null });
+
+        if (!isRefundScenario(orderId)) {
+          await this.#note(row, "stock reserved — order settled", {
+            phase: "settled",
           });
           this.#looping = false;
           return;
         }
 
-        await this.#note(row, "stock reserved — settled", { phase: "settled" });
+        row = await this.#note(
+          row,
+          `reservation failed (out of stock: ${orderId}) — refunding ${ref}`,
+          { phase: "refunding", failure: `out of stock: ${orderId}` },
+        );
+
+        // ── and the refund wait. Every wait this lane makes is a sleep, so
+        // every one of them dies with the isolate. The refund is the one that
+        // actually costs someone money.
+        row = await this.#note(
+          row,
+          `refund submitted… (clears in ${REFUND_WAIT_MS}ms)`,
+          { dueAt: Date.now() + REFUND_WAIT_MS },
+        );
+        await sleep(REFUND_WAIT_MS);
+        row = await this.#note(row, "confirming the refund…", { dueAt: null });
+        await this.#note(
+          row,
+          "refund cleared — order failed cleanly, customer made whole",
+          { phase: "failed", refunded: true },
+        );
         this.#looping = false;
         return;
       }
@@ -165,7 +203,7 @@ export class NaiveOrderDO implements DurableObject {
       await this.#note(row, "payment gave up", {
         phase: "failed",
         failure: "retry budget exhausted",
-        nextRetryAt: null,
+        dueAt: null,
       });
       this.#looping = false;
     })();
@@ -219,12 +257,14 @@ export class NaiveOrderDO implements DurableObject {
       orderId: row.orderId,
       amountCents: row.amountCents,
       attempt: row.attempt,
-      nextRetryAt: row.nextRetryAt,
+      dueAt: row.dueAt,
+      waitInMs: row.dueAt === null ? null : Math.max(0, row.dueAt - Date.now()),
       retryInMs:
-        row.nextRetryAt === null
+        row.dueAt === null || row.phase !== "paying"
           ? null
-          : Math.max(0, row.nextRetryAt - Date.now()),
+          : Math.max(0, row.dueAt - Date.now()),
       paymentRef: row.paymentRef,
+      refunded: row.refunded,
       failure: row.failure,
       terminal,
       /** Is anything actually going to advance this order? */
@@ -235,6 +275,13 @@ export class NaiveOrderDO implements DurableObject {
        * at 3am and cannot distinguish from "still working".
        */
       frozen: inFlight && !this.#looping,
+      /**
+       * WHAT was lost, in the phase it was lost in. "Frozen while paying" is a
+       * customer who never gets charged; "frozen while refunding" is a customer
+       * who was charged and whose money is now sitting in limbo with nothing
+       * scheduled to return it. The second one is the expensive one.
+       */
+      strandedMoney: inFlight && !this.#looping && row.paymentRef !== null,
       lastSeenAt: row.updatedAt,
       staleForMs: row.updatedAt === 0 ? null : Date.now() - row.updatedAt,
       log: row.log,
