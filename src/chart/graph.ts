@@ -6,21 +6,32 @@ import type { Cmd } from "../pure/core";
 // ── 1. the graph shape ─────────────────────────────────────────────────────
 // An edge is either a bare target name, a target with optional cmd, a GUARDED
 // target (`when` + `otherwise`), or a RESUME edge (go back to `was ?? fallback`).
+/**
+ * A cmd reference on an edge: one name, or an ORDERED list of names. The list
+ * is what buys `Cmd.batch` — an edge that fires N effects in a fixed order.
+ */
+export type CmdRef = string | readonly string[];
+
 export type EdgeSpec<SN extends string> =
   | SN
-  | { readonly target: SN; readonly cmd?: string }
+  | { readonly target: SN; readonly cmd?: CmdRef }
   | {
       readonly target: SN;
       readonly when: string;
       readonly otherwise: SN;
-      readonly cmd?: string;
+      /** Fires only when the guard HOLDS. */
+      readonly cmd?: CmdRef;
+      /** Fires only when the guard FAILS — `Cmd.when` lifted onto the edge. */
+      readonly otherwiseCmd?: CmdRef;
     }
-  | { readonly resume: { readonly fallback: SN }; readonly cmd?: string };
+  | { readonly resume: { readonly fallback: SN }; readonly cmd?: CmdRef };
 
 // F-bounded: `SN` is instantiated with `keyof G`, so every `target` /
 // `otherwise` / `fallback` is validated against the SAME object's own keys.
 export type Graph<G> = {
   readonly [S in keyof G]: {
+    /** Exactly one state in a machine-bearing graph marks itself the entry. */
+    readonly initial?: true;
     readonly on?: Readonly<Record<string, EdgeSpec<Extract<keyof G, string>>>>;
   };
 };
@@ -32,7 +43,13 @@ export type Graph<G> = {
  * drop the guard. This maps each edge to `unknown` (fine) or to a marker object
  * naming the offending field, which the object-literal check then rejects.
  */
-type KnownEdgeField = "target" | "cmd" | "when" | "otherwise" | "resume";
+type KnownEdgeField =
+  | "target"
+  | "cmd"
+  | "otherwiseCmd"
+  | "when"
+  | "otherwise"
+  | "resume";
 export type StrictEdges<G> = {
   readonly [S in keyof G]: {
     readonly on?: {
@@ -84,6 +101,18 @@ export type EventName<G> = Extract<
 export type EdgeKey<G> = {
   [S in keyof G]: `${Extract<S, string>}.${Extract<keyof On<G, S>, string>}`;
 }[keyof G];
+
+/**
+ * The state marked `initial: true` — the graph's entry. Declared ON the graph
+ * so the entry edge is data (`machine-viz` can draw `[*] --> queued`) instead
+ * of a fact the author repeats in the hand-written `init`.
+ */
+export type InitialState<G> = Extract<
+  {
+    [S in keyof G]: G[S] extends { readonly initial: true } ? S : never;
+  }[keyof G],
+  string
+>;
 
 // ── 3. the resume ("hist") derivation ──────────────────────────────────────
 /** States that carry a `resume` edge out of them — the parking states. */
@@ -170,6 +199,21 @@ type Assigned<G, S, T> = T extends string
     : Data<S, T>
   : never;
 
+type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
+
+/**
+ * What `boot()` must return: the initial state's payload, minus the `type` the
+ * compiler stamps on. The two degenerate graphs get a NAMED marker type rather
+ * than a silent `never`, so the diagnostic says which rule was broken.
+ */
+export type InitialData<G, S extends { type: string }> = [
+  InitialState<G>,
+] extends [never]
+  ? { readonly __graphDeclaresNoInitialState: true }
+  : [IsUnion<InitialState<G>>] extends [true]
+    ? { readonly __graphDeclaresManyInitialStates: InitialState<G> }
+    : Data<S, InitialState<G>>;
+
 type Fn<S, M, From, Ev, R> = (state: Narrow<S, From>, msg: Narrow<M, Ev>) => R;
 
 type Cell<G, X, S, M, From extends keyof G, Ev> = X extends {
@@ -213,21 +257,38 @@ export type GuardName<G> = Extract<
   string
 >;
 
+/** Flatten a `CmdRef` — one name, or every name in an ordered list. */
+type Flatten<C> = C extends readonly string[] ? C[number] : C;
+
+/** Every cmd an edge can fire, across BOTH guard arms. */
+type EdgeCmds<X> =
+  | (X extends { readonly cmd: infer C } ? Flatten<C> : never)
+  | (X extends { readonly otherwiseCmd: infer C } ? Flatten<C> : never);
+
 export type CmdName<G> = Extract<
   {
     [S in keyof G]: {
-      [E in keyof On<G, S>]: On<G, S>[E] extends { readonly cmd: infer W }
-        ? W
-        : never;
+      [E in keyof On<G, S>]: EdgeCmds<On<G, S>[E]>;
     }[keyof On<G, S>];
   }[keyof G],
   string
 >;
 
-/** Scan the graph for every edge whose `when`/`cmd` equals `Name`. */
+/** What field `F` on an edge REFERENCES — a guard name, or its cmd names. */
+type Referenced<X, F extends "when" | "cmd"> = F extends "when"
+  ? X extends { readonly when: infer W }
+    ? W
+    : never
+  : EdgeCmds<X>;
+
+/**
+ * Scan the graph for every edge that references `Name` through field `F`.
+ * `[Name] extends [Referenced<…>]` rather than an equality check, because an
+ * edge's cmd list references SEVERAL names at once.
+ */
 type SitesWhere<G, F extends "when" | "cmd", Name> = {
   [S in keyof G]: {
-    [E in keyof On<G, S>]: On<G, S>[E] extends Record<F, Name>
+    [E in keyof On<G, S>]: [Name] extends [Referenced<On<G, S>[E], F>]
       ? `${Extract<S, string>}.${Extract<E, string>}`
       : never;
   }[keyof On<G, S>];
@@ -247,6 +308,20 @@ export type Guards<G, S extends { type: string }, M extends { type: string }> = 
   [N in GuardName<G>]: (...args: SiteArgs<SitesWhere<G, "when", N>, S, M>) => boolean;
 };
 
+/**
+ * The payload a builder owes: its Cmd variant minus the `type` the compiler
+ * stamps on. A name with NO matching variant in `C` would otherwise collapse
+ * to `Omit<never, "type">` — which accepts anything — so it gets a marker.
+ */
+type CmdPayload<C extends Cmd, N> = [Narrow<C, N>] extends [never]
+  ? { readonly __noCmdVariantNamed: N }
+  : Omit<Narrow<C, N>, "type">;
+
+/**
+ * Same technique as `Guards`: a cmd's parameters come from the edges that
+ * REFERENCE it. A cmd fired from two edges gets the union of both sites'
+ * `[state, msg]` tuples, so its builder must handle both.
+ */
 export type Cmds<
   G,
   S extends { type: string },
@@ -255,7 +330,7 @@ export type Cmds<
 > = {
   [N in CmdName<G>]: (
     ...args: SiteArgs<SitesWhere<G, "cmd", N>, S, M>
-  ) => Omit<Narrow<C, N>, "type">;
+  ) => CmdPayload<C, N>;
 };
 
 // ── 7. identity assertion helpers ──────────────────────────────────────────

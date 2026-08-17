@@ -2,8 +2,7 @@
 // IDENTITY ASSERTIONS — each one fails to compile if the derivation is wrong.
 // `Eq<A,B>` is the invariant-position trick, so `any`/`never` do NOT slip past.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, SyncReturn, Transitions } from "../pure/core";
-import { compile } from "./compile";
+import type { SyncReturn, Transitions } from "../pure/core";
 import {
   type Assert,
   type Assigns,
@@ -14,7 +13,8 @@ import {
   type EventName,
   type GuardName,
   type Guards,
-  type MsgOf,
+  type InitialData,
+  type InitialState,
   type Namespaced,
   type ParkingState,
   type ResumeTargets,
@@ -33,6 +33,20 @@ import {
   issue42,
   region,
 } from "./lane";
+import {
+  type UCmd,
+  type UG,
+  type UMsg,
+  type UState,
+  uCmds,
+  uploadMachine,
+  uploader,
+} from "./upload";
+
+/** Local narrowing shorthands for the upload demo's unions. */
+type U<K extends string> = Extract<UState, { type: K }>;
+type UM<K extends string> = Extract<UMsg, { type: K }>;
+type UCmds = Cmds<UG, UState, UMsg, UCmd>;
 
 // ── §2 derivations ──────────────────────────────────────────────────────────
 export type A1 = Assert<
@@ -195,69 +209,78 @@ export type A25 = Assert<
   Eq<keyof (typeof issue42)["shipped"], LaneMsgIn<"ISSUE_42">["type"]>
 >;
 
-// ═══ a second graph, purely to exercise `cmds` (the lane region emits none) ══
-const upload = defineGraph({
-  idle: { on: { pick: { target: "sending", cmd: "put_object" } } },
-  sending: {
-    on: {
-      done: { target: "checking", cmd: "verify_object" },
-      fail: { target: "idle", when: "hasBudget", otherwise: "dead" },
-    },
-  },
-  checking: { on: { ok: "idle" } },
-  dead: {},
-});
-type UG = typeof upload;
-type UState = StateOf<
-  UG,
-  {
-    idle: { readonly tries: number };
-    sending: { readonly key: string; readonly tries: number };
-    checking: { readonly key: string; readonly etag: string; readonly tries: number };
-    dead: { readonly tries: number };
-  }
->;
-type UMsg = MsgOf<
-  UG,
-  {
-    pick: { readonly key: string };
-    done: { readonly etag: string };
-    fail: { readonly error: string };
-    ok: Record<never, never>;
-  }
->;
-type UCmd =
-  | (Cmd<"put_object"> & { readonly key: string })
-  | (Cmd<"verify_object"> & { readonly key: string; readonly etag: string });
 
-const uCmds: Cmds<UG, UState, UMsg, UCmd> = {
-  // one site (`idle.pick`) → exactly the idle state + the pick msg
-  put_object: (_s, m) => ({ key: m.key }),
-  // one site (`sending.done`) → the sending state + the done msg
-  verify_object: (s, m) => ({ key: s.key, etag: m.etag }),
-};
+// ═══ §7 the CMD surface (the lane region emits none — see `upload.ts`) ═══════
 export type A26 = Assert<
-  Eq<
-    Parameters<Cmds<UG, UState, UMsg, UCmd>["put_object"]>,
-    [state: Extract<UState, { type: "idle" }>, msg: Extract<UMsg, { type: "pick" }>]
-  >
+  Eq<Parameters<UCmds["put_object"]>, [state: U<"idle">, msg: UM<"pick">]>
 >;
 export type A27 = Assert<Eq<ParkingState<UG>, never>>;
-
-export const uploader = compile<UG, UState, UMsg, UCmd, "up">(upload, "up", {
-  assign: {
-    "idle.pick": (s, m) => ({ key: m.key, tries: s.tries }),
-    "sending.done": (s, m) => ({ key: s.key, etag: m.etag, tries: s.tries }),
-    "sending.fail": {
-      then: (s) => ({ tries: s.tries + 1 }),
-      else: (s) => ({ tries: s.tries }),
-    },
-    "checking.ok": (s) => ({ tries: s.tries }),
-  },
-  guards: { hasBudget: (s) => s.tries < 3 },
-  cmds: uCmds,
-  unhandled: "error",
-});
 export type A28 = Assert<
   Eq<typeof uploader, Transitions<UState, Namespaced<UMsg, "up">, UCmd>>
+>;
+// every name reachable from ANY edge, through `cmd` (scalar OR list) and
+// through `otherwiseCmd`.
+export type A29 = Assert<
+  Eq<CmdName<UG>, "put_object" | "verify_object" | "log" | "alert_human">
+>;
+// a builder's params are the UNION of its use sites — `log` fires from
+// `sending.done` and from both arms of `sending.fail`.
+export type A30 = Assert<
+  Eq<
+    Parameters<UCmds["log"]>,
+    [state: U<"sending">, msg: UM<"done">] | [state: U<"sending">, msg: UM<"fail">]
+  >
+>;
+// an `otherwiseCmd`-only builder is narrowed to its (single) site all the same
+export type A31 = Assert<
+  Eq<Parameters<UCmds["alert_human"]>, [state: U<"sending">, msg: UM<"fail">]>
+>;
+// the payload owed is the Cmd variant MINUS `type` — the compiler stamps it
+export type A32 = Assert<
+  Eq<ReturnType<UCmds["verify_object"]>, { readonly key: string; readonly etag: string }>
+>;
+// and the emitted cell genuinely returns `[nextState, cmds]` as a SyncReturn
+export type A33 = Assert<
+  Eq<
+    ReturnType<(typeof uploader)["sending"]["up.done"]>,
+    SyncReturn<UState, UCmd>
+  >
+>;
+
+// ═══ §8 `init`, DERIVED from the graph ══════════════════════════════════════
+export type A34 = Assert<Eq<InitialState<LaneG>, "queued">>;
+export type A35 = Assert<Eq<InitialState<UG>, "idle">>;
+// `boot()` owes EXACTLY the entry state's data — no `type`, nothing else
+export type A36 = Assert<
+  Eq<
+    InitialData<LaneG, LaneState>,
+    { readonly retries: number; readonly maxRetries: number }
+  >
+>;
+export type A37 = Assert<Eq<InitialData<UG, UState>, { readonly tries: number }>>;
+// a graph with NO entry marked gets a NAMED marker, not a silent `never`
+const noEntry = defineGraph({ a: { on: { go: "b" } }, b: {} });
+export type A38 = Assert<
+  Eq<
+    InitialData<typeof noEntry, StateOf<typeof noEntry, { a: object; b: object }>>,
+    { readonly __graphDeclaresNoInitialState: true }
+  >
+>;
+// …and so does a graph with TWO
+const twoEntries = defineGraph({
+  a: { initial: true, on: { go: "b" } },
+  b: { initial: true },
+});
+export type A39 = Assert<
+  Eq<
+    InitialData<
+      typeof twoEntries,
+      StateOf<typeof twoEntries, { a: object; b: object }>
+    >,
+    { readonly __graphDeclaresManyInitialStates: "a" | "b" }
+  >
+>;
+// the derived `init` is exactly `Machine["init"]`'s shape, rehydrate included
+export type A40 = Assert<
+  Eq<Parameters<typeof uploadMachine.init>[0], UState | null>
 >;
