@@ -7,7 +7,8 @@
   "durable_objects": {
     "bindings": [
       { "name": "CHECKOUT", "class_name": "CheckoutSaga" },
-      { "name": "NAIVE", "class_name": "NaiveOrderDO" }
+      { "name": "NAIVE", "class_name": "NaiveOrderDO" },
+      { "name": "RECIPE", "class_name": "RecipeDO" }
     ]
   },
   // SQLite-backed Durable Objects. `new_sqlite_classes` (not `new_classes`) is
@@ -23,7 +24,7 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["CheckoutSaga", "NaiveOrderDO"]
+      "new_sqlite_classes": ["CheckoutSaga", "NaiveOrderDO", "RecipeDO"]
     }
   ],
   "observability": { "enabled": true }

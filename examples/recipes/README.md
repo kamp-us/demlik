@@ -1,8 +1,12 @@
 # tea recipes — the day-scale shapes
 
-> The sibling [`examples/checkout-saga`](../checkout-saga) referenced throughout
-> lands with the Effect demo branch; the recipes here stand on their own and need
-> nothing from it to run.
+> **All five are now clickable.** The sibling
+> [`examples/checkout-saga`](../checkout-saga) worker serves them at `/recipes`,
+> one panel each. Because no recipe ever sleeps (see below), each panel gets ⏩
+> time-travel buttons that dispatch the exact `tick` a Durable Object alarm would
+> have delivered — so the three-week dunning ladder is four clicks — plus a 💥
+> button that destroys the isolate. The machines here are untouched by that
+> hosting: they still stand on their own and need nothing from it to run.
 
 The checkout-saga demo exists to be watched: it compresses a
 multi-day order lifecycle into about thirty seconds so you can kill the isolate

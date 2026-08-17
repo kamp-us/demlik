@@ -30,6 +30,7 @@ import {
   parseState,
 } from "./machine";
 import { PAGE } from "./page";
+import { RECIPES_PAGE } from "./recipes/page";
 import { CheckoutLayer } from "./services";
 
 export interface Env {
@@ -37,9 +38,12 @@ export interface Env {
   readonly CHECKOUT: DurableObjectNamespace;
   /** Lane A — the same saga written the ordinary way. */
   readonly NAIVE: DurableObjectNamespace;
+  /** One class, any recipe, keyed `recipe:<id>:<instance>`. */
+  readonly RECIPE: DurableObjectNamespace;
 }
 
 export { NaiveOrderDO } from "./naive";
+export { RecipeDO } from "./recipes/do";
 
 type CheckoutRuntime = Runtime<State, Msg>;
 
@@ -246,6 +250,43 @@ export default {
       return new Response(PAGE, {
         headers: { "content-type": "text/html; charset=utf-8" },
       });
+    }
+
+    if (url.pathname === "/recipes") {
+      return new Response(RECIPES_PAGE, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+
+    // ── the recipe panels ───────────────────────────────────────────────────
+    const recipeRoute = /^\/recipe\/(state|act|crash|reset)$/.exec(
+      url.pathname,
+    );
+    if (recipeRoute !== null) {
+      const action = recipeRoute[1] as string;
+      const recipe = url.searchParams.get("recipe") ?? "";
+      const instance = url.searchParams.get("inst") ?? "1";
+      const name = `recipe:${recipe}:${instance}`;
+      const stub = env.RECIPE.get(env.RECIPE.idFromName(name));
+      const inner = new URL(
+        `https://recipe/${action === "state" ? "act" : action}`,
+      );
+      inner.search = url.searchParams.toString();
+      try {
+        const res = await stub.fetch(
+          new Request(inner.toString(), { method: "POST" }),
+        );
+        return new Response(await res.text(), {
+          status: res.status,
+          headers: { "content-type": "application/json" },
+        });
+      } catch (error) {
+        // `ctx.abort()` tears the object down mid-request by design.
+        if (action === "crash") {
+          return json({ crashed: true, recipe, instance, at: Date.now() });
+        }
+        throw error;
+      }
     }
 
     const orderId = url.searchParams.get("order") ?? "order-1";

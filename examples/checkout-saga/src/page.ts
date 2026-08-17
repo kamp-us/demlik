@@ -145,6 +145,15 @@ export const PAGE = `<!doctype html>
     color: #6b7685; font-size: 13px;
   }
   footer a { color: #9db4cc; }
+  .more { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .more h2 { font-size: 15px; margin: 0 0 8px; }
+  .more p { margin: 0 0 10px; color: #b3bfcd; font-size: 13.5px; max-width: 74ch; }
+  a.cta {
+    display: inline-block; color: #cfe0f0; text-decoration: none; font-weight: 600;
+    font-size: 13.5px; padding: 9px 14px; border-radius: 8px;
+    border: 1px solid #2f4a63; background: #16222d;
+  }
+  a.cta:hover { background: #1d2c3a; }
 
   /*
    * The kill is deliberately UNDRAMATIC: no shake, no flash, no animation on
@@ -363,6 +372,17 @@ export const PAGE = `<!doctype html>
         itself.
       </p>
     </details>
+  </section>
+
+  <section class="more">
+    <h2>Five more, all clickable</h2>
+    <p>
+      The same idea applied to workflows that normally take days or weeks — an AI agent
+      pausing for a human approval, a 21-day dunning ladder, an expense report chasing
+      three approvers, an onboarding drip that cancels itself, a device config that keeps
+      retrying until it converges. Each one can be fast-forwarded and killed.
+    </p>
+    <p><a class="cta" href="/recipes">Open the five recipes →</a></p>
   </section>
 
   <footer>

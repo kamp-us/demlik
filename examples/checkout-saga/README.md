@@ -58,6 +58,25 @@ Run the machine tests:
 npx vitest run
 ```
 
+## The five recipes
+
+The same worker serves `/recipes`: five more machines from
+[`examples/recipes/`](../recipes/README.md), each with its own clickable panel —
+a durable agent run that parks on a human approval, a 21-day dunning ladder, an
+expense-report approval chain, an onboarding drip that cancels itself, and a
+device-config reconcile loop.
+
+Every one of those machines is pure over `now` (the reducer receives `at` on the
+Msg and never reads a clock), so each panel gets **⏩ time-travel buttons** that
+dispatch the exact tick a Durable Object alarm would have delivered, with the
+timestamp it would have carried. That is how a 21-day workflow is demonstrated in
+four clicks. Each panel also has its own 💥 kill button.
+
+The host is one generic `RecipeDO` keyed `recipe:<id>:<instance>`, so adding a
+recipe is a registry entry — no new DO class, no new migration. It keeps a
+persisted clock skew (what the ⏩ buttons move) and a persisted event feed (so
+the crash divider survives `ctx.abort()`).
+
 ## Driving it with curl
 
 ```sh
@@ -74,6 +93,24 @@ curl -sX POST 'localhost:8790/both/crash?order=demo-1'
 `/order/*` and `/naive/*` address a single lane; `/both/*` fans out to both.
 Each also supports `reset`.
 
+The recipe panels are driven the same way:
+
+```sh
+# start a recipe instance
+curl -sX POST 'localhost:8790/recipe/act?recipe=dunning&inst=demo&action=start'
+
+# fast-forward to its next deadline (the alarm, on demand)
+curl -sX POST 'localhost:8790/recipe/act?recipe=dunning&inst=demo&action=skip'
+
+# read it, or destroy its isolate
+curl -s       'localhost:8790/recipe/state?recipe=dunning&inst=demo'
+curl -sX POST 'localhost:8790/recipe/crash?recipe=dunning&inst=demo'
+```
+
+Valid `recipe` values are `durable-agent-run`, `dunning`, `approval-chain`,
+`onboarding-drip` and `fleet-reconcile`. The available `action` ids for the
+current state come back on every response, in the `actions` array.
+
 ## The files
 
 | File | What it is |
@@ -84,6 +121,9 @@ Each also supports `reset`.
 | [`src/worker.ts`](src/worker.ts) | The host. The `CheckoutSaga` Durable Object (Store + alarm + `ManagedRuntime`) and the worker routes. |
 | [`src/naive.ts`](src/naive.ts) | The control lane. The same saga in plain async code, with the ladder in memory. Deliberately does not use tea. |
 | [`src/page.ts`](src/page.ts) | The UI, as one inline HTML string. No framework, no build step. |
+| [`src/recipes/registry.ts`](src/recipes/registry.ts) | The five recipe machines behind one uniform surface — phase, facts, chips, narrative, actions — so one DO can host any of them and one set of helpers can draw any of them. |
+| [`src/recipes/do.ts`](src/recipes/do.ts) | The generic `RecipeDO`: the persisted virtual clock the ⏩ buttons move, and the persisted event feed. |
+| [`src/recipes/page.ts`](src/recipes/page.ts) | The `/recipes` page. Five panels, all generated from the registry. |
 | [`test/machine.test.ts`](test/machine.test.ts) | Both scenarios end to end, retry-budget exhaustion, restart and double-click semantics, stale-tick idempotence, and three resume-from-storage tests that kill the runtime mid-ladder, mid-reservation and mid-refund. |
 
 ## The parts worth reading
