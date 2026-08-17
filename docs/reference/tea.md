@@ -6,13 +6,13 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (66)
+## Exports (62)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `absurd` | Function |  |
-| `acceptsOf` | Function |  |
 | `applyCell` | Function |  |
+| `applyCellChecked` | Function |  |
 | `asReducer` | Function |  |
 | `BootingRuntime` | Interface |  |
 | `Branded` | Type |  |
@@ -23,14 +23,13 @@ import { … } from "@demlik/tea";
 | `defineMachine` | Function |  |
 | `definePort` | Function |  |
 | `DepKeyedSub` | Interface |  |
-| `describeMachine` | Function |  |
 | `detectUpdateForm` | Function |  |
 | `DispatchDiscardedError` | Class | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
 | `DispatchSettle` | Type |  |
 | `Dispose` | Type |  |
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `foldMsgs` | Function |  |
-| `FoldRefusal` | Interface | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no cell, where. |
+| `foldUpdates` | Function |  |
 | `formOf` | Function |  |
 | `historyTracker` | Function |  |
 | `HistoryTracker` | Interface |  |
@@ -39,7 +38,6 @@ import { … } from "@demlik/tea";
 | `Interpret` | Type |  |
 | `InterpretDetached` | Type |  |
 | `Machine` | Type |  |
-| `MachineShape` | Type |  |
 | `msgKeysOf` | Function |  |
 | `NoCellError` | Class |  |
 | `NoCtx` | Type |  |
@@ -71,8 +69,6 @@ import { … } from "@demlik/tea";
 | `SupervisionStrategy` | Type | The three declared reducer-throw supervision strategies. |
 | `SyncReturn` | Type |  |
 | `Transitions` | Type |  |
-| `tryApplyCell` | Function |  |
-| `tryFoldMsgs` | Function |  |
 | `tryInterpret` | Function |  |
 | `UpdateForm` | Type |  |
 | `wrapDetached` | Function |  |

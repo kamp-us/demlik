@@ -36,10 +36,19 @@ export type {
 export {
   acceptsOf,
   applyCell,
+  // The DEV-checked twin of `applyCell` (deepFreeze + assertPureResult around
+  // the same cell lookup). A consumer driving its own fold — rather than `run`
+  // — needs the checked step to get the purity invariants the kernel enforces
+  // for itself; without it the choice is `applyCell` and no checking at all.
+  applyCellChecked,
   Cmd,
   describeMachine,
   detectUpdateForm,
   foldMsgs,
+  // `foldMsgs` returns state only (ADR 0006). `foldUpdates` is the fold beneath
+  // it and beneath `replay`, and it returns `{ state, cmds }` — the shape a
+  // caller folding a log needs when it must also act on the emitted Cmds.
+  foldUpdates,
   formOf,
   msgKeysOf,
   NoCellError,
