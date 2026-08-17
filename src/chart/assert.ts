@@ -14,6 +14,8 @@ import {
   type EventName,
   type GuardName,
   type Guards,
+  type MissingAt,
+  type MissingPairs,
   type MsgOf,
   type Namespaced,
   type ParkingState,
@@ -73,6 +75,33 @@ export type A3 = Assert<
 
 export type A4 = Assert<Eq<GuardName<LaneG>, "retriesRemaining">>;
 export type A5 = Assert<Eq<CmdName<LaneG>, never>>;
+
+// ── §2b TOTALITY: every pair declared-or-refused ───────────────────────────
+// The real lane graph is total — nothing falls through.
+export type A29 = Assert<Eq<MissingPairs<LaneG>, never>>;
+// row by row: declared ∪ ignored ∪ end covers all six events, per state.
+export type A30 = Assert<Eq<MissingAt<LaneG, "review">, never>>;
+export type A31 = Assert<Eq<MissingAt<LaneG, "shipped">, never>>;
+
+// A deliberately INCOMPLETE graph, built WITHOUT `defineGraph` (which would
+// refuse it) so the derivation itself can be asserted on. `open.B` is declared,
+// `open.A` is ignored, `open.C` is neither — and `MissingPairs` names it.
+type Holey = {
+  open: { on: { B: "shut" }; ignore: ["A"] };
+  shut: { on: { A: "open"; C: "open" } };
+};
+export type A32 = Assert<Eq<EventName<Holey>, "B" | "A" | "C">>;
+export type A33 = Assert<Eq<MissingAt<Holey, "open">, "C">>;
+export type A34 = Assert<Eq<MissingAt<Holey, "shut">, "B">>;
+export type A35 = Assert<Eq<MissingPairs<Holey>, "open.C" | "shut.B">>;
+
+// `end: true` dismisses a whole row in one token — the six-event row is refused
+// without naming a single event.
+type Sealed = { a: { on: { X: "b" } }; b: { end: true } };
+export type A36 = Assert<Eq<MissingPairs<Sealed>, never>>;
+// …and dropping the `end` re-opens exactly that pair.
+type Unsealed = { a: { on: { X: "b" } }; b: Record<never, never> };
+export type A37 = Assert<Eq<MissingPairs<Unsealed>, "b.X">>;
 
 // ── §3 discriminated unions ────────────────────────────────────────────────
 export type A6 = Assert<
@@ -197,15 +226,19 @@ export type A25 = Assert<
 
 // ═══ a second graph, purely to exercise `cmds` (the lane region emits none) ══
 const upload = defineGraph({
-  idle: { on: { pick: { target: "sending", cmd: "put_object" } } },
+  idle: {
+    on: { pick: { target: "sending", cmd: "put_object" } },
+    ignore: ["done", "fail", "ok"],
+  },
   sending: {
     on: {
       done: { target: "checking", cmd: "verify_object" },
       fail: { target: "idle", when: "hasBudget", otherwise: "dead" },
     },
+    ignore: ["pick", "ok"],
   },
-  checking: { on: { ok: "idle" } },
-  dead: {},
+  checking: { on: { ok: "idle" }, ignore: ["pick", "done", "fail"] },
+  dead: { end: true },
 });
 type UG = typeof upload;
 type UState = StateOf<
@@ -256,7 +289,6 @@ export const uploader = compile<UG, UState, UMsg, UCmd, "up">(upload, "up", {
   },
   guards: { hasBudget: (s) => s.tries < 3 },
   cmds: uCmds,
-  unhandled: "error",
 });
 export type A28 = Assert<
   Eq<typeof uploader, Transitions<UState, Namespaced<UMsg, "up">, UCmd>>

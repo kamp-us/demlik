@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RUNTIME — the graph walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, Transitions } from "../pure/core";
+import { type Cmd, NoCellError, type Transitions } from "../pure/core";
 import type {
   Assigns,
   CmdName,
@@ -12,9 +12,11 @@ import type {
   Namespaced,
 } from "./graph";
 
-/** Policy for a (state × msg) pair the graph does not declare. */
-export type Unhandled = "ignore" | "error";
-
+// There is no `unhandled` policy any more. A pair is DECLARED (an edge), or
+// REFUSED in the graph (`ignore` / `end: true`) — `Total<G>` refuses to compile
+// on any third case. The refusal is a self-loop with no cmds; the throw below
+// is the safety net under the compile-time refusal (`.decisions/0011`), reached
+// only when the mapped types were bypassed with a cast.
 export type Parts<
   G,
   S extends { type: string },
@@ -22,8 +24,6 @@ export type Parts<
   C extends Cmd,
 > = {
   readonly assign: Assigns<G, S, M>;
-  /** `"ignore"` (default) = self-loop, no cmds. `"error"` = throw at dispatch. */
-  readonly unhandled?: Unhandled;
 } & ([GuardName<G>] extends [never]
   ? { readonly guards?: undefined }
   : { readonly guards: Guards<G, S, M> }) &
@@ -41,7 +41,16 @@ type RtEdge =
       readonly cmd?: string;
       readonly resume?: { readonly fallback: string };
     };
-type RtGraph = Readonly<Record<string, { readonly on?: Record<string, RtEdge> }>>;
+type RtGraph = Readonly<
+  Record<
+    string,
+    {
+      readonly on?: Record<string, RtEdge>;
+      readonly ignore?: readonly string[];
+      readonly end?: true;
+    }
+  >
+>;
 type RtState = { readonly type: string; readonly was?: string };
 type RtMsg = { readonly type: string };
 type RtCell = (s: RtState, m: RtMsg) => readonly [RtState, readonly Cmd[]];
@@ -102,14 +111,14 @@ export function compile<
       const spec = on[e];
 
       if (spec === undefined) {
-        row[key] =
-          parts.unhandled === "error"
-            ? () => {
-                throw new Error(
-                  `@demlik/tea: state "${s}" declares no edge for event "${e}"`,
-                );
-              }
-            : (st) => [st, []];
+        const node = g[s];
+        const refused =
+          node?.end === true || (node?.ignore ?? []).includes(e) === true;
+        row[key] = refused
+          ? (st) => [st, []]
+          : () => {
+              throw new NoCellError(key, s);
+            };
         continue;
       }
 

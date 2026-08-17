@@ -4,6 +4,6 @@
 import { defineGraph } from "../graph";
 export const g = defineGraph({
   review: { on: { FAIL: { target: "build", whn: "retriesRemaining", otherwise: "frozen" } } },
-  build: {},
-  frozen: {},
+  build: { end: true },
+  frozen: { end: true },
 });
