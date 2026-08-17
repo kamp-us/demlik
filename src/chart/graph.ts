@@ -88,6 +88,14 @@ export type CmdRef<N extends string> = N | readonly N[];
 
 export type EdgeSpec<SN extends string, CN extends string> =
   | SN
+  // ── THE ESCAPE HATCH ────────────────────────────────────────────────────
+  // The author declares the SET of reachable targets; a hand-written cell
+  // picks one at runtime and returns `[state, cmds]` itself. Everything the
+  // chart is for is still declared here — `to` is the fan-out `machine-viz`
+  // draws and the union the cell's return type is clamped to — and the one
+  // thing the chart genuinely cannot know (WHICH of them, this time) is the
+  // only thing left in code.
+  | { readonly to: readonly SN[]; readonly cell: string }
   | { readonly target: SN; readonly cmd?: CmdRef<CN> }
   | {
       readonly target: SN;
@@ -221,18 +229,57 @@ type KnownEdgeField =
   | "otherwiseCmd"
   | "when"
   | "otherwise"
+  | "resume"
+  | "to"
+  | "cell";
+
+/**
+ * A cell edge OWNS its transition end to end — it picks the target and returns
+ * its own cmds. So every declarative field that would also decide one of those
+ * is illegal ALONGSIDE it, rather than silently ignored by the walk:
+ *
+ *   `cmd`/`otherwiseCmd` — the cell already returns the cmd list (req. 4)
+ *   `when`/`otherwise`   — the cell already chose (a guard would choose twice)
+ *   `target`/`resume`    — same fact as `to`, said a second way
+ *
+ * The `assign` bypass (req. 6) is caught one level up: `Assigns` is keyed by
+ * `EdgeKey` MINUS the cell edges, so writing `"polling.poll_failed"` in the
+ * assign bag of a cell edge is an excess property, named by tsc.
+ */
+type CellFieldConflict =
+  | "target"
+  | "cmd"
+  | "otherwiseCmd"
+  | "when"
+  | "otherwise"
   | "resume";
+
+type CellCheck<X> = X extends { readonly cell: string }
+  ? X extends { readonly to: readonly unknown[] }
+    ? [Extract<keyof X, CellFieldConflict>] extends [never]
+      ? unknown
+      : {
+          readonly __cellEdgeCannotAlsoDeclare: Extract<
+            keyof X,
+            CellFieldConflict
+          >;
+        }
+    : { readonly __cellEdgeMustDeclareItsTargetsInTo: true }
+  : X extends { readonly to: readonly unknown[] }
+    ? { readonly __toWithoutACellToPickFromIt: true }
+    : unknown;
 
 type EdgeCheck<X> = X extends string
   ? unknown
   : [Exclude<keyof X, KnownEdgeField>] extends [never]
-    ? // `otherwiseCmd` is meaningless without a guard to have an "otherwise":
-      // it would sit on an unguarded edge and silently never fire.
-      X extends { readonly otherwiseCmd: unknown }
-      ? X extends { readonly when: string }
-        ? unknown
-        : { readonly __otherwiseCmdWithoutAGuard: true }
-      : unknown
+    ? CellCheck<X> &
+        // `otherwiseCmd` is meaningless without a guard to have an "otherwise":
+        // it would sit on an unguarded edge and silently never fire.
+        (X extends { readonly otherwiseCmd: unknown }
+          ? X extends { readonly when: string }
+            ? unknown
+            : { readonly __otherwiseCmdWithoutAGuard: true }
+          : unknown)
     : { readonly __edgeHasUnknownField: Exclude<keyof X, KnownEdgeField> };
 
 type StrictNode<C, N> = {
@@ -329,6 +376,18 @@ export type EdgeKey<C> = {
   [S in StateName<C>]: `${S}.${Extract<keyof On<C, S>, string>}`;
 }[StateName<C>];
 
+/** The subset of `EdgeKey` whose transition is delegated to a cell. */
+export type CellEdgeKey<C> = Extract<
+  {
+    [S in StateName<C>]: {
+      [E in keyof On<C, S>]: On<C, S>[E] extends { readonly cell: string }
+        ? `${S}.${Extract<E, string>}`
+        : never;
+    }[keyof On<C, S>];
+  }[StateName<C>],
+  string
+>;
+
 /** The state marked `initial: true` — the chart's entry, as data. */
 export type InitialState<C> = Extract<
   {
@@ -350,12 +409,22 @@ export type ParkingState<C> = Extract<
   string
 >;
 
-/** Every state an edge can land on (guarded edges contribute both arms). */
+/** The targets a CELL edge declares — the union its cell is clamped to. */
+type ToOf<X> = X extends { readonly to: readonly (infer T)[] } ? T : never;
+
+/**
+ * Every state an edge can land on. A guarded edge contributes both arms; a
+ * cell edge contributes its whole declared `to` fan-out — which is precisely
+ * why the escape hatch does not blind the derivations (`ResumeTargets`,
+ * `chartMermaid`) that read the graph's shape.
+ */
 type TargetOf<X> = X extends string
   ? X
-  : X extends { readonly target: infer T }
-    ? T | (X extends { readonly otherwise: infer O } ? O : never)
-    : never;
+  : X extends { readonly to: readonly unknown[] }
+    ? ToOf<X>
+    : X extends { readonly target: infer T }
+      ? T | (X extends { readonly otherwise: infer O } ? O : never)
+      : never;
 
 /** States with an edge INTO `P` — i.e. the states you could be parked from. */
 type ResumeSource<C, P> = {
@@ -491,12 +560,19 @@ type Cell<C, X, S, M, From, Ev> = X extends { readonly resume: unknown }
         ? Fn<S, M, From, Ev, Assigned<C, S, X>>
         : never;
 
+/**
+ * The payload builders — one per DECLARATIVE edge. Cell edges are excluded:
+ * a cell returns the whole next state itself, so an `assign` entry for one
+ * would be dead code the walk never calls. Because this is a mapped type over
+ * a closed key union, writing that entry anyway is an excess property and tsc
+ * names it (req. 6 — the bypass is a compile error, not a surprise).
+ */
 export type Assigns<
   C,
   S extends { type: string },
   M extends { type: string },
 > = {
-  [K in EdgeKey<C>]: K extends `${infer From}.${infer Ev}`
+  [K in Exclude<EdgeKey<C>, CellEdgeKey<C>>]: K extends `${infer From}.${infer Ev}`
     ? Cell<C, EdgeAt<C, From, Ev>, S, M, From, Ev>
     : never;
 };
@@ -513,6 +589,18 @@ export type GuardName<C> = Extract<
   string
 >;
 
+/** Every cell named by a `{ to, cell }` edge — the escape hatch's alphabet. */
+export type CellName<C> = Extract<
+  {
+    [S in StateName<C>]: {
+      [E in keyof On<C, S>]: On<C, S>[E] extends { readonly cell: infer W }
+        ? W
+        : never;
+    }[keyof On<C, S>];
+  }[StateName<C>],
+  string
+>;
+
 /** Flatten a `CmdRef` — one name, or every name in an ordered list. */
 type Flatten<X> = X extends readonly string[] ? X[number] : X;
 
@@ -521,19 +609,33 @@ type EdgeCmds<X> =
   | (X extends { readonly cmd: infer Q } ? Flatten<Q> : never)
   | (X extends { readonly otherwiseCmd: infer Q } ? Flatten<Q> : never);
 
-/** What field `F` on an edge REFERENCES — a guard name, or its cmd names. */
-type Referenced<X, F extends "when" | "cmd"> = F extends "when"
+/** Every cmd name any edge in the chart actually FIRES declaratively. */
+export type UsedCmdName<C> = Extract<
+  {
+    [S in StateName<C>]: {
+      [E in keyof On<C, S>]: EdgeCmds<On<C, S>[E]>;
+    }[keyof On<C, S>];
+  }[StateName<C>],
+  string
+>;
+
+/** What field `F` on an edge REFERENCES — a guard/cell name, or its cmd names. */
+type Referenced<X, F extends "when" | "cmd" | "cell"> = F extends "when"
   ? X extends { readonly when: infer W }
     ? W
     : never
-  : EdgeCmds<X>;
+  : F extends "cell"
+    ? X extends { readonly cell: infer W }
+      ? W
+      : never
+    : EdgeCmds<X>;
 
 /**
  * Scan the chart for every edge that references `Name` through field `F`.
  * `[Name] extends [Referenced<…>]` rather than an equality check, because an
  * edge's cmd list references SEVERAL names at once.
  */
-type SitesWhere<C, F extends "when" | "cmd", Name> = {
+type SitesWhere<C, F extends "when" | "cmd" | "cell", Name> = {
   [S in StateName<C>]: {
     [E in keyof On<C, S>]: [Name] extends [Referenced<On<C, S>[E], F>]
       ? `${S}.${Extract<E, string>}`
@@ -576,10 +678,36 @@ export type Guards<C, S extends { type: string }, M extends { type: string }> = 
  * the union of both sites' `[state, msg]` tuples.
  */
 export type Cmds<C, S extends { type: string }, M extends { type: string }> = {
-  [N in CmdName<C>]: (
+  // keyed by the cmds edges FIRE, not by every cmd declared. A cmd only ever
+  // emitted from inside a cell needs no builder — the cell built the payload
+  // when it built the cmd — but its name still belongs in the `cmds` section,
+  // because that section is where the Cmd union comes from.
+  [N in UsedCmdName<C>]: (
     ...args: SiteArgs<SitesWhere<C, "cmd", N>, S, M>
   ) => Payload<CmdMap<C>[N]>;
 };
+
+/**
+ * THE ESCAPE HATCH's parts bag. Same shape and the same `SitesWhere`/`SiteArgs`
+ * narrowing as `guards` and `cmds` — a cell used at one site gets exactly that
+ * site's state and msg, a cell used at N sites gets the union of N tuples plus
+ * the `at` correlator to discriminate on.
+ *
+ * What is different is the RETURN: a cell returns the transition itself,
+ * `[nextState, cmds]`, clamped to the states the edge DECLARED in `to`. That
+ * clamp is the whole bargain — code may decide, but only among the targets the
+ * chart admits, so the chart stays a truthful drawing of the machine.
+ */
+export type Cells<C, S extends { type: string }, M extends { type: string }> = {
+  [N in CellName<C>]: (
+    ...args: SiteArgs<SitesWhere<C, "cell", N>, S, M>
+  ) => readonly [CellTarget<C, SitesWhere<C, "cell", N>, S>, readonly CmdOf<C>[]];
+};
+
+/** The `to` union of every site `N` is used at, resolved to real State members. */
+type CellTarget<C, Sites, S> = Sites extends `${infer From}.${infer Ev}`
+  ? Narrow<S, ToOf<EdgeAt<C, From, Ev>>>
+  : never;
 
 // ── 11. identity assertion helpers ─────────────────────────────────────────
 export type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends <
