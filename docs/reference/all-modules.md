@@ -1,12 +1,6 @@
 # @demlik/tea — all modules
 
-<<<<<<< HEAD
-The complete export catalog — all 60 public subpaths. Curated
-||||||| e239a65
-The complete export catalog — all 57 public subpaths. Curated
-=======
-The complete export catalog — all 58 public subpaths. Curated
->>>>>>> can/chart-report
+The complete export catalog — all 61 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -19,14 +13,10 @@ discoverable here with a one-line gloss from their source barrel.
 | `./batch-window` | coalesce a stream of items into size- or time-bounded BATCHES, then flush each batch as a single Cmd. |
 | `./cache` | a TTL cache as pure state, PLUS a periodic eviction Sub. |
 | `./chart` | chart — the machine as a DRAWING the compiler reads, not a picture drawn beside one. |
-<<<<<<< HEAD
 | `./chart/inspect` | the chart, as a debugger reads it — headless, framework-free, pure. |
 | `./chart/inspect/react` | the chart inspector, as one component. |
 | `./chart/inspect/styles.css` |  |
-||||||| e239a65
-=======
 | `./chart/report` | chart/report — a fabrika lane, imported as charts and read back as markdown. |
->>>>>>> can/chart-report
 | [`./circuit-breaker`](./circuit-breaker.md) | per-target failure tracking as pure state + ops. |
 | `./deadline` | a one-shot Sub that fires when an ABSOLUTE wall-clock deadline is reached. |
 | `./debounce` | a timer-based call transformer that coalesces a burst of calls into a single fire. |
