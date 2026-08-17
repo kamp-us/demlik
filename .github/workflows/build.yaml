@@ -49,6 +49,12 @@ jobs:
             exit 1;
           }
 
+      # Cheap, deterministic, and catches a public-API mistake the tests cannot:
+      # a subpath added to the export map with no tier stamp ships with no stated
+      # stability promise. Runs before the slower suites.
+      - name: Check every export carries a tier stamp
+        run: node scripts/check-export-stamps.mjs
+
       - name: Run tests
         run: pnpm test
 
