@@ -33,7 +33,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./node`](./node.md) | Node host adapter for `@demlik/tea`. |
 | `./paginated-walk` | traverse a paginated API / sitemap end to end WITHOUT a fake clock, without 429s, and resumable across a Durable-Object eviction. |
 | `./paginator` | the cursor/offset/page-token walk loop as pure state + ops. |
-| `./parity` | A live parity recording attached to a Runtime — the go/no-go gate's golden artifact. |
+| `./parity` | the record → replay → normalized-diff go/no-go gate. |
 | [`./pbt`](./pbt.md) | Property-based testing primitives for `@demlik/tea` machines. |
 | `./pbt/arbitraries` |  |
 | `./pbt/runners` |  |

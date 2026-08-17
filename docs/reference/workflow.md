@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/workflow";
 ```
 
-## Exports (33)
+## Exports (34)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -31,6 +31,7 @@ import { … } from "@demlik/tea/workflow";
 | `foldWorkflow` | Function |  |
 | `InFlightActivity` | Interface | The activity currently in flight on a `running` workflow. |
 | `InFlightCompensation` | Interface | The compensation currently in flight on a `compensating` workflow (#125). |
+| `routeWorkflowMsg` | Function |  |
 | `RunningWorkflow` | Interface | A workflow in progress. |
 | `Workflow` | Interface | The hook bag returned by createWorkflow. |
 | `WORKFLOW_MSG_TYPES` | Variable | The runtime accept-set of every WorkflowMsgType — the single source of truth the boundary replay parse keys off (see `do.ts`). |

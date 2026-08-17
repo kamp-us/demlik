@@ -1067,3 +1067,8 @@ export {
   type EffectOwed,
   emptyLedger,
 };
+// The ONE WorkflowMsg → verb routing table, exported because a consumer driving
+// a workflow from its own host — rather than through `./do`'s grain — otherwise
+// has to re-derive the same four-way mapping by hand, and a fifth Msg variant
+// would then break it silently instead of at compile time.
+export { routeWorkflowMsg } from "./route";

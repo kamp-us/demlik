@@ -6,12 +6,13 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (60)
+## Exports (62)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `absurd` | Function |  |
 | `applyCell` | Function |  |
+| `applyCellChecked` | Function |  |
 | `asReducer` | Function |  |
 | `BootingRuntime` | Interface |  |
 | `Branded` | Type |  |
@@ -28,6 +29,7 @@ import { … } from "@demlik/tea";
 | `Dispose` | Type |  |
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `foldMsgs` | Function |  |
+| `foldUpdates` | Function |  |
 | `formOf` | Function |  |
 | `historyTracker` | Function |  |
 | `HistoryTracker` | Interface |  |
