@@ -63,13 +63,17 @@ export {
   initialStates,
   type LaneStatus,
   type LogEntry,
+  type PhaseStand,
+  type PhaseStanding,
   parseEventsJsonl,
   parseHistoryJson,
   parseStatusJson,
+  phaseStandings,
   stepTask,
   type TaskState,
   type TimelineStep,
   timeline,
+  trippedTasks,
   UnreplayableLogError,
 } from "./fold";
 export {

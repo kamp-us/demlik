@@ -65,6 +65,7 @@ export default defineConfig({
     "chart/inspect/index": "src/chart/inspect/index.ts",
     "chart/inspect/react": "src/chart/inspect/react.tsx",
     "chart/report/index": "src/chart/report/index.ts",
+    "chart/lane/index": "src/chart/lane/index.ts",
   },
   format: ["esm"],
   dts: true,

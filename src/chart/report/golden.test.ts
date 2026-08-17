@@ -28,6 +28,7 @@
 // it.
 // ═══════════════════════════════════════════════════════════════════════════
 import { describe, expect, it } from "vitest";
+import { EPIC_TEMPLATE } from "./__fixtures__/epic";
 import { TEMPLATES } from "./__fixtures__/templates";
 import {
   type CompiledTask,
@@ -93,9 +94,14 @@ function chartEdges(chart: {
 const sorted = (m: Map<string, string>): [string, string][] =>
   [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
 
-describe.each(TEMPLATES)("$name — imported vs fabrika's own compiler", ({
-  document,
-}) => {
+// The third row is not a committed file: it is what fabrika's OWN `lane emit`
+// wrote for a two-phase epic (`__fixtures__/epic.ts`). Both committed templates
+// are single-phase, so without it the phase list, the terminals and the
+// `onDone` chain are asserted only where there is one phase to chain.
+describe.each([
+  ...TEMPLATES,
+  EPIC_TEMPLATE,
+])("$name — imported vs fabrika's own compiler", ({ document }) => {
   const compiled = fabrikaCompile(document);
   if (compiled._tag !== "Compiled") {
     throw new Error(

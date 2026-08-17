@@ -265,6 +265,10 @@
       "types": "./dist/chart/report/index.d.ts",
       "import": "./dist/chart/report/index.js"
     },
+    "./chart/lane": {
+      "types": "./dist/chart/lane/index.d.ts",
+      "import": "./dist/chart/lane/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

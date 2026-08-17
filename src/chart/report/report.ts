@@ -27,12 +27,15 @@ import {
   foldLane,
   type LaneStatus,
   type LogEntry,
+  type PhaseStand,
+  phaseStandings,
   type TaskState,
   type TimelineStep,
   timeline,
 } from "./fold";
 import {
   chartFromWorkflow,
+  endPolarityOf,
   type ImportedChart,
   type ImportedLane,
   statesOf,
@@ -123,6 +126,35 @@ function retryLine(chart: ImportedChart, state: TaskState): string | null {
   return `**retries:** ${budget} — spent`;
 }
 
+/**
+ * One phase that is NOT the active one, in one line.
+ *
+ * The editorial rule the module opened with, applied to the phase dimension: a
+ * comment with eight diagrams is a comment nobody reads, so a phase already
+ * finished and a phase not yet started each get a line. A finished phase still
+ * gets its leaves, because "complete" alone does not say WHICH ending each of
+ * its tasks reached — and a phase that never started has no leaves worth
+ * printing, because every one of them would be an initial state nothing walked.
+ */
+function phaseLine(
+  stand: PhaseStand,
+  states: Readonly<Record<string, TaskState>>,
+): string {
+  const count = `${stand.tasks.length} task${stand.tasks.length === 1 ? "" : "s"}`;
+  if (stand.standing === "waiting") {
+    return `**${stand.name}:** waiting — ${count}, not started.`;
+  }
+  const leaves = stand.tasks
+    .map(
+      (taskId) =>
+        `\`${taskId}\` = \`${states[taskId]?.type ?? "?"}\`${
+          stand.tripped.includes(taskId) ? " **(tripped)**" : ""
+        }`,
+    )
+    .join(", ");
+  return `**${stand.name}:** ${stand.standing} — ${count}: ${leaves}`;
+}
+
 function timelineTable(steps: readonly TimelineStep[]): string {
   if (steps.length === 0)
     return "_no events yet — the lane is at its initial state._";
@@ -166,50 +198,62 @@ export function laneReport(input: LaneReportInput): LaneReport {
   }
   out.push("");
 
-  // ── the active phase, in full ───────────────────────────────────────────
-  const activeName = activePhaseName(status);
-  const active = lane.phases.find((p) => p.name === activeName);
-  if (active !== undefined) {
-    for (const taskId of active.tasks) {
-      const chart = lane.charts[taskId];
-      const state = states[taskId];
-      if (chart === undefined || state === undefined) continue;
-      out.push(`### ${taskId} — \`${state.type}\``);
-      const waiting = waitingOn(chart, state.type);
-      out.push(
-        waiting === null
-          ? "**waiting on:** nothing — this task is final."
-          : `**waiting on:** ${waiting}`,
-      );
-      const retries = retryLine(chart, state);
-      if (retries !== null) out.push(retries);
-      out.push("");
-      out.push("```mermaid");
-      out.push(
-        drawTask(chart, {
-          current: state.type,
-          walked: walkedEdges(steps.filter((s) => s.task === taskId)),
-        }),
-      );
-      out.push("```");
-      out.push("");
-    }
-  }
+  // ── the phases, in order: one in full, the rest in one line each ────────
+  //
+  // The standings are DERIVED from the fold — the same walk `deriveLaneStatus`
+  // makes — rather than read off `stateValue`, because `stateValue` is silent
+  // about a lane that already stopped: it collapses to the terminal's NAME, and
+  // a reader of a tripped epic then cannot tell which phase tripped it, or
+  // which phases below never got to start. The one thing still taken from
+  // `status` is WHICH phase is active, so a report handed the CLI's own answer
+  // shows the CLI's answer. (`fold.test.ts` asserts the two agree at every
+  // prefix of every run, so this is a precedence rule, not a disagreement.)
+  const stands = phaseStandings(lane, states);
+  const named = activePhaseName(status);
+  const active =
+    stands.find((s) => s.name === named) ??
+    stands.find((s) => s.standing === "active");
 
-  // ── every other phase, one line each ────────────────────────────────────
-  const rest = lane.phases.filter((p) => p.name !== activeName);
-  if (rest.length > 0) {
-    for (const phase of rest) {
-      const label =
-        typeof status.stateValue === "object"
-          ? (status.stateValue[phase.name] ?? "done")
-          : "done";
-      out.push(
-        `**${phase.name}:** ${typeof label === "string" ? label : "active"} (${phase.tasks.length} task${phase.tasks.length === 1 ? "" : "s"})`,
-      );
+  for (const stand of stands) {
+    if (stand === active) {
+      for (const taskId of stand.tasks) {
+        const chart = lane.charts[taskId];
+        const state = states[taskId];
+        if (chart === undefined || state === undefined) continue;
+        const polarity = endPolarityOf(statesOf(chart).get(state.type));
+        out.push(
+          `### ${taskId} — \`${state.type}\`${polarity === "error" ? " — TRIPPED" : ""}`,
+        );
+        const waiting = waitingOn(chart, state.type);
+        out.push(
+          waiting !== null
+            ? `**waiting on:** ${waiting}`
+            : polarity === "error"
+              ? // The distinction `end: "error"` bought, spent where it is worth
+                // something: this task is as finished as a shipped one, and the
+                // phase it is in is going to trip the lane when its siblings
+                // finish. A report that said "final" for both would bury that.
+                `**waiting on:** nothing — this task landed on the error final \`${state.type}\`, and \`${stand.name}\` will trip the lane when its siblings finish.`
+              : "**waiting on:** nothing — this task is final.",
+        );
+        const retries = retryLine(chart, state);
+        if (retries !== null) out.push(retries);
+        out.push("");
+        out.push("```mermaid");
+        out.push(
+          drawTask(chart, {
+            current: state.type,
+            walked: walkedEdges(steps.filter((s) => s.task === taskId)),
+          }),
+        );
+        out.push("```");
+        out.push("");
+      }
+      continue;
     }
-    out.push("");
+    out.push(phaseLine(stand, states));
   }
+  out.push("");
 
   // ── the timeline ────────────────────────────────────────────────────────
   out.push("### timeline");

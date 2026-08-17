@@ -27,16 +27,17 @@
  * and which ones freeze. That is a choice about the run, not a fact about the
  * machine, and there is nowhere to read it from.
  */
+
+import type { LogEntry, TaskState } from "../fold";
+import { stepTask } from "../fold";
 import {
-  type ImportedChart,
-  type ImportedLane,
   chartFromWorkflow,
   endPolarityOf,
+  type ImportedChart,
+  type ImportedLane,
   initialOf,
   statesOf,
 } from "../workflow";
-import type { LogEntry, TaskState } from "../fold";
-import { stepTask } from "../fold";
 import { emitMachine, type SubIssueLink } from "./vendor/fabrika-emit";
 
 /** The epic, and the three children the topology places into two phases. */
@@ -157,7 +158,9 @@ function parkDetour(
   state: TaskState,
 ): readonly string[] | null {
   const states = statesOf(chart);
-  for (const [event, edge] of Object.entries(states.get(state.type)?.on ?? {})) {
+  for (const [event, edge] of Object.entries(
+    states.get(state.type)?.on ?? {},
+  )) {
     if (!("target" in edge) || "when" in edge) continue;
     for (const [back, out] of Object.entries(
       states.get(edge.target)?.on ?? {},
@@ -238,6 +241,17 @@ export const EPIC_RUN_COMPLETE = runEvents(EPIC_LANE, {
 export const EPIC_RUN_TRIPPED = runEvents(EPIC_LANE, {
   outcomes: { [EPIC_LANE.phases[1]?.tasks[0] ?? ""]: "error" },
 });
+
+/**
+ * The emitted document as a golden-test row, shaped like `TEMPLATES`'s — so the
+ * SAME assertions the two committed templates face (edge set, state set,
+ * finals and their polarity, initial, retry budget, phase list, terminals) run
+ * against a multi-phase document with no new test code.
+ */
+export const EPIC_TEMPLATE = {
+  name: "emitted epic (fabrika `lane emit`)",
+  document: EPIC_DOCUMENT,
+} as const;
 
 /** `events.jsonl` bytes, for the halves that take text. */
 export const asJsonl = (entries: readonly LogEntry[]): string =>
