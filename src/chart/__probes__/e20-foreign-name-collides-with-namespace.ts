@@ -5,6 +5,7 @@
 //
 // `Total<C>` bans the dot on a foreign name, so the collision is unrepresentable
 // for EVERY namespace at once rather than caught per-`compile`.
+// @expect-error: TS2322
 import { defineChart, ty } from "../graph";
 
 export const g = defineChart({

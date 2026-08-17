@@ -9,6 +9,35 @@ import type {
   PollerPolling,
 } from "../poller";
 import type { Cmd, Reducer, SyncReturn, Transitions } from "../pure/core";
+import type {
+  issue42,
+  LaneCmd,
+  LaneG,
+  LaneMsg,
+  LaneMsgIn,
+  LaneState,
+  region,
+} from "./__fixtures__/lane";
+import type { FG, FMsg, FState } from "./__fixtures__/resilient-fetch-chart";
+import type {
+  RFG,
+  RFMsg,
+  RFState,
+} from "./__fixtures__/resilient-fetch-reducer";
+import type {
+  JobStatus,
+  PollerG,
+  PollMsg,
+  PollState,
+} from "./__fixtures__/status-poller-chart";
+import type {
+  UCmd,
+  UG,
+  UMsg,
+  UState,
+  uploader,
+  uploadMachine,
+} from "./__fixtures__/upload";
 import { compile, compileReducer } from "./compile";
 import {
   type Assert,
@@ -39,43 +68,17 @@ import {
   type RCellEvent,
   type RCellName,
   type RCells,
+  type ResumeTargets,
   type RGuardName,
   type RGuards,
   type RStateName,
   type RStateOf,
   type RUsedCmdName,
-  type ResumeTargets,
   type StateName,
   type StateOf,
   ty,
   type UsedCmdName,
 } from "./graph";
-import type {
-  issue42,
-  LaneCmd,
-  LaneG,
-  LaneMsg,
-  LaneMsgIn,
-  LaneState,
-  region,
-} from "./lane";
-import type { FG, FMsg, FState } from "./resilient-fetch-chart";
-import type { RFG, RFMsg, RFState } from "./resilient-fetch-reducer";
-import type {
-  JobStatus,
-  PollerG,
-  PollMsg,
-  PollState,
-} from "./status-poller-chart";
-import {
-  type UCmd,
-  type UG,
-  type UMsg,
-  type UState,
-  uCmds,
-  type uploader,
-  type uploadMachine,
-} from "./upload";
 
 /** Local narrowing shorthands for the upload demo's unions. */
 type U<K extends string> = Extract<UState, { type: K }>;
@@ -539,10 +542,12 @@ export const retrier = compile(
   {
     assign: {
       "fetching.TIMEOUT": {
+        // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
         then: (s) => ({ attempt: s.attempt + 1, url: s.url }),
         else: (s) => ({ attempt: s.attempt }),
       },
       "parsing.CORRUPT": {
+        // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
         then: (s) => ({ attempt: s.attempt + 1, url: "refetch" }),
         else: (s) => ({ attempt: s.attempt }),
       },
@@ -792,7 +797,10 @@ const flat = defineReducerChart({
   ctx: ty<{ readonly n: number }>(),
   states: ["a", "b", "c"],
   initial: "a",
-  cmds: { beep: ty<{ readonly n: number }>(), boop: ty<{ readonly n: number }>() },
+  cmds: {
+    beep: ty<{ readonly n: number }>(),
+    boop: ty<{ readonly n: number }>(),
+  },
   events: {
     X: { data: ty<{ readonly lo: number }>() },
     Y: { data: ty<{ readonly hi: string }>() },
@@ -843,7 +851,8 @@ type Decide2BySite = Exclude<Decide2Form, (...args: never[]) => unknown>;
 export type A75 = Assert<
   Eq<
     Parameters<Decide2>,
-    [state: FState2, msg: FM<"X">, at: "X"] | [state: FState2, msg: FM<"Y">, at: "Y"]
+    | [state: FState2, msg: FM<"X">, at: "X"]
+    | [state: FState2, msg: FM<"Y">, at: "Y"]
   >
 >;
 // THE POINT (return): the tag is clamped to the union of both sites' `to`, and
@@ -852,8 +861,10 @@ export type A76 = Assert<
   Eq<
     ReturnType<Decide2>,
     readonly [
-      | ({ readonly type: "a" | "b" } & { readonly n: number })
-      | ({ readonly type: "a" | "c" } & { readonly n: number }),
+      (
+        | ({ readonly type: "a" | "b" } & { readonly n: number })
+        | ({ readonly type: "a" | "c" } & { readonly n: number })
+      ),
       readonly CmdOf<FG2>[],
     ]
   >
@@ -910,7 +921,10 @@ export const flatCellsBySite: RCells<FG2, FState2, FMsg2> = {
 
 // a guard's params come from its use site, same as ever.
 export type A77 = Assert<
-  Eq<Parameters<RGuards<FG2, FState2, FMsg2>["isOn"]>, [state: FState2, msg: FM<"Z">, at: "Z"]>
+  Eq<
+    Parameters<RGuards<FG2, FState2, FMsg2>["isOn"]>,
+    [state: FState2, msg: FM<"Z">, at: "Z"]
+  >
 >;
 
 export const flatCells: RCells<FG2, FState2, FMsg2> = {
@@ -919,7 +933,10 @@ export const flatCells: RCells<FG2, FState2, FMsg2> = {
       case "X":
         return [{ ...s, type: m.lo > 0 ? "b" : "a" }, []];
       case "Y":
-        return [{ ...s, type: m.hi === "" ? "a" : "c" }, [{ type: "boop", n: s.n }]];
+        return [
+          { ...s, type: m.hi === "" ? "a" : "c" },
+          [{ type: "boop", n: s.n }],
+        ];
     }
   },
 };
@@ -928,6 +945,7 @@ export const flatUpdate = compileReducer(
   flat,
   {
     assign: {
+      // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
       Z: { then: (s) => ({ n: s.n + 1 }), else: (s) => ({ n: s.n }) },
       deadline_exceeded: (s) => ({ n: s.n }),
     },
@@ -947,5 +965,8 @@ export type A79 = Assert<
 >;
 // un-namespaced, the keys are bare — the single-instance call, no dummy string.
 export type A80 = Assert<
-  Eq<keyof Reducer<FState2, MsgIn<FG2>, CmdOf<FG2>>, "X" | "Y" | "Z" | "deadline_exceeded">
+  Eq<
+    keyof Reducer<FState2, MsgIn<FG2>, CmdOf<FG2>>,
+    "X" | "Y" | "Z" | "deadline_exceeded"
+  >
 >;

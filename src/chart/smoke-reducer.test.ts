@@ -6,36 +6,42 @@
 // fetch port behaves; and per-event namespacing survives the loss of the phase
 // dimension, foreign events included.
 // ═══════════════════════════════════════════════════════════════════════════
-import { type Cmd, type Sub, formOf, msgKeysOf } from "../pure/core";
+import { expect, it } from "vitest";
+import { type Cmd, formOf, msgKeysOf, type Sub } from "../pure/core";
 import { defineMachine } from "../runtime-types";
+import {
+  fetchReducerChart,
+  fetchReducerInit,
+  fetchReducerRegion,
+  fetchReducerSubs,
+  fetchReducerUpdate,
+  type RFDoFetch,
+  type RFMsgIn,
+  type RFState,
+} from "./__fixtures__/resilient-fetch-reducer";
 import {
   CellTargetError,
   compileReducer,
   reducerInitFrom,
   reducerMermaid,
 } from "./compile";
-import { type CmdOf, type MsgIn, type MsgOf, type RCells, type RStateOf, defineReducerChart, ty } from "./graph";
 import {
-  type RFDoFetch,
-  type RFMsgIn,
-  type RFState,
-  fetchReducerChart,
-  fetchReducerInit,
-  fetchReducerRegion,
-  fetchReducerSubs,
-  fetchReducerUpdate,
-} from "./resilient-fetch-reducer";
+  type CmdOf,
+  defineReducerChart,
+  type MsgOf,
+  type RCells,
+  type RStateOf,
+  ty,
+} from "./graph";
 
-let fails = 0;
-const stable = (v: unknown): string => JSON.stringify(v);
+/**
+ * One assertion → one vitest test, comparing stable JSON — the smoke script's
+ * comparison verbatim, so key order still counts.
+ */
 function ok(what: string, got: unknown, want: unknown): void {
-  const g = stable(got);
-  const w = stable(want);
-  if (g === w) console.log(`ok   ${what}  got=${g} want=${w}`);
-  else {
-    fails += 1;
-    console.log(`FAIL ${what}  got=${g} want=${w}`);
-  }
+  it(what, () => {
+    expect(JSON.stringify(got), what).toBe(JSON.stringify(want));
+  });
 }
 
 // ── 1. it is a Reducer, not a Transitions ─────────────────────────────────
@@ -58,7 +64,9 @@ const machine = defineMachine<
   init: fetchReducerInit,
   // ← the compiled reducer, verbatim. No `as`, no `satisfies`.
   update: fetchReducerUpdate,
-  subscriptions: fetchReducerSubs as unknown as (s: RFState) => readonly Sub<never>[],
+  subscriptions: fetchReducerSubs as unknown as (
+    s: RFState,
+  ) => readonly Sub<never>[],
   // required by `Machine` whenever the Cmd union is inhabited.
   interpret: { do_fetch: async () => {} },
 });
@@ -76,6 +84,7 @@ const step = (m: { type: string; [k: string]: unknown }): readonly Cmd[] => {
     string,
     (a: RFState, b: unknown) => readonly [RFState, readonly Cmd[]]
   >;
+  // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
   const [next, cs] = table[m.type]!(s, m);
   s = next;
   return cs;
@@ -113,14 +122,18 @@ ok("…re-emitting the effect", cs, [{ type: "do_fetch", url: "u://y" }]);
 
 // ── 3. namespacing, one dimension down ────────────────────────────────────
 const nsA = fetchReducerRegion("A");
-ok("namespaced keys, foreign event kept bare", Object.keys(nsA as object).sort(), [
-  "A.fetch",
-  "A.fetch_err",
-  "A.fetch_ok",
-  "deadline_exceeded",
-]);
+ok(
+  "namespaced keys, foreign event kept bare",
+  Object.keys(nsA as object).sort(),
+  ["A.fetch", "A.fetch_err", "A.fetch_ok", "deadline_exceeded"],
+);
 type NsMsgs = RFMsgIn<"A">["type"];
-const nsProof: NsMsgs[] = ["A.fetch", "A.fetch_ok", "A.fetch_err", "deadline_exceeded"];
+const nsProof: NsMsgs[] = [
+  "A.fetch",
+  "A.fetch_ok",
+  "A.fetch_err",
+  "deadline_exceeded",
+];
 ok("…and the type-level keys match the runtime ones", nsProof.sort(), [
   "A.fetch",
   "A.fetch_err",
@@ -148,6 +161,7 @@ type GG = typeof gate;
 const gated = compileReducer(gate, {
   assign: {
     poke: {
+      // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
       then: (s, m) => ({ n: s.n + m.by }),
       else: (s) => ({ n: s.n }),
     },
@@ -155,22 +169,34 @@ const gated = compileReducer(gate, {
   guards: { bigEnough: (_s, m, _at) => m.by > 10 },
   cmds: { ping: (s) => ({ n: s.n }) },
 });
-const gInit = reducerInitFrom<GG, RStateOf<GG>, CmdOf<GG>>(gate, () => ({ n: 0 }));
+const gInit = reducerInitFrom<GG, RStateOf<GG>, CmdOf<GG>>(gate, () => ({
+  n: 0,
+}));
 ok("guarded edge: init", gInit(null)[0], { n: 0, type: "open" });
-ok("guarded edge: guard TRUE arm", gated.poke(gInit(null)[0], { type: "poke", by: 11 }), [
-  { n: 11, type: "shut" },
-  [{ n: 0, type: "ping" }],
-]);
-ok("guarded edge: guard FALSE arm (no cmd)", gated.poke(gInit(null)[0], { type: "poke", by: 1 }), [
-  { n: 0, type: "open" },
-  [],
-]);
+ok(
+  "guarded edge: guard TRUE arm",
+  gated.poke(gInit(null)[0], { type: "poke", by: 11 }),
+  [{ n: 11, type: "shut" }, [{ n: 0, type: "ping" }]],
+);
+ok(
+  "guarded edge: guard FALSE arm (no cmd)",
+  gated.poke(gInit(null)[0], { type: "poke", by: 1 }),
+  [{ n: 0, type: "open" }, []],
+);
 
 // ── 5. the drawing ────────────────────────────────────────────────────────
 const mmd = reducerMermaid(fetchReducerChart);
 ok("mermaid draws the entry edge", mmd.includes("[*] --> idle"), true);
-ok("…the cell fan-out", mmd.includes("any --> circuit_open : fetch / attempt()"), true);
-ok("…and the declarative edge", mmd.includes("any --> succeeded : fetch_ok"), true);
+ok(
+  "…the cell fan-out",
+  mmd.includes("any --> circuit_open : fetch / attempt()"),
+  true,
+);
+ok(
+  "…and the declarative edge",
+  mmd.includes("any --> succeeded : fetch_ok"),
+  true,
+);
 
 // ── 6. a cell used at TWO sites still gets the `at` correlator ────────────
 const two = defineReducerChart({
@@ -196,8 +222,16 @@ const decide: RCells<TG, RStateOf<TG>, MsgOf<TG>>["decide"] = (s, m, at) => {
   }
 };
 const twoC = compileReducer(two, { assign: {}, cells: { decide } });
-ok("two-site cell, site X", twoC.X({ n: 1, type: "a" }, { type: "X", lo: 5 })[0].type, "b");
-ok("two-site cell, site Y", twoC.Y({ n: 1, type: "b" }, { type: "Y", hi: "z" })[0].type, "a");
+ok(
+  "two-site cell, site X",
+  twoC.X({ n: 1, type: "a" }, { type: "X", lo: 5 })[0].type,
+  "b",
+);
+ok(
+  "two-site cell, site Y",
+  twoC.Y({ n: 1, type: "b" }, { type: "Y", hi: "z" })[0].type,
+  "a",
+);
 
 // ── 7. the per-site form and the runtime `to` clamp, in the reducer form ──
 // Both fall out of the shared `buildCell`, so the reducer form gets the same
@@ -206,7 +240,10 @@ const decideBySite: RCells<TG, RStateOf<TG>, MsgOf<TG>>["decide"] = {
   X: (s, m) => [{ ...s, type: m.lo > 0 ? "b" : "a" }, []],
   Y: (s) => [{ ...s, type: "a" }, []],
 };
-const bySiteC = compileReducer(two, { assign: {}, cells: { decide: decideBySite } });
+const bySiteC = compileReducer(two, {
+  assign: {},
+  cells: { decide: decideBySite },
+});
 ok(
   "per-site reducer cell, site X",
   bySiteC.X({ n: 1, type: "a" }, { type: "X", lo: 5 })[0].type,
@@ -230,7 +267,11 @@ try {
 } catch (err) {
   caught = err;
 }
-ok("reducer form throws CellTargetError too", caught instanceof CellTargetError, true);
+ok(
+  "reducer form throws CellTargetError too",
+  caught instanceof CellTargetError,
+  true,
+);
 const ce = caught as CellTargetError;
 ok("…naming the event as the edge", ce.at, "Y");
 ok("…the cell", ce.cell, "decide");
@@ -247,7 +288,9 @@ let missing = "no throw";
 try {
   compileReducer(two, {
     assign: {},
-    cells: { decide: { X: (s: RStateOf<TG>) => [{ ...s, type: "b" }, []] } as never },
+    cells: {
+      decide: { X: (s: RStateOf<TG>) => [{ ...s, type: "b" }, []] } as never,
+    },
   });
 } catch (err) {
   missing = err instanceof Error ? err.message : String(err);
@@ -257,6 +300,3 @@ ok(
   missing.includes('no entry for edge "Y"'),
   true,
 );
-
-console.log(fails === 0 ? "\nALL OK" : `\n${fails} FAIL`);
-if (fails > 0) process.exitCode = 1;

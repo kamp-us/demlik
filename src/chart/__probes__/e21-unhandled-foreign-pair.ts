@@ -4,6 +4,7 @@
 //
 // Here `deadline_exceeded` is live across the whole `live` phase and `parked`
 // neither routes nor ignores it.
+// @expect-error: TS2322
 import { defineChart, ty } from "../graph";
 
 export const g = defineChart({

@@ -11,7 +11,8 @@
 // of both sites' `to`, and `c` (which only `b.Y` admits) slips through. PROBE 25
 // is that case, in the per-site form that does catch it; `CellTargetError` is
 // what catches it at runtime in this form.
-import type { PG, PMsg, PState } from "../assert";
+// @expect-error: TS2339
+import type { PG, PMsg, PState } from "../assert.test-d";
 import type { Cells } from "../graph";
 export const bad: Cells<PG, PState, PMsg> = {
   decide: (s, m, at) => {

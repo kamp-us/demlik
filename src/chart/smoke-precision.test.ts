@@ -5,20 +5,30 @@
 //      entries must be reachable in both directions.
 //   2. `CellTargetError` — the runtime half of the `to` clamp, which is what
 //      the multi-site FUNCTION form has instead of a per-site compile error.
+import { expect, it } from "vitest";
 import { applyCell, type Cmd } from "../pure/core";
-import { pCells, pCellsBySite, picker } from "./assert";
+import { pCells, pCellsBySite, picker } from "./assert.test-d";
 import { CellTargetError, compile } from "./compile";
-import type { CmdOf, MsgOf, MsgIn, StateOf } from "./graph";
+import type { CmdOf, MsgIn, MsgOf, StateOf } from "./graph";
 
 type PG = typeof picker;
 type PState = StateOf<PG>;
 type PCmd = CmdOf<PG>;
 type PIn = MsgIn<PG, "q">;
 
+/**
+ * One assertion → one vitest test. Everything these files assert is computed at
+ * module scope from pure data, so registering the case here (rather than
+ * wrapping the whole file in one `it`) keeps a failure pointing at the single
+ * claim that broke, exactly as the smoke script's per-line output did.
+ *
+ * The comparison is stable JSON rather than `toEqual`, which is what the script
+ * compared — key order included.
+ */
 const eq = (label: string, got: unknown, want: unknown): void => {
-  const g = JSON.stringify(got);
-  const w = JSON.stringify(want);
-  console.log(`${g === w ? "ok  " : "FAIL"} ${label}  got=${g} want=${w}`);
+  it(label, () => {
+    expect(JSON.stringify(got), label).toBe(JSON.stringify(want));
+  });
 };
 
 const step = (

@@ -37,7 +37,9 @@ type Payload<X> = X extends Ty<infer T> ? T : unknown;
 
 // ── 1. section accessors ───────────────────────────────────────────────────
 type EvMap<C> = C extends { readonly events: infer E } ? E : never;
-type CmdMap<C> = C extends { readonly cmds: infer M } ? M : Record<never, never>;
+type CmdMap<C> = C extends { readonly cmds: infer M }
+  ? M
+  : Record<never, never>;
 type Groups<C> = C extends { readonly states: infer G } ? G : never;
 type CtxOf<C> = C extends { readonly ctx: infer T } ? Payload<T> : unknown;
 
@@ -53,7 +55,9 @@ export type StateName<C> = Extract<
 
 /** The node for state `S`, found by scanning the groups. Groups partition. */
 type NodeAt<C, S> = {
-  [G in keyof Groups<C>]: S extends keyof Groups<C>[G] ? Groups<C>[G][S] : never;
+  [G in keyof Groups<C>]: S extends keyof Groups<C>[G]
+    ? Groups<C>[G][S]
+    : never;
 }[keyof Groups<C>];
 
 /** The phase `S` lives in. A union here means `S` was declared twice. */
@@ -305,7 +309,11 @@ type Demand<S extends string, E extends string> = E extends string
   ? `unhandled pair "${S}.${E}" — declare it in \`on\`, or list "${E}" in this state's \`ignore\`, or narrow the \`scope\` of event "${E}"`
   : never;
 
-type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
+type IsUnion<T, U = T> = T extends unknown
+  ? [U] extends [T]
+    ? false
+    : true
+  : never;
 
 export type Total<C> = {
   // A namespaced key IS `${ns}.${event}`, so a foreign name that already
@@ -461,7 +469,9 @@ export type ResumeTargets<C, P> = Extract<
 export type StateOf<C> = {
   [S in StateName<C>]: { readonly type: S } & CtxOf<C> &
     DataOf<NodeAt<C, S>> &
-    (S extends ParkingState<C> ? { readonly was: ResumeTargets<C, S> } : unknown);
+    (S extends ParkingState<C>
+      ? { readonly was: ResumeTargets<C, S> }
+      : unknown);
 }[StateName<C>];
 
 export type MsgOf<C> = {
@@ -493,11 +503,8 @@ export type ForeignEvent<C> = Extract<
 // key unresolved, so the library's own Msg would not be assignable to the
 // instance's Msg union inside the factory. Testing `E` first resolves the
 // foreign branch eagerly, whatever `NS` turns out to be.
-type KeyOf<C, NS extends string | undefined, E extends string> = E extends ForeignEvent<C>
-  ? E
-  : NS extends string
-    ? `${NS}.${E}`
-    : E;
+type KeyOf<C, NS extends string | undefined, E extends string> =
+  E extends ForeignEvent<C> ? E : NS extends string ? `${NS}.${E}` : E;
 
 /**
  * The Msg union AS THE COMPILED TABLE CONSUMES IT — the same derivation as
@@ -514,7 +521,9 @@ type Narrow<U, K> = Extract<U, { type: K }>;
 type Data<S, K> = K extends string ? Omit<Narrow<S, K>, "type"> : never;
 
 type UnionToIntersection<U> = (
-  U extends unknown ? (x: U) => void : never
+  U extends unknown
+    ? (x: U) => void
+    : never
 ) extends (x: infer I) => void
   ? I
   : never;
@@ -548,7 +557,13 @@ type Fn<S, M, From, Ev, R> = (state: Narrow<S, From>, msg: Narrow<M, Ev>) => R;
 type Cell<C, X, S, M, From, Ev> = X extends { readonly resume: unknown }
   ? // a resume edge may land on ANY resume target → the payload must satisfy
     // all of them, hence the intersection (not the union).
-    Fn<S, M, From, Ev, UnionToIntersection<Assigned<C, S, ResumeTargets<C, From>>>>
+    Fn<
+      S,
+      M,
+      From,
+      Ev,
+      UnionToIntersection<Assigned<C, S, ResumeTargets<C, From>>>
+    >
   : X extends { readonly target: infer T; readonly otherwise: infer O }
     ? {
         readonly then: Fn<S, M, From, Ev, Assigned<C, S, T>>;
@@ -572,7 +587,10 @@ export type Assigns<
   S extends { type: string },
   M extends { type: string },
 > = {
-  [K in Exclude<EdgeKey<C>, CellEdgeKey<C>>]: K extends `${infer From}.${infer Ev}`
+  [K in Exclude<
+    EdgeKey<C>,
+    CellEdgeKey<C>
+  >]: K extends `${infer From}.${infer Ev}`
     ? Cell<C, EdgeAt<C, From, Ev>, S, M, From, Ev>
     : never;
 };
@@ -667,8 +685,14 @@ type SiteArgs<K, S, M> = K extends `${infer From}.${infer Ev}`
  * from a standalone registry declaration — so `retriesRemaining`, used only at
  * `review.FAIL`, receives exactly `review`'s state and `FAIL`'s msg.
  */
-export type Guards<C, S extends { type: string }, M extends { type: string }> = {
-  [N in GuardName<C>]: (...args: SiteArgs<SitesWhere<C, "when", N>, S, M>) => boolean;
+export type Guards<
+  C,
+  S extends { type: string },
+  M extends { type: string },
+> = {
+  [N in GuardName<C>]: (
+    ...args: SiteArgs<SitesWhere<C, "when", N>, S, M>
+  ) => boolean;
 };
 
 /**
@@ -885,7 +909,9 @@ export type RStateOf<C> = { readonly type: RStateName<C> } & CtxOf<C>;
 /** The events whose transition is delegated to a cell. */
 export type RCellEvent<C> = Extract<
   {
-    [E in EventName<C>]: ROn<C>[E & keyof ROn<C>] extends { readonly cell: string }
+    [E in EventName<C>]: ROn<C>[E & keyof ROn<C>] extends {
+      readonly cell: string;
+    }
       ? E
       : never;
   }[EventName<C>],
@@ -922,7 +948,9 @@ type RSiteArgs<K, S, M> = K extends string
   : never;
 
 export type RGuards<C, S, M extends { type: string }> = {
-  [N in RGuardName<C>]: (...args: RSiteArgs<RSitesWhere<C, "when", N>, S, M>) => boolean;
+  [N in RGuardName<C>]: (
+    ...args: RSiteArgs<RSitesWhere<C, "when", N>, S, M>
+  ) => boolean;
 };
 
 export type RCmds<C, S, M extends { type: string }> = {
@@ -931,7 +959,11 @@ export type RCmds<C, S, M extends { type: string }> = {
   ) => Payload<CmdMap<C>[N & keyof CmdMap<C>]>;
 };
 
-export type RCells<C, S extends { type: string }, M extends { type: string }> = {
+export type RCells<
+  C,
+  S extends { type: string },
+  M extends { type: string },
+> = {
   [N in RCellName<C>]: RCellForm<C, RSitesWhere<C, "cell", N>, S, M>;
 };
 
@@ -968,7 +1000,7 @@ type RCellForm<C, Sites, S, M extends { type: string }> =
  * and cannot get it wrong.
  */
 type RAssigned<C> = CtxOf<C>;
-type RFn<C, S, M extends { type: string }, E, R> = (
+type RFn<S, M extends { type: string }, E, R> = (
   state: S,
   msg: Narrow<M, E>,
 ) => R;
@@ -978,10 +1010,10 @@ type RCell<C, X, S, M extends { type: string }, E> = X extends {
   readonly otherwise: unknown;
 }
   ? {
-      readonly then: RFn<C, S, M, E, RAssigned<C>>;
-      readonly else: RFn<C, S, M, E, RAssigned<C>>;
+      readonly then: RFn<S, M, E, RAssigned<C>>;
+      readonly else: RFn<S, M, E, RAssigned<C>>;
     }
-  : RFn<C, S, M, E, RAssigned<C>>;
+  : RFn<S, M, E, RAssigned<C>>;
 
 /** One builder per DECLARATIVE event. Cell events own their whole transition. */
 export type RAssigns<C, S, M extends { type: string }> = {
@@ -989,9 +1021,8 @@ export type RAssigns<C, S, M extends { type: string }> = {
 };
 
 // ── 11. identity assertion helpers ─────────────────────────────────────────
-export type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends <
-  T,
->() => T extends B ? 1 : 2
-  ? true
-  : false;
+export type Eq<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
 export type Assert<T extends true> = T;

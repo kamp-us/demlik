@@ -9,6 +9,7 @@
 // the picture is to tighten the verb (which is what `PollerPolling` /
 // `PollerDone` / `PollerGaveUp` did — see `A74`–`A81`). No amount of declaring
 // on the chart's side can buy precision the delegate does not have.
+// @expect-error: TS2322
 import { createPoller, type PollerState } from "../../poller";
 import type { Cmd } from "../../pure/core";
 import {

@@ -9,18 +9,18 @@
 // written once as a declaration (with its payload), then only referenced —
 // on the edges that fire it, and by the builder that constructs its payload.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Sub } from "../pure/core";
-import { defineMachine } from "../runtime-types";
-import { compile, initFrom } from "./compile";
+import type { Sub } from "../../pure/core";
+import { defineMachine } from "../../runtime-types";
+import { compile, initFrom } from "../compile";
 import {
   type CmdOf,
   type Cmds,
+  defineChart,
   type MsgIn,
   type MsgOf,
   type StateOf,
-  defineChart,
   ty,
-} from "./graph";
+} from "../graph";
 
 export const upload = defineChart({
   events: {
@@ -93,7 +93,9 @@ export const uCmds: Cmds<UG, UState, UMsg> = {
   }),
   // one site, the ELSE arm of `sending.fail` — `otherwiseCmd` sites feed the
   // same `SitesWhere` scan as `cmd` sites.
-  alert_human: (s, m) => ({ reason: `${s.key} dead after ${s.tries}: ${m.error}` }),
+  alert_human: (s, m) => ({
+    reason: `${s.key} dead after ${s.tries}: ${m.error}`,
+  }),
 };
 
 export const uploader = compile(
@@ -103,6 +105,7 @@ export const uploader = compile(
       "idle.pick": (s, m) => ({ key: m.key, tries: s.tries }),
       "sending.done": (s, m) => ({ key: s.key, etag: m.etag, tries: s.tries }),
       "sending.fail": {
+        // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
         then: (s) => ({ tries: s.tries + 1 }),
         else: (s) => ({ tries: s.tries }),
       },

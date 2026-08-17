@@ -19,5 +19,11 @@
     "types": ["node", "chrome", "react", "react-dom"]
   },
   "include": ["src"],
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "src/chart/__probes__"
+  ]
 }

@@ -13,8 +13,10 @@
 // whereas a varying sequence makes the two agree only if they draw the same
 // number of times in the same order.
 // ═══════════════════════════════════════════════════════════════════════════
+import { expect, it, vi } from "vitest";
 import { subId } from "../pure/core";
-import type { RFState } from "./resilient-fetch-reducer";
+import { importExample } from "./__fixtures__/import-example";
+import type { RFState } from "./__fixtures__/resilient-fetch-reducer";
 
 const lcg = (): (() => number) => {
   let seed = 0x2f6e2b1;
@@ -24,25 +26,43 @@ const lcg = (): (() => number) => {
   };
 };
 
-const realLog = console.log.bind(console);
+/**
+ * The example is imported for its EXPORTED machine, but the file also calls
+ * `main()` at module scope — so `console.log` is muted across the import and
+ * restored immediately after. `say` collects the step-by-step table instead of
+ * printing it: on a green run nobody reads it, and on a red one vitest prints
+ * the whole thing as the failure message.
+ */
+// The examples log as they boot (`status-poller` even calls `main()` at module
+// scope, whose async tail keeps logging long after the import resolves), so the
+// mute is permanent for this file rather than restored after the import —
+// nothing here writes to stdout: `say` collects the step table into
+// `transcript`, which vitest prints only if the equivalence fails.
 console.log = () => {};
+
+// Each side must get its OWN module graph, and that is load-bearing rather than
+// tidiness: `retry-backoff` captures `defaultRng` from `Math.random` AT MODULE
+// LOAD, so two machines sharing one instance share one generator, interleave
+// their draws, and diff for a reason that is not a behavioural difference. The
+// script version got the separation for free (the example resolved
+// `@demlik/tea` to dist/, the port to src/ — two copies). Under vitest the
+// alias points both at src/, so the separation has to be asked for.
+vi.resetModules();
 
 Math.random = lcg();
 // the specifier is a variable so tsc does not pull `examples/` (which compiles
 // under its own tsconfig) into this file's program.
-const EXAMPLE = "../../examples/resilient-fetch";
-const { resilientFetch } = (await import(EXAMPLE)) as {
+const EXAMPLE = new URL("../../examples/resilient-fetch.ts", import.meta.url)
+  .href;
+const { resilientFetch } = (await importExample(EXAMPLE)) as {
   resilientFetch: { init: unknown; update: unknown };
 };
 
+vi.resetModules();
 Math.random = lcg();
 const { fetchReducerInit, fetchReducerUpdate } = await import(
-  "./resilient-fetch-reducer"
+  "./__fixtures__/resilient-fetch-reducer"
 );
-
-const say = (line: string): void => {
-  realLog(line);
-};
 
 type AnyMsg = { readonly type: string; readonly [k: string]: unknown };
 type Step = readonly [label: string, msg: AnyMsg];
@@ -52,7 +72,10 @@ const U = "https://api.example/thing";
 
 const steps: readonly Step[] = [
   // a timer that fires before anything started — the phase-conditioned no-op
-  ["deadline before start", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 }],
+  [
+    "deadline before start",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 },
+  ],
   ["fetch", { type: "fetch", url: U, at: T0 }],
   ["fetch_ok", { type: "fetch_ok", url: U, body: "hello", at: T0 + 50 }],
   // served from cache this time — no cmd at all
@@ -60,32 +83,78 @@ const steps: readonly Step[] = [
   // a different url misses the cache and spends a token
   ["fetch other", { type: "fetch", url: `${U}/b`, at: T0 + 200 }],
   // the failure fork, run to exhaustion — every step here draws from the RNG
-  ["fetch_err 1", { type: "fetch_err", url: `${U}/b`, error: "boom-1", at: T0 + 300 }],
-  ["deadline -> retry", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 400 }],
-  ["fetch_err 2", { type: "fetch_err", url: `${U}/b`, error: "boom-2", at: T0 + 500 }],
-  ["deadline -> retry", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 900 }],
-  ["fetch_err 3", { type: "fetch_err", url: `${U}/b`, error: "boom-3", at: T0 + 1_000 }],
-  ["deadline -> retry", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 1_800 }],
-  ["fetch_err 4", { type: "fetch_err", url: `${U}/b`, error: "boom-4", at: T0 + 1_900 }],
-  ["deadline -> retry", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 3_000 }],
-  ["fetch_err 5", { type: "fetch_err", url: `${U}/b`, error: "boom-5", at: T0 + 3_100 }],
-  ["fetch_err 6", { type: "fetch_err", url: `${U}/b`, error: "boom-6", at: T0 + 3_200 }],
-  ["fetch_err 7", { type: "fetch_err", url: `${U}/b`, error: "boom-7", at: T0 + 3_300 }],
+  [
+    "fetch_err 1",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-1", at: T0 + 300 },
+  ],
+  [
+    "deadline -> retry",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 400 },
+  ],
+  [
+    "fetch_err 2",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-2", at: T0 + 500 },
+  ],
+  [
+    "deadline -> retry",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 900 },
+  ],
+  [
+    "fetch_err 3",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-3", at: T0 + 1_000 },
+  ],
+  [
+    "deadline -> retry",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 1_800 },
+  ],
+  [
+    "fetch_err 4",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-4", at: T0 + 1_900 },
+  ],
+  [
+    "deadline -> retry",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 3_000 },
+  ],
+  [
+    "fetch_err 5",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-5", at: T0 + 3_100 },
+  ],
+  [
+    "fetch_err 6",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-6", at: T0 + 3_200 },
+  ],
+  [
+    "fetch_err 7",
+    { type: "fetch_err", url: `${U}/b`, error: "boom-7", at: T0 + 3_300 },
+  ],
   // adversarial: does a failed machine still absorb traffic identically?
-  ["deadline after failed", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 4_000 }],
+  [
+    "deadline after failed",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 4_000 },
+  ],
   ["fetch after failed", { type: "fetch", url: `${U}/c`, at: T0 + 4_100 }],
-  ["fetch_ok late", { type: "fetch_ok", url: `${U}/c`, body: "late", at: T0 + 4_200 }],
+  [
+    "fetch_ok late",
+    { type: "fetch_ok", url: `${U}/c`, body: "late", at: T0 + 4_200 },
+  ],
   // drain the bucket to force the rate-limit fork inside `attempt`
-  ...Array.from({ length: 14 }, (_, i): Step => [
-    `drain ${i + 1}`,
-    { type: "fetch", url: `${U}/d${i}`, at: T0 + 4_300 + i },
-  ]),
-  ["deadline after drain", { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 5_000 }],
+  ...Array.from(
+    { length: 14 },
+    (_, i): Step => [
+      `drain ${i + 1}`,
+      { type: "fetch", url: `${U}/d${i}`, at: T0 + 4_300 + i },
+    ],
+  ),
+  [
+    "deadline after drain",
+    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 5_000 },
+  ],
 ];
 
 /** property-order-independent structural print */
 function stable(v: unknown): string {
-  if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "undefined";
+  if (v === null || typeof v !== "object")
+    return JSON.stringify(v) ?? "undefined";
   if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
   const rec = v as Record<string, unknown>;
   return `{${Object.keys(rec)
@@ -102,7 +171,10 @@ const origUpdate = resilientFetch.update as unknown as Record<
   (s: unknown, m: AnyMsg) => Pair
 >;
 let orig = (
-  resilientFetch.init as unknown as (l: null, c: unknown) => readonly [Record<string, unknown>]
+  resilientFetch.init as unknown as (
+    l: null,
+    c: unknown,
+  ) => readonly [Record<string, unknown>]
 )(null, {})[0];
 
 // THE SHAPE THAT MATTERS: `fetchReducerUpdate` is a FLAT record keyed by msg
@@ -119,23 +191,34 @@ const asOrig = (s: RFState): Record<string, unknown> => {
   return { ...rest, phase: type };
 };
 
-let diffs = 0;
+const diffs: string[] = [];
+const transcript: string[] = [];
+const say = (line: string): void => {
+  transcript.push(line);
+};
 const check = (label: string, a: string, b: string, what: string): void => {
   if (a !== b) {
-    diffs += 1;
-    say(`  DIFF (${what}) @ ${label}\n    original: ${a}\n    ported  : ${b}`);
+    diffs.push(`DIFF (${what}) @ ${label}
+    original: ${a}
+    ported  : ${b}`);
   }
 };
 
 check("<init>", stable(orig), stable(asOrig(port)), "state");
 
-say("step                                  | phase(orig)   | type(port)    | cmds");
-say("--------------------------------------+---------------+---------------+------");
+say(
+  "step                                  | phase(orig)   | type(port)    | cmds",
+);
+say(
+  "--------------------------------------+---------------+---------------+------",
+);
 
 for (const [label, msg] of steps) {
+  // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
   const [nextOrig, origCmds] = origUpdate[msg.type]!(orig, msg);
   orig = nextOrig;
 
+  // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
   const [nextPort, portCmds] = portUpdate[msg.type]!(port, msg);
   port = nextPort;
 
@@ -143,7 +226,7 @@ for (const [label, msg] of steps) {
   check(label, stable(origCmds), stable(portCmds), "cmds");
 
   say(
-    `${label.padEnd(37)} | ${String(orig["phase"]).padEnd(13)} | ${port.type.padEnd(13)} | ${
+    `${label.padEnd(37)} | ${String(orig.phase).padEnd(13)} | ${port.type.padEnd(13)} | ${
       portCmds.map((c) => (c as { type: string }).type).join(",") || "-"
     }`,
   );
@@ -152,10 +235,7 @@ for (const [label, msg] of steps) {
 say("");
 say(`final original: ${stable(orig)}`);
 say(`final ported  : ${stable(asOrig(port))}`);
-say("");
-say(
-  diffs === 0
-    ? `EQUIVALENT — ${steps.length} steps, ${steps.length * 2 + 1} comparisons, 0 diffs`
-    : `${diffs} DIFFS`,
-);
-if (diffs > 0) process.exitCode = 1;
+
+it("the reducer-form port is behaviourally identical to examples/resilient-fetch", () => {
+  expect(diffs, transcript.join("\n")).toEqual([]);
+});

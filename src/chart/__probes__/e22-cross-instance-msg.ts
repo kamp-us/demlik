@@ -5,7 +5,8 @@
 //
 // The foreign event is the deliberate exception: `deadline_exceeded` IS shared,
 // and the second line below compiles.
-import type { WMsgIn } from "../watchdog";
+// @expect-error: TS2322
+import type { WMsgIn } from "../__fixtures__/watchdog";
 
 const forA: WMsgIn<"JOB_A"> = {
   type: "JOB_A.START",

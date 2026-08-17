@@ -5,11 +5,11 @@
 // and checks that the chart is still drawable — the `to` list gives the FULL
 // fan-out, which is more than executing a compiled cell against one sample can
 // ever recover.
+import { expect, it } from "vitest";
 import { set as cacheSet, initCache } from "../cache";
-import { applyCell } from "../pure/core";
 import { toMermaid } from "../machine-viz";
+import { applyCell } from "../pure/core";
 import { defineMachine } from "../runtime-types";
-import { chartMermaid } from "./compile";
 import {
   type DoFetch,
   type FMsgIn,
@@ -18,13 +18,27 @@ import {
   fetchInit,
   fetchSubs,
   fetchUpdate,
-} from "./resilient-fetch-chart";
-import { pollerChart, pollerInit, pollerUpdate } from "./status-poller-chart";
+} from "./__fixtures__/resilient-fetch-chart";
+import {
+  pollerChart,
+  pollerInit,
+  pollerUpdate,
+} from "./__fixtures__/status-poller-chart";
+import { chartMermaid } from "./compile";
 
+/**
+ * One assertion → one vitest test. Everything these files assert is computed at
+ * module scope from pure data, so registering the case here (rather than
+ * wrapping the whole file in one `it`) keeps a failure pointing at the single
+ * claim that broke, exactly as the smoke script's per-line output did.
+ *
+ * The comparison is stable JSON rather than `toEqual`, which is what the script
+ * compared — key order included.
+ */
 const eq = (label: string, got: unknown, want: unknown): void => {
-  const g = JSON.stringify(got);
-  const w = JSON.stringify(want);
-  console.log(`${g === w ? "ok  " : "FAIL"} ${label}  got=${g} want=${w}`);
+  it(label, () => {
+    expect(JSON.stringify(got), label).toBe(JSON.stringify(want));
+  });
 };
 
 type M = FMsgIn<"RF">;
@@ -57,7 +71,11 @@ const drained: FState = {
   bucket: { ...idle.bucket, tokens: 0, lastRefillMs: 1_000 },
 };
 const [f3, c3] = fire(drained, { type: "RF.fetch", url: "u", at: 1_000 });
-eq("idle -fetch-> waiting_retry (no token, retries left)", f3.type, "waiting_retry");
+eq(
+  "idle -fetch-> waiting_retry (no token, retries left)",
+  f3.type,
+  "waiting_retry",
+);
 eq("…no cmds", c3, []);
 eq("…and only THEN is a retry timer armed", fetchSubs(f3).length, 1);
 eq("…while fetching arms none", fetchSubs(f1).length, 0);
@@ -134,7 +152,11 @@ const [p3] = pstep(p2, {
 });
 eq("polling -ready-> done (battery decided)", p3.type, "done");
 eq("…type is the battery's own phase, one writer", p3.type, p3.poll.phase);
-const [p4] = pstep(p3, { type: "POLL.deadline_exceeded", id: "t", atMs: 9_000 });
+const [p4] = pstep(p3, {
+  type: "POLL.deadline_exceeded",
+  id: "t",
+  atMs: 9_000,
+});
 eq("done -tick-> done (scoped out, no ignore needed)", p4.type, "done");
 
 // ── DRAWING ────────────────────────────────────────────────────────────────
@@ -143,8 +165,9 @@ eq("done -tick-> done (scoped out, no ignore needed)", p4.type, "done");
 const drawn = chartMermaid(fetchChart);
 eq(
   "chartMermaid draws the full 5-way fan-out",
-  drawn.split("\n").filter((l) => l.startsWith("  idle --> ") && l.includes("fetch /"))
-    .length,
+  drawn
+    .split("\n")
+    .filter((l) => l.startsWith("  idle --> ") && l.includes("fetch /")).length,
   5,
 );
 eq(
@@ -160,7 +183,9 @@ eq(
 eq("…and the entry edge", drawn.includes("  [*] --> idle"), true);
 eq(
   "chartMermaid draws the poller's cell fan-out too",
-  chartMermaid(pollerChart).includes("  polling --> gave_up : poll_failed / onError()"),
+  chartMermaid(pollerChart).includes(
+    "  polling --> gave_up : poll_failed / onError()",
+  ),
   true,
 );
 
@@ -168,7 +193,13 @@ eq(
 // by executing it against a sample — so it draws the ONE edge that sample takes
 // (exactly as it already did for a guarded edge). It must not crash, and the
 // edge it does draw must be a real one.
-const rfMachine = defineMachine<FState, M, DoFetch, never, Record<never, never>>({
+const rfMachine = defineMachine<
+  FState,
+  M,
+  DoFetch,
+  never,
+  Record<never, never>
+>({
   init: fetchInit,
   update: fetchUpdate,
   interpret: { do_fetch: async () => undefined },
@@ -180,7 +211,11 @@ const viz = toMermaid(rfMachine, {
     msgs: { "RF.fetch": { type: "RF.fetch", url: "u", at: 1_000 } },
   },
 });
-eq("toMermaid does not crash on a cell machine", viz.startsWith("stateDiagram-v2"), true);
+eq(
+  "toMermaid does not crash on a cell machine",
+  viz.startsWith("stateDiagram-v2"),
+  true,
+);
 eq("toMermaid draws the entry edge", viz.includes("[*] --> idle"), true);
 eq(
   "toMermaid resolves the sampled cell edge to a REAL target",

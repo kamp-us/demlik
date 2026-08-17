@@ -7,18 +7,18 @@
 // travel with them. The Msg union, the State union, `was`, the entry state and
 // the totality obligation are all derived from this one value.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Transitions } from "../pure/core";
-import { compile } from "./compile";
+import type { Transitions } from "../../pure/core";
+import { compile } from "../compile";
 import {
   type Assigns,
   type CmdOf,
+  defineChart,
   type Guards,
   type MsgIn,
   type MsgOf,
   type StateOf,
-  defineChart,
   ty,
-} from "./graph";
+} from "../graph";
 
 export const lane = defineChart({
   // carried by every state — one declaration, not one per state.
@@ -56,7 +56,11 @@ export const lane = defineChart({
           PASS: "ship",
           BLOCKED: "blocked",
           // the one guarded edge: retries left → back to build, else freeze.
-          FAIL: { target: "build", when: "retriesRemaining", otherwise: "frozen" },
+          FAIL: {
+            target: "build",
+            when: "retriesRemaining",
+            otherwise: "frozen",
+          },
         },
       },
       ship: { on: { DONE: "shipped", BLOCKED: "human:cp-approval" } },
@@ -66,7 +70,9 @@ export const lane = defineChart({
     // `scope` of the lane events, not 10 strings written out here.
     parked: {
       blocked: { on: { UNBLOCKED: { resume: { fallback: "queued" } } } },
-      "human:cp-approval": { on: { UNBLOCKED: { resume: { fallback: "queued" } } } },
+      "human:cp-approval": {
+        on: { UNBLOCKED: { resume: { fallback: "queued" } } },
+      },
     },
     // terminal: declared, not inferred from "has no outgoing edges".
     done: {
@@ -82,7 +88,10 @@ export type LaneState = StateOf<LaneG>;
 /** The BARE msg union — what the parts below are authored against. */
 export type LaneMsg = MsgOf<LaneG>;
 /** The namespaced msg union — what the compiled machine actually consumes. */
-export type LaneMsgIn<NS extends string | undefined = undefined> = MsgIn<LaneG, NS>;
+export type LaneMsgIn<NS extends string | undefined = undefined> = MsgIn<
+  LaneG,
+  NS
+>;
 export type LaneCmd = CmdOf<LaneG>;
 
 // ── the parts ───────────────────────────────────────────────────────────────
@@ -104,6 +113,7 @@ export const assign: Assigns<LaneG, LaneState, LaneMsg> = {
   "review.BLOCKED": (s) => ctx(s),
   // guarded edge → `{ then, else }`, each narrowed to ITS target's payload.
   "review.FAIL": {
+    // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
     then: (s) => ({ retries: s.retries + 1, maxRetries: s.maxRetries }),
     else: (s) => ctx(s),
   },

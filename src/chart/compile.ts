@@ -19,11 +19,11 @@ import type {
   RCellName,
   RCells,
   RCmds,
+  ReducerChart,
   RGuardName,
   RGuards,
   RStateOf,
   RUsedCmdName,
-  ReducerChart,
   StateOf,
   UsedCmdName,
 } from "./graph";
@@ -63,7 +63,9 @@ export class CellTargetError extends Error {
 }
 
 /** `undefined` → none; `"x"` → one; `["x","y"]` → both, in order. */
-function cmdNames(ref: string | readonly string[] | undefined): readonly string[] {
+function cmdNames(
+  ref: string | readonly string[] | undefined,
+): readonly string[] {
   if (ref === undefined) return [];
   return typeof ref === "string" ? [ref] : ref;
 }
@@ -74,11 +76,7 @@ function cmdNames(ref: string | readonly string[] | undefined): readonly string[
 // refusal is a self-loop with no cmds; the throw below is the safety net under
 // the compile-time refusal (`.decisions/0011`), reached only when the mapped
 // types were bypassed with a cast.
-export type Parts<
-  C,
-  S extends { type: string },
-  M extends { type: string },
-> = {
+export type Parts<C, S extends { type: string }, M extends { type: string }> = {
   readonly assign: Assigns<C, S, M>;
 } & ([GuardName<C>] extends [never]
   ? { readonly guards?: undefined }
@@ -166,10 +164,10 @@ type RtParts = {
 function rtParts(parts: object): RtParts {
   const p = parts as Record<string, object | undefined>;
   return {
-    assign: (p["assign"] ?? {}) as RtParts["assign"],
-    guards: (p["guards"] ?? {}) as RtParts["guards"],
-    cmds: (p["cmds"] ?? {}) as RtParts["cmds"],
-    cells: (p["cells"] ?? {}) as RtParts["cells"],
+    assign: (p.assign ?? {}) as RtParts["assign"],
+    guards: (p.guards ?? {}) as RtParts["guards"],
+    cmds: (p.cmds ?? {}) as RtParts["cmds"],
+    cells: (p.cells ?? {}) as RtParts["cells"],
   };
 }
 
@@ -260,15 +258,17 @@ function buildCell(
     // 0..n Cmds, in declaration order. A guarded edge picks its arm's list —
     // `Cmd.when` lifted onto the edge, so which effects fire is visible in the
     // chart rather than buried in a cell body.
-    const emitted = cmdNames(fired ? edge.cmd : edge.otherwiseCmd).map((n): Cmd => {
-      const build = p.cmds[n];
-      if (build === undefined) {
-        throw new Error(
-          `@demlik/tea: edge "${at}" names cmd "${n}" with no builder`,
-        );
-      }
-      return { ...build(st, msg, at), type: n };
-    });
+    const emitted = cmdNames(fired ? edge.cmd : edge.otherwiseCmd).map(
+      (n): Cmd => {
+        const build = p.cmds[n];
+        if (build === undefined) {
+          throw new Error(
+            `@demlik/tea: edge "${at}" names cmd "${n}" with no builder`,
+          );
+        }
+        return { ...build(st, msg, at), type: n };
+      },
+    );
 
     return [next, emitted];
   };
@@ -276,7 +276,9 @@ function buildCell(
 
 /** `undefined` → bare; a foreign event → bare; otherwise `${ns}.${event}`. */
 function keyOf(
-  c: { readonly events: Record<string, { readonly foreign?: true } | undefined> },
+  c: {
+    readonly events: Record<string, { readonly foreign?: true } | undefined>;
+  },
   e: string,
   ns: string | undefined,
 ): string {
@@ -310,11 +312,7 @@ export function compile<
   M extends { type: string } = MsgOf<C>,
   K extends Cmd = CmdOf<C>,
   const NS extends string | undefined = undefined,
->(
-  chart: C,
-  parts: Parts<C, S, M>,
-  ns?: NS,
-): Transitions<S, MsgIn<C, NS>, K> {
+>(chart: C, parts: Parts<C, S, M>, ns?: NS): Transitions<S, MsgIn<C, NS>, K> {
   const c = chart as unknown as RtChart;
   const p = rtParts(parts);
 
@@ -450,9 +448,15 @@ export function reducerInitFrom<
   const C extends ReducerChart<C>,
   S extends { type: string } = RStateOf<C>,
   K extends Cmd = CmdOf<C>,
->(chart: C, boot: () => Omit<RStateOf<C>, "type">): (loaded: S | null) => readonly [S, readonly K[]] {
+>(
+  chart: C,
+  boot: () => Omit<RStateOf<C>, "type">,
+): (loaded: S | null) => readonly [S, readonly K[]] {
   const type: string = (chart as unknown as RtReducerChart).initial;
-  return (loaded) => [loaded ?? ({ ...boot(), type } as unknown as S), Cmd.none];
+  return (loaded) => [
+    loaded ?? ({ ...boot(), type } as unknown as S),
+    Cmd.none,
+  ];
 }
 
 /**
@@ -461,7 +465,9 @@ export function reducerInitFrom<
  * which is what having no phase dimension MEANS — plus each event's full
  * fan-out, cell edges included.
  */
-export function reducerMermaid<const C extends ReducerChart<C>>(chart: C): string {
+export function reducerMermaid<const C extends ReducerChart<C>>(
+  chart: C,
+): string {
   const c = chart as unknown as RtReducerChart;
   const lines = ["stateDiagram-v2", "  direction TB", `  [*] --> ${c.initial}`];
   for (const [e, spec] of Object.entries(c.on)) {
@@ -471,7 +477,8 @@ export function reducerMermaid<const C extends ReducerChart<C>>(chart: C): strin
         lines.push(`  any --> ${t} : ${e} / ${edge.cell}()`);
       }
     } else {
-      if (edge.target !== undefined) lines.push(`  any --> ${edge.target} : ${e}`);
+      if (edge.target !== undefined)
+        lines.push(`  any --> ${edge.target} : ${e}`);
       if (edge.otherwise !== undefined) {
         lines.push(`  any --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`);
       }
@@ -489,7 +496,9 @@ export function reducerMermaid<const C extends ReducerChart<C>>(chart: C): strin
  * marked — the runtime half of what `InitialData`'s marker types say at the
  * type level.
  */
-export function initialStateOf<const C extends Chart<C>>(chart: C): InitialState<C> {
+export function initialStateOf<const C extends Chart<C>>(
+  chart: C,
+): InitialState<C> {
   const flat = flatten(chart as unknown as RtChart);
   const marked = [...flat].filter(([, f]) => f.node.initial === true);
   const only = marked[0];
@@ -515,7 +524,10 @@ export function initFrom<
   const C extends Chart<C>,
   S extends { type: string },
   K extends Cmd,
->(chart: C, boot: () => InitialData<C, S>): (loaded: S | null) => readonly [S, readonly K[]] {
+>(
+  chart: C,
+  boot: () => InitialData<C, S>,
+): (loaded: S | null) => readonly [S, readonly K[]] {
   const type: string = initialStateOf(chart);
   return (loaded) => [
     // The one cast this helper needs: `{ ...InitialData, type: <the initial
@@ -552,9 +564,12 @@ export function chartMermaid<const C extends Chart<C>>(chart: C): string {
       } else if (edge.resume !== undefined) {
         lines.push(`  ${s} --> ${edge.resume.fallback} : ${e} (resume)`);
       } else {
-        if (edge.target !== undefined) lines.push(`  ${s} --> ${edge.target} : ${e}`);
+        if (edge.target !== undefined)
+          lines.push(`  ${s} --> ${edge.target} : ${e}`);
         if (edge.otherwise !== undefined) {
-          lines.push(`  ${s} --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`);
+          lines.push(
+            `  ${s} --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`,
+          );
         }
       }
     }

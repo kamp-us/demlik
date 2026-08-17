@@ -3,6 +3,7 @@
 // is reachable from every state — so the derivation degenerates to "all of
 // them" and the fallback means nothing. Rejected by name rather than accepted
 // and silently ignored by the walk.
+// @expect-error: TS2322
 import { defineReducerChart, ty } from "../graph";
 export const bad = defineReducerChart({
   ctx: ty<{ readonly n: number }>(),

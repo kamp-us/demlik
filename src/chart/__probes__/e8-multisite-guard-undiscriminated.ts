@@ -5,8 +5,10 @@
 // nested `s.type === "fetching"` test does NOT stand in for it, because
 // TypeScript re-narrows sibling parameters only from a discriminant that is a
 // direct, literal-typed element of the tuple union.
-import type { RG, RMsg, RState } from "../assert";
+// @expect-error: TS2322 TS2339 TS2339
+import type { RG, RMsg, RState } from "../assert.test-d";
 import type { Guards } from "../graph";
 export const guards: Guards<RG, RState, RMsg> = {
-  worthRetrying: (s, m) => (s.type === "fetching" ? m.afterMs > 0 : m.offset >= 0),
+  worthRetrying: (s, m) =>
+    s.type === "fetching" ? m.afterMs > 0 : m.offset >= 0,
 };

@@ -8,20 +8,26 @@
 //      `subscribeDeadline` through the real reconcile pass) — nothing here
 //      builds a `deadline_exceeded` literal;
 //   3. the un-namespaced compile is keyed bare, end to end.
+import { expect, it } from "vitest";
 import { applyCell } from "../pure/core";
 import { run } from "../run";
 import {
-  type WMsgIn,
-  type WState,
   jobWatcher,
   solo,
+  type WMsgIn,
+  type WState,
   watchdog,
-} from "./watchdog";
+} from "./__fixtures__/watchdog";
 
+/**
+ * Stable-JSON equality with the claim as the failure label — the smoke script's
+ * comparison verbatim. Unlike the other chart suites this one is a single
+ * SEQUENTIAL scenario (two live runtimes, real deadline subs, real timers), so
+ * it is one `it` rather than one per assertion; the label keeps a failure
+ * pointing at the exact claim.
+ */
 const eq = (label: string, got: unknown, want: unknown): void => {
-  const g = JSON.stringify(got);
-  const w = JSON.stringify(want);
-  console.log(`${g === w ? "ok  " : "FAIL"} ${label}  got=${g} want=${w}`);
+  expect(JSON.stringify(got), label).toBe(JSON.stringify(want));
 };
 
 /**
@@ -40,7 +46,7 @@ const rowKeys = (update: object, state: string): readonly string[] => {
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
-async function main(): Promise<void> {
+it("per-event namespacing, on a real machine", async () => {
   // ── the emitted key sets, side by side ───────────────────────────────────
   const a = jobWatcher("JOB_A");
   const b = jobWatcher("JOB_B");
@@ -61,11 +67,11 @@ async function main(): Promise<void> {
     keysA.filter((k) => keysB.includes(k)),
     ["deadline_exceeded"],
   );
-  eq(
-    "…and the un-namespaced compile is keyed bare",
-    rowKeys(solo, "working"),
-    ["FINISHED", "START", "deadline_exceeded"],
-  );
+  eq("…and the un-namespaced compile is keyed bare", rowKeys(solo, "working"), [
+    "FINISHED",
+    "START",
+    "deadline_exceeded",
+  ]);
 
   // ── 1. the instances' own events are disjoint, at RUNTIME too ────────────
   const rtA = await run(a, {}).ready;
@@ -180,6 +186,4 @@ async function main(): Promise<void> {
 
   // the chart still draws — `foreign` is inert to every other derivation.
   eq("chart still has one entry state", Object.keys(watchdog.states).length, 2);
-}
-
-void main();
+});

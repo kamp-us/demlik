@@ -3,6 +3,7 @@
 // events that its phase is IN SCOPE for, and the pair would otherwise fall
 // through to a global policy — the `_ -> (state, [])` default `Transitions`
 // forbids.
+// @expect-error: TS2322
 import { defineChart } from "../graph";
 export const g = defineChart({
   events: {

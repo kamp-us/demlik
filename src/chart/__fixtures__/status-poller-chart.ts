@@ -11,18 +11,18 @@
 // Nothing here re-runs a verb to ask where it went, and nothing duplicates a
 // decision the library already makes.
 // ═══════════════════════════════════════════════════════════════════════════
-import { createPoller, type PollerState } from "../poller";
-import type { Cmd, SubId } from "../pure/core";
-import { compile, initFrom } from "./compile";
+import { createPoller, type PollerState } from "../../poller";
+import type { Cmd, SubId } from "../../pure/core";
+import { compile, initFrom } from "../compile";
 import {
   type Cells,
   type CmdOf,
   defineChart,
-  type MsgOf,
   type MsgIn,
+  type MsgOf,
   type StateOf,
   ty,
-} from "./graph";
+} from "../graph";
 
 export type JobStatus = {
   readonly status: "pending" | "ready";

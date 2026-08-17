@@ -17,7 +17,7 @@ import {
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "../cache";
+} from "../../cache";
 import {
   type CircuitState,
   canPass,
@@ -25,10 +25,10 @@ import {
   initCircuit,
   onFailure,
   onSuccess,
-} from "../circuit-breaker";
-import { type DeadlineSub, deadlineSub } from "../deadline";
-import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
-import type { SubId } from "../pure/core";
+} from "../../circuit-breaker";
+import { type DeadlineSub, deadlineSub } from "../../deadline";
+import type { SubId } from "../../pure/core";
+import { initBucket, type TokenBucket, tryConsume } from "../../rate-limit";
 import {
   defaultRetryPolicy,
   initRetry,
@@ -36,18 +36,18 @@ import {
   type RetryState,
   recordFailure,
   shouldRetry,
-} from "../retry-backoff";
-import { compileReducer, reducerInitFrom } from "./compile";
+} from "../../retry-backoff";
+import { compileReducer, reducerInitFrom } from "../compile";
 import {
   type CmdOf,
+  defineReducerChart,
   type MsgIn,
   type MsgOf,
   type RAssigns,
   type RCells,
   type RStateOf,
-  defineReducerChart,
   ty,
-} from "./graph";
+} from "../graph";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -118,7 +118,10 @@ export type RFMsgIn<NS extends string> = MsgIn<RFG, NS>;
 export type RFDoFetch = CmdOf<RFG>;
 
 /** Exactly the states `ATTEMPT` declares — checked against the edge's `to`. */
-type Attempted = { readonly type: (typeof ATTEMPT)[number] } & Omit<RFState, "type">;
+type Attempted = { readonly type: (typeof ATTEMPT)[number] } & Omit<
+  RFState,
+  "type"
+>;
 
 /**
  * The original's `attempt()`, VERBATIM apart from `phase:` becoming `type:`.

@@ -2,13 +2,15 @@
 // reached from ONE edge, so the function form is already exact in both
 // directions and the second form is deliberately not offered — the common case
 // keeps exactly one shape to learn, and the bag stays a function.
-import type { Cells } from "../graph";
+// @expect-error: TS2353 TS7006
+
 import {
   cells,
   type FG,
   type FMsg,
   type FState,
-} from "../resilient-fetch-chart";
+} from "../__fixtures__/resilient-fetch-chart";
+import type { Cells } from "../graph";
 export const bad: Cells<FG, FState, FMsg> = {
   ...cells,
   retryNow: {

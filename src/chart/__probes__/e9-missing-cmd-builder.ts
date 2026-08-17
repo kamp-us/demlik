@@ -1,6 +1,7 @@
 // PROBE 9: an edge names a Cmd, but the `cmds` parts bag has no builder for it.
 // `Parts` makes `cmds` REQUIRED the moment `CmdName<C>` is non-`never`, and the
 // mapped type is total over the names the chart declares.
+// @expect-error: TS2741
 import { compile } from "../compile";
 import { defineChart, ty } from "../graph";
 

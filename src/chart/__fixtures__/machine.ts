@@ -1,9 +1,9 @@
 // The end-to-end proof: the compiled table drops into the REAL `defineMachine`
 // with no cast, no annotation, and no adapter.
-import type { Cmd, Machine, Sub } from "../pure/core";
-import { defineMachine } from "../runtime-types";
-import { initFrom } from "./compile";
-import { type Assert, type Eq, type InitialState } from "./graph";
+import type { Cmd, Machine, Sub } from "../../pure/core";
+import { defineMachine } from "../../runtime-types";
+import { initFrom } from "../compile";
+import type { Assert, Eq, InitialState } from "../graph";
 import {
   type LaneCmd,
   type LaneG,

@@ -18,20 +18,24 @@
 // they are namespaced and instance-private. `deadline_exceeded` is the
 // library's, so it is bare and SHARED — which is correct: it is the same event.
 // ═══════════════════════════════════════════════════════════════════════════
-import { type DeadlineSub, deadlineSub, subscribeDeadline } from "../deadline";
-import type { Cmd } from "../pure/core";
-import { defineMachine } from "../runtime-types";
-import { compile, initFrom } from "./compile";
+import {
+  type DeadlineSub,
+  deadlineSub,
+  subscribeDeadline,
+} from "../../deadline";
+import type { Cmd } from "../../pure/core";
+import { defineMachine } from "../../runtime-types";
+import { compile, initFrom } from "../compile";
 import {
   type Assert,
+  defineChart,
   type Eq,
   type ForeignEvent,
   type MsgIn,
   type MsgOf,
   type StateOf,
-  defineChart,
   ty,
-} from "./graph";
+} from "../graph";
 
 export const watchdog = defineChart({
   ctx: ty<{ readonly jobId: string; readonly deadlineAtMs: number }>(),

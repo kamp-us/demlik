@@ -1,27 +1,42 @@
 // Runtime exercise of the emitted table. Types compiling ≠ the walk working.
+import { expect, it } from "vitest";
 import { toMermaid } from "../machine-viz";
 import { applyCell } from "../pure/core";
-import { initialStateOf } from "./compile";
-import { defineChart } from "./graph";
-import { type LaneMsgIn, type LaneState, issue42, lane } from "./lane";
-import { laneMachine } from "./machine";
+import {
+  issue42,
+  type LaneMsgIn,
+  type LaneState,
+  lane,
+} from "./__fixtures__/lane";
+import { laneMachine } from "./__fixtures__/machine";
 import {
   type UCmd,
   type UMsgIn,
   type UState,
   upload,
   uploadMachine,
-} from "./upload";
+} from "./__fixtures__/upload";
+import { initialStateOf } from "./compile";
+import { defineChart } from "./graph";
 
 type M = LaneMsgIn<"ISSUE_42">;
 const machine = { update: issue42 as object, __form: "transitions" as const };
 const step = (s: LaneState, m: M): LaneState =>
   applyCell<LaneState, M, never>(machine, s, m)[0];
 
+/**
+ * One assertion → one vitest test. Everything these files assert is computed at
+ * module scope from pure data, so registering the case here (rather than
+ * wrapping the whole file in one `it`) keeps a failure pointing at the single
+ * claim that broke, exactly as the smoke script's per-line output did.
+ *
+ * The comparison is stable JSON rather than `toEqual`, which is what the script
+ * compared — key order included.
+ */
 const eq = (label: string, got: unknown, want: unknown): void => {
-  const g = JSON.stringify(got);
-  const w = JSON.stringify(want);
-  console.log(`${g === w ? "ok  " : "FAIL"} ${label}  got=${g} want=${w}`);
+  it(label, () => {
+    expect(JSON.stringify(got), label).toBe(JSON.stringify(want));
+  });
 };
 
 const start: LaneState = { type: "queued", retries: 0, maxRetries: 2 };
@@ -31,7 +46,11 @@ const b = step(start, { type: "ISSUE_42.WIP", at: 1 });
 eq("queued -WIP-> build", b, { retries: 0, maxRetries: 2, type: "build" });
 const r = step(b, { type: "ISSUE_42.DONE", at: 2 });
 eq("build -DONE-> review", r.type, "review");
-eq("review -PASS-> ship", step(r, { type: "ISSUE_42.PASS", at: 3 }).type, "ship");
+eq(
+  "review -PASS-> ship",
+  step(r, { type: "ISSUE_42.PASS", at: 3 }).type,
+  "ship",
+);
 
 // guard true → back to build, retries incremented
 const f1 = step(r, { type: "ISSUE_42.FAIL", at: 4, reason: "flake" });
@@ -55,7 +74,11 @@ eq(
 );
 
 // `was` is injected on entry to a parking state, from three different sources
-const blockedFromReview = step(r, { type: "ISSUE_42.BLOCKED", at: 7, reason: "x" });
+const blockedFromReview = step(r, {
+  type: "ISSUE_42.BLOCKED",
+  at: 7,
+  reason: "x",
+});
 eq("review -BLOCKED-> blocked", blockedFromReview, {
   retries: 0,
   maxRetries: 2,
@@ -106,10 +129,13 @@ eq(
 // refused pairs self-loop: `end: true` on a terminal, `ignore` on a live state
 eq(
   "shipped -WIP-> shipped (end: true)",
-  step({ type: "shipped", retries: 0, maxRetries: 2 }, {
-    type: "ISSUE_42.WIP",
-    at: 14,
-  }).type,
+  step(
+    { type: "shipped", retries: 0, maxRetries: 2 },
+    {
+      type: "ISSUE_42.WIP",
+      at: 14,
+    },
+  ).type,
   "shipped",
 );
 eq(
@@ -138,7 +164,11 @@ const idle: UState = { type: "idle", tries: 0 };
 
 // one named cmd on an edge → one cmd in the SyncReturn tuple, `type` stamped
 const [sending, c1] = fire(idle, { type: "up.pick", key: "a/b.png" });
-eq("idle -pick-> sending", sending, { key: "a/b.png", tries: 0, type: "sending" });
+eq("idle -pick-> sending", sending, {
+  key: "a/b.png",
+  tries: 0,
+  type: "sending",
+});
 eq("…emits put_object", c1, [{ key: "a/b.png", type: "put_object" }]);
 
 // a LIST of names → n cmds, in declaration order

@@ -1,4 +1,5 @@
 // PROBE 1: a typo'd target state.
+// @expect-error: TS2820
 import { defineChart } from "../graph";
 export const g = defineChart({
   events: {

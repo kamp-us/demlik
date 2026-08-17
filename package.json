@@ -248,6 +248,10 @@
       "types": "./dist/parity/index.d.ts",
       "import": "./dist/parity/index.js"
     },
+    "./chart": {
+      "types": "./dist/chart/index.d.ts",
+      "import": "./dist/chart/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -261,6 +265,7 @@
     "docs:reference:check": "pnpm run docs:reference && git diff --exit-code -- docs/reference",
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
     "verify-exports": "node scripts/verify-exports.mjs",
+    "check:chart-probes": "node scripts/check-chart-probes.mjs",
     "release": "changeset"
   },
   "dependencies": {

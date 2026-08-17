@@ -7,7 +7,8 @@
 // COMPILES: one rest signature over a union of tuples has no dependent return
 // type, so the clamp is the union of both sites' `to`. Written per site, each
 // entry is clamped to its own `to` and tsc names the offending literal.
-import type { PG, PMsg, PState } from "../assert";
+// @expect-error: TS2322
+import type { PG, PMsg, PState } from "../assert.test-d";
 import type { Cells } from "../graph";
 export const bad: Cells<PG, PState, PMsg> = {
   decide: {
