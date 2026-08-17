@@ -28,6 +28,23 @@
 //      that matters going forward.
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The test program's mirror of `vitest.config.ts`'s alias: a test may import
+    // the PUBLISHED specifier (`src/export-map-alias.test.ts` does, because that
+    // is the only way to exercise the alias at all), and tsc has no `dist/` to
+    // resolve it against. Both subpath SHAPES are listed and tried in order —
+    // `x/index.ts` for a directory module, then bare `x` for a flat one — which
+    // is the same fact `vitest.config.ts` reads off `exports`, said in the one
+    // vocabulary tsc has for it. The second entry is deliberately EXTENSIONLESS:
+    // it hands the extension back to tsc's own resolver, which is what lets
+    // `extension/react` land on `react.tsx` (spelling `./src/*.tsx` explicitly
+    // makes tsc 5.7.3 abort with an internal `Debug Failure`). Shipped code never
+    // imports the specifier, so this is scoped to the test program deliberately.
+    "paths": {
+      "@demlik/tea": ["./src/index.ts"],
+      "@demlik/tea/*": ["./src/*/index.ts", "./src/*"]
+    }
+  },
   "include": ["src"],
   "exclude": [
     "dist",
