@@ -15,8 +15,8 @@ import { compile, initFrom } from "./compile";
 import {
   type CmdOf,
   type Cmds,
+  type MsgIn,
   type MsgOf,
-  type Namespaced,
   type StateOf,
   defineChart,
   ty,
@@ -96,21 +96,25 @@ export const uCmds: Cmds<UG, UState, UMsg> = {
   alert_human: (s, m) => ({ reason: `${s.key} dead after ${s.tries}: ${m.error}` }),
 };
 
-export const uploader = compile<UG, UState, UMsg, UCmd, "up">(upload, "up", {
-  assign: {
-    "idle.pick": (s, m) => ({ key: m.key, tries: s.tries }),
-    "sending.done": (s, m) => ({ key: s.key, etag: m.etag, tries: s.tries }),
-    "sending.fail": {
-      then: (s) => ({ tries: s.tries + 1 }),
-      else: (s) => ({ tries: s.tries }),
+export const uploader = compile(
+  upload,
+  {
+    assign: {
+      "idle.pick": (s, m) => ({ key: m.key, tries: s.tries }),
+      "sending.done": (s, m) => ({ key: s.key, etag: m.etag, tries: s.tries }),
+      "sending.fail": {
+        then: (s) => ({ tries: s.tries + 1 }),
+        else: (s) => ({ tries: s.tries }),
+      },
+      "checking.ok": (s) => ({ tries: s.tries }),
     },
-    "checking.ok": (s) => ({ tries: s.tries }),
+    guards: { hasBudget: (s) => s.tries < 3 },
+    cmds: uCmds,
   },
-  guards: { hasBudget: (s) => s.tries < 3 },
-  cmds: uCmds,
-});
+  "up",
+);
 
-export type UMsgIn = Namespaced<UMsg, "up">;
+export type UMsgIn = MsgIn<UG, "up">;
 
 export const uploadMachine = defineMachine<
   UState,

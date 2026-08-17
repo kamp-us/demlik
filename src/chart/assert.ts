@@ -21,8 +21,8 @@ import {
   type InitialState,
   type MissingAt,
   type MissingPairs,
+  type MsgIn,
   type MsgOf,
-  type Namespaced,
   type ParkingState,
   type ResumeTargets,
   type StateName,
@@ -311,7 +311,7 @@ export type A26 = Assert<
 export type A27 = Assert<Eq<ParkingState<UG>, never>>;
 
 export type A28 = Assert<
-  Eq<typeof uploader, Transitions<UState, Namespaced<UMsg, "up">, UCmd>>
+  Eq<typeof uploader, Transitions<UState, MsgIn<UG, "up">, UCmd>>
 >;
 // every name reachable from ANY edge, through `cmd` (scalar OR list) and
 // through `otherwiseCmd` — and it agrees with the `cmds` DECLARATION, because
@@ -471,16 +471,20 @@ export const rGuardsSwitch: Guards<RG, RState, RMsg> = {
   },
 };
 
-export const retrier = compile<RG, RState, RMsg, Cmd<never>, "r">(retry, "r", {
-  assign: {
-    "fetching.TIMEOUT": {
-      then: (s) => ({ attempt: s.attempt + 1, url: s.url }),
-      else: (s) => ({ attempt: s.attempt }),
+export const retrier = compile(
+  retry,
+  {
+    assign: {
+      "fetching.TIMEOUT": {
+        then: (s) => ({ attempt: s.attempt + 1, url: s.url }),
+        else: (s) => ({ attempt: s.attempt }),
+      },
+      "parsing.CORRUPT": {
+        then: (s) => ({ attempt: s.attempt + 1, url: "refetch" }),
+        else: (s) => ({ attempt: s.attempt }),
+      },
     },
-    "parsing.CORRUPT": {
-      then: (s) => ({ attempt: s.attempt + 1, url: "refetch" }),
-      else: (s) => ({ attempt: s.attempt }),
-    },
+    guards: rGuards,
   },
-  guards: rGuards,
-});
+  "r",
+);

@@ -6,12 +6,15 @@ import type {
   Assigns,
   Chart,
   CmdName,
+  CmdOf,
   Cmds,
   GuardName,
   Guards,
   InitialData,
   InitialState,
-  Namespaced,
+  MsgIn,
+  MsgOf,
+  StateOf,
 } from "./graph";
 
 /** `undefined` → none; `"x"` → one; `["x","y"]` → both, in order. */
@@ -59,7 +62,7 @@ type RtNode = {
 type RtChart = {
   readonly events: Record<
     string,
-    { readonly scope: string | readonly string[] }
+    { readonly scope: string | readonly string[]; readonly foreign?: true }
   >;
   readonly states: Record<string, Record<string, RtNode>>;
 };
@@ -91,23 +94,33 @@ function scopeList(scope: string | readonly string[]): readonly string[] {
 /**
  * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
  *
- * `NS` namespaces the emitted table keys AND the Msg union at the type level:
- * the table is keyed `${ns}.${event}`, and the returned type is
- * `Transitions<S, Namespaced<M, NS>, C>` — a literal union, never `string`.
- * The parts are authored against the BARE msg union; the compiled cell strips
- * the namespace before calling them (Umut's `bareEvent`).
+ * `ns` is OPTIONAL and PER-EVENT. Omitted, nothing is decorated and the table
+ * is keyed by the bare event names — a single-instance machine carries no
+ * namespace and passes no dummy string. Given, the author's own events are
+ * keyed `${ns}.${event}` (so N instances share one dispatch surface with
+ * genuinely disjoint literal unions), while every event the chart marks
+ * `foreign: true` keeps its BARE name: a library-minted Msg like
+ * `deadline_exceeded` is the same event for every instance, and its name was
+ * never the author's to rename.
+ *
+ * The returned type is `Transitions<S, MsgIn<C, NS>, K>` — literal keys, never
+ * `string`. The parts are authored against the BARE msg union; the compiled
+ * cell restores the bare event name before calling them.
+ *
+ * `S`/`M`/`K` DEFAULT to the chart's own derivations, so the common call is
+ * `compile(chart, parts)` with no type arguments at all.
  */
 export function compile<
   const C extends Chart<C>,
-  S extends { type: string },
-  M extends { type: string },
-  K extends Cmd,
-  const NS extends string,
+  S extends { type: string } = StateOf<C>,
+  M extends { type: string } = MsgOf<C>,
+  K extends Cmd = CmdOf<C>,
+  const NS extends string | undefined = undefined,
 >(
   chart: C,
-  ns: NS,
   parts: Parts<C, S, M>,
-): Transitions<S, Namespaced<M, NS>, K> {
+  ns?: NS,
+): Transitions<S, MsgIn<C, NS>, K> {
   const c = chart as unknown as RtChart;
   const assign = parts.assign as unknown as Record<string, RtAssign>;
   const guards = (parts.guards ?? {}) as unknown as Record<
@@ -135,7 +148,9 @@ export function compile<
     const on = node.on ?? {};
 
     for (const e of events) {
-      const key = `${ns}.${e}`;
+      // the one runtime consequence of per-event namespacing.
+      const key =
+        ns === undefined || c.events[e]?.foreign === true ? e : `${ns}.${e}`;
       const spec = on[e];
 
       if (spec === undefined) {
@@ -213,9 +228,9 @@ export function compile<
   // ── THE ONE CAST ────────────────────────────────────────────────────────
   // Inside the library, at the construction boundary. `Transitions` is a
   // mapped type over `S["type"] × M["type"]`; the walk builds the same keys
-  // from the flattened chart × `${ns}.${event}`, but tsc cannot see that a
+  // from the flattened chart × the per-event keys, but tsc cannot see that a
   // string-keyed record built in a loop is total over those unions.
-  return table as unknown as Transitions<S, Namespaced<M, NS>, K>;
+  return table as unknown as Transitions<S, MsgIn<C, NS>, K>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

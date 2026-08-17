@@ -72,6 +72,7 @@ type IgnoreOf<X> = X extends { readonly ignore: readonly (infer I)[] }
 type DataOf<X> = X extends { readonly data: infer D } ? Payload<D> : unknown;
 type IsEndOf<X> = X extends { readonly end: true } ? true : false;
 type IsInitialOf<X> = X extends { readonly initial: true } ? true : false;
+type IsForeignOf<X> = X extends { readonly foreign: true } ? true : false;
 type ScopeOf<X> = X extends { readonly scope: infer S }
   ? S extends readonly string[]
     ? S[number]
@@ -166,6 +167,17 @@ export type Chart<C> = {
   readonly events: {
     readonly [E in keyof EvMap<C>]: {
       readonly data?: Ty<object>;
+      /**
+       * "This name is not mine." The Msg is minted by SOMEONE ELSE — a library
+       * Sub (`@demlik/tea/deadline` dispatching `deadline_exceeded`), a host
+       * bridge, another machine — so the author cannot rename it and the
+       * compiler must not decorate it. A foreign event keeps its BARE name in
+       * the emitted table under every namespace, which is what makes it the
+       * same event across all N instances. Everything else — payload, `scope`,
+       * totality, edges — is unchanged: it is a normal event that happens to
+       * belong to someone else.
+       */
+      readonly foreign?: true;
       // written out rather than aliased: tsc prints the alias NAME in the
       // diagnostic, and the author needs to see the phase names themselves
       // (and get tsc's "Did you mean …?" against them).
@@ -249,6 +261,18 @@ type Demand<S extends string, E extends string> = E extends string
 type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
 
 export type Total<C> = {
+  // A namespaced key IS `${ns}.${event}`, so a foreign name that already
+  // contains a dot is indistinguishable from one. Banning the dot on foreign
+  // names makes the collision unrepresentable for EVERY namespace at once,
+  // rather than deferring it to a per-`compile` check that only fires for the
+  // one namespace that happens to collide.
+  readonly events: {
+    readonly [E in keyof EvMap<C>]: [IsForeignOf<EvMap<C>[E]>] extends [true]
+      ? E extends `${string}.${string}`
+        ? { readonly __foreignEventNameCannotContainADot: E }
+        : unknown
+      : unknown;
+  };
   readonly states: {
     readonly [G in keyof Groups<C>]: {
       readonly [S in keyof Groups<C>[G]]: ([MissingAt<C, S>] extends [never]
@@ -381,13 +405,40 @@ export type CmdOf<C> = [CmdName<C>] extends [never]
       [N in CmdName<C>]: { readonly type: N } & Payload<CmdMap<C>[N]>;
     }[CmdName<C>];
 
-/** Namespace a Msg union at the TYPE level — stays a literal union, never `string`. */
-export type Namespaced<
-  M extends { type: string },
-  NS extends string,
-> = M extends unknown
-  ? Omit<M, "type"> & { readonly type: `${NS}.${M["type"]}` }
-  : never;
+/** The events the chart declares FOREIGN — the names that are not ours to decorate. */
+export type ForeignEvent<C> = Extract<
+  {
+    [E in EventName<C>]: [IsForeignOf<EvMap<C>[E]>] extends [true] ? E : never;
+  }[EventName<C>],
+  string
+>;
+
+/**
+ * How the compiled table keys event `E`. Namespacing is PER-EVENT, not
+ * per-machine: `NS` omitted (`undefined`) namespaces nothing, and a foreign
+ * event keeps its bare name even under a namespace. Everything stays a literal.
+ */
+// The foreign test comes FIRST, deliberately. `NS` is often an unresolved type
+// parameter (inside a `function make<const NS extends string>(ns: NS)` factory),
+// and a conditional on it stays deferred — which would leave even the foreign
+// key unresolved, so the library's own Msg would not be assignable to the
+// instance's Msg union inside the factory. Testing `E` first resolves the
+// foreign branch eagerly, whatever `NS` turns out to be.
+type KeyOf<C, NS extends string | undefined, E extends string> = E extends ForeignEvent<C>
+  ? E
+  : NS extends string
+    ? `${NS}.${E}`
+    : E;
+
+/**
+ * The Msg union AS THE COMPILED TABLE CONSUMES IT — the same derivation as
+ * `MsgOf`, with the keys the namespace produces. Two namespaces give genuinely
+ * disjoint literal unions for the author's OWN events, while the foreign events
+ * are literally shared, because they are the same event.
+ */
+export type MsgIn<C, NS extends string | undefined = undefined> = {
+  [E in EventName<C>]: { readonly type: KeyOf<C, NS, E> } & DataOf<EvMap<C>[E]>;
+}[EventName<C>];
 
 // ── 9. the parts the chart cannot own ──────────────────────────────────────
 type Narrow<U, K> = Extract<U, { type: K }>;

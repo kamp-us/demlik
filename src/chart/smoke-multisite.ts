@@ -2,10 +2,10 @@
 // from two edges, and the compiled cell must hand it the right `at` tag at each
 // one — the tag the type system correlates on has to be the tag the walk passes.
 import { type Cmd, applyCell } from "../pure/core";
-import { type RMsg, type RState, retrier } from "./assert";
-import type { Namespaced } from "./graph";
+import { type RG, type RState, retrier } from "./assert";
+import type { MsgIn } from "./graph";
 
-type M = Namespaced<RMsg, "r">;
+type M = MsgIn<RG, "r">;
 const machine = { update: retrier as object, __form: "transitions" as const };
 const step = (s: RState, m: M): RState =>
   applyCell<RState, M, Cmd<never>>(machine, s, m)[0];

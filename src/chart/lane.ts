@@ -13,8 +13,8 @@ import {
   type Assigns,
   type CmdOf,
   type Guards,
+  type MsgIn,
   type MsgOf,
-  type Namespaced,
   type StateOf,
   defineChart,
   ty,
@@ -82,7 +82,7 @@ export type LaneState = StateOf<LaneG>;
 /** The BARE msg union — what the parts below are authored against. */
 export type LaneMsg = MsgOf<LaneG>;
 /** The namespaced msg union — what the compiled machine actually consumes. */
-export type LaneMsgIn<NS extends string> = Namespaced<LaneMsg, NS>;
+export type LaneMsgIn<NS extends string | undefined = undefined> = MsgIn<LaneG, NS>;
 export type LaneCmd = CmdOf<LaneG>;
 
 // ── the parts ───────────────────────────────────────────────────────────────
@@ -127,10 +127,7 @@ export const guards: Guards<LaneG, LaneState, LaneMsg> = {
 export function region<const NS extends string>(
   ns: NS,
 ): Transitions<LaneState, LaneMsgIn<NS>, LaneCmd> {
-  return compile<LaneG, LaneState, LaneMsg, LaneCmd, NS>(lane, ns, {
-    assign,
-    guards,
-  });
+  return compile(lane, { assign, guards }, ns);
 }
 
 export const issue42 = region("ISSUE_42");
