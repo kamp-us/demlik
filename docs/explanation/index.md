@@ -2,6 +2,9 @@
 
 Understanding-oriented compass for `@demlik/tea`. The decisions themselves live in the repo-wide [`.decisions/`](../../.decisions/index.md) — one global ADR sequence for this repo. This quadrant does not hold ADR files; it links out to them.
 
+- [Why charts keep their types](./why-charts-keep-their-types.md) — how
+  `@demlik/tea/chart` authors a machine as data without giving up narrowing: use-site
+  scanning, the `at` site tag, what totality buys, and the limits that remain.
 - [ADR 0001 — Resilience is built in-house, not installed](../../.decisions/0001-no-offtheshelf-resilience.md) — why the wrapper tier is hand-built, not an off-the-shelf library.
 - [ADR 0002 — A Durable-Object host layer, not a DO framework](../../.decisions/0002-do-host-layer.md) — the `@demlik/tea/do` host is composable functions, not a base class.
 - [ADR 0003 — The DO host targets event-sourced virtual actors](../../.decisions/0003-do-targets-event-sourced-virtual-actors.md) — the target the DO host layer is converging toward.
