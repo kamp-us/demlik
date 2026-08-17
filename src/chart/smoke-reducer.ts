@@ -8,7 +8,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { type Cmd, type Sub, formOf, msgKeysOf } from "../pure/core";
 import { defineMachine } from "../runtime-types";
-import { compileReducer, reducerInitFrom, reducerMermaid } from "./compile";
+import {
+  CellTargetError,
+  compileReducer,
+  reducerInitFrom,
+  reducerMermaid,
+} from "./compile";
 import { type CmdOf, type MsgIn, type MsgOf, type RCells, type RStateOf, defineReducerChart, ty } from "./graph";
 import {
   type RFDoFetch,
@@ -193,6 +198,65 @@ const decide: RCells<TG, RStateOf<TG>, MsgOf<TG>>["decide"] = (s, m, at) => {
 const twoC = compileReducer(two, { assign: {}, cells: { decide } });
 ok("two-site cell, site X", twoC.X({ n: 1, type: "a" }, { type: "X", lo: 5 })[0].type, "b");
 ok("two-site cell, site Y", twoC.Y({ n: 1, type: "b" }, { type: "Y", hi: "z" })[0].type, "a");
+
+// ── 7. the per-site form and the runtime `to` clamp, in the reducer form ──
+// Both fall out of the shared `buildCell`, so the reducer form gets the same
+// precision dial and the same net as the grid form, from the same code.
+const decideBySite: RCells<TG, RStateOf<TG>, MsgOf<TG>>["decide"] = {
+  X: (s, m) => [{ ...s, type: m.lo > 0 ? "b" : "a" }, []],
+  Y: (s) => [{ ...s, type: "a" }, []],
+};
+const bySiteC = compileReducer(two, { assign: {}, cells: { decide: decideBySite } });
+ok(
+  "per-site reducer cell, site X",
+  bySiteC.X({ n: 1, type: "a" }, { type: "X", lo: 5 })[0].type,
+  "b",
+);
+ok(
+  "per-site reducer cell, site Y",
+  bySiteC.Y({ n: 1, type: "b" }, { type: "Y", hi: "z" })[0].type,
+  "a",
+);
+
+// the FUNCTION form's residual hole — `b` is in `X`'s `to`, never in `Y`'s —
+// is closed at runtime here exactly as it is in the grid form.
+const liar = compileReducer(two, {
+  assign: {},
+  cells: { decide: ((s: RStateOf<TG>) => [{ ...s, type: "b" }, []]) as never },
+});
+let caught: unknown = "no throw";
+try {
+  liar.Y({ n: 1, type: "a" }, { type: "Y", hi: "z" });
+} catch (err) {
+  caught = err;
+}
+ok("reducer form throws CellTargetError too", caught instanceof CellTargetError, true);
+const ce = caught as CellTargetError;
+ok("…naming the event as the edge", ce.at, "Y");
+ok("…the cell", ce.cell, "decide");
+ok("…what it returned", ce.returned, "b");
+ok("…and what that edge declared", ce.declared, ["a"]);
+// the SAME cell at the OTHER site is legal — the check is per-EDGE.
+ok(
+  "…while `b` at site X is fine",
+  liar.X({ n: 1, type: "a" }, { type: "X", lo: 5 })[0].type,
+  "b",
+);
+// a per-site bag missing a site fails at compileReducer() with a named message.
+let missing = "no throw";
+try {
+  compileReducer(two, {
+    assign: {},
+    cells: { decide: { X: (s: RStateOf<TG>) => [{ ...s, type: "b" }, []] } as never },
+  });
+} catch (err) {
+  missing = err instanceof Error ? err.message : String(err);
+}
+ok(
+  "a per-site reducer bag missing a site fails at compileReducer()",
+  missing.includes('no entry for edge "Y"'),
+  true,
+);
 
 console.log(fails === 0 ? "\nALL OK" : `\n${fails} FAIL`);
 if (fails > 0) process.exitCode = 1;

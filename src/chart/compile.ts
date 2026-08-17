@@ -28,6 +28,40 @@ import type {
   UsedCmdName,
 } from "./graph";
 
+/**
+ * A cell returned a state OUTSIDE its edge's declared `to`.
+ *
+ * The escape hatch's bargain is that code may pick the target but only from the
+ * set the chart admits — otherwise the drawing stops being a truthful picture
+ * of the machine. For a SINGLE-site cell, and for the per-site form of a
+ * multi-site one, the clamp is a compile error and this never fires. For the
+ * function form of a MULTI-SITE cell it is the only enforcement there is: the
+ * return of one rest signature over a union of tuples cannot be made to depend
+ * on `at`, so the union of every site's `to` is the tightest static clamp
+ * available and this closes the difference at the moment it is violated.
+ *
+ * It sits inside `buildCell`, so BOTH chart forms — the grid and the reducer —
+ * get the same net from the same three lines.
+ */
+export class CellTargetError extends Error {
+  override readonly name = "CellTargetError";
+  readonly _tag = "CellTargetError" as const;
+  constructor(
+    public readonly at: string,
+    public readonly cell: string,
+    public readonly returned: string,
+    public readonly declared: readonly string[],
+  ) {
+    super(
+      `@demlik/tea: cell "${cell}" at edge "${at}" returned state ` +
+        `"${returned}", which is not among that edge's declared targets ` +
+        `[${declared.map((t) => `"${t}"`).join(", ")}] — either the cell is ` +
+        `wrong, or the edge's \`to\` is missing a target the code can reach ` +
+        `(in which case add it, so the chart still draws the whole fan-out).`,
+    );
+  }
+}
+
 /** `undefined` → none; `"x"` → one; `["x","y"]` → both, in order. */
 function cmdNames(ref: string | readonly string[] | undefined): readonly string[] {
   if (ref === undefined) return [];
@@ -86,6 +120,13 @@ type RtChart = {
 type RtState = { readonly type: string; readonly was?: string };
 type RtMsg = { readonly type: string };
 type RtCell = (s: RtState, m: RtMsg) => readonly [RtState, readonly Cmd[]];
+type RtCellFn = (
+  s: RtState,
+  m: RtMsg,
+  at: string,
+) => readonly [RtState, readonly Cmd[]];
+/** Either form: one body for every site, or one body PER site keyed by `at`. */
+type RtCellImpl = RtCellFn | Record<string, RtCellFn | undefined>;
 type RtFn = (s: RtState, m: RtMsg) => object;
 type RtAssign = RtFn | { readonly then: RtFn; readonly else: RtFn };
 
@@ -119,10 +160,7 @@ type RtParts = {
     string,
     ((s: RtState, m: RtMsg, at: string) => object) | undefined
   >;
-  readonly cells: Record<
-    string,
-    ((s: RtState, m: RtMsg, at: string) => readonly [RtState, readonly Cmd[]]) | undefined
-  >;
+  readonly cells: Record<string, RtCellImpl | undefined>;
 };
 
 function rtParts(parts: object): RtParts {
@@ -162,13 +200,31 @@ function buildCell(
   // it). The other fields are compile errors beside `cell`, so this branch is
   // not silently skipping anything.
   if (edge.cell !== undefined) {
-    const hand = p.cells[edge.cell];
-    if (hand === undefined) {
+    const name = edge.cell;
+    const impl = p.cells[name];
+    if (impl === undefined) {
       throw new Error(
-        `@demlik/tea: edge "${at}" names cell "${edge.cell}" with no implementation`,
+        `@demlik/tea: edge "${at}" names cell "${name}" with no implementation`,
       );
     }
-    return (st, nsMsg) => hand(st, { ...nsMsg, type: bare }, at);
+    // the two forms: one body for every site, or one body per site. A
+    // multi-site cell may be written either way (`Cells`/`RCells` offer both);
+    // a single-site one is always the plain function.
+    const hand = typeof impl === "function" ? impl : impl[at];
+    if (hand === undefined) {
+      throw new Error(
+        `@demlik/tea: cell "${name}" is written in the per-site form but has no entry for edge "${at}"`,
+      );
+    }
+    const to = edge.to ?? [];
+    return (st, nsMsg) => {
+      const out = hand(st, { ...nsMsg, type: bare }, at);
+      // the runtime half of the `to` clamp — see `CellTargetError`.
+      if (!to.includes(out[0].type)) {
+        throw new CellTargetError(at, name, out[0].type, to);
+      }
+      return out;
+    };
   }
 
   return (st, nsMsg) => {

@@ -24,6 +24,19 @@ const eq = (label: string, got: unknown, want: unknown): void => {
   console.log(`${g === w ? "ok  " : "FAIL"} ${label}  got=${g} want=${w}`);
 };
 
+/**
+ * The sorted event keys of one state's row in a compiled `Transitions` table.
+ * A typed lookup rather than a cast: the row genuinely may be absent, so say so
+ * once, here, instead of teaching every call site to ignore it.
+ */
+const rowKeys = (update: object, state: string): readonly string[] => {
+  const row = (update as Record<string, object | undefined>)[state];
+  if (row === undefined) {
+    throw new Error(`smoke-foreign: compiled table has no row for "${state}"`);
+  }
+  return Object.keys(row).sort();
+};
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
@@ -31,12 +44,8 @@ async function main(): Promise<void> {
   // ── the emitted key sets, side by side ───────────────────────────────────
   const a = jobWatcher("JOB_A");
   const b = jobWatcher("JOB_B");
-  const keysA = Object.keys(
-    (a.update as Record<string, object>).working,
-  ).sort();
-  const keysB = Object.keys(
-    (b.update as Record<string, object>).working,
-  ).sort();
+  const keysA = rowKeys(a.update, "working");
+  const keysB = rowKeys(b.update, "working");
   eq("A's `working` row is keyed per-event", keysA, [
     "JOB_A.FINISHED",
     "JOB_A.START",
@@ -54,7 +63,7 @@ async function main(): Promise<void> {
   );
   eq(
     "…and the un-namespaced compile is keyed bare",
-    Object.keys((solo as Record<string, object>).working).sort(),
+    rowKeys(solo, "working"),
     ["FINISHED", "START", "deadline_exceeded"],
   );
 
