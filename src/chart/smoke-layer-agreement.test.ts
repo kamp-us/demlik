@@ -109,6 +109,10 @@ it("a resume edge lands on `was`, and on its fallback when there is none", () =>
     { type: "PARK" },
   )[0];
   expect(parked).toEqual({ type: "hold", n: 7, was: "s2" });
+  // A `Transitions` cell returns the whole State union by contract, so narrow
+  // before feeding it to the next row — the same thing a real caller does.
+  if (parked.type !== "hold")
+    throw new Error(`expected hold, got ${parked.type}`);
   const back = parkingTable.hold.BACK(parked, { type: "BACK" })[0];
   expect(back).toEqual({ type: "s2", n: 7 });
 });
