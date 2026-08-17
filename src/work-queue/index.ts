@@ -37,8 +37,15 @@ import {
  * without `crypto.randomUUID`.
  */
 function genId(): string {
+  // Read `crypto` structurally rather than off the ambient global: under a
+  // Workers tsconfig (`types: ["@cloudflare/workers-types"]`, no DOM lib) the
+  // global is declared `const`, so it is not a property of `typeof globalThis`
+  // and `globalThis.crypto` fails to compile for the consumer.
+  const host = globalThis as {
+    crypto?: { randomUUID?: () => string };
+  };
   return (
-    globalThis.crypto?.randomUUID?.() ??
+    host.crypto?.randomUUID?.() ??
     `q_${Date.now()}_${Math.random().toString(36).slice(2)}`
   );
 }

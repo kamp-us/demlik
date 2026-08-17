@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "checkout-saga",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "CHECKOUT", "class_name": "CheckoutSaga" }]
+  },
+  "migrations": [{ "tag": "v1", "new_classes": ["CheckoutSaga"] }],
+  "observability": { "enabled": true }
+}

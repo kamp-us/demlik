@@ -4,6 +4,9 @@ node_modules
 # Build outputs
 dist
 
+# wrangler dev local state (miniflare's DO storage, caches, traces)
+.wrangler
+
 # Testing
 coverage
 
