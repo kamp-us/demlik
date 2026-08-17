@@ -252,6 +252,10 @@
       "types": "./dist/chart/index.d.ts",
       "import": "./dist/chart/index.js"
     },
+    "./chart/report": {
+      "types": "./dist/chart/report/index.d.ts",
+      "import": "./dist/chart/report/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

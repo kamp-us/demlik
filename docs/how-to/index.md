@@ -22,6 +22,13 @@ what you are trying to do, and it names the subpath you need.
   compile with a namespace so N instances share a dispatch surface, and mark
   library-minted events `foreign: true` so their names stay bare.
 
+## Read a running machine
+
+- [Report on a fabrika lane](./report-on-a-fabrika-lane.md) — import a
+  `workflow.json` into charts with `@demlik/tea/chart/report` and render a lane
+  as one markdown block (diagram, "waiting on", retry budget, timeline) that
+  reads the same in a terminal, a PR comment and an issue comment.
+
 ## Test and verify
 
 - [Replay a recorded run in a test](./replay-in-a-test.md) — assert what a machine

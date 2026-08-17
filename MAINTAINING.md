@@ -89,6 +89,7 @@ export is not done until it has a row here.
 | `./llm-call` | experimental | agent layer |
 | `./prediction` | experimental | client prediction |
 | `./chart` | experimental | machines authored as config; the type machinery IS the surface |
+| `./chart/report` | experimental | imports a fabrika `workflow.json` into charts and renders a lane as markdown; tracks an external tool's document format |
 
 ## Store factory per host
 

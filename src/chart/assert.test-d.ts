@@ -52,7 +52,9 @@ import {
   defineChart,
   defineReducerChart,
   type EdgeKey,
+  type EndPolarity,
   type Eq,
+  type ErrorFinal,
   type EventName,
   type GroupName,
   type GroupOf,
@@ -77,6 +79,7 @@ import {
   type RUsedCmdName,
   type StateName,
   type StateOf,
+  type SuccessFinal,
   ty,
   type UsedCmdName,
 } from "./graph";
@@ -1001,3 +1004,44 @@ export const computedKeyChart = defineChart({
   states: { only: { [STATE_A]: { initial: true, on: { X: "b" } }, b: {} } },
 });
 export type A103 = Assert<Eq<StateName<typeof computedKeyChart>, "a" | "b">>;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END POLARITY — a final's `true`/`"error"`, and the rules that must not
+// notice the difference.
+//
+// `end` widened from `true` to `true | "error"` so a chart can say WHICH ending
+// it reached. Two obligations follow, and both are pinned here rather than left
+// to the reader: the polarity must be READABLE off the chart (that is the whole
+// point), and every rule that keys off FINALITY must keep reading both spellings
+// (the regression that would otherwise land silently — an error final quietly
+// re-acquiring the totality obligation a success final is excused from, and
+// quietly re-acquiring the right to declare edges, which probe 49 pins).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// the polarity, read back off the one site it is declared at.
+export type A104 = Assert<Eq<EndPolarity<LaneG, "shipped">, true>>;
+export type A105 = Assert<Eq<EndPolarity<LaneG, "frozen">, "error">>;
+// a live state is not a final "with no polarity" — it is `false`.
+export type A106 = Assert<Eq<EndPolarity<LaneG, "review">, false>>;
+
+// the two terminal SETS, partitioned by polarity. `frozen` is the lane's whole
+// error surface, and `deriveStatus`'s trip is exactly this set being non-empty.
+export type A107 = Assert<Eq<SuccessFinal<LaneG>, "shipped">>;
+export type A108 = Assert<Eq<ErrorFinal<LaneG>, "frozen">>;
+
+// FINALITY IS BLIND TO POLARITY. `frozen` is `end: "error"` and still owes no
+// pair — if `IsEndOf` had kept testing `end: true` alone this would be the
+// `BLOCKED`/`UNBLOCKED` demand for a state that accepts nothing.
+export type A109 = Assert<Eq<MissingAt<LaneG, "frozen">, never>>;
+export type A110 = Assert<Eq<MissingAt<LaneG, "shipped">, never>>;
+export type A111 = Assert<Eq<MissingPairs<LaneG>, never>>;
+
+// backwards compatibility, stated as a type: a chart that never writes
+// `"error"` derives exactly what it derived before — every final is a success
+// final and the error set is empty.
+const successOnly = defineChart({
+  events: { X: { scope: "edges" } },
+  states: { only: { a: { initial: true, on: { X: "b" } }, b: { end: true } } },
+});
+export type A112 = Assert<Eq<SuccessFinal<typeof successOnly>, "b">>;
+export type A113 = Assert<Eq<ErrorFinal<typeof successOnly>, never>>;

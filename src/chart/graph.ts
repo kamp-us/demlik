@@ -74,7 +74,13 @@ type IgnoreOf<X> = X extends { readonly ignore: readonly (infer I)[] }
   ? Extract<I, string>
   : never;
 type DataOf<X> = X extends { readonly data: infer D } ? Payload<D> : unknown;
-type IsEndOf<X> = X extends { readonly end: true } ? true : false;
+// A final is a final whatever its POLARITY: `end: true` (success) and
+// `end: "error"` (the failure terminal) are both "accepts nothing, owes
+// nothing". Every rule that keys off finality — `MissingAt`'s exemption,
+// `Total`'s `__endStateCannotDeclareEdges` — must therefore read BOTH, or an
+// error final silently regains the totality obligation a success final is
+// excused from and regains the right to declare edges.
+type IsEndOf<X> = X extends { readonly end: true | "error" } ? true : false;
 type IsInitialOf<X> = X extends { readonly initial: true } ? true : false;
 type IsForeignOf<X> = X extends { readonly foreign: true } ? true : false;
 type ScopeOf<X> = X extends { readonly scope: infer S }
@@ -243,7 +249,21 @@ export type Chart<C> = {
         };
         /** Per-state exception: refuse a live event by name. */
         readonly ignore?: readonly EventName<C>[];
-        readonly end?: true;
+        /**
+         * Terminal, and WITH WHICH POLARITY.
+         *
+         * `true` is the success final — the meaning it has always had, so every
+         * chart written before this field widened is unchanged. `"error"` is
+         * the failure final: the state a guarded edge falls through to when its
+         * guard is spent (`frozen`, `tripped`), which a driver reads to trip the
+         * whole run rather than to call it done.
+         *
+         * Both are finals in every structural sense — no obligations, no edges.
+         * The difference is not "is this the end" but "which end", and it is
+         * declared here because it is a fact ABOUT THE STATE, not a fact about
+         * the one edge that happens to reach it.
+         */
+        readonly end?: true | "error";
       };
     };
   };
@@ -547,6 +567,36 @@ export type CellEdgeKey<C> = Extract<
 export type InitialState<C> = Extract<
   {
     [S in StateName<C>]: [IsInitialOf<NodeAt<C, S>>] extends [true] ? S : never;
+  }[StateName<C>],
+  string
+>;
+
+/**
+ * `S`'s terminal polarity, as data: `true` (success final), `"error"` (failure
+ * final) or `false` (not a final at all).
+ *
+ * Read off the ONE site the polarity is declared at, so a drawing, a driver and
+ * a status derivation cannot disagree about which finals mean "done" and which
+ * mean "tripped".
+ */
+export type EndPolarity<C, S> = [IsEndOf<NodeAt<C, S>>] extends [true]
+  ? NodeAt<C, S> extends { readonly end: "error" }
+    ? "error"
+    : true
+  : false;
+
+/** Every state the chart declares a SUCCESS final. */
+export type SuccessFinal<C> = Extract<
+  {
+    [S in StateName<C>]: [EndPolarity<C, S>] extends [true] ? S : never;
+  }[StateName<C>],
+  string
+>;
+
+/** Every state the chart declares an ERROR final — the tripped terminals. */
+export type ErrorFinal<C> = Extract<
+  {
+    [S in StateName<C>]: [EndPolarity<C, S>] extends ["error"] ? S : never;
   }[StateName<C>],
   string
 >;

@@ -62,6 +62,7 @@ export default defineConfig({
     "pure/index": "src/pure/index.ts",
     "parity/index": "src/parity/index.ts",
     "chart/index": "src/chart/index.ts",
+    "chart/report/index": "src/chart/report/index.ts",
   },
   format: ["esm"],
   dts: true,

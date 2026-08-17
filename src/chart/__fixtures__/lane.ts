@@ -74,10 +74,14 @@ export const lane = defineChart({
         on: { UNBLOCKED: { resume: { fallback: "queued" } } },
       },
     },
-    // terminal: declared, not inferred from "has no outgoing edges".
+    // terminal: declared, not inferred from "has no outgoing edges" — and with
+    // its POLARITY, because `shipped` and `frozen` are not the same ending.
+    // `frozen` is where the one guarded edge falls through when the retry
+    // budget is spent, which is what trips the whole lane; a chart that spelled
+    // both `end: true` could not tell the driver which of the two it reached.
     done: {
       shipped: { end: true },
-      frozen: { end: true },
+      frozen: { end: "error" },
     },
   },
 });
