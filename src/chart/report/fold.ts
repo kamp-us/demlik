@@ -294,23 +294,93 @@ export function timeline(
 }
 
 /**
+ * Where one phase stands. The four are exhaustive over a phase in a lane whose
+ * log has been folded, and they are POSITIONAL rather than local: a phase whose
+ * tasks all happen to be final is `"waiting"` if an earlier phase stopped the
+ * lane before it could have run.
+ */
+export type PhaseStanding = "complete" | "tripped" | "active" | "waiting";
+
+/** One phase, and where it stands after the fold. */
+export interface PhaseStand {
+  readonly name: string;
+  /** Its position in the sequence — the phase order, as a number. */
+  readonly index: number;
+  readonly tasks: readonly string[];
+  readonly standing: PhaseStanding;
+  /** The tasks in this phase that landed on an ERROR final. */
+  readonly tripped: readonly string[];
+}
+
+/** Every task at an error final — the `errors` list, one declaration site. */
+export function trippedTasks(
+  lane: ImportedLane,
+  states: Readonly<Record<string, TaskState>>,
+): readonly string[] {
+  return Object.keys(states).filter(
+    (taskId) => endPolarityOf(nodeOf(lane, taskId, states)) === "error",
+  );
+}
+
+/**
+ * THE PHASE WALK — the one loop that decides which phase is running, which are
+ * behind it, and which never got to start.
+ *
+ * It is fabrika's `deriveStatus` loop, factored out rather than copied: walk
+ * phases in order, the first whose tasks are not ALL final is the active one
+ * and the walk stops; a phase that IS all final but holds an error final trips
+ * the lane and the walk stops there instead; everything after a stop is
+ * `"waiting"`, whatever its tasks happen to read.
+ *
+ * That last clause is the whole reason this is positional. `foldLane` boots
+ * every task of every phase, so a later phase's region can sit in a final
+ * before its phase ever ran — a child the board abandoned boots straight into
+ * an error final, which is exactly the case fabrika's emitter produces. Read
+ * locally, that phase looks "tripped". Read in sequence, it is a phase that
+ * never started, and the lane tripped somewhere else.
+ *
+ * {@link deriveLaneStatus} and the report both read this, so the compound state
+ * value and the phase headings cannot disagree about what is running.
+ */
+export function phaseStandings(
+  lane: ImportedLane,
+  states: Readonly<Record<string, TaskState>>,
+): readonly PhaseStand[] {
+  const isFinal = (taskId: string): boolean =>
+    endPolarityOf(nodeOf(lane, taskId, states)) !== false;
+  const errors = trippedTasks(lane, states);
+  let stopped = false;
+  return lane.phases.map((phase, index) => {
+    const tripped = phase.tasks.filter((taskId) => errors.includes(taskId));
+    const base = { name: phase.name, index, tasks: phase.tasks, tripped };
+    if (stopped) return { ...base, standing: "waiting" as const };
+    if (!phase.tasks.every(isFinal)) {
+      stopped = true;
+      return { ...base, standing: "active" as const };
+    }
+    if (tripped.length > 0) {
+      stopped = true;
+      return { ...base, standing: "tripped" as const };
+    }
+    return { ...base, standing: "complete" as const };
+  });
+}
+
+/**
  * The whole "compound machine", as a pure derivation.
  *
  * The active phase is the first whose tasks are not all final; a COMPLETED
  * phase holding a task in an error final trips the workflow. That is fabrika's
  * `noErrors` gate — never a machine event, and here it reads the chart's
  * `end: "error"` polarity, which is the same fact the document's guarded
- * fallthrough declared.
+ * fallthrough declared. The walk itself is {@link phaseStandings}, so the
+ * status and the drawing are one derivation seen twice.
  */
 export function deriveLaneStatus(
   lane: ImportedLane,
   states: Readonly<Record<string, TaskState>>,
 ): LaneStatus {
-  const isFinal = (taskId: string): boolean =>
-    endPolarityOf(nodeOf(lane, taskId, states)) !== false;
-  const errors = Object.keys(states).filter(
-    (taskId) => endPolarityOf(nodeOf(lane, taskId, states)) === "error",
-  );
+  const errors = trippedTasks(lane, states);
 
   const context: Record<string, unknown> = {};
   for (const [taskId, state] of Object.entries(states)) {
@@ -322,20 +392,11 @@ export function deriveLaneStatus(
   }
   context.errors = errors;
 
-  let active: ImportedLane["phases"][number] | undefined;
-  for (const phase of lane.phases) {
-    if (!phase.tasks.every(isFinal)) {
-      active = phase;
-      break;
-    }
-    if (phase.tasks.some((taskId) => errors.includes(taskId))) {
-      return {
-        stateValue: lane.terminals.tripped,
-        status: "done",
-        context,
-      };
-    }
+  const stands = phaseStandings(lane, states);
+  if (stands.some((stand) => stand.standing === "tripped")) {
+    return { stateValue: lane.terminals.tripped, status: "done", context };
   }
+  const active = stands.find((stand) => stand.standing === "active");
   if (active === undefined) {
     return { stateValue: lane.terminals.complete, status: "done", context };
   }
@@ -345,8 +406,8 @@ export function deriveLaneStatus(
       active.tasks.map((taskId) => [taskId, states[taskId]?.type ?? "?"]),
     ),
   };
-  for (const phase of lane.phases.slice(lane.phases.indexOf(active) + 1)) {
-    stateValue[phase.name] = "waiting";
+  for (const stand of stands.slice(active.index + 1)) {
+    stateValue[stand.name] = "waiting";
   }
   return { stateValue, status: "active", context };
 }

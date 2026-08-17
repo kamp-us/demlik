@@ -36,7 +36,14 @@ type RtNode = {
   readonly data?: object;
   readonly on?: Record<string, RtEdge>;
   readonly ignore?: readonly string[];
-  readonly end?: true;
+  // BOTH POLARITIES. `end: true` (reached the goal) and `end: "error"` (stopped
+  // because it failed) are both finals — `graph.ts`'s `IsEndOf` reads the pair,
+  // and `end-polarity.test.ts` pins the two runtime sites that used to read
+  // only `=== true`. This was the third such site: an error final described
+  // here as `end: false` re-acquired the totality obligation, so a scoped event
+  // over it came back `undeclared` ("the chart's totality was bypassed")
+  // instead of refused — the loudest possible wrong answer.
+  readonly end?: true | "error";
 };
 type RtChart = {
   readonly ctx?: object;
@@ -158,8 +165,20 @@ export interface ChartStateInfo {
   readonly phase: string;
   /** `initial: true` — the entry state. Exactly one per machine-bearing chart. */
   readonly initial: boolean;
-  /** `end: true` — terminal by declaration, not by "has no outgoing edges". */
+  /**
+   * Terminal by DECLARATION, not by "has no outgoing edges" — `true` for both
+   * polarities, because both accept nothing and both owe nothing.
+   */
   readonly end: boolean;
+  /**
+   * WHICH ending. `true` a success final, `"error"` the failure terminal,
+   * `false` not a final at all.
+   *
+   * `end` answers "does this accept anything"; this answers "did the machine
+   * win or lose". A lane needs both and they are not the same question —
+   * `shipped` and `frozen` are equally terminal and are not the same outcome.
+   */
+  readonly endPolarity: false | true | "error";
   /** Carries a `resume` edge out of it, so the compiler injects `was` here. */
   readonly parking: boolean;
 }
@@ -280,7 +299,7 @@ function refusalAt(
   event: string,
 ): RefusalReason | undefined {
   if (node.on?.[event] !== undefined) return undefined;
-  if (node.end === true) return { kind: "end", state };
+  if (node.end !== undefined) return { kind: "end", state };
   const scope = scopeList(c.events[event]?.scope ?? "edges");
   const live = scope.includes("all") || scope.includes(phase);
   if (!live) return { kind: "out-of-scope", scope, phase };
@@ -337,7 +356,8 @@ export function describeChart<const C extends Chart<C>>(
       name: state,
       phase,
       initial: node.initial === true,
-      end: node.end === true,
+      end: node.end !== undefined,
+      endPolarity: node.end ?? false,
       parking: parking.has(state),
     });
     for (const event of events) {

@@ -43,6 +43,7 @@ describe("describeChart — the shape of the chart", () => {
       phase: "done",
       initial: false,
       end: true,
+      endPolarity: true,
       parking: false,
     });
     // `blocked` is parking because it carries a `resume` edge — a derivation
@@ -50,6 +51,24 @@ describe("describeChart — the shape of the chart", () => {
     expect(stateInfo(laneDesc, "blocked")?.parking).toBe(true);
     expect(stateInfo(laneDesc, "human:cp-approval")?.parking).toBe(true);
     expect(stateInfo(laneDesc, "queued")?.parking).toBe(false);
+  });
+
+  // BOTH POLARITIES ARE FINALS — the third runtime site that read `=== true`
+  // (the two in `compile.ts` are pinned by `end-polarity.test.ts`). Described
+  // as a non-final, `frozen` re-acquired the totality obligation, so an event
+  // live over it came back `undeclared` — "the chart's totality was bypassed",
+  // which is the loudest wrong answer the inspector can give.
+  it("reads an error final as final, and refuses over it for that reason", () => {
+    expect(stateInfo(laneDesc, "frozen")).toMatchObject({
+      end: true,
+      endPolarity: "error",
+    });
+    expect(stateInfo(laneDesc, "shipped")?.endPolarity).toBe(true);
+    expect(stateInfo(laneDesc, "queued")?.endPolarity).toBe(false);
+    expect(refusalAtState(laneDesc, "frozen", "WIP")).toEqual({
+      kind: "end",
+      state: "frozen",
+    });
   });
 
   it("derives the event alphabet with each event's scope and payload flag", () => {
