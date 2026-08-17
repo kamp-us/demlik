@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RUNTIME — the chart walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
+import { safeId, safeLabel } from "../machine-viz/mermaid-id";
 import { Cmd, NoCellError, type Reducer, type Transitions } from "../pure/core";
 import type {
   Assigns,
@@ -548,32 +549,123 @@ export function initFrom<
 // target, which is the whole point of declaring `to`. This reads the chart
 // directly and draws the full fan-out, no samples and no execution needed.
 // ═══════════════════════════════════════════════════════════════════════════
-export function chartMermaid<const C extends Chart<C>>(chart: C): string {
+
+/**
+ * Options for {@link chartMermaid}. Every field is optional and every default
+ * reproduces the drawing this function has always emitted — a flat node set,
+ * `direction TB`, no title, no highlight — so an existing caller is untouched.
+ *
+ * Shaped after `MachineVizOptions` (`../machine-viz`) where the two overlap
+ * (`direction`, `title`), because the two drawings are read side by side and a
+ * second spelling of the same knob is a fact said twice. What is NOT shared is
+ * `samples`: `toMermaid` needs them because it must EXECUTE a compiled cell to
+ * learn a target; the chart declares its targets, so there is nothing to
+ * resolve and nothing to sample.
+ */
+export interface ChartMermaidOptions {
+  /**
+   * Draw this state as the ACTIVE node — a `classDef`/`class` pair Mermaid
+   * renders with the highlight fill. Pass the live `state.type`. A name that is
+   * not in the chart is ignored rather than drawn as a phantom node.
+   */
+  readonly highlight?: string;
+  /**
+   * Draw each phase as a Mermaid COMPOSITE state (`state working { … }`).
+   *
+   * The chart groups its states into named phases and the flat drawing throws
+   * that away — which is the one structural fact `chartMermaid` knew and did
+   * not show. Off by default: turning it on changes the emitted text, and the
+   * drawing is something a reviewer approves rather than something that moves
+   * under them.
+   */
+  readonly phases?: boolean;
+  /** Mermaid layout direction. Default `"TB"`. */
+  readonly direction?: "TB" | "LR";
+  /** Optional title, emitted as a Mermaid front-matter `title:` block. */
+  readonly title?: string;
+}
+
+/** The CSS class Mermaid applies to the highlighted node. */
+const ACTIVE_CLASS = "teaActive";
+
+/**
+ * A node's declaration line, or `undefined` when the sanitized id already IS
+ * the name and the bare id carries the whole fact. Emitting the label only for
+ * a renamed node is what keeps the default drawing byte-identical for charts
+ * whose names were already Mermaid-safe.
+ */
+function nodeDecl(raw: string, indent: string): string | undefined {
+  const id = safeId(raw);
+  return id === raw ? undefined : `${indent}${id} : ${safeLabel(raw)}`;
+}
+
+export function chartMermaid<const C extends Chart<C>>(
+  chart: C,
+  opts: ChartMermaidOptions = {},
+): string {
   const c = chart as unknown as RtChart;
-  const lines = ["stateDiagram-v2", "  direction TB"];
-  for (const [s, { node }] of flatten(c)) {
-    if (node.initial === true) lines.push(`  [*] --> ${s}`);
+  const flat = flatten(c);
+  const lines: string[] = [];
+  if (opts.title !== undefined)
+    lines.push("---", `title: ${opts.title}`, "---");
+  lines.push("stateDiagram-v2", `  direction ${opts.direction ?? "TB"}`);
+
+  // Phases, as composite states. Declared BEFORE the edges so every node is
+  // already inside its phase by the time an arrow references it — Mermaid
+  // otherwise hoists the first mention to the top level.
+  if (opts.phases === true) {
+    for (const [group, members] of Object.entries(c.states)) {
+      lines.push(`  state ${safeId(group)} {`);
+      for (const s of Object.keys(members)) {
+        lines.push(nodeDecl(s, "    ") ?? `    ${safeId(s)}`);
+      }
+      lines.push("  }");
+    }
+  }
+
+  for (const [s, { node }] of flat) {
+    const from = safeId(s);
+    // A renamed node needs its human name shown once. In `phases` mode the
+    // declaration already went inside the composite block.
+    if (opts.phases !== true) {
+      const decl = nodeDecl(s, "  ");
+      if (decl !== undefined) lines.push(decl);
+    }
+    if (node.initial === true) lines.push(`  [*] --> ${from}`);
     for (const [e, spec] of Object.entries(node.on ?? {})) {
       const edge = typeof spec === "string" ? { target: spec } : spec;
       if (edge.cell !== undefined) {
         // one real edge per DECLARED target — the fan-out, labelled with the
         // cell that picks among them.
         for (const t of edge.to ?? []) {
-          lines.push(`  ${s} --> ${t} : ${e} / ${edge.cell}()`);
+          lines.push(
+            `  ${from} --> ${safeId(t)} : ${safeLabel(`${e} / ${edge.cell}()`)}`,
+          );
         }
       } else if (edge.resume !== undefined) {
-        lines.push(`  ${s} --> ${edge.resume.fallback} : ${e} (resume)`);
+        lines.push(
+          `  ${from} --> ${safeId(edge.resume.fallback)} : ${safeLabel(`${e} (resume)`)}`,
+        );
       } else {
         if (edge.target !== undefined)
-          lines.push(`  ${s} --> ${edge.target} : ${e}`);
+          lines.push(`  ${from} --> ${safeId(edge.target)} : ${safeLabel(e)}`);
         if (edge.otherwise !== undefined) {
           lines.push(
-            `  ${s} --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`,
+            `  ${from} --> ${safeId(edge.otherwise)} : ${safeLabel(`${e} [!${edge.when ?? ""}]`)}`,
           );
         }
       }
     }
-    if (node.end === true) lines.push(`  ${s} --> [*]`);
+    if (node.end === true) lines.push(`  ${from} --> [*]`);
+  }
+
+  // The highlight, last: a `classDef` must exist before the `class` line that
+  // uses it, and both must sit outside any composite block.
+  if (opts.highlight !== undefined && flat.has(opts.highlight)) {
+    lines.push(
+      `  classDef ${ACTIVE_CLASS} fill:#2f81f7,stroke:#2f81f7,color:#fff,font-weight:bold`,
+      `  class ${safeId(opts.highlight)} ${ACTIVE_CLASS}`,
+    );
   }
   return lines.join("\n");
 }
