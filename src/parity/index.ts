@@ -1,26 +1,30 @@
-// ---------------------------------------------------------------------------
-// parity — the record → replay → normalized-diff go/no-go gate.
-//
-// The parity spike proved the mechanism already composes from in-tree
-// primitives: `recorder` captures a run's Msg sequence (the recording), `replay`
-// re-folds it purely, and `trace-replay`'s order-insensitive deep-equal diffs
-// the result. Non-determinism is a RECORD-TIME property — ids/timestamps freeze
-// into the recording, `replay` never re-mints them — so the same recording
-// replays byte-identical every time.
-//
-// This module is the thin packaging over that substrate plus the one genuinely
-// new helper, `normalizeForParity`: the finding-normalizer that strips
-// record-time non-determinism (generated ids/timestamps) and stable-key-sorts
-// collections, so an OLD-engine golden run and a NEW-engine run diff as equal
-// exactly when they are behaviourally equivalent. Every domain (audit, auth,
-// ingest, …) gets its old-vs-new parity check without reinventing the capture,
-// the normalization, and the diff.
-//
-//   recordRun(runtime)            → Recording        // wraps the recorder
-//   goldenReplay(machine, rec)    → State            // wraps replay
-//   normalizeForParity(schema)    → (finding) => norm // strip + stable-sort
-//   parityEqual(a, b)             → boolean           // normalized deep-equal
-// ---------------------------------------------------------------------------
+/**
+ * the record → replay → normalized-diff go/no-go gate.
+ *
+ * The parity spike proved the mechanism already composes from in-tree
+ * primitives: `recorder` captures a run's Msg sequence (the recording), `replay`
+ * re-folds it purely, and `trace-replay`'s order-insensitive deep-equal diffs
+ * the result. Non-determinism is a RECORD-TIME property — ids/timestamps freeze
+ * into the recording, `replay` never re-mints them — so the same recording
+ * replays byte-identical every time.
+ *
+ * This module is the thin packaging over that substrate plus the one genuinely
+ * new helper, `normalizeForParity`: the finding-normalizer that strips
+ * record-time non-determinism (generated ids/timestamps) and stable-key-sorts
+ * collections, so an OLD-engine golden run and a NEW-engine run diff as equal
+ * exactly when they are behaviourally equivalent. Every domain (audit, auth,
+ * ingest, …) gets its old-vs-new parity check without reinventing the capture,
+ * the normalization, and the diff.
+ *
+ * ```text
+ *   recordRun(runtime)            → Recording        // wraps the recorder
+ *   goldenReplay(machine, rec)    → State            // wraps replay
+ *   normalizeForParity(schema)    → (finding) => norm // strip + stable-sort
+ *   parityEqual(a, b)             → boolean           // normalized deep-equal
+ * ```
+ *
+ * @packageDocumentation
+ */
 
 import type { BootingRuntime, Cmd, Machine, Sub } from "../index";
 import { replay } from "../index";
