@@ -28,7 +28,7 @@ export const PAGE = `<!doctype html>
     border: 1px solid #2c343f; background: #1b222b; color: var(--ink); cursor: pointer;
   }
   button:hover:not(:disabled) { background: #222b35; }
-  button:disabled { opacity: .55; cursor: not-allowed; }
+  button:disabled { cursor: not-allowed; }
   button.kill {
     border-color: #7e3232; background: #35181c; color: #ffb4b4; font-size: 16px; padding: 10px 20px;
   }
@@ -44,15 +44,16 @@ export const PAGE = `<!doctype html>
   .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 18px; }
   .lane {
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    padding: 18px 18px 16px; transition: border-color .2s ease, box-shadow .2s ease, opacity .2s ease;
+    padding: 18px 18px 16px; transition: border-color .2s ease, box-shadow .2s ease;
   }
   .lane.dead {
     border-color: #7e3232; box-shadow: 0 0 0 1px #7e3232 inset, 0 0 28px -12px #e07a7a;
   }
   .lane.dead .stack, .lane.dead .dots, .lane.dead .facts { opacity: .45; }
+  .lane.revived { border-color: #2f6b46; box-shadow: 0 0 0 1px #2f6b46 inset, 0 0 28px -12px #7ec699; }
   .lane h2 { font-size: 15px; margin: 0 0 3px; letter-spacing: -0.005em; }
   .lane .sub { margin: 0 0 14px; font-size: 13px; color: var(--dim); min-height: 36px; }
-  .lane.dead .sub.hardened { color: #f0a5a5; font-weight: 600; }
+  .lane .sub.hardened { color: #f0a5a5; font-weight: 600; }
 
   .stack { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .st {
@@ -89,6 +90,8 @@ export const PAGE = `<!doctype html>
   .banner { border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
   .banner.good { background: #17291f; border: 1px solid #2f6b46; color: #a8dcbc; }
   .banner.bad  { background: #2a1719; border: 1px solid #7e3232; color: #f0a5a5; }
+  .banner.wait { background: #2a2417; border: 1px solid #6b5a2f; color: #e5cf9b; }
+  .banner.wait .spin { animation: pulse 1.4s ease-in-out infinite; display: inline-block; }
 
   .feed {
     background: #0c1015; border: 1px solid var(--line); border-radius: 9px;
@@ -101,23 +104,26 @@ export const PAGE = `<!doctype html>
     margin: 8px -12px; padding: 5px 12px; background: #7e3232; color: #fff;
     font-weight: 700; letter-spacing: .06em; text-align: center; border-radius: 2px;
   }
+  .feed .after { color: #a8dcbc; }
 
-  .shake { animation: shake .45s cubic-bezier(.36,.07,.19,.97); }
-  @keyframes shake {
-    10%,90% { transform: translateX(-2px) } 20%,80% { transform: translateX(4px) }
-    30%,50%,70% { transform: translateX(-7px) } 40%,60% { transform: translateX(7px) }
-  }
-  #flash {
-    position: fixed; inset: 0; background: #e07a7a; opacity: 0;
-    pointer-events: none; z-index: 9; transition: opacity .38s ease;
-  }
-  #flash.on { opacity: .3; transition: opacity .04s ease; }
   .hint { color: #6b7685; font-size: 13px; margin-top: 20px; }
   code { color: #b6c2d1; }
+
+  /*
+   * The kill is deliberately UNDRAMATIC: no shake, no flash, no animation on
+   * click. The information does the work — the button relabels, the cards go
+   * dead, the divider lands in the feed. The only motion left is the slow
+   * pulse marking "something is still pending", and it yields on request.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+  }
 </style>
 </head>
 <body>
-<div id="flash"></div>
 <main>
   <h1>What happens to your retries when the server dies</h1>
   <p class="lede">
@@ -137,9 +143,7 @@ export const PAGE = `<!doctype html>
   <div class="lanes">
     <section class="lane" id="lane-naive">
       <h2>A · The ordinary way</h2>
-      <p class="sub" id="sub-naive">
-        The retry is a timer held in the server's memory — a sleep inside a running function.
-      </p>
+      <p class="sub" id="sub-naive"></p>
       <div class="stack" data-stack="naive"></div>
       <div class="ladder">
         <div class="dots" data-dots="naive"></div>
@@ -156,9 +160,7 @@ export const PAGE = `<!doctype html>
 
     <section class="lane" id="lane-tea">
       <h2>B · With demlik/tea</h2>
-      <p class="sub" id="sub-tea">
-        The retry is written down — which attempt, and when the next one is due — so anything can pick it up.
-      </p>
+      <p class="sub" id="sub-tea"></p>
       <div class="stack" data-stack="tea"></div>
       <div class="ladder">
         <div class="dots" data-dots="tea"></div>
@@ -185,13 +187,42 @@ export const PAGE = `<!doctype html>
   var LANES = ["naive", "tea"];
   var MAX_ATTEMPTS = 4;
 
+  var SUB_BASE = {
+    naive: "The retry is a timer held in the server's memory — a sleep inside a running function.",
+    tea: "The retry is written down — which attempt, and when the next one is due — so anything can pick it up."
+  };
+  var SUB_DEAD = "Nothing is coming. The retry died with the process — the order says \\u201cretrying\\u2026\\u201d and will say it forever.";
+
   var q = function (s) { return document.querySelector(s); };
-  var crashAt = null;         // client-side instant of the explosion
-  var killed = false;
   var last = { naive: null, tea: null };
   var pollTimer = null;
 
+  // ── the crash is a FACT, not a transient ─────────────────────────────────
+  // It used to live in a closure variable, which meant every re-render (and
+  // every reload) forgot the explosion ever happened — the exact bug this demo
+  // is about, reproduced in the UI. So it gets written down, keyed by order,
+  // and every visual below is derived from it rather than set imperatively.
+  var crashedAt = null;
+  var killingUntil = 0;
+
+  function crashKey() { return "crash:" + order(); }
+  function loadCrash() {
+    var raw = null;
+    try { raw = sessionStorage.getItem(crashKey()); } catch (e) { raw = null; }
+    crashedAt = raw === null ? null : Number(raw);
+    if (crashedAt !== null && !isFinite(crashedAt)) crashedAt = null;
+  }
+  function saveCrash(ts) {
+    crashedAt = ts;
+    try { sessionStorage.setItem(crashKey(), String(ts)); } catch (e) {}
+  }
+  function forgetCrash() {
+    crashedAt = null;
+    try { sessionStorage.removeItem(crashKey()); } catch (e) {}
+  }
+
   LANES.forEach(function (lane) {
+    q("#sub-" + lane).textContent = SUB_BASE[lane];
     var stack = document.querySelector('[data-stack="' + lane + '"]');
     PHASES.forEach(function (p) {
       var d = document.createElement("div");
@@ -216,50 +247,67 @@ export const PAGE = `<!doctype html>
   }
   function clock(ms) { return new Date(ms).toISOString().slice(11, 19); }
 
-  // ── the explosion, client-side and INSTANT ───────────────────────────────
+  /** Has this lane produced any progress since the explosion? */
+  function progressedSinceCrash(s) {
+    if (crashedAt === null || !s) return false;
+    if (s.lastSeenAt && s.lastSeenAt > crashedAt) return true;
+    return (s.log || []).some(function (l) { return l.at > crashedAt; });
+  }
+
+  // ── the kill: recorded immediately, reported calmly ─────────────────────
+  // No shake, no flash. The viewer is told what happened in words and colour,
+  // and the telling survives every subsequent render.
   function detonate() {
-    crashAt = Date.now();
-    killed = true;
+    // Anchor the crash to the SERVER's clock, not the browser's: the divider
+    // is placed by comparing against server-stamped log entries, and a browser
+    // a few seconds off would otherwise file post-crash events before it.
+    // The newest event we had seen at kill time is exactly that boundary.
+    var anchor = Math.max(
+      (last.naive && last.naive.lastSeenAt) || 0,
+      (last.tea && last.tea.lastSeenAt) || 0
+    ) || Date.now();
+    saveCrash(anchor);
+    killingUntil = Date.now() + 600;
+    setTimeout(renderChrome, 650);
 
-    var flash = q("#flash");
-    flash.classList.add("on");
-    setTimeout(function () { flash.classList.remove("on"); }, 60);
-    document.querySelector("main").classList.add("shake");
-    setTimeout(function () { document.querySelector("main").classList.remove("shake"); }, 460);
-
-    var kill = q("#kill");
-    kill.disabled = true;
-    kill.classList.add("spent");
-    kill.textContent = "💥 killing…";
-    setTimeout(function () { kill.textContent = "☠️ isolate destroyed"; }, 500);
-
-    LANES.forEach(function (lane) {
-      q("#lane-" + lane).classList.add("dead");
-      var feed = document.querySelector('[data-feed="' + lane + '"]');
-      var boom = document.createElement("div");
-      boom.className = "boom";
-      boom.textContent = "💥 isolate destroyed — " + clock(crashAt);
-      feed.appendChild(boom);
-      feed.scrollTop = feed.scrollHeight;
-      setBanner(lane, "bad", "☠️ isolate destroyed — waiting to see who comes back");
-    });
+    LANES.forEach(function (lane) { renderLane(lane, last[lane]); });
     notice("Server destroyed. Watch which order keeps moving.", "#f0a5a5");
   }
 
-  function setBanner(lane, kind, text) {
+  /**
+   * Kill-button state, DERIVED — so neither a poll re-render nor a reload can
+   * revert it. killingUntil is the only transient, and it is a timestamp
+   * rather than a one-shot mutation, so recomputing is always safe.
+   */
+  function renderChrome() {
+    var kill = q("#kill");
+    if (crashedAt !== null) {
+      kill.disabled = true;
+      kill.classList.add("spent");
+      kill.textContent =
+        Date.now() < killingUntil ? "💥 killing…" : "☠️ isolate destroyed";
+    } else {
+      kill.disabled = false;
+      kill.classList.remove("spent");
+      kill.textContent = "💥 Kill the server";
+    }
+  }
+
+  function setBanner(lane, kind, html) {
     var host = document.querySelector('[data-banner="' + lane + '"]');
     host.innerHTML = "";
-    if (!text) return;
+    if (!html) return;
     var b = document.createElement("div");
     b.className = "banner " + kind;
-    b.textContent = text;
+    b.innerHTML = html;
     host.appendChild(b);
   }
 
-  // ── rendering ────────────────────────────────────────────────────────────
+  // ── rendering: a pure function of (crashedAt, server state) ──────────────
   function renderLane(lane, s) {
     if (!s) return;
     last[lane] = s;
+    var revived = progressedSinceCrash(s);
 
     PHASES.forEach(function (p) {
       q("#st-" + lane + "-" + p).classList.toggle("on", s.phase === p);
@@ -280,10 +328,15 @@ export const PAGE = `<!doctype html>
     var cd = document.querySelector('[data-cd="' + lane + '"]');
     if (s.terminal) {
       cd.textContent = s.phase === "settled" ? "done" : "finished (failed)";
+    } else if (crashedAt !== null && !revived && s.phase !== "idle") {
+      cd.textContent =
+        lane === "tea" ? "waiting for a fresh isolate…" : "no one is holding this";
     } else if (s.nextRetryAt !== null) {
       var left = Math.max(0, s.nextRetryAt - Date.now());
       cd.innerHTML = s.frozen
-        ? "next retry was due <b>" + (left === 0 ? "already" : "in " + (left / 1000).toFixed(1) + "s") + "</b> — but no one is holding it"
+        ? "next retry was due <b>" +
+          (left === 0 ? "already" : "in " + (left / 1000).toFixed(1) + "s") +
+          "</b> — but no one is holding it"
         : "next retry in <b>" + (left / 1000).toFixed(1) + "s</b>";
     } else if (s.phase === "idle") {
       cd.textContent = "not started";
@@ -296,21 +349,74 @@ export const PAGE = `<!doctype html>
       s.staleForMs === null ? "—" : (s.staleForMs / 1000).toFixed(1) + "s ago";
     q('[data-f="' + lane + '-ref"]').textContent = s.paymentRef || "—";
 
-    // Event feed: server log, with the client-side crash divider spliced in.
+    renderFeed(lane, s);
+
+    // ── card state + banner, both derived ─────────────────────────────────
+    var card = q("#lane-" + lane);
+    var sub = q("#sub-" + lane);
+    var dead = crashedAt !== null && !revived;
+    card.classList.toggle("dead", dead);
+    card.classList.toggle("revived", crashedAt !== null && revived && lane === "tea");
+
+    var frozenForGood = s.frozen && crashedAt !== null;
+    sub.classList.toggle("hardened", frozenForGood);
+    sub.textContent = frozenForGood ? SUB_DEAD : SUB_BASE[lane];
+
+    if (crashedAt === null) { setBanner(lane, "good", null); return; }
+
+    if (lane === "tea") {
+      if (revived && s.terminal) {
+        setBanner("tea", "good",
+          "✅ resumed from storage and finished — " + s.phase + " on attempt " + s.attempt);
+      } else if (revived) {
+        setBanner("tea", "good", "✅ resumed from storage at attempt " + s.attempt);
+      } else if (s.terminal) {
+        setBanner("tea", "good", "finished before the crash — " + s.phase);
+      } else {
+        // The gap between the kill and the alarm is real (~10-15s locally).
+        // Name it, so the silence reads as suspense rather than breakage.
+        setBanner("tea", "wait",
+          '<span class="spin">⏳</span> isolate destroyed — waiting for the Durable Object alarm to wake a fresh one…');
+      }
+      return;
+    }
+
+    if (s.frozen) {
+      setBanner("naive", "bad",
+        "☠️ frozen at attempt " + s.attempt + " — no timer, no alarm, nobody scheduled to continue");
+    } else if (s.terminal) {
+      setBanner("naive", revived ? "good" : "bad",
+        revived ? "finished — " + s.phase : "finished before the crash — " + s.phase);
+    } else {
+      setBanner("naive", "bad", "☠️ isolate destroyed");
+    }
+  }
+
+  /** The feed, with the crash divider spliced back in at its real position. */
+  function renderFeed(lane, s) {
     var feed = document.querySelector('[data-feed="' + lane + '"]');
     var atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 30;
     feed.innerHTML = "";
-    var wroteBoom = crashAt === null;
-    (s.log || []).forEach(function (l) {
-      if (!wroteBoom && l.at > crashAt) {
-        var boom = document.createElement("div");
-        boom.className = "boom";
-        boom.textContent = "💥 isolate destroyed — " + clock(crashAt);
-        feed.appendChild(boom);
-        wroteBoom = true;
-      }
+
+    var log = s.log || [];
+    if (!log.length && crashedAt === null) {
+      feed.textContent = "no events yet";
+      return;
+    }
+
+    var wroteBoom = crashedAt === null;
+    function boom() {
+      var b = document.createElement("div");
+      b.className = "boom";
+      b.textContent = "💥 isolate destroyed — " + clock(crashedAt);
+      feed.appendChild(b);
+      wroteBoom = true;
+    }
+
+    log.forEach(function (l) {
+      if (!wroteBoom && l.at > crashedAt) boom();
       var row = document.createElement("div");
-      row.className = "row";
+      row.className = "row" + (crashedAt !== null && l.at > crashedAt ? " after" : "");
       var t = document.createElement("span");
       t.className = "t"; t.textContent = clock(l.at);
       var x = document.createElement("span");
@@ -318,40 +424,9 @@ export const PAGE = `<!doctype html>
       row.appendChild(t); row.appendChild(x);
       feed.appendChild(row);
     });
-    if (!wroteBoom) {
-      var tail = document.createElement("div");
-      tail.className = "boom";
-      tail.textContent = "💥 isolate destroyed — " + clock(crashAt);
-      feed.appendChild(tail);
-    }
-    if (!s.log || !s.log.length) feed.textContent = "no events yet";
+    if (!wroteBoom) boom();
+
     if (atBottom) feed.scrollTop = feed.scrollHeight;
-
-    // Post-crash verdict.
-    var card = q("#lane-" + lane);
-    var sub = q("#sub-" + lane);
-    if (crashAt === null) return;
-
-    var movedSince = (s.log || []).some(function (l) { return l.at > crashAt; });
-    if (lane === "tea") {
-      if (movedSince || s.terminal) {
-        card.classList.remove("dead");
-        setBanner("tea", "good",
-          s.terminal
-            ? "✅ resumed from storage and finished — " + s.phase + " on attempt " + s.attempt
-            : "✅ resumed from storage at attempt " + s.attempt);
-      }
-    } else {
-      if (s.frozen) {
-        card.classList.add("dead");
-        sub.classList.add("hardened");
-        sub.textContent = "Nothing is coming. The retry died with the process — the order says \\u201cretrying\\u2026\\u201d and will say it forever.";
-        setBanner("naive", "bad", "☠️ frozen at attempt " + s.attempt + " — no timer, no alarm, nobody scheduled to continue");
-      } else if (s.terminal) {
-        card.classList.remove("dead");
-        setBanner("naive", "good", "finished — " + s.phase);
-      }
-    }
   }
 
   function inFlight(s) { return s && s.phase !== "idle" && !s.terminal && !s.frozen; }
@@ -364,13 +439,14 @@ export const PAGE = `<!doctype html>
       .then(function (d) {
         renderLane("naive", d.naive);
         renderLane("tea", d.tea);
+        renderChrome();
 
         var a = d.naive, b = d.tea;
         if (settledOrDead(a) && settledOrDead(b)) {
           // Both lanes are done moving. Stop polling entirely — the quiet is
           // part of the story.
           clearTimeout(pollTimer); pollTimer = null;
-          if (killed) {
+          if (crashedAt !== null) {
             notice("Lane B finished after the crash. Lane A never will. Polling stopped.", "var(--green)");
           }
           return;
@@ -386,6 +462,8 @@ export const PAGE = `<!doctype html>
 
   // ── controls ─────────────────────────────────────────────────────────────
   q("#start").onclick = function () {
+    forgetCrash();
+    renderChrome();
     fetch("/both/start?order=" + encodeURIComponent(order()), { method: "POST" })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -404,6 +482,7 @@ export const PAGE = `<!doctype html>
     // Fire the visuals BEFORE the request. The explosion is not something the
     // viewer should have to wait for a poll to believe.
     detonate();
+    renderChrome();
     fetch("/both/crash?order=" + encodeURIComponent(order()), { method: "POST" })
       .then(function () { schedule(250); })
       .catch(function () {
@@ -413,11 +492,21 @@ export const PAGE = `<!doctype html>
   };
 
   q("#reset").onclick = function () {
+    forgetCrash();
     fetch("/both/reset?order=" + encodeURIComponent(order()), { method: "POST" })
       .then(function () { location.reload(); })
       .catch(function () { location.reload(); });
   };
 
+  // Switching order id switches which crash we remember.
+  q("#order").oninput = function () {
+    loadCrash();
+    renderChrome();
+    schedule(0);
+  };
+
+  loadCrash();
+  renderChrome();
   schedule(0);
 })();
 </script>
