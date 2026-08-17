@@ -137,21 +137,51 @@ export type EdgeSpec<SN extends string, CN extends string> =
 // (one string per cell). See `.decisions` note in the report: forcing a
 // per-pair reconsideration on every new event *requires* |S| × |M| author-owned
 // sites — that is the one thing the two goals genuinely trade against.
-type ScopeRef<C> = "edges" | "all" | GroupName<C>;
+
+/** The `scope` field AS DECLARED — before the list is flattened to its members. */
+type ScopeDeclOf<X> = X extends { readonly scope: infer S } ? S : never;
+type ScopeElems<S> = S extends readonly (infer T)[] ? T : S;
 
 /**
- * The event's declared scope — with one guard. When some OTHER error in the
- * chart literal (a typo'd target, say) defeats inference of `C`, tsc falls back
- * to the constraint, where `scope` is the whole `ScopeRef<C>` universe. Left
+ * Is this event's `scope` something the AUTHOR wrote, or is it tsc's fallback?
+ *
+ * When some OTHER error in the chart literal (a typo'd target, say) defeats
+ * inference of `C`, tsc falls back to the `Chart<C>` constraint, where `scope`
+ * is the whole `"edges" | "all" | GroupName<C> | readonly (…)[]` universe. Left
  * alone that makes every event look live in every phase and buries the one real
- * diagnostic under a wall of spurious unhandled-pair demands. A scope that
- * spans the entire universe is not a scope, so it is read as no scope at all.
+ * diagnostic under a wall of spurious unhandled-pair demands.
+ *
+ * The fallback is recognised BY ITS SHAPE, not by what it happens to cover: it
+ * is the one form that is a union MIXING a string with a list, which no literal
+ * can produce. An author's scope is either a word (`"all"`) or a list
+ * (`["edges", "p"]`) — never both at once.
+ *
+ * The older test — "a scope that spans the entire universe is no scope" — was a
+ * proxy for this, and it misfired on the genuinely authored `["edges","all","p"]`:
+ * the type layer read it as NO scope (so `MissingPairs<C>` was `never` and the
+ * chart looked total) while `compile`'s `scopeList(…).includes("all")` read it as
+ * live everywhere and threw `NoCellError` on the first msg. Testing the shape
+ * instead makes the two layers agree by construction.
+ *
+ * A `string`-typed (non-literal) scope is also not authorable as a decision, so
+ * it keeps the old reading of "no scope".
  */
-type ScopeAt<C, E extends keyof EvMap<C>> = [ScopeRef<C>] extends [
-  ScopeOf<EvMap<C>[E]>,
-]
-  ? never
-  : ScopeOf<EvMap<C>[E]>;
+type IsAuthoredScope<X, S = ScopeDeclOf<X>> = [S] extends [string]
+  ? [string] extends [S]
+    ? false
+    : true
+  : [S] extends [readonly string[]]
+    ? [string] extends [ScopeElems<S>]
+      ? false
+      : true
+    : false;
+
+/** The event's declared scope, once it is established that it IS a declaration. */
+type ScopeAt<C, E extends keyof EvMap<C>> = [
+  IsAuthoredScope<EvMap<C>[E]>,
+] extends [true]
+  ? ScopeOf<EvMap<C>[E]>
+  : never;
 
 /** The events that are LIVE at `S` — i.e. that `S` owes a decision about. */
 type LiveAt<C, S> = {
@@ -258,6 +288,50 @@ type CellFieldConflict =
   | "otherwise"
   | "resume";
 
+/**
+ * A resume edge OWNS its transition the same way a cell edge does: the target
+ * is `st.was ?? fallback`, which is neither declared nor chosen by a guard. So
+ * every field that would ALSO decide the target is illegal alongside it, rather
+ * than accepted and then skipped by the walk — `buildCell` tests `edge.resume`
+ * first, so a `when` beside it is a guard the author writes, maintains and
+ * reads as load-bearing, and which is never once called.
+ *
+ * `cmd` is absent from this list deliberately: `EdgeSpec` admits `{ resume, cmd }`
+ * and the walk fires it, so it is a real, working field on a resume edge.
+ * `to`/`cell` are absent because `CellCheck` already names that conflict.
+ */
+type ResumeFieldConflict = "target" | "when" | "otherwise" | "otherwiseCmd";
+
+type ResumeCheck<X> = X extends { readonly resume: unknown }
+  ? [Extract<keyof X, ResumeFieldConflict>] extends [never]
+    ? unknown
+    : {
+        readonly __resumeEdgeCannotAlsoDeclare: Extract<
+          keyof X,
+          ResumeFieldConflict
+        >;
+      }
+  : unknown;
+
+/**
+ * `when` and `otherwise` are ONE fact — "this edge branches" — written in two
+ * halves, and half of it is not a decision, it is a hole.
+ *
+ * The two layers used to key the `{ then, else }` assign shape off different
+ * halves: `Cell<C, X, …>` off `X extends { target; otherwise }`, `buildCell`
+ * off `edge.when !== undefined`. Omit either field and they picked opposite
+ * shapes — the chart compiled and then died with `payloadFn is not a function`
+ * on the first message. Both layers now read `when`, and this makes the two
+ * halves inseparable, so there is no shape left on which they could disagree.
+ */
+type GuardPairCheck<X> = X extends { readonly when: string }
+  ? X extends { readonly otherwise: unknown }
+    ? unknown
+    : { readonly __whenNeedsAnOtherwiseTarget: true }
+  : X extends { readonly otherwise: unknown }
+    ? { readonly __otherwiseNeedsAWhenGuard: true }
+    : unknown;
+
 type CellCheck<X> = X extends { readonly cell: string }
   ? X extends { readonly to: readonly unknown[] }
     ? [Extract<keyof X, CellFieldConflict>] extends [never]
@@ -277,6 +351,8 @@ type EdgeCheck<X> = X extends string
   ? unknown
   : [Exclude<keyof X, KnownEdgeField>] extends [never]
     ? CellCheck<X> &
+        ResumeCheck<X> &
+        GuardPairCheck<X> &
         // `otherwiseCmd` is meaningless without a guard to have an "otherwise":
         // it would sit on an unguarded edge and silently never fire.
         (X extends { readonly otherwiseCmd: unknown }
@@ -286,7 +362,34 @@ type EdgeCheck<X> = X extends string
           : unknown)
     : { readonly __edgeHasUnknownField: Exclude<keyof X, KnownEdgeField> };
 
-type StrictNode<C, N> = {
+// ── unknown KEYS, at every level of the literal ────────────────────────────
+//
+// The same hole `KnownEdgeField` closes on an edge exists at the three levels
+// above it, and for the same reason: constraint checking is plain assignability
+// and `C` is inferred FROM the literal, so the literal's own typo is part of the
+// type it is checked against and excess-property checking has nothing to fire
+// on. `cxt: ty<…>()` was therefore a chart with no `ctx` — `CtxOf<C>` fell back
+// to `unknown`, `StateOf<C>` collapsed to bare `{ type }`, and every `assign`
+// builder was left owing nothing. The chart enforced LESS than a hand-written
+// table. Same shape for `foriegn` (the library event gets namespaced — exactly
+// what `foreign: true` exists to prevent), `dta`, `intial`, `evnets`.
+//
+// So: one rule per level, naming the offending key, the way the edge level does.
+type KnownChartField = "ctx" | "events" | "cmds" | "states";
+type KnownEventField = "data" | "foreign" | "scope";
+type KnownNodeField = "initial" | "data" | "on" | "ignore" | "end";
+
+type UnknownKeys<X, Known extends string> = Exclude<keyof X, Known>;
+
+type EventCheck<X> = [UnknownKeys<X, KnownEventField>] extends [never]
+  ? unknown
+  : { readonly __eventHasUnknownField: UnknownKeys<X, KnownEventField> };
+
+type NodeCheck<N> = [UnknownKeys<N, KnownNodeField>] extends [never]
+  ? unknown
+  : { readonly __stateNodeHasUnknownField: UnknownKeys<N, KnownNodeField> };
+
+type StrictNode<C, N> = NodeCheck<N> & {
   readonly on?: {
     readonly [E in keyof OnOf<N>]: E extends EventName<C>
       ? EdgeCheck<OnOf<N>[E]>
@@ -294,13 +397,48 @@ type StrictNode<C, N> = {
   };
 };
 
-export type Strict<C> = {
-  readonly states: {
-    readonly [G in keyof Groups<C>]: {
-      readonly [S in keyof Groups<C>[G]]: StrictNode<C, Groups<C>[G][S]>;
+// ── the DEGENERACY guard ───────────────────────────────────────────────────
+//
+// Every derivation in this file is a union of LITERALS. One computed key whose
+// type is the bare `string` —
+//
+//   const prefix = "a" as string;
+//   states: { only: { [prefix]: { … } } }
+//
+// — gives `states.only` an index signature, `StateName<C>` becomes `string`, and
+// every check downstream of it silently stops checking: a bogus `target` is
+// accepted, `EdgeKey<C>` degenerates, and `compile(g, { assign: {} })` demands
+// no builders at all. The chart is not weakened, it is switched OFF, and nothing
+// says so. A LITERAL computed key (`const NAME = "a"`) and a spread of another
+// object both keep their literal types and are unaffected.
+type IsDegenerate<N> = [string] extends [N] ? true : false;
+
+type LiteralAlphabets<C> = ([IsDegenerate<StateName<C>>] extends [true]
+  ? { readonly __stateNamesMustBeLiteralsNotAComputedStringKey: true }
+  : unknown) &
+  ([IsDegenerate<EventName<C>>] extends [true]
+    ? { readonly __eventNamesMustBeLiteralsNotAComputedStringKey: true }
+    : unknown) &
+  ([IsDegenerate<CmdName<C>>] extends [true]
+    ? { readonly __cmdNamesMustBeLiteralsNotAComputedStringKey: true }
+    : unknown) &
+  ([IsDegenerate<GroupName<C>>] extends [true]
+    ? { readonly __phaseNamesMustBeLiteralsNotAComputedStringKey: true }
+    : unknown);
+
+export type Strict<C> = LiteralAlphabets<C> &
+  ([UnknownKeys<C, KnownChartField>] extends [never]
+    ? unknown
+    : { readonly __chartHasUnknownField: UnknownKeys<C, KnownChartField> }) & {
+    readonly events: {
+      readonly [E in keyof EvMap<C>]: EventCheck<EvMap<C>[E]>;
+    };
+    readonly states: {
+      readonly [G in keyof Groups<C>]: {
+        readonly [S in keyof Groups<C>[G]]: StrictNode<C, Groups<C>[G][S]>;
+      };
     };
   };
-};
 
 // The diagnostic IS the property name: tsc reports the missing property
 // verbatim, so the author reads which pair and what the fixes are without
@@ -338,6 +476,15 @@ export type Total<C> = {
               Extract<MissingAt<C, S>, string>
             >]: never;
           }) &
+        // An edge key IS `${state}.${event}` and `Assigns` splits it at the
+        // FIRST dot, so a dotted state name re-partitions every key it appears
+        // in: `"a.b.X"` reads as state `"a"`, event `"b.X"`. It already failed
+        // closed, but with a diagnostic that named nothing (`Type '(s: any) =>
+        // …' is not assignable to type 'never'`). Same ban, same reason and now
+        // the same shape as `__foreignEventNameCannotContainADot`.
+        (Extract<S, string> extends `${string}.${string}`
+          ? { readonly __stateNameCannotContainADot: S }
+          : unknown) &
         // `end: true` means "accepts nothing" — it cannot also accept something.
         ([Extract<keyof On<C, S>, string>] extends [never]
           ? unknown
@@ -564,10 +711,27 @@ type Cell<C, X, S, M, From, Ev> = X extends { readonly resume: unknown }
       Ev,
       UnionToIntersection<Assigned<C, S, ResumeTargets<C, From>>>
     >
-  : X extends { readonly target: infer T; readonly otherwise: infer O }
+  : // THE SAME PREDICATE THE WALK USES. `buildCell` branches on
+    // `edge.when !== undefined`; so does this. `GuardPairCheck` makes `when`
+    // and `otherwise` inseparable, so on any chart that compiles the two arms
+    // below are both present — but the SHAPE is decided by one field read by
+    // both layers, not by two conditions that have to be kept in agreement.
+    X extends { readonly when: string }
     ? {
-        readonly then: Fn<S, M, From, Ev, Assigned<C, S, T>>;
-        readonly else: Fn<S, M, From, Ev, Assigned<C, S, O>>;
+        readonly then: Fn<
+          S,
+          M,
+          From,
+          Ev,
+          Assigned<C, S, X extends { readonly target: infer T } ? T : never>
+        >;
+        readonly else: Fn<
+          S,
+          M,
+          From,
+          Ev,
+          Assigned<C, S, X extends { readonly otherwise: infer O } ? O : never>
+        >;
       }
     : X extends { readonly target: infer T }
       ? Fn<S, M, From, Ev, Assigned<C, S, T>>
@@ -876,20 +1040,53 @@ type RStrictEdge<X> = X extends { readonly resume: unknown }
   ? { readonly __resumeNeedsAPhaseDimension: true }
   : EdgeCheck<X>;
 
-export type StrictR<C> = {
-  readonly on: {
-    readonly [E in keyof ROn<C>]: E extends EventName<C>
-      ? RStrictEdge<ROn<C>[E]>
-      : { readonly __onDeclaresAnUndeclaredEvent: E };
+/** The reducer form's key alphabet — `scope` has no meaning without phases. */
+type KnownReducerChartField =
+  | "ctx"
+  | "states"
+  | "initial"
+  | "events"
+  | "cmds"
+  | "on";
+type KnownReducerEventField = "data" | "foreign";
+
+type REventCheck<X> = [UnknownKeys<X, KnownReducerEventField>] extends [never]
+  ? unknown
+  : {
+      readonly __eventHasUnknownField: UnknownKeys<X, KnownReducerEventField>;
+    };
+
+export type StrictR<C> = ([IsDegenerate<RStateName<C>>] extends [true]
+  ? { readonly __stateNamesMustBeLiteralsNotAComputedStringKey: true }
+  : unknown) &
+  ([IsDegenerate<EventName<C>>] extends [true]
+    ? { readonly __eventNamesMustBeLiteralsNotAComputedStringKey: true }
+    : unknown) &
+  ([IsDegenerate<CmdName<C>>] extends [true]
+    ? { readonly __cmdNamesMustBeLiteralsNotAComputedStringKey: true }
+    : unknown) &
+  // the same unknown-key rule as the grid form, over this form's alphabet — a
+  // `cxt` typo here empties `RStateOf<C>` down to its bare tag exactly as it
+  // emptied `StateOf<C>` there.
+  ([UnknownKeys<C, KnownReducerChartField>] extends [never]
+    ? unknown
+    : {
+        readonly __chartHasUnknownField: UnknownKeys<C, KnownReducerChartField>;
+      }) & {
+    readonly on: {
+      readonly [E in keyof ROn<C>]: E extends EventName<C>
+        ? RStrictEdge<ROn<C>[E]>
+        : { readonly __onDeclaresAnUndeclaredEvent: E };
+    };
+    readonly events: {
+      readonly [E in keyof EvMap<C>]: REventCheck<EvMap<C>[E]> &
+        ([IsForeignOf<EvMap<C>[E]>] extends [true]
+          ? E extends `${string}.${string}`
+            ? { readonly __foreignEventNameCannotContainADot: E }
+            : unknown
+          : unknown);
+    };
   };
-  readonly events: {
-    readonly [E in keyof EvMap<C>]: [IsForeignOf<EvMap<C>[E]>] extends [true]
-      ? E extends `${string}.${string}`
-        ? { readonly __foreignEventNameCannotContainADot: E }
-        : unknown
-      : unknown;
-  };
-};
 
 /** Same contract as `defineChart`, one dimension smaller. */
 export function defineReducerChart<const C extends ReducerChart<C>>(
@@ -1005,9 +1202,10 @@ type RFn<S, M extends { type: string }, E, R> = (
   msg: Narrow<M, E>,
 ) => R;
 
+// `when`, for the same reason as the grid form's `Cell`: it is the field
+// `buildCell` — which serves BOTH forms — actually branches on.
 type RCell<C, X, S, M extends { type: string }, E> = X extends {
-  readonly target: unknown;
-  readonly otherwise: unknown;
+  readonly when: string;
 }
   ? {
       readonly then: RFn<S, M, E, RAssigned<C>>;

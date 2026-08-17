@@ -970,3 +970,31 @@ export type A80 = Assert<
     "X" | "Y" | "Z" | "deadline_exceeded"
   >
 >;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE DEGENERACY GUARD'S OTHER HALF — what it must NOT refuse.
+//
+// `Strict<C>` now refuses a chart whose `StateName`/`EventName`/`CmdName` has
+// collapsed to the bare `string`, because at that point every check downstream
+// has silently stopped checking (probe 46). The two shapes below LOOK like the
+// same mistake and are not: both keep full literal types, and both are the way
+// an author naturally factors a chart out of one literal. They are pinned here
+// so the guard cannot start eating them.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// (1) a chart spread from another object.
+const spreadBase = { events: { X: { scope: "edges" as const } } };
+export const spreadChart = defineChart({
+  ...spreadBase,
+  states: { only: { a: { initial: true, on: { X: "b" } }, b: {} } },
+});
+export type A101 = Assert<Eq<StateName<typeof spreadChart>, "a" | "b">>;
+export type A102 = Assert<Eq<EventName<typeof spreadChart>, "X">>;
+
+// (2) a LITERAL computed key for a state name.
+const STATE_A = "a";
+export const computedKeyChart = defineChart({
+  events: { X: { scope: "edges" } },
+  states: { only: { [STATE_A]: { initial: true, on: { X: "b" } }, b: {} } },
+});
+export type A103 = Assert<Eq<StateName<typeof computedKeyChart>, "a" | "b">>;

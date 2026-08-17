@@ -3,7 +3,7 @@
 //
 // The chart's guarantees are almost all compile-time, so the suite that proves
 // them is a directory of files that must NOT type-check. Nothing else in the
-// repo can check them: `tsconfig.json` excludes the directory (37 deliberate
+// repo can check them: `tsconfig.json` excludes the directory (48 deliberate
 // errors would otherwise break `pnpm typecheck`), and vitest never sees them.
 // A probe that silently stops erroring — because a derivation loosened, or the
 // chart it is written against drifted — is exactly the regression the probes
@@ -21,7 +21,7 @@
 //
 // Cost: ONE tsc invocation over the whole directory (`src/chart/__probes__/
 // tsconfig.json`, which extends the repo's own so the probes are checked under
-// the settings that actually ship), not one per file. ~0.7s for 37 probes vs
+// the settings that actually ship), not one per file. ~0.7s for 48 probes vs
 // ~25s serially.
 //
 // Run: node scripts/check-chart-probes.mjs
