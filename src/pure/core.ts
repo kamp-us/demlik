@@ -223,29 +223,36 @@ function stateNameOf(state: unknown): string {
   return "(untagged state)";
 }
 
-// === applyCell: THE single reducer-vs-transitions dispatch primitive ===
+// === lookupCell: THE single cell SELECTION, split from the invocation ===
 //
-// Applies the one update cell selected by `(formOf(machine), state, msg)` and
-// returns its `[nextState, cmds]` verbatim. Every site that steps a machine —
-// `run`'s applyUpdate, `foldUpdates` (replay/foldMsgs), the PBT fold runner,
-// and the withX wrappers — dispatches through THIS function, so production and
-// the verification tools agree on the update form by construction (#275).
-// Pure and dev-check-free: `deepFreeze`/`assertPureResult` stay at the call
-// sites that want them. A missing cell throws `NoCellError` (#276), never a
-// bare TypeError.
-export function applyCell<S, M extends { type: string }, C extends Cmd>(
+// The form-branching (`reducer` → flat `update[msg.type]`; `transitions` →
+// `update[state.type][msg.type]`) lives here and NOWHERE else. `applyCell`
+// (throwing) and `tryApplyCell` (`Result`-returning, in `../runtime-types`)
+// are both thin skins over this one selection, so the two error disciplines
+// can never disagree about WHICH cell a `(machine, state, msg)` triple picks
+// — the failure mode a second hand-written copy of the branching would have.
+//
+// Returns the selected cell (or `undefined` when there is none) together with
+// the `stateName` the `NoCellError` message needs — the caller decides whether
+// that absence becomes a throw or an `Err`.
+//
+// Pure and allocation-light: one small record per lookup, never a closure.
+export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
-): readonly [S, readonly C[]] {
+): {
+  readonly cell: ((state: S, msg: M) => readonly [S, readonly C[]]) | undefined;
+  readonly stateName: string;
+} {
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   if (formOf(machine) === "reducer") {
     const record = machine.update as Record<string, CellFn | undefined>;
     const cell = record[msg.type];
-    if (typeof cell !== "function") {
-      throw new NoCellError(msg.type, stateNameOf(state));
-    }
-    return cell(state, msg);
+    return {
+      cell: typeof cell === "function" ? cell : undefined,
+      stateName: stateNameOf(state),
+    };
   }
   const table = machine.update as Record<
     string,
@@ -258,9 +265,33 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
   // this line (#275).
   const stateKey = (state as unknown as { type: string }).type;
   const cell = table[stateKey]?.[msg.type];
-  if (typeof cell !== "function") {
-    throw new NoCellError(msg.type, String(stateKey));
-  }
+  return {
+    cell: typeof cell === "function" ? cell : undefined,
+    stateName: String(stateKey),
+  };
+}
+
+// === applyCell: THE single reducer-vs-transitions dispatch primitive ===
+//
+// Applies the one update cell selected by `lookupCell(machine, state, msg)` and
+// returns its `[nextState, cmds]` verbatim. Every site that steps a machine —
+// `run`'s applyUpdate, `foldUpdates` (replay/foldMsgs), the PBT fold runner,
+// and the withX wrappers — dispatches through THIS function, so production and
+// the verification tools agree on the update form by construction (#275).
+// Pure and dev-check-free: `deepFreeze`/`assertPureResult` stay at the call
+// sites that want them. A missing cell throws `NoCellError` (#276), never a
+// bare TypeError.
+//
+// The `Result`-returning twin is `tryApplyCell` (`@demlik/tea` root; it needs
+// `better-result`, which this pure leaf must not import). Both read the SAME
+// `lookupCell`, so "which cell" is decided once.
+export function applyCell<S, M extends { type: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+  msg: M,
+): readonly [S, readonly C[]] {
+  const { cell, stateName } = lookupCell<S, M, C>(machine, state, msg);
+  if (cell === undefined) throw new NoCellError(msg.type, stateName);
   return cell(state, msg);
 }
 
