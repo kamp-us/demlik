@@ -248,6 +248,10 @@
       "types": "./dist/parity/index.d.ts",
       "import": "./dist/parity/index.js"
     },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "import": "./dist/effect/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -267,6 +271,7 @@
     "better-result": "^2.5.2"
   },
   "peerDependencies": {
+    "effect": "^4.0.0-beta.92",
     "fast-check": "^3 || ^4",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19",
@@ -274,6 +279,9 @@
     "ws": "^8"
   },
   "peerDependenciesMeta": {
+    "effect": {
+      "optional": true
+    },
     "fast-check": {
       "optional": true
     },
@@ -299,6 +307,7 @@
     "@types/react": "19.0.8",
     "@types/react-dom": "19.0.3",
     "@types/ws": "8.5.14",
+    "effect": "4.0.0-beta.92",
     "fast-check": "^3.23.0",
     "happy-dom": "^20.9.0",
     "react": "19.0.0",
