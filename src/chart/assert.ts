@@ -143,7 +143,11 @@ type RetriesGuard = Guards<LaneG, LaneState, LaneMsg>["retriesRemaining"];
 export type A17 = Assert<
   Eq<
     Parameters<RetriesGuard>,
-    [state: Extract<LaneState, { type: "review" }>, msg: Extract<LaneMsg, { type: "FAIL" }>]
+    [
+      state: Extract<LaneState, { type: "review" }>,
+      msg: Extract<LaneMsg, { type: "FAIL" }>,
+      at: "review.FAIL",
+    ]
   >
 >;
 // the guarded edge's assign is a `{ then, else }` pair, each with ITS OWN
@@ -239,7 +243,11 @@ const uCmds: Cmds<UG, UState, UMsg, UCmd> = {
 export type A26 = Assert<
   Eq<
     Parameters<Cmds<UG, UState, UMsg, UCmd>["put_object"]>,
-    [state: Extract<UState, { type: "idle" }>, msg: Extract<UMsg, { type: "pick" }>]
+    [
+      state: Extract<UState, { type: "idle" }>,
+      msg: Extract<UMsg, { type: "pick" }>,
+      at: "idle.pick",
+    ]
   >
 >;
 export type A27 = Assert<Eq<ParkingState<UG>, never>>;
@@ -261,3 +269,91 @@ export const uploader = compile<UG, UState, UMsg, UCmd, "up">(upload, "up", {
 export type A28 = Assert<
   Eq<typeof uploader, Transitions<UState, Namespaced<UMsg, "up">, UCmd>>
 >;
+
+// ═══ a third graph: ONE guard referenced from TWO sites ═════════════════════
+// The single-site case above is exact by construction. The multi-site case is
+// the one that needs the `at` correlator: `SiteArgs` distributes, so the guard's
+// parameters are a UNION OF TUPLES, and narrowing `s.type` is a NESTED
+// discriminant that TypeScript will not propagate to the sibling `m`.
+const retry = defineGraph({
+  fetching: {
+    on: { TIMEOUT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+  },
+  parsing: {
+    on: { CORRUPT: { target: "fetching", when: "worthRetrying", otherwise: "dead" } },
+  },
+  dead: {},
+});
+export type RG = typeof retry;
+export type RState = StateOf<
+  RG,
+  {
+    fetching: { readonly attempt: number; readonly url: string };
+    parsing: { readonly attempt: number; readonly bytes: number };
+    dead: { readonly attempt: number };
+  }
+>;
+export type RMsg = MsgOf<
+  RG,
+  {
+    TIMEOUT: { readonly afterMs: number };
+    CORRUPT: { readonly offset: number };
+  }
+>;
+
+// the guard is named from TWO edges, so `at` is a two-member literal union…
+export type A29 = Assert<Eq<GuardName<RG>, "worthRetrying">>;
+type RetryGuard = Guards<RG, RState, RMsg>["worthRetrying"];
+export type A30 = Assert<
+  Eq<
+    Parameters<RetryGuard>,
+    | [
+        state: Extract<RState, { type: "fetching" }>,
+        msg: Extract<RMsg, { type: "TIMEOUT" }>,
+        at: "fetching.TIMEOUT",
+      ]
+    | [
+        state: Extract<RState, { type: "parsing" }>,
+        msg: Extract<RMsg, { type: "CORRUPT" }>,
+        at: "parsing.CORRUPT",
+      ]
+  >
+>;
+
+// …and THE POINT: discriminating on `at` narrows the state AND the msg together.
+// Every field read below exists on exactly one site. Before the `at` correlator
+// this body did not compile: `m` stayed the full union in both branches.
+export const rGuards: Guards<RG, RState, RMsg> = {
+  worthRetrying: (s, m, at) =>
+    at === "fetching.TIMEOUT"
+      ? s.attempt < 3 && s.url !== "" && m.afterMs < 30_000
+      : s.attempt < 5 && s.bytes > 0 && m.offset >= 0,
+};
+
+// the "vice versa" direction: narrow to the OTHER site first, and the state
+// follows the msg just as readily. A `switch` works as well as an `if`.
+export const rGuardsSwitch: Guards<RG, RState, RMsg> = {
+  worthRetrying: (s, m, at) => {
+    switch (at) {
+      case "parsing.CORRUPT":
+        return m.offset < s.bytes;
+      case "fetching.TIMEOUT":
+        return m.afterMs < s.attempt * 1000;
+    }
+  },
+};
+
+export const retrier = compile<RG, RState, RMsg, Cmd<never>, "r">(retry, "r", {
+  assign: {
+    "fetching.TIMEOUT": {
+      then: (s) => ({ attempt: s.attempt + 1, url: s.url }),
+      else: (s) => ({ attempt: s.attempt }),
+    },
+    "parsing.CORRUPT": {
+      then: (s) => ({ attempt: s.attempt + 1, url: "refetch" }),
+      else: (s) => ({ attempt: s.attempt }),
+    },
+  },
+  guards: rGuards,
+  unhandled: "ignore",
+});

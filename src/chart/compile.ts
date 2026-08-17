@@ -72,11 +72,11 @@ export function compile<
   const assign = parts.assign as unknown as Record<string, RtAssign>;
   const guards = (parts.guards ?? {}) as unknown as Record<
     string,
-    (s: RtState, m: RtMsg) => boolean
+    (s: RtState, m: RtMsg, at: string) => boolean
   >;
   const cmds = (parts.cmds ?? {}) as unknown as Record<
     string,
-    (s: RtState, m: RtMsg) => object
+    (s: RtState, m: RtMsg, at: string) => object
   >;
 
   const stateKeys = Object.keys(g);
@@ -114,7 +114,10 @@ export function compile<
       }
 
       const edge = typeof spec === "string" ? { target: spec } : spec;
-      const cell = assign[`${s}.${e}`];
+      // the site tag, passed to guards/cmds as their last argument — it is what
+      // lets a multi-site guard discriminate (see `SiteArgs` in graph.ts).
+      const at = `${s}.${e}`;
+      const cell = assign[at];
 
       row[key] = (st, nsMsg) => {
         // strip the namespace so the author's parts see the bare event.
@@ -129,7 +132,7 @@ export function compile<
           payloadFn = cell as RtFn;
         } else if (edge.when !== undefined) {
           const guard = guards[edge.when];
-          fired = guard !== undefined && guard(st, msg) === true;
+          fired = guard !== undefined && guard(st, msg, at) === true;
           const branch = cell as { then: RtFn; else: RtFn };
           target = fired ? (edge.target as string) : (edge.otherwise as string);
           payloadFn = fired ? branch.then : branch.else;
@@ -148,7 +151,7 @@ export function compile<
 
         const emitted: Cmd[] =
           fired && edge.cmd !== undefined && cmds[edge.cmd] !== undefined
-            ? [{ ...cmds[edge.cmd]?.(st, msg), type: edge.cmd }]
+            ? [{ ...cmds[edge.cmd]?.(st, msg, at), type: edge.cmd }]
             : [];
 
         return [next, emitted];

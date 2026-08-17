@@ -233,9 +233,26 @@ type SitesWhere<G, F extends "when" | "cmd", Name> = {
   }[keyof On<G, S>];
 }[keyof G];
 
-/** `"review.FAIL"` → `[state: ReviewState, msg: FailMsg]`. Distributes over N sites. */
+/**
+ * `"review.FAIL"` → `[state: ReviewState, msg: FailMsg, at: "review.FAIL"]`.
+ * Distributes over N sites, so a multi-site name yields a UNION OF TUPLES.
+ *
+ * The third element is the correlator. A union of tuples does not, on its own,
+ * keep `state` and `msg` in step: narrowing `state.type` is a NESTED
+ * discriminant, and TypeScript's dependent-parameter control-flow analysis
+ * (TS 4.6, microsoft/TypeScript#47109) only re-narrows sibling parameters from
+ * a discriminant that is a DIRECT, literal-typed element of the union. `at` is
+ * exactly that: one `switch (at)` / `if (at === …)` collapses the tuple union
+ * to a single member, and `state` AND `msg` both narrow with it — in either
+ * direction, since the tag determines both.
+ *
+ * For a single-site name `K` is not a union, so this is a lone tuple and the
+ * author may keep writing `(s, m) => …`: a shorter parameter list is
+ * assignable to a longer non-union rest signature. `at` only becomes
+ * mandatory where it is the only thing that can carry the correlation.
+ */
 type SiteArgs<K, S, M> = K extends `${infer From}.${infer Ev}`
-  ? [state: Narrow<S, From>, msg: Narrow<M, Ev>]
+  ? [state: Narrow<S, From>, msg: Narrow<M, Ev>, at: K]
   : never;
 
 /**
