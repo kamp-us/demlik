@@ -33,8 +33,13 @@ import { PAGE } from "./page";
 import { CheckoutLayer } from "./services";
 
 export interface Env {
+  /** Lane B — the tea machine. */
   readonly CHECKOUT: DurableObjectNamespace;
+  /** Lane A — the same saga written the ordinary way. */
+  readonly NAIVE: DurableObjectNamespace;
 }
+
+export { NaiveOrderDO } from "./naive";
 
 type CheckoutRuntime = Runtime<State, Msg>;
 
@@ -128,6 +133,7 @@ export class CheckoutSaga extends DurableObject<Env> {
 }
 
 interface StateView {
+  readonly lane: "tea";
   readonly phase: string;
   readonly orderId: string;
   readonly amountCents: number;
@@ -137,11 +143,22 @@ interface StateView {
   readonly paymentRef: string | null;
   readonly failure: string | null;
   readonly terminal: boolean;
+  /**
+   * Always true for this lane, and that is the whole point: the thing that
+   * advances the order is a persisted alarm, so it is alive by definition —
+   * there is no isolate for it to have died with.
+   */
+  readonly loopAlive: boolean;
+  readonly frozen: boolean;
+  readonly lastSeenAt: number;
+  readonly staleForMs: number | null;
   readonly log: readonly { readonly at: number; readonly text: string }[];
 }
 
 function view(state: State): StateView {
+  const lastSeenAt = state.log.at(-1)?.at ?? 0;
   return {
+    lane: "tea",
     phase: state.phase,
     orderId: state.orderId,
     amountCents: state.amountCents,
@@ -154,6 +171,10 @@ function view(state: State): StateView {
     paymentRef: state.paymentRef,
     failure: state.failure,
     terminal: isTerminal(state),
+    loopAlive: true,
+    frozen: false,
+    lastSeenAt,
+    staleForMs: lastSeenAt === 0 ? null : Date.now() - lastSeenAt,
     log: state.log,
   };
 }
@@ -162,6 +183,34 @@ function json(body: unknown): Response {
   return new Response(JSON.stringify(body, null, 2), {
     headers: { "content-type": "application/json" },
   });
+}
+
+type Lane = "tea" | "naive";
+
+/**
+ * One lane call. `ctx.abort()` tears the object down mid-request, so the RPC
+ * to it fails BY DESIGN — that failure is the successful crash, not an error.
+ */
+async function callLane(
+  env: Env,
+  lane: Lane,
+  orderId: string,
+  action: string,
+  search: URLSearchParams,
+): Promise<unknown> {
+  const ns = lane === "tea" ? env.CHECKOUT : env.NAIVE;
+  const stub = ns.get(ns.idFromName(orderId));
+  const inner = new URL(`https://lane/${action}`);
+  inner.search = search.toString();
+  try {
+    const res = await stub.fetch(
+      new Request(inner.toString(), { method: "POST" }),
+    );
+    return await res.json();
+  } catch (error) {
+    if (action === "crash") return { crashed: true, lane, order: orderId };
+    throw error;
+  }
 }
 
 export default {
@@ -174,27 +223,35 @@ export default {
       });
     }
 
-    if (!url.pathname.startsWith("/order/")) {
-      return new Response("not found", { status: 404 });
-    }
-
     const orderId = url.searchParams.get("order") ?? "order-1";
-    const stub = env.CHECKOUT.get(env.CHECKOUT.idFromName(orderId));
-    const inner = new URL(url);
-    inner.pathname = url.pathname.replace(/^\/order/, "");
+    const search = url.searchParams;
 
-    try {
-      return await stub.fetch(new Request(inner.toString(), request));
-    } catch (error) {
-      // `ctx.abort()` tears the object down mid-request, so the RPC to it
-      // fails by design. That failure IS the successful crash.
-      if (inner.pathname === "/crash") {
-        return new Response(
-          JSON.stringify({ crashed: true, order: orderId }, null, 2),
-          { headers: { "content-type": "application/json" } },
-        );
-      }
-      throw error;
+    // `/both/<action>` fans out to BOTH lanes — one explosion, two victims.
+    const both = /^\/both\/(start|state|crash|reset)$/.exec(url.pathname);
+    if (both !== null) {
+      const action = both[1] as string;
+      const [tea, naive] = await Promise.all([
+        callLane(env, "tea", orderId, action, search),
+        callLane(env, "naive", orderId, action, search),
+      ]);
+      return json({ order: orderId, tea, naive });
     }
+
+    const single = /^\/(order|naive)\/(start|state|crash|reset)$/.exec(
+      url.pathname,
+    );
+    if (single !== null) {
+      const lane: Lane = single[1] === "naive" ? "naive" : "tea";
+      const body = await callLane(
+        env,
+        lane,
+        orderId,
+        single[2] as string,
+        search,
+      );
+      return json(body);
+    }
+
+    return new Response("not found", { status: 404 });
   },
 };

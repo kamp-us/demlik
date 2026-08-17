@@ -5,8 +5,14 @@
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
-    "bindings": [{ "name": "CHECKOUT", "class_name": "CheckoutSaga" }]
+    "bindings": [
+      { "name": "CHECKOUT", "class_name": "CheckoutSaga" },
+      { "name": "NAIVE", "class_name": "NaiveOrderDO" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_classes": ["CheckoutSaga"] }],
+  "migrations": [
+    { "tag": "v1", "new_classes": ["CheckoutSaga"] },
+    { "tag": "v2", "new_classes": ["NaiveOrderDO"] }
+  ],
   "observability": { "enabled": true }
 }
