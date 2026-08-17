@@ -329,6 +329,79 @@ export function msgKeysOf(machine: {
   return union;
 }
 
+// === describeMachine / acceptsOf: the per-state accept-sets, as a reading ===
+//
+// "Which Msgs does this machine accept, and in which state?" — the question a
+// tool asks when it drives a machine ITSELF instead of through `run`: a CLI
+// rendering the legal next moves, a doc generator, a log validator. Before
+// this the only answer was to cast `machine.update as Record<string,
+// Record<string, unknown>>` at the call site and hand-branch the form — one
+// private copy of the form-branching per consumer, drifting from the kernel's.
+//
+// This is a DERIVED READING over the table, deliberately NOT a property on the
+// machine. It has to be: every `withX` wrapper builds a fresh flat
+// `Record<string, Cell>`, casts it to `Reducer`, and returns a NEW object
+// literal carrying only `init`/`update`/`subscriptions`/`subscribe`/
+// `interpret`. Any property hung on a machine is therefore destroyed by the
+// first wrap, and the wrapped table is reducer-form regardless of the base's.
+// A function over `(update, formOf)` survives wrapping and tells the truth
+// about the machine it is actually handed.
+//
+// The return type is a DISCRIMINATED union on `form` because the two forms
+// genuinely answer different questions, and faking the missing one would be a
+// lie the type system would then propagate:
+//   - `transitions` — carries `states` and `accepts` (state.type → Msg.types).
+//   - `reducer`     — has NO per-state accept-sets AT ALL. Its dispatch does
+//     not consult the state, so `msgs` is the whole answer and there is no
+//     `accepts` field to read. Reaching for one is a compile error, not an
+//     empty object.
+export type MachineShape =
+  | {
+      readonly form: "reducer";
+      /** Every `Msg.type` the flat reducer has a cell for. */
+      readonly msgs: readonly string[];
+    }
+  | {
+      readonly form: "transitions";
+      /** The union of every row's `Msg.type` keys (see `msgKeysOf`). */
+      readonly msgs: readonly string[];
+      /** Every `state.type` the table has a row for, in table order. */
+      readonly states: readonly string[];
+      /** `state.type` → the `Msg.type`s that state has a cell for. */
+      readonly accepts: Readonly<Record<string, readonly string[]>>;
+    };
+
+export function describeMachine(machine: {
+  update: object;
+  __form?: UpdateForm;
+}): MachineShape {
+  const msgs = msgKeysOf(machine);
+  if (formOf(machine) === "reducer") return { form: "reducer", msgs };
+  const table = machine.update as Record<string, object | undefined>;
+  const states = Object.keys(table);
+  const accepts: Record<string, readonly string[]> = {};
+  for (const stateKey of states) {
+    const row = table[stateKey];
+    accepts[stateKey] =
+      row === null || row === undefined ? [] : Object.keys(row);
+  }
+  return { form: "transitions", msgs, states, accepts };
+}
+
+// The one-state shorthand over `describeMachine`. Reducer-form is not a
+// special case being papered over: a flat reducer's dispatch never reads the
+// state, so EVERY state accepts the full Msg set and returning it is the true
+// answer, not a stand-in. A `stateType` with no row in a Transitions table
+// accepts nothing, so `[]` — equally true.
+export function acceptsOf(
+  machine: { update: object; __form?: UpdateForm },
+  stateType: string,
+): readonly string[] {
+  const shape = describeMachine(machine);
+  if (shape.form === "reducer") return shape.msgs;
+  return shape.accepts[stateType] ?? [];
+}
+
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
 //
 // Flat dispatch table keyed by `Msg.type`. Each cell is a pure transition for
