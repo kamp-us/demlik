@@ -148,8 +148,15 @@ export const cells: Cells<PollerG, PollState, PollMsg> = {
   tick: (s) => {
     const slice = s.poll;
     if (slice.phase !== "polling") return [s, []];
-    const [next, cs] = poll.tick(slice);
-    return [{ ...s, poll: next, type: next.phase }, reads(cs)];
+    // `tick` is the ONE verb that moves neither the phase nor the schedule: it
+    // emits the observation Cmd and hands back the slice it was given. Its
+    // SIGNATURE cannot say so — a generic identity there would make `Poller`
+    // unsatisfiable by any non-generic implementation, so the return type is
+    // the full union. The narrow `to: ["polling"]` therefore comes from the
+    // slice this cell narrowed ITSELF, which is the same battery-owned value
+    // and still the single writer of `type`.
+    const [, cs] = poll.tick(slice);
+    return [{ ...s, poll: slice, type: slice.phase }, reads(cs)];
   },
   onResult: (s, m, _at) => {
     const untilHeld = m.result.status === "ready";

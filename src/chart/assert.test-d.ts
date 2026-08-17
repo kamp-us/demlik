@@ -7,6 +7,7 @@ import type {
   PollerDone,
   PollerGaveUp,
   PollerPolling,
+  PollerState,
 } from "../poller";
 import type { Cmd, Reducer, SyncReturn, Transitions } from "../pure/core";
 import type {
@@ -722,13 +723,15 @@ export type A90 = Assert<
     PollerPolling<JobStatus> | PollerGaveUp<JobStatus>
   >
 >;
-// `tick` returns its ARGUMENT — the identity a generic states and a
-// `PollerState<R>` return type cannot.
+// `tick` is deliberately NOT generic. A `tick<S extends PollerState<R>>(s: S)
+// => [S, …]` states an identity no non-generic implementation can satisfy, so
+// it made the whole `Poller` interface unimplementable by a consumer's
+// hand-written or mocked poller (TS2322: "'S' could be instantiated with a
+// different subtype"). The verb's real narrowness is recovered at the call
+// site instead — the cell narrows the slice itself and carries THAT forward,
+// which `A95` pins.
 export type A91 = Assert<
-  Eq<
-    ReturnType<typeof pollVerbs.tick<PollerDone<JobStatus>>>[0],
-    PollerDone<JobStatus>
-  >
+  Eq<ReturnType<typeof pollVerbs.tick>[0], PollerState<JobStatus>>
 >;
 // and the fan-out the chart now declares is the narrow one, per edge.
 export type A92 = Assert<

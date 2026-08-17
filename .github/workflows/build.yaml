@@ -34,6 +34,15 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # The SHIPPED program excludes `**/*.test.ts`, so the test files are not in
+      # it — and for a package whose whole value is a compile-time guarantee, the
+      # files that DEMONSTRATE that guarantee (`src/chart/smoke-*.test.ts`, the
+      # hand-written-interface regressions) have to compile too. `tsconfig.test.json`
+      # is the same options over the same tree with that exclusion dropped, minus a
+      # named, shrink-only list of pre-existing debt.
+      - name: Typecheck tests
+        run: pnpm run typecheck:test
+
       - name: Lint (Biome)
         run: pnpm run lint
 

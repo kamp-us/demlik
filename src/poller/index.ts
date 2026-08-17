@@ -307,7 +307,7 @@ export interface Poller<
    * is exhausted; the next target is set when the result lands), so it needs no
    * clock — keeping it trivially pure.
    */
-  tick<S extends PollerState<R>>(state: S): readonly [S, readonly Cmd[]];
+  tick(state: PollerState<R>): readonly [PollerState<R>, readonly Cmd[]];
   /**
    * Record a successful tick observation at clock `at`.
    *
@@ -449,9 +449,9 @@ export function createPoller<State, R>(
     ];
   }
 
-  function tick<S extends PollerState<R>>(
-    state: S,
-  ): readonly [S, readonly Cmd[]] {
+  function tick(
+    state: PollerState<R>,
+  ): readonly [PollerState<R>, readonly Cmd[]] {
     // The deadline fired. Perform the observation — this is the ONLY place the
     // `onTick` Cmd is emitted, so the timer is the single next-tick mechanism.
     // No schedule change here: the just-fired deadline is exhausted, and the

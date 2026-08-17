@@ -260,6 +260,7 @@
     "test": "vitest run",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
     "docs:reference": "TEA_DOCS_WRITE=1 vitest run src/docs/reference/generate-reference.test.ts",
     "docs:reference:check": "pnpm run docs:reference && git diff --exit-code -- docs/reference",

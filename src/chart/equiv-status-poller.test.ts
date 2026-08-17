@@ -1,7 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // BEHAVIOURAL EQUIVALENCE — the REAL `examples/status-poller.ts` machine and
-// the cell-edge port, driven through the same message sequence, full state and
-// full cmd list diffed at every step.
+// the cell-edge port, driven through the same message sequence, with full
+// state, full ordered cmd list AND full sub set diffed at every step.
+//
+// For a POLLER the subs are the behaviour: the timer wiring is the whole
+// machine, and a port that produced identical states and identical cmds while
+// arming no deadline would never poll at all. Comparing only `[state, cmds]`
+// called that identical — replacing `pollerSubs` with `() => []` left the suite
+// green. It does not now.
+//
+// The walk also covers the graph, not just a happy path: every one of the
+// chart's 10 declared edges is driven, and the coverage is ASSERTED at the
+// bottom rather than asserted in a comment. Two fan-out arms are named there as
+// unreachable, with the reason.
 //
 // Determinism: the poller's backoff draws from `Math.random`, captured at
 // `createPoller` time. It is replaced below by a SEEDED LCG that returns a
@@ -14,6 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it, vi } from "vitest";
 import { subId } from "../pure/core";
+import { deepEqual } from "../trace-replay";
 import { importExample } from "./__fixtures__/import-example";
 import type { PollState } from "./__fixtures__/status-poller-chart";
 
@@ -62,12 +74,13 @@ const { statusPoller } = (await importExample(EXAMPLE)) as {
   statusPoller: {
     init: unknown;
     update: unknown;
+    subscriptions: unknown;
   };
 };
 
 vi.resetModules();
 Math.random = lcg();
-const { pollerInit, pollerUpdate } = await import(
+const { pollerInit, pollerUpdate, pollerSubs } = await import(
   "./__fixtures__/status-poller-chart"
 );
 
@@ -175,6 +188,90 @@ const steps: readonly Step[] = [
       at: T0 + 65_010,
     },
   ],
+
+  // ── the edges the happy path never touched ───────────────────────────────
+  // A success resets the retry counter, so a failure landing on a FINISHED
+  // poller always has budget left: `done -poll_failed-> polling` is the only
+  // arm of that edge a real run can take (see the coverage assertion below).
+  [
+    "done -poll_failed-> polling",
+    { type: "poll_failed", error: "late-boom", at: T0 + 70_000 },
+  ],
+  [
+    "tick 7",
+    {
+      type: "deadline_exceeded",
+      id: subId("poller:tick:7"),
+      atMs: T0 + 75_000,
+    },
+  ],
+  [
+    "ready -> done (3rd)",
+    {
+      type: "poll_result",
+      result: { status: "ready", progress: 100 },
+      at: T0 + 75_010,
+    },
+  ],
+  // `done -poll_result-> done`: a second terminal observation on an already
+  // finished poller — the self-arm of that fan-out.
+  [
+    "done -poll_result-> done",
+    {
+      type: "poll_result",
+      result: { status: "ready", progress: 100 },
+      at: T0 + 76_000,
+    },
+  ],
+  // `done -start_polling-> polling`: restart a finished poller.
+  ["done -start_polling-> polling", { type: "start_polling", at: T0 + 80_000 }],
+
+  // back to `gave_up`, to drive the two edges out of it that only a result can
+  // take. The retry counter is fresh again (the successes above reset it), so
+  // this is a full ladder.
+  ...Array.from(
+    { length: 6 },
+    (_, i): Step => [
+      `re-fail ${i + 1}`,
+      {
+        type: "poll_failed",
+        error: `re-boom-${i + 1}`,
+        at: T0 + 85_000 + i * 5_000,
+      },
+    ],
+  ),
+  // `gave_up -poll_result-> polling`: a late PENDING observation resurrects a
+  // given-up poller onto the cadence (the reducer form never declared this
+  // unreachable, and the chart says so too).
+  [
+    "gave_up -poll_result-> polling",
+    {
+      type: "poll_result",
+      result: { status: "pending", progress: 40 },
+      at: T0 + 120_000,
+    },
+  ],
+  // …and once more into `gave_up`, this time exited by a TERMINAL observation:
+  // `gave_up -poll_result-> done`.
+  ...Array.from(
+    { length: 6 },
+    (_, i): Step => [
+      `re-fail b${i + 1}`,
+      {
+        type: "poll_failed",
+        error: `b-boom-${i + 1}`,
+        at: T0 + 125_000 + i * 5_000,
+      },
+    ],
+  ),
+  [
+    "gave_up -poll_result-> done",
+    {
+      type: "poll_result",
+      result: { status: "ready", progress: 100 },
+      at: T0 + 160_000,
+    },
+  ],
 ];
 
 /** property-order-independent structural print */
@@ -196,6 +293,9 @@ const origUpdate = statusPoller.update as unknown as Record<
   string,
   (s: unknown, m: AnyMsg) => Pair
 >;
+const origSubs = statusPoller.subscriptions as (
+  s: unknown,
+) => readonly unknown[];
 let orig: unknown = (
   statusPoller.init as unknown as (l: null, c: unknown) => readonly [unknown]
 )(null, {})[0];
@@ -222,21 +322,52 @@ const check = (label: string, a: string, b: string, what: string): void => {
   }
 };
 
+/**
+ * Subs carry an `id`, and a sub SET is identified by those ids, so the compare
+ * is order-insensitive but otherwise faithful: sort by id, then hand it to the
+ * record/replay lane's own `deepEqual` rather than adding a fourth
+ * deep-compare. The poller's tick id ROTATES with the armed target, so this
+ * catches a re-arm at the wrong instant as well as a missing timer.
+ */
+const byId = (subs: readonly unknown[]): readonly unknown[] =>
+  [...subs].sort((a, b) =>
+    String((a as { id?: unknown }).id).localeCompare(
+      String((b as { id?: unknown }).id),
+    ),
+  );
+const checkSubs = (label: string, a: readonly unknown[]): void => {
+  const b = pollerSubs(port);
+  if (!deepEqual(byId(a), byId(b))) {
+    diffs.push(`DIFF (subs) @ ${label}
+    original: ${stable(byId(a))}
+    ported  : ${stable(byId(b))}`);
+  }
+};
+
+/** every `state -event-> state` the walk actually drove. */
+const covered = new Set<string>();
+
 check(
   "<init>",
   stable(orig),
   stable({ jobId: port.jobId, poll: port.poll }),
   "state",
 );
+checkSubs("<init>", origSubs(orig));
 
-say("step                                  | phase(orig) | type(port) | cmds");
-say("--------------------------------------+-------------+------------+------");
+say(
+  "step                                  | phase(orig) | type(port) | subs | cmds",
+);
+say(
+  "--------------------------------------+-------------+------------+------+------",
+);
 
 for (const [label, msg] of steps) {
   // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
   const [nextOrig, origCmds] = origUpdate[msg.type]!(orig, msg);
   orig = nextOrig;
 
+  const from = port.type;
   const nsMsg = { ...msg, type: `POLL.${msg.type}` };
   // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
   const [nextPort, portCmds] = portUpdate[port.type]![nsMsg.type]!(port, nsMsg);
@@ -249,6 +380,12 @@ for (const [label, msg] of steps) {
     "state",
   );
   check(label, stable(origCmds), stable(portCmds), "cmds");
+  checkSubs(label, origSubs(orig));
+  // `deadline_exceeded` is routed ONLY out of `polling`; from `done`/`gave_up`
+  // it is a scoped-out self-loop, not an edge, so it is not counted as one.
+  if (msg.type !== "deadline_exceeded" || from === "polling") {
+    covered.add(`${from} -${msg.type}-> ${port.type}`);
+  }
 
   // the chart's `type` and the battery's `phase` have ONE writer between them
   // (the cell's `type: slice.phase`), so this can never desync — asserted, not
@@ -260,7 +397,11 @@ for (const [label, msg] of steps) {
   }
   const o = orig as { poll: { phase: string } };
   say(
-    `${label.padEnd(37)} | ${o.poll.phase.padEnd(11)} | ${port.type.padEnd(10)} | ${portCmds.map((c) => (c as { type: string }).type).join(",") || "-"}`,
+    `${label.padEnd(37)} | ${o.poll.phase.padEnd(11)} | ${port.type.padEnd(10)} | ${String(
+      pollerSubs(port).length,
+    ).padEnd(
+      4,
+    )} | ${portCmds.map((c) => (c as { type: string }).type).join(",") || "-"}`,
   );
 }
 
@@ -270,4 +411,51 @@ say(`final ported  : ${stable({ jobId: port.jobId, poll: port.poll })}`);
 
 it("the cell-edge port is behaviourally identical to examples/status-poller", () => {
   expect(diffs, transcript.join("\n")).toEqual([]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EDGE COVERAGE — agreeing on a walk is only worth as much as the walk covers.
+//
+// The chart declares 10 edges fanning out to 16 targets. This pins exactly which
+// of those 16 the sequence lands, so an edge silently falling out of the walk
+// fails here instead of quietly reducing what "equivalent" means.
+//
+// TWO arms are absent, and both are UNREACHABLE rather than untested — the
+// chart declares them because `to` can be no tighter than the delegate's return
+// type, and `tickErr` genuinely returns `PollerPolling | PollerGaveUp` from any
+// input:
+//
+//   done -poll_failed-> gave_up    Reaching `done` means a `tickResult` with
+//                                  `untilHeld`, which resets `retry` to
+//                                  `initRetry()`. The next failure is therefore
+//                                  attempt 1 of 5, and `shouldRetry` always
+//                                  permits it. Only a `maxAttempts: 1` policy
+//                                  could land this arm.
+//   gave_up -poll_failed-> polling `gave_up` is entered precisely when
+//                                  `shouldRetry` returned false, and another
+//                                  `recordFailure` only advances the counter
+//                                  further past the bound. Under the count
+//                                  policy this chart uses, once refused always
+//                                  refused.
+//
+// Both are declared honestly and drawn honestly; what is asserted here is that
+// nothing ELSE is quietly dead.
+// ═══════════════════════════════════════════════════════════════════════════
+it("the sequence drives every reachable edge of the chart", () => {
+  expect([...covered].sort(), transcript.join("\n")).toEqual([
+    "done -poll_failed-> polling",
+    "done -poll_result-> done",
+    "done -poll_result-> polling",
+    "done -start_polling-> polling",
+    "gave_up -poll_failed-> gave_up",
+    "gave_up -poll_result-> done",
+    "gave_up -poll_result-> polling",
+    "gave_up -start_polling-> polling",
+    "polling -deadline_exceeded-> polling",
+    "polling -poll_failed-> gave_up",
+    "polling -poll_failed-> polling",
+    "polling -poll_result-> done",
+    "polling -poll_result-> polling",
+    "polling -start_polling-> polling",
+  ]);
 });
