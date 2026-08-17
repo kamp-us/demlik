@@ -21,6 +21,10 @@ what you are trying to do, and it names the subpath you need.
 - [Run many instances of one chart](./run-many-instances-of-one-chart.md) —
   compile with a namespace so N instances share a dispatch surface, and mark
   library-minted events `foreign: true` so their names stay bare.
+- [Inspect a chart live](./inspect-a-chart-live.md) — point `<ChartInspector>` at
+  a chart to get a whole debugger page with no page code: a control per message,
+  refusals rendered with their reason, a guard's branch previewed against the
+  live state, and a scrubber that time-travels by pure replay.
 
 ## Test and verify
 

@@ -62,6 +62,8 @@ export default defineConfig({
     "pure/index": "src/pure/index.ts",
     "parity/index": "src/parity/index.ts",
     "chart/index": "src/chart/index.ts",
+    "chart/inspect/index": "src/chart/inspect/index.ts",
+    "chart/inspect/react": "src/chart/inspect/react.tsx",
   },
   format: ["esm"],
   dts: true,
@@ -77,5 +79,11 @@ export default defineConfig({
     // devtools ships a standalone stylesheet consumers import directly.
     mkdirSync("dist/devtools", { recursive: true });
     copyFileSync("src/devtools/styles.css", "dist/devtools/styles.css");
+    // chart/inspect ships its own companion stylesheet, same contract.
+    mkdirSync("dist/chart/inspect", { recursive: true });
+    copyFileSync(
+      "src/chart/inspect/styles.css",
+      "dist/chart/inspect/styles.css",
+    );
   },
 });

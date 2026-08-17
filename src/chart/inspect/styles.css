@@ -1,0 +1,221 @@
+/*
+ * @demlik/tea/chart/inspect — visual defaults for <ChartInspector>.
+ *
+ * Same strategy as `@demlik/tea/devtools/styles.css`, deliberately: every class
+ * is prefixed (here `.tea-ci-*`) so it cannot collide with host styles, and
+ * every colour is a consumer design token (shadcn slots + Radix accents) so the
+ * inspector inherits whatever theme is active. Override by re-declaring the
+ * --tea-ci-* vars on .tea-ci, or pass your own `className`.
+ *
+ * The state / log / diff panels are devtools components, so this sheet is a
+ * COMPANION to devtools' — import both.
+ *
+ * Refusal palette — the one thing this sheet says that devtools' does not.
+ * A refused event is drawn, not hidden, and WHY it is refused is a colour:
+ *   end          → --crimson-11  (this state is over)
+ *   out-of-scope → --muted-foreground (not addressed here — the quietest)
+ *   ignored      → --amber-11    (addressed here, and deliberately dropped)
+ *   undeclared   → --crimson-11  (the totality bypass; should never appear)
+ */
+
+.tea-ci {
+  --tea-ci-fg: var(--foreground);
+  --tea-ci-muted: var(--muted-foreground);
+  --tea-ci-border: var(--border);
+  --tea-ci-accent: var(--teal-11);
+  --tea-ci-warn: var(--amber-11);
+  --tea-ci-bad: var(--crimson-11);
+
+  font-family: var(
+    --font-mono,
+    "JetBrains Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 12px;
+  color: var(--tea-ci-fg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tea-ci-boot {
+  color: var(--tea-ci-muted);
+  font-style: italic;
+  padding: 16px;
+}
+
+.tea-ci-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--tea-ci-border);
+  padding-bottom: 8px;
+}
+.tea-ci-title {
+  font-weight: 600;
+}
+.tea-ci-now {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.tea-ci-phase {
+  color: var(--tea-ci-muted);
+}
+.tea-ci-phase::after {
+  content: " /";
+}
+.tea-ci-state {
+  color: var(--tea-ci-accent);
+  font-weight: 600;
+}
+.tea-ci-tag {
+  border: 1px solid var(--tea-ci-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 0 4px;
+  color: var(--tea-ci-muted);
+  font-size: 10.5px;
+}
+.tea-ci-warn {
+  color: var(--tea-ci-warn);
+}
+
+.tea-ci-panel {
+  border: 1px solid var(--tea-ci-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 12px 14px;
+  background: transparent;
+  min-width: 0;
+}
+.tea-ci-h {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tea-ci-muted);
+}
+
+.tea-ci-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* ── the button row ─────────────────────────────────────────────────────── */
+.tea-ci-events {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.tea-ci-ev {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tea-ci-btn {
+  font: inherit;
+  text-align: left;
+  padding: 4px 8px;
+  border: 1px solid var(--tea-ci-border);
+  border-radius: var(--radius, 0.25rem);
+  background: transparent;
+  color: var(--tea-ci-fg);
+  cursor: pointer;
+}
+.tea-ci-btn:hover:not(:disabled) {
+  border-color: var(--tea-ci-accent);
+  color: var(--tea-ci-accent);
+}
+.tea-ci-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+.tea-ci-to {
+  color: var(--tea-ci-muted);
+}
+.tea-ci-why {
+  color: var(--tea-ci-muted);
+  font-style: italic;
+}
+.tea-ci-sample {
+  font: inherit;
+  resize: vertical;
+  border: 1px dashed var(--tea-ci-border);
+  border-radius: var(--radius, 0.25rem);
+  background: transparent;
+  color: var(--tea-ci-fg);
+  padding: 2px 6px;
+  min-width: 0;
+}
+
+/* A refused control keeps its shape and loses its affordance — the reason is
+ * the content, the colour is only the cue. */
+.tea-ci-ev-end .tea-ci-btn,
+.tea-ci-ev-undeclared .tea-ci-btn {
+  border-style: dashed;
+  color: var(--tea-ci-bad);
+  text-decoration: line-through;
+}
+.tea-ci-ev-ignored .tea-ci-btn {
+  border-style: dashed;
+  color: var(--tea-ci-warn);
+  text-decoration: line-through;
+}
+.tea-ci-ev-out-of-scope .tea-ci-btn {
+  border-style: dotted;
+  color: var(--tea-ci-muted);
+}
+.tea-ci-ev-end .tea-ci-why,
+.tea-ci-ev-undeclared .tea-ci-why {
+  color: var(--tea-ci-bad);
+}
+.tea-ci-ev-ignored .tea-ci-why {
+  color: var(--tea-ci-warn);
+}
+
+/* ── the diagram ────────────────────────────────────────────────────────── */
+.tea-ci-mermaid {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--tea-ci-muted);
+  line-height: 1.5;
+}
+
+/* ── time travel ────────────────────────────────────────────────────────── */
+.tea-ci-scrub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.tea-ci-scrub input[type="range"] {
+  flex: 1 1 160px;
+  min-width: 120px;
+  accent-color: var(--tea-ci-accent);
+}
+.tea-ci-step {
+  color: var(--tea-ci-muted);
+  white-space: nowrap;
+}
+.tea-ci-scrub button {
+  font: inherit;
+  padding: 2px 10px;
+  border: 1px solid var(--tea-ci-border);
+  border-radius: var(--radius, 0.25rem);
+  background: transparent;
+  color: var(--tea-ci-fg);
+  cursor: pointer;
+}
+.tea-ci-scrub button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

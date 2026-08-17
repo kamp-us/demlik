@@ -89,6 +89,9 @@ export is not done until it has a row here.
 | `./llm-call` | experimental | agent layer |
 | `./prediction` | experimental | client prediction |
 | `./chart` | experimental | machines authored as config; the type machinery IS the surface |
+| `./chart/inspect` | experimental | the chart read as data — headless; the debugger UI's substrate |
+| `./chart/inspect/react` | experimental | `<ChartInspector>`; React binding of `./chart/inspect` |
+| `./chart/inspect/styles.css` | experimental | asset of `./chart/inspect/react` |
 
 ## Store factory per host
 
