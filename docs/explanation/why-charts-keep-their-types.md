@@ -266,9 +266,11 @@ edge reachable from everywhere the derivation degenerates to "all of them".
 ## Where the guarantees live
 
 Every claim above is pinned by an executable file rather than by this page.
-`src/chart/assert.ts` holds the type-level assertions `A1`..`A80` — the derived
-alphabets, the exact parameter tuples of a two-site guard, the cell's clamped
-return, the emitted key sets. `src/chart/smoke*.ts` runs the compiled machines.
+`src/chart/assert.test-d.ts` holds the type-level assertions `A1`..`A100` — the
+derived alphabets, the exact parameter tuples of a two-site guard, the cell's
+clamped return, the emitted key sets. `src/chart/smoke*.test.ts` runs the
+compiled machines, and `src/chart/probes.test.ts` type-checks every probe below
+and asserts each one still fails, for its declared reason.
 And `src/chart/__probes__/e*.ts` is one file per compile-time error the design
 catches, each with a header explaining what would have gone silently wrong
 without it. If a claim here and a probe there disagree, the probe is right.
