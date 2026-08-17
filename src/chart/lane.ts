@@ -16,7 +16,9 @@ import {
 
 // ── the graph. No `as const`. Every target checked against these same keys. ──
 export const lane = defineGraph({
-  queued: { on: { WIP: "build", BLOCKED: "blocked" } },
+  // the entry point is DATA on the graph — `init` is derived from it, and
+  // `machine-viz` draws `[*] --> queued` off the same fact.
+  queued: { initial: true, on: { WIP: "build", BLOCKED: "blocked" } },
   build: { on: { DONE: "review", BLOCKED: "blocked" } },
   review: {
     on: {

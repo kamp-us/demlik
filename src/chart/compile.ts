@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RUNTIME — the graph walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, Transitions } from "../pure/core";
+import { Cmd, type Transitions } from "../pure/core";
 import type {
   Assigns,
   CmdName,
@@ -9,8 +9,16 @@ import type {
   Graph,
   GuardName,
   Guards,
+  InitialData,
+  InitialState,
   Namespaced,
 } from "./graph";
+
+/** `undefined` → none; `"x"` → one; `["x","y"]` → both, in order. */
+function cmdNames(ref: string | readonly string[] | undefined): readonly string[] {
+  if (ref === undefined) return [];
+  return typeof ref === "string" ? [ref] : ref;
+}
 
 /** Policy for a (state × msg) pair the graph does not declare. */
 export type Unhandled = "ignore" | "error";
@@ -38,10 +46,13 @@ type RtEdge =
       readonly target?: string;
       readonly when?: string;
       readonly otherwise?: string;
-      readonly cmd?: string;
+      readonly cmd?: string | readonly string[];
+      readonly otherwiseCmd?: string | readonly string[];
       readonly resume?: { readonly fallback: string };
     };
-type RtGraph = Readonly<Record<string, { readonly on?: Record<string, RtEdge> }>>;
+type RtGraph = Readonly<
+  Record<string, { readonly initial?: true; readonly on?: Record<string, RtEdge> }>
+>;
 type RtState = { readonly type: string; readonly was?: string };
 type RtMsg = { readonly type: string };
 type RtCell = (s: RtState, m: RtMsg) => readonly [RtState, readonly Cmd[]];
@@ -149,10 +160,20 @@ export function compile<
           ? { ...data, type: target, was: st.type }
           : { ...data, type: target };
 
-        const emitted: Cmd[] =
-          fired && edge.cmd !== undefined && cmds[edge.cmd] !== undefined
-            ? [{ ...cmds[edge.cmd]?.(st, msg, at), type: edge.cmd }]
-            : [];
+        // 0..n Cmds, in declaration order. A guarded edge picks its arm's
+        // list — `Cmd.when` lifted onto the edge, so which effects fire is
+        // visible in the graph rather than buried in a cell body.
+        const emitted = cmdNames(fired ? edge.cmd : edge.otherwiseCmd).map(
+          (n): Cmd => {
+            const build = cmds[n];
+            if (build === undefined) {
+              throw new Error(
+                `@demlik/tea: edge "${s}.${e}" names cmd "${n}" with no builder`,
+              );
+            }
+            return { ...build(st, msg, at), type: n };
+          },
+        );
 
         return [next, emitted];
       };
@@ -166,4 +187,53 @@ export function compile<
   // from `Object.keys(graph)` × `${ns}.${event}`, but tsc cannot see that a
   // string-keyed record built in a loop is total over those unions.
   return table as unknown as Transitions<S, Namespaced<M, NS>, C>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `init`, DERIVED FROM THE GRAPH
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The name of the state marked `initial: true`. Throws unless EXACTLY one is
+ * marked — the runtime half of what `InitialData`'s marker types say at the
+ * type level.
+ */
+export function initialStateOf<const G extends Graph<G>>(graph: G): InitialState<G> {
+  const g = graph as unknown as RtGraph;
+  const marked = Object.keys(g).filter((s) => g[s]?.initial === true);
+  const only = marked[0];
+  if (marked.length !== 1 || only === undefined) {
+    throw new Error(
+      `@demlik/tea: graph must mark exactly one state \`initial: true\` (found ${marked.length})`,
+    );
+  }
+  // `Object.keys` yields `string`; the type-level answer is the same key.
+  return only as InitialState<G>;
+}
+
+/**
+ * Build a `Machine["init"]` from the graph's declared entry state plus a
+ * `boot()` that supplies ONLY that state's data. The state NAME is never
+ * repeated by the author — it comes from the same `initial: true` that
+ * `machine-viz` reads to draw the `[*] -->` edge.
+ *
+ * Rehydrate is honoured verbatim: a non-null `loaded` is returned untouched
+ * with NO cmds, which is exactly Invariant 2's contract (init's rehydrate
+ * branch is the migration boundary, not the boot-effect hook). Boot cmds are
+ * therefore NOT expressible here, deliberately — the substrate's own answer is
+ * a `boot` Msg dispatched once after `run(...)`.
+ */
+export function initFrom<
+  const G extends Graph<G>,
+  S extends { type: string },
+  C extends Cmd,
+>(graph: G, boot: () => InitialData<G, S>): (loaded: S | null) => readonly [S, readonly C[]] {
+  const type: string = initialStateOf(graph);
+  return (loaded) => [
+    // The one cast this helper needs: `{ ...InitialData, type: <the initial
+    // name> }` IS `Extract<S, { type: InitialState<G> }>`, but tsc cannot
+    // rebuild a union member from a spread plus a `string`-typed discriminant.
+    loaded ?? ({ ...boot(), type } as unknown as S),
+    Cmd.none,
+  ];
 }
