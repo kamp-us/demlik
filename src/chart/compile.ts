@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RUNTIME — the chart walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
-import { Cmd, NoCellError, type Transitions } from "../pure/core";
+import { Cmd, NoCellError, type Reducer, type Transitions } from "../pure/core";
 import type {
   Assigns,
   CellName,
@@ -15,6 +15,15 @@ import type {
   InitialState,
   MsgIn,
   MsgOf,
+  RAssigns,
+  RCellName,
+  RCells,
+  RCmds,
+  RGuardName,
+  RGuards,
+  RStateOf,
+  RUsedCmdName,
+  ReducerChart,
   StateOf,
   UsedCmdName,
 } from "./graph";
@@ -99,6 +108,127 @@ function scopeList(scope: string | readonly string[]): readonly string[] {
   return typeof scope === "string" ? [scope] : scope;
 }
 
+/** The code parts, after the type layer has been erased. Shared by both forms. */
+type RtParts = {
+  readonly assign: Record<string, RtAssign | undefined>;
+  readonly guards: Record<
+    string,
+    ((s: RtState, m: RtMsg, at: string) => boolean) | undefined
+  >;
+  readonly cmds: Record<
+    string,
+    ((s: RtState, m: RtMsg, at: string) => object) | undefined
+  >;
+  readonly cells: Record<
+    string,
+    ((s: RtState, m: RtMsg, at: string) => readonly [RtState, readonly Cmd[]]) | undefined
+  >;
+};
+
+function rtParts(parts: object): RtParts {
+  const p = parts as Record<string, object | undefined>;
+  return {
+    assign: (p["assign"] ?? {}) as RtParts["assign"],
+    guards: (p["guards"] ?? {}) as RtParts["guards"],
+    cmds: (p["cmds"] ?? {}) as RtParts["cmds"],
+    cells: (p["cells"] ?? {}) as RtParts["cells"],
+  };
+}
+
+/**
+ * ONE edge → one transition cell. This is the whole walk, and it is shared
+ * verbatim by both chart forms: a `Transitions` cell and a `Reducer` cell
+ * differ only in what `at` is (`"state.event"` vs `"event"`) and in whether a
+ * parking set exists to inject `was` from — both parameters here, not branches.
+ *
+ * `bare` is the un-namespaced event name the author's parts are written
+ * against; the compiled cell restores it before calling them.
+ */
+function buildCell(
+  spec: RtEdge,
+  bare: string,
+  at: string,
+  p: RtParts,
+  parking: ReadonlySet<string>,
+): RtCell {
+  const edge = typeof spec === "string" ? { target: spec } : spec;
+  const cell = p.assign[at];
+
+  // ── THE ESCAPE HATCH ────────────────────────────────────────────────────
+  // A `{ to, cell }` edge is the whole transition: the cell picks the target
+  // from `to` and returns its own cmds, so there is no assign to call, no
+  // guard to evaluate, no cmd list to rebuild and no `was` to inject (a cell
+  // landing on a parking state supplies `was` itself — its return type demands
+  // it). The other fields are compile errors beside `cell`, so this branch is
+  // not silently skipping anything.
+  if (edge.cell !== undefined) {
+    const hand = p.cells[edge.cell];
+    if (hand === undefined) {
+      throw new Error(
+        `@demlik/tea: edge "${at}" names cell "${edge.cell}" with no implementation`,
+      );
+    }
+    return (st, nsMsg) => hand(st, { ...nsMsg, type: bare }, at);
+  }
+
+  return (st, nsMsg) => {
+    // strip the namespace so the author's parts see the bare event.
+    const msg: RtMsg = { ...nsMsg, type: bare };
+
+    let target: string;
+    let payloadFn: RtFn;
+    let fired = true;
+
+    if (edge.resume !== undefined) {
+      target = st.was ?? edge.resume.fallback;
+      payloadFn = cell as RtFn;
+    } else if (edge.when !== undefined) {
+      const guard = p.guards[edge.when];
+      fired = guard !== undefined && guard(st, msg, at) === true;
+      const branch = cell as { then: RtFn; else: RtFn };
+      target = fired ? (edge.target as string) : (edge.otherwise as string);
+      payloadFn = fired ? branch.then : branch.else;
+    } else {
+      target = edge.target as string;
+      payloadFn = cell as RtFn;
+    }
+
+    const data = payloadFn(st, msg);
+    // `was` is INJECTED, never authored: entering a parking state records where
+    // you came from. The type of `was` is `ResumeTargets<C, target>`, and
+    // `st.type` is in that set by construction.
+    const next: RtState = parking.has(target)
+      ? { ...data, type: target, was: st.type }
+      : { ...data, type: target };
+
+    // 0..n Cmds, in declaration order. A guarded edge picks its arm's list —
+    // `Cmd.when` lifted onto the edge, so which effects fire is visible in the
+    // chart rather than buried in a cell body.
+    const emitted = cmdNames(fired ? edge.cmd : edge.otherwiseCmd).map((n): Cmd => {
+      const build = p.cmds[n];
+      if (build === undefined) {
+        throw new Error(
+          `@demlik/tea: edge "${at}" names cmd "${n}" with no builder`,
+        );
+      }
+      return { ...build(st, msg, at), type: n };
+    });
+
+    return [next, emitted];
+  };
+}
+
+/** `undefined` → bare; a foreign event → bare; otherwise `${ns}.${event}`. */
+function keyOf(
+  c: { readonly events: Record<string, { readonly foreign?: true } | undefined> },
+  e: string,
+  ns: string | undefined,
+): string {
+  return ns === undefined || c.events[e]?.foreign === true ? e : `${ns}.${e}`;
+}
+
+const NO_PARKING: ReadonlySet<string> = new Set<string>();
+
 /**
  * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
  *
@@ -130,19 +260,7 @@ export function compile<
   ns?: NS,
 ): Transitions<S, MsgIn<C, NS>, K> {
   const c = chart as unknown as RtChart;
-  const assign = parts.assign as unknown as Record<string, RtAssign>;
-  const guards = (parts.guards ?? {}) as unknown as Record<
-    string,
-    (s: RtState, m: RtMsg, at: string) => boolean
-  >;
-  const cmds = (parts.cmds ?? {}) as unknown as Record<
-    string,
-    (s: RtState, m: RtMsg, at: string) => object
-  >;
-  const cells = (parts.cells ?? {}) as unknown as Record<
-    string,
-    (s: RtState, m: RtMsg, at: string) => readonly [RtState, readonly Cmd[]]
-  >;
+  const p = rtParts(parts);
 
   const flat = flatten(c);
   const events = Object.keys(c.events);
@@ -161,8 +279,7 @@ export function compile<
 
     for (const e of events) {
       // the one runtime consequence of per-event namespacing.
-      const key =
-        ns === undefined || c.events[e]?.foreign === true ? e : `${ns}.${e}`;
+      const key = keyOf(c, e, ns);
       const spec = on[e];
 
       if (spec === undefined) {
@@ -180,77 +297,9 @@ export function compile<
         continue;
       }
 
-      const edge = typeof spec === "string" ? { target: spec } : spec;
-      // the site tag, passed to guards/cmds as their last argument — it is what
-      // lets a multi-site guard discriminate (see `SiteArgs` in graph.ts).
-      const at = `${s}.${e}`;
-      const cell = assign[at];
-
-      // ── THE ESCAPE HATCH ────────────────────────────────────────────────
-      // A `{ to, cell }` edge is the whole transition: the cell picks the
-      // target from `to` and returns its own cmds, so there is no assign to
-      // call, no guard to evaluate, no cmd list to rebuild and no `was` to
-      // inject (a cell landing on a parking state supplies `was` itself — its
-      // return type demands it). The other three fields are compile errors
-      // beside `cell`, so this branch is not silently skipping anything.
-      if (edge.cell !== undefined) {
-        const hand = cells[edge.cell];
-        if (hand === undefined) {
-          throw new Error(
-            `@demlik/tea: edge "${s}.${e}" names cell "${edge.cell}" with no implementation`,
-          );
-        }
-        row[key] = (st, nsMsg) => hand(st, { ...nsMsg, type: e }, at);
-        continue;
-      }
-
-      row[key] = (st, nsMsg) => {
-        // strip the namespace so the author's parts see the bare event.
-        const msg: RtMsg = { ...nsMsg, type: e };
-
-        let target: string;
-        let payloadFn: RtFn;
-        let fired = true;
-
-        if (edge.resume !== undefined) {
-          target = st.was ?? edge.resume.fallback;
-          payloadFn = cell as RtFn;
-        } else if (edge.when !== undefined) {
-          const guard = guards[edge.when];
-          fired = guard !== undefined && guard(st, msg, at) === true;
-          const branch = cell as { then: RtFn; else: RtFn };
-          target = fired ? (edge.target as string) : (edge.otherwise as string);
-          payloadFn = fired ? branch.then : branch.else;
-        } else {
-          target = edge.target as string;
-          payloadFn = cell as RtFn;
-        }
-
-        const data = payloadFn(st, msg);
-        // `was` is INJECTED, never authored: entering a parking state records
-        // where you came from. The type of `was` is `ResumeTargets<C, target>`,
-        // and `st.type` is in that set by construction.
-        const next: RtState = parking.has(target)
-          ? { ...data, type: target, was: st.type }
-          : { ...data, type: target };
-
-        // 0..n Cmds, in declaration order. A guarded edge picks its arm's
-        // list — `Cmd.when` lifted onto the edge, so which effects fire is
-        // visible in the chart rather than buried in a cell body.
-        const emitted = cmdNames(fired ? edge.cmd : edge.otherwiseCmd).map(
-          (n): Cmd => {
-            const build = cmds[n];
-            if (build === undefined) {
-              throw new Error(
-                `@demlik/tea: edge "${s}.${e}" names cmd "${n}" with no builder`,
-              );
-            }
-            return { ...build(st, msg, at), type: n };
-          },
-        );
-
-        return [next, emitted];
-      };
+      // the site tag, passed to guards/cmds/cells as their last argument — it is
+      // what lets a multi-site helper discriminate (see `SiteArgs` in graph.ts).
+      row[key] = buildCell(spec, e, `${s}.${e}`, p, parking);
     }
     table[s] = row;
   }
@@ -261,6 +310,118 @@ export function compile<
   // from the flattened chart × the per-event keys, but tsc cannot see that a
   // string-keyed record built in a loop is total over those unions.
   return table as unknown as Transitions<S, MsgIn<C, NS>, K>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REDUCER FORM — the same walk, one loop shallower.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The reducer form's parts bag. Structurally identical to `Parts`, over the
+ * reducer chart's derivations — `assign` is total over the DECLARATIVE events
+ * (a cell event owes none), and each of `guards`/`cmds`/`cells` is demanded
+ * exactly when the chart names one.
+ */
+export type RParts<
+  C,
+  S extends { type: string },
+  M extends { type: string },
+> = {
+  readonly assign: RAssigns<C, S, M>;
+} & ([RGuardName<C>] extends [never]
+  ? { readonly guards?: undefined }
+  : { readonly guards: RGuards<C, S, M> }) &
+  ([RUsedCmdName<C>] extends [never]
+    ? { readonly cmds?: undefined }
+    : { readonly cmds: RCmds<C, S, M> }) &
+  ([RCellName<C>] extends [never]
+    ? { readonly cells?: undefined }
+    : { readonly cells: RCells<C, S, M> });
+
+type RtReducerChart = {
+  readonly events: Record<string, { readonly foreign?: true }>;
+  readonly initial: string;
+  readonly on: Record<string, RtEdge>;
+};
+
+/**
+ * Compile a reducer-form chart into a genuine `Reducer<S, M, K>` — the flat,
+ * msg-keyed `update` shape `defineMachine` already accepts (`src/pure/core.ts`).
+ *
+ * There is no `NoCellError` branch and no refusal branch here, and that is not
+ * an omission: `on` is a TOTAL mapped type over the event alphabet, so an
+ * undeclared event cannot exist to be missing. The safety the grid form buys
+ * with `scope` + `ignore` + `Total<C>`, this form gets from the mapped type.
+ *
+ * `ns` behaves exactly as in `compile`: per-event, optional, and never applied
+ * to an event the chart marks `foreign`.
+ */
+export function compileReducer<
+  const C extends ReducerChart<C>,
+  S extends { type: string } = RStateOf<C>,
+  M extends { type: string } = MsgOf<C>,
+  K extends Cmd = CmdOf<C>,
+  const NS extends string | undefined = undefined,
+>(chart: C, parts: RParts<C, S, M>, ns?: NS): Reducer<S, MsgIn<C, NS>, K> {
+  const c = chart as unknown as RtReducerChart;
+  const p = rtParts(parts);
+  const out: Record<string, RtCell> = {};
+
+  for (const e of Object.keys(c.events)) {
+    const spec = c.on[e];
+    if (spec === undefined) {
+      // unreachable through the typed door — `on` is total over `events`. The
+      // safety net under the compile-time obligation, as `NoCellError` is
+      // under `Total<C>`.
+      throw new Error(`@demlik/tea: reducer chart declares no edge for "${e}"`);
+    }
+    // the site tag IS the event: one dimension, so `SiteArgs`'s `at` is the
+    // bare name and a multi-site cell discriminates on it exactly as before.
+    out[keyOf(c, e, ns)] = buildCell(spec, e, e, p, NO_PARKING);
+  }
+
+  // The same one cast, for the same reason: a string-keyed record built in a
+  // loop is total over `M["type"]`, and tsc cannot see it.
+  return out as unknown as Reducer<S, MsgIn<C, NS>, K>;
+}
+
+/**
+ * `init` for a reducer chart. The entry state is the chart's `initial` field —
+ * one word, still never repeated by the author — and `boot()` supplies `ctx`,
+ * which for this form IS the whole state minus its tag.
+ */
+export function reducerInitFrom<
+  const C extends ReducerChart<C>,
+  S extends { type: string } = RStateOf<C>,
+  K extends Cmd = CmdOf<C>,
+>(chart: C, boot: () => Omit<RStateOf<C>, "type">): (loaded: S | null) => readonly [S, readonly K[]] {
+  const type: string = (chart as unknown as RtReducerChart).initial;
+  return (loaded) => [loaded ?? ({ ...boot(), type } as unknown as S), Cmd.none];
+}
+
+/**
+ * The reducer chart, drawn. There is no per-state routing to show, so the
+ * honest picture is one `any` node — every edge is reachable from every state,
+ * which is what having no phase dimension MEANS — plus each event's full
+ * fan-out, cell edges included.
+ */
+export function reducerMermaid<const C extends ReducerChart<C>>(chart: C): string {
+  const c = chart as unknown as RtReducerChart;
+  const lines = ["stateDiagram-v2", "  direction TB", `  [*] --> ${c.initial}`];
+  for (const [e, spec] of Object.entries(c.on)) {
+    const edge = typeof spec === "string" ? { target: spec } : spec;
+    if (edge.cell !== undefined) {
+      for (const t of edge.to ?? []) {
+        lines.push(`  any --> ${t} : ${e} / ${edge.cell}()`);
+      }
+    } else {
+      if (edge.target !== undefined) lines.push(`  any --> ${edge.target} : ${e}`);
+      if (edge.otherwise !== undefined) {
+        lines.push(`  any --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`);
+      }
+    }
+  }
+  return lines.join("\n");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

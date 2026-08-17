@@ -709,6 +709,222 @@ type CellTarget<C, Sites, S> = Sites extends `${infer From}.${infer Ev}`
   ? Narrow<S, ToOf<EdgeAt<C, From, Ev>>>
   : never;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. REDUCER FORM — the same chart, minus the state grouping.
+//
+// A `Transitions` chart answers |S| × |M| questions. A great many real machines
+// answer only |M| of them: the logic is keyed by the MESSAGE, and `state.type`
+// is a label the message handler writes rather than a dimension it dispatches
+// on. `examples/resilient-fetch.ts` is exactly that — four cells, six phases,
+// and not one of the four asks which phase it is in (except `deadline_exceeded`,
+// which asks INSIDE its body). Forcing it into a grid multiplies each of those
+// four facts by six.
+//
+// So: drop the dimension the machine does not have. Everything else — `ctx`,
+// `events` (with `foreign`), `cmds`, `EdgeSpec` (including `{ to, cell }`),
+// `Referenced`/`EdgeCmds`, `Cell`, `MsgIn`/`KeyOf` — is reused verbatim. What
+// this section adds is the three-line site notion (a site is an EVENT, not a
+// `state.event` pair) and the shapes that hang off it.
+//
+// ── `states`: KEPT, as a flat list ────────────────────────────────────────
+// It is still the chart's job to own every name. `states` stays because two
+// things need it and neither can be recovered from anywhere else:
+//
+//   1. `StateOf<C>` — the State type is DERIVED, as in the grid form, so
+//      `type` is spelled once. Declaring the union separately in TypeScript
+//      would be the one-site rule broken for no gain.
+//   2. the `to` clamp — `to: ["succeded"]` has to be a typo the compiler
+//      catches, and it can only do that against a declared universe.
+//
+// What it is NOT is a record of nodes: a reducer cell receives the WHOLE `S`
+// un-narrowed (that is what `Reducer<S, M, C>` says), so per-state `data`,
+// per-state `on`, `end` and `ignore` are all unrepresentable here — which is
+// correct, not a limitation. `StateOf` therefore collapses from a union of
+// members to ONE object whose `type` is a union of literals. That is precisely
+// the original's `interface State { phase: Phase; … }`.
+//
+// ── `scope`/totality: `scope` GOES, totality STAYS (one dimension smaller) ─
+// `scope` answers "at which states does this event mean anything?". With no
+// state dimension the question has no content, so the field is gone rather
+// than accepted and ignored.
+//
+// Totality is NOT dropped. It changes quantifier: ∀(s,e) becomes ∀e, and it
+// needs no `Total<C>` analogue to enforce, because `on` is a REQUIRED mapped
+// type over `EventName<C>`. Declare an event and omit its edge and tsc says
+// "Property 'fetch_err' is missing". That is the same property `Reducer<S,M,C>`
+// itself enforces on a hand-written record, lifted into the chart — and it is
+// STRONGER per-event than the grid form, where `scope: "edges"` lets an event
+// be routed from nowhere at all.
+//
+// What is genuinely LOST, stated plainly: the per-state REFUSAL. A grid chart
+// can say "in `done`, `poll_failed` is dropped" and draw it. A reducer chart
+// cannot; that decision lives inside the cell body, exactly where the original
+// hand-written machine had it (`s.phase === "waiting_retry" ? … : [s, []]`).
+// This is a real reduction in what the drawing knows. It is the honest trade:
+// the grid form did not RECOVER that information from the original machine, it
+// MANUFACTURED it, at 18 edge declarations for 3 facts. A chart should not
+// charge for knowledge the machine does not have.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** The declared state names — a flat tuple, not a grouped record of nodes. */
+export type RStateName<C> = C extends { readonly states: readonly (infer S)[] }
+  ? Extract<S, string>
+  : never;
+
+/** The top-level edge bag. One edge per event; that IS the totality obligation. */
+type ROn<C> = C extends { readonly on: infer O } ? O : never;
+type REdgeAt<C, E> = E extends keyof ROn<C> ? ROn<C>[E] : never;
+
+export type ReducerChart<C> = {
+  /** Data EVERY state carries — and, here, the ONLY data any state carries. */
+  readonly ctx?: Ty<object>;
+  readonly states: readonly RStateName<C>[];
+  /** The entry state, by name. One word where the grid form marks a node. */
+  readonly initial: RStateName<C>;
+  readonly events: {
+    readonly [E in keyof EvMap<C>]: {
+      readonly data?: Ty<object>;
+      /** Same meaning as the grid form's: this name is not ours to decorate. */
+      readonly foreign?: true;
+    };
+  };
+  readonly cmds?: { readonly [N in keyof CmdMap<C>]: Ty<object> };
+  /**
+   * TOTAL, not partial. Every declared event owes an edge — the `?` the grid
+   * form's per-state `on` carries is exactly what `Total<C>` had to police
+   * there, and here the mapped type does it for free.
+   */
+  readonly on: {
+    readonly [E in EventName<C>]: EdgeSpec<RStateName<C>, CmdName<C>>;
+  };
+};
+
+/**
+ * `resume` needs a phase dimension: `was` is derived from "the states with an
+ * edge INTO the parking state", and here every edge is reachable from every
+ * state, so the derivation degenerates to "all of them" and says nothing. It
+ * is rejected by name rather than silently accepted and ignored by the walk.
+ */
+type RStrictEdge<X> = X extends { readonly resume: unknown }
+  ? { readonly __resumeNeedsAPhaseDimension: true }
+  : EdgeCheck<X>;
+
+export type StrictR<C> = {
+  readonly on: {
+    readonly [E in keyof ROn<C>]: E extends EventName<C>
+      ? RStrictEdge<ROn<C>[E]>
+      : { readonly __onDeclaresAnUndeclaredEvent: E };
+  };
+  readonly events: {
+    readonly [E in keyof EvMap<C>]: [IsForeignOf<EvMap<C>[E]>] extends [true]
+      ? E extends `${string}.${string}`
+        ? { readonly __foreignEventNameCannotContainADot: E }
+        : unknown
+      : unknown;
+  };
+};
+
+/** Same contract as `defineChart`, one dimension smaller. */
+export function defineReducerChart<const C extends ReducerChart<C>>(
+  c: C & StrictR<C>,
+): C {
+  return c;
+}
+
+// ── 12b. derivations ───────────────────────────────────────────────────────
+/**
+ * ONE object, not a union: every state carries `ctx` and nothing else, so the
+ * only thing that varies is the tag. This is the original's
+ * `interface State { phase: Phase; … }` with `phase` named `type`.
+ */
+export type RStateOf<C> = { readonly type: RStateName<C> } & CtxOf<C>;
+
+/** The events whose transition is delegated to a cell. */
+export type RCellEvent<C> = Extract<
+  {
+    [E in EventName<C>]: ROn<C>[E & keyof ROn<C>] extends { readonly cell: string }
+      ? E
+      : never;
+  }[EventName<C>],
+  string
+>;
+
+type RNames<C, F extends "when" | "cmd" | "cell"> = Extract<
+  { [E in keyof ROn<C>]: Referenced<ROn<C>[E], F> }[keyof ROn<C>],
+  string
+>;
+
+export type RGuardName<C> = RNames<C, "when">;
+export type RCellName<C> = RNames<C, "cell">;
+export type RUsedCmdName<C> = RNames<C, "cmd">;
+
+/**
+ * A site is an EVENT. The grid form's `SitesWhere` scans `state × event`; with
+ * one dimension the scan is the same shape with the outer loop removed.
+ */
+type RSitesWhere<C, F extends "when" | "cmd" | "cell", Name> = Extract<
+  {
+    [E in keyof ROn<C>]: [Name] extends [Referenced<ROn<C>[E], F>] ? E : never;
+  }[keyof ROn<C>],
+  string
+>;
+
+/**
+ * The state is NOT narrowed — there is nothing to narrow it to. Everything
+ * else is `SiteArgs` verbatim, including the `at` correlator that lets a
+ * multi-site helper discriminate its msg with one `switch`.
+ */
+type RSiteArgs<K, S, M> = K extends string
+  ? [state: S, msg: Narrow<M, K>, at: K]
+  : never;
+
+export type RGuards<C, S, M extends { type: string }> = {
+  [N in RGuardName<C>]: (...args: RSiteArgs<RSitesWhere<C, "when", N>, S, M>) => boolean;
+};
+
+export type RCmds<C, S, M extends { type: string }> = {
+  [N in RUsedCmdName<C>]: (
+    ...args: RSiteArgs<RSitesWhere<C, "cmd", N>, S, M>
+  ) => Payload<CmdMap<C>[N & keyof CmdMap<C>]>;
+};
+
+export type RCells<C, S extends { type: string }, M extends { type: string }> = {
+  [N in RCellName<C>]: (
+    ...args: RSiteArgs<RSitesWhere<C, "cell", N>, S, M>
+  ) => readonly [RCellTarget<C, RSitesWhere<C, "cell", N>>, readonly CmdOf<C>[]];
+};
+
+/** The `to` clamp, unchanged in spirit: the tag is restricted, `ctx` is not. */
+type RCellTarget<C, Sites> = Sites extends string
+  ? { readonly type: Extract<ToOf<REdgeAt<C, Sites>>, string> } & CtxOf<C>
+  : never;
+
+/**
+ * What an `assign` returns: `ctx`, for every target. The compiler stamps
+ * `type` from the edge, so — as in the grid form — the author cannot forget it
+ * and cannot get it wrong.
+ */
+type RAssigned<C> = CtxOf<C>;
+type RFn<C, S, M extends { type: string }, E, R> = (
+  state: S,
+  msg: Narrow<M, E>,
+) => R;
+
+type RCell<C, X, S, M extends { type: string }, E> = X extends {
+  readonly target: unknown;
+  readonly otherwise: unknown;
+}
+  ? {
+      readonly then: RFn<C, S, M, E, RAssigned<C>>;
+      readonly else: RFn<C, S, M, E, RAssigned<C>>;
+    }
+  : RFn<C, S, M, E, RAssigned<C>>;
+
+/** One builder per DECLARATIVE event. Cell events own their whole transition. */
+export type RAssigns<C, S, M extends { type: string }> = {
+  [E in Exclude<EventName<C>, RCellEvent<C>>]: RCell<C, REdgeAt<C, E>, S, M, E>;
+};
+
 // ── 11. identity assertion helpers ─────────────────────────────────────────
 export type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends <
   T,

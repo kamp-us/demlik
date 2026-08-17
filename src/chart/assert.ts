@@ -2,8 +2,8 @@
 // IDENTITY ASSERTIONS — each one fails to compile if the derivation is wrong.
 // `Eq<A,B>` is the invariant-position trick, so `any`/`never` do NOT slip past.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Cmd, SyncReturn, Transitions } from "../pure/core";
-import { compile } from "./compile";
+import type { Cmd, Reducer, SyncReturn, Transitions } from "../pure/core";
+import { compile, compileReducer } from "./compile";
 import {
   type Assert,
   type Assigns,
@@ -27,11 +27,21 @@ import {
   type MsgIn,
   type MsgOf,
   type ParkingState,
+  type RAssigns,
+  type RCellEvent,
+  type RCellName,
+  type RCells,
+  type RGuardName,
+  type RGuards,
+  type RStateName,
+  type RStateOf,
+  type RUsedCmdName,
   type ResumeTargets,
   type StateName,
   type StateOf,
   type UsedCmdName,
   defineChart,
+  defineReducerChart,
   ty,
 } from "./graph";
 import {
@@ -578,4 +588,119 @@ export const picked = compile(
 );
 export type A66 = Assert<
   Eq<typeof picked, Transitions<PState, MsgIn<PG, "p">, CmdOf<PG>>>
+>;
+
+// ═══ §11 REDUCER FORM — the chart minus the state grouping ═════════════════
+// One chart with every edge kind the form admits: a plain target, a guarded
+// pair, and a cell used at TWO sites with DIFFERENT `to` sets. Every claim
+// about the form is asserted off it, and each assertion below names the grid-
+// form derivation it mirrors — because it IS that derivation, one loop up.
+const flat = defineReducerChart({
+  ctx: ty<{ readonly n: number }>(),
+  states: ["a", "b", "c"],
+  initial: "a",
+  cmds: { beep: ty<{ readonly n: number }>(), boop: ty<{ readonly n: number }>() },
+  events: {
+    X: { data: ty<{ readonly lo: number }>() },
+    Y: { data: ty<{ readonly hi: string }>() },
+    Z: { data: ty<{ readonly on: boolean }>() },
+    // a library's Msg — not ours to decorate, exactly as in the grid form.
+    deadline_exceeded: { data: ty<{ readonly atMs: number }>(), foreign: true },
+  },
+  on: {
+    X: { to: ["a", "b"], cell: "decide" },
+    Y: { to: ["a", "c"], cell: "decide" },
+    Z: { target: "c", when: "isOn", otherwise: "a", cmd: "beep" },
+    deadline_exceeded: "a",
+  },
+});
+export type FG2 = typeof flat;
+export type FState2 = RStateOf<FG2>;
+export type FMsg2 = MsgOf<FG2>;
+type FM<K extends string> = Extract<FMsg2, { type: K }>;
+
+// THE SHAPE. `StateOf` collapses from a union of members to ONE object whose
+// `type` is a union of literals — which is the original's
+// `interface State { phase: Phase; … }`, derived instead of hand-written.
+export type A67 = Assert<
+  Eq<FState2, { readonly type: "a" | "b" | "c" } & { readonly n: number }>
+>;
+// the alphabets are DERIVED off `on`, exactly as the grid form's are off the
+// nested `on`s — one reference site each, no declaration.
+export type A68 = Assert<Eq<RStateName<FG2>, "a" | "b" | "c">>;
+export type A69 = Assert<Eq<RCellName<FG2>, "decide">>;
+export type A70 = Assert<Eq<RGuardName<FG2>, "isOn">>;
+export type A71 = Assert<Eq<RCellEvent<FG2>, "X" | "Y">>;
+// a cmd only a CELL could emit owes no builder; one an EDGE fires does.
+export type A72 = Assert<Eq<CmdName<FG2>, "beep" | "boop">>;
+export type A73 = Assert<Eq<RUsedCmdName<FG2>, "beep">>;
+// `assign` is keyed by the DECLARATIVE events only — cell events own their
+// whole transition, so a builder for one is not merely optional, it is not a
+// key of the bag at all (the grid form's `Exclude<EdgeKey, CellEdgeKey>`).
+export type A74 = Assert<
+  Eq<keyof RAssigns<FG2, FState2, FMsg2>, "Z" | "deadline_exceeded">
+>;
+
+type Decide2 = RCells<FG2, FState2, FMsg2>["decide"];
+// THE POINT (params): two sites → a union of tuples with the `at` correlator,
+// identical in construction to the grid form's — except the STATE is not
+// narrowed, because in this form there is nothing to narrow it to.
+export type A75 = Assert<
+  Eq<
+    Parameters<Decide2>,
+    [state: FState2, msg: FM<"X">, at: "X"] | [state: FState2, msg: FM<"Y">, at: "Y"]
+  >
+>;
+// THE POINT (return): the tag is clamped to the union of both sites' `to`, and
+// nothing else about the state is.
+export type A76 = Assert<
+  Eq<
+    ReturnType<Decide2>,
+    readonly [
+      | ({ readonly type: "a" | "b" } & { readonly n: number })
+      | ({ readonly type: "a" | "c" } & { readonly n: number }),
+      readonly CmdOf<FG2>[],
+    ]
+  >
+>;
+// a guard's params come from its use site, same as ever.
+export type A77 = Assert<
+  Eq<Parameters<RGuards<FG2, FState2, FMsg2>["isOn"]>, [state: FState2, msg: FM<"Z">, at: "Z"]>
+>;
+
+export const flatCells: RCells<FG2, FState2, FMsg2> = {
+  decide: (s, m, at) => {
+    switch (at) {
+      case "X":
+        return [{ ...s, type: m.lo > 0 ? "b" : "a" }, []];
+      case "Y":
+        return [{ ...s, type: m.hi === "" ? "a" : "c" }, [{ type: "boop", n: s.n }]];
+    }
+  },
+};
+
+export const flatUpdate = compileReducer(
+  flat,
+  {
+    assign: {
+      Z: { then: (s) => ({ n: s.n + 1 }), else: (s) => ({ n: s.n }) },
+      deadline_exceeded: (s) => ({ n: s.n }),
+    },
+    guards: { isOn: (_s, m) => m.on },
+    cmds: { beep: (s) => ({ n: s.n }) },
+    cells: flatCells,
+  },
+  "f",
+);
+// THE OUTPUT IS A REAL `Reducer` — flat, msg-keyed, namespaced per-event with
+// the foreign name kept bare. Not a `Transitions` with one row.
+export type A78 = Assert<
+  Eq<typeof flatUpdate, Reducer<FState2, MsgIn<FG2, "f">, CmdOf<FG2>>>
+>;
+export type A79 = Assert<
+  Eq<keyof typeof flatUpdate, "f.X" | "f.Y" | "f.Z" | "deadline_exceeded">
+>;
+// un-namespaced, the keys are bare — the single-instance call, no dummy string.
+export type A80 = Assert<
+  Eq<keyof Reducer<FState2, MsgIn<FG2>, CmdOf<FG2>>, "X" | "Y" | "Z" | "deadline_exceeded">
 >;
