@@ -1,7 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // BEHAVIOURAL EQUIVALENCE — the REAL `examples/resilient-fetch.ts` machine and
-// the REDUCER-FORM port, driven through the same message sequence, full state
-// and full cmd list diffed at every step.
+// the REDUCER-FORM port, driven through the same message sequence, with full
+// state, full ordered cmd list AND full sub set diffed at every step.
+//
+// The sequence lives in `__fixtures__/resilient-fetch-steps.ts`, shared with the
+// GRID-form twin `equiv-resilient-fetch-chart.test.ts` — an equivalence claim
+// about "the ports" is only as strong as its weaker walk. That file also asserts
+// which arms of the five-way `attempt()` fan-out the walk actually lands.
 //
 // Determinism: `nextDelayMs` jitters through `defaultRng`, which each copy of
 // `retry-backoff` binds to whatever `Math.random` is when THAT copy is first
@@ -14,9 +19,14 @@
 // number of times in the same order.
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it, vi } from "vitest";
-import { subId } from "../pure/core";
+import { deepEqual } from "../trace-replay";
 import { importExample } from "./__fixtures__/import-example";
 import type { RFState } from "./__fixtures__/resilient-fetch-reducer";
+import {
+  type AnyMsg,
+  stable,
+  walks,
+} from "./__fixtures__/resilient-fetch-steps";
 
 const lcg = (): (() => number) => {
   let seed = 0x2f6e2b1;
@@ -55,114 +65,14 @@ Math.random = lcg();
 const EXAMPLE = new URL("../../examples/resilient-fetch.ts", import.meta.url)
   .href;
 const { resilientFetch } = (await importExample(EXAMPLE)) as {
-  resilientFetch: { init: unknown; update: unknown };
+  resilientFetch: { init: unknown; update: unknown; subscriptions: unknown };
 };
 
 vi.resetModules();
 Math.random = lcg();
-const { fetchReducerInit, fetchReducerUpdate } = await import(
+const { fetchReducerInit, fetchReducerUpdate, fetchReducerSubs } = await import(
   "./__fixtures__/resilient-fetch-reducer"
 );
-
-type AnyMsg = { readonly type: string; readonly [k: string]: unknown };
-type Step = readonly [label: string, msg: AnyMsg];
-
-const T0 = 1_000_000;
-const U = "https://api.example/thing";
-
-const steps: readonly Step[] = [
-  // a timer that fires before anything started — the phase-conditioned no-op
-  [
-    "deadline before start",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 },
-  ],
-  ["fetch", { type: "fetch", url: U, at: T0 }],
-  ["fetch_ok", { type: "fetch_ok", url: U, body: "hello", at: T0 + 50 }],
-  // served from cache this time — no cmd at all
-  ["fetch (cache hit)", { type: "fetch", url: U, at: T0 + 100 }],
-  // a different url misses the cache and spends a token
-  ["fetch other", { type: "fetch", url: `${U}/b`, at: T0 + 200 }],
-  // the failure fork, run to exhaustion — every step here draws from the RNG
-  [
-    "fetch_err 1",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-1", at: T0 + 300 },
-  ],
-  [
-    "deadline -> retry",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 400 },
-  ],
-  [
-    "fetch_err 2",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-2", at: T0 + 500 },
-  ],
-  [
-    "deadline -> retry",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 900 },
-  ],
-  [
-    "fetch_err 3",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-3", at: T0 + 1_000 },
-  ],
-  [
-    "deadline -> retry",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 1_800 },
-  ],
-  [
-    "fetch_err 4",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-4", at: T0 + 1_900 },
-  ],
-  [
-    "deadline -> retry",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 3_000 },
-  ],
-  [
-    "fetch_err 5",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-5", at: T0 + 3_100 },
-  ],
-  [
-    "fetch_err 6",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-6", at: T0 + 3_200 },
-  ],
-  [
-    "fetch_err 7",
-    { type: "fetch_err", url: `${U}/b`, error: "boom-7", at: T0 + 3_300 },
-  ],
-  // adversarial: does a failed machine still absorb traffic identically?
-  [
-    "deadline after failed",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 4_000 },
-  ],
-  ["fetch after failed", { type: "fetch", url: `${U}/c`, at: T0 + 4_100 }],
-  [
-    "fetch_ok late",
-    { type: "fetch_ok", url: `${U}/c`, body: "late", at: T0 + 4_200 },
-  ],
-  // drain the bucket to force the rate-limit fork inside `attempt`
-  ...Array.from(
-    { length: 14 },
-    (_, i): Step => [
-      `drain ${i + 1}`,
-      { type: "fetch", url: `${U}/d${i}`, at: T0 + 4_300 + i },
-    ],
-  ),
-  [
-    "deadline after drain",
-    { type: "deadline_exceeded", id: subId("retry"), atMs: T0 + 5_000 },
-  ],
-];
-
-/** property-order-independent structural print */
-function stable(v: unknown): string {
-  if (v === null || typeof v !== "object")
-    return JSON.stringify(v) ?? "undefined";
-  if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
-  const rec = v as Record<string, unknown>;
-  return `{${Object.keys(rec)
-    .sort()
-    .filter((k) => rec[k] !== undefined)
-    .map((k) => `${JSON.stringify(k)}:${stable(rec[k])}`)
-    .join(",")}}`;
-}
 
 type Pair = readonly [Record<string, unknown>, readonly unknown[]];
 
@@ -170,12 +80,14 @@ const origUpdate = resilientFetch.update as unknown as Record<
   string,
   (s: unknown, m: AnyMsg) => Pair
 >;
-let orig = (
-  resilientFetch.init as unknown as (
-    l: null,
-    c: unknown,
-  ) => readonly [Record<string, unknown>]
-)(null, {})[0];
+const origSubs = resilientFetch.subscriptions as (
+  s: unknown,
+) => readonly unknown[];
+const origInit = resilientFetch.init as unknown as (
+  l: null,
+  c: unknown,
+) => readonly [Record<string, unknown>];
+let orig = origInit(null, {})[0];
 
 // THE SHAPE THAT MATTERS: `fetchReducerUpdate` is a FLAT record keyed by msg
 // type — a real `Reducer`, dispatched `update[msg.type](s, m)`, no phase index.
@@ -204,34 +116,71 @@ const check = (label: string, a: string, b: string, what: string): void => {
   }
 };
 
-check("<init>", stable(orig), stable(asOrig(port)), "state");
-
-say(
-  "step                                  | phase(orig)   | type(port)    | cmds",
-);
-say(
-  "--------------------------------------+---------------+---------------+------",
-);
-
-for (const [label, msg] of steps) {
-  // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
-  const [nextOrig, origCmds] = origUpdate[msg.type]!(orig, msg);
-  orig = nextOrig;
-
-  // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
-  const [nextPort, portCmds] = portUpdate[msg.type]!(port, msg);
-  port = nextPort;
-
-  check(label, stable(orig), stable(asOrig(port)), "state");
-  check(label, stable(origCmds), stable(portCmds), "cmds");
-
-  say(
-    `${label.padEnd(37)} | ${String(orig.phase).padEnd(13)} | ${port.type.padEnd(13)} | ${
-      portCmds.map((c) => (c as { type: string }).type).join(",") || "-"
-    }`,
+/**
+ * SUBS ARE PART OF THE MACHINE. Both the example and the port declare
+ * `subscriptions`, and for the retry ladder the timer IS the behaviour — a port
+ * that emitted the right states and the right cmds but armed no deadline would
+ * simply never retry, and comparing only `[state, cmds]` called that identical.
+ *
+ * Subs carry an `id`, and a sub SET is identified by those ids, so the compare
+ * is order-insensitive but otherwise faithful: sort by id, then hand it to the
+ * record/replay lane's own `deepEqual` rather than adding a fourth deep-compare.
+ */
+const byId = (subs: readonly unknown[]): readonly unknown[] =>
+  [...subs].sort((a, b) =>
+    String((a as { id?: unknown }).id).localeCompare(
+      String((b as { id?: unknown }).id),
+    ),
   );
-}
+const checkSubs = (label: string, a: readonly unknown[]): void => {
+  const b = fetchReducerSubs(port);
+  if (!deepEqual(byId(a), byId(b))) {
+    diffs.push(`DIFF (subs) @ ${label}
+    original: ${stable(byId(a))}
+    ported  : ${stable(byId(b))}`);
+  }
+};
 
+say(
+  "step                                  | phase(orig)   | type(port)    | subs | cmds",
+);
+say(
+  "--------------------------------------+---------------+---------------+------+------",
+);
+
+for (const walk of walks) {
+  // A fresh `init` per walk, on BOTH machines — `idle` is the one state nothing
+  // targets, so a walk can only ask it one question. The RNG streams are NOT
+  // reset between walks: each machine keeps one stream end to end, so the two
+  // agree only if they draw the same number of times in the same order.
+  orig = origInit(null, {})[0];
+  port = fetchReducerInit(null)[0];
+  say(`— walk: ${walk.name} —`);
+  check(`<init:${walk.name}>`, stable(orig), stable(asOrig(port)), "state");
+  checkSubs(`<init:${walk.name}>`, origSubs(orig));
+
+  for (const [label, msg] of walk.steps) {
+    // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
+    const [nextOrig, origCmds] = origUpdate[msg.type]!(orig, msg);
+    orig = nextOrig;
+
+    // biome-ignore lint/style/noNonNullAssertion: the compiled table is total over the event alphabet by construction — a mapped type tsc cannot see through under noUncheckedIndexedAccess
+    const [nextPort, portCmds] = portUpdate[msg.type]!(port, msg);
+    port = nextPort;
+
+    check(label, stable(orig), stable(asOrig(port)), "state");
+    check(label, stable(origCmds), stable(portCmds), "cmds");
+    checkSubs(label, origSubs(orig));
+
+    say(
+      `${label.padEnd(37)} | ${String(orig.phase).padEnd(13)} | ${port.type.padEnd(13)} | ${String(
+        fetchReducerSubs(port).length,
+      ).padEnd(
+        4,
+      )} | ${portCmds.map((c) => (c as { type: string }).type).join(",") || "-"}`,
+    );
+  }
+}
 say("");
 say(`final original: ${stable(orig)}`);
 say(`final ported  : ${stable(asOrig(port))}`);
