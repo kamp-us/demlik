@@ -286,20 +286,47 @@ export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
 // === msgKeysOf: recover the Msg.type set from either update form ===
 //
 // A Reducer's own keys ARE the Msg.type set. A Transitions table's keys are
-// state.type; its INNER keys are the Msg.type set (uniform across phases by
-// the mapped-type contract), so the first phase's inner keys are read. An
-// empty update (`M` is `never`) yields `[]`. Keyed on `formOf` — the withX
-// wrappers and the PBT `msgTypeKeys` all read through this one helper (#275).
+// state.type; its INNER keys are the Msg.type set, so the UNION of every row's
+// inner keys is read — first-seen order, deduped. An empty update (`M` is
+// `never`) yields `[]`. Keyed on `formOf` — the withX wrappers and the PBT
+// `msgTypeKeys` all read through this one helper (#275).
+//
+// Why the union and not the first row's keys (the former reading): the
+// mapped-type `Transitions<S, M, C>` contract makes the Msg key set uniform
+// across phases, so for a hand-written TOTAL table the first row already IS
+// the union and this is a no-op. But the contract only binds where the types
+// bind. A table assembled DYNAMICALLY — the discriminants widened to plain
+// `string`, rows pushed in a loop — is structurally ragged, and reading row
+// zero then under-reports the Msg union. That under-report is not cosmetic:
+// all three withX wrappers build their flat merged Reducer by iterating
+// `msgKeysOf(base)`, so a Msg missing from row zero got NO cell in the wrapped
+// machine and threw `NoCellError` at dispatch for a Msg the base handles
+// perfectly well; and `withDeadline`'s reserved-namespace scan silently missed
+// a `$deadline:`-prefixed base Msg that appeared only in a later row.
+//
+// The widening is pure: for any total table the returned array is identical
+// (same keys, same order). Cost goes from O(msgs) to O(states × msgs), paid
+// ONCE per wrapper construction — never inside the dispatch loop.
 export function msgKeysOf(machine: {
   update: object;
   __form?: UpdateForm;
 }): readonly string[] {
   const keys = Object.keys(machine.update);
-  const firstKey = keys[0];
-  if (firstKey === undefined) return [];
+  if (keys.length === 0) return [];
   if (formOf(machine) === "reducer") return keys;
-  const firstValue = (machine.update as Record<string, unknown>)[firstKey];
-  return Object.keys(firstValue as object);
+  const table = machine.update as Record<string, object | undefined>;
+  const seen = new Set<string>();
+  const union: string[] = [];
+  for (const stateKey of keys) {
+    const row = table[stateKey];
+    if (row === null || row === undefined) continue;
+    for (const msgKey of Object.keys(row)) {
+      if (seen.has(msgKey)) continue;
+      seen.add(msgKey);
+      union.push(msgKey);
+    }
+  }
+  return union;
 }
 
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
