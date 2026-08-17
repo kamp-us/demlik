@@ -30,6 +30,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      # First, because it is the cheapest and because every other gate has
+      # already been observed to miss it: a merge left conflict markers in two
+      # markdown files and typecheck, lint, build, verify-exports AND
+      # check-export-stamps all passed on the result.
+      - name: Conflict markers
+        run: pnpm run check:merge-markers
+
       # Fast + deterministic, so it gates before the slower test/build.
       - name: Typecheck
         run: pnpm run typecheck

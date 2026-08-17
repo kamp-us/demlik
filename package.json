@@ -284,6 +284,7 @@
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
     "verify-exports": "node scripts/verify-exports.mjs",
     "check:chart-probes": "node scripts/check-chart-probes.mjs",
+    "check:merge-markers": "node scripts/check-merge-markers.mjs",
     "release": "changeset"
   },
   "dependencies": {
