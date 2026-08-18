@@ -1,0 +1,11 @@
+{
+  "stateValue": "complete",
+  "status": "done",
+  "context": {
+    "issue": {
+      "retries": 1,
+      "maxRetries": 2
+    },
+    "errors": []
+  }
+}

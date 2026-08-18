@@ -1,0 +1,861 @@
+{
+	"id": "epic-4195",
+	"version": 1,
+	"machine": {
+		"id": "epic-4195",
+		"initial": "phase1",
+		"context": {
+			"issue_4239": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4253": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4240": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4241": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4242": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4243": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4244": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4245": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4246": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4247": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"issue_4248": {
+				"retries": 0,
+				"maxRetries": 2
+			},
+			"epic_4195": {
+				"retries": 0,
+				"maxRetries": 2
+			}
+		},
+		"states": {
+			"phase1": {
+				"type": "parallel",
+				"states": {
+					"issue_4239": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4239.WIP": "build",
+									"ISSUE_4239.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4239.DONE": "review",
+									"ISSUE_4239.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4239.PASS": "integrate",
+									"ISSUE_4239.BLOCKED": "blocked",
+									"ISSUE_4239.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4239.DONE": "landed",
+									"ISSUE_4239.BLOCKED": "blocked",
+									"ISSUE_4239.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4239.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4253": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4253.WIP": "build",
+									"ISSUE_4253.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4253.DONE": "review",
+									"ISSUE_4253.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4253.PASS": "integrate",
+									"ISSUE_4253.BLOCKED": "blocked",
+									"ISSUE_4253.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4253.DONE": "landed",
+									"ISSUE_4253.BLOCKED": "blocked",
+									"ISSUE_4253.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4253.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					}
+				},
+				"onDone": [
+					{
+						"target": "phase2",
+						"guard": "noErrors"
+					},
+					{
+						"target": "tripped"
+					}
+				]
+			},
+			"phase2": {
+				"type": "parallel",
+				"states": {
+					"issue_4240": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4240.WIP": "build",
+									"ISSUE_4240.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4240.DONE": "review",
+									"ISSUE_4240.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4240.PASS": "integrate",
+									"ISSUE_4240.BLOCKED": "blocked",
+									"ISSUE_4240.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4240.DONE": "landed",
+									"ISSUE_4240.BLOCKED": "blocked",
+									"ISSUE_4240.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4240.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4241": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4241.WIP": "build",
+									"ISSUE_4241.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4241.DONE": "review",
+									"ISSUE_4241.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4241.PASS": "integrate",
+									"ISSUE_4241.BLOCKED": "blocked",
+									"ISSUE_4241.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4241.DONE": "landed",
+									"ISSUE_4241.BLOCKED": "blocked",
+									"ISSUE_4241.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4241.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4242": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4242.WIP": "build",
+									"ISSUE_4242.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4242.DONE": "review",
+									"ISSUE_4242.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4242.PASS": "integrate",
+									"ISSUE_4242.BLOCKED": "blocked",
+									"ISSUE_4242.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4242.DONE": "landed",
+									"ISSUE_4242.BLOCKED": "blocked",
+									"ISSUE_4242.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4242.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4243": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4243.WIP": "build",
+									"ISSUE_4243.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4243.DONE": "review",
+									"ISSUE_4243.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4243.PASS": "integrate",
+									"ISSUE_4243.BLOCKED": "blocked",
+									"ISSUE_4243.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4243.DONE": "landed",
+									"ISSUE_4243.BLOCKED": "blocked",
+									"ISSUE_4243.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4243.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4244": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4244.WIP": "build",
+									"ISSUE_4244.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4244.DONE": "review",
+									"ISSUE_4244.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4244.PASS": "integrate",
+									"ISSUE_4244.BLOCKED": "blocked",
+									"ISSUE_4244.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4244.DONE": "landed",
+									"ISSUE_4244.BLOCKED": "blocked",
+									"ISSUE_4244.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4244.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4245": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4245.WIP": "build",
+									"ISSUE_4245.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4245.DONE": "review",
+									"ISSUE_4245.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4245.PASS": "integrate",
+									"ISSUE_4245.BLOCKED": "blocked",
+									"ISSUE_4245.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4245.DONE": "landed",
+									"ISSUE_4245.BLOCKED": "blocked",
+									"ISSUE_4245.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4245.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4246": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4246.WIP": "build",
+									"ISSUE_4246.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4246.DONE": "review",
+									"ISSUE_4246.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4246.PASS": "integrate",
+									"ISSUE_4246.BLOCKED": "blocked",
+									"ISSUE_4246.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4246.DONE": "landed",
+									"ISSUE_4246.BLOCKED": "blocked",
+									"ISSUE_4246.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4246.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					},
+					"issue_4247": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4247.WIP": "build",
+									"ISSUE_4247.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4247.DONE": "review",
+									"ISSUE_4247.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4247.PASS": "integrate",
+									"ISSUE_4247.BLOCKED": "blocked",
+									"ISSUE_4247.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4247.DONE": "landed",
+									"ISSUE_4247.BLOCKED": "blocked",
+									"ISSUE_4247.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4247.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					}
+				},
+				"onDone": [
+					{
+						"target": "phase3",
+						"guard": "noErrors"
+					},
+					{
+						"target": "tripped"
+					}
+				]
+			},
+			"phase3": {
+				"type": "parallel",
+				"states": {
+					"issue_4248": {
+						"initial": "queued",
+						"states": {
+							"queued": {
+								"on": {
+									"ISSUE_4248.WIP": "build",
+									"ISSUE_4248.BLOCKED": "blocked"
+								}
+							},
+							"build": {
+								"on": {
+									"ISSUE_4248.DONE": "review",
+									"ISSUE_4248.BLOCKED": "blocked"
+								}
+							},
+							"review": {
+								"on": {
+									"ISSUE_4248.PASS": "integrate",
+									"ISSUE_4248.BLOCKED": "blocked",
+									"ISSUE_4248.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"integrate": {
+								"on": {
+									"ISSUE_4248.DONE": "landed",
+									"ISSUE_4248.BLOCKED": "blocked",
+									"ISSUE_4248.FAIL": [
+										{
+											"target": "build",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "frozen"
+										}
+									]
+								}
+							},
+							"blocked": {
+								"on": {
+									"ISSUE_4248.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"landed": {
+								"type": "final"
+							},
+							"frozen": {
+								"type": "final"
+							}
+						}
+					}
+				},
+				"onDone": [
+					{
+						"target": "epic",
+						"guard": "noErrors"
+					},
+					{
+						"target": "tripped"
+					}
+				]
+			},
+			"epic": {
+				"type": "parallel",
+				"states": {
+					"epic_4195": {
+						"initial": "review",
+						"states": {
+							"review": {
+								"on": {
+									"EPIC_4195.PASS": "ship",
+									"EPIC_4195.BLOCKED": "blocked",
+									"EPIC_4195.FAIL": [
+										{
+											"target": "review",
+											"guard": "retriesRemaining",
+											"actions": "incrementRetries"
+										},
+										{
+											"target": "human:epic-review"
+										}
+									]
+								}
+							},
+							"ship": {
+								"on": {
+									"EPIC_4195.DONE": "shipped",
+									"EPIC_4195.BLOCKED": "human:cp-approval"
+								}
+							},
+							"blocked": {
+								"on": {
+									"EPIC_4195.UNBLOCKED": "hist"
+								}
+							},
+							"human:cp-approval": {
+								"on": {
+									"EPIC_4195.UNBLOCKED": "hist"
+								}
+							},
+							"hist": {
+								"type": "history"
+							},
+							"shipped": {
+								"type": "final"
+							},
+							"human:epic-review": {
+								"type": "final"
+							}
+						}
+					}
+				},
+				"onDone": [
+					{
+						"target": "complete",
+						"guard": "noErrors"
+					},
+					{
+						"target": "tripped"
+					}
+				]
+			},
+			"complete": {
+				"type": "final"
+			},
+			"tripped": {
+				"type": "final"
+			}
+		}
+	}
+}
