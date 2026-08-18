@@ -181,9 +181,15 @@ export interface ReducerChartInspectorProps<
  *
  * Shared by both chart forms because none of it is form-specific: a compiled
  * `Transitions` and a compiled `Reducer` are both just a `Machine["update"]`.
+ *
+ * EXPORTED for the one other component with the same lifecycle to own:
+ * `@demlik/tea/chart/lane/react`'s live lane, whose `update` is `runLane`'s.
+ * A lane is not a chart form, but "own a runtime for the component's lifetime,
+ * record it, and stop it on unmount" is not a fact about charts either — and a
+ * second copy of it is a second place for the recorder's stop to be forgotten.
  */
-function useInspectorRuntime<
-  S extends { type: string },
+export function useInspectorRuntime<
+  S,
   M extends { type: string },
   K extends Cmd,
   Ctx,

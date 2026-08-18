@@ -230,8 +230,15 @@ export interface LaneFeed {
   ) => RetryBudget | Unanswerable<"retries">;
   /** The `parts` bag and samples, per task. Absent where there are none. */
   readonly optsFor?: (task: string) => InspectOptions;
-  /** What a click dispatches — or why this source offers no click. */
-  readonly send: (preview: EventPreview) => LaneControl["send"];
+  /**
+   * What a click dispatches — or why this source offers no click.
+   *
+   * The task is a parameter because a lane's dispatch surface is addressed:
+   * `compile(chart, parts, taskId)` keys the table `${task}.${event}`, so the
+   * msg a control sends is the region's event WEARING its task. The preview's
+   * own `msg` is the bare one; namespacing it is the feed's job, once.
+   */
+  readonly send: (task: string, preview: EventPreview) => LaneControl["send"];
 }
 
 const NO_DISPATCH: Unanswerable<"dispatch"> = {
@@ -408,7 +415,10 @@ export function liveFeed(lane: ImportedLane, input: LiveFeedInput): LaneFeed {
     ...(input.optsFor === undefined ? {} : { optsFor: input.optsFor }),
     // The code bodies exist, so the only thing that can stop a click is a
     // payload nobody could derive.
-    send: (preview) => preview.msg ?? noSample(preview.event),
+    send: (task, preview) =>
+      preview.msg === undefined
+        ? noSample(preview.event)
+        : { ...preview.msg, type: `${task}.${preview.event}` },
   };
 }
 
@@ -525,7 +535,7 @@ function control(
     refused,
     ...(preview.why === undefined ? {} : { why: preview.why }),
     outcome: outcomeOf(preview),
-    send: refused ? NO_DISPATCH_REFUSED : feed.send(preview),
+    send: refused ? NO_DISPATCH_REFUSED : feed.send(task, preview),
   };
 }
 

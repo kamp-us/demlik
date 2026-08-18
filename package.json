@@ -269,6 +269,11 @@
       "types": "./dist/chart/lane/index.d.ts",
       "import": "./dist/chart/lane/index.js"
     },
+    "./chart/lane/react": {
+      "types": "./dist/chart/lane/react.d.ts",
+      "import": "./dist/chart/lane/react.js"
+    },
+    "./chart/lane/styles.css": "./dist/chart/lane/styles.css",
     "./package.json": "./package.json"
   },
   "scripts": {
