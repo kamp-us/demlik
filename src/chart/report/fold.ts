@@ -32,6 +32,31 @@ import {
   statesOf,
 } from "./workflow";
 
+/**
+ * The edge a step DREW, keyed as {@link edgeKey} spells it.
+ *
+ * ONE DECLARATION SITE for the resume rule, and that is the whole reason it is
+ * a function rather than four lines inside {@link timeline}. A resume edge is
+ * DRAWN once, to its fallback, and WALKED to wherever `was` pointed — so
+ * recovering "which edge lit up" from the observed target lands on an edge the
+ * drawing does not have. Any reader that knows `from`/`event`/`to` and wants
+ * the drawn edge (a folded log's timeline; a live lane's recorded tape) asks
+ * here, so the two cannot disagree about which edge to thicken.
+ */
+export function walkedEdgeKey(
+  chart: ImportedChart,
+  from: string,
+  event: string,
+  to: string,
+): string {
+  const declared = statesOf(chart).get(from)?.on?.[event];
+  const drawn =
+    declared !== undefined && "resume" in declared
+      ? declared.resume.fallback
+      : to;
+  return edgeKey(from, event, drawn);
+}
+
 /** One appended line of `events.jsonl`: which task, which event, when. */
 export interface LogEntry {
   readonly task: string;
@@ -276,11 +301,6 @@ export function timeline(
     const event = bareEvent(entry.event);
     const after = stepTask(chart, before, event);
     states[entry.task] = after;
-    const declared = statesOf(chart).get(before.type)?.on?.[event];
-    const drawnTarget =
-      declared !== undefined && "resume" in declared
-        ? declared.resume.fallback
-        : after.type;
     steps.push({
       index,
       at: entry.at,
@@ -288,7 +308,7 @@ export function timeline(
       event: entry.event,
       from: before.type,
       to: after.type,
-      edge: edgeKey(before.type, event, drawnTarget),
+      edge: walkedEdgeKey(chart, before.type, event, after.type),
     });
   }
   return steps;

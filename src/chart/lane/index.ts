@@ -74,6 +74,7 @@
 
 export {
   inspectLane,
+  inspectLaneStates,
   type LaneInspection,
   type LanePhaseInspection,
   type LaneTaskInspection,

@@ -84,6 +84,7 @@ export {
   timeline,
   trippedTasks,
   UnreplayableLogError,
+  walkedEdgeKey,
 } from "./fold";
 export {
   type LaneReport,
