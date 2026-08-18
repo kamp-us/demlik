@@ -243,8 +243,8 @@ function timelineTable(steps: readonly TimelineStep[]): string {
 /**
  * A lane, as one markdown block.
  *
- * The diagram half is behind {@link drawTask} — see that file's banner for the
- * one line that swaps in `chartMermaid`'s option-taking form.
+ * The diagram half is behind {@link drawTask}, which is a translation onto
+ * `chartMermaid` — the package's one chart renderer.
  */
 export function laneReport(input: LaneReportInput): LaneReport {
   const lane = isImportedLane(input.workflow)

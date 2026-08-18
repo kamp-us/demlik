@@ -289,7 +289,7 @@ describe("the report, on a lane that was actually driven", () => {
     // nobody reads" the module's editorial rule forbids — a task still at its
     // entry state has a one-line story, so it gets one line.
     expect(fences).toHaveLength(2);
-    expect(fences.map((f) => /class (\S+) current/.exec(f)?.[1])).toEqual([
+    expect(fences.map((f) => /class (\S+) teaActive/.exec(f)?.[1])).toEqual([
       "review",
       "blocked",
     ]);
@@ -297,7 +297,7 @@ describe("the report, on a lane that was actually driven", () => {
       "**not started yet:** `issue_4242`, `issue_4243`, `issue_4244`, `issue_4245`, `issue_4246`, `issue_4247` — still at `queued`.",
     );
     // The walked edges are the real log's, and only the two tasks that moved
-    // carry any. `»` is `drawTask`'s walked marker.
+    // carry any. `»` is the renderer's walked marker.
     expect(fences[0]).toMatchInlineSnapshot(`
       "\`\`\`mermaid
       stateDiagram-v2
@@ -318,12 +318,12 @@ describe("the report, on a lane that was actually driven", () => {
         blocked --> queued : UNBLOCKED (resume)
         landed --> [*]
         frozen --> [*]
-        classDef current font-weight:bold,stroke-width:3px
-        classDef tripped stroke-dasharray:4 4
-        class frozen tripped
-        classDef shipped stroke-width:2px
-        class landed shipped
-        class review current
+        classDef teaTripped stroke-dasharray:4 4
+        class frozen teaTripped
+        classDef teaShipped stroke-width:2px
+        class landed teaShipped
+        classDef teaActive fill:#2f81f7,stroke:#2f81f7,color:#fff,font-weight:bold
+        class review teaActive
       \`\`\`"
     `);
   });

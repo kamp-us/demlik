@@ -107,7 +107,10 @@ type RtNode = {
   readonly initial?: true;
   readonly on?: Record<string, RtEdge>;
   readonly ignore?: readonly string[];
-  readonly end?: true;
+  // BOTH polarities, because both are final and only one of them is a success.
+  // The walk reads `!== undefined` (either is terminal); the drawing reads the
+  // value, which is the whole reason it is not narrowed to `true` here.
+  readonly end?: true | "error";
 };
 type RtChart = {
   readonly events: Record<
@@ -587,12 +590,46 @@ export function initFrom<
 // of a `{ to, cell }` edge now. The chart, though, still knows every possible
 // target, which is the whole point of declaring `to`. This reads the chart
 // directly and draws the full fan-out, no samples and no execution needed.
+//
+// THIS IS THE ONLY CHART RENDERER. `chart/report/draw.ts` used to carry a
+// second one, written in parallel against the same mermaid grammar while this
+// one was growing its options bag; the two diverged before the swap its banner
+// promised ever happened (a guarded then-arm drawn bare here and labelled
+// there, two spellings of the highlight class, sanitizing on one side only).
+// How a chart is drawn is ONE fact, so there is one body and the report enters
+// it through `drawTask`, which is now nothing but a translation of its option
+// names into these.
+//
+// WHAT MERMAID CAN AND CANNOT DO, stated so `walked` is judged fairly:
+// `stateDiagram-v2` supports `classDef`/`class`, so LIGHTING A NODE is real
+// styling. It supports no per-edge styling at all — there is no `linkStyle` for
+// a state diagram — so a walked edge is marked ON ITS LABEL (`»`, plus the
+// visit count) rather than thickened. Still true as of mermaid 11.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** How many times each {@link edgeKey} was walked. */
+export type WalkCounts = ReadonlyMap<string, number>;
+
+/**
+ * The key a {@link ChartMermaidOptions.walked} map is read by.
+ *
+ * One spelling, shared by whoever counts the walk and the drawing that marks
+ * it — the names are the chart's OWN, unsanitized, because the counter reads
+ * them off a log and has no business knowing what mermaid can spell.
+ *
+ * NOT `EdgeKey<C>` (`graph.ts`), despite the casing. That one is the SITE tag
+ * — `"state.event"` — which is what a guard or a cmd builder is keyed by,
+ * because a site is where code hangs. This one names a drawn ARROW, and a
+ * guarded site draws two of them, so it needs the target as well.
+ */
+export const edgeKey = (from: string, event: string, to: string): string =>
+  `${from}|${event}|${to}`;
 
 /**
  * Options for {@link chartMermaid}. Every field is optional and every default
- * reproduces the drawing this function has always emitted — a flat node set,
- * `direction TB`, no title, no highlight — so an existing caller is untouched.
+ * reproduces the drawing this function emitted before options existed — a flat
+ * node set, `direction TB`, no title, no highlight, no polarity and no walk —
+ * so an existing caller is untouched.
  *
  * Shaped after `MachineVizOptions` (`../machine-viz`) where the two overlap
  * (`direction`, `title`), because the two drawings are read side by side and a
@@ -618,6 +655,24 @@ export interface ChartMermaidOptions {
    * under them.
    */
   readonly phases?: boolean;
+  /**
+   * Draw the two ENDINGS differently — a dashed outline on every `end:
+   * "error"` final, a heavier one on every `end: true`.
+   *
+   * A success final and an error final both terminate, so both draw the `[*]`
+   * edge, and a picture that stopped there paints `shipped` and `frozen` alike
+   * in the one place a reader looks first. Off by default for the same reason
+   * `phases` is: it changes the emitted text.
+   */
+  readonly polarity?: boolean;
+  /**
+   * Edges the caller actually WALKED, keyed by {@link edgeKey} — each drawn
+   * edge that has a count picks up a `»` (or `»×N`) on its label.
+   *
+   * A missing or zero count marks nothing, so a chart nobody has run through
+   * draws exactly as it does without this option.
+   */
+  readonly walked?: WalkCounts;
   /** Mermaid layout direction. Default `"TB"`. */
   readonly direction?: "TB" | "LR";
   /** Optional title, emitted as a Mermaid front-matter `title:` block. */
@@ -626,6 +681,9 @@ export interface ChartMermaidOptions {
 
 /** The CSS class Mermaid applies to the highlighted node. */
 const ACTIVE_CLASS = "teaActive";
+/** …and to the two endings, when `polarity` asks for them. */
+const TRIPPED_CLASS = "teaTripped";
+const SHIPPED_CLASS = "teaShipped";
 
 /**
  * A node's declaration line, or `undefined` when the sanitized id already IS
@@ -648,6 +706,14 @@ export function chartMermaid<const C extends Chart<C>>(
   if (opts.title !== undefined)
     lines.push("---", `title: ${opts.title}`, "---");
   lines.push("stateDiagram-v2", `  direction ${opts.direction ?? "TB"}`);
+
+  // The walk mark, keyed by the chart's OWN names — `walked` is counted off a
+  // log, so it never saw a sanitized id.
+  const walked = opts.walked;
+  const mark = (from: string, event: string, to: string): string => {
+    const n = walked?.get(edgeKey(from, event, to)) ?? 0;
+    return n === 0 ? "" : n === 1 ? " »" : ` »×${n}`;
+  };
 
   // Phases, as composite states. Declared BEFORE the edges so every node is
   // already inside its phase by the time an arrow references it — Mermaid
@@ -673,25 +739,30 @@ export function chartMermaid<const C extends Chart<C>>(
     if (node.initial === true) lines.push(`  [*] --> ${from}`);
     for (const [e, spec] of Object.entries(node.on ?? {})) {
       const edge = typeof spec === "string" ? { target: spec } : spec;
+      // ONE arrow-writer for every edge form, so the walk mark cannot be
+      // remembered on three of the four and forgotten on the fourth.
+      const arrow = (to: string, label: string): void => {
+        lines.push(
+          `  ${from} --> ${safeId(to)} : ${safeLabel(`${label}${mark(s, e, to)}`)}`,
+        );
+      };
       if (edge.cell !== undefined) {
         // one real edge per DECLARED target — the fan-out, labelled with the
         // cell that picks among them.
-        for (const t of edge.to ?? []) {
-          lines.push(
-            `  ${from} --> ${safeId(t)} : ${safeLabel(`${e} / ${edge.cell}()`)}`,
-          );
-        }
+        for (const t of edge.to ?? []) arrow(t, `${e} / ${edge.cell}()`);
       } else if (edge.resume !== undefined) {
-        lines.push(
-          `  ${from} --> ${safeId(edge.resume.fallback)} : ${safeLabel(`${e} (resume)`)}`,
-        );
+        arrow(edge.resume.fallback, `${e} (resume)`);
       } else {
-        if (edge.target !== undefined)
-          lines.push(`  ${from} --> ${safeId(edge.target)} : ${safeLabel(e)}`);
+        // A GUARDED edge labels BOTH arms. Drawing the then-arm bare —
+        // `review --> build : FAIL` beside `review --> frozen : FAIL
+        // [!retriesRemaining]` — reads as an unconditional edge racing a
+        // conditional one, which is not what the chart says: the then-arm is
+        // exactly as conditional as the else-arm, and the reader has to infer
+        // the guard from the sibling. So the guard is written on both.
+        const guard = edge.when === undefined ? "" : ` [${edge.when}]`;
+        if (edge.target !== undefined) arrow(edge.target, `${e}${guard}`);
         if (edge.otherwise !== undefined) {
-          lines.push(
-            `  ${from} --> ${safeId(edge.otherwise)} : ${safeLabel(`${e} [!${edge.when ?? ""}]`)}`,
-          );
+          arrow(edge.otherwise, `${e} [!${edge.when ?? ""}]`);
         }
       }
     }
@@ -700,8 +771,29 @@ export function chartMermaid<const C extends Chart<C>>(
     if (node.end !== undefined) lines.push(`  ${from} --> [*]`);
   }
 
-  // The highlight, last: a `classDef` must exist before the `class` line that
-  // uses it, and both must sit outside any composite block.
+  // The classes, last: a `classDef` must exist before the `class` line that
+  // uses it, and both must sit outside any composite block. Each pair is
+  // emitted only when something wears it, so an unused `classDef` never lands.
+  if (opts.polarity === true) {
+    const tripped: string[] = [];
+    const shipped: string[] = [];
+    for (const [s, { node }] of flat) {
+      if (node.end === "error") tripped.push(safeId(s));
+      if (node.end === true) shipped.push(safeId(s));
+    }
+    if (tripped.length > 0) {
+      lines.push(
+        `  classDef ${TRIPPED_CLASS} stroke-dasharray:4 4`,
+        `  class ${tripped.join(",")} ${TRIPPED_CLASS}`,
+      );
+    }
+    if (shipped.length > 0) {
+      lines.push(
+        `  classDef ${SHIPPED_CLASS} stroke-width:2px`,
+        `  class ${shipped.join(",")} ${SHIPPED_CLASS}`,
+      );
+    }
+  }
   if (opts.highlight !== undefined && flat.has(opts.highlight)) {
     lines.push(
       `  classDef ${ACTIVE_CLASS} fill:#2f81f7,stroke:#2f81f7,color:#fff,font-weight:bold`,

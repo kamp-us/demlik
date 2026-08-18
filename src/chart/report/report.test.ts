@@ -81,7 +81,7 @@ describe("laneReport — the file path", () => {
   });
 
   it("lights the current node and marks the edges the log walked", () => {
-    expect(markdown).toContain("class review current");
+    expect(markdown).toContain("class review teaActive");
     // review --FAIL--> build was walked twice; queued --BLOCKED--> blocked never.
     expect(markdown).toContain(
       "review --> build : FAIL [retriesRemaining] »×2",
@@ -91,8 +91,8 @@ describe("laneReport — the file path", () => {
   });
 
   it("draws the two finals with different weight — the polarity, visible", () => {
-    expect(markdown).toContain("class frozen tripped");
-    expect(markdown).toContain("class shipped shipped");
+    expect(markdown).toContain("class frozen teaTripped");
+    expect(markdown).toContain("class shipped teaShipped");
   });
 
   it("recomputes `from → to` per step in the timeline", () => {

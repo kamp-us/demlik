@@ -27,7 +27,7 @@
  *   defineChart(graph)              → C            // the grid form: state × event
  *   compile(C, parts, ns?)          → Transitions  // drops into `defineMachine`
  *   initFrom(C, boot)               → init         // entry state read off the graph
- *   chartMermaid(C, opts?)          → string       // highlight / phases / title
+ *   chartMermaid(C, opts?)          → string       // the ONE chart renderer
  *
  *   defineReducerChart(graph)       → C            // no phase dimension: |M| edges
  *   compileReducer(C, parts, ns?)   → Reducer
@@ -69,15 +69,18 @@
 
 export {
   CellTargetError,
+  type ChartMermaidOptions,
   chartMermaid,
   compile,
   compileReducer,
+  edgeKey,
   initFrom,
   initialStateOf,
   type Parts,
   type RParts,
   reducerInitFrom,
   reducerMermaid,
+  type WalkCounts,
 } from "./compile";
 export {
   type Assigns,

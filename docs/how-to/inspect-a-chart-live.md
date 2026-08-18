@@ -193,12 +193,15 @@ parts do not exist yet. Use it from a script, a test, or an Ink TUI.
 
 ## The diagram, on its own
 
-`chartMermaid` takes an optional options bag:
+`chartMermaid` is the package's one chart renderer, and it takes an optional
+options bag:
 
 ```ts
 chartMermaid(lane, {
   highlight: state.type, // light the active node
   phases: true, // draw phases as composite states
+  polarity: true, // draw `end: true` and `end: "error"` apart
+  walked, // Map<edgeKey(from, event, to), count> — mark the edges a run took
   direction: "LR",
   title: "lane",
 });
@@ -206,6 +209,15 @@ chartMermaid(lane, {
 
 Every default reproduces the drawing it emitted before options existed, so
 adding one is opt-in.
+
+`walked` is marked on the edge's LABEL (`»`, or `»×N`) rather than by
+thickening the arrow: `stateDiagram-v2` supports `classDef`/`class`, so
+lighting a node is real styling, but it has no per-edge styling at all. That is
+also why `highlight` and `polarity` are classes and `walked` is not.
+
+`@demlik/tea/chart/report` draws through this same function — `drawTask(chart,
+{ current, walked })` is a translation of those two option names, nothing
+more.
 
 ## See also
 

@@ -7,15 +7,15 @@
 // promise, stated as an assertion rather than as a comment.
 //
 // The rest exercise what the options add — a highlighted node, phases as real
-// composite states (the one structural fact the flat drawing threw away), a
-// title and a direction — and the sanitizing that makes `human:cp-approval`
-// drawable at all.
+// composite states (the one structural fact the flat drawing threw away), the
+// two endings drawn apart, the walked edges marked, a title and a direction —
+// and the sanitizing that makes `human:cp-approval` drawable at all.
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it } from "vitest";
 import { safeId } from "../machine-viz";
 import { lane } from "./__fixtures__/lane";
 import { pollerChart } from "./__fixtures__/status-poller-chart";
-import { chartMermaid } from "./compile";
+import { chartMermaid, edgeKey } from "./compile";
 
 it("no options draws exactly what it drew before options existed", () => {
   // The bytes `drawing.test.ts` pins. Passing `{}` explicitly must not move
@@ -73,7 +73,7 @@ it("draws the whole lane chart, phases and all", () => {
       build --> blocked : BLOCKED
       review --> ship : PASS
       review --> blocked : BLOCKED
-      review --> build : FAIL
+      review --> build : FAIL [retriesRemaining]
       review --> frozen : FAIL [!retriesRemaining]
       ship --> shipped : DONE
       ship --> human_cp_approval : BLOCKED
@@ -139,4 +139,40 @@ it("carries a title as Mermaid front matter, and the direction as asked", () => 
     "stateDiagram-v2",
     "  direction LR",
   ]);
+});
+
+it("labels BOTH arms of a guarded edge — a bare then-arm reads as unconditional", () => {
+  const drawn = chartMermaid(lane);
+  // `FAIL` from `review` is one guarded edge with two arms. Drawing the
+  // then-arm bare beside a `[!guard]` else-arm made the guard look like it
+  // applied to one of them.
+  expect(drawn).toContain("review --> build : FAIL [retriesRemaining]");
+  expect(drawn).toContain("review --> frozen : FAIL [!retriesRemaining]");
+});
+
+it("polarity draws the two endings apart, and only the ones that exist", () => {
+  const drawn = chartMermaid(lane, { polarity: true });
+  // `frozen` is the `end: "error"` final, `shipped` the `end: true` one — both
+  // terminate, and a picture that painted them alike would be lying where a
+  // reader looks first.
+  expect(drawn).toContain("classDef teaTripped stroke-dasharray:4 4");
+  expect(drawn).toContain("class frozen teaTripped");
+  expect(drawn).toContain("classDef teaShipped stroke-width:2px");
+  expect(drawn).toContain("class shipped teaShipped");
+  // …and a chart with no error final gets no dangling classDef for one.
+  const poller = chartMermaid(pollerChart, { polarity: true });
+  expect(poller).not.toContain("teaTripped");
+});
+
+it("marks a walked edge on its LABEL — mermaid has no per-edge styling", () => {
+  const walked = new Map([
+    [edgeKey("review", "FAIL", "build"), 2],
+    [edgeKey("blocked", "UNBLOCKED", "queued"), 1],
+  ]);
+  const drawn = chartMermaid(lane, { walked });
+  expect(drawn).toContain("review --> build : FAIL [retriesRemaining] »×2");
+  expect(drawn).toContain("blocked --> queued : UNBLOCKED (resume) »");
+  // An edge the walk never took is untouched, and an empty walk is no walk.
+  expect(drawn).toContain("queued --> blocked : BLOCKED\n");
+  expect(chartMermaid(lane, { walked: new Map() })).toBe(chartMermaid(lane));
 });
