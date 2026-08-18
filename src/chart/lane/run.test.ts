@@ -200,10 +200,20 @@ describe("runLane — per-instance boot", () => {
     expect(rt.init(null)[0].lane).toBe("complete");
   });
 
-  it("returns a rehydrated lane verbatim, with no cmds (invariant 2)", () => {
+  it("returns a rehydrated lane's leaves verbatim, with no cmds (invariant 2)", () => {
     const rt = runLane(epic, freshHands);
-    const [booted] = rt.init(null);
-    expect(rt.init(booted)).toEqual([booted, []]);
+    // NOT the state a cold boot produces, which is the whole assertion: handed
+    // `init(null)`'s own output back, this test holds whether or not the
+    // rehydration branch exists at all. Driven three steps first, it does not.
+    // `lane-runtime.test.ts` carries the rest of that door — what a persisted
+    // state is CHECKED against on the way in.
+    const loaded = drive(rt, [
+      { type: "issue_1.WIP", at: 1 },
+      { type: "issue_1.DONE", at: 2 },
+      { type: "issue_1.BLOCKED", at: 3, reason: "waiting on review" },
+    ]);
+    expect(loaded.regions.issue_1.type).toBe("blocked");
+    expect(rt.init(loaded)).toEqual([loaded, []]);
   });
 
   it("refuses a boot state the task's chart does not declare", () => {

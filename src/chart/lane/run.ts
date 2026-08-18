@@ -32,6 +32,28 @@
 //                    receives `issue_5729.spawn_shell` knows where to send the
 //                    reply without a side table.
 //
+//   REHYDRATION      `init(loaded)` is the branch a production restart walks,
+//                    every time. A persisted state is DATA that outlived the
+//                    code that wrote it — a task added since, a state renamed
+//                    since — so it is validated against the lane on the way in
+//                    rather than trusted and discovered mid-run, as a reducer
+//                    throw inside the host's dispatch loop.
+//
+//   THE BUDGET       `retries` on the lane is the retry budget, `lane.context
+//                    [task].maxRetries` is where `defineLane` puts it, and the
+//                    fold reads it from there. A `boot()` that names a
+//                    different number is refused rather than silently
+//                    preferred: two numbers for one fact is how a run and a
+//                    report of that run come to disagree about whether a task
+//                    ever retried.
+//
+// WHAT THE PHASES DO NOT DO. They do not gate dispatch. A message addressed to
+// a task in phase 2 moves that region while phase 1 is still active, and it is
+// meant to: `foldLane` folds the WHOLE log, so a run that refused what a fold
+// accepts would be the drift this module exists to rule out. Phases sequence
+// the lane's own STANDING (which phase is active, when the lane advances or
+// trips) — they are not admission control over the regions.
+//
 // WHAT IT IS NOT. This does not build a `Machine`; it builds a machine's `init`
 // and `update`. `interpret` is the host's — it is required exactly when a lane
 // emits cmds, and a lane knows nothing about the shells the cmds run in. The
@@ -52,7 +74,7 @@ import type {
   StateOf,
 } from "../graph";
 import { laneTerminalReached, phaseStandings } from "../report/fold";
-import { statesOf } from "../report/workflow";
+import { RETRY_BUDGET, statesOf } from "../report/workflow";
 import {
   type Lane,
   type LaneRegion,
@@ -267,7 +289,13 @@ export interface LaneRuntime<L> {
 // ── the erased shapes the dispatch actually walks ──────────────────────────
 
 /** A region leaf, as the router reads it: a name, and whatever else it carries. */
-type RtLeaf = { readonly type: string };
+type RtLeaf = {
+  readonly type: string;
+  /** Present on a parked leaf: the state a `resume` will land back on. */
+  readonly was?: string;
+  /** Present where the chart's ctx carries a budget — the guard's right side. */
+  readonly maxRetries?: number;
+};
 type RtRunState = {
   readonly regions: Readonly<Record<string, RtLeaf>>;
   readonly lane: string;
@@ -291,6 +319,36 @@ const isForeign = (event: unknown): boolean =>
   event !== null &&
   "foreign" in event &&
   event.foreign === true;
+
+/**
+ * Why a dot is refused in a task id and in an event name.
+ *
+ * A dispatch key is `task` + `.` + `event`, and every reader splits it at the
+ * FIRST dot — `bareEvent`, `liveFeed`'s `address`, the replayer over `events.jsonl`.
+ * So task `a` with event `b.GO` and task `a.b` with event `GO` register the
+ * same key `a.b.GO`, one of them wins the table and the other's event is
+ * unreachable for the life of the process; and a task id with a dot in it
+ * writes a log the replayer re-partitions into a task that does not exist.
+ * `Total<C>` already bans the dot in a state name and in a foreign event name
+ * for exactly this reason — this is that rule at the runtime door, where the
+ * imported chart's alphabet is `string` and no type can carry it.
+ */
+const DOT =
+  "a dispatch key is the task id, a dot, then the event name — and every reader splits it at the FIRST dot, so a dot here makes two different messages one key";
+
+/** The bare event a dispatch key carries — with the dot refused, split once. */
+const bare = (taskId: string, key: string): string =>
+  key.startsWith(`${taskId}.`) ? key.slice(taskId.length + 1) : key;
+
+/**
+ * A leaf with the `was` it arrived with, and no `was` at all where there was
+ * none — the fold's `{ ...state, type }`, which never adds the field.
+ */
+const carryWas = (leaf: RtLeaf, was: string | undefined): RtLeaf => {
+  if (was !== undefined) return { ...leaf, was };
+  const { was: _dropped, ...rest } = leaf;
+  return rest;
+};
 
 /**
  * Run a lane: one compiled region per task, one dispatch surface, one derived
@@ -328,25 +386,45 @@ export function runLane<
   const defects: string[] = [];
   const tables = new Map<string, CompiledTable>();
   const boots = new Map<string, () => RtLeaf>();
+  /** `${state}.${event}` per task, for the edges that RESUME — see `update`. */
+  const resumes = new Map<string, ReadonlySet<string>>();
 
   for (const phase of lane.phases) {
     for (const taskId of phase.tasks) {
       const region = lane.spec.phases[phase.name]?.[taskId];
       const hand = byTask[taskId];
-      if (region === undefined || hand === undefined) {
+      // `lane.charts` is what every OTHER reader walks — the fold, the
+      // inspector, the boot check below, the event list `update` is keyed from.
+      // A task the phases declare and the charts do not is the one input where
+      // this module's closing cast asserts something false, so it is a defect
+      // here rather than a `continue` that quietly drops the region.
+      const chart = lane.charts[taskId];
+      if (region === undefined || hand === undefined || chart === undefined) {
         defects.push(
           `task "${taskId}": the lane declares it but ${
             region === undefined
               ? "its spec holds no chart"
-              : "no hand was given for it"
+              : chart === undefined
+                ? "the lane's `charts` hold none for it"
+                : "no hand was given for it"
           }`,
         );
         continue;
+      }
+      if (taskId.includes(".")) {
+        defects.push(
+          `task "${taskId}": a task id may not carry a dot — ${DOT}`,
+        );
       }
       for (const [name, event] of Object.entries(region.events)) {
         if (isForeign(event)) {
           defects.push(
             `task "${taskId}": its chart declares "${name}" foreign — a foreign event keeps its BARE name under a namespace, so a lane message carrying it addresses no region in particular`,
+          );
+        }
+        if (name.includes(".")) {
+          defects.push(
+            `task "${taskId}": its chart declares the event "${name}" — an event name may not carry a dot, ${DOT}`,
           );
         }
       }
@@ -355,6 +433,13 @@ export function runLane<
       // routing needed no second scheme.
       tables.set(taskId, compileTable(region, hand.parts, taskId));
       boots.set(taskId, hand.boot);
+      const sites = new Set<string>();
+      for (const [name, node] of statesOf(chart)) {
+        for (const [event, edge] of Object.entries(node.on ?? {})) {
+          if ("resume" in edge) sites.add(`${name}.${event}`);
+        }
+      }
+      resumes.set(taskId, sites);
     }
   }
   if (defects.length > 0) throw new LaneShapeError(defects);
@@ -364,23 +449,91 @@ export function runLane<
     laneTerminalReached(phaseStandings(lane, regions), lane.terminals) ??
     "running";
 
-  const init = (loaded: RtRunState | null): readonly [RtRunState, never[]] => {
-    // Invariant 2: a rehydrated lane is returned verbatim, with no cmds.
-    if (loaded !== null) return [loaded, []];
-    const regions: Record<string, RtLeaf> = {};
+  /** The budget the LANE declares for a task — `defineLane`'s `retries`. */
+  const budgetOf = (taskId: string): number =>
+    lane.context[taskId]?.maxRetries ?? RETRY_BUDGET;
+
+  /**
+   * Every region's leaf against the lane, with EVERY defect named.
+   *
+   * One site for both doors, because they are the same question asked of two
+   * origins: `boot()` produces a leaf from code, a restart produces one from
+   * storage, and neither is checked by any type at the imported door. What is
+   * asked is what the rest of the module then assumes — the task set is
+   * exactly the lane's, every `type` is a state of that task's chart, every
+   * `was` is too (it is a TARGET: a resume walks to it, so a `was` the chart
+   * does not declare is a region that lands nowhere), and the retry budget is
+   * the lane's own.
+   */
+  const check = (
+    regions: Readonly<Record<string, unknown>>,
+    origin: string,
+  ): readonly string[] => {
     const bad: string[] = [];
-    for (const [taskId, boot] of boots) {
-      const leaf = boot();
-      // the runtime half of `__laneTaskBootsIntoAStateItsChartDoesNotDeclare`,
-      // and the only net at the imported door, where the marker stands down.
-      const chart = lane.charts[taskId];
-      if (chart !== undefined && !statesOf(chart).has(leaf.type)) {
+    for (const taskId of Object.keys(regions)) {
+      if (!boots.has(taskId)) {
         bad.push(
-          `task "${taskId}": boots into "${leaf.type}", which its chart does not declare`,
+          `${origin}: it names task "${taskId}", which this lane does not run — a state written by an older build of the lane is not a state this one can load`,
         );
       }
-      regions[taskId] = leaf;
     }
+    for (const taskId of boots.keys()) {
+      const chart = lane.charts[taskId];
+      if (chart === undefined) continue;
+      const raw = regions[taskId];
+      const leaf =
+        typeof raw === "object" && raw !== null ? (raw as RtLeaf) : undefined;
+      if (leaf === undefined || typeof leaf.type !== "string") {
+        bad.push(
+          `${origin}: it holds no leaf for task "${taskId}" — every region of the lane has to be standing somewhere`,
+        );
+        continue;
+      }
+      const states = statesOf(chart);
+      // the runtime half of `__laneTaskBootsIntoAStateItsChartDoesNotDeclare`,
+      // and the only net at the imported door, where the marker stands down.
+      if (!states.has(leaf.type)) {
+        bad.push(
+          `${origin}: task "${taskId}" stands in "${leaf.type}", which its chart does not declare`,
+        );
+      }
+      if (leaf.was !== undefined && !states.has(leaf.was)) {
+        bad.push(
+          `${origin}: task "${taskId}" carries \`was: "${leaf.was}"\`, which its chart does not declare — a resume would walk it to a state that does not exist`,
+        );
+      }
+      const budget = budgetOf(taskId);
+      if (typeof leaf.maxRetries === "number" && leaf.maxRetries !== budget) {
+        bad.push(
+          `task "${taskId}": its \`maxRetries\` is ${leaf.maxRetries} and the lane's budget for it is ${budget} — the lane's \`retries\` is the one source of that number (\`lane.context\`, which \`foldLane\` reads), so a run carrying a second one reports a different task than the one it ran`,
+        );
+      }
+    }
+    return bad;
+  };
+
+  const init = (loaded: RtRunState | null): readonly [RtRunState, never[]] => {
+    // Invariant 2: a rehydrated lane keeps its leaves verbatim, and emits no
+    // cmds. VERBATIM, not unread — this is the branch every production restart
+    // walks, and what it is handed is data that outlived the code that wrote
+    // it. The standing is the one field NOT taken back: it is derived from the
+    // leaves by `standingOf` and nothing else may write it, so re-deriving it
+    // costs one walk and makes a persisted standing that disagrees with its own
+    // leaves impossible to load.
+    if (loaded !== null) {
+      const bad = check(
+        loaded.regions ?? {},
+        "this lane cannot resume the state it was handed",
+      );
+      if (bad.length > 0) throw new LaneShapeError(bad);
+      return [
+        { regions: loaded.regions, lane: standingOf(loaded.regions) },
+        [],
+      ];
+    }
+    const regions: Record<string, RtLeaf> = {};
+    for (const [taskId, boot] of boots) regions[taskId] = boot();
+    const bad = check(regions, "this lane cannot boot");
     if (bad.length > 0) throw new LaneShapeError(bad);
     // A lane can boot ALREADY finished — every child landed before the run
     // started — so the standing is derived at boot by the same rule that
@@ -394,7 +547,11 @@ export function runLane<
   > = {};
 
   for (const [taskId, table] of tables) {
+    // total by construction: a task with no chart was refused above, so the
+    // key set this loop builds is exactly the tasks × their charts' events —
+    // which is what the closing cast asserts.
     const chart = lane.charts[taskId];
+    const resumeSites = resumes.get(taskId) ?? new Set<string>();
     if (chart === undefined) continue;
     for (const event of Object.keys(chart.events)) {
       // `keyOf(chart, event, taskId)` — with the foreign case refused above,
@@ -408,7 +565,23 @@ export function runLane<
             `task "${taskId}": no cell for "${msg.type}" in state "${leaf?.type ?? "<none>"}"`,
           ]);
         }
-        const [next, cmds] = cell(leaf, msg);
+        const [moved, cmds] = cell(leaf, msg);
+        // ── `was`, ON A RESUME ──────────────────────────────────────────────
+        // The fold's rule, applied to the compiled cell's output: `stepTask`
+        // returns `{ ...state, type: was ?? fallback }` on a resume and does
+        // NOT rewrite `was` — you are LEAVING the park, not entering one —
+        // while `buildCell` re-injects `was = st.type` for any landing in a
+        // parking state, resume included.
+        //
+        // With ONE parking state the two never differ where it is read: a
+        // resume out of it lands somewhere unparked, so the injection writes a
+        // field nothing reads again. With TWO mutually reachable parking states
+        // a resume lands ON a parking state, the injection overwrites the `was`
+        // the fold kept, and the NEXT resume walks the run and the report to
+        // two different STATES. That is not a `was` divergence any more.
+        const next = resumeSites.has(`${leaf.type}.${bare(taskId, msg.type)}`)
+          ? carryWas(moved, leaf.was)
+          : moved;
         const regions = { ...state.regions, [taskId]: next };
         return [
           { regions, lane: standingOf(regions) },
