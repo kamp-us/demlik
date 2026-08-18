@@ -440,3 +440,56 @@ describe("the lowering keeps what the fold reads", () => {
     ]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The cmds survive the lowering. They were dropped as "the RUN's business, not
+// the topology's" — but every reader downstream renders them, so a lane built
+// from literals could say a click lands on `build` and never that it fires
+// `spawn_shell`. A fact the author wrote down, lost in translation.
+// ═══════════════════════════════════════════════════════════════════════════
+describe("lowering keeps what a click FIRES", () => {
+  const emitter = defineChart({
+    events: { GO: { scope: "edges" }, FAIL: { scope: "edges" } },
+    cmds: { spawn: ty<{ id: string }>(), page: ty<{ id: string }>() },
+    states: {
+      only: {
+        queued: {
+          initial: true,
+          on: {
+            GO: { target: "shipped", cmd: "spawn" },
+            FAIL: {
+              when: "again",
+              target: "queued",
+              cmd: "spawn",
+              otherwise: "frozen",
+              otherwiseCmd: "page",
+            },
+          },
+        },
+        shipped: { end: true },
+        frozen: { end: "error" },
+      },
+    },
+  });
+  const lowered = defineLane({
+    phases: { p1: { issue_1: emitter } },
+    terminals: { complete: "complete", tripped: "tripped" },
+  }).charts.issue_1;
+
+  it("carries a plain edge's cmd", () => {
+    expect(lowered?.states.only?.queued?.on?.GO).toEqual({
+      target: "shipped",
+      cmd: "spawn",
+    });
+  });
+
+  it("carries BOTH arms of a guarded edge", () => {
+    expect(lowered?.states.only?.queued?.on?.FAIL).toEqual({
+      target: "queued",
+      when: "again",
+      otherwise: "frozen",
+      cmd: "spawn",
+      otherwiseCmd: "page",
+    });
+  });
+});

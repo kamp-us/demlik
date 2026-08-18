@@ -150,3 +150,67 @@ describe("inspectLaneStates — what the per-task preview is told", () => {
     expect(refusals.every((r) => r.from !== r.event)).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE CTX, handed to the per-task preview.
+//
+// A guard is a predicate over the region's own ctx — fabrika's is
+// `(s) => s.retries < s.maxRetries` — and the per-task preview used to be given
+// `{ type, was }` alone. The guard then read `undefined < undefined`, returned
+// false, and EVERY guarded control on EVERY live lane rendered its `otherwise`
+// arm: a task with its whole budget unspent told the reader that `FAIL` lands
+// on the error final. The state is on screen, the retry counter beside it says
+// `0 / 2`, and the arrow disagrees with both.
+// ═══════════════════════════════════════════════════════════════════════════
+const retrier: ImportedChart = {
+  events: { FAIL: { scope: "edges" } },
+  states: {
+    only: {
+      build: {
+        initial: true,
+        on: {
+          FAIL: {
+            when: "retriesRemaining",
+            target: "build",
+            otherwise: "frozen",
+          },
+        },
+      },
+      frozen: { end: "error" },
+    },
+  },
+};
+
+describe("inspectLane — the preview is given the region's ctx", () => {
+  const lane = defineLane({
+    phases: { p1: { issue_1: retrier } },
+    terminals: { complete: "complete", tripped: "tripped" },
+  });
+  const parts = {
+    guards: {
+      retriesRemaining: (s: { retries: number; maxRetries: number }) =>
+        s.retries < s.maxRetries,
+    },
+  };
+  const previewOf = (state: TaskState) => {
+    const seen = inspectLaneStates(
+      lane,
+      { issue_1: state },
+      () => ({ parts, samples: { FAIL: {} } }) as never,
+    );
+    const task = seen.phases[0]?.tasks[0];
+    return task?.events.find((e) => e.event === "FAIL");
+  };
+
+  it("takes the THEN arm while the budget is unspent", () => {
+    const fail = previewOf(leaf({ type: "build", retries: 0, maxRetries: 2 }));
+    expect(fail?.guard?.branch).toBe("then");
+    expect(fail?.guard?.target).toBe("build");
+  });
+
+  it("takes the ELSE arm once it is spent — the same guard, a different ctx", () => {
+    const fail = previewOf(leaf({ type: "build", retries: 2, maxRetries: 2 }));
+    expect(fail?.guard?.branch).toBe("else");
+    expect(fail?.guard?.target).toBe("frozen");
+  });
+});

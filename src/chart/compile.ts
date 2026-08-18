@@ -692,6 +692,8 @@ export interface ChartMermaidOptions {
 
 /** The CSS class Mermaid applies to the highlighted node. */
 const ACTIVE_CLASS = "teaActive";
+/** The highlighted node when it is where a task DIED — see `chartMermaid`. */
+const ACTIVE_ERROR_CLASS = "teaActiveError";
 /** …and to the two endings, when `polarity` asks for them. */
 const TRIPPED_CLASS = "teaTripped";
 const SHIPPED_CLASS = "teaShipped";
@@ -833,9 +835,19 @@ export function chartMermaid<const C extends Chart<C>>(
     }
   }
   if (opts.highlight !== undefined && flat.has(opts.highlight)) {
+    // The lit node carries POLARITY too, when polarity is on. `polarity` draws
+    // the two endings apart by STROKE and the highlight then painted a fill
+    // over the top, so an error final and a success final were the same picture
+    // at the exact moment one of them is where a task DIED. Every other surface
+    // — the chip, the badge, the stuck panel — says which; the drawing is the
+    // thing a reader looks at first and it was the one saying nothing.
+    const lit = flat.get(opts.highlight)?.node;
+    const died = opts.polarity === true && lit?.end === "error";
+    const cls = died ? ACTIVE_ERROR_CLASS : ACTIVE_CLASS;
+    const paint = died ? "#f85149" : "#2f81f7";
     lines.push(
-      `  classDef ${ACTIVE_CLASS} fill:#2f81f7,stroke:#2f81f7,color:#fff,font-weight:bold`,
-      `  class ${safeId(opts.highlight)} ${ACTIVE_CLASS}`,
+      `  classDef ${cls} fill:${paint},stroke:${paint},color:#fff,font-weight:bold`,
+      `  class ${safeId(opts.highlight)} ${cls}`,
     );
   }
   return lines.join("\n");

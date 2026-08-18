@@ -36,7 +36,6 @@
 // is in `./react`; a script or a TUI gets everything below with no DOM.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { safeId } from "../../machine-viz/mermaid-id";
 import type { EventPreview, InspectOptions, Unanswerable } from "../inspect";
 import { drawTask, walkedEdges } from "../report/draw";
 import {
@@ -77,38 +76,6 @@ const draw = (
   current: string,
   walked: ReadonlyMap<string, number>,
 ): string => drawTask(chart, { current, walked });
-
-/**
- * THE LIT NODE CARRIES POLARITY, because the picture is what a reader looks at
- * first and it was the one surface that did not.
- *
- * `chartMermaid` lights the current node blue and draws the two endings apart by
- * STROKE (`teaShipped` thick, `teaTripped` dashed) — which the blue fill then
- * sits on top of, so `frozen` and `shipped` read identically at the exact moment
- * one of them is where the task died. Every other surface says so in red: the
- * chip, the badge, the stuck panel.
- *
- * `stateDiagram-v2` has `classDef`/`class` and no per-edge styling, so a class
- * on the node IS the mechanism, and one appended pair repaints it. The right
- * home for this is `chartMermaid`'s own `highlight` (it already reads `polarity`
- * two branches earlier); until that lands, it is one function wide here — the
- * same reason `drawTask` exists at all. See HANDOFF-ui.md.
- */
-const ERROR_ACTIVE_CLASS = "teaActiveError";
-
-function drawLit(
-  chart: ImportedChart,
-  current: string,
-  walked: ReadonlyMap<string, number>,
-  onErrorFinal: boolean,
-): string {
-  const body = draw(chart, current, walked);
-  if (!onErrorFinal) return body;
-  // `safeId` is the drawing's own sanitizer — a `class` line naming the raw
-  // state would miss every name with a `-` or a space in it, of which a real
-  // workflow has several (`human:cp-approval`).
-  return `${body}\n  classDef ${ERROR_ACTIVE_CLASS} fill:#f85149,stroke:#f85149,color:#fff,font-weight:bold\n  class ${safeId(current)} ${ERROR_ACTIVE_CLASS}`;
-}
 
 /** Does this chart route `event` out of `from`, or is a step there a no-op? */
 function declaresEdge(
@@ -558,10 +525,7 @@ export function laneView(
         controls: task.events.map((preview) =>
           control(feed, task.task, preview),
         ),
-        diagram:
-          chart === undefined
-            ? ""
-            : drawLit(chart, task.state, walked, task.endPolarity === "error"),
+        diagram: chart === undefined ? "" : draw(chart, task.state, walked),
       };
     });
     return {

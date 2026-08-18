@@ -48,14 +48,26 @@ export const bareEvent = (event: string): string => {
 // types recovered from a literal the compiler can see.
 
 /** A declarative edge, in the only three forms a lane region can produce. */
+/**
+ * `cmd` / `otherwiseCmd` are carried but never AUTHORED here: a `workflow.json`
+ * declares no effects, so an imported edge simply has neither. They exist
+ * because the TYPED door has them and lowering used to drop them, which left a
+ * lane page able to say where a click LANDS and never what it FIRES — a fact
+ * the author wrote down, lost in translation.
+ */
+type ImportedCmds = {
+  readonly cmd?: string | readonly string[];
+  readonly otherwiseCmd?: string | readonly string[];
+};
+
 export type ImportedEdge =
-  | { readonly target: string }
-  | {
+  | ({ readonly target: string } & ImportedCmds)
+  | ({
       readonly target: string;
       readonly when: string;
       readonly otherwise: string;
-    }
-  | { readonly resume: { readonly fallback: string } };
+    } & ImportedCmds)
+  | ({ readonly resume: { readonly fallback: string } } & ImportedCmds);
 
 export interface ImportedNode {
   readonly initial?: true;

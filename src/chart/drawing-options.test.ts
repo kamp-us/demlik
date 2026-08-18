@@ -176,3 +176,26 @@ it("marks a walked edge on its LABEL — mermaid has no per-edge styling", () =>
   expect(drawn).toContain("queued --> blocked : BLOCKED\n");
   expect(chartMermaid(lane, { walked: new Map() })).toBe(chartMermaid(lane));
 });
+
+it("lights the node a task DIED on in a different colour than one it finished on", () => {
+  // `polarity` draws the two endings apart by STROKE and `highlight` then
+  // painted a fill over the top, so an error final and a success final were the
+  // same picture at the exact moment one of them is where the task died. Every
+  // other surface a lane renders carries the polarity; the drawing is the thing
+  // a reader looks at first and it was the one saying nothing.
+  const died = chartMermaid(lane, { polarity: true, highlight: "frozen" });
+  expect(died).toContain("classDef teaActiveError fill:#f85149");
+  expect(died).toContain("class frozen teaActiveError");
+  expect(died).not.toContain("classDef teaActive fill");
+
+  const finished = chartMermaid(lane, { polarity: true, highlight: "shipped" });
+  expect(finished).toContain("classDef teaActive fill:#2f81f7");
+  expect(finished).not.toContain("teaActiveError");
+
+  // …and with no polarity asked for, the highlight is the highlight. The two
+  // endings are undrawn there, so painting one of them red would be the picture
+  // claiming a distinction the rest of the drawing does not make.
+  const plain = chartMermaid(lane, { highlight: "frozen" });
+  expect(plain).toContain("class frozen teaActive");
+  expect(plain).not.toContain("teaActiveError");
+});

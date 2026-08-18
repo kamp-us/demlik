@@ -502,10 +502,17 @@ const isRecord = (v: unknown): v is Readonly<Record<string, unknown>> =>
  * shape a lane cannot hold.
  *
  * A `defineChart` edge has five spellings and four of them lower exactly: the
- * bare target, the target with cmds (the cmds are the RUN's business, not the
- * topology's), the guarded pair, and `resume`. The fifth — `{ to, cell }` —
- * does not: a cell picks its target in hand-written code at runtime, and a lane
- * region has no runtime to pick with. That is refused, here and in the types.
+ * bare target, the target with cmds, the guarded pair, and `resume`. The fifth
+ * — `{ to, cell }` — does not: a cell picks its target in hand-written code at
+ * runtime, and a lane region has no runtime to pick with. That is refused, here
+ * and in the types.
+ *
+ * The cmds ride along. They were dropped once as "the RUN's business, not the
+ * topology's", and the cost showed up on the page: every reader downstream
+ * (`readEdgeCore`, `EventPreview`, `outcomeOf`) already renders them, so a lane
+ * built from literals could say a click lands on `build` and never that it
+ * fires `spawn_shell` — information the author wrote down and the lowering
+ * threw away.
  */
 const lowerEdge = (edge: unknown): ImportedEdge | undefined => {
   if (typeof edge === "string") return { target: edge };
@@ -515,9 +522,15 @@ const lowerEdge = (edge: unknown): ImportedEdge | undefined => {
   }
   if (typeof edge.target !== "string") return undefined;
   const target = edge.target;
+  const cmds = {
+    ...(edge.cmd === undefined ? {} : { cmd: edge.cmd as string | string[] }),
+    ...(edge.otherwiseCmd === undefined
+      ? {}
+      : { otherwiseCmd: edge.otherwiseCmd as string | string[] }),
+  };
   return typeof edge.when === "string" && typeof edge.otherwise === "string"
-    ? { target, when: edge.when, otherwise: edge.otherwise }
-    : { target };
+    ? { target, when: edge.when, otherwise: edge.otherwise, ...cmds }
+    : { target, ...cmds };
 };
 
 /**

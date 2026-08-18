@@ -287,11 +287,13 @@ export function inspectLaneStates(
     const state = states[taskId];
     if (chart === undefined || state === undefined) return null;
     const desc = describe(chart);
-    const events = inspectState(
-      desc,
-      { type: state.type, was: state.was },
-      optsFor?.(taskId),
-    );
+    // the WHOLE leaf, not `{ type, was }`. A guard is a predicate over the
+    // region's ctx — fabrika's own is `(s) => s.retries < s.maxRetries` — so
+    // handing it a state stripped of `retries`/`maxRetries` made it read
+    // `undefined < undefined`, return false, and every guarded control on every
+    // live lane showed its `otherwise` arm: a task with its whole budget unspent
+    // told the reader that `FAIL` lands on the error final.
+    const events = inspectState(desc, { ...state }, optsFor?.(taskId));
     const reason = stuckAt(chart, state);
     if (reason !== null) stuck.push({ task: taskId, reason });
     return {
