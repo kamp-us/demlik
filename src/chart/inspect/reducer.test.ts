@@ -178,6 +178,31 @@ describe("describeReducerChart — what it refuses to answer", () => {
     expect(desc.scope.answerable).toBe(false);
     expect(desc.scope.why).toContain("no phase dimension");
   });
+
+  it("gives each refusal its OWN sentence — three questions, three answers", () => {
+    // The three share a cause and they are not the same answer: a UI renders
+    // whichever slot the user opened, and "this chart form has no phase
+    // dimension" under `scope` tells a reader nothing about what `scope` would
+    // have answered. Collapsing them to one sentence is invisible in every
+    // `toContain` assertion above, which is why this one compares them.
+    const whys = [desc.phases.why, desc.refusals.why, desc.scope.why];
+    expect(new Set(whys).size).toBe(3);
+    expect(desc.phases.why).toContain(
+      "every edge is reachable from every state",
+    );
+    expect(desc.scope.why).toContain(
+      "at which states does this event mean anything",
+    );
+    expect(desc.refusals.why).toContain(
+      "a reducer cell decides inside its body",
+    );
+    // and each names the question it stands in for.
+    expect([
+      desc.phases.question,
+      desc.refusals.question,
+      desc.scope.question,
+    ]).toEqual(["phases", "refusals", "scope"]);
+  });
 });
 
 describe("inspectReducerState — the live button row", () => {
@@ -233,6 +258,53 @@ describe("inspectReducerState — the live button row", () => {
     // the `then` arm's declared cmds — the happy path, with `unknown` saying so.
     expect(v.cmds).toEqual(["log"]);
     expect(v.resolved).toBeUndefined();
+  });
+
+  // ── WHAT A PREVIEW MAY NOT CLAIM ────────────────────────────────────────
+  // Three ways this module can lie about how an edge resolved, all of them
+  // invisible in the happy-path assertions above: each is a `resolvedBy` (or a
+  // target list) asserted where nothing was actually determined.
+  it("does not claim `declared` for a plain edge that declares no target", () => {
+    const cast = describeReducerChart({
+      states: ["a"],
+      initial: "a",
+      events: { X: {} },
+      on: { X: {} },
+    } as unknown as typeof gate);
+    const v = previewReducerEvent(cast, { type: "a" }, "X");
+    expect(v.edge?.kind).toBe("plain");
+    expect(v.targets).toEqual([]);
+    expect(v.resolved).toBeUndefined();
+    // nothing was declared, so nothing declared it.
+    expect(v.resolvedBy).toBeUndefined();
+  });
+
+  it("does not claim `cell` when the cell could not be run", () => {
+    // no parts bag and no sample: `runCellOn` answers nothing, and a
+    // `resolvedBy: "cell"` beside `resolved: undefined` would report a cell
+    // that picked a target it never picked.
+    const v = previewReducerEvent(desc, s, "fetch_err");
+    expect(v.edge?.kind).toBe("cell");
+    expect(v.targets).toEqual(["failed", "waiting_retry"]);
+    expect(v.resolved).toBeUndefined();
+    expect(v.resolvedBy).toBeUndefined();
+  });
+
+  it("invents no edge for an event the chart routes nowhere", () => {
+    const cast = describeReducerChart({
+      states: ["a"],
+      initial: "a",
+      events: { X: {}, Y: {} },
+      on: { X: "a" },
+    } as unknown as typeof gate);
+    const v = previewReducerEvent(cast, { type: "a" }, "Y");
+    expect(v.edge).toBeUndefined();
+    // the honest empties: this event goes nowhere and fires nothing, and a
+    // placeholder in either list is a target a UI would offer as a button.
+    expect(v.targets).toEqual([]);
+    expect(v.cmds).toEqual([]);
+    expect(v.resolved).toBeUndefined();
+    expect(v.resolvedBy).toBeUndefined();
   });
 
   it("builds the msg from the sample plus the chart's own `type`", () => {

@@ -24,10 +24,18 @@
 //
 //   `was`. The fold records the state you left on EVERY edge; the compiled
 //   chart injects it only when entering a parking state, because that is the
-//   only place a `resume` edge can read it. The two agree at every site where
-//   it is READ, and the walk below proves it the only way that matters — by
-//   parking `issue_1` from `build` and resuming it, where a wrong `was` lands a
-//   different `type` and the type diff fires.
+//   only place a `resume` edge can read it. The two agree wherever it is read
+//   BY CONSTRUCTION rather than by luck: `runLane` restores the fold's rule on
+//   a resume — `was` is carried through unchanged, because you are leaving the
+//   park rather than entering one — so the compiled cell's re-injection cannot
+//   outlive the step. That fix has its own test, over the lane this walk cannot
+//   build: `lane-runtime.test.ts`, "a resume between two parking states". THIS
+//   comment used to claim the agreement held wherever `was` was read, and it
+//   did not — with two mutually reachable parking states the next resume landed
+//   the run and the fold on two different `type`s, which no fixture with ONE
+//   parking state can show. The walk below still proves the half it can: park
+//   `issue_1` from `build`, resume it, and a wrong `was` lands a different
+//   `type` and the type diff fires.
 //
 //   cmds. A fold has none and cannot: it replays events that already happened,
 //   so the effects are precisely the part it does not hold. That asymmetry is
@@ -64,8 +72,12 @@ const hands = {
     parts: coderParts,
     boot: () => ({ type: "queued", retries: 0, maxRetries: 2 }),
   },
-  // `retries: { issue_3: 5 }` on the lane — the fold reads the same budget out
-  // of `lane.context`, so both sides freeze at the same round or neither does.
+  // `retries: { issue_3: 5 }` on the lane. The two numbers agreeing is not this
+  // fixture being careful: `runLane` reads the budget off `lane.context` — the
+  // same field `foldLane` reads — and REFUSES a boot that contradicts it, so a
+  // hand copying the wrong number here throws rather than quietly making the
+  // two sides freeze at different rounds. (It used to be a coincidence, and a
+  // coincidence is what this file exists not to rest on.)
   issue_3: {
     parts: coderParts,
     boot: () => ({ type: "queued", retries: 0, maxRetries: 5 }),

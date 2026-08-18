@@ -128,8 +128,14 @@ describe("runLane — routing", () => {
       type: "issue_2.WIP",
       at: 1,
     });
+    // the tag rides BESIDE the payload, nested — a chart's own `task` field
+    // would otherwise be overwritten by the lane's task id, silently.
     expect(cmds).toEqual([
-      { type: "issue_2.spawn_shell", task: "issue_2", step: "queued.WIP" },
+      {
+        type: "issue_2.spawn_shell",
+        lane: { task: "issue_2" },
+        step: "queued.WIP",
+      },
     ]);
   });
 });
@@ -200,10 +206,20 @@ describe("runLane — per-instance boot", () => {
     expect(rt.init(null)[0].lane).toBe("complete");
   });
 
-  it("returns a rehydrated lane verbatim, with no cmds (invariant 2)", () => {
+  it("returns a rehydrated lane's leaves verbatim, with no cmds (invariant 2)", () => {
     const rt = runLane(epic, freshHands);
-    const [booted] = rt.init(null);
-    expect(rt.init(booted)).toEqual([booted, []]);
+    // NOT the state a cold boot produces, which is the whole assertion: handed
+    // `init(null)`'s own output back, this test holds whether or not the
+    // rehydration branch exists at all. Driven three steps first, it does not.
+    // `lane-runtime.test.ts` carries the rest of that door — what a persisted
+    // state is CHECKED against on the way in.
+    const loaded = drive(rt, [
+      { type: "issue_1.WIP", at: 1 },
+      { type: "issue_1.DONE", at: 2 },
+      { type: "issue_1.BLOCKED", at: 3, reason: "waiting on review" },
+    ]);
+    expect(loaded.regions.issue_1.type).toBe("blocked");
+    expect(rt.init(loaded)).toEqual([loaded, []]);
   });
 
   it("refuses a boot state the task's chart does not declare", () => {
@@ -314,7 +330,11 @@ describe("runLane — a real Machine", () => {
     expect(next.regions.issue_3.type).toBe("build");
     await expect(
       machine.interpret["issue_1.spawn_shell"](
-        { type: "issue_1.spawn_shell", task: "issue_1", step: "queued.WIP" },
+        {
+          type: "issue_1.spawn_shell",
+          lane: { task: "issue_1" },
+          step: "queued.WIP",
+        },
         { emit: () => undefined },
       ),
     ).resolves.toBeUndefined();
