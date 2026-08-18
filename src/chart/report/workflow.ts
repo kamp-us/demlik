@@ -86,6 +86,31 @@ export interface ImportedChart {
   readonly states: Readonly<
     Record<string, Readonly<Record<string, ImportedNode>>>
   >;
+  /**
+   * State name → the events that state ACCEPTS AND DROPS, leaving itself alone.
+   *
+   * THE THIRD ANSWER. A lane state either routes an event, or refuses it, or
+   * cannot replay it — tea's runtime has always had all three (`compile`'s
+   * `refused` self-loops a pair the state's `ignore` names or the event's
+   * `scope` does not address, and only a LIVE-but-undecided pair throws), and
+   * the lowered chart could carry only two. So `stepTask` threw
+   * `UnreplayableLogError` on a log `runLane` had accepted without blinking: a
+   * run and a report of that run disagreeing, which is the one thing this
+   * module promises they cannot do.
+   *
+   * IT IS ON THE CHART, NOT ON THE NODE, and that is deliberate.
+   * {@link ImportedNode} is a MIRROR of the node fabrika's own compiler emits —
+   * `golden.test.ts` compares the two — so a field fabrika never produces does
+   * not belong inside it. This is our layer's annotation about someone else's
+   * shape, and it sits one level out where it reads as one.
+   *
+   * ABSENT AT THE IMPORTED DOOR, always. A refusal is a fact about a state's
+   * `ignore` and an event's `scope`, and `workflow.json` records neither — so
+   * `chartFromWorkflow` writes none, an imported chart is the same value it
+   * always was, and an imported log naming an unrouted event is still refused
+   * loudly. Only `defineLane`'s lowering, which can SEE the two, fills it in.
+   */
+  readonly refusals?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface ImportedPhase {
@@ -161,6 +186,26 @@ export interface WorkflowImportOptions {
    * is safe to invent.
    */
   readonly from?: Readonly<Record<string, EventOrigin>>;
+  /**
+   * Refuse a `from` key that names no event THIS document routes.
+   *
+   * The silent drop it closes is real: `UNBLOKED: { world: "a human" }` imports
+   * clean, and every reader downstream then answers "the chart does not say"
+   * for the one event the caller had just taken the trouble to declare. The
+   * cross-check needs no list of ours — {@link eventAlphabet} derives the
+   * document's own alphabet, which is precisely what that function exists for
+   * and what nothing was calling.
+   *
+   * OPT-IN, because the map is legitimately WIDER than one document. A
+   * consumer's cast is a property of their world, not of one template, so one
+   * `from` covers every workflow they run — `src/chart/report/__fixtures__/
+   * origins.ts` states fabrika's six once and imports two templates with it,
+   * and the chore template routes neither `PASS` nor `FAIL`. Defaulting to
+   * strict would make sharing a cast an error, which is the wrong half of the
+   * trade. So the caller says which of the two they meant: pass this when the
+   * map was written FOR this document, and a typo in it stops compiling.
+   */
+  readonly strictFrom?: true;
 }
 
 /**
@@ -533,7 +578,7 @@ export function chartFromWorkflow(
     isRecord(document) && typeof document.id === "string"
       ? document.id
       : undefined;
-  return {
+  const lane: ImportedLane = {
     ...(id === undefined ? {} : { id }),
     ...(typeof declaredTrigger === "string"
       ? { trigger: declaredTrigger }
@@ -543,6 +588,26 @@ export function chartFromWorkflow(
     charts,
     context,
   };
+
+  // THE `from` MAP, CROSS-CHECKED — `eventAlphabet` exists for exactly this
+  // and nothing was calling it. The alphabet is DERIVED from the document, so
+  // this compares the caller's claim against the document itself rather than
+  // against a list of ours. See `strictFrom` for why it is the caller's call.
+  if (options.strictFrom === true) {
+    const declared = new Set(eventAlphabet(lane));
+    const strays = Object.keys(options.from ?? {}).filter(
+      (event) => !declared.has(event),
+    );
+    if (strays.length > 0) {
+      throw new WorkflowImportError(
+        strays.map(
+          (event) =>
+            `\`from\` names "${event}", which no state in this document routes — the map is keyed by the BARE event name`,
+        ),
+      );
+    }
+  }
+  return lane;
 }
 
 /** Parse and import in one step — for a caller holding the document's bytes. */
