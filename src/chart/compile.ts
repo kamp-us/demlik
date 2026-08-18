@@ -512,20 +512,16 @@ export function reducerMermaid<const C extends ReducerChart<C>>(
   chart: C,
 ): string {
   const c = chart as unknown as RtReducerChart;
-  const lines = ["stateDiagram-v2", "  direction TB", `  [*] --> ${c.initial}`];
+  const lines = [
+    "stateDiagram-v2",
+    "  direction TB",
+    `  [*] --> ${safeId(c.initial)}`,
+  ];
+  // The SAME edge grammar `chartMermaid` draws — see {@link edgeLines}. The one
+  // difference this form has is `from`, which is `any` at every edge, because
+  // having no phase dimension MEANS every edge is reachable from every state.
   for (const [e, spec] of Object.entries(c.on)) {
-    const edge = typeof spec === "string" ? { target: spec } : spec;
-    if (edge.cell !== undefined) {
-      for (const t of edge.to ?? []) {
-        lines.push(`  any --> ${t} : ${e} / ${edge.cell}()`);
-      }
-    } else {
-      if (edge.target !== undefined)
-        lines.push(`  any --> ${edge.target} : ${e}`);
-      if (edge.otherwise !== undefined) {
-        lines.push(`  any --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`);
-      }
-    }
+    lines.push(...edgeLines("any", "any", e, spec, NO_MARKS));
   }
   return lines.join("\n");
 }
@@ -696,6 +692,59 @@ function nodeDecl(raw: string, indent: string): string | undefined {
   return id === raw ? undefined : `${indent}${id} : ${safeLabel(raw)}`;
 }
 
+/**
+ * ONE edge, as the arrows that draw it — the whole edge grammar, in one place.
+ *
+ * Both drawings in this file come through here: the grid form draws it from
+ * each state, the reducer form from the single `any` node, and the two forms
+ * differ in what `from` is and in nothing else. That is not tidiness — the
+ * guarded arm's labelling was wrong in both of them, in the same way, and one
+ * of them was fixed once already without the other moving.
+ *
+ * `at` is the UNSANITIZED source-state name the walk counter keyed by; `from`
+ * is what mermaid will read.
+ */
+function edgeLines(
+  from: string,
+  at: string,
+  e: string,
+  spec: RtEdge,
+  mark: (from: string, event: string, to: string) => string,
+): readonly string[] {
+  const edge = typeof spec === "string" ? { target: spec } : spec;
+  const out: string[] = [];
+  // ONE arrow-writer for every edge form, so the walk mark cannot be
+  // remembered on three of the four and forgotten on the fourth.
+  const arrow = (to: string, label: string): void => {
+    out.push(
+      `  ${from} --> ${safeId(to)} : ${safeLabel(`${label}${mark(at, e, to)}`)}`,
+    );
+  };
+  if (edge.cell !== undefined) {
+    // one real edge per DECLARED target — the fan-out, labelled with the cell
+    // that picks among them.
+    for (const t of edge.to ?? []) arrow(t, `${e} / ${edge.cell}()`);
+    return out;
+  }
+  if (edge.resume !== undefined) {
+    arrow(edge.resume.fallback, `${e} (resume)`);
+    return out;
+  }
+  // A GUARDED edge labels BOTH arms. Drawing the then-arm bare — `review -->
+  // build : FAIL` beside `review --> frozen : FAIL [!retriesRemaining]` —
+  // reads as an unconditional edge racing a conditional one, which is not what
+  // the chart says: the then-arm is exactly as conditional as the else-arm,
+  // and the reader is left to infer its guard from a sibling arrow.
+  const guard = edge.when === undefined ? "" : ` [${edge.when}]`;
+  if (edge.target !== undefined) arrow(edge.target, `${e}${guard}`);
+  if (edge.otherwise !== undefined)
+    arrow(edge.otherwise, `${e} [!${edge.when ?? ""}]`);
+  return out;
+}
+
+/** No walk to mark — the drawings that take no `walked` map. */
+const NO_MARKS = (): string => "";
+
 export function chartMermaid<const C extends Chart<C>>(
   chart: C,
   opts: ChartMermaidOptions = {},
@@ -738,33 +787,7 @@ export function chartMermaid<const C extends Chart<C>>(
     }
     if (node.initial === true) lines.push(`  [*] --> ${from}`);
     for (const [e, spec] of Object.entries(node.on ?? {})) {
-      const edge = typeof spec === "string" ? { target: spec } : spec;
-      // ONE arrow-writer for every edge form, so the walk mark cannot be
-      // remembered on three of the four and forgotten on the fourth.
-      const arrow = (to: string, label: string): void => {
-        lines.push(
-          `  ${from} --> ${safeId(to)} : ${safeLabel(`${label}${mark(s, e, to)}`)}`,
-        );
-      };
-      if (edge.cell !== undefined) {
-        // one real edge per DECLARED target — the fan-out, labelled with the
-        // cell that picks among them.
-        for (const t of edge.to ?? []) arrow(t, `${e} / ${edge.cell}()`);
-      } else if (edge.resume !== undefined) {
-        arrow(edge.resume.fallback, `${e} (resume)`);
-      } else {
-        // A GUARDED edge labels BOTH arms. Drawing the then-arm bare —
-        // `review --> build : FAIL` beside `review --> frozen : FAIL
-        // [!retriesRemaining]` — reads as an unconditional edge racing a
-        // conditional one, which is not what the chart says: the then-arm is
-        // exactly as conditional as the else-arm, and the reader has to infer
-        // the guard from the sibling. So the guard is written on both.
-        const guard = edge.when === undefined ? "" : ` [${edge.when}]`;
-        if (edge.target !== undefined) arrow(edge.target, `${e}${guard}`);
-        if (edge.otherwise !== undefined) {
-          arrow(edge.otherwise, `${e} [!${edge.when ?? ""}]`);
-        }
-      }
+      lines.push(...edgeLines(from, s, e, spec, mark));
     }
     // Both polarities terminate, so both draw the `[*]` edge — an error final
     // that stopped drawing one would read as a state the machine can leave.
