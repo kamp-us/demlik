@@ -230,9 +230,9 @@ const machine = defineMachine<
 >({
   ...runLane(lane, hands),
   interpret: {
-    "issue_5729.spawn_shell": async (cmd) => spawn(cmd.task, cmd.step),
-    "issue_5730.spawn_shell": async (cmd) => spawn(cmd.task, cmd.step),
-    "issue_5731.spawn_shell": async (cmd) => spawn(cmd.task, cmd.step),
+    "issue_5729.spawn_shell": async (cmd) => spawn(cmd.lane.task, cmd.step),
+    "issue_5730.spawn_shell": async (cmd) => spawn(cmd.lane.task, cmd.step),
+    "issue_5731.spawn_shell": async (cmd) => spawn(cmd.lane.task, cmd.step),
   },
 });
 ```
@@ -253,7 +253,16 @@ as much a compile error as an event nothing declares.
 its chart does not declare is a compile error at that task. The lane's own
 standing is derived at boot as well as after every step — a lane whose children
 all landed before the run started boots straight into `complete` or `tripped`
-rather than pretending to be running.
+rather than pretending to be running. The retry budget is **not** boot's to
+decide: `defineLane({ retries })` is the one source of that number (it is what
+`foldLane` replays with), and a `boot()` naming a different `maxRetries` is
+refused with both numbers in the message.
+
+**Restart.** `init(loaded)` returns a persisted state's leaves verbatim and emits
+no cmds — and checks them first, against the lane it is being loaded into: every
+task present, no task this lane does not run, each leaf standing in a state its
+chart declares, and each `was` a declared state too. A state written by an older
+build of the lane is refused at the door rather than mid-run.
 
 **Advancement.** When every region of the active phase reaches a final, the lane
 moves on; when it runs out of phases it lands on `complete`, and a completed
@@ -261,8 +270,12 @@ phase holding an `end: "error"` final lands it on `tripped` instead.
 `state.lane` is `"running"` or the terminal it reached.
 
 **Cmds.** A region's cmds leave the lane under the same namespace its messages
-arrive in — `issue_5729.spawn_shell`, carrying `task: "issue_5729"` — so an
-interpreter routes the reply back without a side table.
+arrive in — `issue_5729.spawn_shell`, carrying `lane: { task: "issue_5729" }` —
+so an interpreter routes the reply back without a side table. The tag is
+**nested** rather than spread over the payload, because `task` is an ordinary
+field for a work-lane cmd to carry and a flat tag would silently replace the
+author's value with the lane's task id. `lane` is the one key a region's cmd may
+not declare, and declaring it is a compile error naming the task.
 
 **One advancement rule, not two.** The runtime does not re-implement the phase
 walk: it calls `phaseStandings` and `laneTerminalReached`, which are the fold's
@@ -286,7 +299,7 @@ Three things stay outside a lane's reach and one of them is not obvious:
 ## What the types catch, and what they cannot
 
 `defineLane` rejects seven authoring mistakes at compile time, and `runLane`
-three more, each naming the offender in the diagnostic.
+four more, each naming the offender in the diagnostic.
 
 Four are about the **lane's own shape** and hold at either door: a task declared
 in two phases, a phase with no tasks, a terminal that collides with a phase
@@ -297,9 +310,10 @@ Three are about the **charts it was handed**, and hold wherever the chart is a
 declares no final in either polarity, and a region that hands a transition to a
 `{ to, cell }` (nothing here runs a cell, so a lane cannot hold that edge).
 
-`runLane` adds three about the **code**: a hand for a task the lane does not
-declare, an instance booted into a state its own chart never declares, and a
-region whose chart declares a foreign event.
+`runLane` adds four about the **code**: a hand for a task the lane does not
+declare, an instance booted into a state its own chart never declares, a region
+whose chart declares a foreign event, and a region whose cmd payload declares
+`lane` — the one key the task tag reserves.
 
 Those same three chart-shaped ones stand **down** at the imported door: an imported chart's states
 are `string` by construction, so the question cannot be asked, and `defineLane`
