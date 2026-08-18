@@ -13,7 +13,17 @@ import "./style.css";
 import { LANES, SOURCE } from "virtual:lanes";
 import { laneView, replayFeed } from "../../src/chart/lane/view";
 import { parseEventsJsonl } from "../../src/chart/report/fold";
-import { chartFromWorkflowText } from "../../src/chart/report/workflow";
+import {
+  chartFromWorkflowText,
+  statesOf,
+} from "../../src/chart/report/workflow";
+import {
+  type DispatchResult,
+  explainExit,
+  OPERATOR_EVENTS,
+  type OperatorEvent,
+  send,
+} from "./dispatch";
 import { byAttention, type FleetRow, fleetRow } from "./fleet";
 import { FABRIKA_ORIGINS } from "./origins";
 
@@ -84,6 +94,40 @@ const ATTENTION_LABEL: Record<string, string> = {
 };
 
 /** The fleet, derived once — every lane read the same way one lane is read. */
+type Driver = { session: string; login: string; at: string | null };
+
+/**
+ * Ownership, polled — it lives on GitHub, not in the two files, so it cannot
+ * ride the file watcher. Absent means UNKNOWN and renders as nothing; a lane
+ * shown as free when someone holds it is how two drivers end up on one epic.
+ */
+function useDrivers(): Record<string, Driver | null> {
+  const [drivers, setDrivers] = useState<Record<string, Driver | null>>({});
+  useEffect(() => {
+    let alive = true;
+    const pull = () =>
+      fetch("/__lane/drivers")
+        .then((r) => r.json())
+        .then((d: { drivers: Record<string, Driver | null> }) => {
+          if (alive) setDrivers(d.drivers ?? {});
+        })
+        .catch(() => {});
+    pull();
+    const t = setInterval(pull, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  return drivers;
+}
+
+/** `lane:<session>:<uuid>` — a reader needs the person and a short handle. */
+function driverLabel(d: Driver): string {
+  const short = d.session.split(":")[1]?.slice(0, 7) ?? "";
+  return `${d.login} · ${short}`;
+}
+
 function useFleet(
   lanes: Lane[],
   beat: number,
@@ -118,6 +162,7 @@ function Fleet({
   onOpen: (id: string) => void;
 }) {
   const fleet = useFleet(lanes, beat);
+  const drivers = useDrivers();
   const counts = new Map<string, number>();
   for (const { row } of fleet)
     counts.set(row.attention, (counts.get(row.attention) ?? 0) + 1);
@@ -151,6 +196,11 @@ function Fleet({
               <span className="fl-id">{row.id}</span>
               <span className="fl-head">{row.headline}</span>
               <span className="fl-meta">
+                {drivers[row.id] != null ? (
+                  <span className="fl-drv" title={drivers[row.id]?.session}>
+                    {driverLabel(drivers[row.id] as Driver)}
+                  </span>
+                ) : null}
                 {[
                   row.progress,
                   row.quietFor === null ? null : age(row.quietFor),
@@ -174,6 +224,132 @@ function age(min: number): string {
   if (min < 60) return `${min}m quiet`;
   const h = Math.round(min / 60);
   return h < 48 ? `${h}h quiet` : `${Math.round(h / 24)}d quiet`;
+}
+
+/**
+ * SENDING AN EVENT, from the screen you noticed the problem on.
+ *
+ * Only the events the machine DECLARES out of a task's current state are
+ * offered. `lane transition` would refuse the rest anyway — but a button that
+ * exists to be refused teaches the reader nothing, and one that is absent says
+ * "not from here" without costing them a click and an error.
+ *
+ * fabrika still has the last word: the button proposes, the verb decides, and
+ * the log only moves if the machine accepted it.
+ */
+function Act({
+  laneId,
+  tasks,
+  single,
+}: {
+  laneId: string;
+  /** Each task with the state it is standing in AND its own region — a lane
+   *  holds one chart per task, and the events on offer are that chart's. */
+  tasks: readonly {
+    task: string;
+    state: string;
+    events: readonly OperatorEvent[];
+  }[];
+  single: boolean;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [said, setSaid] = useState<{
+    key: string;
+    text: string;
+    ok: boolean;
+  } | null>(null);
+
+  const fire = async (task: string, event: OperatorEvent) => {
+    const key = `${task}.${event}`;
+    setBusy(key);
+    setSaid(null);
+    let out: DispatchResult;
+    try {
+      out = await send({
+        lane: laneId,
+        event,
+        ...(single ? {} : { task }),
+      });
+    } catch (e) {
+      out = { ok: false, exit: -1, stdout: "", stderr: String(e) };
+    }
+    setBusy(null);
+    setSaid({ key, ok: out.ok, text: explainExit(out.exit, out.stderr) });
+    // nothing else to do — if it landed, fabrika appended, the watcher fired
+    // and the lanes are already on their way back down the socket.
+  };
+
+  const rows = tasks.filter((t) => t.events.length > 0);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="act">
+      <h3 className="act-h">
+        Send an event
+        <span className="act-sub">
+          fabrika records it, or refuses it and says why
+        </span>
+      </h3>
+      {rows.map((t) => (
+        <div className="act-row" key={t.task}>
+          <span className="act-task">
+            {t.task} <span className="act-at">at {t.state}</span>
+          </span>
+          <span className="act-btns">
+            {t.events.map((e) => {
+              const key = `${t.task}.${e}`;
+              return (
+                <button
+                  type="button"
+                  key={e}
+                  className="act-btn"
+                  disabled={busy !== null}
+                  onClick={() => void fire(t.task, e)}
+                >
+                  {busy === key ? "…" : e}
+                </button>
+              );
+            })}
+          </span>
+          {said !== null && said.key.startsWith(`${t.task}.`) ? (
+            <span className={said.ok ? "act-said ok" : "act-said no"}>
+              {said.ok ? `${said.key.split(".")[1]} recorded` : said.text}
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** The active phase's tasks, which are the only ones an event can address. */
+function ActFor({ lane }: { lane: Lane }) {
+  const chart = chartFromWorkflowText(
+    lane.workflow,
+    (lane.origins as typeof FABRIKA_ORIGINS) ?? FABRIKA_ORIGINS,
+  );
+  const view = laneView(
+    replayFeed(chart, parseEventsJsonl(lane.events)),
+    Number.MAX_SAFE_INTEGER,
+  );
+  const phase = view.phases.find((p) => p.name === view.activePhase);
+  if (phase === undefined) return null;
+
+  // A lane holds ONE CHART PER TASK, so the events on offer are that task's
+  // own region's — asking the lane would be asking the wrong thing, and on a
+  // mixed epic the answer would be another task's alphabet.
+  const tasks = phase.tasks.map((t) => {
+    const region = chart.charts[t.task];
+    const on =
+      region === undefined ? {} : (statesOf(region).get(t.state)?.on ?? {});
+    return {
+      task: t.task,
+      state: t.state,
+      events: OPERATOR_EVENTS.filter((e) => on[e] !== undefined),
+    };
+  });
+  return <Act laneId={lane.id} tasks={tasks} single={tasks.length === 1} />;
 }
 
 function App() {
@@ -241,6 +417,7 @@ function App() {
         <code className="lv-src">{SOURCE}</code>
       </header>
       <main>
+        <ActFor lane={lane} />
         <LaneView
           key={lane.id}
           lane={chartFromWorkflowText(

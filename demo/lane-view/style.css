@@ -208,3 +208,93 @@ main {
     gap: 0.3rem;
   }
 }
+
+/* ── send an event ─────────────────────────────────────────────────────── */
+.act {
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #161b22;
+  padding: 1rem 1.2rem 1.1rem;
+  margin: 0 0 1.5rem;
+}
+.act-h {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e6edf3;
+  margin: 0 0 0.9rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.act-sub {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8rem;
+  color: #8b949e;
+  font-style: italic;
+}
+.act-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 0;
+  border-top: 1px solid #21262d;
+}
+.act-row:first-of-type {
+  border-top: 0;
+}
+.act-task {
+  font-family: ui-monospace, monospace;
+  font-size: 0.83rem;
+  min-width: 15rem;
+}
+.act-at {
+  color: #8b949e;
+}
+.act-btns {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.act-btn {
+  font: inherit;
+  font-size: 0.76rem;
+  font-family: ui-monospace, monospace;
+  padding: 0.24rem 0.62rem;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  background: #21262d;
+  color: #e6edf3;
+  cursor: pointer;
+}
+.act-btn:hover:not(:disabled) {
+  border-color: #2dd4bf;
+  color: #2dd4bf;
+}
+.act-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.act-said {
+  font-size: 0.78rem;
+}
+.act-said.ok {
+  color: #3fb950;
+}
+.act-said.no {
+  color: #e3b341;
+}
+
+.fl-drv {
+  display: inline-block;
+  margin-right: 0.6rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: #a5d6ff;
+}
