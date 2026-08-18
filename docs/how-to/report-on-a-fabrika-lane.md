@@ -140,6 +140,33 @@ lane.charts.issue;           // the region as a chart value
 A document that does not fit throws `WorkflowImportError` with **every** defect
 named — never a half-import.
 
+## The importer knows your grammar, never your vocabulary
+
+There is no list of event names in this package. The importer enforces what
+makes a document *well-formed* — a state routes events to targets, a guarded
+edge is a two-arm array, a `history` target means resume, a `final` is terminal,
+a machine-level `parallel` is a phase and its `onDone` pair names the terminals
+— and reads the *names* off the document. An event a state declares is an event
+of that document, whatever it is called, so a lane that grows a seventh event
+imports the commit it lands, with no release of ours in between.
+
+Which means you never hard-code the alphabet either — ask for it:
+
+```ts
+import { chartFromWorkflow, eventAlphabet } from "@demlik/tea/chart/report";
+
+const lane = chartFromWorkflow(JSON.parse(workflowJson));
+eventAlphabet(lane);         // ["WIP", "BLOCKED", "DONE", "PASS", "FAIL", "UNBLOCKED"]
+```
+
+That is the list to key your `from` map by (below), and the list to diff when
+you want to know whether a workflow revision changed its vocabulary.
+
+Two rules about names *are* grammatical and are still refused: a spelling that
+strips to nothing once its namespace is removed (`"ISSUE."`), and one state
+spelling one event twice (`"ISSUE.WIP"` and `"WIP"` in the same `on`) — a state
+routes each event once.
+
 ## What the import does and does not recover
 
 Exact: the edge set (target for target, including both guard arms and the

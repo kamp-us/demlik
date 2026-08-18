@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// THE IMPORTER — one fabrika `workflow.json` in, one chart per task out.
+// THE IMPORTER — one `workflow.json` in, one chart per task out.
 //
 // This is the mirror of `kamp-us/phoenix` `packages/fabrika-cli/src/lane/
 // machine.ts`, and it is deliberately STRUCTURAL in exactly the same three
@@ -12,29 +12,27 @@
 //   …reached as an array's fallthrough → `end: "error"`
 //   machine-level `type: "parallel"` → a phase; its `onDone` pair → the terminals
 //
+// GRAMMAR, NEVER VOCABULARY. Every rule above is about what makes a document
+// WELL-FORMED — a state routes events to targets, a guarded edge is a two-arm
+// array, a `history` target means resume, a `final` is terminal. None of them
+// is about WHICH NAMES a consumer chose. So the event alphabet is read OFF the
+// document: a name a state declares is, by definition, an event of that
+// document, and there is no list here for it to be absent from.
+//
+// That is not a relaxation for its own sake. This file used to carry a consumer's
+// six event names as a closed set, which meant one upstream commit adding a
+// seventh took the importer offline for every document, not just the new one —
+// the same failure mode the report had when it matched STATE names, and the same
+// fix: enforce the shape, read the names.
+//
 // No guard name and no action name is ever dereferenced here, for the same
 // reason fabrika does not dereference them: the ARRAY is the guard. The name
 // travels into the chart's `when` because the chart draws it, and the fold
 // applies the one inline predicate (`retries < maxRetries`) the compiler
-// applies, whatever the name says.
+// applies, whatever the name says. An event name is the same kind of thing.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { EventOrigin } from "../graph";
-
-/** The operator's whole event vocabulary — fabrika's six, closed. */
-export const OPERATOR_EVENTS = [
-  "DONE",
-  "PASS",
-  "FAIL",
-  "BLOCKED",
-  "WIP",
-  "UNBLOCKED",
-] as const;
-
-export type OperatorEvent = (typeof OPERATOR_EVENTS)[number];
-
-export const isOperatorEvent = (event: string): event is OperatorEvent =>
-  (OPERATOR_EVENTS as readonly string[]).includes(event);
 
 /** `TASK_1.DONE` and `DONE` are the same event; the namespace is presentation. */
 export const bareEvent = (event: string): string => {
@@ -254,14 +252,27 @@ function importRegion(taskId: string, region: unknown): RegionImport {
       );
       continue;
     }
+    // Which bare name each spelling in THIS state collapsed to, so the one
+    // event-name rule that IS grammatical can be checked: a state holds one
+    // cell per event, so two spellings of one event in one state is a document
+    // that means two things by the same edge. Nothing here cares WHICH names.
+    const spelledAs = new Map<string, string>();
     for (const [eventName, transition] of Object.entries(raw)) {
       const event = bareEvent(eventName);
-      if (!isOperatorEvent(event)) {
+      if (event === "") {
         defects.push(
-          `task "${taskId}": state "${stateName}" listens for "${eventName}" — outside the operator's six (${OPERATOR_EVENTS.join("/")})`,
+          `task "${taskId}": state "${stateName}" listens for "${eventName}", which names no event once its namespace is stripped`,
         );
         continue;
       }
+      const already = spelledAs.get(event);
+      if (already !== undefined) {
+        defects.push(
+          `task "${taskId}": state "${stateName}" spells the same event twice — "${already}" and "${eventName}" are both \`${event}\`, and a state routes each event once`,
+        );
+        continue;
+      }
+      spelledAs.set(event, eventName);
 
       // ── the guarded array ────────────────────────────────────────────────
       if (Array.isArray(transition)) {
@@ -553,6 +564,26 @@ export function initialOf(chart: ImportedChart): string {
     if (node.initial === true) return name;
   }
   throw new Error("@demlik/tea: imported chart marks no initial state");
+}
+
+/**
+ * Every event name this lane declares, in first-declaration order.
+ *
+ * THE ALPHABET, DERIVED — the answer a caller used to get from a constant in
+ * this file listing one consumer's six. It is a fact about the document, so it
+ * is read from the document: the bare names its states route, deduplicated
+ * across tasks and phases. A consumer that adds an event gets it here the
+ * commit it lands, without a release of ours.
+ *
+ * Use it to build the `from` map at the import boundary and know you covered
+ * every name, or to diff two revisions of a workflow for a vocabulary change.
+ */
+export function eventAlphabet(lane: ImportedLane): readonly string[] {
+  const out = new Set<string>();
+  for (const chart of Object.values(lane.charts)) {
+    for (const event of Object.keys(chart.events)) out.add(event);
+  }
+  return [...out];
 }
 
 /**

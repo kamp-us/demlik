@@ -4,10 +4,20 @@
 // compile. This file covers the other half: documents that must not compile,
 // and the facts the import genuinely does not carry back.
 import { describe, expect, it } from "vitest";
+import {
+  CHECKOUT_EVENTS_JSONL,
+  CHECKOUT_ORIGINS,
+  CHECKOUT_WORKFLOW,
+} from "./__fixtures__/checkout";
 import { coder } from "./__fixtures__/templates";
+import { deriveLaneStatus, foldLane } from "./fold";
+import { laneReport } from "./report";
+import { laneFromFiles, reportInput } from "./sources";
 import {
   chartFromWorkflow,
   chartFromWorkflowText,
+  endPolarityOf,
+  eventAlphabet,
   statesOf,
   WorkflowImportError,
 } from "./workflow";
@@ -44,16 +54,28 @@ describe("chartFromWorkflow — what it refuses", () => {
     expect(() => chartFromWorkflowText("{oops")).toThrow(WorkflowImportError);
   });
 
-  it("an event outside the operator's six — named, with the six listed", () => {
+  it("a name that strips to nothing — a namespace with no event behind it", () => {
     const defects = defectsOf(
       mutate((doc) => {
         // biome-ignore lint/suspicious/noExplicitAny: untyped JSON document
-        (region(doc) as any).states.queued.on["ISSUE.YOLO"] = "build";
+        (region(doc) as any).states.queued.on["ISSUE."] = "build";
       }),
     );
     expect(defects).toHaveLength(1);
-    expect(defects[0]).toContain('"ISSUE.YOLO"');
-    expect(defects[0]).toContain("DONE/PASS/FAIL/BLOCKED/WIP/UNBLOCKED");
+    expect(defects[0]).toContain(
+      "names no event once its namespace is stripped",
+    );
+  });
+
+  it("one state spelling one event twice — a state routes each event once", () => {
+    const defects = defectsOf(
+      mutate((doc) => {
+        // biome-ignore lint/suspicious/noExplicitAny: untyped JSON document
+        (region(doc) as any).states.queued.on.WIP = "blocked";
+      }),
+    );
+    expect(defects).toHaveLength(1);
+    expect(defects[0]).toContain("spells the same event twice");
   });
 
   it("a transition targeting a state that does not exist", () => {
@@ -164,5 +186,135 @@ describe("chartFromWorkflow — what it carries, and what it drops", () => {
   it("does not carry `actions` — an action name is inert data upstream too", () => {
     const json = JSON.stringify(lane);
     expect(json).not.toContain("incrementRetries");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A COMPLETELY DIFFERENT VOCABULARY — the test this module exists to pass.
+//
+// `__fixtures__/checkout.ts` is the same GRAMMAR with none of the same NAMES:
+// eight events, two namespaces, two phases, two task ids, nine state names, two
+// terminals, a guard label and a history state, and not one of them is a name
+// this package has ever seen. If any of the importer's rules were secretly
+// about fabrika's vocabulary, this block is where it would show — and when
+// phoenix #5800 lands a seventh event on the epic lane, this is the block that
+// already said we import it.
+// ═══════════════════════════════════════════════════════════════════════════
+describe("a document with a completely different event vocabulary", () => {
+  const lane = chartFromWorkflow(CHECKOUT_WORKFLOW, CHECKOUT_ORIGINS);
+  const payment = lane.charts.payment;
+  const parcel = lane.charts.parcel;
+  if (payment === undefined || parcel === undefined) throw new Error("missing");
+
+  it("shares NOT ONE event name with fabrika's — the premise, asserted", () => {
+    const theirs = new Set(eventAlphabet(chartFromWorkflow(coder)));
+    expect([...theirs].sort()).toEqual([
+      "BLOCKED",
+      "DONE",
+      "FAIL",
+      "PASS",
+      "UNBLOCKED",
+      "WIP",
+    ]);
+    expect(eventAlphabet(lane).filter((e) => theirs.has(e))).toEqual([]);
+  });
+
+  it("derives the alphabet off the document, namespaces stripped", () => {
+    expect([...eventAlphabet(lane)].sort()).toEqual([
+      "AUTHORISED",
+      "DECLINED",
+      "DISPATCHED",
+      "HELD",
+      "LOST",
+      "PICKED",
+      "RESUMED",
+      "SUBMITTED",
+    ]);
+  });
+
+  it("reads the phase chain, both terminals and the trigger", () => {
+    expect(lane.phases).toEqual([
+      { name: "authorisation", tasks: ["payment"] },
+      { name: "fulfilment", tasks: ["parcel"] },
+    ]);
+    expect(lane.terminals).toEqual({
+      complete: "settled",
+      tripped: "cancelled",
+    });
+    expect(lane.trigger).toBe("cart.checkout-requested");
+    expect(lane.id).toBe("checkout");
+  });
+
+  it("recognises all three edge forms by SHAPE, under foreign names", () => {
+    const states = statesOf(payment);
+    expect(states.get("awaiting-card")?.on?.SUBMITTED).toEqual({
+      target: "authorising",
+    });
+    expect(states.get("authorising")?.on?.DECLINED).toEqual({
+      target: "awaiting-card",
+      when: "attemptsRemaining",
+      otherwise: "abandoned",
+    });
+    // The history state is called `back` here. `hist` was fabrika's spelling of
+    // it; `type: "history"` is the grammar, and that is what is read.
+    expect(states.get("on-hold")?.on?.RESUMED).toEqual({
+      resume: { fallback: "awaiting-card" },
+    });
+    expect([...states.keys()]).not.toContain("back");
+  });
+
+  it("keeps the terminal POLARITY off the guarded fallthrough", () => {
+    const states = statesOf(payment);
+    expect(endPolarityOf(states.get("captured"))).toBe(true);
+    expect(endPolarityOf(states.get("abandoned"))).toBe("error");
+    expect(endPolarityOf(statesOf(parcel).get("written-off"))).toBe("error");
+    expect(endPolarityOf(states.get("authorising"))).toBe(false);
+  });
+
+  it("takes the retry budget and the extras off this document's `context`", () => {
+    expect(lane.context.payment).toEqual({
+      maxRetries: 3,
+      extras: { attempts: 0, currency: "TRY" },
+    });
+  });
+
+  it("folds a real run — the guard, the park and the resume all fire", () => {
+    const source = laneFromFiles(
+      JSON.stringify(CHECKOUT_WORKFLOW),
+      CHECKOUT_EVENTS_JSONL,
+      CHECKOUT_ORIGINS,
+    );
+    const states = foldLane(source.workflow, source.entries);
+    // Declined once inside budget, parked, then RESUMED back to `authorising`
+    // rather than to the region's initial — the resume, under a foreign name.
+    expect(states.payment).toEqual({
+      type: "captured",
+      retries: 1,
+      maxRetries: 3,
+      was: "authorising",
+    });
+    expect(deriveLaneStatus(source.workflow, states).stateValue).toEqual({
+      fulfilment: { parcel: "unpacked" },
+    });
+  });
+
+  it("reports on it, in this consumer's own cast", () => {
+    const source = laneFromFiles(
+      JSON.stringify(CHECKOUT_WORKFLOW),
+      CHECKOUT_EVENTS_JSONL,
+      CHECKOUT_ORIGINS,
+    );
+    const { markdown } = laneReport(reportInput(source));
+    expect(markdown).toContain("## checkout — active");
+    expect(markdown).toContain("**fired by:** `cart.checkout-requested`");
+    // The first phase finished; the second is the one drawn.
+    expect(markdown).toContain("**authorisation:** complete");
+    expect(markdown).toContain("### parcel — `unpacked`");
+    expect(markdown).toContain("the warehouse's `PICKED`");
+    expect(markdown).toContain("```mermaid");
+    // and nothing of fabrika's leaked in through a default.
+    for (const theirs of ["WIP", "UNBLOCKED", "the operator", "pipeline"]) {
+      expect(markdown).not.toContain(theirs);
+    }
   });
 });

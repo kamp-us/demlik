@@ -47,6 +47,13 @@
  * carry guard or action NAMES as anything but labels — the guarded array IS the
  * guard, in fabrika and here, so a rename cannot make the two disagree.
  *
+ * AND IT KNOWS NO VOCABULARY. Nothing in this module holds a list of a
+ * consumer's event names, state names or phase names. The importer enforces the
+ * document's GRAMMAR — the edge forms, the terminals, the phase shape — and
+ * reads its alphabet ({@link eventAlphabet}) off the names the document itself
+ * declares, so a consumer adding a seventh event is a consumer we already
+ * import.
+ *
  * @packageDocumentation
  */
 
@@ -93,15 +100,13 @@ export {
   chartFromWorkflow,
   chartFromWorkflowText,
   endPolarityOf,
+  eventAlphabet,
   type ImportedChart,
   type ImportedEdge,
   type ImportedLane,
   type ImportedNode,
   type ImportedPhase,
   initialOf,
-  isOperatorEvent,
-  OPERATOR_EVENTS,
-  type OperatorEvent,
   originOf,
   statesOf,
   WorkflowImportError,
