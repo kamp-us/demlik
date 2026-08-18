@@ -204,8 +204,14 @@ lane](./report-on-a-fabrika-lane.md#say-who-sends-what).
 `boot()` saying where **that instance** starts.
 
 ```ts
-import { defineMachine } from "@demlik/tea";
-import { type LaneHands, runLane } from "@demlik/tea/chart/lane";
+import { defineMachine, type Sub } from "@demlik/tea";
+import {
+  type LaneCmd,
+  type LaneHands,
+  type LaneRunMsg,
+  type LaneRunState,
+  runLane,
+} from "@demlik/tea/chart/lane";
 
 const hands = {
   // the ordinary case: this child starts where the chart starts.
