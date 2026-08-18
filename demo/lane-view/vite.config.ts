@@ -10,6 +10,8 @@ import { defineConfig } from "vite";
  * copy of anyone's lane anywhere.
  */
 const VIRTUAL = "virtual:lanes";
+/** The one channel the page listens on. */
+const CHANNEL = "lanes:update";
 
 type Lane = {
   id: string;
@@ -60,6 +62,39 @@ function collect(dir: string): Lane[] {
     .filter((l): l is Lane => l !== null);
 }
 
+/**
+ * Every lane under `dir`, however it is spelled on disk.
+ *
+ * ONE implementation, because the first paint and every live update must agree
+ * — a watcher that re-read differently would show a lane moving that had not.
+ */
+function readLanes(dir: string): Lane[] {
+  let lanes: Lane[] = [];
+  try {
+    lanes = collect(dir);
+  } catch {
+    lanes = [];
+  }
+  if (lanes.length > 0) return lanes;
+  // the flat fixture spelling (`5673.workflow.json`) as well as the on-disk
+  // one, so `pnpm lane:view` with no argument shows three real lanes and
+  // proves the thing works before anyone points it at their own.
+  try {
+    const names = new Set(
+      readdirSync(dir)
+        .filter((n) => n.endsWith(".workflow.json"))
+        .map((n) => n.replace(".workflow.json", "")),
+    );
+    return [...names].map((id) => ({
+      id,
+      workflow: readFileSync(join(dir, `${id}.workflow.json`), "utf8"),
+      events: readFileSync(join(dir, `${id}.events.jsonl`), "utf8"),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 const target = resolve(
   process.env.LANE_DIR ?? "src/chart/report/__fixtures__/real",
 );
@@ -74,29 +109,38 @@ export default defineConfig({
       resolveId: (id) => (id === VIRTUAL ? `\0${VIRTUAL}` : null),
       load(id) {
         if (id !== `\0${VIRTUAL}`) return null;
-        // the flat fixture spelling (`5673.workflow.json`) as well as the
-        // on-disk one (`5673/workflow.json`), so `pnpm lane:view` with no
-        // argument shows three real lanes and proves the thing works.
-        let lanes: Lane[] = [];
-        try {
-          lanes = collect(target);
-        } catch {
-          lanes = [];
-        }
-        if (lanes.length === 0) {
-          const names = new Set(
-            readdirSync(target)
-              .filter((n) => n.endsWith(".workflow.json"))
-              .map((n) => n.replace(".workflow.json", "")),
-          );
-          lanes = [...names].map((id) => ({
-            id,
-            workflow: readFileSync(join(target, `${id}.workflow.json`), "utf8"),
-            events: readFileSync(join(target, `${id}.events.jsonl`), "utf8"),
-          }));
-        }
+        const lanes = readLanes(target);
         return `export const LANES = ${JSON.stringify(lanes)};
 export const SOURCE = ${JSON.stringify(target)};`;
+      },
+
+      // ── LIVE ───────────────────────────────────────────────────────────
+      // An agent driving a lane APPENDS to `events.jsonl`, so the file's
+      // mtime is the pipeline's own heartbeat — there is nothing to poll and
+      // no endpoint to call. Watch the lane root, re-read on any change, and
+      // push. A whole-page reload would work and would also throw away
+      // whatever the reader was looking at, so the bytes go over the socket
+      // and the page swaps them in place: scroll position, the lane you have
+      // open and the step you scrubbed to all survive the update.
+      configureServer(server) {
+        server.watcher.add(target);
+        const push = (path: string) => {
+          if (!path.startsWith(target)) return;
+          try {
+            server.ws.send({
+              type: "custom",
+              event: CHANNEL,
+              data: readLanes(target),
+            });
+          } catch {
+            // a half-written file during an append is not an error, it is the
+            // next event arriving — the following change fires with it whole.
+          }
+        };
+        server.watcher.on("add", push);
+        server.watcher.on("change", push);
+        server.watcher.on("unlink", push);
+        server.watcher.on("addDir", push);
       },
     },
   ],

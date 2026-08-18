@@ -25,7 +25,32 @@ type Lane = {
   events: string;
   origins?: unknown;
 };
-const lanes = LANES as Lane[];
+
+/**
+ * LIVE — the lanes, as they are on disk right now.
+ *
+ * An agent driving a lane appends to `events.jsonl`, so the file IS the
+ * heartbeat: the dev server watches the lane root and pushes the bytes down
+ * the socket it already holds open. Nothing polls, nothing is subscribed to,
+ * and the page never reloads — a reload would lose the lane you have open and
+ * the step you scrubbed to, which on a screen you leave up all day is the
+ * whole value of it.
+ */
+function useLanes(): { lanes: Lane[]; beat: number } {
+  const [lanes, setLanes] = useState(LANES as Lane[]);
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    const hot = import.meta.hot;
+    if (hot === undefined) return;
+    const on = (next: Lane[]) => {
+      setLanes(next);
+      setBeat((n) => n + 1);
+    };
+    hot.on("lanes:update", on);
+    return () => hot.off("lanes:update", on);
+  }, []);
+  return { lanes, beat };
+}
 
 /**
  * Every mermaid host skips a node once it has drawn it, and the component keys
@@ -59,7 +84,13 @@ const ATTENTION_LABEL: Record<string, string> = {
 };
 
 /** The fleet, derived once — every lane read the same way one lane is read. */
-function useFleet(): { row: FleetRow; lane: Lane }[] {
+function useFleet(
+  lanes: Lane[],
+  beat: number,
+): { row: FleetRow; lane: Lane }[] {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `beat` is the
+  // clock — a lane that has been quiet for 20 minutes should say 21 without
+  // anything on disk changing, and the tick is what re-derives the ages.
   return useMemo(() => {
     const now = Date.now();
     return lanes
@@ -74,11 +105,19 @@ function useFleet(): { row: FleetRow; lane: Lane }[] {
         return { row: fleetRow(l.id, view, last, now), lane: l };
       })
       .sort((a, b) => byAttention(a.row, b.row));
-  }, []);
+  }, [lanes, beat]);
 }
 
-function Fleet({ onOpen }: { onOpen: (id: string) => void }) {
-  const fleet = useFleet();
+function Fleet({
+  lanes,
+  beat,
+  onOpen,
+}: {
+  lanes: Lane[];
+  beat: number;
+  onOpen: (id: string) => void;
+}) {
+  const fleet = useFleet(lanes, beat);
   const counts = new Map<string, number>();
   for (const { row } of fleet)
     counts.set(row.attention, (counts.get(row.attention) ?? 0) + 1);
@@ -139,6 +178,17 @@ function age(min: number): string {
 
 function App() {
   const [open, setOpen] = useState<string | null>(null);
+  const { lanes, beat } = useLanes();
+  const [tick, setTick] = useState(0);
+
+  // "20h quiet" must not still say 20h an hour later. A minute is finer than
+  // anything the ages are rendered in, so nothing on screen is ever stale by
+  // more than the unit it is displayed in.
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   if (lanes.length === 0) {
     return (
       <main className="lv-empty">
@@ -159,12 +209,17 @@ function App() {
   if (open === null)
     return (
       <>
-        <Fleet onOpen={setOpen} />
+        <Fleet lanes={lanes} beat={beat + tick} onOpen={setOpen} />
         <Mermaid />
       </>
     );
 
-  const lane = lanes.find((l) => l.id === open) as Lane;
+  const lane = lanes.find((l) => l.id === open);
+  if (lane === undefined) {
+    // the lane went away under us — a root re-pointed, a dir removed.
+    setOpen(null);
+    return null;
+  }
   return (
     <>
       <header className="lv-bar">
