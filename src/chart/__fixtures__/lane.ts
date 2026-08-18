@@ -27,22 +27,40 @@ export const lane = defineChart({
   // `scope` answers "where does this event mean anything?" once, on the event.
   // "edges"  → targeted: live exactly where it is routed, dead elsewhere.
   // <phase>  → live in that phase; EVERY state there must handle or `ignore` it.
+  //
+  // `from` answers the other half — WHERE DOES THIS EVENT COME FROM? — and it
+  // is fabrika's cast, not the library's: the taxonomy (`"cmd"`, `"sub"`, a
+  // named world role) is TEA's, the role NAMES below belong to the lane. A
+  // reader builds its sentence out of these, so the role is written the way it
+  // is said: "the operator" (there is one) and "a human" (any of them).
   events: {
-    WIP: { data: ty<{ readonly at: number }>(), scope: "edges" },
-    DONE: { data: ty<{ readonly at: number }>(), scope: "edges" },
+    WIP: {
+      data: ty<{ readonly at: number }>(),
+      scope: "edges",
+      from: { world: "the operator" },
+    },
+    // the work the lane dispatched, answering. `build`/`review`/`ship` each
+    // spawn a shell and the shell reports back; that is a Cmd's result.
+    DONE: { data: ty<{ readonly at: number }>(), scope: "edges", from: "cmd" },
     // a block can arrive at any point in the work — and every working state
     // routes it. Adding a state to `working` without a BLOCKED edge goes red.
     BLOCKED: {
       data: ty<{ readonly at: number; readonly reason: string }>(),
       scope: "working",
+      from: { world: "the operator" },
     },
-    PASS: { data: ty<{ readonly at: number }>(), scope: "edges" },
+    PASS: { data: ty<{ readonly at: number }>(), scope: "edges", from: "cmd" },
     FAIL: {
       data: ty<{ readonly at: number; readonly reason: string }>(),
       scope: "edges",
+      from: "cmd",
     },
     // only a parked lane can be unblocked — and both parked states route it.
-    UNBLOCKED: { data: ty<{ readonly at: number }>(), scope: "parked" },
+    UNBLOCKED: {
+      data: ty<{ readonly at: number }>(),
+      scope: "parked",
+      from: { world: "a human" },
+    },
   },
 
   states: {

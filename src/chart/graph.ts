@@ -7,7 +7,7 @@
 // exactly one of them and everything else is derived:
 //
 //   ctx     — the data every state carries.                          (1 site)
-//   events  — the event alphabet: name, payload, and SCOPE.          (1 site)
+//   events  — the alphabet: name, payload, SCOPE and ORIGIN.         (1 site)
 //   cmds    — the effect alphabet: name and payload.                 (1 site)
 //   states  — states grouped into named PHASES, each with its edges. (1 site)
 //
@@ -144,6 +144,128 @@ export type EdgeSpec<SN extends string, CN extends string> =
 // per-pair reconsideration on every new event *requires* |S| × |M| author-owned
 // sites — that is the one thing the two goals genuinely trade against.
 
+// ── 3a. FROM — where the Msg comes from ────────────────────────────────────
+//
+// A chart says `WIP: "build"` — an edge from an event to a target. It never
+// said where the event COMES FROM, and that absence is not a small one: in TEA
+// a Msg has exactly three origins and no fourth,
+//
+//   a Cmd's result — the machine asked, and this is the answer coming back
+//   a Sub firing   — a source the machine subscribed to, speaking unprompted
+//   the outside world — someone who is not this machine, acting
+//
+// so "what is this state waiting on" is answerable from the chart alone, once
+// the chart carries the fact. Before it did, every reader that wanted the
+// answer reconstructed it by matching STATE NAMES against a list of its
+// consumer's own — which is a second declaration site for a fact the event
+// owns, and it went stale the moment the consumer renamed a state.
+//
+// THE THIRD ORIGIN IS PARAMETERISED, and that is the whole reason this
+// generalises past any one consumer. "The outside world" alone cannot tell an
+// operator from a human from a webhook, and those roles are the CONSUMER's —
+// fabrika's operator, a checkout's shopper, an ops tool's on-call. So the world
+// origin carries a role NAME the consumer chooses, and this file enumerates
+// none of them. What is closed is the taxonomy (three origins, from TEA); what
+// is open is the cast (any role, from whoever is writing the chart).
+//
+// The role is a free noun phrase rather than a bare noun deliberately: a reader
+// renders it in a sentence, and only the consumer knows whether its role is
+// definite ("the operator" — there is one) or indefinite ("a human" — any of
+// them). An enum of nouns would put that article in OUR source, which is the
+// same mistake one level down.
+
+/**
+ * Where an event's Msg comes from. TEA's own taxonomy, and no wider:
+ *
+ *   `"cmd"`             — a Cmd's result.
+ *   `"sub"`             — a Sub firing.
+ *   `{ world: <role> }` — the outside world, through the role the CONSUMER
+ *                         names. `{ world: "the operator" }`, `{ world: "a
+ *                         human" }` — this file knows no role names.
+ *
+ * Written as one exported alias and used at the declaration site too, unlike
+ * `scope` (which is spelled out inline so tsc prints the chart's own phase
+ * names and offers "Did you mean …?" against them). There is nothing chart-
+ * specific to print here — the alphabet is closed, universal and three members
+ * long — so the alias name in the diagnostic costs nothing and the one-site
+ * rule wins.
+ */
+export type EventOrigin = "cmd" | "sub" | { readonly world: string };
+
+/** The `from` field AS DECLARED — before the authored/fallback test. */
+type FromOf<X> = X extends { readonly from: infer F } ? F : never;
+type WorldRoleOf<F> = F extends { readonly world: infer R } ? R : never;
+
+/**
+ * Is this event's `from` something the AUTHOR wrote, or is it tsc's fallback?
+ *
+ * `IsAuthoredScope`'s test, applied to this field's shape. When some OTHER
+ * error in the literal defeats inference of `C`, tsc falls back to the
+ * `Chart<C>` constraint, where `from` is the whole `EventOrigin` union — a
+ * union MIXING a word with an object, which no literal can produce. An author's
+ * `from` is either a word (`"cmd"`) or a `{ world }` with a LITERAL role; a
+ * bare `string` role is not authorable as a declaration either, so it keeps the
+ * same reading of "no declaration".
+ */
+type IsAuthoredFrom<X, F = FromOf<X>> = [F] extends [string]
+  ? [string] extends [F]
+    ? false
+    : true
+  : [F] extends [{ readonly world: string }]
+    ? [string] extends [WorldRoleOf<F>]
+      ? false
+      : true
+    : false;
+
+/** Event `E`'s declared origin, once it is established that it IS a declaration. */
+export type OriginAt<C, E extends keyof EvMap<C>> = [
+  IsAuthoredFrom<EvMap<C>[E]>,
+] extends [true]
+  ? FromOf<EvMap<C>[E]>
+  : never;
+
+/**
+ * The events whose declared origin is exactly `O`.
+ *
+ * The `[never] extends [O]` arm comes FIRST and is not optional: an event with
+ * no `from` has `OriginAt` `never`, and `[never] extends ["cmd"]` is TRUE — so
+ * without it an undeclared event would be classified as every origin at once,
+ * which is the loudest possible way to turn "the chart does not say" into a
+ * confident wrong answer.
+ */
+type EventsFrom<C, O> = Extract<
+  {
+    [E in EventName<C>]: [OriginAt<C, E>] extends [never]
+      ? never
+      : [OriginAt<C, E>] extends [O]
+        ? E
+        : never;
+  }[EventName<C>],
+  string
+>;
+
+/** The events the chart says are a Cmd's result. */
+export type CmdEvent<C> = EventsFrom<C, "cmd">;
+
+/** The events the chart says a Sub fires. */
+export type SubEvent<C> = EventsFrom<C, "sub">;
+
+/** The events the chart attributes to a named outside-world role. */
+export type WorldEvent<C> = Extract<
+  {
+    [E in EventName<C>]: [WorldRoleOf<OriginAt<C, E>>] extends [never]
+      ? never
+      : E;
+  }[EventName<C>],
+  string
+>;
+
+/** The role `E` is attributed to — `never` for a `cmd`/`sub`/undeclared event. */
+export type WorldRole<C, E extends keyof EvMap<C>> = Extract<
+  WorldRoleOf<OriginAt<C, E>>,
+  string
+>;
+
 /** The `scope` field AS DECLARED — before the list is flattened to its members. */
 type ScopeDeclOf<X> = X extends { readonly scope: infer S } ? S : never;
 type ScopeElems<S> = S extends readonly (infer T)[] ? T : S;
@@ -226,6 +348,18 @@ export type Chart<C> = {
        * belong to someone else.
        */
       readonly foreign?: true;
+      /**
+       * WHERE THIS MSG COMES FROM — see {@link EventOrigin} and §3a.
+       *
+       * Optional, and its absence means exactly "the chart does not say",
+       * never a default: a chart that declares no `from` behaves as it always
+       * did, and a reader that wants the answer must degrade honestly rather
+       * than guess. It composes with everything else on the event — `scope`
+       * answers WHERE the event is live, `data` WHAT it carries, `foreign`
+       * WHOSE NAME it is, and this WHO SENT IT — and none of the four is
+       * derivable from another.
+       */
+      readonly from?: EventOrigin;
       // written out rather than aliased: tsc prints the alias NAME in the
       // diagnostic, and the author needs to see the phase names themselves
       // (and get tsc's "Did you mean …?" against them).
@@ -396,14 +530,32 @@ type EdgeCheck<X> = X extends string
 //
 // So: one rule per level, naming the offending key, the way the edge level does.
 type KnownChartField = "ctx" | "events" | "cmds" | "states";
-type KnownEventField = "data" | "foreign" | "scope";
+type KnownEventField = "data" | "foreign" | "scope" | "from";
 type KnownNodeField = "initial" | "data" | "on" | "ignore" | "end";
 
 type UnknownKeys<X, Known extends string> = Exclude<keyof X, Known>;
 
-type EventCheck<X> = [UnknownKeys<X, KnownEventField>] extends [never]
+/**
+ * The `{ world }` form's own unknown-key rule — the same hole one level down.
+ *
+ * `EventCheck` names a typo'd key ON the event (`frm`), but the world origin is
+ * an object of its own and constraint checking runs no excess-property check
+ * inside it either: `{ world: "a human", role: "reviewer" }` structurally
+ * satisfies `{ world: string }`, so a second field would be accepted and then
+ * silently dropped by every reader. A role is ONE fact and it is `world`.
+ */
+type FromCheck<X> = X extends { readonly from: infer F }
+  ? [F] extends [string]
+    ? unknown
+    : [Exclude<keyof F, "world">] extends [never]
+      ? unknown
+      : { readonly __fromWorldCannotAlsoDeclare: Exclude<keyof F, "world"> }
+  : unknown;
+
+type EventCheck<X> = ([UnknownKeys<X, KnownEventField>] extends [never]
   ? unknown
-  : { readonly __eventHasUnknownField: UnknownKeys<X, KnownEventField> };
+  : { readonly __eventHasUnknownField: UnknownKeys<X, KnownEventField> }) &
+  FromCheck<X>;
 
 type NodeCheck<N> = [UnknownKeys<N, KnownNodeField>] extends [never]
   ? unknown
@@ -1067,6 +1219,14 @@ export type ReducerChart<C> = {
       readonly data?: Ty<object>;
       /** Same meaning as the grid form's: this name is not ours to decorate. */
       readonly foreign?: true;
+      /**
+       * KEPT, where `scope` is dropped. `scope` answers "at which STATES does
+       * this event mean anything", and with no state dimension the question
+       * has no content. "Who sent this" has exactly as much content here as it
+       * does in the grid form — it is a fact about the event, and this form
+       * still has events.
+       */
+      readonly from?: EventOrigin;
     };
   };
   readonly cmds?: { readonly [N in keyof CmdMap<C>]: Ty<object> };
@@ -1098,13 +1258,14 @@ type KnownReducerChartField =
   | "events"
   | "cmds"
   | "on";
-type KnownReducerEventField = "data" | "foreign";
+type KnownReducerEventField = "data" | "foreign" | "from";
 
-type REventCheck<X> = [UnknownKeys<X, KnownReducerEventField>] extends [never]
+type REventCheck<X> = ([UnknownKeys<X, KnownReducerEventField>] extends [never]
   ? unknown
   : {
       readonly __eventHasUnknownField: UnknownKeys<X, KnownReducerEventField>;
-    };
+    }) &
+  FromCheck<X>;
 
 export type StrictR<C> = ([IsDegenerate<RStateName<C>>] extends [true]
   ? { readonly __stateNamesMustBeLiteralsNotAComputedStringKey: true }
