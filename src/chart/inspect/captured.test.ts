@@ -149,6 +149,46 @@ describe("captureCmds — the cmds a CELL built, which no chart declares", () =>
   });
 });
 
+// A capture is a fold, and a fold has a ZERO. `CaptureInput.loaded` is the
+// rehydrated state the recorded run actually booted from — a run that resumed a
+// persisted session and one that started cold are two different runs, and a
+// capture that dropped the distinction would report the cold one's effects
+// under the resumed one's trace.
+describe("captureCmds — the state the run booted from", () => {
+  type S = { readonly type: "a"; readonly n: number };
+  type M = { readonly type: "tick" };
+  const machine = defineMachine<
+    S,
+    M,
+    Cmd<"mark"> & { readonly n: number },
+    Sub<never>,
+    Record<never, never>
+  >({
+    // the rehydrate branch is a pure passthrough, cmds and all — `replay`
+    // enforces that — so the loaded state shows up in what the run does NEXT.
+    init: (loaded) => [loaded ?? { type: "a", n: 0 }, []],
+    update: {
+      tick: (s) => [
+        { ...s, n: s.n + 1 },
+        [{ type: "mark", n: s.n + 1 } as Cmd<"mark"> & { readonly n: number }],
+      ],
+    },
+    interpret: { mark: async () => undefined },
+  });
+
+  it("folds from `loaded`, not from a cold boot", () => {
+    const msgs = [{ type: "tick" }] as readonly M[];
+    const resumed = captureCmds(machine, {
+      msgs,
+      ctx: NO_CTX,
+      loaded: { type: "a", n: 5 } as S,
+    });
+    const cold = captureCmds(machine, { msgs, ctx: NO_CTX });
+    expect(firedAt(resumed, 1)?.cmds).toEqual([{ type: "mark", n: 6 }]);
+    expect(firedAt(cold, 1)?.cmds).toEqual([{ type: "mark", n: 1 }]);
+  });
+});
+
 describe("captureCmds — honest degradation", () => {
   it("truncates at the step that threw and says so", () => {
     type S = { readonly type: "a"; readonly n: number };
@@ -179,5 +219,26 @@ describe("captureCmds — honest degradation", () => {
     expect(cap.stoppedAt?.step).toBe(2);
     expect(cap.stoppedAt?.error).toContain("the cell blew up");
     expect(firedAt(cap, 2)).toBeUndefined();
+  });
+
+  it("`firedAt` addresses a STEP NUMBER, never a position in the list", () => {
+    const cap = captureUpload([
+      { type: "up.pick", key: "k1" },
+      { type: "up.done", etag: "e1" },
+    ]);
+    // The effects panel's own view: the steps that fired something. `step` is
+    // the scrubber's cursor and it survives the filter — the list index does
+    // not, and reading one for the other hands the cursor a different step's
+    // effects (here, step 2's cmds under cursor 1).
+    const fired = { ...cap, steps: cap.steps.filter((s) => s.cmds.length > 0) };
+    expect(fired.steps.map((s) => s.step)).toEqual([1, 2]);
+    expect(firedAt(fired, 1)?.cmds).toEqual([
+      { type: "put_object", key: "k1" },
+    ]);
+    expect(firedAt(fired, 2)?.cmds.map((c) => c.type)).toEqual([
+      "verify_object",
+      "log",
+    ]);
+    expect(firedAt(fired, 0)).toBeUndefined();
   });
 });
