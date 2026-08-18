@@ -28,6 +28,7 @@ import {
   type ImportedChart,
   type ImportedLane,
   initialOf,
+  RETRY_BUDGET,
   statesOf,
 } from "./workflow";
 
@@ -159,7 +160,7 @@ export function initialStates(
     out[taskId] = {
       type: initialOf(chart),
       retries: 0,
-      maxRetries: lane.context[taskId]?.maxRetries ?? 2,
+      maxRetries: lane.context[taskId]?.maxRetries ?? RETRY_BUDGET,
     };
   }
   return out;

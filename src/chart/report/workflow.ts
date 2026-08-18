@@ -189,8 +189,14 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const nodeType = (node: unknown): string | undefined =>
   isRecord(node) && typeof node.type === "string" ? node.type : undefined;
 
-/** The retry budget a document inherits when its `context` names none. */
-const RETRY_BUDGET = 2;
+/**
+ * The retry budget a document inherits when its `context` names none.
+ *
+ * Exported because the fold needs the same number when it boots a task the
+ * document's `context` never mentioned, and a default spelled in two files is
+ * a default that drifts in one of them.
+ */
+export const RETRY_BUDGET = 2;
 
 /**
  * The `when` a guarded arm carries when the document names no guard.
