@@ -96,6 +96,7 @@ export is not done until it has a row here.
 | `./chart/lane` | experimental | N chart instances in parallel, grouped into phases that sequence — describe, fold and draw a lane; tracks an external tool's document format |
 | `./chart/lane/react` | experimental | `<LaneView>` / `<LiveLaneView>`; React binding of `./chart/lane` over both sources (a replayed event log, a running `runLane`) |
 | `./chart/lane/styles.css` | experimental | asset of `./chart/lane/react` |
+| `./chart/lane/server` | experimental | `laneViewer` — the prebuilt lane dashboard as a `(Request) => Response`, for a host with no bundler; the host supplies where the lanes are, how an event is recorded and who holds one |
 
 ## Store factory per host
 
