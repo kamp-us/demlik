@@ -69,7 +69,7 @@ export function explainExit(exit: number, stderr: string): string {
 }
 
 export async function send(req: DispatchRequest): Promise<DispatchResult> {
-  const res = await fetch("/__lane/transition", {
+  const res = await fetch("/api/transition", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(req),

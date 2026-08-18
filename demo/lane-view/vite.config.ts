@@ -229,7 +229,7 @@ export const SOURCE = ${JSON.stringify(target)};`;
         // `execFile` with an argument ARRAY, never a shell string, and both
         // names re-validated here — this endpoint is reachable by anything
         // that can talk to the dev server.
-        server.middlewares.use("/__lane/transition", (req, res, next) => {
+        server.middlewares.use("/api/transition", (req, res, next) => {
           if (req.method !== "POST") return next();
           let body = "";
           req.on("data", (c) => {
@@ -299,7 +299,7 @@ export const SOURCE = ${JSON.stringify(target)};`;
         });
 
         // ── WHO IS DRIVING ──────────────────────────────────────────────
-        server.middlewares.use("/__lane/drivers", (req, res, next) => {
+        server.middlewares.use("/api/drivers", (req, res, next) => {
           if (req.method !== "GET") return next();
           const done = (drivers: Record<string, Driver | null>) => {
             res.setHeader("content-type", "application/json");

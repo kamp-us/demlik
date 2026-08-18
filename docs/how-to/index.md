@@ -41,6 +41,10 @@ what you are trying to do, and it names the subpath you need.
   lane on a page with `@demlik/tea/chart/lane/react`: which of twelve things is
   stuck first, the phases in order, a scrubber over the run, and dispatch where
   the code bodies exist — over a replayed event log or a live `runLane`.
+- [Serve a lane dashboard](./serve-a-lane-dashboard.md) — the same page, but
+  prebuilt and served by a host with no bundler: `@demlik/tea/chart/lane/server`
+  takes three callbacks (where the lanes are, how an event is recorded, who
+  holds one) and hands back a `(Request) => Response`.
 
 ## Test and verify
 

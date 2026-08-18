@@ -4,7 +4,7 @@
 // so this reads the disk where it is started and renders in the browser. No
 // server, no upload, no copy of a lane leaving the machine.
 import mermaid from "mermaid";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LaneView } from "../../src/chart/lane/react";
 import "../../src/chart/lane/styles.css";
@@ -46,20 +46,51 @@ type Lane = {
  * the step you scrubbed to, which on a screen you leave up all day is the
  * whole value of it.
  */
-function useLanes(): { lanes: Lane[]; beat: number } {
+function useLanes(): { lanes: Lane[]; beat: number; source: string } {
   const [lanes, setLanes] = useState(LANES as Lane[]);
   const [beat, setBeat] = useState(0);
-  useEffect(() => {
-    const hot = import.meta.hot;
-    if (hot === undefined) return;
-    const on = (next: Lane[]) => {
-      setLanes(next);
-      setBeat((n) => n + 1);
-    };
-    hot.on("lanes:update", on);
-    return () => hot.off("lanes:update", on);
+  const [source, setSource] = useState(SOURCE as string);
+  const arrived = useCallback((next: Lane[]) => {
+    setLanes(next);
+    setBeat((n) => n + 1);
   }, []);
-  return { lanes, beat };
+
+  useEffect(() => {
+    // TWO HOSTS, ONE PAGE. Under `pnpm lane:view` the lanes come off disk at
+    // build time and updates ride vite's own socket. Served by a consumer —
+    // fabrika, or anything else implementing the contract — they come from
+    // `/api/lanes` and updates from `/api/stream`. Neither knows about the
+    // other; the page just takes whichever answers.
+    const hot = import.meta.hot;
+    if (hot !== undefined) {
+      hot.on("lanes:update", arrived);
+      return () => hot.off("lanes:update", arrived);
+    }
+
+    let alive = true;
+    void fetch("/api/lanes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { lanes?: Lane[]; source?: string } | null) => {
+        if (!alive || d?.lanes === undefined) return;
+        arrived(d.lanes);
+        if (typeof d.source === "string") setSource(d.source);
+      })
+      .catch(() => {});
+
+    const es = new EventSource("/api/stream");
+    es.onmessage = (e) => {
+      try {
+        arrived(JSON.parse(e.data as string) as Lane[]);
+      } catch {
+        // a partial frame is the next event still arriving
+      }
+    };
+    return () => {
+      alive = false;
+      es.close();
+    };
+  }, [arrived]);
+  return { lanes, beat, source };
 }
 
 /**
@@ -106,7 +137,7 @@ function useDrivers(): Record<string, Driver | null> {
   useEffect(() => {
     let alive = true;
     const pull = () =>
-      fetch("/__lane/drivers")
+      fetch("/api/drivers")
         .then((r) => r.json())
         .then((d: { drivers: Record<string, Driver | null> }) => {
           if (alive) setDrivers(d.drivers ?? {});
@@ -132,11 +163,12 @@ function useFleet(
   lanes: Lane[],
   beat: number,
 ): { row: FleetRow; lane: Lane }[] {
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `beat` is the
-  // clock — a lane that has been quiet for 20 minutes should say 21 without
-  // anything on disk changing, and the tick is what re-derives the ages.
+  // `beat` is the clock: a lane quiet for 20 minutes should read 21 without
+  // anything on disk changing, and the tick is what re-derives the ages. It is
+  // a dependency in the honest sense — the answer is a function of it.
   return useMemo(() => {
     const now = Date.now();
+    void beat;
     return lanes
       .map((l) => {
         const chart = chartFromWorkflowText(
@@ -155,10 +187,12 @@ function useFleet(
 function Fleet({
   lanes,
   beat,
+  source,
   onOpen,
 }: {
   lanes: Lane[];
   beat: number;
+  source: string;
   onOpen: (id: string) => void;
 }) {
   const fleet = useFleet(lanes, beat);
@@ -213,7 +247,7 @@ function Fleet({
         ))}
       </ul>
       <p className="fl-foot">
-        Read from <code>{SOURCE}</code> — nothing left this machine.
+        Read from <code>{source || "this machine"}</code> — nothing left it.
       </p>
     </main>
   );
@@ -312,7 +346,7 @@ function Act({
               );
             })}
           </span>
-          {said !== null && said.key.startsWith(`${t.task}.`) ? (
+          {said?.key.startsWith(`${t.task}.`) === true ? (
             <span className={said.ok ? "act-said ok" : "act-said no"}>
               {said.ok ? `${said.key.split(".")[1]} recorded` : said.text}
             </span>
@@ -354,7 +388,7 @@ function ActFor({ lane }: { lane: Lane }) {
 
 function App() {
   const [open, setOpen] = useState<string | null>(null);
-  const { lanes, beat } = useLanes();
+  const { lanes, beat, source } = useLanes();
   const [tick, setTick] = useState(0);
 
   // "20h quiet" must not still say 20h an hour later. A minute is finer than
@@ -385,7 +419,12 @@ function App() {
   if (open === null)
     return (
       <>
-        <Fleet lanes={lanes} beat={beat + tick} onOpen={setOpen} />
+        <Fleet
+          lanes={lanes}
+          beat={beat + tick}
+          source={source}
+          onOpen={setOpen}
+        />
         <Mermaid />
       </>
     );
@@ -414,7 +453,7 @@ function App() {
             </button>
           ))}
         </nav>
-        <code className="lv-src">{SOURCE}</code>
+        <code className="lv-src">{source}</code>
       </header>
       <main>
         <ActFor lane={lane} />

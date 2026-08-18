@@ -273,11 +273,15 @@
       "types": "./dist/chart/lane/react.d.ts",
       "import": "./dist/chart/lane/react.js"
     },
+    "./chart/lane/server": {
+      "types": "./dist/chart/lane/server.d.ts",
+      "import": "./dist/chart/lane/server.js"
+    },
     "./chart/lane/styles.css": "./dist/chart/lane/styles.css",
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node build-viewer.mjs",
     "lint": "biome check src package.json",
     "test": "vitest run",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
@@ -291,7 +295,8 @@
     "verify-exports": "node scripts/verify-exports.mjs",
     "check:chart-probes": "node scripts/check-chart-probes.mjs",
     "check:merge-markers": "node scripts/check-merge-markers.mjs",
-    "release": "changeset"
+    "release": "changeset",
+    "build:viewer": "node build-viewer.mjs"
   },
   "dependencies": {
     "better-result": "^2.5.2"
