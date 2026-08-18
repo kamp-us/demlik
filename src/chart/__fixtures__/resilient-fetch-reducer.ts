@@ -231,18 +231,21 @@ export const fetchReducerUpdate = compileReducer(fetchReducerChart, {
   cells,
 });
 
+/** The entry state's data — everything this form's state carries but the tag. */
+export const fetchReducerBoot = (): Omit<RFState, "type"> => ({
+  url: null,
+  body: null,
+  error: null,
+  retryAtMs: 0,
+  circuit: initCircuit(),
+  bucket: initBucket(10, 5, 0),
+  retry: initRetry(),
+  cache: initCache<string>(),
+});
+
 export const fetchReducerInit = reducerInitFrom<RFG, RFState, RFDoFetch>(
   fetchReducerChart,
-  () => ({
-    url: null,
-    body: null,
-    error: null,
-    retryAtMs: 0,
-    circuit: initCircuit(),
-    bucket: initBucket(10, 5, 0),
-    retry: initRetry(),
-    cache: initCache<string>(),
-  }),
+  fetchReducerBoot,
 );
 
 export const fetchReducerSubs = (s: RFState): readonly DeadlineSub[] =>

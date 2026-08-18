@@ -85,13 +85,88 @@ and changes nothing. Where a guard cannot be evaluated — no sample, no bag, a
 body that throws — the control says so (`retriesRemaining? (no-sample)`) rather
 than guessing a branch.
 
-## 4. Scrub
+## 4. Read what actually fired
+
+The control row answers a **before** question: what this edge *declares* it would
+fire. That is empty by declaration on a `{ to, cell }` edge — the cell builds its
+cmds inside its body, so the chart has none to declare — and on a guarded edge it
+names both arms, only one of which ever ran.
+
+The **cmds fired** panel answers the **after** question: what the recorded run
+*did* emit, per step, tagged with the message that caused it. The row highlighted
+is the step the scrubber is on.
+
+```text
+init       —
+WIP        —
+fetch      do_fetch          ← built inside the cell; no chart declares it
+```
+
+Headless, it is one call:
+
+```ts
+import { captureCmds, firedAt } from "@demlik/tea/chart/inspect";
+
+const capture = captureCmds(machine, { msgs: trace.msgs, ctx });
+firedAt(capture, 3); // { step: 3, by: { type: "fetch", … }, cmds: [{ type: "do_fetch", … }] }
+```
+
+It is derived, not observed: `replay` already returns the cmds a fold emitted, so
+the cmds of step *n* are the tail past the prefix of step *n − 1* — the same pure
+fold the scrubber uses, with nothing subscribed and no effect re-performed. A
+fold that throws truncates the capture and says so in `stoppedAt` rather than
+reporting a short list as complete.
+
+## 5. Scrub
 
 The slider runs over every recorded transition. Moving it re-folds that PREFIX of
 the recorded messages through `replay` — `init` + `update` only, never
 `interpret`, never a Store, never a live subscription. Scrubbing backwards
 therefore re-derives history rather than re-performing it, so no effect fires
 twice. `live` returns to the present; `reset` re-boots the machine.
+
+## A reducer-form chart
+
+`defineReducerChart` drops the dimension the machine does not have, so its
+inspector is a genuinely thinner page — and it says which parts are missing
+rather than leaving gaps you have to explain to yourself.
+
+```tsx
+import { ReducerChartInspector } from "@demlik/tea/chart/inspect/react";
+
+<ReducerChartInspector
+  chart={fetchReducerChart}
+  parts={{ assign, cells }}
+  boot={() => ({ url: null, /* … */ })}
+  samples={samples}
+/>;
+```
+
+What it shows: the flat state list and the entry state, one control per event
+(each with its `from` provenance and its declared routing, cell fan-out
+included), a cell's actually-picked target when it can be run purely, the state
+panel, the drawing, time travel and the cmds-fired panel.
+
+What it will not pretend to: **per-state refusal, phases and `scope`**. A
+reducer cell receives the whole state un-narrowed and decides inside its body,
+so there is no `(state, event)` pair for the chart to refuse. The page lists all
+three under **not available in this form**, with the reason, and the headless
+description does the same:
+
+```ts
+const desc = describeReducerChart(fetchReducerChart);
+desc.states; // ["idle", "succeeded", …]      — flat, no phases
+desc.total; // true — `on` is a REQUIRED mapped type over the alphabet, so
+//                     totality here is STRONGER than the grid form's
+desc.refusals.why;
+// "this chart form has no state dimension — a refusal is a (state, event) fact…"
+```
+
+`desc.refusals` is not an empty array. An empty array reads as *"nothing is
+refused"*, which is the loudest wrong answer available; it is an `Unanswerable`,
+so code written against the grid form's list fails to compile rather than
+rendering a comfortable lie. Each describer takes only its own form — passing a
+reducer chart to `describeChart` (or the reverse) is a compile error.
 
 ## Without React
 

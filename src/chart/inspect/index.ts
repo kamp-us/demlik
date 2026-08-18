@@ -15,9 +15,31 @@
  *   inspectState(desc, state, opts)      → EventPreview[]    // live: what is
  *                                                            // legal right now
  *   previewEvent(desc, state, e, opts)   → EventPreview      // live: one event
+ *   captureCmds(machine, { msgs, ctx })  → CmdCapture        // after: what
+ *                                                            // ACTUALLY fired
+ *   describeReducerChart(C)              → ReducerChartDescription
+ *   inspectReducerState(desc, state)     → ReducerEventPreview[]
  *   Samples<C>                                               // the sample bag,
  *                                                            // typed BY the chart
  * ```
+ *
+ * BEFORE AND AFTER ARE DIFFERENT QUESTIONS, and this module keeps them apart.
+ * `EventPreview.cmds` is what an edge DECLARES it would fire — the before
+ * question, answerable with no run at all, and empty by declaration on a
+ * `{ to, cell }` edge because the cell builds its cmds in its body.
+ * `captureCmds` is what a recorded run DID fire, per step, tagged with the msg
+ * that caused it — read back off `replay`'s own output, which is the same pure
+ * fold the scrubber already uses, so there is no observer to install and no
+ * second answer to keep in sync.
+ *
+ * THE REDUCER FORM gets `describeReducerChart`, which is deliberately a THINNER
+ * shape rather than the grid one with holes: a flat state list, the event
+ * alphabet with `from` provenance, per-event routing including a cell edge's
+ * fan-out, and totality over events (which this form enforces more strictly
+ * than the grid — `on` is a required mapped type). Per-state refusals, phases
+ * and `scope` are not available at all, and each of those slots holds an
+ * `Unanswerable` saying so — never an empty list that would read as "nothing is
+ * refused".
  *
  * THE TWO THINGS THIS KNOWS THAT NO OTHER INSPECTOR DOES.
  *
@@ -50,12 +72,21 @@
  */
 
 export {
+  type CapturedStep,
+  type CaptureInput,
+  type CmdCapture,
+  captureCmds,
+  firedAt,
+  firedCounts,
+} from "./captured";
+export {
   type ChartDescription,
   type ChartEdge,
   type ChartEventInfo,
   type ChartRefusal,
   type ChartStateInfo,
   describeChart,
+  type EdgeCore,
   type EdgeKind,
   edgeAt,
   explainRefusal,
@@ -76,6 +107,17 @@ export {
   previewEvent,
   type ResolvedBy,
 } from "./live";
+export {
+  describeReducerChart,
+  inspectReducerState,
+  previewReducerEvent,
+  type ReducerChartDescription,
+  type ReducerEdge,
+  type ReducerEventInfo,
+  type ReducerEventPreview,
+  reducerEdgeAt,
+  type Unanswerable,
+} from "./reducer";
 export {
   type RtSamples,
   type SamplePayload,

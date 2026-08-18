@@ -189,6 +189,54 @@
   line-height: 1.5;
 }
 
+/* ── cmds fired ─────────────────────────────────────────────────────────────
+ * The AFTER panel. The button row above says what an edge DECLARES it would
+ * fire; this says what the run did fire, so a step that emitted nothing reads
+ * as a dash rather than as a missing row. The step on the scrubber is the one
+ * highlighted, because the two are indexed by the same cursor. */
+.tea-ci-firelog {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.tea-ci-fire {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 1px 4px;
+  border-left: 2px solid transparent;
+}
+.tea-ci-fire-now {
+  border-left-color: var(--tea-ci-accent);
+}
+.tea-ci-fire-by {
+  color: var(--tea-ci-muted);
+  min-width: 9em;
+}
+.tea-ci-fire[data-fired="0"] .tea-ci-fire-cmds {
+  color: var(--tea-ci-muted);
+}
+.tea-ci-fire-cmds {
+  color: var(--tea-ci-accent);
+}
+
+/* ── what this chart form cannot answer ─────────────────────────────────────
+ * Named, never silently absent: an empty refusal list would read as "nothing is
+ * refused", which is the one wrong answer worth going out of the way to avoid. */
+.tea-ci-omits ul {
+  margin: 0;
+  padding-left: 1.1em;
+  color: var(--tea-ci-muted);
+}
+.tea-ci-omits b {
+  color: var(--tea-ci-fg);
+}
+
 /* ── time travel ────────────────────────────────────────────────────────── */
 .tea-ci-scrub {
   display: flex;

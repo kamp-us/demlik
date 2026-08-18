@@ -29,6 +29,19 @@
  *     vary a payload and watch a guard's branch flip.
  *   - `ctx` — the runtime environment, which is not a property of the machine.
  *
+ * WHAT WOULD FIRE, AND WHAT DID. The button row shows the cmds an edge
+ * DECLARES — the before question, and empty by declaration on a `{ to, cell }`
+ * edge, because the cell builds its cmds in its body. The "cmds fired" panel
+ * shows what the recorded run ACTUALLY emitted, per step, tagged with the msg
+ * that caused it. Two panels, because they answer two questions; the second is
+ * the only place a cell-built effect is visible at all.
+ *
+ * THE REDUCER FORM has its own component, `<ReducerChartInspector>`, over the
+ * same view. It renders the panels that apply and NAMES the ones that do not:
+ * no phase on the header, no refusal on any control, no highlighted node in the
+ * drawing — each listed in a "not available in this form" panel with the reason,
+ * rather than quietly missing.
+ *
  * TIME TRAVEL IS PURE. The runtime is recorded with `@demlik/tea/recorder`, and
  * scrubbing re-folds a PREFIX of the recorded msgs through `replay` — init +
  * update only, never `interpret`, never a Store, never a live subscription. So
@@ -43,7 +56,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   MsgLog,
   StateDiff,
@@ -59,15 +72,39 @@ import {
   run,
   type Sub,
 } from "../../index";
-import type { Transitions } from "../../pure/core";
+import type { Reducer, Transitions } from "../../pure/core";
 import { type Recorder, recorder, type Trace } from "../../recorder";
-import { chartMermaid, compile, initFrom, type Parts } from "../compile";
-import type { Chart, CmdOf, InitialData, MsgOf, StateOf } from "../graph";
+import {
+  chartMermaid,
+  compile,
+  compileReducer,
+  initFrom,
+  type Parts,
+  type RParts,
+  reducerInitFrom,
+  reducerMermaid,
+} from "../compile";
+import type {
+  Chart,
+  CmdOf,
+  InitialData,
+  MsgOf,
+  ReducerChart,
+  RStateOf,
+  StateOf,
+} from "../graph";
 import {
   type ChartDescription,
+  type CmdCapture,
+  captureCmds,
   describeChart,
+  describeReducerChart,
   type EventPreview,
+  inspectReducerState,
   inspectState,
+  type ReducerChartDescription,
+  type ReducerEventPreview,
+  type RtSamples,
   type Samples,
 } from "./index";
 
@@ -103,15 +140,96 @@ export interface ChartInspectorProps<
   readonly className?: string;
 }
 
-// ── the component ─────────────────────────────────────────────────────────
+/**
+ * Everything `<ReducerChartInspector>` needs — the same four undecidable facts,
+ * over the form that has no phase dimension.
+ *
+ * There is no `direction` prop, and its absence is the honest kind: the reducer
+ * drawing has one `any` node with every edge leaving it (that is what having no
+ * phase dimension MEANS), so a layout knob would be a knob over nothing.
+ */
+export interface ReducerChartInspectorProps<
+  C,
+  S extends { type: string },
+  M extends { type: string },
+  Ctx,
+> {
+  /** The reducer chart. Everything the UI draws is read off this value. */
+  readonly chart: C;
+  /** The parts bag `compileReducer` demands. */
+  readonly parts: RParts<C, S, M>;
+  /** The entry state's data — for this form, the whole state minus its tag. */
+  readonly boot: () => Omit<RStateOf<C>, "type">;
+  /** One payload per event that declares one. Typed by the chart. */
+  readonly samples?: Samples<C>;
+  /** The runtime ctx. Omit for a machine that reads nothing from one. */
+  readonly ctx?: Ctx;
+  /** Panel title. Cosmetic — defaults to no title. */
+  readonly title?: string;
+  /** Appended to the container's class list. */
+  readonly className?: string;
+}
+
+// ── the runtime lifecycle, shared by both forms ───────────────────────────
 
 /**
- * The self-building debugger for any chart.
+ * Own a runtime for the component's lifetime (built with `run`, stopped on
+ * unmount or reset) so the recorder has something to attach to — `useMachine`
+ * hides the runtime, and the recorder needs it. The booted `Runtime` is
+ * consumed with `useRuntime`'s contract: the component that owns the lifecycle
+ * stops it.
  *
- * Owns a runtime for its own lifetime (built with `run`, stopped on unmount or
- * reset) so the recorder has something to attach to — `useMachine` hides the
- * runtime, and the recorder needs it. The booted `Runtime` is consumed with
- * `useRuntime`'s contract: the component that owns the lifecycle stops it.
+ * Shared by both chart forms because none of it is form-specific: a compiled
+ * `Transitions` and a compiled `Reducer` are both just a `Machine["update"]`.
+ */
+function useInspectorRuntime<
+  S extends { type: string },
+  M extends { type: string },
+  K extends Cmd,
+  Ctx,
+>(
+  machine: Machine<S, M, K, Sub<never>, Ctx>,
+  ctx: Ctx,
+  epoch: number,
+): { readonly rt: Runtime<S, M> | null; readonly rec: Recorder<S, M> } {
+  // `epoch` is not read inside the memo, and it is still a real dependency: it
+  // IS the reset lever. Bumping it is how "start over" rebuilds the runtime, so
+  // re-booting the machine from `init` rather than pretending some message
+  // means "go back to the beginning" — no chart has one.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `epoch` is the reset lever — the memo must re-run when it bumps, which is the whole point of the value
+  const booting = useMemo<BootingRuntime<S, M>>(
+    () => run(machine, { ctx }),
+    [machine, ctx, epoch],
+  );
+  const rec = useMemo<Recorder<S, M>>(() => recorder(booting), [booting]);
+
+  // The booted handle. Until `ready` resolves there is no total `getState`, so
+  // there is nothing honest to render — one frame of "booting" beats inventing
+  // a state the machine has not produced.
+  const [rt, setRt] = useState<Runtime<S, M> | null>(null);
+  useEffect(() => {
+    let live = true;
+    setRt(null);
+    booting.ready.then(
+      (r) => {
+        if (live) setRt(r);
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+      rec.stop();
+      booting.stop().catch(() => {});
+    };
+  }, [booting, rec]);
+
+  return { rt, rec };
+}
+
+// ── the components ────────────────────────────────────────────────────────
+
+/**
+ * The self-building debugger for any GRID-form chart.
  */
 export function ChartInspector<
   const C extends Chart<C>,
@@ -137,39 +255,13 @@ export function ChartInspector<
       }) as unknown as Machine<S, M, K, Sub<never>, Ctx>,
     [chart, parts, boot],
   );
-
-  // `epoch` is not read inside the memo, and it is still a real dependency: it
-  // IS the reset lever. Bumping it is how "start over" rebuilds the runtime, so
-  // re-booting the machine from `init` rather than pretending some message
-  // means "go back to the beginning" — no chart has one.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `epoch` is the reset lever — the memo must re-run when it bumps, which is the whole point of the value
-  const booting = useMemo<BootingRuntime<S, M>>(
-    () => run(machine, { ctx: ctx as Ctx }),
-    [machine, ctx, epoch],
-  );
-  const rec = useMemo<Recorder<S, M>>(() => recorder(booting), [booting]);
-
-  // The booted handle. Until `ready` resolves there is no total `getState`, so
-  // there is nothing honest to render — one frame of "booting" beats inventing
-  // a state the machine has not produced.
-  const [rt, setRt] = useState<Runtime<S, M> | null>(null);
-  useEffect(() => {
-    let live = true;
-    setRt(null);
-    booting.ready.then(
-      (r) => {
-        if (live) setRt(r);
-      },
-      () => {},
-    );
-    return () => {
-      live = false;
-      rec.stop();
-      booting.stop().catch(() => {});
-    };
-  }, [booting, rec]);
+  const { rt, rec } = useInspectorRuntime(machine, ctx as Ctx, epoch);
 
   const desc = useMemo(() => describeChart(chart), [chart]);
+  const view = useMemo<FormView<S>>(
+    () => gridView(desc, chart, parts, props.title, props.direction),
+    [desc, chart, parts, props.title, props.direction],
+  );
 
   if (rt === null) {
     return (
@@ -181,16 +273,74 @@ export function ChartInspector<
   return (
     <InspectorView
       key={epoch}
-      desc={desc}
-      chart={chart}
-      parts={parts}
+      view={view}
       samples={props.samples}
       runtime={rt}
       rec={rec}
       machine={machine}
       ctx={ctx as Ctx}
       title={props.title}
-      direction={props.direction}
+      className={props.className}
+      onReset={reset}
+    />
+  );
+}
+
+/**
+ * The same debugger for a REDUCER-form chart — the panels that apply, and the
+ * ones that do not left out with the reason on screen.
+ *
+ * What is missing here is missing because the form does not have it: no phase
+ * on the header, no refusal on any control (this form cannot refuse an event),
+ * and no highlighted node in the drawing (every edge leaves the one `any`
+ * node). The "not available in this form" panel names each one, so the
+ * omission reads as a property of the chart rather than a hole in the tool.
+ */
+export function ReducerChartInspector<
+  const C extends ReducerChart<C>,
+  S extends { type: string } = RStateOf<C>,
+  M extends { type: string } = MsgOf<C>,
+  K extends Cmd = CmdOf<C>,
+  Ctx = Record<never, never>,
+>(props: ReducerChartInspectorProps<C, S, M, Ctx>) {
+  const { chart, parts, boot, ctx } = props;
+  const [epoch, reset] = useReducer((n: number) => n + 1, 0);
+
+  const machine = useMemo(
+    () =>
+      ({
+        init: reducerInitFrom<C, S, K>(chart, boot),
+        // The one cast, for the same reason as the grid form's: `compileReducer`
+        // returns a `Reducer` over the chart's OWN derivations.
+        update: compileReducer(chart, parts) as unknown as Reducer<S, M, K>,
+      }) as unknown as Machine<S, M, K, Sub<never>, Ctx>,
+    [chart, parts, boot],
+  );
+  const { rt, rec } = useInspectorRuntime(machine, ctx as Ctx, epoch);
+
+  const desc = useMemo(() => describeReducerChart(chart), [chart]);
+  const view = useMemo<FormView<S>>(
+    () => reducerView(desc, chart, parts),
+    [desc, chart, parts],
+  );
+
+  if (rt === null) {
+    return (
+      <div className={containerClass(props.className)}>
+        <div className="tea-ci-boot">booting…</div>
+      </div>
+    );
+  }
+  return (
+    <InspectorView
+      key={epoch}
+      view={view}
+      samples={props.samples}
+      runtime={rt}
+      rec={rec}
+      machine={machine}
+      ctx={ctx as Ctx}
+      title={props.title}
       className={props.className}
       onReset={reset}
     />
@@ -199,6 +349,132 @@ export function ChartInspector<
 
 function containerClass(extra: string | undefined): string {
   return `tea-ci${extra ? ` ${extra}` : ""}`;
+}
+
+// ── the form seam ─────────────────────────────────────────────────────────
+
+/** One event control, normalized so the two chart forms render through one row. */
+interface ControlModel {
+  readonly event: string;
+  /** `"legal"` or the refusal's kind — the class suffix, and the CSS hook. */
+  readonly kind: string;
+  readonly refused: boolean;
+  /** The refusal's one-line explanation. Present iff refused. */
+  readonly why?: string;
+  /** "where would this go, and what would it fire" — the DECLARED answer. */
+  readonly outcome: string;
+  /** The msg a click would dispatch, or `undefined` when no sample was given. */
+  readonly msg?: { readonly type: string };
+}
+
+/**
+ * The three things that differ between the chart forms, and nothing else.
+ *
+ * Everything below this line — the runtime, the recorder, time travel, the
+ * drafts, the captured cmds — is identical for a grid chart and a reducer
+ * chart, because none of it depends on there being a phase dimension. So the
+ * view takes the difference as data rather than branching on it: `header`
+ * returns no phase where there is no phase, `controls` returns rows that cannot
+ * be refused where nothing can refuse them, and `omits` names each panel the
+ * form cannot honestly fill.
+ */
+interface FormView<S extends { type: string }> {
+  /** The alphabet, for seeding one payload draft per event that declares one. */
+  readonly events: readonly {
+    readonly name: string;
+    readonly hasPayload: boolean;
+  }[];
+  readonly controls: (state: S, samples: RtSamples) => readonly ControlModel[];
+  readonly mermaid: (state: S) => string;
+  readonly header: (state: S) => {
+    readonly phase?: string;
+    readonly tags: readonly string[];
+  };
+  /** The questions this form cannot answer, each with the reason. */
+  readonly omits: readonly {
+    readonly question: string;
+    readonly why: string;
+  }[];
+}
+
+function gridView<C, S extends { type: string }, M extends { type: string }>(
+  desc: ChartDescription,
+  chart: C,
+  parts: Parts<C, S, M>,
+  title: string | undefined,
+  direction: "TB" | "LR" | undefined,
+): FormView<S> {
+  return {
+    events: desc.events,
+    controls: (state, samples) =>
+      inspectState(desc, state, { parts: parts as never, samples }).map(
+        gridControl,
+      ),
+    mermaid: (state) =>
+      chartMermaid(chart as never, {
+        highlight: state.type,
+        phases: true,
+        direction,
+        title,
+      }),
+    header: (state) => {
+      const here = desc.states.find((s) => s.name === state.type);
+      return {
+        ...(here === undefined ? {} : { phase: here.phase }),
+        tags: [
+          ...(here?.end === true ? ["end"] : []),
+          ...(here?.parking === true ? ["parking"] : []),
+        ],
+      };
+    },
+    omits: [],
+  };
+}
+
+function reducerView<C, S extends { type: string }, M extends { type: string }>(
+  desc: ReducerChartDescription,
+  chart: C,
+  parts: RParts<C, S, M>,
+): FormView<S> {
+  return {
+    events: desc.events,
+    controls: (state, samples) =>
+      inspectReducerState(desc, state, {
+        parts: parts as never,
+        samples,
+      }).map(reducerControl),
+    // No `highlight`: every edge leaves the one `any` node, so there is no
+    // node that IS the current state to light up.
+    mermaid: () => reducerMermaid(chart as never),
+    // No phase, no `end`, no `parking` — this form declares none of the three.
+    header: () => ({ tags: [] }),
+    omits: [desc.phases, desc.refusals, desc.scope],
+  };
+}
+
+/** An `EventPreview` as a row: legality is a real question in the grid form. */
+function gridControl(v: EventPreview): ControlModel {
+  const refused = v.status === "refused";
+  return {
+    event: v.event,
+    kind: refused ? (v.reason?.kind ?? "undeclared") : "legal",
+    refused,
+    ...(v.why === undefined ? {} : { why: v.why }),
+    outcome: describeOutcome(v),
+    ...(v.msg === undefined ? {} : { msg: v.msg }),
+  };
+}
+
+/** A `ReducerEventPreview` as a row. It can never be refused — there is no
+ * mechanism in this form with which to refuse it. */
+function reducerControl(v: ReducerEventPreview): ControlModel {
+  return {
+    event: v.event,
+    kind: "legal",
+    refused: false,
+    outcome: describeOutcome(v),
+    ...(v.msg === undefined ? {} : { msg: v.msg }),
+  };
 }
 
 // ── the view ──────────────────────────────────────────────────────────────
@@ -210,16 +486,13 @@ interface ViewProps<
   K extends Cmd,
   Ctx,
 > {
-  readonly desc: ChartDescription;
-  readonly chart: C;
-  readonly parts: Parts<C, S, M>;
+  readonly view: FormView<S>;
   readonly samples: Samples<C> | undefined;
   readonly runtime: Runtime<S, M>;
   readonly rec: Recorder<S, M>;
   readonly machine: Machine<S, M, K, Sub<never>, Ctx>;
   readonly ctx: Ctx;
   readonly title: string | undefined;
-  readonly direction: "TB" | "LR" | undefined;
   readonly className: string | undefined;
   readonly onReset: () => void;
 }
@@ -231,16 +504,13 @@ function InspectorView<
   K extends Cmd,
   Ctx,
 >({
-  desc,
-  chart,
-  parts,
+  view,
   samples,
   runtime,
   rec,
   machine,
   ctx,
   title,
-  direction,
   className,
   onReset,
 }: ViewProps<C, S, M, K, Ctx>) {
@@ -257,7 +527,7 @@ function InspectorView<
   // The editable payloads. Seeded from `samples`, then owned by the operator —
   // varying one is what makes the guard preview interactive.
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>(() =>
-    seedDrafts(desc, samples),
+    seedDrafts(view.events, samples),
   );
   const effective = useMemo(() => parseDrafts(drafts), [drafts]);
 
@@ -278,23 +548,43 @@ function InspectorView<
     liveState,
   );
 
-  const verdicts = inspectState(desc, shown, {
-    parts: parts as never,
-    samples: effective,
-  });
-  const here = desc.states.find((s) => s.name === shown.type);
+  const verdicts = view.controls(shown, effective);
+  const here = view.header(shown);
+
+  // WHAT ACTUALLY FIRED, per step — the after question, folded from the same
+  // recorded prefix the scrubber is already folding. `cursor` indexes both, so
+  // the highlighted row is the transition on screen.
+  // `rec.dump()` allocates a fresh tape every render, so the msgs ARRAY has a
+  // new identity each time and keying the memo on it would re-fold the whole run
+  // on every keystroke in a payload box. The tape only ever grows, so its LENGTH
+  // is the honest key, and the tape itself is read through a ref.
+  const tape = useRef(trace);
+  tape.current = trace;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `total` is not read in the body and is the whole point of the memo — it is the tape's length, the one thing that changes what the capture returns
+  const capture = useMemo<CmdCapture<M, K>>(
+    () =>
+      captureCmds(machine, {
+        msgs: tape.current.msgs,
+        ctx,
+        loaded: tape.current.loaded,
+      }),
+    [machine, ctx, total],
+  );
 
   return (
     <div className={containerClass(className)}>
       <header className="tea-ci-head">
         <span className="tea-ci-title">{title ?? "chart inspector"}</span>
         <span className="tea-ci-now">
-          <span className="tea-ci-phase">{here?.phase ?? "?"}</span>
+          {here.phase === undefined ? null : (
+            <span className="tea-ci-phase">{here.phase}</span>
+          )}
           <span className="tea-ci-state">{shown.type}</span>
-          {here?.end === true ? <span className="tea-ci-tag">end</span> : null}
-          {here?.parking === true ? (
-            <span className="tea-ci-tag">parking</span>
-          ) : null}
+          {here.tags.map((t) => (
+            <span className="tea-ci-tag" key={t}>
+              {t}
+            </span>
+          ))}
         </span>
         {scrubbed ? (
           <span className="tea-ci-warn">
@@ -309,7 +599,7 @@ function InspectorView<
         {verdicts.map((v) => (
           <EventControl
             key={v.event}
-            verdict={v}
+            control={v}
             disabled={scrubbed}
             draft={drafts[v.event]}
             onDraft={(text) => setDrafts((d) => ({ ...d, [v.event]: text }))}
@@ -330,23 +620,63 @@ function InspectorView<
           <StateDiff expected={previous} actual={shown} />
         </section>
 
-        {/* 3 — the diagram, with the current node lit. `<pre class="mermaid">`
-            is the shape a mermaid host renders in place; the text is readable
-            either way, so the panel is useful with no renderer at all. */}
+        {/* 3 — the diagram, with the current node lit where the form has one.
+            `<pre class="mermaid">` is the shape a mermaid host renders in
+            place; the text is readable either way, so the panel is useful with
+            no renderer at all. */}
         <section className="tea-ci-panel">
           <h3 className="tea-ci-h">diagram</h3>
-          <pre className="mermaid tea-ci-mermaid">
-            {chartMermaid(chart as never, {
-              highlight: shown.type,
-              phases: true,
-              direction,
-              title,
-            })}
-          </pre>
+          <pre className="mermaid tea-ci-mermaid">{view.mermaid(shown)}</pre>
         </section>
       </div>
 
-      {/* 4 — time travel over every recorded transition. */}
+      {/* 4 — WHAT ACTUALLY FIRED. The button row above says what an edge
+          DECLARES it would fire; this says what the recorded run did fire, per
+          step, tagged with the msg that caused it — the only place a cmd built
+          inside a cell body is visible at all. */}
+      <section className="tea-ci-panel tea-ci-fired">
+        <h3 className="tea-ci-h">cmds fired</h3>
+        <ol className="tea-ci-firelog">
+          {capture.steps.map((s) => (
+            <li
+              key={s.step}
+              className={`tea-ci-fire${s.step === cursor ? " tea-ci-fire-now" : ""}`}
+              data-step={s.step}
+              data-fired={s.cmds.length}
+            >
+              <span className="tea-ci-fire-by">{s.by?.type ?? "init"}</span>
+              <span className="tea-ci-fire-cmds">
+                {s.cmds.length === 0
+                  ? "—"
+                  : s.cmds.map((c) => c.type).join(", ")}
+              </span>
+            </li>
+          ))}
+        </ol>
+        {capture.stoppedAt === undefined ? null : (
+          <span className="tea-ci-why">
+            capture stopped at step {capture.stoppedAt.step}:{" "}
+            {capture.stoppedAt.error}
+          </span>
+        )}
+      </section>
+
+      {/* 5 — the questions this chart form cannot answer, named rather than
+          silently missing. Empty for a grid chart, which answers all three. */}
+      {view.omits.length === 0 ? null : (
+        <section className="tea-ci-panel tea-ci-omits">
+          <h3 className="tea-ci-h">not available in this form</h3>
+          <ul>
+            {view.omits.map((o) => (
+              <li key={o.question} data-omitted={o.question}>
+                <b>{o.question}</b> — {o.why}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* 6 — time travel over every recorded transition. */}
       <section className="tea-ci-panel tea-ci-travel">
         <h3 className="tea-ci-h">time travel</h3>
         <div className="tea-ci-scrub">
@@ -382,59 +712,69 @@ function InspectorView<
 // ── one event control ─────────────────────────────────────────────────────
 
 function EventControl({
-  verdict,
+  control,
   disabled,
   draft,
   onDraft,
   onSend,
 }: {
-  readonly verdict: EventPreview;
+  readonly control: ControlModel;
   readonly disabled: boolean;
   readonly draft: string | undefined;
   readonly onDraft: (text: string) => void;
   readonly onSend: () => void;
 }) {
-  const refused = verdict.status === "refused";
-  const kind = refused ? (verdict.reason?.kind ?? "undeclared") : "legal";
-  const blocked = refused || disabled || verdict.msg === undefined;
+  const { event, refused, kind, why, outcome, msg } = control;
+  const blocked = refused || disabled || msg === undefined;
   return (
     <div
       className={`tea-ci-ev tea-ci-ev-${kind}`}
-      data-event={verdict.event}
-      data-status={verdict.status}
+      data-event={event}
+      data-status={refused ? "refused" : "legal"}
     >
       <button
         type="button"
         className="tea-ci-btn"
         disabled={blocked}
-        title={verdict.why ?? verdict.targets.join(" | ")}
+        title={why ?? outcome}
         onClick={onSend}
       >
-        {verdict.event}
+        {event}
       </button>
       {refused ? (
-        <span className="tea-ci-why">{verdict.why}</span>
+        <span className="tea-ci-why">{why}</span>
       ) : (
-        <span className="tea-ci-to">{describeOutcome(verdict)}</span>
+        <span className="tea-ci-to">{outcome}</span>
       )}
       {draft === undefined ? null : (
         <textarea
           className="tea-ci-sample"
-          aria-label={`${verdict.event} payload`}
+          aria-label={`${event} payload`}
           rows={1}
           value={draft}
           onChange={(e) => onDraft(e.target.value)}
         />
       )}
-      {verdict.msg === undefined && !refused ? (
+      {msg === undefined && !refused ? (
         <span className="tea-ci-why">no sample — cannot dispatch</span>
       ) : null}
     </div>
   );
 }
 
-/** The one-line "where would this go, and what would it fire". */
-function describeOutcome(v: EventPreview): string {
+/**
+ * The one-line "where would this go, and what would it DECLARE it fires".
+ *
+ * Structural in its parameter, because a grid preview and a reducer preview
+ * agree on exactly the four fields it reads — and disagree only about the
+ * refusal, which never reaches here.
+ */
+function describeOutcome(v: {
+  readonly guard?: EventPreview["guard"];
+  readonly cmds: readonly string[];
+  readonly targets: readonly string[];
+  readonly resolved?: string;
+}): string {
   const cmds = v.cmds.length > 0 ? ` / ${v.cmds.join(", ")}` : "";
   if (v.guard !== undefined) {
     return v.guard.branch === "unknown"
@@ -449,12 +789,12 @@ function describeOutcome(v: EventPreview): string {
 
 /** One JSON draft per event that declares a payload. */
 function seedDrafts(
-  desc: ChartDescription,
+  events: readonly { readonly name: string; readonly hasPayload: boolean }[],
   samples: unknown,
 ): Record<string, string> {
   const bag = (samples ?? {}) as Record<string, unknown>;
   const out: Record<string, string> = {};
-  for (const e of desc.events) {
+  for (const e of events) {
     if (!e.hasPayload) continue;
     out[e.name] = JSON.stringify(bag[e.name] ?? {});
   }
