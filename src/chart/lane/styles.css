@@ -24,12 +24,28 @@
  */
 
 .tea-lv {
-  --tea-lv-fg: var(--foreground);
-  --tea-lv-muted: var(--muted-foreground);
-  --tea-lv-border: var(--border);
-  --tea-lv-accent: var(--teal-11);
-  --tea-lv-warn: var(--amber-11);
-  --tea-lv-bad: var(--crimson-11);
+  /*
+   * EVERY TOKEN HAS A FALLBACK, and that is not a detail.
+   *
+   * These slots are shadcn's and Radix's, which is right for a consumer that
+   * has them — the page then wears whatever theme is already on. But a
+   * consumer that does NOT have them used to get a sheet where every colour
+   * resolved to nothing: unstyled text, no borders, no hierarchy. Rendering
+   * this page in a bare harness is what showed it, and it would have shipped.
+   *
+   * So each `var()` carries a default that stands on its own. The package is
+   * usable with no design system at all, better with one, and nobody has to
+   * adopt ours to read a lane.
+   */
+  --tea-lv-fg: var(--foreground, #e6edf3);
+  --tea-lv-muted: var(--muted-foreground, #8b949e);
+  --tea-lv-border: var(--border, #30363d);
+  --tea-lv-bg: var(--card, #0d1117);
+  --tea-lv-raised: var(--muted, #161b22);
+  --tea-lv-accent: var(--teal-11, #2dd4bf);
+  --tea-lv-warn: var(--amber-11, #d29922);
+  --tea-lv-bad: var(--crimson-11, #f85149);
+  --tea-lv-r: var(--radius, 6px);
 
   font-family: var(
     --font-mono,
@@ -356,4 +372,278 @@
 }
 .tea-lv-steps td:first-child {
   color: var(--tea-lv-fg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * SHAPE — added after rendering a real lane and finding the page unreadable.
+ *
+ * The rules above colour things. They did not give the page STRUCTURE, so
+ * every panel ran into the next one and a reader had to parse a wall of
+ * monospace to find the one line that mattered. These rules give each answer
+ * an edge, a background and room, in the order the page answers questions:
+ * what is stuck, then each phase, then the walk.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.tea-lv {
+  background: var(--tea-lv-bg);
+  padding: 1.25rem;
+  border-radius: var(--tea-lv-r);
+  border: 1px solid var(--tea-lv-border);
+  line-height: 1.55;
+  gap: 1.25rem;
+}
+
+/* The header: the lane's name, its source, and where it is — one band. */
+.tea-lv-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--tea-lv-border);
+}
+.tea-lv-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.tea-lv-src,
+.tea-lv-standing,
+.tea-lv-status,
+.tea-lv-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--tea-lv-border);
+  background: var(--tea-lv-raised);
+  color: var(--tea-lv-muted);
+}
+.tea-lv-phase,
+.tea-lv-terminal {
+  font-weight: 700;
+  color: var(--tea-lv-fg);
+}
+
+/* Each panel is a card, so where one answer ends is visible without reading. */
+.tea-lv-panel {
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--tea-lv-r);
+  background: var(--tea-lv-raised);
+  padding: 0.9rem 1rem;
+}
+.tea-lv-h {
+  margin: 0 0 0.6rem;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--tea-lv-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* WHAT IS STUCK reads loudest, because it is why the page was opened. */
+.tea-lv-stuck {
+  border-left: 3px solid var(--tea-lv-warn);
+}
+.tea-lv-stuck .tea-lv-h {
+  color: var(--tea-lv-warn);
+}
+.tea-lv-stucklist {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.tea-lv-stucklist li {
+  margin: 0.2rem 0;
+}
+.tea-lv-none {
+  color: var(--tea-lv-muted);
+  font-style: italic;
+}
+
+/* The chips: the whole phase at a glance, one line, wrapping. */
+.tea-lv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+.tea-lv-chip {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--tea-lv-r);
+  background: var(--tea-lv-bg);
+}
+.tea-lv-chip[data-end="error"] {
+  border-color: var(--tea-lv-bad);
+  color: var(--tea-lv-bad);
+}
+.tea-lv-chip[data-end="true"] {
+  border-color: var(--tea-lv-accent);
+}
+
+/* One task, expanded: its own block inside the phase card. */
+.tea-lv-task {
+  border-top: 1px solid var(--tea-lv-border);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+.tea-lv-taskh {
+  margin: 0 0 0.3rem;
+  font-size: 13px;
+}
+.tea-lv-collapsed > summary {
+  cursor: pointer;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-waiting {
+  color: var(--tea-lv-fg);
+  margin: 0.2rem 0 0.6rem;
+}
+
+/* The controls: a grid, so six events do not become six ragged columns. */
+.tea-lv-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.9rem;
+}
+.tea-lv-ev {
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--tea-lv-r);
+  padding: 0.5rem 0.6rem;
+  background: var(--tea-lv-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.tea-lv-ev[data-status="refused"] {
+  opacity: 0.62;
+  border-style: dashed;
+}
+.tea-lv-btn {
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--tea-lv-fg);
+  cursor: pointer;
+}
+.tea-lv-btn:disabled {
+  cursor: default;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-ev[data-sendable="true"] .tea-lv-btn {
+  color: var(--tea-lv-accent);
+}
+.tea-lv-to {
+  color: var(--tea-lv-muted);
+}
+
+/* The diagram: give it air and let a wide one scroll rather than overflow. */
+.tea-lv-mermaid {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--tea-lv-r);
+  background: var(--tea-lv-bg);
+  overflow-x: auto;
+}
+
+/* The walk. A long lane's table scrolls inside the card, not the page. */
+.tea-lv-steps {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tea-lv-steps th,
+.tea-lv-steps td {
+  text-align: left;
+  padding: 0.25rem 0.6rem 0.25rem 0;
+  border-bottom: 1px solid var(--tea-lv-border);
+  white-space: nowrap;
+}
+.tea-lv-steps th {
+  color: var(--tea-lv-muted);
+  font-weight: 400;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tea-lv-travel {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.tea-lv-scrub {
+  flex: 1 1 260px;
+  accent-color: var(--tea-lv-accent);
+}
+
+/* A panel is as wide as the page, always. Without this a phase whose card holds
+ * only chips shrinks to its content and sits centred, so two phases of the same
+ * lane render at two different widths and read as two different things. */
+.tea-lv-panel {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── legibility: the page has to TEACH, not just display ─────────────────── */
+
+/* The opening paragraph. Prose, not monospace — it is the one part of the page
+ * that is English rather than data, and setting it apart is what makes a reader
+ * start there instead of drowning in chips. */
+.tea-lv-lede {
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 13.5px;
+  line-height: 1.65;
+  max-width: 68ch;
+  margin: 0;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-lede b {
+  color: var(--tea-lv-fg);
+}
+
+/* A heading says WHICH QUESTION its panel answers, and the hint says how to
+ * read the answer. Numbered, so the page has an order rather than a pile. */
+.tea-lv-h {
+  flex-wrap: wrap;
+}
+.tea-lv-hint {
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11.5px;
+  opacity: 0.75;
+}
+
+/* The folded control wall. Quiet by default: on a lane read from a log it is
+ * reference material, not the story. */
+.tea-lv-accepts > summary {
+  cursor: pointer;
+  color: var(--tea-lv-muted);
+  font-size: 11px;
+  margin: 0.35rem 0;
+}
+.tea-lv-accepts[open] > summary {
+  margin-bottom: 0.6rem;
+}
+
+/* Breathing room between the answers. */
+.tea-lv {
+  gap: 1.6rem;
+}
+.tea-lv-waiting {
+  padding: 0.45rem 0.6rem;
+  border-left: 2px solid var(--tea-lv-accent);
+  background: var(--tea-lv-bg);
+  border-radius: 0 var(--tea-lv-r) var(--tea-lv-r) 0;
 }

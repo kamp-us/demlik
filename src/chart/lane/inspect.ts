@@ -45,6 +45,8 @@ import {
   endPolarityOf,
   type ImportedChart,
   type ImportedLane,
+  initialOf,
+  originOf,
   statesOf,
 } from "../report/workflow";
 
@@ -81,6 +83,26 @@ export type StuckReason =
       readonly state: string;
       readonly event: string;
       readonly landsOn: string;
+    }
+  | {
+      /**
+       * Every event this state routes comes from the OUTSIDE WORLD — no `cmd`
+       * result and no `sub` will ever arrive here, so the lane advances only
+       * when a person acts.
+       *
+       * This is the fourth kind, and it was missing until a real epic was
+       * rendered and looked at: a task parked at a human approval reported
+       * "nothing is stuck — every task can still move", which is true of the
+       * machine and false of the day. Nothing will happen until someone does
+       * something, which is precisely what a stuck list is for.
+       *
+       * Derived from `from`, never from a state name: `roles` carries the
+       * consumer's own words for who is owed, in declaration order.
+       */
+      readonly kind: "awaiting-world";
+      readonly state: string;
+      readonly roles: readonly string[];
+      readonly events: readonly string[];
     };
 
 /** One task of a lane, inspected. */
@@ -142,11 +164,17 @@ export interface LaneInspection {
 /**
  * Why this task cannot move, or `null`.
  *
- * THREE KINDS, and the third is the one worth having. "Tripped" and "dead end"
- * are stuck in the ordinary sense — nothing can happen next. A task with its
- * retry budget spent CAN still move, and it is stuck in the sense that matters
- * operationally: the next `FAIL` is no longer a retry, it is the error final,
- * and a reader who cannot see that finds out afterwards.
+ * FOUR KINDS, and the last two are the ones worth having. "Tripped" and "dead
+ * end" are stuck in the ordinary sense — nothing can happen next. The other two
+ * are states a machine would call live and a person would call stopped: a task
+ * with its retry budget spent CAN still move, but the next `FAIL` is no longer
+ * a retry, it is the error final; and a task whose every routed event comes
+ * from the outside world moves only when someone acts.
+ *
+ * That last one was missing until a real epic was rendered and looked at — a
+ * lane with a child parked at a human approval reported "nothing is stuck", and
+ * no test could see it, because every test asked the machine and the machine
+ * was right.
  */
 function stuckAt(chart: ImportedChart, state: TaskState): StuckReason | null {
   const node = statesOf(chart).get(state.type);
@@ -166,6 +194,39 @@ function stuckAt(chart: ImportedChart, state: TaskState): StuckReason | null {
         };
       }
     }
+  }
+  // Waiting on a PERSON. Every routed event has a declared origin and every one
+  // of them is a world role, so no cmd result and no sub can arrive — the lane
+  // sits until someone acts. An event whose origin was never declared makes this
+  // unknowable, and unknowable is not the same as false, so it is not reported.
+  const origins = edges.map(([event]) => ({
+    event,
+    origin: originOf(chart, event),
+  }));
+  // NOT STARTED IS NOT STUCK. A task sitting at its entry state is waiting on a
+  // person by construction — that is what an entry state IS — and reporting it
+  // here buries the one task that actually stopped under seven that never
+  // began. Rendering a real epic showed both halves of this: without the kind
+  // at all, a child parked at a human approval read as fine; with it applied to
+  // entry states, that same child was one line in eight identical ones. "Not
+  // started" is a different fact and it already has its own line.
+  const started = state.type !== initialOf(chart);
+  if (
+    started &&
+    origins.length > 0 &&
+    origins.every((o) => typeof o.origin === "object" && o.origin !== null)
+  ) {
+    const roles: string[] = [];
+    for (const { origin } of origins) {
+      const role = (origin as { readonly world: string }).world;
+      if (!roles.includes(role)) roles.push(role);
+    }
+    return {
+      kind: "awaiting-world",
+      state: state.type,
+      roles,
+      events: origins.map((o) => o.event),
+    };
   }
   return null;
 }

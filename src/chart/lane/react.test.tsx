@@ -216,11 +216,16 @@ describe("<LaneView> — nothing is dispatchable, and it says why", () => {
       expect(el.dataset.sendable).toBe("false");
       expect(el.querySelector("button")?.disabled).toBe(true);
     }
-    // …and the reason is TEXT, not a tooltip nobody hovers.
+    // …and the reason is TEXT, not a tooltip nobody hovers — said ONCE for the
+    // view rather than on each control. It is a fact about the SOURCE, identical
+    // for every control, and a phase of eight tasks × six events printed it
+    // forty-eight times until a real lane was rendered and looked at. The button
+    // keeps it as its `title`, so no affordance is silently missing.
+    const banner = document.querySelectorAll('[data-unavailable="dispatch"]');
+    expect(banner).toHaveLength(1);
+    expect(banner[0]?.textContent).toContain("code bodies");
     const legal = controls.find((el) => el.dataset.status === "legal");
-    expect(
-      legal?.querySelector('[data-unavailable="dispatch"]')?.textContent,
-    ).toContain("code bodies");
+    expect(legal?.querySelector("button")?.title).toContain("code bodies");
   });
 
   it("keeps a refused control on screen with the mechanism that refused it", async () => {

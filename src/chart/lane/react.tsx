@@ -374,6 +374,39 @@ function LanePanels({
         ) : null}
       </header>
 
+      {/* WHY NOTHING IS DISPATCHABLE — said ONCE, here.
+          It used to be said on every control, which is where looking at a real
+          rendered lane earned its keep: the sentence is a fact about the SOURCE,
+          identical for all of them, and a phase with eight tasks × six events
+          repeated it forty-eight times. The rule ("never a silently missing
+          affordance") is kept — the reason is on screen, above every control it
+          explains, and each disabled button still carries it as its title. */}
+      {/* WHAT AM I LOOKING AT — one paragraph, in words, before any data.
+          A reader who has never seen a lane cannot infer it from chips and
+          arrows, and a page that needs explaining out loud is a page that has
+          not finished. The counts are derived, so it stays true as it moves. */}
+      <p className="tea-lv-lede">
+        A <b>lane</b> is {view.phases.length} phase
+        {view.phases.length === 1 ? "" : "s"} that run in order. Each phase
+        holds tasks that run <i>at the same time</i>, and every task is one
+        state machine — the diagram below it is that machine, with the state it
+        is in right now lit up. A phase finishes when all of its tasks finish;{" "}
+        {view.terminal === null ? (
+          <>
+            right now <b>{view.activePhase}</b> is the one running.
+          </>
+        ) : (
+          <>
+            this lane has ended, on <b>{view.terminal}</b>.
+          </>
+        )}
+      </p>
+      {sourceReason(view) === undefined ? null : (
+        <p className="tea-lv-unavailable" data-unavailable="dispatch">
+          {sourceReason(view)}
+        </p>
+      )}
+
       {/* 1 — WHICH OF TWELVE THINGS IS STUCK. First, because it is the first
           question anyone asks about an epic that stopped moving. */}
       <StuckPanel view={view} />
@@ -398,7 +431,12 @@ function LanePanels({
 function StuckPanel({ view }: { readonly view: LaneViewModel }) {
   return (
     <section className="tea-lv-panel tea-lv-stuck">
-      <h3 className="tea-lv-h">what is stuck</h3>
+      <h3 className="tea-lv-h">
+        1 · is anything blocked?
+        <span className="tea-lv-hint">
+          a task nothing can move until someone acts
+        </span>
+      </h3>
       {view.stuck.length === 0 ? (
         // Said, never left blank: "nothing is stuck" is an answer, and an empty
         // panel is the reader wondering whether the question was asked.
@@ -422,7 +460,7 @@ function StuckPanel({ view }: { readonly view: LaneViewModel }) {
   );
 }
 
-/** One stuck reason, as a sentence. The three kinds are not the same news. */
+/** One stuck reason, as a sentence. The four kinds are not the same news. */
 function stuckLine(reason: LaneTaskView["stuck"]): string {
   if (reason === null) return "";
   switch (reason.kind) {
@@ -432,6 +470,9 @@ function stuckLine(reason: LaneTaskView["stuck"]): string {
       return `\`${reason.state}\` routes no event and is not a final — nobody can move it`;
     case "budget-spent":
       return `\`${reason.state}\` has spent its retry budget — the next \`${reason.event}\` is \`${reason.landsOn}\`, not a retry`;
+    case "awaiting-world":
+      // The roles are the consumer's own words, carried through from `from`.
+      return `\`${reason.state}\` moves only when ${reason.roles.join(" or ")} sends ${reason.events.map((e) => `\`${e}\``).join(" or ")} — no cmd or sub can arrive here`;
   }
 }
 
@@ -450,8 +491,9 @@ function PhasePanel({
       data-standing={phase.standing}
     >
       <h3 className="tea-lv-h">
+        {phase.index === 0 ? "2 · " : ""}
         {phase.name} <span className="tea-lv-standing">{phase.standing}</span>{" "}
-        <span className="tea-lv-muted">{count}</span>
+        <span className="tea-lv-muted">{count} running together</span>
       </h3>
       <ul className="tea-lv-chips">
         {phase.tasks.map((task) => (
@@ -467,6 +509,16 @@ function PhasePanel({
           </li>
         ))}
       </ul>
+      {/* THE CHIPS ARE THE SUMMARY, so a collapsed task must not repeat them.
+          Each collapsed task used to render its own `task = state` disclosure
+          directly under a chip row that had just said exactly that — every task
+          listed twice, adjacent. Rendering a real phase of eight made it
+          obvious and no assertion could.
+
+          So: expanded tasks get their panel, and the rest go behind ONE
+          disclosure. Nothing is lost — the collapsed panels are still whole and
+          still one click away, which on a live lane keeps those regions
+          dispatchable — and the phase reads as one line per task either way. */}
       {phase.tasks.map((task) => (
         <TaskPanel
           key={task.task}
@@ -506,23 +558,61 @@ function TaskPanel({
     <>
       <p className="tea-lv-waiting">waiting on: {waiting}</p>
       <Budget task={task} />
-      <div className="tea-lv-controls">
-        {task.controls.map((control) => (
-          <Control key={control.event} control={control} send={send} />
-        ))}
-      </div>
-      <pre className="mermaid tea-lv-mermaid">{task.diagram}</pre>
+      {/* THE CONTROL WALL, and why it is folded away on a replay.
+          Six events × eight tasks is forty-eight boxes, and on a lane read from
+          a log not one of them can be clicked — most of them say only that the
+          event is not accepted here. That is true, and it is the answer to a
+          question nobody asked while reading history. So on a replay they go
+          behind a disclosure; on a LIVE lane, where a click actually moves the
+          machine, they stay open. Reachable either way — never absent. */}
+      {send === null ? (
+        <details className="tea-lv-accepts">
+          <summary>
+            which events this state accepts (
+            {task.controls.filter((c) => !c.refused).length} of{" "}
+            {task.controls.length})
+          </summary>
+          <div className="tea-lv-controls">
+            {task.controls.map((control) => (
+              <Control key={control.event} control={control} send={send} />
+            ))}
+          </div>
+        </details>
+      ) : (
+        <div className="tea-lv-controls">
+          {task.controls.map((control) => (
+            <Control key={control.event} control={control} send={send} />
+          ))}
+        </div>
+      )}
+      {/* KEYED BY THE DIAGRAM ITSELF, so scrubbing replaces the NODE.
+          Every mermaid host marks what it has rendered (`data-processed`) and
+          skips those nodes. React, updating in place, rewrites only the TEXT —
+          the attribute survives, the host skips it forever, and from the second
+          frame on the reader sees mermaid source instead of a picture. Found by
+          dragging the timeline.
+
+          A key derived from the content makes React unmount and remount, so the
+          host meets a genuinely new node. One line, and it removes the trap for
+          every host rather than documenting it for each. */}
+      <pre key={task.diagram} className="mermaid tea-lv-mermaid">
+        {task.diagram}
+      </pre>
     </>
   );
 
   if (!expanded) {
     return (
+      /* The chip row above already says `task = state` for every task in the
+         phase. A collapsed disclosure that repeats it lists each task twice,
+         adjacent — which reads as a bug and was one, found by rendering a real
+         eight-task phase rather than by any assertion. So the summary says what
+         the chip cannot: that there is more here, and whether it has begun. */
       <details className="tea-lv-task tea-lv-collapsed" data-task={task.task}>
         <summary>
-          <b>{task.task}</b> ={" "}
-          <span className="tea-lv-state">{task.state}</span>{" "}
+          <b>{task.task}</b>{" "}
           <span className="tea-lv-muted">
-            {task.moved ? "" : "· not started"}
+            {task.moved ? "· details" : "· not started"}
           </span>
         </summary>
         {body}
@@ -570,6 +660,26 @@ function Budget({ task }: { readonly task: LaneTaskView }) {
 }
 
 /**
+ * The source-level dispatch reason, if this source has one — the same sentence
+ * every control would otherwise carry, read off the first one that has it.
+ *
+ * Read rather than hardcoded: the wording belongs to whoever built the feed, and
+ * restating it here would be a second declaration site for one sentence.
+ */
+function sourceReason(view: LaneViewModel): string | undefined {
+  for (const phase of view.phases) {
+    for (const task of phase.tasks) {
+      for (const control of task.controls) {
+        if (!control.refused && "answerable" in control.send) {
+          return (control.send as Unanswerable<"dispatch">).why;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * One control. An unavailable one keeps its shape and loses its affordance, and
  * the REASON is the content — never a missing button.
  */
@@ -607,19 +717,14 @@ function Control({
       <span className="tea-lv-to">
         {control.refused ? control.why : control.outcome}
       </span>
-      {/* The unavailability, said on screen rather than left to a tooltip: this
-          is the whole difference between "the button is grey" and "this lane has
-          no code bodies, so nothing here can be dispatched".
+      {/* The source-level reason is NOT repeated here — it is stated once above
+          every control it explains (see the header). It stays on this button's
+          `title`, so the affordance is never silently missing.
 
-          Not on a REFUSED control, and that is not an exception to the rule: a
-          refused control's reason is already its content, and it is the better
-          answer — the CHART refused this, so which source is looking at it is
-          beside the point. */}
-      {why === undefined || control.refused ? null : (
-        <span className="tea-lv-unavailable" data-unavailable="dispatch">
-          {why}
-        </span>
-      )}
+          A REFUSED control is different and keeps its own reason inline as its
+          content: the CHART refused this one, so it is specific to this control
+          rather than a fact about the source, and which source is looking at it
+          is beside the point. */}
     </div>
   );
 }
@@ -638,7 +743,12 @@ function TimelinePanel({
   const clockless = "answerable" in view.clock;
   return (
     <section className="tea-lv-panel tea-lv-travel">
-      <h3 className="tea-lv-h">timeline</h3>
+      <h3 className="tea-lv-h">
+        3 · what happened, step by step
+        <span className="tea-lv-hint">
+          drag to rewind — everything above moves with it
+        </span>
+      </h3>
       <div className="tea-lv-scrub">
         <input
           type="range"

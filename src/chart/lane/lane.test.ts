@@ -224,6 +224,55 @@ describe("laneShape — the reading door, over an emitted lane", () => {
   });
 });
 
+describe("inspectLane — a task waiting on a person is STUCK", () => {
+  // The machine says this task can move; the day says nothing will happen until
+  // someone acts. Found by rendering a real epic and reading it: a child parked
+  // at a human approval sat under "nothing is stuck — every task can still
+  // move". No test could catch it, because every test asked the machine and the
+  // machine was right.
+  //
+  // Derived from `from`, so there is no state name here and none in the source.
+  const parked = defineLane({
+    id: "approval",
+    phases: { only: { t: coderChart } },
+    terminals: { complete: "complete", tripped: "tripped" },
+  });
+
+  it("names the roles owed and the events they owe, from the chart's `from`", () => {
+    const view = inspectLane(parked, [
+      { task: "t", event: "t.BLOCKED", at: "2026-08-18T00:00:00.000Z" },
+    ]);
+    const stuck = view.stuck.find((s) => s.task === "t");
+    expect(stuck?.reason.kind).toBe("awaiting-world");
+    if (stuck?.reason.kind !== "awaiting-world") throw new Error("kind");
+    // `coderChart` declares UNBLOCKED as coming from a human — the role text is
+    // the chart's own, carried through verbatim.
+    expect(stuck.reason.roles.length).toBeGreaterThan(0);
+    expect(stuck.reason.events).toContain("UNBLOCKED");
+  });
+
+  it("does NOT call a state stuck when a cmd result can still arrive", () => {
+    // `build` routes `DONE` (a cmd result — work is in flight) alongside the
+    // operator's `BLOCKED`. One non-world origin is enough: something can
+    // arrive without anyone doing anything, so this is not that kind.
+    const view = inspectLane(parked, [
+      { task: "t", event: "t.WIP", at: "2026-08-18T00:00:00.000Z" },
+    ]);
+    const stuck = view.stuck.find((s) => s.task === "t");
+    expect(stuck?.reason.kind ?? null).not.toBe("awaiting-world");
+  });
+
+  it("NOT STARTED is not stuck — an entry state is excluded", () => {
+    // `queued` accepts only the operator's events, so by the rule alone a
+    // freshly-opened lane would report every task as stuck. Rendering a real
+    // eight-task phase showed what that costs: the one child actually parked at
+    // a human approval became one line in eight identical ones. Waiting to
+    // start is a different fact and it has its own line.
+    const view = inspectLane(parked, []);
+    expect(view.stuck).toEqual([]);
+  });
+});
+
 describe("inspectLane", () => {
   it("is `done` on a completed run, with the complete terminal named", () => {
     const view = inspectLane(EPIC_LANE, EPIC_RUN_COMPLETE);

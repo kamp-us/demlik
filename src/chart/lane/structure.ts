@@ -33,6 +33,7 @@ import type {
   CellEdgeKey,
   ErrorFinal,
   EventName,
+  EventOrigin,
   InitialState,
   StateName,
   StateOf,
@@ -309,11 +310,27 @@ const lowerRegion = (
     states[group] = lowered;
   }
 
-  const events: Record<string, { readonly scope: "edges" }> = {};
-  for (const name of Object.keys(region.events))
+  // `from` RIDES THROUGH. The lowering drops what a lane cannot use — payload
+  // types, cmds, ctx, and the phase dimension a region does not have — but
+  // provenance is not one of those: it is the whole basis of "what is this
+  // waiting on" and of the `awaiting-world` stuck kind, and dropping it made
+  // the TYPED door strictly worse than the imported one, which carries a
+  // provenance map from its boundary. The imported door states it once at
+  // import; the typed door states it once on the event. Same fact, one site
+  // each, and neither is this function's to invent.
+  const events: Record<
+    string,
+    { readonly scope: "edges"; readonly from?: EventOrigin }
+  > = {};
+  for (const [name, decl] of Object.entries(region.events)) {
+    const from = isRecord(decl)
+      ? (decl.from as EventOrigin | undefined)
+      : undefined;
     events[name] = {
       scope: "edges",
+      ...(from === undefined ? {} : { from }),
     };
+  }
 
   return { events, states };
 };

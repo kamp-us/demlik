@@ -632,7 +632,13 @@ function InspectorView<
             no renderer at all. */}
         <section className="tea-ci-panel">
           <h3 className="tea-ci-h">diagram</h3>
-          <pre className="mermaid tea-ci-mermaid">{view.mermaid(shown)}</pre>
+          {/* Keyed by the diagram, for the reason `chart/lane/react.tsx` records:
+              a mermaid host marks rendered nodes and skips them, React rewrites
+              only the text, and the picture silently stops updating after the
+              first frame. The key forces a genuinely new node. */}
+          <pre key={view.mermaid(shown)} className="mermaid tea-ci-mermaid">
+            {view.mermaid(shown)}
+          </pre>
         </section>
       </div>
 

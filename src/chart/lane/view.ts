@@ -559,12 +559,34 @@ const NO_DISPATCH_REFUSED: Unanswerable<"dispatch"> = {
   why: "this event is refused at this state — see the refusal for which mechanism refused it",
 };
 
+/**
+ * Why a guard could not be evaluated, as a sentence.
+ *
+ * The verdict's `why` is a tag — `no-guard-bag`, `no-sample` — which is the
+ * right thing for a caller to branch on and the wrong thing to print. Reading
+ * `retriesRemaining? (no-guard-bag)` on screen tells you the answer is missing
+ * without telling you why, and the why is the useful half: on an imported lane
+ * it is not a gap to fix, it is what an imported lane IS.
+ */
+function guardUnknownLine(why: string): string {
+  switch (why) {
+    case "no-guard-bag":
+      return "cannot say which — this lane came from a workflow document, so the guard bodies that would decide do not exist here";
+    case "no-implementation":
+      return "cannot say which — no implementation was supplied for this guard";
+    case "no-sample":
+      return "cannot say which — the guard reads the message payload and no sample was given for this event";
+    default:
+      return `cannot say which — evaluating the guard threw (${why})`;
+  }
+}
+
 /** The one-line "where would this go, and what would it DECLARE it fires". */
 function outcomeOf(v: EventPreview): string {
   const cmds = v.cmds.length > 0 ? ` / ${v.cmds.join(", ")}` : "";
   if (v.guard !== undefined) {
     return v.guard.branch === "unknown"
-      ? `${v.targets.join(" | ")} — ${v.guard.guard}? (${v.guard.why})`
+      ? `${v.targets.join(" | ")} — ${guardUnknownLine(v.guard.why ?? "")}`
       : `→ ${v.guard.target} [${v.guard.branch === "then" ? "" : "!"}${v.guard.guard}]${cmds}`;
   }
   if (v.resolved !== undefined) return `→ ${v.resolved}${cmds}`;
