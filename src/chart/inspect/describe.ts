@@ -99,6 +99,21 @@ export type RefusalReason =
       readonly phase: string;
     }
   | {
+      /**
+       * `scope: "edges"` — the event is live exactly where an edge declares it,
+       * and this state declares none.
+       *
+       * SPLIT OUT OF `out-of-scope` because the phase has nothing to do with it.
+       * `"edges"` is not a phase name, so the phase test could never pass and
+       * the refusal came back naming a phase the reader then went looking for:
+       * *"`DONE` is not addressed to phase `working` (scope: edges)"* — three
+       * pieces of vocabulary for one fact, and the fact is not in there. The
+       * default scope is `edges`, so this was most refusals on most charts.
+       */
+      readonly kind: "no-edge";
+      readonly state: string;
+    }
+  | {
       readonly kind: "ignored";
       /** The event is live here and this state refuses it BY NAME. */
       readonly state: string;
@@ -112,6 +127,8 @@ export function explainRefusal(event: string, reason: RefusalReason): string {
       return `"${reason.state}" is an end state — it accepts nothing`;
     case "out-of-scope":
       return `"${event}" is not addressed to phase "${reason.phase}" (scope: ${reason.scope.join(", ")})`;
+    case "no-edge":
+      return `"${reason.state}" declares no "${event}" edge`;
     case "ignored":
       return `"${reason.state}" lists "${event}" in its \`ignore\``;
     case "undeclared":
@@ -330,6 +347,13 @@ function refusalAt(
   if (node.end !== undefined) return { kind: "end", state };
   const scope = scopeList(c.events[event]?.scope ?? "edges");
   const live = scope.includes("all") || scope.includes(phase);
+  // `edges` is a scope with no phase in it, so it fails the phase test for a
+  // reason that is not about the phase — say the one that is true. Only when
+  // `edges` is the WHOLE scope: a `["edges", "review"]` event really is out of
+  // scope in `working`, and that is the phase's news after all.
+  if (!live && scope.length === 1 && scope[0] === "edges") {
+    return { kind: "no-edge", state };
+  }
   if (!live) return { kind: "out-of-scope", scope, phase };
   if ((node.ignore ?? []).includes(event)) return { kind: "ignored", state };
   return { kind: "undeclared" };

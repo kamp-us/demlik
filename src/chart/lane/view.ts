@@ -36,6 +36,7 @@
 // is in `./react`; a script or a TUI gets everything below with no DOM.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { safeId } from "../../machine-viz/mermaid-id";
 import type { EventPreview, InspectOptions, Unanswerable } from "../inspect";
 import { drawTask, walkedEdges } from "../report/draw";
 import {
@@ -47,10 +48,12 @@ import {
   walkedEdgeKey,
 } from "../report/fold";
 import {
+  bareEvent,
   type ImportedChart,
   type ImportedLane,
   initialOf,
   RETRY_BUDGET,
+  statesOf,
 } from "../report/workflow";
 import { inspectLaneStates, type StuckReason } from "./inspect";
 
@@ -74,6 +77,48 @@ const draw = (
   current: string,
   walked: ReadonlyMap<string, number>,
 ): string => drawTask(chart, { current, walked });
+
+/**
+ * THE LIT NODE CARRIES POLARITY, because the picture is what a reader looks at
+ * first and it was the one surface that did not.
+ *
+ * `chartMermaid` lights the current node blue and draws the two endings apart by
+ * STROKE (`teaShipped` thick, `teaTripped` dashed) — which the blue fill then
+ * sits on top of, so `frozen` and `shipped` read identically at the exact moment
+ * one of them is where the task died. Every other surface says so in red: the
+ * chip, the badge, the stuck panel.
+ *
+ * `stateDiagram-v2` has `classDef`/`class` and no per-edge styling, so a class
+ * on the node IS the mechanism, and one appended pair repaints it. The right
+ * home for this is `chartMermaid`'s own `highlight` (it already reads `polarity`
+ * two branches earlier); until that lands, it is one function wide here — the
+ * same reason `drawTask` exists at all. See HANDOFF-ui.md.
+ */
+const ERROR_ACTIVE_CLASS = "teaActiveError";
+
+function drawLit(
+  chart: ImportedChart,
+  current: string,
+  walked: ReadonlyMap<string, number>,
+  onErrorFinal: boolean,
+): string {
+  const body = draw(chart, current, walked);
+  if (!onErrorFinal) return body;
+  // `safeId` is the drawing's own sanitizer — a `class` line naming the raw
+  // state would miss every name with a `-` or a space in it, of which a real
+  // workflow has several (`human:cp-approval`).
+  return `${body}\n  classDef ${ERROR_ACTIVE_CLASS} fill:#f85149,stroke:#f85149,color:#fff,font-weight:bold\n  class ${safeId(current)} ${ERROR_ACTIVE_CLASS}`;
+}
+
+/** Does this chart route `event` out of `from`, or is a step there a no-op? */
+function declaresEdge(
+  chart: ImportedChart | undefined,
+  from: string,
+  event: string,
+): boolean {
+  if (chart === undefined) return true;
+  return statesOf(chart).get(from)?.on?.[bareEvent(event)] !== undefined;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // THE MODEL
@@ -162,6 +207,16 @@ export interface LaneStepView {
   readonly to: string;
   /** The edge that fired, keyed as the drawing keys it. */
   readonly edge: string;
+  /**
+   * The msg arrived and NOTHING happened — the chart routes no such edge here.
+   *
+   * A total chart answers every msg, so a refused one is still a line in the
+   * log and still a step of the tape; it is just not a WALK. Left unmarked it
+   * reads as a real transition that happened to land where it started
+   * (`issue_1 DONE review → review`), which is the one row on the timeline a
+   * reader would take at face value and be wrong about.
+   */
+  readonly refused: boolean;
 }
 
 /** A whole lane, at one moment, ready to render. */
@@ -199,6 +254,16 @@ export interface LaneViewModel {
   readonly total: number;
   /** `true` while the cursor is behind the present. */
   readonly scrubbed: boolean;
+  /**
+   * Why THIS SOURCE can dispatch nothing at all — absent on a source that can.
+   *
+   * A fact about the source, so it is stated once by the source rather than
+   * scraped back off whichever control still happens to carry it. Scraping is
+   * what it used to be, and it went silent on exactly the lane that needed it
+   * most: on a finished lane every control is refused BY THE CHART, so the one
+   * sentence explaining why the whole page is dead had nowhere left to live.
+   */
+  readonly noDispatch?: Unanswerable<"dispatch">;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -239,6 +304,8 @@ export interface LaneFeed {
    * own `msg` is the bare one; namespacing it is the feed's job, once.
    */
   readonly send: (task: string, preview: EventPreview) => LaneControl["send"];
+  /** {@link LaneViewModel.noDispatch} — set it iff NO control of this source can be sent. */
+  readonly noDispatch?: Unanswerable<"dispatch">;
 }
 
 const NO_DISPATCH: Unanswerable<"dispatch"> = {
@@ -285,7 +352,12 @@ export function replayFeed(
     lane,
     total: entries.length,
     leavesAt: (n) => foldLane(lane, entries.slice(0, n)),
-    steps: steps.map(({ at: _at, ...rest }) => rest),
+    // NEVER REFUSED, and that is a property of this source rather than of this
+    // log: `foldLane` throws `UnreplayableLogError` on a line the chart routes
+    // nowhere, so a log holding a refused msg does not produce a lane view at
+    // all. A recorded TAPE is the opposite — a click that no-ops is a msg like
+    // any other — which is where the mark earns its keep.
+    steps: steps.map(({ at: _at, ...rest }) => ({ ...rest, refused: false })),
     clock: steps.map((s) => s.at),
     budget: (task, leaves) => {
       const leaf = leaves[task];
@@ -296,6 +368,7 @@ export function replayFeed(
     // No `optsFor`: a document carries no guard bodies and no payload samples,
     // and the previews degrade to exactly that.
     send: () => NO_DISPATCH,
+    noDispatch: NO_DISPATCH,
   };
 }
 
@@ -379,6 +452,7 @@ export function liveFeed(lane: ImportedLane, input: LiveFeedInput): LaneFeed {
       from: before.type,
       to: after.type,
       edge: walkedEdgeKey(chart, before.type, at.event, after.type),
+      refused: !declaresEdge(chart, before.type, at.event),
     });
   }
 
@@ -388,6 +462,13 @@ export function liveFeed(lane: ImportedLane, input: LiveFeedInput): LaneFeed {
     const out: Record<string, TaskState> = {};
     for (const [task, leaf] of Object.entries(regions)) {
       out[task] = {
+        // THE REGION'S OWN CTX, CARRIED. `TaskState` names the four fields the
+        // FOLD needs, and a running region is a whole state: the guards a live
+        // preview evaluates are `(state, msg) => …` over that state, so a leaf
+        // narrowed to its four bookkeeping fields makes every guard read
+        // `undefined` and answer with its `otherwise` arm. The extra keys are
+        // invisible to a `TaskState` reader and exactly what a guard came for.
+        ...leaf,
         type: leaf.type,
         retries: numberAt(leaf, "retries") ?? 0,
         maxRetries:
@@ -446,7 +527,21 @@ export function laneView(
   const seen = feed.steps.filter((s) => s.index < at);
   const inspection = inspectLaneStates(feed.lane, leaves, feed.optsFor);
 
-  const phases = inspection.phases.map((phase): LanePhaseView => {
+  // THE PHASE THE READER CAME FOR, when there is no active one left. A lane
+  // that ENDED has no active phase, and the rule below expands only the active
+  // one — so a lane that finished successfully drew not one diagram, under a
+  // paragraph promising that every task had one. `tripped` was special-cased
+  // and `complete` was not, and complete is the common ending.
+  //
+  // The last phase that actually ran is the ending: it holds the tasks that
+  // reached the terminal, and the earlier ones are history a reader can open.
+  const lastRan = inspection.phases.reduce(
+    (last, p, i) => (p.standing === "waiting" ? last : i),
+    -1,
+  );
+  const endsAt = inspection.terminal === null ? -1 : lastRan;
+
+  const phases = inspection.phases.map((phase, index): LanePhaseView => {
     const tasks = phase.tasks.map((task): LaneTaskView => {
       const chart = feed.lane.charts[task.task];
       const walked = walkedEdges(seen.filter((s) => s.task === task.task));
@@ -463,7 +558,10 @@ export function laneView(
         controls: task.events.map((preview) =>
           control(feed, task.task, preview),
         ),
-        diagram: chart === undefined ? "" : draw(chart, task.state, walked),
+        diagram:
+          chart === undefined
+            ? ""
+            : drawLit(chart, task.state, walked, task.endPolarity === "error"),
       };
     });
     return {
@@ -472,7 +570,7 @@ export function laneView(
       standing: phase.standing,
       tripped: phase.tripped,
       tasks,
-      expanded: expandedIn(phase.standing, tasks),
+      expanded: expandedIn(phase.standing, tasks, index === endsAt),
     };
   });
 
@@ -497,22 +595,27 @@ export function laneView(
     cursor: at,
     total,
     scrubbed: at < total,
+    ...(feed.noDispatch === undefined ? {} : { noDispatch: feed.noDispatch }),
   };
 }
 
 /**
  * `report.ts`'s rule, as a set of task ids.
  *
- * Only the active phase expands anything, and inside it only the tasks that
+ * The phase a reader is here for expands, and inside it only the tasks that
  * moved — with the one exception the markdown makes for the same reason: a
  * phase that just started has moved nothing, and collapsing all of it would
  * leave the reader with no picture at all, so its first task represents the
  * rest (they are all at the same entry state, so any of them is the same
  * picture).
+ *
+ * WHICH PHASE that is depends on whether the lane is still moving: the ACTIVE
+ * one while it runs, and the one it ENDED IN once it has stopped.
  */
 function expandedIn(
   standing: PhaseStanding,
   tasks: readonly LaneTaskView[],
+  ending: boolean,
 ): readonly string[] {
   // A TRIPPED phase expands the tasks that tripped it. `report.ts` gives that
   // phase one line and that is right for a comment, where the reader is going
@@ -521,7 +624,7 @@ function expandedIn(
   if (standing === "tripped") {
     return tasks.filter((t) => t.endPolarity === "error").map((t) => t.task);
   }
-  if (standing !== "active") return [];
+  if (standing !== "active" && !ending) return [];
   const moved = tasks.filter((t) => t.moved).map((t) => t.task);
   if (moved.length > 0) return moved;
   const first = tasks[0];

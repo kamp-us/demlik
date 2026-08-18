@@ -329,6 +329,62 @@ function containerClass(extra: string | undefined): string {
 // ── the one presentation ──────────────────────────────────────────────────
 
 /**
+ * WHAT A CLICK DOES HERE — or why nothing does. One value, never a pair.
+ *
+ * It replaced `send: fn | null` for a reason a rendered page found: `null`
+ * meant "this source has no dispatch", and there is a SECOND way a click can be
+ * unavailable — the reader has scrubbed into the past — that a nullable
+ * function has no room for. So the reason travels with the absence, and every
+ * component that draws a control gets the sentence for free.
+ */
+type Dispatch =
+  | { readonly send: (msg: { readonly type: string }) => void }
+  | { readonly blocked: string };
+
+/** The facts a panel needs that are about the PAGE rather than about a task. */
+interface Page {
+  readonly dispatch: Dispatch;
+  /**
+   * Fold the control wall behind a disclosure.
+   *
+   * A property of the SOURCE, not of the moment: on a lane read from a log not
+   * one of forty-eight boxes can ever be clicked, so they are reference
+   * material. A live lane that is merely scrubbed keeps them open — the reader
+   * is one button ("now") from clicking them, and a wall that vanishes when you
+   * drag the timeline reads as a page losing its nerve.
+   */
+  readonly foldControls: boolean;
+  /** The lane has stopped. Nothing on this page is about to happen. */
+  readonly ended: boolean;
+}
+
+/**
+ * A separator that survives with NO STYLESHEET.
+ *
+ * Every gap on this page between two adjacent inline spans was a CSS `gap`, so
+ * an unstyled host rendered `5674 — NO STYLESHEETreplaytrippeddone`. The
+ * package promises a legible page with no design system at all (see the
+ * stylesheet's own banner); a separator that only exists in the stylesheet is
+ * that promise kept in one of the two cases.
+ */
+const Sep = () => <span className="tea-lv-sep"> · </span>;
+
+/** A view handed no dispatch and no reason — said, rather than left blank. */
+const NO_SEND = "this view was given no way to dispatch";
+
+/**
+ * WHERE THE LANE IS, in words a reader owes nothing to learn.
+ *
+ * `view.status` is `deriveLaneStatus`'s `"done" | "active"` — the driver's
+ * vocabulary, right for a caller branching on it and wrong on a header, where
+ * `done` sat next to `tripped` and read as "it worked".
+ */
+function endingWord(view: LaneViewModel): string {
+  if (view.terminal === null) return "still running";
+  return view.tripped.length > 0 ? "stopped here" : "finished";
+}
+
+/**
  * The panels. ONE component for both sources, and it takes `send` as data:
  * `null` is a source with no dispatch at all, and the reason is already on every
  * control's `send` field, so this component never has to know which source it
@@ -352,25 +408,58 @@ function LanePanels({
   const cursor = at === null ? feed.total : Math.min(at, feed.total);
   const view = laneView(feed, cursor, title);
 
+  // A CLICK GOES TO THE PRESENT, AND THE PAGE IS SHOWING THE PAST.
+  //
+  // The scrubber moves the VIEW; the runtime stays where it is. So while the
+  // cursor is behind the tape, a live control's outcome (`→ build`) is computed
+  // from the state on screen and its click lands on the state that is actually
+  // there — the button both mis-states what it will do and gives no sign it
+  // did it. Found by clicking one: the only feedback anywhere was `step 3 of 6`
+  // becoming `step 3 of 7`.
+  //
+  // The reason is a value, so this is the whole fix: the buttons go off and say
+  // why, through the same machinery a replay source's controls already use.
+  const blocked: string | undefined = view.scrubbed
+    ? `you are looking at step ${view.cursor} of ${view.total}. A button dispatches into the lane as it is NOW — press “now” to get them back.`
+    : view.noDispatch?.why;
+  const page: Page = {
+    dispatch:
+      send !== null && blocked === undefined
+        ? { send }
+        : { blocked: blocked ?? NO_SEND },
+    foldControls: view.noDispatch !== undefined,
+    ended: view.terminal !== null,
+  };
+
   return (
     <div className={containerClass(className)} data-source={view.source}>
       <header className="tea-lv-head">
         <span className="tea-lv-title">{view.title}</span>
+        <Sep />
         <span className="tea-lv-src" data-source={view.source}>
           {view.source}
         </span>
+        <Sep />
         <span className="tea-lv-now" data-lane-status={view.status}>
           {view.terminal === null ? (
             <span className="tea-lv-phase">{view.activePhase ?? "—"}</span>
           ) : (
             <span className="tea-lv-terminal">{view.terminal}</span>
           )}
-          <span className="tea-lv-status">{view.status}</span>
+          <Sep />
+          {/* NOT `view.status`. That field is fabrika's own `done | active`,
+              and printing it raw badged a lane that FROZE as DONE, one span
+              away from the word `tripped`. Internal vocabulary that reads as a
+              success claim is worse than no badge. */}
+          <span className="tea-lv-status">{endingWord(view)}</span>
         </span>
         {view.scrubbed ? (
-          <span className="tea-lv-warn">
-            time-travelling — step {view.cursor} of {view.total}
-          </span>
+          <>
+            <Sep />
+            <span className="tea-lv-warn">
+              time-travelling — step {view.cursor} of {view.total}
+            </span>
+          </>
         ) : null}
       </header>
 
@@ -386,11 +475,23 @@ function LanePanels({
           arrows, and a page that needs explaining out loud is a page that has
           not finished. The counts are derived, so it stays true as it moves. */}
       <p className="tea-lv-lede">
-        A <b>lane</b> is {view.phases.length} phase
-        {view.phases.length === 1 ? "" : "s"} that run in order. Each phase
-        holds tasks that run <i>at the same time</i>, and every task is one
-        state machine — the diagram below it is that machine, with the state it
-        is in right now lit up. A phase finishes when all of its tasks finish;{" "}
+        {/* THE SENTENCE HAS TO BE TRUE AT ONE PHASE TOO. "A lane is 1 phase
+            that run in order" was a plural verb on a count that can be one, and
+            "in order" says nothing about a sequence with one item in it. */}
+        {view.phases.length === 1 ? (
+          <>
+            A <b>lane</b> is a run of phases — this one has a single phase.
+          </>
+        ) : (
+          <>
+            A <b>lane</b> is {view.phases.length} phases that run one after
+            another.
+          </>
+        )}{" "}
+        Each phase holds tasks that run <i>at the same time</i>, and every task
+        is one state machine — the diagram below it is that machine, with the
+        state it is in right now lit up. A phase finishes when all of its tasks
+        finish;{" "}
         {view.terminal === null ? (
           <>
             right now <b>{view.activePhase}</b> is the one running.
@@ -401,11 +502,16 @@ function LanePanels({
           </>
         )}
       </p>
-      {sourceReason(view) === undefined ? null : (
+      {/* WHY NOTHING CAN BE CLICKED — one sentence, above every control it
+          explains. Read off the MODEL, not scraped back off whichever control
+          still happened to carry it: on a finished lane every control is
+          refused by the chart, so the scrape returned nothing and the page lost
+          its explanation at the exact moment six disabled buttons needed one. */}
+      {"blocked" in page.dispatch ? (
         <p className="tea-lv-unavailable" data-unavailable="dispatch">
-          {sourceReason(view)}
+          {page.dispatch.blocked}
         </p>
-      )}
+      ) : null}
 
       {/* 1 — WHICH OF TWELVE THINGS IS STUCK. First, because it is the first
           question anyone asks about an epic that stopped moving. */}
@@ -414,7 +520,7 @@ function LanePanels({
       {/* 2 — the phases, in order. The lane's own structure: N tasks each,
           running concurrently, and a standing per phase. */}
       {view.phases.map((phase) => (
-        <PhasePanel key={phase.name} phase={phase} send={send} />
+        <PhasePanel key={phase.name} phase={phase} page={page} />
       ))}
 
       {/* 3 — the timeline, and the scrubber over it. */}
@@ -433,6 +539,7 @@ function StuckPanel({ view }: { readonly view: LaneViewModel }) {
     <section className="tea-lv-panel tea-lv-stuck">
       <h3 className="tea-lv-h">
         1 · is anything blocked?
+        <Sep />
         <span className="tea-lv-hint">
           a task nothing can move until someone acts
         </span>
@@ -476,14 +583,39 @@ function stuckLine(reason: LaneTaskView["stuck"]): string {
   }
 }
 
+/**
+ * HOW MANY TASKS, AND WHAT THEY ARE DOING — which is not always "running".
+ *
+ * "8 tasks running together" is the point of a phase and was printed on every
+ * phase, including the ones that finished before the reader arrived and the
+ * ones that have not started. And "1 task running together" is not a sentence.
+ * The count is the fact; the verb is the standing's.
+ */
+function phaseCount(phase: LanePhaseView): string {
+  const n = phase.tasks.length;
+  const tasks = `${n} task${n === 1 ? "" : "s"}`;
+  switch (phase.standing) {
+    case "active":
+      return n === 1 ? `${tasks}, running` : `${tasks}, running together`;
+    case "complete":
+      return `${tasks}, all finished`;
+    case "tripped":
+      return n === 1
+        ? `${tasks}, stopped on an error`
+        : `${tasks} — ${phase.tripped.length} stopped on an error`;
+    case "waiting":
+      return `${tasks}, not started`;
+  }
+}
+
 function PhasePanel({
   phase,
-  send,
+  page,
 }: {
   readonly phase: LanePhaseView;
-  readonly send: ((msg: { readonly type: string }) => void) | null;
+  readonly page: Page;
 }) {
-  const count = `${phase.tasks.length} task${phase.tasks.length === 1 ? "" : "s"}`;
+  const count = phaseCount(phase);
   return (
     <section
       className={`tea-lv-panel tea-lv-phase-${phase.standing}`}
@@ -492,8 +624,9 @@ function PhasePanel({
     >
       <h3 className="tea-lv-h">
         {phase.index === 0 ? "2 · " : ""}
-        {phase.name} <span className="tea-lv-standing">{phase.standing}</span>{" "}
-        <span className="tea-lv-muted">{count} running together</span>
+        {phase.name} <span className="tea-lv-standing">{phase.standing}</span>
+        <Sep />
+        <span className="tea-lv-muted">{count}</span>
       </h3>
       <ul className="tea-lv-chips">
         {phase.tasks.map((task) => (
@@ -524,11 +657,34 @@ function PhasePanel({
           key={task.task}
           task={task}
           expanded={phase.expanded.includes(task.task)}
-          send={send}
+          alone={phase.tasks.length === 1}
+          page={page}
         />
       ))}
     </section>
   );
+}
+
+/**
+ * WHAT THIS TASK IS WAITING ON — in the tense of what has actually happened.
+ *
+ * The error-final sentence used to promise the trip as future work ("`pipeline`
+ * WILL trip the lane when its siblings finish") on a page whose header, badge
+ * and stuck panel all already said the lane HAD tripped — four surfaces in the
+ * past, the fifth in the future. It is future work only while the lane is still
+ * running, and only when there are siblings left to wait for.
+ */
+function waitingLine(
+  task: LaneTaskView,
+  alone: boolean,
+  ended: boolean,
+): string {
+  if (task.waitingOn !== null) return task.waitingOn;
+  if (task.endPolarity !== "error") return "nothing — this task is final";
+  const landed = `nothing — this task landed on the error final \`${task.state}\``;
+  if (ended) return `${landed}, which is what stopped the lane`;
+  if (alone) return `${landed}, and that trips \`${task.phase}\``;
+  return `${landed}, and \`${task.phase}\` will trip the lane once its siblings finish`;
 }
 
 /**
@@ -538,17 +694,32 @@ function PhasePanel({
 function TaskPanel({
   task,
   expanded,
-  send,
+  alone,
+  page,
 }: {
   readonly task: LaneTaskView;
   readonly expanded: boolean;
-  readonly send: ((msg: { readonly type: string }) => void) | null;
+  /** The only task in its phase — so it has no siblings to wait for. */
+  readonly alone: boolean;
+  readonly page: Page;
 }) {
-  const waiting =
-    task.waitingOn ??
-    (task.endPolarity === "error"
-      ? `nothing — this task landed on the error final \`${task.state}\`, and \`${task.phase}\` will trip the lane when its siblings finish`
-      : "nothing — this task is final");
+  // THE COLLAPSED DIAGRAM IS NOT MOUNTED UNTIL IT IS OPENED.
+  //
+  // The editorial rule folds ten of twelve pictures away, and every one of them
+  // was still a `<pre class="mermaid">` in the DOM — so a mermaid host rendered
+  // all twelve, and because each `<pre>` is keyed by its own text (see below),
+  // ONE step of the scrubber remounted and re-rendered all twelve. The first
+  // paint of that page timed out a thirty-second screenshot. `toggle` is the
+  // event a `<details>` already fires, so the fold now costs what it looks like
+  // it costs.
+  //
+  // THE DIAGRAM ALONE, and not the panel around it. The picture is the whole
+  // expense (a mermaid host lays out every node) and the controls are the whole
+  // promise — a collapsed region of a LIVE lane stays dispatchable, so its
+  // buttons stay in the DOM whether or not anyone opened the triangle.
+  const [opened, setOpened] = useState(false);
+  const showDiagram = expanded || opened;
+  const waiting = waitingLine(task, alone, page.ended);
 
   // THE SAME BODY EITHER WAY, and that is the point of the disclosure: the
   // collapse hides the wall, it does not withhold the task. A live lane's
@@ -565,7 +736,7 @@ function TaskPanel({
           question nobody asked while reading history. So on a replay they go
           behind a disclosure; on a LIVE lane, where a click actually moves the
           machine, they stay open. Reachable either way — never absent. */}
-      {send === null ? (
+      {page.foldControls ? (
         <details className="tea-lv-accepts">
           <summary>
             which events this state accepts (
@@ -574,14 +745,22 @@ function TaskPanel({
           </summary>
           <div className="tea-lv-controls">
             {task.controls.map((control) => (
-              <Control key={control.event} control={control} send={send} />
+              <Control
+                key={control.event}
+                control={control}
+                dispatch={page.dispatch}
+              />
             ))}
           </div>
         </details>
       ) : (
         <div className="tea-lv-controls">
           {task.controls.map((control) => (
-            <Control key={control.event} control={control} send={send} />
+            <Control
+              key={control.event}
+              control={control}
+              dispatch={page.dispatch}
+            />
           ))}
         </div>
       )}
@@ -595,9 +774,11 @@ function TaskPanel({
           A key derived from the content makes React unmount and remount, so the
           host meets a genuinely new node. One line, and it removes the trap for
           every host rather than documenting it for each. */}
-      <pre key={task.diagram} className="mermaid tea-lv-mermaid">
-        {task.diagram}
-      </pre>
+      {showDiagram ? (
+        <pre key={task.diagram} className="mermaid tea-lv-mermaid">
+          {task.diagram}
+        </pre>
+      ) : null}
     </>
   );
 
@@ -608,11 +789,21 @@ function TaskPanel({
          adjacent — which reads as a bug and was one, found by rendering a real
          eight-task phase rather than by any assertion. So the summary says what
          the chip cannot: that there is more here, and whether it has begun. */
-      <details className="tea-lv-task tea-lv-collapsed" data-task={task.task}>
+      <details
+        className="tea-lv-task tea-lv-collapsed"
+        data-task={task.task}
+        onToggle={(e) => setOpened(e.currentTarget.open)}
+      >
         <summary>
-          <b>{task.task}</b>{" "}
+          <b>{task.task}</b>
+          <Sep />
           <span className="tea-lv-muted">
-            {task.moved ? "· details" : "· not started"}
+            {/* NOT "not started" beside a chip reading `epic_4195 = review`.
+                Both were true — that chart's `initial` IS `review` — and on
+                screen they contradicted each other. What `moved` actually
+                knows is whether the task has left where it began, so that is
+                what it says. */}
+            {task.moved ? "details" : `still at ${task.state}`}
           </span>
         </summary>
         {body}
@@ -625,7 +816,10 @@ function TaskPanel({
       <h4 className="tea-lv-taskh">
         <b>{task.task}</b> — <span className="tea-lv-state">{task.state}</span>
         {task.endPolarity === "error" ? (
-          <span className="tea-lv-badge">tripped</span>
+          <>
+            {" "}
+            <span className="tea-lv-badge">tripped</span>
+          </>
         ) : null}
         {task.was === undefined ? null : (
           <span className="tea-lv-muted"> · resumes to {task.was}</span>
@@ -660,56 +854,38 @@ function Budget({ task }: { readonly task: LaneTaskView }) {
 }
 
 /**
- * The source-level dispatch reason, if this source has one — the same sentence
- * every control would otherwise carry, read off the first one that has it.
- *
- * Read rather than hardcoded: the wording belongs to whoever built the feed, and
- * restating it here would be a second declaration site for one sentence.
- */
-function sourceReason(view: LaneViewModel): string | undefined {
-  for (const phase of view.phases) {
-    for (const task of phase.tasks) {
-      for (const control of task.controls) {
-        if (!control.refused && "answerable" in control.send) {
-          return (control.send as Unanswerable<"dispatch">).why;
-        }
-      }
-    }
-  }
-  return undefined;
-}
-
-/**
  * One control. An unavailable one keeps its shape and loses its affordance, and
  * the REASON is the content — never a missing button.
  */
 function Control({
   control,
-  send,
+  dispatch,
 }: {
   readonly control: LaneControl;
-  readonly send: ((msg: { readonly type: string }) => void) | null;
+  readonly dispatch: Dispatch;
 }) {
   const unsendable = "answerable" in control.send;
   const msg = unsendable ? undefined : control.send;
   const why = unsendable
     ? (control.send as Unanswerable<"dispatch">).why
     : undefined;
+  const blocked = "blocked" in dispatch ? dispatch.blocked : undefined;
+  const sendable = msg !== undefined && blocked === undefined;
   return (
     <div
       className={`tea-lv-ev tea-lv-ev-${control.kind}`}
       data-event={control.event}
       data-task={control.task}
       data-status={control.refused ? "refused" : "legal"}
-      data-sendable={String(!unsendable && send !== null)}
+      data-sendable={String(sendable)}
     >
       <button
         type="button"
         className="tea-lv-btn"
-        disabled={msg === undefined || send === null}
-        title={control.why ?? why ?? control.outcome}
+        disabled={!sendable}
+        title={control.why ?? why ?? blocked ?? control.outcome}
         onClick={() => {
-          if (msg !== undefined && send !== null) send(msg);
+          if (msg !== undefined && "send" in dispatch) dispatch.send(msg);
         }}
       >
         {control.event}
@@ -745,6 +921,7 @@ function TimelinePanel({
     <section className="tea-lv-panel tea-lv-travel">
       <h3 className="tea-lv-h">
         3 · what happened, step by step
+        <Sep />
         <span className="tea-lv-hint">
           drag to rewind — everything above moves with it
         </span>
@@ -796,15 +973,30 @@ function TimelinePanel({
           </thead>
           <tbody>
             {view.steps.map((step) => (
-              <tr key={step.index} data-step={step.index}>
+              <tr
+                key={step.index}
+                data-step={step.index}
+                data-refused={step.refused ? "true" : undefined}
+              >
                 <td>{step.index + 1}</td>
                 {clockless ? null : (
                   <td>{(view.clock as readonly string[])[step.index]}</td>
                 )}
                 <td>{step.task}</td>
                 <td>{step.event}</td>
+                {/* A REFUSED MSG IS A STEP AND NOT A WALK. The chart is total,
+                    so an event nothing routes still lands, still counts and
+                    still gets a row — and rendered as `review → review` it was
+                    indistinguishable from a self-loop the chart actually
+                    declares. It never moved; the row says so. */}
                 <td>
-                  {step.from} → {step.to}
+                  {step.refused ? (
+                    <>{step.from} — refused, nothing moved</>
+                  ) : (
+                    <>
+                      {step.from} → {step.to}
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
