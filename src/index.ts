@@ -19,6 +19,7 @@ export type {
   Interpret,
   InterpretDetached,
   Machine,
+  MachineShape,
   NoCtx,
   Port,
   PortEmitter,
@@ -33,6 +34,7 @@ export type {
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives on `@demlik/tea/pure`).
 export {
+  acceptsOf,
   applyCell,
   // The DEV-checked twin of `applyCell` (deepFreeze + assertPureResult around
   // the same cell lookup). A consumer driving its own fold — rather than `run`
@@ -40,6 +42,7 @@ export {
   // for itself; without it the choice is `applyCell` and no checking at all.
   applyCellChecked,
   Cmd,
+  describeMachine,
   detectUpdateForm,
   foldMsgs,
   // `foldMsgs` returns state only (ADR 0006). `foldUpdates` is the fold beneath

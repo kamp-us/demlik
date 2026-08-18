@@ -18,11 +18,17 @@ import type {
   Transitions,
 } from "./pure/core";
 import {
+  __DEV__,
+  assertPureResult,
   type Cmd,
+  deepFreeze,
   depsInactive,
   detectUpdateForm,
   foldUpdates,
+  lookupCell,
+  NoCellError,
   structuralHash,
+  type UpdateForm,
 } from "./pure/core";
 
 // The nominal brand minted ONLY through the validated construction path
@@ -892,6 +898,101 @@ export function wrapDetached<
     }
     return handler(cmd, ctx, dispatch);
   };
+}
+
+// === tryApplyCell / tryFoldMsgs: refusal as DATA, not as a throw ===
+//
+// `applyCell` and `foldMsgs` throw `NoCellError` when a Msg has no cell. That
+// is right for the runtime — `run`'s dispatch loop wants the throw so the
+// error sink and supervision see it. It is wrong for a caller that drives a
+// machine itself and treats "this Msg does not apply here" as an ORDINARY
+// answer: an interactive tool offering the next move, a validator replaying a
+// persisted log. Those callers were writing
+// `try { applyCell(...) } catch (e) { if (e instanceof NoCellError) ... }`
+// around every step — control flow through the exception channel, and a `catch`
+// wide enough to swallow a genuine bug thrown from inside a cell.
+//
+// So: the same operations with the refusal in the return type. The idiom is
+// `better-result`, exactly as `tryInterpret` below uses it — the package's one
+// runtime dependency, already the house Railway spelling.
+//
+// PLACEMENT: these live here and not in `pure/core` because `pure/core` is the
+// runtime-free leaf and must import NOTHING — `better-result` included (see its
+// header). The pure half of the work is the shared `lookupCell` primitive,
+// which DOES live there; these are the `Result` skins over it. `applyCell` and
+// `tryApplyCell` therefore select the same cell by construction, not by two
+// copies of the form-branching agreeing by luck.
+//
+// NOT a general try/catch: a cell that THROWS from inside its own body is a bug
+// in the machine, and it propagates. Only the ABSENCE of a cell is data here.
+
+/**
+ * `applyCell` with the missing-cell case in the return type.
+ *
+ * `Ok` carries the cell's `[nextState, cmds]` verbatim; `Err` carries the same
+ * `NoCellError` (msg.type + state name) `applyCell` would have thrown. Dispatch
+ * inside `run` keeps using the throwing `applyCell` — this is for callers that
+ * step a machine themselves.
+ */
+export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+  msg: M,
+): Result<readonly [S, readonly C[]], NoCellError> {
+  const { cell, stateName } = lookupCell<S, M, C>(machine, state, msg);
+  if (cell === undefined) {
+    return Result.err(new NoCellError(msg.type, stateName));
+  }
+  return Result.ok(cell(state, msg));
+}
+
+/**
+ * The refusal `tryFoldMsgs` reports: WHICH msg in the log had no cell, where.
+ *
+ * A plain record, not a new `Error` subclass — it is a `Result` payload, never
+ * thrown, and the actual error is the existing `NoCellError` it carries. The
+ * package's thrown-error idiom (`class extends Error` + `_tag`, pinned by
+ * `error-idiom.test.ts`) applies to errors raised at the runtime edge; this one
+ * is never raised, so adding a class would state a promise it does not make.
+ */
+export interface FoldRefusal<M> {
+  /** Index into the `msgs` array the fold was given. */
+  readonly index: number;
+  /** The offending Msg itself — so the caller can print it, not just point. */
+  readonly msg: M;
+  /** The underlying cell-lookup failure, carrying msg.type + state name. */
+  readonly error: NoCellError;
+}
+
+/**
+ * `foldMsgs` with the missing-cell case in the return type, INCLUDING which
+ * message failed.
+ *
+ * The motivating use is "this persisted log does not replay — tell the user
+ * where". A bare `Result<S, NoCellError>` cannot: the error names the msg.type
+ * and the state, but a log usually contains that type many times, so the
+ * INDEX is the load-bearing fact. The fold stops at the first refusal (state
+ * past that point is not defined) and returns it.
+ *
+ * Shares `foldMsgs`' dev-mode discipline: `deepFreeze` the input state,
+ * `assertPureResult` the cell's return. Both compile out of production.
+ */
+export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
+  machine: { update: object; __form?: UpdateForm },
+  base: S,
+  msgs: readonly M[],
+): Result<S, FoldRefusal<M>> {
+  let state = base;
+  for (const [index, msg] of msgs.entries()) {
+    if (__DEV__) deepFreeze(state);
+    const stepped = tryApplyCell<S, M, C>(machine, state, msg);
+    if (Result.isError(stepped)) {
+      return Result.err({ index, msg, error: stepped.error });
+    }
+    if (__DEV__) assertPureResult(stepped.value, msg.type);
+    state = stepped.value[0];
+  }
+  return Result.ok(state);
 }
 
 // === tryInterpret: Railway sugar over `Result.tryPromise` ===

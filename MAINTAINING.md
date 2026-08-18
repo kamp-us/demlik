@@ -88,6 +88,7 @@ export is not done until it has a row here.
 | `./agent` | experimental | agent layer; the brain migration graduates it |
 | `./llm-call` | experimental | agent layer |
 | `./prediction` | experimental | client prediction |
+| `./chart` | experimental | machines authored as config; the type machinery IS the surface |
 
 ## Store factory per host
 

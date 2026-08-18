@@ -215,6 +215,22 @@ export type PollerState<R> =
   | (PollerCore<R> & { readonly phase: "gave_up" });
 
 /**
+ * The three arms, named — so a verb can DECLARE the phases it can actually
+ * reach instead of the whole union.
+ *
+ * A verb whose return type is the full `PollerState<R>` tells a caller nothing
+ * about where the poller went, and a caller that needs to know (a chart
+ * declaring an edge's fan-out; an exhaustive `switch`) has to re-derive it by
+ * reading the verb's body. Every one of these narrowings is already true of the
+ * implementation — `start` only ever builds a `polling` arm, `tickResult` never
+ * builds `gave_up`, `tickErr` never builds `done` — so naming them costs
+ * nothing at runtime and moves a fact out of the source and into the signature.
+ */
+export type PollerPolling<R> = Extract<PollerState<R>, { phase: "polling" }>;
+export type PollerDone<R> = Extract<PollerState<R>, { phase: "done" }>;
+export type PollerGaveUp<R> = Extract<PollerState<R>, { phase: "gave_up" }>;
+
+/**
  * The poller Sub type — a `../deadline` Sub under a fixed id family. One id per
  * knob instance keeps the reconcile pass from churning the timer: the same id
  * across transitions means "same armed deadline", even as `nextAtMs` advances.
@@ -262,7 +278,7 @@ export interface Poller<
   R,
 > {
   /** Seed the Model slice. Idle until `start(...)` arms the first tick. */
-  init(): PollerState<R>;
+  init(): PollerPolling<R>;
   /**
    * Arm the first tick. `at` is the current clock (carried in from the Msg /
    * runtime that kicks the poller off — never read inside the verb). Returns
@@ -276,7 +292,7 @@ export interface Poller<
   start(
     state: PollerState<R>,
     at: number,
-  ): readonly [PollerState<R>, readonly Cmd[]];
+  ): readonly [PollerPolling<R>, readonly Cmd[]];
   /**
    * Perform one observation — the cadence verb. The consumer routes the
    * deadline Sub's `deadline_exceeded` Msg here; `tick` emits the single
@@ -321,7 +337,7 @@ export interface Poller<
     result: R,
     at: number,
     untilHeld: boolean,
-  ): readonly [PollerState<R>, readonly Cmd[]];
+  ): readonly [PollerPolling<R> | PollerDone<R>, readonly Cmd[]];
   /**
    * Record a FAILED tick at clock `at`. Backs off instead of holding the
    * steady cadence:
@@ -351,7 +367,7 @@ export interface Poller<
     state: PollerState<R>,
     error: unknown,
     at: number,
-  ): readonly [PollerState<R>, readonly Cmd[]];
+  ): readonly [PollerPolling<R> | PollerGaveUp<R>, readonly Cmd[]];
   /**
    * The pre-wired subscriptions cell. Returns the single tick-deadline Sub
    * while the poller is `"polling"` with an armed `nextAtMs`; returns `[]`
@@ -393,7 +409,7 @@ export function createPoller<State, R>(
   // the verbs, so the `IdempotencyStore` shape stays insulated.
   const memory = idempotencyMemory<true>();
 
-  function init(): PollerState<R> {
+  function init(): PollerPolling<R> {
     return {
       phase: "polling",
       tick: 0,
@@ -410,7 +426,7 @@ export function createPoller<State, R>(
   function start(
     state: PollerState<R>,
     at: number,
-  ): readonly [PollerState<R>, readonly Cmd[]] {
+  ): readonly [PollerPolling<R>, readonly Cmd[]] {
     // Arm the first deadline at `at + everyMs` and emit NOTHING. The cadence has
     // ONE source — the `everyMs` deadline Sub. `start` does not perform the
     // first observation itself: that would be a second, immediate next-tick
@@ -451,7 +467,7 @@ export function createPoller<State, R>(
     result: R,
     at: number,
     untilHeld: boolean,
-  ): readonly [PollerState<R>, readonly Cmd[]] {
+  ): readonly [PollerPolling<R> | PollerDone<R>, readonly Cmd[]] {
     // A success always clears consecutive-failure state and records the datum.
     // The next arm is built explicitly (not spread from `state`) so `done`
     // carries no `nextAtMs` — a finished poll can never sit on an armed target.
@@ -478,7 +494,7 @@ export function createPoller<State, R>(
     // `tick`. `tickResult` itself never emits the cadence `onTick` — the timer
     // is the single next-tick mechanism (recording a result is not a reason to
     // immediately re-fetch; that would poll as fast as the source responds).
-    const next: PollerState<R> = {
+    const next: PollerPolling<R> = {
       phase: "polling",
       tick,
       lastResult: result,
@@ -501,7 +517,7 @@ export function createPoller<State, R>(
     // idempotency "touch" semantics), so a steadily-repeating observation never
     // ages out mid-poll. The stored value is the unit `true` — the poller only
     // needs presence, not a payload.
-    const deduped: PollerState<R> = {
+    const deduped: PollerPolling<R> = {
       ...next,
       dedupe: memory.remember(next.dedupe, key, true, at),
     };
@@ -512,7 +528,7 @@ export function createPoller<State, R>(
     state: PollerState<R>,
     error: unknown,
     at: number,
-  ): readonly [PollerState<R>, readonly Cmd[]] {
+  ): readonly [PollerPolling<R> | PollerGaveUp<R>, readonly Cmd[]] {
     // `at` is the failure's OBSERVATION instant, already carried in from the
     // Msg — so it doubles as the streak clock a duration bound is measured
     // against. The first failure of a streak sets `firstFailureAtMs`; every

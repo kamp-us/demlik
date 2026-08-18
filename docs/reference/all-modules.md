@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 56 public subpaths. Curated
+The complete export catalog — all 57 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -12,6 +12,7 @@ discoverable here with a one-line gloss from their source barrel.
 | `./await-terminal` | run a ONE-SHOT / decision-procedure machine to a terminal state and hand the caller a `Promise<State>` that resolves the moment the machine FIRST enters a terminal state. |
 | `./batch-window` | coalesce a stream of items into size- or time-bounded BATCHES, then flush each batch as a single Cmd. |
 | `./cache` | a TTL cache as pure state, PLUS a periodic eviction Sub. |
+| `./chart` | chart — the machine as a DRAWING the compiler reads, not a picture drawn beside one. |
 | [`./circuit-breaker`](./circuit-breaker.md) | per-target failure tracking as pure state + ops. |
 | `./deadline` | a one-shot Sub that fires when an ABSOLUTE wall-clock deadline is reached. |
 | `./debounce` | a timer-based call transformer that coalesces a burst of calls into a single fire. |
