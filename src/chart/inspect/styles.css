@@ -119,13 +119,22 @@
   gap: 3px;
   min-width: 0;
 }
+/* THE THING YOU CAN CLICK LOOKS LIKE THE THING YOU CAN CLICK.
+ *
+ * This read backwards: a pressable event was plain text on a transparent
+ * ground while every REFUSED one wore a dashed or dotted box, so on a state
+ * accepting two of six events the only two you could click were the only two
+ * that looked like labels. The chrome belongs to the affordance — a button
+ * raised while it can be pressed, and flat when it cannot. The refusal keeps
+ * its colour and its reason, which is what says WHY; it just stops being the
+ * loudest thing in the row. */
 .tea-ci-btn {
   font: inherit;
   text-align: left;
   padding: 4px 8px;
   border: 1px solid var(--tea-ci-border);
   border-radius: var(--radius, 0.25rem);
-  background: transparent;
+  background: var(--tea-ci-raised, rgba(127, 127, 127, 0.14));
   color: var(--tea-ci-fg);
   cursor: pointer;
 }
@@ -135,7 +144,9 @@
 }
 .tea-ci-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.75;
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
 }
 .tea-ci-to {
   color: var(--tea-ci-muted);
@@ -144,6 +155,9 @@
   color: var(--tea-ci-muted);
   font-style: italic;
 }
+/* The sample is a PAYLOAD and payloads wrap. On one line with no wrap and no
+ * scroll cue, `{"at":3,"reason":"review` was the whole of what a reader could
+ * see of it — the rest was not hidden, it was invisible. */
 .tea-ci-sample {
   font: inherit;
   resize: vertical;
@@ -153,27 +167,30 @@
   color: var(--tea-ci-fg);
   padding: 2px 6px;
   min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  max-height: 8lh;
 }
 
-/* A refused control keeps its shape and loses its affordance — the reason is
- * the content, the colour is only the cue. */
+/* A refused control keeps its NAME and loses its chrome — the reason beneath it
+ * is the content, the colour is only the cue. */
 .tea-ci-ev-end .tea-ci-btn,
-.tea-ci-ev-undeclared .tea-ci-btn {
-  border-style: dashed;
+.tea-ci-ev-undeclared .tea-ci-btn,
+.tea-ci-ev-no-edge .tea-ci-btn {
   color: var(--tea-ci-bad);
   text-decoration: line-through;
 }
 .tea-ci-ev-ignored .tea-ci-btn {
-  border-style: dashed;
   color: var(--tea-ci-warn);
   text-decoration: line-through;
 }
 .tea-ci-ev-out-of-scope .tea-ci-btn {
-  border-style: dotted;
   color: var(--tea-ci-muted);
 }
 .tea-ci-ev-end .tea-ci-why,
-.tea-ci-ev-undeclared .tea-ci-why {
+.tea-ci-ev-undeclared .tea-ci-why,
+.tea-ci-ev-no-edge .tea-ci-why {
   color: var(--tea-ci-bad);
 }
 .tea-ci-ev-ignored .tea-ci-why {

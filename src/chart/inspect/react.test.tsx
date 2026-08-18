@@ -324,6 +324,22 @@ describe("<ChartInspector> — the diagram", () => {
     expect(after).not.toContain("class queued teaActive");
   });
 
+  it("gives the mermaid host a NEW node every time the drawing changes", async () => {
+    await mount();
+    // Every mermaid host marks what it has rendered (`data-processed`) and
+    // skips those nodes forever, so React updating in place — which rewrites
+    // only the TEXT — leaves the reader looking at mermaid source from the
+    // second frame on. A key derived from the content forces an unmount, and a
+    // `key` has no DOM projection, so node IDENTITY is the only thing that can
+    // tell the two worlds apart. The lane shipped this bug once already.
+    const node = () => container.querySelector(".tea-ci-mermaid");
+    const first = node();
+    expect(first?.textContent).toContain("class queued teaActive");
+    await click(buttonFor("WIP"));
+    expect(node()?.textContent).toContain("class build teaActive");
+    expect(node()).not.toBe(first);
+  });
+
   it("the highlight follows the SCRUBBED state, not only the live one", async () => {
     await mount();
     await click(buttonFor("WIP"));
