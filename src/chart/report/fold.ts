@@ -312,10 +312,23 @@ export interface PhaseStand {
   readonly tripped: readonly string[];
 }
 
+/**
+ * The ONE thing the phase walk reads off a task: which state it is standing in.
+ *
+ * {@link TaskState} satisfies it, and so does a RUNNING region's own
+ * `StateOf<chart>` — which is the whole reason the parameter is spelled this
+ * loosely. The fold and the runtime carry different per-task values (the fold's
+ * carries `retries`, a region's carries its `ctx`), and the advancement rule
+ * reads neither: it reads `type`, looks the node up in the chart, and asks its
+ * `end` polarity. Widening the parameter to what the rule ACTUALLY reads is what
+ * lets {@link phaseStandings} be called by both without a second copy of it.
+ */
+export type LeafStates = Readonly<Record<string, { readonly type: string }>>;
+
 /** Every task at an error final — the `errors` list, one declaration site. */
 export function trippedTasks(
   lane: ImportedLane,
-  states: Readonly<Record<string, TaskState>>,
+  states: LeafStates,
 ): readonly string[] {
   return Object.keys(states).filter(
     (taskId) => endPolarityOf(nodeOf(lane, taskId, states)) === "error",
@@ -344,7 +357,7 @@ export function trippedTasks(
  */
 export function phaseStandings(
   lane: ImportedLane,
-  states: Readonly<Record<string, TaskState>>,
+  states: LeafStates,
 ): readonly PhaseStand[] {
   const isFinal = (taskId: string): boolean =>
     endPolarityOf(nodeOf(lane, taskId, states)) !== false;
@@ -364,6 +377,32 @@ export function phaseStandings(
     }
     return { ...base, standing: "complete" as const };
   });
+}
+
+/**
+ * THE ADVANCEMENT RULE — has the lane left the phases, and by which door?
+ *
+ * `undefined` means "still running": some phase is active, so the lane is
+ * sitting in it. A terminal name means the walk ran out of phases — every phase
+ * completed (`onDone` chained all the way past the last one, which is what the
+ * `complete` terminal IS), or one of them completed holding a region at an
+ * `end: "error"` final, which trips the lane wherever it had got to.
+ *
+ * Three lines, and they are pulled out here rather than inlined below because
+ * this is the rule the RUNTIME advances by (`runLane`, in `../lane/run`). The
+ * runtime does not re-derive it and does not agree with it by inspection: it
+ * calls {@link phaseStandings} over its own region states and then this, so
+ * "the machine advanced" and "the fold says it advanced" are the same sentence
+ * evaluated twice, not two sentences kept in sync.
+ */
+export function laneTerminalReached(
+  stands: readonly PhaseStand[],
+  terminals: ImportedLane["terminals"],
+): string | undefined {
+  if (stands.some((stand) => stand.standing === "tripped"))
+    return terminals.tripped;
+  if (stands.some((stand) => stand.standing === "active")) return undefined;
+  return terminals.complete;
 }
 
 /**
@@ -393,9 +432,12 @@ export function deriveLaneStatus(
   context.errors = errors;
 
   const stands = phaseStandings(lane, states);
-  if (stands.some((stand) => stand.standing === "tripped")) {
-    return { stateValue: lane.terminals.tripped, status: "done", context };
+  const terminal = laneTerminalReached(stands, lane.terminals);
+  if (terminal !== undefined) {
+    return { stateValue: terminal, status: "done", context };
   }
+  // `laneTerminalReached` returned `undefined`, which is precisely "some phase
+  // is active" — so this find cannot miss.
   const active = stands.find((stand) => stand.standing === "active");
   if (active === undefined) {
     return { stateValue: lane.terminals.complete, status: "done", context };
@@ -412,11 +454,7 @@ export function deriveLaneStatus(
   return { stateValue, status: "active", context };
 }
 
-function nodeOf(
-  lane: ImportedLane,
-  taskId: string,
-  states: Readonly<Record<string, TaskState>>,
-) {
+function nodeOf(lane: ImportedLane, taskId: string, states: LeafStates) {
   const chart = lane.charts[taskId];
   const state = states[taskId];
   if (chart === undefined || state === undefined) return undefined;

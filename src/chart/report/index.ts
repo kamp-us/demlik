@@ -62,6 +62,8 @@ export {
   foldLane,
   initialStates,
   type LaneStatus,
+  laneTerminalReached,
+  type LeafStates,
   type LogEntry,
   type PhaseStand,
   type PhaseStanding,
