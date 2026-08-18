@@ -11,13 +11,15 @@
 //   `defineLane` — the AUTHORING door. Phases in order, each holding the tasks
 //   that run concurrently in it, each task an instance of a chart. Everything
 //   an author would otherwise repeat is DERIVED: the phase order is the
-//   declaration order, a phase's task set is its keys, and which of a task's
-//   finals are success and which are error is read off the charts themselves.
+//   declaration order, a phase's task set is its keys, which of a task's finals
+//   are success and which are error is read off the charts themselves, and —
+//   where the charts are `defineChart` literals — so are the lane's own
+//   alphabets, `LaneState` and `LaneMsg`.
 //
 //   `laneShape` — the READING door, over ANY lane: one built here, or one
 //   `chartFromWorkflow` imported from a `workflow.json` this repo has never
-//   seen. Both produce the same `ImportedLane`, so the fold, the report and the
-//   inspector take either without knowing which.
+//   seen. Both hold the same `ImportedChart` values, so the fold, the report and
+//   the inspector take either without knowing which.
 //
 // WHAT THIS IS NOT, and the boundary is worth stating because it is the whole
 // design: there is no lane RUNTIME here. No per-instance boot override, no

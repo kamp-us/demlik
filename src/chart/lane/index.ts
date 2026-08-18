@@ -19,9 +19,10 @@
  * and no amount of drawing one chart at a time produces that picture.
  *
  * ```text
- *   defineLane(spec)              → ImportedLane   // author one
+ *   defineLane(spec)              → Lane<S>        // author one, typed
  *   laneShape(lane)               → LaneShape      // read any one, derived
  *   inspectLane(lane, entries)    → LaneInspection // the headless view
+ *   LaneState<L> / LaneMsg<L>                      // its alphabets, derived
  * ```
  *
  * DRAW, NOT AUTHOR-AND-RUN — the boundary, stated up front because it is what
@@ -34,18 +35,26 @@
  *
  * ONE LANE REPRESENTATION, TWO DOORS. {@link defineLane} and
  * `chartFromWorkflow` (in `@demlik/tea/chart/report`) both produce the same
- * `ImportedLane`, so the fold, the markdown report and the inspector take
- * either without a second code path. What differs is what each buys:
- * `chartFromWorkflow` buys FIDELITY to a `workflow.json` this repo has never
- * seen; `defineLane` buys the four authoring mistakes the type layer can catch
- * (a task in two phases, a phase with no tasks, a terminal that collides with a
- * phase name, a retry budget for a task that does not exist).
+ * `ImportedLane` value — `defineLane` LOWERS whichever chart it was handed to
+ * it — so the fold, the markdown report and the inspector take either without a
+ * second code path. What differs is what each buys: `chartFromWorkflow` buys
+ * FIDELITY to a `workflow.json` this repo has never seen; `defineLane` buys the
+ * types.
  *
- * WHERE THE GUARANTEE STOPS, said here rather than discovered later. A lane
- * assembled from `ImportedChart`s is runtime-typed by construction — states,
- * events and targets are `string` — so "does this chart declare an initial
- * state" is not a question the type layer can be asked. Those checks are
- * runtime, and they throw {@link LaneShapeError} rather than being pretended.
+ * THE TYPED DOOR. A lane built from `defineChart` literals keeps them: its
+ * `spec` is carried on the lane, so {@link LaneState} is the compound state
+ * with every leaf that task's OWN `StateOf<chart>`, and {@link LaneMsg} is
+ * `{ task, event }` with the event narrowed to the events THAT task's chart
+ * declares — never a union across the lane's charts. Three more authoring
+ * mistakes become compile errors there: a region with no initial state, a
+ * region with no final, a region that delegates a target to a cell.
+ *
+ * WHERE THE GUARANTEE STOPS, said here rather than discovered later. An
+ * `ImportedChart` is runtime-typed by construction — states, events and targets
+ * are `string` — so "does this chart declare an initial state" is not a question
+ * that door can be asked. The same derivations run over it and read back as
+ * `string`; the three chart-shaped checks stand down; and {@link defineLane}
+ * throws {@link LaneShapeError} rather than pretending.
  *
  * @packageDocumentation
  */

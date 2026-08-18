@@ -60,6 +60,10 @@ The nesting **is** the structure. Nothing states the phase order (it is the key
 order), nothing states a phase's task set (it is the keys), and nothing states
 which finals are success and which are error (the charts say).
 
+The charts keep their types. `coderChart` is a `defineChart` literal, so the
+lane knows which states `issue_5729` can stand in and which events it answers —
+see [step 2](#step-2--the-compound-state-and-the-lane-message).
+
 **Imported**, when the topology arrives at runtime as a `workflow.json`:
 
 ```ts
@@ -68,7 +72,43 @@ import { chartFromWorkflow } from "@demlik/tea/chart/report";
 const lane = chartFromWorkflow(JSON.parse(workflowJson));
 ```
 
-## Step 2 — read the structure back
+## Step 2 — the compound state, and the lane message
+
+Two derivations off the lane, both narrowed **per task**:
+
+```ts
+import type { LaneMsg, LaneState } from "@demlik/tea/chart/lane";
+
+const state: LaneState<typeof lane> = {
+  phases: {
+    phase1: { issue_5729: { type: "build", retries: 0, maxRetries: 2 },
+              issue_5730: { type: "queued", retries: 0, maxRetries: 2 } },
+    phase2: "waiting",           // not reached yet — a standing, not a task map
+  },
+  lane: "running",               // or "complete" / "tripped", the lane's own
+};
+
+const msg: LaneMsg<typeof lane> = { task: "issue_5730", event: "PASS" };
+```
+
+Every leaf is that task's **own** `StateOf<chart>`, and `event` is narrowed to
+the events **that task's** chart declares — not to a union across the lane. In a
+phase running two different templates, sending the reviewer's event to the
+builder's task is exactly as wrong as sending an event nothing declares, and
+fails the same way:
+
+```ts
+const wrong: LaneMsg<typeof lane> = { task: "issue_5730", event: "APPROVE" };
+//                                                        ~~~~~~~~~~~~~~~~
+// Type '"APPROVE"' is not assignable to type
+//   '"WIP" | "DONE" | "BLOCKED" | "PASS" | "FAIL" | "UNBLOCKED"'.
+```
+
+An **imported** lane carries no spec, so the same derivations run over
+`Chart<unknown>` and read back as `string` throughout — which is exactly what
+that door knows. One formula, two doors.
+
+## Step 3 — read the structure back
 
 ```ts
 import { laneShape } from "@demlik/tea/chart/lane";
@@ -85,7 +125,7 @@ Every field is derived. `cannotTrip` is not a defect — a task may legitimately
 be unable to fail — but it changes what the lane can do, and it is invisible
 otherwise.
 
-## Step 3 — fold a run
+## Step 4 — fold a run
 
 ```ts
 import { foldLane, deriveLaneStatus, parseEventsJsonl } from "@demlik/tea/chart/report";
@@ -105,7 +145,7 @@ the exact state after *k* events — time travel costs a `slice`.
 tripped. It is **positional**, not local: everything after the phase that
 stopped the lane reads `"waiting"`, whatever its regions happen to contain.
 
-## Step 4 — draw it
+## Step 5 — draw it
 
 ```ts
 import { laneReport } from "@demlik/tea/chart/report";
@@ -121,7 +161,7 @@ which ending each task reached, and a tripped region is marked distinctly from a
 complete one — including in the active phase, where a frozen region sits beside
 a sibling that is still moving.
 
-## Step 5 — inspect it headlessly
+## Step 6 — inspect it headlessly
 
 ```ts
 import { inspectLane } from "@demlik/tea/chart/lane";
@@ -150,16 +190,22 @@ a lane UI and a single-chart debugger agree about what a refusal is.
 
 ## What the types catch, and what they cannot
 
-`defineLane` rejects four authoring mistakes at compile time: a task declared in
-two phases, a phase with no tasks, a terminal that collides with a phase name,
-and a retry budget naming a task that does not exist. Each names the offender in
-the diagnostic.
+`defineLane` rejects seven authoring mistakes at compile time, each naming the
+offender in the diagnostic.
 
-Everything about a **chart's insides** — no `initial: true`, no final at all —
-is a runtime refusal (`LaneShapeError`, with every defect listed), because a
-lane assembled from imported charts is runtime-typed by construction and the
-type layer cannot be asked. Where a guarantee cannot be had, it throws rather
-than pretending.
+Four are about the **lane's own shape** and hold at either door: a task declared
+in two phases, a phase with no tasks, a terminal that collides with a phase
+name, and a retry budget naming a task that does not exist.
+
+Three are about the **charts it was handed**, and hold wherever the chart is a
+`defineChart` literal: a region that marks no `initial: true`, a region that
+declares no final in either polarity, and a region that hands a transition to a
+`{ to, cell }` (nothing here runs a cell, so a lane cannot hold that edge).
+
+Those same three stand **down** at the imported door: an imported chart's states
+are `string` by construction, so the question cannot be asked, and `defineLane`
+refuses at runtime instead (`LaneShapeError`, with every defect listed). Where a
+guarantee cannot be had, it throws rather than pretending.
 
 ## See also
 
