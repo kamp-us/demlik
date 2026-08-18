@@ -448,6 +448,44 @@ describe("runLane — dots", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("runLane — the refusals nothing was driving", () => {
+  // THE THREE HALVES OF ONE DEFECT, each asserted for the SENTENCE it produces
+  // rather than only for the throw. The three branches name three different
+  // authoring mistakes, and a reader who is handed the wrong one goes looking
+  // in the wrong file: "your spec holds no chart" sends them to `defineLane`,
+  // "no hand was given" sends them to the `runLane` call site.
+  it("names the SPEC when the spec is the half that is missing", () => {
+    const lane = defineLane({
+      phases: { p1: { t1: goer } },
+      terminals: { complete: "complete", tripped: "tripped" },
+    });
+    const specless = { ...lane, spec: { phases: { p1: {} } } };
+    // the hands are cast because the spec is the thing that is missing: with no
+    // task on it there is no `LaneTaskId` for a hand to name, which is the
+    // type layer agreeing with the throw rather than a hole in it.
+    expect(() =>
+      runLane(specless, {
+        t1: {
+          parts: { assign: { "queued.GO": () => ({}) } },
+          boot: () => ({ type: "queued" }),
+        },
+      } as never),
+    ).toThrow('task "t1": the lane declares it but its spec holds no chart');
+  });
+
+  it("names the HAND when the hand is the half that is missing", () => {
+    const lane = defineLane({
+      phases: { p1: { t1: goer } },
+      terminals: { complete: "complete", tripped: "tripped" },
+    });
+    // `__laneHandNamesAnUnknownTask`'s other direction: the marker refuses a
+    // hand for a task that does not exist, and `LaneHands<L>` demands one per
+    // task — so reaching this needs the types bypassed, which is what the
+    // imported door does to every alphabet it touches.
+    expect(() => runLane(lane, {} as never)).toThrow(
+      'task "t1": the lane declares it but no hand was given for it',
+    );
+  });
+
   it("refuses a task the lane's phases declare and its charts do not", () => {
     const lane = defineLane({
       phases: { p1: { t1: goer } },
@@ -465,7 +503,9 @@ describe("runLane — the refusals nothing was driving", () => {
           boot: () => ({ type: "queued" }),
         },
       }),
-    ).toThrow(/t1/);
+    ).toThrow(
+      'task "t1": the lane declares it but the lane\'s `charts` hold none for it',
+    );
   });
 
   it("refuses a message with no cell in the state the region is standing in", () => {
