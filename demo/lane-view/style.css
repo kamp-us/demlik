@@ -70,3 +70,141 @@ main {
   padding: 0.9rem 1.1rem;
   overflow-x: auto;
 }
+
+/* ── the fleet ─────────────────────────────────────────────────────────── */
+.fl {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 3.5rem 1rem 6rem;
+}
+
+.fl-h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 1.4rem;
+  text-wrap: balance;
+}
+
+.fl-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.fl-chip {
+  font-size: 0.78rem;
+  padding: 0.24rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid #30363d;
+  color: #8b949e;
+}
+.fl-chip b {
+  color: #e6edf3;
+  font-variant-numeric: tabular-nums;
+}
+.fl-chip.is-needs-you {
+  border-color: #d29922;
+  color: #e3b341;
+}
+.fl-chip.is-needs-you b {
+  color: #e3b341;
+}
+.fl-chip.is-tripped {
+  border-color: #f85149;
+  color: #ff7b72;
+}
+.fl-chip.is-tripped b {
+  color: #ff7b72;
+}
+
+.fl-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fl-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  gap: 1rem;
+  align-items: baseline;
+  text-align: left;
+  font: inherit;
+  padding: 0.85rem 1.1rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-left: 3px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  cursor: pointer;
+}
+.fl-row:hover {
+  border-color: #2dd4bf;
+}
+.fl-row.is-needs-you {
+  border-left-color: #d29922;
+}
+.fl-row.is-tripped {
+  border-left-color: #f85149;
+}
+.fl-row.is-quiet {
+  border-left-color: #8b949e;
+}
+.fl-row.is-moving {
+  border-left-color: #2dd4bf;
+}
+.fl-row.is-done {
+  border-left-color: #238636;
+  opacity: 0.62;
+}
+.fl-row.is-unstarted {
+  opacity: 0.62;
+}
+
+.fl-id {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fl-head {
+  color: #c9d1d9;
+}
+.fl-head code {
+  background: none;
+}
+.fl-meta {
+  color: #8b949e;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.fl-foot {
+  color: #8b949e;
+  font-size: 0.75rem;
+  margin-top: 2.5rem;
+}
+
+.lv-back {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.28rem 0.7rem;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  background: #21262d;
+  color: #e6edf3;
+  cursor: pointer;
+}
+.lv-back:hover {
+  border-color: #2dd4bf;
+}
+
+@media (max-width: 620px) {
+  .fl-row {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+}

@@ -4,15 +4,17 @@
 // so this reads the disk where it is started and renders in the browser. No
 // server, no upload, no copy of a lane leaving the machine.
 import mermaid from "mermaid";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LaneView } from "../../src/chart/lane/react";
 import "../../src/chart/lane/styles.css";
 import "./style.css";
 // @ts-expect-error — supplied by the vite plugin beside this file.
 import { LANES, SOURCE } from "virtual:lanes";
+import { laneView, replayFeed } from "../../src/chart/lane/view";
 import { parseEventsJsonl } from "../../src/chart/report/fold";
 import { chartFromWorkflowText } from "../../src/chart/report/workflow";
+import { byAttention, type FleetRow, fleetRow } from "./fleet";
 import { FABRIKA_ORIGINS } from "./origins";
 
 mermaid.initialize({ startOnLoad: false, theme: "dark" });
@@ -47,8 +49,96 @@ function Mermaid() {
   return null;
 }
 
+const ATTENTION_LABEL: Record<string, string> = {
+  "needs-you": "needs you",
+  tripped: "tripped",
+  quiet: "gone quiet",
+  moving: "moving",
+  unstarted: "not started",
+  done: "done",
+};
+
+/** The fleet, derived once — every lane read the same way one lane is read. */
+function useFleet(): { row: FleetRow; lane: Lane }[] {
+  return useMemo(() => {
+    const now = Date.now();
+    return lanes
+      .map((l) => {
+        const chart = chartFromWorkflowText(
+          l.workflow,
+          (l.origins as typeof FABRIKA_ORIGINS) ?? FABRIKA_ORIGINS,
+        );
+        const log = parseEventsJsonl(l.events);
+        const view = laneView(replayFeed(chart, log), Number.MAX_SAFE_INTEGER);
+        const last = log.at(-1)?.at ?? null;
+        return { row: fleetRow(l.id, view, last, now), lane: l };
+      })
+      .sort((a, b) => byAttention(a.row, b.row));
+  }, []);
+}
+
+function Fleet({ onOpen }: { onOpen: (id: string) => void }) {
+  const fleet = useFleet();
+  const counts = new Map<string, number>();
+  for (const { row } of fleet)
+    counts.set(row.attention, (counts.get(row.attention) ?? 0) + 1);
+
+  const needs = counts.get("needs-you") ?? 0;
+
+  return (
+    <main className="fl">
+      <h1 className="fl-h1">
+        {needs === 0
+          ? "Nothing is waiting on you."
+          : `${needs} lane${needs === 1 ? "" : "s"} waiting on you.`}
+      </h1>
+
+      <div className="fl-counts">
+        {[...counts].map(([k, n]) => (
+          <span key={k} className={`fl-chip is-${k}`}>
+            <b>{n}</b> {ATTENTION_LABEL[k]}
+          </span>
+        ))}
+      </div>
+
+      <ul className="fl-rows">
+        {fleet.map(({ row }) => (
+          <li key={row.id}>
+            <button
+              type="button"
+              className={`fl-row is-${row.attention}`}
+              onClick={() => onOpen(row.id)}
+            >
+              <span className="fl-id">{row.id}</span>
+              <span className="fl-head">{row.headline}</span>
+              <span className="fl-meta">
+                {[
+                  row.progress,
+                  row.quietFor === null ? null : age(row.quietFor),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="fl-foot">
+        Read from <code>{SOURCE}</code> — nothing left this machine.
+      </p>
+    </main>
+  );
+}
+
+/** Minutes are how the ledger counts; a reader does not think in 1211 of them. */
+function age(min: number): string {
+  if (min < 60) return `${min}m quiet`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `${h}h quiet` : `${Math.round(h / 24)}d quiet`;
+}
+
 function App() {
-  const [at, setAt] = useState(0);
+  const [open, setOpen] = useState<string | null>(null);
   if (lanes.length === 0) {
     return (
       <main className="lv-empty">
@@ -61,23 +151,33 @@ function App() {
           <code>events.jsonl</code>. Point the viewer at one, or at the parent
           holding several:
         </p>
-        <pre>pnpm lane:view ~/phoenix/.fabrika/lanes</pre>
+        <pre>LANE_DIR=~/phoenix/.fabrika/lanes pnpm lane:view</pre>
       </main>
     );
   }
 
-  const lane = lanes[Math.min(at, lanes.length - 1)] as Lane;
+  if (open === null)
+    return (
+      <>
+        <Fleet onOpen={setOpen} />
+        <Mermaid />
+      </>
+    );
+
+  const lane = lanes.find((l) => l.id === open) as Lane;
   return (
     <>
       <header className="lv-bar">
-        <span className="lv-brand">fabrika lanes</span>
+        <button type="button" className="lv-back" onClick={() => setOpen(null)}>
+          ← all lanes
+        </button>
         <nav>
-          {lanes.map((l, i) => (
+          {lanes.map((l) => (
             <button
               type="button"
               key={l.id}
-              className={i === at ? "on" : ""}
-              onClick={() => setAt(i)}
+              className={l.id === open ? "on" : ""}
+              onClick={() => setOpen(l.id)}
             >
               {l.id}
             </button>
