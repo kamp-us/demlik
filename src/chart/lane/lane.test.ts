@@ -12,9 +12,21 @@ import {
   EPIC_RUN_TRIPPED,
 } from "../report/__fixtures__/epic";
 import { coder } from "../report/__fixtures__/templates";
-import { chartFromWorkflow } from "../report/workflow";
+import { chartFromWorkflow, type ImportedChart } from "../report/workflow";
 import { inspectLane } from "./inspect";
 import { defineLane, LaneShapeError, laneShape } from "./structure";
+
+// Both malformed charts below are typed `ImportedChart` on purpose. These are
+// the imported door's defects — the door whose charts CANNOT be asked in the
+// type layer — and that is the whole reason `defineLane` still checks them at
+// runtime. Written as literals they would be caught one layer earlier, by
+// `__laneTaskChartMarksNoInitialState` / `__laneTaskChartDeclaresNoFinal`,
+// which `markers.test-d.ts` pins.
+const NO_INITIAL: ImportedChart = { events: {}, states: { g: { s: {} } } };
+const NO_FINAL: ImportedChart = {
+  events: { GO: { scope: "edges" } },
+  states: { g: { a: { initial: true, on: { GO: { target: "a" } } } } },
+};
 
 const coderLane = chartFromWorkflow(coder);
 const CODER_CHART = coderLane.charts.issue;
@@ -58,7 +70,7 @@ describe("defineLane — the authoring door", () => {
   it("refuses a chart with no initial state — a runtime check, by necessity", () => {
     expect(() =>
       defineLane({
-        phases: { p1: { t: { events: {}, states: { g: { s: {} } } } } },
+        phases: { p1: { t: NO_INITIAL } },
         terminals: { complete: "complete", tripped: "tripped" },
       }),
     ).toThrow(LaneShapeError);
@@ -67,16 +79,7 @@ describe("defineLane — the authoring door", () => {
   it("refuses a chart with no final — its phase could never complete", () => {
     expect(() =>
       defineLane({
-        phases: {
-          p1: {
-            t: {
-              events: { GO: { scope: "edges" } },
-              states: {
-                g: { a: { initial: true, on: { GO: { target: "a" } } } },
-              },
-            },
-          },
-        },
+        phases: { p1: { t: NO_FINAL } },
         terminals: { complete: "complete", tripped: "tripped" },
       }),
     ).toThrow(LaneShapeError);
@@ -94,7 +97,7 @@ describe("defineLane — the authoring door", () => {
   it("names EVERY defect, never a half-lane", () => {
     try {
       defineLane({
-        phases: { p1: { t: { events: {}, states: { g: { s: {} } } } } },
+        phases: { p1: { t: NO_INITIAL } },
         terminals: { complete: "over", tripped: "over" },
       });
       throw new Error("expected a refusal");
