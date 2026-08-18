@@ -37,6 +37,10 @@ what you are trying to do, and it names the subpath you need.
   `workflow.json` into charts with `@demlik/tea/chart/report` and render a lane
   as one markdown block (diagram, "waiting on", retry budget, timeline) that
   reads the same in a terminal, a PR comment and an issue comment.
+- [Look at a lane in a browser](./look-at-a-lane-in-a-browser.md) — put the same
+  lane on a page with `@demlik/tea/chart/lane/react`: which of twelve things is
+  stuck first, the phases in order, a scrubber over the run, and dispatch where
+  the code bodies exist — over a replayed event log or a live `runLane`.
 
 ## Test and verify
 
