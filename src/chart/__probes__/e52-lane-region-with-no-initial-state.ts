@@ -1,4 +1,4 @@
-// PROBE 51: a lane region whose chart marks no `initial: true`.
+// PROBE 52: a lane region whose chart marks no `initial: true`.
 //
 // The fold has no zero to start from, so `initialStates` cannot name where this
 // task stands before its first event. `defineLane` has always refused this — at

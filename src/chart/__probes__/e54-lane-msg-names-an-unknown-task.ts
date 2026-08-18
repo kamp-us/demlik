@@ -1,4 +1,4 @@
-// PROBE 53: a lane message addressed to a task the lane does not run.
+// PROBE 54: a lane message addressed to a task the lane does not run.
 //
 // `LaneMsg` is derived from the spec's own nesting, so the address space IS the
 // task set — no second list to keep in step, and a typo'd or stale region id is

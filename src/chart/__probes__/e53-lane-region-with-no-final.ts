@@ -1,4 +1,4 @@
-// PROBE 52: a lane region whose chart declares no final, in either polarity.
+// PROBE 53: a lane region whose chart declares no final, in either polarity.
 //
 // A phase completes when EVERY region in it reaches a final. A region that
 // declares none never does, so the phase never completes, so the lane never

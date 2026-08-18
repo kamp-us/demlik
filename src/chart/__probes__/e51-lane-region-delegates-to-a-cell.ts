@@ -1,4 +1,4 @@
-// PROBE 50: a lane region whose chart hands a transition to a cell.
+// PROBE 51: a lane region whose chart hands a transition to a cell.
 //
 // `{ to, cell }` is the chart's escape hatch: the author declares the reachable
 // SET and hand-written code picks one at runtime. A lane region has no such

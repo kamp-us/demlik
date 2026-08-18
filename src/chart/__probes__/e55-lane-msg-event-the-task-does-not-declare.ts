@@ -1,4 +1,4 @@
-// PROBE 54: a lane message carrying an event THAT task's chart never declares.
+// PROBE 55: a lane message carrying an event THAT task's chart never declares.
 //
 // This is the narrowing a union across the lane's charts would lose. `LaneMsg`
 // is built per task, so the event alphabet is the one that task's own chart
