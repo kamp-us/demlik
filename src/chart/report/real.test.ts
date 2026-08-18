@@ -256,29 +256,7 @@ describe("the report, on a lane that was actually driven", () => {
       **waiting on:** a human's \`UNBLOCKED\`
 
 
-      ### issue_4242 — \`queued\`
-      **waiting on:** the operator's \`WIP\`, \`BLOCKED\`
-
-
-      ### issue_4243 — \`queued\`
-      **waiting on:** the operator's \`WIP\`, \`BLOCKED\`
-
-
-      ### issue_4244 — \`queued\`
-      **waiting on:** the operator's \`WIP\`, \`BLOCKED\`
-
-
-      ### issue_4245 — \`queued\`
-      **waiting on:** the operator's \`WIP\`, \`BLOCKED\`
-
-
-      ### issue_4246 — \`queued\`
-      **waiting on:** the operator's \`WIP\`, \`BLOCKED\`
-
-
-      ### issue_4247 — \`queued\`
-      **waiting on:** the operator's \`WIP\`, \`BLOCKED\`
-
+      **not started yet:** \`issue_4242\`, \`issue_4243\`, \`issue_4244\`, \`issue_4245\`, \`issue_4246\`, \`issue_4247\` — still at \`queued\`.
 
       **phase3:** waiting — 1 task, not started.
 
@@ -303,20 +281,21 @@ describe("the report, on a lane that was actually driven", () => {
     `);
   });
 
-  it("4195 — one diagram per task of the active phase, each marking its own state", () => {
+  it("4195 — a diagram per task that MOVED; the untouched six get one line", () => {
     const markdown = laneReport(reportInput(fromFiles(REAL_EPIC))).markdown;
     const fences = markdown.match(/```mermaid\n[\s\S]*?\n```/g) ?? [];
-    expect(fences).toHaveLength(8);
+    // This phase holds eight tasks and six of them have never moved. Drawing
+    // the same picture six times with a different node lit is the "comment
+    // nobody reads" the module's editorial rule forbids — a task still at its
+    // entry state has a one-line story, so it gets one line.
+    expect(fences).toHaveLength(2);
     expect(fences.map((f) => /class (\S+) current/.exec(f)?.[1])).toEqual([
       "review",
       "blocked",
-      "queued",
-      "queued",
-      "queued",
-      "queued",
-      "queued",
-      "queued",
     ]);
+    expect(markdown).toContain(
+      "**not started yet:** `issue_4242`, `issue_4243`, `issue_4244`, `issue_4245`, `issue_4246`, `issue_4247` — still at `queued`.",
+    );
     // The walked edges are the real log's, and only the two tasks that moved
     // carry any. `»` is `drawTask`'s walked marker.
     expect(fences[0]).toMatchInlineSnapshot(`

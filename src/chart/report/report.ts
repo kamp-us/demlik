@@ -8,8 +8,12 @@
 //
 // THE EDITORIAL RULES, which are most of what this file is:
 //
-//   ONE DIAGRAM PER TASK, ACTIVE PHASE ONLY. A comment with eight diagrams is a
-//   comment nobody reads. Future phases get one line each.
+//   ONE DIAGRAM PER TASK THAT MOVED, ACTIVE PHASE ONLY. A comment with eight
+//   diagrams is a comment nobody reads. Future phases get one line each, and so
+//   do the tasks still sitting at their entry state — a real emitted epic put
+//   eight tasks in one phase, six of them untouched, and the rule as originally
+//   written (per TASK, not per MOVED task) produced exactly the wall of
+//   near-identical pictures it exists to prevent.
 //
 //   "WAITING ON" IS DERIVED, AND NAMES NOTHING. This file used to answer it by
 //   matching STATE NAMES — `queued`, `build`, `review`, `ship`, `blocked`,
@@ -48,6 +52,7 @@ import {
   endPolarityOf,
   type ImportedChart,
   type ImportedLane,
+  initialOf,
   originOf,
   statesOf,
 } from "./workflow";
@@ -282,10 +287,32 @@ export function laneReport(input: LaneReportInput): LaneReport {
 
   for (const stand of stands) {
     if (stand === active) {
+      // ONE DIAGRAM PER TASK THAT HAS MOVED — not per task.
+      //
+      // The rule at the top of this file says a comment with eight diagrams is
+      // a comment nobody reads, and until this was run against a real emitted
+      // epic the rule was only enforced on the phase dimension. A real phase
+      // holds eight tasks; six of them sat untouched at `queued`, and the
+      // report spent ~200 of its ~265 lines drawing the same picture six times
+      // with a different node lit. A task still at its entry state has a story
+      // one line long, so it gets one line.
+      const untouched: string[] = [];
       for (const taskId of stand.tasks) {
         const chart = lane.charts[taskId];
         const state = states[taskId];
         if (chart === undefined || state === undefined) continue;
+        if (state.type === initialOf(chart)) untouched.push(taskId);
+      }
+      // If NOTHING in the phase has moved, the phase just started — and
+      // collapsing every task would leave the reader with no picture at all.
+      // Draw the first as the representative (they are all at the same entry
+      // state, so any of them is the same picture) and list the rest.
+      if (untouched.length === stand.tasks.length) untouched.shift();
+      for (const taskId of stand.tasks) {
+        const chart = lane.charts[taskId];
+        const state = states[taskId];
+        if (chart === undefined || state === undefined) continue;
+        if (untouched.includes(taskId)) continue;
         const polarity = endPolarityOf(statesOf(chart).get(state.type));
         out.push(
           `### ${taskId} — \`${state.type}\`${polarity === "error" ? " — TRIPPED" : ""}`,
@@ -313,6 +340,17 @@ export function laneReport(input: LaneReportInput): LaneReport {
           }),
         );
         out.push("```");
+        out.push("");
+      }
+      if (untouched.length > 0) {
+        // Named, not counted: "6 tasks not started" tells a reader nothing they
+        // can act on, and the names are what they came for.
+        const chart = lane.charts[untouched[0] as string];
+        const at =
+          chart === undefined ? "their entry state" : `\`${initialOf(chart)}\``;
+        out.push(
+          `**not started yet:** ${untouched.map((t) => `\`${t}\``).join(", ")} — still at ${at}.`,
+        );
         out.push("");
       }
       continue;
