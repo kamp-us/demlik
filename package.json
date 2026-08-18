@@ -294,6 +294,7 @@
     "@biomejs/biome": "2.3.14",
     "@changesets/cli": "^2.27.11",
     "@cloudflare/workers-types": "4.20260312.1",
+    "@kampus/fabrika-cli": "0.3.0",
     "@types/chrome": "^0.1.42",
     "@types/node": "^22",
     "@types/react": "19.0.8",
