@@ -1,5 +1,398 @@
 # @demlik/tea
 
+## 0.8.0
+
+### Minor Changes
+
+- 3066c6e: Add `./chart/inspect` and `./chart/inspect/react` (**experimental**): a live debugger for any machine authored with `./chart`, that builds itself out of the chart.
+
+  A hand-built debugger page for a machine types four things out by hand — the list of messages, the state names, which control is disabled when, and what each payload looks like. A chart already carries all four as data, so `<ChartInspector chart={lane} parts={{ assign, guards }} boot={…} samples={…} />` is the whole page: a control per message, a live state panel, a state diagram with the current node lit, and a time-travel scrubber over every transition. There is no prop that restates something the chart already says.
+
+  **Refusals are first-class**, which is the capability the totality property buys and no other inspector can offer. A chart is total over (state × event): a pair is declared, or refused — by the event's `scope`, by the state's `ignore`, or by `end: true` — and there is no third case. So a refused event renders as _visibly refused with the mechanism that refused it_ (`"PASS" is not addressed to phase "working" (scope: edges)`), not as a missing button. The refusal reasons are derived by the same predicate `compile` uses to choose between a self-loop and a `NoCellError`, so the picture and the machine cannot disagree about what is refused.
+
+  **Guard preview.** Given a live state and a sample message the named guard is executed — it is pure, the same thing `replay` may call — and the branch it takes is reported with that arm's target and cmds. Edit a payload and watch the branch flip. Where it cannot be evaluated (no sample, no bag, a throwing body) it degrades to `unknown` carrying the reason, never to a guess. Cell edges show their whole declared `to` fan-out, plus the target the cell actually picks when it can be run purely with samples, clamped to that edge's `to`.
+
+  **What would fire, and what did.** The control row shows the cmds an edge _declares_ — the before question, which a `{ to, cell }` edge answers with an empty list _by declaration_, because the cell builds its cmds inside its body. `captureCmds(machine, { msgs, ctx })` answers the after question: what a recorded run actually emitted, per step, tagged with the message that caused it, cell-built cmds included. It installs no observer — `replay` already returns the cmds a fold emitted, so a step's emissions are the tail past the previous prefix, read off the same pure fold the scrubber uses. A fold that throws truncates the capture and says so (`stoppedAt`) rather than reporting a short list as complete. The React page renders both, as separate panels, with the fired row highlighted at the scrubber's cursor.
+
+  **Reducer-form charts are inspectable, as the thinner thing they are.** `describeReducerChart` + `inspectReducerState` + `<ReducerChartInspector>` describe a `defineReducerChart` chart with the facts it actually has: the flat state list, the entry state, the event alphabet with `foreign`/`from`/payload-ness, per-event routing including a cell edge's whole declared fan-out, and totality over events — which this form enforces _more_ strictly than the grid form, since `on` is a required mapped type rather than a `scope` convention. What it cannot say it refuses to say: `phases`, `refusals` and `scope` each hold an `Unanswerable` carrying the reason ("this chart form has no state dimension — a refusal is a `(state, event)` fact"), never an empty list that would read as _nothing is refused_. The component names all three on screen instead of leaving unexplained gaps, and each describer accepts only its own chart form (a compile error otherwise, probes `e56`/`e57`).
+
+  **Time travel is pure.** The runtime is recorded with `./recorder` and scrubbing re-folds a prefix of the recorded messages through `replay` — `init` + `update` only, never `interpret`, never a Store, never a live subscription — so dragging backwards re-derives history instead of re-performing it.
+
+  `./chart/inspect` is the headless half: `describeChart(C)` returns the phases, states, entry, end/parking flags, the event alphabet with `scope`/`foreign`/`hasPayload`, the cmd/guard/cell alphabets, every edge and every refusal; `inspectState(desc, state, opts)` returns one verdict per event against a live state. It is framework-free and pure, so a script, a test or an Ink TUI gets the useful half. `./chart/inspect/react` is the thin binding, styled the way `./devtools` is (one prefixed stylesheet, consumer design tokens, no new dependency).
+
+  The one thing the author still supplies is `Samples<C>`: `ty<T>()` is `{}` at runtime, so a payload's shape is erased before any runtime code could read it. The bag is typed by the chart all the same — keyed by exactly the events that declare a payload, each value that event's declared type, an event with no payload has no key to write, and a typo'd name is an excess property.
+
+  Additively, `chartMermaid` now takes an optional options bag — `highlight` (light the active node), `phases` (draw phases as Mermaid composite states, which the flat drawing threw away), `polarity` (draw an `end: true` final and an `end: "error"` one apart), `walked` (mark the edges a run actually took, keyed by the exported `edgeKey`), `direction` and `title`. Every default reproduces the drawing it emitted before options existed, so no existing caller and no committed diagram moves. `safeId` / `safeLabel` are now exported from `./machine-viz` and shared by both drawings, so a chart whose state name is not identifier-safe (`human:cp-approval`) draws correctly instead of emitting broken Mermaid.
+
+  It is also the package's ONE chart renderer. `./chart/report`'s `drawTask` was a second implementation of the same drawing, written in parallel against the same Mermaid grammar while this options bag was being added, and the two had diverged before they were folded together: a guarded edge's then-arm was drawn bare here (reading as unconditional beside its `[!guard]` sibling) and labelled there, the highlight had two spellings, and only one side sanitized its ids. `drawTask` is now a translation of `{ current, walked }` onto these options and nothing else, so a report's diagram and a chart's diagram cannot drift again. A guarded then-arm now carries its guard in **both** drawings, and the report's classes are the renderer's own — `teaActive` / `teaTripped` / `teaShipped`.
+
+- 3066c6e: **`from` on an event — where its Msg comes from.** A chart says `WIP: "build"`, an edge from an event to a target; it never said where the event comes from. In TEA a Msg has exactly three origins — a Cmd's result, a Sub firing, the outside world — so `from: "cmd" | "sub" | { world: <role> }` declares which, once, on the event that owns the fact. The taxonomy is closed and the **cast is open**: the world origin carries a role name you choose, so an operator, a shopper, an on-call rota and a webhook are all expressible and none is enumerated by the library. `OriginAt`, `CmdEvent`, `SubEvent`, `WorldEvent` and `WorldRole` derive off it; `describeChart` returns it per event and `EventPreview` carries it to the button row (a refused event has a sender too). Optional throughout — a chart that declares no `from` derives `never` everywhere and behaves exactly as it did — and it composes with `scope`, `data` and `foreign` without touching any of them. A second field inside `{ world }` is a compile error naming the offender (probe 50).
+- 3066c6e: **`@demlik/tea/chart/lane` + `/chart/report`** — the nets under a typed lane, and
+  the one thing a run and a report of that run must never do.
+
+  The module's stated contract is that a run and a report of that run cannot
+  drift. Three ways they could are closed here, plus the type-layer gate the lane
+  had been missing and the diagnostics that named the wrong thing.
+
+  **A run and a fold now refuse the same pairs.** tea's runtime has always had
+  three answers to `(state, event)` — routed, refused, unreplayable — and the
+  lowered chart could carry two. So an event a state accepts and drops (its
+  `ignore` names it, or it is broadcast to another phase) made `runLane` self-loop
+  and `foldLane` throw `UnreplayableLogError`: a report calling a run unreplayable
+  when the run had replayed it, on the shape of our own shipped lane fixture. The
+  refusal set is now computed once at lowering and carried as
+  `ImportedChart.refusals` — on the chart rather than on the node, because
+  `ImportedNode` is a mirror of what fabrika's own compiler emits and the golden
+  test compares the two. **It is a no-op at the imported door by construction**: a
+  `workflow.json`'s events are `scope: "edges"` and its states carry no `ignore`,
+  so nothing there can produce a refusal, lowering an imported chart is still the
+  identity, and an imported log naming an unrouted event is refused exactly as
+  before.
+
+  **A guarded edge a lane cannot fold is refused at the door.** The fold walks
+  every guarded edge with one inline predicate, `retries < maxRetries`, because
+  that is the only guard a `workflow.json` can mean — the two-arm array IS the
+  retry guard. Applied unstated to a `defineChart` literal it invents an answer: a
+  chart guarded on `amount < 100`, driven with `amount: 5000`, RAN to `declined`
+  and FOLDED to `captured`, so the report called a tripped run complete and
+  printed a `retries: 1/2` on a chart with no retry concept. Carrying the real
+  predicate is not available — a guard's BODY lives in `Parts`, which `defineLane`
+  never sees — so a region whose `ctx` does not carry the budget the fold reads is
+  now refused by `__laneRegionGuardsOnSomethingOtherThanTheRetryBudget`.
+
+  **A numeric task id is a task id.** fabrika's task ids are GitHub issue numbers,
+  so `defineLane({ phases: [{ tasks: { 5729: coder } }] })` is the obvious
+  spelling, and `Extract<keyof …, string>` annihilated it: `LaneTaskId`, `LaneMsg`
+  and `LaneHands` all read back `never`, zero hands were demanded and the CORRECT
+  hand was rejected. Every alphabet now normalises a key the way the log, the
+  `${task}.${event}` wire key and `Object.entries` already spell one.
+
+  **The lane has its own literal-alphabet gate**, mirroring `graph.ts`'s. A
+  computed phase or task key, or a `terminals` object hoisted without `as const`,
+  degraded the lane's alphabets to `string` — no hand required, any invented task
+  id accepted, `__laneHandNamesAnUnknownTask` dead — and with two phases it
+  accused the author of `__taskDeclaredInTwoPhases` for a task declared exactly
+  once. The gate is ordered ahead of the duplicate check so the accusation is
+  true, and its markers name the fix (`…MustBeLiteralsAddAsConst`).
+
+  **Also refused at the `defineLane` door**, each with a probe: a region marking
+  two states `initial: true` (zero was caught and two was not — and two SPLIT, the
+  shape reading the last and the fold the first); a region that never went through
+  `defineChart`, so `Strict`/`Total` never ran and a typo'd target parked the task
+  in a state that does not exist; and a dot in a task id or an event name, which
+  re-partitions the `${task}.${event}` key space so one task's event becomes
+  unreachable and a message addressed to `a` moves `a.b`.
+
+  **Diagnostics.** The no-cell defect names the task (useless on a twelve-task
+  lane otherwise). Every unknown task in a log is collected, not just the first,
+  as `parseEventsJsonl` already did. `laneShape` reads the FIRST `initial: true`,
+  which is the one `initialOf` and the fold take.
+
+  **Export surface.** `chart/lane`'s `PhaseStanding` is renamed **`PhaseAtRest`**
+  and is now `Exclude<PhaseStanding, "active">` over `chart/report`'s — the two
+  entry points exported different types under one name, so which one a reader got
+  depended on which module they imported. `ImportedChart` gains optional
+  `refusals`; `WorkflowImportOptions` gains optional `strictFrom`, which refuses a
+  `from` key naming no event the document routes (opt-in, because a consumer's
+  cast legitimately spans several templates) — the cross-check `eventAlphabet` was
+  written for and nothing was calling.
+
+- 3066c6e: **`@demlik/tea/chart/lane` (experimental)** — a lane, as a describable
+  structure: N chart instances running in parallel, grouped into phases that
+  sequence.
+
+  `./chart` describes one machine. A lane is not one machine — it has phases that
+  run in order, each holding N task regions running concurrently, a phase
+  completes when every region in it reaches a final, and the whole thing ends
+  `complete` or `tripped` (tripped when any region landed on an `end: "error"`
+  final). Its state is compound: `{ phase1: { issue_5729: "build" }, phase2:
+"waiting" }`.
+
+  - `defineLane` — the authoring door. The nesting is the structure; the phase
+    order, each phase's task set, and which finals are success vs error are all
+    derived. Four authoring mistakes are compile errors that name the offender.
+  - `laneShape` — read the same facts off any lane, authored or imported.
+  - `inspectLane` — the headless view a UI needs: the active phase, each task's
+    state, what it is waiting on, what is stuck, and — per task — the existing
+    per-chart legal-events / refusals inspection.
+
+  **`@demlik/tea/chart/report`** grows the multi-phase half: `phaseStandings` and
+  `trippedTasks` are exported, and `laneReport` draws a multi-phase lane honestly
+  — diagrams for the active phase, one line each for phases already finished and
+  phases not yet started, with tripped regions marked distinctly from complete
+  ones.
+
+  **`@demlik/tea/chart/inspect`** — bug fix. `describeChart` read `node.end ===
+true`, so a state declared `end: "error"` was described as a non-final: it
+  re-acquired the totality obligation, and a live event over it came back
+  `undeclared` rather than refused. Both polarities now read as final, and
+  `ChartStateInfo` carries `endPolarity` (`false | true | "error"`) beside `end`.
+
+- 3066c6e: **`@demlik/tea/chart/lane` — `runLane`'s doors are checked, and its cmd tag
+  moved.** The runtime drove one lane correctly; what it did with the inputs a
+  host actually hands it — a persisted state from an older build, a boot that
+  disagrees with the lane, a task id with a dot in it — was undefined.
+
+  **Breaking, one shape.** A region's cmd leaves the lane tagged
+  `{ lane: { task } }` instead of a flat `task`, so a chart whose cmd payload
+  declares its own `task` field keeps its value:
+
+  ```diff
+  - interpret: { "issue_5729.spawn_shell": async (cmd) => spawn(cmd.task) }
+  + interpret: { "issue_5729.spawn_shell": async (cmd) => spawn(cmd.lane.task) }
+  ```
+
+  The flat tag was spread OVER the payload, and `task` is an entirely ordinary
+  field for a cmd in a work lane to carry: the author's value was replaced by the
+  lane's task id, and the tag narrowed the author's field to that literal, so
+  there was no type error either. `lane` is now the one key a region's cmd may not
+  declare, and a chart that declares it is a compile error naming the task
+  (`__laneRegionCmdDeclaresTheReservedLaneField`). `cmd.type` is unchanged.
+
+  - **One retry budget, not two.** `defineLane({ retries })` lands in
+    `lane.context[task].maxRetries` and that is the number `foldLane` replays
+    with. `runLane`'s budget used to come only from `boot()`, and nothing
+    cross-checked them: booting `maxRetries: 0` under a lane that declares the
+    default 2 froze the run where the report of that same log said it retried.
+    A `boot()` — or a rehydrated leaf — carrying a budget the lane does not
+    declare is now refused, naming the task and both numbers.
+  - **Rehydration is validated.** `init(loaded)` is the branch every production
+    restart walks; it used to return its argument unread. A persisted state is now
+    checked against the lane on the way in — every task present, no task the lane
+    does not run, each leaf's `type` a state of that task's chart, and its `was` a
+    state too — instead of failing later as a reducer throw inside the host's
+    dispatch loop. The leaves are still returned verbatim; the lane's own standing
+    is re-derived, since it is a fact derived from those leaves.
+  - **`was` is checked at boot, and no longer rewritten on a resume.** The typed
+    door refuses a bad `was` in `StateOf`; the imported door had no net at all.
+    And a resume now carries `was` through unchanged, which is `stepTask`'s rule —
+    the compiled cell re-injects `was` for any landing in a parking state, so with
+    two mutually reachable parking states the run and the fold walked the next
+    resume to two different STATES. fabrika has one parking state; `runLane` is a
+    library.
+  - **Dots are refused.** Task `a` + event `b.GO` and task `a.b` + event `GO` both
+    register the dispatch key `a.b.GO` — last writer wins and one task's event is
+    unreachable for the life of the process — and a dotted task id writes a log
+    the replayer re-partitions into a task that does not exist. `runLane` throws,
+    naming both. (`Total<C>` already banned the dot in a state name and in a
+    foreign event name, for the same reason.)
+  - **A task in `phases` with no chart is a defect, not a skip.** It used to get
+    no dispatch keys and no boot check — the one input where `runLane`'s closing
+    cast asserted something untrue.
+
+  `phases` do not gate dispatch and the module header now says so: a message
+  addressed to a phase-2 task moves that region while phase 1 is active, exactly
+  as `foldLane` folds the whole log. Phases sequence the lane's STANDING; they are
+  not admission control.
+
+- 3066c6e: Add `./chart/lane/react` and `./chart/lane/styles.css` (**experimental**): a real fabrika lane, looked at in a browser rather than only as markdown.
+
+  `<ChartInspector>` takes a live machine — a chart plus the code bodies — and runs it. A fabrika lane is the opposite shape: already-run history, no code bodies anywhere, imported at runtime from a `workflow.json`. So the one thing a real consumer most wants to look at could reach only one of this module's surfaces. Now it reaches both.
+
+  **Two sources, one presentation.** `<LaneView lane log>` is the replay case — the two files a fabrika lane IS, and its scrubber folds a prefix of the real log, which is not an approximation of the state at step k but the definition of it. `<LiveLaneView lane hands>` is a lane running under `runLane`, whose leaves come off the runtime rather than off a fold (a lane boots each region where its sub-issue actually is, so a fold from every chart's `initial: true` would draw a different lane than the one running). Same component underneath, same panels, and neither branches on which source it has.
+
+  **What the source decides is what is OFFERED, and an unavailable control is visibly unavailable with the reason** — never silently absent, which is the rule the refusal rendering has always followed. In replay every control carries an `Unanswerable<"dispatch">` reading _the code bodies that would run an edge do not exist here_; live, they dispatch `${task}.${event}`, the addressed form `compile(chart, parts, taskId)` already keys the table by. The same discipline covers the questions one source cannot answer at all: a recorded tape carries the ORDER of its msgs and no wall-clock, so the timeline's `at` column is an `Unanswerable<"clock">` with the reason rather than a column of invented times, and a region whose state keeps no `retries` gets an `Unanswerable<"retries">` rather than a confident `0/2`.
+
+  **The lane's own structure is the page.** Phases in order with their standings, N task chips per phase, the lane terminal — and _which of twelve things is stuck_ FIRST, because for a real epic that is the first question and a page that answers it fourth answers it too late. Three kinds of stuck, and the third is the one worth having: a task whose retry budget is spent can still move, and the next `FAIL` is the error final rather than a retry.
+
+  **`report.ts`'s editorial rules are applied, not relearned.** A real emitted phase holds eight tasks and six sit untouched at their entry state; a wall of near-identical diagrams is exactly as useless in a browser as in a PR comment. So the active phase expands only the tasks that MOVED (a tripped phase expands the tasks that tripped it), and the rest collapse. The one concession the medium earns is that a collapsed task keeps its whole panel — waiting-on, controls, picture — behind a disclosure instead of losing it, so on a live lane a collapsed region is still dispatchable one click away.
+
+  **The headless half ships too**, on the existing `./chart/lane` subpath: `replayFeed` / `liveFeed` build a `LaneFeed`, and `laneView(feed, cursor)` is the whole lane at one moment as a value a script or a TUI can read with no DOM. `inspectLaneStates` is `inspectLane` from the leaves rather than from a log — the door a running lane comes through — and `walkedEdgeKey` is now one declaration site for "which edge did this step draw", so a folded timeline and a live tape thicken the same edges.
+
+  Tested against the real fabrika artifacts (`workflow.json`, `events.jsonl`, and `lane status`/`lane history` stdout for three lanes driven by the actual binary, including a four-phase epic), with a real `react-dom/client` root under happy-dom. The strongest assertion folds the epic's log and compares all eight of its phase-2 leaves against `fabrika lane status`'s own stdout, which the page never saw.
+
+  No new dependency: the diagram is emitted as `<pre class="mermaid">` for a host renderer, exactly as the chart inspector does, and the stylesheet is standalone (this page renders no devtools component) with the same prefixed-class, consumer-token contract.
+
+- 3066c6e: Add `./chart/report` (**experimental**): import a `kamp-us/phoenix` fabrika
+  `workflow.json` into charts, and render a running lane as one markdown block.
+
+  `chartFromWorkflow(document)` mirrors fabrika's own lane compiler structurally
+  rather than by name — an `on` string becomes `{ target }`, a two-arm array
+  becomes `{ target, when, otherwise }`, a transition targeting a `type: "history"`
+  node becomes `{ resume: { fallback } }`, the `hist` node itself is dropped
+  (history is an edge property in a chart, not a state), a `type: "final"` becomes
+  `end: true`, and a final reached as a guarded array's fallthrough becomes
+  `end: "error"`. It refuses a document that does not fit with every defect named,
+  never a half-import. The imported charts are runtime-typed (`string` states and
+  events); the compile-time guarantees still come from a chart written as a
+  literal, and the two are held together by a golden test that asserts the
+  importer's edge set against what fabrika's own compiler produces for the two
+  committed templates.
+
+  `laneReport({ workflow, entries, status })` returns markdown that works
+  unchanged in a terminal, a PR comment and an issue comment: one mermaid block
+  per task **in the active phase only** with the current node lit and the walked
+  edges marked, one line per future phase, a "where it is" line off `stateValue`,
+  a "waiting on" line in fabrika's own vocabulary (the operator's `WIP`, the
+  spawned shell, a human's `UNBLOCKED` — and no guess at all for a state nothing
+  routes), a retry line when the budget has been spent, and a timeline table whose
+  `from → to` is recomputed by prefix-folding, because `lane history` deliberately
+  does not store it.
+
+  Two input paths, both supported and asserted to produce identical output:
+  `laneFromFiles(workflowJson, eventsJsonl)` off disk, and
+  `laneFromCli(workflowJson, statusStdout, historyStdout)` off `fabrika lane
+status` / `fabrika lane history`. The second means a standalone inspector can
+  shell out to `fabrika` and needs **zero** phoenix changes.
+
+  **`./chart`: `end` widens from `true` to `true | "error"`.** `true` still means
+  a success final, so every existing chart is unchanged and this is additive.
+  `"error"` declares the failure terminal — the state a guarded edge falls through
+  to when its guard is spent — which is the distinction a driver trips a whole run
+  off and which a chart previously could not express. Finality itself is blind to
+  the polarity: an error final owes no pairs and may declare no edges, exactly as
+  a success final does. Three new derivations read it: `EndPolarity<C, S>`,
+  `SuccessFinal<C>` and `ErrorFinal<C>`.
+
+  **"Waiting on" is derived, and the importer takes provenance at the boundary.** `waitingOn` used to decide what a lane was waiting on by matching hard-coded state names — `queued`, `build`, `review`, `ship`, `blocked`, `human:*` — copied out of fabrika's `wire/lane-brief.ts`. Those names are fabrika's, so an upstream rename turned the report into a confident liar with nothing failing anywhere. The answer is now the events the state routes, grouped by the `from` each declares, and `./chart/report` holds no state name, no event name and no job title.
+
+  `workflow.json` records topology and has never recorded who sends what, so `chartFromWorkflow(document, { from })` — mirrored on `chartFromWorkflowText`, `laneFromFiles` and `laneFromCli` — takes that map **once, at the import boundary**, and everything downstream derives from it. Omit it and every reader degrades honestly: it names the events a state accepts and refuses to say who sends them, the same refusal an unrouted state used to get. A partial map is not rounded up to a whole one.
+
+  **Breaking:** `SHELL_STATES` and `ShellState` are gone. They were a copy of another repo's vocabulary and there is nothing to replace them with — the fact they encoded now lives on the event. New: `WorkflowImportOptions` and `originOf`.
+
+  **The importer is driven by the document's grammar, not its vocabulary.** `chartFromWorkflow` used to enumerate one consumer's six event names (`WIP`, `DONE`, `BLOCKED`, `PASS`, `FAIL`, `UNBLOCKED`) and refuse any document that used a seventh — so a consumer adding an event took the importer offline for every document, not just theirs. An event name a document declares is now, by definition, an event of that document. Every genuinely structural refusal is unchanged: a guarded arm that is not a two-arm array, a transition targeting an unknown state, a machine-level state that is neither a `parallel` phase nor a `final`, a final no `onDone` pair targets, a non-string `trigger`, text that is not JSON — all still refused, still with **every** defect named. Two grammatical rules about names replace the vocabulary check: a spelling that strips to nothing once its namespace is removed (`"ISSUE."`), and one state spelling one event twice (`"ISSUE.WIP"` and `"WIP"` in the same `on`), which used to be a silent overwrite.
+
+  **Breaking:** `OPERATOR_EVENTS`, `OperatorEvent` and `isOperatorEvent` are gone — one more copy of another repo's vocabulary. New: `eventAlphabet(lane)`, which answers the same question by deriving it from the document.
+
+  A guarded arm the document leaves unlabelled now carries `when: "retries remain"` — a description of what the two-arm array already means — rather than defaulting to one consumer's guard name (`retriesRemaining`). A labelled arm still carries the author's own word, verbatim and undereferenced.
+
+- 3066c6e: **`@demlik/tea/chart/lane`** — a lane can now be **run**. `runLane(lane, hands)`
+  returns the `init` and `update` a `Machine` is made of, and `defineMachine`
+  takes them with no cast.
+
+  ```ts
+  const machine = defineMachine<
+    LaneRunState<typeof epic>,
+    LaneRunMsg<typeof epic>,
+    LaneCmd<typeof epic>,
+    Sub<never>,
+    Record<never, never>
+  >({
+    ...runLane(epic, {
+      issue_5729: {
+        parts,
+        boot: () => ({ type: "queued", retries: 0, maxRetries: 2 }),
+      },
+      // already merged on GitHub — this instance boots where it IS.
+      issue_5730: {
+        parts,
+        boot: () => ({ type: "shipped", retries: 0, maxRetries: 2 }),
+      },
+    }),
+    interpret: {
+      "issue_5729.spawn_shell": async (cmd) => spawn(cmd.task) /* … */,
+    },
+  });
+  ```
+
+  - **Routing** reuses the namespacing that was already there. `compile(chart,
+parts, ns)` keys a table `${ns}.${event}`; the lane's `ns` is the task id, so
+    `{ task, event }` is `${task}.${event}` on the wire and a message reaches that
+    task's region and no other. The event stays narrowed to the events **that
+    task's** chart declares.
+  - **Per-instance boot.** `boot()` says where THIS instance starts, typed to that
+    task's own `StateOf<chart>` — an emitted epic boots each child `queued`,
+    `landed` or `frozen` depending on its sub-issue, and `initial: true` becomes
+    the default rather than the law. The lane's own standing is derived at boot
+    too, so a lane whose children all landed before the run started boots straight
+    into `complete` or `tripped`.
+  - **Phase advancement is the fold's, not a copy of it.** The runtime calls
+    `phaseStandings` and the newly-named `laneTerminalReached` — `foldLane`'s own
+    functions — so a run and a report of that run cannot drift. `equiv-lane-run
+.test.ts` drives one lane through the runtime and through the fold over the
+    equivalent event log and diffs every region's state plus the whole derived
+    `deriveLaneStatus` output at every step, over two walks that between them
+    cover every declared arm of the region chart.
+  - **Cmds** leave the lane tagged with the task that emitted them, under the same
+    namespace the replies come back in: `issue_5729.spawn_shell`, carrying
+    `task: "issue_5729"`.
+
+  New exports: `runLane`, `LaneRuntime`, `LaneRunState`, `LaneRegions`,
+  `LaneRunMsg`, `LaneCmd`, `LaneHand`, `LaneHands`, `LaneHandsOf`,
+  `LaneRunChecks`; and from `@demlik/tea/chart/report`, `laneTerminalReached` plus
+  the `LeafStates` the phase walk now takes (`TaskState` still satisfies it — the
+  widening is what lets the runtime call the same function over its own region
+  states).
+
+  Three more authoring mistakes are compile errors naming the offender: a hand for
+  a task the lane does not declare, an instance booted into a state its own chart
+  never declares, and a region whose chart declares a **foreign** event —
+  `keyOf` leaves a foreign name bare under a namespace on purpose, and a bare
+  event addresses no single region.
+
+- 3066c6e: **`@demlik/tea/chart/lane`** — `defineLane` is now generic over its region
+  charts, so a lane built from `defineChart` literals keeps their types.
+
+  `phases` took an `ImportedChart` — `Chart<unknown>` by construction, because the
+  imported door reads a `workflow.json` this repo has never compiled — so a lane
+  assembled from typed charts erased every literal type the chart module exists to
+  preserve, and authoring a typed lane needed a cast. It no longer does:
+
+  ```ts
+  const lane = defineLane({
+    phases: { phase1: { issue_5729: coderChart, issue_5730: coderChart } },
+    terminals: { complete: "complete", tripped: "tripped" },
+  });
+
+  const state: LaneState<typeof lane> = {
+    phases: {
+      phase1: { issue_5729: { type: "build", retries: 0, maxRetries: 2 } },
+    },
+    lane: "running",
+  };
+  const msg: LaneMsg<typeof lane> = { task: "issue_5729", event: "PASS" };
+  ```
+
+  - `LaneState<L>` — the compound state, per phase, per task, each leaf that
+    task's **own** `StateOf<chart>`, narrowed; plus the phase standing and the
+    lane's terminal.
+  - `LaneMsg<L>` — `{ task, event }` with both narrowed, and the event narrowed to
+    the events **that task's** chart declares, not to a union across the lane's
+    charts.
+  - `LanePhaseName`, `LaneTaskId`, `LaneTasksIn`, `LaneTaskChart`, `LanePhaseOf`,
+    `LaneSiblings`, `LaneInitial`, `LaneSuccessFinals`, `LaneErrorFinals`,
+    `LaneTerminal`, `PhaseStanding`, `LaneRegion`, `Lane` are exported alongside.
+
+  Three new authoring mistakes are compile errors naming the offending task: a
+  region that marks no `initial: true`, a region that declares no final in either
+  polarity, and a region that hands a transition to a `{ to, cell }` (nothing in
+  this subpath runs a cell). All three stand down at the imported door, where an
+  imported chart's states are `string` and the question cannot be asked —
+  `defineLane` still refuses those at runtime with `LaneShapeError`.
+
+  **Two doors, one representation** is unchanged and now literal: `defineLane`
+  lowers whichever chart it was handed to the single `ImportedChart`
+  representation, so `foldLane`, `laneReport` and `inspectLane` take an authored
+  lane and an imported one through the same code path. `chartFromWorkflow` is
+  untouched and still reads back as `Chart<unknown>` — the same derivations, at a
+  weaker instantiation.
+
+### Patch Changes
+
+- 3066c6e: **`@demlik/tea/chart/lane/react` (experimental)** — the lane page, read again by a person and fixed where it lied.
+
+  Every item below was found by rendering a real lane in a browser and reading it, not by an assertion. Each now has one that fails without its fix.
+
+  **A live lane no longer dispatches into the present while you are looking at the past.** The scrubber moves the view; the runtime stays where it is. So while the cursor was behind the tape, every control was still enabled, computed its outcome (`→ build`) from the state ON SCREEN, and dispatched into the state that was actually there — a click both mis-stated what it would do and gave no sign it had done it (the only feedback anywhere was `step 3 of 6` becoming `step 3 of 7`). Scrubbing now turns the controls off and says why, through the same "unavailable, with the reason" machinery a replay source has always used.
+
+  **A lane that finished successfully draws its diagrams again.** Only an `active` or `tripped` phase expanded anything, so a lane that ended the way lanes are meant to end rendered zero diagrams — under its own paragraph promising one under every task. The phase a lane ENDED in now expands, by the same rule the active one uses.
+
+  **Why nothing can be dispatched is a fact of the source, and is stated as one.** The sentence used to be scraped back off the first non-refused control; on a finished lane the chart refuses every control, so the page dropped its one explanation exactly where six dead buttons needed it. `LaneViewModel` now carries `noDispatch` and the feed declares it.
+
+  **A refused message is drawn as a step, not as a walk.** A total chart answers everything, so a message nothing routes still lands and still gets a row — rendered `issue_1 DONE review → review` it was indistinguishable from a self-loop the chart declares. `LaneStepView.refused` marks it and the row says "refused, nothing moved".
+
+  **The picture carries polarity.** An error final and a success final were both lit the same blue at the moment one of them was where a task died, while every other surface (chip, badge, stuck panel) said so in red. `stateDiagram-v2` has no per-edge styling, so the lit node wears a class of its own.
+
+  **`"DONE" is not addressed to phase "working" (scope: edges)` is gone.** `scope: "edges"` means the event is live exactly where an edge declares it — it is not a phase name, so the phase test could never pass and the refusal named a phase that had nothing to do with it. `RefusalReason` gains a `no-edge` kind and the sentence is now `"queued" declares no "DONE" edge`. Since `edges` is the default scope, this was most refusals on most charts, and it was the densest jargon on a page that otherwise works hard to teach.
+
+  **Sentences that were wrong when they were said.** A tripped lane is no longer badged `DONE` (that was `deriveLaneStatus`'s internal `done | active` printed raw, one span from the word `tripped`); "N tasks running together" is now the standing's own count, and never says "1 task running together"; a single-phase lane no longer opens "A lane is 1 phase that run in order"; a collapsed task reads "still at `review`" rather than "not started" beside a chip saying `= review`; and a task on an error final speaks of the trip in the tense it happened in.
+
+  **The page reads with no stylesheet at all.** Separators between adjacent inline spans are in the markup, so a bare host gets `5674 · replay · tripped · stopped here` rather than `5674replaytrippeddone`. The stylesheet only makes them quiet.
+
+  **A collapsed diagram is not rendered until it is opened.** All twelve `<pre class="mermaid">` of a twelve-task lane were in the DOM and every mermaid host rendered all twelve; keyed by their own text, one step of the scrubber remounted and re-rendered the lot. The fold now costs what it looks like it costs.
+
+  **`chart/lane/styles.css` is one stylesheet again.** It had been written in two passes, the second re-declaring `.tea-lv`, `.tea-lv-head`, `.tea-lv-panel`, `.tea-lv-stuck`, `.tea-lv-mermaid` and `.tea-lv-steps` wholesale with `.tea-lv-btn` appearing five times — half the first pass was dead by cascade. One authoritative declaration per selector, theme-token fallbacks intact. The cascade had also inverted the page's affordances: the two clickable events rendered as plain text while the four disabled ones kept a dotted box. A button now looks like a button while it can be pressed.
+
 ## 0.7.0
 
 ### Minor Changes
