@@ -22,16 +22,29 @@
  *   defineLane(spec)              → Lane<S>        // author one, typed
  *   laneShape(lane)               → LaneShape      // read any one, derived
  *   inspectLane(lane, entries)    → LaneInspection // the headless view
+ *   runLane(lane, hands)          → { init, update } // …and run one
  *   LaneState<L> / LaneMsg<L>                      // its alphabets, derived
  * ```
  *
- * DRAW, NOT AUTHOR-AND-RUN — the boundary, stated up front because it is what
- * keeps this module small. Everything here DESCRIBES, FOLDS and DRAWS a lane.
- * Nothing here runs one: no per-instance boot override, no router dispatching
- * `ISSUE_5729.DONE` to region 5729, nothing that makes a lane dispatchable as a
- * `Machine`. fabrika folds its own log and owns its own supervision; this reads
- * the result. A lane you can draw is a smaller thing than a lane you can run,
- * and it was the missing one.
+ * RUNNING ONE. {@link runLane} compiles each region with `compile(chart, parts,
+ * taskId)` — the task id IS the namespace, so a `{ task, event }` message is
+ * `${task}.${event}` on the wire and the routing needed no scheme of its own —
+ * and hands back the `init` and `update` a `Machine` is made of. `defineMachine
+ * ({ ...runLane(lane, hands), interpret })` takes them with no cast. Each
+ * instance boots where IT is rather than at its chart's `initial: true` (an
+ * emitted epic boots its children `queued`, `landed` or `frozen` depending on
+ * the sub-issue), and a region's cmds leave the lane tagged with the task that
+ * emitted them.
+ *
+ * ONE ADVANCEMENT RULE, NOT TWO. A phase completes when every region in it
+ * reaches a final, and the lane then advances or lands on `complete`/`tripped`
+ * per the finals' polarity. The runtime does not re-implement that: it calls
+ * `phaseStandings` + `laneTerminalReached`, which are the FOLD's own functions,
+ * so a run and a report of that run cannot drift. `equiv-lane-run.test.ts`
+ * drives both and diffs the whole state at every step.
+ *
+ * What is still the host's: `interpret` (a lane knows nothing about the shells
+ * its cmds run in), supervision, and the log. fabrika keeps folding its own.
  *
  * ONE LANE REPRESENTATION, TWO DOORS. {@link defineLane} and
  * `chartFromWorkflow` (in `@demlik/tea/chart/report`) both produce the same
@@ -66,6 +79,18 @@ export {
   type LaneTaskInspection,
   type StuckReason,
 } from "./inspect";
+export {
+  type LaneCmd,
+  type LaneHand,
+  type LaneHands,
+  type LaneHandsOf,
+  type LaneRegions,
+  type LaneRunChecks,
+  type LaneRunMsg,
+  type LaneRunState,
+  type LaneRuntime,
+  runLane,
+} from "./run";
 export {
   defineLane,
   type Lane,
