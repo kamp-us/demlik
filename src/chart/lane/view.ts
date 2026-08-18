@@ -514,6 +514,13 @@ function expandedIn(
   standing: PhaseStanding,
   tasks: readonly LaneTaskView[],
 ): readonly string[] {
+  // A TRIPPED phase expands the tasks that tripped it. `report.ts` gives that
+  // phase one line and that is right for a comment, where the reader is going
+  // to click through to the lane anyway. On the screen they came for, the task
+  // that ended the lane is the whole reason they are here.
+  if (standing === "tripped") {
+    return tasks.filter((t) => t.endPolarity === "error").map((t) => t.task);
+  }
   if (standing !== "active") return [];
   const moved = tasks.filter((t) => t.moved).map((t) => t.task);
   if (moved.length > 0) return moved;

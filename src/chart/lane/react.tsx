@@ -27,10 +27,10 @@
  *   log; the code bodies that would run an edge do not exist here". The lane
  *   moves by its log and by nothing else, and the scrubber runs over that log.
  *
- *   LIVE — the controls dispatch. A legal event with a sample sends
- *   `${task}.${event}`; a legal event whose payload has no sample says so
- *   (`ty<T>()` is `{}` at runtime, so no derivation recovers the shape); a
- *   refused event is refused by the CHART, and says which mechanism refused it.
+ *   LIVE — the controls dispatch. A legal event sends `${task}.${event}`, the
+ *   addressed form `compile(chart, parts, taskId)` already keys the table by.
+ *   A refused one is still on screen, refused by the CHART rather than by the
+ *   source, and saying which mechanism refused it.
  *
  * The same discipline covers the two questions one source cannot answer at all:
  * a live tape carries the ORDER of its msgs and no wall-clock, so the timeline's
@@ -47,10 +47,14 @@
  * emitted epic that a phase holds eight tasks and six of them sit untouched at
  * their entry state, and that drawing all eight produces a wall nobody reads.
  * That judgement is not relearned here: only the ACTIVE phase expands, and
- * inside it only the tasks that have MOVED. The one concession the medium earns
- * is that a screen can put an untouched task's picture behind a disclosure
- * instead of dropping it — the reader who wants the seventh diagram can have it,
- * and the reader who wants the answer is not made to scroll past six.
+ * inside it only the tasks that have MOVED (plus, in a TRIPPED phase, the tasks
+ * that tripped it — on the screen someone opened about a stopped lane, that task
+ * is the whole reason they are here). The one concession the medium earns is
+ * that a collapsed task keeps its entire panel — waiting-on, controls, picture —
+ * behind a disclosure instead of losing it. The reader who wants the seventh
+ * diagram can have it, the reader who wants the answer is not made to scroll
+ * past six, and on a LIVE lane a collapsed region is still dispatchable one
+ * click of the triangle away.
  *
  * NO NEW DEPENDENCY. The diagram is emitted as `<pre class="mermaid">` for a
  * host renderer, exactly as `<ChartInspector>` does — the text is readable with
@@ -114,6 +118,13 @@ export interface LaneViewProps {
  * prop: `ty<T>()` is `{}` at runtime, so a payload's shape is erased before any
  * runtime code could read it. Optional per task, because a task whose events
  * declare no payload has nothing to supply.
+ *
+ * WHAT A LANE LOSES, said here rather than found out. `defineLane` LOWERS its
+ * charts to the runtime-typed form the fold and the drawing share, and that form
+ * records which events a state routes and NOT which of them declare a payload.
+ * So no control is ever reported as blocked for want of a sample: a msg is built
+ * either way, with the sample merged in when one was given. Supply one where a
+ * guard reads a payload field, and the guard preview reads the field you meant.
  */
 export type LaneSamples<L> = {
   readonly [T in LaneTaskId<L>]?: Samples<LaneTaskChart<L, T>>;
@@ -487,7 +498,22 @@ function TaskPanel({
       ? `nothing — this task landed on the error final \`${task.state}\`, and \`${task.phase}\` will trip the lane when its siblings finish`
       : "nothing — this task is final");
 
-  const diagram = <pre className="mermaid tea-lv-mermaid">{task.diagram}</pre>;
+  // THE SAME BODY EITHER WAY, and that is the point of the disclosure: the
+  // collapse hides the wall, it does not withhold the task. A live lane's
+  // collapsed region is still dispatchable, one click of the triangle away —
+  // which is exactly what a comment could not have offered.
+  const body = (
+    <>
+      <p className="tea-lv-waiting">waiting on: {waiting}</p>
+      <Budget task={task} />
+      <div className="tea-lv-controls">
+        {task.controls.map((control) => (
+          <Control key={control.event} control={control} send={send} />
+        ))}
+      </div>
+      <pre className="mermaid tea-lv-mermaid">{task.diagram}</pre>
+    </>
+  );
 
   if (!expanded) {
     return (
@@ -499,8 +525,7 @@ function TaskPanel({
             {task.moved ? "" : "· not started"}
           </span>
         </summary>
-        <p className="tea-lv-waiting">waiting on: {waiting}</p>
-        {diagram}
+        {body}
       </details>
     );
   }
@@ -516,14 +541,7 @@ function TaskPanel({
           <span className="tea-lv-muted"> · resumes to {task.was}</span>
         )}
       </h4>
-      <p className="tea-lv-waiting">waiting on: {waiting}</p>
-      <Budget task={task} />
-      <div className="tea-lv-controls">
-        {task.controls.map((control) => (
-          <Control key={control.event} control={control} send={send} />
-        ))}
-      </div>
-      {diagram}
+      {body}
     </div>
   );
 }
@@ -591,8 +609,13 @@ function Control({
       </span>
       {/* The unavailability, said on screen rather than left to a tooltip: this
           is the whole difference between "the button is grey" and "this lane has
-          no code bodies, so nothing here can be dispatched". */}
-      {why === undefined ? null : (
+          no code bodies, so nothing here can be dispatched".
+
+          Not on a REFUSED control, and that is not an exception to the rule: a
+          refused control's reason is already its content, and it is the better
+          answer — the CHART refused this, so which source is looking at it is
+          beside the point. */}
+      {why === undefined || control.refused ? null : (
         <span className="tea-lv-unavailable" data-unavailable="dispatch">
           {why}
         </span>
