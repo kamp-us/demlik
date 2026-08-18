@@ -199,18 +199,16 @@ describe("inspectLane — the preview is given the region's ctx", () => {
       () => ({ parts, samples: { FAIL: {} } }) as never,
     );
     const task = seen.phases[0]?.tasks[0];
-    return task?.events.find((e) => e.event === "FAIL");
+    return task?.events.find((e) => e.event === "FAIL")?.guard;
   };
 
   it("takes the THEN arm while the budget is unspent", () => {
-    const fail = previewOf(leaf({ type: "build", retries: 0, maxRetries: 2 }));
-    expect(fail?.guard?.branch).toBe("then");
-    expect(fail?.guard?.target).toBe("build");
+    const guard = previewOf(leaf({ type: "build", retries: 0, maxRetries: 2 }));
+    expect(guard).toMatchObject({ branch: "then", target: "build" });
   });
 
   it("takes the ELSE arm once it is spent — the same guard, a different ctx", () => {
-    const fail = previewOf(leaf({ type: "build", retries: 2, maxRetries: 2 }));
-    expect(fail?.guard?.branch).toBe("else");
-    expect(fail?.guard?.target).toBe("frozen");
+    const guard = previewOf(leaf({ type: "build", retries: 2, maxRetries: 2 }));
+    expect(guard).toMatchObject({ branch: "else", target: "frozen" });
   });
 });

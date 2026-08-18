@@ -449,6 +449,7 @@ describe("the lowering keeps what the fold reads", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 describe("lowering keeps what a click FIRES", () => {
   const emitter = defineChart({
+    ctx: ty<{ readonly retries: number; readonly maxRetries: number }>(),
     events: { GO: { scope: "edges" }, FAIL: { scope: "edges" } },
     cmds: { spawn: ty<{ id: string }>(), page: ty<{ id: string }>() },
     states: {
