@@ -31,25 +31,28 @@
 
 import type {
   CellEdgeKey,
+  Chart,
   ErrorFinal,
   EventName,
   EventOrigin,
   InitialState,
   StateName,
   StateOf,
+  Strict,
   SuccessFinal,
+  Total,
+  Ty,
 } from "../graph";
+import type { PhaseStanding } from "../report/fold";
 import {
   endPolarityOf,
   type ImportedChart,
   type ImportedEdge,
   type ImportedLane,
   type ImportedNode,
+  RETRY_BUDGET,
   statesOf,
 } from "../report/workflow";
-
-/** The retry budget a task inherits when the lane names none — fabrika's. */
-const RETRY_BUDGET = 2;
 
 // ── the two doors, and the ONE thing they have in common ───────────────────
 //
@@ -121,16 +124,94 @@ export interface LaneSpec {
 // offender — which the object-literal check then rejects, with the rule in the
 // diagnostic instead of a `never` the author has to reverse-engineer.
 
-type TaskIdsIn<P> = { [K in keyof P]: keyof P[K] }[keyof P];
+// A NUMERIC KEY IS A KEY. fabrika's task ids are GitHub issue numbers, so
+// `{ 5729: coder }` is the obvious spelling of a phase and an author will
+// reach for it — but `keyof { 5729: … }` is the NUMBER `5729`, and the older
+// `Extract<keyof …, string>` annihilated it: every alphabet the lane derives
+// went `never`, no hand was demanded and the CORRECT hand was rejected. So a
+// key is normalised to the way every OTHER layer already spells it — the log's
+// `task` field, the `${task}.${event}` wire key, `Object.entries` — which is
+// as a string. `Keyed` re-keys the record itself so an indexed access lands,
+// and both leave a degenerate `Record<string, …>` exactly as degenerate as it
+// was, so {@link LaneLiteralAlphabets} below still fires.
+type Key<K> = K extends string | number ? `${K}` : never;
+type Keyed<R> = { [K in keyof R as Key<K>]: R[K] };
 
-/** Task ids declared under more than one phase. */
-type DuplicateTasks<P> = {
-  [K in keyof P]: Extract<keyof P[K], TaskIdsIn<Omit<P, K>>>;
-}[keyof P];
+type TaskIdsIn<P> = { [K in keyof P]: Key<keyof P[K]> }[keyof P];
+
+/**
+ * Task ids declared under more than one phase.
+ *
+ * DEGENERACY-GUARDED, and not for tidiness: `Omit<P, K>` over a `P` with an
+ * index signature is `P` again, so at a computed-key phase record this reads
+ * every task as declared twice and accuses the author of a duplicate they did
+ * not write. {@link LaneLiteralAlphabets} is what actually went wrong there,
+ * and it is ordered ahead of this so it is what the author is told.
+ */
+type DuplicateTasks<P> = [IsDegenerate<TaskIdsIn<P>>] extends [true]
+  ? never
+  : {
+      [K in keyof P]: Extract<Key<keyof P[K]>, TaskIdsIn<Omit<P, K>>>;
+    }[keyof P];
 
 /** Phases whose task record is empty — a phase that completes on arrival. */
 type EmptyPhases<P> = {
-  [K in keyof P]: [keyof P[K]] extends [never] ? K : never;
+  [K in keyof P]: [keyof P[K]] extends [never] ? Key<K> : never;
+}[keyof P];
+
+// ── the lane's own literal-alphabet gate ───────────────────────────────────
+//
+// `graph.ts` has `__stateNamesMustBeLiteralsNotAComputedStringKey` for exactly
+// one failure mode: an alphabet that stopped being a union of literals is not a
+// weakened chart, it is a chart with the checking SWITCHED OFF, and nothing
+// says so. The lane had no equivalent, and it has the same failure mode one
+// level up — `{ [dyn]: coder }` or `Object.fromEntries(ids.map(…))` degrades
+// `LaneTaskId` to `string`, so no hand is required, an invented task id is
+// accepted and `__laneHandNamesAnUnknownTask` is dead code.
+//
+// The terminals are in here for the SAME reason and it is worth stating,
+// because the way an author reaches it is not exotic: hoisting the terminals to
+// a variable without `as const` widens them to `string`, which silently
+// disables `__terminalCollidesWithAPhase` and makes `LaneTerminal<L>` the bare
+// `string`. Told as "this object lost its literal types", it is one `as const`;
+// discovered later, it is a lane whose ending is unnamed.
+
+/** The three alphabets a lane derives, each refused where it degenerated. */
+type LaneLiteralAlphabets<S> = ([IsDegenerate<Key<keyof PhasesOf<S>>>] extends [
+  true,
+]
+  ? { readonly __lanePhaseNamesMustBeLiteralsAddAsConst: true }
+  : unknown) &
+  ([IsDegenerate<TaskIdsIn<PhasesOf<S>>>] extends [true]
+    ? { readonly __laneTaskIdsMustBeLiteralsAddAsConst: true }
+    : unknown) &
+  ([IsDegenerate<TerminalsOf<S>>] extends [true]
+    ? { readonly __laneTerminalsMustBeLiteralsAddAsConst: true }
+    : unknown);
+
+/**
+ * Task ids, or event names, carrying a dot.
+ *
+ * `${task}.${event}` IS the lane's wire key — `runLane` compiles each region
+ * under `ns = taskId` and `foldLane` splits an incoming name at the FIRST dot —
+ * so a dot on either side re-partitions the key space. Task `a` + event `b.GO`
+ * and task `a.b` + event `GO` both register `"a.b.GO"`: last writer wins, one
+ * task's event is unreachable forever, and a message addressed to `a` moves
+ * `a.b`. And task `epic.issue_1` emits a log line the splitter can never route
+ * back. Banning the dot makes the collision unrepresentable for every pairing
+ * at once, which is the same move `graph.ts` makes for a foreign event name and
+ * for a state name.
+ */
+type DottedTaskIds<P> = Extract<TaskIdsIn<P>, `${string}.${string}`>;
+
+type DottedEventTasks<P> = {
+  [K in keyof P]: {
+    [T in keyof P[K]]: [IsDegenerate<EventName<P[K][T]>>] extends [true]
+      ? never
+      : [Extract<EventName<P[K][T]>, `${string}.${string}`>] extends [never]
+        ? never
+        : Key<T>;
+  }[keyof P[K]];
 }[keyof P];
 
 // ── and the three the TYPED door adds ──────────────────────────────────────
@@ -144,10 +225,23 @@ type EmptyPhases<P> = {
 // the imported door still needs, and they are now the SECOND net under the
 // typed one rather than the only net under both.
 
-/** Task ids whose chart hands a transition to a hand-written cell. */
+/**
+ * Task ids whose chart hands a transition to a hand-written cell.
+ *
+ * Degeneracy-guarded like its two siblings below: `CellEdgeKey` over an
+ * imported chart is `never` for the same reason it is `never` over a chart with
+ * no cell edge, and reading the first as the second is how a check that cannot
+ * be asked pretends to have been answered. It happens to be the SAFE direction
+ * here — the answer is "no cell", which is what the imported door always
+ * says — but a check that is right by luck is a check that stops being right.
+ */
 type CellDelegatingTasks<P> = {
   [K in keyof P]: {
-    [T in keyof P[K]]: [CellEdgeKey<P[K][T]>] extends [never] ? never : T;
+    [T in keyof P[K]]: [IsDegenerate<StateName<P[K][T]>>] extends [true]
+      ? never
+      : [CellEdgeKey<P[K][T]>] extends [never]
+        ? never
+        : Key<T>;
   }[keyof P[K]];
 }[keyof P];
 
@@ -157,7 +251,29 @@ type NoInitialTasks<P> = {
     [T in keyof P[K]]: [IsDegenerate<StateName<P[K][T]>>] extends [true]
       ? never
       : [InitialState<P[K][T]>] extends [never]
-        ? T
+        ? Key<T>
+        : never;
+  }[keyof P[K]];
+}[keyof P];
+
+/**
+ * Task ids whose chart marks MORE THAN ONE `initial: true`.
+ *
+ * Zero and two are both wrong and only zero was caught. Two is the worse of
+ * the pair, because it does not fail — it splits: `laneShape` walked the states
+ * and kept the LAST one it saw, `initialOf` (and therefore the fold, and
+ * therefore every report) takes the FIRST, so the report printed a start state
+ * the fold never booted into. `graph.ts` refuses the same thing on a single
+ * chart with `__chartDeclaresManyInitialStates`; the lane door had dropped it,
+ * because a lane region's entry is per-INSTANCE (`boot()`) and the check that
+ * used to sit on the chart's own `InitialData` went with it.
+ */
+type ManyInitialTasks<P> = {
+  [K in keyof P]: {
+    [T in keyof P[K]]: [IsDegenerate<StateName<P[K][T]>>] extends [true]
+      ? never
+      : [IsUnion<InitialState<P[K][T]>>] extends [true]
+        ? Key<T>
         : never;
   }[keyof P[K]];
 }[keyof P];
@@ -168,8 +284,104 @@ type NoFinalTasks<P> = {
     [T in keyof P[K]]: [IsDegenerate<StateName<P[K][T]>>] extends [true]
       ? never
       : [SuccessFinal<P[K][T]> | ErrorFinal<P[K][T]>] extends [never]
-        ? T
+        ? Key<T>
         : never;
+  }[keyof P[K]];
+}[keyof P];
+
+/** `graph.ts`'s own union test — a `T` that is not a single member. */
+type IsUnion<T, U = T> = T extends unknown
+  ? [U] extends [T]
+    ? false
+    : true
+  : never;
+
+// ── the guarded edge, and the one predicate a lane can fold ────────────────
+//
+// THE FOLD OWNS THE GUARD. `report/fold.ts` walks a guarded edge with the one
+// inline predicate `retries < maxRetries`, because a `workflow.json` carries a
+// guard NAME and never a guard BODY — the array IS the retry guard, in fabrika
+// and here. That is exactly right for the imported door and it was applied,
+// unstated, to the typed one as well: `lowerRegion` kept the name and dropped
+// everything else, so a chart guarded on `amount < 100` and driven with
+// `amount: 5000` RAN to `declined` and FOLDED to `captured` — a tripped run
+// reported complete, with a `retries: 1/2` invented on a chart that has no
+// retry concept.
+//
+// Carrying the real predicate onto the lowered edge is the fix that would cost
+// the typed door nothing, and it is not available: a `defineChart` guard's BODY
+// lives in `Parts`, which is handed to `compile`/`runLane` and which
+// `defineLane` never sees. There is no seam at which the fold could be given
+// it, so a lane whose guard is not the retry guard is a lane this module cannot
+// fold — and the honest move is to refuse it at the door rather than to answer
+// it wrongly in a report.
+//
+// What IS checkable is the contract the fold's predicate is written against:
+// the region's `ctx` carries the two numbers it reads. That is necessary and
+// not sufficient (a guard body could still be about something else while the
+// budget rides along), so the marker names the contract rather than claiming to
+// have read the author's mind — but it catches the case the reviewer found,
+// where a lane region reaches for `when` meaning something the lane cannot see.
+
+/** A chart's `ctx`, as declared — the `Ty<…>` payload, unwrapped. */
+type LaneCtxOf<C> = C extends { readonly ctx: Ty<infer T> } ? T : unknown;
+
+/** Does any of `C`'s edges carry a `when`? */
+type HasGuardedEdge<C> = C extends { readonly states: infer G }
+  ? {
+      [P in keyof G]: {
+        [S in keyof G[P]]: G[P][S] extends { readonly on: infer O }
+          ? {
+              [E in keyof O]: O[E] extends { readonly when: string }
+                ? true
+                : never;
+            }[keyof O]
+          : never;
+      }[keyof G[P]];
+    }[keyof G]
+  : never;
+
+/** The budget the fold's guarded arm reads, and the only shape it can read. */
+type RetryBudgetCtx = { readonly retries: number; readonly maxRetries: number };
+
+/** Task ids that guard an edge on something the fold cannot evaluate. */
+type GuardsOffTheBudgetTasks<P> = {
+  [K in keyof P]: {
+    [T in keyof P[K]]: [IsDegenerate<StateName<P[K][T]>>] extends [true]
+      ? never
+      : [HasGuardedEdge<P[K][T]>] extends [never]
+        ? never
+        : LaneCtxOf<P[K][T]> extends RetryBudgetCtx
+          ? never
+          : Key<T>;
+  }[keyof P[K]];
+}[keyof P];
+
+/**
+ * Task ids whose region never went through `defineChart`.
+ *
+ * `LaneRegion` is the structural minimum BOTH doors satisfy, which is what lets
+ * one type parameter carry either — and it is also a hole: a hand-written
+ * object of that shape passes it, so `Strict` and `Total` never run, a typo'd
+ * target is never checked, and the fold lands the task in a state that does not
+ * exist and leaves it there forever with no diagnostic. A brand stamped by
+ * `defineChart` would be the tighter fix; it is not available from here, since
+ * that would change `defineChart`'s own return type. So the region is put
+ * through the checking door FROM here instead: a chart that satisfies its own
+ * F-bounded constraint plus `Strict` and `Total` is a chart `defineChart` would
+ * have accepted, whatever produced it, and one that does not is refused by the
+ * name of the door it skipped.
+ *
+ * Stands down at the imported door, where `Chart<C>` is not a question an
+ * `ImportedChart` can be asked.
+ */
+type UncheckedRegionTasks<P> = {
+  [K in keyof P]: {
+    [T in keyof P[K]]: [IsDegenerate<StateName<P[K][T]>>] extends [true]
+      ? never
+      : [P[K][T]] extends [Chart<P[K][T]> & Strict<P[K][T]> & Total<P[K][T]>]
+        ? never
+        : Key<T>;
   }[keyof P[K]];
 }[keyof P];
 
@@ -179,31 +391,43 @@ type TerminalsOf<S> = S extends {
 }
   ? C | T
   : never;
-type RetryKeysOf<S> = S extends { readonly retries: infer R } ? keyof R : never;
+type RetryKeysOf<S> = S extends { readonly retries: infer R }
+  ? Key<keyof R>
+  : never;
 
 /**
- * The seven authoring mistakes assignability can catch — four about the lane's
- * own shape, three about the charts it was handed.
+ * The authoring mistakes assignability can catch — the lane's own shape, and
+ * the charts it was handed.
  *
- * The three chart-shaped ones stand down at the imported door, where the answer
- * would be a guess rather than a fact, and {@link defineLane}'s runtime checks
- * catch them there instead. Where a guarantee cannot be had, it is thrown for
- * rather than pretended.
+ * THE ORDER IS LOAD-BEARING. {@link LaneLiteralAlphabets} comes first because
+ * every check under it is a question about a union of literals, and at a
+ * degenerate alphabet those questions do not merely go unanswered — they answer
+ * WRONGLY. With two phases and a computed task key the old order accused the
+ * author of `__taskDeclaredInTwoPhases` for a task declared exactly once, which
+ * is a diagnostic that sends them looking in the one place the mistake is not.
+ * A check that cannot be asked stands down; a check that would lie is ordered
+ * behind the one that names the real cause.
+ *
+ * The chart-shaped ones stand down at the imported door, where the answer would
+ * be a guess rather than a fact, and {@link defineLane}'s runtime checks catch
+ * what they can there instead. Where a guarantee cannot be had, it is thrown
+ * for rather than pretended.
  */
-export type LaneChecks<S> = ([DuplicateTasks<PhasesOf<S>>] extends [never]
-  ? unknown
-  : {
-      readonly __taskDeclaredInTwoPhases: DuplicateTasks<PhasesOf<S>>;
-    }) &
+export type LaneChecks<S> = LaneLiteralAlphabets<S> &
+  ([DuplicateTasks<PhasesOf<S>>] extends [never]
+    ? unknown
+    : {
+        readonly __taskDeclaredInTwoPhases: DuplicateTasks<PhasesOf<S>>;
+      }) &
   ([EmptyPhases<PhasesOf<S>>] extends [never]
     ? unknown
     : { readonly __phaseDeclaresNoTasks: EmptyPhases<PhasesOf<S>> }) &
-  ([Extract<TerminalsOf<S>, keyof PhasesOf<S>>] extends [never]
+  ([Extract<TerminalsOf<S>, Key<keyof PhasesOf<S>>>] extends [never]
     ? unknown
     : {
         readonly __terminalCollidesWithAPhase: Extract<
           TerminalsOf<S>,
-          keyof PhasesOf<S>
+          Key<keyof PhasesOf<S>>
         >;
       }) &
   ([Exclude<RetryKeysOf<S>, TaskIdsIn<PhasesOf<S>>>] extends [never]
@@ -212,6 +436,23 @@ export type LaneChecks<S> = ([DuplicateTasks<PhasesOf<S>>] extends [never]
         readonly __retryBudgetNamesAnUnknownTask: Exclude<
           RetryKeysOf<S>,
           TaskIdsIn<PhasesOf<S>>
+        >;
+      }) &
+  ([DottedTaskIds<PhasesOf<S>>] extends [never]
+    ? unknown
+    : { readonly __laneTaskIdCannotContainADot: DottedTaskIds<PhasesOf<S>> }) &
+  ([DottedEventTasks<PhasesOf<S>>] extends [never]
+    ? unknown
+    : {
+        readonly __laneRegionEventNameCannotContainADot: DottedEventTasks<
+          PhasesOf<S>
+        >;
+      }) &
+  ([UncheckedRegionTasks<PhasesOf<S>>] extends [never]
+    ? unknown
+    : {
+        readonly __laneRegionDidNotComeThroughDefineChart: UncheckedRegionTasks<
+          PhasesOf<S>
         >;
       }) &
   ([CellDelegatingTasks<PhasesOf<S>>] extends [never]
@@ -225,6 +466,20 @@ export type LaneChecks<S> = ([DuplicateTasks<PhasesOf<S>>] extends [never]
     ? unknown
     : {
         readonly __laneTaskChartMarksNoInitialState: NoInitialTasks<
+          PhasesOf<S>
+        >;
+      }) &
+  ([ManyInitialTasks<PhasesOf<S>>] extends [never]
+    ? unknown
+    : {
+        readonly __laneTaskChartMarksManyInitialStates: ManyInitialTasks<
+          PhasesOf<S>
+        >;
+      }) &
+  ([GuardsOffTheBudgetTasks<PhasesOf<S>>] extends [never]
+    ? unknown
+    : {
+        readonly __laneRegionGuardsOnSomethingOtherThanTheRetryBudget: GuardsOffTheBudgetTasks<
           PhasesOf<S>
         >;
       }) &
@@ -271,12 +526,76 @@ const lowerEdge = (edge: unknown): ImportedEdge | undefined => {
  * lowering rather than a second code path: the imported door goes through it
  * and comes out the value it went in as.
  */
+const isString = (v: unknown): v is string => typeof v === "string";
+
+/** `compile`'s own reading of `scope`: a word, or a list of them. */
+const scopeList = (scope: unknown): readonly string[] =>
+  typeof scope === "string"
+    ? [scope]
+    : Array.isArray(scope)
+      ? scope.filter(isString)
+      : ["edges"];
+
+/**
+ * The events `state` ACCEPTS AND DROPS — the refusal set, read off the chart
+ * once at lowering instead of asked at dispatch.
+ *
+ * THE DIVERGENCE THIS CLOSES. `compile.ts` self-loops a pair the state's
+ * `ignore` names or the event's `scope` does not address, and throws only on a
+ * live-but-undecided pair. The lowered chart could not say "refused", so
+ * `stepTask` threw on a log `runLane` had accepted — a report calling a run
+ * unreplayable when the run had replayed it. The fold cannot ask the chart at
+ * dispatch time (its states are `string` by then), so the answer is computed
+ * here and carried.
+ *
+ * WHAT IS AND IS NOT IN THE SET, because the boundary is the whole design. A
+ * refusal the chart DECLARES is carried: an `ignore` entry, and an event whose
+ * `scope` names phases that do not include this state's. An `"edges"` event
+ * that this state simply does not route is NOT — `graph.ts` is explicit that
+ * such a pair is "not ignored, it is simply not addressed to that state", and
+ * making it a refusal here would change the IMPORTED door, where every event is
+ * `scope: "edges"` by construction: a `workflow.json` log naming an unrouted
+ * event would stop being refused, which is precisely the check fabrika's own
+ * fold keeps and `fold.test.ts` pins. So the rule is exactly the one an
+ * imported chart cannot trigger, and lowering an imported chart is still the
+ * identity.
+ */
+const refusalsAt = (
+  region: LaneRegion,
+  group: string,
+  node: Readonly<Record<string, unknown>>,
+  routed: ReadonlySet<string>,
+): readonly string[] => {
+  const ignored = new Set(
+    Array.isArray(node.ignore) ? node.ignore.filter(isString) : [],
+  );
+  const isFinal = node.end !== undefined;
+  const out: string[] = [];
+  for (const [event, decl] of Object.entries(region.events)) {
+    if (routed.has(event)) continue;
+    const scope = scopeList(isRecord(decl) ? decl.scope : undefined);
+    // "edges" is not a phase, so an "edges" event is addressed to no state by
+    // broadcast — and that is the case left OUT. What is refused is an event
+    // broadcast SOMEWHERE ELSE, an event broadcast HERE at a state that is
+    // final (a final accepts nothing and owes nothing, which is why `Total`
+    // exempts it from the pair and why `compile` self-loops it), or an event
+    // this state's `ignore` names.
+    const broadcast = scope.some((s) => s !== "edges");
+    const live = scope.some((s) => s === "all" || s === group);
+    if (ignored.has(event) || (broadcast && (!live || isFinal))) {
+      out.push(event);
+    }
+  }
+  return out;
+};
+
 const lowerRegion = (
   taskId: string,
   region: LaneRegion,
   defects: string[],
 ): ImportedChart => {
   const states: Record<string, Record<string, ImportedNode>> = {};
+  const refusals: Record<string, readonly string[]> = {};
   for (const [group, nodes] of Object.entries(region.states)) {
     const lowered: Record<string, ImportedNode> = {};
     for (const [name, node] of Object.entries(nodes)) {
@@ -297,6 +616,8 @@ const lowerRegion = (
           on[event] = low;
         }
       }
+      const refused = refusalsAt(region, group, node, new Set(Object.keys(on)));
+      if (refused.length > 0) refusals[name] = refused;
       lowered[name] = {
         ...(node.initial === true ? { initial: true as const } : {}),
         ...(Object.keys(on).length > 0 ? { on } : {}),
@@ -332,7 +653,11 @@ const lowerRegion = (
     };
   }
 
-  return { events, states };
+  return {
+    events,
+    states,
+    ...(Object.keys(refusals).length > 0 ? { refusals } : {}),
+  };
 };
 
 /** The lane does not hold together — with every defect named, never a half-lane. */
@@ -406,9 +731,20 @@ export function defineLane<const S extends LaneOf<S>>(spec: S): Lane<S> {
       const chart = lowerRegion(taskId, region, defects);
       charts[taskId] = chart;
       const nodes = [...statesOf(chart).values()];
-      if (!nodes.some((node) => node.initial === true)) {
+      const initials = nodes.filter((node) => node.initial === true).length;
+      if (initials === 0) {
         defects.push(
           `task "${taskId}": its chart marks no state \`initial: true\` — the fold has no zero to start from`,
+        );
+      }
+      // TWO is as wrong as zero, and it is the worse of the pair because it
+      // does not fail — it SPLITS. `laneShape` and `initialOf` walk the same
+      // states and disagree about which one they mean, so the report prints a
+      // start state the fold never booted into. Refused here as well as in the
+      // types, because the imported door has no marker to stand behind.
+      if (initials > 1) {
+        defects.push(
+          `task "${taskId}": its chart marks ${initials} states \`initial: true\` — a fold has one zero, and which one it picks would be an accident of key order`,
         );
       }
       if (!nodes.some((node) => node.end !== undefined)) {
@@ -461,7 +797,18 @@ interface ImportedSpec {
 /** The spec a lane was authored from — an imported lane carries none. */
 type SpecOf<L> = L extends { readonly spec: infer S } ? S : ImportedSpec;
 
-type Phases<L> = PhasesOf<SpecOf<L>>;
+/**
+ * The lane's phases, keyed the way every other layer keys them: by strings.
+ *
+ * A phase or a task written as a number (`{ 5729: coder }` — and fabrika's task
+ * ids ARE GitHub issue numbers) is a key like any other; it is only `keyof`
+ * that hands it back as a number. Normalising here, ONCE, is what lets every
+ * derivation below stay the plain formula it was.
+ */
+type Phases<L> = Keyed<PhasesOf<SpecOf<L>>>;
+
+/** The tasks of phase `P`, keyed by string for the same reason. */
+type TasksOf<L, P extends LanePhaseName<L>> = Keyed<Phases<L>[P]>;
 
 /**
  * `[string] extends [N]` — the alphabet stopped being a union of literals.
@@ -486,7 +833,7 @@ export type LanePhaseName<L> = Extract<keyof Phases<L>, string>;
 
 /** The task ids declared in phase `P`. */
 export type LaneTasksIn<L, P extends LanePhaseName<L>> = Extract<
-  keyof Phases<L>[P],
+  keyof TasksOf<L, P>,
   string
 >;
 
@@ -497,14 +844,14 @@ export type LaneTaskId<L> = {
 
 /** The chart task `T` runs — ITS chart, not a union over the lane's charts. */
 export type LaneTaskChart<L, T extends LaneTaskId<L>> = {
-  [P in LanePhaseName<L>]: T extends keyof Phases<L>[P]
-    ? Phases<L>[P][T]
+  [P in LanePhaseName<L>]: T extends keyof TasksOf<L, P>
+    ? TasksOf<L, P>[T]
     : never;
 }[LanePhaseName<L>];
 
 /** The phase task `T` runs in. `defineLane` refuses a task with two. */
 export type LanePhaseOf<L, T extends LaneTaskId<L>> = {
-  [P in LanePhaseName<L>]: T extends keyof Phases<L>[P] ? P : never;
+  [P in LanePhaseName<L>]: T extends keyof TasksOf<L, P> ? P : never;
 }[LanePhaseName<L>];
 
 /** The tasks running BESIDE `T` — its phase's set, minus itself. */
@@ -537,12 +884,16 @@ export type LaneTerminal<L> = TerminalsOf<SpecOf<L>>;
 /**
  * A phase that is not carrying task states.
  *
- * The vocabulary is the inspector's, on purpose: a phase is `waiting` before
- * the lane reaches it and `complete`/`tripped` after it leaves, and in exactly
- * one of those three readings there is no task map to hold — while it is
- * ACTIVE, the phase IS its tasks' states.
+ * ONE TYPE, TWO NAMES, and it used to be two types with ONE name: this and
+ * `report/fold.ts`'s {@link PhaseStanding} were both exported as
+ * `PhaseStanding` from two entry points with different members, so which one a
+ * reader got depended on which module they happened to import. It is a
+ * SUBSET, so it is spelled as one — the phase standings minus the one reading
+ * in which the phase IS its tasks' states, which is exactly why `LaneState`'s
+ * phase leaf cannot hold `"active"`: while a phase is active there is a task
+ * map there instead.
  */
-export type PhaseStanding = "waiting" | "complete" | "tripped";
+export type PhaseAtRest = Exclude<PhaseStanding, "active">;
 
 /**
  * The compound state of a whole lane.
@@ -566,9 +917,9 @@ export type PhaseStanding = "waiting" | "complete" | "tripped";
 export type LaneState<L> = {
   readonly phases: {
     readonly [P in LanePhaseName<L>]:
-      | PhaseStanding
+      | PhaseAtRest
       | {
-          readonly [T in LaneTasksIn<L, P>]: StateOf<Phases<L>[P][T]>;
+          readonly [T in LaneTasksIn<L, P>]: StateOf<TasksOf<L, P>[T]>;
         };
   };
   /** `running`, or the terminal it ended on. */
@@ -588,7 +939,7 @@ export type LaneMsg<L> = {
   [P in LanePhaseName<L>]: {
     [T in LaneTasksIn<L, P>]: {
       readonly task: T;
-      readonly event: EventName<Phases<L>[P][T]>;
+      readonly event: EventName<TasksOf<L, P>[T]>;
     };
   }[LaneTasksIn<L, P>];
 }[LanePhaseName<L>];
@@ -681,9 +1032,15 @@ export function laneShape(lane: ImportedLane): LaneShape {
       if (chart === undefined) continue;
       const errorFinals = finalsOf(chart, "error");
       if (errorFinals.length === 0) cannotTrip.push(taskId);
+      // THE FIRST, not the last — `initialOf` (and therefore the fold, and
+      // therefore every report built on it) takes the first, and a reader that
+      // took the last printed a start state the fold never booted into.
+      // `defineLane` refuses a chart with two, so on an authored lane the two
+      // readings coincide; on an imported one this is the tie-break that keeps
+      // the shape and the fold saying the same word.
       let initial = "";
       for (const [name, node] of statesOf(chart)) {
-        if (node.initial === true) initial = name;
+        if (node.initial === true && initial === "") initial = name;
       }
       tasks.push({
         id: taskId,

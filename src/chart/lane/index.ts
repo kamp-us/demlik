@@ -129,7 +129,7 @@ export {
   type LaneTasksIn,
   type LaneTerminal,
   laneShape,
-  type PhaseStanding,
+  type PhaseAtRest,
 } from "./structure";
 export {
   type LaneControl,
