@@ -22,8 +22,8 @@ importers:
         specifier: 4.20260312.1
         version: 4.20260312.1
       '@kampus/fabrika-cli':
-        specifier: 0.2.0
-        version: 0.2.0(fast-check@3.23.2)(ioredis@5.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@3.0.9(@types/node@22.20.1)(happy-dom@20.11.2)(yaml@2.9.0))(ws@8.18.1)
+        specifier: 0.3.0
+        version: 0.3.0(fast-check@3.23.2)(ioredis@5.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@3.0.9(@types/node@22.20.1)(happy-dom@20.11.2)(yaml@2.9.0))(ws@8.18.1)
       '@types/chrome':
         specifier: ^0.1.42
         version: 0.1.43
@@ -557,8 +557,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@kampus/fabrika-cli@0.2.0':
-    resolution: {integrity: sha512-ep7Gr7v06YAPcKHhgA1Q6R8sdF8cIgy+3nX/3nd81wnTsJ0F8h9B0uGqz7n7DXeCGuJjyi0WQUzNExidt96gXg==}
+  '@kampus/fabrika-cli@0.3.0':
+    resolution: {integrity: sha512-mxSAO6jG3uuWRriFTYvWjHKniPKhfBBaBjt3lKu0IIynnyDnOYilhGOiWAX5x1BymByhtMVdt9Rm3X/5akOrfQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -2078,7 +2078,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kampus/fabrika-cli@0.2.0(fast-check@3.23.2)(ioredis@5.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@3.0.9(@types/node@22.20.1)(happy-dom@20.11.2)(yaml@2.9.0))(ws@8.18.1)':
+  '@kampus/fabrika-cli@0.3.0(fast-check@3.23.2)(ioredis@5.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@3.0.9(@types/node@22.20.1)(happy-dom@20.11.2)(yaml@2.9.0))(ws@8.18.1)':
     dependencies:
       '@demlik/tea': 0.5.1(fast-check@3.23.2)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@3.0.9(@types/node@22.20.1)(happy-dom@20.11.2)(yaml@2.9.0))(ws@8.18.1)
       '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.92)(ioredis@5.11.1)
