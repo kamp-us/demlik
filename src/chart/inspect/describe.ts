@@ -19,7 +19,7 @@
 import type { Chart, EventOrigin } from "../graph";
 
 // ── the runtime views (the same shapes `compile` reads) ───────────────────
-type RtEdge =
+export type RtEdge =
   | string
   | {
       readonly target?: string;
@@ -233,16 +233,33 @@ export interface ChartDescription {
   readonly refusals: readonly ChartRefusal[];
 }
 
-/** Read one edge spec into the flat {@link ChartEdge} shape. */
-function readEdge(from: string, event: string, spec: RtEdge): ChartEdge {
-  const at = `${from}.${event}`;
+/**
+ * A read edge MINUS the state it leaves — everything about an edge that is a
+ * fact of the edge itself rather than of the grid it sits in.
+ *
+ * The reducer form has no state dimension (`src/chart/inspect/reducer.ts`), so
+ * its edges are exactly this: same kinds, same targets, same guard/cell/cmd
+ * fields, with `from` unrepresentable rather than blank.
+ */
+export type EdgeCore = Omit<ChartEdge, "from">;
+
+/**
+ * Read one edge spec into {@link EdgeCore}. `at` is the site key the parts bag
+ * is indexed by — `"state.event"` in the grid form, the bare event in the
+ * reducer form — and it is passed in rather than derived, because that key IS
+ * the difference between the two forms.
+ */
+export function readEdgeCore(
+  event: string,
+  at: string,
+  spec: RtEdge,
+): EdgeCore {
   const edge = typeof spec === "string" ? { target: spec } : spec;
   const cmds = cmdNames(edge.cmd);
   const otherwiseCmds = cmdNames(edge.otherwiseCmd);
 
   if (edge.cell !== undefined) {
     return {
-      from,
       event,
       at,
       kind: "cell",
@@ -254,7 +271,6 @@ function readEdge(from: string, event: string, spec: RtEdge): ChartEdge {
   }
   if (edge.resume !== undefined) {
     return {
-      from,
       event,
       at,
       kind: "resume",
@@ -268,7 +284,6 @@ function readEdge(from: string, event: string, spec: RtEdge): ChartEdge {
     const then = edge.target ?? "";
     const otherwise = edge.otherwise ?? "";
     return {
-      from,
       event,
       at,
       kind: "guarded",
@@ -281,7 +296,6 @@ function readEdge(from: string, event: string, spec: RtEdge): ChartEdge {
     };
   }
   return {
-    from,
     event,
     at,
     kind: "plain",
@@ -289,6 +303,11 @@ function readEdge(from: string, event: string, spec: RtEdge): ChartEdge {
     cmds,
     otherwiseCmds,
   };
+}
+
+/** Read one edge spec into the flat {@link ChartEdge} shape. */
+function readEdge(from: string, event: string, spec: RtEdge): ChartEdge {
+  return { from, ...readEdgeCore(event, `${from}.${event}`, spec) };
 }
 
 /**

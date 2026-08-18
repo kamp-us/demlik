@@ -21,6 +21,7 @@ import type { EventOrigin } from "../graph";
 import {
   type ChartDescription,
   type ChartEdge,
+  type EdgeCore,
   edgeAt,
   explainRefusal,
   type RefusalReason,
@@ -105,10 +106,17 @@ export type GuardPreview =
       readonly error?: string;
     };
 
-/** Run the named guard against `state` + a sample msg. Never throws. */
-function previewGuard(
-  edge: ChartEdge,
-  state: RtState,
+/**
+ * Run the named guard against `state` + a sample msg. Never throws.
+ *
+ * Takes an {@link EdgeCore} rather than a `ChartEdge`, so BOTH chart forms get
+ * this one implementation: a guard is pure and site-keyed by `at` in either
+ * form, and `from` is the only field that differs between their edges — a field
+ * this function never reads. `./reducer` calls it directly.
+ */
+export function previewGuardOn(
+  edge: EdgeCore,
+  state: { readonly type: string },
   msg: RtMsg | undefined,
   opts: InspectOptions,
 ): GuardPreview {
@@ -150,10 +158,16 @@ function previewGuard(
 /** How a single target was determined, when one could be. */
 export type ResolvedBy = "declared" | "guard" | "resume" | "cell";
 
-/** Run a cell purely to learn which target it actually picks. Never throws. */
-function runCell(
-  edge: ChartEdge,
-  state: RtState,
+/**
+ * Run a cell purely to learn which target it actually picks. Never throws.
+ *
+ * {@link EdgeCore}, for the same reason {@link previewGuardOn} takes one: the
+ * escape hatch is the same escape hatch in both chart forms, and `buildCell`
+ * serves both from one body — so previewing it must not fork either.
+ */
+export function runCellOn(
+  edge: EdgeCore,
+  state: { readonly type: string },
   msg: RtMsg | undefined,
   opts: InspectOptions,
 ): string | undefined {
@@ -209,9 +223,16 @@ export interface EventPreview {
   /** Present iff the edge is guarded. */
   readonly guard?: GuardPreview;
   /**
-   * The cmds that would fire. For a guarded edge whose branch resolved, the
-   * cmds of THAT arm; for one that did not, the `then` arm's (the declared
-   * happy path) — `guard.branch === "unknown"` is what says so.
+   * The cmds that WOULD fire — read off the edge's declaration. For a guarded
+   * edge whose branch resolved, the cmds of THAT arm; for one that did not, the
+   * `then` arm's (the declared happy path) — `guard.branch === "unknown"` is
+   * what says so.
+   *
+   * This is the BEFORE question, and a `{ to, cell }` edge answers it with an
+   * empty list BY DECLARATION: the cell builds its cmds inside its body, so the
+   * chart has none to declare. For what actually fired, ask the after question
+   * — `captureCmds` in `./captured`, which reads the emitted cmds off the
+   * machine's own output.
    */
   readonly cmds: readonly string[];
   /** Every state the edge declares it can reach. */
@@ -284,7 +305,7 @@ export function previewEvent<S extends { readonly type: string }>(
       };
 
     case "guarded": {
-      const guard = previewGuard(edge, st, msg, opts);
+      const guard = previewGuardOn(edge, st, msg, opts);
       return {
         ...base,
         guard,
@@ -307,7 +328,7 @@ export function previewEvent<S extends { readonly type: string }>(
       };
 
     case "cell": {
-      const resolved = runCell(edge, st, msg, opts);
+      const resolved = runCellOn(edge, st, msg, opts);
       return {
         ...base,
         // A cell builds its own cmds inside its body, so the chart declares
