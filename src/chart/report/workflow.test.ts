@@ -183,6 +183,25 @@ describe("chartFromWorkflow — what it carries, and what it drops", () => {
     );
   });
 
+  it("labels an unlabelled guarded arm off the GRAMMAR, not off a name", () => {
+    // No `guard` on the arm — so there is no name to carry, and the fallback
+    // says what the two-arm array itself says rather than borrowing whatever
+    // this consumer happens to call it.
+    const bare = chartFromWorkflow(
+      mutate((doc) => {
+        // biome-ignore lint/suspicious/noExplicitAny: untyped JSON document
+        (region(doc) as any).states.review.on["ISSUE.FAIL"][0] = {
+          target: "build",
+        };
+      }),
+    );
+    expect(bare.charts.issue?.states.pipeline?.review?.on?.FAIL).toEqual({
+      target: "build",
+      when: "retries remain",
+      otherwise: "frozen",
+    });
+  });
+
   it("does not carry `actions` — an action name is inert data upstream too", () => {
     const json = JSON.stringify(lane);
     expect(json).not.toContain("incrementRetries");

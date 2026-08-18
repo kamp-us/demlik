@@ -192,8 +192,16 @@ const nodeType = (node: unknown): string | undefined =>
 /** The retry budget a document inherits when its `context` names none. */
 const RETRY_BUDGET = 2;
 
-/** The `when` a guarded arm carries when the document names no guard. */
-const DEFAULT_GUARD = "retriesRemaining";
+/**
+ * The `when` a guarded arm carries when the document names no guard.
+ *
+ * A DESCRIPTION OF THE GRAMMAR, not a borrowed name. A two-arm array means
+ * "retry while the budget holds, else fall through" in every document, because
+ * that is what the array IS — so when the author wrote no label, the label says
+ * the thing the array already said. Defaulting to some consumer's guard name
+ * (`retriesRemaining`) would print their word over another consumer's document.
+ */
+const DEFAULT_GUARD = "retries remain";
 
 interface RegionImport {
   readonly node?: Readonly<Record<string, ImportedNode>>;
