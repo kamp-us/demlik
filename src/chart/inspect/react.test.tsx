@@ -14,9 +14,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { SubId } from "../../pure/core";
 import { assign, guards, lane } from "../__fixtures__/lane";
+import {
+  fetchReducerBoot,
+  fetchReducerChart,
+  assign as rAssign,
+  cells as rCells,
+} from "../__fixtures__/resilient-fetch-reducer";
 import type { Samples } from "./index";
-import { ChartInspector } from "./react";
+import { ChartInspector, ReducerChartInspector } from "./react";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -333,5 +340,126 @@ describe("<ChartInspector> — the diagram", () => {
     expect(container.querySelector(".tea-ci-mermaid")?.textContent).toContain(
       "class queued teaActive",
     );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WHAT ACTUALLY FIRED, and the REDUCER form.
+//
+// One harness for both, because both claims live on the same page: the lane
+// emits no cmds at all (so its fired panel is a column of dashes, which is a
+// fact and not a blank), and the resilient-fetch reducer emits `do_fetch` from
+// INSIDE a cell body — the cmd no chart declares, and the one the declarative
+// button row therefore cannot show.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const rSamples: Samples<typeof fetchReducerChart> = {
+  fetch: { url: "u://x", at: 1_000 },
+  fetch_ok: { url: "u://x", body: "hi", at: 1_010 },
+  fetch_err: { url: "u://x", error: "boom", at: 1_020 },
+  deadline_exceeded: { id: "retry" as SubId, atMs: 1_030 },
+};
+
+async function mountReducer(): Promise<void> {
+  await act(async () => {
+    root.render(
+      <ReducerChartInspector
+        chart={fetchReducerChart}
+        parts={{ assign: rAssign, cells: rCells }}
+        boot={fetchReducerBoot}
+        samples={rSamples}
+        title="resilient fetch"
+      />,
+    );
+  });
+  await act(async () => {});
+}
+
+/** The "cmds fired" rows, in step order: `[cause, what fired]`. */
+function firedRows(): [string, string][] {
+  return [...container.querySelectorAll(".tea-ci-fire")].map((el) => [
+    el.querySelector(".tea-ci-fire-by")?.textContent ?? "",
+    el.querySelector(".tea-ci-fire-cmds")?.textContent ?? "",
+  ]);
+}
+
+describe("<ChartInspector> — the cmds that actually fired", () => {
+  it("starts with the `init` step, whose cause is not a msg", async () => {
+    await mount();
+    expect(firedRows()).toEqual([["init", "—"]]);
+  });
+
+  it("adds one row per dispatch, tagged with the msg that caused it", async () => {
+    await mount();
+    await click(buttonFor("WIP"));
+    await click(buttonFor("DONE"));
+    // `lane` declares no cmds anywhere, so every row is an honest dash — the
+    // panel says "nothing fired", never "no data".
+    expect(firedRows()).toEqual([
+      ["init", "—"],
+      ["WIP", "—"],
+      ["DONE", "—"],
+    ]);
+  });
+});
+
+describe("<ReducerChartInspector> — the form with no state dimension", () => {
+  it("renders one control per event, and none of them can be refused", async () => {
+    await mountReducer();
+    expect([...controls().keys()]).toEqual([
+      "fetch",
+      "fetch_ok",
+      "fetch_err",
+      "deadline_exceeded",
+    ]);
+    for (const [, el] of controls()) {
+      expect(el.dataset.status).toBe("legal");
+    }
+    expect(currentState()).toBe("idle");
+  });
+
+  it("omits the phase, and NAMES every question the form cannot answer", async () => {
+    await mountReducer();
+    expect(container.querySelector(".tea-ci-phase")).toBeNull();
+    const omitted = [
+      ...container.querySelectorAll<HTMLElement>("[data-omitted]"),
+    ].map((el) => el.dataset.omitted);
+    expect(omitted).toEqual(["phases", "refusals", "scope"]);
+    expect(container.querySelector(".tea-ci-omits")?.textContent).toContain(
+      "no state dimension",
+    );
+  });
+
+  it("runs a cell purely and shows the target it actually picks", async () => {
+    await mountReducer();
+    // `onErr` is run against the live state and the sample, exactly as the grid
+    // form runs one — the phase dimension is what this form lost, not purity.
+    expect(controls().get("fetch_err")?.textContent).toContain(
+      "→ waiting_retry",
+    );
+    // …and the whole declared fan-out is still one hover away.
+    expect(buttonFor("fetch_err").title).toContain("waiting_retry");
+  });
+
+  it("shows the cmd a CELL built, which the chart declares nowhere", async () => {
+    await mountReducer();
+    // the declarative row for `fetch` names no cmd — the chart has none to name
+    expect(controls().get("fetch")?.textContent).not.toContain("do_fetch");
+    await click(buttonFor("fetch"));
+    expect(currentState()).toBe("fetching");
+    // …and the after panel has it, tagged with the msg that caused it.
+    expect(firedRows()).toEqual([
+      ["init", "—"],
+      ["fetch", "do_fetch"],
+    ]);
+  });
+
+  it("draws the reducer's one-node diagram, every edge leaving `any`", async () => {
+    await mountReducer();
+    const pre = container.querySelector(".tea-ci-mermaid")?.textContent ?? "";
+    expect(pre).toContain("[*] --> idle");
+    expect(pre).toContain("any --> fetching : fetch / attempt()");
+    // no highlight: there is no node that IS the current state.
+    expect(pre).not.toContain("teaActive");
   });
 });
