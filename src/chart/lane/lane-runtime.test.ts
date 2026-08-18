@@ -10,6 +10,7 @@
 // and the two walls a lane between two parking states can fall off.
 // ═══════════════════════════════════════════════════════════════════════════
 import { describe, expect, it } from "vitest";
+import { defineChart, ty } from "../graph";
 import { foldLane, type LogEntry, type TaskState } from "../report/fold";
 import type { ImportedChart } from "../report/workflow";
 import { coderParts, epic } from "./__fixtures__/epic-run";
@@ -338,6 +339,51 @@ describe("runLane — a resume between two parking states", () => {
         folded.t1?.was,
       ]);
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE CMD TAG — the lane's namespace, beside the payload rather than over it.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const notifier = defineChart({
+  cmds: { notify: ty<{ readonly task: string }>() },
+  events: { GO: { data: ty<{ readonly at: number }>(), scope: "edges" } },
+  states: {
+    only: {
+      queued: {
+        initial: true,
+        on: { GO: { target: "shipped", cmd: "notify" } },
+      },
+      shipped: { end: true },
+    },
+  },
+});
+
+describe("runLane — the cmd tag", () => {
+  it("does not destroy a payload field the chart named `task`", () => {
+    const lane = defineLane({
+      phases: { p1: { t1: notifier } },
+      terminals: { complete: "complete", tripped: "tripped" },
+    });
+    const rt = runLane(lane, {
+      t1: {
+        parts: {
+          assign: { "queued.GO": () => ({}) },
+          cmds: { notify: () => ({ task: "the author's own field" }) },
+        },
+        boot: () => ({ type: "queued" }) as const,
+      },
+    });
+    const [booted] = rt.init(null);
+    const [, cmds] = rt.update["t1.GO"](booted, { type: "t1.GO", at: 1 });
+    expect(cmds).toEqual([
+      {
+        type: "t1.notify",
+        task: "the author's own field",
+        lane: { task: "t1" },
+      },
+    ]);
   });
 });
 

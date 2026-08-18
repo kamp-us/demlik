@@ -128,8 +128,14 @@ describe("runLane — routing", () => {
       type: "issue_2.WIP",
       at: 1,
     });
+    // the tag rides BESIDE the payload, nested — a chart's own `task` field
+    // would otherwise be overwritten by the lane's task id, silently.
     expect(cmds).toEqual([
-      { type: "issue_2.spawn_shell", task: "issue_2", step: "queued.WIP" },
+      {
+        type: "issue_2.spawn_shell",
+        lane: { task: "issue_2" },
+        step: "queued.WIP",
+      },
     ]);
   });
 });
@@ -324,7 +330,11 @@ describe("runLane — a real Machine", () => {
     expect(next.regions.issue_3.type).toBe("build");
     await expect(
       machine.interpret["issue_1.spawn_shell"](
-        { type: "issue_1.spawn_shell", task: "issue_1", step: "queued.WIP" },
+        {
+          type: "issue_1.spawn_shell",
+          lane: { task: "issue_1" },
+          step: "queued.WIP",
+        },
         { emit: () => undefined },
       ),
     ).resolves.toBeUndefined();

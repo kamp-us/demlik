@@ -30,7 +30,11 @@
 //                    emitted them, under the same `${task}.${name}` namespace
 //                    the messages come back in — so an interpreter that
 //                    receives `issue_5729.spawn_shell` knows where to send the
-//                    reply without a side table.
+//                    reply without a side table. The tag is NESTED, under
+//                    `lane`, rather than spread over the payload: a work lane's
+//                    cmd may perfectly well declare a `task` of its own, and a
+//                    tag that overwrote it would take the author's value with
+//                    no type error to show for it.
 //
 //   REHYDRATION      `init(loaded)` is the branch a production restart walks,
 //                    every time. A persisted state is DATA that outlived the
@@ -148,17 +152,28 @@ type Tagged<T extends string, K> = K extends {
   ? // the same witness `LaneRunMsg` carries, for the same reason: `Cmd` is
     // `{ type: string }` and a template literal over two parameters is not
     // reduced to one while they are parameters.
-    Omit<K, "type"> & { readonly type: `${T}.${N}`; readonly task: T } & Cmd
+    Omit<K, "type" | "lane"> & {
+      readonly type: `${T}.${N}`;
+      readonly lane: { readonly task: T };
+    } & Cmd
   : never;
 
 /**
  * The cmd union a running lane emits — each region's own `CmdOf<chart>`, under
  * the SAME `${task}.${name}` namespace the messages arrive in.
  *
- * The `task` field is carried as well as spelled into the type, because the two
+ * The task id is carried as well as spelled into the type, because the two
  * readers differ: an interpreter's handler map is keyed by `cmd.type` (so the
  * namespace has to be in the name), while the code that routes the reply back
  * wants the task id without parsing it out of a string.
+ *
+ * IT IS NESTED, and `lane` is the one key a region's cmd may not use — which
+ * {@link LaneRunChecks} refuses at the typed door. The tag used to be a flat
+ * `task`, spread OVER the payload, and `task` is an entirely ordinary field for
+ * a cmd in a work lane to carry: the author's value was replaced by the lane's
+ * task id, and `Tagged` narrowed the author's field to that literal, so there
+ * was no type error either. One nested key is a smaller surface than every key
+ * a chart might plausibly name.
  */
 export type LaneCmd<L> = {
   [T in LaneTaskId<L>]: Tagged<T, CmdOf<LaneTaskChart<L, T>>>;
@@ -242,7 +257,23 @@ type ForeignOf<C> = C extends { readonly events: infer E }
     }[keyof E]
   : never;
 
-/** The three authoring mistakes a RUN can make that a drawing cannot. */
+/**
+ * Tasks whose chart declares a cmd carrying `lane` — the one reserved key.
+ *
+ * {@link LaneCmd} nests the task id under `lane` and a nested tag can still be
+ * shadowed by a payload that spells the same key. It is refused rather than
+ * silently overwritten, because "the field you declared is not the field your
+ * interpreter receives" is the exact defect nesting was introduced to end.
+ */
+type CmdCarriesTheLaneTag<L> = {
+  [T in LaneTaskId<L>]: [
+    Extract<CmdOf<LaneTaskChart<L, T>>, { readonly lane: unknown }>,
+  ] extends [never]
+    ? never
+    : T;
+}[LaneTaskId<L>];
+
+/** The four authoring mistakes a RUN can make that a drawing cannot. */
 export type LaneRunChecks<L, H> = ([Exclude<keyof H, LaneTaskId<L>>] extends [
   never,
 ]
@@ -262,6 +293,11 @@ export type LaneRunChecks<L, H> = ([Exclude<keyof H, LaneTaskId<L>>] extends [
     ? unknown
     : {
         readonly __laneRegionChartDeclaresAForeignEvent: DeclaresAForeignEvent<L>;
+      }) &
+  ([CmdCarriesTheLaneTag<L>] extends [never]
+    ? unknown
+    : {
+        readonly __laneRegionCmdDeclaresTheReservedLaneField: CmdCarriesTheLaneTag<L>;
       });
 
 /**
@@ -586,10 +622,10 @@ export function runLane<
         return [
           { regions, lane: standingOf(regions) },
           // the cmds leave wearing their task, under the namespace the replies
-          // will come back in.
+          // will come back in — BESIDE the payload, never over it.
           cmds.map((cmd) => ({
             ...cmd,
-            task: taskId,
+            lane: { task: taskId },
             type: `${taskId}.${cmd.type}`,
           })),
         ];
