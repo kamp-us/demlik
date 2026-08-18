@@ -6,15 +6,32 @@
 // phoenix #5800 is rewriting exactly those — and everything is asserted through
 // the grammar instead (phase order, task sets, final polarity, standings).
 import { describe, expect, it } from "vitest";
+import { lane as coderChart } from "../__fixtures__/lane";
 import {
   EPIC_LANE,
   EPIC_RUN_COMPLETE,
   EPIC_RUN_TRIPPED,
 } from "../report/__fixtures__/epic";
 import { coder } from "../report/__fixtures__/templates";
-import { chartFromWorkflow } from "../report/workflow";
+import {
+  chartFromWorkflow,
+  type ImportedChart,
+  statesOf,
+} from "../report/workflow";
 import { inspectLane } from "./inspect";
 import { defineLane, LaneShapeError, laneShape } from "./structure";
+
+// Both malformed charts below are typed `ImportedChart` on purpose. These are
+// the imported door's defects — the door whose charts CANNOT be asked in the
+// type layer — and that is the whole reason `defineLane` still checks them at
+// runtime. Written as literals they would be caught one layer earlier, by
+// `__laneTaskChartMarksNoInitialState` / `__laneTaskChartDeclaresNoFinal`,
+// which `markers.test-d.ts` pins.
+const NO_INITIAL: ImportedChart = { events: {}, states: { g: { s: {} } } };
+const NO_FINAL: ImportedChart = {
+  events: { GO: { scope: "edges" } },
+  states: { g: { a: { initial: true, on: { GO: { target: "a" } } } } },
+};
 
 const coderLane = chartFromWorkflow(coder);
 const CODER_CHART = coderLane.charts.issue;
@@ -58,7 +75,7 @@ describe("defineLane — the authoring door", () => {
   it("refuses a chart with no initial state — a runtime check, by necessity", () => {
     expect(() =>
       defineLane({
-        phases: { p1: { t: { events: {}, states: { g: { s: {} } } } } },
+        phases: { p1: { t: NO_INITIAL } },
         terminals: { complete: "complete", tripped: "tripped" },
       }),
     ).toThrow(LaneShapeError);
@@ -67,16 +84,7 @@ describe("defineLane — the authoring door", () => {
   it("refuses a chart with no final — its phase could never complete", () => {
     expect(() =>
       defineLane({
-        phases: {
-          p1: {
-            t: {
-              events: { GO: { scope: "edges" } },
-              states: {
-                g: { a: { initial: true, on: { GO: { target: "a" } } } },
-              },
-            },
-          },
-        },
+        phases: { p1: { t: NO_FINAL } },
         terminals: { complete: "complete", tripped: "tripped" },
       }),
     ).toThrow(LaneShapeError);
@@ -94,7 +102,7 @@ describe("defineLane — the authoring door", () => {
   it("names EVERY defect, never a half-lane", () => {
     try {
       defineLane({
-        phases: { p1: { t: { events: {}, states: { g: { s: {} } } } } },
+        phases: { p1: { t: NO_INITIAL } },
         terminals: { complete: "over", tripped: "over" },
       });
       throw new Error("expected a refusal");
@@ -102,6 +110,74 @@ describe("defineLane — the authoring door", () => {
       expect(error).toBeInstanceOf(LaneShapeError);
       expect((error as LaneShapeError).defects).toHaveLength(3);
     }
+  });
+});
+
+describe("defineLane — the TYPED door", () => {
+  // The same `defineChart` literal the rest of `src/chart` is written against.
+  // Before this, putting it in a lane took a cast: `phases` took an
+  // `ImportedChart` and erased every literal type the chart module exists to
+  // preserve. What is asserted here is the other half of that fix — the VALUE.
+  const typed = defineLane({
+    id: "epic-typed",
+    phases: { phase1: { issue_1: coderChart } },
+    terminals: { complete: "complete", tripped: "tripped" },
+  });
+
+  const states = () => {
+    const chart = typed.charts.issue_1;
+    if (chart === undefined) throw new Error("the lane lost `issue_1`");
+    return statesOf(chart);
+  };
+
+  it("lowers every authored edge form to the ONE the fold reads", () => {
+    expect(states().get("queued")).toEqual({
+      initial: true,
+      on: { WIP: { target: "build" }, BLOCKED: { target: "blocked" } },
+    });
+    // the guarded edge keeps BOTH arms and the guard name — the fold reads all
+    // three, and a lowering that dropped `otherwise` would silently make the
+    // retry budget unspendable.
+    expect(states().get("review")?.on?.FAIL).toEqual({
+      target: "build",
+      when: "retriesRemaining",
+      otherwise: "frozen",
+    });
+    // `resume` is a property of the EDGE, and survives as one.
+    expect(states().get("blocked")?.on?.UNBLOCKED).toEqual({
+      resume: { fallback: "queued" },
+    });
+  });
+
+  it("keeps final polarity — the two endings are not the same ending", () => {
+    expect(states().get("shipped")?.end).toBe(true);
+    expect(states().get("frozen")?.end).toBe("error");
+    const shape = laneShape(typed);
+    expect(shape.tasks[0]?.successFinals).toEqual(["shipped"]);
+    expect(shape.tasks[0]?.errorFinals).toEqual(["frozen"]);
+    expect(shape.tasks[0]?.initial).toBe("queued");
+  });
+
+  it("folds and inspects through the IMPORTED functions, untouched", () => {
+    const view = inspectLane(typed, [
+      { task: "issue_1", event: "WIP", at: "2024-01-01T00:00:00Z" },
+      { task: "issue_1", event: "DONE", at: "2024-01-01T00:01:00Z" },
+      { task: "issue_1", event: "PASS", at: "2024-01-01T00:02:00Z" },
+      { task: "issue_1", event: "DONE", at: "2024-01-01T00:03:00Z" },
+    ]);
+    expect(view.phases[0]?.tasks[0]?.state).toBe("shipped");
+    expect(view.status).toBe("done");
+    expect(view.terminal).toBe("complete");
+  });
+
+  it("is the IDENTITY on an imported chart — a lowering, not a rewrite", () => {
+    // The proof that the imported door goes through the same lowering and comes
+    // out the value it went in as. One representation, two doors, no fork.
+    const imported = defineLane({
+      phases: { phase1: { issue_1: CODER_CHART } },
+      terminals: { complete: "complete", tripped: "tripped" },
+    });
+    expect(imported.charts.issue_1).toEqual(CODER_CHART);
   });
 });
 
