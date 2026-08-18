@@ -87,6 +87,24 @@ function declaresEdge(
   return statesOf(chart).get(from)?.on?.[bareEvent(event)] !== undefined;
 }
 
+/**
+ * Is `state` a state you can RESUME out of — a parking state?
+ *
+ * `was` is written when a region enters a parking state and it is never
+ * cleared, so a task that parked once and moved on still carries where it
+ * parked FROM. Reading it unconditionally put "· resumes to review" beside a
+ * task sitting on `frozen`: a dead task announcing a return it cannot make,
+ * from a fact that stopped being true several steps earlier. The state's own
+ * edges are what say whether it is still parked.
+ */
+function parksHere(chart: ImportedChart | undefined, state: string): boolean {
+  if (chart === undefined) return false;
+  const on = statesOf(chart).get(state)?.on ?? {};
+  return Object.values(on).some(
+    (edge) => edge !== undefined && "resume" in edge,
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // THE MODEL
 // ═══════════════════════════════════════════════════════════════════════════
@@ -125,7 +143,11 @@ export interface LaneTaskView {
   readonly phase: string;
   readonly state: string;
   readonly endPolarity: false | true | "error";
-  /** The state it resumes to while parked. */
+  /**
+   * The state it resumes to — present ONLY while the task is actually parked.
+   * A region keeps `was` after it leaves the park, and rendering that made a
+   * finished task claim a return it cannot make.
+   */
   readonly was?: string;
   /** Grouped by who sends them — `report.ts`'s own derivation. `null` at a final. */
   readonly waitingOn: string | null;
@@ -517,7 +539,9 @@ export function laneView(
         phase: task.phase,
         state: task.state,
         endPolarity: task.endPolarity,
-        ...(task.was === undefined ? {} : { was: task.was }),
+        ...(task.was === undefined || !parksHere(chart, task.state)
+          ? {}
+          : { was: task.was }),
         waitingOn: task.waitingOn,
         stuck: task.stuck,
         moved: chart === undefined ? true : task.state !== initialOf(chart),

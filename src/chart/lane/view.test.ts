@@ -408,3 +408,26 @@ describe("a TRIPPED phase expands the task that stopped it", () => {
     expect(view.phases[0]?.expanded).toEqual(["issue_2"]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `was` OUTLIVES THE PARK, and the page used to read it anyway.
+//
+// A region writes `was` when it enters a parking state and nothing clears it,
+// so a task that parked once and moved on still carries where it parked from.
+// Rendered unconditionally, that put "· resumes to review" beside a task
+// sitting on the error final `frozen` — a dead task announcing a return it
+// cannot make, from a fact that stopped being true several steps earlier.
+// ═══════════════════════════════════════════════════════════════════════════
+describe("was — only while the task is still parked", () => {
+  const wasOf = (type: string) =>
+    taskOf(liveAt({ issue_1: { type, was: "build" } }), "issue_1").was;
+
+  it("carries it in a parking state", () => {
+    expect(wasOf("blocked")).toBe("build");
+  });
+
+  it("drops it on a final — a finished task resumes nowhere", () => {
+    expect(wasOf("shipped")).toBeUndefined();
+    expect(wasOf("frozen")).toBeUndefined();
+  });
+});
