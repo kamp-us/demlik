@@ -119,6 +119,15 @@ async function drag(el: HTMLInputElement, to: number): Promise<void> {
   });
 }
 
+/** Open a `<details>` the way a reader does — the `toggle` the lazy body waits for. */
+async function open(el: HTMLDetailsElement): Promise<void> {
+  await act(async () => {
+    el.open = true;
+    el.dispatchEvent(new Event("toggle"));
+  });
+  await act(async () => {});
+}
+
 async function click(el: HTMLElement): Promise<void> {
   await act(async () => {
     el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -163,6 +172,63 @@ describe("<LaneView> — the lane's own structure, derived", () => {
   });
 });
 
+describe("<LaneView> — the page says it in words, and they are true", () => {
+  const head = () => container.querySelector(".tea-lv-head")?.textContent ?? "";
+  const statusPill = () =>
+    container.querySelector(".tea-lv-status")?.textContent ?? "";
+  const phaseHead = (phase: string) =>
+    container.querySelector(`[data-phase="${phase}"] .tea-lv-h`)?.textContent ??
+    "";
+
+  it("badges a lane that FROZE as stopped, never as done", async () => {
+    await mountReplay(REAL_FROZEN);
+    // `deriveLaneStatus` emits fabrika's `done | active`, and printing it raw
+    // put the word DONE one span away from the word `tripped`.
+    expect(container.querySelector(".tea-lv-terminal")?.textContent).toBe(
+      "tripped",
+    );
+    expect(statusPill()).toBe("stopped here");
+    await mountReplay(REAL_CODER);
+    expect(statusPill()).toBe("finished");
+    await mountReplay(REAL_EPIC);
+    expect(statusPill()).toBe("still running");
+  });
+
+  it("counts a phase's tasks without claiming they are running", async () => {
+    await mountReplay(REAL_EPIC);
+    // `N tasks running together` is what a phase is FOR, and it was printed on
+    // the ones that had finished and the ones that had not started.
+    expect(phaseHead("phase2")).toContain("8 tasks, running together");
+    expect(phaseHead("phase1")).toContain("all finished");
+    expect(phaseHead("phase1")).not.toContain("running");
+    expect(phaseHead("phase3")).toContain("not started");
+    expect(phaseHead("phase3")).not.toContain("running");
+    // …and one task is never "1 task running together"
+    await mountReplay(REAL_CODER);
+    expect(phaseHead("pipeline")).toContain("1 task, all finished");
+  });
+
+  it("speaks of a trip that already happened in the past tense", async () => {
+    await mountReplay(REAL_FROZEN);
+    const waiting =
+      container.querySelector(".tea-lv-waiting")?.textContent ?? "";
+    // Four surfaces said the lane HAD tripped; this one said it was about to.
+    expect(waiting).toContain("stopped the lane");
+    expect(waiting).not.toContain("will trip");
+    expect(waiting).not.toContain("siblings");
+  });
+
+  it("separates its labels in the MARKUP, for a host with no stylesheet", async () => {
+    await mountReplay(REAL_FROZEN);
+    // With the sheet absent every `gap` goes with it, and the header read
+    // `5674 — NO STYLESHEETreplaytrippeddone`. The reading order is the
+    // markup's job; the sheet only makes it quiet.
+    expect(head()).toContain(" · replay · ");
+    expect(head()).toContain("tripped · stopped here");
+    expect(phaseHead("pipeline")).toContain(" · ");
+  });
+});
+
 describe("<LaneView> — the wall of diagrams, prevented", () => {
   it("expands only the tasks that MOVED, and collapses the six that did not", async () => {
     await mountReplay(REAL_EPIC);
@@ -183,16 +249,37 @@ describe("<LaneView> — the wall of diagrams, prevented", () => {
 
   it("still offers the collapsed task's picture — behind a disclosure", async () => {
     await mountReplay(REAL_EPIC);
-    const untouched = container.querySelector<HTMLElement>(
+    const untouched = container.querySelector<HTMLDetailsElement>(
       '.tea-lv-collapsed[data-task="issue_4242"]',
     );
     expect(untouched).toBeTruthy();
     // the screen's one concession over a comment: dropped from the flow, not
     // dropped from the page.
     expect(untouched?.tagName).toBe("DETAILS");
+    // …and the region is still DISPATCHABLE from behind the fold: the controls
+    // are in the DOM whether or not anyone opened it. That is the promise the
+    // collapse makes, and it is the half that must not be lazy.
+    expect(untouched?.querySelectorAll(".tea-lv-ev").length).toBeGreaterThan(0);
+    await open(untouched as HTMLDetailsElement);
     expect(untouched?.querySelector(".tea-lv-mermaid")?.textContent).toContain(
       "stateDiagram-v2",
     );
+  });
+
+  it("does not PAY for the diagrams it folded away until they are opened", async () => {
+    await mountReplay(REAL_EPIC);
+    // The wall is twelve `<pre class="mermaid">` and a host renders every one
+    // of them — closed `<details>` or not. Keyed by their own text, one step of
+    // the scrubber remounted and re-rendered all twelve, and the first paint of
+    // that page timed out a thirty-second screenshot. The fold has to cost what
+    // it looks like it costs.
+    const drawn = () => container.querySelectorAll(".tea-lv-mermaid").length;
+    expect(drawn()).toBe(expanded().length);
+    const one = container.querySelector<HTMLDetailsElement>(
+      '.tea-lv-collapsed[data-task="issue_4242"]',
+    ) as HTMLDetailsElement;
+    await open(one);
+    expect(drawn()).toBe(expanded().length + 1);
   });
 
   it("when NOTHING in the active phase has moved, one task represents it", async () => {
@@ -223,7 +310,12 @@ describe("<LaneView> — nothing is dispatchable, and it says why", () => {
     // keeps it as its `title`, so no affordance is silently missing.
     const banner = document.querySelectorAll('[data-unavailable="dispatch"]');
     expect(banner).toHaveLength(1);
-    expect(banner[0]?.textContent).toContain("code bodies");
+    const reason = banner[0]?.textContent ?? "";
+    expect(reason).toContain("code bodies");
+    // ONCE on the page, and the count is what matters: this sentence shipped on
+    // every control, and a phase of eight tasks × six events said it 48 times.
+    // Counting elements with the attribute would not have caught that.
+    expect(container.textContent?.split(reason)).toHaveLength(2);
     const legal = controls.find((el) => el.dataset.status === "legal");
     expect(legal?.querySelector("button")?.title).toContain("code bodies");
   });
@@ -235,7 +327,9 @@ describe("<LaneView> — nothing is dispatchable, and it says why", () => {
       (el) => el.dataset.status === "refused",
     );
     expect(refused.length).toBeGreaterThan(0);
-    expect(refused[0]?.textContent).toContain("not addressed to phase");
+    // …and it names the pair that is missing rather than a phase. `WIP` is
+    // `edges`-scoped, so the phase never had anything to do with the refusal.
+    expect(refused[0]?.textContent).toContain('declares no "WIP" edge');
   });
 });
 
@@ -248,6 +342,39 @@ describe("<LaneView> — the timeline, and the scrubber over it", () => {
     expect(rows[0]?.textContent).toContain(log[0]?.at);
     // a log stamps every line, so the clock is answered rather than excused
     expect(container.querySelector('[data-unavailable="clock"]')).toBeNull();
+  });
+
+  it("gives the mermaid host a NEW node every time the drawing changes", async () => {
+    await mountReplay(REAL_EPIC);
+    // Every mermaid host marks what it has rendered (`data-processed`) and
+    // skips those nodes forever. React updating in place rewrites only the
+    // TEXT, so the host skips the node and from the second frame on the reader
+    // sees mermaid source instead of a picture. A key derived from the content
+    // forces an unmount/remount — and a `key` has no DOM projection, so only
+    // node IDENTITY can tell the two worlds apart.
+    const node = () =>
+      container.querySelector('[data-task="issue_4240"] .tea-lv-mermaid');
+    const first = node();
+    expect(first?.textContent).toContain("stateDiagram-v2");
+    await drag(range(), 9);
+    expect(node()?.textContent).toContain("stateDiagram-v2");
+    expect(node()).not.toBe(first);
+  });
+
+  it("says what the chip cannot, and never repeats it", async () => {
+    await mountReplay(REAL_EPIC);
+    // The collapsed summary sits directly under a chip row that already said
+    // `task = state` for every task in the phase. Repeating it there lists each
+    // task twice, adjacent — which reads as a bug and was one.
+    const summary = container.querySelector(
+      '.tea-lv-collapsed[data-task="issue_4242"] > summary',
+    )?.textContent;
+    expect(summary).toContain("issue_4242");
+    expect(summary).not.toContain("=");
+    // …and it says the one thing the chip does not: whether this has begun. Not
+    // "not started" — that chart's `initial` can BE the state on the chip, and
+    // the two then contradicted each other on screen.
+    expect(summary).toContain(`still at ${chips("phase2").issue_4242}`);
   });
 
   it("scrubbing back re-folds the prefix — the state AT that step", async () => {
@@ -412,6 +539,50 @@ describe("<LiveLaneView> — the same page, with the code bodies", () => {
     ) as HTMLButtonElement;
     await click(now);
     expect(chips("phase1").issue_1).toBe("review");
+  });
+
+  it("will not dispatch into the PRESENT while showing the PAST", async () => {
+    await mountLive();
+    await click(buttonFor("issue_1", "WIP"));
+    await click(buttonFor("issue_1", "DONE"));
+    await drag(range(), 0);
+    // The page is showing step 0 and the machine is at `review`. Every button
+    // used to be live, computing its outcome from the state ON SCREEN and
+    // dispatching into the state that is actually there — so a click both
+    // mis-stated what it would do and gave no sign it had done it. The only
+    // feedback was the step count going from `2` to `3`.
+    expect(chips("phase1").issue_1).toBe("queued");
+    expect(buttonFor("issue_1", "WIP").disabled).toBe(true);
+    const why = container.querySelector('[data-unavailable="dispatch"]');
+    expect(why?.textContent).toContain("step 0 of 2");
+    // …and the reason travels with the button, so no affordance is silently off
+    expect(buttonFor("issue_1", "WIP").title).toContain("step 0 of 2");
+
+    const before = range().max;
+    await click(buttonFor("issue_1", "WIP"));
+    expect(range().max).toBe(before);
+
+    // and `now` gives them back
+    const now = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "now",
+    ) as HTMLButtonElement;
+    await click(now);
+    expect(buttonFor("issue_1", "PASS").disabled).toBe(false);
+    expect(container.querySelector('[data-unavailable="dispatch"]')).toBeNull();
+  });
+
+  it("records no step the lane refused — every row on it is a walk", async () => {
+    await mountLive();
+    await click(buttonFor("issue_1", "WIP"));
+    await click(buttonFor("issue_1", "DONE"));
+    // The one way this page could put a no-op on its own timeline was a click
+    // dispatched from a scrubbed state into the present; the chart refuses
+    // everything else before it reaches the runtime. `view.test.ts` pins how a
+    // refused entry RENDERS if a tape arrives holding one.
+    expect(buttonFor("issue_1", "WIP").disabled).toBe(true);
+    const rows = [...container.querySelectorAll("[data-step]")];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.getAttribute("data-refused")).toBeNull();
   });
 
   it("shows the retry budget off the REGION's own state", async () => {
