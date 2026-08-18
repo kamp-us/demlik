@@ -80,6 +80,8 @@ import type {
 import { laneTerminalReached, phaseStandings } from "../report/fold";
 import { RETRY_BUDGET, statesOf } from "../report/workflow";
 import {
+  type Key,
+  type Keyed,
   type Lane,
   type LaneRegion,
   LaneShapeError,
@@ -216,19 +218,62 @@ export type LaneHands<L> = {
 /** `[string] extends [N]` — an imported chart's alphabet, which cannot be asked. */
 type IsDegenerate<N> = [string] extends [N] ? true : false;
 
+/** What `boot()` says it returns, for the task keyed `T` however it was spelled. */
+type BootOf<H, T> = Keyed<H>[T & keyof Keyed<H>] extends {
+  readonly boot: () => infer B;
+}
+  ? B
+  : never;
+
+/**
+ * Tasks whose `boot()` returns a state whose `type` is no longer a LITERAL.
+ *
+ * Hoisting the hands to a variable is what every author does the moment a lane
+ * is assembled by a helper, and without a `satisfies` it widens `boot()`'s
+ * `type` from `"queued"` to `string`. The check below then cannot answer its
+ * question, and used to answer a DIFFERENT one — it named a task whose boot
+ * state was entirely correct and sent the author to look at the one thing that
+ * was right.
+ *
+ * So this is asked FIRST and says what actually happened. It is the hands' half
+ * of `__laneTerminalsMustBeLiteralsAddAsConst` on the spec side: the same
+ * mistake, the same shape of answer.
+ */
+type BootLostItsLiterals<L, H> = {
+  [T in LaneTaskId<L>]: [IsDegenerate<StateName<LaneTaskChart<L, T>>>] extends [
+    true,
+  ]
+    ? never
+    : [BootOf<H, T>] extends [never]
+      ? never
+      : [
+            IsDegenerate<
+              BootOf<H, T> extends { readonly type: infer S } ? S : never
+            >,
+          ] extends [true]
+        ? T
+        : never;
+}[LaneTaskId<L>];
+
 /** Tasks whose `boot()` returns something that is not a state of THEIR chart. */
 type BootsOutsideItsChart<L, H> = {
   [T in LaneTaskId<L>]: [IsDegenerate<StateName<LaneTaskChart<L, T>>>] extends [
     true,
   ]
     ? never
-    : T extends keyof H
-      ? H[T] extends { readonly boot: () => infer B }
-        ? [B] extends [StateOf<LaneTaskChart<L, T>>]
+    : [BootOf<H, T>] extends [never]
+      ? never
+      : // a widened boot is the finding above, not this one — one mistake, one
+        // marker, and the author is not told two things about one typo.
+        [
+            IsDegenerate<
+              BootOf<H, T> extends { readonly type: infer S } ? S : never
+            >,
+          ] extends [true]
+        ? never
+        : [BootOf<H, T>] extends [StateOf<LaneTaskChart<L, T>>]
           ? never
-          : T
-        : never
-      : never;
+          : T;
 }[LaneTaskId<L>];
 
 /**
@@ -273,14 +318,25 @@ type CmdCarriesTheLaneTag<L> = {
     : T;
 }[LaneTaskId<L>];
 
-/** The four authoring mistakes a RUN can make that a drawing cannot. */
-export type LaneRunChecks<L, H> = ([Exclude<keyof H, LaneTaskId<L>>] extends [
-  never,
-]
+/** The five authoring mistakes a RUN can make that a drawing cannot. */
+export type LaneRunChecks<L, H> = ([
+  Exclude<Key<keyof H>, LaneTaskId<L>>,
+] extends [never]
   ? unknown
   : {
-      readonly __laneHandNamesAnUnknownTask: Exclude<keyof H, LaneTaskId<L>>;
+      readonly __laneHandNamesAnUnknownTask: Exclude<
+        Key<keyof H>,
+        LaneTaskId<L>
+      >;
     }) &
+  ([BootLostItsLiterals<L, H>] extends [never]
+    ? unknown
+    : {
+        readonly __laneHandsLostTheirLiteralTypesAddSatisfiesLaneHands: BootLostItsLiterals<
+          L,
+          H
+        >;
+      }) &
   ([BootsOutsideItsChart<L, H>] extends [never]
     ? unknown
     : {

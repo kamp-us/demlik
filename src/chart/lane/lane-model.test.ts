@@ -285,6 +285,26 @@ describe("a NUMERIC task id is a task id", () => {
   it("carries the retry budget keyed the same way", () => {
     expect(laneShape(numbered).tasks[0]?.maxRetries).toBe(5);
   });
+
+  // the hand keys UNQUOTED — which is how anyone who wrote the phase that way
+  // will write the hands. `keyof { 5729: … }` is the number, so the
+  // unknown-task check has to spell a key the way every other layer does before
+  // it subtracts; otherwise it refuses `5729` for being unknown when the task
+  // is right there and only its key was spelled differently.
+  it("takes the hands with the id unquoted too", () => {
+    const rt = runLane(numbered, {
+      5729: {
+        parts,
+        boot: () => ({ type: "queued", retries: 0, maxRetries: 5 }),
+      },
+      5730: {
+        parts,
+        boot: () => ({ type: "queued", retries: 0, maxRetries: 2 }),
+      },
+    });
+    const [booted] = rt.init(null);
+    expect(Object.keys(booted.regions)).toEqual(["5729", "5730"]);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

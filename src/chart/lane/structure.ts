@@ -134,8 +134,10 @@ export interface LaneSpec {
 // as a string. `Keyed` re-keys the record itself so an indexed access lands,
 // and both leave a degenerate `Record<string, …>` exactly as degenerate as it
 // was, so {@link LaneLiteralAlphabets} below still fires.
-type Key<K> = K extends string | number ? `${K}` : never;
-type Keyed<R> = { [K in keyof R as Key<K>]: R[K] };
+// Exported for `./run`, which asks the same question of the HANDS record — one
+// spelling of a key in the module, not two.
+export type Key<K> = K extends string | number ? `${K}` : never;
+export type Keyed<R> = { [K in keyof R as Key<K>]: R[K] };
 
 type TaskIdsIn<P> = { [K in keyof P]: Key<keyof P[K]> }[keyof P];
 
