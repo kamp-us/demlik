@@ -12,8 +12,14 @@
 // that separates "narrowed per task" from "a union across the lane's charts".
 // ═══════════════════════════════════════════════════════════════════════════
 import { lane as coder, type LaneG } from "../__fixtures__/lane";
-import { upload } from "../__fixtures__/upload";
-import type { Assert, Eq, EventName, StateOf } from "../graph";
+import {
+  type Assert,
+  defineChart,
+  type Eq,
+  type EventName,
+  type StateOf,
+  ty,
+} from "../graph";
 import type { ImportedChart, ImportedLane } from "../report/workflow";
 import {
   defineLane,
@@ -29,7 +35,7 @@ import {
   type LaneTaskId,
   type LaneTasksIn,
   type LaneTerminal,
-  type PhaseStanding,
+  type PhaseAtRest,
 } from "./structure";
 
 // ── the worked example ─────────────────────────────────────────────────────
@@ -75,7 +81,7 @@ export type _stateKeys = Assert<
 export type _phase1 = Assert<
   Eq<
     LaneState<L>["phases"]["phase1"],
-    | PhaseStanding
+    | PhaseAtRest
     | {
         readonly issue_5729: StateOf<LaneG>;
         readonly issue_5730: StateOf<LaneG>;
@@ -85,7 +91,7 @@ export type _phase1 = Assert<
 export type _phase2 = Assert<
   Eq<
     LaneState<L>["phases"]["phase2"],
-    PhaseStanding | { readonly issue_5731: StateOf<LaneG> }
+    PhaseAtRest | { readonly issue_5731: StateOf<LaneG> }
   >
 >;
 /** The lane's own standing: running, or the terminal it ended on. */
@@ -105,34 +111,58 @@ export type _msg = Assert<
 
 // ── TWO TEMPLATES IN ONE PHASE — where the narrowing earns its keep ────────
 //
-// `upload` and `coder` share not one event name. A lane holding both must not
-// let the uploader's alphabet reach the coder's task, and a `LaneMsg` built as
+// `packer` and `coder` share not one event name. A lane holding both must not
+// let the packer's alphabet reach the coder's task, and a `LaneMsg` built as
 // one alphabet across the lane's charts would do exactly that.
+//
+// It is `upload` MINUS ITS GUARD, and the subtraction is the point rather than
+// an inconvenience: `upload` guards on `tries < 3` off its own state data, and
+// the lane's fold walks every guarded edge with `retries < maxRetries` off the
+// lane's context — a predicate the chart never declared. So `upload` is a chart
+// a lane can RUN and cannot FOLD, and `__laneRegionGuardsOnSomethingOtherThan
+// TheRetryBudget` refuses it at the door instead of letting a report describe a
+// run that did something else. `e61` is that refusal, pinned.
+const packer = defineChart({
+  events: {
+    pick: { data: ty<{ readonly key: string }>(), scope: "edges" },
+    done: { data: ty<{ readonly etag: string }>(), scope: "edges" },
+    ok: { scope: "edges" },
+  },
+  states: {
+    live: {
+      idle: { initial: true, on: { pick: "sending" } },
+      sending: { on: { done: "checking" } },
+      checking: { on: { ok: "stored" } },
+    },
+    finished: { stored: { end: true } },
+  },
+});
+
 const mixed = defineLane({
-  phases: { phase1: { work: coder, file: upload } },
+  phases: { phase1: { work: coder, file: packer } },
   terminals: { complete: "complete", tripped: "tripped" },
 });
 type M = typeof mixed;
 
-export type _mixedCharts = Assert<Eq<LaneTaskChart<M, "file">, typeof upload>>;
+export type _mixedCharts = Assert<Eq<LaneTaskChart<M, "file">, typeof packer>>;
 export type _mixedMsg = Assert<
   Eq<
     LaneMsg<M>,
     | { readonly task: "work"; readonly event: EventName<LaneG> }
-    | { readonly task: "file"; readonly event: EventName<typeof upload> }
+    | { readonly task: "file"; readonly event: EventName<typeof packer> }
   >
 >;
-/** The uploader's events, narrowed to the uploader's task. */
+/** The packer's events, narrowed to the packer's task. */
 export type _mixedEvent = Assert<
   Eq<
     Extract<LaneMsg<M>, { readonly task: "file" }>["event"],
-    EventName<typeof upload>
+    EventName<typeof packer>
   >
 >;
 export type _mixedState = Assert<
   Eq<
-    Exclude<LaneState<M>["phases"]["phase1"], PhaseStanding>,
-    { readonly work: StateOf<LaneG>; readonly file: StateOf<typeof upload> }
+    Exclude<LaneState<M>["phases"]["phase1"], PhaseAtRest>,
+    { readonly work: StateOf<LaneG>; readonly file: StateOf<typeof packer> }
   >
 >;
 
