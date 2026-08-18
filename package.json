@@ -273,14 +273,19 @@
       "types": "./dist/chart/lane/react.d.ts",
       "import": "./dist/chart/lane/react.js"
     },
+    "./chart/lane/server": {
+      "types": "./dist/chart/lane/server.d.ts",
+      "import": "./dist/chart/lane/server.js"
+    },
     "./chart/lane/styles.css": "./dist/chart/lane/styles.css",
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node build-viewer.mjs",
     "lint": "biome check src package.json",
     "test": "vitest run",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
+    "lane:view": "vite --config demo/lane-view/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
@@ -290,7 +295,8 @@
     "verify-exports": "node scripts/verify-exports.mjs",
     "check:chart-probes": "node scripts/check-chart-probes.mjs",
     "check:merge-markers": "node scripts/check-merge-markers.mjs",
-    "release": "changeset"
+    "release": "changeset",
+    "build:viewer": "node build-viewer.mjs"
   },
   "dependencies": {
     "better-result": "^2.5.2"
@@ -329,13 +335,16 @@
     "@types/react": "19.0.8",
     "@types/react-dom": "19.0.3",
     "@types/ws": "8.5.14",
+    "@vitejs/plugin-react": "^6.0.5",
     "fast-check": "^3.23.0",
     "happy-dom": "^20.9.0",
+    "mermaid": "^11.16.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "tsup": "^8.3.5",
     "typedoc": "0.28.20",
     "typescript": "5.7.3",
+    "vite": "^8.2.1",
     "vitest": "~3.0.7",
     "ws": "8.18.1"
   },
