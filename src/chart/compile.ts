@@ -238,8 +238,7 @@ function buildCell(
   // `otherwise` arm. On the imported door (`chart/lane`) the guard alphabet is
   // `string`, so no type ever checked the name either: a typo in an operator's
   // parts routed the whole lane down its failure arm in silence.
-  const guard =
-    edge.when === undefined ? undefined : p.guards[edge.when];
+  const guard = edge.when === undefined ? undefined : p.guards[edge.when];
   if (edge.when !== undefined && guard === undefined) {
     throw new Error(
       `@demlik/tea: edge "${at}" names guard "${edge.when}" with no implementation`,
