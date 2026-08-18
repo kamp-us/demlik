@@ -14,6 +14,16 @@
  *   the lane's ending is COMPLETE or TRIPPED — tripped when any region landed
  *   on an `end: "error"` final.
  *
+ * "Run in order" is a claim about the lane's own STANDING — which phase is
+ * active, when the lane advances, which ending it reaches — and not admission
+ * control over the regions. A message addressed to a later phase's task moves
+ * that region while an earlier phase is still active, exactly as the fold folds
+ * the whole log. That is deliberate and it is the only rule both halves can
+ * hold: a fold replays events that ALREADY HAPPENED, so a phase gate there
+ * would turn a truthful historical record into an `UnreplayableLogError` for a
+ * lane that genuinely ran. A run and a report of that run cannot drift, and
+ * this is one of the places that costs something.
+ *
  * So a lane's state is compound. Not `"build"` but
  * `{ phase1: { issue_5729: "build", issue_5730: "queued" }, phase2: "waiting" }`,
  * and no amount of drawing one chart at a time produces that picture.
