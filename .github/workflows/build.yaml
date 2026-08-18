@@ -1,12 +1,17 @@
 name: build
 
 on:
+  # `**`, not `*`: a GitHub branch filter treats `*` as matching a single path
+  # SEGMENT, so `*` never matched `can/chart` and push CI had never run on any
+  # prefixed branch. Worse, a stacked PR whose BASE contains a slash matched
+  # neither trigger and got no CI at all — silently, because a PR with zero
+  # checks reads the same as a PR whose checks have not started yet.
   push:
     branches:
-      - "*"
+      - "**"
   pull_request:
     branches:
-      - "*"
+      - "**"
 
 jobs:
   test-and-build:
