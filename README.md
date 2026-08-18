@@ -47,3 +47,7 @@ The four Diátaxis quadrants live in [`docs/`](./docs/README.md):
 - [How-to guides](./docs/how-to/index.md) — goal-oriented directions for getting a specific job done.
 - [Reference](./docs/reference/index.md) — information-oriented API description, generated per public module.
 - [Explanation](./docs/explanation/index.md) — understanding-oriented discussion of how it works and why it is shaped this way.
+
+Two more surfaces sit behind those, for people working on the library rather than using it:
+[`.patterns/`](./.patterns/index.md) is how the code is shaped, and
+[`.decisions/`](./.decisions/index.md) is why it was shaped that way.
