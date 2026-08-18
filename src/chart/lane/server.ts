@@ -24,7 +24,9 @@
 // The handler is `(Request) => Promise<Response>`, so it mounts under Node's
 // `http`, Bun.serve, Hono, or a Worker without an adapter per framework.
 // ═══════════════════════════════════════════════════════════════════════════
+
 import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -70,6 +72,20 @@ export interface LaneDriver {
   /** The claim token, or any stable handle for the session holding it. */
   readonly session: string;
   readonly at?: string | null;
+}
+
+export interface ServeOptions extends LaneViewerOptions {
+  /** Default 5411. `0` takes any free port and reports it back on `url`. */
+  readonly port?: number;
+  /** Default `127.0.0.1` — this reads a machine's own disk and should stay on it. */
+  readonly host?: string;
+}
+
+/** A running dashboard. */
+export interface LaneViewerServer {
+  /** Where to point a browser. Carries the real port when `port: 0` was asked for. */
+  readonly url: string;
+  readonly close: () => Promise<void>;
 }
 
 export interface LaneViewerOptions {
@@ -239,5 +255,95 @@ export function laneViewer(
         headers: { "content-type": MIME[".html"] as string },
       });
     }
+  };
+}
+
+/**
+ * Start the dashboard. This is the one most callers want.
+ *
+ * {@link laneViewer} hands back a `(Request) => Response` for a host that already has a server to
+ * mount it on. Everything BETWEEN that handler and a running page — creating the server, turning
+ * node's `IncomingMessage` into a `Request`, reading a POST body, streaming a response back so the
+ * event stream stays open — is the same in every host, and asking each one to write it is asking
+ * them to get it subtly wrong. Notably the streaming: buffer the response and `/api/stream` never
+ * delivers a frame, which looks like "the page does not update" and is nobody's obvious bug.
+ *
+ * So the three callbacks are the whole integration:
+ *
+ * ```ts
+ * const server = await serveLaneViewer({
+ *   root: ".fabrika/lanes",           // not read here — see `lanes`
+ *   lanes: () => readMyLanes(),
+ *   transition: (r) => myVerb(r),
+ * });
+ * console.log(server.url);
+ * ```
+ */
+export async function serveLaneViewer(
+  opts: ServeOptions,
+): Promise<LaneViewerServer> {
+  const handle = laneViewer(opts);
+  const host = opts.host ?? "127.0.0.1";
+
+  const server = createServer((req, res) => {
+    void (async () => {
+      const body =
+        req.method === "POST" || req.method === "PUT"
+          ? await new Promise<string>((ok) => {
+              let read = "";
+              req.on("data", (chunk) => {
+                read += chunk;
+              });
+              req.on("end", () => ok(read));
+            })
+          : undefined;
+
+      const out = await handle(
+        new Request(`http://${host}${req.url ?? "/"}`, {
+          method: req.method ?? "GET",
+          ...(body === undefined ? {} : { body }),
+        }),
+      );
+
+      res.writeHead(out.status, Object.fromEntries(out.headers));
+      if (out.body === null) {
+        res.end();
+        return;
+      }
+      // STREAMED, never buffered: `/api/stream` holds open for the life of the
+      // page, and a buffered response is one that never arrives.
+      const reader = out.body.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } catch {
+        // the reader is gone — the page navigated away mid-frame
+      }
+      res.end();
+    })();
+  });
+
+  const port = await new Promise<number>((ok, no) => {
+    server.once("error", no);
+    server.listen(opts.port ?? 5411, host, () => {
+      const addr = server.address();
+      ok(
+        typeof addr === "object" && addr !== null
+          ? addr.port
+          : (opts.port ?? 5411),
+      );
+    });
+  });
+
+  return {
+    url: `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`,
+    close: () =>
+      new Promise<void>((ok) => {
+        server.closeAllConnections?.();
+        server.close(() => ok());
+      }),
   };
 }

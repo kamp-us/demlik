@@ -10,10 +10,9 @@ three facts only you know.
 ## The whole adapter
 
 ```ts
-import { createServer } from "node:http";
-import { laneViewer } from "@demlik/tea/chart/lane/server";
+import { serveLaneViewer } from "@demlik/tea/chart/lane/server";
 
-const handle = laneViewer({
+const { url } = await serveLaneViewer({
   // WHERE THE LANES ARE — you already read these.
   lanes: () => readMyLanes(),          // → { id, workflow, events }[]
 
@@ -25,11 +24,22 @@ const handle = laneViewer({
 
   source: ".fabrika/lanes",
 });
+
+console.log(url);
 ```
 
-Mount it under any server that speaks `Request`/`Response`. A complete Node
-host, including the streaming needed to keep `/api/stream` open, is in
-[`examples/lane-dashboard/serve.ts`](../../examples/lane-dashboard/serve.ts).
+That is the integration. There is no server to write: creating it, turning
+node's request into a `Request`, reading a POST body and **streaming** the
+response back are the same in every host, and the streaming in particular is
+the kind of detail that costs an afternoon — buffer it and `/api/stream` never
+delivers a frame, which looks like "the page does not update" and is nobody's
+obvious bug.
+
+Already have a server? `laneViewer(opts)` returns the bare
+`(Request) => Promise<Response>` to mount wherever you like.
+
+A complete host is [`examples/lane-dashboard/serve.ts`](../../examples/lane-dashboard/serve.ts)
+— and nearly all of it is reading two files.
 
 ## What the page does with that
 
