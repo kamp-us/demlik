@@ -1,0 +1,359 @@
+/*
+ * @demlik/tea/chart/lane — visual defaults for <LaneView> / <LiveLaneView>.
+ *
+ * Same strategy as `@demlik/tea/chart/inspect/styles.css`, deliberately: every
+ * class is prefixed (here `.tea-lv-*`) so it cannot collide with host styles,
+ * and every colour is a consumer design token (shadcn slots + Radix accents) so
+ * the page inherits whatever theme is active. Override by re-declaring the
+ * --tea-lv-* vars on .tea-lv, or pass your own `className`.
+ *
+ * STANDALONE. Unlike the chart inspector's sheet, this one is not a companion
+ * to devtools' — the lane page renders no devtools component. One import.
+ *
+ * The palette says the two things the page is FOR:
+ *
+ *   standing     complete → --teal-11    a phase that is behind us
+ *                active   → --foreground the one that is running, and reads loudest
+ *                tripped  → --crimson-11 the phase that ends the lane
+ *                waiting  → --muted-foreground it has not started, and says so quietly
+ *
+ *   unavailable  --muted-foreground, italic, ALWAYS with its reason as text.
+ *                Never `display: none`: a control that cannot be sent keeps its
+ *                shape and loses its affordance, so the reader sees a thing that
+ *                is off rather than a thing that is missing.
+ */
+
+.tea-lv {
+  --tea-lv-fg: var(--foreground);
+  --tea-lv-muted: var(--muted-foreground);
+  --tea-lv-border: var(--border);
+  --tea-lv-accent: var(--teal-11);
+  --tea-lv-warn: var(--amber-11);
+  --tea-lv-bad: var(--crimson-11);
+
+  font-family: var(
+    --font-mono,
+    "JetBrains Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-size: 12px;
+  color: var(--tea-lv-fg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tea-lv-boot {
+  color: var(--tea-lv-muted);
+  font-style: italic;
+  padding: 16px;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+.tea-lv-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--tea-lv-border);
+  padding-bottom: 8px;
+}
+.tea-lv-title {
+  font-weight: 600;
+}
+/* WHICH SOURCE, on the page. The page is honest about what it is looking at,
+ * because "no control works" reads very differently once you know why. */
+.tea-lv-src {
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 0 5px;
+  font-size: 10.5px;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-src[data-source="live"] {
+  color: var(--tea-lv-accent);
+  border-color: var(--tea-lv-accent);
+}
+.tea-lv-now {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.tea-lv-phase,
+.tea-lv-terminal {
+  color: var(--tea-lv-accent);
+  font-weight: 600;
+}
+.tea-lv-status {
+  color: var(--tea-lv-muted);
+}
+.tea-lv-warn {
+  color: var(--tea-lv-warn);
+}
+.tea-lv-muted {
+  color: var(--tea-lv-muted);
+}
+
+/* ── panels ─────────────────────────────────────────────────────────────── */
+.tea-lv-panel {
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.tea-lv-h {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-none {
+  margin: 0;
+  color: var(--tea-lv-muted);
+  font-style: italic;
+}
+
+/* ── what is stuck — the first panel, and it looks like it ──────────────── */
+.tea-lv-stuck {
+  border-left: 3px solid var(--tea-lv-border);
+}
+.tea-lv-stuck:has([data-stuck]) {
+  border-left-color: var(--tea-lv-bad);
+}
+.tea-lv-stucklist {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tea-lv-stucklist [data-stuck="budget-spent"] {
+  color: var(--tea-lv-warn);
+}
+.tea-lv-stucklist [data-stuck="tripped"],
+.tea-lv-stucklist [data-stuck="dead-end"] {
+  color: var(--tea-lv-bad);
+}
+.tea-lv-tripped {
+  margin: 8px 0 0;
+  color: var(--tea-lv-bad);
+}
+
+/* ── one phase ──────────────────────────────────────────────────────────── */
+.tea-lv-standing {
+  font-weight: 600;
+}
+.tea-lv-phase-complete .tea-lv-standing {
+  color: var(--tea-lv-accent);
+}
+.tea-lv-phase-active {
+  border-color: var(--tea-lv-accent);
+}
+.tea-lv-phase-active .tea-lv-standing {
+  color: var(--tea-lv-fg);
+}
+.tea-lv-phase-tripped {
+  border-color: var(--tea-lv-bad);
+}
+.tea-lv-phase-tripped .tea-lv-standing {
+  color: var(--tea-lv-bad);
+}
+.tea-lv-phase-waiting {
+  opacity: 0.75;
+}
+.tea-lv-phase-waiting .tea-lv-standing {
+  color: var(--tea-lv-muted);
+}
+
+/* Every task of the phase, at a glance — the answer to "which of twelve". */
+.tea-lv-chips {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tea-lv-chip {
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--radius, 0.25rem);
+  padding: 1px 6px;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-chip[data-end="error"] {
+  color: var(--tea-lv-bad);
+  border-color: var(--tea-lv-bad);
+}
+.tea-lv-chip[data-end="true"] {
+  color: var(--tea-lv-accent);
+}
+
+/* ── one task ───────────────────────────────────────────────────────────── */
+.tea-lv-task {
+  border-top: 1px solid var(--tea-lv-border);
+  padding-top: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+/* The collapsed form: a line, with the picture one click away. A comment cannot
+ * offer this, which is the whole reason the screen does. */
+.tea-lv-collapsed > summary {
+  cursor: pointer;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-taskh {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.tea-lv-state {
+  color: var(--tea-lv-accent);
+  font-weight: 600;
+}
+.tea-lv-badge {
+  margin-left: 6px;
+  border: 1px solid var(--tea-lv-bad);
+  border-radius: var(--radius, 0.25rem);
+  padding: 0 4px;
+  font-size: 10.5px;
+  color: var(--tea-lv-bad);
+}
+.tea-lv-waiting {
+  margin: 0 0 4px;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-retries {
+  margin: 0 0 4px;
+  color: var(--tea-lv-warn);
+}
+
+/* ── controls ───────────────────────────────────────────────────────────── */
+.tea-lv-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.tea-lv-ev {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tea-lv-btn {
+  font: inherit;
+  text-align: left;
+  padding: 4px 8px;
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--radius, 0.25rem);
+  background: transparent;
+  color: var(--tea-lv-fg);
+  cursor: pointer;
+}
+.tea-lv-btn:hover:not(:disabled) {
+  border-color: var(--tea-lv-accent);
+  color: var(--tea-lv-accent);
+}
+.tea-lv-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+.tea-lv-to {
+  color: var(--tea-lv-muted);
+}
+
+/* The refusal palette, identical to the chart inspector's, because it is the
+ * same fact: a refused event keeps its shape and loses its affordance. */
+.tea-lv-ev-end .tea-lv-btn,
+.tea-lv-ev-undeclared .tea-lv-btn {
+  border-style: dashed;
+  color: var(--tea-lv-bad);
+  text-decoration: line-through;
+}
+.tea-lv-ev-ignored .tea-lv-btn {
+  border-style: dashed;
+  color: var(--tea-lv-warn);
+  text-decoration: line-through;
+}
+.tea-lv-ev-out-of-scope .tea-lv-btn {
+  border-style: dotted;
+  color: var(--tea-lv-muted);
+}
+
+/* WHY IT IS NOT ON OFFER — text, never a hidden element. */
+.tea-lv-unavailable {
+  margin: 0;
+  color: var(--tea-lv-muted);
+  font-style: italic;
+}
+
+/* ── the diagram ────────────────────────────────────────────────────────── */
+.tea-lv-mermaid {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--tea-lv-muted);
+  line-height: 1.5;
+}
+
+/* ── the timeline and its scrubber ──────────────────────────────────────── */
+.tea-lv-scrub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.tea-lv-scrub input[type="range"] {
+  flex: 1 1 160px;
+  min-width: 120px;
+  accent-color: var(--tea-lv-accent);
+}
+.tea-lv-step {
+  color: var(--tea-lv-muted);
+  white-space: nowrap;
+}
+.tea-lv-scrub button {
+  font: inherit;
+  padding: 2px 10px;
+  border: 1px solid var(--tea-lv-border);
+  border-radius: var(--radius, 0.25rem);
+  background: transparent;
+  color: var(--tea-lv-fg);
+  cursor: pointer;
+}
+.tea-lv-scrub button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.tea-lv-steps {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.tea-lv-steps th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--tea-lv-muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 10px 2px 0;
+}
+.tea-lv-steps td {
+  padding: 1px 10px 1px 0;
+  white-space: nowrap;
+  color: var(--tea-lv-muted);
+}
+.tea-lv-steps td:first-child {
+  color: var(--tea-lv-fg);
+}

@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 62 public subpaths. Curated
+The complete export catalog — all 64 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -17,6 +17,8 @@ discoverable here with a one-line gloss from their source barrel.
 | `./chart/inspect/react` | the chart inspector, as one component. |
 | `./chart/inspect/styles.css` |  |
 | `./chart/lane` | chart/lane — N chart instances in parallel, grouped into phases that sequence. |
+| `./chart/lane/react` | a lane, as one page. |
+| `./chart/lane/styles.css` |  |
 | `./chart/report` | chart/report — a fabrika lane, imported as charts and read back as markdown. |
 | [`./circuit-breaker`](./circuit-breaker.md) | per-target failure tracking as pure state + ops. |
 | `./deadline` | a one-shot Sub that fires when an ABSOLUTE wall-clock deadline is reached. |

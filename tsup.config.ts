@@ -66,6 +66,7 @@ export default defineConfig({
     "chart/inspect/react": "src/chart/inspect/react.tsx",
     "chart/report/index": "src/chart/report/index.ts",
     "chart/lane/index": "src/chart/lane/index.ts",
+    "chart/lane/react": "src/chart/lane/react.tsx",
   },
   format: ["esm"],
   dts: true,
@@ -87,5 +88,9 @@ export default defineConfig({
       "src/chart/inspect/styles.css",
       "dist/chart/inspect/styles.css",
     );
+    // chart/lane's page ships its own, standalone — it renders no devtools
+    // component, so it is not a companion to anything.
+    mkdirSync("dist/chart/lane", { recursive: true });
+    copyFileSync("src/chart/lane/styles.css", "dist/chart/lane/styles.css");
   },
 });

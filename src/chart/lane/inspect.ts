@@ -28,6 +28,7 @@ import {
   type ChartRefusal,
   describeChart,
   type EventPreview,
+  type InspectOptions,
   inspectState,
 } from "../inspect";
 import {
@@ -187,8 +188,31 @@ function stuckAt(chart: ImportedChart, state: TaskState): StuckReason | null {
 export function inspectLane(
   lane: ImportedLane,
   entries: readonly LogEntry[],
+  optsFor?: (taskId: string) => InspectOptions,
 ): LaneInspection {
-  const states = foldLane(lane, entries);
+  return inspectLaneStates(lane, foldLane(lane, entries), optsFor);
+}
+
+/**
+ * The same view, from the LEAVES rather than from a log.
+ *
+ * The two callers differ in exactly one thing and it is which of these doors
+ * they come through. A reader holding `workflow.json` + `events.jsonl` has no
+ * states, so it folds — {@link inspectLane}. A reader watching a lane RUN has
+ * the states and no log worth folding: `runLane` boots each region where its
+ * sub-issue actually is, so re-deriving the leaves from a log that starts at
+ * every chart's `initial: true` would answer a different question than the one
+ * on screen. It hands the leaves it has.
+ *
+ * @param optsFor per-task {@link InspectOptions} — the `parts` bag and the
+ *   sample payloads, which only the LIVE door has. Omit it and every preview
+ *   degrades honestly, exactly as `inspectState` does with no bag at all.
+ */
+export function inspectLaneStates(
+  lane: ImportedLane,
+  states: Readonly<Record<string, TaskState>>,
+  optsFor?: (taskId: string) => InspectOptions,
+): LaneInspection {
   const stands = phaseStandings(lane, states);
   const active = stands.find((stand) => stand.standing === "active");
   const trippedPhase = stands.find((stand) => stand.standing === "tripped");
@@ -202,7 +226,11 @@ export function inspectLane(
     const state = states[taskId];
     if (chart === undefined || state === undefined) return null;
     const desc = describe(chart);
-    const events = inspectState(desc, { type: state.type, was: state.was });
+    const events = inspectState(
+      desc,
+      { type: state.type, was: state.was },
+      optsFor?.(taskId),
+    );
     const reason = stuckAt(chart, state);
     if (reason !== null) stuck.push({ task: taskId, reason });
     return {

@@ -70,12 +70,22 @@
  * Kept out of biome (see `biome.jsonc`) so the bytes stay the binary's.
  */
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+/**
+ * Where the bytes are, joined with `node:path` rather than with `new URL`.
+ *
+ * `new URL(relative, import.meta.url)` reads the ENVIRONMENT's `URL`, and a DOM
+ * environment installs its own — under happy-dom it resolves a `file:` base to
+ * a document-relative path, and the read then misses by the whole repo root. A
+ * path join has no such global to be swapped out from under it, and these bytes
+ * are read by a component test as well as by a node one.
+ */
+const DIR = join(dirname(fileURLToPath(import.meta.url)), "real");
+
 const read = (name: string): string =>
-  readFileSync(fileURLToPath(new URL(`./real/${name}`, import.meta.url)), {
-    encoding: "utf8",
-  });
+  readFileSync(join(DIR, name), { encoding: "utf8" });
 
 /** One lane, as the four artifacts a reader can actually be handed. */
 export interface RealLane {
