@@ -1,0 +1,72 @@
+:root {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: #0d1117;
+  color: #e6edf3;
+  font:
+    15px / 1.6 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 5rem;
+}
+.lv-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #30363d;
+  background: #161b22;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.lv-brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.lv-bar nav {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.lv-bar button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.28rem 0.7rem;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  background: #21262d;
+  color: #e6edf3;
+  cursor: pointer;
+}
+.lv-bar button:hover {
+  border-color: #2dd4bf;
+}
+.lv-bar button.on {
+  background: #2dd4bf;
+  border-color: #2dd4bf;
+  color: #04201c;
+  font-weight: 600;
+}
+.lv-src {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #8b949e;
+}
+.lv-empty {
+  padding-top: 4rem;
+}
+.lv-empty pre {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+}
