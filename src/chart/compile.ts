@@ -130,6 +130,7 @@ type RtCellFn = (
 /** Either form: one body for every site, or one body PER site keyed by `at`. */
 type RtCellImpl = RtCellFn | Record<string, RtCellFn | undefined>;
 type RtFn = (s: RtState, m: RtMsg) => object;
+type RtGuard = (s: RtState, m: RtMsg, at: string) => boolean;
 type RtAssign = RtFn | { readonly then: RtFn; readonly else: RtFn };
 
 /** State name → its node and its phase, flattened out of the grouped shape. */
@@ -154,10 +155,7 @@ function scopeList(scope: string | readonly string[]): readonly string[] {
 /** The code parts, after the type layer has been erased. Shared by both forms. */
 type RtParts = {
   readonly assign: Record<string, RtAssign | undefined>;
-  readonly guards: Record<
-    string,
-    ((s: RtState, m: RtMsg, at: string) => boolean) | undefined
-  >;
+  readonly guards: Record<string, RtGuard | undefined>;
   readonly cmds: Record<
     string,
     ((s: RtState, m: RtMsg, at: string) => object) | undefined
@@ -229,6 +227,25 @@ function buildCell(
     };
   }
 
+  // A guarded edge is resolved HERE, not at dispatch — same as `cell` above and
+  // for the same reason: an unimplemented name is a wiring mistake, and a
+  // wiring mistake should surface when the chart is compiled rather than on the
+  // first message that happens to reach this edge.
+  //
+  // It is the only one of the three that ever read a missing part as a VALUE.
+  // A missing cmd builder throws, a missing cell throws, and a missing guard
+  // used to quietly evaluate to `false` — which is not an error, it is the
+  // `otherwise` arm. On the imported door (`chart/lane`) the guard alphabet is
+  // `string`, so no type ever checked the name either: a typo in an operator's
+  // parts routed the whole lane down its failure arm in silence.
+  const guard =
+    edge.when === undefined ? undefined : p.guards[edge.when];
+  if (edge.when !== undefined && guard === undefined) {
+    throw new Error(
+      `@demlik/tea: edge "${at}" names guard "${edge.when}" with no implementation`,
+    );
+  }
+
   return (st, nsMsg) => {
     // strip the namespace so the author's parts see the bare event.
     const msg: RtMsg = { ...nsMsg, type: bare };
@@ -240,9 +257,8 @@ function buildCell(
     if (edge.resume !== undefined) {
       target = st.was ?? edge.resume.fallback;
       payloadFn = cell as RtFn;
-    } else if (edge.when !== undefined) {
-      const guard = p.guards[edge.when];
-      fired = guard !== undefined && guard(st, msg, at) === true;
+    } else if (guard !== undefined) {
+      fired = guard(st, msg, at) === true;
       const branch = cell as { then: RtFn; else: RtFn };
       target = fired ? (edge.target as string) : (edge.otherwise as string);
       payloadFn = fired ? branch.then : branch.else;
