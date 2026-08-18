@@ -27,7 +27,7 @@
  *   defineChart(graph)              → C            // the grid form: state × event
  *   compile(C, parts, ns?)          → Transitions  // drops into `defineMachine`
  *   initFrom(C, boot)               → init         // entry state read off the graph
- *   chartMermaid(C)                 → string
+ *   chartMermaid(C, opts?)          → string       // the ONE chart renderer
  *
  *   defineReducerChart(graph)       → C            // no phase dimension: |M| edges
  *   compileReducer(C, parts, ns?)   → Reducer
@@ -58,26 +58,36 @@
  * library's Msg, `deadline_exceeded` say — keeps its bare name, because it is
  * not ours to decorate. `MsgIn<C, NS>` is the resulting inbound union.
  *
+ * INSPECTING ONE. Because all of that is data, a chart can be read back:
+ * `@demlik/tea/chart/inspect` turns it into phases, states, edges and every
+ * explicit REFUSAL, and answers "what is legal at this state, and which branch
+ * would that guard take right now"; `@demlik/tea/chart/inspect/react` is the
+ * whole debugger page over it, with no page code.
+ *
  * @packageDocumentation
  */
 
 export {
   CellTargetError,
+  type ChartMermaidOptions,
   chartMermaid,
   compile,
   compileReducer,
+  edgeKey,
   initFrom,
   initialStateOf,
   type Parts,
   type RParts,
   reducerInitFrom,
   reducerMermaid,
+  type WalkCounts,
 } from "./compile";
 export {
   type Assigns,
   type CellName,
   type Cells,
   type Chart,
+  type CmdEvent,
   type CmdName,
   type CmdOf,
   type Cmds,
@@ -85,7 +95,10 @@ export {
   defineReducerChart,
   type EdgeKey,
   type EdgeSpec,
+  type EndPolarity,
+  type ErrorFinal,
   type EventName,
+  type EventOrigin,
   type ForeignEvent,
   type GroupName,
   type GroupOf,
@@ -95,6 +108,7 @@ export {
   type MissingPairs,
   type MsgIn,
   type MsgOf,
+  type OriginAt,
   type ParkingState,
   type RAssigns,
   type RCellName,
@@ -108,7 +122,11 @@ export {
   type RUsedCmdName,
   type StateName,
   type StateOf,
+  type SubEvent,
+  type SuccessFinal,
   type Ty,
   ty,
   type UsedCmdName,
+  type WorldEvent,
+  type WorldRole,
 } from "./graph";

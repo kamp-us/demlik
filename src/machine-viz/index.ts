@@ -26,6 +26,12 @@
 
 import type { Cmd, Machine, Sub } from "../index";
 import { formOf } from "../index";
+import { safeId, safeLabel } from "./mermaid-id";
+
+// The sanitizers are SHARED with `chart`'s `chartMermaid` — one copy, in a
+// dependency-free module, re-exported here because both drawings are public
+// and a consumer post-processing either one needs the same escaping.
+export { safeId, safeLabel } from "./mermaid-id";
 
 // === Public options ===
 
@@ -55,30 +61,6 @@ export interface MachineVizOptions<S, M> {
   direction?: "TB" | "LR";
   /** Optional diagram title, emitted as a Mermaid front-matter `title:` block. */
   title?: string;
-}
-
-// === Mermaid label escaping ===
-//
-// Mermaid state ids must be identifier-safe; arbitrary `type` strings (which
-// CAN contain `:`, spaces, `-`, etc.) are not. We sanitize the id used as the
-// node identifier and carry the human-readable original as a quoted label via
-// `stateId : "Original"` when they differ. Edge transition labels (after the
-// `:`) are sanitized to avoid breaking the arrow syntax.
-
-/** Sanitize a discriminant string into a Mermaid-safe node identifier. */
-function safeId(raw: string): string {
-  // Replace any run of non-identifier chars with `_`; prefix a leading digit so
-  // the id is always a valid Mermaid token. Empty ⇒ a stable placeholder.
-  const cleaned = raw.replace(/[^A-Za-z0-9_]/g, "_");
-  if (cleaned === "") return "_empty";
-  return /^[0-9]/.test(cleaned) ? `s_${cleaned}` : cleaned;
-}
-
-/** Sanitize text used as a Mermaid edge/transition label (after the `:`). */
-function safeLabel(raw: string): string {
-  // Strip the chars that terminate or confuse a transition label: newlines,
-  // the `:` that separates label from target, and Mermaid's `"`/`;` delimiters.
-  return raw.replace(/["\n\r;:]/g, " ").trim();
 }
 
 // === Edge model ===

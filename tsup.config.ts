@@ -62,6 +62,11 @@ export default defineConfig({
     "pure/index": "src/pure/index.ts",
     "parity/index": "src/parity/index.ts",
     "chart/index": "src/chart/index.ts",
+    "chart/inspect/index": "src/chart/inspect/index.ts",
+    "chart/inspect/react": "src/chart/inspect/react.tsx",
+    "chart/report/index": "src/chart/report/index.ts",
+    "chart/lane/index": "src/chart/lane/index.ts",
+    "chart/lane/react": "src/chart/lane/react.tsx",
   },
   format: ["esm"],
   dts: true,
@@ -77,5 +82,15 @@ export default defineConfig({
     // devtools ships a standalone stylesheet consumers import directly.
     mkdirSync("dist/devtools", { recursive: true });
     copyFileSync("src/devtools/styles.css", "dist/devtools/styles.css");
+    // chart/inspect ships its own companion stylesheet, same contract.
+    mkdirSync("dist/chart/inspect", { recursive: true });
+    copyFileSync(
+      "src/chart/inspect/styles.css",
+      "dist/chart/inspect/styles.css",
+    );
+    // chart/lane's page ships its own, standalone — it renders no devtools
+    // component, so it is not a companion to anything.
+    mkdirSync("dist/chart/lane", { recursive: true });
+    copyFileSync("src/chart/lane/styles.css", "dist/chart/lane/styles.css");
   },
 });

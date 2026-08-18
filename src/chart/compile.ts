@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RUNTIME — the chart walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
+import { safeId, safeLabel } from "../machine-viz/mermaid-id";
 import { Cmd, NoCellError, type Reducer, type Transitions } from "../pure/core";
 import type {
   Assigns,
@@ -106,7 +107,10 @@ type RtNode = {
   readonly initial?: true;
   readonly on?: Record<string, RtEdge>;
   readonly ignore?: readonly string[];
-  readonly end?: true;
+  // BOTH polarities, because both are final and only one of them is a success.
+  // The walk reads `!== undefined` (either is terminal); the drawing reads the
+  // value, which is the whole reason it is not narrowed to `true` here.
+  readonly end?: true | "error";
 };
 type RtChart = {
   readonly events: Record<
@@ -126,6 +130,7 @@ type RtCellFn = (
 /** Either form: one body for every site, or one body PER site keyed by `at`. */
 type RtCellImpl = RtCellFn | Record<string, RtCellFn | undefined>;
 type RtFn = (s: RtState, m: RtMsg) => object;
+type RtGuard = (s: RtState, m: RtMsg, at: string) => boolean;
 type RtAssign = RtFn | { readonly then: RtFn; readonly else: RtFn };
 
 /** State name → its node and its phase, flattened out of the grouped shape. */
@@ -150,10 +155,7 @@ function scopeList(scope: string | readonly string[]): readonly string[] {
 /** The code parts, after the type layer has been erased. Shared by both forms. */
 type RtParts = {
   readonly assign: Record<string, RtAssign | undefined>;
-  readonly guards: Record<
-    string,
-    ((s: RtState, m: RtMsg, at: string) => boolean) | undefined
-  >;
+  readonly guards: Record<string, RtGuard | undefined>;
   readonly cmds: Record<
     string,
     ((s: RtState, m: RtMsg, at: string) => object) | undefined
@@ -225,6 +227,24 @@ function buildCell(
     };
   }
 
+  // A guarded edge is resolved HERE, not at dispatch — same as `cell` above and
+  // for the same reason: an unimplemented name is a wiring mistake, and a
+  // wiring mistake should surface when the chart is compiled rather than on the
+  // first message that happens to reach this edge.
+  //
+  // It is the only one of the three that ever read a missing part as a VALUE.
+  // A missing cmd builder throws, a missing cell throws, and a missing guard
+  // used to quietly evaluate to `false` — which is not an error, it is the
+  // `otherwise` arm. On the imported door (`chart/lane`) the guard alphabet is
+  // `string`, so no type ever checked the name either: a typo in an operator's
+  // parts routed the whole lane down its failure arm in silence.
+  const guard = edge.when === undefined ? undefined : p.guards[edge.when];
+  if (edge.when !== undefined && guard === undefined) {
+    throw new Error(
+      `@demlik/tea: edge "${at}" names guard "${edge.when}" with no implementation`,
+    );
+  }
+
   return (st, nsMsg) => {
     // strip the namespace so the author's parts see the bare event.
     const msg: RtMsg = { ...nsMsg, type: bare };
@@ -236,9 +256,8 @@ function buildCell(
     if (edge.resume !== undefined) {
       target = st.was ?? edge.resume.fallback;
       payloadFn = cell as RtFn;
-    } else if (edge.when !== undefined) {
-      const guard = p.guards[edge.when];
-      fired = guard !== undefined && guard(st, msg, at) === true;
+    } else if (guard !== undefined) {
+      fired = guard(st, msg, at) === true;
       const branch = cell as { then: RtFn; else: RtFn };
       target = fired ? (edge.target as string) : (edge.otherwise as string);
       payloadFn = fired ? branch.then : branch.else;
@@ -288,31 +307,34 @@ function keyOf(
 const NO_PARKING: ReadonlySet<string> = new Set<string>();
 
 /**
- * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
+ * One compiled table, BEFORE the typed boundary — `state.type` → the event key
+ * → the cell.
  *
- * `ns` is OPTIONAL and PER-EVENT. Omitted, nothing is decorated and the table
- * is keyed by the bare event names — a single-instance machine carries no
- * namespace and passes no dummy string. Given, the author's own events are
- * keyed `${ns}.${event}` (so N instances share one dispatch surface with
- * genuinely disjoint literal unions), while every event the chart marks
- * `foreign: true` keeps its BARE name: a library-minted Msg like
- * `deadline_exceeded` is the same event for every instance, and its name was
- * never the author's to rename.
- *
- * The returned type is `Transitions<S, MsgIn<C, NS>, K>` — literal keys, never
- * `string`. The parts are authored against the BARE msg union; the compiled
- * cell restores the bare event name before calling them.
- *
- * `S`/`M`/`K` DEFAULT to the chart's own derivations, so the common call is
- * `compile(chart, parts)` with no type arguments at all.
+ * The shape `compile` builds and then declares as a `Transitions<S, M, C>`. It
+ * is named because a second caller needs the walk without the declaration:
+ * `chart/lane/run` compiles ONE region per task and the tables it holds are
+ * keyed by task id, so the per-region `Transitions` type is never the type of
+ * anything it stores.
  */
-export function compile<
-  const C extends Chart<C>,
-  S extends { type: string } = StateOf<C>,
-  M extends { type: string } = MsgOf<C>,
-  K extends Cmd = CmdOf<C>,
-  const NS extends string | undefined = undefined,
->(chart: C, parts: Parts<C, S, M>, ns?: NS): Transitions<S, MsgIn<C, NS>, K> {
+export type CompiledTable = Readonly<
+  Record<string, Readonly<Record<string, RtCell | undefined>> | undefined>
+>;
+
+/**
+ * THE WALK, with no type layer over it — `compile`'s body, callable by a second
+ * compiler that has already done its own type checking.
+ *
+ * `chart`/`parts` are `object` rather than the F-bounded `Chart<C>`/`Parts<…>`
+ * because this entry is not where the checking happens; it is where the
+ * checking has ALREADY happened. The erasing cast lives here, exactly once, at
+ * the top of the walk — which is where it lived before this function had a
+ * name, so nothing gained a cast by being reachable from two places.
+ */
+export function compileTable(
+  chart: object,
+  parts: object,
+  ns: string | undefined,
+): CompiledTable {
   const c = chart as unknown as RtChart;
   const p = rtParts(parts);
 
@@ -341,8 +363,11 @@ export function compile<
         // the type layer forbids, so it is the only case that throws.
         const scope = scopeList(c.events[e]?.scope ?? "edges");
         const live = scope.includes("all") || scope.includes(group);
+        // `end` is `true` (success) or `"error"`; BOTH are final, and the type
+        // layer's `IsEndOf` reads both. Testing `=== true` here would put an
+        // error final back under the totality obligation at runtime only.
         const refused =
-          node.end === true || !live || (node.ignore ?? []).includes(e);
+          node.end !== undefined || !live || (node.ignore ?? []).includes(e);
         row[key] = refused
           ? (st) => [st, []]
           : () => {
@@ -358,12 +383,45 @@ export function compile<
     table[s] = row;
   }
 
+  return table;
+}
+
+/**
+ * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
+ *
+ * `ns` is OPTIONAL and PER-EVENT. Omitted, nothing is decorated and the table
+ * is keyed by the bare event names — a single-instance machine carries no
+ * namespace and passes no dummy string. Given, the author's own events are
+ * keyed `${ns}.${event}` (so N instances share one dispatch surface with
+ * genuinely disjoint literal unions), while every event the chart marks
+ * `foreign: true` keeps its BARE name: a library-minted Msg like
+ * `deadline_exceeded` is the same event for every instance, and its name was
+ * never the author's to rename.
+ *
+ * The returned type is `Transitions<S, MsgIn<C, NS>, K>` — literal keys, never
+ * `string`. The parts are authored against the BARE msg union; the compiled
+ * cell restores the bare event name before calling them.
+ *
+ * `S`/`M`/`K` DEFAULT to the chart's own derivations, so the common call is
+ * `compile(chart, parts)` with no type arguments at all.
+ */
+export function compile<
+  const C extends Chart<C>,
+  S extends { type: string } = StateOf<C>,
+  M extends { type: string } = MsgOf<C>,
+  K extends Cmd = CmdOf<C>,
+  const NS extends string | undefined = undefined,
+>(chart: C, parts: Parts<C, S, M>, ns?: NS): Transitions<S, MsgIn<C, NS>, K> {
   // ── THE ONE CAST ────────────────────────────────────────────────────────
   // Inside the library, at the construction boundary. `Transitions` is a
   // mapped type over `S["type"] × M["type"]`; the walk builds the same keys
   // from the flattened chart × the per-event keys, but tsc cannot see that a
   // string-keyed record built in a loop is total over those unions.
-  return table as unknown as Transitions<S, MsgIn<C, NS>, K>;
+  return compileTable(chart, parts, ns) as unknown as Transitions<
+    S,
+    MsgIn<C, NS>,
+    K
+  >;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -469,20 +527,16 @@ export function reducerMermaid<const C extends ReducerChart<C>>(
   chart: C,
 ): string {
   const c = chart as unknown as RtReducerChart;
-  const lines = ["stateDiagram-v2", "  direction TB", `  [*] --> ${c.initial}`];
+  const lines = [
+    "stateDiagram-v2",
+    "  direction TB",
+    `  [*] --> ${safeId(c.initial)}`,
+  ];
+  // The SAME edge grammar `chartMermaid` draws — see {@link edgeLines}. The one
+  // difference this form has is `from`, which is `any` at every edge, because
+  // having no phase dimension MEANS every edge is reachable from every state.
   for (const [e, spec] of Object.entries(c.on)) {
-    const edge = typeof spec === "string" ? { target: spec } : spec;
-    if (edge.cell !== undefined) {
-      for (const t of edge.to ?? []) {
-        lines.push(`  any --> ${t} : ${e} / ${edge.cell}()`);
-      }
-    } else {
-      if (edge.target !== undefined)
-        lines.push(`  any --> ${edge.target} : ${e}`);
-      if (edge.otherwise !== undefined) {
-        lines.push(`  any --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`);
-      }
-    }
+    lines.push(...edgeLines("any", "any", e, spec, NO_MARKS));
   }
   return lines.join("\n");
 }
@@ -547,33 +601,254 @@ export function initFrom<
 // of a `{ to, cell }` edge now. The chart, though, still knows every possible
 // target, which is the whole point of declaring `to`. This reads the chart
 // directly and draws the full fan-out, no samples and no execution needed.
+//
+// THIS IS THE ONLY CHART RENDERER. `chart/report/draw.ts` used to carry a
+// second one, written in parallel against the same mermaid grammar while this
+// one was growing its options bag; the two diverged before the swap its banner
+// promised ever happened (a guarded then-arm drawn bare here and labelled
+// there, two spellings of the highlight class, sanitizing on one side only).
+// How a chart is drawn is ONE fact, so there is one body and the report enters
+// it through `drawTask`, which is now nothing but a translation of its option
+// names into these.
+//
+// WHAT MERMAID CAN AND CANNOT DO, stated so `walked` is judged fairly:
+// `stateDiagram-v2` supports `classDef`/`class`, so LIGHTING A NODE is real
+// styling. It supports no per-edge styling at all — there is no `linkStyle` for
+// a state diagram — so a walked edge is marked ON ITS LABEL (`»`, plus the
+// visit count) rather than thickened. Still true as of mermaid 11.
 // ═══════════════════════════════════════════════════════════════════════════
-export function chartMermaid<const C extends Chart<C>>(chart: C): string {
+
+/** How many times each {@link edgeKey} was walked. */
+export type WalkCounts = ReadonlyMap<string, number>;
+
+/**
+ * The key a {@link ChartMermaidOptions.walked} map is read by.
+ *
+ * One spelling, shared by whoever counts the walk and the drawing that marks
+ * it — the names are the chart's OWN, unsanitized, because the counter reads
+ * them off a log and has no business knowing what mermaid can spell.
+ *
+ * NOT `EdgeKey<C>` (`graph.ts`), despite the casing. That one is the SITE tag
+ * — `"state.event"` — which is what a guard or a cmd builder is keyed by,
+ * because a site is where code hangs. This one names a drawn ARROW, and a
+ * guarded site draws two of them, so it needs the target as well.
+ */
+export const edgeKey = (from: string, event: string, to: string): string =>
+  `${from}|${event}|${to}`;
+
+/**
+ * Options for {@link chartMermaid}. Every field is optional and every default
+ * reproduces the drawing this function emitted before options existed — a flat
+ * node set, `direction TB`, no title, no highlight, no polarity and no walk —
+ * so an existing caller is untouched.
+ *
+ * Shaped after `MachineVizOptions` (`../machine-viz`) where the two overlap
+ * (`direction`, `title`), because the two drawings are read side by side and a
+ * second spelling of the same knob is a fact said twice. What is NOT shared is
+ * `samples`: `toMermaid` needs them because it must EXECUTE a compiled cell to
+ * learn a target; the chart declares its targets, so there is nothing to
+ * resolve and nothing to sample.
+ */
+export interface ChartMermaidOptions {
+  /**
+   * Draw this state as the ACTIVE node — a `classDef`/`class` pair Mermaid
+   * renders with the highlight fill. Pass the live `state.type`. A name that is
+   * not in the chart is ignored rather than drawn as a phantom node.
+   */
+  readonly highlight?: string;
+  /**
+   * Draw each phase as a Mermaid COMPOSITE state (`state working { … }`).
+   *
+   * The chart groups its states into named phases and the flat drawing throws
+   * that away — which is the one structural fact `chartMermaid` knew and did
+   * not show. Off by default: turning it on changes the emitted text, and the
+   * drawing is something a reviewer approves rather than something that moves
+   * under them.
+   */
+  readonly phases?: boolean;
+  /**
+   * Draw the two ENDINGS differently — a dashed outline on every `end:
+   * "error"` final, a heavier one on every `end: true`.
+   *
+   * A success final and an error final both terminate, so both draw the `[*]`
+   * edge, and a picture that stopped there paints `shipped` and `frozen` alike
+   * in the one place a reader looks first. Off by default for the same reason
+   * `phases` is: it changes the emitted text.
+   */
+  readonly polarity?: boolean;
+  /**
+   * Edges the caller actually WALKED, keyed by {@link edgeKey} — each drawn
+   * edge that has a count picks up a `»` (or `»×N`) on its label.
+   *
+   * A missing or zero count marks nothing, so a chart nobody has run through
+   * draws exactly as it does without this option.
+   */
+  readonly walked?: WalkCounts;
+  /** Mermaid layout direction. Default `"TB"`. */
+  readonly direction?: "TB" | "LR";
+  /** Optional title, emitted as a Mermaid front-matter `title:` block. */
+  readonly title?: string;
+}
+
+/** The CSS class Mermaid applies to the highlighted node. */
+const ACTIVE_CLASS = "teaActive";
+/** The highlighted node when it is where a task DIED — see `chartMermaid`. */
+const ACTIVE_ERROR_CLASS = "teaActiveError";
+/** …and to the two endings, when `polarity` asks for them. */
+const TRIPPED_CLASS = "teaTripped";
+const SHIPPED_CLASS = "teaShipped";
+
+/**
+ * A node's declaration line, or `undefined` when the sanitized id already IS
+ * the name and the bare id carries the whole fact. Emitting the label only for
+ * a renamed node is what keeps the default drawing byte-identical for charts
+ * whose names were already Mermaid-safe.
+ */
+function nodeDecl(raw: string, indent: string): string | undefined {
+  const id = safeId(raw);
+  return id === raw ? undefined : `${indent}${id} : ${safeLabel(raw)}`;
+}
+
+/**
+ * ONE edge, as the arrows that draw it — the whole edge grammar, in one place.
+ *
+ * Both drawings in this file come through here: the grid form draws it from
+ * each state, the reducer form from the single `any` node, and the two forms
+ * differ in what `from` is and in nothing else. That is not tidiness — the
+ * guarded arm's labelling was wrong in both of them, in the same way, and one
+ * of them was fixed once already without the other moving.
+ *
+ * `at` is the UNSANITIZED source-state name the walk counter keyed by; `from`
+ * is what mermaid will read.
+ */
+function edgeLines(
+  from: string,
+  at: string,
+  e: string,
+  spec: RtEdge,
+  mark: (from: string, event: string, to: string) => string,
+): readonly string[] {
+  const edge = typeof spec === "string" ? { target: spec } : spec;
+  const out: string[] = [];
+  // ONE arrow-writer for every edge form, so the walk mark cannot be
+  // remembered on three of the four and forgotten on the fourth.
+  const arrow = (to: string, label: string): void => {
+    out.push(
+      `  ${from} --> ${safeId(to)} : ${safeLabel(`${label}${mark(at, e, to)}`)}`,
+    );
+  };
+  if (edge.cell !== undefined) {
+    // one real edge per DECLARED target — the fan-out, labelled with the cell
+    // that picks among them.
+    for (const t of edge.to ?? []) arrow(t, `${e} / ${edge.cell}()`);
+    return out;
+  }
+  if (edge.resume !== undefined) {
+    arrow(edge.resume.fallback, `${e} (resume)`);
+    return out;
+  }
+  // A GUARDED edge labels BOTH arms. Drawing the then-arm bare — `review -->
+  // build : FAIL` beside `review --> frozen : FAIL [!retriesRemaining]` —
+  // reads as an unconditional edge racing a conditional one, which is not what
+  // the chart says: the then-arm is exactly as conditional as the else-arm,
+  // and the reader is left to infer its guard from a sibling arrow.
+  const guard = edge.when === undefined ? "" : ` [${edge.when}]`;
+  if (edge.target !== undefined) arrow(edge.target, `${e}${guard}`);
+  if (edge.otherwise !== undefined)
+    arrow(edge.otherwise, `${e} [!${edge.when ?? ""}]`);
+  return out;
+}
+
+/** No walk to mark — the drawings that take no `walked` map. */
+const NO_MARKS = (): string => "";
+
+export function chartMermaid<const C extends Chart<C>>(
+  chart: C,
+  opts: ChartMermaidOptions = {},
+): string {
   const c = chart as unknown as RtChart;
-  const lines = ["stateDiagram-v2", "  direction TB"];
-  for (const [s, { node }] of flatten(c)) {
-    if (node.initial === true) lines.push(`  [*] --> ${s}`);
-    for (const [e, spec] of Object.entries(node.on ?? {})) {
-      const edge = typeof spec === "string" ? { target: spec } : spec;
-      if (edge.cell !== undefined) {
-        // one real edge per DECLARED target — the fan-out, labelled with the
-        // cell that picks among them.
-        for (const t of edge.to ?? []) {
-          lines.push(`  ${s} --> ${t} : ${e} / ${edge.cell}()`);
-        }
-      } else if (edge.resume !== undefined) {
-        lines.push(`  ${s} --> ${edge.resume.fallback} : ${e} (resume)`);
-      } else {
-        if (edge.target !== undefined)
-          lines.push(`  ${s} --> ${edge.target} : ${e}`);
-        if (edge.otherwise !== undefined) {
-          lines.push(
-            `  ${s} --> ${edge.otherwise} : ${e} [!${edge.when ?? ""}]`,
-          );
-        }
+  const flat = flatten(c);
+  const lines: string[] = [];
+  if (opts.title !== undefined)
+    lines.push("---", `title: ${opts.title}`, "---");
+  lines.push("stateDiagram-v2", `  direction ${opts.direction ?? "TB"}`);
+
+  // The walk mark, keyed by the chart's OWN names — `walked` is counted off a
+  // log, so it never saw a sanitized id.
+  const walked = opts.walked;
+  const mark = (from: string, event: string, to: string): string => {
+    const n = walked?.get(edgeKey(from, event, to)) ?? 0;
+    return n === 0 ? "" : n === 1 ? " »" : ` »×${n}`;
+  };
+
+  // Phases, as composite states. Declared BEFORE the edges so every node is
+  // already inside its phase by the time an arrow references it — Mermaid
+  // otherwise hoists the first mention to the top level.
+  if (opts.phases === true) {
+    for (const [group, members] of Object.entries(c.states)) {
+      lines.push(`  state ${safeId(group)} {`);
+      for (const s of Object.keys(members)) {
+        lines.push(nodeDecl(s, "    ") ?? `    ${safeId(s)}`);
       }
+      lines.push("  }");
     }
-    if (node.end === true) lines.push(`  ${s} --> [*]`);
+  }
+
+  for (const [s, { node }] of flat) {
+    const from = safeId(s);
+    // A renamed node needs its human name shown once. In `phases` mode the
+    // declaration already went inside the composite block.
+    if (opts.phases !== true) {
+      const decl = nodeDecl(s, "  ");
+      if (decl !== undefined) lines.push(decl);
+    }
+    if (node.initial === true) lines.push(`  [*] --> ${from}`);
+    for (const [e, spec] of Object.entries(node.on ?? {})) {
+      lines.push(...edgeLines(from, s, e, spec, mark));
+    }
+    // Both polarities terminate, so both draw the `[*]` edge — an error final
+    // that stopped drawing one would read as a state the machine can leave.
+    if (node.end !== undefined) lines.push(`  ${from} --> [*]`);
+  }
+
+  // The classes, last: a `classDef` must exist before the `class` line that
+  // uses it, and both must sit outside any composite block. Each pair is
+  // emitted only when something wears it, so an unused `classDef` never lands.
+  if (opts.polarity === true) {
+    const tripped: string[] = [];
+    const shipped: string[] = [];
+    for (const [s, { node }] of flat) {
+      if (node.end === "error") tripped.push(safeId(s));
+      if (node.end === true) shipped.push(safeId(s));
+    }
+    if (tripped.length > 0) {
+      lines.push(
+        `  classDef ${TRIPPED_CLASS} stroke-dasharray:4 4`,
+        `  class ${tripped.join(",")} ${TRIPPED_CLASS}`,
+      );
+    }
+    if (shipped.length > 0) {
+      lines.push(
+        `  classDef ${SHIPPED_CLASS} stroke-width:2px`,
+        `  class ${shipped.join(",")} ${SHIPPED_CLASS}`,
+      );
+    }
+  }
+  if (opts.highlight !== undefined && flat.has(opts.highlight)) {
+    // The lit node carries POLARITY too, when polarity is on. `polarity` draws
+    // the two endings apart by STROKE and the highlight then painted a fill
+    // over the top, so an error final and a success final were the same picture
+    // at the exact moment one of them is where a task DIED. Every other surface
+    // — the chip, the badge, the stuck panel — says which; the drawing is the
+    // thing a reader looks at first and it was the one saying nothing.
+    const lit = flat.get(opts.highlight)?.node;
+    const died = opts.polarity === true && lit?.end === "error";
+    const cls = died ? ACTIVE_ERROR_CLASS : ACTIVE_CLASS;
+    const paint = died ? "#f85149" : "#2f81f7";
+    lines.push(
+      `  classDef ${cls} fill:${paint},stroke:${paint},color:#fff,font-weight:bold`,
+      `  class ${safeId(opts.highlight)} ${cls}`,
+    );
   }
   return lines.join("\n");
 }

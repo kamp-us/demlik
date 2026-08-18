@@ -1,0 +1,13 @@
+{
+  "stateValue": "tripped",
+  "status": "done",
+  "context": {
+    "issue": {
+      "retries": 2,
+      "maxRetries": 2
+    },
+    "errors": [
+      "issue"
+    ]
+  }
+}

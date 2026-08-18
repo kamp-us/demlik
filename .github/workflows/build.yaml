@@ -1,12 +1,17 @@
 name: build
 
 on:
+  # `**`, not `*`: a GitHub branch filter treats `*` as matching a single path
+  # SEGMENT, so `*` never matched `can/chart` and push CI had never run on any
+  # prefixed branch. Worse, a stacked PR whose BASE contains a slash matched
+  # neither trigger and got no CI at all — silently, because a PR with zero
+  # checks reads the same as a PR whose checks have not started yet.
   push:
     branches:
-      - "*"
+      - "**"
   pull_request:
     branches:
-      - "*"
+      - "**"
 
 jobs:
   test-and-build:
@@ -29,6 +34,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+
+      # First, because it is the cheapest and because every other gate has
+      # already been observed to miss it: a merge left conflict markers in two
+      # markdown files and typecheck, lint, build, verify-exports AND
+      # check-export-stamps all passed on the result.
+      - name: Conflict markers
+        run: pnpm run check:merge-markers
 
       # Fast + deterministic, so it gates before the slower test/build.
       - name: Typecheck

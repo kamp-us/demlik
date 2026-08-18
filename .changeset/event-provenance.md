@@ -1,0 +1,5 @@
+---
+"@demlik/tea": minor
+---
+
+**`from` on an event — where its Msg comes from.** A chart says `WIP: "build"`, an edge from an event to a target; it never said where the event comes from. In TEA a Msg has exactly three origins — a Cmd's result, a Sub firing, the outside world — so `from: "cmd" | "sub" | { world: <role> }` declares which, once, on the event that owns the fact. The taxonomy is closed and the **cast is open**: the world origin carries a role name you choose, so an operator, a shopper, an on-call rota and a webhook are all expressible and none is enumerated by the library. `OriginAt`, `CmdEvent`, `SubEvent`, `WorldEvent` and `WorldRole` derive off it; `describeChart` returns it per event and `EventPreview` carries it to the button row (a refused event has a sender too). Optional throughout — a chart that declares no `from` derives `never` everywhere and behaves exactly as it did — and it composes with `scope`, `data` and `foreign` without touching any of them. A second field inside `{ world }` is a compile error naming the offender (probe 50).

@@ -21,6 +21,26 @@ what you are trying to do, and it names the subpath you need.
 - [Run many instances of one chart](./run-many-instances-of-one-chart.md) —
   compile with a namespace so N instances share a dispatch surface, and mark
   library-minted events `foreign: true` so their names stay bare.
+- [Inspect a chart live](./inspect-a-chart-live.md) — point `<ChartInspector>` at
+  a chart to get a whole debugger page with no page code: a control per message,
+  refusals rendered with their reason, a guard's branch previewed against the
+  live state, and a scrubber that time-travels by pure replay.
+
+## Read a running machine
+
+- [Describe and run a lane of parallel charts](./describe-a-lane.md) — use
+  `@demlik/tea/chart/lane` when the workload is not one machine: N chart
+  instances running side by side, grouped into phases that sequence, folding to
+  a compound state and ending complete or tripped — and `runLane` when you want
+  to drive it as a real `Machine`.
+- [Report on a fabrika lane](./report-on-a-fabrika-lane.md) — import a
+  `workflow.json` into charts with `@demlik/tea/chart/report` and render a lane
+  as one markdown block (diagram, "waiting on", retry budget, timeline) that
+  reads the same in a terminal, a PR comment and an issue comment.
+- [Look at a lane in a browser](./look-at-a-lane-in-a-browser.md) — put the same
+  lane on a page with `@demlik/tea/chart/lane/react`: which of twelve things is
+  stuck first, the phases in order, a scrubber over the run, and dispatch where
+  the code bodies exist — over a replayed event log or a live `runLane`.
 
 ## Test and verify
 

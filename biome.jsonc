@@ -1,5 +1,25 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "files": {
+    // VENDORED UPSTREAM SOURCE — formatted by the repo it came from, not by
+    // this one. `src/chart/report/__fixtures__/vendor/` holds fabrika's own
+    // lane compiler and the two committed `workflow.json` templates, copied at
+    // a recorded commit and used as the golden oracle the importer is asserted
+    // against. Reformatting them would make every re-vendor a whole-file diff
+    // and hide the change that actually matters, so biome leaves them alone.
+    // tsc does NOT: they are inside `src` and must still compile.
+    //
+    // `src/chart/report/__fixtures__/real/` is the same rule for a different
+    // reason: those files are the `fabrika` BINARY's output — stdout bytes and
+    // the lane directory it wrote. Formatting them would destroy the one
+    // property they are kept for, which is that they are byte-for-byte what
+    // came out of another process. Nothing in `src` imports them as modules.
+    "includes": [
+      "**",
+      "!src/chart/report/__fixtures__/vendor/**",
+      "!src/chart/report/__fixtures__/real/**"
+    ]
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space"

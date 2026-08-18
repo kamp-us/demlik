@@ -1,0 +1,700 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// THE IMPORTER — one `workflow.json` in, one chart per task out.
+//
+// This is the mirror of `kamp-us/phoenix` `packages/fabrika-cli/src/lane/
+// machine.ts`, and it is deliberately STRUCTURAL in exactly the same three
+// places, because that is what makes the two agree:
+//
+//   an `on` string           → `{ target }`
+//   an `on` two-arm array    → `{ target, when, otherwise }`   (guarded)
+//   a target of `type: "history"` → `{ resume: { fallback: <region initial> } }`
+//   `type: "final"`          → `end: true`
+//   …reached as an array's fallthrough → `end: "error"`
+//   machine-level `type: "parallel"` → a phase; its `onDone` pair → the terminals
+//
+// GRAMMAR, NEVER VOCABULARY. Every rule above is about what makes a document
+// WELL-FORMED — a state routes events to targets, a guarded edge is a two-arm
+// array, a `history` target means resume, a `final` is terminal. None of them
+// is about WHICH NAMES a consumer chose. So the event alphabet is read OFF the
+// document: a name a state declares is, by definition, an event of that
+// document, and there is no list here for it to be absent from.
+//
+// That is not a relaxation for its own sake. This file used to carry a consumer's
+// six event names as a closed set, which meant one upstream commit adding a
+// seventh took the importer offline for every document, not just the new one —
+// the same failure mode the report had when it matched STATE names, and the same
+// fix: enforce the shape, read the names.
+//
+// No guard name and no action name is ever dereferenced here, for the same
+// reason fabrika does not dereference them: the ARRAY is the guard. The name
+// travels into the chart's `when` because the chart draws it, and the fold
+// applies the one inline predicate (`retries < maxRetries`) the compiler
+// applies, whatever the name says. An event name is the same kind of thing.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import type { EventOrigin } from "../graph";
+
+/** `TASK_1.DONE` and `DONE` are the same event; the namespace is presentation. */
+export const bareEvent = (event: string): string => {
+  const dot = event.indexOf(".");
+  return dot === -1 ? event : event.slice(dot + 1);
+};
+
+// ── the imported chart's shape ─────────────────────────────────────────────
+//
+// RUNTIME-TYPED, and the doc comment on `chartFromWorkflow` says why. These
+// interfaces are the chart's VALUE shape narrowed to the three edge forms a
+// fabrika region can produce — not `Chart<C>`, whose whole content is literal
+// types recovered from a literal the compiler can see.
+
+/** A declarative edge, in the only three forms a lane region can produce. */
+/**
+ * `cmd` / `otherwiseCmd` are carried but never AUTHORED here: a `workflow.json`
+ * declares no effects, so an imported edge simply has neither. They exist
+ * because the TYPED door has them and lowering used to drop them, which left a
+ * lane page able to say where a click LANDS and never what it FIRES — a fact
+ * the author wrote down, lost in translation.
+ */
+type ImportedCmds = {
+  readonly cmd?: string | readonly string[];
+  readonly otherwiseCmd?: string | readonly string[];
+};
+
+export type ImportedEdge =
+  | ({ readonly target: string } & ImportedCmds)
+  | ({
+      readonly target: string;
+      readonly when: string;
+      readonly otherwise: string;
+    } & ImportedCmds)
+  | ({ readonly resume: { readonly fallback: string } } & ImportedCmds);
+
+export interface ImportedNode {
+  readonly initial?: true;
+  readonly on?: Readonly<Record<string, ImportedEdge>>;
+  /** `true` success final, `"error"` the fallthrough final that trips the lane. */
+  readonly end?: true | "error";
+}
+
+/** One task's region, as a chart value. One phase group, named by the phase. */
+export interface ImportedChart {
+  readonly events: Readonly<
+    Record<
+      string,
+      {
+        readonly scope: "edges";
+        /**
+         * Where this event comes from — the chart's `from`, at runtime.
+         *
+         * OPTIONAL, and its absence is the document's honest answer:
+         * `workflow.json` records the topology and nothing about who sends
+         * what, so this is present exactly when the caller supplied it at
+         * {@link chartFromWorkflow}.
+         */
+        readonly from?: EventOrigin;
+      }
+    >
+  >;
+  readonly states: Readonly<
+    Record<string, Readonly<Record<string, ImportedNode>>>
+  >;
+  /**
+   * State name → the events that state ACCEPTS AND DROPS, leaving itself alone.
+   *
+   * THE THIRD ANSWER. A lane state either routes an event, or refuses it, or
+   * cannot replay it — tea's runtime has always had all three (`compile`'s
+   * `refused` self-loops a pair the state's `ignore` names or the event's
+   * `scope` does not address, and only a LIVE-but-undecided pair throws), and
+   * the lowered chart could carry only two. So `stepTask` threw
+   * `UnreplayableLogError` on a log `runLane` had accepted without blinking: a
+   * run and a report of that run disagreeing, which is the one thing this
+   * module promises they cannot do.
+   *
+   * IT IS ON THE CHART, NOT ON THE NODE, and that is deliberate.
+   * {@link ImportedNode} is a MIRROR of the node fabrika's own compiler emits —
+   * `golden.test.ts` compares the two — so a field fabrika never produces does
+   * not belong inside it. This is our layer's annotation about someone else's
+   * shape, and it sits one level out where it reads as one.
+   *
+   * ABSENT AT THE IMPORTED DOOR, always. A refusal is a fact about a state's
+   * `ignore` and an event's `scope`, and `workflow.json` records neither — so
+   * `chartFromWorkflow` writes none, an imported chart is the same value it
+   * always was, and an imported log naming an unrouted event is still refused
+   * loudly. Only `defineLane`'s lowering, which can SEE the two, fills it in.
+   */
+  readonly refusals?: Readonly<Record<string, readonly string[]>>;
+}
+
+export interface ImportedPhase {
+  readonly name: string;
+  readonly tasks: readonly string[];
+}
+
+export interface ImportedLane {
+  /** The document's own `id`, when it carries one. */
+  readonly id?: string;
+  /** What fires this lane — a chore workflow's own field, carried not invented. */
+  readonly trigger?: string;
+  readonly phases: readonly ImportedPhase[];
+  /** The workflow's two terminals, read off the last phase's `onDone` pair. */
+  readonly terminals: { readonly complete: string; readonly tripped: string };
+  /** One chart per task id — the ask's `charts`. */
+  readonly charts: Readonly<Record<string, ImportedChart>>;
+  /**
+   * The document's `context` per task, minus the retry bookkeeping the fold
+   * owns. `maxRetries` is split out because it is a transition input, not a
+   * passenger — the guarded arm reads it.
+   */
+  readonly context: Readonly<
+    Record<
+      string,
+      {
+        readonly maxRetries: number;
+        readonly extras: Readonly<Record<string, unknown>>;
+      }
+    >
+  >;
+}
+
+/**
+ * THE ONE PLACE PROVENANCE ENTERS.
+ *
+ * `workflow.json` carries topology and nothing else: it says `queued --WIP-->
+ * build` and it does not say, and has never said, who sends a `WIP`. That fact
+ * lives in fabrika's CODE, not in fabrika's document — so it cannot be read
+ * here and it must not be guessed here.
+ *
+ * So the caller states it, ONCE, at the seam where their world meets ours, and
+ * everything downstream derives from that: the charts carry it, the report
+ * groups by it, the inspector reports it. One map, at the boundary the
+ * information actually crosses — not a default sprinkled through the readers,
+ * and not a table of fabrika's own event names baked in as a fallback, which
+ * would put us right back to owning a copy of someone else's vocabulary.
+ *
+ * ```ts
+ * chartFromWorkflow(document, {
+ *   from: {
+ *     WIP: { world: "the operator" },
+ *     BLOCKED: { world: "the operator" },
+ *     UNBLOCKED: { world: "a human" },
+ *     DONE: "cmd",
+ *     PASS: "cmd",
+ *     FAIL: "cmd",
+ *   },
+ * });
+ * ```
+ *
+ * Omit it and every reader degrades honestly — it says which events a state
+ * accepts and refuses to say who they come from.
+ */
+export interface WorkflowImportOptions {
+  /**
+   * Event name → where its Msg comes from. Keyed by the BARE name, so one
+   * entry covers every task's namespaced spelling of it (`ISSUE.WIP`,
+   * `PARK_SWEEP.WIP`) — the namespace is presentation, the event is the event.
+   *
+   * A name with no entry is left undeclared rather than defaulted. "I do not
+   * know" and "the outside world" are different answers and only one of them
+   * is safe to invent.
+   */
+  readonly from?: Readonly<Record<string, EventOrigin>>;
+  /**
+   * Refuse a `from` key that names no event THIS document routes.
+   *
+   * The silent drop it closes is real: `UNBLOKED: { world: "a human" }` imports
+   * clean, and every reader downstream then answers "the chart does not say"
+   * for the one event the caller had just taken the trouble to declare. The
+   * cross-check needs no list of ours — {@link eventAlphabet} derives the
+   * document's own alphabet, which is precisely what that function exists for
+   * and what nothing was calling.
+   *
+   * OPT-IN, because the map is legitimately WIDER than one document. A
+   * consumer's cast is a property of their world, not of one template, so one
+   * `from` covers every workflow they run — `src/chart/report/__fixtures__/
+   * origins.ts` states fabrika's six once and imports two templates with it,
+   * and the chore template routes neither `PASS` nor `FAIL`. Defaulting to
+   * strict would make sharing a cast an error, which is the wrong half of the
+   * trade. So the caller says which of the two they meant: pass this when the
+   * map was written FOR this document, and a typo in it stops compiling.
+   */
+  readonly strictFrom?: true;
+}
+
+/**
+ * The document does not fit — with EVERY defect named, never a half-import.
+ *
+ * Same contract as fabrika's `Malformed`: a `workflow.json` that cannot be
+ * compiled comes back as a list of reasons rather than as a machine that works
+ * for some states. Thrown rather than returned because the chart module's other
+ * doors throw too (`initialStateOf`, `CellTargetError`) and an importer that
+ * returned a union would be the only one a caller could forget to check.
+ */
+export class WorkflowImportError extends Error {
+  override readonly name = "WorkflowImportError";
+  readonly _tag = "WorkflowImportError" as const;
+  constructor(public readonly defects: readonly string[]) {
+    super(
+      `@demlik/tea: this workflow.json does not compile to charts —\n` +
+        defects.map((d) => `  • ${d}`).join("\n"),
+    );
+  }
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const nodeType = (node: unknown): string | undefined =>
+  isRecord(node) && typeof node.type === "string" ? node.type : undefined;
+
+/**
+ * The retry budget a document inherits when its `context` names none.
+ *
+ * Exported because the fold needs the same number when it boots a task the
+ * document's `context` never mentioned, and a default spelled in two files is
+ * a default that drifts in one of them.
+ */
+export const RETRY_BUDGET = 2;
+
+/**
+ * The `when` a guarded arm carries when the document names no guard.
+ *
+ * A DESCRIPTION OF THE GRAMMAR, not a borrowed name. A two-arm array means
+ * "retry while the budget holds, else fall through" in every document, because
+ * that is what the array IS — so when the author wrote no label, the label says
+ * the thing the array already said. Defaulting to some consumer's guard name
+ * (`retriesRemaining`) would print their word over another consumer's document.
+ */
+const DEFAULT_GUARD = "retries remain";
+
+interface RegionImport {
+  readonly node?: Readonly<Record<string, ImportedNode>>;
+  readonly defects: readonly string[];
+}
+
+/** One task region → the phase group's state bag. `hist` is DROPPED, not kept. */
+function importRegion(taskId: string, region: unknown): RegionImport {
+  const defects: string[] = [];
+  if (
+    !isRecord(region) ||
+    !isRecord(region.states) ||
+    typeof region.initial !== "string"
+  ) {
+    return {
+      defects: [
+        `task "${taskId}": region must carry string \`initial\` and \`states\``,
+      ],
+    };
+  }
+  const states = region.states;
+  const initialState = region.initial;
+  if (states[initialState] === undefined) {
+    defects.push(
+      `task "${taskId}": initial state "${initialState}" is not in \`states\``,
+    );
+  }
+
+  // Pass 1: which names are finals at all. The polarity needs the whole set
+  // before any edge is read, because an error final is recognised by the edge
+  // that REACHES it and the edge may be declared before the state.
+  const finals = new Set<string>();
+  for (const [name, node] of Object.entries(states)) {
+    if (nodeType(node) === "final") finals.add(name);
+  }
+  const errorFinals = new Set<string>();
+
+  // Pass 2: the edges.
+  const on: Record<string, Record<string, ImportedEdge>> = {};
+  for (const [stateName, node] of Object.entries(states)) {
+    // `hist` IS a state node in the document and is NOT a chart state: the
+    // chart carries history as a property of the EDGE (`resume`), which is why
+    // it needs no pseudo-state to point at. Dropping it here is the same drop
+    // fabrika's compiler makes, one line above its own table build.
+    if (nodeType(node) === "history") continue;
+    const edges: Record<string, ImportedEdge> = {};
+    on[stateName] = edges;
+    if (!isRecord(node)) {
+      defects.push(`task "${taskId}": state "${stateName}" is not an object`);
+      continue;
+    }
+    const raw = node.on ?? {};
+    if (!isRecord(raw)) {
+      defects.push(
+        `task "${taskId}": state "${stateName}" carries a non-object \`on\``,
+      );
+      continue;
+    }
+    // Which bare name each spelling in THIS state collapsed to, so the one
+    // event-name rule that IS grammatical can be checked: a state holds one
+    // cell per event, so two spellings of one event in one state is a document
+    // that means two things by the same edge. Nothing here cares WHICH names.
+    const spelledAs = new Map<string, string>();
+    for (const [eventName, transition] of Object.entries(raw)) {
+      const event = bareEvent(eventName);
+      if (event === "") {
+        defects.push(
+          `task "${taskId}": state "${stateName}" listens for "${eventName}", which names no event once its namespace is stripped`,
+        );
+        continue;
+      }
+      const already = spelledAs.get(event);
+      if (already !== undefined) {
+        defects.push(
+          `task "${taskId}": state "${stateName}" spells the same event twice — "${already}" and "${eventName}" are both \`${event}\`, and a state routes each event once`,
+        );
+        continue;
+      }
+      spelledAs.set(event, eventName);
+
+      // ── the guarded array ────────────────────────────────────────────────
+      if (Array.isArray(transition)) {
+        const arms = transition.map((arm) =>
+          isRecord(arm) && typeof arm.target === "string"
+            ? arm.target
+            : undefined,
+        );
+        const [retry, fallthrough] = arms;
+        if (
+          transition.length !== 2 ||
+          retry === undefined ||
+          fallthrough === undefined
+        ) {
+          defects.push(
+            `task "${taskId}": guarded "${eventName}" must be a two-arm array of \`{target}\` — [retry-while-retries-remain, else-fallthrough]`,
+          );
+          continue;
+        }
+        for (const target of [retry, fallthrough]) {
+          if (states[target] === undefined) {
+            defects.push(
+              `task "${taskId}": "${eventName}" targets unknown state "${target}"`,
+            );
+          }
+        }
+        // THE POLARITY, recognised exactly where fabrika recognises it: a final
+        // reached as the fallthrough is the task's error terminal.
+        if (finals.has(fallthrough)) errorFinals.add(fallthrough);
+        const head = transition[0];
+        const when =
+          isRecord(head) && typeof head.guard === "string"
+            ? head.guard
+            : DEFAULT_GUARD;
+        edges[event] = { target: retry, when, otherwise: fallthrough };
+        continue;
+      }
+
+      if (typeof transition !== "string") {
+        defects.push(
+          `task "${taskId}": "${eventName}" is neither a target nor a guarded array`,
+        );
+        continue;
+      }
+      if (states[transition] === undefined) {
+        defects.push(
+          `task "${taskId}": "${eventName}" targets unknown state "${transition}"`,
+        );
+        continue;
+      }
+      // ── the history target ───────────────────────────────────────────────
+      edges[event] =
+        nodeType(states[transition]) === "history"
+          ? { resume: { fallback: initialState } }
+          : { target: transition };
+    }
+  }
+
+  if (defects.length > 0) return { defects };
+
+  const out: Record<string, ImportedNode> = {};
+  for (const [name, node] of Object.entries(states)) {
+    if (nodeType(node) === "history") continue;
+    const edges = on[name] ?? {};
+    const isFinal = finals.has(name);
+    out[name] = {
+      ...(name === initialState ? { initial: true as const } : {}),
+      ...(Object.keys(edges).length > 0 ? { on: edges } : {}),
+      ...(isFinal
+        ? { end: errorFinals.has(name) ? ("error" as const) : (true as const) }
+        : {}),
+    };
+  }
+  return { node: out, defects: [] };
+}
+
+/** The two targets of a phase's `onDone` pair: `[guarded success, fallthrough]`. */
+function onDoneTargets(
+  phaseName: string,
+  onDone: unknown,
+): { targets?: readonly [string, string]; defect?: string } {
+  const defect = `phase "${phaseName}": \`onDone\` must be a two-arm array of \`{target}\` — [{target, guard}, {target}]`;
+  if (!Array.isArray(onDone) || onDone.length !== 2) return { defect };
+  const [success, trip] = onDone.map((arm) =>
+    isRecord(arm) && typeof arm.target === "string" ? arm.target : undefined,
+  );
+  return success === undefined || trip === undefined
+    ? { defect }
+    : { targets: [success, trip] as const };
+}
+
+/**
+ * `workflow.json` → one chart per task, plus the phase topology around them.
+ *
+ * WHICH HALF GUARANTEES WHAT — this matters, and it is the whole reason the
+ * authored fixture (`src/chart/__fixtures__/lane.ts`) still exists beside this
+ * function rather than being deleted in its favour:
+ *
+ *   THIS FUNCTION gives you FIDELITY. It reads bytes that only exist at
+ *   runtime, so its result is `ImportedChart` — states, events and targets are
+ *   `string`, and nothing about them is checked before the process starts. What
+ *   it buys is that the drawing is of THE document the driver is actually
+ *   folding, including a `workflow.json` this repo has never seen.
+ *
+ *   THE AUTHORED FIXTURE gives you TYPES. `lane.ts` is the same machine written
+ *   as a literal, so `StateName`, `ResumeTargets`, `Assigns` and the totality
+ *   obligation are all real there, and `assert.test-d.ts` pins them. What it
+ *   cannot do is follow a document it was not written against.
+ *
+ * Neither replaces the other. The golden test is the seam: it asserts this
+ * importer's edge set against what fabrika's own compiler produces for the same
+ * file, so the runtime-typed half stays honest about the literal-typed one.
+ *
+ * @param document the PARSED `workflow.json` — `JSON.parse`'s output, not text.
+ * @param options  {@link WorkflowImportOptions} — the facts the document does
+ *                 not carry, stated once at the boundary they enter through.
+ * @throws {WorkflowImportError} with every defect named, never a half-import.
+ */
+export function chartFromWorkflow(
+  document: unknown,
+  options: WorkflowImportOptions = {},
+): ImportedLane {
+  const defects: string[] = [];
+  const machineDef = isRecord(document) ? document.machine : undefined;
+  if (!isRecord(machineDef) || !isRecord(machineDef.states)) {
+    throw new WorkflowImportError([
+      "document must carry a `machine.states` object",
+    ]);
+  }
+  const documentContext = isRecord(machineDef.context)
+    ? machineDef.context
+    : {};
+  const declaredTrigger = isRecord(document) ? document.trigger : undefined;
+  if (declaredTrigger !== undefined && typeof declaredTrigger !== "string") {
+    defects.push(
+      "document `trigger` must be a string naming what fires this lane",
+    );
+  }
+
+  const machineStates = machineDef.states;
+  const charts: Record<string, ImportedChart> = {};
+  const context: Record<
+    string,
+    {
+      readonly maxRetries: number;
+      readonly extras: Readonly<Record<string, unknown>>;
+    }
+  > = {};
+  const phases: ImportedPhase[] = [];
+  const gateTargets = new Set<string>();
+  let terminals: { complete: string; tripped: string } | undefined;
+
+  for (const [phaseName, node] of Object.entries(machineStates)) {
+    if (nodeType(node) !== "parallel" || !isRecord(node)) continue;
+    const regions = node.states;
+    if (!isRecord(regions) || Object.keys(regions).length === 0) {
+      defects.push(
+        `phase "${phaseName}": a parallel phase must carry task regions in \`states\``,
+      );
+      continue;
+    }
+    const phaseTasks: string[] = [];
+    for (const [taskId, region] of Object.entries(regions)) {
+      const imported = importRegion(taskId, region);
+      defects.push(...imported.defects);
+      if (imported.node !== undefined) {
+        const events: Record<
+          string,
+          { readonly scope: "edges"; readonly from?: EventOrigin }
+        > = {};
+        for (const edges of Object.values(imported.node)) {
+          for (const event of Object.keys(edges.on ?? {})) {
+            // The caller's map is the ONLY source of `from` — read once, here,
+            // and written onto the event. Absent stays absent.
+            const origin = options.from?.[event];
+            events[event] =
+              origin === undefined
+                ? { scope: "edges" }
+                : { scope: "edges", from: origin };
+          }
+        }
+        // ONE group, named by the phase. The authored twin splits the same
+        // states into working/parked/done, and that split is an AUTHORING
+        // choice the document does not record — inventing it here would be
+        // manufacturing knowledge the source does not have. It costs nothing:
+        // every event is `scope: "edges"` (a lane state either routes an event
+        // or refuses it), and with no broadcast scope the grouping carries no
+        // obligation to carry.
+        charts[taskId] = { events, states: { [phaseName]: imported.node } };
+      }
+      const ctx = documentContext[taskId];
+      const bag = isRecord(ctx) ? ctx : {};
+      const { maxRetries: rawMax, retries: _retries, ...extras } = bag;
+      context[taskId] = {
+        maxRetries: typeof rawMax === "number" ? rawMax : RETRY_BUDGET,
+        extras,
+      };
+      phaseTasks.push(taskId);
+    }
+    phases.push({ name: phaseName, tasks: phaseTasks });
+
+    const gate = onDoneTargets(phaseName, node.onDone);
+    if (gate.defect !== undefined) defects.push(gate.defect);
+    if (gate.targets !== undefined) {
+      for (const target of gate.targets) {
+        gateTargets.add(target);
+        if (machineStates[target] === undefined) {
+          defects.push(
+            `phase "${phaseName}": \`onDone\` targets unknown machine-level state "${target}"`,
+          );
+        }
+      }
+      // Every phase names the same trip terminal; the LAST phase's success
+      // target is the workflow's complete terminal, because earlier ones target
+      // the next phase.
+      terminals = { complete: gate.targets[0], tripped: gate.targets[1] };
+    }
+  }
+
+  // A machine-level state the loop above did not import is a terminal or a
+  // defect — never dropped silently.
+  for (const [name, node] of Object.entries(machineStates)) {
+    if (nodeType(node) === "parallel" && isRecord(node)) continue;
+    if (nodeType(node) !== "final") {
+      defects.push(
+        `machine-level state "${name}" is neither a \`parallel\` phase nor a \`final\` terminal`,
+      );
+    } else if (!gateTargets.has(name)) {
+      defects.push(
+        `machine-level final "${name}" is targeted by no phase's \`onDone\` pair`,
+      );
+    }
+  }
+  if (phases.length === 0)
+    defects.push("machine holds no `parallel` phase state");
+  if (defects.length > 0) throw new WorkflowImportError(defects);
+  if (terminals === undefined) {
+    throw new WorkflowImportError([
+      "no phase carried a readable `onDone` pair",
+    ]);
+  }
+
+  const id =
+    isRecord(document) && typeof document.id === "string"
+      ? document.id
+      : undefined;
+  const lane: ImportedLane = {
+    ...(id === undefined ? {} : { id }),
+    ...(typeof declaredTrigger === "string"
+      ? { trigger: declaredTrigger }
+      : {}),
+    phases,
+    terminals,
+    charts,
+    context,
+  };
+
+  // THE `from` MAP, CROSS-CHECKED — `eventAlphabet` exists for exactly this
+  // and nothing was calling it. The alphabet is DERIVED from the document, so
+  // this compares the caller's claim against the document itself rather than
+  // against a list of ours. See `strictFrom` for why it is the caller's call.
+  if (options.strictFrom === true) {
+    const declared = new Set(eventAlphabet(lane));
+    const strays = Object.keys(options.from ?? {}).filter(
+      (event) => !declared.has(event),
+    );
+    if (strays.length > 0) {
+      throw new WorkflowImportError(
+        strays.map(
+          (event) =>
+            `\`from\` names "${event}", which no state in this document routes — the map is keyed by the BARE event name`,
+        ),
+      );
+    }
+  }
+  return lane;
+}
+
+/** Parse and import in one step — for a caller holding the document's bytes. */
+export function chartFromWorkflowText(
+  text: string,
+  options: WorkflowImportOptions = {},
+): ImportedLane {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new WorkflowImportError(["the document is not JSON"]);
+  }
+  return chartFromWorkflow(parsed, options);
+}
+
+// ── reading a chart back ───────────────────────────────────────────────────
+
+/** Every state in an imported chart, flattened out of its one phase group. */
+export function statesOf(
+  chart: ImportedChart,
+): ReadonlyMap<string, ImportedNode> {
+  const out = new Map<string, ImportedNode>();
+  for (const group of Object.values(chart.states)) {
+    for (const [name, node] of Object.entries(group)) out.set(name, node);
+  }
+  return out;
+}
+
+/** The state marked `initial: true`. */
+export function initialOf(chart: ImportedChart): string {
+  for (const [name, node] of statesOf(chart)) {
+    if (node.initial === true) return name;
+  }
+  throw new Error("@demlik/tea: imported chart marks no initial state");
+}
+
+/**
+ * Every event name this lane declares, in first-declaration order.
+ *
+ * THE ALPHABET, DERIVED — the answer a caller used to get from a constant in
+ * this file listing one consumer's six. It is a fact about the document, so it
+ * is read from the document: the bare names its states route, deduplicated
+ * across tasks and phases. A consumer that adds an event gets it here the
+ * commit it lands, without a release of ours.
+ *
+ * Use it to build the `from` map at the import boundary and know you covered
+ * every name, or to diff two revisions of a workflow for a vocabulary change.
+ */
+export function eventAlphabet(lane: ImportedLane): readonly string[] {
+  const out = new Set<string>();
+  for (const chart of Object.values(lane.charts)) {
+    for (const event of Object.keys(chart.events)) out.add(event);
+  }
+  return [...out];
+}
+
+/**
+ * Where `event` comes from, or `undefined` when the chart does not say.
+ *
+ * The ONE read of provenance, so a reader that wants to group by origin and a
+ * reader that wants to label one event cannot disagree about what "undeclared"
+ * looks like.
+ */
+export function originOf(
+  chart: ImportedChart,
+  event: string,
+): EventOrigin | undefined {
+  return chart.events[event]?.from;
+}
+
+/** `true` success, `"error"` tripped, `false` not a final — the ONE polarity read. */
+export function endPolarityOf(
+  node: ImportedNode | undefined,
+): true | "error" | false {
+  if (node?.end === undefined) return false;
+  return node.end;
+}

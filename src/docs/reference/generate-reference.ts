@@ -296,12 +296,20 @@ function renderCompass(version: string): string {
  * TSDoc), not scraped output. Returns "" when the barrel has no block comment.
  */
 async function barrelGloss(srcRelPath: string): Promise<string> {
-  let text: string;
-  try {
-    text = await readFile(join(PKG_ROOT, srcRelPath), "utf8");
-  } catch {
-    return "";
+  // A barrel may be `.ts` or `.tsx` — `subpathToSrc` cannot know which without
+  // touching the filesystem, so the `.tsx` fallback lives here, where a read is
+  // already happening. Generic rather than a per-module special case: any React
+  // barrel added later gets its gloss for free.
+  let text: string | undefined;
+  for (const path of [srcRelPath, srcRelPath.replace(/\.ts$/, ".tsx")]) {
+    try {
+      text = await readFile(join(PKG_ROOT, path), "utf8");
+      break;
+    } catch {
+      // try the next extension
+    }
   }
+  if (text === undefined) return "";
   const block = text.match(/\/\*\*([\s\S]*?)\*\//);
   if (!block?.[1]) return "";
   const body = block[1]
@@ -324,10 +332,10 @@ function subpathToSrc(
       : isRecord(entry) && typeof entry.import === "string"
         ? entry.import
         : "";
-  // ./dist/foo/index.js -> src/foo/index.ts ; tsup maps extension/react.tsx.
-  let src = imp.replace(/^\.\/dist\//, "src/").replace(/\.js$/, ".ts");
-  if (src === "src/extension/react.ts") src = "src/extension/react.tsx";
-  return src;
+  // ./dist/foo/index.js -> src/foo/index.ts. A `.tsx` barrel (extension/react,
+  // chart/inspect/react) resolves in `barrelGloss`, which retries the other
+  // extension rather than carrying a list of names that drifts.
+  return imp.replace(/^\.\/dist\//, "src/").replace(/\.js$/, ".ts");
 }
 
 async function renderCatalog(

@@ -46,14 +46,19 @@ import {
   type CellEdgeKey,
   type CellName,
   type Cells,
+  type CmdEvent,
   type CmdName,
   type CmdOf,
   type Cmds,
   defineChart,
   defineReducerChart,
   type EdgeKey,
+  type EndPolarity,
   type Eq,
+  type ErrorFinal,
   type EventName,
+  type EventOrigin,
+  type ForeignEvent,
   type GroupName,
   type GroupOf,
   type GuardName,
@@ -64,6 +69,7 @@ import {
   type MissingPairs,
   type MsgIn,
   type MsgOf,
+  type OriginAt,
   type ParkingState,
   type RAssigns,
   type RCellEvent,
@@ -77,8 +83,12 @@ import {
   type RUsedCmdName,
   type StateName,
   type StateOf,
+  type SubEvent,
+  type SuccessFinal,
   ty,
   type UsedCmdName,
+  type WorldEvent,
+  type WorldRole,
 } from "./graph";
 
 /** Local narrowing shorthands for the upload demo's unions. */
@@ -1001,3 +1011,123 @@ export const computedKeyChart = defineChart({
   states: { only: { [STATE_A]: { initial: true, on: { X: "b" } }, b: {} } },
 });
 export type A103 = Assert<Eq<StateName<typeof computedKeyChart>, "a" | "b">>;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END POLARITY — a final's `true`/`"error"`, and the rules that must not
+// notice the difference.
+//
+// `end` widened from `true` to `true | "error"` so a chart can say WHICH ending
+// it reached. Two obligations follow, and both are pinned here rather than left
+// to the reader: the polarity must be READABLE off the chart (that is the whole
+// point), and every rule that keys off FINALITY must keep reading both spellings
+// (the regression that would otherwise land silently — an error final quietly
+// re-acquiring the totality obligation a success final is excused from, and
+// quietly re-acquiring the right to declare edges, which probe 49 pins).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// the polarity, read back off the one site it is declared at.
+export type A104 = Assert<Eq<EndPolarity<LaneG, "shipped">, true>>;
+export type A105 = Assert<Eq<EndPolarity<LaneG, "frozen">, "error">>;
+// a live state is not a final "with no polarity" — it is `false`.
+export type A106 = Assert<Eq<EndPolarity<LaneG, "review">, false>>;
+
+// the two terminal SETS, partitioned by polarity. `frozen` is the lane's whole
+// error surface, and `deriveStatus`'s trip is exactly this set being non-empty.
+export type A107 = Assert<Eq<SuccessFinal<LaneG>, "shipped">>;
+export type A108 = Assert<Eq<ErrorFinal<LaneG>, "frozen">>;
+
+// FINALITY IS BLIND TO POLARITY. `frozen` is `end: "error"` and still owes no
+// pair — if `IsEndOf` had kept testing `end: true` alone this would be the
+// `BLOCKED`/`UNBLOCKED` demand for a state that accepts nothing.
+export type A109 = Assert<Eq<MissingAt<LaneG, "frozen">, never>>;
+export type A110 = Assert<Eq<MissingAt<LaneG, "shipped">, never>>;
+export type A111 = Assert<Eq<MissingPairs<LaneG>, never>>;
+
+// backwards compatibility, stated as a type: a chart that never writes
+// `"error"` derives exactly what it derived before — every final is a success
+// final and the error set is empty.
+const successOnly = defineChart({
+  events: { X: { scope: "edges" } },
+  states: { only: { a: { initial: true, on: { X: "b" } }, b: { end: true } } },
+});
+export type A112 = Assert<Eq<SuccessFinal<typeof successOnly>, "b">>;
+export type A113 = Assert<Eq<ErrorFinal<typeof successOnly>, never>>;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROVENANCE — `from`, and the four fields it must not disturb.
+//
+// A Msg has exactly three origins (a Cmd's result, a Sub firing, the outside
+// world) and the chart now carries which. The reason it is DECLARED rather than
+// reconstructed is that the only other way to recover it is to match state
+// NAMES against a list of the consumer's own — a second declaration site for a
+// fact the event owns, which goes stale the moment the consumer renames a
+// state. So: the derivations are pinned, the additivity is pinned, and the
+// non-interference with `scope`/`data`/`foreign` is pinned.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// read back off the one site it is declared at, in all three forms.
+export type A114 = Assert<Eq<OriginAt<LaneG, "DONE">, "cmd">>;
+export type A115 = Assert<
+  Eq<OriginAt<LaneG, "WIP">, { readonly world: "the operator" }>
+>;
+export type A116 = Assert<Eq<WorldRole<LaneG, "UNBLOCKED">, "a human">>;
+// a `cmd` event has no role — the question does not apply, and the answer is
+// `never` rather than an empty string nobody can distinguish from one.
+export type A117 = Assert<Eq<WorldRole<LaneG, "DONE">, never>>;
+
+// the three PARTITIONS, which is what a reader actually groups by.
+export type A118 = Assert<Eq<CmdEvent<LaneG>, "DONE" | "PASS" | "FAIL">>;
+export type A119 = Assert<
+  Eq<WorldEvent<LaneG>, "WIP" | "BLOCKED" | "UNBLOCKED">
+>;
+export type A120 = Assert<Eq<SubEvent<LaneG>, never>>;
+
+// ADDITIVE. A chart that declares no `from` derives `never` everywhere — "the
+// chart does not say", which is a different answer from any of the three and
+// must stay distinguishable from all of them.
+export type A121 = Assert<Eq<OriginAt<typeof successOnly, "X">, never>>;
+export type A122 = Assert<Eq<CmdEvent<typeof successOnly>, never>>;
+export type A123 = Assert<Eq<WorldEvent<typeof successOnly>, never>>;
+
+// NON-INTERFERENCE, on one chart that writes all four event fields at once.
+// `scope` still decides liveness (so `Total` still demands the broadcast pair),
+// `data` still decides the payload, `foreign` still keeps the name bare under a
+// namespace, and `from` changes none of them.
+const provenance = defineChart({
+  events: {
+    START: {
+      data: ty<{ readonly at: number }>(),
+      scope: "all",
+      from: { world: "a caller" },
+    },
+    OK: { scope: "edges", from: "cmd" },
+    deadline_exceeded: { foreign: true, scope: "edges", from: "sub" },
+  },
+  states: {
+    only: {
+      a: { initial: true, on: { START: "b", OK: "a", deadline_exceeded: "b" } },
+      b: { on: { START: "a" } },
+    },
+  },
+});
+type ProvG = typeof provenance;
+export type A124 = Assert<Eq<MissingPairs<ProvG>, never>>;
+export type A125 = Assert<Eq<ForeignEvent<ProvG>, "deadline_exceeded">>;
+// the foreign name stays bare under a namespace; ours are decorated. `from`
+// sits beside `foreign` and neither reads the other.
+export type A126 = Assert<
+  Eq<MsgIn<ProvG, "ns">["type"], "ns.START" | "ns.OK" | "deadline_exceeded">
+>;
+// the payload still travels with the event that declared it.
+export type A127 = Assert<
+  Eq<Extract<MsgOf<ProvG>, { type: "START" }>["at"], number>
+>;
+export type A128 = Assert<Eq<SubEvent<ProvG>, "deadline_exceeded">>;
+export type A129 = Assert<Eq<WorldRole<ProvG, "START">, "a caller">>;
+
+// the declaration site accepts exactly `EventOrigin` and nothing wider — the
+// one place the alias and the field could drift apart if the field were ever
+// spelled out inline again.
+export type A130 = Assert<
+  Eq<EventOrigin, "cmd" | "sub" | { readonly world: string }>
+>;

@@ -51,6 +51,34 @@ Pick the narrowest one that is true. A wrong `scope` is not a style problem: it
 is the difference between adding a state and being asked one question, and adding
 a state and being asked twelve.
 
+### Optionally, say where each event comes from
+
+`scope` says *where* an event is live. `from` says *who sent it* — the other
+half, and the one that answers "what is this state waiting on" without anyone
+having to recognise a state by name:
+
+```ts
+events: {
+  WIP:  { scope: "edges",  from: { world: "the operator" } },
+  DONE: { scope: "edges",  from: "cmd" },
+  TICK: { scope: "all",    from: "sub" },
+  UNBLOCKED: { scope: "parked", from: { world: "a human" } },
+},
+```
+
+Three values and no fourth, because in TEA a Msg has exactly three origins: a
+Cmd's result (`"cmd"`), a Sub firing (`"sub"`), or the outside world — and the
+world is `{ world: <role> }`, where the role is **yours**. The library
+enumerates no roles, so an operator, a shopper, an on-call rota and a webhook
+are all expressible. Write the role the way you would say it, article included
+(`"the operator"`, `"a human"`): a reader drops it straight into a sentence and
+only you know whether there is one of them or any of them.
+
+Optional throughout. Declare none and everything behaves exactly as before;
+readers that want provenance (`@demlik/tea/chart/inspect`'s `EventPreview.from`,
+`@demlik/tea/chart/report`'s "waiting on" line) then say what they know and
+refuse to guess the rest.
+
 ## 3. Draw the states, grouped into phases
 
 A phase is declared by being a key of `states`; a state by being a key under a

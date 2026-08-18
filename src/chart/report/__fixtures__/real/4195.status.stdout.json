@@ -1,0 +1,68 @@
+{
+  "stateValue": {
+    "phase2": {
+      "issue_4240": "review",
+      "issue_4241": "blocked",
+      "issue_4242": "queued",
+      "issue_4243": "queued",
+      "issue_4244": "queued",
+      "issue_4245": "queued",
+      "issue_4246": "queued",
+      "issue_4247": "queued"
+    },
+    "phase3": "waiting",
+    "epic": "waiting"
+  },
+  "status": "active",
+  "context": {
+    "issue_4239": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4253": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4240": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4241": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4242": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4243": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4244": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4245": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4246": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4247": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "issue_4248": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "epic_4195": {
+      "retries": 0,
+      "maxRetries": 2
+    },
+    "errors": []
+  }
+}
