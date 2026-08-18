@@ -42,3 +42,9 @@ off and which a chart previously could not express. Finality itself is blind to
 the polarity: an error final owes no pairs and may declare no edges, exactly as
 a success final does. Three new derivations read it: `EndPolarity<C, S>`,
 `SuccessFinal<C>` and `ErrorFinal<C>`.
+
+**"Waiting on" is derived, and the importer takes provenance at the boundary.** `waitingOn` used to decide what a lane was waiting on by matching hard-coded state names — `queued`, `build`, `review`, `ship`, `blocked`, `human:*` — copied out of fabrika's `wire/lane-brief.ts`. Those names are fabrika's, so an upstream rename turned the report into a confident liar with nothing failing anywhere. The answer is now the events the state routes, grouped by the `from` each declares, and `./chart/report` holds no state name, no event name and no job title.
+
+`workflow.json` records topology and has never recorded who sends what, so `chartFromWorkflow(document, { from })` — mirrored on `chartFromWorkflowText`, `laneFromFiles` and `laneFromCli` — takes that map **once, at the import boundary**, and everything downstream derives from it. Omit it and every reader degrades honestly: it names the events a state accepts and refuses to say who sends them, the same refusal an unrouted state used to get. A partial map is not rounded up to a whole one.
+
+**Breaking:** `SHELL_STATES` and `ShellState` are gone. They were a copy of another repo's vocabulary and there is nothing to replace them with — the fact they encoded now lives on the event. New: `WorkflowImportOptions` and `originOf`.

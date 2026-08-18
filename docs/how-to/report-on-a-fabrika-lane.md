@@ -34,6 +34,7 @@ const dir = ".fabrika/lanes/5842";
 const source = laneFromFiles(
   readFileSync(`${dir}/workflow.json`, "utf8"),
   readFileSync(`${dir}/events.jsonl`, "utf8"),
+  FABRIKA_ORIGINS,               // see "Say who sends what" below
 );
 
 console.log(laneReport(reportInput(source)).markdown);
@@ -58,6 +59,7 @@ const source = laneFromCli(
   readFileSync(`.fabrika/lanes/${lane}/workflow.json`, "utf8"),
   run("lane", "status", "--lane", lane),
   run("lane", "history", "--lane", lane),
+  FABRIKA_ORIGINS,
 );
 
 console.log(laneReport(reportInput(source)).markdown);
@@ -74,17 +76,52 @@ the derived one is wrong.
   and the edges the log actually walked marked (`»`, `»×2`);
 - **one line per future phase** (`phase2: waiting (3 tasks)`) — a comment with
   eight diagrams is a comment nobody reads;
-- **a "waiting on" line in fabrika's own vocabulary**, so it never contradicts
-  the driver: `queued` waits on the operator's `WIP`; `build`/`review`/`ship`
-  wait on the shell `wire/lane-brief.ts` spawns for them; `blocked` and
-  `human:*` wait on a human's `UNBLOCKED`; a final waits on nothing. A state
-  nothing routes gets no guess — it gets the events it accepts;
+- **a "waiting on" line derived from the events**, so it cannot contradict the
+  driver and cannot go stale when the driver renames a state: it is the events
+  the state routes, grouped by who sends them (`the work \`review\` dispatched —
+  \`PASS\`, \`FAIL\` · the operator's \`BLOCKED\``). A final waits on nothing. Say
+  nothing about who sends what and it says nothing about who sends what — it
+  names the events and stops (`` `review` accepts `PASS`, `BLOCKED`, `FAIL` ``);
 - **a retry line, only when a retry has been spent** — `2/2 — spent; one FAIL
   from frozen` is the difference between "in review" and one message from a
   frozen lane;
 - **a timeline table** with `from → to` recomputed per step. `lane history`
   deliberately does not store those (they are reconstructible by folding), so
   the report re-folds each prefix to recover them.
+
+## Say who sends what
+
+`workflow.json` records the topology and has never recorded **who sends** a
+`WIP` — that fact lives in fabrika's code, not in fabrika's document. So state
+it once, at the import boundary, and every reader downstream derives from it:
+the report's "waiting on" line, `inspectLane`, and the `from` on each event of
+`describeChart`'s alphabet.
+
+```ts
+import type { WorkflowImportOptions } from "@demlik/tea/chart/report";
+
+const FABRIKA_ORIGINS: WorkflowImportOptions = {
+  from: {
+    WIP: { world: "the operator" },
+    BLOCKED: { world: "the operator" },
+    UNBLOCKED: { world: "a human" },
+    DONE: "cmd",
+    PASS: "cmd",
+    FAIL: "cmd",
+  },
+};
+```
+
+Three origins and no fourth, because in TEA a Msg has three: `"cmd"` (a Cmd's
+result — fabrika spawns a shell on entering a working state and the shell
+reports back), `"sub"` (a Sub firing), and `{ world: <role> }` (the outside
+world, through a role **you** name). The library ships no role names, so a
+consumer with a different cast writes a different map and every reader works
+unchanged. Keys are the **bare** event name: `ISSUE.WIP` and `PARK_SWEEP.WIP`
+are the same `WIP`.
+
+Omit an entry, or the whole map, and nothing is invented — the readers degrade
+to naming the events and saying nothing about their sender.
 
 ## Just the charts
 
@@ -113,7 +150,8 @@ terminals, the retry budget, and the `trigger`.
 Not recovered, because the document does not record it: the phase grouping and
 the per-event `scope` an author would write by hand. The import puts every state
 of a task in one group named after the workflow phase and leaves every event
-`scope: "edges"`.
+`scope: "edges"`. Nor the per-event `from` — but that one you can **supply**,
+once, through `WorkflowImportOptions` above.
 
 Not dereferenced, on purpose: guard and action **names**. The two-arm array *is*
 the guard, upstream and here — the name rides along as a label the drawing

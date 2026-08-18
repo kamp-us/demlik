@@ -137,8 +137,16 @@ view.phases[1]?.tasks[0];
 ```
 
 `events` is the whole alphabet per task — legal entries with their targets,
-refused entries with the reason — composed from `@demlik/tea/chart/inspect`, so
-a lane UI and a single-chart debugger agree about what a refusal is.
+refused entries with the reason, each carrying the `from` its event declared —
+composed from `@demlik/tea/chart/inspect`, so a lane UI and a single-chart
+debugger agree about what a refusal is and about who would send what.
+
+`waitingOn` is the same answer as one sentence: the events this state routes,
+grouped by who sends them. It is derived, not matched against a list of state
+names, so it stays true when the lane's states are renamed. On a lane imported
+without a provenance map it degrades to naming the events and says nothing
+about their sender — see [Report on a fabrika
+lane](./report-on-a-fabrika-lane.md#say-who-sends-what).
 
 `stuck` has three kinds, and the third is the one worth having:
 
