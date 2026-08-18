@@ -12,10 +12,12 @@
 //   which tasks are stuck
 //
 // So this file composes rather than duplicates: `describeChart` and
-// `inspectState` are called per task, `waitingOn` is the report's own
-// vocabulary (one declaration site, not two), and `phaseStandings` is the same
-// walk `deriveLaneStatus` makes. The only thing invented here is `stuck`, and
-// it is defined below rather than felt.
+// `inspectState` are called per task, `waitingOn` is the report's OWN
+// derivation (one site, not two — and since that answer is itself derived from
+// the events' declared `from`, there is no vocabulary anywhere on this path to
+// keep in step), and `phaseStandings` is the same walk `deriveLaneStatus`
+// makes. The only thing invented here is `stuck`, and it is defined below
+// rather than felt.
 //
 // PURE, framework-free, and it never runs the lane. Fold in, description out.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -92,7 +94,11 @@ export interface LaneTaskInspection {
   readonly was?: string;
   readonly retries: number;
   readonly maxRetries: number;
-  /** In the driver's own words — or `null` at a final. */
+  /**
+   * The events this state routes, grouped by who sends them — {@link waitingOn},
+   * read rather than recomputed. `null` at a final. On a lane imported without
+   * a provenance map it degrades to the events alone, and says so.
+   */
   readonly waitingOn: string | null;
   readonly stuck: StuckReason | null;
   /** Every event of this task's alphabet, legal or refused, with the reason. */

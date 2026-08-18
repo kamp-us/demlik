@@ -16,7 +16,7 @@
 // TUI, or a test gets exactly this.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import type { Chart } from "../graph";
+import type { Chart, EventOrigin } from "../graph";
 
 // ── the runtime views (the same shapes `compile` reads) ───────────────────
 type RtEdge =
@@ -52,6 +52,7 @@ type RtChart = {
     {
       readonly scope: string | readonly string[];
       readonly foreign?: true;
+      readonly from?: EventOrigin;
       readonly data?: object;
     }
   >;
@@ -190,6 +191,14 @@ export interface ChartEventInfo {
   readonly scope: readonly string[];
   /** `foreign: true` — the name belongs to someone else and stays bare. */
   readonly foreign: boolean;
+  /**
+   * WHERE THIS EVENT COMES FROM — `from`, read back off the chart.
+   *
+   * `undefined` means the chart does not say, which is a fact of its own and
+   * never a default: a UI that groups its button row by sender must render the
+   * undeclared ones as undeclared rather than filing them under a guess.
+   */
+  readonly from?: EventOrigin;
   /**
    * Whether the event DECLARED a payload (`data: ty<…>()`).
    *
@@ -376,6 +385,7 @@ export function describeChart<const C extends Chart<C>>(
         name,
         scope: scopeList(decl?.scope ?? "edges"),
         foreign: decl?.foreign === true,
+        ...(decl?.from === undefined ? {} : { from: decl.from }),
         hasPayload: decl !== undefined && "data" in decl,
       };
     }),

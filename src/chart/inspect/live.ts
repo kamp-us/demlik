@@ -17,6 +17,7 @@
 // silently rendered as `else`.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { EventOrigin } from "../graph";
 import {
   type ChartDescription,
   type ChartEdge,
@@ -192,6 +193,13 @@ function runCell(
 export interface EventPreview {
   readonly event: string;
   readonly status: "legal" | "refused";
+  /**
+   * Who would send this — the event's declared `from`, carried through rather
+   * than recomputed, so a button row can be grouped by sender with the same
+   * answer the report's "waiting on" line gives. `undefined` when the chart
+   * does not say.
+   */
+  readonly from?: EventOrigin;
   /** Present iff `status` is `"refused"`. */
   readonly reason?: RefusalReason;
   /** A one-line rendering of `reason`. Present iff refused. */
@@ -235,6 +243,11 @@ export function previewEvent<S extends { readonly type: string }>(
 ): EventPreview {
   const st = state as RtState;
   const edge = edgeAt(desc, st.type, event);
+  const info = desc.events.find((e) => e.name === event);
+  // The ONE read of provenance in this file, shared by both arms: a refused
+  // event has a sender too, and hiding it would make the refused half of a
+  // grouped button row unfilable.
+  const from = info?.from === undefined ? {} : { from: info.from };
 
   if (edge === undefined) {
     const reason = refusalAtState(desc, st.type, event) ?? {
@@ -242,6 +255,7 @@ export function previewEvent<S extends { readonly type: string }>(
     };
     return {
       event,
+      ...from,
       status: "refused",
       reason,
       why: explainRefusal(event, reason),
@@ -250,10 +264,10 @@ export function previewEvent<S extends { readonly type: string }>(
     };
   }
 
-  const info = desc.events.find((e) => e.name === event);
   const msg = sampleMsg(event, info?.hasPayload === true, opts.samples);
   const base = {
     event,
+    ...from,
     status: "legal" as const,
     edge,
     targets: edge.targets,

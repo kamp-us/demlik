@@ -462,3 +462,26 @@ describe("samples — the msg the preview actually used", () => {
     expect(v.resolved).toBe("idle");
   });
 });
+
+describe("from — who would send this, carried to the button row", () => {
+  it("stamps the declared origin on a legal event", () => {
+    expect(previewEvent(laneDesc, review(0, 3), "PASS").from).toBe("cmd");
+    expect(previewEvent(laneDesc, review(0, 3), "BLOCKED").from).toEqual({
+      world: "the operator",
+    });
+  });
+
+  it("stamps it on a REFUSED one too — a refusal has a sender", () => {
+    // `UNBLOCKED` is scoped to `parked`, so it is refused at `review`. A UI
+    // grouping its controls by sender still has to file this one.
+    const v = previewEvent(laneDesc, review(0, 3), "UNBLOCKED");
+    expect(v.status).toBe("refused");
+    expect(v.from).toEqual({ world: "a human" });
+  });
+
+  it("leaves it absent on a chart that declares no provenance", () => {
+    const uDesc = describeChart(upload);
+    const checking = { type: "checking", key: "k", etag: "e", tries: 0 };
+    expect(previewEvent(uDesc, checking, "ok").from).toBeUndefined();
+  });
+});

@@ -71,20 +71,61 @@ describe("describeChart — the shape of the chart", () => {
     });
   });
 
-  it("derives the event alphabet with each event's scope and payload flag", () => {
+  it("derives the event alphabet with each event's scope, origin and payload flag", () => {
+    const op = { world: "the operator" };
     expect(laneDesc.events).toEqual([
-      { name: "WIP", scope: ["edges"], foreign: false, hasPayload: true },
-      { name: "DONE", scope: ["edges"], foreign: false, hasPayload: true },
-      { name: "BLOCKED", scope: ["working"], foreign: false, hasPayload: true },
-      { name: "PASS", scope: ["edges"], foreign: false, hasPayload: true },
-      { name: "FAIL", scope: ["edges"], foreign: false, hasPayload: true },
+      {
+        name: "WIP",
+        scope: ["edges"],
+        foreign: false,
+        from: op,
+        hasPayload: true,
+      },
+      {
+        name: "DONE",
+        scope: ["edges"],
+        foreign: false,
+        from: "cmd",
+        hasPayload: true,
+      },
+      {
+        name: "BLOCKED",
+        scope: ["working"],
+        foreign: false,
+        from: op,
+        hasPayload: true,
+      },
+      {
+        name: "PASS",
+        scope: ["edges"],
+        foreign: false,
+        from: "cmd",
+        hasPayload: true,
+      },
+      {
+        name: "FAIL",
+        scope: ["edges"],
+        foreign: false,
+        from: "cmd",
+        hasPayload: true,
+      },
       {
         name: "UNBLOCKED",
         scope: ["parked"],
         foreign: false,
+        from: { world: "a human" },
         hasPayload: true,
       },
     ]);
+  });
+
+  it("leaves `from` absent — not defaulted — on a chart that declares none", () => {
+    // `undefined` is the answer "the chart does not say", and it has to stay
+    // distinguishable from all three origins or a UI grouping by sender files
+    // the unknowns under a guess.
+    const desc = describeChart(upload);
+    expect(desc.events.every((e) => e.from === undefined)).toBe(true);
+    expect(desc.events[0] && "from" in desc.events[0]).toBe(false);
   });
 
   it("reads `foreign: true` off the event, not off a naming convention", () => {
