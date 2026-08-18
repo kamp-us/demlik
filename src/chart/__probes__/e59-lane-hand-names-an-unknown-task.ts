@@ -1,4 +1,4 @@
-// PROBE 57: a hand written for a task the lane does not declare.
+// PROBE 59: a hand written for a task the lane does not declare.
 //
 // Silently ignored otherwise — the parts and the boot state authored for
 // `issue_9` are simply never reached, and the lane runs the regions it does

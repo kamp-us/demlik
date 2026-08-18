@@ -1,4 +1,4 @@
-// PROBE 58: a lane region whose chart declares a FOREIGN event.
+// PROBE 60: a lane region whose chart declares a FOREIGN event.
 //
 // `keyOf` leaves a foreign event's name BARE under a namespace, deliberately:
 // `deadline_exceeded` is the same event for every instance of a chart and its

@@ -1,4 +1,4 @@
-// PROBE 56: an instance booted into a state its OWN chart never declares.
+// PROBE 58: an instance booted into a state its OWN chart never declares.
 //
 // The mistake per-instance boot introduces, and the reason the boot state is
 // typed rather than taken as a string. An emitted epic boots each child where
