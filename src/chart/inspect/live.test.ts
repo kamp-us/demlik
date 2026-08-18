@@ -82,12 +82,8 @@ describe("inspectState — the button row builds itself", () => {
   it("a refused event is a verdict WITH a reason, not an absent entry", () => {
     const v = previewEvent(laneDesc, review(0, 3), "WIP", {});
     expect(v.status).toBe("refused");
-    expect(v.reason).toEqual({
-      kind: "out-of-scope",
-      scope: ["edges"],
-      phase: "working",
-    });
-    expect(v.why).toContain("not addressed to phase");
+    expect(v.reason).toEqual({ kind: "no-edge", state: "review" });
+    expect(v.why).toContain('declares no "WIP" edge');
     expect(v.edge).toBeUndefined();
   });
 
@@ -107,9 +103,7 @@ describe("inspectState — the button row builds itself", () => {
     const byName = previewEvent(wDesc, idle, "FINISHED");
     expect(byName.reason?.kind).toBe("ignored");
     const working = { type: "working", jobId: "j", deadlineAtMs: 0 };
-    expect(previewEvent(wDesc, working, "START").reason?.kind).toBe(
-      "out-of-scope",
-    );
+    expect(previewEvent(wDesc, working, "START").reason?.kind).toBe("no-edge");
   });
 });
 

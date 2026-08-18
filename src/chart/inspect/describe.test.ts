@@ -277,11 +277,13 @@ describe("describeChart — refusals, the totality property as data", () => {
     });
   });
 
-  it("refuses an `edges`-scoped event everywhere it is not routed", () => {
+  it("refuses an `edges`-scoped event as the missing EDGE, not a phase", () => {
+    // `edges` is not a phase name, so the phase test could never have passed —
+    // reporting it as `out-of-scope` named a phase that had nothing to do with
+    // the refusal. The fact is that `queued` routes no `PASS`.
     expect(refusalAtState(laneDesc, "queued", "PASS")).toEqual({
-      kind: "out-of-scope",
-      scope: ["edges"],
-      phase: "working",
+      kind: "no-edge",
+      state: "queued",
     });
   });
 
@@ -315,11 +317,10 @@ describe("describeChart — refusals, the totality property as data", () => {
       kind: "ignored",
       state: "idle",
     });
-    // …while `START` is `edges`-scoped, so at `working` it is out of scope.
+    // …while `START` is `edges`-scoped, so at `working` it is simply not routed.
     expect(refusalAtState(desc, "working", "START")).toEqual({
-      kind: "out-of-scope",
-      scope: ["edges"],
-      phase: "live",
+      kind: "no-edge",
+      state: "working",
     });
   });
 
@@ -336,6 +337,10 @@ describe("describeChart — refusals, the totality property as data", () => {
     ).toContain('phase "parked"');
     expect(explainRefusal("X", { kind: "ignored", state: "s" })).toContain(
       "`ignore`",
+    );
+    // the densest jargon on the page, gone: no phase, no scope, one fact
+    expect(explainRefusal("DONE", { kind: "no-edge", state: "queued" })).toBe(
+      '"queued" declares no "DONE" edge',
     );
     expect(explainRefusal("X", { kind: "undeclared" })).toContain("totality");
   });

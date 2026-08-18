@@ -122,8 +122,9 @@ describe("<ChartInspector> — the button row is derived, not configured", () =>
     expect(statusOf("BLOCKED")).toBe("legal");
     for (const e of ["DONE", "PASS", "FAIL"]) {
       expect(statusOf(e)).toBe("refused");
+      // the reason names the pair that is missing — no phase, no scope jargon
       expect(controls().get(e)?.textContent).toContain(
-        "not addressed to phase",
+        `"queued" declares no "${e}" edge`,
       );
       expect(buttonFor(e).disabled).toBe(true);
     }
