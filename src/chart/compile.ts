@@ -289,31 +289,34 @@ function keyOf(
 const NO_PARKING: ReadonlySet<string> = new Set<string>();
 
 /**
- * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
+ * One compiled table, BEFORE the typed boundary — `state.type` → the event key
+ * → the cell.
  *
- * `ns` is OPTIONAL and PER-EVENT. Omitted, nothing is decorated and the table
- * is keyed by the bare event names — a single-instance machine carries no
- * namespace and passes no dummy string. Given, the author's own events are
- * keyed `${ns}.${event}` (so N instances share one dispatch surface with
- * genuinely disjoint literal unions), while every event the chart marks
- * `foreign: true` keeps its BARE name: a library-minted Msg like
- * `deadline_exceeded` is the same event for every instance, and its name was
- * never the author's to rename.
- *
- * The returned type is `Transitions<S, MsgIn<C, NS>, K>` — literal keys, never
- * `string`. The parts are authored against the BARE msg union; the compiled
- * cell restores the bare event name before calling them.
- *
- * `S`/`M`/`K` DEFAULT to the chart's own derivations, so the common call is
- * `compile(chart, parts)` with no type arguments at all.
+ * The shape `compile` builds and then declares as a `Transitions<S, M, C>`. It
+ * is named because a second caller needs the walk without the declaration:
+ * `chart/lane/run` compiles ONE region per task and the tables it holds are
+ * keyed by task id, so the per-region `Transitions` type is never the type of
+ * anything it stores.
  */
-export function compile<
-  const C extends Chart<C>,
-  S extends { type: string } = StateOf<C>,
-  M extends { type: string } = MsgOf<C>,
-  K extends Cmd = CmdOf<C>,
-  const NS extends string | undefined = undefined,
->(chart: C, parts: Parts<C, S, M>, ns?: NS): Transitions<S, MsgIn<C, NS>, K> {
+export type CompiledTable = Readonly<
+  Record<string, Readonly<Record<string, RtCell | undefined>> | undefined>
+>;
+
+/**
+ * THE WALK, with no type layer over it — `compile`'s body, callable by a second
+ * compiler that has already done its own type checking.
+ *
+ * `chart`/`parts` are `object` rather than the F-bounded `Chart<C>`/`Parts<…>`
+ * because this entry is not where the checking happens; it is where the
+ * checking has ALREADY happened. The erasing cast lives here, exactly once, at
+ * the top of the walk — which is where it lived before this function had a
+ * name, so nothing gained a cast by being reachable from two places.
+ */
+export function compileTable(
+  chart: object,
+  parts: object,
+  ns: string | undefined,
+): CompiledTable {
   const c = chart as unknown as RtChart;
   const p = rtParts(parts);
 
@@ -362,12 +365,45 @@ export function compile<
     table[s] = row;
   }
 
+  return table;
+}
+
+/**
+ * Compile a chart + the code parts into a genuine `Transitions<S, M, C>`.
+ *
+ * `ns` is OPTIONAL and PER-EVENT. Omitted, nothing is decorated and the table
+ * is keyed by the bare event names — a single-instance machine carries no
+ * namespace and passes no dummy string. Given, the author's own events are
+ * keyed `${ns}.${event}` (so N instances share one dispatch surface with
+ * genuinely disjoint literal unions), while every event the chart marks
+ * `foreign: true` keeps its BARE name: a library-minted Msg like
+ * `deadline_exceeded` is the same event for every instance, and its name was
+ * never the author's to rename.
+ *
+ * The returned type is `Transitions<S, MsgIn<C, NS>, K>` — literal keys, never
+ * `string`. The parts are authored against the BARE msg union; the compiled
+ * cell restores the bare event name before calling them.
+ *
+ * `S`/`M`/`K` DEFAULT to the chart's own derivations, so the common call is
+ * `compile(chart, parts)` with no type arguments at all.
+ */
+export function compile<
+  const C extends Chart<C>,
+  S extends { type: string } = StateOf<C>,
+  M extends { type: string } = MsgOf<C>,
+  K extends Cmd = CmdOf<C>,
+  const NS extends string | undefined = undefined,
+>(chart: C, parts: Parts<C, S, M>, ns?: NS): Transitions<S, MsgIn<C, NS>, K> {
   // ── THE ONE CAST ────────────────────────────────────────────────────────
   // Inside the library, at the construction boundary. `Transitions` is a
   // mapped type over `S["type"] × M["type"]`; the walk builds the same keys
   // from the flattened chart × the per-event keys, but tsc cannot see that a
   // string-keyed record built in a loop is total over those unions.
-  return table as unknown as Transitions<S, MsgIn<C, NS>, K>;
+  return compileTable(chart, parts, ns) as unknown as Transitions<
+    S,
+    MsgIn<C, NS>,
+    K
+  >;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
