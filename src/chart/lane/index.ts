@@ -23,8 +23,21 @@
  *   laneShape(lane)               → LaneShape      // read any one, derived
  *   inspectLane(lane, entries)    → LaneInspection // the headless view
  *   runLane(lane, hands)          → { init, update } // …and run one
+ *   replayFeed(lane, entries)     → LaneFeed        // …or LOOK at one:
+ *   liveFeed(lane, input)         → LaneFeed        //   two sources,
+ *   laneView(feed, cursor)        → LaneViewModel  //   one screen's model
  *   LaneState<L> / LaneMsg<L>                      // its alphabets, derived
  * ```
+ *
+ * LOOKING AT ONE. {@link laneView} is the whole lane at one moment as a value a
+ * view renders straight: which of twelve things is stuck (first, because it is
+ * the first question about a stuck epic), the phases in order with their
+ * standings, each task's leaf, what it is waiting on, its retry budget and its
+ * region drawn with the walked edges marked. Two feeds supply it and the model
+ * branches on neither: `replayFeed` is a lane plus its `events.jsonl` — history
+ * with no code bodies, so no control can be sent and each one says so;
+ * `liveFeed` watches a lane under `runLane`, where the bodies exist and the
+ * controls are live. `@demlik/tea/chart/lane/react` is the React binding.
  *
  * RUNNING ONE. {@link runLane} compiles each region with `compile(chart, parts,
  * taskId)` — the task id IS the namespace, so a `{ task, event }` message is
@@ -118,3 +131,18 @@ export {
   laneShape,
   type PhaseStanding,
 } from "./structure";
+export {
+  type LaneControl,
+  type LaneFeed,
+  type LaneLeaves,
+  type LanePhaseView,
+  type LaneStepView,
+  type LaneTaskView,
+  type LaneViewModel,
+  type LiveFeedInput,
+  laneView,
+  liveFeed,
+  type RetryBudget,
+  type RunningLeaf,
+  replayFeed,
+} from "./view";
