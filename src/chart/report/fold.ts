@@ -166,6 +166,32 @@ export function parseHistoryJson(text: string): readonly LogEntry[] {
   return entries;
 }
 
+/**
+ * EVERY task the log names that this lane does not have, never just the first.
+ *
+ * The same contract {@link parseEventsJsonl} keeps one function up, and the
+ * same one fabrika keeps: a log that names four tasks from a workflow the
+ * caller swapped underneath it is four facts, and reporting one of them per
+ * run turns one fix into four rounds of paste-the-error-back. Deduplicated by
+ * name, in first-mention order — a thousand-line log naming one stale task is
+ * one defect, not a thousand.
+ */
+const unknownTaskDefects = (
+  lane: ImportedLane,
+  entries: readonly LogEntry[],
+): readonly string[] => {
+  const seen = new Set<string>();
+  const defects: string[] = [];
+  for (const entry of entries) {
+    if (lane.charts[entry.task] !== undefined || seen.has(entry.task)) continue;
+    seen.add(entry.task);
+    defects.push(
+      `log names task "${entry.task}", which is not in this lane's machine`,
+    );
+  }
+  return defects;
+};
+
 const chartOf = (lane: ImportedLane, taskId: string): ImportedChart => {
   const chart = lane.charts[taskId];
   if (chart === undefined) {
@@ -192,20 +218,36 @@ export function initialStates(
 }
 
 /**
- * ONE event applied to ONE task. The three edge forms, and the fourth case —
- * no edge — which is a REFUSAL, exactly as tea's `NoCellError` is: a lane state
- * either routes an event or it does not, and "does not" is a decision.
+ * ONE event applied to ONE task. The three edge forms, and the two ways there
+ * can be no edge.
+ *
+ * THERE ARE THREE ANSWERS, NOT TWO, and this used to give two. tea's runtime
+ * has always distinguished a REFUSAL — an event the state accepts and drops,
+ * because its `ignore` names the event or the event is broadcast to some other
+ * phase — from a pair it cannot replay, which is the only one that throws. The
+ * lowered chart could not carry the first, so a log the runtime had happily
+ * accepted came back `UnreplayableLogError` here: a run and a report of that
+ * run disagreeing about what the machine did. The refusal set now rides on the
+ * chart (`ImportedChart.refusals`, written by `lowerRegion` and by nothing
+ * else), so both sides refuse the same pairs by construction.
+ *
+ * `taskId` is for the DIAGNOSTIC only. `stepTask` folds one region and has
+ * never needed to know which; a reader staring at `state "queued" holds no cell
+ * for "DONE"` on a twelve-task lane needs to know very much, and the callers
+ * have it.
  */
 export function stepTask(
   chart: ImportedChart,
   state: TaskState,
   event: string,
+  taskId?: string,
 ): TaskState {
   const node = statesOf(chart).get(state.type);
   const edge = node?.on?.[event];
   if (edge === undefined) {
+    if (chart.refusals?.[state.type]?.includes(event) === true) return state;
     throw new UnreplayableLogError([
-      `state "${state.type}" holds no cell for "${event}"`,
+      `${taskId === undefined ? "" : `task "${taskId}": `}state "${state.type}" holds no cell for "${event}"`,
     ]);
   }
   if ("resume" in edge) {
@@ -239,6 +281,8 @@ export function foldLane(
   lane: ImportedLane,
   entries: readonly LogEntry[],
 ): Readonly<Record<string, TaskState>> {
+  const unknown = unknownTaskDefects(lane, entries);
+  if (unknown.length > 0) throw new UnreplayableLogError(unknown);
   const states: Record<string, TaskState> = { ...initialStates(lane) };
   for (const entry of entries) {
     const chart = chartOf(lane, entry.task);
@@ -248,7 +292,12 @@ export function foldLane(
         `log names task "${entry.task}", which is not in this lane's machine`,
       ]);
     }
-    states[entry.task] = stepTask(chart, current, bareEvent(entry.event));
+    states[entry.task] = stepTask(
+      chart,
+      current,
+      bareEvent(entry.event),
+      entry.task,
+    );
   }
   return states;
 }
@@ -288,6 +337,8 @@ export function timeline(
   lane: ImportedLane,
   entries: readonly LogEntry[],
 ): readonly TimelineStep[] {
+  const unknown = unknownTaskDefects(lane, entries);
+  if (unknown.length > 0) throw new UnreplayableLogError(unknown);
   const states: Record<string, TaskState> = { ...initialStates(lane) };
   const steps: TimelineStep[] = [];
   for (const [index, entry] of entries.entries()) {
@@ -299,7 +350,7 @@ export function timeline(
       ]);
     }
     const event = bareEvent(entry.event);
-    const after = stepTask(chart, before, event);
+    const after = stepTask(chart, before, event, entry.task);
     states[entry.task] = after;
     steps.push({
       index,
