@@ -1,9 +1,9 @@
-# Describe a lane of parallel charts
+# Describe and run a lane of parallel charts
 
 **Goal:** describe a workload that is *not* one machine — N chart instances
 running side by side, grouped into phases that run in order — then fold a run
-into its compound state, draw it, and answer "which phase is running, what is
-each task waiting on, what is stuck".
+into its compound state, draw it, answer "which phase is running, what is each
+task waiting on, what is stuck", and **run** it as a real `Machine`.
 
 **Subpath:** `@demlik/tea/chart/lane`
 
@@ -29,11 +29,11 @@ reason this subpath exists.
 
 ## What it does not do
 
-It **describes, folds and draws** a lane. It does not run one — there is no
-per-instance boot override, no router turning `ISSUE_5729.DONE` into a message
-for region 5729, and nothing that makes a lane dispatchable as a `Machine`.
-The driver (`kamp-us/phoenix`'s `fabrika`) folds its own log; this reads the
-result.
+It describes, folds, draws **and runs** a lane. What it still does not own is
+the effect boundary: `interpret` is yours, because a lane knows nothing about
+the shells its cmds run in. Supervision and the event log stay with the driver
+(`kamp-us/phoenix`'s `fabrika`) too — [step 7](#step-7--run-it) hands you an
+`init` and an `update`, not a process.
 
 ## Step 1 — get a lane
 
@@ -196,10 +196,97 @@ lane](./report-on-a-fabrika-lane.md#say-who-sends-what).
 | `dead-end` | a non-final state that routes nothing |
 | `budget-spent` | `retries === maxRetries`: the next guarded event is no longer a retry, it is the error final |
 
+## Step 7 — run it
+
+`runLane(lane, hands)` returns the two halves of a `Machine` a lane can derive.
+`hands` is what the lane cannot: one entry per task, each carrying that task's
+`parts` (the assigns, guards, cmd builders and cells its chart demands) and a
+`boot()` saying where **that instance** starts.
+
+```ts
+import { defineMachine, type Sub } from "@demlik/tea";
+import {
+  type LaneCmd,
+  type LaneHands,
+  type LaneRunMsg,
+  type LaneRunState,
+  runLane,
+} from "@demlik/tea/chart/lane";
+
+const hands = {
+  // the ordinary case: this child starts where the chart starts.
+  issue_5729: { parts: coderParts, boot: () => ({ type: "queued", retries: 0, maxRetries: 2 }) },
+  // …and this one is already merged on GitHub, so it boots where it IS.
+  issue_5730: { parts: coderParts, boot: () => ({ type: "shipped", retries: 0, maxRetries: 2 }) },
+  issue_5731: { parts: coderParts, boot: () => ({ type: "queued", retries: 0, maxRetries: 5 }) },
+} satisfies LaneHands<typeof lane>;
+
+const machine = defineMachine<
+  LaneRunState<typeof lane>,
+  LaneRunMsg<typeof lane>,
+  LaneCmd<typeof lane>,
+  Sub<never>,
+  Record<never, never>
+>({
+  ...runLane(lane, hands),
+  interpret: {
+    "issue_5729.spawn_shell": async (cmd) => spawn(cmd.task, cmd.step),
+    "issue_5730.spawn_shell": async (cmd) => spawn(cmd.task, cmd.step),
+    "issue_5731.spawn_shell": async (cmd) => spawn(cmd.task, cmd.step),
+  },
+});
+```
+
+Write `satisfies LaneHands<typeof lane>` on a hoisted `hands` object: it is what
+gives `boot`'s body a contextual type, so `{ type: "queued" }` stays the literal
+instead of widening to `string`. Written inline at the call, the parameter does
+the same job.
+
+**Routing.** The machine's messages are `${task}.${event}` — the `{ task, event }`
+pair of `LaneMsg<L>`, spelled by the same `keyOf` that namespaces a compiled
+chart's table. Dispatch `{ type: "issue_5729.DONE", at: Date.now() }` and it
+reaches `issue_5729`'s region and no other. The event is narrowed to the events
+**that task's** chart declares, so the reviewer's event sent to the builder is
+as much a compile error as an event nothing declares.
+
+**Boot.** `boot()` is typed to that task's own `StateOf<chart>`, so a state name
+its chart does not declare is a compile error at that task. The lane's own
+standing is derived at boot as well as after every step — a lane whose children
+all landed before the run started boots straight into `complete` or `tripped`
+rather than pretending to be running.
+
+**Advancement.** When every region of the active phase reaches a final, the lane
+moves on; when it runs out of phases it lands on `complete`, and a completed
+phase holding an `end: "error"` final lands it on `tripped` instead.
+`state.lane` is `"running"` or the terminal it reached.
+
+**Cmds.** A region's cmds leave the lane under the same namespace its messages
+arrive in — `issue_5729.spawn_shell`, carrying `task: "issue_5729"` — so an
+interpreter routes the reply back without a side table.
+
+**One advancement rule, not two.** The runtime does not re-implement the phase
+walk: it calls `phaseStandings` and `laneTerminalReached`, which are the fold's
+own functions. A run and a report of that run therefore cannot drift, and the
+suite proves it rather than asserting it — `equiv-lane-run.test.ts` drives the
+same lane through the runtime and through `foldLane` over the equivalent event
+log, diffing every region's state and the whole derived status at every step.
+
+Three things stay outside a lane's reach and one of them is not obvious:
+
+- `interpret`, as above.
+- A region whose chart declares a **foreign** event. `keyOf` leaves a foreign
+  name bare under a namespace, deliberately — it is the same event for every
+  instance — and a bare event addresses no single region. Refused, naming the
+  task.
+- Sending an event to a region already sitting in a final. The chart declares
+  that a refusal (a self-loop with no cmds) and the runtime honours it; the
+  **fold** throws instead, because a log that records it is a log that does not
+  replay. Do not build one.
+
 ## What the types catch, and what they cannot
 
-`defineLane` rejects seven authoring mistakes at compile time, each naming the
-offender in the diagnostic.
+`defineLane` rejects seven authoring mistakes at compile time, and `runLane`
+three more, each naming the offender in the diagnostic.
 
 Four are about the **lane's own shape** and hold at either door: a task declared
 in two phases, a phase with no tasks, a terminal that collides with a phase
@@ -210,7 +297,11 @@ Three are about the **charts it was handed**, and hold wherever the chart is a
 declares no final in either polarity, and a region that hands a transition to a
 `{ to, cell }` (nothing here runs a cell, so a lane cannot hold that edge).
 
-Those same three stand **down** at the imported door: an imported chart's states
+`runLane` adds three about the **code**: a hand for a task the lane does not
+declare, an instance booted into a state its own chart never declares, and a
+region whose chart declares a foreign event.
+
+Those same three chart-shaped ones stand **down** at the imported door: an imported chart's states
 are `string` by construction, so the question cannot be asked, and `defineLane`
 refuses at runtime instead (`LaneShapeError`, with every defect listed). Where a
 guarantee cannot be had, it throws rather than pretending.

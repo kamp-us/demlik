@@ -28,10 +28,11 @@ what you are trying to do, and it names the subpath you need.
 
 ## Read a running machine
 
-- [Describe a lane of parallel charts](./describe-a-lane.md) — use
+- [Describe and run a lane of parallel charts](./describe-a-lane.md) — use
   `@demlik/tea/chart/lane` when the workload is not one machine: N chart
   instances running side by side, grouped into phases that sequence, folding to
-  a compound state and ending complete or tripped.
+  a compound state and ending complete or tripped — and `runLane` when you want
+  to drive it as a real `Machine`.
 - [Report on a fabrika lane](./report-on-a-fabrika-lane.md) — import a
   `workflow.json` into charts with `@demlik/tea/chart/report` and render a lane
   as one markdown block (diagram, "waiting on", retry budget, timeline) that
