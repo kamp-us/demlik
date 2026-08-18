@@ -402,9 +402,17 @@ const goer: ImportedChart = {
   },
 };
 
+// `defineLane` now refuses a dotted id at the TYPE level too (probe `e64`), so
+// these two reach `runLane` the way the imported door does — through a lane
+// value that no literal produced. That is not a cheat: `chartFromWorkflow`
+// builds exactly such a value from a `workflow.json` this repo has never seen,
+// and the runtime refusal is the only net on that side.
+const dottedLane = (spec: object) =>
+  defineLane(spec as never) as never as Parameters<typeof runLane>[0];
+
 describe("runLane — dots", () => {
   it("refuses a task id with a dot in it", () => {
-    const lane = defineLane({
+    const lane = dottedLane({
       phases: { p1: { "a.b": goer } },
       terminals: { complete: "complete", tripped: "tripped" },
     });
@@ -428,7 +436,7 @@ describe("runLane — dots", () => {
         },
       },
     };
-    const lane = defineLane({
+    const lane = dottedLane({
       phases: { p1: { a: dotted } },
       terminals: { complete: "complete", tripped: "tripped" },
     });
