@@ -242,8 +242,16 @@ export type LaneRunChecks<L, H> = ([Exclude<keyof H, LaneTaskId<L>>] extends [
         readonly __laneRegionChartDeclaresAForeignEvent: DeclaresAForeignEvent<L>;
       });
 
-/** The self-referential constraint `runLane` binds its hands with. */
-export type LaneHandsOf<L, H> = LaneHands<L> & LaneRunChecks<L, H>;
+/**
+ * The self-referential constraint `runLane` binds its hands with.
+ *
+ * The CHECKS come first in the intersection, and the order is load-bearing for
+ * the diagnostic rather than for the semantics: tsc reports the first
+ * constituent that fails, so a hands object that boots a task into the wrong
+ * state is told which RULE it broke and which TASK broke it, instead of being
+ * handed that task's whole state union to compare by eye.
+ */
+export type LaneHandsOf<L, H> = LaneRunChecks<L, H> & LaneHands<L>;
 
 /**
  * A lane's `init` and `update` — the two halves of a `Machine` a lane can
