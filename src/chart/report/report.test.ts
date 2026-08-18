@@ -11,6 +11,7 @@ import {
   CODER_EVENTS_FROZEN_JSONL,
   CODER_EVENTS_JSONL,
 } from "./__fixtures__/events";
+import { FABRIKA_ORIGINS } from "./__fixtures__/origins";
 import { chore, coder } from "./__fixtures__/templates";
 import {
   deriveStatus as fabrikaDeriveStatus,
@@ -54,7 +55,7 @@ function fabrikaStdout(document: unknown, jsonl: string) {
 }
 
 describe("laneReport — the file path", () => {
-  const source = laneFromFiles(CODER_JSON, CODER_EVENTS_JSONL);
+  const source = laneFromFiles(CODER_JSON, CODER_EVENTS_JSONL, FABRIKA_ORIGINS);
   const { markdown } = laneReport(reportInput(source));
 
   it("says where it is, in the driver's own stateValue", () => {
@@ -63,8 +64,10 @@ describe("laneReport — the file path", () => {
     );
   });
 
-  it("says what it is waiting on, in the driver's own vocabulary", () => {
-    expect(markdown).toContain("**waiting on:** the `reviewer` shell");
+  it("says what it is waiting on, derived from the events' origins", () => {
+    expect(markdown).toContain(
+      "**waiting on:** the work `review` dispatched — `PASS`, `FAIL` · the operator's `BLOCKED`",
+    );
   });
 
   it("shows the spent retry budget and names the one-way door", () => {
@@ -104,7 +107,12 @@ describe("laneReport — the file path", () => {
 
 describe("laneReport — the CLI path", () => {
   const out = fabrikaStdout(coder, CODER_EVENTS_JSONL);
-  const source = laneFromCli(CODER_JSON, out.status, out.history);
+  const source = laneFromCli(
+    CODER_JSON,
+    out.status,
+    out.history,
+    FABRIKA_ORIGINS,
+  );
 
   it("parses both verbs' stdout without a single phoenix change", () => {
     expect(source.entries).toHaveLength(8);
@@ -119,15 +127,25 @@ describe("laneReport — the CLI path", () => {
     // The two paths differ ONLY in where the status came from. If they can
     // diverge, the derived one is wrong — which is the whole assertion.
     expect(laneReport(reportInput(source)).markdown).toBe(
-      laneReport(reportInput(laneFromFiles(CODER_JSON, CODER_EVENTS_JSONL)))
-        .markdown,
+      laneReport(
+        reportInput(
+          laneFromFiles(CODER_JSON, CODER_EVENTS_JSONL, FABRIKA_ORIGINS),
+        ),
+      ).markdown,
     );
   });
 
   it("carries the CLI's own verdict through on a tripped lane", () => {
     const tripped = fabrikaStdout(coder, CODER_EVENTS_FROZEN_JSONL);
     const { markdown } = laneReport(
-      reportInput(laneFromCli(CODER_JSON, tripped.status, tripped.history)),
+      reportInput(
+        laneFromCli(
+          CODER_JSON,
+          tripped.status,
+          tripped.history,
+          FABRIKA_ORIGINS,
+        ),
+      ),
     );
     expect(markdown).toContain("`tripped` — the workflow is done.");
     expect(markdown).toContain(
@@ -138,29 +156,53 @@ describe("laneReport — the CLI path", () => {
   });
 });
 
-describe("waitingOn — fabrika's vocabulary, and its refusal to guess", () => {
-  const coderLane = chartFromWorkflow(coder);
-  const choreLane = chartFromWorkflow(chore);
+// ── WAITING ON, DERIVED ────────────────────────────────────────────────────
+//
+// Every sentence below comes out of the events the state routes and the `from`
+// each of those events declares. `report.ts` holds no state name, no event name
+// and no job title; the cast is fabrika's, stated once at the import boundary
+// (`__fixtures__/origins.ts`) and read from the chart thereafter.
+describe("waitingOn — derived from the events' declared origin", () => {
+  const coderLane = chartFromWorkflow(coder, FABRIKA_ORIGINS);
+  const choreLane = chartFromWorkflow(chore, FABRIKA_ORIGINS);
   const issue = coderLane.charts.issue;
   const sweep = choreLane.charts.park_sweep;
   if (issue === undefined || sweep === undefined) throw new Error("missing");
 
-  it("routes `queued` to the operator", () => {
-    expect(waitingOn(issue, "queued")).toBe("the operator's `WIP`");
+  it("names the operator, in the words the caller declared", () => {
+    // `queued` routes WIP and BLOCKED and both are the operator's, so both are
+    // named. The old hard-coded answer said `WIP` alone and was WRONG about
+    // this state: a reader who acts on it does not know a BLOCKED is accepted
+    // here too.
+    expect(waitingOn(issue, "queued")).toBe("the operator's `WIP`, `BLOCKED`");
   });
 
   it.each([
-    ["build", "builder"],
-    ["review", "reviewer"],
-    ["ship", "shipper"],
-  ])("routes `%s` to the `%s` shell", (state, shell) => {
-    expect(waitingOn(issue, state)).toBe(`the \`${shell}\` shell`);
+    "build",
+    "review",
+    "ship",
+  ])("names the work `%s` dispatched, plus whoever else can speak", (state) => {
+    const line = waitingOn(issue, state);
+    expect(line).toContain(`the work \`${state}\` dispatched`);
+    // BLOCKED is live in every working state and it is NOT the dispatched
+    // work's to send, so it appears as its own group rather than being
+    // folded into one.
+    expect(line).toContain("the operator's `BLOCKED`");
+  });
+
+  it("says exactly what the shell reports back, per state", () => {
+    expect(waitingOn(issue, "review")).toBe(
+      "the work `review` dispatched — `PASS`, `FAIL` · the operator's `BLOCKED`",
+    );
+    expect(waitingOn(issue, "ship")).toBe(
+      "the work `ship` dispatched — `DONE` · the operator's `BLOCKED`",
+    );
   });
 
   it.each([
     "blocked",
     "human:cp-approval",
-  ])("routes `%s` to a human", (state) => {
+  ])("routes `%s` to a human — verbatim, article and all", (state) => {
     expect(waitingOn(issue, state)).toBe("a human's `UNBLOCKED`");
   });
 
@@ -169,18 +211,63 @@ describe("waitingOn — fabrika's vocabulary, and its refusal to guess", () => {
     expect(waitingOn(issue, "frozen")).toBeNull();
   });
 
-  it("REFUSES to invent a shell for a state nothing routes", () => {
-    // `unpark` is a real chore state and it is not one of the three. fabrika's
-    // `shellState()` answers `null` here rather than guessing; so does this,
-    // and it says what the machine does say instead.
-    const line = waitingOn(sweep, "unpark");
-    expect(line).toContain("nothing routes `unpark`");
-    expect(line).not.toContain("shell");
+  it("answers a state the old list had never heard of — no special case", () => {
+    // `unpark` is a chore state and was not one of the three shell states, so
+    // the old code refused it. There is nothing to refuse now: it routes four
+    // events, they declare their origins, and the answer falls out.
+    expect(waitingOn(sweep, "unpark")).toBe(
+      "the work `unpark` dispatched — `DONE`, `FAIL` · the operator's `WIP`, `BLOCKED`",
+    );
+  });
+});
+
+// ── AND ITS REFUSAL TO GUESS ───────────────────────────────────────────────
+describe("waitingOn — with no provenance to read", () => {
+  // The SAME documents, imported without the map: `workflow.json` carries no
+  // provenance of its own, so this is what an importer that is handed nothing
+  // must produce.
+  const issue = chartFromWorkflow(coder).charts.issue;
+  if (issue === undefined) throw new Error("missing");
+
+  it("says which events the state accepts, and nothing about who sends them", () => {
+    expect(waitingOn(issue, "build")).toBe("`build` accepts `DONE`, `BLOCKED`");
+  });
+
+  it("invents no sender anywhere in the report", () => {
+    const { markdown } = laneReport(
+      reportInput(laneFromFiles(CODER_JSON, CODER_EVENTS_JSONL)),
+    );
+    expect(markdown).toContain("**waiting on:** `review` accepts");
+    expect(markdown).not.toContain("operator");
+    expect(markdown).not.toContain("shell");
+  });
+
+  it("does not round a PARTIAL map up to a whole one", () => {
+    const partial = chartFromWorkflow(coder, {
+      from: { DONE: "cmd", PASS: "cmd", FAIL: "cmd" },
+    });
+    const chart = partial.charts.issue;
+    if (chart === undefined) throw new Error("missing");
+    expect(waitingOn(chart, "build")).toBe(
+      "the work `build` dispatched — `DONE` · `BLOCKED`, from somewhere the chart does not say",
+    );
+  });
+
+  it("says so plainly at a live state that routes nothing", () => {
+    const deadEnd = {
+      events: {},
+      states: { p: { stalled: { initial: true as const } } },
+    };
+    expect(waitingOn(deadEnd, "stalled")).toBe(
+      "`stalled` accepts no events, and it is not a final",
+    );
   });
 });
 
 describe("laneReport — a chore lane", () => {
-  const { markdown } = laneReport(reportInput(laneFromFiles(CHORE_JSON, "")));
+  const { markdown } = laneReport(
+    reportInput(laneFromFiles(CHORE_JSON, "", FABRIKA_ORIGINS)),
+  );
 
   it("names the trigger the document declares", () => {
     expect(markdown).toContain("**fired by:** `lane-parked`");

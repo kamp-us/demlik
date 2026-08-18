@@ -30,7 +30,11 @@ import {
   parseStatusJson,
 } from "./fold";
 import type { LaneReportInput } from "./report";
-import { chartFromWorkflowText, type ImportedLane } from "./workflow";
+import {
+  chartFromWorkflowText,
+  type ImportedLane,
+  type WorkflowImportOptions,
+} from "./workflow";
 
 /** Everything a report needs, however it was obtained. */
 export interface LaneSource {
@@ -45,13 +49,16 @@ export interface LaneSource {
  *
  * @param workflowJson the bytes of `<lane>/workflow.json`
  * @param eventsJsonl  the bytes of `<lane>/events.jsonl` (`""` for a fresh lane)
+ * @param options      {@link WorkflowImportOptions} — carried straight through
+ *                     to the importer, which is the one place it is read.
  */
 export function laneFromFiles(
   workflowJson: string,
   eventsJsonl: string,
+  options: WorkflowImportOptions = {},
 ): LaneSource {
   return {
-    workflow: chartFromWorkflowText(workflowJson),
+    workflow: chartFromWorkflowText(workflowJson, options),
     entries: parseEventsJsonl(eventsJsonl),
   };
 }
@@ -70,14 +77,16 @@ export function laneFromFiles(
  * @param workflowJson the bytes of `<lane>/workflow.json`
  * @param statusStdout `fabrika lane status`'s stdout — `JSON.stringify(status, null, 2)`
  * @param historyStdout `fabrika lane history`'s stdout — the log as a JSON array
+ * @param options {@link WorkflowImportOptions} — the same seam as path 1's.
  */
 export function laneFromCli(
   workflowJson: string,
   statusStdout: string,
   historyStdout: string,
+  options: WorkflowImportOptions = {},
 ): LaneSource {
   return {
-    workflow: chartFromWorkflowText(workflowJson),
+    workflow: chartFromWorkflowText(workflowJson, options),
     entries: parseHistoryJson(historyStdout),
     status: parseStatusJson(statusStdout),
   };

@@ -19,6 +19,8 @@
 // applies, whatever the name says.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { EventOrigin } from "../graph";
+
 /** The operator's whole event vocabulary — fabrika's six, closed. */
 export const OPERATOR_EVENTS = [
   "DONE",
@@ -66,7 +68,23 @@ export interface ImportedNode {
 
 /** One task's region, as a chart value. One phase group, named by the phase. */
 export interface ImportedChart {
-  readonly events: Readonly<Record<string, { readonly scope: "edges" }>>;
+  readonly events: Readonly<
+    Record<
+      string,
+      {
+        readonly scope: "edges";
+        /**
+         * Where this event comes from — the chart's `from`, at runtime.
+         *
+         * OPTIONAL, and its absence is the document's honest answer:
+         * `workflow.json` records the topology and nothing about who sends
+         * what, so this is present exactly when the caller supplied it at
+         * {@link chartFromWorkflow}.
+         */
+        readonly from?: EventOrigin;
+      }
+    >
+  >;
   readonly states: Readonly<
     Record<string, Readonly<Record<string, ImportedNode>>>
   >;
@@ -101,6 +119,50 @@ export interface ImportedLane {
       }
     >
   >;
+}
+
+/**
+ * THE ONE PLACE PROVENANCE ENTERS.
+ *
+ * `workflow.json` carries topology and nothing else: it says `queued --WIP-->
+ * build` and it does not say, and has never said, who sends a `WIP`. That fact
+ * lives in fabrika's CODE, not in fabrika's document — so it cannot be read
+ * here and it must not be guessed here.
+ *
+ * So the caller states it, ONCE, at the seam where their world meets ours, and
+ * everything downstream derives from that: the charts carry it, the report
+ * groups by it, the inspector reports it. One map, at the boundary the
+ * information actually crosses — not a default sprinkled through the readers,
+ * and not a table of fabrika's own event names baked in as a fallback, which
+ * would put us right back to owning a copy of someone else's vocabulary.
+ *
+ * ```ts
+ * chartFromWorkflow(document, {
+ *   from: {
+ *     WIP: { world: "the operator" },
+ *     BLOCKED: { world: "the operator" },
+ *     UNBLOCKED: { world: "a human" },
+ *     DONE: "cmd",
+ *     PASS: "cmd",
+ *     FAIL: "cmd",
+ *   },
+ * });
+ * ```
+ *
+ * Omit it and every reader degrades honestly — it says which events a state
+ * accepts and refuses to say who they come from.
+ */
+export interface WorkflowImportOptions {
+  /**
+   * Event name → where its Msg comes from. Keyed by the BARE name, so one
+   * entry covers every task's namespaced spelling of it (`ISSUE.WIP`,
+   * `PARK_SWEEP.WIP`) — the namespace is presentation, the event is the event.
+   *
+   * A name with no entry is left undeclared rather than defaulted. "I do not
+   * know" and "the outside world" are different answers and only one of them
+   * is safe to invent.
+   */
+  readonly from?: Readonly<Record<string, EventOrigin>>;
 }
 
 /**
@@ -314,9 +376,14 @@ function onDoneTargets(
  * file, so the runtime-typed half stays honest about the literal-typed one.
  *
  * @param document the PARSED `workflow.json` — `JSON.parse`'s output, not text.
+ * @param options  {@link WorkflowImportOptions} — the facts the document does
+ *                 not carry, stated once at the boundary they enter through.
  * @throws {WorkflowImportError} with every defect named, never a half-import.
  */
-export function chartFromWorkflow(document: unknown): ImportedLane {
+export function chartFromWorkflow(
+  document: unknown,
+  options: WorkflowImportOptions = {},
+): ImportedLane {
   const defects: string[] = [];
   const machineDef = isRecord(document) ? document.machine : undefined;
   if (!isRecord(machineDef) || !isRecord(machineDef.states)) {
@@ -361,10 +428,19 @@ export function chartFromWorkflow(document: unknown): ImportedLane {
       const imported = importRegion(taskId, region);
       defects.push(...imported.defects);
       if (imported.node !== undefined) {
-        const events: Record<string, { readonly scope: "edges" }> = {};
+        const events: Record<
+          string,
+          { readonly scope: "edges"; readonly from?: EventOrigin }
+        > = {};
         for (const edges of Object.values(imported.node)) {
           for (const event of Object.keys(edges.on ?? {})) {
-            events[event] = { scope: "edges" };
+            // The caller's map is the ONLY source of `from` — read once, here,
+            // and written onto the event. Absent stays absent.
+            const origin = options.from?.[event];
+            events[event] =
+              origin === undefined
+                ? { scope: "edges" }
+                : { scope: "edges", from: origin };
           }
         }
         // ONE group, named by the phase. The authored twin splits the same
@@ -445,14 +521,17 @@ export function chartFromWorkflow(document: unknown): ImportedLane {
 }
 
 /** Parse and import in one step — for a caller holding the document's bytes. */
-export function chartFromWorkflowText(text: string): ImportedLane {
+export function chartFromWorkflowText(
+  text: string,
+  options: WorkflowImportOptions = {},
+): ImportedLane {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     throw new WorkflowImportError(["the document is not JSON"]);
   }
-  return chartFromWorkflow(parsed);
+  return chartFromWorkflow(parsed, options);
 }
 
 // ── reading a chart back ───────────────────────────────────────────────────
@@ -474,6 +553,20 @@ export function initialOf(chart: ImportedChart): string {
     if (node.initial === true) return name;
   }
   throw new Error("@demlik/tea: imported chart marks no initial state");
+}
+
+/**
+ * Where `event` comes from, or `undefined` when the chart does not say.
+ *
+ * The ONE read of provenance, so a reader that wants to group by origin and a
+ * reader that wants to label one event cannot disagree about what "undeclared"
+ * looks like.
+ */
+export function originOf(
+  chart: ImportedChart,
+  event: string,
+): EventOrigin | undefined {
+  return chart.events[event]?.from;
 }
 
 /** `true` success, `"error"` tripped, `false` not a final — the ONE polarity read. */

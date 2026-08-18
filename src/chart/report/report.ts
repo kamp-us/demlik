@@ -11,16 +11,26 @@
 //   ONE DIAGRAM PER TASK, ACTIVE PHASE ONLY. A comment with eight diagrams is a
 //   comment nobody reads. Future phases get one line each.
 //
-//   FABRIKA'S OWN VOCABULARY FOR "WAITING ON". The report is a reader, not a
-//   second driver — so `queued` waits on the operator's `WIP`, `build`/`review`/
-//   `ship` wait on the shell that `wire/lane-brief.ts` routes them to, and
-//   `blocked`/`human:*` wait on a human's `UNBLOCKED`. A state nothing routes
-//   gets NO GUESS, exactly as `shellState()` returns null rather than inventing
-//   one; it gets the events it accepts, which is what the machine does say.
+//   "WAITING ON" IS DERIVED, AND NAMES NOTHING. This file used to answer it by
+//   matching STATE NAMES — `queued`, `build`, `review`, `ship`, `blocked`,
+//   `human:*` — against a list copied out of fabrika's `wire/lane-brief.ts`.
+//   Those names are fabrika's, so a rename upstream turned this report into a
+//   confident liar with nothing failing anywhere. The fact it was really after
+//   is not "which state is this" but "who has to act next", which is a property
+//   of the EVENT: a Msg comes from a Cmd's result, a Sub firing, or the outside
+//   world, and the chart now says which (`graph.ts` §3a, `from`). So the answer
+//   is the events legal HERE, grouped by THEIR origin — no state name, no event
+//   name, no job title in this file.
+//
+//   AND IT STILL REFUSES TO GUESS. A chart that declares no provenance gets no
+//   invented one: the line says which events the state accepts and stops, which
+//   is what the machine does say — the same refusal `shellState()` makes by
+//   answering null rather than inventing a shell.
 //
 //   THE RETRY LINE, WHEN AND ONLY WHEN IT MATTERS. `2/2` is the difference
 //   between "in review" and "one FAIL from frozen", and `0/2` is noise.
 // ═══════════════════════════════════════════════════════════════════════════
+import type { EventOrigin } from "../graph";
 import { drawTask, walkedEdges } from "./draw";
 import {
   deriveLaneStatus,
@@ -38,21 +48,9 @@ import {
   endPolarityOf,
   type ImportedChart,
   type ImportedLane,
+  originOf,
   statesOf,
 } from "./workflow";
-
-/**
- * The three leaf states that route to a spawned shell — `wire/lane-brief.ts`'s
- * `SHELL_STATES`, carried over rather than re-derived, so the report cannot
- * name a shell the driver would not spawn.
- */
-export const SHELL_STATES = ["build", "review", "ship"] as const;
-export type ShellState = (typeof SHELL_STATES)[number];
-const SHELLS: Readonly<Record<ShellState, string>> = {
-  build: "builder",
-  review: "reviewer",
-  ship: "shipper",
-};
 
 /** The lane the report is about. `workflow` is the PARSED document, or an import. */
 export interface LaneReportInput {
@@ -91,23 +89,91 @@ function activePhaseName(status: LaneStatus): string | undefined {
   return undefined;
 }
 
-/** What this task is waiting on, in the driver's words — or `null` at a final. */
+/** Event names, as the report writes a list of them. */
+const listed = (events: readonly string[]): string =>
+  events.map((e) => `\`${e}\``).join(", ");
+
+/**
+ * One origin's worth of the answer, said the way that origin is said.
+ *
+ * The three phrasings are the three origins, and each says the thing that
+ * origin makes true. A world role is a WHO, so the events are what that who
+ * owes; a cmd is work already in flight, so the sentence is about the work and
+ * the events are how it comes back; a sub is a source, so the sentence is about
+ * the source. The role text (`the operator`, `a human`) is the consumer's own,
+ * carried from the chart verbatim — including its article, because only the
+ * consumer knows whether there is one of them or any of them.
+ */
+function phrase(
+  origin: EventOrigin,
+  state: string,
+  events: readonly string[],
+): string {
+  if (origin === "cmd") {
+    return `the work \`${state}\` dispatched — ${listed(events)}`;
+  }
+  if (origin === "sub") {
+    return `the source \`${state}\` is subscribed to — ${listed(events)}`;
+  }
+  return `${origin.world}'s ${listed(events)}`;
+}
+
+/** The grouping key for an origin — the two words, or the role, distinctly. */
+const originKey = (origin: EventOrigin): string =>
+  typeof origin === "string" ? origin : `world:${origin.world}`;
+
+/**
+ * What this task is waiting on — or `null` at a final.
+ *
+ * DERIVED, entirely: the events this state routes, grouped by the origin each
+ * one DECLARES, in declaration order. Nothing here knows a state name, an event
+ * name or a job title, so a consumer that renames half its states changes this
+ * output correctly and a consumer with a completely different cast is served by
+ * the same function.
+ *
+ * The degradation is the point of the second half. Provenance is not in
+ * `workflow.json` — it is stated at the import boundary or not at all — so a
+ * chart imported without it must say what it actually knows, which is WHICH
+ * EVENTS the state accepts. It never says who sends them.
+ */
 export function waitingOn(chart: ImportedChart, state: string): string | null {
   const node = statesOf(chart).get(state);
   if (node?.end !== undefined) return null;
-  if (state === "queued") return "the operator's `WIP`";
-  if ((SHELL_STATES as readonly string[]).includes(state)) {
-    return `the \`${SHELLS[state as ShellState]}\` shell`;
-  }
-  if (state === "blocked" || state.startsWith("human:")) {
-    return "a human's `UNBLOCKED`";
-  }
-  // NO GUESS. `shellState()` refuses to invent a shell for an unrouted state,
-  // and so does this — what the machine does say is which events it accepts.
   const events = Object.keys(node?.on ?? {});
-  return events.length === 0
-    ? `nothing routes \`${state}\`, and it accepts no events`
-    : `nothing routes \`${state}\` — it accepts ${events.map((e) => `\`${e}\``).join(", ")}`;
+  if (events.length === 0) {
+    // A live state that routes nothing. `inspectLane` calls this a dead end;
+    // there is no one to wait for and saying so is the whole answer.
+    return `\`${state}\` accepts no events, and it is not a final`;
+  }
+
+  // Group by origin, keeping the events in the order the chart declares them.
+  const groups = new Map<string, { origin: EventOrigin; events: string[] }>();
+  const undeclared: string[] = [];
+  for (const event of events) {
+    const origin = originOf(chart, event);
+    if (origin === undefined) {
+      undeclared.push(event);
+      continue;
+    }
+    const key = originKey(origin);
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, { origin, events: [event] });
+    else group.events.push(event);
+  }
+
+  // NO PROVENANCE AT ALL — the honest floor. Same voice as the refusal this
+  // replaces: name what the machine says, and stop.
+  if (groups.size === 0) return `\`${state}\` accepts ${listed(events)}`;
+
+  const parts = [...groups.values()].map((g) =>
+    phrase(g.origin, state, g.events),
+  );
+  // A PARTIAL map is not rounded up to a whole one. The events whose origin was
+  // never stated are listed as exactly that, beside the ones that were.
+  if (undeclared.length > 0) {
+    parts.push(`${listed(undeclared)}, from somewhere the chart does not say`);
+  }
+  return parts.join(" · ");
 }
 
 /** `2/2 — one \`FAIL\` from \`frozen\``, or `null` when no retry has been spent. */

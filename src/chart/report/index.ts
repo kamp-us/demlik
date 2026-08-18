@@ -80,8 +80,6 @@ export {
   type LaneReport,
   type LaneReportInput,
   laneReport,
-  SHELL_STATES,
-  type ShellState,
   waitingOn,
 } from "./report";
 export {
@@ -104,6 +102,8 @@ export {
   isOperatorEvent,
   OPERATOR_EVENTS,
   type OperatorEvent,
+  originOf,
   statesOf,
   WorkflowImportError,
+  type WorkflowImportOptions,
 } from "./workflow";
