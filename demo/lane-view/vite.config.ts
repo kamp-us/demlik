@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { lanesFromDisk } from "../../src/chart/lane/server";
+import { FABRIKA_ORIGINS } from "./origins";
 
 /**
  * A lane is TWO FILES on disk, and `.fabrika/` is gitignored — the lanes only
@@ -110,82 +112,31 @@ const EVENTS = new Set(["WIP", "DONE", "PASS", "FAIL", "BLOCKED", "UNBLOCKED"]);
 /** A lane key or task name, conservatively. Nothing here reaches a shell. */
 const NAME = /^[A-Za-z0-9_.:-]{1,120}$/;
 
-type Lane = {
-  id: string;
-  workflow: string;
-  events: string;
-  origins?: unknown;
-};
-
-/** An optional `origins.json` beside the lane overrides the viewer's cast. */
-function originsIn(d: string): unknown {
-  try {
-    return JSON.parse(readFileSync(join(d, "origins.json"), "utf8"));
-  } catch {
-    return undefined;
-  }
-}
-
-/** One lane dir, or a parent holding several — both spellings work. */
-function collect(dir: string): Lane[] {
-  const one = (d: string): Lane | null => {
-    try {
-      return {
-        id: d.split("/").filter(Boolean).pop() ?? "lane",
-        workflow: readFileSync(join(d, "workflow.json"), "utf8"),
-        // a lane that has been emitted but never run has no log yet, and that
-        // is a legitimate thing to look at: every task sits where it booted.
-        events: (() => {
-          try {
-            return readFileSync(join(d, "events.jsonl"), "utf8");
-          } catch {
-            return "";
-          }
-        })(),
-        ...(originsIn(d) === undefined ? {} : { origins: originsIn(d) }),
-      };
-    } catch {
-      return null;
-    }
-  };
-
-  const self = one(dir);
-  if (self !== null) return [self];
-
-  return readdirSync(dir)
-    .map((n) => join(dir, n))
-    .filter((p) => statSync(p).isDirectory())
-    .map(one)
-    .filter((l): l is Lane => l !== null);
-}
-
 /**
- * Every lane under `dir`, however it is spelled on disk.
+ * ONE READER. `lanesFromDisk` is the package's own — the two-file convention is
+ * ours, so reading it is too, and this file used to hold a third copy of it
+ * that disagreed at the edges about what counts as a lane.
  *
- * ONE implementation, because the first paint and every live update must agree
- * — a watcher that re-read differently would show a lane moving that had not.
+ * The flat fixture spelling (`5673.workflow.json`) is the exception it does not
+ * know, and it only exists so `pnpm lane:view` with no argument shows three
+ * real lanes before anyone points it at their own.
  */
-function readLanes(dir: string): Lane[] {
-  let lanes: Lane[] = [];
+type Lane = Awaited<ReturnType<typeof lanesFromDisk>>[number];
+
+async function readLanes(dir: string): Promise<Lane[]> {
+  const found = await lanesFromDisk(dir, { origins: FABRIKA_ORIGINS });
+  if (found.length > 0) return found;
   try {
-    lanes = collect(dir);
-  } catch {
-    lanes = [];
-  }
-  if (lanes.length > 0) return lanes;
-  // the flat fixture spelling (`5673.workflow.json`) as well as the on-disk
-  // one, so `pnpm lane:view` with no argument shows three real lanes and
-  // proves the thing works before anyone points it at their own.
-  try {
-    const names = new Set(
+    const flat = new Set(
       readdirSync(dir)
         .filter((n) => n.endsWith(".workflow.json"))
         .map((n) => n.replace(".workflow.json", "")),
     );
-    return [...names].map((id) => ({
+    return [...flat].map((id) => ({
       id,
       workflow: readFileSync(join(dir, `${id}.workflow.json`), "utf8"),
       events: readFileSync(join(dir, `${id}.events.jsonl`), "utf8"),
+      origins: FABRIKA_ORIGINS,
     }));
   } catch {
     return [];
@@ -204,9 +155,9 @@ export default defineConfig({
     {
       name: "lanes-from-disk",
       resolveId: (id) => (id === VIRTUAL ? `\0${VIRTUAL}` : null),
-      load(id) {
+      async load(id) {
         if (id !== `\0${VIRTUAL}`) return null;
-        const lanes = readLanes(target);
+        const lanes = await readLanes(target);
         return `export const LANES = ${JSON.stringify(lanes)};
 export const SOURCE = ${JSON.stringify(target)};`;
       },
@@ -309,7 +260,8 @@ export const SOURCE = ${JSON.stringify(target)};`;
           if (claimCache !== null && now - claimCache.at < CLAIM_TTL_MS) {
             return done(claimCache.drivers);
           }
-          void readDrivers(readLanes(target).map((l) => l.id))
+          void readLanes(target)
+            .then((all) => readDrivers(all.map((l) => l.id)))
             .then((drivers) => {
               claimCache = { at: Date.now(), drivers };
               done(drivers);
@@ -318,23 +270,24 @@ export const SOURCE = ${JSON.stringify(target)};`;
         });
 
         server.watcher.add(target);
-        const push = (path: string) => {
+        const push = async (path: string) => {
           if (!path.startsWith(target)) return;
           try {
             server.ws.send({
               type: "custom",
               event: CHANNEL,
-              data: readLanes(target),
+              data: await readLanes(target),
             });
           } catch {
             // a half-written file during an append is not an error, it is the
             // next event arriving — the following change fires with it whole.
           }
         };
-        server.watcher.on("add", push);
-        server.watcher.on("change", push);
-        server.watcher.on("unlink", push);
-        server.watcher.on("addDir", push);
+        const onChange = (path: string) => void push(path);
+        server.watcher.on("add", onChange);
+        server.watcher.on("change", onChange);
+        server.watcher.on("unlink", onChange);
+        server.watcher.on("addDir", onChange);
       },
     },
   ],
