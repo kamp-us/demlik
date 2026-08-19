@@ -287,7 +287,7 @@
     "test": "vitest run",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "lane:view": "vite --config demo/lane-view/vite.config.ts",
-    "lane:watch": "tsx scripts/lane-watch.ts",
+    "lane:watch": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/lane-watch.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "typecheck:consumers": "tsc -p tsconfig.consumers.json",
