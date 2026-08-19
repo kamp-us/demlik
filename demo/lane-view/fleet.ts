@@ -19,6 +19,11 @@ import type { LaneViewModel } from "../../src/chart/lane/view";
 export const RANK = [
   "needs-you",
   "tripped",
+  // A lane whose workflow will not parse is ranked among the defects rather
+  // than above them: it is a broken file, not a person blocked on a decision.
+  // It still gets a row, because the alternative — dropping it — is how a lane
+  // disappears from the fleet without anyone being told it did.
+  "unreadable",
   "quiet",
   "moving",
   "unstarted",
@@ -36,6 +41,24 @@ export interface FleetRow {
   readonly progress: string | null;
   /** Minutes since the last event, or `null` for a lane that never ran. */
   readonly quietFor: number | null;
+}
+
+/**
+ * A lane that could not be read at all.
+ *
+ * The rest of this file derives a headline FROM a view; there is no view here,
+ * so the headline is the parser's own complaint. Saying "unreadable" and
+ * stopping would leave the reader to go find out why on their own, which for a
+ * one-character JSON error is a long walk.
+ */
+export function unreadableRow(id: string, why: string): FleetRow {
+  return {
+    id,
+    attention: "unreadable",
+    headline: why,
+    progress: null,
+    quietFor: null,
+  };
 }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;

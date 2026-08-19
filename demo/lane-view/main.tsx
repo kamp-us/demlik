@@ -4,17 +4,29 @@
 // so this reads the disk where it is started and renders in the browser. No
 // server, no upload, no copy of a lane leaving the machine.
 import mermaid from "mermaid";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Component,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import { LaneView } from "../../src/chart/lane/react";
 import "../../src/chart/lane/styles.css";
 import "./style.css";
 // @ts-expect-error — supplied by the vite plugin beside this file.
 import { LANES, SOURCE } from "virtual:lanes";
-import { laneView, replayFeed } from "../../src/chart/lane/view";
+import {
+  type LaneViewModel,
+  laneView,
+  replayFeed,
+} from "../../src/chart/lane/view";
 import { parseEventsJsonl } from "../../src/chart/report/fold";
 import {
   chartFromWorkflowText,
+  type ImportedLane,
   statesOf,
 } from "../../src/chart/report/workflow";
 import {
@@ -24,7 +36,7 @@ import {
   type OperatorEvent,
   send,
 } from "./dispatch";
-import { byAttention, type FleetRow, fleetRow } from "./fleet";
+import { byAttention, type FleetRow, fleetRow, unreadableRow } from "./fleet";
 import { FABRIKA_ORIGINS } from "./origins";
 
 mermaid.initialize({ startOnLoad: false, theme: "dark" });
@@ -98,14 +110,47 @@ function useLanes(): { lanes: Lane[]; beat: number; source: string } {
  * each `<pre>` by its diagram text — so a changed drawing arrives as a NEW
  * node. Watching the DOM is what picks that up; rendering once on mount shows
  * the source from the second frame on.
+ *
+ * SCRUBBING IS THE HARD CASE. Stepping through the log changes the diagram on
+ * every press, and each change is a fresh `<pre>` holding raw mermaid source
+ * that mermaid has not replaced with an svg yet. Left alone the reader sees the
+ * source text flash, then the panel collapse to nothing, then snap back to a
+ * diagram's height — three times a second while they hold the key down.
+ *
+ * So the node is hidden until it is drawn (the stylesheet does that), and the
+ * space it will occupy is held open here: the height each task's diagram last
+ * rendered at is remembered, and the replacement is floored to it before
+ * mermaid runs. The diagram still redraws — it just stops moving the page.
  */
+const DREW_AT = new Map<string, number>();
+
+/** Which task's diagram this is, so its height is remembered as its own. */
+const taskOf = (n: HTMLElement): string =>
+  n.closest<HTMLElement>("[data-task]")?.dataset.task ?? "";
+
 function Mermaid() {
   useEffect(() => {
     const paint = () => {
       const nodes = document.querySelectorAll<HTMLElement>(
         "pre.mermaid:not([data-processed])",
       );
-      if (nodes.length > 0) void mermaid.run({ nodes: [...nodes] });
+      if (nodes.length === 0) return;
+      for (const n of nodes) {
+        const was = DREW_AT.get(taskOf(n));
+        if (was !== undefined) n.style.minHeight = `${was}px`;
+      }
+      void mermaid.run({ nodes: [...nodes] }).then(() => {
+        for (const n of nodes) {
+          // The SVG's height, not the node's — the node's includes the floor
+          // we just put under it, so remembering that would ratchet: every
+          // redraw would hold open the tallest the diagram has ever been and
+          // a lane that shed a phase would keep the empty space forever.
+          const h = n.querySelector("svg")?.getBoundingClientRect().height ?? 0;
+          if (h > 0) DREW_AT.set(taskOf(n), h);
+          // Drawn — the diagram sets its own height from here.
+          n.style.minHeight = "";
+        }
+      });
     };
     paint();
     const obs = new MutationObserver(paint);
@@ -121,6 +166,7 @@ const ATTENTION_LABEL: Record<string, string> = {
   quiet: "gone quiet",
   moving: "moving",
   unstarted: "not started",
+  unreadable: "unreadable",
   done: "done",
 };
 
@@ -159,10 +205,47 @@ function driverLabel(d: Driver): string {
   return `${d.login} · ${short}`;
 }
 
-function useFleet(
-  lanes: Lane[],
-  beat: number,
-): { row: FleetRow; lane: Lane }[] {
+/**
+ * READING A LANE, ONCE, AND SURVIVING A LANE THAT WILL NOT READ.
+ *
+ * `workflow.json` is written by whatever emitted the lane, so it can be
+ * half-written, hand-edited or from a version this viewer does not understand.
+ * Parsing it inside render meant one bad file threw during React's commit and
+ * took the WHOLE screen with it: eleven healthy lanes went blank because of a
+ * twelfth, which is the exact opposite of what a fleet screen is for.
+ *
+ * So the parse happens here, once per lane, and its failure is a value.
+ */
+type Read =
+  | {
+      readonly ok: true;
+      readonly chart: ImportedLane;
+      readonly view: LaneViewModel;
+    }
+  | { readonly ok: false; readonly why: string };
+
+function readLane(l: Lane, at: number): Read {
+  try {
+    const chart = chartFromWorkflowText(
+      l.workflow,
+      (l.origins as typeof FABRIKA_ORIGINS) ?? FABRIKA_ORIGINS,
+    );
+    const log = parseEventsJsonl(l.events);
+    return { ok: true, chart, view: laneView(replayFeed(chart, log), at) };
+  } catch (e) {
+    // The parser's own sentence, trimmed of the prefix that names this
+    // library — the reader knows which viewer they are looking at.
+    const why = (e instanceof Error ? e.message : String(e)).replace(
+      /^@demlik\/tea:\s*/,
+      "",
+    );
+    return { ok: false, why };
+  }
+}
+
+type Seat = { row: FleetRow; lane: Lane; read: Read };
+
+function useFleet(lanes: Lane[], beat: number): Seat[] {
   // `beat` is the clock: a lane quiet for 20 minutes should read 21 without
   // anything on disk changing, and the tick is what re-derives the ages. It is
   // a dependency in the honest sense — the answer is a function of it.
@@ -171,70 +254,57 @@ function useFleet(
     void beat;
     return lanes
       .map((l) => {
-        const chart = chartFromWorkflowText(
-          l.workflow,
-          (l.origins as typeof FABRIKA_ORIGINS) ?? FABRIKA_ORIGINS,
-        );
-        const log = parseEventsJsonl(l.events);
-        const view = laneView(replayFeed(chart, log), Number.MAX_SAFE_INTEGER);
-        const last = log.at(-1)?.at ?? null;
-        return { row: fleetRow(l.id, view, last, now), lane: l };
+        const read = readLane(l, Number.MAX_SAFE_INTEGER);
+        if (!read.ok)
+          return { row: unreadableRow(l.id, read.why), lane: l, read };
+        const last = parseEventsJsonl(l.events).at(-1)?.at ?? null;
+        return { row: fleetRow(l.id, read.view, last, now), lane: l, read };
       })
       .sort((a, b) => byAttention(a.row, b.row));
   }, [lanes, beat]);
 }
 
-function Fleet({
-  lanes,
-  beat,
-  source,
+/**
+ * THE RAIL — every lane, always, whichever one you have open.
+ *
+ * The first cut of this screen was two screens: a list, and a lane you
+ * reached by leaving the list. That is a document's shape, not a console's.
+ * An operator watching a fleet needs the fleet in view WHILE they work one
+ * lane, because the reason to look away is another lane going amber, and a
+ * list you have navigated away from cannot tell you that.
+ */
+function Rail({
+  fleet,
+  drivers,
+  open,
   onOpen,
 }: {
-  lanes: Lane[];
-  beat: number;
-  source: string;
+  fleet: readonly { row: FleetRow }[];
+  drivers: Record<string, Driver | null>;
+  open: string | null;
   onOpen: (id: string) => void;
 }) {
-  const fleet = useFleet(lanes, beat);
-  const drivers = useDrivers();
-  const counts = new Map<string, number>();
-  for (const { row } of fleet)
-    counts.set(row.attention, (counts.get(row.attention) ?? 0) + 1);
-
-  const needs = counts.get("needs-you") ?? 0;
-
   return (
-    <main className="fl">
-      <h1 className="fl-h1">
-        {needs === 0
-          ? "Nothing is waiting on you."
-          : `${needs} lane${needs === 1 ? "" : "s"} waiting on you.`}
-      </h1>
-
-      <div className="fl-counts">
-        {[...counts].map(([k, n]) => (
-          <span key={k} className={`fl-chip is-${k}`}>
-            <b>{n}</b> {ATTENTION_LABEL[k]}
-          </span>
-        ))}
-      </div>
-
-      <ul className="fl-rows">
+    <nav className="rail" aria-label="lanes">
+      <ul className="rail-rows">
         {fleet.map(({ row }) => (
           <li key={row.id}>
             <button
               type="button"
-              className={`fl-row is-${row.attention}`}
+              className={`rail-row is-${row.attention}${row.id === open ? " on" : ""}`}
+              aria-current={row.id === open ? "true" : undefined}
               onClick={() => onOpen(row.id)}
             >
-              <span className="fl-id">{row.id}</span>
-              <span className="fl-head">{row.headline}</span>
-              <span className="fl-meta">
+              <span className="rail-top">
+                <span className="rail-id">{row.id}</span>
                 {drivers[row.id] != null ? (
-                  <span className="fl-drv" title={drivers[row.id]?.session}>
+                  <span className="rail-drv" title={drivers[row.id]?.session}>
                     {driverLabel(drivers[row.id] as Driver)}
                   </span>
                 ) : null}
+              </span>
+              <span className="rail-head">{row.headline}</span>
+              <span className="rail-meta">
                 {[
                   row.progress,
                   row.quietFor === null ? null : age(row.quietFor),
@@ -246,10 +316,7 @@ function Fleet({
           </li>
         ))}
       </ul>
-      <p className="fl-foot">
-        Read from <code>{source || "this machine"}</code> — nothing left it.
-      </p>
-    </main>
+    </nav>
   );
 }
 
@@ -358,15 +425,15 @@ function Act({
 }
 
 /** The active phase's tasks, which are the only ones an event can address. */
-function ActFor({ lane }: { lane: Lane }) {
-  const chart = chartFromWorkflowText(
-    lane.workflow,
-    (lane.origins as typeof FABRIKA_ORIGINS) ?? FABRIKA_ORIGINS,
-  );
-  const view = laneView(
-    replayFeed(chart, parseEventsJsonl(lane.events)),
-    Number.MAX_SAFE_INTEGER,
-  );
+function ActFor({
+  lane,
+  chart,
+  view,
+}: {
+  lane: Lane;
+  chart: ImportedLane;
+  view: LaneViewModel;
+}) {
   const phase = view.phases.find((p) => p.name === view.activePhase);
   if (phase === undefined) return null;
 
@@ -386,6 +453,90 @@ function ActFor({ lane }: { lane: Lane }) {
   return <Act laneId={lane.id} tasks={tasks} single={tasks.length === 1} />;
 }
 
+/**
+ * A LANE THAT WILL NOT PARSE, said out loud.
+ *
+ * The rail keeps its row either way, so the stage owes the reader the rest:
+ * which file, what the parser objected to, and the one command that shows the
+ * bytes. Anything less and the row is a dead end.
+ */
+function Unreadable({ id, why }: { id: string; why: string }) {
+  return (
+    <section className="broke">
+      <h2 className="broke-h">This lane could not be read</h2>
+      <p className="broke-why">{why}</p>
+      <p className="broke-p">
+        Every other lane on this screen is unaffected — only this one is
+        skipped. Its <code>workflow.json</code> is either not valid JSON or not
+        a shape this viewer understands.
+      </p>
+      <pre className="broke-cmd">{`cat ${SOURCE}/${id}/workflow.json | jq .`}</pre>
+    </section>
+  );
+}
+
+/**
+ * THE BACKSTOP.
+ *
+ * `readLane` catches the failure we know about — a workflow that will not
+ * parse. This catches the ones we do not: a chart that imports but renders
+ * badly, a mermaid diagram that throws, a shape from a future fabrika. React
+ * unmounts the whole tree on an uncaught render error, so without a boundary
+ * here the blast radius of any of them is still the entire screen.
+ *
+ * Keyed by lane id at the call site, which is what lets a reader click away to
+ * a healthy lane and back rather than being stuck on the wreck.
+ */
+class Boundary extends Component<
+  { id: string; children: ReactNode },
+  { why: string | null }
+> {
+  state: { why: string | null } = { why: null };
+  static getDerivedStateFromError(e: unknown) {
+    return { why: e instanceof Error ? e.message : String(e) };
+  }
+  render() {
+    return this.state.why === null ? (
+      this.props.children
+    ) : (
+      <Unreadable id={this.props.id} why={this.state.why} />
+    );
+  }
+}
+
+/** The rollup, in a sentence — the one thing worth reading from across a room. */
+function Verdict({
+  needs,
+  tripped,
+  broken,
+}: {
+  needs: number;
+  tripped: number;
+  broken: number;
+}) {
+  if (needs > 0)
+    return (
+      <b className="hd-say is-needs-you">
+        {needs} lane{needs === 1 ? "" : "s"} waiting on you
+      </b>
+    );
+  if (tripped > 0)
+    return (
+      <b className="hd-say is-tripped">
+        {tripped} lane{tripped === 1 ? "" : "s"} tripped
+      </b>
+    );
+  // Last, because a file this viewer cannot read is our problem, not the
+  // operator's — but it still beats claiming all is well while a lane is dark.
+  if (broken > 0)
+    return (
+      <b className="hd-say is-unreadable">
+        {broken} lane{broken === 1 ? "" : "s"} could not be read
+      </b>
+    );
+  return <b className="hd-say">Nothing is waiting on you</b>;
+}
+
 function App() {
   const [open, setOpen] = useState<string | null>(null);
   const { lanes, beat, source } = useLanes();
@@ -398,6 +549,17 @@ function App() {
     const t = setInterval(() => setTick((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, []);
+
+  const fleet = useFleet(lanes, beat + tick);
+  const drivers = useDrivers();
+
+  // OPEN ON THE PROBLEM. The rail is sorted by who needs you, so its first row
+  // IS the answer to "what should I look at" — landing on a blank stage and
+  // making the operator click it would be asking them the question they came
+  // here to have answered.
+  const shown = open ?? fleet[0]?.row.id ?? null;
+  const seat = fleet.find((f) => f.row.id === shown);
+  const lane = seat?.lane;
 
   if (lanes.length === 0) {
     return (
@@ -416,59 +578,67 @@ function App() {
     );
   }
 
-  if (open === null)
-    return (
-      <>
-        <Fleet
-          lanes={lanes}
-          beat={beat + tick}
-          source={source}
-          onOpen={setOpen}
-        />
-        <Mermaid />
-      </>
-    );
+  const counts = new Map<string, number>();
+  for (const { row } of fleet)
+    counts.set(row.attention, (counts.get(row.attention) ?? 0) + 1);
 
-  const lane = lanes.find((l) => l.id === open);
-  if (lane === undefined) {
-    // the lane went away under us — a root re-pointed, a dir removed.
-    setOpen(null);
-    return null;
-  }
   return (
-    <>
-      <header className="lv-bar">
-        <button type="button" className="lv-back" onClick={() => setOpen(null)}>
-          ← all lanes
-        </button>
-        <nav>
-          {lanes.map((l) => (
-            <button
-              type="button"
-              key={l.id}
-              className={l.id === open ? "on" : ""}
-              onClick={() => setOpen(l.id)}
-            >
-              {l.id}
-            </button>
-          ))}
-        </nav>
-        <code className="lv-src">{source}</code>
-      </header>
-      <main>
-        <ActFor lane={lane} />
-        <LaneView
-          key={lane.id}
-          lane={chartFromWorkflowText(
-            lane.workflow,
-            (lane.origins as typeof FABRIKA_ORIGINS) ?? FABRIKA_ORIGINS,
-          )}
-          log={parseEventsJsonl(lane.events)}
-          title={lane.id}
+    <div className="op">
+      <header className="hd">
+        <span className="hd-brand">fabrika</span>
+        <Verdict
+          needs={counts.get("needs-you") ?? 0}
+          tripped={counts.get("tripped") ?? 0}
+          broken={counts.get("unreadable") ?? 0}
         />
+        <span className="hd-counts">
+          {[...counts].map(([k, n]) => (
+            <span key={k} className={`hd-chip is-${k}`}>
+              <b>{n}</b> {ATTENTION_LABEL[k]}
+            </span>
+          ))}
+        </span>
+        <span className="hd-src" title={source}>
+          <span className="hd-live" aria-hidden="true" />
+          {source || "this machine"}
+        </span>
+      </header>
+
+      <Rail fleet={fleet} drivers={drivers} open={shown} onOpen={setOpen} />
+
+      <main className="stage">
+        {lane === undefined ? null : (
+          <>
+            <div className="stage-hd">
+              <h1>{lane.id}</h1>
+              <span className="stage-sub">{seat?.row.headline}</span>
+            </div>
+            {seat === undefined || !seat.read.ok ? (
+              <Unreadable
+                id={lane.id}
+                why={seat?.read.ok === false ? seat.read.why : "unknown"}
+              />
+            ) : (
+              <Boundary id={lane.id} key={`b-${lane.id}`}>
+                <ActFor
+                  key={`act-${lane.id}`}
+                  lane={lane}
+                  chart={seat.read.chart}
+                  view={seat.read.view}
+                />
+                <LaneView
+                  key={lane.id}
+                  lane={seat.read.chart}
+                  log={parseEventsJsonl(lane.events)}
+                  title={lane.id}
+                />
+              </Boundary>
+            )}
+          </>
+        )}
       </main>
       <Mermaid />
-    </>
+    </div>
   );
 }
 
