@@ -352,6 +352,11 @@ export function compileTable(
   for (const [s, { node, group }] of flat) {
     const row: Record<string, RtCell> = {};
     const on = node.on ?? {};
+    // Every event gets a row key here, but a live-but-undecided one gets a cell
+    // that only throws — it is not a Msg this state accepts, and `NoCellError`
+    // must not list it as one. Read lazily inside the throwing closure, which
+    // runs long after this loop has finished filling the row (#14).
+    const undecided = new Set<string>();
 
     for (const e of events) {
       // the one runtime consequence of per-event namespacing.
@@ -368,11 +373,18 @@ export function compileTable(
         // error final back under the totality obligation at runtime only.
         const refused =
           node.end !== undefined || !live || (node.ignore ?? []).includes(e);
-        row[key] = refused
-          ? (st) => [st, []]
-          : () => {
-              throw new NoCellError(key, s);
-            };
+        if (refused) {
+          row[key] = (st) => [st, []];
+        } else {
+          undecided.add(key);
+          row[key] = () => {
+            throw new NoCellError(
+              key,
+              s,
+              Object.keys(row).filter((k) => !undecided.has(k)),
+            );
+          };
+        }
         continue;
       }
 
