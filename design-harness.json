@@ -1,0 +1,6 @@
+{
+  "command": "BROWSER=none pnpm lane:view",
+  "url": "http://localhost:5410",
+  "readyPath": "/",
+  "viewport": { "width": 1440, "height": 900 }
+}
