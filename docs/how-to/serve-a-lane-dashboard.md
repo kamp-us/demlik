@@ -43,8 +43,10 @@ obvious bug.
 Already have a server? `laneViewer(opts)` returns the bare
 `(Request) => Promise<Response>` to mount wherever you like.
 
-A complete host is [`examples/lane-dashboard/serve.ts`](../../examples/lane-dashboard/serve.ts)
-— and nearly all of it is reading two files.
+A complete host is [`scripts/lane-watch.ts`](../../scripts/lane-watch.ts)
+— and nearly all of it is reading two files. It is not a sketch: it is the host
+this repo runs over its own lanes (`pnpm lane:watch`), imported through the
+same public specifier you would use.
 
 ## What the page does with that
 

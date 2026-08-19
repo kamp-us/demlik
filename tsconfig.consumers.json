@@ -1,0 +1,15 @@
+{
+  // The files that reach this package the way an INSTALLER does — through the
+  // published specifiers, against `dist`, not through `src`. The worked
+  // examples, and the host this repo runs over its own lanes.
+  //
+  // Kept apart from `tsconfig.json` because that one compiles `src` against
+  // itself and so can never catch an export map that resolves internally and
+  // not from outside — the failure a consumer meets first and we meet last.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["examples/**/*.ts", "scripts/lane-watch.ts"]
+}
