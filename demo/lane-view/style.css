@@ -10,58 +10,234 @@ body {
     system-ui,
     sans-serif;
 }
-main {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem 5rem;
+/* ── the console ───────────────────────────────────────────────────────────
+ *
+ * A fixed viewport split three ways: a strip that carries the verdict, a rail
+ * that never leaves, and a stage that takes every pixel left over. The page
+ * itself does not scroll — the rail and the stage scroll independently, so
+ * reading a 12-task epic never pushes the lane going amber off the screen.
+ */
+.op {
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(15rem, 19rem) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "hd hd"
+    "rail stage";
 }
-.lv-bar {
+
+/* ── the strip ─────────────────────────────────────────────────────────── */
+.hd {
+  grid-area: hd;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.1rem;
   flex-wrap: wrap;
-  padding: 0.85rem 1.25rem;
+  padding: 0.7rem 1.25rem;
+  background: #010409;
   border-bottom: 1px solid #30363d;
-  background: #161b22;
-  position: sticky;
-  top: 0;
-  z-index: 5;
 }
-.lv-brand {
+.hd-brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #8b949e;
+}
+.hd-say {
+  font-size: 1.02rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.lv-bar nav {
+.hd-say.is-needs-you {
+  color: #e3b341;
+}
+.hd-say.is-tripped {
+  color: #ff7b72;
+}
+.hd-counts {
   display: flex;
   gap: 0.4rem;
   flex-wrap: wrap;
 }
-.lv-bar button {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.28rem 0.7rem;
-  border: 1px solid #30363d;
+.hd-chip {
+  font-size: 0.74rem;
+  padding: 0.16rem 0.6rem;
   border-radius: 999px;
-  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  white-space: nowrap;
+}
+.hd-chip b {
+  color: #e6edf3;
+  font-variant-numeric: tabular-nums;
+}
+.hd-chip.is-needs-you {
+  border-color: #d29922;
+  color: #e3b341;
+}
+.hd-chip.is-needs-you b {
+  color: #e3b341;
+}
+.hd-chip.is-tripped {
+  border-color: #f85149;
+  color: #ff7b72;
+}
+.hd-chip.is-tripped b {
+  color: #ff7b72;
+}
+.hd-src {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: #8b949e;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+.hd-live {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 0 0 rgb(63 185 80 / 55%);
+  animation: hd-beat 2.4s ease-out infinite;
+}
+@keyframes hd-beat {
+  60%,
+  100% {
+    box-shadow: 0 0 0 7px rgb(63 185 80 / 0%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hd-live {
+    animation: none;
+  }
+}
+
+/* ── the rail ──────────────────────────────────────────────────────────── */
+.rail {
+  grid-area: rail;
+  overflow-y: auto;
+  border-right: 1px solid #30363d;
+  background: #010409;
+  padding: 0.6rem;
+}
+.rail-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.rail-row {
+  width: 100%;
+  display: grid;
+  gap: 0.12rem;
+  text-align: left;
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-left: 3px solid #30363d;
+  border-radius: 5px;
   color: #e6edf3;
   cursor: pointer;
 }
-.lv-bar button:hover {
-  border-color: #2dd4bf;
+.rail-row:hover {
+  background: #161b22;
 }
-.lv-bar button.on {
-  background: #2dd4bf;
-  border-color: #2dd4bf;
-  color: #04201c;
+.rail-row.on {
+  background: #161b22;
+  border-color: #30363d;
+}
+.rail-row.on::after {
+  content: "";
+}
+.rail-row.is-needs-you {
+  border-left-color: #d29922;
+}
+.rail-row.is-tripped {
+  border-left-color: #f85149;
+}
+.rail-row.is-quiet {
+  border-left-color: #8b949e;
+}
+.rail-row.is-moving {
+  border-left-color: #2dd4bf;
+}
+.rail-row.is-done {
+  border-left-color: #238636;
+}
+.rail-row.is-done:not(.on),
+.rail-row.is-unstarted:not(.on) {
+  opacity: 0.55;
+}
+.rail-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+.rail-id {
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-.lv-src {
+.rail-drv {
   margin-left: auto;
-  font-size: 0.72rem;
-  color: #8b949e;
+  padding: 0.02rem 0.4rem;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.62rem;
+  color: #a5d6ff;
+  white-space: nowrap;
 }
+.rail-head {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #c9d1d9;
+}
+.rail-meta {
+  font-size: 0.71rem;
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the stage ─────────────────────────────────────────────────────────── */
+.stage {
+  grid-area: stage;
+  overflow-y: auto;
+  padding: 1.4rem 1.75rem 5rem;
+}
+.stage-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+.stage-hd h1 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.stage-sub {
+  color: #8b949e;
+  font-size: 0.88rem;
+}
+
 .lv-empty {
-  padding-top: 4rem;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
 }
 .lv-empty pre {
   background: #161b22;
@@ -71,141 +247,26 @@ main {
   overflow-x: auto;
 }
 
-/* ── the fleet ─────────────────────────────────────────────────────────── */
-.fl {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 3.5rem 1rem 6rem;
-}
-
-.fl-h1 {
-  font-size: 1.6rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 0 1.4rem;
-  text-wrap: balance;
-}
-
-.fl-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-}
-
-.fl-chip {
-  font-size: 0.78rem;
-  padding: 0.24rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid #30363d;
-  color: #8b949e;
-}
-.fl-chip b {
-  color: #e6edf3;
-  font-variant-numeric: tabular-nums;
-}
-.fl-chip.is-needs-you {
-  border-color: #d29922;
-  color: #e3b341;
-}
-.fl-chip.is-needs-you b {
-  color: #e3b341;
-}
-.fl-chip.is-tripped {
-  border-color: #f85149;
-  color: #ff7b72;
-}
-.fl-chip.is-tripped b {
-  color: #ff7b72;
-}
-
-.fl-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.fl-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 5.5rem 1fr auto;
-  gap: 1rem;
-  align-items: baseline;
-  text-align: left;
-  font: inherit;
-  padding: 0.85rem 1.1rem;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-left: 3px solid #30363d;
-  border-radius: 6px;
-  color: #e6edf3;
-  cursor: pointer;
-}
-.fl-row:hover {
-  border-color: #2dd4bf;
-}
-.fl-row.is-needs-you {
-  border-left-color: #d29922;
-}
-.fl-row.is-tripped {
-  border-left-color: #f85149;
-}
-.fl-row.is-quiet {
-  border-left-color: #8b949e;
-}
-.fl-row.is-moving {
-  border-left-color: #2dd4bf;
-}
-.fl-row.is-done {
-  border-left-color: #238636;
-  opacity: 0.62;
-}
-.fl-row.is-unstarted {
-  opacity: 0.62;
-}
-
-.fl-id {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.fl-head {
-  color: #c9d1d9;
-}
-.fl-head code {
-  background: none;
-}
-.fl-meta {
-  color: #8b949e;
-  font-size: 0.78rem;
-  white-space: nowrap;
-}
-.fl-foot {
-  color: #8b949e;
-  font-size: 0.75rem;
-  margin-top: 2.5rem;
-}
-
-.lv-back {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.28rem 0.7rem;
-  border: 1px solid #30363d;
-  border-radius: 999px;
-  background: #21262d;
-  color: #e6edf3;
-  cursor: pointer;
-}
-.lv-back:hover {
-  border-color: #2dd4bf;
-}
-
-@media (max-width: 620px) {
-  .fl-row {
-    grid-template-columns: 1fr;
-    gap: 0.3rem;
+/* Narrow: the rail becomes a strip above the stage rather than vanishing —
+ * losing the fleet is the one thing this layout exists to prevent. */
+@media (max-width: 60rem) {
+  .op {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "hd"
+      "rail"
+      "stage";
+  }
+  .rail {
+    border-right: 0;
+    border-bottom: 1px solid #30363d;
+    max-height: 15rem;
+  }
+  .stage {
+    padding: 1.2rem 1rem 4rem;
   }
 }
 
@@ -236,11 +297,11 @@ main {
   font-style: italic;
 }
 .act-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(11rem, 18rem) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.45rem 0;
+  gap: 0.5rem 1rem;
+  padding: 0.4rem 0;
   border-top: 1px solid #21262d;
 }
 .act-row:first-of-type {
@@ -249,10 +310,16 @@ main {
 .act-task {
   font-family: ui-monospace, monospace;
   font-size: 0.83rem;
-  min-width: 15rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .act-at {
   color: #8b949e;
+}
+@media (max-width: 48rem) {
+  .act-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .act-btns {
   display: flex;
@@ -288,13 +355,24 @@ main {
   color: #e3b341;
 }
 
-.fl-drv {
-  display: inline-block;
-  margin-right: 0.6rem;
-  padding: 0.1rem 0.5rem;
-  border: 1px solid #30363d;
-  border-radius: 999px;
-  font-family: ui-monospace, monospace;
-  font-size: 0.68rem;
-  color: #a5d6ff;
+/* The diagram is the one thing on the stage that a wide screen actually buys
+ * you — mermaid pins the svg to the width it happened to lay out at, which on
+ * a wide stage leaves it small in a very large box. The cap is the other half
+ * of that: given the whole width it will take the whole width, and a 6-node
+ * region rendered a metre across is no easier to read than a small one. */
+.stage .tea-lv-mermaid svg {
+  width: 100%;
+  /* biome-ignore lint/complexity/noImportantStyles: mermaid writes max-width
+     as an INLINE style on the svg it renders, pinning the diagram to whatever
+     width it happened to lay out at. Inline beats every selector, so this is
+     the one lever that reaches it. */
+  max-width: min(100%, 46rem) !important;
+  height: auto;
+}
+
+/* Undrawn, not invisible — the box keeps the height its diagram last rendered
+ * at (held open in `Mermaid`), so scrubbing redraws in place instead of
+ * flashing raw mermaid source and collapsing the page under the reader. */
+.stage pre.mermaid:not([data-processed]) {
+  visibility: hidden;
 }
