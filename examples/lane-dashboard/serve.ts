@@ -1,16 +1,12 @@
-// A HOST, END TO END — and it is three callbacks, because everything between
-// them and a running page belongs to the package.
+// A HOST, END TO END.
 //
-// The three facts a library cannot know: where your lanes are, how you record
-// an event, and who holds one. Everything a reader sees — the attention
-// ordering, what is stuck and why, the diagrams, the scrubbing, the live
-// updates — comes from `@demlik/tea`.
+// Two facts a library cannot know: where your lanes are, and how you record an
+// event. Everything else — reading the two files each lane is, serving the
+// page, keeping it current, the attention ordering, what is stuck and why, the
+// diagrams, the scrubbing — comes from `@demlik/tea`.
 import { execFile } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { promisify } from "node:util";
 import {
-  type LaneFiles,
   serveLaneViewer,
   type TransitionRequest,
 } from "@demlik/tea/chart/lane/server";
@@ -20,45 +16,6 @@ const run = promisify(execFile);
 const ROOT = process.env.LANE_DIR ?? ".fabrika/lanes";
 const FABRIKA = (process.env.FABRIKA_BIN ?? "fabrika").split(" ");
 const CWD = process.env.FABRIKA_CWD ?? process.cwd();
-
-/** WHO SENDS WHAT — the fact a workflow document does not record. */
-const ORIGINS = {
-  from: {
-    WIP: { world: "the operator" },
-    BLOCKED: { world: "the operator" },
-    UNBLOCKED: { world: "a human" },
-    DONE: "cmd",
-    PASS: "cmd",
-    FAIL: "cmd",
-  },
-};
-
-/** ① WHERE THE LANES ARE. Two files per directory; that is the whole contract. */
-const lanes = (): LaneFiles[] =>
-  readdirSync(ROOT)
-    .map((name) => ({ name, dir: join(ROOT, name) }))
-    .filter(({ dir }) => statSync(dir).isDirectory())
-    .flatMap(({ name, dir }) => {
-      try {
-        return [
-          {
-            id: name,
-            workflow: readFileSync(join(dir, "workflow.json"), "utf8"),
-            // emitted and never run is a real state, not an error
-            events: (() => {
-              try {
-                return readFileSync(join(dir, "events.jsonl"), "utf8");
-              } catch {
-                return "";
-              }
-            })(),
-            origins: ORIGINS,
-          },
-        ];
-      } catch {
-        return []; // a scratch directory under the root is not a lane
-      }
-    });
 
 /** ② HOW AN EVENT IS RECORDED. The machine decides; we relay what it said. */
 const transition = async ({ lane, event, task }: TransitionRequest) => {
@@ -87,12 +44,23 @@ const transition = async ({ lane, event, task }: TransitionRequest) => {
   }
 };
 
-// ③ WHO IS DRIVING would go here, when a host can answer it.
-
 const { url } = await serveLaneViewer({
-  lanes,
+  // ① WHERE THE LANES ARE.
+  root: ROOT,
   transition,
-  source: ROOT,
+  // WHO SENDS WHAT — the one fact the documents do not record. Without it the
+  // page can see a task cannot move and not that it is waiting on a PERSON.
+  origins: {
+    from: {
+      WIP: { world: "the operator" },
+      BLOCKED: { world: "the operator" },
+      UNBLOCKED: { world: "a human" },
+      DONE: "cmd",
+      PASS: "cmd",
+      FAIL: "cmd",
+    },
+  },
   port: Number(process.env.PORT ?? 5411),
 });
+
 console.log(`lanes → ${url}`);

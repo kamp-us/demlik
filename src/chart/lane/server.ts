@@ -25,7 +25,7 @@
 // `http`, Bun.serve, Hono, or a Worker without an adapter per framework.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,7 +74,72 @@ export interface LaneDriver {
   readonly at?: string | null;
 }
 
-export interface ServeOptions extends LaneViewerOptions {
+export interface FromDiskOptions {
+  /**
+   * Who sends each event, applied to every lane.
+   *
+   * A workflow document records topology and never provenance, so without this
+   * the page can see that a task cannot move and not that it is WAITING ON
+   * SOMEONE — which is the question a reader opened it to answer. Stated once
+   * here rather than copied onto each lane.
+   */
+  readonly origins?: unknown;
+}
+
+/**
+ * Every lane under `root`, read the way the convention says.
+ *
+ * A LANE IS A DIRECTORY HOLDING TWO FILES, and that convention is ours, so
+ * reading it is ours too. Three separate hosts wrote this same loop before it
+ * moved here, each with its own idea of the edges: whether a directory with no
+ * `workflow.json` is a lane (it is not — a scratch dir under the root is not
+ * something to draw), and whether a lane with no `events.jsonl` is broken (it
+ * is not — it was emitted and never run, every task sits where it booted).
+ *
+ * A lane that cannot be read is SKIPPED rather than thrown, because one bad
+ * directory should not take down a fleet view. A root that cannot be listed
+ * throws, because a short list presented as "your lanes" is worse than an
+ * error.
+ */
+export async function lanesFromDisk(
+  root: string,
+  opts: FromDiskOptions = {},
+): Promise<LaneFiles[]> {
+  const names = await readdir(root);
+  const read = await Promise.all(
+    names.map(async (id): Promise<LaneFiles | null> => {
+      const dir = `${root}/${id}`;
+      try {
+        if (!(await stat(dir)).isDirectory()) return null;
+        const workflow = await readFile(`${dir}/workflow.json`, "utf8");
+        const events = await readFile(`${dir}/events.jsonl`, "utf8").catch(
+          () => "",
+        );
+        return {
+          id,
+          workflow,
+          events,
+          ...(opts.origins === undefined ? {} : { origins: opts.origins }),
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return read.filter((lane): lane is LaneFiles => lane !== null);
+}
+
+export interface ServeOptions
+  extends Omit<LaneViewerOptions, "lanes">,
+    FromDiskOptions {
+  /** Every lane the reader should see. Omit it and `root` is read instead. */
+  readonly lanes?: () => readonly LaneFiles[] | Promise<readonly LaneFiles[]>;
+  /**
+   * A directory of lane directories. Supply this and {@link lanes} is not
+   * needed — pointing at a folder is the whole setup, which is what most
+   * callers want and what all of them were writing by hand.
+   */
+  readonly root?: string;
   /** Default 5411. `0` takes any free port and reports it back on `url`. */
   readonly port?: number;
   /** Default `127.0.0.1` — this reads a machine's own disk and should stay on it. */
@@ -282,7 +347,26 @@ export function laneViewer(
 export async function serveLaneViewer(
   opts: ServeOptions,
 ): Promise<LaneViewerServer> {
-  const handle = laneViewer(opts);
+  const root = opts.root;
+  if (opts.lanes === undefined && root === undefined) {
+    throw new Error(
+      "@demlik/tea: serveLaneViewer needs either `root` (a directory of lane directories) or `lanes`",
+    );
+  }
+  const handle = laneViewer({
+    ...opts,
+    // Re-read on every ask rather than cache: a driver appends to these files
+    // while the page is open, and current is the whole point of the page.
+    lanes:
+      opts.lanes ??
+      (() =>
+        lanesFromDisk(root as string, {
+          ...(opts.origins === undefined ? {} : { origins: opts.origins }),
+        })),
+    ...(opts.source === undefined && root !== undefined
+      ? { source: root }
+      : {}),
+  });
   const host = opts.host ?? "127.0.0.1";
 
   const server = createServer((req, res) => {

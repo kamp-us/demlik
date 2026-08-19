@@ -13,20 +13,25 @@ three facts only you know.
 import { serveLaneViewer } from "@demlik/tea/chart/lane/server";
 
 const { url } = await serveLaneViewer({
-  // WHERE THE LANES ARE — you already read these.
-  lanes: () => readMyLanes(),          // → { id, workflow, events }[]
+  // WHERE THE LANES ARE — a directory of lane directories.
+  root: ".fabrika/lanes",
 
   // HOW AN EVENT IS RECORDED — your verb, and the only writer.
   transition: async ({ lane, event, task }) => {
     const out = await myTransitionVerb(lane, event, task);
     return { ok: out.accepted, message: out.reason };
   },
-
-  source: ".fabrika/lanes",
 });
 
 console.log(url);
 ```
+
+Drop `transition` too and it is one line — a read-only dashboard over a folder,
+which is the right shape for looking at runs that already finished.
+
+Lanes somewhere other than a folder — a database, a remote store, a cache you
+already hold? Pass `lanes: () => …` instead of `root` and return the same
+`{ id, workflow, events }` shapes.
 
 That is the integration. There is no server to write: creating it, turning
 node's request into a `Request`, reading a POST body and **streaming** the
@@ -52,7 +57,7 @@ a reader scrub back through the history.
 
 | endpoint | answers | comes from |
 |---|---|---|
-| `GET /api/lanes` | every lane's two files | your `lanes()` |
+| `GET /api/lanes` | every lane's two files | `root`, or your `lanes()` |
 | `GET /api/stream` | pushes when they change | `lanes()`, re-asked; see below |
 | `GET /api/drivers` | who holds each lane | your `drivers()`, optional |
 | `POST /api/transition` | records one event | your `transition()`, optional |
