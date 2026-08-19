@@ -283,6 +283,7 @@
   "scripts": {
     "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node build-viewer.mjs",
     "lint": "biome check src package.json",
+    "lint:worktree": "biome check src package.json",
     "test": "vitest run",
     "demo:saga": "vitest run src/workflow/demo.test.ts",
     "lane:view": "vite --config demo/lane-view/vite.config.ts",

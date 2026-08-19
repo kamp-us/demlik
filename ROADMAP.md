@@ -20,8 +20,11 @@ title, so renaming an arc cannot silently repoint it.
 
 ## Campaigns
 
-| Campaign | Milestone | State | What it covers |
-|---|---|---|---|
+Exactly three cells per row — `build`'s scope fence reads this table and a fourth column makes
+the whole thing unreadable, so what a campaign covers goes in prose above it, not in a column.
+
+| Campaign | Milestone | State |
+|---|---|---|
 
 ## Dependencies
 
