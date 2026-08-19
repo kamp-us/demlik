@@ -1,6 +1,6 @@
 # @demlik/tea — reference
 
-Generated API reference for `@demlik/tea` **v0.11.0**.
+Generated API reference for `@demlik/tea` **v0.12.0**.
 
 One page per curated public module. Every export — including the plumbing
 subpaths that have no dedicated page — is listed in [all-modules.md](./all-modules.md).
