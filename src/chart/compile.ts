@@ -71,6 +71,28 @@ function cmdNames(
   return typeof ref === "string" ? [ref] : ref;
 }
 
+/**
+ * A compiler refusal names the set that WAS supplied beside the name it could
+ * not find, so an author can tell a misspelling from an omission — the refusals
+ * are the whole onboarding surface for a chart authored by hand, and one that
+ * ends at the missing name teaches nothing. The four sites (three in
+ * `buildCell`, one in `compileReducer`) render their set through here so the
+ * phrasing cannot drift between them.
+ *
+ * The empty set is stated in words, never as `[]`: a reader skimming an empty
+ * list sees a formatting artefact, not the dead end it actually is — the same
+ * reading `NoCellError` gives its empty accepted set (`src/pure/core.ts`).
+ *
+ * The clause opens with `. ` so it appends cleanly onto a message that carries
+ * no trailing punctuation, which keeps each site's pre-existing text a verbatim
+ * PREFIX of the new one.
+ */
+function suppliedClause(noun: string, members: readonly string[]): string {
+  return members.length === 0
+    ? `. No ${noun} were supplied.`
+    : `. The ${noun} supplied: ${members.map((m) => `"${m}"`).join(", ")}.`;
+}
+
 // There is no `unhandled` policy any more. A pair is DECLARED (an edge), or
 // REFUSED — by the event's `scope`, or by this state's `ignore`, or by
 // `end: true` — and `Total<C>` refuses to compile on any third case. The
@@ -204,7 +226,8 @@ function buildCell(
     const impl = p.cells[name];
     if (impl === undefined) {
       throw new Error(
-        `@demlik/tea: edge "${at}" names cell "${name}" with no implementation`,
+        `@demlik/tea: edge "${at}" names cell "${name}" with no implementation` +
+          suppliedClause("cells", Object.keys(p.cells)),
       );
     }
     // the two forms: one body for every site, or one body per site. A
@@ -213,7 +236,16 @@ function buildCell(
     const hand = typeof impl === "function" ? impl : impl[at];
     if (hand === undefined) {
       throw new Error(
-        `@demlik/tea: cell "${name}" is written in the per-site form but has no entry for edge "${at}"`,
+        `@demlik/tea: cell "${name}" is written in the per-site form but has no entry for edge "${at}"` +
+          suppliedClause(
+            "edges",
+            // `hand === undefined` only ever reaches here for the per-site
+            // record form — the function form's `hand` is `impl` itself and is
+            // never undefined — but tsc keeps the union, so narrow explicitly.
+            typeof impl === "function"
+              ? []
+              : Object.keys(impl).filter((k) => impl[k] !== undefined),
+          ),
       );
     }
     const to = edge.to ?? [];
@@ -241,7 +273,8 @@ function buildCell(
   const guard = edge.when === undefined ? undefined : p.guards[edge.when];
   if (edge.when !== undefined && guard === undefined) {
     throw new Error(
-      `@demlik/tea: edge "${at}" names guard "${edge.when}" with no implementation`,
+      `@demlik/tea: edge "${at}" names guard "${edge.when}" with no implementation` +
+        suppliedClause("guards", Object.keys(p.guards)),
     );
   }
 
@@ -496,8 +529,16 @@ export function compileReducer<
     if (spec === undefined) {
       // unreachable through the typed door — `on` is total over `events`. The
       // safety net under the compile-time obligation, as `NoCellError` is
-      // under `Total<C>`.
-      throw new Error(`@demlik/tea: reducer chart declares no edge for "${e}"`);
+      // under `Total<C>`. The message says so, so a reader who somehow lands
+      // here knows it is a library bug, not a mistake in their chart.
+      throw new Error(
+        `@demlik/tea: reducer chart declares no edge for "${e}"` +
+          " — this is the library's safety net under a compile-time" +
+          " obligation (`on` is total over the event alphabet), not an error" +
+          " in your chart; reaching it means the types were bypassed with a" +
+          " cast" +
+          suppliedClause("edges", Object.keys(c.on)),
+      );
     }
     // the site tag IS the event: one dimension, so `SiteArgs`'s `at` is the
     // bare name and a multi-site cell discriminates on it exactly as before.

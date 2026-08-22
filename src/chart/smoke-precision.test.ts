@@ -164,6 +164,13 @@ eq(
   typeof missing === "string" && missing.includes('no entry for edge "b.Y"'),
   true,
 );
+// …and the refusal names the entries the per-site bag DOES carry, so an author
+// reads the omission against what is there (#22).
+eq(
+  "a per-site miss names the edges the bag does carry",
+  typeof missing === "string" && missing.includes('The edges supplied: "a.X".'),
+  true,
+);
 
 // and a cell NAMED by an edge with no implementation at all still fails the
 // same way it always did — the new lookup did not swallow it.
@@ -182,6 +189,37 @@ const absent = ((): unknown => {
 eq(
   "a cell with no implementation still fails at compile()",
   typeof absent === "string" && absent.includes("with no implementation"),
+  true,
+);
+// the supplied cell set was empty, and an empty set reads as WORDS — a reader
+// skimming `[]` sees a formatting artefact, not the dead end it is (#22).
+eq(
+  "an empty supplied set reads as words, not an empty list",
+  typeof absent === "string" && absent.includes("No cells were supplied."),
+  true,
+);
+
+// a cell named by an edge, absent from a NON-empty bag: the refusal lists the
+// cells that were supplied, so a misspelling is legible against them (#22).
+const misspelled = ((): unknown => {
+  try {
+    compile<PG, PState, MsgOf<PG>, PCmd, "q">(
+      picker,
+      {
+        assign: {},
+        cells: { notDecide: () => [{ type: "a", n: 0 }, []] } as never,
+      },
+      "q",
+    );
+    return "no throw";
+  } catch (err) {
+    return err instanceof Error ? err.message : err;
+  }
+})();
+eq(
+  "a missing cell names the cells that were supplied",
+  typeof misspelled === "string" &&
+    misspelled.includes('The cells supplied: "notDecide".'),
   true,
 );
 
