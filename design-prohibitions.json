@@ -1,0 +1,103 @@
+{
+  "rows": [
+    {
+      "id": "page-does-not-scroll",
+      "pillar": "verdict-survives-the-scroll",
+      "class": "blocking",
+      "machineCheck": "verb",
+      "source": "demo/lane-view/style.css — .op, and its comment",
+      "statement": "The console's document must not scroll. The shell is a fixed 100dvh grid; the rail and the stage each own their overflow. Nothing may introduce a page-level scrollbar, and no region may grow the shell past the viewport.",
+      "counterexample": "Adding a long footer below .stage, or dropping the min-height:0 from a grid track, so the whole console scrolls and the strip's verdict leaves the screen while the reader is halfway down a 12-task epic."
+    },
+    {
+      "id": "rail-is-never-hidden",
+      "pillar": "never-lose-the-fleet",
+      "class": "blocking",
+      "machineCheck": "vlm",
+      "source": "demo/lane-view/style.css — the max-width:60rem block, and its comment",
+      "statement": "The set of lanes is visible at every viewport width. The rail may move, shorten or scroll; it may not become display:none, collapse behind a toggle, or move into a drawer, an off-canvas panel or a tab.",
+      "counterexample": "A mobile breakpoint that replaces the rail with a hamburger, so a lane going amber cannot catch an eye that was not already looking for it."
+    },
+    {
+      "id": "every-attention-state-is-painted",
+      "pillar": "colour-is-a-second-channel",
+      "class": "blocking",
+      "machineCheck": "verb",
+      "source": "src/chart/lane/fleet.ts — the Attention union; demo/lane-view/style.css — the .rail-row.is-* set",
+      "statement": "Every member of the Attention union has an explicit rule in the stylesheet, on every element that renders it. A state that falls through to a default is unstyled, not neutral.",
+      "counterexample": "attention:\"unreadable\" reaching .hd-say with no .hd-say.is-unreadable rule, so 'N lanes could not be read' renders in the same colour as 'Nothing is waiting on you' — the one state that must not look normal looking exactly normal."
+    },
+    {
+      "id": "state-carries-a-non-colour-channel",
+      "pillar": "colour-is-a-second-channel",
+      "class": "blocking",
+      "machineCheck": "vlm",
+      "source": "design-system-manifest.md — Pillar 4",
+      "statement": "Any state a reader must act on reaches them through at least one channel besides hue: text, shape, weight, position or an icon. Colour reinforces the signal; it never carries it alone.",
+      "counterexample": "A rail row whose attention state is conveyed only by the colour of its 3px left border, so two rows that differ only in that border are the same row to a reader who cannot separate amber from teal."
+    },
+    {
+      "id": "unread-never-renders-as-clear",
+      "pillar": "unknown-is-never-fine",
+      "class": "blocking",
+      "machineCheck": "vlm",
+      "source": "demo/lane-view/vite.config.ts — the claim reader; demo/lane-view/main.tsx — Verdict",
+      "statement": "A surface built from data that could not be read renders visibly differently from the same surface built from data that was read and is clear. Absent, zero, empty and unreadable are four renders, never one.",
+      "counterexample": "A drivers fetch that fails and leaves every lane's driver chip blank, identical to a lane genuinely nobody is driving — which is the render that gets a second driver started on a held lane."
+    },
+    {
+      "id": "motion-is-removable",
+      "pillar": "unknown-is-never-fine",
+      "class": "blocking",
+      "machineCheck": "verb",
+      "source": "demo/lane-view/style.css — the prefers-reduced-motion block",
+      "statement": "Every animation and transition is disabled under prefers-reduced-motion: reduce, and no information exists only in the motion. A stopped animation must leave the state still readable.",
+      "counterexample": "A pulsing dot that is the only indication the feed is live, so a reader with reduced motion cannot tell a live console from a frozen one."
+    },
+    {
+      "id": "counted-numbers-are-tabular",
+      "pillar": "verdict-survives-the-scroll",
+      "class": "advisory",
+      "machineCheck": "verb",
+      "source": "demo/lane-view/style.css — .hd-chip b, .rail-id, .rail-meta, .stage-hd h1",
+      "statement": "A number that updates in place carries font-variant-numeric: tabular-nums, so it changes value without changing width.",
+      "counterexample": "A live count in proportional figures that reflows the chip beside it every time it ticks, making a glanceable strip twitch."
+    },
+    {
+      "id": "monospace-marks-machine-text",
+      "pillar": "colour-is-a-second-channel",
+      "class": "advisory",
+      "machineCheck": "vlm",
+      "source": "design-system-manifest.md — Type roles",
+      "statement": "Monospace is reserved for strings a machine authored or will read: ids, task names, paths, event names, session keys, and controls that send events. Prose a human wrote is set in the body face.",
+      "counterexample": "Setting a lane's human-written headline in mono because it looked more technical, which tells the reader to copy a sentence rather than read it."
+    },
+    {
+      "id": "no-raw-hex-outside-the-role-tables",
+      "pillar": "colour-is-a-second-channel",
+      "class": "advisory",
+      "machineCheck": "verb",
+      "source": "design-system-manifest.md — the role tables",
+      "statement": "A new rule reaches for a role named in the manifest. A hex literal that is not already in the role tables is a request to extend the tables, taken deliberately, not a value typed inline.",
+      "counterexample": "A fifth grey introduced in one component because none of the three text roles looked quite right there."
+    },
+    {
+      "id": "no-improvised-light-theme",
+      "pillar": "unknown-is-never-fine",
+      "class": "blocking",
+      "machineCheck": "verb",
+      "source": "demo/lane-view/style.css — color-scheme: dark",
+      "statement": "The console is dark-only by decision. No component may add a prefers-color-scheme: light block or a light-mode override on its own. A light theme is a whole second palette, ratified once, not assembled a component at a time.",
+      "counterexample": "One card gaining a light-mode variant, so a reader on a light-preferring OS gets one pale panel floating in an otherwise dark console."
+    },
+    {
+      "id": "escape-hatches-carry-their-reason",
+      "pillar": "verdict-survives-the-scroll",
+      "class": "advisory",
+      "machineCheck": "verb",
+      "source": "demo/lane-view/style.css — the biome-ignore on the mermaid max-width",
+      "statement": "An !important, a z-index literal or a negative margin carries an inline comment naming the force it is overriding and why nothing weaker reaches it.",
+      "counterexample": "An unexplained !important that a later reader cannot distinguish from a specificity workaround, and so cannot safely remove."
+    }
+  ]
+}

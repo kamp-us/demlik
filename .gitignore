@@ -21,6 +21,12 @@ npm-debug.log*
 # Claude Code local settings (per-machine)
 .claude/settings.local.json
 
+# Agent worktrees. `.claude/settings.json` and the agent definitions beside it ARE
+# shared history; the worktrees a background agent cuts under here are not — they
+# are whole second checkouts, and one `git add -A` away from being committed into
+# the repo they were cut from.
+/.claude/worktrees/
+
 # fabrika's local machine state — never committed. `fabrika lane` writes each lane's
 # machine document and event log here, and both are per-checkout, not shared history.
 /.fabrika/
