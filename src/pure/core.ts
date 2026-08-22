@@ -237,6 +237,35 @@ function stateNameOf(state: unknown): string {
   return "(untagged state)";
 }
 
+// === acceptedTypes: ask which Msgs a state admits, BEFORE dispatching (#21) ===
+//
+// The runtime companion to `NoCellError.acceptedTypes` (#14): a caller holding a
+// machine and a state reads the accepted set directly instead of learning it by
+// refusal, so a dead-end state is a fact it queries rather than a conclusion it
+// infers from a sweep of refused dispatches.
+//
+// This is THE accepted-set reader, and `lookupCell`'s miss arm reads through it
+// too — so the throwing path (`applyCell`), the `Result` path (`tryApplyCell`)
+// and this one report one reading by construction. A copy of the row selection
+// here would be the third opinion about which cells exist that #14 forbids; the
+// property in `accepted-types.test.ts` pins the agreement it buys.
+//
+// Transitions form → the refusing state's own per-state cell keys. Reducer form
+// → the flat table's keys, the state unconsulted exactly as dispatch leaves it
+// (so an untagged reducer-form state is no special case — it never reaches the
+// state read). A state with no row, or an empty table, returns `[]`: a real
+// answer meaning "dead end", never `undefined` and never a throw, so a caller
+// asking "can I dispatch here" need not guard the asking.
+export function acceptedTypes<S>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+): readonly string[] {
+  if (formOf(machine) === "reducer") return Object.keys(machine.update);
+  const table = machine.update as Record<string, object | undefined>;
+  const row = table[(state as unknown as { type: string }).type];
+  return row === undefined || row === null ? [] : Object.keys(row);
+}
+
 // === lookupCell: THE single cell SELECTION, split from the invocation ===
 //
 // The form-branching (`reducer` → flat `update[msg.type]`; `transitions` →
@@ -287,7 +316,11 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
     // state), and the set is unaffected by it.
     return typeof cell === "function"
       ? { cell, stateName }
-      : { cell: undefined, stateName, acceptedTypes: Object.keys(record) };
+      : {
+          cell: undefined,
+          stateName,
+          acceptedTypes: acceptedTypes(machine, state),
+        };
   }
   const table = machine.update as Record<
     string,
@@ -309,8 +342,7 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
     : {
         cell: undefined,
         stateName,
-        acceptedTypes:
-          row === undefined || row === null ? [] : Object.keys(row),
+        acceptedTypes: acceptedTypes(machine, state),
       };
 }
 
