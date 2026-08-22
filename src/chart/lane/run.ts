@@ -68,7 +68,7 @@
 
 import type { Cmd, Reducer } from "../../pure/core";
 import type { Parts } from "../compile";
-import { type CompiledTable, compileTable } from "../compile";
+import { type CompiledTable, compileTable, suppliedClause } from "../compile";
 import type {
   CmdOf,
   EventName,
@@ -466,6 +466,32 @@ const carryWas = (leaf: RtLeaf, was: string | undefined): RtLeaf => {
  *   task with no chart on the spec, a region declaring a foreign event, and a
  *   `boot()` landing on a state its chart does not declare.
  */
+// ── the accepted-set audit, imported/runtime door (#23) ─────────────────────
+//
+// The companion to `structure.ts`'s audit above `LaneShapeError`: these are the
+// lane-shape refusals raised at wiring, load and boot, read against the same
+// compiler principle (name the set that WOULD have been accepted). Verdicts:
+//
+//   set named (through `suppliedClause`):
+//     • no hand was given for a task — the tasks a hand WAS supplied for.
+//     • a persisted leaf names a task this lane does not run — the tasks the
+//       lane runs.
+//     • a leaf / its `was` stands in a state the chart does not declare — the
+//       states the chart declares (the lane twin of `NoCellError`, #20).
+//
+//   no set — recorded beside the throw, with the reason:
+//     • spec holds no chart / `charts` hold none — an internal invariant, an
+//       absence with nothing to enumerate.
+//     • a task id or event name carries a dot — a shape refusal; the rule is
+//       the message.
+//     • a chart declares an event foreign — a shape refusal; the reason is the
+//       message.
+//     • a run holds no leaf for a task — an absence, not a wrong pick.
+//     • `maxRetries` contradicts the budget — a scalar mismatch; both numbers
+//       are already named, and the source of truth is one value, not a set.
+//     • no cell for a msg at dispatch — NOT a shape refusal: it fires on a
+//       well-formed lane at step time, so its accepted set belongs to the
+//       `NoCellError` / `acceptedTypes` family (#20/#21), not this helper.
 export function runLane<
   L extends Lane<RunnableSpec>,
   const H extends LaneHandsOf<L, H>,
@@ -492,28 +518,37 @@ export function runLane<
       // here rather than a `continue` that quietly drops the region.
       const chart = lane.charts[taskId];
       if (region === undefined || hand === undefined || chart === undefined) {
+        // The spec/charts arms are internal-invariant absences (#23): a lane
+        // whose own spec or `charts` disagree with its phases, with nothing to
+        // enumerate. The no-hand arm is the caller's mistake, and it names the
+        // tasks a hand WAS supplied for so a misplaced key is legible.
         defects.push(
           `task "${taskId}": the lane declares it but ${
             region === undefined
               ? "its spec holds no chart"
               : chart === undefined
                 ? "the lane's `charts` hold none for it"
-                : "no hand was given for it"
+                : "no hand was given for it" +
+                  suppliedClause("hands", Object.keys(byTask))
           }`,
         );
         continue;
       }
+      // NO SET (#23): a shape refusal — the rule ("no dot") is the message.
       if (taskId.includes(".")) {
         defects.push(
           `task "${taskId}": a task id may not carry a dot — ${DOT}`,
         );
       }
       for (const [name, event] of Object.entries(region.events)) {
+        // NO SET (#23): a shape refusal — the reason a foreign event cannot be
+        // routed is the whole message; there is no admitted enumeration.
         if (isForeign(event)) {
           defects.push(
             `task "${taskId}": its chart declares "${name}" foreign — a foreign event keeps its BARE name under a namespace, so a lane message carrying it addresses no region in particular`,
           );
         }
+        // NO SET (#23): a shape refusal, the event-name twin of the task-id dot.
         if (name.includes(".")) {
           defects.push(
             `task "${taskId}": its chart declares the event "${name}" — an event name may not carry a dot, ${DOT}`,
@@ -563,9 +598,12 @@ export function runLane<
   ): readonly string[] => {
     const bad: string[] = [];
     for (const taskId of Object.keys(regions)) {
+      // SET NAMED (#23): the tasks this lane runs, so a leaf left by an older
+      // build reads against the current task set instead of in isolation.
       if (!boots.has(taskId)) {
         bad.push(
-          `${origin}: it names task "${taskId}", which this lane does not run — a state written by an older build of the lane is not a state this one can load`,
+          `${origin}: it names task "${taskId}", which this lane does not run — a state written by an older build of the lane is not a state this one can load` +
+            suppliedClause("tasks", [...boots.keys()]),
         );
       }
     }
@@ -575,6 +613,8 @@ export function runLane<
       const raw = regions[taskId];
       const leaf =
         typeof raw === "object" && raw !== null ? (raw as RtLeaf) : undefined;
+      // NO SET (#23): an absence — the leaf is missing, not standing in a wrong
+      // place, so there is no state or task set the sentence could point at.
       if (leaf === undefined || typeof leaf.type !== "string") {
         bad.push(
           `${origin}: it holds no leaf for task "${taskId}" — every region of the lane has to be standing somewhere`,
@@ -582,18 +622,30 @@ export function runLane<
         continue;
       }
       const states = statesOf(chart);
+      const declared = [...states.keys()];
       // the runtime half of `__laneTaskBootsIntoAStateItsChartDoesNotDeclare`,
       // and the only net at the imported door, where the marker stands down.
+      //
+      // SET NAMED (#23): the states the chart declares — the lane twin of
+      // `NoCellError` naming its accepted set (#20). A leaf in an unknown state
+      // learns which states are the real ones from the refusal itself.
       if (!states.has(leaf.type)) {
         bad.push(
-          `${origin}: task "${taskId}" stands in "${leaf.type}", which its chart does not declare`,
+          `${origin}: task "${taskId}" stands in "${leaf.type}", which its chart does not declare` +
+            suppliedClause("states", declared),
         );
       }
+      // SET NAMED (#23): the same declared-state set — `was` is a resume TARGET,
+      // so naming the real states says where a resume could legitimately land.
       if (leaf.was !== undefined && !states.has(leaf.was)) {
         bad.push(
-          `${origin}: task "${taskId}" carries \`was: "${leaf.was}"\`, which its chart does not declare — a resume would walk it to a state that does not exist`,
+          `${origin}: task "${taskId}" carries \`was: "${leaf.was}"\`, which its chart does not declare — a resume would walk it to a state that does not exist` +
+            suppliedClause("states", declared),
         );
       }
+      // NO SET (#23): a scalar mismatch. Both numbers are already named and the
+      // source of truth is one value (the lane's `retries`), not a set to pick
+      // from — the fix is to drop the persisted copy, which the message says.
       const budget = budgetOf(taskId);
       if (typeof leaf.maxRetries === "number" && leaf.maxRetries !== budget) {
         bad.push(
@@ -652,6 +704,13 @@ export function runLane<
         const leaf = state.regions[taskId];
         const cell =
           leaf === undefined ? undefined : table[leaf.type]?.[msg.type];
+        // NOT a shape refusal (#23): this fires at DISPATCH time on a
+        // well-formed lane, so it is the lane twin of `NoCellError`, not of the
+        // structure defects above. Its accepted set (the msg types this state's
+        // compiled table holds) is the `acceptedTypes` family's question
+        // (#20/#21), read at the machine's own selection site — not this
+        // helper's, which speaks the compiler's "supplied" register. Left to
+        // that family rather than answered here in a foreign voice.
         if (leaf === undefined || cell === undefined) {
           throw new LaneShapeError([
             `task "${taskId}": no cell for "${msg.type}" in state "${leaf?.type ?? "<none>"}"`,

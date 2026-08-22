@@ -86,8 +86,17 @@ function cmdNames(
  * The clause opens with `. ` so it appends cleanly onto a message that carries
  * no trailing punctuation, which keeps each site's pre-existing text a verbatim
  * PREFIX of the new one.
+ *
+ * Exported because the lane structure reader (`lane/structure.ts`,
+ * `lane/run.ts`) is the second consumer of these refusals and answers the same
+ * question with the same words (#23) — one helper, so the two doors' phrasing
+ * cannot drift the way two hand-rolled copies would. It stays module-internal:
+ * a cross-module import within `src/chart`, never a published subpath.
  */
-function suppliedClause(noun: string, members: readonly string[]): string {
+export function suppliedClause(
+  noun: string,
+  members: readonly string[],
+): string {
   return members.length === 0
     ? `. No ${noun} were supplied.`
     : `. The ${noun} supplied: ${members.map((m) => `"${m}"`).join(", ")}.`;

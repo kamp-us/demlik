@@ -199,6 +199,11 @@ describe("runLane — rehydration", () => {
       issue_4: { type: "queued", retries: 0, maxRetries: 2 },
     });
     expect(() => rt.init(loaded)).toThrow(/issue_4/);
+    // #23 — names the tasks the lane DOES run, so the stray key reads against
+    // the real set instead of in isolation.
+    expect(() => rt.init(loaded)).toThrow(
+      /The tasks supplied:[\s\S]*"issue_1"/,
+    );
   });
 
   it("refuses a persisted leaf standing in a state its chart does not declare", () => {
@@ -209,6 +214,11 @@ describe("runLane — rehydration", () => {
       issue_3: { type: "queued", retries: 0, maxRetries: 5 },
     });
     expect(() => rt.init(loaded)).toThrow(/issue_1[\s\S]*landed/);
+    // #23 — the lane twin of `NoCellError`: the refusal names the states the
+    // chart declares, so "landed" reads against the real ones.
+    expect(() => rt.init(loaded)).toThrow(
+      /The states supplied:[\s\S]*"queued"/,
+    );
   });
 
   it("refuses a persisted leaf whose `was` is not a state of its chart", () => {
@@ -219,6 +229,11 @@ describe("runLane — rehydration", () => {
       issue_3: { type: "queued", retries: 0, maxRetries: 5 },
     });
     expect(() => rt.init(loaded)).toThrow(/issue_1[\s\S]*was[\s\S]*landed/);
+    // #23 — `was` is a resume TARGET, so the declared states say where a resume
+    // could legitimately land.
+    expect(() => rt.init(loaded)).toThrow(
+      /The states supplied:[\s\S]*"queued"/,
+    );
   });
 
   it("refuses a persisted budget that contradicts the lane's", () => {
@@ -492,6 +507,9 @@ describe("runLane — the refusals nothing was driving", () => {
     expect(() => runLane(lane, {} as never)).toThrow(
       'task "t1": the lane declares it but no hand was given for it',
     );
+    // #23 — names the hands that WERE supplied so a misplaced key is legible;
+    // with none given at all, the empty set reads in words, not as `[]`.
+    expect(() => runLane(lane, {} as never)).toThrow("No hands were supplied.");
   });
 
   it("refuses a task the lane's phases declare and its charts do not", () => {
