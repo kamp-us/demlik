@@ -97,6 +97,12 @@ describe("tryApplyCell", () => {
     expect(thrown).toBeInstanceOf(NoCellError);
     expect((thrown as NoCellError).msgType).toBe(r.error.msgType);
     expect((thrown as NoCellError).stateName).toBe(r.error.stateName);
+    // Including the accepted set (#14): both skins read one `lookupCell`, so
+    // neither can under-report what the refusing state would have taken.
+    expect((thrown as NoCellError).acceptedTypes).toEqual(
+      r.error.acceptedTypes,
+    );
+    expect((thrown as NoCellError).message).toBe(r.error.message);
   });
 
   it("refuses per STATE in transitions form, and names the state", () => {

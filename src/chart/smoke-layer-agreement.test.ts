@@ -55,6 +55,26 @@ it("a guarded edge takes its `else` arm when the guard fails", () => {
   expect(next).toEqual({ type: "miss", n: 0 });
 });
 
+// an edge naming a guard with no implementation refuses at compile(), naming
+// the guards that WERE supplied so a misspelling is legible against them (#22).
+it("a missing guard names the guards that were supplied", () => {
+  let msg = "no throw";
+  try {
+    compile(guarded, {
+      assign: {
+        // biome-ignore lint/suspicious/noThenProperty: the chart's guarded-assign shape is `{ then, else }` — the two arms of one edge's guard, never a thenable
+        "s0.A": { then: (s) => ({ n: s.n }), else: (s) => ({ n: s.n }) },
+      },
+      guards: { notGate: () => true } as never,
+    });
+  } catch (err) {
+    msg = err instanceof Error ? err.message : String(err);
+  }
+  // the pre-#22 text is still the prefix, and the new clause names the member.
+  expect(msg).toContain('names guard "gate" with no implementation');
+  expect(msg).toContain('The guards supplied: "notGate".');
+});
+
 // ── 1b. the reducer form: the same edge, one dimension smaller ────────────
 const rGuarded = defineReducerChart({
   ctx: ty<{ readonly n: number }>(),

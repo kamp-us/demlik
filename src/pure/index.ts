@@ -59,6 +59,7 @@ export type {
 // the identity comparison are both derived from it, and a client-safe consumer
 // that folds a machine needs the same key rendering the kernel uses.
 export {
+  acceptedTypes,
   acceptsOf,
   Cmd,
   describeMachine,
