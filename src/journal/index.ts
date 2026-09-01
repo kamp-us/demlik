@@ -33,6 +33,8 @@
  * (`entries`/`write`/`changes`/`withLock`) as prior art, not a dependency.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 /** A per-stream total-order key. Starts at 1 and increments by one per append. */
 export type Seq = number;
 
@@ -120,7 +122,18 @@ class AsyncLock {
  */
 export function makeJournal<R>(backend: JournalBackend<R>): Journal<R> {
   const mutexes = new Map<string, AsyncLock>();
-  const held = new Set<string>();
+  // The streams this async call chain holds. Kept in AsyncLocalStorage, not an
+  // instance-wide Set, because re-entrancy is a property of the CALL CHAIN, not
+  // of the instance: a genuine re-entrant append (nested inside an `fx` that
+  // already holds the stream) and an INDEPENDENT top-level append that merely
+  // arrives while another chain holds the lock are indistinguishable to a
+  // shared Set — so the shared Set waves the independent call through inline,
+  // past the mutex, to run concurrently with the holder. That is a lost record:
+  // in `fileJournal` the two both read the same length and compute the same
+  // `seq`, and the second `rename` clobbers the first. A per-chain store only
+  // ever reports the streams THIS chain entered, so an independent call sees an
+  // empty (or unrelated) store and correctly queues on the mutex.
+  const heldStreams = new AsyncLocalStorage<ReadonlySet<string>>();
   const listeners = new Set<(entry: JournalEntry<R>) => void>();
 
   const mutexFor = (stream: string): AsyncLock => {
@@ -133,17 +146,16 @@ export function makeJournal<R>(backend: JournalBackend<R>): Journal<R> {
   };
 
   const exclusive = <A>(stream: string, fx: () => Promise<A>): Promise<A> => {
-    // Already holding this stream's lock in this call chain: run inline, or a
+    const held = heldStreams.getStore();
+    // This call chain already holds this stream's lock: run inline, or a
     // re-entrant append/withLock would block forever on a lock it owns.
-    if (held.has(stream)) return fx();
+    if (held?.has(stream)) return fx();
     return mutexFor(stream).run(() =>
-      backend.lock(stream, async () => {
-        held.add(stream);
-        try {
-          return await fx();
-        } finally {
-          held.delete(stream);
-        }
+      backend.lock(stream, () => {
+        // Scope the augmented held-set to `fx` and its async continuations. The
+        // store is torn down when `fx` settles — no finally clause to leak it.
+        const nested = new Set(held).add(stream);
+        return heldStreams.run(nested, fx);
       }),
     );
   };

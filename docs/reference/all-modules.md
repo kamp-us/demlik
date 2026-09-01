@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 65 public subpaths. Curated
+The complete export catalog — all 66 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -35,6 +35,7 @@ discoverable here with a one-line gloss from their source barrel.
 | `./idempotency` | dedupe-by-key + last-result cache as pure state + ops. |
 | `./idempotency/adapter` | the verb seam over the pure idempotency ops. |
 | `./idempotent-intake` | receive-once intake for webhooks / queue messages: dedupe by key, enqueue the new ones, replay the cached result to the duplicates. |
+| `./journal` | an append-only, ordered record log for `@demlik/tea`. |
 | [`./llm-call`](./llm-call.md) | `resilient-call` + structured-output parse + a typed failure variant, around a purpose-discriminated LLM invocation. |
 | `./machine-viz` | turn a `Machine` into a Mermaid diagram string. |
 | [`./mem`](./mem.md) | in-memory `Store<S>` adapter for `@demlik/tea`. |

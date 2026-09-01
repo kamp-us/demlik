@@ -7,7 +7,13 @@
 // racing to append, where only the file lock (not a shared in-process mutex)
 // serialises them into one order.
 // ───────────────────────────────────────────────────────────────────────────
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -61,6 +67,33 @@ describe("fileJournal: the lock steals a dead holder's stale lock", () => {
     writeFileSync(join(dir, "s.jsonl.lock"), "2147483647");
     expect(await journal.append("s", { tag: "a" })).toEqual({ seq: 1 });
     expect((await journal.list("s")).map((e) => e.record.tag)).toEqual(["a"]);
+  });
+});
+
+describe("fileJournal: an interleaved second append does not steal the seq", () => {
+  it("serialises a second append DISPATCHED while the first holds the lock", async () => {
+    const dir = freshDir();
+    const journal = fileJournal(dir, parseRec);
+    const lockPath = join(dir, "s.jsonl.lock");
+
+    // Interleaved dispatch, not a synchronous Promise.all burst: A is initiated
+    // first and B only after A is proven to hold the stream lock (its lock file
+    // is on disk, mid-append). This is the shape a re-entrancy check keyed on an
+    // instance-wide "held" Set waves through inline — B runs concurrently with A,
+    // both read length 0, both compute seq 1, and A's record is clobbered.
+    // Serialisation keyed on the async call chain queues B on the mutex instead.
+    const a = journal.append("s", { tag: "A" });
+    for (let spin = 0; spin < 10_000 && !existsSync(lockPath); spin++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(existsSync(lockPath)).toBe(true); // A is mid-append, holding the lock
+    const b = journal.append("s", { tag: "B" });
+
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(new Set([ra.seq, rb.seq])).toEqual(new Set([1, 2])); // no collision
+    const entries = await journal.list("s");
+    expect(entries.map((e) => e.seq)).toEqual([1, 2]); // gapless
+    expect(entries.map((e) => e.record.tag).sort()).toEqual(["A", "B"]); // both kept
   });
 });
 
