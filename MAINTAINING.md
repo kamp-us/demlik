@@ -82,6 +82,7 @@ export is not done until it has a row here.
 | `./work-queue/adapter` | battery | flow |
 | `./work-queue/ops` | battery | flow |
 | `./workflow` | battery | flow |
+| `./journal` | experimental | append-only ordered record log; interface + `memoryJournal`. The Node file substrate `fileJournal` homes in `./node` beside `fileStore` and carries THIS experimental promise, not `./node`'s stable one (see the Store-factory note below). Ratified human, issue #30 (tier/path/no-blocking-ADR), pre-1.0, no consumers. |
 | `./recorder` | battery | observability/persistence ops |
 | `./snapshot` | battery | ops add-on over the core `Store`, not core Store mechanics |
 | `./trace-replay` | battery | observability/persistence ops |
@@ -118,6 +119,15 @@ factory and so has no row. If a future factory is added, prefer the
 mechanism-named form for consistency with the majority — but do **not** rename
 the existing four to converge; that break is not worth the churn (this table is
 the cheaper fix).
+
+**Journal factories are a separate family from Store factories.** A `Store<S>`
+is whole-load / whole-save of one state value; a `Journal<R>` (`./journal`) is
+an append-only, ordered record log. The two mechanism-named journal factories —
+`memoryJournal` (`./journal`) and `fileJournal` (`./node`, beside `fileStore`) —
+carry the `./journal` **experimental** promise, not the `stable` stamp of the
+subpath they are exported from. `fileJournal` lives in `./node` per the #30
+ruling (a host file substrate homes with the host's other file adapter); its tier
+travels with the journal feature, tracked by the `./journal` row above.
 
 ## Semver policy
 
