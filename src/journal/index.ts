@@ -210,3 +210,9 @@ export function memoryJournal<R>(): Journal<R> {
     },
   });
 }
+
+// The remote-journal + per-remote-cursor half of the journal feature (#31): the
+// remote a client pushes to and pulls from, the local cursor that resumes sync,
+// and the sync client that joins a local `Journal` to a remote so two local
+// journals meet in one order. It builds ON `memoryJournal` above.
+export * from "./remote";
