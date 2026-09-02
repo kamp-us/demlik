@@ -47,6 +47,10 @@
       "types": "./dist/mem/index.d.ts",
       "import": "./dist/mem/index.js"
     },
+    "./journal": {
+      "types": "./dist/journal/index.d.ts",
+      "import": "./dist/journal/index.js"
+    },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"

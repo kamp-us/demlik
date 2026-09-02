@@ -11,6 +11,7 @@ export default defineConfig({
     "testing/index": "src/testing/index.ts",
     "do/index": "src/do/index.ts",
     "mem/index": "src/mem/index.ts",
+    "journal/index": "src/journal/index.ts",
     "react/index": "src/react/index.ts",
     "devtools/index": "src/devtools/index.ts",
     "extension/index": "src/extension/index.ts",

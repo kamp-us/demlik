@@ -6,11 +6,12 @@
 import { … } from "@demlik/tea/node";
 ```
 
-## Exports (10)
+## Exports (11)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `AssertNodeSubIsSub` | Type |  |
+| `fileJournal` | Function |  |
 | `fileStore` | Function |  |
 | `NodeSignalSub` | Type | A process-signal sub: `signal` (SIGINT/SIGTERM/…) → `msg`. |
 | `NodeSub` | Type |  |

@@ -37,10 +37,23 @@
  * `wsRegistry`.
  */
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
 import WebSocket, { type RawData } from "ws";
 import type { Store, Sub, SubId } from "../index";
+import {
+  type Journal,
+  type JournalEntry,
+  makeJournal,
+  type Seq,
+} from "../journal";
 import { dispatchIfPresent } from "../subs/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +104,146 @@ export function fileStore<S>(
       return parse(raw);
     },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fileJournal — a `Journal<R>` over one on-disk JSONL file per stream.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LOCK_SPIN_MS = 10;
+
+/**
+ * The Node file substrate for `@demlik/tea/journal`, beside `fileStore`. A
+ * stream is one JSONL file under `dir` (`<encoded-stream>.jsonl`), one
+ * `{"seq":n,"record":…}` object per line — readable and greppable on disk, no
+ * SQLite. `parse` is REQUIRED for the same reason `fileStore` requires it: the
+ * bytes read back through `JSON.parse` are structurally `unknown`, and the
+ * caller who owns `R` is the only party that can validate a record's shape.
+ *
+ * `append` rewrites the whole stream file via a pid-scoped temp + `rename`,
+ * exactly as `fileStore.save` does — a reader sees the old file or the new one,
+ * never a torn line, and the write survives a crash mid-append. The append is
+ * O(n) in the stream's length; a durable record log a machine replays is read
+ * whole anyway, so the atomic-rewrite guarantee is worth the cost.
+ *
+ * The ordering key is taken under a `wx` lock file (`<file>.lock`) holding the
+ * writer's PID: a second writer racing the same stream blocks on the lock, so
+ * `seq` is a single total order across processes. A crashed writer's lock is
+ * stolen once its PID proves dead (`process.kill(pid, 0)` → `ESRCH`), so a
+ * crash never wedges the stream. This is the lock phoenix spike #6673 proved:
+ * its only job is an honest order key, not the win.
+ *
+ * `changes` fires for appends made through THIS instance; a cross-process
+ * append lands on disk but is not broadcast here (that is a polling concern the
+ * log leaves to its consumer, and the remote-journal work downstream).
+ */
+export function fileJournal<R>(
+  dir: string,
+  parse: (raw: unknown) => R,
+): Journal<R> {
+  const streamPath = (stream: string): string =>
+    join(dir, `${encodeURIComponent(stream)}.jsonl`);
+
+  const readEntries = async (stream: string): Promise<JournalEntry<R>[]> => {
+    const path = streamPath(stream);
+    let raw: string;
+    try {
+      raw = await readFile(path, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+    return raw
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const row = JSON.parse(line) as { seq: Seq; record: unknown };
+        return { stream, seq: row.seq, record: parse(row.record) };
+      });
+  };
+
+  return makeJournal<R>({
+    read: readEntries,
+    async append(stream, record) {
+      const entries = await readEntries(stream);
+      const entry: JournalEntry<R> = {
+        stream,
+        seq: entries.length + 1,
+        record,
+      };
+      const path = streamPath(stream);
+      const lines = [...entries, entry]
+        .map((e) => JSON.stringify({ seq: e.seq, record: e.record }))
+        .join("\n");
+      await mkdir(dir, { recursive: true });
+      const tmp = `${path}.${process.pid}.tmp`;
+      await writeFile(tmp, `${lines}\n`, "utf8");
+      await rename(tmp, path);
+      return entry;
+    },
+    async lock(stream, fx) {
+      const lockPath = `${streamPath(stream)}.lock`;
+      await acquireFileLock(dir, lockPath);
+      try {
+        return await fx();
+      } finally {
+        await unlink(lockPath).catch(() => {});
+      }
+    },
+  });
+}
+
+/**
+ * Acquire an exclusive lock by creating `lockPath` with `wx` (O_CREAT|O_EXCL) —
+ * the one primitive that is atomic across processes. On contention, steal the
+ * lock only once its holder's PID proves dead; otherwise spin. `process.kill(pid,
+ * 0)` sends no signal — it tests existence: it throws `ESRCH` for a dead PID,
+ * and `EPERM` for a live one this process may not signal (still alive, so hold
+ * off). A lock that vanishes between the failed create and the read is already
+ * free, so retry.
+ */
+async function acquireFileLock(dir: string, lockPath: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  for (;;) {
+    try {
+      const handle = await open(lockPath, "wx");
+      try {
+        await handle.writeFile(String(process.pid));
+      } finally {
+        await handle.close();
+      }
+      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (await stealIfStale(lockPath)) continue;
+      await new Promise((resolve) => setTimeout(resolve, LOCK_SPIN_MS));
+    }
+  }
+}
+
+async function stealIfStale(lockPath: string): Promise<boolean> {
+  let holder: string;
+  try {
+    holder = await readFile(lockPath, "utf8");
+  } catch (err) {
+    // Vanished between the failed create and this read — already free.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw err;
+  }
+  const pid = Number(holder.trim());
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (isProcessAlive(pid)) return false;
+  await unlink(lockPath).catch(() => {});
+  return true;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
