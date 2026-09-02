@@ -7,13 +7,7 @@
 // racing to append, where only the file lock (not a shared in-process mutex)
 // serialises them into one order.
 // ───────────────────────────────────────────────────────────────────────────
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -74,20 +68,40 @@ describe("fileJournal: an interleaved second append does not steal the seq", () 
   it("serialises a second append DISPATCHED while the first holds the lock", async () => {
     const dir = freshDir();
     const journal = fileJournal(dir, parseRec);
-    const lockPath = join(dir, "s.jsonl.lock");
 
-    // Interleaved dispatch, not a synchronous Promise.all burst: A is initiated
-    // first and B only after A is proven to hold the stream lock (its lock file
-    // is on disk, mid-append). This is the shape a re-entrancy check keyed on an
-    // instance-wide "held" Set waves through inline — B runs concurrently with A,
-    // both read length 0, both compute seq 1, and A's record is clobbered.
+    // A deterministic handshake, not a wall-clock spin on the lock file: A takes
+    // the stream lock via `withLock` and parks inside the critical section until
+    // B is proven dispatched. Only once A provably holds the lock (`aHasLock`
+    // resolved) is B initiated — a second, INDEPENDENT top-level append that
+    // must queue on the lock rather than race it. This is the shape a
+    // re-entrancy check keyed on an instance-wide "held" Set waves through
+    // inline: it sees "s" already held (by A) and runs B's append concurrently,
+    // so both read length 0, both compute seq 1, and A's record is clobbered.
     // Serialisation keyed on the async call chain queues B on the mutex instead.
-    const a = journal.append("s", { tag: "A" });
-    for (let spin = 0; spin < 10_000 && !existsSync(lockPath); spin++) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    expect(existsSync(lockPath)).toBe(true); // A is mid-append, holding the lock
-    const b = journal.append("s", { tag: "B" });
+    //
+    // Every ordering point here is a resolved promise, never elapsed time: the
+    // earlier spin-until-`existsSync(lockPath)` could miss the brief window in
+    // which the lock file exists (A's whole append can complete within one
+    // event-loop turn), then spin ~10_000 iterations past the 5s timeout — a
+    // concurrency proof that intermittently timed out and proved nothing.
+    let signalAHasLock!: () => void;
+    let signalBDispatched!: () => void;
+    const aHasLock = new Promise<void>((resolve) => {
+      signalAHasLock = resolve;
+    });
+    const bDispatched = new Promise<void>((resolve) => {
+      signalBDispatched = resolve;
+    });
+
+    const a = journal.withLock("s", async () => {
+      signalAHasLock(); // A now holds the stream lock, mid-critical-section
+      await bDispatched; // …and keeps holding it until B is proven dispatched
+      return journal.append("s", { tag: "A" }); // re-entrant append under the held lock
+    });
+
+    await aHasLock; // A provably holds the lock before B is initiated
+    const b = journal.append("s", { tag: "B" }); // dispatched while A holds it —
+    signalBDispatched(); // B is already queued on the mutex; let A finish and release
 
     const [ra, rb] = await Promise.all([a, b]);
     expect(new Set([ra.seq, rb.seq])).toEqual(new Set([1, 2])); // no collision
