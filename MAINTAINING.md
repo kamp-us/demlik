@@ -155,15 +155,20 @@ The package is at 0.x. Semver's 0.x escape hatch is not the policy — the tier 
   obligation beyond noting the change. Do not build a stability-sensitive consumer on
   an experimental subpath.
 
-### Deprecate, don't delete
+### Removal, while 0.x
 
-A published subpath is never removed outright. Removal is staged:
+A subpath, module or exported name is removed in the **same PR** that replaces it — no
+deprecated re-export is published first
+([ADR 0016](./.decisions/0016-removal-lands-in-a-minor-at-0x.md)):
 
-1. Stamp the module `@deprecated` in JSDoc with a concrete migration note naming the
-   successor, and mark the row **deprecated** in the tier table above.
-2. Keep the subpath published for **at least one minor** so consumers migrate
-   deliberately instead of hitting a surprise break.
-3. Remove per the tier's semver rule (post-1.0, removal of a `stable` subpath is a
-   major).
+1. The removal, every internal import rewrite and a changeset land together. The
+   changeset is `minor` for a `stable` or `battery` subpath and its breaking-change note
+   names where each thing went (`./retry-backoff` → `./resilience` `{ retryBackoff }`).
+   `experimental` removes silently, as its tier allows.
+2. A collapse **moves parts, never drops them**: the grouped door re-exports every
+   primitive of the doors it replaces. Only a genuinely dead twin — a superseded
+   implementation, an inverted-name alias — is deleted, with its migration named.
+3. A `@deprecated` stamp is not a holding pattern. If the removal can land now, it lands.
 
-Live example: `./resilient-call` → `./with-resilience` (deprecated at step 1–2 now).
+This section is rewritten at `1.0.0`: post-1.0, removing a `stable` subpath is a major
+and earns a staged ritual written for the consumers that exist then.
