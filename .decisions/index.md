@@ -15,6 +15,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental | Accepted | 2026-07-17 |
 | [0011](./0011-errors-as-data.md) | Errors are data; a throw is reserved for a contract breach | Accepted | 2026-07-17 |
 | [0013](./0013-fabrika-is-the-work-pipeline.md) | fabrika is this repo's work pipeline | Accepted | 2026-08-16 |
+| [0015](./0015-hide-the-wiring-never-the-state.md) | A convenience layer hides the wiring, never the state | Accepted | 2026-09-04 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
