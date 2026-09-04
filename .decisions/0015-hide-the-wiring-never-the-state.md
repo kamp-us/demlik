@@ -58,7 +58,7 @@ layer beneath remains a first-class, reachable escape hatch.**
 
 **Banned.** A lid that stores Model in a private field or non-JSON wrapper; a facade whose
 output cannot be fed to the raw `run`; a primitive removed from the export map because a lid
-"covers" it (deprecate-don't-delete, per [0010](./0010-export-map-tiers.md)); a lid that reads
+"covers" it — a collapse may move a part to a grouped door, never drop the part; a lid that reads
 the clock or RNG inside a transition to spare the user threading `at` — that moves impurity into
 the kernel rather than hiding wiring at the edge.
 
