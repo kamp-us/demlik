@@ -83,3 +83,10 @@ the kernel rather than hiding wiring at the edge.
 
 no vocabulary impact — "wiring" and "state" carry their ordinary meanings; the terms this ADR
 governs (Model, Cmd, lid altitude) are already canonized.
+
+## Amendments
+
+- **#83 — item 4 and the Banned paragraph: a collapse moves a part to an internal folder built
+  to public standard, never to a grouped public door; a part is exported only on a real external
+  callsite (today `./retry-backoff`). Ruling: epic #41's 2026-09-04 grilling session, recorded at
+  https://github.com/kamp-us/demlik/issues/41#issuecomment-5556466033 (2026-09-06).**

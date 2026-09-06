@@ -81,3 +81,12 @@ changeset; citing the retired ritual as a reason to keep a dead door.
 ## Records
 
 no vocabulary impact.
+
+## Amendments
+
+- **#83 — item 2: a collapse moves a part to an internal folder built to public standard, never
+  to a grouped public door; a part is exported only on a real external callsite. Item 1's
+  `./retry-backoff` → `./resilience` `{ retryBackoff }` example reads as that internal-folder
+  move — `./retry-backoff` stays a bare public door, and no `./resilience` door exists. Ruling:
+  epic #41's 2026-09-04 grilling session, recorded at
+  https://github.com/kamp-us/demlik/issues/41#issuecomment-5556466033 (2026-09-06).**
