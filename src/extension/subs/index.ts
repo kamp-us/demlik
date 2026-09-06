@@ -1,7 +1,9 @@
 // ---------------------------------------------------------------------------
-// @demlik/tea/extension/subs — Chrome-specific Sub factories.
+// Chrome-specific Sub factories, published on the `@demlik/tea/extension` door,
+// which re-exports this barrel (#51: the `/extension/subs` door closed and its
+// parts moved up, per ADR 0016).
 //
-// Companion to @demlik/tea/subs (the universal factories, host-agnostic). The
+// Companion to the universal, host-agnostic factories in `src/subs/`. The
 // factories here depend on `chrome.*` globals: alarms, tabs, storage,
 // runtime messaging. They absorb the recurring
 // `(sub, ctx, dispatch) => cleanup` shape of every Sub that wraps a chrome
@@ -10,13 +12,12 @@
 // lifecycle (subscribe + cleanup, plus the standard filters chrome
 // requires).
 //
-// Subpath separation rationale (mirrors `@demlik/tea/subs` and
-// `@demlik/tea/testing`): the main `@demlik/tea/extension` entry is the host
-// adapter — chromeStorageStore and the bridge runtime — that pure
-// substrate tests can import without dragging in factory plumbing.
-// Factories that touch the broader chrome.* surface (alarms, tabs,
-// runtime messaging, storage events) live behind this subpath; importers
-// opt in.
+// Module separation rationale: the rest of `@demlik/tea/extension` is the host
+// adapter — chromeStorageStore and the bridge runtime — and the factories that
+// touch the broader chrome.* surface (alarms, tabs, runtime messaging, storage
+// events) are kept in this leaf so the two halves stay legible. They now
+// publish through the one extension door; a bundle that names no factory shakes
+// them out, which is the isolation the second subpath used to buy.
 //
 // Excluded from v1:
 //   - fromChromePort (chrome.runtime.connect) — different lifecycle
@@ -26,7 +27,7 @@
 //     earn each via a real consumer call site.
 //
 // Strengthens invariant 9 (the surface for chrome-specific Sub topologies
-// is named, small, and exported from one subpath).
+// is named, small, and exported from one module).
 // ---------------------------------------------------------------------------
 
 export { fromChromeAlarm } from "./from-chrome-alarm";

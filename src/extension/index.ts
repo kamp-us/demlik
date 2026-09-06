@@ -23,15 +23,28 @@ export type {
 } from "./bridge";
 // Re-export the wire-envelope types — surfaces that test against the
 // bridge can pin the shapes without round-tripping through the runtime.
-// Re-export the runtime bridge primitives. The React adapter lives at
-// `@demlik/tea/extension/react` so the main entry stays react-free for the
-// background service-worker side.
+// Re-export the runtime bridge primitives.
 export {
   bridgeClient,
   bridgeRuntime,
   bridgeTabClient,
   passThroughMsg,
 } from "./bridge";
+// The three extension sub-doors closed in the #51 sweep and their parts moved
+// here (ADR 0016): the React adapter, the chrome-event Sub factories, and the
+// fake-chrome test double. `react` is a re-export and nothing in this package
+// is side-effectful outside `*.css`, so a background service worker that never
+// names a hook still tree-shakes React out of its bundle — the react-free
+// background entry is preserved by the bundler, not by a second door.
+export {
+  type BackgroundRuntimeContext,
+  createBackgroundRuntimeContext,
+  type UseBackgroundRuntimeOpts,
+  type UseBackgroundRuntimeResult,
+  useBackgroundRuntime,
+} from "./react";
+export * from "./subs";
+export { type FakeChrome, fakeChrome } from "./test-utils";
 
 const MALFORMED = "chromeStorageStore: stored value is not a string";
 

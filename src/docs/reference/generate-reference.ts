@@ -42,9 +42,9 @@ const PACKAGE_JSON = join(PKG_ROOT, "package.json");
 type Group = "Core" | "Adapters" | "Machines" | "Resilience" | "Testing";
 
 interface Curated {
-  /** package.json exports subpath, e.g. "." or "./subs". */
+  /** package.json exports subpath, e.g. "." or "./pbt". */
   readonly subpath: string;
-  /** Import specifier shown on the page, e.g. "@demlik/tea/subs". */
+  /** Import specifier shown on the page, e.g. "@demlik/tea/pbt". */
   readonly importPath: string;
   /** Output page filename under docs/reference/. */
   readonly file: string;
@@ -65,13 +65,6 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     importPath: "@demlik/tea",
     file: "tea.md",
     typedocName: "index",
-    group: "Core",
-  },
-  {
-    subpath: "./subs",
-    importPath: "@demlik/tea/subs",
-    file: "subs.md",
-    typedocName: "subs",
     group: "Core",
   },
   {

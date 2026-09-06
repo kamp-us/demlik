@@ -9,8 +9,8 @@
  * **Dependency direction (the actual decoupling):** this module imports
  * NOTHING from the runtime — no `better-result`, no `run`/host/`Store`. The
  * runtime (`run`, the host, interpret, `Store`, subscribe — all in
- * `../index.ts`) imports *from* here; never the reverse. The
- * `@demlik/tea/pure` subpath re-exports this surface, and
+ * `../index.ts`) imports *from* here; never the reverse. The root door
+ * re-exports this surface through `./index.ts`, and
  * `pure/import-graph.test.ts` is the regression fence asserting the pure
  * entrypoint's import graph never reaches `run`.
  *
@@ -1108,7 +1108,7 @@ export function depsInactive(deps: unknown): boolean {
 // churn this hash exists to prevent. One rule, stated once: plain data only.
 //
 // It is also the ONE "turn this key value into a stable string" primitive the
-// `@demlik/tea/subs` batteries address their interpret-local handle tables
+// Sub factories in `src/subs/` address their interpret-local handle tables
 // with, so a battery's key rendering and the kernel's Sub identity can never
 // drift into two hashes for one fact.
 export function structuralHash(deps: unknown): string {
@@ -1628,10 +1628,10 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
 // reads the reducer-vs-transitions form via the same `formOf(machine)` reader
 // `run`/`replay` use, so it agrees with them by construction.
 //
-// Per ADR 0006 the runtime-free *guarantee* lives on a dedicated
-// `@demlik/tea/pure` subpath whose module graph never reaches `run`; that
-// subpath export + import-graph guard are #213's scope. Here `foldMsgs` ships
-// as a reachable public API from root; #213 formalizes the boundary.
+// Per ADR 0006 the runtime-free *guarantee* lives in `src/pure/`, whose module
+// graph never reaches `run`; that barrel + the import-graph guard are #213's
+// scope. `foldMsgs` ships as a reachable public API from the root door, which
+// is where the whole runtime-free surface publishes since #51.
 export function foldMsgs<
   S,
   M extends { type: string },

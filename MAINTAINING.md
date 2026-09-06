@@ -27,25 +27,19 @@ a separate consumer repo, off the export map.
 ### Tier table — every published subpath
 
 Canonical stamp per subpath. One row per entry in `package.json` `exports`; a new
-export is not done until it has a row here.
+export is not done until it has a row here. The list itself is pinned by
+`src/public-doors.test.ts` — a door added or removed without that diff fails the suite.
 
 | Subpath | Tier stamp | Notes |
 |---|---|---|
-| `.` | stable | the sentence: run / defineMachine / replay / supervision / ports |
-| `./pure` | stable | runtime-free umbrella; most stable surface |
-| `./subs` | stable | |
+| `.` | stable | the sentence: run / defineMachine / replay / supervision / ports — plus the runtime-free surface and the Sub factories |
 | `./testing` | stable | testing infra is kernel |
-| `./pbt` | stable | |
-| `./pbt/arbitraries` | stable | |
-| `./pbt/runners` | stable | |
+| `./pbt` | stable | arbitraries + runners, one door |
 | `./do` | stable | durable/host seam |
 | `./react` | stable | |
 | `./node` | stable | |
 | `./mem` | stable | |
-| `./extension` | stable | |
-| `./extension/react` | stable | |
-| `./extension/subs` | stable | |
-| `./extension/test-utils` | stable | |
+| `./extension` | stable | chrome host adapter: bridge, Subs, React hooks, `fakeChrome` |
 | `./parity` | stable | grandfathered by production usage (audit-core) |
 | `./devtools` | stable | dev-tooling edge of the kernel |
 | `./devtools/styles.css` | stable | asset of `./devtools` |
@@ -53,6 +47,22 @@ export is not done until it has a row here.
 | `./package.json` | stable | metadata passthrough, not an API subpath |
 | `./retry-backoff` | battery | call-hardening |
 | `./agent` | experimental | agent layer; the brain migration graduates it |
+
+### Internal parts
+
+Everything under `src/internal/` is **not** a tier and carries no promise: the flow family, the
+resilience and timing families, the persistence ops, the journal, prediction, the chart compiler.
+A part lives there when it is real code the package depends on but not something a consumer is
+invited to import — the way in is a published door that re-exports what it chooses to. Moving,
+renaming or deleting an internal part is not a break and needs no changelog entry.
+
+Prose that names an internal part points at its **in-tree path** (`src/internal/journal/`), never
+at a `@demlik/tea/…` specifier — `src/closed-door-specifiers.test.ts` fails any tracked file under
+`.patterns/` or `src/` that names a subpath `exports` does not carry.
+
+Promoting an internal part to a door is the deliberate act this file governs: it earns a row in
+the table above, a line in `src/public-doors.test.ts`, an entry in `tsup.config.ts` and a
+changeset.
 
 ## Store factory per host
 

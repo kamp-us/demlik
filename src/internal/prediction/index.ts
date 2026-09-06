@@ -1,7 +1,8 @@
 /**
  * internal/prediction — the client-prediction ack primitive (epic #186, facet 2).
- * Internal since #49 — not published on any subpath; `@demlik/tea/pure`
- * re-exports the public surface.
+ * Internal since #49 — not published on any subpath of its own; the
+ * client-safe barrel `src/pure/` re-exports the public surface, and the root
+ * `@demlik/tea` door publishes it.
  *
  * The contract the Gambetta/Valve authoritative-server netcode loop needs:
  * **command-seq-in → last-applied-seq-out.** A client tags each predicted
@@ -10,7 +11,7 @@
  * pending buffer into the inputs the server has ACKED (`seq <= lastAppliedSeq`)
  * and those still PENDING (`seq > lastAppliedSeq`) — the un-acked tail the
  * reconciliation pass (#214) replays over the authoritative snapshot via
- * `foldMsgs` (#211, `@demlik/tea/pure`).
+ * `foldMsgs` (#211, the client-safe barrel `src/pure/`).
  *
  * Deliberately **Model-shape-agnostic** (ADR 0006): the ack is a standalone
  * value, NOT a field this module requires on the consumer's `State`. It
@@ -27,7 +28,7 @@
  * the pure fold seam `foldMsgs` (#211) to perform the whole Gambetta/Valve
  * reconciliation step in one call. The `foldMsgs` import is the ONLY dependency
  * this leaf takes, and it reaches into the pure-core leaf (`../pure/core`) — NOT
- * the runtime root — so the module stays runtime-free and the `@demlik/tea/pure`
+ * the runtime root — so the module stays runtime-free and the client-safe
  * import-graph guard (ADR 0006, #213) still holds.
  */
 
@@ -150,8 +151,7 @@ export const nextSeq = <T>(buffer: readonly SeqTagged<T>[]): Seq =>
  * Pure and host-agnostic: it takes the `machine` (which `foldMsgs` needs to
  * dispatch `update`) but touches no `Store`, `interpret`, or subscription, and
  * imports nothing from the runtime — so it ships through the client-safe
- * `@demlik/tea/pure` umbrella without dragging `run` into a
- * client bundle.
+ * umbrella without dragging `run` into a client bundle.
  */
 export function reconcile<
   S,
