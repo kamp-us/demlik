@@ -48,8 +48,8 @@ import {
 } from "@demlik/tea/agent";
 import { recorder } from "@demlik/tea/recorder";
 import { replayTrace } from "@demlik/tea/trace-replay";
-import { withDeadline } from "@demlik/tea/with-deadline";
-import { withResilience } from "@demlik/tea/with-resilience";
+import { withDeadline } from "../src/internal/resilience/with-deadline";
+import { withResilience } from "../src/internal/resilience/with-resilience";
 
 // ===========================================================================
 // Tiny presentation helpers — narrate the story, nothing load-bearing.

@@ -34,11 +34,11 @@ import {
   type RunCmd,
   type SucceedMsg,
   subscribeDeadline as subscribeAuditDeadline,
-} from "@demlik/tea/resilient-call";
+} from "../src/internal/resilience/resilient-call";
 import { replayTrace } from "@demlik/tea/trace-replay";
-import { withDeadline } from "@demlik/tea/with-deadline";
-import { withResilience } from "@demlik/tea/with-resilience";
-import { withTelemetry } from "@demlik/tea/with-telemetry";
+import { withDeadline } from "../src/internal/resilience/with-deadline";
+import { withResilience } from "../src/internal/resilience/with-resilience";
+import { withTelemetry } from "../src/internal/resilience/with-telemetry";
 
 type Stage = "plan" | "crawl" | "audit" | "report";
 type Purpose = Stage;

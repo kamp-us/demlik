@@ -10,11 +10,11 @@ import {
   run,
   type Transitions,
 } from "./index";
+import { withDeadline } from "./internal/resilience/with-deadline";
+import { withResilience } from "./internal/resilience/with-resilience";
+import { withTelemetry } from "./internal/resilience/with-telemetry";
 import { toMermaid } from "./machine-viz";
 import { foldEvents, msgTypeKeys } from "./pbt";
-import { withDeadline } from "./with-deadline";
-import { withResilience } from "./with-resilience";
-import { withTelemetry } from "./with-telemetry";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Vertical tracer (#275): ONE machine, the exact shape `__form` disambiguates,

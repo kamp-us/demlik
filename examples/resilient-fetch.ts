@@ -23,7 +23,7 @@ import {
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "@demlik/tea/cache";
+} from "../src/internal/resilience/cache";
 import {
   type CircuitState,
   canPass,
@@ -31,18 +31,18 @@ import {
   initCircuit,
   onFailure,
   onSuccess,
-} from "@demlik/tea/circuit-breaker";
+} from "../src/internal/resilience/circuit-breaker";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
   deadlineSub,
   subscribeDeadline,
-} from "@demlik/tea/deadline";
+} from "../src/internal/resilience/deadline";
 import {
   initBucket,
   type TokenBucket,
   tryConsume,
-} from "@demlik/tea/rate-limit";
+} from "../src/internal/resilience/rate-limit";
 import {
   defaultRetryPolicy,
   initRetry,

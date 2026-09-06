@@ -33,6 +33,6 @@ import { … } from "@demlik/tea/llm-call";
 | `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
 | `plainModel` | Function |  |
 | `PlainModel` | Type | The plain-function model port — the common path (#58). |
-| `ResilientState` | Reference |  |
+| `ResilientState` | Interface | The slice. |
 | `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call the handler uses to validate the model's output before it settles `resilient_ok`. |
 | `subscribeDeadline` | Reference | Re-export the deadline Sub primitives (inherited from resilient-call) so consumers wire one import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the Sub literal `subs` emits. |

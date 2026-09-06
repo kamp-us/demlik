@@ -6,7 +6,7 @@
 // fan-out, which is more than executing a compiled cell against one sample can
 // ever recover.
 import { expect, it } from "vitest";
-import { set as cacheSet, initCache } from "../cache";
+import { set as cacheSet, initCache } from "../internal/resilience/cache";
 import { toMermaid } from "../machine-viz";
 import { applyCell } from "../pure/core";
 import { defineMachine } from "../runtime-types";

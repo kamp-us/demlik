@@ -22,7 +22,7 @@ import {
   type DeadlineSub,
   deadlineSub,
   subscribeDeadline,
-} from "../../deadline";
+} from "../../internal/resilience/deadline";
 import type { Cmd } from "../../pure/core";
 import { defineMachine } from "../../runtime-types";
 import { compile, initFrom } from "../compile";

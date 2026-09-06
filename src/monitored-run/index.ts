@@ -80,13 +80,13 @@
  *   interpret: run.handlers({ store: r2 }),
  */
 
+import type { Cmd, Interpret } from "../index";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
   deadlineSub,
   subscribeDeadline,
-} from "../deadline";
-import type { Cmd, Interpret } from "../index";
+} from "../internal/resilience/deadline";
 import {
   createSnapshot,
   type SnapshotFailedMsg,

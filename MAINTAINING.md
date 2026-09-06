@@ -51,18 +51,7 @@ export is not done until it has a row here.
 | `./devtools/styles.css` | stable | asset of `./devtools` |
 | `./machine-viz` | stable | |
 | `./package.json` | stable | metadata passthrough, not an API subpath |
-| `./authed-call` | battery | call-hardening |
-| `./cache` | battery | call-hardening |
-| `./circuit-breaker` | battery | call-hardening |
-| `./deadline` | battery | call-hardening |
-| `./rate-limit` | battery | call-hardening |
-| `./resilient-call` | battery | **deprecated** → use `./with-resilience` (migration notes in the module's `@deprecated` JSDoc) |
 | `./retry-backoff` | battery | call-hardening |
-| `./retry-to-success` | battery | call-hardening |
-| `./token-refresh` | battery | call-hardening |
-| `./with-deadline` | battery | call-hardening |
-| `./with-resilience` | battery | call-hardening; successor of `./resilient-call` |
-| `./with-telemetry` | battery | call-hardening |
 | `./await-terminal` | battery | flow |
 | `./batch-window` | battery | flow |
 | `./debounce` | battery | flow; layering vs `./throttle`/`./throttled-input` documented in their JSDoc |
