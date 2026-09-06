@@ -447,9 +447,16 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
  * compile error at the call sites that switch on it, instead of silently
  * breaking a hand-rolled re-derivation. Make-invalid-states-unrepresentable:
  *
+ *   - `idle`      — never started: `run.phase === "idle"`, the slice straight
+ *                   out of `init` before any `agent_start`. Distinct from
+ *                   `running` so a "start or resume?" decision never boots a
+ *                   run that has not begun (#92); the next move is `agent_start`.
  *   - `running`   — live, NOT awaiting tools (a brain call is in flight, or the
  *                   run is between stages). Not resumable on cold wake by
  *                   itself — the in-flight brain call re-fires from `boot`.
+ *                   A `stale` run reads here too: monitored-run documents it
+ *                   as a soft, still-resumable live mark that the next
+ *                   `progress` flips back to `running`.
  *   - `suspended` — the RESUMABLE case: running + a live conversation +
  *                   `awaiting.kind === "tools"`. `pending` is the outstanding
  *                   tool calls (`conversation.awaiting` … the in-flight batch),
@@ -463,6 +470,7 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
  *                   `state.run.failure` dual channel so callers stop unioning.
  */
 export type AgentStatus<Stage> =
+  | { readonly kind: "idle" }
   | { readonly kind: "running" }
   | { readonly kind: "suspended"; readonly pending: readonly ToolCall[] }
   | { readonly kind: "done"; readonly output: AgentTurn | null }
@@ -473,19 +481,23 @@ export type AgentStatus<Stage> =
  * status function that REPLACES every caller's hand re-derivation of the private
  * shape (issue #49). PURE — reads no clock / RNG, allocates one small record.
  *
- * Ordering is terminal-first so a settled run never reports `running`:
+ * Ordering is terminal-first so a settled run never reports `running`, and a
+ * never-started one never reports live:
  *
  *   1. `state.failure` (the agent's own annotation, set WITHOUT moving
  *      `run.phase`) → `failed`. Checked first because `turn_limit` / `llm`
  *      leave `run.phase === "running"`; reading `run.phase` first would
  *      misreport such a run as `running`. This is the canonical failure source
  *      when present.
- *   2. `run.phase === "failed"` → `failed`, carrying `run.failure` (deadline /
+ *   2. `run.phase === "idle"` → `idle`. Never started (#92); after the failure
+ *      check so the annotation stays canonical, before every live reading so
+ *      an `init` slice is never mistaken for a run in flight.
+ *   3. `run.phase === "failed"` → `failed`, carrying `run.failure` (deadline /
  *      stage). The fallback channel.
- *   3. `run.phase === "done"` → `done` with `state.output` (#46).
- *   4. running + conversation + `awaiting.kind === "tools"` → `suspended` with
+ *   4. `run.phase === "done"` → `done` with `state.output` (#46).
+ *   5. running + conversation + `awaiting.kind === "tools"` → `suspended` with
  *      the outstanding tool calls (`tools.running`). THE resumability condition.
- *   5. otherwise → `running`.
+ *   6. otherwise (`running` or `stale`, not awaiting tools) → `running`.
  */
 export function status<
   Stage,
@@ -499,7 +511,12 @@ export function status<
   if (s.failure !== null) {
     return { kind: "failed", failure: s.failure };
   }
-  // 2) The monitored-run terminal failure (deadline / stage). `run.failure` now
+  // 2) Never started — monitored-run's `idle` phase is exactly the "has this
+  //    actually started?" guard, and the status channel keeps that distinction.
+  if (s.run.phase === "idle") {
+    return { kind: "idle" };
+  }
+  // 3) The monitored-run terminal failure (deadline / stage). `run.failure` now
   //    rides ONLY the `failed` arm of the discriminated union, so narrowing on
   //    `phase === "failed"` surfaces it with no nullable side field and no
   //    fabricated fallback — the old "failed-yet-failure-null" state is
@@ -507,15 +524,15 @@ export function status<
   if (s.run.phase === "failed") {
     return { kind: "failed", failure: s.run.failure };
   }
-  // 3) The pipeline finished — the terminal output landed on `state.output`.
+  // 4) The pipeline finished — the terminal output landed on `state.output`.
   if (s.run.phase === "done") {
     return { kind: "done", output: s.output };
   }
-  // 4) Running + a live conversation awaiting tools → suspended (resumable).
+  // 5) Running + a live conversation awaiting tools → suspended (resumable).
   //    The outstanding calls are the in-flight fan-out batch (`tools.running`).
   if (s.conversation !== null && s.conversation.awaiting.kind === "tools") {
     return { kind: "suspended", pending: s.tools.running };
   }
-  // 5) Otherwise the run is live and not awaiting tools.
+  // 6) Otherwise the run is live (`running` or `stale`) and not awaiting tools.
   return { kind: "running" };
 }
