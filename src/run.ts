@@ -35,6 +35,7 @@ import type {
 import {
   DispatchDiscardedError,
   DisposeTimeoutNotice,
+  DriveFailedError,
   IdentityDropNotice,
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
@@ -1047,4 +1048,92 @@ export function run<
   };
 
   return runtime;
+}
+
+/** Options for `driveToDone`. */
+export interface DriveToDoneOptions<S> {
+  /**
+   * Marks a terminal State as a FAILURE. A State this holds for ends the drive
+   * like any terminal one — the runtime is stopped — but the drive REJECTS with
+   * `DriveFailedError` carrying it instead of resolving. A failed State is
+   * terminal by definition; it need not also satisfy `isTerminal`. Omit → the
+   * drive never rejects on State, only on a runtime error.
+   */
+  readonly failed?: (state: S) => boolean;
+}
+
+/**
+ * Drive a machine from `start` to its terminal State in one call, then tear the
+ * runtime down. The one-shot shape every "run this machine to done" test and
+ * caller boundary otherwise hand-wires as six steps — `await ready`, `observe`,
+ * park a promise, `dispatch(start)`, `getState()`, `stop()` — with the observer
+ * leak and the forgotten `stop` those six steps invite.
+ *
+ * Takes the handle `run()` returns (a `Runtime` extends it, so a booted one is
+ * accepted too), awaits `ready`, dispatches `start`, and resolves with the first
+ * State for which `isTerminal` holds. A machine that boots already terminal (a
+ * rehydrated finished run) resolves on its boot State and `start` is never
+ * dispatched — a finished run has nothing to set in motion. The
+ * observer is detached and `stop()` awaited on EVERY exit: resolve, `failed`,
+ * a boot or dispatch throw, the quiescence cap.
+ *
+ * Rejections are typed, never silent:
+ *   - `DriveFailedError<S>` when `opts.failed` marks the final State — the State
+ *     rides on `error.state`.
+ *   - `QuiescenceTimeoutError` when `start`'s follow-up chain never settles —
+ *     the SAME cap `dispatch` and `idle()` already reject on (invariant 6), not a
+ *     second clock. A livelocking machine surfaces as its own failure class.
+ *   - the boot error, or whatever `dispatch(start)` rejects with, otherwise.
+ *
+ * `isTerminal` is caller-supplied, exactly as `run()`'s `terminal` option is —
+ * the kernel has no built-in terminal-set concept and this does not add one.
+ *
+ * @param handle     the handle `run(machine, opts)` returned.
+ * @param start      the Msg that sets the run in motion.
+ * @param isTerminal the terminal predicate over the machine's State. PURE.
+ * @param opts       an optional `failed` predicate (see {@link DriveToDoneOptions}).
+ */
+export async function driveToDone<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+>(
+  handle: BootingRuntime<S, M, E>,
+  start: M,
+  isTerminal: (state: S) => boolean,
+  opts: DriveToDoneOptions<S> = {},
+): Promise<S> {
+  const failed = opts.failed ?? (() => false);
+  const settles = (state: S): boolean => isTerminal(state) || failed(state);
+  let detach: (() => void) | undefined;
+  try {
+    const runtime = await handle.ready;
+    // A run that rehydrated already terminal has nothing to start: resolve on
+    // the boot State without dispatching, so `start`'s Cmds are never left in
+    // flight for `stop()` to discard.
+    const booted = runtime.getState();
+    if (settles(booted)) {
+      if (failed(booted)) throw new DriveFailedError(booted);
+      return booted;
+    }
+    // Attach BEFORE dispatching so a terminal transition landing inside the
+    // start dispatch is caught.
+    const terminal = new Promise<S>((resolve) => {
+      detach = runtime.observe((_msg, state) => {
+        if (settles(state)) resolve(state);
+      });
+    });
+    // The race lets a dispatch rejection (reducer / interpret throw, the
+    // quiescence cap) surface here instead of floating as an unhandled rejection
+    // while the terminal await parks forever.
+    const started = runtime.dispatch(start);
+    const state = await Promise.race([terminal, started.then(() => terminal)]);
+    if (failed(state)) throw new DriveFailedError(state);
+    return state;
+  } finally {
+    detach?.();
+    // `stop()` resolves by contract, so awaiting it here cannot mask the error
+    // a rejecting branch above is carrying.
+    await handle.stop();
+  }
 }

@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (86)
+## Exports (89)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -35,6 +35,9 @@ import { … } from "@demlik/tea";
 | `DispatchSettle` | Type |  |
 | `Dispose` | Type |  |
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
+| `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
+| `driveToDone` | Function |  |
+| `DriveToDoneOptions` | Interface | Options for `driveToDone`. |
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `foldMsgs` | Function |  |
