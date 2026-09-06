@@ -87,7 +87,7 @@ cell would, and exactly how `foldWorkflow` replays a log.
 pnpm --filter @demlik/tea demo:saga
 ```
 
-This runs `src/workflow/demo.test.ts`, which drives both scenarios and prints the
+This runs `src/internal/flow/workflow/demo.test.ts`, which drives both scenarios and prints the
 narration. Sample output:
 
 ```

@@ -31,7 +31,7 @@
  *     `pnpm demo:saga` output). Pure string-building; the runner does the IO.
  *
  * Run it:  `pnpm --filter @demlik/tea demo:saga`
- * (see `src/workflow/README.md`).
+ * (see `src/internal/flow/workflow/README.md`).
  */
 
 import {
