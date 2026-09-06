@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/workflow — a runnable, deterministic Saga demo (#127, story 5 of
+ * internal/flow/workflow — a runnable, deterministic Saga demo (#127, story 5 of
  * epic #118, the final child). The live demo the docs reference: the canonical
  * Saga `order → charge card → reserve inventory → ship`, each committed step
  * declaring the compensation that undoes it, driven through the #124 core + the
@@ -473,7 +473,7 @@ function narrateScenario(outcome: ScenarioOutcome): string[] {
 export function narrateDemo(result: DemoResult): string {
   const lines: string[] = [];
   lines.push("=".repeat(72));
-  lines.push("  @demlik/tea/workflow — Saga rollback demo (deterministic)");
+  lines.push("  tea workflow — Saga rollback demo (deterministic)");
   lines.push(`  saga: ${result.steps.join(" → ")}`);
   lines.push("=".repeat(72));
 

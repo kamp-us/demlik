@@ -1,7 +1,7 @@
 /**
  * internal/resilience/rate-limit — two rate limiters as pure state + ops.
  *
- * Same shape as `@demlik/tea/work-queue`'s `ops.ts`: a state type plus pure
+ * Same shape as `../../work-queue/ops.ts`: a state type plus pure
  * transition functions. Host-agnostic by construction — no `Date.now()`, no
  * timers, no I/O. The caller injects the clock (`nowMs`) and wires the result
  * into its own reducer / interpret. This keeps the limiters inside TEA's

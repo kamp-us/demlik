@@ -149,8 +149,8 @@ export const nextSeq = <T>(buffer: readonly SeqTagged<T>[]): Seq =>
  *
  * Pure and host-agnostic: it takes the `machine` (which `foldMsgs` needs to
  * dispatch `update`) but touches no `Store`, `interpret`, or subscription, and
- * imports nothing from the runtime — so it ships on `@demlik/tea/prediction`
- * and the client-safe `@demlik/tea/pure` umbrella without dragging `run` into a
+ * imports nothing from the runtime — so it ships through the client-safe
+ * `@demlik/tea/pure` umbrella without dragging `run` into a
  * client bundle.
  */
 export function reconcile<

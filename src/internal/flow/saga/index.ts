@@ -9,7 +9,8 @@
  * the saga drives `do` forward one step at a time, and on the first failure it
  * pivots and drives `undo` backward over exactly the steps that completed.
  *
- * **Boundary with `@demlik/tea/workflow` — the compensation test.** Both drive
+ * **Boundary with the workflow module (`../workflow/`) — the compensation
+ * test.** Both drive
  * an ordered multi-step transaction with reverse-order compensation; the line
  * between them is whether every step carries a true inverse. Here
  * `SagaStep<D, U>` REQUIRES both `do` and `undo` — a step without its inverse

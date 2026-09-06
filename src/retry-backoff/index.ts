@@ -4,7 +4,8 @@
  * retry-attempt state every fallible `interpret` handler folds over.
  *
  * This is a "pure state + ops" module in the same mold as
- * `@demlik/tea/work-queue`: a state type plus pure transition functions,
+ * the internal work queue (`src/internal/work-queue/ops.ts`): a state type
+ * plus pure transition functions,
  * storage- and host-agnostic, that a consumer wires into their own reducer /
  * interpret. Nothing here reads the clock or the RNG on its own behalf —
  * randomness is *injected* (`rng`) and time is *computed by the caller* from

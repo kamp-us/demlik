@@ -42,7 +42,8 @@
  * activity exists only while running" is a type-level guarantee, not a runtime
  * convention (acceptance criterion 1).
  *
- * **Boundary with `@demlik/tea/saga` — the compensation test.** Both drive an
+ * **Boundary with the saga module (`../saga/`) — the compensation test.**
+ * Both drive an
  * ordered multi-step transaction with reverse-order compensation (#125 here);
  * the line between them is whether every step carries a true inverse. Here
  * {@link WorkflowStep.compensation} is OPTIONAL — an irreversible step (a sent
@@ -99,7 +100,7 @@ import { routeWorkflowMsg } from "./route";
  *
  * A step may declare a **compensation** — the inverse activity that undoes the
  * forward one (cancel the reservation, refund the charge). Compensation is the
- * `{ do, undo }` pair of `@demlik/tea/saga` mapped onto the workflow: the step's
+ * `{ do, undo }` pair of `../saga/` mapped onto the workflow: the step's
  * `activity` is the `do`, its `compensation` is the `undo`. The pair is the unit
  * of reversibility — a step that completed (its forward activity succeeded) is
  * exactly a step whose `compensation` must run, in reverse order, if a LATER
@@ -190,7 +191,7 @@ export interface InFlightCompensation<A> {
 // running nor compensating, nor a terminal state still holding one
 // (acceptance crit. 1).
 //
-// The failure path (#125), mirroring `@demlik/tea/saga`'s phases:
+// The failure path (#125), mirroring `../saga/`'s phases:
 //
 //   running ──activity_err with completed steps──▶ compensating
 //   running ──activity_err with NO completed steps──▶ failed   (empty rollback)
@@ -615,7 +616,7 @@ export interface Workflow<A, R, F> {
    * match: confirm the owed compensation and HALT the rollback at the terminal
    * `compensation_failed` state — a bounced compensation is visible terminal
    * state to reconcile by hand, never a workflow wedged in `compensating`
-   * forever. Mirrors `@demlik/tea/saga`'s `undoErr`.
+   * forever. Mirrors `../saga/`'s `undoErr`.
    */
   onCompensationErr(
     state: WorkflowState<A, R, F>,

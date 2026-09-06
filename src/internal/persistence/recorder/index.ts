@@ -254,7 +254,7 @@ export function recorder<S, M extends { type: string }>(
     dump(): Trace<S, M> {
       if (finalState === undefined) {
         throw new Error(
-          "@demlik/tea/recorder: dump() called before any transition was observed. " +
+          "tea recorder: dump() called before any transition was observed. " +
             "Await `runtime.ready` (boot fires the first observe) before dumping.",
         );
       }
@@ -272,7 +272,7 @@ export function recorder<S, M extends { type: string }>(
     toJSONL(): string {
       if (finalState === undefined) {
         throw new Error(
-          "@demlik/tea/recorder: toJSONL() called before any transition was observed. " +
+          "tea recorder: toJSONL() called before any transition was observed. " +
             "Await `runtime.ready` (boot fires the first observe) before serializing.",
         );
       }
@@ -338,14 +338,14 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
       parsed = JSON.parse(line) as JsonlLine<S, M>;
     } catch (err) {
       throw new Error(
-        `@demlik/tea/recorder: parseJSONL failed on line ${i + 1}: not valid JSON. ${String(err)}`,
+        `tea recorder: parseJSONL failed on line ${i + 1}: not valid JSON. ${String(err)}`,
       );
     }
 
     if (parsed.kind === "boot") {
       if (sawBoot) {
         throw new Error(
-          `@demlik/tea/recorder: parseJSONL saw a second boot header on line ${i + 1}. ` +
+          `tea recorder: parseJSONL saw a second boot header on line ${i + 1}. ` +
             "A trace has exactly one boot line.",
         );
       }
@@ -358,7 +358,7 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
     } else if (parsed.kind === "step") {
       if (!sawBoot) {
         throw new Error(
-          `@demlik/tea/recorder: parseJSONL saw a step line before the boot header on line ${i + 1}.`,
+          `tea recorder: parseJSONL saw a step line before the boot header on line ${i + 1}.`,
         );
       }
       msgs.push(parsed.msg);
@@ -369,7 +369,7 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
       }
     } else {
       throw new Error(
-        `@demlik/tea/recorder: parseJSONL saw an unknown line kind on line ${i + 1}: ` +
+        `tea recorder: parseJSONL saw an unknown line kind on line ${i + 1}: ` +
           JSON.stringify((parsed as { kind?: unknown }).kind),
       );
     }
@@ -377,13 +377,13 @@ export function parseJSONL<S, M>(jsonl: string): Trace<S, M> {
 
   if (!sawBoot) {
     throw new Error(
-      "@demlik/tea/recorder: parseJSONL found no boot header. A trace must start with " +
+      "tea recorder: parseJSONL found no boot header. A trace must start with " +
         '{ kind: "boot", state }.',
     );
   }
   if (!finalKnown || finalState === null) {
     throw new Error(
-      "@demlik/tea/recorder: parseJSONL could not determine finalState — the boot state " +
+      "tea recorder: parseJSONL could not determine finalState — the boot state " +
         "was null and no step carried a non-null state. The trace is unusable for replay.",
     );
   }
@@ -439,7 +439,7 @@ export interface TraceAttachment {
  *
  * ```ts
  * import * as Sentry from "@sentry/browser"; // or "@sentry/node"
- * import { traceAttachment } from "@demlik/tea/recorder";
+ * import { traceAttachment } from "./internal/persistence/recorder"; // internal module
  * Sentry.getCurrentScope().addAttachment(traceAttachment(rec.dump()));
  * ```
  *
@@ -506,7 +506,7 @@ export interface BreadcrumbsOptions<M> {
  *
  * ```ts
  * import * as Sentry from "@sentry/browser"; // or "@sentry/node"
- * import { breadcrumbsFromTrace } from "@demlik/tea/recorder";
+ * import { breadcrumbsFromTrace } from "./internal/persistence/recorder"; // internal module
  * for (const b of breadcrumbsFromTrace(rec.dump())) Sentry.addBreadcrumb(b);
  * ```
  *

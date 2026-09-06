@@ -42,7 +42,8 @@
  * drawing — each listed in a "not available in this form" panel with the reason,
  * rather than quietly missing.
  *
- * TIME TRAVEL IS PURE. The runtime is recorded with `@demlik/tea/recorder`, and
+ * TIME TRAVEL IS PURE. The runtime is recorded with the internal recorder
+ * (`src/internal/persistence/recorder/`), and
  * scrubbing re-folds a PREFIX of the recorded msgs through `replay` — init +
  * update only, never `interpret`, never a Store, never a live subscription. So
  * dragging the scrubber backwards cannot re-fire an effect, which is the one

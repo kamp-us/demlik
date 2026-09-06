@@ -113,7 +113,8 @@ export function fileStore<S>(
 const LOCK_SPIN_MS = 10;
 
 /**
- * The Node file substrate for `@demlik/tea/journal`, beside `fileStore`. A
+ * The Node file substrate for the journal (`src/internal/journal/`), beside
+ * `fileStore`. A
  * stream is one JSONL file under `dir` (`<encoded-stream>.jsonl`), one
  * `{"seq":n,"record":…}` object per line — readable and greppable on disk, no
  * SQLite. `parse` is REQUIRED for the same reason `fileStore` requires it: the

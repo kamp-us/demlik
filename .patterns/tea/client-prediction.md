@@ -14,7 +14,7 @@ math to be a guarantee, not a hand-roll.
 The seam shipped in epic #186 (ADR
 [0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md)).
 The worked, tested code is
-[`src/prediction/client-prediction.example.ts`](../../src/prediction/client-prediction.example.ts)
+[`src/internal/prediction/client-prediction.example.ts`](../../src/internal/prediction/client-prediction.example.ts)
 (+ `.test.ts`); the consumer-facing version that imports the public boundary is
 [`examples/client-prediction.ts`](../../examples/client-prediction.ts).
 
@@ -85,8 +85,8 @@ guarantee, not a tree-shaking accident**:
 - The seam ships on the dedicated subpath **`@demlik/tea/pure`** — the umbrella
   that re-exports the fold seam (`foldMsgs`), the ack primitive
   (`tagSeq`/`nextSeq`/`partitionByAck`/`ack`), and the reconciliation helper
-  (`reconcile`). `@demlik/tea/prediction` is the focused leaf for just the ack +
-  reconcile.
+  (`reconcile`). `src/internal/prediction/` is the focused internal leaf for
+  just the ack + reconcile; it ships on no subpath of its own.
 - The pure-core module imports **nothing** from the runtime; the runtime imports
   *from* it. That dependency direction is the actual decoupling.
 - [`src/pure/import-graph.test.ts`](../../src/pure/import-graph.test.ts)

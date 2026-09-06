@@ -704,7 +704,7 @@ export const pickedBySite = compile<PG, PState, PMsg, CmdOf<PG>, "q">(
 
 // ═══ §11 `to` IS BOUNDED BY THE DELEGATE'S RETURN TYPE ═════════════════════
 // The chart cannot declare a fan-out narrower than the code it delegates to can
-// prove. When every `@demlik/tea/poller` verb returned the whole `PollerState`
+// prove. When every poller verb returned the whole `PollerState`
 // union, `slice.phase` was the whole union at every site and all four poller
 // edges had to say `["polling","done","gave_up"]` — honest, but a drawing of 30
 // edges where 16 are reachable. The fix is not on the chart's side: it is the

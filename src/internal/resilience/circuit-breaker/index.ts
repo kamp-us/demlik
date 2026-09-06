@@ -2,8 +2,8 @@
  * @packageDocumentation
  * internal/resilience/circuit-breaker — per-target failure tracking as pure state + ops.
  *
- * Same shape as `@demlik/tea/work-queue`'s `ops.ts`, `@demlik/tea/rate-limit`,
- * and `@demlik/tea/idempotency`: a state type plus pure transition functions.
+ * Same shape as `../../work-queue/ops.ts`, `../rate-limit/`, and
+ * `../../idempotency/`: a state type plus pure transition functions.
  * Host-agnostic by construction — no `Date.now()`, no timers, no I/O. The
  * caller injects the clock (`nowMs`) and wires the result into its own reducer
  * / interpret. This keeps the breaker inside TEA's invariant 2 (transitions are

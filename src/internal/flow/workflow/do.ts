@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 /**
- * `@demlik/tea/workflow/do` — a durable workflow as a virtual actor on a
+ * internal/flow/workflow/do — a durable workflow as a virtual actor on a
  * Durable Object (#126, child of the durable-workflow epic #118).
  *
  * The pure reducer lives in `./index` (`createWorkflow` — the forward activity

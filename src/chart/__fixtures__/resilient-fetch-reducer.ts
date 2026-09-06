@@ -100,7 +100,7 @@ export const fetchReducerChart = defineReducerChart({
         readonly at: number;
       }>(),
     },
-    // minted by `@demlik/tea/deadline`, not by us — its name is not ours to
+    // minted by a deadline library, not by us — its name is not ours to
     // namespace, which is exactly what `foreign` says.
     deadline_exceeded: {
       data: ty<{ readonly id: SubId; readonly atMs: number }>(),

@@ -232,7 +232,7 @@ export function isPlainModel<Msg, T>(
 export const PLAIN_MODEL_MISROUTE_REASON =
   "model: a sync function returned a Promise where an Llm was expected — " +
   "a promise-returning model that is not declared `async` must be wrapped in " +
-  "plainModel(fn) (see @demlik/tea/llm-call)";
+  "plainModel(fn) (see the llm-call module)";
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (
