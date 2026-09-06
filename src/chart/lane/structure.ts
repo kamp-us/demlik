@@ -29,6 +29,7 @@
 // you can RUN, and it is the thing that was missing.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { suppliedClause } from "../compile";
 import type {
   CellEdgeKey,
   Chart,
@@ -614,6 +615,9 @@ const lowerRegion = (
   for (const [group, nodes] of Object.entries(region.states)) {
     const lowered: Record<string, ImportedNode> = {};
     for (const [name, node] of Object.entries(nodes)) {
+      // NO SET (#23): a type refusal. A valid state is a shape (an object with
+      // optional `on`/`initial`/`end`), not a member of an enumeration, so
+      // there is no admitted set to name — only a kind.
       if (!isRecord(node)) {
         defects.push(`task "${taskId}": state "${name}" is not an object`);
         continue;
@@ -622,6 +626,9 @@ const lowerRegion = (
       if (isRecord(node.on)) {
         for (const [event, edge] of Object.entries(node.on)) {
           const low = lowerEdge(edge);
+          // NO SET (#23): rejects a shape outright. The admitted shape — "route
+          // to targets it DECLARES" — is already the whole message, so there is
+          // no enumeration to add that the sentence does not already carry.
           if (low === undefined) {
             defects.push(
               `task "${taskId}": "${name}.${event}" delegates its target to a cell — a lane region routes to targets it DECLARES, because nothing here runs a cell to pick one`,
@@ -675,6 +682,36 @@ const lowerRegion = (
   };
 };
 
+// ── the accepted-set audit (#23) ───────────────────────────────────────────
+//
+// `LaneShapeError` is the lane's whole refusal surface, and it is the one a
+// second consumer of the workflow importer meets first. The compiler refusals
+// (#20/#22) were made to name the set that WOULD have been accepted, not only
+// what was rejected; this reader was audited against that same principle. Each
+// refusal was read for whether it has a set worth naming — and where it does,
+// it names it through the compiler's own `suppliedClause`, so the two doors'
+// phrasing cannot drift.
+//
+// The reader spans two files. Its authoring/typed door is `defineLane` +
+// `lowerRegion` below; its imported/runtime door is `runLane` + `check` in
+// `run.ts`, audited beside its own throws. The verdicts for THIS file:
+//
+//   set named (through `suppliedClause`):
+//     • no state `initial: true`  — the states the chart declares, so the
+//       author knows which one to mark.
+//     • two+ states `initial: true` — WHICH states carry the marker.
+//     • no final                  — the states the chart declares, one of
+//       which owes an `end`.
+//
+//   no set — recorded beside the throw, with the reason:
+//     • `state is not an object`  — a type refusal; a valid state is a shape,
+//       not a member of an enumeration.
+//     • edge delegates its target to a cell — rejects a shape outright; the
+//       admitted shape ("route to targets it DECLARES") is already the message.
+//     • both terminals spelled alike — a collision of two names already in the
+//       message; the fix is two distinct spellings, not a set to pick from.
+//     • the lane declares no phase — an absence; there is nothing to enumerate.
+//
 /** The lane does not hold together — with every defect named, never a half-lane. */
 export class LaneShapeError extends Error {
   override readonly name = "LaneShapeError";
@@ -733,6 +770,9 @@ export function defineLane<const S extends LaneOf<S>>(spec: S): Lane<S> {
   const charts: Record<string, ImportedChart> = {};
   const context: ImportedLane["context"] = {};
 
+  // NO SET (#23): a collision of two names already in the message. The admitted
+  // shape is "two distinct spellings", not a member of a set to pick from, so
+  // there is nothing to enumerate — the fix is legible from the one name shown.
   if (spec.terminals.complete === spec.terminals.tripped) {
     defects.push(
       `both terminals are "${spec.terminals.complete}" — a lane that ended cannot say which ending it reached`,
@@ -745,11 +785,19 @@ export function defineLane<const S extends LaneOf<S>>(spec: S): Lane<S> {
       ids.push(taskId);
       const chart = lowerRegion(taskId, region, defects);
       charts[taskId] = chart;
-      const nodes = [...statesOf(chart).values()];
-      const initials = nodes.filter((node) => node.initial === true).length;
-      if (initials === 0) {
+      const nodeMap = statesOf(chart);
+      const nodes = [...nodeMap.values()];
+      const stateNames = [...nodeMap.keys()];
+      const initials = [...nodeMap]
+        .filter(([, node]) => node.initial === true)
+        .map(([name]) => name);
+      // SET NAMED (#23): the states the chart declares, one of which owes the
+      // `initial: true` marker — so the author is told which names to choose
+      // from rather than left to reopen the chart to find them.
+      if (initials.length === 0) {
         defects.push(
-          `task "${taskId}": its chart marks no state \`initial: true\` — the fold has no zero to start from`,
+          `task "${taskId}": its chart marks no state \`initial: true\` — the fold has no zero to start from` +
+            suppliedClause("states", stateNames),
         );
       }
       // TWO is as wrong as zero, and it is the worse of the pair because it
@@ -757,14 +805,21 @@ export function defineLane<const S extends LaneOf<S>>(spec: S): Lane<S> {
       // states and disagree about which one they mean, so the report prints a
       // start state the fold never booted into. Refused here as well as in the
       // types, because the imported door has no marker to stand behind.
-      if (initials > 1) {
+      //
+      // SET NAMED (#23): WHICH states carry the marker — the fix is to drop all
+      // but one, and naming them points at the exact states to unmark.
+      if (initials.length > 1) {
         defects.push(
-          `task "${taskId}": its chart marks ${initials} states \`initial: true\` — a fold has one zero, and which one it picks would be an accident of key order`,
+          `task "${taskId}": its chart marks ${initials.length} states \`initial: true\` — a fold has one zero, and which one it picks would be an accident of key order` +
+            suppliedClause("initial states", initials),
         );
       }
+      // SET NAMED (#23): the states the chart declares, one of which owes an
+      // `end` — same reading as the missing-initial refusal above.
       if (!nodes.some((node) => node.end !== undefined)) {
         defects.push(
-          `task "${taskId}": its chart declares no final — phase "${phaseName}" could never complete, so the lane could never advance`,
+          `task "${taskId}": its chart declares no final — phase "${phaseName}" could never complete, so the lane could never advance` +
+            suppliedClause("states", stateNames),
         );
       }
       (context as Record<string, unknown>)[taskId] = {
@@ -775,6 +830,8 @@ export function defineLane<const S extends LaneOf<S>>(spec: S): Lane<S> {
     phases.push({ name: phaseName, tasks: ids });
   }
 
+  // NO SET (#23): an absence, not a wrong choice among options — there is
+  // nothing declared to enumerate, and the admitted shape is "at least one".
   if (phases.length === 0) defects.push("the lane declares no phase");
   if (defects.length > 0) throw new LaneShapeError(defects);
 

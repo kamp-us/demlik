@@ -99,6 +99,40 @@ describe("defineLane — the authoring door", () => {
     ).toThrow(LaneShapeError);
   });
 
+  // #23 — a structure refusal names the states the chart declares, so an author
+  // hitting it learns which state to mark rather than reopening the chart. The
+  // same clause the compiler refusals use (`suppliedClause`), one register.
+  it("a missing initial names the states the chart declares", () => {
+    try {
+      defineLane({
+        phases: { p1: { t: NO_INITIAL } },
+        terminals: { complete: "complete", tripped: "tripped" },
+      });
+      throw new Error("expected a refusal");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LaneShapeError);
+      const msg = (error as LaneShapeError).message;
+      // the pre-#23 text stays a verbatim PREFIX
+      expect(msg).toContain("the fold has no zero to start from");
+      expect(msg).toContain('The states supplied: "s".');
+    }
+  });
+
+  it("a missing final names the states the chart declares", () => {
+    try {
+      defineLane({
+        phases: { p1: { t: NO_FINAL } },
+        terminals: { complete: "complete", tripped: "tripped" },
+      });
+      throw new Error("expected a refusal");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LaneShapeError);
+      const msg = (error as LaneShapeError).message;
+      expect(msg).toContain("so the lane could never advance");
+      expect(msg).toContain('The states supplied: "a".');
+    }
+  });
+
   it("names EVERY defect, never a half-lane", () => {
     try {
       defineLane({

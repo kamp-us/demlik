@@ -216,7 +216,7 @@ describe("one zero per region — zero and two are both wrong", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ShapeError);
       expect((error as LaneShapeError).defects).toEqual([
-        'task "t": its chart marks 2 states `initial: true` — a fold has one zero, and which one it picks would be an accident of key order',
+        'task "t": its chart marks 2 states `initial: true` — a fold has one zero, and which one it picks would be an accident of key order. The initial states supplied: "a", "b".',
       ]);
     }
   });

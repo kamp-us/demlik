@@ -197,18 +197,32 @@ export function formOf(machine: {
 // guard lives in `applyCell` because it is the single dispatch primitive
 // every stepping site goes through (#275), so one guard covers `run`,
 // replay/foldMsgs, the PBT fold runner, and the withX wrappers.
+//
+// It also carries `acceptedTypes` — what the refusing state WOULD accept (#14).
+// Without it a caller learns "not this one" and nothing else, so discovering
+// that a state accepts nothing at all took one refusal per Msg type: N probe
+// dispatches to establish one fact. The empty set is the load-bearing case, so
+// it is stated in words rather than rendered as an empty list — a caller
+// skimming `accepts: []` reads a formatting artefact, not a dead end.
 export class NoCellError extends Error {
   override readonly name = "NoCellError";
   readonly _tag = "NoCellError" as const;
   constructor(
     public readonly msgType: string,
     public readonly stateName: string,
+    /** The Msg types the refusing state has cells for, empty when it has none. */
+    public readonly acceptedTypes: readonly string[],
   ) {
     super(
+      // The pre-#14 text is kept verbatim as a PREFIX: a caller matching on it
+      // keeps matching, and the new clause only ever appends.
       `@demlik/tea: no update cell for msg.type "${msgType}" in state ` +
         `"${stateName}" — the machine's update does not handle this Msg ` +
         `(an unknown wire msg.type, or a missing cell reached by bypassing ` +
-        `the mapped types).`,
+        `the mapped types).` +
+        (acceptedTypes.length === 0
+          ? ` This state accepts no Msg at all.`
+          : ` This state accepts: ${acceptedTypes.map((t) => `"${t}"`).join(", ")}.`),
     );
   }
 }
@@ -221,6 +235,35 @@ function stateNameOf(state: unknown): string {
     if (typeof t === "string") return t;
   }
   return "(untagged state)";
+}
+
+// === acceptedTypes: ask which Msgs a state admits, BEFORE dispatching (#21) ===
+//
+// The runtime companion to `NoCellError.acceptedTypes` (#14): a caller holding a
+// machine and a state reads the accepted set directly instead of learning it by
+// refusal, so a dead-end state is a fact it queries rather than a conclusion it
+// infers from a sweep of refused dispatches.
+//
+// This is THE accepted-set reader, and `lookupCell`'s miss arm reads through it
+// too — so the throwing path (`applyCell`), the `Result` path (`tryApplyCell`)
+// and this one report one reading by construction. A copy of the row selection
+// here would be the third opinion about which cells exist that #14 forbids; the
+// property in `accepted-types.test.ts` pins the agreement it buys.
+//
+// Transitions form → the refusing state's own per-state cell keys. Reducer form
+// → the flat table's keys, the state unconsulted exactly as dispatch leaves it
+// (so an untagged reducer-form state is no special case — it never reaches the
+// state read). A state with no row, or an empty table, returns `[]`: a real
+// answer meaning "dead end", never `undefined` and never a throw, so a caller
+// asking "can I dispatch here" need not guard the asking.
+export function acceptedTypes<S>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+): readonly string[] {
+  if (formOf(machine) === "reducer") return Object.keys(machine.update);
+  const table = machine.update as Record<string, object | undefined>;
+  const row = table[(state as unknown as { type: string }).type];
+  return row === undefined || row === null ? [] : Object.keys(row);
 }
 
 // === lookupCell: THE single cell SELECTION, split from the invocation ===
@@ -236,23 +279,48 @@ function stateNameOf(state: unknown): string {
 // the `stateName` the `NoCellError` message needs — the caller decides whether
 // that absence becomes a throw or an `Err`.
 //
-// Pure and allocation-light: one small record per lookup, never a closure.
+// The MISS arm additionally carries `acceptedTypes`, and it is a union rather
+// than one optional field because the accepted set is only ever a fact about a
+// refusal: on a hit there is no set to state, and a field holding `[]` there
+// would read as "accepts nothing" to anyone who looked. The set is read HERE,
+// at the moment the selection is made and the row is in hand — a second reader
+// elsewhere could disagree with this one about which cells exist (#14).
+//
+// Pure and allocation-light: one small record per lookup, never a closure. The
+// keys array is allocated on the miss arm only, so the dispatch hot path is
+// unchanged.
+export type CellLookup<S, M, C extends Cmd> =
+  | {
+      readonly cell: (state: S, msg: M) => readonly [S, readonly C[]];
+      readonly stateName: string;
+    }
+  | {
+      readonly cell: undefined;
+      readonly stateName: string;
+      readonly acceptedTypes: readonly string[];
+    };
+
 export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
-): {
-  readonly cell: ((state: S, msg: M) => readonly [S, readonly C[]]) | undefined;
-  readonly stateName: string;
-} {
+): CellLookup<S, M, C> {
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   if (formOf(machine) === "reducer") {
     const record = machine.update as Record<string, CellFn | undefined>;
     const cell = record[msg.type];
-    return {
-      cell: typeof cell === "function" ? cell : undefined,
-      stateName: stateNameOf(state),
-    };
+    const stateName = stateNameOf(state);
+    // Dispatch here never consults the state, so the flat table's own keys ARE
+    // the accepted set — the same reading `msgKeysOf` gives this form. The
+    // `stateName` stays the best-effort read (a placeholder for an untagged
+    // state), and the set is unaffected by it.
+    return typeof cell === "function"
+      ? { cell, stateName }
+      : {
+          cell: undefined,
+          stateName,
+          acceptedTypes: acceptedTypes(machine, state),
+        };
   }
   const table = machine.update as Record<
     string,
@@ -264,11 +332,18 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   // here — every former per-site copy of this double-cast collapsed into
   // this line (#275).
   const stateKey = (state as unknown as { type: string }).type;
-  const cell = table[stateKey]?.[msg.type];
-  return {
-    cell: typeof cell === "function" ? cell : undefined,
-    stateName: String(stateKey),
-  };
+  const row = table[stateKey];
+  const cell = row?.[msg.type];
+  const stateName = String(stateKey);
+  // The row IS the per-state accept-set. A state with no row at all (a
+  // type-bypassed `state.type`) accepts nothing, which is true of it.
+  return typeof cell === "function"
+    ? { cell, stateName }
+    : {
+        cell: undefined,
+        stateName,
+        acceptedTypes: acceptedTypes(machine, state),
+      };
 }
 
 // === applyCell: THE single reducer-vs-transitions dispatch primitive ===
@@ -290,9 +365,11 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
-  const { cell, stateName } = lookupCell<S, M, C>(machine, state, msg);
-  if (cell === undefined) throw new NoCellError(msg.type, stateName);
-  return cell(state, msg);
+  const found = lookupCell<S, M, C>(machine, state, msg);
+  if (found.cell === undefined) {
+    throw new NoCellError(msg.type, found.stateName, found.acceptedTypes);
+  }
+  return found.cell(state, msg);
 }
 
 // === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===

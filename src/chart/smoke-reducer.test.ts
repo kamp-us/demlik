@@ -300,3 +300,33 @@ ok(
   missing.includes('no entry for edge "Y"'),
   true,
 );
+
+// ── 8. the safety net under the compile-time obligation ───────────────────
+// `on` is total over the event alphabet, so an undeclared event cannot exist to
+// be missing — reaching this throw means the types were bypassed with a cast.
+// The message says so, so a reader landing here reads a library bug rather than
+// a mistake in their chart; and it names the edges the chart DOES declare (#22).
+let net = "no throw";
+try {
+  compileReducer(
+    { events: { X: {}, Y: {} }, initial: "a", on: { X: "b" } } as never,
+    { assign: {} } as never,
+  );
+} catch (err) {
+  net = err instanceof Error ? err.message : String(err);
+}
+ok(
+  "the reducer safety net keeps its pre-#22 text as a prefix",
+  net.includes('declares no edge for "Y"'),
+  true,
+);
+ok(
+  "…names itself a safety net, not a chart error",
+  net.includes("safety net") && net.includes("not an error in your chart"),
+  true,
+);
+ok(
+  "…and names the edges the chart does declare",
+  net.includes('The edges supplied: "X".'),
+  true,
+);

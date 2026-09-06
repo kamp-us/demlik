@@ -6,11 +6,12 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (68)
+## Exports (69)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `absurd` | Function |  |
+| `acceptedTypes` | Function |  |
 | `acceptsOf` | Function |  |
 | `applyCell` | Function |  |
 | `applyCellChecked` | Function |  |

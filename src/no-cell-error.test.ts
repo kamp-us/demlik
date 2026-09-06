@@ -137,6 +137,124 @@ describe("NoCellError — transitions form carries the current state name", () =
   });
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// #14 — the refusal names the state's ACCEPTED set.
+//
+// Before this, learning that a state accepts nothing at all cost one dispatch
+// per Msg type: every refusal was byte-identical, so "not this one" was the
+// whole answer and "dead end" had to be inferred from a probe sweep. These
+// pin the set on the error, the empty case stated in words, and the pre-#14
+// text kept as a prefix so a caller matching on it still matches.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("NoCellError — the accepted set (#14)", () => {
+  // The verbatim pre-#14 message, as a template. A caller that matched on it
+  // must keep matching, so it is asserted as a PREFIX, never as equality.
+  const legacy = (msgType: string, stateName: string) =>
+    `@demlik/tea: no update cell for msg.type "${msgType}" in state ` +
+    `"${stateName}" — the machine's update does not handle this Msg ` +
+    `(an unknown wire msg.type, or a missing cell reached by bypassing ` +
+    `the mapped types).`;
+
+  // `applyCell` only ever reads `update` (+ the optional `__form` stamp), so a
+  // hand-shaped machine is the narrowest way to pin a table the mapped
+  // `Transitions` type deliberately cannot express — a state with no cells.
+  const refusal = (machine: object, state: unknown, msgType: string) => {
+    const msg: { type: string } = { type: msgType };
+    try {
+      applyCell(machine as { update: object }, state, msg);
+    } catch (err) {
+      expect(err).toBeInstanceOf(NoCellError);
+      return err as NoCellError;
+    }
+    throw new Error(`applyCell returned — expected NoCellError for ${msgType}`);
+  };
+
+  it("transitions form: the refusing state's own row is the accepted set", () => {
+    const m = {
+      __form: "transitions" as const,
+      update: {
+        idle: { start: () => [{ type: "running" }, []] },
+        running: {
+          step: (s: unknown) => [s, []],
+          halt: () => [{ type: "idle" }, []],
+        },
+      },
+    };
+
+    const e = refusal(m, { type: "running" }, "start");
+    expect(e.acceptedTypes).toEqual(["step", "halt"]);
+    expect(e.message).toContain('This state accepts: "step", "halt".');
+    expect(e.message.startsWith(legacy("start", "running"))).toBe(true);
+  });
+
+  it("transitions form: a state with no cells says so in words, not as an empty list", () => {
+    const m = {
+      __form: "transitions" as const,
+      update: {
+        running: { freeze: () => [{ type: "frozen" }, []] },
+        frozen: {},
+      },
+    };
+
+    const e = refusal(m, { type: "frozen" }, "UNBLOCKED");
+    expect(e.acceptedTypes).toEqual([]);
+    expect(e.message).toContain("This state accepts no Msg at all.");
+    expect(e.message).not.toContain("[]");
+    expect(e.message.startsWith(legacy("UNBLOCKED", "frozen"))).toBe(true);
+  });
+
+  it("transitions form: a type-bypassed missing ROW accepts nothing", () => {
+    const m = {
+      __form: "transitions" as const,
+      update: { idle: { start: () => [{ type: "idle" }, []] } },
+    };
+
+    const e = refusal(m, { type: "vanished" }, "start");
+    expect(e.stateName).toBe("vanished");
+    expect(e.acceptedTypes).toEqual([]);
+  });
+
+  it("reducer form: the flat table's keys are the accepted set", () => {
+    const m = {
+      __form: "reducer" as const,
+      update: {
+        bump: (s: unknown) => [s, []],
+        reset: () => [{ count: 0 }, []],
+      },
+    };
+
+    const e = refusal(m, { type: "counting", count: 3 }, "unknown_wire");
+    expect(e.acceptedTypes).toEqual(["bump", "reset"]);
+    expect(e.message).toContain('This state accepts: "bump", "reset".');
+    expect(e.message.startsWith(legacy("unknown_wire", "counting"))).toBe(true);
+  });
+
+  it("reducer form: an untagged state still yields the placeholder AND the set", () => {
+    const m = {
+      __form: "reducer" as const,
+      update: { bump: (s: unknown) => [s, []] },
+    };
+
+    const e = refusal(m, { count: 3 }, "unknown_wire");
+    expect(e.stateName).toBe("(untagged state)");
+    expect(e.acceptedTypes).toEqual(["bump"]);
+    expect(
+      e.message.startsWith(legacy("unknown_wire", "(untagged state)")),
+    ).toBe(true);
+  });
+
+  it("reducer form: an empty update accepts nothing", () => {
+    const e = refusal(
+      { __form: "reducer" as const, update: {} },
+      { type: "counting" },
+      "bump",
+    );
+    expect(e.acceptedTypes).toEqual([]);
+    expect(e.message).toContain("This state accepts no Msg at all.");
+  });
+});
+
 describe("vertical tracer — a real Sub union wired through subscribe runs live (#276)", () => {
   // A two-phase machine: `start` moves to `running`, whose subscriptions
   // declare one `tick` Sub. The subscribe handler fires a `ticked` follow-up
