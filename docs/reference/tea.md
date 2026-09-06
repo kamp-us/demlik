@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (68)
+## Exports (71)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -30,6 +30,9 @@ import { … } from "@demlik/tea";
 | `DispatchSettle` | Type |  |
 | `Dispose` | Type |  |
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
+| `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
+| `driveToDone` | Function |  |
+| `DriveToDoneOptions` | Interface | Options for `driveToDone`. |
 | `foldMsgs` | Function |  |
 | `FoldRefusal` | Interface | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no cell, where. |
 | `foldUpdates` | Function |  |
