@@ -203,8 +203,8 @@ events `${ns}.${event}` while the parts stay written against the bare union, so
 instance A's `START` is not a key of instance B's table — a compile error, with
 the runtime `NoCellError` as the net beneath it (`e22-cross-instance-msg.ts`).
 
-The exception is an event the author does not own. A Msg minted by
-`@demlik/tea/deadline` arrives as `deadline_exceeded` no matter whose instance
+The exception is an event the author does not own. A Msg minted by the package's
+deadline Sub arrives as `deadline_exceeded` no matter whose instance
 armed the timer, so `foreign: true` keeps it bare under every namespace — which
 also makes it the one key two instances share, correctly, because it is the same
 event. Since a namespaced key *is* `${ns}.${event}`, a foreign name containing a

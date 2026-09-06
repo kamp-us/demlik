@@ -49,8 +49,8 @@ verbatim by every instance.
 ## 3. Mark library-minted events `foreign: true`
 
 A machine that consumes a Msg minted by someone else cannot rename it.
-`@demlik/tea/deadline` dispatches `{ type: "deadline_exceeded", id, atMs }` from
-its own subscribe cell, and no amount of author intent turns that into
+The package's deadline Sub dispatches `{ type: "deadline_exceeded", id, atMs }`
+from its own subscribe cell, and no amount of author intent turns that into
 `"JOB_A.deadline_exceeded"`. Say whose name it is, in the chart:
 
 ```ts
@@ -61,7 +61,7 @@ events: {
   },
   FINISHED: { data: ty<{ readonly at: number }>(), scope: "live" },
 
-  // ── the LIBRARY's event. `@demlik/tea/deadline` owns this name; the shape
+  // ── the LIBRARY's event. The deadline Sub owns this name; the shape
   //    below is `DeadlineExceeded` verbatim, and `foreign: true` is what keeps
   //    it bare in the emitted table under every namespace.
   deadline_exceeded: {

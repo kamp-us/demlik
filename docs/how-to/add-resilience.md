@@ -133,31 +133,4 @@ That is the whole recipe: a transient failure moves the machine to
 `waiting_retry` with `retryAtMs` set to a backed-off future time, and a success
 resets the slice with `initRetry()`. To fire the scheduled retry automatically,
 declare a `deadlineSub` at `retryAtMs` — see the `resilient-fetch` example for
-the timer wiring, and `@demlik/tea/with-resilience` for the same behavior applied
-as a one-line wrapper over an existing machine.
-
-## 6. Or hand the same policy to a battery — the bound flows through
-
-You do not have to fold the ops by hand to get an outage budget. The three
-wrappers that own a retry ladder take the whole `AnyRetryPolicy` union, so the
-policy from step 5 drops straight in:
-
-```ts
-// poll a status endpoint, tolerating a minute-long outage of the source
-const poll = createPoller<State, Status>({
-  everyMs: 5_000,
-  until: (s) => s.poll.lastResult?.status === "ready",
-  onTick: () => ({ type: "fetch_status" }),
-  retry: policy, // ← the DurationRetryPolicy from step 5
-});
-
-// or harden an existing machine's effect Cmd with the same budget
-const hardened = withResilience(base, { target: "do_fetch", retry: policy });
-```
-
-Nothing extra is wired for the duration bound, and nothing extra is asked of
-your machine: each of these already receives the failure instant as DATA —
-`poller.tickErr(state, error, at)`, `resilient-call`'s `fail(…, msg.at)`, and
-`withResilience`'s own `$resilience:err.at` / `$resilience:timer.atMs` — and
-that instant is the streak clock. The reducer still never reads a clock, and a
-count-bounded `RetryPolicy` behaves exactly as it always did.
+the timer wiring.

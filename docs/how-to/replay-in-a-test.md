@@ -55,10 +55,10 @@ expectCmdEmitted(
 
 ## 3. Replay a trace captured from a live run
 
-For a run whose messages you did not write by hand, record them off a live
-runtime with `@demlik/tea/recorder` and re-fold the captured trace with
-`@demlik/tea/trace-replay`'s `replayTrace`. It reconstructs the exact final
-Model with no model, tool, or clock calls — the same discipline `replay` uses,
-applied to a real production trace. That is how a stuck run becomes a diff at one
-field instead of a re-run; the `agent-resilient-and-durable` example walks the
-full record-then-replay loop.
+For a run whose messages you did not write by hand, record them off a live runtime
+with `@demlik/tea/parity`'s `recordRun` and re-fold the captured trace with its
+`goldenReplay`. It reconstructs the exact final Model with no model, tool, or
+clock calls — the same discipline `replay` uses, applied to a real production
+trace. That is how a stuck run becomes a diff at one field instead of a re-run;
+[Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) walks the full
+record-then-replay loop.
