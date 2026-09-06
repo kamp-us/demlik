@@ -117,7 +117,7 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
     program = programOf(await readFile(page, "utf8"));
     work = await mkdtemp(join(tmpdir(), "tea-tutorial-"));
     // The program is written and bundled INSIDE the repo so its bare imports
-    // (`@anthropic-ai/sdk`, `zod`, `better-result`) resolve from the repo's
+    // (`@anthropic-ai/sdk`, `zod`) resolve from the repo's
     // `node_modules`, both for the bundler and for the child that runs the
     // bundle; the run itself gets the empty temp directory as its cwd.
     cache = join(
@@ -143,6 +143,13 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
     expect(agent.trimEnd().split("\n").length).toBeLessThanOrEqual(
       MAX_AGENT_LINES,
     );
+  });
+
+  // #94 — the handler settles through the `{ ok, fail }` tea hands it, so the
+  // reader installs nothing past the three packages the page names.
+  it("the reader's code and install line name no result library of tea's", async () => {
+    for (const [, body] of program) expect(body).not.toContain("better-result");
+    expect(await readFile(page, "utf8")).not.toContain("better-result");
   });
 
   it("killed after the first tool call, the next run resumes the same run and skips that tool", async () => {
