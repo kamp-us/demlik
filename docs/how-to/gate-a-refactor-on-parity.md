@@ -98,9 +98,8 @@ import { parityEqual } from "@demlik/tea/parity";
 expect(parityEqual(normalize(oldState), normalize(newState))).toBe(true);
 ```
 
-Use `parityEqual`, not the `diff` alias — `diff` is deprecated for its inverted
-name (it returns `true` when the values are EQUAL, so `if (diff(old, new))` reads
-backwards) and is removed after one minor.
+The former `diff` alias is gone — its name read inverted (it returned `true`
+when the values were EQUAL, so `if (diff(old, new))` read backwards).
 
 ## 6. Localize a failure to the step that drifted
 

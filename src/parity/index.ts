@@ -221,10 +221,3 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export function parityEqual(a: unknown, b: unknown): boolean {
   return deepEqual(a, b);
 }
-
-/**
- * @deprecated Inverted name — it returns `true` when the values are EQUAL, so
- * `if (diff(old, new))` reads backwards (#278). Use {@link parityEqual}.
- * Alias kept for one minor, then removed.
- */
-export const diff = parityEqual;
