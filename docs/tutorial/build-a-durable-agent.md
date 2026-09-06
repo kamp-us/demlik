@@ -41,10 +41,8 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const response = await client.messages.create({
       model: "claude-opus-5",
-      max_tokens: 1024,
-      // A tea turn carries the text and the tool calls, not the thinking blocks
-      // a replayed transcript would have to hand back — so thinking stays off.
-      thinking: { type: "disabled" },
+      max_tokens: 4096,
+      thinking: { type: "adaptive" },
       system: messages.find((m) => m.role === "system")?.content,
       tools: declared,
       messages: messages.flatMap(toParam),
@@ -57,6 +55,10 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
         b.type === "tool_use"
           ? { callId: b.id, name: b.name, args: b.input as Record<string, unknown> }
           : [],
+      ),
+      // Signed thinking blocks: the API wants them back verbatim next turn.
+      provider: response.content.filter(
+        (b) => b.type !== "text" && b.type !== "tool_use",
       ),
     };
   };
@@ -74,6 +76,7 @@ function toParam(m: AgentMessage): Anthropic.MessageParam[] {
         {
           role: "assistant",
           content: [
+            ...((m.provider as Anthropic.ContentBlockParam[] | undefined) ?? []),
             ...(m.content === ""
               ? []
               : [{ type: "text" as const, text: m.content }]),
@@ -103,6 +106,11 @@ function toParam(m: AgentMessage): Anthropic.MessageParam[] {
   }
 }
 ```
+
+The turn's `provider` slot is how the signed `thinking` blocks survive a resume:
+tea saves whatever the adapter puts there with the turn and hands it back on the
+`assistant` message, never reading it, so the transcript a resumed process
+replays carries the blocks Anthropic requires beside its text and tool calls.
 
 Swap this file for any provider's SDK and nothing below changes: the port is one
 `async` function from messages to a turn.

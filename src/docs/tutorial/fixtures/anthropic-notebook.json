@@ -1,5 +1,5 @@
 {
-  "note": "Recorded Anthropic Messages API responses for docs/tutorial/build-a-durable-agent.md, one per model turn, keyed by the number of assistant turns already in the request. Turns 0-2 each ask for one `note` tool call; turn 3 answers.",
+  "note": "Recorded Anthropic Messages API responses for docs/tutorial/build-a-durable-agent.md, one per model turn, keyed by the number of assistant turns already in the request. Turns 0-2 each ask for one `note` tool call; turn 3 answers. Every turn opens with a signed `thinking` block, which the adapter must replay verbatim in the next request's assistant message.",
   "turns": [
     {
       "id": "msg_fixture_0",
@@ -7,6 +7,11 @@
       "role": "assistant",
       "model": "claude-opus-5",
       "content": [
+        {
+          "type": "thinking",
+          "thinking": "The three primary colours are red, yellow and blue. One note per turn, so red first.",
+          "signature": "sig_fixture_0"
+        },
         { "type": "text", "text": "Saving the first colour." },
         {
           "type": "tool_use",
@@ -26,6 +31,11 @@
       "model": "claude-opus-5",
       "content": [
         {
+          "type": "thinking",
+          "thinking": "Red is saved. Yellow next.",
+          "signature": "sig_fixture_1"
+        },
+        {
           "type": "tool_use",
           "id": "toolu_fixture_yellow",
           "name": "note",
@@ -43,6 +53,11 @@
       "model": "claude-opus-5",
       "content": [
         {
+          "type": "thinking",
+          "thinking": "Red and yellow are saved. Blue is the last one.",
+          "signature": "sig_fixture_2"
+        },
+        {
           "type": "tool_use",
           "id": "toolu_fixture_blue",
           "name": "note",
@@ -59,6 +74,11 @@
       "role": "assistant",
       "model": "claude-opus-5",
       "content": [
+        {
+          "type": "thinking",
+          "thinking": "All three are in the notebook. Answer in one line.",
+          "signature": "sig_fixture_3"
+        },
         {
           "type": "text",
           "text": "Done — red, yellow and blue are in the notebook."

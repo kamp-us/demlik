@@ -7,7 +7,11 @@
 // `TEA_TUTORIAL_HOLD_TURN=<n>` makes the request for turn n hang forever after
 // printing a marker: the point at which the test kills the process, with the
 // Model for every earlier turn already saved by the substrate.
-import { readFileSync } from "node:fs";
+//
+// `TEA_TUTORIAL_REQUEST_LOG=<file>` appends every request body as one JSON
+// line, held ones included, so the test can read what the adapter actually
+// sent back — the replayed thinking blocks above all.
+import { appendFileSync, readFileSync } from "node:fs";
 
 const fixture = JSON.parse(
   readFileSync(process.env.TEA_TUTORIAL_FIXTURE, "utf8"),
@@ -16,6 +20,7 @@ const holdTurn =
   process.env.TEA_TUTORIAL_HOLD_TURN === undefined
     ? null
     : Number(process.env.TEA_TUTORIAL_HOLD_TURN);
+const requestLog = process.env.TEA_TUTORIAL_REQUEST_LOG;
 const realFetch = globalThis.fetch;
 
 globalThis.fetch = async (input, init) => {
@@ -24,6 +29,8 @@ globalThis.fetch = async (input, init) => {
     return realFetch(input, init);
   const body = JSON.parse(init.body);
   const turn = body.messages.filter((m) => m.role === "assistant").length;
+  if (requestLog !== undefined)
+    appendFileSync(requestLog, `${JSON.stringify({ turn, body })}\n`);
   if (turn === holdTurn) {
     process.stdout.write(`fixture: holding turn ${turn}\n`);
     return new Promise(() => {});
