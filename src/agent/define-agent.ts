@@ -274,9 +274,8 @@ function startMsg(runId: string, at: number) {
  * lid is exactly that it never does one. PURE.
  */
 function isMidRun(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
-  // Off `run.phase`, not `status`: `status` reads an `idle` (never started)
-  // Model as `running` too, and idle is exactly the State a start belongs to.
-  return s.run.phase === "running" && status(s).kind !== "failed";
+  const { kind } = status(s);
+  return kind === "running" || kind === "suspended";
 }
 
 /** The drive's terminal predicate — the pipeline finished. PURE. */
