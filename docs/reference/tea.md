@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (88)
+## Exports (89)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ import { … } from "@demlik/tea";
 | `Dispose` | Type |  |
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
+| `DriveStalledError` | Class | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. |
 | `driveToDone` | Function |  |
 | `DriveToDoneOptions` | Interface | Options for `driveToDone`. |
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |

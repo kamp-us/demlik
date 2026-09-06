@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type BootingRuntime,
   DriveFailedError,
+  DriveStalledError,
   defineMachine,
   driveToDone,
   type Interpret,
@@ -10,6 +11,8 @@ import {
   type Runtime,
   run,
   type Store,
+  type SubId,
+  subId,
 } from "./index";
 import { memoryStore } from "./mem";
 
@@ -188,6 +191,39 @@ describe("driveToDone — typed rejections (#57)", () => {
     expect(probe.stopped).toBe(true);
   });
 
+  it("a start chain that quiesces on a non-terminal State with nothing live rejects with DriveStalledError (#68)", async () => {
+    // `start` parks the machine in `waiting` with no Cmd and no Sub: the chain
+    // is quiescent, nothing inside the runtime can move it, and before #68 the
+    // drive waited on that forever with `stop()` never reached.
+    type S3 = { readonly phase: "idle" | "waiting" | "done" };
+    type M3 = { readonly type: "start" } | { readonly type: "finish" };
+    const update: Reducer<S3, M3, never> = {
+      start: () => [{ phase: "waiting" }, []],
+      finish: () => [{ phase: "done" }, []],
+    };
+    const parker = defineMachine<S3, M3, never, never, undefined>({
+      init: () => [{ phase: "idle" }, []],
+      update,
+    });
+    const probe = instrument(run(parker, { ctx: undefined }));
+
+    const drive = driveToDone(
+      probe.handle,
+      { type: "start" },
+      (s) => s.phase === "done",
+    );
+
+    await expect(drive).rejects.toBeInstanceOf(DriveStalledError);
+    await drive.catch((err: unknown) => {
+      expect((err as DriveStalledError<S3>).state).toEqual({
+        phase: "waiting",
+      });
+      expect((err as DriveStalledError<S3>)._tag).toBe("DriveStalledError");
+    });
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
   it("a boot failure rejects with the boot error and still stops", async () => {
     // A store whose `load` throws is the boot failure that surfaces on `ready`.
     const boom = new Error("boot exploded");
@@ -205,6 +241,65 @@ describe("driveToDone — typed rejections (#57)", () => {
     await expect(
       driveToDone(probe.handle, { type: "start" }, isDone),
     ).rejects.toBe(boom);
+    expect(probe.stopped).toBe(true);
+  });
+});
+
+// A Sub-driven machine is NOT stalled: the start dispatch quiesces on `waiting`,
+// and the terminal Msg arrives later from the Sub the machine armed there. The
+// stall gate (#68) must keep waiting for exactly this shape, on both Sub paths.
+describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", () => {
+  type S4 = { readonly phase: "idle" | "waiting" | "done" };
+  type M4 = { readonly type: "start" } | { readonly type: "finish" };
+  const update: Reducer<S4, M4, never> = {
+    start: () => [{ phase: "waiting" }, []],
+    finish: () => [{ phase: "done" }, []],
+  };
+  const isDone4 = (s: S4): boolean => s.phase === "done";
+  // A one-shot timer that delivers `finish` on a later macrotask — after the
+  // quiescent drain has already returned.
+  const finishLater = (dispatch: (msg: M4) => void): (() => void) => {
+    const timer = setTimeout(() => dispatch({ type: "finish" }), 5);
+    return () => clearTimeout(timer);
+  };
+
+  it("dep-keyed Sub (`machine.subs`): resolves with the State the Sub delivered", async () => {
+    const machine = defineMachine<S4, M4, never, never, undefined>({
+      init: () => [{ phase: "idle" }, []],
+      update,
+      subs: [
+        {
+          deps: (s) => (s.phase === "waiting" ? { armed: true } : null),
+          source: (_s, dispatch) => finishLater(dispatch),
+        },
+      ],
+    });
+    const probe = instrument(run(machine, { ctx: undefined }));
+
+    const final = await driveToDone(probe.handle, { type: "start" }, isDone4);
+
+    expect(final).toEqual({ phase: "done" });
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
+  it("manual Sub (`subscriptions` + `subscribe`): resolves with the State the Sub delivered", async () => {
+    type U4 = { readonly type: "timer"; readonly id: SubId };
+    const machine = defineMachine<S4, M4, never, U4, undefined>({
+      init: () => [{ phase: "idle" }, []],
+      update,
+      subscriptions: (s) =>
+        s.phase === "waiting" ? [{ type: "timer", id: subId("finish") }] : [],
+      subscribe: {
+        timer: (_sub, _ctx, dispatch) => finishLater(dispatch),
+      },
+    });
+    const probe = instrument(run(machine, { ctx: undefined }));
+
+    const final = await driveToDone(probe.handle, { type: "start" }, isDone4);
+
+    expect(final).toEqual({ phase: "done" });
+    expect(probe.attached).toBe(0);
     expect(probe.stopped).toBe(true);
   });
 });

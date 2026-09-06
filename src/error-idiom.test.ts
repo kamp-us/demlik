@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { TerminalTimeoutError } from "./await-terminal";
 import {
+  DriveFailedError,
+  DriveStalledError,
   NoCellError,
   PortNameCollisionError,
   QuiescenceTimeoutError,
@@ -81,6 +83,18 @@ const thrownCases: readonly ThrownCase[] = [
     make: () => new RetryExhaustedError(3, new Error("final attempt")),
     ctor: RetryExhaustedError,
     tag: "RetryExhaustedError",
+  },
+  {
+    name: "DriveFailedError",
+    make: () => new DriveFailedError({ phase: "failed" }),
+    ctor: DriveFailedError,
+    tag: "DriveFailedError",
+  },
+  {
+    name: "DriveStalledError",
+    make: () => new DriveStalledError({ phase: "waiting" }),
+    ctor: DriveStalledError,
+    tag: "DriveStalledError",
   },
 ];
 

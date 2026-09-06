@@ -36,6 +36,7 @@ import {
   DispatchDiscardedError,
   DisposeTimeoutNotice,
   DriveFailedError,
+  DriveStalledError,
   IdentityDropNotice,
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
@@ -86,6 +87,28 @@ function normalizeSupervision<S, M extends { type: string }>(
   if (supervision === undefined) return { strategy: "stop" };
   if (typeof supervision === "string") return { strategy: supervision };
   return supervision;
+}
+
+// === liveWork: "can anything still transition me without a dispatch?" ===
+//
+// The one read `driveToDone` needs that the public `Runtime` does not carry:
+// after `start`'s chain quiesces on a non-terminal State, only a live Sub or an
+// in-flight Cmd can still enqueue a transition; with neither, waiting is a leak
+// (#68). Module-private and symbol-keyed so it reaches no export (the export map
+// is the contract — MAINTAINING.md), yet enumerable so it survives the spread a
+// wrapper does over the handle.
+const liveWork: unique symbol = Symbol("@demlik/tea/liveWork");
+
+/** The runtime's own sources of a caller-less transition, counted. */
+interface LiveWork {
+  /** Live Subs — manual (`subscriptions`) plus dep-keyed (`subs`). */
+  readonly subs: number;
+  /** Interpret handlers currently awaiting. */
+  readonly cmds: number;
+}
+
+interface LiveWorkProbe {
+  readonly [liveWork]: () => LiveWork;
 }
 
 // === run ===
@@ -859,7 +882,11 @@ export function run<
     () => runtime,
   );
 
-  const runtime: Runtime<S, M, E> = {
+  const runtime: Runtime<S, M, E> & LiveWorkProbe = {
+    [liveWork]: () => ({
+      subs: subRegistry.size + depSubRegistry.size,
+      cmds: inFlightCmds,
+    }),
     dispatch: dispatchToQuiescence,
     dispatchOnce: enqueueDispatch,
     getState(): S {
@@ -1006,6 +1033,20 @@ export function run<
   return runtime;
 }
 
+/**
+ * Is the runtime provably out of ways to transition on its own? True only when
+ * the handle carries the `liveWork` read and it counts zero live Subs and zero
+ * in-flight Cmds. A handle without the read (a wrapper that rebuilt the object
+ * without spreading it) cannot be proven stalled, so the drive keeps waiting —
+ * the pre-#68 contract, never a false stall.
+ */
+function isStalled(runtime: object): boolean {
+  const probe = (runtime as Partial<LiveWorkProbe>)[liveWork];
+  if (probe === undefined) return false;
+  const live = probe();
+  return live.subs === 0 && live.cmds === 0;
+}
+
 /** Options for `driveToDone`. */
 export interface DriveToDoneOptions<S> {
   /**
@@ -1031,11 +1072,20 @@ export interface DriveToDoneOptions<S> {
  * rehydrated finished run) resolves on its boot State and `start` is never
  * dispatched — a finished run has nothing to set in motion. The
  * observer is detached and `stop()` awaited on EVERY exit: resolve, `failed`,
- * a boot or dispatch throw, the quiescence cap.
+ * a stall, a boot or dispatch throw, the quiescence cap.
  *
  * Rejections are typed, never silent:
  *   - `DriveFailedError<S>` when `opts.failed` marks the final State — the State
  *     rides on `error.state`.
+ *   - `DriveStalledError<S>` when `start`'s follow-up chain quiesces on a State
+ *     that is neither terminal nor `failed` and the runtime has no live Sub and
+ *     no Cmd in flight — nothing inside it can deliver another transition, so
+ *     waiting would be a hang with the runtime leaked. The stalled State rides
+ *     on `error.state`. A machine that CAN still move is not stalled: a live Sub
+ *     (manual or dep-keyed) that delivers the terminal Msg after the dispatch
+ *     quiesces keeps the drive waiting, and it resolves on that State. What the
+ *     runtime cannot see — a dispatch from outside it after quiescence — does
+ *     not count as live; a machine that depends on one declares it as a Sub.
  *   - `QuiescenceTimeoutError` when `start`'s follow-up chain never settles —
  *     the SAME cap `dispatch` and `idle()` already reject on (invariant 6), not a
  *     second clock. A livelocking machine surfaces as its own failure class.
@@ -1082,8 +1132,18 @@ export async function driveToDone<
     // The race lets a dispatch rejection (reducer / interpret throw, the
     // quiescence cap) surface here instead of floating as an unhandled rejection
     // while the terminal await parks forever.
-    const started = runtime.dispatch(start);
-    const state = await Promise.race([terminal, started.then(() => terminal)]);
+    const started = runtime.dispatch(start).then(() => {
+      // Quiesced. A settling State already went through the observer, so
+      // `terminal` is resolved; otherwise the wait is legitimate only while the
+      // runtime itself can still transition. With no live Sub and no Cmd in
+      // flight nothing is coming, and the wait becomes the hang #68 names.
+      const parked = runtime.getState();
+      if (!settles(parked) && isStalled(runtime)) {
+        throw new DriveStalledError(parked);
+      }
+      return terminal;
+    });
+    const state = await Promise.race([terminal, started]);
     if (failed(state)) throw new DriveFailedError(state);
     return state;
   } finally {
