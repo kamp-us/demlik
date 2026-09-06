@@ -193,7 +193,7 @@ function cell(text: string): string {
   return text.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
 }
 
-/** First paragraph of a module summary, with the `@demlik/tea/x — ` lead stripped. */
+/** First paragraph of a module summary, with the leading subpath + em-dash stripped. */
 function tagline(summary: string): string {
   const firstPara = summary.split(/\n\s*\n/)[0] ?? "";
   const flat = firstPara.replace(/\s+/g, " ").trim();

@@ -34,20 +34,24 @@ so the same recording reproduces byte-identically forever.
 
 ## 2. Keep the recording as a fixture
 
-`toJSONL()` serializes the recording; `parseJSONL` from `@demlik/tea/recorder`
-hydrates it back into a `Trace`. Write it once from a real production run and the
-gate no longer needs the old engine present at all:
+A trace is plain data — `loaded`, the ordered `msgs`, `finalState` — so JSON is
+the whole fixture format. Write it once from a real production run and the gate no
+longer needs the old engine present at all:
 
 ```ts
-import { parseJSONL } from "@demlik/tea/recorder";
+import type { Trace } from "@demlik/tea/parity";
 
-await writeFile("fixtures/audit-golden.jsonl", rec.toJSONL());
+await writeFile("fixtures/audit-golden.json", JSON.stringify(rec.trace()));
 
 // later, in the test:
-const golden = parseJSONL<State, Msg>(
-  await readFile("fixtures/audit-golden.jsonl", "utf8"),
-);
+const golden = JSON.parse(
+  await readFile("fixtures/audit-golden.json", "utf8"),
+) as Trace<AuditState, AuditMsg>;
 ```
+
+`rec.toJSONL()` also dumps the run, but that line format is the package's own
+record log and nothing public re-hydrates it — reach for it as a diagnostic
+artifact, not as the fixture the gate reads back.
 
 ## 3. Replay the same recording through both engines
 

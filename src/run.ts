@@ -97,7 +97,7 @@ function normalizeSupervision<S, M extends { type: string }>(
 // (#68). Module-private and symbol-keyed so it reaches no export (the export map
 // is the contract — MAINTAINING.md), yet enumerable so it survives the spread a
 // wrapper does over the handle.
-const liveWork: unique symbol = Symbol("@demlik/tea/liveWork");
+const liveWork: unique symbol = Symbol("demlik-tea.liveWork");
 
 /** The runtime's own sources of a caller-less transition, counted. */
 interface LiveWork {
