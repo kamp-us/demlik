@@ -24,6 +24,7 @@ import {
   type Interpret,
   type NoCtx,
   type Reducer,
+  type RequiredCtx,
   run,
   type Settled,
   settle,
@@ -175,6 +176,24 @@ run(machine, { ctx: { http } });
 run(machine, { ctx: {} });
 // @ts-expect-error ctx cannot be omitted while a Cmd names a requirement
 run(machine, {});
+
+// A Cmd that needs NOTHING beside one that does — hand-written, or `Cmd.define`d
+// without `needs` — leaves the sibling's demand intact: `unknown` is dropped
+// from the union before the intersection, not absorbed into it (#56).
+const log = Cmd.define("log", {
+  input: z.object({ line: z.string() }),
+  ok: z.void(),
+  err: [],
+});
+type Mixed = FetchCmd | ReturnType<typeof log> | Legacy;
+const mixedNeeds: RequiredCtx<Mixed> = { http };
+void mixedNeeds;
+// @ts-expect-error `http` is still demanded when siblings need nothing
+const mixedMissing: RequiredCtx<Mixed> = {};
+void mixedMissing;
+// Only need-nothing Cmds → the identity of `&`, exactly as before.
+const nothing: RequiredCtx<Legacy | ReturnType<typeof log>> = undefined;
+void nothing;
 
 // A machine with NO typed Cmds still runs ctx-less (the #182 win is untouched).
 type PureMsg = { readonly type: "bump" };

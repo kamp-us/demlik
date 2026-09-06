@@ -24,7 +24,6 @@ import {
   type AgentMachineMsg,
   type AgentTurn,
   createAgent,
-  type MonitoredRunCmd,
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
@@ -223,7 +222,7 @@ type Msg = AgentMachineMsg<Purpose, Outputs, ToolResult>;
 type State = ReturnType<typeof agent.init>;
 type Ctx = { readonly now: () => number };
 
-const toolInterpret: Interpret<Msg, MonitoredRunCmd<unknown> | RunTool, Ctx> = {
+const toolInterpret: Interpret<Msg, RunTool, Ctx> = {
   run_tool: async (cmd, ctx) => {
     const q = String((cmd.args as { q?: unknown }).q ?? "");
     const snippet = KNOWLEDGE[q];
@@ -243,9 +242,8 @@ const toolInterpret: Interpret<Msg, MonitoredRunCmd<unknown> | RunTool, Ctx> = {
       at: ctx.now(),
     };
   },
-  // The agent forwards monitored-run checkpoint writes here; we set no
-  // `snapshotEvery`, so this never fires — but the closed Cmd union requires it.
-  snapshot_write: async () => undefined,
+  // No `snapshotEvery` is set, so the `snapshot_write` checkpoint cell is
+  // config-derived OUT of this obligation — wiring one would not compile.
 };
 
 // ===========================================================================
