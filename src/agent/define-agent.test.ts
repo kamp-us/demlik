@@ -303,6 +303,100 @@ describe("agent.run resumes a Model the Store hands back mid-run (#60)", () => {
   });
 });
 
+// The lid's boot predicate reads `status(model).kind` (#101): `running` and
+// `suspended` are booted, `idle` is started, `done` resolves as it is. The
+// `running` arm is the #60 test above; these pin the other three.
+describe("agent.run picks start vs boot off status(model).kind (#101)", () => {
+  type S = DefinedAgentState<typeof search>;
+  const lid = { tools: [search], instructions: INSTRUCTIONS } as const;
+
+  /** Run once with `model`, copying out the first Model saved for which `at` holds. */
+  async function parkWhen(
+    model: (messages: readonly AgentMessage[]) => Promise<AgentTurn>,
+    at: (state: S) => boolean,
+    runId: string,
+  ): Promise<S> {
+    let parked: S | undefined;
+    const live = memoryStore<S>();
+    const store: Store<S> = {
+      ...live,
+      save: async (state) => {
+        await live.save(state);
+        if (parked === undefined && at(state)) {
+          parked = JSON.parse(JSON.stringify(state)) as S;
+        }
+      },
+    };
+    await defineAgent({ model, ...lid }).run(INPUT, {
+      ctx: { kb },
+      store,
+      runId,
+    });
+    if (parked === undefined) throw new Error("never parked");
+    return parked;
+  }
+
+  it("a suspended Model (awaiting tools) boots with the same runId; the tool is the resumed effect", async () => {
+    const parked = await parkWhen(
+      scripted([ASK, ANSWER]).model,
+      (s) => s.conversation?.awaiting.kind === "tools",
+      "run-1",
+    );
+    expect(status(parked).kind).toBe("suspended");
+
+    const second = scripted([ANSWER]);
+    const final = await defineAgent({ model: second.model, ...lid }).run(
+      INPUT,
+      { ctx: { kb }, store: memoryStore(parked), runId: "run-2" },
+    );
+    expect(final.run.phase === "done" && final.run.runId).toBe("run-1");
+    expect(final.output).toEqual(ANSWER);
+    // Booted, not started: the one model call it makes reads the transcript
+    // the first process built, with the resumed tool's outcome folded in.
+    expect(second.seen).toHaveLength(1);
+    expect(second.seen[0]?.map((m) => m.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "tool",
+    ]);
+  });
+
+  it("an empty Store (idle Model) starts with the runId the call names", async () => {
+    const { model, seen } = scripted([ANSWER]);
+    const final = await defineAgent({ model, ...lid }).run(INPUT, {
+      ctx: { kb },
+      store: memoryStore<S>(),
+      runId: "fresh",
+    });
+    expect(final.run.phase === "done" && final.run.runId).toBe("fresh");
+    // Started, not booted: the first model call reads only the head.
+    expect(seen).toEqual([
+      [
+        { role: "system", content: INSTRUCTIONS },
+        { role: "user", content: INPUT },
+      ],
+    ]);
+  });
+
+  it("a done Model resolves as-is: its runId, no model call", async () => {
+    const done = await parkWhen(
+      scripted([ASK, ANSWER]).model,
+      (s) => s.run.phase === "done",
+      "run-1",
+    );
+    expect(status(done).kind).toBe("done");
+
+    const second = scripted([]);
+    const again = await defineAgent({ model: second.model, ...lid }).run(
+      INPUT,
+      { ctx: { kb }, store: memoryStore(done), runId: "run-2" },
+    );
+    expect(again).toEqual(done);
+    expect(second.seen).toEqual([]);
+  });
+});
+
 describe("instructions live in the durable Model (ADR 0004)", () => {
   it("is present after init on both paths, null when the config names none", () => {
     const { model } = scripted([]);
