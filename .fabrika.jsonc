@@ -2,5 +2,28 @@
 	// The CI gate whose jobs supersede `fabrika build check`'s in-tree verdict. fabrika's shipped
 	// default names phoenix's `ci.yml`; this repo's gate is `build.yaml` (#54). `ci.noProducer` is
 	// deliberately not set — it only applies to a repo with zero workflows, so here it would be inert.
-	"ci": { "gateWorkflow": "build.yaml" }
+	"ci": { "gateWorkflow": "build.yaml" },
+
+	// The commands `fabrika build check --surface code` spawns in-tree; with none declared the verb
+	// refuses UNKNOWN (#63). Both are `package.json` scripts CI runs: `typecheck` is `tsc --noEmit`,
+	// `lint:worktree` is the alias of `lint` kept for this verb by name (CLAUDE.md). No `--force`
+	// on either — that is turbo's flag and `tsc` rejects it (TS5093).
+	"codeValidators": [{ "command": ["pnpm", "typecheck"] }, { "command": ["pnpm", "lint:worktree"] }],
+
+	// The paths whose diffs make the governance gate `required`. This list replaces fabrika's shipped
+	// default wholesale, so it restates the roots that still apply here (`claude-plugins/` does not
+	// exist in this repo) and adds the surfaces this repo's ADRs govern: `package.json` (the export
+	// map, ADR 0010) and `MAINTAINING.md` (the tier stamps and removal ritual, ADR 0016). `.patterns/`
+	// is here because CLAUDE.md names it beside `.decisions/` as a surface fabrika writes through.
+	// `.fabrika.jsonc` must stay listed or the config refuses to load. `ROADMAP.md` is board config,
+	// not decision corpus, and is deliberately absent.
+	"governedRoots": [
+		".decisions/",
+		".patterns/",
+		".claude/",
+		".github/",
+		".fabrika.jsonc",
+		"package.json",
+		"MAINTAINING.md"
+	]
 }
