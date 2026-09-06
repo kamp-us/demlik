@@ -305,7 +305,8 @@
     "build:viewer": "node build-viewer.mjs"
   },
   "dependencies": {
-    "better-result": "^2.5.2"
+    "better-result": "^2.5.2",
+    "zod": "^4.5.4"
   },
   "peerDependencies": {
     "fast-check": "^3 || ^4",
