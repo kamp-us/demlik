@@ -11,9 +11,9 @@
  * `withDeadline` / `withTelemetry` forward `cmds`, so `run`'s own edge does the
  * work. `withResilience` retags the target into a `$resilience:run` carrier and
  * invokes the base handler inside it, so the settle happens there, through the
- * edge `run` hands over on ctx — and the settled Msg lands as the call's
- * `result` in the `$resilience` slice, which is where the wrapper carries a
- * base follow-up.
+ * edge `run` hands over on ctx — the settled Msg is recorded as the call's
+ * `result` in the `$resilience` slice and delivered to the base reducer once
+ * the resilience verbs settle (#80).
  */
 
 import { describe, expect, it } from "vitest";
@@ -161,11 +161,11 @@ describe("withTelemetry — the edge still parses and stamps behind the wrap", (
 });
 
 describe("withResilience — the carrier settles the target through the same edge", () => {
-  // Retry-free: the carrier runs the target once and records the base
-  // handler's follow-up as the call's `result`.
+  // Retry-free: the carrier runs the target once; the base handler's settled
+  // follow-up is delivered to the base reducer off `$resilience:ok`.
   const config = { target: "fetch" as const };
 
-  it("a malformed `_ok` is recorded as `fetch_err` (malformed_result); `base` is unchanged", async () => {
+  it("a malformed `_ok` reaches the base as `fetch_err` (malformed_result); `body` is unchanged", async () => {
     const rt = await run(withResilience(machineOver(malformed), config), {
       ctx: {},
       clock: fixedClock(7),
@@ -177,19 +177,15 @@ describe("withResilience — the carrier settles the target through the same edg
 
     await rt.dispatch({ type: "go", url: "/" });
 
-    const { base, $resilience } = rt.getState();
+    const { base } = rt.getState();
     expect(base.body).toBe(initial.body);
-    const call = $resilience.calls.fetch;
-    expect(call?.phase).toBe("succeeded");
-    const settled = (call as { result: FetchErr }).result;
-    expect(settled.type).toBe("fetch_err");
-    expectMalformed(settled.error);
-    expect(settled.at).toBe(7);
-    expect(settled.cmd).toEqual({ type: "fetch", url: "/" });
+    expectMalformed(base.lastError);
+    expect(base.ats).toEqual([7]);
+    // The settle is a fold inside the carrier's `$resilience:ok` transition.
     expect(seen).toEqual(["go", "$resilience:ok"]);
   });
 
-  it("a well-formed `_ok` is recorded parsed, stamped with `run`'s clock", async () => {
+  it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
     const rt = await run(withResilience(machineOver(wellFormed), config), {
       ctx: {},
       clock: fixedClock(1_000),
@@ -197,11 +193,8 @@ describe("withResilience — the carrier settles the target through the same edg
 
     await rt.dispatch({ type: "go", url: "/" });
 
-    const call = rt.getState().$resilience.calls.fetch as {
-      result: Extract<FetchSettled, { type: "fetch_ok" }>;
-    };
-    expect(call.result.type).toBe("fetch_ok");
-    expect(call.result.value).toEqual({ body: "hello" });
-    expect(call.result.at).toBe(1_000);
+    const { base } = rt.getState();
+    expect(base.body).toBe("hello");
+    expect(base.ats).toEqual([1_000]);
   });
 });
