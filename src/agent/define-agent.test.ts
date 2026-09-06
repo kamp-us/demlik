@@ -1,4 +1,3 @@
-import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
@@ -53,11 +52,11 @@ const search = tool(
     err: ["not_found"],
     needs: Cmd.needs<{ readonly kb: Kb }>(),
   },
-  async ({ q }, ctx, fail) => {
+  async ({ q }, ctx, { ok, fail }) => {
     const snippet = ctx.kb.lookup(q);
     return snippet === undefined
       ? fail({ _tag: "not_found", q })
-      : Result.ok({ snippet });
+      : ok({ snippet });
   },
 );
 
@@ -216,9 +215,9 @@ describe("agent.run resumes a Model the Store hands back mid-run (#60)", () => {
         ok: z.object({ snippet: z.string() }),
         err: [],
       },
-      async ({ q }) => {
+      async ({ q }, _ctx, { ok }) => {
         calls.push(q);
-        return Result.ok({ snippet: `about ${q}` });
+        return ok({ snippet: `about ${q}` });
       },
     );
     type S = DefinedAgentState<typeof counted>;

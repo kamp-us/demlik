@@ -7,11 +7,11 @@ exactly where it stopped — same run, no tool called twice. By the end you will
 have written one tool, one `defineAgent`, and one `agent.run`, and seen the
 whole run live in a JSON file you can open.
 
-You need Node 22 or newer, an Anthropic API key in `ANTHROPIC_API_KEY`, and four
+You need Node 22 or newer, an Anthropic API key in `ANTHROPIC_API_KEY`, and three
 packages:
 
 ```sh
-pnpm add @demlik/tea @anthropic-ai/sdk zod better-result
+pnpm add @demlik/tea @anthropic-ai/sdk zod
 ```
 
 The agent is two files. `model.ts` is the brain — the wire format of one model
@@ -118,7 +118,6 @@ happen:
 // agent.ts
 import { type DefinedAgentState, defineAgent, tool } from "@demlik/tea/agent";
 import { fileStore } from "@demlik/tea/node";
-import { Result } from "better-result";
 import { appendFile } from "node:fs/promises";
 import { z } from "zod";
 import { anthropic } from "./model.ts";
@@ -130,10 +129,10 @@ const note = tool(
     ok: z.object({ saved: z.boolean() }),
     err: [],
   },
-  async ({ text }) => {
+  async ({ text }, _ctx, { ok }) => {
     console.log("note:", text);
     await appendFile("notes.txt", `${text}\n`);
-    return Result.ok({ saved: true });
+    return ok({ saved: true });
   },
 );
 ```

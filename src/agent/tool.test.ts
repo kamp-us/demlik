@@ -1,4 +1,3 @@
-import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { Cmd, type PortEmitter, run } from "../index";
@@ -13,6 +12,7 @@ import {
   isReservedToolName,
   type Schema,
   type ToolCall,
+  type ToolConstructors,
   type ToolRecord,
   tool,
   toolErrorReason,
@@ -36,13 +36,15 @@ const search = tool(
     err: ["not_found"],
     needs: Cmd.needs<KbCtx>(),
   },
-  async ({ q }, ctx, fail) => {
+  async ({ q }, ctx, { ok, fail }) => {
     if (q === "boom") throw new Error("kb offline");
     if (q === "boom-tagged") throw { _tag: "not_found", via: "throw" };
     const snippet = ctx.kb.lookup(q);
-    return snippet === undefined
-      ? fail({ _tag: "not_found", q })
-      : Result.ok({ snippet, extra: "stripped by the ok schema" });
+    if (snippet === undefined) return fail({ _tag: "not_found", q });
+    // Widened first: `ok` refuses an excess property in a literal, and the
+    // strip the runtime does is the thing this exercises.
+    const found = { snippet, extra: "stripped by the ok schema" };
+    return ok(found);
   },
 );
 
@@ -53,7 +55,7 @@ const count = tool(
     ok: z.number(),
     err: [],
   },
-  async ({ items }) => Result.ok(items.length),
+  async ({ items }, _ctx, { ok }) => ok(items.length),
 );
 
 const tools = toolRouter([search, count]);
@@ -80,7 +82,7 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
     });
   });
 
-  it("err: a declared `Result.err` rides `<name>_err` with its `_tag` and detail", async () => {
+  it("err: a declared `fail` rides `<name>_err` with its `_tag` and detail", async () => {
     const cmd = search({ callId: "c2", args: { q: "nope" } });
     const settled = await search.interpret(cmd, ctx);
     expect(settled).toEqual({
@@ -115,7 +117,8 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
       "lying",
       { input: z.object({}), ok: z.object({ n: z.number() }), err: [] },
       // The handler's type says `{ n: number }`; the runtime value lies.
-      async () => Result.ok({ n: "one" } as unknown as { n: number }),
+      async (_args, _ctx, { ok }) =>
+        ok({ n: "one" } as unknown as { n: number }),
     );
     const cmd = lying({ callId: "c5", args: {} });
     const settled = await lying.interpret(cmd, {} as PortEmitter);
@@ -141,7 +144,11 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
 
 describe("tool() — a reserved name is a declaration bug, refused at construction", () => {
   const spec = { input: z.object({}), ok: z.void(), err: [] };
-  const noop = async () => Result.ok(undefined);
+  const noop = async (
+    _args: object,
+    _ctx: PortEmitter,
+    { ok }: ToolConstructors<void, never>,
+  ) => ok(undefined);
   const declare = (name: string) => () => tool(name, spec, noop);
 
   it.each([
