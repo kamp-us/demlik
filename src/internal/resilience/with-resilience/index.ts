@@ -51,6 +51,14 @@
  * verbs read it there. A thrown handler never reaches the base: it is a
  * `$resilience:err`, the resilience layer's to retry or settle failed.
  *
+ * Delivery is a fold, not a dispatch: the follow-up never appears in the Msg
+ * log as its own entry (an update cell cannot dispatch a Msg — rule 5 keeps
+ * the reducer pure), so replaying `$resilience:ok` reproduces the base's cell
+ * run exactly. And it is bounded within one transition: under `cache`, a
+ * delivered follow-up that re-emits the target under the key just filled is
+ * served from the cache and recorded in the slice, but the served Msg — the one
+ * already in the base's hand — is not folded a second time.
+ *
  * ## The slice + verbs are REUSED, not reinvented
  *
  * The `$resilience` slice IS resilient-call's `ResilientState<I, R>` (per-key
@@ -433,7 +441,23 @@ export function withResilience<
   // by the host, delivered as a settled follow-up (`$resilience:ok`), or
   // served from the cache in the same transition. A follow-up that re-emits
   // the target is retagged like any other; a non-target Cmd passes through.
-  function foldBase(state: WM, msg: M): readonly [WM, readonly WCmd[]] {
+  //
+  // `delivering` is the set of call keys whose settled follow-up is being
+  // folded higher up THIS transition's call chain. It bounds the one loop a
+  // fold can enter: under `cache`, a delivered follow-up that re-emits the
+  // target under the same key (the default `keyOf` is one shared key) hits the
+  // cache `succeed` just filled with the very Msg being delivered; folding that
+  // hit again re-emits, hits again, and recurses without bound. A hit on a key
+  // already in `delivering` is therefore RECORDED in the slice (the call is
+  // `succeeded`, served from cache — the divergence stays on the ledger) but
+  // not folded a second time: the base already has this Msg in hand. The next
+  // transition starts with an empty set, so a later host Msg hitting the same
+  // cache is delivered as usual.
+  function foldBase(
+    state: WM,
+    msg: M,
+    delivering: ReadonlySet<string> = new Set(),
+  ): readonly [WM, readonly WCmd[]] {
     // 1) Run the base reducer. Its NON-target Cmds pass through unchanged.
     const [nextBase, baseCmds] = applyCell<S, M, C>(base, state.base, msg);
 
@@ -485,10 +509,14 @@ export function withResilience<
       // will come back through `$resilience:ok` to deliver it. Deliver it
       // here, in the same transition — the base learns of a served call the
       // same way it learns of a performed one.
-      if (runCmds.length === 0) {
+      if (runCmds.length === 0 && !delivering.has(callKey)) {
         const call = nextSlice.calls[callKey];
         if (call?.phase === "succeeded" && isBaseMsg(call.result)) {
-          const [delivered, moreCmds] = foldBase(next, call.result);
+          const [delivered, moreCmds] = foldBase(
+            next,
+            call.result,
+            new Set([...delivering, callKey]),
+          );
           next = delivered;
           outCmds.push(...moreCmds);
         }
@@ -518,7 +546,9 @@ export function withResilience<
     // The slice keeps the settled result for the retry / circuit / cache verbs;
     // the base gets it as the Msg its handler resolved. `void` delivers nothing.
     if (!isBaseMsg(m.result)) return [settled, settleCmds];
-    const [next, followCmds] = foldBase(settled, m.result);
+    // `m.key` is being delivered: a cache hit on it inside this fold is the
+    // same Msg coming back, and is recorded but not folded again (see foldBase).
+    const [next, followCmds] = foldBase(settled, m.result, new Set([m.key]));
     return [next, [...settleCmds, ...followCmds]];
   };
 

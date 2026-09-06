@@ -812,6 +812,81 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
     // One carrier only — the cold run. The served call emitted none.
     expect(cmds.filter((c) => c.type === "$resilience:run")).toHaveLength(1);
   });
+
+  // AC #9: `cache` + a chaining follow-up under the default `keyOf`. `succeed`
+  // fills the cache under the one shared key with the very Msg it is about to
+  // deliver; the delivered `loaded` re-emits the target for `/next`, which hits
+  // that fresh cache. Without a bound, the hit folds the same `loaded` again →
+  // re-emits → hits again, inside ONE `$resilience:ok` transition. The bound:
+  // a hit on a key already mid-delivery is recorded, not folded.
+  it("cache + a chaining follow-up under the default key terminates: the served hit is recorded, not re-folded", () => {
+    const wrapped = withResilience(makeChainingBase(), {
+      target: "do_fetch",
+      at: atOf,
+      cache: { ttlMs: 60_000 },
+    });
+    const ctx: FetchCtx = { fetchUrl: async () => "x", logLine: () => {} };
+    const { state, cmds } = replay(wrapped, {
+      msgs: [
+        { type: "load", url: "/first", at: 1_000 },
+        {
+          type: "$resilience:ok",
+          key: "do_fetch",
+          result: { type: "loaded", body: "page1" },
+          at: 1_001,
+        },
+      ] as readonly FetchMsg[],
+      ctx,
+    });
+
+    // `loaded` ran exactly once: body is page1 and its `log` was emitted once.
+    expect(state.base.body).toBe("page1");
+    expect(cmds).toEqual([
+      {
+        type: "$resilience:run",
+        key: "do_fetch",
+        input: { type: "do_fetch", url: "/first" },
+      },
+      { type: "log", line: "got page1" },
+    ]);
+    // The re-emitted `/next` was served from cache — recorded on the slice
+    // as a settled call, with no carrier and no second fold.
+    expect(state.$resilience.calls.do_fetch).toEqual({
+      phase: "succeeded",
+      result: { type: "loaded", body: "page1" },
+    });
+  });
+
+  it("cache + a chaining follow-up: a host-dispatched cache hit delivers once and stops", () => {
+    const wrapped = withResilience(makeChainingBase(), {
+      target: "do_fetch",
+      at: atOf,
+      cache: { ttlMs: 60_000 },
+    });
+    const ctx: FetchCtx = { fetchUrl: async () => "x", logLine: () => {} };
+    const { state, cmds } = replay(wrapped, {
+      msgs: [
+        { type: "load", url: "/first", at: 1_000 },
+        {
+          type: "$resilience:ok",
+          key: "do_fetch",
+          result: { type: "loaded", body: "page1" },
+          at: 1_001,
+        },
+        // A fresh host `load` hits the cache: `loaded` is delivered once, and
+        // its re-emitted target hits the same key mid-delivery and stops.
+        { type: "load", url: "/again", at: 2_000 },
+      ] as readonly FetchMsg[],
+      ctx,
+    });
+
+    expect(state.base.body).toBe("page1");
+    expect(cmds.filter((c) => c.type === "log")).toEqual([
+      { type: "log", line: "got page1" },
+      { type: "log", line: "got page1" },
+    ]);
+    expect(cmds.filter((c) => c.type === "$resilience:run")).toHaveLength(1);
+  });
 });
 
 // ===========================================================================
