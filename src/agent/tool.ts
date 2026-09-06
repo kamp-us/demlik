@@ -121,23 +121,41 @@ export type ToolInput<Args> = {
 export type ToolThrown = { readonly _tag: "thrown"; readonly message: string };
 
 /**
- * The typed failure constructor a handler receives: `fail({ _tag })` is
- * `Result.err` with `E` fixed to the declared tags, so the literal is checked
- * against them where it is written. (A bare `Result.err({ _tag: "x" })` infers
- * `_tag: string` and cannot be — the parameter type is what keeps it literal.)
+ * The typed success constructor a handler receives: `ok(value)` with `Ok`
+ * fixed to what the `ok` schema parses, so a value of the wrong shape is
+ * refused where it is written.
+ */
+export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Result<Ok, E>;
+
+/**
+ * The typed failure constructor a handler receives: `fail({ _tag })` with `E`
+ * fixed to the declared tags, so the literal is checked against them where it
+ * is written. (A bare `{ _tag: "x" }` built elsewhere infers `_tag: string`
+ * and cannot be — the parameter type is what keeps it literal.)
  */
 export type ToolFail<Ok, E extends Tagged> = (error: E) => Result<Ok, E>;
 
 /**
+ * The two constructors a handler is handed, one per channel — `ok` for the
+ * value the `ok` schema parses, `fail` for a declared `{ _tag }`. Both are
+ * tea's, so a handler settles either arm without naming the result library
+ * underneath (#94).
+ */
+export type ToolConstructors<Ok, E extends Tagged> = {
+  readonly ok: ToolOk<Ok, E>;
+  readonly fail: ToolFail<Ok, E>;
+};
+
+/**
  * A tool's handler: the parsed `args`, the ctx slice `needs` named, and the
- * typed `fail`, to a `Result` over the declared channels — `Ok` is what the
- * `ok` schema parses, `E` the declared `_tag` union. An undeclared tag does
- * not compile.
+ * typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what
+ * the `ok` schema parses, `E` the declared `_tag` union. An undeclared tag
+ * does not compile.
  */
 export type ToolHandler<Args, Ok, E extends Tagged, R> = (
   args: Args,
   ctx: R & PortEmitter,
-  fail: ToolFail<Ok, E>,
+  settle: ToolConstructors<Ok, E>,
 ) => Promise<Result<Ok, E>>;
 
 /**
@@ -178,10 +196,10 @@ export type AnyToolDef = AnyCmdDef & {
  * call the tool, read off `def.description`, never off the `input` schema;
  * `input` parses the model's `args`; `ok` parses the handler's value at the
  * edge; `err` is the `_tag` list the handler may fail with; `needs` is the ctx
- * slice it reads, demanded at `run`. The handler returns `Result<Ok, E>` —
- * `Result.ok(value)` or the typed `fail({ _tag })` it is handed; a throw
- * settles `<name>_err` — with the thrown `_tag` when it is a declared one,
- * else as `{ _tag: "thrown", message }`.
+ * slice it reads, demanded at `run`. The handler returns one of the two
+ * constructors it is handed — `ok(value)` or the typed `fail({ _tag })`; a
+ * throw settles `<name>_err` — with the thrown `_tag` when it is a declared
+ * one, else as `{ _tag: "thrown", message }`.
  *
  * A `ReservedToolName` does not compile as `name`, and one that reaches here
  * as a widened `string` throws — the same declaration-bug refusal
@@ -222,8 +240,10 @@ export function tool<
   });
   type C = CmdValue<Name, ToolInput<Args>, E, R>;
   const declared = new Set<string>(spec.err);
-  const fail: ToolFail<Ok, TaggedError<Tags[number]>> = (error) =>
-    Result.err(error);
+  const settle: ToolConstructors<Ok, TaggedError<Tags[number]>> = {
+    ok: (value) => Result.ok(value),
+    fail: (error) => Result.err(error),
+  };
   const asDeclared = (thrown: unknown): E => {
     if (isTagged(thrown) && declared.has(thrown._tag)) return thrown as E;
     return { _tag: "thrown", message: describeError(thrown) };
@@ -234,7 +254,7 @@ export function tool<
   ): Promise<Settled<Def>> => {
     let result: Result<Ok, TaggedError<Tags[number]>>;
     try {
-      result = await handler(cmd.args, ctx, fail);
+      result = await handler(cmd.args, ctx, settle);
     } catch (thrown) {
       return def.err(cmd, asDeclared(thrown));
     }

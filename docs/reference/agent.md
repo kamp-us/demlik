@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (95)
+## Exports (97)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -88,12 +88,14 @@ import { … } from "@demlik/tea/agent";
 | `tool` | Function |  |
 | `ToolCall` | Interface | One tool the model asked to call this turn — the seed's `ToolCall`, stripped of the audit-specific args typing. |
 | `ToolCmd` | Type | The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. |
+| `ToolConstructors` | Type | The two constructors a handler is handed, one per channel — `ok` for the value the `ok` schema parses, `fail` for a declared `{ _tag }`. |
 | `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell, the bare `args` schema the router parses a call against, and the `description` a provider adapter declares to the model beside that schema. |
 | `toolErrorReason` | Function |  |
-| `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` is `Result.err` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
-| `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `needs` named, and the typed `fail`, to a `Result` over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
+| `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
+| `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `needs` named, and the typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
 | `ToolInput` | Type | The input a tool Cmd carries: the model's `callId` (the fan-out identity the settle folds back on) and the `args` already parsed against the tool's `input` schema — the boundary parses, the handler trusts. |
 | `ToolMsg` | Type | The settled Msg union a router's cells return — folded by `toMachine`. |
+| `ToolOk` | Type | The typed success constructor a handler receives: `ok(value)` with `Ok` fixed to what the `ok` schema parses, so a value of the wrong shape is refused where it is written. |
 | `ToolOutcome` | Type | One settled tool outcome the consumer routes back into the loop — the seed's `ToolOutcome`. |
 | `ToolRecord` | Interface | A folded tool record kept on the conversation once a tool settles — the call + its outcome, in settle order. |
 | `ToolRejectedCmd` | Type | The Cmd `tool_rejected` builds — the router-owned variant of `ToolCmd`. |

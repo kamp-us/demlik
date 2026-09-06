@@ -1208,9 +1208,24 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
     expect(status(s)).toEqual({ kind: "running" });
   });
 
-  it("never-run init slice → { kind: 'running' } (live, no conversation)", () => {
+  it("never-run init slice (run.phase === 'idle') → { kind: 'idle' }, never running (#92)", () => {
     const agent = makeAgent();
-    expect(status(agent.init())).toEqual({ kind: "running" });
+    const s = agent.init();
+    expect(s.run.phase).toBe("idle");
+    expect(status(s)).toEqual({ kind: "idle" });
+  });
+
+  it("a stale run (soft no-progress mark, still live) → { kind: 'running' } (#92)", () => {
+    const agent = makeAgent();
+    const [running] = agent.start(agent.init(), "r", 0);
+    // monitored-run's `markStale` is exactly this flip: `running` → `stale`,
+    // same `runId`, nothing else moves. The next `progress` flips it back.
+    if (running.run.phase !== "running") throw new Error("expected running");
+    const stale = {
+      ...running,
+      run: { ...running.run, phase: "stale" as const },
+    };
+    expect(status(stale)).toEqual({ kind: "running" });
   });
 
   it("running + awaiting tools → { kind: 'suspended', pending } with the outstanding calls", () => {

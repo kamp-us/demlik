@@ -15,7 +15,6 @@
 //      compile as `tool()`'s `name` (#72); the set derives from `MsgType`.
 //   5. `description` is required on the spec and read back off the def (#91).
 
-import { Result } from "better-result";
 import { z } from "zod";
 import { absurd, Cmd, type PortEmitter, run, type Settled } from "../index";
 import type { MsgTypeValue } from "../protocol";
@@ -26,6 +25,7 @@ import {
   type ReservedToolName,
   type Schema,
   type ToolCmd,
+  type ToolConstructors,
   type ToolResult,
   tool,
   toolRouter,
@@ -45,15 +45,13 @@ const search = tool(
     err: ["not_found", "rate_limited"],
     needs: Cmd.needs<KbCtx>(),
   },
-  async ({ q }, ctx, fail) => {
+  async ({ q }, ctx, { ok, fail }) => {
     // The `R` slice lands on the handler's ctx: `ctx.kb` is typed.
     const snippet = ctx.kb.lookup(q);
     if (snippet === undefined) return fail({ _tag: "not_found" });
     // Detail rides beside the tag.
     if (q === "") return fail({ _tag: "rate_limited", afterMs: 250 });
-    // A `Result.err` written `as const` is the same declared arm.
-    if (q === " ") return Result.err({ _tag: "not_found" } as const);
-    return Result.ok({ snippet });
+    return ok({ snippet });
   },
 );
 
@@ -61,14 +59,7 @@ tool(
   "leaky",
   { description: "d", input: z.object({}), ok: z.void(), err: ["not_found"] },
   // @ts-expect-error `timeout` is not a declared tag
-  async (_args, _ctx, fail) => fail({ _tag: "timeout" }),
-);
-
-tool(
-  "leaky_const",
-  { description: "d", input: z.object({}), ok: z.void(), err: ["not_found"] },
-  // @ts-expect-error `timeout` is not a declared tag
-  async () => Result.err({ _tag: "timeout" } as const),
+  async (_args, _ctx, { fail }) => fail({ _tag: "timeout" }),
 );
 
 tool(
@@ -80,7 +71,7 @@ tool(
     err: [],
   },
   // @ts-expect-error the ok value must be what the `ok` schema parses
-  async () => Result.ok({ n: "one" }),
+  async (_args, _ctx, { ok }) => ok({ n: "one" }),
 );
 
 // The settled `_err` arm is exhaustive over declared + `thrown` + the kernel's
@@ -136,7 +127,7 @@ const count = tool(
     ok: z.number(),
     err: [],
   },
-  async ({ items }) => Result.ok(items.length),
+  async ({ items }, _ctx, { ok }) => ok(items.length),
 );
 
 const tools = toolRouter([search, count]);
@@ -206,12 +197,16 @@ run(machine, {});
 // ── 4. a reserved name does not compile (#72) ───────────────────────────────
 
 const spec = {
-  description: "noop",
+  description: "Do nothing; exists only to test the reserved-name refusal.",
   input: z.object({}),
   ok: z.void(),
   err: [],
 } as const;
-const noop = async () => Result.ok(undefined);
+const noop = async (
+  _args: object,
+  _ctx: PortEmitter,
+  { ok }: ToolConstructors<void, never>,
+) => ok(undefined);
 
 // The four the reviewer hit: the settle prefixes the agent's reducer owns, and
 // the router's own rejection def.

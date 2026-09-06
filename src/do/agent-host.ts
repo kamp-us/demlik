@@ -141,7 +141,9 @@ export interface AgentHost<
    * The agent's lifecycle status (#49) — the ONE typed channel a consumer reads
    * instead of re-deriving `run.phase` / `awaiting` by hand. Ensures the runtime
    * is built + boot-reconciled first. Replaces the per-consumer `isSuspended` /
-   * `runPhase` test methods (read `status().kind`).
+   * `runPhase` test methods (read `status().kind`: `idle` / `running` /
+   * `suspended` / `done` / `failed`). A hydrated DO that has not yet seen
+   * `agent_start` reads `idle`, not `running` (#92).
    */
   status(): Promise<AgentStatus<Stage>>;
   /**
