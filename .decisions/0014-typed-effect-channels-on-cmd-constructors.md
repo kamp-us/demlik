@@ -1,11 +1,17 @@
+---
+id: 0014
+title: Effect's E and R channels are types on Cmd constructors, never Effect values at the core
+status: accepted
+date: 2026-09-04
+tags: []
+---
+
 # 0014 — Effect's E and R channels are types on Cmd constructors, never Effect values at the core
 
-- **Status:** Accepted
-- **Date:** 2026-09-04
-- **Scope:** what `@demlik/tea` takes from the Effect library and what it refuses. Settles
-  the recurring "effectify tea" proposal: the typed-error (`E`) and typed-requirements (`R`)
-  discipline is adopted as *types* carried by Cmd constructor functions; an `Effect<A, E, R>`
-  runtime value is never a Cmd, a Msg, or a member of Model.
+**Scope:** what `@demlik/tea` takes from the Effect library and what it refuses. Settles
+the recurring "effectify tea" proposal: the typed-error (`E`) and typed-requirements (`R`)
+discipline is adopted as *types* carried by Cmd constructor functions; an `Effect<A, E, R>`
+runtime value is never a Cmd, a Msg, or a member of Model.
 
 **What this decides:** we steal Effect's type-level contract for failures and dependencies, and
 we do not let an Effect program anywhere it would have to be saved, hashed, or replayed.
@@ -19,7 +25,8 @@ An `Effect<A, E, R>` is an **open** program: a tree of closures carrying capture
 openness is Effect's power and the one property tea's kernel cannot admit, because the kernel's
 promise is *crash, reload the JSON, resume at the exact spot*. Two things in this repo depend on
 the closed spelling directly: the journal / `recorder` / `trace-replay` surfaces write Cmds as
-data, and `structural-hash.test.ts` proves two replays yield structurally-equal output. A closure
+data, and `structural-hash.test.ts` proves the hash is deterministic and rejects a closure outright
+(replay equality is [0001](./0001-no-offtheshelf-resilience.md)'s `assertWrapperFaithful`). A closure
 can be neither serialized nor compared, so an Effect value emitted by `update` breaks both.
 `Effect.runSync` does not rescue it — sync-vs-async was never the axis; saveable-vs-not is.
 
@@ -47,8 +54,9 @@ constructor function that builds it; the value it returns stays a plain tagged r
    `Cmd<Type, Ok, E, R>`: `E` the `_tag` union this Cmd can settle with, `R` the slice of `Ctx`
    its handler needs. The returned *value* is the same dead record it is today.
 2. **`E` is the `_tag` union, nothing else.** A settled failure remains the plain `{ _tag, … }`
-   value 0011 mandates; `E` is its static name. `interpret[type]` returns
-   `Result<Ok, E>` with `E` inferred from the constructor, so the reducer's error cell is
+   value 0011 mandates; `E` is its static name. `interpret[type]` keeps returning
+   `Promise<M | void>`; the `Result<Ok, E>` lives in a helper (`settle`) that maps its two arms
+   onto the minted Msgs, with `E` inferred from the constructor, so the reducer's error cell is
    exhaustively typed and a new failure mode is a compile error, not a runtime surprise.
 3. **`R` is checked at wiring.** A machine whose Cmds require `{ http }` cannot be handed to a
    `run` whose `Ctx` lacks it; the requirement is the union of every constructor's `R`. Today's

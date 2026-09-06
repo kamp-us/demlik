@@ -1,10 +1,16 @@
+---
+id: 0001
+title: Resilience is built in-house, not installed
+status: accepted
+date: 2026-06-09
+tags: []
+---
+
 # 0001 — Resilience is built in-house, not installed
 
-- **Status:** Accepted
-- **Date:** 2026-06-09
-- **Scope:** the wrapper tier (`with-resilience`, `with-deadline`, `resilient-call`,
-  `deadline`) and the L1 bricks it composes (`circuit-breaker`, `rate-limit`,
-  `retry-backoff`, `cache`).
+**Scope:** the wrapper tier (`with-resilience`, `with-deadline`, `resilient-call`,
+`deadline`) and the L1 bricks it composes (`circuit-breaker`, `rate-limit`,
+`retry-backoff`, `cache`).
 
 ## Context
 

@@ -1,11 +1,17 @@
+---
+id: 0005
+title: Web timeline player: hosting + render primitive
+status: accepted
+date: 2026-06-24
+tags: []
+---
+
 # 0005 — Web timeline player: hosting + render primitive
 
-- **Status:** Accepted
-- **Date:** 2026-06-24
-- **Scope:** the build slices of epic #137 (the Raft `SimTrace` web timeline
-  player). Two decisions only — **where the player is served** and **what
-  primitive draws the cluster diagram**. No UI code; this records the choices
-  that unblock #142–#144.
+**Scope:** the build slices of epic #137 (the Raft `SimTrace` web timeline
+player). Two decisions only — **where the player is served** and **what
+primitive draws the cluster diagram**. No UI code; this records the choices
+that unblock #142–#144.
 
 ## Context
 

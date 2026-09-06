@@ -1,17 +1,23 @@
+---
+id: 0010
+title: Export-map tiers: kernel/battery/experimental, showcases off the map
+status: amended-in-part by [0016](0016-removal-lands-in-a-minor-at-0x.md)
+date: 2026-07-17
+tags: []
+---
+
 # 0010 — Export-map tiers: kernel/battery/experimental, showcases off the map
 
-- **Status:** Accepted — amended in part by [0016](./0016-removal-lands-in-a-minor-at-0x.md)
-  (the deprecate-don't-delete ritual is retired while 0.x; the tiers and their semver
-  promises stand)
-- **Date:** 2026-07-17
-- **Scope:** the shape of the `@demlik/tea` npm `exports` map — how many
-  stability promises it carries and where integration demos live. Records the
-  tiering + consolidation verdicts already landed across the raft-move
-  (#268/#269), the `./resilient-call` deprecation (#270), and the tier stamps
-  (#272). The full tier table, per-tier semver policy, deprecate-don't-delete
-  ritual, and store-factory-per-host table are the living contract in
-  [`MAINTAINING.md`](../MAINTAINING.md) — this ADR records *why* the map
-  is tiered, not the table itself.
+**Scope:** the shape of the `@demlik/tea` npm `exports` map — how many
+stability promises it carries and where integration demos live. Records the
+tiering + consolidation verdicts already landed across the raft-move
+(#268/#269), the `./resilient-call` deprecation (#270), and the tier stamps
+(#272). The full tier table, per-tier semver policy, deprecate-don't-delete
+ritual, and store-factory-per-host table are the living contract in
+[`MAINTAINING.md`](../MAINTAINING.md) — this ADR records *why* the map
+is tiered, not the table itself.
+
+**Amended in part by [0016](./0016-removal-lands-in-a-minor-at-0x.md):** the deprecate-don't-delete ritual is retired while 0.x; the tiers and their semver promises stand.
 
 ## Context
 

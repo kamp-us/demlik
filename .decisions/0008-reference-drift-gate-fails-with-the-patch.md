@@ -1,8 +1,14 @@
+---
+id: 0008
+title: The reference drift gate fails with the patch, single-sourced
+status: accepted
+date: 2026-07-17
+tags: []
+---
+
 # 0008 — The reference drift gate fails with the patch, single-sourced
 
-- **Status:** Accepted
-- **Date:** 2026-07-17
-- **Scope:** packages/tea (reference drift gate, CI)
+**Scope:** packages/tea (reference drift gate, CI)
 
 ## Context
 

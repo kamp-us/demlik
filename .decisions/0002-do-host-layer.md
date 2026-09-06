@@ -1,12 +1,18 @@
+---
+id: 0002
+title: A Durable-Object host layer, not a DO framework
+status: accepted
+date: 2026-06-22
+tags: []
+---
+
 # 0002 — A Durable-Object host layer, not a DO framework
 
-- **Status:** Accepted
-- **Date:** 2026-06-22
-- **Scope:** the `@demlik/tea/do` subpath — `host.ts` (`deferredGateway`,
-  `autoBoot`/`agentIsResumable`, `acceptCommandSocket`/`broadcast`, `sseHub`,
-  `captureLastTurn`) plus the core lifts it required (`runtime.idle()`,
-  exported `agentTurnSchema`/`isAgentTurn`, optional
-  `snapshot_write`).
+**Scope:** the `@demlik/tea/do` subpath — `host.ts` (`deferredGateway`,
+`autoBoot`/`agentIsResumable`, `acceptCommandSocket`/`broadcast`, `sseHub`,
+`captureLastTurn`) plus the core lifts it required (`runtime.idle()`,
+exported `agentTurnSchema`/`isAgentTurn`, optional
+`snapshot_write`).
 
 ## Context
 

@@ -1,12 +1,18 @@
+---
+id: 0004
+title: An opt-in context-compaction seam on `createAgent`
+status: accepted
+date: 2026-06-23
+tags: []
+---
+
 # 0004 — An opt-in context-compaction seam on `createAgent`
 
-- **Status:** Accepted
-- **Date:** 2026-06-23
-- **Scope:** the `@demlik/tea/agent` subpath — `createAgent`'s config
-  (`AgentCompactionConfig` / `CompactionPolicy`), the `Conversation` /
-  `ToolRecord` / `Awaiting` slice shapes, the `settleTool` compaction trigger,
-  the `compact_ok` / `compact_err` fold-back verbs, and the `compact_run` /
-  `compact_ok` / `compact_err` protocol discriminants. Resolves issue #85.
+**Scope:** the `@demlik/tea/agent` subpath — `createAgent`'s config
+(`AgentCompactionConfig` / `CompactionPolicy`), the `Conversation` /
+`ToolRecord` / `Awaiting` slice shapes, the `settleTool` compaction trigger,
+the `compact_ok` / `compact_err` fold-back verbs, and the `compact_run` /
+`compact_ok` / `compact_err` protocol discriminants. Resolves issue #85.
 
 ## Context
 

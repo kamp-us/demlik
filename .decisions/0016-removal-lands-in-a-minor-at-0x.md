@@ -1,11 +1,17 @@
+---
+id: 0016
+title: While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag
+status: accepted
+date: 2026-09-04
+tags: []
+---
+
 # 0016 — While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag
 
-- **Status:** Accepted
-- **Date:** 2026-09-04
-- **Scope:** how a published subpath, module or exported name leaves `@demlik/tea` before 1.0.
-  Retires the staged "deprecate, don't delete" ritual in `MAINTAINING.md` and amends
-  [0010](./0010-export-map-tiers.md) in part — the tiers and their semver promises stand; only
-  the removal ritual changes. Governs the export collapse that follows.
+**Scope:** how a published subpath, module or exported name leaves `@demlik/tea` before 1.0.
+Retires the staged "deprecate, don't delete" ritual in `MAINTAINING.md` and amends
+[0010](./0010-export-map-tiers.md) in part — the tiers and their semver promises stand; only
+the removal ritual changes. Governs the export collapse that follows.
 
 **What this decides:** until 1.0 we delete outright — one PR removes the thing and ships a
 changeset that names its replacement — instead of publishing a deprecated twin for a minor first.
@@ -20,7 +26,7 @@ not yet. Every repository on GitHub importing `@demlik/tea` is ours — `Binclus
 ritual is currently paying its cost and collecting no benefit.
 
 Meanwhile the cost is compounding. `./resilient-call` has sat "deprecated" since #270 while
-remaining the 766-line implementation that `with-resilience` and nine other modules still
+remaining the 813-line implementation that `with-resilience` and five other modules still
 import from, so the deprecated door is load-bearing and the successor is a wrapper — the ritual
 froze a migration halfway. Two more deprecated aliases (`diff` → `parityEqual` in `./parity`,
 the `NoCtx` alias in `pure/core`) have zero in-tree uses and exist only to wait out a minor.
