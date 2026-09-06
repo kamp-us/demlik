@@ -1,10 +1,16 @@
+---
+id: 0013
+title: fabrika is this repo's work pipeline
+status: accepted
+date: 2026-08-16
+tags: []
+---
+
 # 0013 — fabrika is this repo's work pipeline
 
-- **Status:** Accepted
-- **Date:** 2026-08-16
-- **Scope:** how work enters, gets classified, and gets built in `kamp-us/demlik`.
-  Records the surfaces this repo now carries so the pipeline can run here, and the
-  ones it deliberately does not.
+**Scope:** how work enters, gets classified, and gets built in `kamp-us/demlik`.
+Records the surfaces this repo now carries so the pipeline can run here, and the
+ones it deliberately does not.
 
 ## Context
 

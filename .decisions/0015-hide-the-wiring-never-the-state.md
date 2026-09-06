@@ -1,11 +1,17 @@
+---
+id: 0015
+title: A convenience layer hides the wiring, never the state
+status: accepted
+date: 2026-09-04
+tags: []
+---
+
 # 0015 — A convenience layer hides the wiring, never the state
 
-- **Status:** Accepted
-- **Date:** 2026-09-04
-- **Scope:** the governing law for every intent-altitude surface built over the kernel —
-  `defineAgent`, `defineWorkflow`, `withResilience`, Cmd constructors, the `noCmd`/`withCmds`
-  sugar, and any facade that collapses several primitives into one call. Names the property a
-  lid may absorb (assembly) and the property it may never absorb (visibility of the durable Model).
+**Scope:** the governing law for every intent-altitude surface built over the kernel —
+`defineAgent`, `defineWorkflow`, `withResilience`, Cmd constructors, the `noCmd`/`withCmds`
+sugar, and any facade that collapses several primitives into one call. Names the property a
+lid may absorb (assembly) and the property it may never absorb (visibility of the durable Model).
 
 **What this decides:** a higher-level API in `@demlik/tea` may spare you from assembling the
 parts, but it may never stop you from reading, replacing, or bypassing them.
@@ -13,7 +19,8 @@ parts, but it may never stop you from reading, replacing, or bypassing them.
 ## Context
 
 The kernel is a pure reducer whose Model is plain JSON that survives eviction and replays exactly
-([`.patterns/tea/tea-invariants.md`](../.patterns/tea/tea-invariants.md), invariants 2 and 6).
+([`.patterns/tea/tea-invariants.md`](../.patterns/tea/tea-invariants.md), invariant 1, and
+[0011](./0011-errors-as-data.md)).
 That is the library's differentiator over the durable-agent frameworks it defines itself against:
 their state is a black box inside a runtime they own; ours is one `console.log` away.
 

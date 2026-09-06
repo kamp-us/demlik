@@ -1,13 +1,19 @@
+---
+id: 0006
+title: Client-prediction fold seam + runtime-free import boundary
+status: accepted
+date: 2026-06-27
+tags: []
+---
+
 # 0006 — Client-prediction fold seam + runtime-free import boundary
 
-- **Status:** Accepted
-- **Date:** 2026-06-27
-- **Scope:** the API contract for epic #186 (the client-prediction surface of
-  `@demlik/tea`). Two forks only — **the replay/fold seam shape** and **how the
-  runtime-free import boundary is enforced**. No implementation; this records the
-  choices the build children cite: #211 (seam), #212 (ack), #213 (boundary +
-  guard), #214 (reconcile). The long-form purity canon is
-  [`.patterns/tea/tea-invariants.md`](../.patterns/tea/tea-invariants.md).
+**Scope:** the API contract for epic #186 (the client-prediction surface of
+`@demlik/tea`). Two forks only — **the replay/fold seam shape** and **how the
+runtime-free import boundary is enforced**. No implementation; this records the
+choices the build children cite: #211 (seam), #212 (ack), #213 (boundary +
+guard), #214 (reconcile). The long-form purity canon is
+[`.patterns/tea/tea-invariants.md`](../.patterns/tea/tea-invariants.md).
 
 ## Context
 

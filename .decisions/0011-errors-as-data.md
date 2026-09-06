@@ -1,13 +1,19 @@
+---
+id: 0011
+title: Errors are data; a throw is reserved for a contract breach
+status: accepted
+date: 2026-07-17
+tags: []
+---
+
 # 0011 — Errors are data; a throw is reserved for a contract breach
 
-- **Status:** Accepted
-- **Date:** 2026-07-17
-- **Scope:** how `@demlik/tea` represents a failure. One principle decides it —
-  is the failure recoverable, or is it a bug? Records the idiom landed in PR #307
-  (issue #283), locked by
-  [`src/error-idiom.test.ts`](../src/error-idiom.test.ts). The two
-  resulting shapes are canonized as **settled-value error** / **thrown error** in
-  `.glossary/TERMS.md` (in the originating monorepo).
+**Scope:** how `@demlik/tea` represents a failure. One principle decides it —
+is the failure recoverable, or is it a bug? Records the idiom landed in PR #307
+(issue #283), locked by
+[`src/error-idiom.test.ts`](../src/error-idiom.test.ts). The two
+resulting shapes are canonized as **settled-value error** / **thrown error** in
+`.glossary/TERMS.md` (in the originating monorepo).
 
 ## Context
 
