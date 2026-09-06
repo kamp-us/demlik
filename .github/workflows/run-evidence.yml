@@ -1,0 +1,131 @@
+# Run-evidence producer for `fabrika ship evidence`.
+#
+# The ship gate resolves the PR head SHA, finds THIS workflow's run at that head, and downloads the
+# artifact named `run-evidence` — both names are hardcoded in fabrika's `ship/evidence-verb.ts`,
+# so neither is negotiable. Without this file every merge here stopped after the approval gate
+# with `run-evidence absent` (#54).
+#
+# Modelled on phoenix's producer, minus crabbox: `fabrika ci evidence` only requires
+# `provider` + `exitCode` in the run-summary, so a hand-written JSON around vitest's own JUnit
+# reporter is the whole input.
+#
+# Load-bearing invariant: the manifest's `commit` MUST equal the head SHA the gate keys on. On
+# `pull_request`, `github.sha` is the synthetic merge commit, NOT the head — so HEAD_SHA is
+# resolved per event below and both the checkout and the `--commit` stamp use it.
+name: run-evidence
+
+on:
+  # Not `push`: this is a per-PR-head evidence producer, and its consumers key on the PR head SHA.
+  pull_request:
+  # The merge queue awaits this on the batched `merge_group` ref; its head is `merge_group.head_sha`.
+  merge_group:
+  # A re-run at a branch head without a new commit; `github.sha` IS the dispatched ref's head here.
+  workflow_dispatch:
+
+# One producer run per head ref; cancel superseded pushes so the latest head SHA wins.
+concurrency:
+  group: run-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  produce:
+    name: produce run-evidence bundle
+    runs-on: ubuntu-latest
+    # The dispatch arm leads and tests `event_name` rather than trailing the `||` chain: falling
+    # through to `github.sha` would bind a `pull_request` run to the synthetic merge ref the moment
+    # `pull_request.head.sha` came back empty — a bundle at a commit no gate keys on.
+    env:
+      HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+    steps:
+      # An empty HEAD_SHA would check out the default branch and stamp the bundle off a commit
+      # this run never resolved, so it is refused before the checkout.
+      - name: Assert the binding head resolved
+        run: |
+          set -uo pipefail
+          if [ -z "${HEAD_SHA:-}" ]; then
+            echo "::error::HEAD_SHA is empty on a '${{ github.event_name }}' event — refusing to build a bundle bound to no commit."
+            exit 1
+          fi
+          echo "binding run-evidence to $HEAD_SHA"
+
+      - name: Checkout the head (not the merge ref)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD_SHA }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      # Same suite `build.yaml` runs (`pnpm test` = `vitest run`), plus the JUnit reporter the
+      # manifest reads. The exit code is captured, not acted on: a red suite must still reach the
+      # manifest and the artifact, and the last step reds the job.
+      - name: Run tests (vitest, JUnit reporter)
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/tests"
+          set +e
+          pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/tests/junit.xml"
+          TEST_EXIT=$?
+          set -e
+          echo "TEST_EXIT=$TEST_EXIT" >> "$GITHUB_ENV"
+          echo "vitest exited $TEST_EXIT"
+
+      # The run-summary `fabrika ci evidence` decodes: only `provider` and `exitCode` are
+      # required; `commands[]` names the one check so the manifest reads `vitest`, not `run`.
+      # `--commit` is HEAD_SHA — the binding key the gate asserts — and the stamp is re-read off
+      # the written manifest so drift fails closed here rather than at the gate.
+      - name: Assemble run-evidence manifest
+        run: |
+          set -euo pipefail
+          BUNDLE="$GITHUB_WORKSPACE/bundle"
+          mkdir -p "$BUNDLE"
+          SUMMARY="$RUNNER_TEMP/run-summary.json"
+          printf '{"provider":"github-actions","exitCode":%s,"commands":[{"name":"vitest","command":"pnpm exec vitest run","exitCode":%s}],"finishedAt":"%s"}\n' \
+            "$TEST_EXIT" "$TEST_EXIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$SUMMARY"
+          JUNIT_ARG=()
+          if [ -f "$RUNNER_TEMP/tests/junit.xml" ]; then JUNIT_ARG=(--junit "$RUNNER_TEMP/tests/junit.xml"); fi
+          pnpm exec fabrika ci evidence \
+            --run-summary "$SUMMARY" \
+            "${JUNIT_ARG[@]}" \
+            --commit "$HEAD_SHA" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --environment ci \
+            --output "$BUNDLE/manifest.json"
+          STAMPED=$(node -e "process.stdout.write(require(process.argv[1]).commit)" "$BUNDLE/manifest.json")
+          if [ "$STAMPED" != "$HEAD_SHA" ]; then
+            echo "::error::manifest.commit ($STAMPED) != head sha ($HEAD_SHA)" >&2
+            exit 1
+          fi
+          if [ -f "$RUNNER_TEMP/tests/junit.xml" ]; then cp "$RUNNER_TEMP/tests/junit.xml" "$BUNDLE/junit.xml"; fi
+
+      # The artifact name is the fetch contract — the gate looks for exactly `run-evidence`.
+      - name: Publish run-evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-evidence
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 30
+
+      # Red the job only after the manifest is published, so a failing suite still reaches the
+      # gate as SHA-bound evidence rather than as a missing bundle.
+      - name: Fail if the test suite failed
+        if: always()
+        run: |
+          if [ "${TEST_EXIT:-1}" != "0" ]; then
+            echo "::error::vitest exited ${TEST_EXIT:-unset} — see the 'Run tests' step and the run-evidence manifest" >&2
+            exit 1
+          fi
+          echo "test suite passed"
