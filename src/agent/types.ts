@@ -23,7 +23,7 @@ import type {
   ModelPort,
   ResilientState,
   Schema,
-} from "../llm-call";
+} from "../internal/llm-call";
 import type { RetryPolicy } from "../retry-backoff";
 import type {
   AgentCompactionConfig,

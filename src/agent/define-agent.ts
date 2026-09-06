@@ -12,7 +12,7 @@
 
 import { driveToDone, type Machine, run } from "../index";
 import type { DeadlineSub } from "../internal/flow/monitored-run";
-import type { LlmCall, MessageLoader, PlainModel } from "../llm-call";
+import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { MsgType } from "../protocol";
 import type { RequiredCtx } from "../pure/core";
 import type { CtxArg, Store } from "../runtime-types";

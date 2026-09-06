@@ -11,8 +11,8 @@
 
 import { type Cmd, defineMachine, noop, run, type Sub } from "@demlik/tea";
 import { toMermaid } from "@demlik/tea/machine-viz";
-import { parseJSONL, recorder } from "@demlik/tea/recorder";
-import { replayTrace } from "@demlik/tea/trace-replay";
+import { parseJSONL, recorder } from "../src/internal/persistence/recorder";
+import { replayTrace } from "../src/internal/persistence/trace-replay";
 
 // === Domain: an order that can take items + a discount, then check out ===
 type Order =

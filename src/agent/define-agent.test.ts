@@ -8,7 +8,7 @@ import {
   run,
   type Store,
 } from "../index";
-import { memoryJournal } from "../journal";
+import { memoryJournal } from "../internal/journal";
 import { memoryStore } from "../mem";
 import {
   type AgentMachineMsg,

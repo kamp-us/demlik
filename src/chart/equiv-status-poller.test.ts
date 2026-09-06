@@ -24,8 +24,8 @@
 // an extra draw. Nothing in this port re-runs a battery verb.
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it, vi } from "vitest";
+import { deepEqual } from "../internal/persistence/trace-replay";
 import { subId } from "../pure/core";
-import { deepEqual } from "../trace-replay";
 import { importExample } from "./__fixtures__/import-example";
 import type { PollState } from "./__fixtures__/status-poller-chart";
 

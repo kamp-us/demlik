@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url)); // .../src/pure
 const PURE_ENTRY = resolve(HERE, "index.ts");
 const RUNTIME_ROOT = resolve(HERE, "../index.ts"); // where run/Store/host live
-const PREDICTION_DIR = resolve(HERE, "../prediction");
+const PREDICTION_DIR = resolve(HERE, "../internal/prediction");
 
 function resolveSpec(fromFile: string, spec: string): string | null {
   if (!spec.startsWith(".")) return null; // external pkg — outside our graph

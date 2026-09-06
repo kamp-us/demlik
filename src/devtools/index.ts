@@ -16,8 +16,8 @@
  *
  * The state-diff trio (`diffState` / `formatDiff` are pure + zero-dep, usable
  * in Node and tests; `<StateDiff>` is the React view) is the richer cousin of
- * `../trace-replay`'s first-divergence walk — same path grammar, but EVERY
- * differing cell, classified as added / removed / changed.
+ * `../internal/persistence/trace-replay`'s first-divergence walk — same path
+ * grammar, but EVERY differing cell, classified as added / removed / changed.
  */
 
 export { MsgLog, type MsgLogEntry, type MsgLogProps } from "./msg-log";

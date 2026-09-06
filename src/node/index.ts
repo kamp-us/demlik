@@ -53,7 +53,7 @@ import {
   type JournalEntry,
   makeJournal,
   type Seq,
-} from "../journal";
+} from "../internal/journal";
 import { dispatchIfPresent } from "../subs/types";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ import type {
   LlmRunCmd,
   LlmSucceedMsg,
   LlmTimerMsg,
-} from "../llm-call";
+} from "../internal/llm-call";
 import { MsgType } from "../protocol";
 import type {
   AgentCompactErrMsg,

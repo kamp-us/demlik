@@ -91,7 +91,7 @@ import {
   type SnapshotState,
   type SnapshotStore,
   type SnapshotWriteCmd,
-} from "../../../snapshot";
+} from "../../persistence/snapshot";
 import {
   type DeadlineExceeded,
   type DeadlineSub,

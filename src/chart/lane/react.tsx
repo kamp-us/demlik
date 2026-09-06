@@ -67,7 +67,7 @@
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { type Cmd, type Machine, replay, type Sub } from "../../index";
-import type { Recorder, Trace } from "../../recorder";
+import type { Recorder, Trace } from "../../internal/persistence/recorder";
 import type { Samples, Unanswerable } from "../inspect";
 import { useInspectorRuntime } from "../inspect/react";
 import type { LogEntry } from "../report/fold";

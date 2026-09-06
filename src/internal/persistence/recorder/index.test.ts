@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Cmd, defineMachine, replay, run } from "../index";
+import { Cmd, defineMachine, replay, run } from "../../../index";
 import {
   breadcrumbsFromTrace,
   parseJSONL,

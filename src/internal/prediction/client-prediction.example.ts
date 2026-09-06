@@ -55,7 +55,7 @@ import {
   type Seq,
   type SeqTagged,
   tagSeq,
-} from "../pure";
+} from "../../pure";
 
 // === The authoritative game machine — pure data, shared by client + server ===
 

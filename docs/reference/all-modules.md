@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 36 public subpaths. Curated
+The complete export catalog — all 30 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -24,8 +24,6 @@ discoverable here with a one-line gloss from their source barrel.
 | `./extension/react` | React adapters for the background TEA runtime. |
 | `./extension/subs` |  |
 | `./extension/test-utils` | In-memory `chrome.*` mock for tests in this package and any downstream consumer that wants to test against `chromeStorageStore` behavior without a real chrome environment. |
-| `./journal` | an append-only, ordered record log for `@demlik/tea`. |
-| [`./llm-call`](./llm-call.md) | `resilient-call` + structured-output parse + a typed failure variant, around a purpose-discriminated LLM invocation. |
 | `./machine-viz` | turn a `Machine` into a Mermaid diagram string. |
 | [`./mem`](./mem.md) | in-memory `Store<S>` adapter for `@demlik/tea`. |
 | [`./node`](./node.md) | Node host adapter for `@demlik/tea`. |
@@ -33,12 +31,8 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./pbt`](./pbt.md) | Property-based testing primitives for `@demlik/tea` machines. |
 | `./pbt/arbitraries` |  |
 | `./pbt/runners` |  |
-| `./prediction` | the client-prediction ack primitive (epic #186, facet 2). |
 | `./pure` | `@demlik/tea/pure` — THE client-safe entrypoint (ADR 0006, #213). |
 | [`./react`](./react.md) | React host adapter for `@demlik/tea`. |
-| `./recorder` | A recorded run, sufficient to reproduce it via `../trace-replay`. |
 | [`./retry-backoff`](./retry-backoff.md) | exponential backoff with jitter + cap, and the retry-attempt state every fallible `interpret` handler folds over. |
-| `./snapshot` | periodic state checkpoint to a host store (R2/KV-shaped). |
 | [`./subs`](./subs.md) | universal Sub factories. |
 | [`./testing`](./testing.md) | test-side ergonomics over @demlik/tea's pure substrate. |
-| `./trace-replay` | The outcome of {@link replayTrace}. |

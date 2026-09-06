@@ -16,7 +16,7 @@
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { foldMsgs } from "../pure";
+import { foldMsgs } from "../../pure";
 import {
   type ClientState,
   clientPredict,

@@ -25,7 +25,7 @@
 // check that the determinism is real rather than accidental.)
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it, vi } from "vitest";
-import { deepEqual } from "../trace-replay";
+import { deepEqual } from "../internal/persistence/trace-replay";
 import { importExample } from "./__fixtures__/import-example";
 import type { FState } from "./__fixtures__/resilient-fetch-chart";
 import {

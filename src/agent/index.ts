@@ -109,7 +109,6 @@ import {
   type DeadlineSub,
   type MonitoredRunCmd,
 } from "../internal/flow/monitored-run";
-import { createResilientCall } from "../internal/resilience/resilient-call";
 import {
   createLlmCall,
   deadlineSub,
@@ -120,7 +119,8 @@ import {
   type LlmSucceedMsg,
   type ResilientState,
   subscribeDeadline,
-} from "../llm-call";
+} from "../internal/llm-call";
+import { createResilientCall } from "../internal/resilience/resilient-call";
 import { MsgType } from "../protocol";
 import {
   type AgentCompactErrMsg,
@@ -1359,5 +1359,5 @@ export type {
   ModelPort,
   PlainModel,
   Schema,
-} from "../llm-call";
-export { PLAIN_MODEL_MISROUTE_REASON, plainModel } from "../llm-call";
+} from "../internal/llm-call";
+export { PLAIN_MODEL_MISROUTE_REASON, plainModel } from "../internal/llm-call";

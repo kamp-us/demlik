@@ -25,7 +25,7 @@ import {
   type PaginatedWalkTimerMsg,
   subscribeDeadline as subscribeWalkDeadline,
 } from "../src/internal/paginate/paginated-walk";
-import { recorder } from "@demlik/tea/recorder";
+import { recorder } from "../src/internal/persistence/recorder";
 import {
   createResilientCall,
   type DeadlineSub,
@@ -35,7 +35,7 @@ import {
   type SucceedMsg,
   subscribeDeadline as subscribeAuditDeadline,
 } from "../src/internal/resilience/resilient-call";
-import { replayTrace } from "@demlik/tea/trace-replay";
+import { replayTrace } from "../src/internal/persistence/trace-replay";
 import { withDeadline } from "../src/internal/resilience/with-deadline";
 import { withResilience } from "../src/internal/resilience/with-resilience";
 import { withTelemetry } from "../src/internal/resilience/with-telemetry";

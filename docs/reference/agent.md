@@ -64,24 +64,24 @@ import { … } from "@demlik/tea/agent";
 | `isReservedToolName` | Function |  |
 | `LidPurpose` | Type | The one purpose the lid's agent runs. |
 | `liftAgent` | Function |  |
-| `LlmCall` | Reference |  |
-| `LlmErr` | Reference |  |
-| `LlmFailMsg` | Reference |  |
-| `LlmOk` | Reference |  |
-| `LlmRunCmd` | Reference |  |
-| `LlmSucceedMsg` | Reference |  |
+| `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this knob, carried on the `resilient_run` Cmd as plain data (no closures, invariant 3). |
+| `LlmErr` | Interface | The typed failure variant — every failure path surfaces this, tagged by purpose. |
+| `LlmFailMsg` | Type |  |
+| `LlmOk` | Interface | The parsed, typed success carried on the `resilient_ok` settle Msg, tagged with its purpose. |
+| `LlmRunCmd` | Type | The effect Cmd the knob emits: run the LLM call for `key` with `input`. |
+| `LlmSucceedMsg` | Type | The settle Msgs llm-call's handler RETURNS from `interpret` so the substrate enqueues them as follow-up Msgs (re-entry) into the host reducer — exactly as `../resilient-call` does. |
 | `mergeInterpret` | Function |  |
-| `MessageLoader` | Reference |  |
-| `ModelFactory` | Reference |  |
-| `ModelPort` | Reference |  |
+| `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
+| `ModelFactory` | Type | The model factory — the first DI port. |
+| `ModelPort` | Type | Either model port. |
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
-| `PLAIN_MODEL_MISROUTE_REASON` | Reference |  |
-| `plainModel` | Reference |  |
-| `PlainModel` | Reference |  |
+| `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
+| `plainModel` | Function |  |
+| `PlainModel` | Type | The plain-function model port — the common path (#58). |
 | `renderPrompt` | Function |  |
 | `ReservedToolName` | Type | A tool name `tool()` refuses (#72). |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
-| `Schema` | Reference |  |
+| `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call the handler uses to validate the model's output before it settles `resilient_ok`. |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |
 | `status` | Function |  |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` cell for the DEFAULT `setTimeout` backing. |

@@ -1,5 +1,7 @@
 /**
- * @demlik/tea/prediction — the client-prediction ack primitive (epic #186, facet 2).
+ * internal/prediction — the client-prediction ack primitive (epic #186, facet 2).
+ * Internal since #49 — not published on any subpath; `@demlik/tea/pure`
+ * re-exports the public surface.
  *
  * The contract the Gambetta/Valve authoritative-server netcode loop needs:
  * **command-seq-in → last-applied-seq-out.** A client tags each predicted
@@ -29,8 +31,8 @@
  * import-graph guard (ADR 0006, #213) still holds.
  */
 
-import type { Cmd, Machine, Sub } from "../pure/core";
-import { foldMsgs } from "../pure/core";
+import type { Cmd, Machine, Sub } from "../../pure/core";
+import { foldMsgs } from "../../pure/core";
 
 /**
  * A monotonic, non-negative sequence number tagging one client-predicted

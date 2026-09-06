@@ -6,7 +6,7 @@
  * `./constructor-built-scan`, this file is the folder's expectation.
  *
  * Only `workflow` mints Cmds of its own. `monitored-run` emits the snapshot
- * Cmds it inherits from `snapshot` (still a public door; #49 retypes it),
+ * Cmds it inherits from `persistence/snapshot` (declared and proven there, #49),
  * `reconciler` emits the page-fetch Cmd it inherits from
  * `resilience/resilient-call` (declared and proven there) plus whatever the
  * consumer's `apply` builds, and `fan-out`, `poller`, `saga`, `await-terminal`

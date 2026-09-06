@@ -16,7 +16,7 @@ import type {
   LlmOk,
   MessageLoader,
   Schema,
-} from "../llm-call";
+} from "../internal/llm-call";
 import type { MsgType } from "../protocol";
 import { schemaFromGuard } from "./schema";
 import type { Conversation } from "./types";

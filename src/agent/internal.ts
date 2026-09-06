@@ -11,7 +11,7 @@
  * everything stays internal.
  */
 
-import type { LlmRunCmd } from "../llm-call";
+import type { LlmRunCmd } from "../internal/llm-call";
 import { MsgType } from "../protocol";
 import type { AgentCompactRunCmd, CompactionPurpose } from "./compaction";
 import { COMPACTION_PURPOSE } from "./compaction";
