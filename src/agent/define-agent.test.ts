@@ -1,7 +1,14 @@
 import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Cmd, DriveFailedError, driveToDone, replay, run } from "../index";
+import {
+  Cmd,
+  DriveFailedError,
+  driveToDone,
+  replay,
+  run,
+  type Store,
+} from "../index";
 import { memoryJournal } from "../journal";
 import { memoryStore } from "../mem";
 import {
@@ -192,6 +199,104 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
     );
     expect(final.output).toEqual(ANSWER);
     expect(final.instructions).toBe(INSTRUCTIONS);
+  });
+});
+
+describe("agent.run resumes a Model the Store hands back mid-run (#60)", () => {
+  it("boots at the outstanding brain call: same runId, the tool is not re-run", async () => {
+    const calls: string[] = [];
+    const counted = tool(
+      "search",
+      {
+        input: z.object({ q: z.string() }),
+        ok: z.object({ snippet: z.string() }),
+        err: [],
+      },
+      async ({ q }) => {
+        calls.push(q);
+        return Result.ok({ snippet: `about ${q}` });
+      },
+    );
+    type S = DefinedAgentState<typeof counted>;
+
+    // Run 1: the first turn asks for the tool; the second brain call is held
+    // open, and the bytes the Store is handed at that moment — tool outcome
+    // folded, `awaiting: llm` — are copied out at the `save` seam (the one
+    // write a kill can never take back). The held call is then released so
+    // this runtime can drain: `stop()` awaits in-flight Cmds, a kill does not.
+    const first = scripted([ASK]);
+    let release: (turn: AgentTurn) => void = () => {};
+    const held = new Promise<AgentTurn>((resolve) => {
+      release = resolve;
+    });
+    const holding = async (messages: readonly AgentMessage[]) =>
+      first.seen.length === 0 ? first.model(messages) : held;
+    let park: (state: S) => void = () => {};
+    const parkedAt = new Promise<S>((resolve) => {
+      park = resolve;
+    });
+    const live = memoryStore<S>();
+    const store: Store<S> = {
+      ...live,
+      save: async (state) => {
+        await live.save(state);
+        if (
+          state.conversation?.awaiting.kind === "llm" &&
+          state.conversation.toolRecords.length === 1
+        ) {
+          park(JSON.parse(JSON.stringify(state)) as S);
+        }
+      },
+    };
+    const firstRun = defineAgent({
+      model: holding,
+      tools: [counted],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { store, runId: "run-1" });
+    const parked = await parkedAt;
+    release(ANSWER);
+    await firstRun;
+    expect(parked.run.phase).toBe("running");
+    expect(calls).toEqual(["tea"]);
+
+    // Run 2: the same three lines over a Store holding those bytes. The lid
+    // boots the parked Model instead of starting over.
+    const second = scripted([ANSWER]);
+    const final = await defineAgent({
+      model: second.model,
+      tools: [counted],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { store: memoryStore(parked), runId: "run-2" });
+
+    expect(final.run.phase).toBe("done");
+    expect(final.run.phase === "done" && final.run.runId).toBe("run-1");
+    expect(final.output).toEqual(ANSWER);
+    expect(calls).toEqual(["tea"]);
+    // The resumed brain call carries the transcript the first process built.
+    expect(second.seen).toHaveLength(1);
+    expect(second.seen[0]?.map((m) => m.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "tool",
+    ]);
+  });
+
+  it("a Store holding a finished run resolves it without a model call", async () => {
+    const store = memoryStore<DefinedAgentState<typeof search>>();
+    const first = scripted([ASK, ANSWER]);
+    const lid = { tools: [search], instructions: INSTRUCTIONS } as const;
+    await defineAgent({ model: first.model, ...lid }).run(INPUT, {
+      ctx: { kb },
+      store,
+    });
+    const second = scripted([]);
+    const again = await defineAgent({ model: second.model, ...lid }).run(
+      INPUT,
+      { ctx: { kb }, store },
+    );
+    expect(again.output).toEqual(ANSWER);
+    expect(second.seen).toEqual([]);
   });
 });
 
