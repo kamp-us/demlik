@@ -11,8 +11,8 @@
  *
  * ## The runtime-free boundary (ADR 0006)
  *
- * Everything here imports ONLY from `../pure` — the `@demlik/tea/pure` umbrella
- * subpath that re-exports the fold seam (`foldMsgs`), the ack primitive
+ * Everything here imports ONLY from `../pure` — the runtime-free umbrella
+ * barrel that re-exports the fold seam (`foldMsgs`), the ack primitive
  * (`tagSeq` / `nextSeq` / `partitionByAck`), and the reconciliation helper
  * (`reconcile`). It imports NO `run`, NO host, NO `Store`: a client bundle built
  * from this example never drags the runtime in, and the

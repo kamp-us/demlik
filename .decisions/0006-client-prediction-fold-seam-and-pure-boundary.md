@@ -8,6 +8,13 @@ tags: []
 
 # 0006 — Client-prediction fold seam + runtime-free import boundary
 
+**Amended in part by the closing sweep (#51):** the `@demlik/tea/pure` **door**
+is closed — the runtime-free surface publishes as named exports of the root
+`@demlik/tea` door, per ADR [0016](./0016-removal-lands-in-a-minor-at-0x.md).
+Everything else below stands: the boundary is still `src/pure/`, the import-graph
+guard still roots there and still fails if it reaches `run`/the host. What
+changed is the specifier a consumer types, not the guarantee.
+
 **Scope:** the API contract for epic #186 (the client-prediction surface of
 `@demlik/tea`). Two forks only — **the replay/fold seam shape** and **how the
 runtime-free import boundary is enforced**. No implementation; this records the

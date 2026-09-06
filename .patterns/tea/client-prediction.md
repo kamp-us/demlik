@@ -82,19 +82,22 @@ A browser client must not drag the server runtime (`run`, the host, `Store`,
 interpret, subscriptions) into its bundle. ADR 0006 makes that a **structural
 guarantee, not a tree-shaking accident**:
 
-- The seam ships on the dedicated subpath **`@demlik/tea/pure`** — the umbrella
-  that re-exports the fold seam (`foldMsgs`), the ack primitive
-  (`tagSeq`/`nextSeq`/`partitionByAck`/`ack`), and the reconciliation helper
-  (`reconcile`). `src/internal/prediction/` is the focused internal leaf for
-  just the ack + reconcile; it ships on no subpath of its own.
+- The seam ships on the root door **`@demlik/tea`** — the fold seam
+  (`foldMsgs`), the ack primitive (`tagSeq`/`nextSeq`/`partitionByAck`/`ack`)
+  and the reconciliation helper (`reconcile`) are all named exports of it. The
+  `/pure` subpath they used to ship on closed in the #51 sweep;
+  [`src/pure/`](../../src/pure/index.ts) is still the in-tree umbrella and still
+  the thing the fence below is drawn around. `src/internal/prediction/` is the
+  focused internal leaf for just the ack + reconcile.
 - The pure-core module imports **nothing** from the runtime; the runtime imports
   *from* it. That dependency direction is the actual decoupling.
 - [`src/pure/import-graph.test.ts`](../../src/pure/import-graph.test.ts)
-  BFS-walks the transitive import graph rooted at `@demlik/tea/pure` and **fails
-  if it ever reaches `run`/the host**. That is the regression fence.
+  BFS-walks the transitive import graph rooted at `src/pure/index.ts` and
+  **fails if it ever reaches `run`/the host**. That is the regression fence, and
+  closing the door did not move it.
 
 ```ts
-import { foldMsgs, nextSeq, partitionByAck, reconcile, tagSeq } from "@demlik/tea/pure";
+import { foldMsgs, nextSeq, partitionByAck, reconcile, tagSeq } from "@demlik/tea";
 ```
 
 One subtlety the worked example demonstrates: **author the shared machine as a
@@ -145,7 +148,7 @@ the roadmap — `foldMsgs` (#211), the ack primitive (#212), the import boundary
 
 | Task | Read / do |
 |---|---|
-| Building a predicting client over a tea machine | This doc → the worked example → import from `@demlik/tea/pure`. |
+| Building a predicting client over a tea machine | This doc → the worked example → import from `@demlik/tea`. |
 | Deciding the seam's name/signature/return shape | ADR [0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md) (it settled all three). |
 | The exact API of each helper | `.glossary/TERMS.md` (in the originating monorepo) — `foldMsgs`, `reconcile`, `partitionByAck`, `tagSeq`, `nextSeq`, `Seq`/`SeqTagged`/`Ack`. |
 | Verifying the boundary didn't regress | Run `src/pure/import-graph.test.ts`. |

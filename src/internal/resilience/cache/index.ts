@@ -30,7 +30,7 @@
  *     by TTL + periodic eviction, not by LRU count.
  *
  * The eviction Sub is the "eviction is a Msg" half: a `setInterval`-shaped Sub
- * (composed directly on `@demlik/tea/subs`' `fromInterval`) that periodically
+ * (composed directly on `fromInterval`, from `src/subs/`) that periodically
  * dispatches a `cache_evict` Msg the consumer's reducer handles by calling
  * `evictExpired`. Time still never enters the reducer — the Sub fires the Msg,
  * the reducer reads `nowMs` off the Msg (the consumer stamps it at the Sub

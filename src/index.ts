@@ -11,6 +11,13 @@
  */
 
 export * from "./observability";
+// `./pure` and `./subs` are no longer doors of their own (#51): the closing
+// sweep pinned the export map to the public doors, and ADR 0016 moves parts
+// rather than dropping them — so the whole runtime-free surface and the whole
+// subscription-factory surface land here, on the root door, as named exports.
+// The runtime-free GUARANTEE still lives in `src/pure/`, which nothing outside
+// it may import from; the door it used to have is what closed.
+export * from "./pure";
 export type {
   AnyCmdDef,
   CmdDef,
@@ -48,7 +55,7 @@ export type {
   UpdateForm,
 } from "./pure/core";
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
-// (additive; the runtime-free guarantee lives on `@demlik/tea/pure`).
+// (additive; the runtime-free guarantee lives in `src/pure/`).
 export {
   acceptsOf,
   applyCell,
@@ -73,3 +80,4 @@ export {
 } from "./pure/core";
 export * from "./run";
 export * from "./runtime-types";
+export * from "./subs";

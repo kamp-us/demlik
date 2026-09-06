@@ -40,7 +40,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Sub } from "../../index";
-import type { SubscribeHandler } from "../../subs/index";
+import type { SubscribeHandler } from "../../subs/types";
 import { dispatchIfPresent } from "../../subs/types";
 
 export type TabsEventName = "onActivated" | "onUpdated" | "onRemoved";

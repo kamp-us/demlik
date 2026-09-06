@@ -31,17 +31,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./subs": {
-      "types": "./dist/subs/index.d.ts",
-      "import": "./dist/subs/index.js"
-    },
-    "./testing": {
-      "types": "./dist/testing/index.d.ts",
-      "import": "./dist/testing/index.js"
-    },
     "./do": {
       "types": "./dist/do/index.d.ts",
       "import": "./dist/do/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
     },
     "./mem": {
       "types": "./dist/mem/index.d.ts",
@@ -51,63 +47,39 @@
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
     },
-    "./devtools": {
-      "types": "./dist/devtools/index.d.ts",
-      "import": "./dist/devtools/index.js"
-    },
-    "./devtools/styles.css": "./dist/devtools/styles.css",
     "./extension": {
       "types": "./dist/extension/index.d.ts",
       "import": "./dist/extension/index.js"
     },
-    "./extension/react": {
-      "types": "./dist/extension/react.d.ts",
-      "import": "./dist/extension/react.js"
-    },
-    "./extension/subs": {
-      "types": "./dist/extension/subs/index.d.ts",
-      "import": "./dist/extension/subs/index.js"
-    },
-    "./extension/test-utils": {
-      "types": "./dist/extension/test-utils.d.ts",
-      "import": "./dist/extension/test-utils.js"
-    },
-    "./node": {
-      "types": "./dist/node/index.d.ts",
-      "import": "./dist/node/index.js"
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
     },
     "./pbt": {
       "types": "./dist/pbt/index.d.ts",
       "import": "./dist/pbt/index.js"
     },
-    "./pbt/arbitraries": {
-      "types": "./dist/pbt/arbitraries/index.d.ts",
-      "import": "./dist/pbt/arbitraries/index.js"
-    },
-    "./pbt/runners": {
-      "types": "./dist/pbt/runners/index.d.ts",
-      "import": "./dist/pbt/runners/index.js"
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js"
     },
     "./retry-backoff": {
       "types": "./dist/retry-backoff/index.d.ts",
       "import": "./dist/retry-backoff/index.js"
     },
+    "./devtools": {
+      "types": "./dist/devtools/index.d.ts",
+      "import": "./dist/devtools/index.js"
+    },
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
       "import": "./dist/machine-viz/index.js"
-    },
-    "./agent": {
-      "types": "./dist/agent/index.d.ts",
-      "import": "./dist/agent/index.js"
-    },
-    "./pure": {
-      "types": "./dist/pure/index.d.ts",
-      "import": "./dist/pure/index.js"
     },
     "./parity": {
       "types": "./dist/parity/index.d.ts",
       "import": "./dist/parity/index.js"
     },
+    "./devtools/styles.css": "./dist/devtools/styles.css",
     "./package.json": "./package.json"
   },
   "scripts": {

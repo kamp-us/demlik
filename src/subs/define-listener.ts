@@ -112,7 +112,7 @@ export interface ListenerTarget<
  * author-land where the Sub shape is in scope.
  *
  * The returned function is a `SubscribeHandler` factory in the exact shape of
- * every other `@demlik/tea/subs` battery: supply the `msgFn` projection, get a
+ * every other Sub factory in `src/subs/`: supply the `msgFn` projection, get a
  * `(sub, ctx, dispatch) => cleanup` handler assignable to `machine.subscribe`.
  * The cleanup the author NEVER writes is `() => remove(listener, sub, ctx)`,
  * with `listener` the identical reference passed to `add`.

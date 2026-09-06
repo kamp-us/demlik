@@ -35,7 +35,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Sub } from "../../index";
-import type { SubscribeHandler } from "../../subs/index";
+import type { SubscribeHandler } from "../../subs/types";
 import { dispatchIfPresent } from "../../subs/types";
 
 export interface ChromeMessageOpts<S extends Sub, M> {

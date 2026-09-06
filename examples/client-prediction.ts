@@ -3,8 +3,9 @@
  * the Gambetta/Valve authoritative-server netcode loop, "one reducer, both
  * sides" (epic #186, ADR 0006).
  *
- * THE POINT OF THIS FILE: every import comes from `@demlik/tea/pure`, the
- * runtime-free umbrella subpath. It pulls in the fold seam (`foldMsgs`), the ack
+ * THE POINT OF THIS FILE: every import is a value from the runtime-free half of
+ * the surface — since #51 those publish on the root `@demlik/tea` door rather
+ * than a `/pure` subpath. It pulls in the fold seam (`foldMsgs`), the ack
  * primitive (`tagSeq` / `nextSeq` / `partitionByAck`), and the reconciliation
  * helper (`reconcile`) — and NOTHING that drags `run`, the host, or `Store` into
  * a client bundle. A browser game client built on this surface ships the reducer
@@ -35,7 +36,7 @@ import {
   type Seq,
   type SeqTagged,
   tagSeq,
-} from "@demlik/tea/pure";
+} from "@demlik/tea";
 
 // === The shared authoritative machine — pure data, no `defineMachine` ===
 //

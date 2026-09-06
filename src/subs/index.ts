@@ -1,6 +1,7 @@
 /**
  * @packageDocumentation
- * @demlik/tea/subs — universal Sub factories.
+ * Universal Sub factories — published on the root `@demlik/tea` door (#51; the
+ * `/subs` door closed and its parts moved up, per ADR 0016).
  *
  * Eleven factories absorb the recurring `(sub, ctx, dispatch) => cleanup`
  * shape of every cross-cutting Sub topology: timers, DOM events,

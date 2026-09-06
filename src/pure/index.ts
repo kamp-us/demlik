@@ -1,7 +1,11 @@
 /**
- * `@demlik/tea/pure` — THE client-safe entrypoint (ADR 0006, #213).
+ * The client-safe barrel (ADR 0006, #213).
  *
- * This is the public surface for code that must NOT drag the runtime (`run`,
+ * The `/pure` DOOR closed in the #51 sweep and its parts moved onto the root
+ * `@demlik/tea` door (ADR 0016). What closed was the specifier; the boundary
+ * this file names is unchanged and still enforced below.
+ *
+ * This is the surface for code that must NOT drag the runtime (`run`,
  * the host, `Store`, interpret, subscribe) into its bundle — the canonical
  * consumer is a client-side prediction loop. Its import graph is *provably*
  * runtime-free: every module reachable from here lives in the pure-core leaf
