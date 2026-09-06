@@ -160,9 +160,11 @@ export type ToolHandler<Args, Ok, E extends Tagged, R> = (
 
 /**
  * What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>`
- * / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell
- * and the bare `args` schema the router parses a call against. `E` is the full
- * failure union the Cmd settles with — the declared tags plus `thrown`.
+ * / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell,
+ * the bare `args` schema the router parses a call against, and the
+ * `description` a provider adapter declares to the model beside that schema.
+ * `E` is the full failure union the Cmd settles with — the declared tags plus
+ * `thrown`.
  */
 export type ToolDef<
   Name extends string,
@@ -171,6 +173,7 @@ export type ToolDef<
   E extends Tagged,
   R,
 > = CmdDef<Name, ToolInput<Args>, Ok, E, R> & {
+  readonly description: string;
   readonly args: z.ZodType<Args>;
   readonly interpret: (
     cmd: CmdValue<Name, ToolInput<Args>, E, R>,
@@ -180,13 +183,18 @@ export type ToolDef<
 
 /** The declaration-erased view the router reads. */
 export type AnyToolDef = AnyCmdDef & {
+  readonly description: string;
   readonly args: z.ZodType;
   readonly interpret: (cmd: never, ctx: never) => Promise<unknown>;
 };
 
 /**
  * Declare one tool. `name` is the Cmd `type` and the name the model calls it
- * by; `input` parses the model's `args`; `ok` parses the handler's value at the
+ * by; `description` is the model-facing sentence — the one place it lives — a
+ * provider adapter declares to the model beside the schema (Anthropic
+ * `description`, OpenAI `function.description`) so the model can tell when to
+ * call the tool, read off `def.description`, never off the `input` schema;
+ * `input` parses the model's `args`; `ok` parses the handler's value at the
  * edge; `err` is the `_tag` list the handler may fail with; `needs` is the ctx
  * slice it reads, demanded at `run`. The handler returns one of the two
  * constructors it is handed — `ok(value)` or the typed `fail({ _tag })`; a
@@ -206,6 +214,7 @@ export function tool<
 >(
   name: Name & NotReserved<Name>,
   spec: {
+    readonly description: string;
     readonly input: z.ZodType<Args>;
     readonly ok: z.ZodType<Ok>;
     readonly err: Tags;
@@ -266,7 +275,11 @@ export function tool<
       err: (error) => def.err(cmd, error),
     });
   };
-  return Object.assign(def, { args: spec.input, interpret });
+  return Object.assign(def, {
+    description: spec.description,
+    args: spec.input,
+    interpret,
+  });
 }
 
 function isTagged(value: unknown): value is Tagged {

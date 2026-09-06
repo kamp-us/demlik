@@ -35,7 +35,7 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
   const client = new Anthropic({ apiKey });
   const declared: Anthropic.Tool[] = tools.map((t) => ({
     name: t.cmdType,
-    description: t.args.description,
+    description: t.description,
     input_schema: z.toJSONSchema(t.args) as Anthropic.Tool.InputSchema,
   }));
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
@@ -133,7 +133,8 @@ import { anthropic } from "./model.ts";
 const note = tool(
   "note",
   {
-    input: z.object({ text: z.string() }).describe("Append one line to the notebook"),
+    description: "Append one line to the notebook",
+    input: z.object({ text: z.string() }),
     ok: z.object({ saved: z.boolean() }),
     err: [],
   },
@@ -146,7 +147,8 @@ const note = tool(
 ```
 
 The `input` schema is what the model's arguments are parsed against before the
-handler ever sees them; its `describe` is the description the model reads.
+handler ever sees them; `description` is the sentence the model reads to decide
+when to call the tool.
 
 ## Define the agent
 

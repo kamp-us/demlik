@@ -13,12 +13,14 @@
 //      does not compile.
 //   4. A reserved name — an agent-owned Msg prefix or discriminant — does not
 //      compile as `tool()`'s `name` (#72); the set derives from `MsgType`.
+//   5. `description` is required on the spec and read back off the def (#91).
 
 import { z } from "zod";
 import { absurd, Cmd, type PortEmitter, run, type Settled } from "../index";
 import type { MsgTypeValue } from "../protocol";
 import {
   type AgentTurn,
+  type AnyToolDef,
   createAgent,
   type ReservedToolName,
   type Schema,
@@ -37,6 +39,7 @@ type KbCtx = { readonly kb: Kb };
 const search = tool(
   "search",
   {
+    description: "Look a phrase up in the knowledge base.",
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found", "rate_limited"],
@@ -54,14 +57,19 @@ const search = tool(
 
 tool(
   "leaky",
-  { input: z.object({}), ok: z.void(), err: ["not_found"] },
+  { description: "d", input: z.object({}), ok: z.void(), err: ["not_found"] },
   // @ts-expect-error `timeout` is not a declared tag
   async (_args, _ctx, { fail }) => fail({ _tag: "timeout" }),
 );
 
 tool(
   "wrong_ok",
-  { input: z.object({}), ok: z.object({ n: z.number() }), err: [] },
+  {
+    description: "d",
+    input: z.object({}),
+    ok: z.object({ n: z.number() }),
+    err: [],
+  },
   // @ts-expect-error the ok value must be what the `ok` schema parses
   async (_args, _ctx, { ok }) => ok({ n: "one" }),
 );
@@ -113,7 +121,12 @@ void snippetOf;
 
 const count = tool(
   "count",
-  { input: z.object({ items: z.array(z.string()) }), ok: z.number(), err: [] },
+  {
+    description: "Count the items handed in.",
+    input: z.object({ items: z.array(z.string()) }),
+    ok: z.number(),
+    err: [],
+  },
   async ({ items }, _ctx, { ok }) => ok(items.length),
 );
 
@@ -183,7 +196,12 @@ run(machine, {});
 
 // ── 4. a reserved name does not compile (#72) ───────────────────────────────
 
-const spec = { input: z.object({}), ok: z.void(), err: [] } as const;
+const spec = {
+  description: "Do nothing; exists only to test the reserved-name refusal.",
+  input: z.object({}),
+  ok: z.void(),
+  err: [],
+} as const;
 const noop = async (
   _args: object,
   _ctx: PortEmitter,
@@ -218,6 +236,20 @@ void compactorType;
 // each `_ok` / `_err` / `_run` entry was minted from.
 const everyDiscriminant: MsgTypeValue extends ReservedToolName ? true : false =
   true;
+
+// ── 5. `description` is the model-facing slot — required, read back (#91) ───
+
+const described: string = search.description;
+void described;
+const anyDescribed: string = (search as AnyToolDef).description;
+void anyDescribed;
+
+tool(
+  "undescribed",
+  // @ts-expect-error `description` is required — a tool the model cannot tell when to call is a declaration bug
+  { input: z.object({}), ok: z.void(), err: [] },
+  noop,
+);
 const everyPrefix:
   | "resilient"
   | "agent_tool"
