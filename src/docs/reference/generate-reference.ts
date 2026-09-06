@@ -290,8 +290,8 @@ function subpathToSrc(
       : isRecord(entry) && typeof entry.import === "string"
         ? entry.import
         : "";
-  // ./dist/foo/index.js -> src/foo/index.ts. A `.tsx` barrel (extension/react,
-  // chart/inspect/react) resolves in `barrelGloss`, which retries the other
+  // ./dist/foo/index.js -> src/foo/index.ts. A `.tsx` barrel
+  // (extension/react) resolves in `barrelGloss`, which retries the other
   // extension rather than carrying a list of names that drifts.
   return imp.replace(/^\.\/dist\//, "src/").replace(/\.js$/, ".ts");
 }

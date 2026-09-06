@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // THE TEST RUNNER RESOLVES THE PUBLISHED SPECIFIER — every subpath, not most.
 //
-// `examples/*.ts` import `@demlik/tea/…`, and `src/chart/equiv-*.test.ts` drive
-// those examples, so `vitest.config.ts` aliases the published specifier back at
-// `src/`. That alias used to be a GUESS — `@demlik/tea/(.*)` → `src/$1/index.ts`
+// `examples/*.ts` import `@demlik/tea/…`, and this test imports the published
+// specifier directly, so `vitest.config.ts` aliases it back at `src/`. That
+// alias used to be a GUESS — `@demlik/tea/(.*)` → `src/$1/index.ts`
 // — which is right for most subpaths and wrong for the FLAT modules
 // (`extension/react`, `extension/test-utils`) and for the one subpath that is
 // not a module at all (`devtools/styles.css`). Nothing imported those through

@@ -16,7 +16,7 @@ Typed effect channels on Cmd constructors (ADR 0014). Additive kernel types — 
   its `M` from the constructors; the reducer must carry the `_ok` / `_err` cells without the
   user naming them in `Msg`.
 - `run` types `ctx` as `Ctx & RequiredCtx<C>` — a ctx missing a key any Cmd's `R` names is a
-  compile error. `useMachine`, `agentHost` and the chart inspector thread the same demand. An
+  compile error. `useMachine` and `agentHost` thread the same demand. An
   `Interpret` cell's `ctx` carries its own Cmd's `R`.
 - Boundary enforcement: a handler's `_ok` value is parsed against the `ok` schema at the
   interpret edge; a value that fails becomes the minted `_err` carrying
