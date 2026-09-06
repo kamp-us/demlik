@@ -1,8 +1,8 @@
 /**
  * internal/resilience/cache — a TTL cache as pure state, PLUS a periodic eviction Sub.
  *
- * Same pure-state-ops shape as `@demlik/tea/idempotency` and
- * `@demlik/tea/work-queue`: a state type plus pure transition functions. Host-
+ * Same pure-state-ops shape as `../../idempotency/` and
+ * `../../work-queue/ops.ts`: a state type plus pure transition functions. Host-
  * agnostic by construction — no `Date.now()`, no timers, no I/O inside the ops.
  * The caller injects the clock (`nowMs`) and folds the result through its own
  * reducer, keeping the store inside TEA's invariant 2 (transitions are pure:

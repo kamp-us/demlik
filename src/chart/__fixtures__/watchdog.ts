@@ -2,7 +2,7 @@
 // A FOREIGN MSG, IN A NAMESPACED MACHINE.
 //
 // The generality blocker this file exists to close: a machine that consumes a
-// Msg minted by a LIBRARY cannot rename it. `@demlik/tea/deadline` dispatches
+// Msg minted by a LIBRARY cannot rename it. A deadline library dispatches
 // `{ type: "deadline_exceeded", id, atMs }` from its own subscribe cell, and no
 // amount of author intent turns that into `"JOB_A.deadline_exceeded"`. Before
 // per-event namespacing, such a machine could not be compiled at all: the only
@@ -49,7 +49,7 @@ export const watchdog = defineChart({
     },
     FINISHED: { data: ty<{ readonly at: number }>(), scope: "live" },
 
-    // ── the LIBRARY's event. `@demlik/tea/deadline` owns this name; the shape
+    // ── the LIBRARY's event. The deadline library owns this name; the shape
     //    below is `DeadlineExceeded` verbatim, and `foreign: true` is what keeps
     //    it bare in the emitted table under every namespace.
     //

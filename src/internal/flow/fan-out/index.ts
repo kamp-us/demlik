@@ -245,7 +245,7 @@ function inFlight<I, R>(state: FanOutState<I, R>): number {
  * projected arrays.
  *
  * Delegation, not re-rolling: each launch is one `queue.claim` call — the same
- * `pending → running` transition `@demlik/tea/work-queue` owns. `queue.claim`
+ * `pending → running` transition `src/internal/work-queue/` owns. `queue.claim`
  * flips the FIRST pending ledger record positionally, and fan-out's `pending`
  * array is appended in lockstep with the ledger, so the first `slots` pending
  * inputs map to the first `slots` pending records — claiming one-per-launch
@@ -395,7 +395,7 @@ export function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
    * completion).
    *
    * Each pending ledger record is minted by the `QueueAdapter`'s `enqueue` — the
-   * same `pending` append `@demlik/tea/work-queue` owns — rather than re-rolled
+   * same `pending` append `src/internal/work-queue/` owns — rather than re-rolled
    * inline, so the `status: "pending"` literal lives in exactly one place (no
    * `as QueueItemStatus` cast here).
    *

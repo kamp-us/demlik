@@ -1,4 +1,4 @@
-# `@demlik/tea/workflow` — durable Saga workflows on the TEA substrate
+# `internal/flow/workflow` — durable Saga workflows on the TEA substrate
 
 A Temporal-style durable-workflow engine where the workflow is a **pure reducer**
 (TEA: `state → msg → [state, cmds]`). A workflow is an ordered sequence of **steps**;
@@ -15,7 +15,7 @@ compensations in **strict reverse order** (the Saga pattern). The reducer reads 
 clock and no RNG; all impurity lives in the consumer's *interpret cell* — the thing
 that actually performs the activity `Cmd` and dispatches its result `Msg`.
 
-**Boundary with [`@demlik/tea/saga`](../saga/index.ts) — the compensation test.**
+**Boundary with [the saga module](../saga/index.ts) — the compensation test.**
 Here `WorkflowStep.compensation` is *optional*: an irreversible step (a sent email)
 is skipped during the unwind, and the run still reaches a terminal state. Saga's
 `SagaStep<D, U>` *requires* both `do` and `undo` — a step without its inverse is
@@ -45,7 +45,7 @@ unrepresentable — the in-flight effect lives ONLY on the active variants:
 | `failed_compensated` | Forward failure, then fully unwound (every committed step compensated, in reverse). Terminal. |
 | `compensation_failed` | A compensation itself bounced mid-unwind — visible, partially-unwound terminal state to reconcile by hand. |
 
-The failure path, mirroring `@demlik/tea/saga`'s phases:
+The failure path, mirroring [the saga module](../saga/index.ts)'s phases:
 
 ```
 running ──activity_err with completed steps──▶ compensating ──all compensations ok──▶ failed_compensated
@@ -92,7 +92,7 @@ narration. Sample output:
 
 ```
 ========================================================================
-  @demlik/tea/workflow — Saga rollback demo (deterministic)
+  tea workflow — Saga rollback demo (deterministic)
   saga: order → charge → reserve → ship
 ========================================================================
 
@@ -133,7 +133,7 @@ Forced failure — ship fails, the saga rolls back
 Or consume it programmatically:
 
 ```ts
-import { runDemo, narrateDemo } from "@demlik/tea/workflow/demo"; // path within the package
+import { runDemo, narrateDemo } from "./demo"; // path within the package
 const result = runDemo();
 console.log(result.rollback.committed, "→ rolled back:", result.rollback.compensated);
 console.log(narrateDemo(result));

@@ -15,7 +15,7 @@
  *      pure-core), and
  *   2. the client-prediction ack primitive (from `../prediction`).
  *
- * `@demlik/tea/prediction` remains the focused standalone leaf; this module
+ * `../internal/prediction` remains the focused standalone leaf; this module
  * cross-references it so a prediction loop imports the fold seam AND the ack
  * from a single client-safe entry (ADR 0006 coherence note).
  */
@@ -24,7 +24,7 @@ export type { Ack, AckPartition, Seq, SeqTagged } from "../internal/prediction";
 // The client-prediction ack primitive + the reconciliation helper —
 // cross-referenced here so a prediction loop imports the fold seam, the ack, AND
 // the reconcile step from one client-safe path (ADR 0006 coherence note).
-// `@demlik/tea/prediction` remains the focused standalone leaf.
+// `../internal/prediction` remains the focused standalone leaf.
 export {
   ack,
   initAck,

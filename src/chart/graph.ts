@@ -339,7 +339,7 @@ export type Chart<C> = {
       readonly data?: Ty<object>;
       /**
        * "This name is not mine." The Msg is minted by SOMEONE ELSE — a library
-       * Sub (`@demlik/tea/deadline` dispatching `deadline_exceeded`), a host
+       * Sub (a deadline library dispatching `deadline_exceeded`), a host
        * bridge, another machine — so the author cannot rename it and the
        * compiler must not decorate it. A foreign event keeps its BARE name in
        * the emitted table under every namespace, which is what makes it the

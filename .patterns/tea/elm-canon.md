@@ -27,7 +27,6 @@ The repo runs The Elm Architecture as substrate — not as inspiration. The
 | `@demlik/tea/react` | React host. `useMachine`, `useRuntime` on `useSyncExternalStore`. | `Browser.element` / `Browser.document`. |
 | `@demlik/tea/extension` | Chrome extension cross-context bridge. `bridgeRuntime`, `bridgeClient`, `bridgeTabClient`, `useBackgroundRuntime`. | Has no Elm analogue — ports + custom transport. |
 | `@demlik/tea/do` | Cloudflare Durable Object adapter. `doStore`, `doSubscribe` with alarm + websocket Sub variants. | No analogue — server-side persistent runtime. |
-| `@demlik/tea/work-queue` | Substrate-agnostic queue lifecycle over `Store<S>`. | No analogue — domain library on top. |
 | `@demlik/tea/mem` | In-memory `Store<S>` (test/volatile). | No analogue — Elm doesn't expose Store. |
 | `@demlik/tea/devtools` | Presentational inspector (state + msg log). | The (now archived) `elm-debugger`. |
 
@@ -900,9 +899,14 @@ const store = memoryStore<Model>({ count: 0 });
 const runtime = run(machine, { ctx, store });
 ```
 
-### 3.5 Domain library: `@demlik/tea/work-queue`
+### 3.5 Domain library: the work queue (`src/internal/work-queue/`)
 
-A work queue is a near-universal substrate need. `tea-work-queue` is
+The work queue is **internal** — it ships on no subpath of its own; the module
+lives at `src/internal/work-queue/`, and what reaches a consumer of it reaches
+them through the compositions built on it. The design is still worth reading,
+because it is the shape every domain library on top of the substrate takes.
+
+A work queue is a near-universal substrate need, and this one is
 substrate-agnostic by construction: it takes a `Store<QueueItem<I, O>[]>`
 and exposes `enqueue`, `claimNext`, `markDone`, `markFailed`, etc.
 
@@ -913,7 +917,7 @@ const next = await queue.claimNext();  // marks status = "running"
 await queue.markDone(next.id, ...);
 ```
 
-The pure ops in `packages/tea-work-queue/src/ops.ts` are testable in
+The pure ops in `src/internal/work-queue/ops.ts` are testable in
 isolation; the adapter binds them to a Store.
 
 ### 3.6 Inspector: `@demlik/tea/devtools`
