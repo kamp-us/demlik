@@ -56,12 +56,24 @@ export interface ToolCall {
  * the model produced and the `toolCalls` it asked us to run. An empty
  * `toolCalls` means the model is done with this stage (advance the pipeline).
  * This is the parsed output of a brain call; the consumer's schema produces it.
+ *
+ * `provider` is the opaque passthrough slot (#93): whatever the adapter hands
+ * back beside `content` / `toolCalls` that its provider expects echoed
+ * verbatim on the next turn — Anthropic's signed `thinking` blocks,
+ * `server_tool_use`, OpenAI reasoning items. tea stores it on the turn and
+ * returns it unchanged on the `assistant` `AgentMessage` that replays this
+ * turn; it never reads, validates or transforms it. The adapter owns its shape,
+ * which must be JSON-serializable like the rest of the Model. A compaction fold
+ * (ADR 0004) summarises turns into text, so it drops the slot with the turns it
+ * summarises. Optional and additive: a persisted turn without it still parses.
  */
 export interface AgentTurn {
   /** Free-text narration the model produced this turn (folded into the conversation). */
   readonly content: string;
   /** The tools the model asked us to run; empty = stage done. */
   readonly toolCalls: readonly ToolCall[];
+  /** Provider-opaque blocks to echo back verbatim next turn. tea never reads it. */
+  readonly provider?: unknown;
 }
 
 /**
@@ -91,8 +103,9 @@ function isToolCall(value: unknown): value is ToolCall {
  * hand-rolling this guard + a `Schema<AgentTurn>` for a type the agent OWNS, the
  * agent exports both. Checks the load-bearing fields: `content` is a string and
  * `toolCalls` is an array of `ToolCall` (each element guarded — the narrow is a
- * real parse of the boundary, not a shallow `Array.isArray`). PURE — allocates
- * no Error.
+ * real parse of the boundary, not a shallow `Array.isArray`). `provider` is
+ * opaque, so its presence or absence is not a fact the guard reads. PURE —
+ * allocates no Error.
  */
 export function isAgentTurn(value: unknown): value is AgentTurn {
   if (value === null || typeof value !== "object") return false;

@@ -45,7 +45,9 @@ import {
  * its provider's shape: the head is the `instructions` (when set) and the
  * run's `input`; then, per model turn, the `assistant` turn followed by the
  * `tool` outcomes that turn asked for. A tool outcome rides as data — the
- * adapter decides how a failure reads to its model.
+ * adapter decides how a failure reads to its model. An `assistant` message
+ * carries the turn's opaque `provider` slot exactly as the adapter returned it
+ * (see `AgentTurn`), present only when the stored turn has one.
  */
 export type AgentMessage =
   | { readonly role: "system"; readonly content: string }
@@ -54,6 +56,7 @@ export type AgentMessage =
       readonly role: "assistant";
       readonly content: string;
       readonly toolCalls: readonly ToolCall[];
+      readonly provider?: unknown;
     }
   | {
       readonly role: "tool";
@@ -224,7 +227,7 @@ export function renderPrompt(prompt: AgentPrompt<unknown>): AgentMessage[] {
   }
   const { turns, toolRecords } = prompt.conversation;
   const transcript = turns.flatMap<AgentMessage>((turn, i) => [
-    { role: "assistant", content: turn.content, toolCalls: turn.toolCalls },
+    assistantOf(turn),
     ...toolRecords
       .filter((r) => r.turn === i)
       .map<AgentMessage>((r) => ({
@@ -235,6 +238,18 @@ export function renderPrompt(prompt: AgentPrompt<unknown>): AgentMessage[] {
       })),
   ]);
   return [...head, ...transcript];
+}
+
+/**
+ * The stored turn as the `assistant` message the model reads back. `provider`
+ * rides only when the turn carries one, so a turn persisted before the slot
+ * existed renders exactly as it did then. PURE.
+ */
+function assistantOf(turn: AgentTurn): AgentMessage {
+  const { content, toolCalls } = turn;
+  return "provider" in turn
+    ? { role: "assistant", content, toolCalls, provider: turn.provider }
+    : { role: "assistant", content, toolCalls };
 }
 
 /**
