@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, replay, run } from "../index";
-import { bindMachine } from "../testing";
+import { type Cmd, defineMachine, replay, run } from "../../../index";
+import { bindMachine } from "../../../testing";
 import {
   createPaginatedWalk,
   deadlineSub,

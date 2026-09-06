@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { memoryStore } from "../mem";
+import { memoryStore } from "../../mem";
 import { createQueue, type QueueItem } from "./index";
 import {
   claimNextOp,
@@ -17,7 +17,7 @@ import {
 type Input = string;
 
 // ===========================================================================
-// Pure ops — the BLESSED delegation surface (`@demlik/tea/work-queue/ops`).
+// Pure ops — the BLESSED delegation surface (`./ops`).
 // L2 compositions import these directly; they are tested directly here.
 // ===========================================================================
 

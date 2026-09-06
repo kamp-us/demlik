@@ -1,7 +1,7 @@
 {
   "name": "@demlik/tea",
   "version": "0.12.0",
-  "description": "TEA-faithful state machine substrate — one package, every host adapter. Core + subs + testing, plus React, Durable Object, Chrome extension, Node, in-memory, work-queue, devtools, and property-testing modules as subpaths.",
+  "description": "TEA-faithful state machine substrate — one package, every host adapter. Core + subs + testing, plus React, Durable Object, Chrome extension, Node, in-memory, devtools, and property-testing modules as subpaths.",
   "keywords": [
     "tea",
     "elm-architecture",
@@ -76,18 +76,6 @@
       "types": "./dist/extension/test-utils.d.ts",
       "import": "./dist/extension/test-utils.js"
     },
-    "./work-queue": {
-      "types": "./dist/work-queue/index.d.ts",
-      "import": "./dist/work-queue/index.js"
-    },
-    "./work-queue/ops": {
-      "types": "./dist/work-queue/ops.d.ts",
-      "import": "./dist/work-queue/ops.js"
-    },
-    "./work-queue/adapter": {
-      "types": "./dist/work-queue/adapter.d.ts",
-      "import": "./dist/work-queue/adapter.js"
-    },
     "./node": {
       "types": "./dist/node/index.d.ts",
       "import": "./dist/node/index.js"
@@ -108,14 +96,6 @@
       "types": "./dist/retry-backoff/index.d.ts",
       "import": "./dist/retry-backoff/index.js"
     },
-    "./idempotency": {
-      "types": "./dist/idempotency/index.d.ts",
-      "import": "./dist/idempotency/index.js"
-    },
-    "./idempotency/adapter": {
-      "types": "./dist/idempotency/adapter.d.ts",
-      "import": "./dist/idempotency/adapter.js"
-    },
     "./await-terminal": {
       "types": "./dist/await-terminal/index.d.ts",
       "import": "./dist/await-terminal/index.js"
@@ -123,14 +103,6 @@
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
       "import": "./dist/machine-viz/index.js"
-    },
-    "./debounce": {
-      "types": "./dist/debounce/index.d.ts",
-      "import": "./dist/debounce/index.js"
-    },
-    "./throttle": {
-      "types": "./dist/throttle/index.d.ts",
-      "import": "./dist/throttle/index.js"
     },
     "./recorder": {
       "types": "./dist/recorder/index.d.ts",
@@ -140,10 +112,6 @@
       "types": "./dist/trace-replay/index.d.ts",
       "import": "./dist/trace-replay/index.js"
     },
-    "./paginator": {
-      "types": "./dist/paginator/index.d.ts",
-      "import": "./dist/paginator/index.js"
-    },
     "./snapshot": {
       "types": "./dist/snapshot/index.d.ts",
       "import": "./dist/snapshot/index.js"
@@ -151,10 +119,6 @@
     "./fan-out": {
       "types": "./dist/fan-out/index.d.ts",
       "import": "./dist/fan-out/index.js"
-    },
-    "./idempotent-intake": {
-      "types": "./dist/idempotent-intake/index.d.ts",
-      "import": "./dist/idempotent-intake/index.js"
     },
     "./poller": {
       "types": "./dist/poller/index.d.ts",
@@ -172,10 +136,6 @@
       "types": "./dist/saga/index.d.ts",
       "import": "./dist/saga/index.js"
     },
-    "./throttled-input": {
-      "types": "./dist/throttled-input/index.d.ts",
-      "import": "./dist/throttled-input/index.js"
-    },
     "./monitored-run": {
       "types": "./dist/monitored-run/index.d.ts",
       "import": "./dist/monitored-run/index.js"
@@ -183,10 +143,6 @@
     "./llm-call": {
       "types": "./dist/llm-call/index.d.ts",
       "import": "./dist/llm-call/index.js"
-    },
-    "./paginated-walk": {
-      "types": "./dist/paginated-walk/index.d.ts",
-      "import": "./dist/paginated-walk/index.js"
     },
     "./reconciler": {
       "types": "./dist/reconciler/index.d.ts",

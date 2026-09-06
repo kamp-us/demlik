@@ -87,6 +87,8 @@ import {
   deadlineSub,
   subscribeDeadline,
 } from "../internal/resilience/deadline";
+import type { QueueItem } from "../internal/work-queue";
+import { queueAdapter } from "../internal/work-queue/adapter";
 import {
   createSnapshot,
   type SnapshotFailedMsg,
@@ -98,8 +100,6 @@ import {
   type SnapshotStore,
   type SnapshotWriteCmd,
 } from "../snapshot";
-import type { QueueItem } from "../work-queue";
-import { queueAdapter } from "../work-queue/adapter";
 
 // ===========================================================================
 // Config — the knob. Every field optional; omit a field → omit its gate.

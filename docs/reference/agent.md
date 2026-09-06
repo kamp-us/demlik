@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (93)
+## Exports (95)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -61,6 +61,7 @@ import { … } from "@demlik/tea/agent";
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
 | `isAgentTurn` | Function |  |
 | `isCompactionSummary` | Function |  |
+| `isReservedToolName` | Function |  |
 | `LidPurpose` | Type | The one purpose the lid's agent runs. |
 | `liftAgent` | Function |  |
 | `LlmCall` | Reference |  |
@@ -78,6 +79,7 @@ import { … } from "@demlik/tea/agent";
 | `plainModel` | Reference |  |
 | `PlainModel` | Reference |  |
 | `renderPrompt` | Function |  |
+| `ReservedToolName` | Type | A tool name `tool()` refuses (#72). |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `Schema` | Reference |  |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |

@@ -83,8 +83,8 @@
  */
 
 import type { Cmd } from "../index";
-import type { QueueItem, QueueItemStatus } from "../work-queue";
-import { queueAdapter } from "../work-queue/adapter";
+import type { QueueItem, QueueItemStatus } from "../internal/work-queue";
+import { queueAdapter } from "../internal/work-queue/adapter";
 
 /**
  * A step's stable identity. Positional: the 0-based index into

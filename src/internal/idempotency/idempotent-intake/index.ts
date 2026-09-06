@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/idempotent-intake — receive-once intake for webhooks / queue
+ * internal/idempotency/idempotent-intake — receive-once intake for webhooks / queue
  * messages: dedupe by key, enqueue the new ones, replay the cached result to
  * the duplicates. The "process this payload exactly once even though it
  * arrives N times" knob.
@@ -80,15 +80,16 @@
  *   // once, after boot (DO reload), before resuming the drain:
  *   const [next, _] = intake.boot(state.intake);
  *
- * Escape hatch: reach the raw L1 ops via `@demlik/tea/idempotency` and
- * `@demlik/tea/work-queue` and thread them by hand.
+ * Escape hatch: reach the raw L1 ops via `../idempotency` and `../../work-queue`
+ * and thread them by hand.
  */
 
+import { z } from "zod";
+import { Cmd, type CmdOf } from "../../../index";
+import type { QueueItem } from "../../work-queue";
+import { queueAdapter } from "../../work-queue/adapter";
 import type { IdempotencyStore } from "../idempotency";
 import { idempotencyMemory } from "../idempotency/adapter";
-import type { Cmd } from "../index";
-import type { QueueItem } from "../work-queue";
-import { queueAdapter } from "../work-queue/adapter";
 
 /**
  * A cached intake entry: either a key whose work is still in flight
@@ -152,27 +153,48 @@ export interface IntakeState<P, R> {
 // value — it is emitted as a Cmd the runtime's interpret handler performs.
 // Each Cmd is plain data (invariant 1): the payload / key / result it carries
 // are values, never closures.
+//
+// Both are `Cmd.define`d (ADR 0014). The payload `P` / result `R` are the
+// knob's own type parameters, so each def is minted per knob by a factory
+// (`createIntake` calls it once) rather than a module-scope constant — the
+// same shape `resilient-call`'s `runCmdDef<I, R>()` takes. The host performs
+// them and settles nothing back through intake, hence `ok: z.void()` and an
+// empty `err` list.
 
 /** A genuinely-new payload was accepted and enqueued — go run the work. */
-export interface IntakeProcessCmd<P> extends Cmd<"intake:process"> {
-  /** The dedupe key the payload was filed under. */
-  readonly key: string;
-  /** The enqueued queue-item id (the same `id` passed to `receive`). */
-  readonly itemId: string;
-  /** The original payload, for the worker to process. */
-  readonly payload: P;
+export function intakeProcessDef<P>() {
+  return Cmd.define("intake:process", {
+    input: z.custom<{
+      /** The dedupe key the payload was filed under. */
+      readonly key: string;
+      /** The enqueued queue-item id (the same `id` passed to `receive`). */
+      readonly itemId: string;
+      /** The original payload, for the worker to process. */
+      readonly payload: P;
+    }>(),
+    ok: z.void(),
+    err: [],
+  });
 }
+export type IntakeProcessCmd<P> = CmdOf<ReturnType<typeof intakeProcessDef<P>>>;
 
 /**
  * A duplicate of an already-completed key arrived — replay the cached result
  * to the caller instead of re-running the side effect.
  */
-export interface IntakeReplayCmd<R> extends Cmd<"intake:replay"> {
-  /** The dedupe key whose cached result is being replayed. */
-  readonly key: string;
-  /** The result the ORIGINAL request produced, recalled from the cache. */
-  readonly result: R;
+export function intakeReplayDef<R>() {
+  return Cmd.define("intake:replay", {
+    input: z.custom<{
+      /** The dedupe key whose cached result is being replayed. */
+      readonly key: string;
+      /** The result the ORIGINAL request produced, recalled from the cache. */
+      readonly result: R;
+    }>(),
+    ok: z.void(),
+    err: [],
+  });
 }
+export type IntakeReplayCmd<R> = CmdOf<ReturnType<typeof intakeReplayDef<R>>>;
 
 /** The Cmd union the intake verbs emit. */
 export type IntakeCmd<P, R> = IntakeProcessCmd<P> | IntakeReplayCmd<R>;
@@ -193,6 +215,10 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
   // are insulated behind the verbs rather than reached by raw ops.
   const queue = queueAdapter<P>();
   const memory = idempotencyMemory<IntakeEntry<R>>();
+
+  // The two Cmd constructors, minted once for this knob's `P`/`R`.
+  const intakeProcess = intakeProcessDef<P>();
+  const intakeReplay = intakeReplayDef<R>();
 
   /**
    * The empty slice: a TTL-free idempotency store (intake owns the TTL itself —
@@ -289,7 +315,7 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
     if (entry !== undefined) {
       if (entry.phase === "done") {
         // Replay the original result; touch nothing.
-        return [state, [{ type: "intake:replay", key, result: entry.result }]];
+        return [state, [intakeReplay({ key, result: entry.result })]];
       }
       // phase === "pending": original is in flight — drop silently.
       return [state, []];
@@ -304,10 +330,7 @@ export function createIntake<P, R>(config: IntakeConfig<P>) {
       id,
     );
     const nextState: IntakeState<P, R> = { seen: seenNext, queue: queueNext };
-    return [
-      nextState,
-      [{ type: "intake:process", key, itemId: item.id, payload }],
-    ];
+    return [nextState, [intakeProcess({ key, itemId: item.id, payload })]];
   }
 
   /**

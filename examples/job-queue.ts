@@ -5,7 +5,7 @@ import {
   type Store,
   tryInterpret,
 } from "@demlik/tea";
-import { createQueue, type QueueItem } from "@demlik/tea/work-queue";
+import { createQueue, type QueueItem } from "../src/internal/work-queue";
 
 interface Job {
   readonly name: string;

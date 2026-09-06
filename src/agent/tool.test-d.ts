@@ -11,13 +11,17 @@
 //      and `toMachine({ tools })` leaves no tool cell on `toolInterpret`.
 //   3. A `needs` slice a tool names is demanded at `run` — a ctx without it
 //      does not compile.
+//   4. A reserved name — an agent-owned Msg prefix or discriminant — does not
+//      compile as `tool()`'s `name` (#72); the set derives from `MsgType`.
 
 import { Result } from "better-result";
 import { z } from "zod";
 import { absurd, Cmd, type PortEmitter, run, type Settled } from "../index";
+import type { MsgTypeValue } from "../protocol";
 import {
   type AgentTurn,
   createAgent,
+  type ReservedToolName,
   type Schema,
   type ToolCmd,
   type ToolResult,
@@ -185,3 +189,45 @@ run(machine, { ctx: { kb } });
 run(machine, { ctx: {} });
 // @ts-expect-error ctx cannot be omitted while a tool names a requirement
 run(machine, {});
+
+// ── 4. a reserved name does not compile (#72) ───────────────────────────────
+
+const spec = { input: z.object({}), ok: z.void(), err: [] } as const;
+const noop = async () => Result.ok(undefined);
+
+// The four the reviewer hit: the settle prefixes the agent's reducer owns, and
+// the router's own rejection def.
+// @ts-expect-error `agent_tool` mints `agent_tool_ok` / `agent_tool_err`
+tool("agent_tool", spec, noop);
+// @ts-expect-error `resilient` mints `resilient_ok` / `resilient_err`
+tool("resilient", spec, noop);
+// @ts-expect-error `compact` mints `compact_ok` / `compact_err`
+tool("compact", spec, noop);
+// @ts-expect-error `tool_rejected` is the router's own def
+tool("tool_rejected", spec, noop);
+
+// The discriminants themselves are interpret keys `toMachine` merges under.
+// @ts-expect-error `compact_run` is the consumer's compaction cell
+tool("compact_run", spec, noop);
+// @ts-expect-error `resilient_run` is the brain cell
+tool("resilient_run", spec, noop);
+// @ts-expect-error `snapshot_write` is the checkpoint cell
+tool("snapshot_write", spec, noop);
+
+// A name beside the reserved ones still compiles, and keeps its literal.
+const compactor = tool("compactor", spec, noop);
+const compactorType: "compactor" = compactor.cmdType;
+void compactorType;
+
+// The set is `MsgType`'s: every discriminant is reserved, and so is the prefix
+// each `_ok` / `_err` / `_run` entry was minted from.
+const everyDiscriminant: MsgTypeValue extends ReservedToolName ? true : false =
+  true;
+const everyPrefix:
+  | "resilient"
+  | "agent_tool"
+  | "compact" extends ReservedToolName
+  ? true
+  : false = true;
+void everyDiscriminant;
+void everyPrefix;

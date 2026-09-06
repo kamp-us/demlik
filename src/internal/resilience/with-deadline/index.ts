@@ -407,6 +407,9 @@ export function withDeadline<
     subscriptions,
     subscribe,
     interpret,
+    // The base's `Cmd.define` list rides through so `run`'s interpret edge
+    // still parses / stamps the base's settled Msgs behind the wrap (#66).
+    ...(base.cmds ? { cmds: base.cmds } : {}),
   } as Machine<
     DeadlineModel<S>,
     M | DeadlineExceededMsg,

@@ -92,6 +92,18 @@
 
 import type { Cmd } from "../index";
 import {
+  createPaginatedWalk,
+  type DeadlineSub,
+  deadlineSub,
+  type FetchPageCmd,
+  PAGE_KEY,
+  type PageErrMsg,
+  type PageOkMsg,
+  type PaginatedWalkState,
+  type PaginatedWalkTimerMsg,
+  subscribeDeadline,
+} from "../internal/paginate/paginated-walk";
+import {
   get as cacheGet,
   set as cacheSet,
   initCache,
@@ -103,18 +115,6 @@ import type {
   RateLimitConfig,
   ResilientPorts,
 } from "../internal/resilience/resilient-call";
-import {
-  createPaginatedWalk,
-  type DeadlineSub,
-  deadlineSub,
-  type FetchPageCmd,
-  PAGE_KEY,
-  type PageErrMsg,
-  type PageOkMsg,
-  type PaginatedWalkState,
-  type PaginatedWalkTimerMsg,
-  subscribeDeadline,
-} from "../paginated-walk";
 import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================

@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, noop, run, type Store } from "../index";
-import { bindMachine } from "../testing";
+import { type Cmd, defineMachine, noop, run, type Store } from "../../../index";
+import { bindMachine } from "../../../testing";
 import { createIntake, type IntakeCmd, type IntakeState } from "./index";
 
 // A tiny payload + result domain for the unit specs. The webhook id IS the

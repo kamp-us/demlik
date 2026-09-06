@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 55 public subpaths. Curated
+The complete export catalog — all 44 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -19,7 +19,6 @@ discoverable here with a one-line gloss from their source barrel.
 | `./chart/lane/server` | One lane, as the two files a host already has on disk. |
 | `./chart/lane/styles.css` |  |
 | `./chart/report` | chart/report — a fabrika lane, imported as charts and read back as markdown. |
-| `./debounce` | a timer-based call transformer that coalesces a burst of calls into a single fire. |
 | [`./devtools`](./devtools.md) | presentational inspector for any tea machine. |
 | `./devtools/styles.css` |  |
 | [`./do`](./do.md) | Durable Object adapter for `@demlik/tea`. |
@@ -28,17 +27,12 @@ discoverable here with a one-line gloss from their source barrel.
 | `./extension/subs` |  |
 | `./extension/test-utils` | In-memory `chrome.*` mock for tests in this package and any downstream consumer that wants to test against `chromeStorageStore` behavior without a real chrome environment. |
 | `./fan-out` | scatter-gather over a bounded-concurrency work list. |
-| `./idempotency` | dedupe-by-key + last-result cache as pure state + ops. |
-| `./idempotency/adapter` | the verb seam over the pure idempotency ops. |
-| `./idempotent-intake` | receive-once intake for webhooks / queue messages: dedupe by key, enqueue the new ones, replay the cached result to the duplicates. |
 | `./journal` | an append-only, ordered record log for `@demlik/tea`. |
 | [`./llm-call`](./llm-call.md) | `resilient-call` + structured-output parse + a typed failure variant, around a purpose-discriminated LLM invocation. |
 | `./machine-viz` | turn a `Machine` into a Mermaid diagram string. |
 | [`./mem`](./mem.md) | in-memory `Store<S>` adapter for `@demlik/tea`. |
 | `./monitored-run` | a long-running operation that is BOTH staged and watched: an ordered stage pipeline whose POSITION survives eviction, wrapped by a no-progress safety deadline and (optionally) a periodic durable checkpoint. |
 | [`./node`](./node.md) | Node host adapter for `@demlik/tea`. |
-| `./paginated-walk` | traverse a paginated API / sitemap end to end WITHOUT a fake clock, without 429s, and resumable across a Durable-Object eviction. |
-| `./paginator` | the cursor/offset/page-token walk loop as pure state + ops. |
 | `./parity` | the record → replay → normalized-diff go/no-go gate. |
 | [`./pbt`](./pbt.md) | Property-based testing primitives for `@demlik/tea` machines. |
 | `./pbt/arbitraries` |  |
@@ -54,10 +48,5 @@ discoverable here with a one-line gloss from their source barrel.
 | `./snapshot` | periodic state checkpoint to a host store (R2/KV-shaped). |
 | [`./subs`](./subs.md) | universal Sub factories. |
 | [`./testing`](./testing.md) | test-side ergonomics over @demlik/tea's pure substrate. |
-| `./throttle` | a timer-based call transformer that caps invocation to at most once per `ms` window. |
-| `./throttled-input` | gate a high-frequency input stream into a SETTLED, RATE-CAPPED, optionally DEDUPED sequence of emits, as a TEA knob: one config object + a few pre-wired hooks you spread into your machine. |
 | `./trace-replay` | The outcome of {@link replayTrace}. |
-| [`./work-queue`](./work-queue.md) | substrate-agnostic work-queue lifecycle on `Store<S>`. |
-| `./work-queue/adapter` | the verb seam over the pure queue ops. |
-| `./work-queue/ops` | Pure queue-lifecycle ops over `QueueItem<I>[]` — the BLESSED delegation surface for this package. |
 | [`./workflow`](./workflow.md) | the durable-workflow runtime core (#124, the first Phase-1 slice of the Temporal-style durable-workflow engine, epic #118). |

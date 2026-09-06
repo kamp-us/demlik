@@ -83,9 +83,9 @@
  * escape hatch is those three sibling subpaths threaded by hand.
  */
 
-import type { IdempotencyStore } from "../idempotency";
-import { idempotencyMemory } from "../idempotency/adapter";
 import type { Cmd, Sub } from "../index";
+import type { IdempotencyStore } from "../internal/idempotency/idempotency";
+import { idempotencyMemory } from "../internal/idempotency/idempotency/adapter";
 import { type DeadlineSub, deadlineSub } from "../internal/resilience/deadline";
 import {
   type AnyRetryPolicy,

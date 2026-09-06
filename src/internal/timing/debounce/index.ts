@@ -1,15 +1,15 @@
 /**
- * @demlik/tea/debounce — a timer-based call transformer that coalesces a burst
+ * internal/timing/debounce — a timer-based call transformer that coalesces a burst
  * of calls into a single fire.
  *
- * Sibling of `@demlik/tea/throttle` — the two share a SYMMETRIC surface
+ * Sibling of `../throttle` — the two share a SYMMETRIC surface
  * (`Debounced<A>` / `Throttled<A>`, both callable + `.cancel()` + `.flush()`,
  * both `{ leading?, trailing? }`) so they read as a pair. They are kept in
  * separate files with NO cross-import: each is a self-contained timer, and the
  * coalesce-vs-drop policies are different enough that sharing code would hide
  * the distinction. Read one to understand the other; do not couple them.
  *
- * Layering with `@demlik/tea/throttled-input`: `debounce` and `throttle` are
+ * Layering with `../throttled-input`: `debounce` and `throttle` are
  * the two host-boundary PRIMITIVES — two distinct algorithms (collapse-a-burst
  * vs at-most-once-per-window) behind one signature shape. `throttled-input` is
  * NOT a third primitive: it is a TEA machine composed OVER them that
@@ -39,9 +39,9 @@
  *   window.addEventListener("resize", onResized);
  *   // cleanup: onResized.cancel(); window.removeEventListener("resize", onResized);
  *
- * NOT exported from the package root — reached via the `@demlik/tea/debounce`
- * subpath, same one-shape-per-package rule as `rate-limit`, `deadline`, and
- * `work-queue`.
+ * Internal since #47 — not published on any subpath; reached from inside the
+ * package as `internal/timing/debounce`. Same one-shape-per-package rule as
+ * `rate-limit`, `deadline`, and `work-queue`.
  *
  * Uses the universal `setTimeout` / `clearTimeout` timer idiom (same discipline
  * as `subs/from-timeout.ts`): exactly one live handle at a time, every arm
