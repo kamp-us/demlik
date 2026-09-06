@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/paginated-walk — traverse a paginated API / sitemap end to end
+ * internal/paginate/paginated-walk — traverse a paginated API / sitemap end to end
  * WITHOUT a fake clock, without 429s, and resumable across a Durable-Object
  * eviction. The L2 composition that bolts `../resilient-call`'s resilience onto
  * `../paginator`'s cursor walk: each page is fetched as ONE keyed resilient
@@ -91,7 +91,9 @@
  *   interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }),
  */
 
-import type { Cmd } from "../index";
+import type { Cmd } from "../../../index";
+import { MsgType } from "../../../protocol";
+import type { RetryPolicy } from "../../../retry-backoff";
 import {
   type CircuitConfig,
   createResilientCall,
@@ -106,7 +108,7 @@ import {
   type RunCmd,
   type SucceedMsg,
   subscribeDeadline,
-} from "../internal/resilience/resilient-call";
+} from "../../resilience/resilient-call";
 import {
   drain as drainWalk,
   initPaginator,
@@ -117,8 +119,6 @@ import {
   resume as resumeWalk,
   start as startWalk,
 } from "../paginator";
-import { MsgType } from "../protocol";
-import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================
 // Config — the knob. `firstPage` / `nextCursor` / `onPage` describe the walk;

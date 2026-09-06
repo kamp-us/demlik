@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { idempotencyMemory } from "../idempotency/adapter";
-import { createIntake } from "../idempotent-intake";
+import { idempotencyMemory } from "../idempotency/idempotency/adapter";
+import { createIntake } from "../idempotency/idempotent-intake";
 import { type QueueAdapter, queueAdapter } from "./adapter";
 import type { QueueItem } from "./index";
 

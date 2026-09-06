@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/work-queue/adapter — the verb seam over the pure queue ops.
+ * internal/work-queue/adapter — the verb seam over the pure queue ops.
  *
  * The pure ops in `./ops` are the BLESSED transitions, but their names and
  * argument tuples (`enqueueOp(queue, input, now, id)`, `claimNextOp(queue,

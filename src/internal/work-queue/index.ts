@@ -1,11 +1,10 @@
 /**
- * @packageDocumentation
- * @demlik/tea/work-queue — substrate-agnostic work-queue lifecycle on `Store<S>`.
+ * internal/work-queue — substrate-agnostic work-queue lifecycle on `Store<S>`.
  *
  * Two public surfaces, one shape:
  *   - `createQueue(store)` (this file) is the in-process adapter — it binds the
  *     pure ops to an injected `Store` and runs `load → mutate → save`.
- *   - `@demlik/tea/work-queue/ops` (`./ops`) is the BLESSED, importable surface
+ *   - `internal/work-queue/ops` (`./ops`) is the BLESSED, importable surface
  *     of those same pure ops. L2 compositions that own their own Model slice
  *     (`monitored-run`, `idempotent-intake`, …) import the ops directly and
  *     delegate status flips to them instead of re-rolling the transitions.
@@ -19,7 +18,7 @@
  * their own store and put the foreign-key string in `output`.
  */
 
-import type { Store } from "../index";
+import type { Store } from "../../index";
 import {
   claimNextOp,
   enqueueOp,

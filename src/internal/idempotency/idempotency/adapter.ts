@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/idempotency/adapter — the verb seam over the pure idempotency ops.
+ * internal/idempotency/idempotency/adapter — the verb seam over the pure idempotency ops.
  *
  * The functions in `./index` (`seen` / `recall` / `remember` / `evictExpired`
  * / `initStore`) are the BLESSED transitions, but their names and the

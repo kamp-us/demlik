@@ -20,7 +20,6 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 - [`@demlik/tea/node`](./node.md)
 - [`@demlik/tea/mem`](./mem.md)
 - [`@demlik/tea/extension`](./extension.md)
-- [`@demlik/tea/work-queue`](./work-queue.md)
 
 ## Machines
 

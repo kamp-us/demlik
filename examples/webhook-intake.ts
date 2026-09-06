@@ -1,5 +1,5 @@
 import { type Cmd, defineMachine, run } from "@demlik/tea";
-import { createIntake, type IntakeState } from "@demlik/tea/idempotent-intake";
+import { createIntake, type IntakeState } from "../src/internal/idempotency/idempotent-intake";
 
 interface PaymentEvent {
   readonly id: string;

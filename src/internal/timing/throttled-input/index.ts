@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/throttled-input — gate a high-frequency input stream into a
+ * internal/timing/throttled-input — gate a high-frequency input stream into a
  * SETTLED, RATE-CAPPED, optionally DEDUPED sequence of emits, as a TEA knob: one
  * config object + a few pre-wired hooks you spread into your machine.
  *
@@ -81,19 +81,19 @@
  *
  * NOT a substrate primitive: it depends only on sibling subpaths (`../throttle`,
  * `../debounce`, `../cache`, `../deadline`) and the core `Cmd` / `Sub` types.
- * Consumers reach it via the `@demlik/tea/throttled-input` subpath; the L1
- * escape hatch is those sibling subpaths threaded by hand. NOT exported from the
- * package root — same one-shape-per-package rule as `batch-window` and `poller`.
+ * Internal since #47 — reached from inside the package as
+ * `internal/timing/throttled-input`; the L1 escape hatch is those siblings
+ * threaded by hand. Same one-shape-per-package rule as `batch-window` and `poller`.
  */
 
-import type { Cmd, Sub } from "../index";
+import type { Cmd, Sub } from "../../../index";
 import {
   get as cacheGet,
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "../internal/resilience/cache";
-import { type DeadlineSub, deadlineSub } from "../internal/resilience/deadline";
+} from "../../resilience/cache";
+import { type DeadlineSub, deadlineSub } from "../../resilience/deadline";
 
 // `../throttle` + `../debounce` — host-boundary pre-transformers (see file
 // header). Re-exported so a consumer that wants to throttle/debounce a bursty
@@ -627,4 +627,4 @@ export {
   type DeadlineExceeded as ThrottledInputSettled,
   deadlineExceeded as throttledInputSettled,
   subscribeDeadline as subscribeThrottledInput,
-} from "../internal/resilience/deadline";
+} from "../../resilience/deadline";
