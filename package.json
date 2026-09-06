@@ -108,10 +108,6 @@
       "types": "./dist/retry-backoff/index.d.ts",
       "import": "./dist/retry-backoff/index.js"
     },
-    "./rate-limit": {
-      "types": "./dist/rate-limit/index.d.ts",
-      "import": "./dist/rate-limit/index.js"
-    },
     "./idempotency": {
       "types": "./dist/idempotency/index.d.ts",
       "import": "./dist/idempotency/index.js"
@@ -120,25 +116,9 @@
       "types": "./dist/idempotency/adapter.d.ts",
       "import": "./dist/idempotency/adapter.js"
     },
-    "./circuit-breaker": {
-      "types": "./dist/circuit-breaker/index.d.ts",
-      "import": "./dist/circuit-breaker/index.js"
-    },
-    "./cache": {
-      "types": "./dist/cache/index.d.ts",
-      "import": "./dist/cache/index.js"
-    },
-    "./deadline": {
-      "types": "./dist/deadline/index.d.ts",
-      "import": "./dist/deadline/index.js"
-    },
     "./await-terminal": {
       "types": "./dist/await-terminal/index.d.ts",
       "import": "./dist/await-terminal/index.js"
-    },
-    "./retry-to-success": {
-      "types": "./dist/retry-to-success/index.d.ts",
-      "import": "./dist/retry-to-success/index.js"
     },
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
@@ -167,18 +147,6 @@
     "./snapshot": {
       "types": "./dist/snapshot/index.d.ts",
       "import": "./dist/snapshot/index.js"
-    },
-    "./token-refresh": {
-      "types": "./dist/token-refresh/index.d.ts",
-      "import": "./dist/token-refresh/index.js"
-    },
-    "./resilient-call": {
-      "types": "./dist/resilient-call/index.d.ts",
-      "import": "./dist/resilient-call/index.js"
-    },
-    "./with-telemetry": {
-      "types": "./dist/with-telemetry/index.d.ts",
-      "import": "./dist/with-telemetry/index.js"
     },
     "./fan-out": {
       "types": "./dist/fan-out/index.d.ts",
@@ -220,10 +188,6 @@
       "types": "./dist/paginated-walk/index.d.ts",
       "import": "./dist/paginated-walk/index.js"
     },
-    "./authed-call": {
-      "types": "./dist/authed-call/index.d.ts",
-      "import": "./dist/authed-call/index.js"
-    },
     "./reconciler": {
       "types": "./dist/reconciler/index.d.ts",
       "import": "./dist/reconciler/index.js"
@@ -231,14 +195,6 @@
     "./agent": {
       "types": "./dist/agent/index.d.ts",
       "import": "./dist/agent/index.js"
-    },
-    "./with-deadline": {
-      "types": "./dist/with-deadline/index.d.ts",
-      "import": "./dist/with-deadline/index.js"
-    },
-    "./with-resilience": {
-      "types": "./dist/with-resilience/index.d.ts",
-      "import": "./dist/with-resilience/index.js"
     },
     "./prediction": {
       "types": "./dist/prediction/index.d.ts",

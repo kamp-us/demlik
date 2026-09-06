@@ -73,7 +73,7 @@ import {
   deadlineExceeded,
   deadlineSub,
   subscribeDeadline,
-} from "../deadline";
+} from "../internal/resilience/deadline";
 import type { SubscribeHandler } from "../subs/types";
 
 // `../work-queue` TYPE re-export only (see file header). This module emits a

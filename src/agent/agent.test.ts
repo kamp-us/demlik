@@ -1,8 +1,8 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { deadlineSub } from "../deadline";
 import { agentIsResumable } from "../do/host";
 import { type Interpret, run } from "../index";
+import { deadlineSub } from "../internal/resilience/deadline";
 import { bindMachine } from "../testing";
 import {
   type AgentLlmOkMsg,

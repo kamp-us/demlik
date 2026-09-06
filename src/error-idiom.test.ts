@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { UnauthorizedError } from "./authed-call";
 import { TerminalTimeoutError } from "./await-terminal";
 import {
   NoCellError,
@@ -7,8 +6,9 @@ import {
   QuiescenceTimeoutError,
   SubIdCollisionError,
 } from "./index";
-import type { DeadlineExceededError } from "./resilient-call";
-import { RetryExhaustedError } from "./retry-to-success";
+import type { UnauthorizedError } from "./internal/resilience/authed-call";
+import type { DeadlineExceededError } from "./internal/resilience/resilient-call";
+import { RetryExhaustedError } from "./internal/resilience/retry-to-success";
 
 // ───────────────────────────────────────────────────────────────────────────
 // #283 — one error idiom PER KIND, and the conformance guard that pins it.

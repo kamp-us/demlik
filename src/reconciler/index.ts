@@ -90,13 +90,19 @@
  *   interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }),
  */
 
+import type { Cmd } from "../index";
 import {
   get as cacheGet,
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "../cache";
-import type { Cmd } from "../index";
+} from "../internal/resilience/cache";
+import type {
+  CircuitConfig,
+  DeadlineConfig,
+  RateLimitConfig,
+  ResilientPorts,
+} from "../internal/resilience/resilient-call";
 import {
   createPaginatedWalk,
   type DeadlineSub,
@@ -109,12 +115,6 @@ import {
   type PaginatedWalkTimerMsg,
   subscribeDeadline,
 } from "../paginated-walk";
-import type {
-  CircuitConfig,
-  DeadlineConfig,
-  RateLimitConfig,
-  ResilientPorts,
-} from "../resilient-call";
 import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================

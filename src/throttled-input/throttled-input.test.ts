@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deadlineSub } from "../deadline";
 import { defineMachine } from "../index";
+import { deadlineSub } from "../internal/resilience/deadline";
 import { bindMachine } from "../testing";
 import {
   createThrottledInput,

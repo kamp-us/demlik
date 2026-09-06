@@ -1,11 +1,11 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type Cmd, defineMachine, run } from "../index";
 import {
   type DeadlineExceeded,
   deadlineSub,
   subscribeDeadline,
-} from "../deadline";
-import { type Cmd, defineMachine, run } from "../index";
+} from "../internal/resilience/deadline";
 import {
   type DurationRetryPolicy,
   defaultRetryPolicy,

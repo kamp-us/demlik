@@ -94,7 +94,6 @@
 
 import { describeError } from "../describe-error";
 import type { Cmd } from "../index";
-import { MsgType } from "../protocol";
 import {
   createResilientCall,
   type DeadlineExceeded,
@@ -107,7 +106,8 @@ import {
   type RunCmd,
   type SucceedMsg,
   subscribeDeadline,
-} from "../resilient-call";
+} from "../internal/resilience/resilient-call";
+import { MsgType } from "../protocol";
 import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================

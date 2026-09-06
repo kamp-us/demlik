@@ -104,6 +104,7 @@ import {
   type Machine,
   type Reducer,
 } from "../index";
+import { createResilientCall } from "../internal/resilience/resilient-call";
 import {
   createLlmCall,
   deadlineSub,
@@ -121,7 +122,6 @@ import {
   type MonitoredRunCmd,
 } from "../monitored-run";
 import { MsgType } from "../protocol";
-import { createResilientCall } from "../resilient-call";
 import {
   type AgentCompactErrMsg,
   type AgentCompactOkMsg,

@@ -26,7 +26,7 @@ import {
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "../../cache";
+} from "../../internal/resilience/cache";
 import {
   type CircuitState,
   canPass,
@@ -34,10 +34,17 @@ import {
   initCircuit,
   onFailure,
   onSuccess,
-} from "../../circuit-breaker";
-import { type DeadlineSub, deadlineSub } from "../../deadline";
+} from "../../internal/resilience/circuit-breaker";
+import {
+  type DeadlineSub,
+  deadlineSub,
+} from "../../internal/resilience/deadline";
+import {
+  initBucket,
+  type TokenBucket,
+  tryConsume,
+} from "../../internal/resilience/rate-limit";
 import type { SubId } from "../../pure/core";
-import { initBucket, type TokenBucket, tryConsume } from "../../rate-limit";
 import {
   defaultRetryPolicy,
   initRetry,

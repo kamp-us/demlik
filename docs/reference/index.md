@@ -32,8 +32,6 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 ## Resilience
 
 - [`@demlik/tea/retry-backoff`](./retry-backoff.md)
-- [`@demlik/tea/circuit-breaker`](./circuit-breaker.md)
-- [`@demlik/tea/with-resilience`](./with-resilience.md)
 
 ## Testing
 

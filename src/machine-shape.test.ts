@@ -7,7 +7,7 @@ import {
   type Reducer,
   type Transitions,
 } from "./index";
-import { withTelemetry } from "./with-telemetry";
+import { withTelemetry } from "./internal/resilience/with-telemetry";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `describeMachine` / `acceptsOf` — the per-state accept-sets as a public

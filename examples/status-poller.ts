@@ -1,5 +1,5 @@
 import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
-import type { DeadlineExceeded } from "@demlik/tea/deadline";
+import type { DeadlineExceeded } from "../src/internal/resilience/deadline";
 import { createPoller, type PollerState } from "@demlik/tea/poller";
 import { Result } from "better-result";
 

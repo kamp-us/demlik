@@ -8,8 +8,8 @@ import {
   type Reducer,
   type Transitions,
 } from "./index";
-import { withDeadline } from "./with-deadline";
-import { withTelemetry } from "./with-telemetry";
+import { withDeadline } from "./internal/resilience/with-deadline";
+import { withTelemetry } from "./internal/resilience/with-telemetry";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `msgKeysOf` over a RAGGED Transitions table.

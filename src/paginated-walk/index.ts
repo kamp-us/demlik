@@ -93,17 +93,6 @@
 
 import type { Cmd } from "../index";
 import {
-  drain as drainWalk,
-  initPaginator,
-  isDone,
-  type PaginatorPolicy,
-  type PaginatorState,
-  recordPage,
-  resume as resumeWalk,
-  start as startWalk,
-} from "../paginator";
-import { MsgType } from "../protocol";
-import {
   type CircuitConfig,
   createResilientCall,
   type DeadlineConfig,
@@ -117,7 +106,18 @@ import {
   type RunCmd,
   type SucceedMsg,
   subscribeDeadline,
-} from "../resilient-call";
+} from "../internal/resilience/resilient-call";
+import {
+  drain as drainWalk,
+  initPaginator,
+  isDone,
+  type PaginatorPolicy,
+  type PaginatorState,
+  recordPage,
+  resume as resumeWalk,
+  start as startWalk,
+} from "../paginator";
+import { MsgType } from "../protocol";
 import type { RetryPolicy } from "../retry-backoff";
 
 // ===========================================================================

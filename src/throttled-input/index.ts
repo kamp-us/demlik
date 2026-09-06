@@ -86,14 +86,14 @@
  * package root — same one-shape-per-package rule as `batch-window` and `poller`.
  */
 
+import type { Cmd, Sub } from "../index";
 import {
   get as cacheGet,
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "../cache";
-import { type DeadlineSub, deadlineSub } from "../deadline";
-import type { Cmd, Sub } from "../index";
+} from "../internal/resilience/cache";
+import { type DeadlineSub, deadlineSub } from "../internal/resilience/deadline";
 
 // `../throttle` + `../debounce` — host-boundary pre-transformers (see file
 // header). Re-exported so a consumer that wants to throttle/debounce a bursty
@@ -627,4 +627,4 @@ export {
   type DeadlineExceeded as ThrottledInputSettled,
   deadlineExceeded as throttledInputSettled,
   subscribeDeadline as subscribeThrottledInput,
-} from "../deadline";
+} from "../internal/resilience/deadline";

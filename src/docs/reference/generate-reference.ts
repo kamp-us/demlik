@@ -152,20 +152,6 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Resilience",
   },
   {
-    subpath: "./circuit-breaker",
-    importPath: "@demlik/tea/circuit-breaker",
-    file: "circuit-breaker.md",
-    typedocName: "circuit-breaker",
-    group: "Resilience",
-  },
-  {
-    subpath: "./with-resilience",
-    importPath: "@demlik/tea/with-resilience",
-    file: "with-resilience.md",
-    typedocName: "with-resilience",
-    group: "Resilience",
-  },
-  {
     subpath: "./testing",
     importPath: "@demlik/tea/testing",
     file: "testing.md",
