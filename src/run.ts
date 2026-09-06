@@ -5,7 +5,6 @@
  */
 
 import type {
-  AnyCmdDef,
   Dispose,
   Interpret,
   Machine,
@@ -17,8 +16,9 @@ import type {
 import {
   applyCellChecked,
   type Cmd,
+  cmdEdge,
+  cmdEdgeOver,
   depsInactive,
-  malformedResult,
   structuralHash,
 } from "./pure/core";
 import type {
@@ -269,6 +269,13 @@ export function run<
     fanout(subscribers, "port-emit", (listener) => listener(value));
   }
 
+  // The interpret edge over the typed constructors (`Cmd.define`) this machine
+  // declared: parses a handler's `_ok` value and stamps `at`; a pass-through
+  // for a machine of hand-written Cmds. Applied to every handler's return in
+  // `runInterpret`, and handed to the handlers on ctx so a wrapper that
+  // composes a base handler inside its own settles through the same edge.
+  const settleAtEdge = cmdEdgeOver(machine.cmds ?? [], clock);
+
   // Copied into a fresh object so handlers get a Ctx & PortEmitter without
   // mutating the caller's ctx (which may be shared across runtimes / tests).
   // `Object.assign`, not a spread: `RequiredCtx<C>` is an intersection tsc
@@ -276,7 +283,7 @@ export function run<
   const augmentedCtx: Ctx & RequiredCtx<C> & PortEmitter = Object.assign(
     {},
     ctx,
-    { emit: portEmit },
+    { emit: portEmit, [cmdEdge]: settleAtEdge },
   );
 
   // Every step chains onto `tail` — the single concurrency gate.
@@ -507,57 +514,6 @@ export function run<
   const interpretMap: Interpret<M, C, Ctx> =
     (machine as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
-
-  // The typed constructors (`Cmd.define`) this machine declared, keyed by the
-  // Cmd `type` each builds. Read at the interpret edge to parse a handler's
-  // `_ok` value and stamp `at`; empty for a machine of hand-written Cmds.
-  const cmdDefs = new Map<string, AnyCmdDef>(
-    (machine.cmds ?? []).map((def) => [def.cmdType, def]),
-  );
-
-  /**
-   * The boundary a `Cmd.define`d effect's result crosses (invariant 8: the
-   * boundary parses, the core trusts). For a follow-up that is the Cmd's own
-   * settled Msg: an `_ok` whose `value` fails the `ok` schema becomes the
-   * minted `_err` carrying `malformed_result`, so a corrupt result never
-   * reaches a reducer cell that would fold it into Model; an `_ok` that passes
-   * carries the PARSED value (zod's strip/transform applied); either arm gets
-   * `at` from the clock unless the builder was handed one. Anything else — a
-   * hand-written Cmd's follow-up, a Msg outside the settled pair — passes
-   * through untouched.
-   */
-  function settleAtEdge(cmd: C, follow: unknown): unknown {
-    const def = cmdDefs.get(cmd.type);
-    if (def === undefined || !isSettledShape(follow)) return follow;
-    const at = follow.at ?? clock();
-    if (follow.type === def.okType) {
-      const parsed = def.schema.ok.safeParse(follow.value);
-      if (!parsed.success) {
-        return {
-          type: def.errType,
-          cmd: follow.cmd,
-          error: malformedResult(parsed.error.issues),
-          at,
-        };
-      }
-      return { ...follow, value: parsed.data, at };
-    }
-    if (follow.type === def.errType) return { ...follow, at };
-    return follow;
-  }
-
-  function isSettledShape(follow: unknown): follow is {
-    readonly type: string;
-    readonly cmd: unknown;
-    readonly value?: unknown;
-    readonly at?: number;
-  } {
-    return (
-      typeof follow === "object" &&
-      follow !== null &&
-      typeof (follow as { type?: unknown }).type === "string"
-    );
-  }
 
   // The ONE `(msg) => void` handed to every producer that cannot await its own
   // dispatch: a detached interpret handler's `ctx.waitUntil(...)` tail, a
