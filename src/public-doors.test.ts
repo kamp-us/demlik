@@ -16,8 +16,15 @@
 // does not has to be named somewhere a release note is assembled from —
 // `CHANGELOG.md` for what already shipped, `.changeset/*.md` for what is about
 // to. A silent removal is the failure this catches.
+//
+// The published map is a CHECKED-IN FIXTURE, never a read of git history. A
+// `git show <sha>:package.json` here exits 128 under CI's default
+// `actions/checkout` (one commit, no `fetch-depth`), and it does so at COLLECT
+// time — which kills the door-list pin above it too, so the gate reports
+// `(0 test)` and pins nothing exactly where pinning matters (#51). The v0.12.0
+// map is a fixed historical fact; a fixture makes this file depth-independent,
+// ref-independent, and runnable in any consumer checkout.
 // ═══════════════════════════════════════════════════════════════════════════
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,8 +59,18 @@ const PUBLIC_DOORS = [
   "./package.json",
 ] as const;
 
-/** The commit that released v0.12.0 — the last map published before the sweep. */
-const V0_12_0 = "6d1fb6c";
+/**
+ * The map v0.12.0 published — the last one before the sweep, transcribed from
+ * `6d1fb6cc5e79a0ab13c48e859b41cdb2c19ec70f:package.json` and checked in beside
+ * this test. Historical and therefore frozen: it changes only if that release's
+ * `exports` is discovered to have been transcribed wrong.
+ */
+const PUBLISHED_V0_12_0 = JSON.parse(
+  readFileSync(
+    join(REPO_ROOT, "src/__fixtures__/v0.12.0-exports.json"),
+    "utf8",
+  ),
+) as { version: string; commit: string; exports: string[] };
 
 function exportKeys(json: string): string[] {
   return Object.keys(
@@ -72,14 +89,9 @@ describe("package.json `exports`", () => {
 });
 
 describe("every door closed since v0.12.0 is named in a release note", () => {
-  const published = exportKeys(
-    execFileSync("git", ["show", `${V0_12_0}:package.json`], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      maxBuffer: 8 * 1024 * 1024,
-    }),
+  const removed = PUBLISHED_V0_12_0.exports.filter(
+    (door) => !currentDoors.includes(door),
   );
-  const removed = published.filter((door) => !currentDoors.includes(door));
 
   // One haystack: the shipped changelog plus the pending changesets, which are
   // the next changelog. Where the entry lives depends only on whether the
