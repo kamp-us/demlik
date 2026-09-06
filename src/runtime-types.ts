@@ -9,11 +9,17 @@
 
 import { Result } from "better-result";
 import type {
+  AnyCmdDef,
+  CmdOf,
+  ErrOf,
   InterpretDetached,
   Machine,
+  NeedsOf,
+  OkOf,
   Port,
   PortEmitter,
   Reducer,
+  Settled,
   Sub,
   Transitions,
 } from "./pure/core";
@@ -673,12 +679,48 @@ export interface Runtime<
 // branch by value shape. Strengthens invariant 2 (record forms have no
 // fall-through default) and invariant 7 (the variant set is load-bearing).
 
+// `cmds`-form overloads — the machine names its typed Cmd constructors
+// (`Cmd.define`) and the effect half of its shape is DERIVED (ADR 0014): `C` is
+// the union of the values the defs build, and `M` is the user's own Msg union
+// plus every def's `Settled` pair (`<name>_ok` / `<name>_err`). The user never
+// spells `fetch_ok` in `M`; the `Reducer` mapped type still demands its cell.
+// `D` is a UNION of defs (not a tuple), so `cmds: [fetch, save]` infers
+// `typeof fetch | typeof save` and an explicit `defineMachine<S, M, typeof fetch
+// | typeof save, U, Ctx>` reads the same way. Declared first: a def has no
+// `type` field, so a Cmd union never satisfies `D extends AnyCmdDef`, and a
+// def never satisfies `C extends Cmd` — the two families cannot cross-match.
+export function defineMachine<
+  S,
+  M extends { type: string },
+  D extends AnyCmdDef,
+  U extends Sub,
+  Ctx,
+>(
+  m: Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "update" | "cmds"> & {
+    readonly cmds: readonly D[];
+    update: [S] extends [{ type: string }]
+      ? Transitions<S, M | Settled<D>, CmdOf<D>>
+      : never;
+  },
+): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+export function defineMachine<
+  S,
+  M extends { type: string },
+  D extends AnyCmdDef,
+  U extends Sub,
+  Ctx,
+>(
+  m: Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "update" | "cmds"> & {
+    readonly cmds: readonly D[];
+    update: Reducer<S, M | Settled<D>, CmdOf<D>>;
+  },
+): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
 // Transitions-form overload — 2D table keyed by State.type then Msg.type.
-// Declared FIRST (most specific). The S constraint is a conditional (`S extends
-// { type: string } ? Transitions<...> : never`) not a generic-parameter
-// constraint, so `S` stays unconstrained at the signature and the public
-// `Parameters<typeof defineMachine<NonDiscriminatedS, ...>>` pattern skips this
-// overload (update becomes `never`) instead of failing.
+// Declared before the reducer form (more specific). The S constraint is a
+// conditional (`S extends { type: string } ? Transitions<...> : never`) not a
+// generic-parameter constraint, so `S` stays unconstrained at the signature and
+// the public `Parameters<typeof defineMachine<NonDiscriminatedS, ...>>` pattern
+// skips this overload (update becomes `never`) instead of failing.
 export function defineMachine<
   S,
   M extends { type: string },
@@ -993,6 +1035,46 @@ export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
     state = stepped.value[0];
   }
   return Result.ok(state);
+}
+
+// === settle: the typed interpret cell for a `Cmd.define`d effect ===
+//
+// `tryInterpret`'s successor for a typed Cmd (ADR 0014 §2). The handler body
+// returns `Result<Ok, E>` with BOTH channels inferred from the def — `Ok` is
+// what the `ok` schema parses, `E` is the declared `_tag` union — and this
+// maps the two arms onto the minted Msgs: `Ok` → `def.ok(cmd, value)`, `Err` →
+// `def.err(cmd, error)`. The `Result` lives here, in the helper, and never
+// enters the kernel contract: the cell still resolves to a plain Msg
+// (`Interpret` keeps returning `Promise<M | void>`), and `run`'s interpret edge
+// then parses the `_ok` value against the schema and stamps `at`.
+//
+// NOT a try/catch: a `work` that THROWS is a bug in the handler, and it
+// propagates to the error sink like any other interpret throw. A failure the
+// caller has a next move for is an `Err` with one of the declared tags —
+// that is the whole point of naming them (0011).
+export function settle<D extends AnyCmdDef, Ctx>(
+  def: D,
+  work: (
+    cmd: CmdOf<D>,
+    ctx: Ctx & NeedsOf<CmdOf<D>> & PortEmitter,
+  ) => Promise<Result<OkOf<D>, ErrOf<D>>>,
+): (
+  cmd: CmdOf<D>,
+  ctx: Ctx & NeedsOf<CmdOf<D>> & PortEmitter,
+) => Promise<Settled<D>> {
+  // `AnyCmdDef` is the declaration-erased view the runtime reads; the two
+  // builders live on the full `CmdDef`, which every `D` structurally is.
+  const builders = def as unknown as {
+    readonly ok: (cmd: CmdOf<D>, value: OkOf<D>) => Settled<D>;
+    readonly err: (cmd: CmdOf<D>, error: ErrOf<D>) => Settled<D>;
+  };
+  return async (cmd, ctx) => {
+    const result = await work(cmd, ctx);
+    return result.match({
+      ok: (value) => builders.ok(cmd, value),
+      err: (error) => builders.err(cmd, error),
+    });
+  };
 }
 
 // === tryInterpret: Railway sugar over `Result.tryPromise` ===
