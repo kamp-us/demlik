@@ -14,6 +14,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+// The sole consumer of the `vite` devDependency: it bundles the reassembled
+// tutorial program below. Prune `vite` only when this import goes with it.
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
