@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/fan-out — scatter-gather over a bounded-concurrency work list.
+ * internal/flow/fan-out — scatter-gather over a bounded-concurrency work list.
  *
  * The Level-2 combinator that fans a batch of items out across at most
  * `concurrency` in-flight effects, gathers each item's result (or error), and
@@ -62,14 +62,15 @@
  * than through the `join` Cmd.
  *
  * NOT a substrate primitive: it depends only on `../work-queue`'s pure types +
- * blessed ops and `../index`'s `Cmd` / `Port` types. Consumers reach it via the
- * `@demlik/tea/fan-out` subpath.
+ * blessed ops and the core `Cmd` / `Port` types. Internal since #48 — not
+ * published on any subpath; reached from inside the package as
+ * `internal/flow/fan-out`.
  */
 
-import { at } from "../at";
-import type { Cmd, Port } from "../index";
-import type { QueueItem, QueueItemStatus } from "../internal/work-queue";
-import { queueAdapter } from "../internal/work-queue/adapter";
+import { at } from "../../../at";
+import type { Cmd, Port } from "../../../index";
+import type { QueueItem, QueueItemStatus } from "../../work-queue";
+import { queueAdapter } from "../../work-queue/adapter";
 
 /**
  * One settled-OK item: the original `input` and the `result` its effect

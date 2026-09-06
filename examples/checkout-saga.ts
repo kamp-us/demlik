@@ -5,7 +5,7 @@ import {
   run,
   tryInterpret,
 } from "@demlik/tea";
-import { createSaga, type SagaState } from "@demlik/tea/saga";
+import { createSaga, type SagaState } from "../src/internal/flow/saga";
 
 type DoCmd =
   | (Cmd<"reserve_stock"> & { sku: string; qty: number })

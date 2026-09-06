@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/reconciler — the desired-vs-actual sync loop (the "fleet-sync /
+ * internal/flow/reconciler — the desired-vs-actual sync loop (the "fleet-sync /
  * coverage-gap" shape): walk the ACTUAL world end to end, diff it against the
  * DESIRED spec, then apply each resulting `Change` one at a time until the two
  * agree. The control-plane reconcile pattern (Kubernetes controllers, fleet
@@ -90,7 +90,8 @@
  *   interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }),
  */
 
-import type { Cmd } from "../index";
+import type { Cmd } from "../../../index";
+import type { RetryPolicy } from "../../../retry-backoff";
 import {
   createPaginatedWalk,
   type DeadlineSub,
@@ -102,20 +103,19 @@ import {
   type PaginatedWalkState,
   type PaginatedWalkTimerMsg,
   subscribeDeadline,
-} from "../internal/paginate/paginated-walk";
+} from "../../paginate/paginated-walk";
 import {
   get as cacheGet,
   set as cacheSet,
   initCache,
   type TtlCache,
-} from "../internal/resilience/cache";
+} from "../../resilience/cache";
 import type {
   CircuitConfig,
   DeadlineConfig,
   RateLimitConfig,
   ResilientPorts,
-} from "../internal/resilience/resilient-call";
-import type { RetryPolicy } from "../retry-backoff";
+} from "../../resilience/resilient-call";
 
 // ===========================================================================
 // Config — the knob. `desired` / `diff` / `apply` / `idOf` describe the

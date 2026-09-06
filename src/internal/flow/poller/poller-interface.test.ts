@@ -23,8 +23,8 @@
 // and a behavioural one second.
 // ═══════════════════════════════════════════════════════════════════════════
 import { describe, expect, it } from "vitest";
-import type { Cmd } from "../index";
-import { initStore } from "../internal/idempotency/idempotency";
+import type { Cmd } from "../../../index";
+import { initStore } from "../../idempotency/idempotency";
 import {
   createPoller,
   type Poller,

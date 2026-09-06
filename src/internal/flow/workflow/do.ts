@@ -61,7 +61,7 @@ import {
   doEventSourcedStore,
   type EffectLedgerEvent,
   type EventSourcedStore,
-} from "../do";
+} from "../../../do";
 import {
   type Cmd,
   defineMachine,
@@ -69,7 +69,7 @@ import {
   type Runtime,
   run,
   type Store,
-} from "../index";
+} from "../../../index";
 import {
   type ActivityErr,
   type ActivityOk,

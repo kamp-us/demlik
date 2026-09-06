@@ -52,14 +52,6 @@ export is not done until it has a row here.
 | `./machine-viz` | stable | |
 | `./package.json` | stable | metadata passthrough, not an API subpath |
 | `./retry-backoff` | battery | call-hardening |
-| `./await-terminal` | battery | flow |
-| `./batch-window` | battery | flow |
-| `./fan-out` | battery | flow |
-| `./monitored-run` | battery | flow |
-| `./poller` | battery | flow |
-| `./reconciler` | battery | flow |
-| `./saga` | battery | flow; boundary vs `./workflow` documented in their JSDoc |
-| `./workflow` | battery | flow |
 | `./journal` | experimental | append-only ordered record log; interface + `memoryJournal`. The Node file substrate `fileJournal` homes in `./node` beside `fileStore` and carries THIS experimental promise, not `./node`'s stable one (see the Store-factory note below). Ratified human, issue #30 (tier/path/no-blocking-ADR), pre-1.0, no consumers. The remote-sync half (#31) — `RemoteJournal<R>` + `memoryRemoteJournal`, `CursorStore` + `memoryCursorStore`, `SyncClient<R>` + `makeSyncClient` — ships under this SAME subpath and experimental promise (no new subpath); interface + memory substrate + convergence proof only, no durable/hosted remote. |
 | `./recorder` | battery | observability/persistence ops |
 | `./snapshot` | battery | ops add-on over the core `Store`, not core Store mechanics |

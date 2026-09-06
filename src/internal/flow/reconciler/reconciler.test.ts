@@ -1,12 +1,12 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, replay } from "../index";
+import { type Cmd, defineMachine, replay } from "../../../index";
+import { bindMachine } from "../../../testing";
 import {
   PAGE_KEY,
   type PageErrMsg,
   type PageOkMsg,
-} from "../internal/paginate/paginated-walk";
-import { bindMachine } from "../testing";
+} from "../../paginate/paginated-walk";
 import {
   createReconciler,
   deadlineSub,

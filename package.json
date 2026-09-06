@@ -96,10 +96,6 @@
       "types": "./dist/retry-backoff/index.d.ts",
       "import": "./dist/retry-backoff/index.js"
     },
-    "./await-terminal": {
-      "types": "./dist/await-terminal/index.d.ts",
-      "import": "./dist/await-terminal/index.js"
-    },
     "./machine-viz": {
       "types": "./dist/machine-viz/index.d.ts",
       "import": "./dist/machine-viz/index.js"
@@ -116,37 +112,9 @@
       "types": "./dist/snapshot/index.d.ts",
       "import": "./dist/snapshot/index.js"
     },
-    "./fan-out": {
-      "types": "./dist/fan-out/index.d.ts",
-      "import": "./dist/fan-out/index.js"
-    },
-    "./poller": {
-      "types": "./dist/poller/index.d.ts",
-      "import": "./dist/poller/index.js"
-    },
-    "./workflow": {
-      "types": "./dist/workflow/index.d.ts",
-      "import": "./dist/workflow/index.js"
-    },
-    "./batch-window": {
-      "types": "./dist/batch-window/index.d.ts",
-      "import": "./dist/batch-window/index.js"
-    },
-    "./saga": {
-      "types": "./dist/saga/index.d.ts",
-      "import": "./dist/saga/index.js"
-    },
-    "./monitored-run": {
-      "types": "./dist/monitored-run/index.d.ts",
-      "import": "./dist/monitored-run/index.js"
-    },
     "./llm-call": {
       "types": "./dist/llm-call/index.d.ts",
       "import": "./dist/llm-call/index.js"
-    },
-    "./reconciler": {
-      "types": "./dist/reconciler/index.d.ts",
-      "import": "./dist/reconciler/index.js"
     },
     "./agent": {
       "types": "./dist/agent/index.d.ts",
@@ -201,7 +169,7 @@
     "lint": "biome check src package.json",
     "lint:worktree": "biome check src package.json",
     "test": "vitest run",
-    "demo:saga": "vitest run src/workflow/demo.test.ts",
+    "demo:saga": "vitest run src/internal/flow/workflow/demo.test.ts",
     "lane:view": "vite --config demo/lane-view/vite.config.ts",
     "lane:watch": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/lane-watch.ts",
     "typecheck": "tsc --noEmit",

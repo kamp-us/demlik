@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/monitored-run — a long-running operation that is BOTH staged and
+ * internal/flow/monitored-run — a long-running operation that is BOTH staged and
  * watched: an ordered stage pipeline whose POSITION survives eviction, wrapped
  * by a no-progress safety deadline and (optionally) a periodic durable
  * checkpoint.
@@ -80,15 +80,7 @@
  *   interpret: run.handlers({ store: r2 }),
  */
 
-import type { Cmd, Interpret } from "../index";
-import {
-  type DeadlineExceeded,
-  type DeadlineSub,
-  deadlineSub,
-  subscribeDeadline,
-} from "../internal/resilience/deadline";
-import type { QueueItem } from "../internal/work-queue";
-import { queueAdapter } from "../internal/work-queue/adapter";
+import type { Cmd, Interpret } from "../../../index";
 import {
   createSnapshot,
   type SnapshotFailedMsg,
@@ -99,7 +91,15 @@ import {
   type SnapshotState,
   type SnapshotStore,
   type SnapshotWriteCmd,
-} from "../snapshot";
+} from "../../../snapshot";
+import {
+  type DeadlineExceeded,
+  type DeadlineSub,
+  deadlineSub,
+  subscribeDeadline,
+} from "../../resilience/deadline";
+import type { QueueItem } from "../../work-queue";
+import { queueAdapter } from "../../work-queue/adapter";
 
 // ===========================================================================
 // Config — the knob. Every field optional; omit a field → omit its gate.

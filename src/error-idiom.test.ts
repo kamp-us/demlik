@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { TerminalTimeoutError } from "./await-terminal";
 import {
   DriveFailedError,
   DriveStalledError,
@@ -8,6 +7,7 @@ import {
   QuiescenceTimeoutError,
   SubIdCollisionError,
 } from "./index";
+import { TerminalTimeoutError } from "./internal/flow/await-terminal";
 import type { UnauthorizedError } from "./internal/resilience/authed-call";
 import type { DeadlineExceededError } from "./internal/resilience/resilient-call";
 import { RetryExhaustedError } from "./internal/resilience/retry-to-success";
