@@ -37,6 +37,20 @@
  * deadline timer settles the call failed). Every decision is a Msg/Cmd through
  * the reducer + log — "why did this fire" is answerable from the log alone.
  *
+ * ## The base's follow-up is DELIVERED, not just recorded
+ *
+ * The base interpret handler resolves `M | void` exactly as it would unwrapped.
+ * The wrapper never inspects that value, but it does deliver it: once the
+ * resilience verbs settle a call — `succeed` on `$resilience:ok`, or the cache
+ * serving a fresh hit with no run at all — a resolved Msg is folded through the
+ * base reducer in the same transition, by the same delegate-then-partition path
+ * a host-dispatched base Msg takes. So the base's own `fetch_ok` / `fetch_err`
+ * cell runs behind the wrap, a follow-up that re-emits the target is retagged
+ * like any other, and a `void` resolution delivers nothing. The settled value
+ * stays in `$resilience.calls[key].result` too — the retry / circuit / cache
+ * verbs read it there. A thrown handler never reaches the base: it is a
+ * `$resilience:err`, the resilience layer's to retry or settle failed.
+ *
  * ## The slice + verbs are REUSED, not reinvented
  *
  * The `$resilience` slice IS resilient-call's `ResilientState<I, R>` (per-key
@@ -168,9 +182,10 @@ export interface ResilienceConfig<TC extends Cmd, TM extends { type: string }>
  * The composed Model. The base machine's state nests under `base`; the wrapper
  * owns the NAMED `$resilience` slice — resilient-call's `ResilientState` keyed
  * by the per-call `key`, with `I = TC` (the original target base Cmd is the
- * port input) and `R = unknown` (the base interpret handler's result is opaque
- * to the wrapper — it only routes Ok/Err). Plain data → round-trips through
- * `JSON.parse(JSON.stringify(...))` iff the base state does.
+ * port input) and `R = unknown` (the base interpret handler's resolution — the
+ * wrapper never inspects it; it routes Ok/Err and delivers a Msg to the base).
+ * Plain data → round-trips through `JSON.parse(JSON.stringify(...))` iff the
+ * base state does.
  */
 export interface ResilienceModel<S, TC extends Cmd> {
   readonly base: S;
@@ -203,8 +218,9 @@ export type ResilienceRunCmd<TC extends Cmd> = CmdOf<
 
 /**
  * The success Msg the `$resilience:run` handler dispatches back when the base
- * interpret resolved OK. Routes to `succeed`. `at` is stamped at the interpret
- * boundary (the one permitted clock read).
+ * interpret resolved OK. Routes to `succeed`, then `result` — the base
+ * handler's follow-up, when it is a Msg — is folded through the base reducer.
+ * `at` is stamped at the interpret boundary (the one permitted clock read).
  */
 export type ResilienceOkMsg = {
   readonly type: "$resilience:ok";
@@ -393,9 +409,9 @@ export function withResilience<
   // off the result / timer Msgs, never the cold attempt.
   const atOf = config.at ?? (() => 0);
 
-  // The REUSED knob: I = the original target base Cmd, R = the opaque base
-  // interpret result. Its verbs / subs / gate are used unmodified; the wrapper
-  // only adapts the boundary (carrier rename + timer-id re-keying).
+  // The REUSED knob: I = the original target base Cmd, R = the base interpret
+  // resolution (uninspected here). Its verbs / subs / gate are used unmodified;
+  // the wrapper only adapts the boundary (carrier rename + timer-id re-keying).
   const rc = createResilientCall<C, unknown>(config, rng);
 
   // -------------------------------------------------------------------------
@@ -407,64 +423,88 @@ export function withResilience<
   type Cell = (state: WM, msg: WMsg) => readonly [WM, readonly WCmd[]];
   const update: Record<string, Cell> = {};
 
-  // --- Base-Msg cells: delegate, then PARTITION + retag the target Cmd. ----
+  // The base handler resolves `M | void`; only a Msg is deliverable.
+  function isBaseMsg(result: unknown): result is M {
+    return typeof result === "object" && result !== null && "type" in result;
+  }
+
+  // --- The base-Msg fold: delegate, then PARTITION + retag the target Cmd. --
+  // One path for every base Msg, whichever door it arrives through — dispatched
+  // by the host, delivered as a settled follow-up (`$resilience:ok`), or
+  // served from the cache in the same transition. A follow-up that re-emits
+  // the target is retagged like any other; a non-target Cmd passes through.
+  function foldBase(state: WM, msg: M): readonly [WM, readonly WCmd[]] {
+    // 1) Run the base reducer. Its NON-target Cmds pass through unchanged.
+    const [nextBase, baseCmds] = applyCell<S, M, C>(base, state.base, msg);
+
+    // 2) Partition base Cmds: non-target pass straight through; each target
+    //    Cmd is routed through the resilient-call `attempt` gate, which either
+    //    emits a `resilient_run` carrier (→ renamed `$resilience:run`,
+    //    retagging the ORIGINAL base Cmd into `input`), or records the gate
+    //    decision in the slice with NO carrier (cache hit / circuit-open /
+    //    rate-limited backoff). Either way the target Cmd never escapes raw
+    //    and never vanishes off-ledger.
+    let next: WM = { base: nextBase, $resilience: state.$resilience };
+    const outCmds: WCmd[] = [];
+    // The COLD attempt's gate time — the REAL wall time the triggering base
+    // Msg carries as data (rule 5: the merged `update` stays pure; the clock
+    // does not enter here, the Msg's own `at` data does). With this real
+    // instant the breaker compares `at - openedAtMs` against its cooldown
+    // (set by a prior real-time `$resilience:err`), so a cold attempt during
+    // cooldown fast-fails and one AFTER cooldown is admitted — the breaker
+    // RECOVERS. The cache compares `at` against its stored write `at`, the
+    // bucket refills from `at`, and the deadline cap anchors at
+    // `at + deadline.ms` — all against true wall time, never a fabricated
+    // `0`. Every SUBSEQUENT gate run (`fail` → backoff, retry-timer
+    // `onTimer` → re-gate) reads time off the result / timer Msgs the same
+    // way. `atOf` defaults to `0` ONLY when no time-sensitive brick is
+    // configured (construction throws otherwise), where retry backoff reads
+    // its time off the result/timer Msgs and the cold `at` is never compared.
+    const at = atOf(msg);
+    for (const cmd of baseCmds) {
+      if (cmd.type !== target) {
+        outCmds.push(cmd);
+        continue;
+      }
+      const callKey = keyOf(cmd);
+      const [nextSlice, runCmds] = rc.attempt(
+        next.$resilience,
+        callKey,
+        cmd,
+        at,
+      );
+      next = { ...next, $resilience: nextSlice };
+      // rc.attempt emits 0 or 1 `resilient_run` carriers. `renameRunCmds`
+      // renames each into the `$resilience:run` namespace, preserving the
+      // retagged `input` (the ORIGINAL base Cmd). Zero carriers = the gate
+      // recorded a divergence in `nextSlice` (cache/circuit/backoff) —
+      // visible in the slice + log.
+      outCmds.push(...renameRunCmds(runCmds));
+      // A cache hit is the one divergence that SETTLES the call: the gate
+      // parked the cached follow-up as `result` with no carrier, so nothing
+      // will come back through `$resilience:ok` to deliver it. Deliver it
+      // here, in the same transition — the base learns of a served call the
+      // same way it learns of a performed one.
+      if (runCmds.length === 0) {
+        const call = nextSlice.calls[callKey];
+        if (call?.phase === "succeeded" && isBaseMsg(call.result)) {
+          const [delivered, moreCmds] = foldBase(next, call.result);
+          next = delivered;
+          outCmds.push(...moreCmds);
+        }
+      }
+    }
+
+    return [next, outCmds];
+  }
+
   // Base Msg keys enumerated via `msgKeysOf(base)` — keyed on the
   // authoritative `__form` tag, no structural re-derivation here (#275).
   for (const key of msgKeysOf(base)) {
-    update[key] = (state, msg) => {
-      // 1) Run the base reducer. Its NON-target Cmds pass through unchanged.
-      const [nextBase, baseCmds] = applyCell<S, M, C>(
-        base,
-        state.base,
-        msg as M,
-      );
-
-      // 2) Partition base Cmds: non-target pass straight through; each target
-      //    Cmd is routed through the resilient-call `attempt` gate, which either
-      //    emits a `resilient_run` carrier (→ renamed `$resilience:run`,
-      //    retagging the ORIGINAL base Cmd into `input`), or records the gate
-      //    decision in the slice with NO carrier (cache hit / circuit-open /
-      //    rate-limited backoff). Either way the target Cmd never escapes raw
-      //    and never vanishes off-ledger.
-      let resilience = state.$resilience;
-      const outCmds: WCmd[] = [];
-      // The COLD attempt's gate time — the REAL wall time the triggering base
-      // Msg carries as data (rule 5: the merged `update` stays pure; the clock
-      // does not enter here, the Msg's own `at` data does). With this real
-      // instant the breaker compares `at - openedAtMs` against its cooldown
-      // (set by a prior real-time `$resilience:err`), so a cold attempt during
-      // cooldown fast-fails and one AFTER cooldown is admitted — the breaker
-      // RECOVERS. The cache compares `at` against its stored write `at`, the
-      // bucket refills from `at`, and the deadline cap anchors at
-      // `at + deadline.ms` — all against true wall time, never a fabricated
-      // `0`. Every SUBSEQUENT gate run (`fail` → backoff, retry-timer
-      // `onTimer` → re-gate) reads time off the result / timer Msgs the same
-      // way. `atOf` defaults to `0` ONLY when no time-sensitive brick is
-      // configured (construction throws otherwise), where retry backoff reads
-      // its time off the result/timer Msgs and the cold `at` is never compared.
-      const at = atOf(msg as M);
-      for (const cmd of baseCmds) {
-        if (cmd.type !== target) {
-          outCmds.push(cmd);
-          continue;
-        }
-        const callKey = keyOf(cmd);
-        const [nextSlice, runCmds] = rc.attempt(resilience, callKey, cmd, at);
-        resilience = nextSlice;
-        // rc.attempt emits 0 or 1 `resilient_run` carriers. `renameRunCmds`
-        // renames each into the `$resilience:run` namespace, preserving the
-        // retagged `input` (the ORIGINAL base Cmd). Zero carriers = the gate
-        // recorded a divergence in `nextSlice` (cache/circuit/backoff) —
-        // visible in the slice + log.
-        outCmds.push(...renameRunCmds(runCmds));
-      }
-
-      const next: WM = { base: nextBase, $resilience: resilience };
-      return [next, outCmds];
-    };
+    update[key] = (state, msg) => foldBase(state, msg as M);
   }
 
-  // --- `$resilience:ok` → succeed ------------------------------------------
+  // --- `$resilience:ok` → succeed, then DELIVER the follow-up ---------------
   update["$resilience:ok"] = (state, msg) => {
     const m = msg as ResilienceOkMsg;
     const [slice, runCmds] = rc.succeed(state.$resilience, m.key, {
@@ -473,7 +513,13 @@ export function withResilience<
       result: m.result,
       at: m.at,
     });
-    return [{ ...state, $resilience: slice }, renameRunCmds(runCmds)];
+    const settled: WM = { ...state, $resilience: slice };
+    const settleCmds = renameRunCmds(runCmds);
+    // The slice keeps the settled result for the retry / circuit / cache verbs;
+    // the base gets it as the Msg its handler resolved. `void` delivers nothing.
+    if (!isBaseMsg(m.result)) return [settled, settleCmds];
+    const [next, followCmds] = foldBase(settled, m.result);
+    return [next, [...settleCmds, ...followCmds]];
   };
 
   // --- `$resilience:err` → fail --------------------------------------------
