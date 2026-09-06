@@ -1,8 +1,8 @@
 /**
- * @demlik/tea/throttle — a timer-based call transformer that caps invocation
+ * internal/timing/throttle — a timer-based call transformer that caps invocation
  * to at most once per `ms` window.
  *
- * Sibling of `@demlik/tea/debounce` — the two share a SYMMETRIC surface
+ * Sibling of `../debounce` — the two share a SYMMETRIC surface
  * (`Throttled<A>` / `Debounced<A>`, both callable + `.cancel()` + `.flush()`,
  * both `{ leading?, trailing? }`) so they read as a pair. They are kept in
  * separate files with NO cross-import: each is a self-contained timer, and the
@@ -13,7 +13,7 @@
  *   - **throttle** enforces a rate — fires AT MOST once per `ms` while the
  *     burst is ongoing, dropping the calls in between.
  *
- * Layering with `@demlik/tea/throttled-input`: `throttle` and `debounce` are
+ * Layering with `../throttled-input`: `throttle` and `debounce` are
  * the two host-boundary PRIMITIVES — two distinct algorithms
  * (at-most-once-per-window vs collapse-a-burst) behind one signature shape.
  * `throttled-input` is NOT a third primitive: it is a TEA machine composed
@@ -47,9 +47,9 @@
  *   window.addEventListener("pointermove", onMoved);
  *   // cleanup: onMoved.cancel(); window.removeEventListener("pointermove", onMoved);
  *
- * NOT exported from the package root — reached via the `@demlik/tea/throttle`
- * subpath, same one-shape-per-package rule as `rate-limit`, `deadline`, and
- * `work-queue`.
+ * Internal since #47 — not published on any subpath; reached from inside the
+ * package as `internal/timing/throttle`. Same one-shape-per-package rule as
+ * `rate-limit`, `deadline`, and `work-queue`.
  *
  * Uses the universal `setTimeout` / `clearTimeout` timer idiom (same discipline
  * as `subs/from-timeout.ts`): exactly one live handle at a time, the window

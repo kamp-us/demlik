@@ -54,22 +54,11 @@ export is not done until it has a row here.
 | `./retry-backoff` | battery | call-hardening |
 | `./await-terminal` | battery | flow |
 | `./batch-window` | battery | flow |
-| `./debounce` | battery | flow; layering vs `./throttle`/`./throttled-input` documented in their JSDoc |
 | `./fan-out` | battery | flow |
-| `./idempotency` | battery | flow |
-| `./idempotency/adapter` | battery | flow |
-| `./idempotent-intake` | battery | flow |
 | `./monitored-run` | battery | flow |
-| `./paginated-walk` | battery | flow |
-| `./paginator` | battery | flow |
 | `./poller` | battery | flow |
 | `./reconciler` | battery | flow |
 | `./saga` | battery | flow; boundary vs `./workflow` documented in their JSDoc |
-| `./throttle` | battery | flow |
-| `./throttled-input` | battery | flow |
-| `./work-queue` | battery | flow |
-| `./work-queue/adapter` | battery | flow |
-| `./work-queue/ops` | battery | flow |
 | `./workflow` | battery | flow |
 | `./journal` | experimental | append-only ordered record log; interface + `memoryJournal`. The Node file substrate `fileJournal` homes in `./node` beside `fileStore` and carries THIS experimental promise, not `./node`'s stable one (see the Store-factory note below). Ratified human, issue #30 (tier/path/no-blocking-ADR), pre-1.0, no consumers. The remote-sync half (#31) — `RemoteJournal<R>` + `memoryRemoteJournal`, `CursorStore` + `memoryCursorStore`, `SyncClient<R>` + `makeSyncClient` — ships under this SAME subpath and experimental promise (no new subpath); interface + memory substrate + convergence proof only, no durable/hosted remote. |
 | `./recorder` | battery | observability/persistence ops |

@@ -15,7 +15,7 @@ import {
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
-import { createIntake, type IntakeCmd } from "@demlik/tea/idempotent-intake";
+import { createIntake, type IntakeCmd } from "../src/internal/idempotency/idempotent-intake";
 import { toMermaid } from "@demlik/tea/machine-viz";
 import {
   createPaginatedWalk,
@@ -24,7 +24,7 @@ import {
   type PaginatedWalkState,
   type PaginatedWalkTimerMsg,
   subscribeDeadline as subscribeWalkDeadline,
-} from "@demlik/tea/paginated-walk";
+} from "../src/internal/paginate/paginated-walk";
 import { recorder } from "@demlik/tea/recorder";
 import {
   createResilientCall,

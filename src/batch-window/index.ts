@@ -65,7 +65,7 @@ import type { Cmd } from "../index";
 // header. This module does NOT call debounce; a consumer that wants to debounce
 // a bursty source BEFORE it becomes an `add` Msg reaches it from the same import
 // as the batch window.
-export { type Debounced, debounce } from "../debounce";
+export { type Debounced, debounce } from "../internal/timing/debounce";
 
 import {
   type DeadlineExceeded,
@@ -80,7 +80,7 @@ import type { SubscribeHandler } from "../subs/types";
 // flush Cmd; the CONSUMER's interpret handler enqueues onto a
 // `createQueue(store)`. Re-export the caller-facing enqueue payload type so the
 // consumer's flush Cmd and queue agree on the item shape.
-export type { EnqueueInput } from "../work-queue";
+export type { EnqueueInput } from "../internal/work-queue";
 
 /**
  * Configuration for a batch window — the knob. Pure config, no mutable state

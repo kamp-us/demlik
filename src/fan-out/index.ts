@@ -68,8 +68,8 @@
 
 import { at } from "../at";
 import type { Cmd, Port } from "../index";
-import type { QueueItem, QueueItemStatus } from "../work-queue";
-import { queueAdapter } from "../work-queue/adapter";
+import type { QueueItem, QueueItemStatus } from "../internal/work-queue";
+import { queueAdapter } from "../internal/work-queue/adapter";
 
 /**
  * One settled-OK item: the original `input` and the `result` its effect

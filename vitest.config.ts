@@ -11,13 +11,11 @@ type ExportEntry = string | { readonly import?: string };
  * The published export map, re-pointed at `src/`.
  *
  * `@demlik/tea/x` → `src/x/index.ts` is TRUE for most subpaths and FALSE for
- * six of them — `extension/react`, `extension/test-utils`, `work-queue/ops`,
- * `work-queue/adapter`, `idempotency/adapter` are flat modules
- * (`src/extension/react.ts`), and `devtools/styles.css` is not a module at all.
- * Guessing the shape resolves five of those to a directory that does not exist
- * and the sixth to a `.ts` file that is a stylesheet, so the first test to
- * import one dies with a module-not-found for a reason nothing in the test
- * explains.
+ * the rest — `extension/react`, `extension/test-utils` are flat modules
+ * (`src/extension/react.tsx`), and `devtools/styles.css` is not a module at
+ * all. Guessing the shape resolves the flat ones to a directory that does not
+ * exist and the stylesheet to a `.ts` file, so the first test to import one
+ * dies with a module-not-found for a reason nothing in the test explains.
  *
  * So the map is not guessed: it is READ. `package.json`'s `exports` already
  * states, per subpath, exactly which file the specifier means; the only
@@ -62,10 +60,10 @@ const subpathAliases = Object.entries(pkg.exports)
     replacement: file,
   }));
 
-// Pure-module test runner. New behavior modules (retry-backoff, rate-limit,
-// circuit-breaker, idempotency, deadline, cache, debounce, throttle,
-// recorder, trace-replay, machine-viz) are host-agnostic and test in plain
-// node — no happy-dom, no Workers pool. Test files are excluded from the
+// Pure-module test runner. Behavior modules (retry-backoff, the internal
+// resilience / timing / paginate / idempotency / work-queue families, recorder,
+// trace-replay, machine-viz) are host-agnostic and test in plain node — no
+// happy-dom, no Workers pool. Test files are excluded from the
 // published tarball (package.json `files: ["dist"]`) and from `tsc`/`tsup`.
 export default defineConfig({
   // `src/chart/equiv-*.test.ts` drive the REAL `examples/*.ts` machines against

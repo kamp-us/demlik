@@ -110,13 +110,6 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Adapters",
   },
   {
-    subpath: "./work-queue",
-    importPath: "@demlik/tea/work-queue",
-    file: "work-queue.md",
-    typedocName: "work-queue",
-    group: "Adapters",
-  },
-  {
     subpath: "./agent",
     importPath: "@demlik/tea/agent",
     file: "agent.md",

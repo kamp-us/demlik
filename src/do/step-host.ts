@@ -64,7 +64,7 @@
  * request/response contract and the token lifecycle.
  */
 
-import { createIntake } from "../idempotent-intake/index";
+import { createIntake } from "../internal/idempotency/idempotent-intake/index";
 import {
   defaultRetryPolicy,
   initRetry,

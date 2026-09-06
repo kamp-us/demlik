@@ -14,11 +14,11 @@
  * these ops to a `Store` for in-process use (same one-shape-per-package rule
  * as `@demlik/tea/do`). L2 compositions that own their own Model slice
  * (`monitored-run`, `idempotent-intake`, …) instead reach these ops directly
- * via the `@demlik/tea/work-queue/ops` subpath, so a status flip is delegated
+ * from `internal/work-queue/ops`, so a status flip is delegated
  * here rather than re-rolled per call site.
  */
 
-import { at } from "../at";
+import { at } from "../../at";
 import type { QueueItem } from "./index";
 
 /** Append a new pending item. Returns the new queue and the created item. */

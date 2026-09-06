@@ -1,7 +1,7 @@
 /**
- * @demlik/tea/idempotency — dedupe-by-key + last-result cache as pure state + ops.
+ * internal/idempotency/idempotency — dedupe-by-key + last-result cache as pure state + ops.
  *
- * Same shape as `@demlik/tea/work-queue`'s `ops.ts` and `@demlik/tea/rate-limit`:
+ * Same shape as `../../work-queue`'s `ops.ts` and `../../resilience/rate-limit`:
  * a state type plus pure transition functions. Host-agnostic by construction —
  * no `Date.now()`, no timers, no I/O. The caller injects the clock (`nowMs`)
  * and wires the result into its own reducer / interpret. This keeps the store
@@ -46,9 +46,9 @@
  * like "touch": a key actively being re-seen is kept alive on both the TTL and
  * capacity axes.
  *
- * NOT exported from the package root — reached via the `@demlik/tea/idempotency`
- * subpath, same one-shape-per-package rule as `work-queue`, `rate-limit`, and
- * `do`.
+ * Internal since #47 — not published on any subpath; reached from inside the
+ * package as `internal/idempotency/idempotency`. Same one-shape-per-package rule
+ * as `work-queue`, `rate-limit`, and `do`.
  */
 
 /**

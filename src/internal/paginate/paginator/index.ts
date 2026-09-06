@@ -1,9 +1,9 @@
 /**
- * @demlik/tea/paginator — the cursor/offset/page-token walk loop as pure
+ * internal/paginate/paginator — the cursor/offset/page-token walk loop as pure
  * state + ops.
  *
- * Same shape as `@demlik/tea/retry-backoff`, `@demlik/tea/circuit-breaker`,
- * and `@demlik/tea/rate-limit`: a state type plus pure transition functions,
+ * Same shape as `../../../retry-backoff`, `../../resilience/circuit-breaker`,
+ * and `../../resilience/rate-limit`: a state type plus pure transition functions,
  * host-agnostic by construction. Nothing here reads the clock, the RNG, or any
  * I/O on its own behalf — the consumer fetches a page out-of-band and folds the
  * *result* back in through `recordPage`. That keeps every function inside TEA's
@@ -100,8 +100,8 @@
  * `hwm <= 0` would pause immediately, so we treat `hwm <= 0` as "unbounded" and
  * never pause. The walk then runs flat-out, `fetching → fetching` until `done`.
  *
- * NOT exported from the package root — reached via the `@demlik/tea/paginator`
- * subpath, same one-shape-per-package rule as `work-queue`, `retry-backoff`,
+ * Internal since #47 — not published on any subpath; reached from inside the
+ * package as `internal/paginate/paginator`. Same one-shape-per-package rule as `work-queue`, `retry-backoff`,
  * `circuit-breaker`, and `rate-limit`. It is the L1 escape hatch the
  * `paginated-walk` composition builds its walk loop on.
  */
