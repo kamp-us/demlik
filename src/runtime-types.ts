@@ -282,6 +282,34 @@ export class DriveFailedError<S> extends Error {
 }
 
 /**
+ * Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State
+ * that is neither terminal nor `failed` AND nothing in the runtime can still
+ * transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. Waiting
+ * past that point is not the Sub-driven contract, it is a leak: no transition is
+ * coming, so the drive would hang with the runtime alive and `stop()` never
+ * reached. The rejection carries the stalled State on `error.state`, sibling to
+ * `DriveFailedError`, so the caller reads where the machine parked off the
+ * Model rather than off a message string (invariant 6).
+ *
+ * A machine that CAN still move — a Sub that will deliver the terminal Msg after
+ * the dispatch quiesces — is not stalled and the drive keeps waiting; this names
+ * only the case where the runtime itself can prove nothing is coming.
+ */
+export class DriveStalledError<S> extends Error {
+  override readonly name = "DriveStalledError";
+  readonly _tag = "DriveStalledError" as const;
+  constructor(public readonly state: S) {
+    super(
+      `@demlik/tea: driveToDone stalled — the start chain quiesced on a State ` +
+        `that is neither terminal nor failed, with no live Sub and no Cmd in ` +
+        `flight to move it further. Read \`error.state\` for the State it ` +
+        `parked on; if a later transition was expected, the machine needs a ` +
+        `Sub (or a Cmd) that delivers it.`,
+    );
+  }
+}
+
+/**
  * Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting
  * go of a runtime that still had something outstanding. Reported under
  * `phase: "discard"`, never raised.
