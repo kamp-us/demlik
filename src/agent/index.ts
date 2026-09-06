@@ -78,7 +78,9 @@
  *   type RunTool = { readonly type: "run_tool" } & ToolCall;
  *   const agent = createAgent<Stage, Purpose, Outputs, Result, RunTool, Msg>({
  *     stages: ["plan", "act", "report"],
- *     model: (id) => createChatModel(env, id),
+ *     // The brain: a plain `async (messages) => turn` (the common path), or the
+ *     // `(id) => Llm` factory when the model binds the schema itself.
+ *     model: async (messages) => client.chat(messages),
  *     schemas: { plan: planSchema, act: turnSchema, report: reportSchema },
  *     turnOf: (stage) => stageToPurpose[stage],   // which brain call a stage runs
  *     toolOf: (call): RunTool => ({ type: "run_tool", ...call }),
@@ -1275,8 +1277,11 @@ export type {
   LlmSucceedMsg,
   MessageLoader,
   ModelFactory,
+  ModelPort,
+  PlainModel,
   Schema,
 } from "../llm-call";
+export { plainModel } from "../llm-call";
 export type {
   DeadlineSub,
   MonitoredRunCmd,

@@ -5,6 +5,7 @@ import { bindMachine } from "../testing";
 import {
   createLlmCall,
   deadlineSub,
+  isPlainModel,
   type LlmCall,
   type LlmErr,
   type LlmFailMsg,
@@ -12,6 +13,7 @@ import {
   type LlmRunCmd,
   type LlmSucceedMsg,
   type LlmTimerMsg,
+  plainModel,
   type ResilientState,
   type Schema,
 } from "./index";
@@ -322,6 +324,94 @@ describe("createLlmCall — invokeOne: structured-output parse + purpose branch"
     await expect(
       llm.invokeOne({ purpose: "plan", model: null, payload: 0 }),
     ).rejects.toBe(boom);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The plain-function model port (#58): `model: async (messages) => answer`
+// beside the factory. Same handler, same schema validation, same failure path.
+// ---------------------------------------------------------------------------
+
+describe("createLlmCall — plain-function model port", () => {
+  it("a bare async function receives the loaded messages and its answer is parsed by the purpose schema", async () => {
+    const seen: LlmCall<Purpose>[] = [];
+    let sawMessages: readonly Message[] | null = null;
+    const llm = createLlmCall<Purpose, Outputs, Message>(
+      {
+        model: async (messages) => {
+          sawMessages = messages;
+          return { steps: ["a"] };
+        },
+        schemas,
+        retry,
+        loadMessages: loaderOf(seen),
+      },
+      rngZero,
+    );
+    const call: LlmCall<Purpose> = { purpose: "plan", model: null, payload: 1 };
+    const ok = await llm.invokeOne(call);
+    expect(ok).toEqual({
+      key: "plan",
+      purpose: "plan",
+      output: { steps: ["a"] },
+    });
+    expect(sawMessages).toEqual([{ role: "user", text: "plan:1" }]);
+  });
+
+  it("an answer the purpose schema rejects throws out of invokeOne (data on the settle Msg, not a corrupt success)", async () => {
+    const llm = createLlmCall<Purpose, Outputs, Message>(
+      { model: async () => ({ score: "high" }), schemas, retry },
+      rngZero,
+    );
+    await expect(
+      llm.invokeOne({ purpose: "report", model: null, payload: 0 }),
+    ).rejects.toThrow("report: score not a number");
+  });
+
+  it("plainModel lifts a sync promise-returning function that carries no async tag", async () => {
+    const answer = (_m: readonly Message[]) => Promise.resolve({ score: 3 });
+    expect(isPlainModel<Message, Outputs[Purpose]>(answer)).toBe(false);
+    const llm = createLlmCall<Purpose, Outputs, Message>(
+      { model: plainModel(answer), schemas, retry },
+      rngZero,
+    );
+    const ok = await llm.invokeOne({
+      purpose: "report",
+      model: null,
+      payload: 0,
+    });
+    expect(ok.output).toEqual({ score: 3 });
+  });
+
+  it("isPlainModel tells a bare async function from a factory", () => {
+    expect(isPlainModel<Message, unknown>(async () => ({}))).toBe(true);
+    expect(isPlainModel<Message, unknown>(fakeModel(async () => ({})))).toBe(
+      false,
+    );
+  });
+
+  it("the structured-output factory path is unchanged beside it", async () => {
+    let bound: Schema<unknown> | null = null;
+    const llm = createLlmCall<Purpose, Outputs, Message>(
+      {
+        model: () => ({
+          withStructuredOutput<T>(s: Schema<T>) {
+            bound = s;
+            return { invoke: async () => ({ steps: [] }) as unknown as T };
+          },
+        }),
+        schemas,
+        retry,
+      },
+      rngZero,
+    );
+    const ok = await llm.invokeOne({
+      purpose: "plan",
+      model: null,
+      payload: 0,
+    });
+    expect(ok.output).toEqual({ steps: [] });
+    expect(bound).toBe(schemas.plan);
   });
 });
 
