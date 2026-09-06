@@ -9,7 +9,7 @@
  * helper stays internal).
  */
 
-import type { Schema } from "../llm-call";
+import type { Schema } from "../internal/llm-call";
 
 /**
  * Build a `Schema<T>` from a type guard — the zod-style `parse` throw-wrapper the

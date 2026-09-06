@@ -22,7 +22,7 @@
 // run anywhere a machine runs (CI, a Worker, a Node script).
 // ---------------------------------------------------------------------------
 
-import { type Cmd, type Machine, replay, type Sub } from "../index";
+import { type Cmd, type Machine, replay, type Sub } from "../../../index";
 import type { Trace } from "../recorder";
 import { indexPath, keyPath, typeOf, unionKeys } from "./state-walk";
 

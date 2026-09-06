@@ -1,5 +1,6 @@
 /**
- * @demlik/tea/snapshot — periodic state checkpoint to a host store (R2/KV-shaped).
+ * internal/persistence/snapshot — periodic state checkpoint to a host store
+ * (R2/KV-shaped). Internal since #49 — not published on any subpath.
  *
  * The problem it solves: a long-running machine (a multi-stage run, a paginated
  * crawl, a saga) lives in TEA's in-memory `State` and is persisted as ONE blob
@@ -68,7 +69,8 @@
  *   interpret: { ...snap.handlers({ store: r2Adapter }) },
  */
 
-import { Cmd, type Interpret, tryInterpret } from "../index";
+import { z } from "zod";
+import { Cmd, type CmdOf, type Interpret, tryInterpret } from "../../../index";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config — the knob.
@@ -184,13 +186,26 @@ export interface SnapshotPorts<V> {
  * state, the cursor, whatever the machine wants restartable). The verb takes it
  * as an argument so the snapshot slice never has to hold a copy of the
  * machine's domain state.
+ *
+ * `Cmd.define`d (ADR 0014), minted per `V` by a factory the way
+ * `workflowActivityDef<A>()` is, since the payload type is the knob's own
+ * parameter. The handler answers through this module's OWN Msgs
+ * (`snapshot_saved` / `snapshot_failed`), never the minted `_ok` / `_err`,
+ * hence `ok: z.void()` and an empty `err` list.
  */
-export type SnapshotWriteCmd<V> = Cmd<"snapshot_write"> & {
-  readonly key: string;
-  readonly seq: number;
-  readonly at: number;
-  readonly payload: V;
-};
+export function snapshotWriteDef<V>() {
+  return Cmd.define("snapshot_write", {
+    input: z.custom<{
+      readonly key: string;
+      readonly seq: number;
+      readonly at: number;
+      readonly payload: V;
+    }>(),
+    ok: z.void(),
+    err: [],
+  });
+}
+export type SnapshotWriteCmd<V> = CmdOf<ReturnType<typeof snapshotWriteDef<V>>>;
 
 /**
  * The Msg the write handler dispatches on a SUCCESSFUL `put`. Fold it back
@@ -228,9 +243,12 @@ export type SnapshotFailedMsg = {
  * triggering Msg once on resume (a `boot` Msg, never `init`'s rehydrate branch —
  * invariant 2), folds the recovered payload into its run slice, then continues.
  */
-export type SnapshotLoadCmd = Cmd<"snapshot_load"> & {
-  readonly key: string;
-};
+export const snapshotLoad = Cmd.define("snapshot_load", {
+  input: z.object({ key: z.string() }),
+  ok: z.void(),
+  err: [],
+});
+export type SnapshotLoadCmd = CmdOf<typeof snapshotLoad>;
 
 /**
  * The Msg the load handler dispatches when `store.get` RESOLVES. `payload` is
@@ -400,6 +418,7 @@ export function createSnapshot<V>(config: SnapshotConfig): SnapshotKnob<V> {
   // progress unit instead of never.
   const every = config.every >= 1 ? config.every : 1;
   const key = config.key ?? DEFAULT_SNAPSHOT_KEY;
+  const snapshotWrite = snapshotWriteDef<V>();
 
   /**
    * Emit the write Cmd for a checkpoint decision. Shared by `record`'s
@@ -414,14 +433,7 @@ export function createSnapshot<V>(config: SnapshotConfig): SnapshotKnob<V> {
   ): readonly [SnapshotState, readonly Cmd[]] {
     const seq = state.seq + 1;
     const next: SnapshotState = { ...state, sinceLast: 0, seq };
-    const cmd: SnapshotWriteCmd<V> = {
-      type: "snapshot_write",
-      key,
-      seq,
-      at,
-      payload,
-    };
-    return [next, [cmd]];
+    return [next, [snapshotWrite({ key, seq, at, payload })]];
   }
 
   return {
@@ -463,8 +475,7 @@ export function createSnapshot<V>(config: SnapshotConfig): SnapshotKnob<V> {
       // A read decides nothing about the cadence bookkeeping — return the slice
       // unchanged and emit the single read Cmd. The recovered payload folds back
       // through `snapshot_loaded` (the consumer's reducer), not here.
-      const cmd: SnapshotLoadCmd = { type: "snapshot_load", key };
-      return [state, [cmd]];
+      return [state, [snapshotLoad({ key })]];
     },
 
     handlers(ports) {

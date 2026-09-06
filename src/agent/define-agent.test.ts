@@ -2,7 +2,7 @@ import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { Cmd, DriveFailedError, driveToDone, replay, run } from "../index";
-import { memoryJournal } from "../journal";
+import { memoryJournal } from "../internal/journal";
 import { memoryStore } from "../mem";
 import {
   type AgentMachineMsg,

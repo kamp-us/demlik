@@ -1,6 +1,6 @@
 // Runtime exercise of the emitted table. Types compiling ≠ the walk working.
 import { expect, it } from "vitest";
-import { toMermaid } from "../machine-viz";
+import { toMermaid } from "../devtools/machine-viz";
 import { applyCell } from "../pure/core";
 import {
   issue42,

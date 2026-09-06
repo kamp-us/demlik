@@ -28,8 +28,12 @@
 
 import type { BootingRuntime, Cmd, Machine, Sub } from "../index";
 import { replay } from "../index";
-import { type RecorderOptions, recorder, type Trace } from "../recorder";
-import { deepEqual } from "../trace-replay";
+import {
+  type RecorderOptions,
+  recorder,
+  type Trace,
+} from "../internal/persistence/recorder";
+import { deepEqual } from "../internal/persistence/trace-replay";
 
 /**
  * A live parity recording attached to a Runtime — the go/no-go gate's golden

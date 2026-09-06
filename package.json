@@ -47,10 +47,6 @@
       "types": "./dist/mem/index.d.ts",
       "import": "./dist/mem/index.js"
     },
-    "./journal": {
-      "types": "./dist/journal/index.d.ts",
-      "import": "./dist/journal/index.js"
-    },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
@@ -96,33 +92,9 @@
       "types": "./dist/retry-backoff/index.d.ts",
       "import": "./dist/retry-backoff/index.js"
     },
-    "./machine-viz": {
-      "types": "./dist/machine-viz/index.d.ts",
-      "import": "./dist/machine-viz/index.js"
-    },
-    "./recorder": {
-      "types": "./dist/recorder/index.d.ts",
-      "import": "./dist/recorder/index.js"
-    },
-    "./trace-replay": {
-      "types": "./dist/trace-replay/index.d.ts",
-      "import": "./dist/trace-replay/index.js"
-    },
-    "./snapshot": {
-      "types": "./dist/snapshot/index.d.ts",
-      "import": "./dist/snapshot/index.js"
-    },
-    "./llm-call": {
-      "types": "./dist/llm-call/index.d.ts",
-      "import": "./dist/llm-call/index.js"
-    },
     "./agent": {
       "types": "./dist/agent/index.d.ts",
       "import": "./dist/agent/index.js"
-    },
-    "./prediction": {
-      "types": "./dist/prediction/index.d.ts",
-      "import": "./dist/prediction/index.js"
     },
     "./pure": {
       "types": "./dist/pure/index.d.ts",

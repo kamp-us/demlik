@@ -12,7 +12,6 @@
     "src/work-queue/index.ts",
     "src/agent/index.ts",
     "src/with-resilience/index.ts",
-    "src/llm-call/index.ts",
     "src/retry-backoff/index.ts",
     "src/circuit-breaker/index.ts",
     "src/resilient-call/index.ts",

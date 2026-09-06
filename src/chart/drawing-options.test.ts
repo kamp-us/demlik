@@ -12,7 +12,7 @@
 // and the sanitizing that makes `human:cp-approval` drawable at all.
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it } from "vitest";
-import { safeId } from "../machine-viz";
+import { safeId } from "../devtools/machine-viz";
 import { lane } from "./__fixtures__/lane";
 import { pollerChart } from "./__fixtures__/status-poller-chart";
 import { chartMermaid, edgeKey } from "./compile";

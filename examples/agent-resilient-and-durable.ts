@@ -46,8 +46,8 @@ import {
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
-import { recorder } from "@demlik/tea/recorder";
-import { replayTrace } from "@demlik/tea/trace-replay";
+import { recorder } from "../src/internal/persistence/recorder";
+import { replayTrace } from "../src/internal/persistence/trace-replay";
 import { withDeadline } from "../src/internal/resilience/with-deadline";
 import { withResilience } from "../src/internal/resilience/with-resilience";
 

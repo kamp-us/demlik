@@ -1,5 +1,7 @@
 /**
- * @demlik/tea/machine-viz — turn a `Machine` into a Mermaid diagram string.
+ * devtools/machine-viz — turn a `Machine` into a Mermaid diagram string.
+ * Published from `@demlik/tea/devtools` (it was its own `./machine-viz` door
+ * until #49 folded it in here); still pure and React-free.
  *
  * PURE. No deps, no AST parsing, no file I/O. The function reads only the
  * `Machine` value it is handed plus optional sample states/msgs/ctx.

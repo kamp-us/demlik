@@ -117,13 +117,6 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Machines",
   },
   {
-    subpath: "./llm-call",
-    importPath: "@demlik/tea/llm-call",
-    file: "llm-call.md",
-    typedocName: "llm-call",
-    group: "Machines",
-  },
-  {
     subpath: "./retry-backoff",
     importPath: "@demlik/tea/retry-backoff",
     file: "retry-backoff.md",

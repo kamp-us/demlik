@@ -1,7 +1,9 @@
 /**
  * @packageDocumentation
- * @demlik/tea/llm-call — `resilient-call` + structured-output parse + a typed
- * failure variant, around a purpose-discriminated LLM invocation.
+ * internal/llm-call — `resilient-call` + structured-output parse + a typed
+ * failure variant, around a purpose-discriminated LLM invocation. Internal
+ * since #49 — not published on any subpath; `@demlik/tea/agent` re-exports
+ * the types a consumer meets.
  *
  * This is the ~60-line `call_llm` handler from the audit-agent seed
  * (`interpret.ts` / `effects.ts`) collapsed into the uniform L2 knob: a config
@@ -92,8 +94,10 @@
  *   interpret: llm.handlers(),
  */
 
-import { describeError } from "../describe-error";
-import type { Cmd } from "../index";
+import { describeError } from "../../describe-error";
+import type { Cmd } from "../../index";
+import { MsgType } from "../../protocol";
+import type { RetryPolicy } from "../../retry-backoff";
 import {
   createResilientCall,
   type DeadlineExceeded,
@@ -106,9 +110,7 @@ import {
   type RunCmd,
   type SucceedMsg,
   subscribeDeadline,
-} from "../internal/resilience/resilient-call";
-import { MsgType } from "../protocol";
-import type { RetryPolicy } from "../retry-backoff";
+} from "../resilience/resilient-call";
 
 // ===========================================================================
 // The DI port surfaces — model factory + structured output + message loader.

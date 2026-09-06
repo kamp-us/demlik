@@ -72,8 +72,12 @@ import {
   run,
   type Sub,
 } from "../../index";
+import {
+  type Recorder,
+  recorder,
+  type Trace,
+} from "../../internal/persistence/recorder";
 import type { Reducer, RequiredCtx, Transitions } from "../../pure/core";
-import { type Recorder, recorder, type Trace } from "../../recorder";
 import {
   chartMermaid,
   compile,

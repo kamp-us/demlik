@@ -21,7 +21,7 @@ import {
   keyPath,
   typeOf,
   unionKeys,
-} from "../trace-replay/state-walk";
+} from "../internal/persistence/trace-replay/state-walk";
 
 /**
  * A single differing cell between two states.

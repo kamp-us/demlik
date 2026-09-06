@@ -49,16 +49,9 @@ export is not done until it has a row here.
 | `./parity` | stable | grandfathered by production usage (audit-core) |
 | `./devtools` | stable | dev-tooling edge of the kernel |
 | `./devtools/styles.css` | stable | asset of `./devtools` |
-| `./machine-viz` | stable | |
 | `./package.json` | stable | metadata passthrough, not an API subpath |
 | `./retry-backoff` | battery | call-hardening |
-| `./journal` | experimental | append-only ordered record log; interface + `memoryJournal`. The Node file substrate `fileJournal` homes in `./node` beside `fileStore` and carries THIS experimental promise, not `./node`'s stable one (see the Store-factory note below). Ratified human, issue #30 (tier/path/no-blocking-ADR), pre-1.0, no consumers. The remote-sync half (#31) — `RemoteJournal<R>` + `memoryRemoteJournal`, `CursorStore` + `memoryCursorStore`, `SyncClient<R>` + `makeSyncClient` — ships under this SAME subpath and experimental promise (no new subpath); interface + memory substrate + convergence proof only, no durable/hosted remote. |
-| `./recorder` | battery | observability/persistence ops |
-| `./snapshot` | battery | ops add-on over the core `Store`, not core Store mechanics |
-| `./trace-replay` | battery | observability/persistence ops |
 | `./agent` | experimental | agent layer; the brain migration graduates it |
-| `./llm-call` | experimental | agent layer |
-| `./prediction` | experimental | client prediction |
 | `./chart` | experimental | machines authored as config; the type machinery IS the surface |
 | `./chart/inspect` | experimental | the chart read as data — headless; the debugger UI's substrate |
 | `./chart/inspect/react` | experimental | `<ChartInspector>`; React binding of `./chart/inspect` |
@@ -91,24 +84,16 @@ the existing four to converge; that break is not worth the churn (this table is
 the cheaper fix).
 
 **Journal factories are a separate family from Store factories.** A `Store<S>`
-is whole-load / whole-save of one state value; a `Journal<R>` (`./journal`) is
-an append-only, ordered record log. The two mechanism-named journal factories —
-`memoryJournal` (`./journal`) and `fileJournal` (`./node`, beside `fileStore`) —
-carry the `./journal` **experimental** promise, not the `stable` stamp of the
-subpath they are exported from. `fileJournal` lives in `./node` per the #30
-ruling (a host file substrate homes with the host's other file adapter); its tier
-travels with the journal feature, tracked by the `./journal` row above.
-
-The **remote-sync** half of the journal (#31) is a third family again: a
-`RemoteJournal<R>` is the append-only remote many local journals push into and
-pull from, with the remote assigning the one `seq` that counts; a `SyncClient<R>`
-joins a local `Journal<R>` to a remote through a per-`(client, stream)`
-`CursorStore`. Its memory substrates — `memoryRemoteJournal`, `memoryCursorStore`
-— mirror `memoryStore`/`memoryJournal` and ship under `./journal` on the same
-experimental promise. It builds ON `memoryJournal` (the remote's authoritative
-seq assignment IS a local journal's per-stream order), consuming the #30 seam
-rather than reinventing it. No durable or hosted remote ships here — the
-deliverable is the interface, the memory substrate, and the convergence proof.
+is whole-load / whole-save of one state value; a `Journal<R>`
+(`src/internal/journal`, internal since #49) is an append-only, ordered record
+log. `fileJournal` (`./node`, beside `fileStore`) is the one journal factory
+still published, and it carries the journal's **experimental** promise, not the
+`stable` stamp of the subpath it is exported from — `fileJournal` lives in
+`./node` per the #30 ruling (a host file substrate homes with the host's other
+file adapter), and its tier travels with the journal feature. `memoryJournal`,
+the remote-sync half (#31: `RemoteJournal<R>` + `memoryRemoteJournal`,
+`CursorStore` + `memoryCursorStore`, `SyncClient<R>` + `makeSyncClient`) and the
+conformance suite are internal; no durable or hosted remote ships.
 
 ## Semver policy
 

@@ -19,7 +19,7 @@
 // number of times in the same order.
 // ═══════════════════════════════════════════════════════════════════════════
 import { expect, it, vi } from "vitest";
-import { deepEqual } from "../trace-replay";
+import { deepEqual } from "../internal/persistence/trace-replay";
 import { importExample } from "./__fixtures__/import-example";
 import type { RFState } from "./__fixtures__/resilient-fetch-reducer";
 import {

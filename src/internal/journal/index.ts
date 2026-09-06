@@ -1,6 +1,8 @@
 /**
  * @packageDocumentation
- * @demlik/tea/journal — an append-only, ordered record log for `@demlik/tea`.
+ * internal/journal — an append-only, ordered record log for `@demlik/tea`.
+ * Internal since #49 — not published on any subpath; `fileJournal` on
+ * `@demlik/tea/node` is the one public route.
  *
  * The log a "durable, replayable state machine" replays from. tea already ships
  * the log's neighbours — `fileStore`/`memoryStore` (`Store<S>`: snapshot with

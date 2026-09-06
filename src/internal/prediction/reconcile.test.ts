@@ -17,7 +17,7 @@
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { defineMachine, foldMsgs, type Reducer } from "../index";
+import { defineMachine, foldMsgs, type Reducer } from "../../index";
 import { ack, reconcile, type SeqTagged, tagSeq } from "./index";
 
 // A counter whose every Msg adds a delta — a stand-in for any client-predicted

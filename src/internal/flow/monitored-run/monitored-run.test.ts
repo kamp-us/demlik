@@ -1,8 +1,8 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { defineMachine, type Reducer } from "../../../index";
-import { type SnapshotStore, snapshotSaved } from "../../../snapshot";
 import { bindMachine } from "../../../testing";
+import { type SnapshotStore, snapshotSaved } from "../../persistence/snapshot";
 import {
   createMonitoredRun,
   deadlineSub,

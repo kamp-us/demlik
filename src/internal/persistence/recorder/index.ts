@@ -30,7 +30,7 @@
 // This module OWNS the `Trace` type. `../trace-replay` imports it.
 // ---------------------------------------------------------------------------
 
-import type { BootingRuntime } from "../index";
+import type { BootingRuntime } from "../../../index";
 
 /**
  * A recorded run, sufficient to reproduce it via `../trace-replay`.
