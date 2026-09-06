@@ -36,6 +36,15 @@ import {
 import { deepEqual } from "../internal/persistence/trace-replay";
 
 /**
+ * The two recorder types this module's own signatures name — `Trace` is what
+ * {@link Recording.trace} returns and what {@link goldenReplay} accepts bare,
+ * `RecorderOptions` is what {@link recordRun} takes. The recorder itself is
+ * internal, so this door is the only place either type can be named from
+ * outside the package.
+ */
+export type { RecorderOptions, Trace } from "../internal/persistence/recorder";
+
+/**
  * A live parity recording attached to a Runtime — the go/no-go gate's golden
  * artifact. Wraps a {@link recorder}: drive the runtime, then snapshot with
  * {@link Recording.trace} (or hand the live `Recording` straight to
