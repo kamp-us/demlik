@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (82)
+## Exports (84)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -52,6 +52,7 @@ import { … } from "@demlik/tea/agent";
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
 | `isAgentTurn` | Function |  |
 | `isCompactionSummary` | Function |  |
+| `isReservedToolName` | Function |  |
 | `liftAgent` | Function |  |
 | `LlmCall` | Reference |  |
 | `LlmErr` | Reference |  |
@@ -67,6 +68,7 @@ import { … } from "@demlik/tea/agent";
 | `PLAIN_MODEL_MISROUTE_REASON` | Reference |  |
 | `plainModel` | Reference |  |
 | `PlainModel` | Reference |  |
+| `ReservedToolName` | Type | A tool name `tool()` refuses (#72). |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `Schema` | Reference |  |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |

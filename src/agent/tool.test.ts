@@ -2,11 +2,15 @@ import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { Cmd, type PortEmitter, run } from "../index";
+import { MsgType } from "../protocol";
+import { bindMachine } from "../testing";
 import {
   type AgentEvent,
+  type AgentLlmOkMsg,
   type AgentTurn,
   agentEvents,
   createAgent,
+  isReservedToolName,
   type Schema,
   type ToolCall,
   type ToolRecord,
@@ -127,6 +131,50 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
     expect(search.errType).toBe("search_err");
     expect(search.errTags).toEqual(["not_found", "thrown"]);
     expect(count.errTags).toEqual(["thrown"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #72 — a reserved name is refused at construction. The type excludes the
+// literal; a name that erased to `string` meets the runtime check instead.
+// ---------------------------------------------------------------------------
+
+describe("tool() — a reserved name is a declaration bug, refused at construction", () => {
+  const spec = { input: z.object({}), ok: z.void(), err: [] };
+  const noop = async () => Result.ok(undefined);
+  const declare = (name: string) => () => tool(name, spec, noop);
+
+  it.each([
+    "agent_tool",
+    "resilient",
+    "compact",
+    "tool_rejected",
+  ])("%s, passed as a widened string, throws an error naming it", (name) => {
+    expect(declare(name)).toThrow(
+      `tool: "${name}" is reserved — it is an agent-owned Msg prefix`,
+    );
+  });
+
+  it("the interpret keys `toMachine` merges under are reserved too", () => {
+    expect(declare("compact_run")).toThrow(/is reserved/);
+    expect(declare("resilient_run")).toThrow(/is reserved/);
+    expect(declare("snapshot_write")).toThrow(/is reserved/);
+  });
+
+  it("a name beside the reserved ones still constructs", () => {
+    expect(declare("compactor")().cmdType).toBe("compactor");
+    expect(declare("agent_tools")().cmdType).toBe("agent_tools");
+  });
+
+  it("the set is read off `MsgType`: every discriminant and every settle prefix", () => {
+    for (const type of Object.values(MsgType)) {
+      expect(isReservedToolName(type)).toBe(true);
+      const prefix = /^(.*)_(?:ok|err|run)$/.exec(type)?.[1];
+      if (prefix !== undefined) expect(isReservedToolName(prefix)).toBe(true);
+    }
+    expect(isReservedToolName("tool_rejected")).toBe(true);
+    expect(isReservedToolName("snapshot_write")).toBe(true);
+    expect(isReservedToolName("search")).toBe(false);
   });
 });
 
@@ -361,5 +409,71 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
       reason: 'unknown_tool {"name":"teleport"}',
     });
     expect(byId.get("c7")?.outcome).toEqual({ kind: "ok", result: 0 });
+  });
+
+  // #72 — the regression the last-wins spread would hide: with a router wired,
+  // the agent's own `agent_tool_ok` / `resilient_ok` / `compact_ok` cells are
+  // still the agent's verbs, not the router's fold (which returns `[s, []]`
+  // for any Msg outside its own `<name>_ok` / `<name>_err`).
+  it("the agent's own settle cells survive the router merge", () => {
+    const agent = createAgent<
+      Stage,
+      Purpose,
+      Outputs,
+      { snippet: string } | number,
+      ReturnType<typeof tools.toolOf>,
+      unknown
+    >({
+      stages: ["plan"],
+      model: fakeModel([]),
+      schemas: { plan_turn: turnSchema },
+      turnOf: () => "plan_turn",
+      toolOf: tools.toolOf,
+      rng: () => 0,
+    });
+    const machine = agent.toMachine({ tools });
+
+    // The router's two cells per def are one fold; the agent's cells are not it.
+    const fold = machine.update.search_ok;
+    expect(machine.update.search_err).toBe(fold);
+    expect(machine.update.agent_tool_ok).not.toBe(fold);
+    expect(machine.update.resilient_ok).not.toBe(fold);
+    expect(machine.update.compact_ok).not.toBe(fold);
+
+    // And they still fold the loop: the brain settle folds the turn and fans
+    // the tool out, the legacy tool settle folds the record and re-fires the
+    // brain. Under the router's fold both would have been no-ops.
+    const brainOk: AgentLlmOkMsg<Purpose, Outputs> = {
+      type: "resilient_ok",
+      key: "plan_turn",
+      result: {
+        key: "plan_turn",
+        purpose: "plan_turn",
+        output: {
+          content: "look",
+          toolCalls: [call("c1", "search", { q: "tea" })],
+        },
+      },
+      at: 10,
+    };
+    const { state, cmds } = bindMachine(machine, ctx).replay({
+      msgs: [
+        { type: "agent_start", runId: "r", at: 0 },
+        brainOk,
+        {
+          type: "agent_tool_ok",
+          callId: "c1",
+          result: { snippet: "s" },
+          at: 20,
+        },
+      ],
+    });
+    expect(state.conversation?.turnCount).toBe(1);
+    expect(state.tools.running).toEqual([]);
+    expect(cmds.map((c) => c.type)).toEqual([
+      "resilient_run",
+      "search",
+      "resilient_run",
+    ]);
   });
 });

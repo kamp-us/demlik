@@ -30,8 +30,74 @@ import {
   type Tagged,
   type TaggedError,
 } from "../index";
+import { MsgType, type MsgTypeValue } from "../protocol";
 import { malformedResult } from "../pure/core";
 import type { ToolCall, ToolOutcome } from "./types";
+
+// ===========================================================================
+// Reserved names — the agent's own Msg vocabulary a tool may not mint over.
+// ===========================================================================
+
+/**
+ * The prefix a protocol discriminant was minted from: `resilient_ok` →
+ * `resilient`, `compact_run` → `compact`. A tool named by that prefix would
+ * mint the same `<name>_ok` / `<name>_err` the agent's reducer already owns.
+ */
+type SettlePrefixOf<T extends string> = T extends
+  | `${infer P}_ok`
+  | `${infer P}_err`
+  | `${infer P}_run`
+  ? P
+  : never;
+
+const REJECTED_TYPE = "tool_rejected";
+const SNAPSHOT_WRITE_TYPE = "snapshot_write";
+
+/**
+ * A tool name `tool()` refuses (#72). A tool's name is its Cmd `type` — so
+ * its interpret key — and the prefix of its settle Msgs, so every string
+ * already spoken by the protocol is taken twice over: the settle prefixes
+ * (`resilient`, `agent_tool`, `compact`) would overwrite the agent's own
+ * reducer cells through `toMachine`'s last-wins spread, and the discriminants
+ * themselves (`compact_run`, `resilient_run`, …) would shadow the interpret
+ * cell of that name. Both halves derive from `MsgType`: a new entry there
+ * reserves its name and its prefix with no second edit. The two names outside
+ * the protocol are the router's own `tool_rejected` and the checkpoint cell
+ * `snapshot_write`, which `toMachine` merges under the consumer's key.
+ */
+export type ReservedToolName =
+  | MsgTypeValue
+  | SettlePrefixOf<MsgTypeValue>
+  | typeof REJECTED_TYPE
+  | typeof SNAPSHOT_WRITE_TYPE;
+
+/**
+ * Widens to `unknown` for a name outside the reserved set and to `never`
+ * inside it, so `Name & NotReserved<Name>` is the name itself or
+ * unconstructible. A widened `string` passes here — the runtime check in
+ * `tool()` is what catches a reserved name built from one.
+ */
+type NotReserved<Name extends string> = Name extends ReservedToolName
+  ? never
+  : unknown;
+
+const SETTLE_SUFFIX = /_(?:ok|err|run)$/;
+
+/** The runtime mirror of `ReservedToolName`, read off the same `MsgType`. */
+const reservedToolNames: ReadonlySet<string> = new Set<string>([
+  ...Object.values(MsgType),
+  ...Object.values(MsgType).flatMap((t) => {
+    const suffix = SETTLE_SUFFIX.exec(t);
+    return suffix === null ? [] : [t.slice(0, suffix.index)];
+  }),
+  REJECTED_TYPE,
+  SNAPSHOT_WRITE_TYPE,
+]);
+
+/** Whether `name` is one `tool()` refuses — the set `ReservedToolName` types. */
+export function isReservedToolName(name: string): name is ReservedToolName {
+  return reservedToolNames.has(name);
+}
 
 // ===========================================================================
 // tool() — one declaration: the Cmd, its channels, and the handler.
@@ -108,6 +174,10 @@ export type AnyToolDef = AnyCmdDef & {
  * `Result.ok(value)` or the typed `fail({ _tag })` it is handed; a throw
  * settles `<name>_err` — with the thrown `_tag` when it is a declared one,
  * else as `{ _tag: "thrown", message }`.
+ *
+ * A `ReservedToolName` does not compile as `name`, and one that reaches here
+ * as a widened `string` throws — the same declaration-bug refusal
+ * `toolRouter` gives a name declared twice.
  */
 export function tool<
   const Name extends string,
@@ -116,7 +186,7 @@ export function tool<
   const Tags extends readonly string[],
   R = unknown,
 >(
-  name: Name,
+  name: Name & NotReserved<Name>,
   spec: {
     readonly input: z.ZodType<Args>;
     readonly ok: z.ZodType<Ok>;
@@ -125,9 +195,14 @@ export function tool<
   },
   handler: ToolHandler<Args, Ok, TaggedError<Tags[number]>, R>,
 ): ToolDef<Name, Args, Ok, TaggedError<Tags[number] | "thrown">, R> {
+  if (isReservedToolName(name)) {
+    throw new Error(
+      `tool: "${name}" is reserved — it is an agent-owned Msg prefix`,
+    );
+  }
   type E = TaggedError<Tags[number] | "thrown">;
   type Def = CmdDef<Name, ToolInput<Args>, Ok, E, R>;
-  const def: Def = Cmd.define(name, {
+  const def: Def = Cmd.define(name as Name, {
     input: z.object({
       callId: z.string(),
       args: spec.input,
@@ -203,7 +278,7 @@ export type ToolRejection =
       }>;
     };
 
-const rejected = Cmd.define("tool_rejected", {
+const rejected = Cmd.define(REJECTED_TYPE, {
   input: z.custom<{ readonly callId: string; readonly error: ToolRejection }>(
     () => true,
   ),
