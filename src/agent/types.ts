@@ -257,6 +257,14 @@ export interface AgentConfigCore<
    * model that binds the structured-output schema itself.
    */
   readonly model: ModelPort<Msg, O[P]>;
+  /**
+   * The system prompt, stored ON THE MODEL at `init` (`AgentState.instructions`)
+   * rather than closed over — so a replay reproduces the exact prompt that ran,
+   * a rehydrated run keeps the prompt it started with, and a compaction fold
+   * (which touches only the conversation) can never lose it (ADR 0004). It
+   * reaches the brain call through `payloadOf`'s third argument. Omit → `null`.
+   */
+  readonly instructions?: string;
   /** One structured-output schema per purpose; the parse target per brain call. */
   readonly schemas: { readonly [K in P]: Schema<O[K]> };
   /** Backoff policy for brain calls, composed into `../llm-call`. Omit → no backoff. */
@@ -278,10 +286,14 @@ export interface AgentConfigCore<
    * AgentTurn>` bound, not left to a doc-comment.
    */
   readonly turnOf: (stage: Stage | undefined) => P;
-  /** Build the per-purpose brain-call payload from the conversation. Omit → `null`. */
+  /**
+   * Build the per-purpose brain-call payload from the durable state: the
+   * stage, the conversation, and the Model's `instructions` slot. Omit → `null`.
+   */
   readonly payloadOf?: (
     stage: Stage | undefined,
     conversation: Conversation<R>,
+    instructions: string | null,
   ) => unknown;
   /** The model id every brain call invokes. Omit → `null` (the host's default). */
   readonly modelId?: string | null;
@@ -346,6 +358,8 @@ export type AgentFailure =
  *                      entered (the consumer seeds it at the agentic stage).
  *   - `failure`      — the agent-specific terminal annotation (turn-limit /
  *                      llm), null otherwise. Distinct from `run.failure`.
+ *   - `instructions` — the system prompt this run was configured with, set at
+ *                      `init` and never touched by a fold (ADR 0004).
  */
 export interface AgentState<
   Stage,
@@ -391,6 +405,13 @@ export interface AgentState<
    * total without a purpose-indexing narrow.
    */
   readonly output: AgentTurn | null;
+  /**
+   * The system prompt, durable beside the transcript it governs. `null` when
+   * the config named none. Read by `brainCall` on every model call — a
+   * rehydrated or replayed run prompts with what the Model says, never with
+   * what a closure happens to hold now.
+   */
+  readonly instructions: string | null;
 }
 
 // ===========================================================================

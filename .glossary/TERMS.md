@@ -19,3 +19,9 @@ and this file is the doc to fix.
 | driver | Who currently holds a lane. Read from GitHub as a third source over the network, because claims live on the board and no claim state is derivable from a fold. Unreadable always answers *unknown*, never *unclaimed* — reporting a held lane as free is the answer that starts a second driver. | The agent that wrote the ledger. The ledger records events; it does not record who was entitled to send them. |
 | lane | One run of a workflow, on disk as exactly **two files**: `workflow.json` (the topology) and `events.jsonl` (what has happened). Lanes live under a gitignored `.fabrika/`, so they only ever exist on the machine that ran them. | A branch, a PR or an issue. A lane may be *about* an issue; it is the run, not the work item. |
 | ledger | A lane's `events.jsonl` — the append-only log an agent writes to as it drives. It is authoritative; every derived view is a fold over it. | The workflow document. The ledger is what happened, the document is what could. |
+
+## The intent layer
+| Term | Definition | Not |
+|---|---|---|
+| lid | An intent-altitude surface over the kernel — `defineAgent` — that defaults, generates and sequences the wiring between parts and never hides state: the Model it produces is the one a hand-wired machine produces, under the same keys, and every altitude beneath stays a reachable door (ADR 0015). | A wrapper that owns the state. A lid that stores Model in a private field, or whose output the raw `run` cannot take, is a framework, not a lid. |
+| part | An internal battery module a lid composes — `toolRouter`, `driveToDone`, the plain model port — each independently testable and named in the lid's source so what it hides stays legible. Public only on a real external callsite, never because the lid uses it. | A public door. Parts are the lid's ceremony made visible; the export map lists doors. |

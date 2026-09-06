@@ -176,6 +176,7 @@ import type {
 // state/status), `./compaction` (the #85 seam), and `./machine` (the Cmd/Msg
 // vocabulary + wiring helpers). The reducer core — `createAgent` — stays here.
 export * from "./compaction";
+export * from "./define-agent";
 export * from "./machine";
 export * from "./tool";
 export * from "./types";
@@ -335,6 +336,7 @@ export function createAgent<
       compaction: compactRc.init(),
       failure: null,
       output: null,
+      instructions: config.instructions ?? null,
     };
   }
 
@@ -342,10 +344,14 @@ export function createAgent<
   function brainCall(s: State): LlmCall<P> {
     const stage = currentStage(s);
     const conversation = s.conversation ?? freshConversation<R>();
+    // `?? null`: a Model persisted before the slot existed rehydrates without it.
+    const instructions = s.instructions ?? null;
     return {
       purpose: config.turnOf(stage),
       model: config.modelId ?? null,
-      payload: config.payloadOf ? config.payloadOf(stage, conversation) : null,
+      payload: config.payloadOf
+        ? config.payloadOf(stage, conversation, instructions)
+        : null,
     };
   }
 

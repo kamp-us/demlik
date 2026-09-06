@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (82)
+## Exports (93)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -28,7 +28,9 @@ import { … } from "@demlik/tea/agent";
 | `AgentLlmOkMsg` | Type | The brain-call success / failure settle Msgs, inherited from `../llm-call`. |
 | `AgentLlmRunCmd` | Type | The brain-call effect Cmd, inherited from `../llm-call`. |
 | `AgentMachineMsg` | Type | The agent machine's Msg union — one variant per reducer entry point. |
+| `AgentMessage` | Type | One message the lid's `model` receives. |
 | `AgentPorts` | Type | Ports the consumer supplies to the llm-call handler — re-exported shape. |
+| `AgentPrompt` | Interface | The brain-call payload the lid builds from the durable state — everything `messagesOf` renders, so the prompt is a pure function of the Model and the resilient slice carries exactly what was sent. |
 | `AgentSnapshotConfig` | Type | The snapshotting discriminant (#55). |
 | `AgentState` | Interface | The agent slice — every composed brick's slice plus the loop's conversation and the agent-specific failure annotation. |
 | `AgentStatus` | Type | The agent's lifecycle status — THE single typed channel for "what is this run doing?" (issue #49). |
@@ -50,8 +52,16 @@ import { … } from "@demlik/tea/agent";
 | `createAgent` | Function |  |
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the Sub literal both composed bricks' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
+| `defineAgent` | Function |  |
+| `DefineAgentConfig` | Interface | What `defineAgent` takes: the three intents, plus the two run guards. |
+| `DefinedAgent` | Interface | What `defineAgent` returns. |
+| `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
+| `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
+| `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
+| `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
 | `isAgentTurn` | Function |  |
 | `isCompactionSummary` | Function |  |
+| `LidPurpose` | Type | The one purpose the lid's agent runs. |
 | `liftAgent` | Function |  |
 | `LlmCall` | Reference |  |
 | `LlmErr` | Reference |  |
@@ -67,6 +77,7 @@ import { … } from "@demlik/tea/agent";
 | `PLAIN_MODEL_MISROUTE_REASON` | Reference |  |
 | `plainModel` | Reference |  |
 | `PlainModel` | Reference |  |
+| `renderPrompt` | Function |  |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `Schema` | Reference |  |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |

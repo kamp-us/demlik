@@ -2,5 +2,13 @@
 	// The CI gate whose jobs supersede `fabrika build check`'s in-tree verdict. fabrika's shipped
 	// default names phoenix's `ci.yml`; this repo's gate is `build.yaml` (#54). `ci.noProducer` is
 	// deliberately not set — it only applies to a repo with zero workflows, so here it would be inert.
-	"ci": { "gateWorkflow": "build.yaml" }
+	"ci": { "gateWorkflow": "build.yaml" },
+	// What `fabrika build check --surface code` spawns in a lane's tree. The shipped default is
+	// empty and refuses UNKNOWN, so without this every code lane here bypassed the gate by hand
+	// (#70). The same three commands `build.yaml` runs first; the tests stay CI's.
+	"codeValidators": [
+		{ "command": ["pnpm", "typecheck"] },
+		{ "command": ["pnpm", "typecheck:test"] },
+		{ "command": ["pnpm", "lint:worktree"] }
+	]
 }
