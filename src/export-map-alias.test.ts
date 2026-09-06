@@ -21,7 +21,7 @@
 import { defineMachine } from "@demlik/tea";
 import * as extReact from "@demlik/tea/extension/react";
 import * as extTestUtils from "@demlik/tea/extension/test-utils";
-import { createPoller } from "@demlik/tea/poller";
+import { backoffDelay } from "@demlik/tea/retry-backoff";
 import { describe, expect, it } from "vitest";
 
 describe("every published subpath shape resolves under the test alias", () => {
@@ -38,7 +38,7 @@ describe("every published subpath shape resolves under the test alias", () => {
   });
 
   it("resolves the `index.ts` shape it always did", () => {
-    expect(typeof createPoller).toBe("function");
+    expect(typeof backoffDelay).toBe("function");
   });
 
   it("resolves the bare root", () => {

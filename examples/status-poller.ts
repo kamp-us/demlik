@@ -1,6 +1,6 @@
 import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
 import type { DeadlineExceeded } from "../src/internal/resilience/deadline";
-import { createPoller, type PollerState } from "@demlik/tea/poller";
+import { createPoller, type PollerState } from "../src/internal/flow/poller";
 import { Result } from "better-result";
 
 type JobStatus = {

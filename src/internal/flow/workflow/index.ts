@@ -1,6 +1,6 @@
 /**
  * @packageDocumentation
- * @demlik/tea/workflow — the durable-workflow runtime core (#124, the first
+ * internal/flow/workflow — the durable-workflow runtime core (#124, the first
  * Phase-1 slice of the Temporal-style durable-workflow engine, epic #118).
  *
  * A workflow is a long-running, multi-step transaction whose every step (an
@@ -63,10 +63,11 @@
  * never inspects them; it only sequences them.
  *
  * NOT a substrate primitive: it depends only on the core `Cmd` type and the
- * sibling `../do` durable-effects ledger. Consumers reach it via the
- * `@demlik/tea/workflow` subpath.
+ * `do` durable-effects ledger. Internal since #48 — not published on any
+ * subpath; reached from inside the package as `internal/flow/workflow`.
  */
 
+import { z } from "zod";
 import {
   type DeliveryId,
   type EffectConfirmed,
@@ -77,8 +78,8 @@ import {
   type PendingEffectsLedger,
   pendingEffectsLedger,
   survivingEffects,
-} from "../do/durable-effects";
-import type { Cmd } from "../index";
+} from "../../../do/durable-effects";
+import { Cmd, type CmdOf } from "../../../index";
 import { routeWorkflowMsg } from "./route";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,19 +377,35 @@ export const WORKFLOW_STATUSES: ReadonlySet<string> = new Set(
 // ledger events ride alongside (see {@link WorkflowReducerStep}/the step tuple).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Both are `Cmd.define`d (ADR 0014). The activity payload `A` is the
+// workflow's own type parameter, so each def is minted per workflow by a
+// factory (`createWorkflow` calls it once) rather than a module-scope constant
+// — the same shape `idempotent-intake`'s `intakeProcessDef<P>()` takes. The
+// consumer's interpret cell performs the dispatch and answers through this
+// module's OWN result Msgs (`activity_ok` / `compensation_err` … carrying the
+// delivery id), never through the minted `_ok` / `_err`, hence `ok: z.void()`
+// and an empty `err` list.
+
 /**
  * Dispatch the in-flight activity. Routed through the consumer's `interpret`
- * over an injected activity port. The reducer emits this literal; it performs
+ * over an injected activity port. The reducer emits this record; it performs
  * no side effect. The result MUST be dispatched back as a Msg carrying `id`.
  */
-export interface ActivityCmd<A> extends Cmd<"workflow_activity"> {
-  /** The 0-based step index this activity belongs to. */
-  readonly index: number;
-  /** The #67 delivery id the result Msg must echo (the dedup key). */
-  readonly id: DeliveryId;
-  /** The opaque activity to perform. */
-  readonly activity: A;
+export function workflowActivityDef<A>() {
+  return Cmd.define("workflow_activity", {
+    input: z.custom<{
+      /** The 0-based step index this activity belongs to. */
+      readonly index: number;
+      /** The #67 delivery id the result Msg must echo (the dedup key). */
+      readonly id: DeliveryId;
+      /** The opaque activity to perform. */
+      readonly activity: A;
+    }>(),
+    ok: z.void(),
+    err: [],
+  });
 }
+export type ActivityCmd<A> = CmdOf<ReturnType<typeof workflowActivityDef<A>>>;
 
 /**
  * Dispatch a compensation (#125). Same shape + ledger discipline as
@@ -399,14 +416,23 @@ export interface ActivityCmd<A> extends Cmd<"workflow_activity"> {
  * Distinguished by `type` so the consumer routes forward vs. inverse work to the
  * right port, and the re-emit-on-wake stays type-correct.
  */
-export interface CompensationCmd<A> extends Cmd<"workflow_compensation"> {
-  /** The 0-based step index whose compensation this is. */
-  readonly index: number;
-  /** The #67 delivery id the result Msg must echo (the dedup key). */
-  readonly id: DeliveryId;
-  /** The opaque compensating (inverse) activity to perform. */
-  readonly compensation: A;
+export function workflowCompensationDef<A>() {
+  return Cmd.define("workflow_compensation", {
+    input: z.custom<{
+      /** The 0-based step index whose compensation this is. */
+      readonly index: number;
+      /** The #67 delivery id the result Msg must echo (the dedup key). */
+      readonly id: DeliveryId;
+      /** The opaque compensating (inverse) activity to perform. */
+      readonly compensation: A;
+    }>(),
+    ok: z.void(),
+    err: [],
+  });
 }
+export type CompensationCmd<A> = CmdOf<
+  ReturnType<typeof workflowCompensationDef<A>>
+>;
 
 /** The Cmd union this module emits: forward activity dispatches AND (#125)
  *  reverse compensation dispatches. The owed/confirmed ledger events are not
@@ -632,6 +658,10 @@ export function createWorkflow<A, R, F>(restore?: {
   // effects on this one ledger (do NOT reinvent the ledger).
   const recorder = pendingEffectsLedger<WorkflowCmd<A>>(restore);
 
+  // The two Cmd constructors, minted once for this workflow's `A`.
+  const activityCmd = workflowActivityDef<A>();
+  const compensationCmd = workflowCompensationDef<A>();
+
   /**
    * Owe + dispatch the activity for `step` at `index`: allocate its delivery
    * id, build the dispatch Cmd, and emit BOTH the `effect_owed` ledger event
@@ -706,12 +736,9 @@ export function createWorkflow<A, R, F>(restore?: {
     readonly owed: EffectOwed<WorkflowCmd<A>>;
     readonly cmd: ActivityCmd<A>;
   } {
-    const { id, owed, cmd } = oweOnLedger<ActivityCmd<A>>((id) => ({
-      type: "workflow_activity",
-      index,
-      id,
-      activity: step.activity,
-    }));
+    const { id, owed, cmd } = oweOnLedger<ActivityCmd<A>>((id) =>
+      activityCmd({ index, id, activity: step.activity }),
+    );
     const current: InFlightActivity<A> = { index, step, id };
     return { current, owed, cmd };
   }
@@ -734,12 +761,9 @@ export function createWorkflow<A, R, F>(restore?: {
     readonly owed: EffectOwed<WorkflowCmd<A>>;
     readonly cmd: CompensationCmd<A>;
   } {
-    const { id, owed, cmd } = oweOnLedger<CompensationCmd<A>>((id) => ({
-      type: "workflow_compensation",
-      index,
-      id,
-      compensation,
-    }));
+    const { id, owed, cmd } = oweOnLedger<CompensationCmd<A>>((id) =>
+      compensationCmd({ index, id, compensation }),
+    );
     const current: InFlightCompensation<A> = { index, step, id };
     return { current, owed, cmd };
   }

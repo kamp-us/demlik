@@ -24,8 +24,6 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 ## Machines
 
 - [`@demlik/tea/agent`](./agent.md)
-- [`@demlik/tea/workflow`](./workflow.md)
-- [`@demlik/tea/saga`](./saga.md)
 - [`@demlik/tea/llm-call`](./llm-call.md)
 
 ## Resilience

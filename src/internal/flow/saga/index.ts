@@ -1,6 +1,6 @@
 /**
  * @packageDocumentation
- * @demlik/tea/saga — a forward-then-compensate transaction over an ordered list
+ * internal/flow/saga — a forward-then-compensate transaction over an ordered list
  * of reversible steps.
  *
  * The Level-2 combinator for "run these N steps in order; if any step fails,
@@ -78,13 +78,13 @@
  * `retry-backoff`.
  *
  * NOT a substrate primitive: it depends only on `../work-queue`'s pure types
- * and `../index`'s `Cmd` type. Consumers reach it via the `@demlik/tea/saga`
- * subpath.
+ * and the core `Cmd` type. Internal since #48 — not published on any subpath;
+ * reached from inside the package as `internal/flow/saga`.
  */
 
-import type { Cmd } from "../index";
-import type { QueueItem, QueueItemStatus } from "../internal/work-queue";
-import { queueAdapter } from "../internal/work-queue/adapter";
+import type { Cmd } from "../../../index";
+import type { QueueItem, QueueItemStatus } from "../../work-queue";
+import { queueAdapter } from "../../work-queue/adapter";
 
 /**
  * A step's stable identity. Positional: the 0-based index into

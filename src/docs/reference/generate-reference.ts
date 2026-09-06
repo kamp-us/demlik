@@ -117,20 +117,6 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Machines",
   },
   {
-    subpath: "./workflow",
-    importPath: "@demlik/tea/workflow",
-    file: "workflow.md",
-    typedocName: "workflow",
-    group: "Machines",
-  },
-  {
-    subpath: "./saga",
-    importPath: "@demlik/tea/saga",
-    file: "saga.md",
-    typedocName: "saga",
-    group: "Machines",
-  },
-  {
     subpath: "./llm-call",
     importPath: "@demlik/tea/llm-call",
     file: "llm-call.md",

@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/poller — "poll a source every N ms until a predicate holds, with
+ * internal/flow/poller — "poll a source every N ms until a predicate holds, with
  * backoff on failure" as a TEA knob: one config object + a few pre-wired hooks
  * you spread into your machine.
  *
@@ -79,14 +79,12 @@
  *
  * NOT a substrate primitive: it depends only on sibling subpaths
  * (`../deadline`, `../retry-backoff`, `../idempotency`) and the core `Cmd` /
- * `Sub` types. Consumers reach it via the `@demlik/tea/poller` subpath; the L1
- * escape hatch is those three sibling subpaths threaded by hand.
+ * `Sub` types. Internal since #48 — not published on any subpath; reached from
+ * inside the package as `internal/flow/poller`. The L1 escape hatch is those
+ * three siblings threaded by hand.
  */
 
-import type { Cmd, Sub } from "../index";
-import type { IdempotencyStore } from "../internal/idempotency/idempotency";
-import { idempotencyMemory } from "../internal/idempotency/idempotency/adapter";
-import { type DeadlineSub, deadlineSub } from "../internal/resilience/deadline";
+import type { Cmd, Sub } from "../../../index";
 import {
   type AnyRetryPolicy,
   asRng,
@@ -96,7 +94,10 @@ import {
   type RetryState,
   recordFailure,
   shouldRetry,
-} from "../retry-backoff";
+} from "../../../retry-backoff";
+import type { IdempotencyStore } from "../../idempotency/idempotency";
+import { idempotencyMemory } from "../../idempotency/idempotency/adapter";
+import { type DeadlineSub, deadlineSub } from "../../resilience/deadline";
 
 /**
  * The poller knob's config — the single object you hand `createPoller`.

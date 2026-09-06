@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/batch-window — coalesce a stream of items into size- or
+ * internal/flow/batch-window — coalesce a stream of items into size- or
  * time-bounded BATCHES, then flush each batch as a single Cmd.
  *
  * What this module actually DELEGATES to, vs. what it merely RE-EXPORTS:
@@ -54,33 +54,33 @@
  * is the consumer's — it is where the batch meets I/O (an `enqueue`, a network
  * POST, an R2 write).
  *
- * NOT exported from the package root — reached via the `@demlik/tea/batch-window`
- * subpath, same one-shape-per-package rule as `deadline`, `cache`, and
+ * Internal since #48 — not published on any subpath; reached from inside the
+ * package as `internal/flow/batch-window`. Same one-shape-per-package rule as `deadline`, `cache`, and
  * `work-queue`.
  */
 
-import type { Cmd } from "../index";
+import type { Cmd } from "../../../index";
 
 // `../debounce` re-export (value + type) for one-import ergonomics — see file
 // header. This module does NOT call debounce; a consumer that wants to debounce
 // a bursty source BEFORE it becomes an `add` Msg reaches it from the same import
 // as the batch window.
-export { type Debounced, debounce } from "../internal/timing/debounce";
+export { type Debounced, debounce } from "../../timing/debounce";
 
+import type { SubscribeHandler } from "../../../subs/types";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
   deadlineExceeded,
   deadlineSub,
   subscribeDeadline,
-} from "../internal/resilience/deadline";
-import type { SubscribeHandler } from "../subs/types";
+} from "../../resilience/deadline";
 
 // `../work-queue` TYPE re-export only (see file header). This module emits a
 // flush Cmd; the CONSUMER's interpret handler enqueues onto a
 // `createQueue(store)`. Re-export the caller-facing enqueue payload type so the
 // consumer's flush Cmd and queue agree on the item shape.
-export type { EnqueueInput } from "../internal/work-queue";
+export type { EnqueueInput } from "../../work-queue";
 
 /**
  * Configuration for a batch window — the knob. Pure config, no mutable state

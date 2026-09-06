@@ -8,7 +8,7 @@ import type {
   PollerGaveUp,
   PollerPolling,
   PollerState,
-} from "../poller";
+} from "../internal/flow/poller";
 import type { Cmd, Reducer, SyncReturn, Transitions } from "../pure/core";
 import type {
   issue42,

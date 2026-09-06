@@ -10,6 +10,10 @@
 
 import type { Cmd, Interpret, Machine } from "../index";
 import type {
+  DeadlineSub,
+  MonitoredRunCmd,
+} from "../internal/flow/monitored-run";
+import type {
   LlmCall,
   LlmCallPorts,
   LlmFailMsg,
@@ -17,7 +21,6 @@ import type {
   LlmSucceedMsg,
   LlmTimerMsg,
 } from "../llm-call";
-import type { DeadlineSub, MonitoredRunCmd } from "../monitored-run";
 import { MsgType } from "../protocol";
 import type {
   AgentCompactErrMsg,

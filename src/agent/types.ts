@@ -10,8 +10,12 @@
  * the wired `toMachine`) lives in `./index`.
  */
 
-import type { FanOutState } from "../fan-out";
 import type { Cmd } from "../index";
+import type { FanOutState } from "../internal/flow/fan-out";
+import type {
+  MonitoredRunState,
+  RunFailure,
+} from "../internal/flow/monitored-run";
 import type {
   LlmCall,
   LlmOk,
@@ -20,7 +24,6 @@ import type {
   ResilientState,
   Schema,
 } from "../llm-call";
-import type { MonitoredRunState, RunFailure } from "../monitored-run";
 import type { RetryPolicy } from "../retry-backoff";
 import type {
   AgentCompactionConfig,

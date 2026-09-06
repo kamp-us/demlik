@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, type NoCtx, run } from "../index";
+import { defineMachine, type NoCtx, run } from "../../../index";
 import { awaitTerminal, runToTerminal, TerminalTimeoutError } from "./index";
 
 // ===========================================================================

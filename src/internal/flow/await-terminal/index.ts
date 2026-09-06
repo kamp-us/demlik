@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/await-terminal — run a ONE-SHOT / decision-procedure machine to a
+ * internal/flow/await-terminal — run a ONE-SHOT / decision-procedure machine to a
  * terminal state and hand the caller a `Promise<State>` that resolves the moment
  * the machine FIRST enters a terminal state.
  *
@@ -37,7 +37,7 @@ import {
   type Runtime,
   run,
   type Sub,
-} from "../index";
+} from "../../../index";
 
 /**
  * Raised when `awaitTerminal` / `runToTerminal` is wired with a `timeoutMs` and

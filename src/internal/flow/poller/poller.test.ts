@@ -1,18 +1,18 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Cmd, defineMachine, run } from "../index";
-import {
-  type DeadlineExceeded,
-  deadlineSub,
-  subscribeDeadline,
-} from "../internal/resilience/deadline";
+import { type Cmd, defineMachine, run } from "../../../index";
 import {
   type DurationRetryPolicy,
   defaultRetryPolicy,
   type RetryPolicy,
   type TimedRetryState,
-} from "../retry-backoff";
-import { bindMachine } from "../testing";
+} from "../../../retry-backoff";
+import { bindMachine } from "../../../testing";
+import {
+  type DeadlineExceeded,
+  deadlineSub,
+  subscribeDeadline,
+} from "../../resilience/deadline";
 import { createPoller, type PollerState } from "./index";
 
 // A tick result shape we poll for: a status that flips to "ready" eventually.

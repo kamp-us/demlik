@@ -7,8 +7,8 @@ import {
   definePort,
   type Runtime,
   run,
-} from "../index";
-import { bindMachine } from "../testing";
+} from "../../../index";
+import { bindMachine } from "../../../testing";
 import {
   createFanOut,
   type FanOutState,

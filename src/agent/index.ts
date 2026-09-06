@@ -96,7 +96,6 @@
  *   const runtime = run(machine, { ctx, store });
  */
 
-import { createFanOut, initFanOut } from "../fan-out";
 import {
   type Cmd,
   defineMachine,
@@ -104,6 +103,12 @@ import {
   type Machine,
   type Reducer,
 } from "../index";
+import { createFanOut, initFanOut } from "../internal/flow/fan-out";
+import {
+  createMonitoredRun,
+  type DeadlineSub,
+  type MonitoredRunCmd,
+} from "../internal/flow/monitored-run";
 import { createResilientCall } from "../internal/resilience/resilient-call";
 import {
   createLlmCall,
@@ -116,11 +121,6 @@ import {
   type ResilientState,
   subscribeDeadline,
 } from "../llm-call";
-import {
-  createMonitoredRun,
-  type DeadlineSub,
-  type MonitoredRunCmd,
-} from "../monitored-run";
 import { MsgType } from "../protocol";
 import {
   type AgentCompactErrMsg,
@@ -1343,6 +1343,11 @@ export function createAgent<
  */
 export { subscribeDeadline, deadlineSub };
 export type {
+  DeadlineSub,
+  MonitoredRunCmd,
+  RunFailure,
+} from "../internal/flow/monitored-run";
+export type {
   LlmCall,
   LlmErr,
   LlmFailMsg,
@@ -1356,8 +1361,3 @@ export type {
   Schema,
 } from "../llm-call";
 export { PLAIN_MODEL_MISROUTE_REASON, plainModel } from "../llm-call";
-export type {
-  DeadlineSub,
-  MonitoredRunCmd,
-  RunFailure,
-} from "../monitored-run";
