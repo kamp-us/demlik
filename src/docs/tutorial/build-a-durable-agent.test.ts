@@ -5,7 +5,8 @@
  * model fixture — killed after the first tool call, then run again. What the
  * page promises the reader is what is asserted: the second process resumes the
  * first run (same `runId`), writes the remaining notes and never repeats the
- * first one, and the program the reader types is short.
+ * first one, every request replays the previous turn's signed thinking block
+ * (#102), and the program the reader types is short.
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
@@ -76,6 +77,7 @@ function launch(entry: string, cwd: string, env: Record<string, string>): Run {
       ...env,
       ANTHROPIC_API_KEY: "fixture-key",
       TEA_TUTORIAL_FIXTURE: fixture,
+      TEA_TUTORIAL_REQUEST_LOG: join(cwd, "requests.jsonl"),
       NODE_OPTIONS: `--import=${preload.href}`,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -105,6 +107,39 @@ async function runId(cwd: string): Promise<string> {
     run: { runId?: string };
   };
   return model.run.runId ?? "";
+}
+
+interface Block {
+  readonly type: string;
+}
+
+interface Request {
+  readonly turn: number;
+  readonly body: {
+    readonly messages: readonly { role: string; content: Block[] | string }[];
+  };
+}
+
+/** Every Messages request the preload saw, in the order both processes sent them. */
+async function requests(cwd: string): Promise<Request[]> {
+  const log = await readFile(join(cwd, "requests.jsonl"), "utf8");
+  return log
+    .trimEnd()
+    .split("\n")
+    .map((line) => JSON.parse(line) as Request);
+}
+
+/** The recorded `thinking` block the fixture's reply for `turn` opens with. */
+async function recordedThinking(turn: number): Promise<Block> {
+  const recorded = JSON.parse(await readFile(fixture, "utf8")) as {
+    turns: { content: Block[] }[];
+  };
+  const block = recorded.turns[turn]?.content.find(
+    (b) => b.type === "thinking",
+  );
+  if (block === undefined)
+    throw new Error(`fixture turn ${turn} has no thinking`);
+  return block;
 }
 
 describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes", () => {
@@ -184,5 +219,19 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
       "red\nyellow\nblue\n",
     );
     expect(await runId(cwd)).toBe(parkedRunId);
+
+    // #102 — thinking is on, so every request for turn n ≥ 1 must replay turn
+    // n−1's signed `thinking` block verbatim in the last assistant message;
+    // the turn-1 request appears twice, once from each process, and the
+    // resumed one replays a block it only ever read back from `agent.json`.
+    const sent = await requests(cwd);
+    expect(sent.map((r) => r.turn)).toEqual([0, 1, 1, 2, 3]);
+    for (const { turn, body } of sent.filter((r) => r.turn >= 1)) {
+      const assistant = body.messages.filter((m) => m.role === "assistant");
+      const last = assistant[turn - 1]?.content;
+      expect(Array.isArray(last) ? last[0] : undefined).toEqual(
+        await recordedThinking(turn - 1),
+      );
+    }
   }, 60_000);
 });
