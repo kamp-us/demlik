@@ -19,6 +19,7 @@ import {
   type BootingRuntime,
   type Cmd,
   type Machine,
+  type RequiredCtx,
   type Runtime,
   run,
   type Store,
@@ -88,8 +89,11 @@ export interface AgentHostConfig<
   >;
   /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
   readonly store: Store<AgentState<Stage, P, O, R>>;
-  /** The Ctx the machine threads to its interpret cells — checked against `buildMachine`'s. */
-  readonly ctx: Ctx;
+  /**
+   * The Ctx the machine threads to its interpret cells — checked against
+   * `buildMachine`'s, plus every typed Cmd's `R` (what `run` itself demands).
+   */
+  readonly ctx: Ctx & RequiredCtx<C>;
   /**
    * The run-terminality predicate (#46) — what makes `result()` first-class.
    * Defaults to the agent's own terminal phases (`done` / `failed`).
