@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (89)
+## Exports (88)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -24,7 +24,6 @@ import { … } from "@demlik/tea";
 | `CmdInput` | Type | The payload a constructor accepts: a plain record spread beside `type`. |
 | `CmdOf` | Type | The Cmd value a def (or a union of defs) builds. |
 | `CmdValue` | Type | The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. |
-| `ContextFree` | Type | Spelled-out alias for `NoCtx`. |
 | `CtxArg` | Type |  |
 | `defineMachine` | Function |  |
 | `definePort` | Function |  |

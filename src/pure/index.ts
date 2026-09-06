@@ -40,7 +40,6 @@ export type {
   CmdInput,
   CmdOf,
   CmdValue,
-  ContextFree,
   DepKeyedSub,
   Dispose,
   ErrOf,
