@@ -99,6 +99,7 @@ import {
   tryInterpret,
 } from "../../../index";
 import { MsgType } from "../../../protocol";
+import { cmdEdgeOf } from "../../../pure/core";
 import { type DeadlineSub, subscribeDeadline } from "../deadline";
 import {
   createResilientCall,
@@ -664,7 +665,15 @@ export function withResilience<
             `"${inner.type}" — the resilient effect has nothing to perform.`,
         );
       }
-      return await handler(inner, ctx as unknown as Ctx);
+      // The base handler's follow-up crosses the interpret edge HERE, not in
+      // `run`: `run`'s edge keys on the Cmd it handed us — the carrier — so a
+      // `Cmd.define`d target's settled Msg would reach the slice unparsed and
+      // unstamped (#66). `cmdEdgeOf` is the same edge `run` applies to a bare
+      // machine, read off the ctx it augmented; a pass-through outside `run`.
+      return cmdEdgeOf(ctx)(
+        inner,
+        await handler(inner, ctx as unknown as Ctx),
+      ) as M | undefined;
     },
     (result, cmd): ResilienceOkMsg => ({
       type: "$resilience:ok",
@@ -787,5 +796,9 @@ export function withResilience<
       Ctx
     >["subscribe"],
     interpret,
+    // The base's `Cmd.define` list rides through so `run`'s interpret edge
+    // still parses / stamps the base's NON-target settled Msgs behind the
+    // wrap; the target's settle through the carrier above (#66).
+    ...(base.cmds ? { cmds: base.cmds } : {}),
   } as Machine<WM, WMsg, WCmd, U | ResilienceTimerSub, Ctx>;
 }

@@ -337,6 +337,88 @@ export type AnyCmdDef = {
   readonly schema: { readonly ok: z.ZodType };
 };
 
+// === The interpret edge — the boundary a `Cmd.define`d result crosses ===
+//
+// `run` builds ONE edge over `machine.cmds` and its clock, applies it to every
+// interpret handler's return, and hands the same edge to the handlers under
+// `cmdEdge` on ctx (beside `emit`). The hand-off is for a wrapper that invokes
+// a base handler INSIDE its own — `withResilience`'s `$resilience:run` carrier
+// — where `run`'s edge sees the carrier's `type`, never the def's, so the
+// base result would cross unparsed (#66). Settling through `cmdEdgeOf(ctx)`
+// at the site the def's handler is actually invoked keeps one parse and one
+// clock for the bare and the wrapped machine alike.
+
+/** Settle one handler's follow-up: parse an `_ok`, stamp `at`, or pass through. */
+export type CmdEdge = (
+  cmd: { readonly type: string },
+  follow: unknown,
+) => unknown;
+
+/** The ctx key `run` hands its edge under. A symbol, so no Ctx port can collide. */
+export const cmdEdge: unique symbol = Symbol("tea.cmdEdge");
+
+/**
+ * The edge over a def list (invariant 8: the boundary parses, the core trusts).
+ * For a follow-up that is a def's own settled Msg: an `_ok` whose `value` fails
+ * the `ok` schema becomes the minted `_err` carrying `malformed_result`, so a
+ * corrupt result never reaches a reducer cell that would fold it into Model; an
+ * `_ok` that passes carries the PARSED value (zod's strip/transform applied);
+ * either arm gets `at` from the clock unless the builder was handed one.
+ * Anything else — a hand-written Cmd's follow-up, a Msg outside the settled
+ * pair — passes through untouched.
+ */
+export function cmdEdgeOver(
+  defs: Iterable<AnyCmdDef>,
+  clock: () => number,
+): CmdEdge {
+  const byType = new Map<string, AnyCmdDef>();
+  for (const def of defs) byType.set(def.cmdType, def);
+  return (cmd, follow) => {
+    const def = byType.get(cmd.type);
+    if (def === undefined || !isSettledShape(follow)) return follow;
+    const at = follow.at ?? clock();
+    if (follow.type === def.okType) {
+      const parsed = def.schema.ok.safeParse(follow.value);
+      if (!parsed.success) {
+        return {
+          type: def.errType,
+          cmd: follow.cmd,
+          error: malformedResult(parsed.error.issues),
+          at,
+        };
+      }
+      return { ...follow, value: parsed.data, at };
+    }
+    if (follow.type === def.errType) return { ...follow, at };
+    return follow;
+  };
+}
+
+/**
+ * The edge `run` put on this ctx, or the pass-through when the handler runs
+ * outside `run` (a unit test calling it directly).
+ */
+export function cmdEdgeOf(ctx: unknown): CmdEdge {
+  const edge =
+    typeof ctx === "object" && ctx !== null
+      ? (ctx as { [cmdEdge]?: CmdEdge })[cmdEdge]
+      : undefined;
+  return edge ?? ((_, follow) => follow);
+}
+
+function isSettledShape(follow: unknown): follow is {
+  readonly type: string;
+  readonly cmd: unknown;
+  readonly value?: unknown;
+  readonly at?: number;
+} {
+  return (
+    typeof follow === "object" &&
+    follow !== null &&
+    typeof (follow as { type?: unknown }).type === "string"
+  );
+}
+
 /** The Cmd value a def (or a union of defs) builds. */
 // (`infer C extends Cmd` keeps the derived union inside `Machine`'s `C extends
 // Cmd` constraint — without it the inference site is unconstrained.)
@@ -674,11 +756,13 @@ export function msgKeysOf(machine: {
 // This is a DERIVED READING over the table, deliberately NOT a property on the
 // machine. It has to be: every `withX` wrapper builds a fresh flat
 // `Record<string, Cell>`, casts it to `Reducer`, and returns a NEW object
-// literal carrying only `init`/`update`/`subscriptions`/`subscribe`/
-// `interpret`. Any property hung on a machine is therefore destroyed by the
-// first wrap, and the wrapped table is reducer-form regardless of the base's.
-// A function over `(update, formOf)` survives wrapping and tells the truth
-// about the machine it is actually handed.
+// literal carrying `init`/`update`/`subscriptions`/`subscribe`/`interpret`
+// plus the base's `cmds` — the one property a wrapper forwards on purpose,
+// because `run`'s interpret edge reads it (#66). Any OTHER property hung on a
+// machine is destroyed by the first wrap, and the wrapped table is
+// reducer-form regardless of the base's. A function over `(update, formOf)`
+// survives wrapping and tells the truth about the machine it is actually
+// handed.
 //
 // The return type is a DISCRIMINATED union on `form` because the two forms
 // genuinely answer different questions, and faking the missing one would be a

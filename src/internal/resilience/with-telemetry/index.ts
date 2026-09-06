@@ -300,6 +300,9 @@ export function withTelemetry<
       : {}),
     ...(baseSubscribe ? { subscribe: baseSubscribe } : {}),
     interpret,
+    // The base's `Cmd.define` list rides through so `run`'s interpret edge
+    // still parses / stamps the base's settled Msgs behind the wrap (#66).
+    ...(base.cmds ? { cmds: base.cmds } : {}),
   } as Machine<
     TelemetryModel<S>,
     M,
