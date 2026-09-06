@@ -88,7 +88,7 @@ import { … } from "@demlik/tea/agent";
 | `tool` | Function |  |
 | `ToolCall` | Interface | One tool the model asked to call this turn — the seed's `ToolCall`, stripped of the audit-specific args typing. |
 | `ToolCmd` | Type | The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. |
-| `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell and the bare `args` schema the router parses a call against. |
+| `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell, the bare `args` schema the router parses a call against, and the `description` a provider adapter declares to the model beside that schema. |
 | `toolErrorReason` | Function |  |
 | `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` is `Result.err` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
 | `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `needs` named, and the typed `fail`, to a `Result` over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |

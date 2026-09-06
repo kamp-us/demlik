@@ -37,6 +37,7 @@ const kb: Kb = {
 const search = tool(
   "search",
   {
+    description: "Look a phrase up in the knowledge base.",
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found"],
