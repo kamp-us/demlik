@@ -6,14 +6,16 @@
 import { … } from "@demlik/tea/llm-call";
 ```
 
-## Exports (20)
+## Exports (26)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
+| `asModelFactory` | Function |  |
 | `createLlmCall` | Function |  |
 | `DeadlineExceeded` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
 | `deadlineSub` | Reference | Re-export the deadline Sub primitives (inherited from resilient-call) so consumers wire one import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the Sub literal `subs` emits. |
 | `DeadlineSub` | Reference |  |
+| `isPlainModel` | Function |  |
 | `liftLlmCall` | Function |  |
 | `Llm` | Interface | The minimal chat-model contract every model the handler talks to must satisfy — the seed's `InjectableChatModel`, trimmed to the one operation llm-call drives for brain-only stages: `withStructuredOutput(schema)` → a runnable whose `invoke(messages)` resolves to a typed object matching `schema`. |
 | `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this knob, carried on the `resilient_run` Cmd as plain data (no closures, invariant 3). |
@@ -27,6 +29,10 @@ import { … } from "@demlik/tea/llm-call";
 | `LlmTimerMsg` | Type | The retry / deadline timer Msg — `DeadlineExceeded`, inherited from resilient-call. |
 | `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
 | `ModelFactory` | Type | The model factory — the first DI port. |
+| `ModelPort` | Type | Either model port. |
+| `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
+| `plainModel` | Function |  |
+| `PlainModel` | Type | The plain-function model port — the common path (#58). |
 | `ResilientState` | Reference |  |
 | `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call the handler uses to validate the model's output before it settles `resilient_ok`. |
 | `subscribeDeadline` | Reference | Re-export the deadline Sub primitives (inherited from resilient-call) so consumers wire one import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the Sub literal `subs` emits. |
