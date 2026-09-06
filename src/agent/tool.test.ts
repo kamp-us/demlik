@@ -31,6 +31,7 @@ type KbCtx = { readonly kb: Kb };
 const search = tool(
   "search",
   {
+    description: "Look a phrase up in the knowledge base.",
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found"],
@@ -51,6 +52,7 @@ const search = tool(
 const count = tool(
   "count",
   {
+    description: "Count the items handed in.",
     input: z.object({ items: z.array(z.string()) }),
     ok: z.number(),
     err: [],
@@ -115,7 +117,12 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
   it("an `_ok` value the schema rejects becomes the kernel's `malformed_result`", async () => {
     const lying = tool(
       "lying",
-      { input: z.object({}), ok: z.object({ n: z.number() }), err: [] },
+      {
+        description: "Claims a number and hands back a string.",
+        input: z.object({}),
+        ok: z.object({ n: z.number() }),
+        err: [],
+      },
       // The handler's type says `{ n: number }`; the runtime value lies.
       async (_args, _ctx, { ok }) =>
         ok({ n: "one" } as unknown as { n: number }),
@@ -130,6 +137,7 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
 
   it("the def reads like any Cmd.define — `errTags` carries the declared tags plus `thrown`", () => {
     expect(search.cmdType).toBe("search");
+    expect(search.description).toBe("Look a phrase up in the knowledge base.");
     expect(search.okType).toBe("search_ok");
     expect(search.errType).toBe("search_err");
     expect(search.errTags).toEqual(["not_found", "thrown"]);
@@ -143,7 +151,12 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
 // ---------------------------------------------------------------------------
 
 describe("tool() — a reserved name is a declaration bug, refused at construction", () => {
-  const spec = { input: z.object({}), ok: z.void(), err: [] };
+  const spec = {
+    description: "Do nothing; exists only to test the reserved-name refusal.",
+    input: z.object({}),
+    ok: z.void(),
+    err: [],
+  };
   const noop = async (
     _args: object,
     _ctx: PortEmitter,
