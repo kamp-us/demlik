@@ -195,7 +195,9 @@ export type ModelPort<Msg, T = unknown> =
  *
  * Reach for this explicitly when the function is not declared `async` — a sync
  * function that returns a promise (`(m) => client.chat(m)`) carries no runtime
- * mark that tells it apart from a factory, and `asModelFactory` reads it as one.
+ * mark that tells it apart from a factory. Passed bare, `asModelFactory`
+ * refuses it on the first call with an `LlmErr` whose reason is
+ * {@link PLAIN_MODEL_MISROUTE_REASON}.
  */
 export function plainModel<Msg, T>(fn: PlainModel<Msg, T>): ModelFactory<Msg> {
   return () => ({
@@ -221,11 +223,49 @@ export function isPlainModel<Msg, T>(
   return Object.prototype.toString.call(model) === "[object AsyncFunction]";
 }
 
-/** Resolve either model port to the factory the handler drives. */
+/**
+ * The reason an `LlmErr` carries when a sync promise-returning function was
+ * passed as `model` bare — the one runtime shape neither port can own.
+ */
+export const PLAIN_MODEL_MISROUTE_REASON =
+  "model: a sync function returned a Promise where an Llm was expected — " +
+  "a promise-returning model that is not declared `async` must be wrapped in " +
+  "plainModel(fn) (see @demlik/tea/llm-call)";
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { then: unknown }).then === "function"
+  );
+}
+
+/**
+ * Resolve either model port to the factory the handler drives.
+ *
+ * A sync function that returns a promise (`(m) => client.chat(m)`) carries no
+ * runtime mark, so it reaches here as a factory and is called with `modelId`.
+ * The one thing that tells it apart is what it returns: an `Llm` is never a
+ * thenable. The resolved factory refuses that answer with
+ * {@link PLAIN_MODEL_MISROUTE_REASON} before anything touches
+ * `.withStructuredOutput`, so the misroute surfaces as an `LlmErr` naming the
+ * fix — never as a bare `TypeError` off a property that is not there.
+ */
 export function asModelFactory<Msg, T>(
   model: ModelPort<Msg, T>,
 ): ModelFactory<Msg> {
-  return isPlainModel(model) ? plainModel(model) : model;
+  if (isPlainModel(model)) return plainModel(model);
+  return (modelId) => {
+    const llm = model(modelId);
+    if (isThenable(llm)) {
+      // The misrouted call already happened; settle its promise quietly so a
+      // rejection there is not an unhandled one beside the error we do raise.
+      llm.then(undefined, () => undefined);
+      throw new Error(PLAIN_MODEL_MISROUTE_REASON);
+    }
+    return llm;
+  };
 }
 
 // ===========================================================================

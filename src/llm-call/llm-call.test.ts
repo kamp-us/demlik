@@ -13,6 +13,8 @@ import {
   type LlmRunCmd,
   type LlmSucceedMsg,
   type LlmTimerMsg,
+  type ModelPort,
+  PLAIN_MODEL_MISROUTE_REASON,
   plainModel,
   type ResilientState,
   type Schema,
@@ -381,6 +383,29 @@ describe("createLlmCall — plain-function model port", () => {
       payload: 0,
     });
     expect(ok.output).toEqual({ score: 3 });
+  });
+
+  it("a sync promise-returning function passed bare fails with the LlmErr reason naming plainModel, not a withStructuredOutput TypeError", async () => {
+    let calledWith: unknown = "never";
+    const bare = (m: unknown) => {
+      calledWith = m;
+      return Promise.resolve({ score: 3 });
+    };
+    const llm = createLlmCall<Purpose, Outputs, Message>(
+      { model: bare as ModelPort<Message, Outputs[Purpose]>, schemas, retry },
+      rngZero,
+    );
+    const msg = (await llm.handlers().resilient_run({
+      type: "resilient_run",
+      key: "report",
+      input: { purpose: "report", model: "gpt", payload: 0 },
+    })) as LlmFailMsg<Purpose>;
+    expect(msg.type).toBe("resilient_err");
+    expect(msg.error.reason).toBe(PLAIN_MODEL_MISROUTE_REASON);
+    expect(msg.error.reason).toContain("plainModel(fn)");
+    // The misroute is what the reason describes: the function was called as a
+    // factory, with the modelId where its messages would be.
+    expect(calledWith).toBe("gpt");
   });
 
   it("isPlainModel tells a bare async function from a factory", () => {

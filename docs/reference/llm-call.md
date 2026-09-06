@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/llm-call";
 ```
 
-## Exports (25)
+## Exports (26)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -30,6 +30,7 @@ import { … } from "@demlik/tea/llm-call";
 | `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
 | `ModelFactory` | Type | The model factory — the first DI port. |
 | `ModelPort` | Type | Either model port. |
+| `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
 | `plainModel` | Function |  |
 | `PlainModel` | Type | The plain-function model port — the common path (#58). |
 | `ResilientState` | Reference |  |

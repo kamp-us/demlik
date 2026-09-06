@@ -13,7 +13,10 @@ out of the handler. The factory, and `withStructuredOutput(schema)` on it,
 stays the advanced form for a model that binds the schema itself.
 
 A bare `async` function is read as the plain port by its `AsyncFunction`
-tag; a sync function that returns a promise goes through the exported
-`plainModel(fn)` to lift it into the factory shape. `ModelPort` names the
+tag; a sync function that returns a promise (`(m) => client.chat(m)`) goes
+through the exported `plainModel(fn)` to lift it into the factory shape.
+Passed bare, such a function is refused on its first call with an `LlmErr`
+whose `reason` is `PLAIN_MODEL_MISROUTE_REASON` — it names `plainModel(fn)`
+as the fix, and never reaches `withStructuredOutput`. `ModelPort` names the
 union, `PlainModel` the plain member. All under `./agent` and `./llm-call`,
 experimental tier.

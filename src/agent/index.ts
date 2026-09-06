@@ -1281,7 +1281,7 @@ export type {
   PlainModel,
   Schema,
 } from "../llm-call";
-export { plainModel } from "../llm-call";
+export { PLAIN_MODEL_MISROUTE_REASON, plainModel } from "../llm-call";
 export type {
   DeadlineSub,
   MonitoredRunCmd,

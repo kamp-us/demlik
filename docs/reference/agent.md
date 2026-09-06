@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (63)
+## Exports (64)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -63,6 +63,7 @@ import { … } from "@demlik/tea/agent";
 | `ModelFactory` | Reference |  |
 | `ModelPort` | Reference |  |
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
+| `PLAIN_MODEL_MISROUTE_REASON` | Reference |  |
 | `plainModel` | Reference |  |
 | `PlainModel` | Reference |  |
 | `RunFailure` | Type | Why a run terminated as `failed`. |

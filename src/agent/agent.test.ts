@@ -14,6 +14,7 @@ import {
   type LlmOk,
   type LlmRunCmd,
   type MonitoredRunCmd,
+  PLAIN_MODEL_MISROUTE_REASON,
   type Schema,
   status,
   type ToolCall,
@@ -604,6 +605,20 @@ describe("createAgent — plain-function model drives the wired machine", () => 
       [{ role: "user", text: "plan_turn" }],
       [{ role: "user", text: "act_turn" }],
     ]);
+  });
+
+  it("a sync promise-returning function passed bare is the run's `llm` failure with a reason naming plainModel", async () => {
+    // `(m) => client.chat(m)` — no `async` tag, so the port cannot tell it from
+    // a factory. The failure must name the fix, not `.withStructuredOutput`.
+    const final = await drive((_m) => Promise.resolve(turnWith()));
+    const st = status(final);
+    expect(st.kind).toBe("failed");
+    if (st.kind !== "failed") throw new Error("unreachable");
+    expect(st.failure.reason).toBe("llm");
+    if (st.failure.reason !== "llm") throw new Error("unreachable");
+    const reason = (st.failure.error as LlmErr<Purpose>).reason;
+    expect(reason).toBe(PLAIN_MODEL_MISROUTE_REASON);
+    expect(reason).not.toContain("withStructuredOutput is not a function");
   });
 
   it("a returned object that fails agentTurnSchema is the run's `llm` failure, not a throw", async () => {
