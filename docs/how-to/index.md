@@ -9,6 +9,10 @@ what you are trying to do, and it names the subpath you need.
 - [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
   `Store` so the Model survives a Durable Object eviction and resumes on the next
   boot.
+- [Deploy an agent to a Durable Object](./deploy-an-agent-to-a-durable-object.md) —
+  run a `defineAgent` agent inside a Cloudflare Durable Object with `doStore`
+  as its `Store`, so an eviction mid-run resumes on the next request instead of
+  starting over.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.

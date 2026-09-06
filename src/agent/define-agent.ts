@@ -17,7 +17,7 @@ import { MsgType } from "../protocol";
 import type { RequiredCtx } from "../pure/core";
 import type { CtxArg, Store } from "../runtime-types";
 import { createAgent } from "./index";
-import type { AgentCmd, AgentMachineMsg } from "./machine";
+import { type AgentCmd, type AgentMachineMsg, agentBootMsg } from "./machine";
 import {
   type AnyToolDef,
   type ToolCmd,
@@ -45,7 +45,9 @@ import {
  * its provider's shape: the head is the `instructions` (when set) and the
  * run's `input`; then, per model turn, the `assistant` turn followed by the
  * `tool` outcomes that turn asked for. A tool outcome rides as data — the
- * adapter decides how a failure reads to its model.
+ * adapter decides how a failure reads to its model. An `assistant` message
+ * carries the turn's opaque `provider` slot exactly as the adapter returned it
+ * (see `AgentTurn`), present only when the stored turn has one.
  */
 export type AgentMessage =
   | { readonly role: "system"; readonly content: string }
@@ -54,6 +56,7 @@ export type AgentMessage =
       readonly role: "assistant";
       readonly content: string;
       readonly toolCalls: readonly ToolCall[];
+      readonly provider?: unknown;
     }
   | {
       readonly role: "tool";
@@ -127,6 +130,11 @@ export interface DefinedAgent<T extends AnyToolDef> {
   /**
    * Run `input` to its terminal Model. Resolves on `run.phase: "done"`; a
    * failed run rejects with `DriveFailedError` carrying the failed Model.
+   *
+   * With a `store`, the same call is also the resume: a Model the Store hands
+   * back mid-run is booted (`agent_boot`) at its one outstanding effect —
+   * same `runId`, no tool re-run — and one already `done` resolves as it is.
+   * A fresh start needs an empty Store.
    */
   readonly run: (
     input: string,
@@ -174,7 +182,12 @@ export function defineAgent<T extends AnyToolDef>(
   const drive: DefinedAgent<T>["run"] = (input, ...[opts = noHost<T>()]) =>
     driveToDone(
       run(machine(input), { ...opts, terminal: isDone }),
-      startMsg(opts.runId ?? crypto.randomUUID(), (opts.clock ?? Date.now)()),
+      (booted) => {
+        const at = (opts.clock ?? Date.now)();
+        return isMidRun(booted)
+          ? agentBootMsg(at)
+          : startMsg(opts.runId ?? crypto.randomUUID(), at);
+      },
       isDone,
       { failed: isFailed },
     );
@@ -214,7 +227,7 @@ export function renderPrompt(prompt: AgentPrompt<unknown>): AgentMessage[] {
   }
   const { turns, toolRecords } = prompt.conversation;
   const transcript = turns.flatMap<AgentMessage>((turn, i) => [
-    { role: "assistant", content: turn.content, toolCalls: turn.toolCalls },
+    assistantOf(turn),
     ...toolRecords
       .filter((r) => r.turn === i)
       .map<AgentMessage>((r) => ({
@@ -225,6 +238,18 @@ export function renderPrompt(prompt: AgentPrompt<unknown>): AgentMessage[] {
       })),
   ]);
   return [...head, ...transcript];
+}
+
+/**
+ * The stored turn as the `assistant` message the model reads back. `provider`
+ * rides only when the turn carries one, so a turn persisted before the slot
+ * existed renders exactly as it did then. PURE.
+ */
+function assistantOf(turn: AgentTurn): AgentMessage {
+  const { content, toolCalls } = turn;
+  return "provider" in turn
+    ? { role: "assistant", content, toolCalls, provider: turn.provider }
+    : { role: "assistant", content, toolCalls };
 }
 
 /**
@@ -239,6 +264,19 @@ function noHost<T extends AnyToolDef>(): DefinedAgentRunOptions<T> {
 /** The Msg that sets a run in motion. */
 function startMsg(runId: string, at: number) {
   return { type: MsgType.AgentStart, runId, at } as const;
+}
+
+/**
+ * Whether the boot State is a run the Store handed back mid-flight — live, or
+ * suspended on tools — which `agent_boot` resumes at its one outstanding
+ * effect. A `start` here would mint a new `runId` and a fresh conversation
+ * over the work already done; that is a restart, and the durable half of the
+ * lid is exactly that it never does one. PURE.
+ */
+function isMidRun(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
+  // Off `run.phase`, not `status`: `status` reads an `idle` (never started)
+  // Model as `running` too, and idle is exactly the State a start belongs to.
+  return s.run.phase === "running" && status(s).kind !== "failed";
 }
 
 /** The drive's terminal predicate — the pipeline finished. PURE. */
