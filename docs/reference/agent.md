@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (64)
+## Exports (82)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -37,6 +37,7 @@ import { … } from "@demlik/tea/agent";
 | `AgentToMachine` | Type | The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants so the snapshotting / compaction overloads of `createAgent` hand back the right obligations. |
 | `AgentTurn` | Interface | One model turn — the seed's `AiTurn`, generalized: the narration `content` the model produced and the `toolCalls` it asked us to run. |
 | `agentTurnSchema` | Variable | The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain call binds when the agentic purpose's output is a bare `AgentTurn` (the common case). |
+| `AnyToolDef` | Type | The declaration-erased view the router reads. |
 | `Awaiting` | Type | Whether the agentic stage is waiting on the model (`llm`), on tools (`tools`), or on a compaction round-trip (`compacting`, #85). |
 | `CompactInterpret` | Type | The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret` (#85), the exact twin of SnapshotInterpret. |
 | `COMPACTION_PURPOSE` | Variable | The reserved compaction purpose's value — the single in-flight summarize call's key. |
@@ -71,6 +72,23 @@ import { … } from "@demlik/tea/agent";
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |
 | `status` | Function |  |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` cell for the DEFAULT `setTimeout` backing. |
+| `tool` | Function |  |
 | `ToolCall` | Interface | One tool the model asked to call this turn — the seed's `ToolCall`, stripped of the audit-specific args typing. |
+| `ToolCmd` | Type | The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. |
+| `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell and the bare `args` schema the router parses a call against. |
+| `toolErrorReason` | Function |  |
+| `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` is `Result.err` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
+| `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `needs` named, and the typed `fail`, to a `Result` over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
+| `ToolInput` | Type | The input a tool Cmd carries: the model's `callId` (the fan-out identity the settle folds back on) and the `args` already parsed against the tool's `input` schema — the boundary parses, the handler trusts. |
+| `ToolMsg` | Type | The settled Msg union a router's cells return — folded by `toMachine`. |
 | `ToolOutcome` | Type | One settled tool outcome the consumer routes back into the loop — the seed's `ToolOutcome`. |
 | `ToolRecord` | Interface | A folded tool record kept on the conversation once a tool settles — the call + its outcome, in settle order. |
+| `ToolRejectedCmd` | Type | The Cmd `tool_rejected` builds — the router-owned variant of `ToolCmd`. |
+| `ToolRejection` | Type | A call the router could not hand to a tool: the model named a tool nobody declared, or its `args` failed the tool's `input` schema. |
+| `ToolResult` | Type | The union of every tool's `ok` value — `R` for `createAgent`. |
+| `toolRouter` | Function |  |
+| `ToolRouter` | Interface | What `toolRouter()` returns: the derived `toolOf` for `createAgent`'s config, the interpret table `toMachine({ tools })` merges, the defs it puts on `Machine.cmds`, and the one reader that turns a settled Msg back into the conversation's `ToolOutcome`. |
+| `ToolSettlement` | Type | One settled tool, read back off a `ToolMsg` by `outcomeOf`. |
+| `ToolThrown` | Type | The router-minted failure beside a tool's declared tags: the handler threw (or rejected) with something that is not a declared `{ _tag }`. |
+| `WiredToolCmd` | Type | `ToolCmd<T>` as `toMachine` reads it: `never` for `T = never` — the "no router" reading it defaults to — so the router-owned `tool_rejected` arm does not leak into a machine that wired no router. |
+| `WiredToolMsg` | Type | `ToolMsg<T>` as `toMachine` / `agentEvents` read it — see `WiredToolCmd`. |

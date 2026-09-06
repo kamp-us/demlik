@@ -155,6 +155,12 @@ import {
   type SnapshotInterpret,
 } from "./machine";
 import type {
+  AnyToolDef,
+  ToolRouter,
+  WiredToolCmd,
+  WiredToolMsg,
+} from "./tool";
+import type {
   AgentConfig,
   AgentConfigCore,
   AgentFailure,
@@ -171,6 +177,7 @@ import type {
 // vocabulary + wiring helpers). The reducer core — `createAgent` — stays here.
 export * from "./compaction";
 export * from "./machine";
+export * from "./tool";
 export * from "./types";
 
 // ===========================================================================
@@ -1116,7 +1123,15 @@ export function createAgent<
    * is self-contained; a consumer needing extra Msgs wires the verbs by hand
    * instead (the knob contract is the escape hatch).
    */
-  function toMachine<Ctx = object>(opts?: {
+  function toMachine<Ctx = object, T extends AnyToolDef = never>(opts?: {
+    /**
+     * A `toolRouter` (#56). Its cells join the interpret table, its defs go on
+     * `Machine.cmds` (so `run`'s edge parses each `_ok` and stamps `at`), and
+     * one reducer cell per settled Msg folds the tool back through `toolOk` /
+     * `toolErr` — the router's `toolOf` is the config's, so the consumer wires
+     * nothing per tool.
+     */
+    readonly tools?: ToolRouter<T>;
     /**
      * The consumer's interpret for the non-brain Cmds — the per-tool effect
      * `TC`, plus (ONLY when checkpointing is configured) the monitored-run
@@ -1131,17 +1146,30 @@ export function createAgent<
      * when checkpointing is off. There is no default no-op: a non-checkpointing
      * consumer cannot even mention `snapshot_write`, and a checkpointing one must.
      */
-    readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
-      SnapshotInterpret<AgentMachineMsg<P, O, R>, boolean, Ctx> &
-      CompactInterpret<AgentMachineMsg<P, O, R>, boolean, Ctx>;
+    readonly toolInterpret?: Interpret<
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      Exclude<TC, WiredToolCmd<T>>,
+      Ctx
+    > &
+      SnapshotInterpret<
+        AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+        boolean,
+        Ctx
+      > &
+      CompactInterpret<
+        AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+        boolean,
+        Ctx
+      >;
   }): Machine<
     State,
-    AgentMachineMsg<P, O, R>,
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
     AgentCmd<P, TC, boolean, boolean>,
     DeadlineSub,
     Ctx
   > {
-    type M = AgentMachineMsg<P, O, R>;
+    type M = AgentMachineMsg<P, O, R> | WiredToolMsg<T>;
+    const tools = opts?.tools;
     // The implementation is typed at `Snap = boolean` — the SUPERSET that
     // always includes the monitored-run checkpoint Cmd; the public OVERLOADS
     // narrow it to `true` / `false` and hand the consumer the precise obligation
@@ -1175,11 +1203,14 @@ export function createAgent<
     // wires it, and the monitored-run slice never emits it — the
     // `snapshot_write: async () => undefined` ceremony (and the type lie it
     // masked) is gone (#55).
-    const consumerInterpret = (opts?.toolInterpret ?? {}) as Interpret<
-      M,
-      NonBrainCmd,
-      Ctx
-    >;
+    //
+    // The router's cells (#56) sit under the consumer's: the router owns the
+    // tool Cmds' keys (`Exclude<TC, WiredToolCmd<T>>` took them off the consumer's
+    // obligation), the consumer owns the rest, so the two never share a key.
+    const consumerInterpret = {
+      ...tools?.interpret,
+      ...opts?.toolInterpret,
+    } as Interpret<M, NonBrainCmd, Ctx>;
     const interpret: Interpret<M, ACmd, Ctx> = mergeInterpret<
       M,
       NonBrainCmd,
@@ -1197,7 +1228,34 @@ export function createAgent<
     // narrowing (`update` below) is SOUND because a non-snapshotting run's
     // monitored-run slice provably never emits a `snapshot_write` Cmd, so the
     // forwarded array never carries the variant `ACmd` excludes.
-    const update: Reducer<State, M, AgentCmd<P, TC>> = {
+    //
+    // The router's settled Msgs (#56) fold exactly as `agent_tool_ok` /
+    // `agent_tool_err` do — one cell per `<name>_ok` / `<name>_err`, read off
+    // the router's defs, each routed through `outcomeOf` so the `_ok` value and
+    // the `{ _tag }` failure's `reason` are rendered in ONE place. The record is
+    // built per def at runtime, which is why the reducer is assembled as a
+    // record and typed at the `M` union below.
+    type ToolCell = (
+      s: State,
+      m: WiredToolMsg<T>,
+    ) => readonly [State, readonly AgentCmd<P, TC>[]];
+    const foldTool: ToolCell = (s, m) => {
+      const settled = tools?.outcomeOf(m);
+      if (settled === undefined || settled === null) return [s, []];
+      return settled.outcome.kind === "ok"
+        ? toolOk(s, settled.callId, settled.outcome.result as R, m.at)
+        : toolErr(s, settled.callId, settled.outcome.reason, m.at);
+    };
+    const toolCells: Record<string, ToolCell> = {};
+    for (const def of tools?.defs ?? []) {
+      toolCells[def.okType] = foldTool;
+      toolCells[def.errType] = foldTool;
+    }
+    const ownUpdate: Reducer<
+      State,
+      AgentMachineMsg<P, O, R>,
+      AgentCmd<P, TC>
+    > = {
       [MsgType.AgentStart]: (s, m) => start(s, m.runId, m.at),
       [MsgType.AgentToolOk]: (s, m) => toolOk(s, m.callId, m.result, m.at),
       [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
@@ -1214,6 +1272,15 @@ export function createAgent<
       deadline_exceeded: (s, m) => onTimer(s, m),
       [MsgType.AgentBoot]: (s, m) => boot(s, m.at),
     };
+    // `ownUpdate` carries every `AgentMachineMsg` cell (checked above);
+    // `toolCells` carries one per router def. The join is `Reducer` over the
+    // union `M` — a mapped type over a generic `T` that TS cannot enumerate,
+    // so the identity is asserted once here.
+    const update = { ...ownUpdate, ...toolCells } as Reducer<
+      State,
+      M,
+      AgentCmd<P, TC>
+    >;
 
     // Build the machine as a fully-typed `Machine<...>` const, then pass it
     // through `defineMachine`'s identity. Annotating the const resolves the
@@ -1234,6 +1301,7 @@ export function createAgent<
       subscriptions: (s) => subs(s),
       subscribe: { deadline: subscribeDeadline },
       interpret,
+      ...(tools !== undefined ? { cmds: tools.defs } : {}),
     };
     return defineMachine(machine);
   }

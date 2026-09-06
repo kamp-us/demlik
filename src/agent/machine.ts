@@ -25,6 +25,12 @@ import type {
   AgentCompactRunCmd,
   CompactInterpret,
 } from "./compaction";
+import type {
+  AnyToolDef,
+  ToolRouter,
+  WiredToolCmd,
+  WiredToolMsg,
+} from "./tool";
 import type { AgentState, AgentTurn } from "./types";
 
 // ===========================================================================
@@ -98,6 +104,12 @@ export type SnapshotInterpret<
  * `snapshot_write` cell via {@link SnapshotInterpret} and the `compact_run` cell
  * via {@link CompactInterpret}, and the machine's Cmd type is the config-derived
  * `AgentCmd<P, TC, Snap, Compact>`.
+ *
+ * `tools` (#56) is a `toolRouter`: its cells are merged in, its settled
+ * `<name>_ok` / `<name>_err` Msgs join the machine's `M` and fold into the
+ * conversation, and its Cmds leave the `toolInterpret` obligation — a consumer
+ * whose `toolOf` is the router's supplies only the snapshot / compaction cells.
+ * With no router (`T = never`) every type here reads exactly as before.
  */
 export type AgentToMachine<
   Stage,
@@ -107,13 +119,18 @@ export type AgentToMachine<
   TC extends Cmd,
   Snap extends boolean,
   Compact extends boolean,
-> = <Ctx = object>(opts?: {
-  readonly toolInterpret?: Interpret<AgentMachineMsg<P, O, R>, TC, Ctx> &
-    SnapshotInterpret<AgentMachineMsg<P, O, R>, Snap, Ctx> &
-    CompactInterpret<AgentMachineMsg<P, O, R>, Compact, Ctx>;
+> = <Ctx = object, T extends AnyToolDef = never>(opts?: {
+  readonly tools?: ToolRouter<T>;
+  readonly toolInterpret?: Interpret<
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    Exclude<TC, WiredToolCmd<T>>,
+    Ctx
+  > &
+    SnapshotInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Snap, Ctx> &
+    CompactInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Compact, Ctx>;
 }) => Machine<
   AgentState<Stage, P, O, R>,
-  AgentMachineMsg<P, O, R>,
+  AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
   AgentCmd<P, TC, Snap, Compact>,
   DeadlineSub,
   Ctx
@@ -412,53 +429,46 @@ export type AgentEvent<R> =
  * exactly once (the agent is terminal there and dispatches no further
  * transition), so the event fires once per run.
  *
+ * A machine wired with `toMachine({ tools })` (#56) settles tools through the
+ * router's `<name>_ok` Msgs instead of `agent_tool_ok`; pass the same router
+ * here so those settles project to `ToolSettled` too.
+ *
  * PURE — reads only the passed `(msg, state)`; no clock, no RNG, no throw.
  *
  * @typeParam P     Brain-call purposes.
  * @typeParam O     Per-purpose outputs (bound to `AgentTurn`, the agentic shape).
  * @typeParam R     Tool result type.
  * @typeParam Stage Pipeline stage type.
+ * @typeParam T     The router's tool defs, when one is wired.
  */
 export function agentEvents<
   Stage,
   P extends string,
   O extends Record<P, AgentTurn>,
   R,
->(): (
-  msg: AgentMachineMsg<P, O, R>,
+  T extends AnyToolDef = never,
+>(opts?: {
+  readonly tools?: ToolRouter<T>;
+}): (
+  msg: AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
   state: AgentState<Stage, P, O, R>,
 ) => readonly AgentEvent<R>[] {
+  const tools = opts?.tools;
   return (msg, state) => {
     const events: AgentEvent<R>[] = [];
-    switch (msg.type) {
-      case MsgType.ResilientOk:
-        // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
-        // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
-        // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
-        // same reasoning `state.output` relies on, #46/#48).
-        events.push({ type: "TurnSettled", turn: msg.result.output });
-        break;
-      case MsgType.AgentToolOk:
-        // The PRIVATE tool-fan-out settle Msg → the public ToolSettled.
+    const routed = tools === undefined ? null : tools.outcomeOf(msg);
+    if (routed !== null) {
+      // A router-settled tool: its `_ok` is the public ToolSettled, its `_err`
+      // stays silent like `agent_tool_err`. The router's `R` is the machine's.
+      if (routed.outcome.kind === "ok") {
         events.push({
           type: "ToolSettled",
-          callId: msg.callId,
-          result: msg.result,
+          callId: routed.callId,
+          result: routed.outcome.result as R,
         });
-        break;
-      // start / boot / timer / the *_err arms / the compaction settles carry no
-      // public event — return []. (No `default`: the switch is exhaustive over
-      // the Msg discriminant, so a new Msg variant forces a decision here at
-      // compile time.) Compaction is an internal optimization, not a semantic
-      // lifecycle moment a UI folds — its settles are deliberately silent here.
-      case MsgType.AgentStart:
-      case MsgType.AgentToolErr:
-      case MsgType.ResilientErr:
-      case MsgType.CompactOk:
-      case MsgType.CompactErr:
-      case "deadline_exceeded":
-      case MsgType.AgentBoot:
-        break;
+      }
+    } else {
+      projectOwn(msg as AgentMachineMsg<P, O, R>, events);
     }
     // RunDone is a STATE-shaped event (the run's terminal output, #46), not a
     // Msg-shaped one: the transition that lands `done` is the final brain turn
@@ -469,6 +479,45 @@ export function agentEvents<
     }
     return events;
   };
+}
+
+// The agent's own Msg union, projected exhaustively. A Msg the router did not
+// claim is one of these: `WiredToolMsg<T>` and `AgentMachineMsg` are disjoint on
+// `type`, which the cast at the one call site records.
+function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
+  msg: AgentMachineMsg<P, O, R>,
+  events: AgentEvent<R>[],
+): void {
+  switch (msg.type) {
+    case MsgType.ResilientOk:
+      // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
+      // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
+      // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
+      // same reasoning `state.output` relies on, #46/#48).
+      events.push({ type: "TurnSettled", turn: msg.result.output });
+      break;
+    case MsgType.AgentToolOk:
+      // The PRIVATE tool-fan-out settle Msg → the public ToolSettled.
+      events.push({
+        type: "ToolSettled",
+        callId: msg.callId,
+        result: msg.result,
+      });
+      break;
+    // start / boot / timer / the *_err arms / the compaction settles carry no
+    // public event. (No `default`: the switch is exhaustive over the Msg
+    // discriminant, so a new Msg variant forces a decision here at compile
+    // time.) Compaction is an internal optimization, not a semantic lifecycle
+    // moment a UI folds — its settles are deliberately silent here.
+    case MsgType.AgentStart:
+    case MsgType.AgentToolErr:
+    case MsgType.ResilientErr:
+    case MsgType.CompactOk:
+    case MsgType.CompactErr:
+    case "deadline_exceeded":
+    case MsgType.AgentBoot:
+      break;
+  }
 }
 
 /**
