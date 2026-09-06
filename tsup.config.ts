@@ -22,6 +22,7 @@ export default defineConfig({
     "pbt/arbitraries/index": "src/pbt/arbitraries/index.ts",
     "pbt/runners/index": "src/pbt/runners/index.ts",
     "retry-backoff/index": "src/retry-backoff/index.ts",
+    "machine-viz/index": "src/machine-viz/index.ts",
     "agent/index": "src/agent/index.ts",
     "pure/index": "src/pure/index.ts",
     "parity/index": "src/parity/index.ts",

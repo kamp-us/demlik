@@ -16,7 +16,7 @@ import {
   type ToolCall,
 } from "@demlik/tea/agent";
 import { createIntake, type IntakeCmd } from "../src/internal/idempotency/idempotent-intake";
-import { toMermaid } from "@demlik/tea/devtools";
+import { toMermaid } from "@demlik/tea/machine-viz";
 import {
   createPaginatedWalk,
   type PageErrMsg,

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RUNTIME — the chart walk that emits a real `Transitions<S, M, C>`.
 // ═══════════════════════════════════════════════════════════════════════════
-import { safeId, safeLabel } from "../devtools/mermaid-id";
+import { safeId, safeLabel } from "../machine-viz/mermaid-id";
 import { Cmd, NoCellError, type Reducer, type Transitions } from "../pure/core";
 import type {
   Assigns,

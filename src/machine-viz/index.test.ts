@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Cmd, defineMachine } from "../index";
-import { toMermaid } from "./machine-viz";
+import { toMermaid } from "./index";
 
 // ---------------------------------------------------------------------------
 // Transitions-form fixture: a traffic light. State is a discriminated union

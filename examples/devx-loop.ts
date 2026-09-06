@@ -10,7 +10,7 @@
  */
 
 import { type Cmd, defineMachine, noop, run, type Sub } from "@demlik/tea";
-import { toMermaid } from "@demlik/tea/devtools";
+import { toMermaid } from "@demlik/tea/machine-viz";
 import { parseJSONL, recorder } from "../src/internal/persistence/recorder";
 import { replayTrace } from "../src/internal/persistence/trace-replay";
 

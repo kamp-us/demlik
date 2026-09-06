@@ -3,28 +3,22 @@
 ---
 
 The persistence / observability modules and the agent-side leaves move inside the package
-(ADR 0015, ADR 0016). Seven subpaths leave `exports`; every primitive they published still
-exists, under `src/internal/` or `./devtools`, and six of them are no longer importable from
-outside the package.
+(ADR 0015, ADR 0016). Six subpaths leave `exports`; every primitive they published still
+exists under `src/internal/`, and none of them is importable from outside the package.
 
 | Removed door | New home |
 |---|---|
 | `@demlik/tea/recorder` | `src/internal/persistence/recorder` |
 | `@demlik/tea/snapshot` | `src/internal/persistence/snapshot` |
 | `@demlik/tea/trace-replay` | `src/internal/persistence/trace-replay` |
-| `@demlik/tea/machine-viz` | `@demlik/tea/devtools` — still public, see below |
 | `@demlik/tea/journal` | `src/internal/journal` |
 | `@demlik/tea/prediction` | `src/internal/prediction` |
 | `@demlik/tea/llm-call` | `src/internal/llm-call` |
 
-**Breaking, stable tier:** `@demlik/tea/machine-viz` was a `stable` subpath. Its whole API —
-`toMermaid`, `MachineVizOptions`, `safeId`, `safeLabel` — now ships from `@demlik/tea/devtools`,
-unchanged. The one migration is the import path:
-
-```diff
-- import { toMermaid } from "@demlik/tea/machine-viz";
-+ import { toMermaid } from "@demlik/tea/devtools";
-```
+**`@demlik/tea/machine-viz` stays where it is.** It is a `stable` subpath with real external
+callsites, and ADR 0016 (as amended by #83) keeps such a part on its own bare door rather than
+folding it into a grouped one — the same shape `@demlik/tea/retry-backoff` takes. `toMermaid`,
+`MachineVizOptions`, `safeId` and `safeLabel` are unchanged, and nothing about that door moves.
 
 `fileJournal` stays on `@demlik/tea/node` and the prediction ack primitive (`ack`, `initAck`,
 `NO_ACK`, `nextSeq`, `partitionByAck`, `reconcile`, `tagSeq`, and their types) stays on

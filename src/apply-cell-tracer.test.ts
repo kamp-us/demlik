@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { toMermaid } from "./devtools/machine-viz";
 import {
   defineMachine,
   detectUpdateForm,
@@ -14,6 +13,7 @@ import {
 import { withDeadline } from "./internal/resilience/with-deadline";
 import { withResilience } from "./internal/resilience/with-resilience";
 import { withTelemetry } from "./internal/resilience/with-telemetry";
+import { toMermaid } from "./machine-viz";
 import { foldEvents, msgTypeKeys } from "./pbt";
 
 // ───────────────────────────────────────────────────────────────────────────

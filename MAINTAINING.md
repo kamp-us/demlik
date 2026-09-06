@@ -49,6 +49,7 @@ export is not done until it has a row here.
 | `./parity` | stable | grandfathered by production usage (audit-core) |
 | `./devtools` | stable | dev-tooling edge of the kernel |
 | `./devtools/styles.css` | stable | asset of `./devtools` |
+| `./machine-viz` | stable | |
 | `./package.json` | stable | metadata passthrough, not an API subpath |
 | `./retry-backoff` | battery | call-hardening |
 | `./agent` | experimental | agent layer; the brain migration graduates it |

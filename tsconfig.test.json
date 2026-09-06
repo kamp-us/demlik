@@ -71,7 +71,7 @@
     "src/fold-msgs.test.ts",
     "src/internal/idempotency/idempotent-intake/idempotent-intake.test.ts",
     "src/internal/llm-call/llm-call.test.ts",
-    "src/devtools/machine-viz.test.ts",
+    "src/machine-viz/index.test.ts",
     "src/internal/flow/monitored-run/monitored-run.test.ts",
     "src/node/node.test.ts",
     "src/onerror-fanout.test.ts",

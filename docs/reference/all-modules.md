@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 29 public subpaths. Curated
+The complete export catalog — all 30 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -24,6 +24,7 @@ discoverable here with a one-line gloss from their source barrel.
 | `./extension/react` | React adapters for the background TEA runtime. |
 | `./extension/subs` |  |
 | `./extension/test-utils` | In-memory `chrome.*` mock for tests in this package and any downstream consumer that wants to test against `chromeStorageStore` behavior without a real chrome environment. |
+| `./machine-viz` | turn a `Machine` into a Mermaid diagram string. |
 | [`./mem`](./mem.md) | in-memory `Store<S>` adapter for `@demlik/tea`. |
 | [`./node`](./node.md) | Node host adapter for `@demlik/tea`. |
 | `./parity` | the record → replay → normalized-diff go/no-go gate. |
