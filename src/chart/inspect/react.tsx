@@ -72,7 +72,7 @@ import {
   run,
   type Sub,
 } from "../../index";
-import type { Reducer, Transitions } from "../../pure/core";
+import type { Reducer, RequiredCtx, Transitions } from "../../pure/core";
 import { type Recorder, recorder, type Trace } from "../../recorder";
 import {
   chartMermaid,
@@ -195,7 +195,8 @@ export function useInspectorRuntime<
   Ctx,
 >(
   machine: Machine<S, M, K, Sub<never>, Ctx>,
-  ctx: Ctx,
+  // What `run` demands: the machine's ctx plus every typed Cmd's `R`.
+  ctx: Ctx & RequiredCtx<K>,
   epoch: number,
 ): { readonly rt: Runtime<S, M> | null; readonly rec: Recorder<S, M> } {
   // `epoch` is not read inside the memo, and it is still a real dependency: it
@@ -261,7 +262,11 @@ export function ChartInspector<
       }) as unknown as Machine<S, M, K, Sub<never>, Ctx>,
     [chart, parts, boot],
   );
-  const { rt, rec } = useInspectorRuntime(machine, ctx as Ctx, epoch);
+  const { rt, rec } = useInspectorRuntime(
+    machine,
+    ctx as Ctx & RequiredCtx<K>,
+    epoch,
+  );
 
   const desc = useMemo(() => describeChart(chart), [chart]);
   const view = useMemo<FormView<S>>(
@@ -322,7 +327,11 @@ export function ReducerChartInspector<
       }) as unknown as Machine<S, M, K, Sub<never>, Ctx>,
     [chart, parts, boot],
   );
-  const { rt, rec } = useInspectorRuntime(machine, ctx as Ctx, epoch);
+  const { rt, rec } = useInspectorRuntime(
+    machine,
+    ctx as Ctx & RequiredCtx<K>,
+    epoch,
+  );
 
   const desc = useMemo(() => describeReducerChart(chart), [chart]);
   const view = useMemo<FormView<S>>(

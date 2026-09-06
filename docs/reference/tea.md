@@ -6,12 +6,13 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (71)
+## Exports (89)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `absurd` | Function |  |
 | `acceptsOf` | Function |  |
+| `AnyCmdDef` | Type | The declaration-erased view the runtime reads: which `type` a def builds, which two Msg types it settles with, and the `ok` schema the edge parses against. |
 | `applyCell` | Function |  |
 | `applyCellChecked` | Function |  |
 | `asReducer` | Function |  |
@@ -19,6 +20,10 @@ import { … } from "@demlik/tea";
 | `Branded` | Type |  |
 | `Cmd` | Type |  |
 | `Cmd` | Variable |  |
+| `CmdDef` | Interface | What `Cmd.define` returns: the Cmd builder itself (`fetch({ url })`), with the minted Msg builders and the declaration hung on it. |
+| `CmdInput` | Type | The payload a constructor accepts: a plain record spread beside `type`. |
+| `CmdOf` | Type | The Cmd value a def (or a union of defs) builds. |
+| `CmdValue` | Type | The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. |
 | `ContextFree` | Type | Spelled-out alias for `NoCtx`. |
 | `CtxArg` | Type |  |
 | `defineMachine` | Function |  |
@@ -33,6 +38,8 @@ import { … } from "@demlik/tea";
 | `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
 | `driveToDone` | Function |  |
 | `DriveToDoneOptions` | Interface | Options for `driveToDone`. |
+| `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
+| `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `foldMsgs` | Function |  |
 | `FoldRefusal` | Interface | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no cell, where. |
 | `foldUpdates` | Function |  |
@@ -45,10 +52,14 @@ import { … } from "@demlik/tea";
 | `InterpretDetached` | Type |  |
 | `Machine` | Type |  |
 | `MachineShape` | Type |  |
+| `MalformedResult` | Type | The kernel-minted failure: a handler returned a `_ok` value the Cmd's `ok` schema rejects. |
 | `msgKeysOf` | Function |  |
+| `Needs` | Type | Phantom carrier for a Cmd's `R`. |
+| `NeedsOf` | Type |  |
 | `NoCellError` | Class |  |
 | `NoCtx` | Type |  |
 | `noop` | Function |  |
+| `OkOf` | Type | The `Ok` a def's handler must produce. |
 | `OnError` | Type | Sink for runtime failures that have no caller to reject at. |
 | `Port` | Interface |  |
 | `PortEmitter` | Interface | Augmentation injected onto `ctx` inside Cmd handlers. |
@@ -56,6 +67,7 @@ import { … } from "@demlik/tea";
 | `QuiescenceTimeoutError` | Class | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
 | `Reducer` | Type |  |
 | `replay` | Function |  |
+| `RequiredCtx` | Type | The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected. |
 | `run` | Function |  |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
@@ -65,6 +77,10 @@ import { … } from "@demlik/tea";
 | `RuntimeRef` | Interface |  |
 | `Schema` | Interface |  |
 | `schemaMigrate` | Function |  |
+| `settle` | Function |  |
+| `Settled` | Type | The settled-Msg union a def (or a union of defs) mints: `<name>_ok` carrying `value`, `<name>_err` carrying `error`. |
+| `SettledErr` | Type |  |
+| `SettledOk` | Type |  |
 | `Store` | Interface |  |
 | `structuralHash` | Function |  |
 | `Sub` | Type |  |
@@ -75,6 +91,8 @@ import { … } from "@demlik/tea";
 | `Supervision` | Type | Declared supervision policy for a reducer (`update`) throw, at `run(machine, { supervision })`. |
 | `SupervisionStrategy` | Type | The three declared reducer-throw supervision strategies. |
 | `SyncReturn` | Type |  |
+| `Tagged` | Type | The shape every settled failure has (ADR 0011): a plain `_tag` record. |
+| `TaggedError` | Type | One declared failure per tag. |
 | `Transitions` | Type |  |
 | `tryApplyCell` | Function |  |
 | `tryFoldMsgs` | Function |  |
