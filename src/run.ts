@@ -1070,7 +1070,10 @@ export interface DriveToDoneOptions<S> {
  * accepted too), awaits `ready`, dispatches `start`, and resolves with the first
  * State for which `isTerminal` holds. A machine that boots already terminal (a
  * rehydrated finished run) resolves on its boot State and `start` is never
- * dispatched — a finished run has nothing to set in motion. The
+ * dispatched — a finished run has nothing to set in motion. `start` may be a
+ * function of the boot State instead of a Msg: a machine rehydrated MID-run
+ * needs its resume Msg, not its start Msg, and only the boot State says which
+ * (the agent's `agent_boot` vs `agent_start` is the case in point). The
  * observer is detached and `stop()` awaited on EVERY exit: resolve, `failed`,
  * a stall, a boot or dispatch throw, the quiescence cap.
  *
@@ -1095,7 +1098,8 @@ export interface DriveToDoneOptions<S> {
  * the kernel has no built-in terminal-set concept and this does not add one.
  *
  * @param handle     the handle `run(machine, opts)` returned.
- * @param start      the Msg that sets the run in motion.
+ * @param start      the Msg that sets the run in motion, or a function choosing
+ *                   it off the boot State. PURE.
  * @param isTerminal the terminal predicate over the machine's State. PURE.
  * @param opts       an optional `failed` predicate (see {@link DriveToDoneOptions}).
  */
@@ -1105,7 +1109,7 @@ export async function driveToDone<
   E extends { type: string } = never,
 >(
   handle: BootingRuntime<S, M, E>,
-  start: M,
+  start: M | ((booted: S) => M),
   isTerminal: (state: S) => boolean,
   opts: DriveToDoneOptions<S> = {},
 ): Promise<S> {
@@ -1132,7 +1136,8 @@ export async function driveToDone<
     // The race lets a dispatch rejection (reducer / interpret throw, the
     // quiescence cap) surface here instead of floating as an unhandled rejection
     // while the terminal await parks forever.
-    const started = runtime.dispatch(start).then(() => {
+    const msg = typeof start === "function" ? start(booted) : start;
+    const started = runtime.dispatch(msg).then(() => {
       // Quiesced. A settling State already went through the observer, so
       // `terminal` is resolved; otherwise the wait is legitimate only while the
       // runtime itself can still transition. With no live Sub and no Cmd in
