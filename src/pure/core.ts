@@ -169,12 +169,25 @@ type UnionToIntersection<U> = (
   ? I
   : never;
 
+// `unknown` is the identity of `&` but the annihilator of `|`: a union of
+// `NeedsOf` over a MIXED Cmd set (`{ http } | unknown`) collapses to `unknown`
+// before it can be intersected, and the machine demands nothing. Box each
+// member first so the "needs nothing" arms can be dropped, not absorbed.
+type NeedsBoxed<C> = C extends unknown ? [NeedsOf<C>] : never;
+type KnownNeeds<B> = B extends [infer R]
+  ? unknown extends R
+    ? never
+    : R
+  : never;
+
 /**
  * The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected.
  * `run` types its `ctx` as `Ctx & RequiredCtx<C>`, so handing a machine whose
- * Cmds need `{ http }` to a `run` whose ctx lacks it is a compile error.
+ * Cmds need `{ http }` to a `run` whose ctx lacks it is a compile error. A Cmd
+ * that needs nothing — untyped, or `Cmd.define`d without `needs` — leaves the
+ * demand of its siblings intact (#56).
  */
-export type RequiredCtx<C> = UnionToIntersection<NeedsOf<C>>;
+export type RequiredCtx<C> = UnionToIntersection<KnownNeeds<NeedsBoxed<C>>>;
 
 // === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1) ===
 //
