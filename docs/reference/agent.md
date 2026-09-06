@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (78)
+## Exports (82)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -62,7 +62,11 @@ import { … } from "@demlik/tea/agent";
 | `mergeInterpret` | Function |  |
 | `MessageLoader` | Reference |  |
 | `ModelFactory` | Reference |  |
+| `ModelPort` | Reference |  |
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
+| `PLAIN_MODEL_MISROUTE_REASON` | Reference |  |
+| `plainModel` | Reference |  |
+| `PlainModel` | Reference |  |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `Schema` | Reference |  |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |
