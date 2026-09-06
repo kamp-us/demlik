@@ -1,0 +1,6 @@
+{
+	// The CI gate whose jobs supersede `fabrika build check`'s in-tree verdict. fabrika's shipped
+	// default names phoenix's `ci.yml`; this repo's gate is `build.yaml` (#54). `ci.noProducer` is
+	// deliberately not set — it only applies to a repo with zero workflows, so here it would be inert.
+	"ci": { "gateWorkflow": "build.yaml" }
+}

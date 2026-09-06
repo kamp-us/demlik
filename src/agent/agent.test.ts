@@ -8,11 +8,13 @@ import {
   type AgentLlmOkMsg,
   type AgentMachineMsg,
   type AgentTurn,
+  agentTurnSchema,
   createAgent,
   type LlmErr,
   type LlmOk,
   type LlmRunCmd,
   type MonitoredRunCmd,
+  PLAIN_MODEL_MISROUTE_REASON,
   type Schema,
   status,
   type ToolCall,
@@ -520,6 +522,117 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
     // double-run (dedup by callId).
     expect(execCount.get("c1")).toBe(1);
     expect([...execCount.keys()]).toEqual(["c1"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The plain-function model port (#58): `model: async (msgs) => turn` in the
+// slot the factory took. The wired machine drives it end to end; a turn that
+// fails `agentTurnSchema` lands as the run's `llm` failure — data, not a throw.
+// ---------------------------------------------------------------------------
+
+describe("createAgent — plain-function model drives the wired machine", () => {
+  type M = AgentMachineMsg<Purpose, Outputs, string>;
+  const plainSchemas = {
+    plan_turn: agentTurnSchema,
+    act_turn: agentTurnSchema,
+  } as const;
+  const toolInterpret: Interpret<
+    M,
+    MonitoredRunCmd<unknown> | ToolCmd,
+    object
+  > = {
+    run_tool: async (cmd) => ({
+      type: "agent_tool_ok",
+      callId: cmd.callId,
+      result: `done:${cmd.callId}`,
+      at: 0,
+    }),
+    snapshot_write: async () => {},
+  };
+
+  async function drive(
+    model: (messages: readonly Message[]) => Promise<AgentTurn>,
+  ) {
+    const agent = createAgent<
+      Stage,
+      Purpose,
+      Outputs,
+      string,
+      ToolCmd,
+      Message
+    >({
+      stages: STAGES,
+      model,
+      schemas: plainSchemas,
+      turnOf,
+      toolOf,
+      loadMessages: async (call) => [{ role: "user", text: call.purpose }],
+      rng: rngZero,
+    });
+    let resolveDone: () => void = () => {};
+    const reachedDone = new Promise<void>((res) => {
+      resolveDone = res;
+    });
+    const runtime = await run(agent.toMachine<object>({ toolInterpret }), {
+      ctx: {} as object,
+    }).ready;
+    const off = runtime.observe((_msg, state) => {
+      if (agent.isSettled(state)) resolveDone();
+    });
+    await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 0 });
+    await reachedDone;
+    await runtime.stop();
+    off();
+    return runtime.getState();
+  }
+
+  it("llm -> tool -> fold -> llm -> done, the messages reaching the function", async () => {
+    const seen: (readonly Message[])[] = [];
+    const turns: AgentTurn[] = [turnWith(tool("c1")), turnWith(), turnWith()];
+    let i = 0;
+    const final = await drive(async (messages) => {
+      seen.push(messages);
+      const t = turns[i] ?? turnWith();
+      i += 1;
+      return t;
+    });
+    expect(final.run.phase).toBe("done");
+    expect(final.failure).toBeNull();
+    expect(final.output).toEqual(turnWith());
+    expect(seen).toEqual([
+      [{ role: "user", text: "plan_turn" }],
+      [{ role: "user", text: "plan_turn" }],
+      [{ role: "user", text: "act_turn" }],
+    ]);
+  });
+
+  it("a sync promise-returning function passed bare is the run's `llm` failure with a reason naming plainModel", async () => {
+    // `(m) => client.chat(m)` — no `async` tag, so the port cannot tell it from
+    // a factory. The failure must name the fix, not `.withStructuredOutput`.
+    const final = await drive((_m) => Promise.resolve(turnWith()));
+    const st = status(final);
+    expect(st.kind).toBe("failed");
+    if (st.kind !== "failed") throw new Error("unreachable");
+    expect(st.failure.reason).toBe("llm");
+    if (st.failure.reason !== "llm") throw new Error("unreachable");
+    const reason = (st.failure.error as LlmErr<Purpose>).reason;
+    expect(reason).toBe(PLAIN_MODEL_MISROUTE_REASON);
+    expect(reason).not.toContain("withStructuredOutput is not a function");
+  });
+
+  it("a returned object that fails agentTurnSchema is the run's `llm` failure, not a throw", async () => {
+    const final = await drive(
+      async () => ({ content: 42, toolCalls: "none" }) as unknown as AgentTurn,
+    );
+    const st = status(final);
+    expect(st.kind).toBe("failed");
+    if (st.kind !== "failed") throw new Error("unreachable");
+    expect(st.failure.reason).toBe("llm");
+    if (st.failure.reason !== "llm") throw new Error("unreachable");
+    expect((st.failure.error as LlmErr<Purpose>).reason).toBe(
+      "structured-output parse failed: not an AgentTurn",
+    );
   });
 });
 

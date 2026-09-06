@@ -1,6 +1,8 @@
 # 0010 — Export-map tiers: kernel/battery/experimental, showcases off the map
 
-- **Status:** Accepted
+- **Status:** Accepted — amended in part by [0016](./0016-removal-lands-in-a-minor-at-0x.md)
+  (the deprecate-don't-delete ritual is retired while 0.x; the tiers and their semver
+  promises stand)
 - **Date:** 2026-07-17
 - **Scope:** the shape of the `@demlik/tea` npm `exports` map — how many
   stability promises it carries and where integration demos live. Records the

@@ -263,6 +263,25 @@ export class QuiescenceTimeoutError extends Error {
 }
 
 /**
+ * Raised by `driveToDone` when the drive ends on a State its `failed` predicate
+ * marks as a failure. Carries that final State so the caller reads the failure
+ * off the Model the machine owns — never off a message string. A rejection, not
+ * a resolve, so a failed run cannot be mistaken for a finished one at the
+ * caller boundary (invariant 6).
+ */
+export class DriveFailedError<S> extends Error {
+  override readonly name = "DriveFailedError";
+  readonly _tag = "DriveFailedError" as const;
+  constructor(public readonly state: S) {
+    super(
+      `@demlik/tea: driveToDone ended on a failed State — the run reached a ` +
+        `terminal State the \`failed\` predicate marks as a failure. Read ` +
+        `\`error.state\` for the final Model.`,
+    );
+  }
+}
+
+/**
  * Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting
  * go of a runtime that still had something outstanding. Reported under
  * `phase: "discard"`, never raised.

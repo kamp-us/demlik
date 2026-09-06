@@ -16,7 +16,7 @@ import type {
   LlmCall,
   LlmOk,
   MessageLoader,
-  ModelFactory,
+  ModelPort,
   ResilientState,
   Schema,
 } from "../llm-call";
@@ -249,8 +249,14 @@ export interface AgentConfigCore<
   readonly deadlineMs?: number;
 
   // ---- llm-call seam (the brain) ------------------------------------------
-  /** DI port — the model factory `(modelId) => Llm`. */
-  readonly model: ModelFactory<Msg>;
+  /**
+   * DI port — the brain. `async (messages) => turn` is the common path (#58):
+   * the returned turn is validated through the purpose's schema
+   * (`agentTurnSchema` for the plain case), so a malformed turn is the run's
+   * `llm` failure, not a throw. `(modelId) => Llm` is the advanced form for a
+   * model that binds the structured-output schema itself.
+   */
+  readonly model: ModelPort<Msg, O[P]>;
   /** One structured-output schema per purpose; the parse target per brain call. */
   readonly schemas: { readonly [K in P]: Schema<O[K]> };
   /** Backoff policy for brain calls, composed into `../llm-call`. Omit → no backoff. */
