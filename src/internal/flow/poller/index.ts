@@ -220,9 +220,8 @@ export type PollerState<R> =
  * reach instead of the whole union.
  *
  * A verb whose return type is the full `PollerState<R>` tells a caller nothing
- * about where the poller went, and a caller that needs to know (a chart
- * declaring an edge's fan-out; an exhaustive `switch`) has to re-derive it by
- * reading the verb's body. Every one of these narrowings is already true of the
+ * about where the poller went, and a caller that needs to know (an exhaustive
+ * `switch`, say) has to re-derive it by reading the verb's body. Every one of these narrowings is already true of the
  * implementation — `start` only ever builds a `polling` arm, `tickResult` never
  * builds `gave_up`, `tickErr` never builds `done` — so naming them costs
  * nothing at runtime and moves a fact out of the source and into the signature.

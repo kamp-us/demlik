@@ -2,14 +2,13 @@
 // MERMAID SANITIZING — the two functions every drawing in this package shares.
 //
 // Mermaid state ids must be identifier-safe, and a transition label must not
-// contain the characters that terminate it. Both `machine-viz`'s `toMermaid`
-// (which draws a COMPILED machine) and `chart`'s `chartMermaid` (which draws
-// the CHART) need exactly this, and a state name like `human:cp-approval` —
-// real, from `src/chart/__fixtures__/lane.ts` — breaks the diagram in both.
+// contain the characters that terminate it. A state name like
+// `human:cp-approval` breaks the diagram on both counts.
 //
-// So it lives here, in a module with NO imports: `machine-viz/index.ts` pulls
-// in the whole substrate (`formOf` from `../index`), and `chart/compile.ts`
-// must not acquire that dependency merely to sanitize a string.
+// So it lives here, in a module with NO imports, rather than inside
+// `machine-viz/index.ts` — that one pulls in the whole substrate (`formOf`
+// from `../index`), and a future drawing must not acquire that dependency
+// merely to sanitize a string.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**

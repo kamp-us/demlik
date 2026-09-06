@@ -2,7 +2,7 @@ name: build
 
 on:
   # `**`, not `*`: a GitHub branch filter treats `*` as matching a single path
-  # SEGMENT, so `*` never matched `can/chart` and push CI had never run on any
+  # SEGMENT, so `*` never matched `can/some-branch` and push CI had never run on any
   # prefixed branch. Worse, a stacked PR whose BASE contains a slash matched
   # neither trigger and got no CI at all — silently, because a PR with zero
   # checks reads the same as a PR whose checks have not started yet.
@@ -48,8 +48,8 @@ jobs:
 
       # The SHIPPED program excludes `**/*.test.ts`, so the test files are not in
       # it — and for a package whose whole value is a compile-time guarantee, the
-      # files that DEMONSTRATE that guarantee (`src/chart/smoke-*.test.ts`, the
-      # hand-written-interface regressions) have to compile too. `tsconfig.test.json`
+      # files that DEMONSTRATE that guarantee (the hand-written-interface
+      # regressions, the `.test-d.ts` assertions) have to compile too. `tsconfig.test.json`
       # is the same options over the same tree with that exclusion dropped, minus a
       # named, shrink-only list of pre-existing debt.
       - name: Typecheck tests

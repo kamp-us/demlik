@@ -16,39 +16,6 @@ what you are trying to do, and it names the subpath you need.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.
-- [Author a machine as config](./author-a-machine-as-config.md) — write the
-  machine as one `defineChart` value: `ctx`, an event alphabet with a `scope`
-  each, states grouped by phase, and the parts bags `compile` demands.
-- [Compose a battery inside a chart](./compose-a-battery-inside-a-chart.md) — use
-  a `{ to, cell }` edge so a retry/breaker/cache chain can pick the next state
-  from a target set the chart still declares and draws.
-- [Run many instances of one chart](./run-many-instances-of-one-chart.md) —
-  compile with a namespace so N instances share a dispatch surface, and mark
-  library-minted events `foreign: true` so their names stay bare.
-- [Inspect a chart live](./inspect-a-chart-live.md) — point `<ChartInspector>` at
-  a chart to get a whole debugger page with no page code: a control per message,
-  refusals rendered with their reason, a guard's branch previewed against the
-  live state, and a scrubber that time-travels by pure replay.
-
-## Read a running machine
-
-- [Describe and run a lane of parallel charts](./describe-a-lane.md) — use
-  `@demlik/tea/chart/lane` when the workload is not one machine: N chart
-  instances running side by side, grouped into phases that sequence, folding to
-  a compound state and ending complete or tripped — and `runLane` when you want
-  to drive it as a real `Machine`.
-- [Report on a fabrika lane](./report-on-a-fabrika-lane.md) — import a
-  `workflow.json` into charts with `@demlik/tea/chart/report` and render a lane
-  as one markdown block (diagram, "waiting on", retry budget, timeline) that
-  reads the same in a terminal, a PR comment and an issue comment.
-- [Look at a lane in a browser](./look-at-a-lane-in-a-browser.md) — put the same
-  lane on a page with `@demlik/tea/chart/lane/react`: which of twelve things is
-  stuck first, the phases in order, a scrubber over the run, and dispatch where
-  the code bodies exist — over a replayed event log or a live `runLane`.
-- [Serve a lane dashboard](./serve-a-lane-dashboard.md) — the same page, but
-  prebuilt and served by a host with no bundler: `@demlik/tea/chart/lane/server`
-  takes three callbacks (where the lanes are, how an event is recorded, who
-  holds one) and hands back a `(Request) => Response`.
 
 ## Test and verify
 

@@ -28,9 +28,8 @@ import type { Cmd, Machine, Sub } from "../index";
 import { formOf } from "../index";
 import { safeId, safeLabel } from "./mermaid-id";
 
-// The sanitizers are SHARED with `chart`'s `chartMermaid` — one copy, in a
-// dependency-free module, re-exported here because both drawings are public
-// and a consumer post-processing either one needs the same escaping.
+// The sanitizers live in a dependency-free module and are re-exported here,
+// because a consumer post-processing this drawing needs the same escaping.
 export { safeId, safeLabel } from "./mermaid-id";
 
 // === Public options ===

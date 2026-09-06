@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 30 public subpaths. Curated
+The complete export catalog — all 21 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -8,15 +8,6 @@ discoverable here with a one-line gloss from their source barrel.
 | --- | --- |
 | [`.`](./tea.md) | TEA-faithful state machine substrate. |
 | [`./agent`](./agent.md) | THE headline Level-3 machine: a durable, crash-recoverable AI agent that runs an ordered stage pipeline, and inside the agentic stage drives the classic loop `llm → tools → fold → llm` until the model stops asking for tools. |
-| `./chart` | chart — the machine as a DRAWING the compiler reads, not a picture drawn beside one. |
-| `./chart/inspect` | the chart, as a debugger reads it — headless, framework-free, pure. |
-| `./chart/inspect/react` | the chart inspector, as one component. |
-| `./chart/inspect/styles.css` |  |
-| `./chart/lane` | chart/lane — N chart instances in parallel, grouped into phases that sequence. |
-| `./chart/lane/react` | a lane, as one page. |
-| `./chart/lane/server` | One lane, as the two files a host already has on disk. |
-| `./chart/lane/styles.css` |  |
-| `./chart/report` | chart/report — a fabrika lane, imported as charts and read back as markdown. |
 | [`./devtools`](./devtools.md) | presentational inspector for any tea machine. |
 | `./devtools/styles.css` |  |
 | [`./do`](./do.md) | Durable Object adapter for `@demlik/tea`. |

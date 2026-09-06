@@ -66,12 +66,9 @@ const subpathAliases = Object.entries(pkg.exports)
 // happy-dom, no Workers pool. Test files are excluded from the
 // published tarball (package.json `files: ["dist"]`) and from `tsc`/`tsup`.
 export default defineConfig({
-  // `src/chart/equiv-*.test.ts` drive the REAL `examples/*.ts` machines against
-  // their chart ports, and those examples import the PUBLISHED specifier. Point
-  // it at `src/` so the suite needs no prior `pnpm build` — and so both sides of
-  // the equivalence run on the same substrate rather than one on dist and one
-  // on source. Nothing under `src/` imports `@demlik/tea`, so no other test is
-  // affected.
+  // A test may import the PUBLISHED specifier (`src/export-map-alias.test.ts`
+  // does). Point it at `src/` so the suite needs no prior `pnpm build`. Nothing
+  // under `src/` imports `@demlik/tea`, so no other test is affected.
   resolve: {
     alias: [
       { find: /^@demlik\/tea$/, replacement: abs("src/index.ts") },

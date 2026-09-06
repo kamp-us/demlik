@@ -23,7 +23,6 @@
     "dist",
     "node_modules",
     "**/*.test.ts",
-    "**/*.test.tsx",
-    "src/chart/__probes__"
+    "**/*.test.tsx"
   ]
 }
