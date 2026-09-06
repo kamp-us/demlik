@@ -15,9 +15,11 @@
  * ## What it adds over `../resilient-call`
  *
  *   - **Two DI ports** (the seed's two seams):
- *       1. `model: (modelId) => LLM` — the model factory. Tests pass a fake so
- *          the handler runs end-to-end without touching a real provider; the
- *          production worker wires `createChatModel(env, …)`.
+ *       1. `model` — either `async (messages) => answer`, the plain-function
+ *          port (#58), or `(modelId) => LLM`, the model factory that binds the
+ *          structured-output schema itself. Tests pass a fake so the handler
+ *          runs end-to-end without touching a real provider; the production
+ *          worker wires `createChatModel(env, …)`.
  *       2. `loadMessages: Loader` — the SDK / message loader. The seed lazy-
  *          imports `@langchain/core/messages` (a top-level `import type` blows
  *          up the workers test runner); the loader keeps that import lazy and
@@ -164,6 +166,108 @@ export type MessageLoader<P extends string, Msg> = (
  */
 export type ModelFactory<Msg> = (modelId: string | null) => Llm<Msg>;
 
+/**
+ * The plain-function model port — the common path (#58). One async function
+ * from the assembled messages to the model's answer; the handler validates the
+ * answer through the purpose's `Schema` exactly as it re-validates the
+ * structured-output path, so a malformed answer is a `resilient_err`, never a
+ * corrupt success. `ModelFactory` → `withStructuredOutput(schema).invoke(...)`
+ * stays the advanced form for a model that binds the schema itself.
+ *
+ * `T` is the answer type the schema narrows to — for the agent, an `AgentTurn`.
+ */
+export type PlainModel<Msg, T = unknown> = (
+  messages: readonly Msg[],
+) => Promise<T>;
+
+/**
+ * Either model port. A bare `async` function is read as a `PlainModel` (see
+ * {@link asModelFactory}); a sync function is the factory.
+ */
+export type ModelPort<Msg, T = unknown> =
+  | ModelFactory<Msg>
+  | PlainModel<Msg, T>;
+
+/**
+ * Lift a plain-function model into the `ModelFactory` port. The factory ignores
+ * `modelId` (the function IS the model) and its `Llm` runs the bound schema over
+ * the function's answer, so both ports meet the handler as one shape.
+ *
+ * Reach for this explicitly when the function is not declared `async` — a sync
+ * function that returns a promise (`(m) => client.chat(m)`) carries no runtime
+ * mark that tells it apart from a factory. Passed bare, `asModelFactory`
+ * refuses it on the first call with an `LlmErr` whose reason is
+ * {@link PLAIN_MODEL_MISROUTE_REASON}.
+ */
+export function plainModel<Msg, T>(fn: PlainModel<Msg, T>): ModelFactory<Msg> {
+  return () => ({
+    withStructuredOutput<U>(schema: Schema<U>) {
+      return {
+        invoke: async (messages: readonly Msg[]): Promise<U> =>
+          schema.parse(await fn(messages)),
+      };
+    },
+  });
+}
+
+/**
+ * Narrow a `ModelPort` to its plain-function member. The two ports are both
+ * unary functions, so the only runtime mark that separates them is the
+ * `AsyncFunction` tag an `async` declaration carries — a factory is never
+ * `async` (its `Llm` is read synchronously). A promise-returning sync function
+ * goes through {@link plainModel} instead.
+ */
+export function isPlainModel<Msg, T>(
+  model: ModelPort<Msg, T>,
+): model is PlainModel<Msg, T> {
+  return Object.prototype.toString.call(model) === "[object AsyncFunction]";
+}
+
+/**
+ * The reason an `LlmErr` carries when a sync promise-returning function was
+ * passed as `model` bare — the one runtime shape neither port can own.
+ */
+export const PLAIN_MODEL_MISROUTE_REASON =
+  "model: a sync function returned a Promise where an Llm was expected — " +
+  "a promise-returning model that is not declared `async` must be wrapped in " +
+  "plainModel(fn) (see @demlik/tea/llm-call)";
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { then: unknown }).then === "function"
+  );
+}
+
+/**
+ * Resolve either model port to the factory the handler drives.
+ *
+ * A sync function that returns a promise (`(m) => client.chat(m)`) carries no
+ * runtime mark, so it reaches here as a factory and is called with `modelId`.
+ * The one thing that tells it apart is what it returns: an `Llm` is never a
+ * thenable. The resolved factory refuses that answer with
+ * {@link PLAIN_MODEL_MISROUTE_REASON} before anything touches
+ * `.withStructuredOutput`, so the misroute surfaces as an `LlmErr` naming the
+ * fix — never as a bare `TypeError` off a property that is not there.
+ */
+export function asModelFactory<Msg, T>(
+  model: ModelPort<Msg, T>,
+): ModelFactory<Msg> {
+  if (isPlainModel(model)) return plainModel(model);
+  return (modelId) => {
+    const llm = model(modelId);
+    if (isThenable(llm)) {
+      // The misrouted call already happened; settle its promise quietly so a
+      // rejection there is not an unhandled one beside the error we do raise.
+      llm.then(undefined, () => undefined);
+      throw new Error(PLAIN_MODEL_MISROUTE_REASON);
+    }
+    return llm;
+  };
+}
+
 // ===========================================================================
 // Config — the knob. `model` + `schemas` required (the two DI ports + the
 // per-purpose parse target); `retry` + `loadMessages` optional.
@@ -175,7 +279,9 @@ export type ModelFactory<Msg> = (modelId: string | null) => Llm<Msg>;
  * rest is optional, exactly the resilient-call "omit a brick → omit its gate"
  * story for `retry`:
  *
- *   - `model`        — DI port 1: the model factory.
+ *   - `model`        — DI port 1: a plain `async (messages) => answer`
+ *                      function (the common path), or the model factory
+ *                      `(modelId) => Llm` that binds the schema itself.
  *   - `schemas`      — one `Schema` per `Purpose`. The handler binds
  *                      `schemas[call.purpose]` as the structured-output target.
  *   - `retry`        — backoff policy, composed straight into `../resilient-
@@ -194,8 +300,8 @@ export interface LlmCallConfig<
   O extends Record<P, unknown>,
   Msg = unknown,
 > {
-  /** DI port 1 — the model factory. `(modelId) => Llm`. */
-  readonly model: ModelFactory<Msg>;
+  /** DI port 1 — `async (messages) => answer`, or the factory `(modelId) => Llm`. */
+  readonly model: ModelPort<Msg, O[P]>;
   /** One structured-output schema per purpose; the parse target the handler binds. */
   readonly schemas: { readonly [K in P]: Schema<O[K]> };
   /** Backoff policy, composed into `../resilient-call`. Omit → no backoff. */
@@ -349,6 +455,8 @@ export function createLlmCall<
     ...(config.retry === undefined ? {} : { retry: config.retry }),
   };
   const rc = createResilientCall<LlmCall<P>, LlmOk<P, O>>(resilientConfig, rng);
+  // Both model ports meet the handler as the factory shape (#58).
+  const modelOf = asModelFactory(config.model);
 
   /** The slice this knob owns — resilient-call's slice verbatim. */
   type State = ResilientState<LlmCall<P>, LlmOk<P, O>>;
@@ -424,7 +532,7 @@ export function createLlmCall<
    * structured response is a failure, not a corrupt success.
    */
   async function invokeOne(input: LlmCall<P>): Promise<LlmOk<P, O>> {
-    const model = config.model(input.model);
+    const model = modelOf(input.model);
     const messages = config.loadMessages
       ? await config.loadMessages(input)
       : [];
