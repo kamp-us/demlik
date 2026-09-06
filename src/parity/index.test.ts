@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Cmd, defineMachine, run } from "../index";
 import {
-  diff,
   goldenReplay,
   normalizeForParity,
   parityEqual,
@@ -174,10 +173,6 @@ describe("the gate has teeth", () => {
     const golden2 = normalize(goldenReplay(auditMachine(), trace2, {}));
 
     expect(parityEqual(golden, golden2)).toBe(true);
-  });
-
-  it("keeps `diff` as a deprecated alias of parityEqual for one minor", () => {
-    expect(diff).toBe(parityEqual);
   });
 });
 

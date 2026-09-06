@@ -15,6 +15,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental | Accepted, amended in part by 0016 | 2026-07-17 |
 | [0011](./0011-errors-as-data.md) | Errors are data; a throw is reserved for a contract breach | Accepted | 2026-07-17 |
 | [0013](./0013-fabrika-is-the-work-pipeline.md) | fabrika is this repo's work pipeline | Accepted | 2026-08-16 |
+| [0014](./0014-typed-effect-channels-on-cmd-constructors.md) | Effect's E and R channels are types on Cmd constructors, never Effect values at the core | Accepted | 2026-09-04 |
 | [0015](./0015-hide-the-wiring-never-the-state.md) | A convenience layer hides the wiring, never the state | Accepted | 2026-09-04 |
 | [0016](./0016-removal-lands-in-a-minor-at-0x.md) | While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag | Accepted | 2026-09-04 |
 
