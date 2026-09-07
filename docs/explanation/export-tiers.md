@@ -11,10 +11,10 @@ named where it comes up.
 
 ## The three tiers
 
-**`stable` — the kernel.** The core loop and the host adapters: the root import,
-`./testing`, `./pbt`, `./do`, `./react`, `./node`, `./mem`, `./extension`,
-`./parity`, `./devtools`, `./machine-viz`. Breaking changes here are deliberate
-and rare. While the package is at 0.x a break lands in a **minor** with an
+**`stable` — the kernel.** The core loop, the testing and property-based-testing
+surfaces, and the host adapters — the root import and every subpath that adapts
+tea to a runtime. This is the bulk of the export map; `MAINTAINING.md` carries
+the per-subpath roster. Breaking changes here are deliberate and rare. While the package is at 0.x a break lands in a **minor** with an
 explicit callout in the changelog; from 1.0 it forces a **major**. This is the
 promise you are buying if you build a product on the library.
 

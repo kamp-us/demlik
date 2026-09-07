@@ -8,6 +8,7 @@ Learning-oriented lessons that take you through `@demlik/tea` by building a real
 - [Build a durable agent](./build-a-durable-agent.md) — declare one `tool`,
   `defineAgent` over a real model, and `agent.run` it on Node with a `fileStore`;
   then kill the process mid-run, run it again, and watch the same run resume
-  without calling a tool twice.
+  from its outstanding effect — tools are at-least-once across that crash, so
+  the lesson also shows why a handler has to survive running twice.
 
 *Lessons are added as the tutorial quadrant grows.*
