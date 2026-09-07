@@ -95,6 +95,7 @@
     "docs:reference:check": "pnpm run docs:reference && git diff --exit-code -- docs/reference",
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
     "verify-exports": "node scripts/verify-exports.mjs",
+    "verify-optional-peer-install": "node scripts/verify-optional-peer-install.mjs",
     "check:merge-markers": "node scripts/check-merge-markers.mjs",
     "release": "changeset"
   },
