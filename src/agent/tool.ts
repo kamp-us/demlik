@@ -189,7 +189,11 @@ export type AnyToolDef = AnyCmdDef & {
 };
 
 /**
- * Declare one tool. `name` is the Cmd `type` and the name the model calls it
+ * Declare one tool the model may call — its name, the schemas for its arguments
+ * and result, the failures it may return and the handler that runs it — and get
+ * back a definition you pass to `toolRouter` or `defineAgent`.
+ *
+ * `name` is the name the model calls it
  * by; `description` is the model-facing sentence — the one place it lives — a
  * provider adapter declares to the model beside the schema (Anthropic
  * `description`, OpenAI `function.description`) so the model can tell when to
@@ -377,8 +381,12 @@ export interface ToolRouter<T extends AnyToolDef> {
 }
 
 /**
- * Fold a set of `tool()`s into one router. Two tools with one name is a
- * declaration bug, refused here rather than by a silent last-wins map.
+ * Fold a set of `tool()`s into one router — pass it the tools, get back the
+ * lookup `createAgent` needs, the handlers `toMachine` merges, and a reader that
+ * turns a settled message back into a plain outcome.
+ *
+ * Two tools with one name is a declaration bug, refused here rather than by a
+ * silent last-wins map.
  */
 export function toolRouter<T extends AnyToolDef>(
   tools: readonly T[],
@@ -464,8 +472,11 @@ type SettledShape<R> = {
 };
 
 /**
- * Render a settled `{ _tag }` failure as the `reason` string the conversation
- * carries — the tag, then the detail beside it as JSON when there is any. The
+ * Turn a tool failure into the human-readable reason string the conversation
+ * carries — pass the `{ _tag, ...detail }` a tool failed with, get the tag
+ * followed by any remaining detail as JSON.
+ *
+ * The
  * model reads this next turn, so the data survives the rendering intact.
  */
 export function toolErrorReason(error: Tagged): string {

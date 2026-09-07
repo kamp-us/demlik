@@ -47,6 +47,18 @@ export function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === "object" && x !== null && !Array.isArray(x);
 }
 
+/**
+ * The comment that documents a symbol. typedoc parks a function's TSDoc on its
+ * first call signature rather than on the declaration reflection, so reading
+ * only `sym.comment` leaves every documented function with an empty summary.
+ * Prefer the declaration's own comment; fall back to the first signature's.
+ */
+function symbolComment(sym: Record<string, unknown>): unknown {
+  if (isRecord(sym.comment)) return sym.comment;
+  const [first] = Array.isArray(sym.signatures) ? sym.signatures : [];
+  return isRecord(first) ? first.comment : undefined;
+}
+
 /** Flatten a typedoc `comment.summary` part array into plain text. */
 function extractSummary(comment: unknown): string {
   if (!isRecord(comment)) return "";
@@ -94,7 +106,7 @@ export function parseTypedocModel(raw: unknown): DocModule[] {
       symbols.push({
         name: sym.name,
         kindLabel: kindLabel(sym.kind),
-        summary: firstSentence(extractSummary(sym.comment)),
+        summary: firstSentence(extractSummary(symbolComment(sym))),
       });
     }
     modules.push({

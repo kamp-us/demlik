@@ -14,13 +14,13 @@ import { … } from "@demlik/tea/extension";
 | `bridgeClient` | Function |  |
 | `BridgeClient` | Interface |  |
 | `BridgeClientOpts` | Interface |  |
-| `bridgeRuntime` | Function |  |
+| `bridgeRuntime` | Function | Install the bridge for a runtime. |
 | `BridgeRuntimeOpts` | Interface |  |
-| `bridgeTabClient` | Function |  |
+| `bridgeTabClient` | Function | SW-side client of a `bridgeRuntime` hosted in a content script. |
 | `BridgeTabClientOpts` | Interface |  |
 | `ChromeMessageOpts` | Interface |  |
 | `ChromeStorageChangeOpts` | Interface |  |
-| `chromeStorageStore` | Function |  |
+| `chromeStorageStore` | Function | `Store<S>` backed by `chrome.storage.local` (or any compatible `StorageArea`). |
 | `ChromeTabsEventOpts` | Interface |  |
 | `createBackgroundRuntimeContext` | Function |  |
 | `fakeChrome` | Function |  |
@@ -29,7 +29,7 @@ import { … } from "@demlik/tea/extension";
 | `fromChromeMessage` | Function |  |
 | `fromChromeStorageChange` | Function |  |
 | `fromChromeTabsEvent` | Function |  |
-| `passThroughMsg` | Function |  |
+| `passThroughMsg` | Function | The explicit opt-out of inbound msg parsing: an identity pass-through that casts the raw `unknown` to `M`. |
 | `TabsEventName` | Type |  |
 | `useBackgroundRuntime` | Function |  |
 | `UseBackgroundRuntimeOpts` | Interface |  |

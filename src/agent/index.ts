@@ -186,21 +186,22 @@ export * from "./types";
 // ===========================================================================
 
 /**
- * Build an agent knob from `config`. The determinism seam — `config.rng`,
- * injected for the inherited brain-call retry jitter — lives as a named field
- * on the config (pass a fixed `() => 0` to pin backoff in tests; omit → defaults
- * to `Math.random`, read only at the resilient-call verb boundary).
+ * Assemble an agent from `config` — the model, the stages it walks, and how a
+ * tool call is turned into a command — and get back its `init`, verbs and `subs`
+ * plus a `toMachine()` that wires all of it into one machine you hand to `run`.
  *
- * Returns the uniform knob contract (`init` / verbs / `subs`) plus `toMachine()`
- * — a `defineMachine` wiring all of it into one runnable machine — and the
- * `unsafeDetachedHandlers` hand-wiring escape hatch.
+ * Pass `snapshotEvery` to have the run persist itself every N steps, and
+ * `compaction` to have long conversations summarized as they grow; each one you
+ * pass obliges you to supply the matching handler at `toMachine`, and each one
+ * you omit forbids it. `rng` is the determinism seam for the retry backoff —
+ * pass a fixed `() => 0` to pin it in tests; omit for `Math.random`.
+ * `unsafeDetachedHandlers` is the hand-wiring escape hatch.
  *
- * `createAgent` is OVERLOADED on TWO independent discriminants — the snapshotting
- * (#55) and the compaction (#85) one — so each `toMachine` obligation is derived
+ * The four overloads exist because the two obligations are derived
  * from the `config` VALUE, never inferred. `{ snapshotEvery: number }` REQUIRES
  * the `snapshot_write` cell, `{ snapshotEvery?: never }` FORBIDS it; `{ compaction:
  * policy }` REQUIRES the `compact_run` cell, `{ compaction?: never }` FORBIDS it.
- * The four overloads enumerate the snapshot × compaction grid: overload resolution
+ * They enumerate the snapshot × compaction grid: overload resolution
  * reads the two fields off `config`, so the right `Snap`/`Compact` pair is fixed
  * even when the call site passes explicit type arguments (TS does not infer
  * trailing type params — a `Cfg`-inference scheme would silently fall back to OFF
