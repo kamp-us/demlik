@@ -7,12 +7,22 @@ exactly where it stopped — same run, no tool called twice. By the end you will
 have written one tool, one `defineAgent`, and one `agent.run`, and seen the
 whole run live in a JSON file you can open.
 
-You need Node 22 or newer, an Anthropic API key in `ANTHROPIC_API_KEY`, and three
-packages:
+## Set up the project
+
+You need Node 22 or newer and an Anthropic API key in `ANTHROPIC_API_KEY`. In an
+empty directory:
 
 ```sh
+pnpm init
+npm pkg set type=module
 pnpm add @demlik/tea @anthropic-ai/sdk zod
 ```
+
+The `type=module` line is not optional. `pnpm init` writes a CommonJS
+`package.json`, and `agent.ts` below ends in a top-level `await` — without
+`"type": "module"` TypeScript rejects them with TS1309 ("await is only allowed
+at the top level of a file when that file is a module"), which points at the
+`await` rather than at the missing field.
 
 The agent is two files. `model.ts` is the brain — the wire format of one model
 provider, nothing about tea. `agent.ts` is the part this lesson is about.
@@ -22,7 +32,13 @@ provider, nothing about tea. `agent.ts` is the part this lesson is about.
 tea hands a model plain messages and expects a *turn* back: what the model said
 and which tools it wants called. The adapter below is that translation for
 Anthropic's Messages API — tea's tool outcomes ride as `tool_result` blocks, and
-the model's `tool_use` blocks come back as tool calls:
+the model's `tool_use` blocks come back as tool calls.
+
+One naming note before you read it. A tool is declared below with a name and an
+`input:` schema; on this side of the seam those two are `cmdType` and `args` —
+`cmdType` because a tool is a command constructor, `args` because the schema
+names what the *model's* arguments are parsed against. Same two things, and the
+adapter reads them under those names:
 
 ```ts
 // model.ts
@@ -164,6 +180,19 @@ const agent = defineAgent({
 });
 ```
 
+"The rest" is the loop you did not write. `defineAgent`:
+
+- renders the prompt — instructions, input, every turn so far with its tool
+  outcomes — and calls your `model` with it;
+- validates the turn that comes back, and reads its tool calls;
+- parses each call's `args` against that tool's `input` schema, rejecting an
+  unknown tool or malformed args as an outcome rather than a throw;
+- runs the matching handler and folds its outcome back into the conversation, so
+  the next prompt carries it;
+- repeats until a turn asks for no tools, then resolves;
+- and, with a `store`, writes the Model after every transition — which is what
+  the next section resumes from.
+
 "One note per turn" is there so the run has several model round-trips to be
 interrupted between.
 
@@ -183,7 +212,9 @@ console.log("done:", final.output?.content);
 
 `fileStore` asks for a parse function because a file is a real serialization
 boundary; this one trusts the file, which is right for a file this program
-wrote. Run it:
+wrote. `DefinedAgentState` is parameterised by the tools the agent may call, so
+it takes their union — with a second tool the type reads
+`DefinedAgentState<typeof note | typeof lookup>`, and so on for a third. Run it:
 
 ```sh
 node --experimental-strip-types agent.ts
