@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (97)
+## Exports (98)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -56,6 +56,7 @@ import { … } from "@demlik/tea/agent";
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs`. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
+| `DefinedAgentEvent` | Type | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
 | `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
 | `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |

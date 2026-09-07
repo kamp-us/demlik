@@ -224,6 +224,11 @@ You will see three `note:` lines and then `done:`, and two new files beside the
 script: `notes.txt` with the three colours, and `agent.json` — the agent's whole
 Model, including the conversation so far.
 
+`agent.run` resolves once, at the end, which is the wrong shape for a chat window
+or a progress line. To show progress instead of waiting on that one promise, pass
+its `onEvent` option and watch the run settle turn by turn — see
+[Show a run's progress while it runs](../how-to/show-a-run-in-progress.md).
+
 ## Kill it mid-run, run it again
 
 Delete both files and run again, but this time press `Ctrl-C` as soon as the
