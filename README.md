@@ -41,13 +41,13 @@ runtime.getState(); // { count: 1 }
 
 ## Documentation
 
-The four Diátaxis quadrants live in [`docs/`](./docs/README.md):
+The four Diátaxis quadrants live in [`docs/`](https://github.com/kamp-us/demlik/blob/main/docs/README.md):
 
-- [Tutorials](./docs/tutorial/index.md) — learning-oriented lessons that take you through the library by building a real machine.
-- [How-to guides](./docs/how-to/index.md) — goal-oriented directions for getting a specific job done.
-- [Reference](./docs/reference/index.md) — information-oriented API description, generated per public module.
-- [Explanation](./docs/explanation/index.md) — understanding-oriented discussion of how it works and why it is shaped this way.
+- [Tutorials](https://github.com/kamp-us/demlik/blob/main/docs/tutorial/index.md) — learning-oriented lessons that take you through the library by building a real machine.
+- [How-to guides](https://github.com/kamp-us/demlik/blob/main/docs/how-to/index.md) — goal-oriented directions for getting a specific job done.
+- [Reference](https://github.com/kamp-us/demlik/blob/main/docs/reference/index.md) — information-oriented API description, generated per public module.
+- [Explanation](https://github.com/kamp-us/demlik/blob/main/docs/explanation/index.md) — understanding-oriented discussion of how it works and why it is shaped this way.
 
 Two more surfaces sit behind those, for people working on the library rather than using it:
-[`.patterns/`](./.patterns/index.md) is how the code is shaped, and
-[`.decisions/`](./.decisions/index.md) is why it was shaped that way.
+[`.patterns/`](https://github.com/kamp-us/demlik/blob/main/.patterns/index.md) is how the code is shaped, and
+[`.decisions/`](https://github.com/kamp-us/demlik/blob/main/.decisions/index.md) is why it was shaped that way.
