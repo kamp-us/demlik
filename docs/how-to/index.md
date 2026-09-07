@@ -26,6 +26,13 @@ what you are trying to do, and it names the subpath you need.
   with `@demlik/tea/parity`'s `recordRun`, re-fold it through the new machine with
   `goldenReplay`, and take a normalized GO/NO-GO verdict from `parityEqual`.
 
+## Build an agent
+
+- [Handle a tool failure](./handle-a-tool-failure.md) — declare an `err` tag, fail
+  with it from the handler, and read the `ToolOutcome` the model gets back —
+  including `thrown`, `unknown_tool` and `malformed_args`, the three failures you
+  never declared.
+
 ## Harden a call
 
 - [Add retry and backoff to a call](./add-resilience.md) — fold
