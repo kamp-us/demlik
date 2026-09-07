@@ -45,8 +45,10 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import WebSocket, { type RawData } from "ws";
+import type WebSocket from "ws";
+import type { RawData } from "ws";
 import type { Store, Sub, SubId } from "../index";
 import {
   type Journal,
@@ -61,7 +63,9 @@ import { dispatchIfPresent } from "../subs/types";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * `Store<S>` backed by a JSON file at `path`.
+ * Persist a machine's state to a JSON file — pass the `path` and a `parse` that
+ * validates what comes back, get a `Store<S>` you hand to `run` so the next run
+ * resumes where this one stopped.
  *
  * `parse` is REQUIRED because the file is a real serialization boundary — the
  * bytes that come back through `JSON.parse` are structurally `unknown`, and the
@@ -309,6 +313,56 @@ export type AssertNodeSubIsSub<T extends Sub = NodeSub<unknown>> = T;
 
 export type NodeWsRegistry = Map<SubId, WebSocket>;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ws — loaded on first use, never at module load.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `ws` is an OPTIONAL peer: the `node_ws` Sub needs it, `fileStore` and
+ * `fileJournal` — everything the tutorial uses — do not. A static
+ * `import … from "ws"` puts the dependency on the module's load path, so a
+ * consumer who installed only the tutorial's three packages could not import
+ * this door at all (`ERR_MODULE_NOT_FOUND`). The type import above is erased,
+ * and the value arrives through this loader at the moment a socket is actually
+ * opened — so the cost of an optional peer is paid by the feature that needs
+ * it, not by the door it happens to share.
+ *
+ * `createRequire` rather than `await import("ws")` because `subscribe`'s
+ * contract is synchronous — the handler must return its cleanup on the same
+ * tick the substrate installs it, and a deferred socket would give cleanup
+ * nothing to close.
+ */
+type NodeWsConstructor = new (url: string) => WebSocket;
+
+let cachedWs: NodeWsConstructor | undefined;
+
+function loadWebSocket(): NodeWsConstructor {
+  if (cachedWs) return cachedWs;
+  let mod: unknown;
+  try {
+    mod = createRequire(import.meta.url)("ws");
+  } catch (cause) {
+    throw new Error(
+      'The `node_ws` Sub needs the optional peer dependency "ws". Install it: `npm install ws`.',
+      { cause },
+    );
+  }
+  const ctor = (mod as { default?: NodeWsConstructor }).default ?? mod;
+  cachedWs = ctor as NodeWsConstructor;
+  return cachedWs;
+}
+
+/**
+ * `WebSocket.OPEN`, inlined. Reading it off the class would drag `ws` onto the
+ * load path of `sendToWebSocket`, which is a Cmd-side helper a caller can reach
+ * without ever opening a socket. The value is fixed by the WHATWG WebSocket
+ * spec, not by `ws`.
+ */
+const WS_OPEN = 1;
+
+/** `WebSocket.CLOSED`, inlined for the same reason as {@link WS_OPEN}. */
+const WS_CLOSED = 3;
+
 /**
  * The Ctx fields the node Subs depend on. A consumer's Ctx must extend this so
  * `node_ws` can register the live socket and Cmd handlers can reach it.
@@ -337,7 +391,7 @@ export function sendToWebSocket(
   data: string,
 ): boolean {
   const socket = ctx.wsRegistry.get(id);
-  if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+  if (!socket || socket.readyState !== WS_OPEN) return false;
   try {
     socket.send(data);
     return true;
@@ -376,7 +430,7 @@ export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(): {
 } {
   return {
     node_ws: (sub, ctx, dispatch) => {
-      const socket = new WebSocket(sub.url);
+      const socket = new (loadWebSocket())(sub.url);
       ctx.wsRegistry.set(sub.id, socket);
 
       socket.on("open", () => {
@@ -405,9 +459,9 @@ export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(): {
         // handshake can't dangle. This is the teardown the hand-driven Cmd-pair
         // approach (`cleanup_browser` closing the ws only `if OPEN`) could not
         // guarantee.
-        if (socket.readyState === WebSocket.OPEN) {
+        if (socket.readyState === WS_OPEN) {
           socket.close(1000, "tea-node sub cleanup");
-        } else if (socket.readyState !== WebSocket.CLOSED) {
+        } else if (socket.readyState !== WS_CLOSED) {
           socket.terminate();
         }
       };

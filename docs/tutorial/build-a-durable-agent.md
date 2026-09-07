@@ -3,16 +3,27 @@
 In this lesson you build an agent that keeps a notebook, run it against a real
 model, and then do the thing that makes `@demlik/tea` worth using for agents:
 kill the process in the middle of the run, run it again, and watch it pick up
-exactly where it stopped — same run, no tool called twice. By the end you will
+exactly where it stopped — same run, resumed at the one effect it was still
+waiting on, with everything the Model already recorded left alone. By the end you will
 have written one tool, one `defineAgent`, and one `agent.run`, and seen the
 whole run live in a JSON file you can open.
 
-You need Node 22 or newer, an Anthropic API key in `ANTHROPIC_API_KEY`, and three
-packages:
+## Set up the project
+
+You need Node 22 or newer and an Anthropic API key in `ANTHROPIC_API_KEY`. In an
+empty directory:
 
 ```sh
+pnpm init
+npm pkg set type=module
 pnpm add @demlik/tea @anthropic-ai/sdk zod
 ```
+
+The `type=module` line is not optional. `pnpm init` writes a CommonJS
+`package.json`, and `agent.ts` below ends in a top-level `await` — without
+`"type": "module"` TypeScript rejects them with TS1309 ("await is only allowed
+at the top level of a file when that file is a module"), which points at the
+`await` rather than at the missing field.
 
 The agent is two files. `model.ts` is the brain — the wire format of one model
 provider, nothing about tea. `agent.ts` is the part this lesson is about.
@@ -22,7 +33,13 @@ provider, nothing about tea. `agent.ts` is the part this lesson is about.
 tea hands a model plain messages and expects a *turn* back: what the model said
 and which tools it wants called. The adapter below is that translation for
 Anthropic's Messages API — tea's tool outcomes ride as `tool_result` blocks, and
-the model's `tool_use` blocks come back as tool calls:
+the model's `tool_use` blocks come back as tool calls.
+
+One naming note before you read it. A tool is declared below with a name and an
+`input:` schema; on this side of the seam those two are `cmdType` and `args` —
+`cmdType` because a tool is a command constructor, `args` because the schema
+names what the *model's* arguments are parsed against. Same two things, and the
+adapter reads them under those names:
 
 ```ts
 // model.ts
@@ -164,6 +181,19 @@ const agent = defineAgent({
 });
 ```
 
+"The rest" is the loop you did not write. `defineAgent`:
+
+- renders the prompt — instructions, input, every turn so far with its tool
+  outcomes — and calls your `model` with it;
+- validates the turn that comes back, and reads its tool calls;
+- parses each call's `args` against that tool's `input` schema, rejecting an
+  unknown tool or malformed args as an outcome rather than a throw;
+- runs the matching handler and folds its outcome back into the conversation, so
+  the next prompt carries it;
+- repeats until a turn asks for no tools, then resolves;
+- and, with a `store`, writes the Model after every transition — which is what
+  the next section resumes from.
+
 "One note per turn" is there so the run has several model round-trips to be
 interrupted between.
 
@@ -183,7 +213,9 @@ console.log("done:", final.output?.content);
 
 `fileStore` asks for a parse function because a file is a real serialization
 boundary; this one trusts the file, which is right for a file this program
-wrote. Run it:
+wrote. `DefinedAgentState` is parameterised by the tools the agent may call, so
+it takes their union — with a second tool the type reads
+`DefinedAgentState<typeof note | typeof lookup>`, and so on for a third. Run it:
 
 ```sh
 node --experimental-strip-types agent.ts
@@ -191,7 +223,15 @@ node --experimental-strip-types agent.ts
 
 You will see three `note:` lines and then `done:`, and two new files beside the
 script: `notes.txt` with the three colours, and `agent.json` — the agent's whole
-Model, including the conversation so far.
+Model. A finished run keeps its `run` slice and `output`, the terminating turn
+`runtime.result()` reads; `conversation` is `null`, because the transcript is
+cleared when the run retires. Open `agent.json` mid-run and the conversation is
+there — it is the retire that drops it.
+
+`agent.run` resolves once, at the end, which is the wrong shape for a chat window
+or a progress line. To show progress instead of waiting on that one promise, pass
+its `onEvent` option and watch the run settle turn by turn — see
+[Show a run's progress while it runs](../how-to/show-a-run-in-progress.md).
 
 ## Kill it mid-run, run it again
 
@@ -212,19 +252,30 @@ node --experimental-strip-types agent.ts
 node -p "require('./agent.json').run.runId"
 ```
 
-Two more `note:` lines, then `done:`. `notes.txt` holds each colour once — the
-note the first process wrote was not written again — and the run id is the one
-you printed before the kill. The second process did not start a run; it resumed
-the first one.
+Two more `note:` lines, then `done:`, and the run id is the one you printed
+before the kill. The second process did not start a run; it resumed the first
+one.
 
 Here is what happened. Every transition of the first process was saved to
-`agent.json` before its effects ran, so the kill left a Model that already held
-the first note's outcome and was waiting on the next model call. `agent.run`
-with a `Store` reads what it is handed: an empty Store starts a run, a finished
-Model is returned as it is, and a Model caught mid-run is booted at its one
-outstanding effect. That effect was a model call, so the model was called with
-the transcript the first process built, and the tool was not — its outcome was
-already data in the Model.
+`agent.json` before the next effects ran. `agent.run` with a `Store` reads what
+it is handed: an empty Store starts a run, a finished Model is returned as it
+is, and a Model caught mid-run is booted at its one outstanding effect. If your
+kill landed after the first note's outcome was stored, that outstanding effect
+was the next model call, so the model was called with the transcript the first
+process built and the tool was not — its outcome was already data in the Model.
+
+That is the common case, not a guarantee, and `notes.txt` is where you see the
+difference. Most of the time it holds each colour once. Sometimes it holds the
+first colour twice, and that is the real behaviour rather than a bug you hit:
+**tools are at-least-once across a crash.** The window is between the handler
+running its side effect and the store write of that call's settle. A kill inside
+it leaves a Model still awaiting the call, so boot re-fires the Cmd and your
+handler appends the same line again.
+
+So write handlers you can afford to run twice: make the effect idempotent, or
+key it by the call's `callId`, which is stable across the re-fire, and skip a
+call you have already applied. `@demlik/tea` ships no idempotency key of its
+own; the dedupe is the tool runner's to implement.
 
 That is the whole durability story for an agent, and it is the same one the
 [first lesson](./build-your-first-machine.md) showed for a download: the Model is

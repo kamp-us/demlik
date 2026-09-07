@@ -15,9 +15,15 @@ import type { DeadlineSub } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { MsgType } from "../protocol";
 import type { RequiredCtx } from "../pure/core";
-import type { CtxArg, Store } from "../runtime-types";
+import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
 import { createAgent } from "./index";
-import { type AgentCmd, type AgentMachineMsg, agentBootMsg } from "./machine";
+import {
+  type AgentCmd,
+  type AgentEvent,
+  type AgentMachineMsg,
+  agentBootMsg,
+  agentEvents,
+} from "./machine";
 import {
   type AnyToolDef,
   type ToolCmd,
@@ -100,7 +106,11 @@ export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
   DefinedAgentCtx<T>
 >;
 
-/** What `defineAgent` takes: the three intents, plus the two run guards. */
+/**
+ * What `defineAgent` takes: the model, the tools and the instructions, plus the
+ * two optional guards that stop a run — `maxTurns` and `deadlineMs`. Omit both
+ * and the run is unbounded: it ends only when the model stops asking for tools.
+ */
 export interface DefineAgentConfig<T extends AnyToolDef> {
   /** The brain: `async (messages) => turn`, validated through `agentTurnSchema`. */
   readonly model: PlainModel<AgentMessage, AgentTurn>;
@@ -108,11 +118,26 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
   readonly tools: readonly T[];
   /** The system prompt — stored on the Model at `init` (ADR 0004). */
   readonly instructions: string;
-  /** Livelock guard: bound on model round-trips. Omit → no turn guard. */
+  /**
+   * Stops a run that keeps going: the maximum number of model round-trips it
+   * may take. Once the completed-turn count reaches it the run fails rather
+   * than calling the model again. Omit → no limit on turns.
+   */
   readonly maxTurns?: number;
-  /** No-progress watchdog budget, in ms. Omit → no watchdog. */
+  /**
+   * Stops a run that stops progressing: milliseconds the run may sit without
+   * advancing before it fails. The budget is a no-progress watchdog, not a
+   * total wall-clock cap — it restarts each time the run moves. Omit → no
+   * watchdog.
+   */
   readonly deadlineMs?: number;
 }
+
+/**
+ * One lifecycle event a defined agent's run emits — {@link AgentEvent} with the
+ * tool results typed against this agent's own tool set.
+ */
+export type DefinedAgentEvent<T extends AnyToolDef> = AgentEvent<ToolResult<T>>;
 
 /** Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. */
 export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
@@ -123,6 +148,24 @@ export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
   readonly runId?: string;
   /** The clock that stamps `at`. Omit → `Date.now`. */
   readonly clock?: () => number;
+  /**
+   * Observe the run's turn-level lifecycle events — `TurnSettled`,
+   * `ToolSettled`, `RunDone` — in the order the kernel settles them. This is
+   * the progress seam: without it the only way to see anything mid-run is
+   * `machine(input)` plus the raw kernel loop.
+   *
+   * It forwards the runtime's existing semantic stream (`agentEvents()` /
+   * `runtime.on`); it mints no vocabulary of its own, so a consumer folds the
+   * same {@link AgentEvent}s a hand-wired `run` would.
+   *
+   * The listener is CONTAINED: a throw is caught and warned, never allowed to
+   * take the run down, and never observable in `run`'s resolution. Only
+   * transitions applied by THIS process project events, so a store-backed
+   * resume replays nothing that settled before the boot.
+   *
+   * Omit → no projector is wired and the run behaves exactly as before.
+   */
+  readonly onEvent?: (event: DefinedAgentEvent<T>) => void;
 };
 
 /** What `defineAgent` returns. */
@@ -151,9 +194,14 @@ export interface DefinedAgent<T extends AnyToolDef> {
 // ===========================================================================
 
 /**
- * Define an agent from its three intents. The run's `input` is its single
- * stage, so it is durable on the Model beside `instructions`; the prompt is
- * rendered from those two and the conversation on every model call.
+ * Define an agent from a model, the tools it may call and its instructions, and
+ * get back `run(input)` — a promise of the finished state — plus `machine(input)`
+ * for driving the same run yourself.
+ *
+ * Add `maxTurns` and `deadlineMs` to bound the run; both are described on
+ * `DefineAgentConfig`. The run's `input` is its single stage, so it is durable
+ * beside `instructions`, and the prompt is rendered from those two and the
+ * conversation on every model call.
  */
 export function defineAgent<T extends AnyToolDef>(
   config: DefineAgentConfig<T>,
@@ -179,9 +227,23 @@ export function defineAgent<T extends AnyToolDef>(
       maxTurns: config.maxTurns,
       deadlineMs: config.deadlineMs,
     }).toMachine<DefinedAgentCtx<T>, T>({ tools });
-  const drive: DefinedAgent<T>["run"] = (input, ...[opts = noHost<T>()]) =>
-    driveToDone(
-      run(machine(input), { ...opts, terminal: isDone }),
+  const drive: DefinedAgent<T>["run"] = (input, ...[opts = noHost<T>()]) => {
+    const { onEvent } = opts;
+    // No listener → no projector, so an omitted `onEvent` leaves the run the
+    // kernel wiring it always had.
+    const handle = run(machine(input), {
+      ...opts,
+      terminal: isDone,
+      events:
+        onEvent === undefined
+          ? undefined
+          : agentEvents<string, LidPurpose, LidOutputs, ToolResult<T>, T>({
+              tools,
+            }),
+    });
+    if (onEvent !== undefined) forwardEvents(handle, onEvent);
+    return driveToDone(
+      handle,
       (booted) => {
         const at = (opts.clock ?? Date.now)();
         return isMidRun(booted)
@@ -191,6 +253,7 @@ export function defineAgent<T extends AnyToolDef>(
       isDone,
       { failed: isFailed },
     );
+  };
   return { machine, run: drive };
 }
 
@@ -259,6 +322,48 @@ function assistantOf(turn: AgentTurn): AgentMessage {
  */
 function noHost<T extends AnyToolDef>(): DefinedAgentRunOptions<T> {
   return {} as DefinedAgentRunOptions<T>;
+}
+
+/**
+ * Every `AgentEvent` discriminant, so one `on(...)` subscription per type
+ * covers the whole union. Subscribing before the drive dispatches is what makes
+ * the delivery total: an event of a type nobody is listening for is dropped by
+ * the runtime's fanout, not queued.
+ */
+const AGENT_EVENT_TYPES = ["TurnSettled", "ToolSettled", "RunDone"] as const;
+
+/**
+ * Forward the runtime's semantic events to the lid's `onEvent`, CONTAINED.
+ *
+ * The runtime's own fanout is throw-isolated but routes a listener's throw to
+ * `OnError`, whose default re-throws on a fresh macrotask — an uncaught error
+ * in the host for a defect that is the consumer's, not the run's. The lid owns
+ * the containment instead: a throwing listener is warned about and the run goes
+ * on to its terminal Model, so `run`'s contract does not depend on the
+ * listener's.
+ *
+ * Ordering is the kernel's: one handler per type, all attached before the
+ * drive's first dispatch, so events arrive in the order the projector emits
+ * them.
+ */
+function forwardEvents<T extends AnyToolDef>(
+  handle: BootingRuntime<
+    DefinedAgentState<T>,
+    AgentMachineMsg<LidPurpose, LidOutputs, ToolResult<T>> | WiredToolMsg<T>,
+    DefinedAgentEvent<T>
+  >,
+  onEvent: (event: DefinedAgentEvent<T>) => void,
+): void {
+  const deliver = (event: DefinedAgentEvent<T>): void => {
+    try {
+      onEvent(event);
+    } catch (err) {
+      console.warn("@demlik/tea: a run's onEvent listener threw", err);
+    }
+  };
+  for (const type of AGENT_EVENT_TYPES) {
+    handle.on(type, deliver);
+  }
 }
 
 /** The Msg that sets a run in motion. */

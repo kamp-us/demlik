@@ -13,9 +13,20 @@ what you are trying to do, and it names the subpath you need.
   run a `defineAgent` agent inside a Cloudflare Durable Object with `doStore`
   as its `Store`, so an eviction mid-run resumes on the next request instead of
   starting over.
+- [Show a run's progress while it runs](./show-a-run-in-progress.md) — pass
+  `onEvent` to `agent.run` and observe the run's `TurnSettled` / `ToolSettled` /
+  `RunDone` events as the kernel settles them, instead of waiting on the one
+  promise that resolves at the end.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.
+
+## Give an agent a brain
+
+- [Use a Vercel AI SDK model as the agent's brain](./use-a-vercel-ai-sdk-model.md) —
+  bridge `generateText` to tea's `(messages) => AgentTurn` port so any provider the
+  AI SDK speaks works, replacing the tutorial's hand-written Anthropic adapter and
+  round-tripping signed reasoning through `AgentTurn.provider`.
 
 ## Test and verify
 
@@ -25,6 +36,13 @@ what you are trying to do, and it names the subpath you need.
 - [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) — record a run
   with `@demlik/tea/parity`'s `recordRun`, re-fold it through the new machine with
   `goldenReplay`, and take a normalized GO/NO-GO verdict from `parityEqual`.
+
+## Build an agent
+
+- [Handle a tool failure](./handle-a-tool-failure.md) — declare an `err` tag, fail
+  with it from the handler, and read the `ToolOutcome` the model gets back —
+  including `thrown`, `unknown_tool` and `malformed_args`, the three failures you
+  never declared.
 
 ## Harden a call
 

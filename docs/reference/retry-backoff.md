@@ -11,24 +11,24 @@ import { … } from "@demlik/tea/retry-backoff";
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `AnyRetryPolicy` | Type | Any well-formed policy. |
-| `asRng` | Function |  |
+| `asRng` | Function | Brand a `[0, 1)` generator as an Rng. |
 | `BackoffCurve` | Interface | The shape of the delay ladder, with no terminal bound attached — `baseMs`, `factor`, `capMs`, `jitter`. |
-| `backoffDelay` | Function |  |
+| `backoffDelay` | Function | Compute the delay for a given 0-based `attempt` under `policy`. |
 | `CountBound` | Interface | Bound by ATTEMPT COUNT — the original bound, and the right one when each attempt costs about the same and the caller is the outermost ladder. |
 | `defaultRetryPolicy` | Variable | Sensible defaults: 100ms base, doubling, capped at 30s, up to 5 attempts, full jitter (the herd-avoidance default). |
 | `defaultRng` | Variable | The production default: `Math.random`, branded. |
 | `DurationBound` | Interface | Bound by WALL-CLOCK OUTAGE DURATION, optionally also by count. |
 | `DurationRetryPolicy` | Type | A curve bounded by wall-clock outage duration (and optionally by count). |
-| `initRetry` | Function |  |
+| `initRetry` | Function | The starting state: zero attempts, no error yet, no streak. |
 | `Jitter` | Type | Jitter strategy applied to the computed backoff delay. |
-| `nextDelayMs` | Function |  |
-| `recordFailure` | Function |  |
+| `nextDelayMs` | Function | The delay to wait before the next attempt, given the current state. |
+| `recordFailure` | Function | Record a failed attempt. |
 | `RetryBudget` | Type | The terminal bound a policy declares: a count, a duration (optionally with a count), or an explicit opt-in to neither. |
-| `retryElapsedMs` | Function |  |
+| `retryElapsedMs` | Function | How long the current failure streak has lasted, in milliseconds. |
 | `RetryPolicy` | Type | A retry policy is pure configuration — the knobs of the backoff curve plus the bound that ends the retrying. |
 | `RetryState` | Interface | Per-operation retry state: how many attempts have failed so far, and the most recent error. |
 | `Rng` | Type | A source of uniform randomness in `[0, 1)` — the `Math.random` contract. |
-| `shouldRetry` | Function |  |
+| `shouldRetry` | Function | Whether another attempt is permitted under `policy`. |
 | `TimedRetryState` | Interface | A retry state that also knows WHEN its failure streak began — the origin a duration bound is measured from. |
 | `Unbounded` | Interface | No bound at all — retry forever. |
 | `UnboundedRetryPolicy` | Type | A curve with the explicit opt-in to unbounded retry. |
