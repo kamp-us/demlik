@@ -3,7 +3,8 @@
 In this lesson you build an agent that keeps a notebook, run it against a real
 model, and then do the thing that makes `@demlik/tea` worth using for agents:
 kill the process in the middle of the run, run it again, and watch it pick up
-exactly where it stopped — same run, no tool called twice. By the end you will
+exactly where it stopped — same run, resumed at the one effect it was still
+waiting on, with everything the Model already recorded left alone. By the end you will
 have written one tool, one `defineAgent`, and one `agent.run`, and seen the
 whole run live in a JSON file you can open.
 
@@ -222,7 +223,10 @@ node --experimental-strip-types agent.ts
 
 You will see three `note:` lines and then `done:`, and two new files beside the
 script: `notes.txt` with the three colours, and `agent.json` — the agent's whole
-Model, including the conversation so far.
+Model. A finished run keeps its `run` slice and `output`, the terminating turn
+`runtime.result()` reads; `conversation` is `null`, because the transcript is
+cleared when the run retires. Open `agent.json` mid-run and the conversation is
+there — it is the retire that drops it.
 
 `agent.run` resolves once, at the end, which is the wrong shape for a chat window
 or a progress line. To show progress instead of waiting on that one promise, pass
@@ -248,19 +252,30 @@ node --experimental-strip-types agent.ts
 node -p "require('./agent.json').run.runId"
 ```
 
-Two more `note:` lines, then `done:`. `notes.txt` holds each colour once — the
-note the first process wrote was not written again — and the run id is the one
-you printed before the kill. The second process did not start a run; it resumed
-the first one.
+Two more `note:` lines, then `done:`, and the run id is the one you printed
+before the kill. The second process did not start a run; it resumed the first
+one.
 
 Here is what happened. Every transition of the first process was saved to
-`agent.json` before its effects ran, so the kill left a Model that already held
-the first note's outcome and was waiting on the next model call. `agent.run`
-with a `Store` reads what it is handed: an empty Store starts a run, a finished
-Model is returned as it is, and a Model caught mid-run is booted at its one
-outstanding effect. That effect was a model call, so the model was called with
-the transcript the first process built, and the tool was not — its outcome was
-already data in the Model.
+`agent.json` before the next effects ran. `agent.run` with a `Store` reads what
+it is handed: an empty Store starts a run, a finished Model is returned as it
+is, and a Model caught mid-run is booted at its one outstanding effect. If your
+kill landed after the first note's outcome was stored, that outstanding effect
+was the next model call, so the model was called with the transcript the first
+process built and the tool was not — its outcome was already data in the Model.
+
+That is the common case, not a guarantee, and `notes.txt` is where you see the
+difference. Most of the time it holds each colour once. Sometimes it holds the
+first colour twice, and that is the real behaviour rather than a bug you hit:
+**tools are at-least-once across a crash.** The window is between the handler
+running its side effect and the store write of that call's settle. A kill inside
+it leaves a Model still awaiting the call, so boot re-fires the Cmd and your
+handler appends the same line again.
+
+So write handlers you can afford to run twice: make the effect idempotent, or
+key it by the call's `callId`, which is stable across the re-fire, and skip a
+call you have already applied. `@demlik/tea` ships no idempotency key of its
+own; the dedupe is the tool runner's to implement.
 
 That is the whole durability story for an agent, and it is the same one the
 [first lesson](./build-your-first-machine.md) showed for a download: the Model is
