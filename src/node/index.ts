@@ -61,7 +61,9 @@ import { dispatchIfPresent } from "../subs/types";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * `Store<S>` backed by a JSON file at `path`.
+ * Persist a machine's state to a JSON file — pass the `path` and a `parse` that
+ * validates what comes back, get a `Store<S>` you hand to `run` so the next run
+ * resumes where this one stopped.
  *
  * `parse` is REQUIRED because the file is a real serialization boundary — the
  * bytes that come back through `JSON.parse` are structurally `unknown`, and the

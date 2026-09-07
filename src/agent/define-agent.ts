@@ -100,7 +100,11 @@ export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
   DefinedAgentCtx<T>
 >;
 
-/** What `defineAgent` takes: the three intents, plus the two run guards. */
+/**
+ * What `defineAgent` takes: the model, the tools and the instructions, plus the
+ * two optional guards that stop a run — `maxTurns` and `deadlineMs`. Omit both
+ * and the run is unbounded: it ends only when the model stops asking for tools.
+ */
 export interface DefineAgentConfig<T extends AnyToolDef> {
   /** The brain: `async (messages) => turn`, validated through `agentTurnSchema`. */
   readonly model: PlainModel<AgentMessage, AgentTurn>;
@@ -108,9 +112,18 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
   readonly tools: readonly T[];
   /** The system prompt — stored on the Model at `init` (ADR 0004). */
   readonly instructions: string;
-  /** Livelock guard: bound on model round-trips. Omit → no turn guard. */
+  /**
+   * Stops a run that keeps going: the maximum number of model round-trips it
+   * may take. Once the completed-turn count reaches it the run fails rather
+   * than calling the model again. Omit → no limit on turns.
+   */
   readonly maxTurns?: number;
-  /** No-progress watchdog budget, in ms. Omit → no watchdog. */
+  /**
+   * Stops a run that stops progressing: milliseconds the run may sit without
+   * advancing before it fails. The budget is a no-progress watchdog, not a
+   * total wall-clock cap — it restarts each time the run moves. Omit → no
+   * watchdog.
+   */
   readonly deadlineMs?: number;
 }
 
@@ -151,9 +164,14 @@ export interface DefinedAgent<T extends AnyToolDef> {
 // ===========================================================================
 
 /**
- * Define an agent from its three intents. The run's `input` is its single
- * stage, so it is durable on the Model beside `instructions`; the prompt is
- * rendered from those two and the conversation on every model call.
+ * Define an agent from a model, the tools it may call and its instructions, and
+ * get back `run(input)` — a promise of the finished state — plus `machine(input)`
+ * for driving the same run yourself.
+ *
+ * Add `maxTurns` and `deadlineMs` to bound the run; both are described on
+ * `DefineAgentConfig`. The run's `input` is its single stage, so it is durable
+ * beside `instructions`, and the prompt is rendered from those two and the
+ * conversation on every model call.
  */
 export function defineAgent<T extends AnyToolDef>(
   config: DefineAgentConfig<T>,

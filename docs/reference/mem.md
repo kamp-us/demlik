@@ -10,4 +10,4 @@ import { … } from "@demlik/tea/mem";
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
-| `memoryStore` | Function |  |
+| `memoryStore` | Function | Build an in-memory `Store<S>`. |

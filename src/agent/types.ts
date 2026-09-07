@@ -490,9 +490,12 @@ export type AgentStatus<Stage> =
   | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> };
 
 /**
- * Derive the agent's lifecycle `status` from its durable slice — the pure
- * status function that REPLACES every caller's hand re-derivation of the private
- * shape (issue #49). PURE — reads no clock / RNG, allocates one small record.
+ * Ask where an agent run stands: pass its state, get back one of `idle`,
+ * `running`, `suspended` (with the tool calls it is waiting on), `done` (with
+ * the output) or `failed` (with the failure).
+ *
+ * Read this instead of picking at the state's own fields. PURE — reads no
+ * clock or randomness, allocates one small record.
  *
  * Ordering is terminal-first so a settled run never reports `running`, and a
  * never-started one never reports live:
