@@ -17,6 +17,13 @@ what you are trying to do, and it names the subpath you need.
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.
 
+## Give an agent a brain
+
+- [Use a Vercel AI SDK model as the agent's brain](./use-a-vercel-ai-sdk-model.md) —
+  bridge `generateText` to tea's `(messages) => AgentTurn` port so any provider the
+  AI SDK speaks works, replacing the tutorial's hand-written Anthropic adapter and
+  round-tripping signed reasoning through `AgentTurn.provider`.
+
 ## Test and verify
 
 - [Replay a recorded run in a test](./replay-in-a-test.md) — assert what a machine
