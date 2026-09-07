@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   Cmd,
@@ -19,6 +19,7 @@ import {
   agentTurnSchema,
   COMPACTION_PURPOSE,
   createAgent,
+  type DefinedAgentEvent,
   type DefinedAgentState,
   defineAgent,
   isAgentTurn,
@@ -699,5 +700,175 @@ describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
       toolCalls: ASK.toolCalls,
     });
     expect(assistant).not.toHaveProperty("provider");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #122 — `onEvent`: the progress seam. The lid forwards the runtime's existing
+// semantic stream (`agentEvents()` / `runtime.on`) so a consumer sees a run's
+// turn-level events without dropping to `machine(input)` and the raw kernel
+// loop. It mints no vocabulary, does not re-emit what settled before a boot,
+// and a throwing listener cannot take the run down.
+// ---------------------------------------------------------------------------
+
+describe("onEvent — turn-level events off the lid (#122)", () => {
+  // A pinned identity and clock, so two runs of the same program are comparable
+  // Model for Model — the only way to assert an omitted `onEvent` changed nothing.
+  const PINNED = {
+    ctx: { kb },
+    runId: "run-pinned",
+    clock: () => 0,
+  } as const;
+
+  /** Drive `INPUT` to done, collecting every event the lid forwards. */
+  async function collect(opts: { readonly onEvent?: () => void } = {}) {
+    const { model } = scripted([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const events: DefinedAgentEvent<typeof search>[] = [];
+    const final = await agent.run(INPUT, {
+      ...PINNED,
+      onEvent: (event) => {
+        events.push(event);
+        opts.onEvent?.();
+      },
+    });
+    return { final, events };
+  }
+
+  it("delivers TurnSettled / ToolSettled / RunDone in the order the kernel settles them", async () => {
+    const { final, events } = await collect();
+
+    expect(events.map((e) => e.type)).toEqual([
+      "TurnSettled",
+      "ToolSettled",
+      "TurnSettled",
+      "RunDone",
+    ]);
+    // Each event carries the settle it names, typed against this agent's tools.
+    expect(events[0]).toEqual({ type: "TurnSettled", turn: ASK });
+    expect(events[1]).toEqual({
+      type: "ToolSettled",
+      callId: "c1",
+      result: { snippet: kb.lookup("tea") },
+    });
+    expect(events[2]).toEqual({ type: "TurnSettled", turn: ANSWER });
+    expect(events[3]).toEqual({ type: "RunDone", output: ANSWER });
+    expect(final.output).toEqual(ANSWER);
+  });
+
+  it("a resumed run re-emits nothing that settled before the boot", async () => {
+    // Run 1 dies mid-flight: snapshot the Model at the moment the first turn
+    // AND its tool have both settled and the second brain call is outstanding.
+    // Everything in that snapshot is a step a listener on run 2 must not see.
+    const first = scripted([ASK, ANSWER]);
+    const agent = defineAgent({
+      model: first.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const handle = run(agent.machine(INPUT), { ctx: { kb } });
+    const runtime = await handle.ready;
+    let snapshot: DefinedAgentState<typeof search> | undefined;
+    const off = runtime.observe((_msg, s) => {
+      if (
+        snapshot === undefined &&
+        s.conversation?.awaiting.kind === "llm" &&
+        s.conversation.toolRecords.length === 1
+      ) {
+        snapshot = JSON.parse(JSON.stringify(s));
+      }
+    });
+    await driveToDone(
+      handle,
+      { type: "agent_start", runId: "run-1", at: 0 },
+      (s) => s.run.phase === "done",
+    );
+    off();
+    if (snapshot === undefined) throw new Error("run 1 never settled its tool");
+
+    // Run 2 boots those bytes. Only transitions THIS process applies project
+    // events, so the first turn and the tool the snapshot already carries are
+    // not replayed to the listener.
+    const second = scripted([ANSWER]);
+    const events: DefinedAgentEvent<typeof search>[] = [];
+    const final = await defineAgent({
+      model: second.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, {
+      ctx: { kb },
+      store: memoryStore(snapshot),
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(final.run.phase).toBe("done");
+    expect(events.map((e) => e.type)).toEqual(["TurnSettled", "RunDone"]);
+    expect(events[0]).toEqual({ type: "TurnSettled", turn: ANSWER });
+  });
+
+  it("a listener that throws is contained: the run still resolves, the throw is warned", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { final, events } = await collect({
+        onEvent: () => {
+          throw new Error("listener defect");
+        },
+      });
+
+      // Every event was still offered, and the run reached its terminal Model.
+      expect(events.map((e) => e.type)).toEqual([
+        "TurnSettled",
+        "ToolSettled",
+        "TurnSettled",
+        "RunDone",
+      ]);
+      expect(final.run.phase).toBe("done");
+      expect(final.output).toEqual(ANSWER);
+      expect(warn).toHaveBeenCalledTimes(4);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("omitting onEvent leaves run's contract as it was: same resolution, same DriveFailedError", async () => {
+    const { model } = scripted([ASK, ANSWER]);
+    const silent = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, PINNED);
+    const { final } = await collect();
+    // The run's outcome, its identity and the transcript it built — every part
+    // of the Model `run` promises a caller. A listener observes; it decides
+    // nothing. (`run.lastProgressAt` is the watchdog's wall clock, not the
+    // pinned one, so it is the run's timing rather than its contract.)
+    expect(silent.run.phase).toBe(final.run.phase);
+    expect(silent.run.phase === "done" && silent.run.runId).toBe(
+      final.run.phase === "done" && final.run.runId,
+    );
+    expect(silent.run.progressSeq).toBe(final.run.progressSeq);
+    expect(silent.output).toEqual(final.output);
+    expect(silent.conversation).toEqual(final.conversation);
+    expect(silent.instructions).toEqual(final.instructions);
+    expect(silent.failure).toEqual(final.failure);
+
+    const limited = scripted([ASK, ASK, ASK]);
+    const failed = await defineAgent({
+      model: limited.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      maxTurns: 1,
+    })
+      .run(INPUT, { ctx: { kb } })
+      .catch((e) => e);
+    expect(failed).toBeInstanceOf(DriveFailedError);
+    expect(
+      (failed as DriveFailedError<DefinedAgentState<typeof search>>).state
+        .failure?.reason,
+    ).toBe("turn_limit");
   });
 });
