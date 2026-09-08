@@ -110,7 +110,7 @@ export interface AgentHostConfig<
 }
 
 /**
- * The assembled host: the runtime cell + the SSE hub + the framework test seam,
+ * The assembled host: the runtime handle + the SSE hub + the framework test seam,
  * owned ONCE. A DO holds one `AgentHost` and delegates to it; its own surface
  * shrinks to the domain (the gateway, the WS bridge, the command-send mapping).
  *

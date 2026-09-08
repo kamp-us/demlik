@@ -166,7 +166,7 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
 // observer hook, no internal-Msg coupling, no state-clear race.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// sseFromAgentEvents — drive an SseHub off the SEMANTIC AgentEvent stream (#47).
+// sseFromAgentEvents — drive an SseHub off the SEMANTIC AgentEvent stream.
 //
 // The pre-#47 host fanned SSE frames off `runtime.observe` by hand-matching the
 // agent's PRIVATE Msg names (`resilient_ok` / `agent_tool_ok`) — coupling the
@@ -185,7 +185,7 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Wire an {@link SseHub} to a runtime's semantic {@link AgentEvent} stream (#47).
+ * Wire an {@link SseHub} to a runtime's semantic {@link AgentEvent} stream.
  * For each event `type` the runtime can emit, subscribes via `runtime.on` and
  * pushes `toFrame(event)` at the hub (returning `null` skips that event). The
  * runtime MUST have been built with `run(machine, { events: agentEvents() })`,

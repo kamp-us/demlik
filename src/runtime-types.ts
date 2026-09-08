@@ -1016,9 +1016,10 @@ export function wrapDetached<
 // in the machine, and it propagates. Only the ABSENCE of a cell is data here.
 
 /**
- * `applyCell` with the missing-cell case in the return type.
+ * `applyCell`, with "no handler for this Msg" moved into the return type
+ * instead of a throw.
  *
- * `Ok` carries the cell's `[nextState, cmds]` verbatim; `Err` carries the same
+ * `Ok` carries the handler's `[nextState, cmds]` verbatim; `Err` carries the same
  * `NoCellError` (msg.type + state name) `applyCell` would have thrown. Dispatch
  * inside `run` keeps using the throwing `applyCell` — this is for callers that
  * step a machine themselves.
@@ -1036,7 +1037,7 @@ export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
 }
 
 /**
- * The refusal `tryFoldMsgs` reports: WHICH msg in the log had no cell, where.
+ * The refusal `tryFoldMsgs` reports: WHICH msg in the log had no handler, where.
  *
  * A plain record, not a new `Error` subclass — it is a `Result` payload, never
  * thrown, and the actual error is the existing `NoCellError` it carries. The
@@ -1054,8 +1055,8 @@ export interface FoldRefusal<M> {
 }
 
 /**
- * `foldMsgs` with the missing-cell case in the return type, INCLUDING which
- * message failed.
+ * `foldMsgs`, with the "no handler for this Msg" case in the return type,
+ * INCLUDING which message failed.
  *
  * The motivating use is "this persisted log does not replay — tell the user
  * where". A bare `Result<S, NoCellError>` cannot: the error names the msg.type
@@ -1064,7 +1065,7 @@ export interface FoldRefusal<M> {
  * past that point is not defined) and returns it.
  *
  * Shares `foldMsgs`' dev-mode discipline: `deepFreeze` the input state,
- * `assertPureResult` the cell's return. Both compile out of production.
+ * `assertPureResult` the handler's return. Both compile out of production.
  */
 export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },

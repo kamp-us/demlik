@@ -13,7 +13,7 @@ import { … } from "@demlik/tea/do";
 | `acceptCommandSocket` | Function | Accept a command-runner WebSocket on the DO's `fetch`. |
 | `acceptDurableCommandSocket` | Function | Accept a command-runner WebSocket using the Cloudflare **Hibernation API** so the socket survives DO eviction. |
 | `acceptPresenceSocket` | Function | Accept a client WebSocket upgrade on a native DO and register it for hibernation. |
-| `AgentHost` | Interface | The assembled host: the runtime cell + the SSE hub + the framework test seam, owned ONCE. |
+| `AgentHost` | Interface | The assembled host: the runtime handle + the SSE hub + the framework test seam, owned ONCE. |
 | `AgentHostConfig` | Interface | What the consumer supplies to createAgentHost — the domain mappings, nothing of the wiring. |
 | `agentIsResumable` | Function | True iff an agent slice loaded from storage is mid-loop (running + awaiting tools) — the resumable case `agent_boot` re-fires. |
 | `AlarmStorage` | Interface | The DO-native alarm slice `stepHost` re-arms. |
@@ -24,12 +24,12 @@ import { … } from "@demlik/tea/do";
 | `applyAppliedEvent` | Function | Apply ONE event — the reducer at the heart of the fold. |
 | `applyEffectEvent` | Function | Apply ONE ledger event — the reducer at the heart of the fold. |
 | `AttachableSocket` | Interface | The subset of `WebSocket` registerHibernatableSocket writes to — the attachment serializer. |
-| `autoBoot` | Function | The AGENT specialization of bootResume (issue #231): after `runtime.ready`, self-dispatch `agent_boot` iff the rehydrated slice is resumable, a no-op on a fresh DO. |
+| `autoBoot` | Function | The AGENT specialization of bootResume: after `runtime.ready`, self-dispatch `agent_boot` iff the rehydrated slice is resumable, a no-op on a fresh DO. |
 | `bootResume` | Function | After `runtime.ready`, derive the single resume Msg from the rehydrated State via `port` and dispatch it exactly once — the generalized AgentBoot. |
 | `broadcast` | Function | Broadcast a JSON frame to every connected command-runner socket. |
 | `broadcastFrame` | Function | Serialize `frame` ONCE and send it to every OPEN socket in `sockets`, skipping any that is closed, errors on `send`, or is the `except` socket. |
 | `broadcastHibernatable` | Function | Broadcast a JSON frame to every hibernatable command-runner socket. |
-| `BroadcastOptions` | Interface | Optional knobs for broadcastFrame. |
+| `BroadcastOptions` | Interface | Optional settings for broadcastFrame. |
 | `BroadcastReport` | Interface | What a broadcastFrame fan-out did, surfaced rather than swallowed: `sent` is the number of sockets the frame reached; `skipped` is the number passed over (not OPEN, errored on `send`, or the `except` socket). |
 | `constantTimeEqual` | Function | Constant-time string equality. |
 | `createAgentHost` | Function | Build an AgentHost from the consumer's domain mappings. |
@@ -56,8 +56,8 @@ import { … } from "@demlik/tea/do";
 | `EffectKey` | Type | The caller-supplied durable dedup identity for an effect — stable across the re-fire (e.g. |
 | `EffectLedgerEvent` | Type | The event union the ledger folds over. |
 | `EffectOwed` | Interface | An effect is now OWED: it has been decided but its delivery is not yet confirmed. |
-| `emptyApplied` | Function | The empty applied set — the fold's seed (a fresh actor has applied nothing). |
-| `emptyLedger` | Function | The empty ledger — the fold's seed (a fresh actor owes nothing). |
+| `emptyApplied` | Function | The empty applied set — the fold's starting value (a fresh actor has applied nothing). |
+| `emptyLedger` | Function | The empty ledger — the fold's starting value (a fresh actor owes nothing). |
 | `EventLogRange` | Interface | Optional inclusive bounds for EventSourcedStore.readEvents. |
 | `EventSourcedOptions` | Interface | Options for doEventSourcedStore. |
 | `EventSourcedStore` | Interface | The handle returned by doEventSourcedStore: a `Store<S>` to hand to `run(...)`, plus the append + recovery surface the cooperating DO drives. |
@@ -65,7 +65,7 @@ import { … } from "@demlik/tea/do";
 | `foldApplied` | Function | THE FOLD. |
 | `foldLedger` | Function | THE FOLD. |
 | `HibernatableCtx` | Interface | The slice of `DurableObjectState` the durable carrier needs: the Hibernation API accept + the registry of hibernatable sockets. |
-| `idempotentEffect` | Function | Pair a durable `key` with an external effect `fn` — the brick's primary surface. |
+| `idempotentEffect` | Function | Pair a durable `key` with an external effect `fn` — this module's primary surface. |
 | `IdempotentEffect` | Interface | A keyed external effect. |
 | `IdempotentOutcome` | Type | The outcome of running a keyed effect through the guard. |
 | `isApplied` | Function | Has this key's effect already been applied (folded into the set)? |
@@ -92,13 +92,13 @@ import { … } from "@demlik/tea/do";
 | `ProjectionUpdate` | Interface | One unit the projection driver presents to a projection's `apply`. |
 | `rebuildProjection` | Function | Rebuild a projection's view by folding an ordered event stream from the `NoOffset` start. |
 | `registerHibernatableSocket` | Function | Register an already-created `server` socket on the DO via the Cloudflare **Hibernation API**: `ctx.acceptWebSocket(server, tags)` hands the socket to the runtime (it survives eviction and re-delivers inbound frames to the DO's `webSocketMessage` lifecycle method), and — when an `attachment` is supplied — persists it via `server.serializeAttachment` so it survives the wake. |
-| `RegisterOptions` | Interface | Optional knobs for registerHibernatableSocket / acceptPresenceSocket. |
-| `reissueSurvivingEffects` | Function | RE-EMIT ON ACTIVATION (the #91 wake path). |
-| `ResumePort` | Interface | The typed cold-wake resume port `bootResume` fires through — the agent's `AgentBootPort` (issue #60) generalized to any DO-hosted machine (issue #231). |
+| `RegisterOptions` | Interface | Optional settings for registerHibernatableSocket / acceptPresenceSocket. |
+| `reissueSurvivingEffects` | Function | Re-fire every round-trip a rehydrated actor still owes, on wake. |
+| `ResumePort` | Interface | The typed cold-wake resume port `bootResume` fires through — the agent's `AgentBootPort`, generalized to any DO-hosted machine. |
 | `runProjection` | Function | Build a ProjectionRunner for a projection, starting from a stored offset (default 0 = `NoOffset`, a fresh run). |
 | `runStepLoop` | Function | Drive the pull loop to completion. |
 | `RunStepLoopConfig` | Interface | Tuning for runStepLoop. |
-| `sseFromAgentEvents` | Function | Wire an SseHub to a runtime's semantic AgentEvent stream (#47). |
+| `sseFromAgentEvents` | Function | Wire an SseHub to a runtime's semantic AgentEvent stream. |
 | `sseHub` | Function | Build an SSE hub for event type `E` (the consumer's domain event shape). |
 | `SseHub` | Interface | A set of SSE sinks plus the plumbing to fan an event out to all of them and to open a `text/event-stream` Response wired to a fresh sink. |
 | `sseProjection` | Function | Express an SseHub as a Projection. |

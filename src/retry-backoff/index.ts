@@ -224,7 +224,7 @@ export interface Unbounded {
 export type RetryBudget = CountBound | DurationBound | Unbounded;
 
 /**
- * A retry policy is pure configuration — the knobs of the backoff curve plus
+ * A retry policy is pure configuration — the shape of the backoff curve plus
  * the bound that ends the retrying. It carries no mutable state; `RetryState`
  * does. One policy is shared across all the attempts of one logical operation
  * (often a module-scope const).

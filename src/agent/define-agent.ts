@@ -1,9 +1,9 @@
 /**
- * @demlik/tea/agent — `defineAgent`, the lid over `createAgent` (#59).
+ * @demlik/tea/agent — `defineAgent`, the convenience layer over `createAgent`.
  *
  * `defineAgent({ model, tools, instructions })` is the three-line door: it
  * defaults the single-stage wiring (`stages`, `turnOf`, `schemas`), derives the
- * tool cells from `toolRouter`, renders the prompt off the Model, and absorbs
+ * tool handlers from `toolRouter`, renders the prompt off the Model, and absorbs
  * the drive loop through `driveToDone`. It hides wiring, never state (ADR
  * 0015): the Model it runs is the same `AgentState` a hand-wired `createAgent`
  * produces, under the same keys, and `machine(input)` is the door down to the
@@ -42,12 +42,12 @@ import {
 } from "./types";
 
 // ===========================================================================
-// The lid's vocabulary: the messages a plain model reads, the prompt they are
-// rendered from, and the one-purpose agent it fixes.
+// The convenience layer's vocabulary: the messages a plain model reads, the
+// prompt they are rendered from, and the one-purpose agent it fixes.
 // ===========================================================================
 
 /**
- * One message the lid's `model` receives. Plain data the adapter renders into
+ * One message a `defineAgent` `model` receives. Plain data the adapter renders into
  * its provider's shape: the head is the `instructions` (when set) and the
  * run's `input`; then, per model turn, the `assistant` turn followed by the
  * `tool` outcomes that turn asked for. A tool outcome rides as data — the
@@ -72,7 +72,7 @@ export type AgentMessage =
     };
 
 /**
- * The brain-call payload the lid builds from the durable state — everything
+ * The brain-call payload `defineAgent` builds from the durable state — everything
  * `messagesOf` renders, so the prompt is a pure function of the Model and the
  * resilient slice carries exactly what was sent.
  */
@@ -82,7 +82,7 @@ export interface AgentPrompt<R> {
   readonly conversation: Conversation<R>;
 }
 
-/** The one purpose the lid's agent runs. */
+/** The one purpose a `defineAgent` agent runs. */
 export type LidPurpose = "act";
 type LidOutputs = { readonly [K in LidPurpose]: AgentTurn };
 
@@ -190,7 +190,7 @@ export interface DefinedAgent<T extends AnyToolDef> {
 }
 
 // ===========================================================================
-// The lid.
+// The defined agent.
 // ===========================================================================
 
 /**
@@ -258,7 +258,7 @@ export function defineAgent<T extends AnyToolDef>(
 }
 
 // ===========================================================================
-// The named parts the lid composes.
+// The named parts `defineAgent` composes.
 // ===========================================================================
 
 /** `payloadOf`: the prompt is the durable state, nothing else. PURE. */
@@ -272,7 +272,7 @@ function promptOf<R>(
 
 /**
  * `loadMessages`: render the call's prompt to the messages the model reads.
- * The payload is what `promptOf` built for this same lid, so the narrowing is
+ * The payload is what `promptOf` built for this same agent, so the narrowing is
  * an identity — the one place the `unknown` payload is read back typed.
  */
 const messagesOf: MessageLoader<LidPurpose, AgentMessage> = async (
@@ -333,11 +333,11 @@ function noHost<T extends AnyToolDef>(): DefinedAgentRunOptions<T> {
 const AGENT_EVENT_TYPES = ["TurnSettled", "ToolSettled", "RunDone"] as const;
 
 /**
- * Forward the runtime's semantic events to the lid's `onEvent`, CONTAINED.
+ * Forward the runtime's semantic events to the caller's `onEvent`, CONTAINED.
  *
  * The runtime's own fanout is throw-isolated but routes a listener's throw to
  * `OnError`, whose default re-throws on a fresh macrotask — an uncaught error
- * in the host for a defect that is the consumer's, not the run's. The lid owns
+ * in the host for a defect that is the consumer's, not the run's. `defineAgent` owns
  * the containment instead: a throwing listener is warned about and the run goes
  * on to its terminal Model, so `run`'s contract does not depend on the
  * listener's.
@@ -375,8 +375,8 @@ function startMsg(runId: string, at: number) {
  * Whether the boot State is a run the Store handed back mid-flight — live, or
  * suspended on tools — which `agent_boot` resumes at its one outstanding
  * effect. A `start` here would mint a new `runId` and a fresh conversation
- * over the work already done; that is a restart, and the durable half of the
- * lid is exactly that it never does one. PURE.
+ * over the work already done; that is a restart, and the durable half of
+ * `defineAgent` is exactly that it never does one. PURE.
  */
 function isMidRun(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
   const { kind } = status(s);

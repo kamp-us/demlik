@@ -103,7 +103,7 @@ export interface GatedManagedResource<S, TKey, Ctx> {
 
 /**
  * What `combineManagedResources` returns: the single managed-resource
- * `subscribe` cell for the machine's `subscribe` record, and a `subs(state)`
+ * `subscribe` handler for the machine's `subscribe` record, and a `subs(state)`
  * builder for `subscriptions(state)`.
  */
 export interface CombinedManagedResources<S, TKey, Ctx> {

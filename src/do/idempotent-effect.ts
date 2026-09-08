@@ -111,7 +111,8 @@ export type AppliedEffectsEvent = EffectApplied | EffectForgotten;
 /** The set of keys whose effect has been applied. A pure fold result. */
 export type AppliedEffects = ReadonlySet<EffectKey>;
 
-/** The empty applied set — the fold's seed (a fresh actor has applied nothing). */
+/** The empty applied set — the fold's starting value (a fresh actor has
+ * applied nothing). */
 export function emptyApplied(): AppliedEffects {
   return new Set<EffectKey>();
 }
@@ -182,7 +183,7 @@ export interface IdempotentEffect<A> {
 }
 
 /**
- * Pair a durable `key` with an external effect `fn` — the brick's primary
+ * Pair a durable `key` with an external effect `fn` — this module's primary
  * surface. Run it through {@link appliedEffects}'s guard; a re-fire whose key is
  * already applied is a proven no-op (`fn` is not invoked a second time).
  */

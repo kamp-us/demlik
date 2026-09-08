@@ -25,7 +25,7 @@ import { … } from "@demlik/tea/retry-backoff";
 | `recordFailure` | Function | Record a failed attempt. |
 | `RetryBudget` | Type | The terminal bound a policy declares: a count, a duration (optionally with a count), or an explicit opt-in to neither. |
 | `retryElapsedMs` | Function | How long the current failure streak has lasted, in milliseconds. |
-| `RetryPolicy` | Type | A retry policy is pure configuration — the knobs of the backoff curve plus the bound that ends the retrying. |
+| `RetryPolicy` | Type | A retry policy is pure configuration — the shape of the backoff curve plus the bound that ends the retrying. |
 | `RetryState` | Interface | Per-operation retry state: how many attempts have failed so far, and the most recent error. |
 | `Rng` | Type | A source of uniform randomness in `[0, 1)` — the `Math.random` contract. |
 | `shouldRetry` | Function | Whether another attempt is permitted under `policy`. |
