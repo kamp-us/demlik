@@ -152,7 +152,8 @@ export function broadcastFrame<S extends PresenceSocket>(
   return { sent, skipped };
 }
 
-/** Optional settings for {@link registerHibernatableSocket} / {@link acceptPresenceSocket}. */
+/** Optional settings for {@link registerHibernatableSocket} /
+ * {@link acceptPresenceSocket}. */
 export interface RegisterOptions<A> {
   /**
    * Hibernation tags for the socket — the same strings `ctx.getWebSockets(tag)`

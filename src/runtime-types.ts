@@ -1065,7 +1065,7 @@ export interface FoldRefusal<M> {
  * past that point is not defined) and returns it.
  *
  * Shares `foldMsgs`' dev-mode discipline: `deepFreeze` the input state,
- * `assertPureResult` the cell's return. Both compile out of production.
+ * `assertPureResult` the handler's return. Both compile out of production.
  */
 export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },

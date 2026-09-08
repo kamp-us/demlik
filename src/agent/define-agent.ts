@@ -3,7 +3,7 @@
  *
  * `defineAgent({ model, tools, instructions })` is the three-line door: it
  * defaults the single-stage wiring (`stages`, `turnOf`, `schemas`), derives the
- * tool cells from `toolRouter`, renders the prompt off the Model, and absorbs
+ * tool handlers from `toolRouter`, renders the prompt off the Model, and absorbs
  * the drive loop through `driveToDone`. It hides wiring, never state (ADR
  * 0015): the Model it runs is the same `AgentState` a hand-wired `createAgent`
  * produces, under the same keys, and `machine(input)` is the door down to the

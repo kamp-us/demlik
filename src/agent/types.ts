@@ -203,9 +203,10 @@ export interface Conversation<R> {
 }
 
 // ===========================================================================
-// Config — the knob. The domain seams (tools / schemas / model / stages) are
-// required; everything cross-cutting (retry / deadline / concurrency / loader /
-// maxTurns) is optional, per the resilient-call "omit a brick → omit its gate".
+// Config — what the agent is configured with. The domain seams (tools /
+// schemas / model / stages) are required; everything cross-cutting (retry /
+// deadline / concurrency / loader / maxTurns) is optional, per the
+// resilient-call "omit a composed wrapper → omit its gate".
 // ===========================================================================
 
 /**
@@ -214,8 +215,9 @@ export interface Conversation<R> {
  * emits a `snapshot_write` Cmd — or ON, in which case `snapshotEvery` is a
  * `number`. A `{ snapshotEvery?: never }` member (rather than a bare optional)
  * makes the OFF case load-bearing: it forbids passing `snapshotEvery` at all, so
- * `toMachine` can config-derive whether the `snapshot_write` interpret cell is
- * REQUIRED (ON) or FORBIDDEN (OFF) instead of defaulting it to a silent no-op.
+ * `toMachine` can config-derive whether the `snapshot_write` interpret handler
+ * is REQUIRED (ON) or FORBIDDEN (OFF) instead of defaulting it to a silent
+ * no-op.
  *
  * This is what kills the type lie: with checkpointing off, `snapshot_write` is
  * absent from the consumer's interpret contract entirely — never a
@@ -244,7 +246,7 @@ export type AgentSnapshotConfig =
  *                 `toolOf` produces. Kept PRECISE (a closed Cmd variant, not the
  *                 open `Cmd`) so `AgentCmd<P, TC>` stays a closed discriminated
  *                 union and the wired machine's interpret merge type-checks per
- *                 key — the brain cell maps to `resilient_run`, the tool cell to
+ *                 key — the brain handler maps to `resilient_run`, the tool one to
  *                 `TC["type"]` — with no laundering cast. Defaults to `Cmd` for
  *                 the consumer that does not care to name its tool Cmd.
  *   - `Msg`     — the model's message shape (threaded through the llm-call loader).
@@ -333,7 +335,8 @@ export interface AgentConfigCore<
  * The agent configuration — the core seams intersected with the snapshotting discriminant
  * (`AgentSnapshotConfig`). Type parameters are documented on `AgentConfigCore`;
  * the only addition here is that `snapshotEvery` is the discriminant that drives
- * whether `toMachine` requires (or forbids) the `snapshot_write` interpret cell.
+ * whether `toMachine` requires (or forbids) the `snapshot_write` interpret
+ * handler.
  */
 export type AgentConfig<
   Stage,
@@ -413,7 +416,7 @@ export interface AgentState<
    * `runtime.result()?.output` / `(await runtime.done()).output`.
    *
    * Typed `AgentTurn | null` (not `O[P]`): the run's output is always a model
-   * turn — the `O extends Record<P, AgentTurn>` knob bound pins every purpose's
+   * turn — the `O extends Record<P, AgentTurn>` type bound pins every purpose's
    * output to an `AgentTurn`, and the terminating turn is the one with no tool
    * calls. The wider `Record<P, unknown>` bound on `AgentState` itself does not
    * constrain `O[P]`, so naming the concrete `AgentTurn` keeps this field's type

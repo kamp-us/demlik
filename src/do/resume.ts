@@ -124,8 +124,9 @@ export async function autoBoot<
 }
 
 /**
- * Re-fire every round-trip a rehydrated actor still owes, on wake. Given a durable carrier whose
- * recorder was rehydrated from the persisted ledger events (e.g.
+ * Re-fire every round-trip a rehydrated actor still owes, on wake. Given a
+ * durable carrier whose recorder was rehydrated from the persisted ledger
+ * events (e.g.
  * `durableCommandCarrier(deferredGateway(), pendingEffectsLedger({ events }),
  * …)` on a wake), re-fire every owed-but-unconfirmed round-trip via
  * `reissue(callId)` — the consumer's "re-send the command frame for this

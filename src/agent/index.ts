@@ -7,9 +7,9 @@
  *
  * This generalizes a production audit agent: the domain specifics are stripped,
  * and what remains — the loop, the durability, the boot-reconcile crash
- * recovery, the serial-vs-fanned tool dispatch — is yours. The consumer supplies the only things that are genuinely
- * domain: the tools, the prompts (via the llm-call message loader), the schemas,
- * and the model. `createAgent(config)` returns the uniform handle contract every
+ * recovery, the serial-vs-fanned tool dispatch — is yours. The consumer
+ * supplies the only things that are genuinely domain: the tools, the prompts
+ * (via the llm-call message loader), the schemas, and the model. `createAgent(config)` returns the uniform handle contract every
  * composition exposes (`init` / verbs returning `readonly [State, Cmd[]]` /
  * `subs`) AND a ready-to-`run` `defineMachine` (`toMachine`) — THE one wired
  * path. (`unsafeDetachedHandlers` is the hand-wiring escape hatch; its name

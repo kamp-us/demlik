@@ -111,7 +111,8 @@ export type AppliedEffectsEvent = EffectApplied | EffectForgotten;
 /** The set of keys whose effect has been applied. A pure fold result. */
 export type AppliedEffects = ReadonlySet<EffectKey>;
 
-/** The empty applied set — the fold's starting value (a fresh actor has applied nothing). */
+/** The empty applied set — the fold's starting value (a fresh actor has
+ * applied nothing). */
 export function emptyApplied(): AppliedEffects {
   return new Set<EffectKey>();
 }
