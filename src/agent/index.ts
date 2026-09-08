@@ -5,16 +5,15 @@
  * drives the classic loop `llm → tools → fold → llm` until the model stops
  * asking for tools.
  *
- * This is the `seed/audit-agent-machine` reducer generalized: the seed's audit /
- * glyph / violation domain specifics are stripped, and what remains — the loop,
- * the durability, the boot-reconcile crash recovery, the serial-vs-fanned tool
- * dispatch — is yours. The consumer supplies the only things that are genuinely
+ * This generalizes a production audit agent: the domain specifics are stripped,
+ * and what remains — the loop, the durability, the boot-reconcile crash
+ * recovery, the serial-vs-fanned tool dispatch — is yours. The consumer supplies the only things that are genuinely
  * domain: the tools, the prompts (via the llm-call message loader), the schemas,
- * and the model. `createAgent(config)` returns the uniform knob contract every
+ * and the model. `createAgent(config)` returns the uniform handle contract every
  * composition exposes (`init` / verbs returning `readonly [State, Cmd[]]` /
  * `subs`) AND a ready-to-`run` `defineMachine` (`toMachine`) — THE one wired
  * path. (`unsafeDetachedHandlers` is the hand-wiring escape hatch; its name
- * advertises that it does not drive the retry loop — see #54.)
+ * advertises that it does not drive the retry loop.)
  *
  * ## The composition (three siblings wired into ONE machine)
  *
@@ -23,18 +22,18 @@
  *     position survives eviction, the no-progress deadline auto-fails a wedged
  *     run, and `boot` resumes mid-pipeline. The agent slice OWNS this slice and
  *     delegates `start` / `advance` / `progress` / `onDeadline` / `boot` to it.
- *   - `../llm-call` — every brain call (the seed's `call_llm{purpose}`). One
+ *   - `../llm-call` — every brain call. One
  *     `LlmCall` per turn, structured-output parsed, retry composed in. The agent
  *     delegates the resilient slice + verbs and reuses the detached handler.
- *   - `../fan-out` — the tool calls a turn produced. The seed dispatched tools
- *     SERIALLY (concurrency 1); fan-out generalizes that to bounded concurrency
- *     `config.toolConcurrency` (default 1 = the seed's serial behavior). Each
+ *   - `../fan-out` — the tool calls a turn produced. Tools dispatch SERIALLY by
+ *     default (concurrency 1); fan-out generalizes that to bounded concurrency
+ *     `config.toolConcurrency`. Each
  *     tool is an `of(call)` Cmd the consumer's own interpret performs; results
  *     route back through `toolOk` / `toolErr`. When the batch drains, the agent
  *     folds the gathered results back into the conversation and fires the next
  *     brain call (`fold → llm`).
  *
- * ## The flow loop, as TEA (generalized from the seed's `applyAiTurn`)
+ * ## The flow loop, as TEA
  *
  *   1. `start` enters the pipeline; the consumer wires the per-stage outstanding
  *      effect (often a `call_llm` for the agentic stage) off the current stage.
@@ -51,7 +50,7 @@
  *   4. The watchdog + turn-limit guard bound the loop; the deadline fires
  *      `failed`, the turn limit fires `failed { turn_limit }`.
  *
- * ## Boot reconcile (crash recovery — the seed's `outstandingEffect`)
+ * ## Boot reconcile (crash recovery)
  *
  * Cold wake re-derives the ONE outstanding effect from `phase × awaiting`: a
  * brain call in flight re-fires `call_llm`; tools in flight re-fire the in-flight
@@ -84,7 +83,7 @@
  *     schemas: { plan: planSchema, act: turnSchema, report: reportSchema },
  *     turnOf: (stage) => stageToPurpose[stage],   // which brain call a stage runs
  *     toolOf: (call): RunTool => ({ type: "run_tool", ...call }),
- *     toolConcurrency: 1,                          // serial like the seed (default)
+ *     toolConcurrency: 1,                          // serial (default)
  *     deadlineMs: 10 * 60_000,
  *     maxTurns: 60,
  *     retry: defaultRetryPolicy,
@@ -1339,8 +1338,8 @@ export function createAgent<
 
 /**
  * Re-export the deadline Sub primitives so consumers (and tests) wire one
- * import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the
- * Sub literal both composed bricks' `subs` emit.
+ * import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds
+ * the Sub literal both composed wrappers' `subs` emit.
  */
 export { subscribeDeadline, deadlineSub };
 export type {

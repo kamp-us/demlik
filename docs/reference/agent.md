@@ -12,45 +12,45 @@ import { … } from "@demlik/tea/agent";
 | --- | --- | --- |
 | `agentBootMsg` | Function | The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches on a resumable rehydrate. |
 | `AgentBootMsg` | Type | The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. |
-| `AgentCmd` | Type | The Cmd union the agent emits, as a CLOSED discriminated union (precise `TC`, not the open `Cmd`) so `Interpret<M, AgentCmd<P, TC>, Ctx>` maps each key precisely and `toMachine` merges the interpret halves with no laundering cast: - `AgentLlmRunCmd<P>` — the brain-call run Cmd (`resilient_run`), folded by the wired `brainHandlers` cell. |
+| `AgentCmd` | Type | The Cmd union the agent emits, as a CLOSED discriminated union (precise `TC`, not the open `Cmd`) so `Interpret<M, AgentCmd<P, TC>, Ctx>` maps each key precisely and `toMachine` merges the interpret halves with no laundering cast: - `AgentLlmRunCmd<P>` — the brain-call run Cmd (`resilient_run`), folded by the wired `brainHandlers` handler. |
 | `AgentCompactErrMsg` | Type | The compaction round-trip failure settle Msg — carries the typed LlmErr. |
-| `AgentCompactionConfig` | Type | The compaction discriminant (#85), shaped exactly like AgentSnapshotConfig. |
+| `AgentCompactionConfig` | Type | The compaction discriminant, shaped exactly like AgentSnapshotConfig. |
 | `AgentCompactOkMsg` | Type | The compaction round-trip success settle Msg — carries the parsed CompactionSummary. |
-| `AgentCompactRunCmd` | Type | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier (#85). |
-| `AgentConfig` | Type | The agent knob — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
-| `AgentConfigCore` | Interface | The core (non-snapshot, non-compaction) agent knob. |
+| `AgentCompactRunCmd` | Type | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier. |
+| `AgentConfig` | Type | The agent configuration — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
+| `AgentConfigCore` | Interface | The core (non-snapshot, non-compaction) agent configuration. |
 | `AgentDetachedHandlers` | Type | The LEGACY detached brain-call handler dictionary `handlers(ports)` returns — the inherited `../llm-call` detached form's exact shape, NOT an `Interpret`. |
-| `AgentEvent` | Type | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)` (#47). |
-| `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents (#47) — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
+| `AgentEvent` | Type | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)`. |
+| `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
 | `AgentFailure` | Type | Why a run terminated as `failed`, beyond monitored-run's own reasons. |
-| `AgentKnob` | Interface | The agent knob `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers` escape hatch. |
+| `AgentKnob` | Interface | The agent handle `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers` escape hatch. |
 | `AgentLlmErrMsg` | Type |  |
 | `AgentLlmOkMsg` | Type | The brain-call success / failure settle Msgs, inherited from `../llm-call`. |
 | `AgentLlmRunCmd` | Type | The brain-call effect Cmd, inherited from `../llm-call`. |
 | `AgentMachineMsg` | Type | The agent machine's Msg union — one variant per reducer entry point. |
-| `AgentMessage` | Type | One message the lid's `model` receives. |
+| `AgentMessage` | Type | One message a `defineAgent` `model` receives. |
 | `AgentPorts` | Type | Ports the consumer supplies to the llm-call handler — re-exported shape. |
-| `AgentPrompt` | Interface | The brain-call payload the lid builds from the durable state — everything `messagesOf` renders, so the prompt is a pure function of the Model and the resilient slice carries exactly what was sent. |
-| `AgentSnapshotConfig` | Type | The snapshotting discriminant (#55). |
-| `AgentState` | Interface | The agent slice — every composed brick's slice plus the loop's conversation and the agent-specific failure annotation. |
-| `AgentStatus` | Type | The agent's lifecycle status — THE single typed channel for "what is this run doing?" (issue #49). |
-| `AgentTerminalFailure` | Type | The unified terminal failure (issue #49). |
-| `AgentTimerMsg` | Type | The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared shape of both bricks' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg` are both `DeadlineExceeded`). |
+| `AgentPrompt` | Interface | The brain-call payload `defineAgent` builds from the durable state — everything `messagesOf` renders, so the prompt is a pure function of the Model and the resilient slice carries exactly what was sent. |
+| `AgentSnapshotConfig` | Type | The snapshotting discriminant. |
+| `AgentState` | Interface | The agent slice — every composed wrapper's slice plus the loop's conversation and the agent-specific failure annotation. |
+| `AgentStatus` | Type | The agent's lifecycle status — THE single typed channel for "what is this run doing?". |
+| `AgentTerminalFailure` | Type | The unified terminal failure the agent settles on. |
+| `AgentTimerMsg` | Type | The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg` are both `DeadlineExceeded`). |
 | `AgentToMachine` | Type | The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants so the snapshotting / compaction overloads of `createAgent` hand back the right obligations. |
-| `AgentTurn` | Interface | One model turn — the seed's `AiTurn`, generalized: the narration `content` the model produced and the `toolCalls` it asked us to run. |
+| `AgentTurn` | Interface | One model turn: the narration `content` the model produced and the `toolCalls` it asked us to run. |
 | `agentTurnSchema` | Variable | The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain call binds when the agentic purpose's output is a bare `AgentTurn` (the common case). |
 | `AnyToolDef` | Type | The declaration-erased view the router reads. |
-| `Awaiting` | Type | Whether the agentic stage is waiting on the model (`llm`), on tools (`tools`), or on a compaction round-trip (`compacting`, #85). |
-| `CompactInterpret` | Type | The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret` (#85), the exact twin of SnapshotInterpret. |
+| `Awaiting` | Type | Whether the agentic stage is waiting on the model (`llm`), on tools (`tools`), or on a compaction round-trip (`compacting`). |
+| `CompactInterpret` | Type | The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret` — the exact twin of SnapshotInterpret. |
 | `COMPACTION_PURPOSE` | Variable | The reserved compaction purpose's value — the single in-flight summarize call's key. |
 | `CompactionOutputs` | Interface | The purpose→output map for the compaction LLM call — the single reserved `$compact` purpose mapping to a CompactionSummary. |
-| `CompactionPolicy` | Interface | The consumer's compaction policy (#85). |
-| `CompactionPurpose` | Type | The reserved purpose the compaction round-trip runs under (#85). |
+| `CompactionPolicy` | Interface | The consumer's compaction policy. |
+| `CompactionPurpose` | Type | The reserved purpose the compaction round-trip runs under. |
 | `CompactionSummary` | Interface | The result a compaction round-trip produces — the model's summary of the folded-away turns. |
 | `compactionSummarySchema` | Variable | The `Schema<CompactionSummary>` the compaction call binds — tea's own parse target for the summarize round-trip (it OWNS the `$compact` purpose's output). |
 | `Conversation` | Interface | The agentic-stage conversation — durable inside the agent slice so an eviction mid-loop resumes the exact turn. |
 | `createAgent` | Function | Assemble an agent from `config` — the model, the stages it walks, and how a tool call is turned into a command — and get back its `init`, verbs and `subs` plus a `toMachine()` that wires all of it into one machine you hand to `run`. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the Sub literal both composed bricks' `subs` emit. |
+| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
 | `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself. |
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs`. |
@@ -63,13 +63,13 @@ import { … } from "@demlik/tea/agent";
 | `isAgentTurn` | Function | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
 | `isReservedToolName` | Function | Whether `name` is one `tool()` refuses — the set `ReservedToolName` types. |
-| `LidPurpose` | Type | The one purpose the lid's agent runs. |
-| `liftAgent` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.agent`. |
-| `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this knob, carried on the `resilient_run` Cmd as plain data (no closures, invariant 3). |
+| `LidPurpose` | Type | The one purpose a `defineAgent` agent runs. |
+| `liftAgent` | Function | Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.agent`. |
+| `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this module, carried on the `resilient_run` Cmd as plain data — no closures, so it survives persistence and replay. |
 | `LlmErr` | Interface | The typed failure variant — every failure path surfaces this, tagged by purpose. |
 | `LlmFailMsg` | Type |  |
 | `LlmOk` | Interface | The parsed, typed success carried on the `resilient_ok` settle Msg, tagged with its purpose. |
-| `LlmRunCmd` | Type | The effect Cmd the knob emits: run the LLM call for `key` with `input`. |
+| `LlmRunCmd` | Type | The effect Cmd this module emits: run the LLM call for `key` with `input`. |
 | `LlmSucceedMsg` | Type | The settle Msgs llm-call's handler RETURNS from `interpret` so the substrate enqueues them as follow-up Msgs (re-entry) into the host reducer — exactly as `../resilient-call` does. |
 | `mergeInterpret` | Function | Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over the same Msg union `M` and Ctx) into the full `Interpret<M, A \| B, Ctx>`. |
 | `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
@@ -78,26 +78,26 @@ import { … } from "@demlik/tea/agent";
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
 | `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
 | `plainModel` | Function | Lift a plain-function model into the `ModelFactory` port. |
-| `PlainModel` | Type | The plain-function model port — the common path (#58). |
+| `PlainModel` | Type | The plain-function model port — the common path. |
 | `renderPrompt` | Function | The prompt as messages: the head, then each turn with its tool outcomes. |
-| `ReservedToolName` | Type | A tool name `tool()` refuses (#72). |
+| `ReservedToolName` | Type | A tool name `tool()` refuses. |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call the handler uses to validate the model's output before it settles `resilient_ok`. |
-| `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55). |
+| `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`. |
 | `status` | Function | Ask where an agent run stands: pass its state, get back one of `idle`, `running`, `suspended` (with the tool calls it is waiting on), `done` (with the output) or `failed` (with the failure). |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` cell for the DEFAULT `setTimeout` backing. |
+| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a definition you pass to `toolRouter` or `defineAgent`. |
-| `ToolCall` | Interface | One tool the model asked to call this turn — the seed's `ToolCall`, stripped of the audit-specific args typing. |
+| `ToolCall` | Interface | One tool the model asked to call this turn. |
 | `ToolCmd` | Type | The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. |
 | `ToolConstructors` | Type | The two constructors a handler is handed, one per channel — `ok` for the value the `ok` schema parses, `fail` for a declared `{ _tag }`. |
-| `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell, the bare `args` schema the router parses a call against, and the `description` a provider adapter declares to the model beside that schema. |
+| `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` handler, the bare `args` schema the router parses a call against, and the `description` a provider adapter declares to the model beside that schema. |
 | `toolErrorReason` | Function | Turn a tool failure into the human-readable reason string the conversation carries — pass the `{ _tag, ...detail }` a tool failed with, get the tag followed by any remaining detail as JSON. |
 | `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
 | `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `needs` named, and the typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
 | `ToolInput` | Type | The input a tool Cmd carries: the model's `callId` (the fan-out identity the settle folds back on) and the `args` already parsed against the tool's `input` schema — the boundary parses, the handler trusts. |
-| `ToolMsg` | Type | The settled Msg union a router's cells return — folded by `toMachine`. |
+| `ToolMsg` | Type | The settled Msg union a router's handlers return — folded by `toMachine`. |
 | `ToolOk` | Type | The typed success constructor a handler receives: `ok(value)` with `Ok` fixed to what the `ok` schema parses, so a value of the wrong shape is refused where it is written. |
-| `ToolOutcome` | Type | One settled tool outcome the consumer routes back into the loop — the seed's `ToolOutcome`. |
+| `ToolOutcome` | Type | One settled tool outcome the consumer routes back into the loop. |
 | `ToolRecord` | Interface | A folded tool record kept on the conversation once a tool settles — the call + its outcome, in settle order. |
 | `ToolRejectedCmd` | Type | The Cmd `tool_rejected` builds — the router-owned variant of `ToolCmd`. |
 | `ToolRejection` | Type | A call the router could not hand to a tool: the model named a tool nobody declared, or its `args` failed the tool's `input` schema. |

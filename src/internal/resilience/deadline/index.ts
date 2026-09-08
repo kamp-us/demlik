@@ -20,7 +20,7 @@
  *
  * Composition over reinvention: the timer lifecycle is `fromTimeout`'s, not
  * redrawn here. `deadlineSub` produces the Sub literal carrying `atMs`; the
- * `subscribe` cell (`subscribeDeadline`) translates `atMs` → a relative delay
+ * `subscribe` handler (`subscribeDeadline`) translates `atMs` → a relative delay
  * and delegates the `setTimeout` / `clearTimeout` to `fromTimeout`. The clock
  * read (`Date.now()`) lives only in the subscribe handler — never in a reducer
  * (invariant 2) — and is exercised in tests via vitest fake timers, matching
@@ -31,7 +31,7 @@
  * live `setTimeout` to wake it, so its deadline must be backed by a `do_alarm`
  * registered on the alarm registry; a test host wants a fake-timer schedule.
  * That backing is the `ArmTimer` seam — `subscribeWith(armTimer)` builds the
- * `subscribe.deadline` cell from a host-plugged timer, and `subscribeDeadline`
+ * `subscribe.deadline` handler from a host-plugged timer, and `subscribeDeadline`
  * IS `subscribeWith(setTimeoutArmTimer())`. One deadline surface, three hosts;
  * there is no second Sub type and no second `atMs` anchor to keep in sync.
  *
@@ -206,7 +206,7 @@ export function setTimeoutArmTimer(): ArmTimer<DeadlineExceeded> {
 }
 
 /**
- * The `subscribe["deadline"]` cell for the DEFAULT `setTimeout` backing. Arms a
+ * The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. Arms a
  * one-shot timer for the remaining delay `max(0, atMs - Date.now())` and
  * dispatches `deadlineExceeded(...)` when it fires; returns a cleanup that
  * clears the pending timer.
@@ -215,7 +215,7 @@ export function setTimeoutArmTimer(): ArmTimer<DeadlineExceeded> {
  * a separate implementation, so the host-plugged path and the default path can
  * never disagree about the anchor.
  *
- * Assign directly to a `Subscribe` cell:
+ * Assign directly to a `Subscribe` handler:
  *
  *   subscribe: {
  *     deadline: subscribeDeadline,

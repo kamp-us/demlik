@@ -1,13 +1,13 @@
 /**
  * @demlik/tea/agent — `tool()` + `toolRouter()`: declare a tool once and derive
  * what a consumer used to hand-write twice — the `toolOf` mapping from a
- * model's `ToolCall` to an effect Cmd, and the interpret cell that runs the
- * handler and settles it (#56).
+ * model's `ToolCall` to an effect Cmd, and the interpret handler that runs it
+ * and settles it.
  *
- * A tool is a `Cmd.define`d effect (#44) whose input is the model's call —
+ * A tool is a `Cmd.define`d effect whose input is the model's call —
  * `{ callId, args }` — with the handler colocated on the constructor. The
  * router folds a set of them into one `toolOf` and one interpret table; the
- * cells settle through the minted `<name>_ok` / `<name>_err` Msgs, errors as
+ * handlers settle through the minted `<name>_ok` / `<name>_err` Msgs, errors as
  * `{ _tag }` data (ADR 0011). `createAgent(...).toMachine({ tools })` folds
  * those settles into the conversation, so a consumer names nothing twice.
  */
@@ -54,15 +54,15 @@ const REJECTED_TYPE = "tool_rejected";
 const SNAPSHOT_WRITE_TYPE = "snapshot_write";
 
 /**
- * A tool name `tool()` refuses (#72). A tool's name is its Cmd `type` — so
+ * A tool name `tool()` refuses. A tool's name is its Cmd `type` — so
  * its interpret key — and the prefix of its settle Msgs, so every string
  * already spoken by the protocol is taken twice over: the settle prefixes
  * (`resilient`, `agent_tool`, `compact`) would overwrite the agent's own
- * reducer cells through `toMachine`'s last-wins spread, and the discriminants
+ * reducer handlers through `toMachine`'s last-wins spread, and the discriminants
  * themselves (`compact_run`, `resilient_run`, …) would shadow the interpret
- * cell of that name. Both halves derive from `MsgType`: a new entry there
+ * handler of that name. Both halves derive from `MsgType`: a new entry there
  * reserves its name and its prefix with no second edit. The two names outside
- * the protocol are the router's own `tool_rejected` and the checkpoint cell
+ * the protocol are the router's own `tool_rejected` and the checkpoint handler
  * `snapshot_write`, which `toMachine` merges under the consumer's key.
  */
 export type ReservedToolName =
@@ -116,7 +116,7 @@ export type ToolInput<Args> = {
 /**
  * The router-minted failure beside a tool's declared tags: the handler threw
  * (or rejected) with something that is not a declared `{ _tag }`. Plain data
- * the model sees as a reason, never a rejection out of the interpret cell.
+ * the model sees as a reason, never a rejection out of the interpret handler.
  */
 export type ToolThrown = { readonly _tag: "thrown"; readonly message: string };
 
@@ -139,7 +139,7 @@ export type ToolFail<Ok, E extends Tagged> = (error: E) => Result<Ok, E>;
  * The two constructors a handler is handed, one per channel — `ok` for the
  * value the `ok` schema parses, `fail` for a declared `{ _tag }`. Both are
  * tea's, so a handler settles either arm without naming the result library
- * underneath (#94).
+ * underneath.
  */
 export type ToolConstructors<Ok, E extends Tagged> = {
   readonly ok: ToolOk<Ok, E>;
@@ -160,7 +160,7 @@ export type ToolHandler<Args, Ok, E extends Tagged, R> = (
 
 /**
  * What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>`
- * / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` cell,
+ * / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` handler,
  * the bare `args` schema the router parses a call against, and the
  * `description` a provider adapter declares to the model beside that schema.
  * `E` is the full failure union the Cmd settles with — the declared tags plus
@@ -265,7 +265,7 @@ export function tool<
     return result.match({
       ok: (value): Settled<Def> => {
         // The same parse `run`'s edge applies when the def is on
-        // `Machine.cmds` — done here too so the cell is honest on its own.
+        // `Machine.cmds` — done here too so the handler is honest on its own.
         // `at` is the runtime's to stamp, exactly as the def's builders leave it.
         const parsed = spec.ok.safeParse(value);
         return parsed.success
@@ -329,7 +329,7 @@ export type ToolRejectedCmd = CmdOf<typeof rejected>;
 /** The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. */
 export type ToolCmd<T extends AnyToolDef> = CmdOf<T> | ToolRejectedCmd;
 
-/** The settled Msg union a router's cells return — folded by `toMachine`. */
+/** The settled Msg union a router's handlers return — folded by `toMachine`. */
 export type ToolMsg<T extends AnyToolDef> =
   | Settled<T>
   | Settled<typeof rejected>;
@@ -368,7 +368,7 @@ export interface ToolRouter<T extends AnyToolDef> {
   readonly defs: readonly AnyCmdDef[];
   /** The `toolOf` for `createAgent`: total, pure, parses `args` at the edge. */
   readonly toolOf: (call: ToolCall) => ToolCmd<T>;
-  /** One interpret cell per tool plus the `tool_rejected` cell. */
+  /** One interpret handler per tool plus the `tool_rejected` handler. */
   readonly interpret: Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>;
   /**
    * Read a settled tool off a Msg: `null` when the Msg is not one of this
@@ -427,14 +427,14 @@ export function toolRouter<T extends AnyToolDef>(
     return build({ callId: call.callId, args: parsed.data });
   };
 
-  const cells: Record<string, unknown> = {
+  const handlers: Record<string, unknown> = {
     [rejected.cmdType]: async (cmd: ToolRejectedCmd) =>
       rejected.err(cmd, cmd.error),
   };
-  for (const t of tools) cells[t.cmdType] = t.interpret;
-  // Each cell is the def's own typed `interpret`, keyed by the `type` it
+  for (const t of tools) handlers[t.cmdType] = t.interpret;
+  // Each handler is the def's own typed `interpret`, keyed by the `type` it
   // builds; the record is assembled per name, which the mapped type cannot see.
-  const interpret = cells as unknown as Interpret<
+  const interpret = handlers as unknown as Interpret<
     ToolMsg<T>,
     ToolCmd<T>,
     NoCtx

@@ -1,11 +1,11 @@
 /**
  * @demlik/tea/agent — the domain data model: the tool + turn shapes the consumer
- * supplies, the agentic-stage conversation, the `createAgent` config knob, and
+ * supplies, the agentic-stage conversation, the `createAgent` config object, and
  * the durable agent slice + its lifecycle status.
  *
- * Everything here is plain data (durable + replayable): the composed bricks'
+ * Everything here is plain data (durable + replayable): the composed wrappers'
  * slices, the conversation, and the config are all JSON-serializable. The
- * compaction (#85) vocabulary lives in `./compaction`; this module imports its
+ * compaction vocabulary lives in `./compaction`; this module imports its
  * types where the slice / config reference them. The reducer core (the verbs +
  * the wired `toMachine`) lives in `./index`.
  */
@@ -37,8 +37,7 @@ import { schemaFromGuard } from "./schema";
 // ===========================================================================
 
 /**
- * One tool the model asked to call this turn — the seed's `ToolCall`, stripped
- * of the audit-specific args typing. Plain data so it round-trips through the
+ * One tool the model asked to call this turn. Plain data so it round-trips through the
  * durable fan-out ledger: a stable `callId` (the fan-out identity), the tool
  * `name`, and the opaque `args` the consumer's own interpret reads.
  */
@@ -52,8 +51,8 @@ export interface ToolCall {
 }
 
 /**
- * One model turn — the seed's `AiTurn`, generalized: the narration `content`
- * the model produced and the `toolCalls` it asked us to run. An empty
+ * One model turn: the narration `content` the model produced and the
+ * `toolCalls` it asked us to run. An empty
  * `toolCalls` means the model is done with this stage (advance the pipeline).
  * This is the parsed output of a brain call; the consumer's schema produces it.
  *
@@ -133,8 +132,8 @@ export const agentTurnSchema: Schema<AgentTurn> = schemaFromGuard(
 );
 
 /**
- * One settled tool outcome the consumer routes back into the loop — the seed's
- * `ToolOutcome`. `ok` carries the result the consumer's interpret produced;
+ * One settled tool outcome the consumer routes back into the loop.
+ * `ok` carries the result the consumer's interpret produced;
  * `error` carries a reason the model sees (so it recovers rather than stalls —
  * "errors are data").
  */
@@ -162,14 +161,14 @@ export interface ToolRecord<R> {
 }
 
 // ===========================================================================
-// Conversation — the agentic-stage loop state (the seed's `Conversation`).
+// Conversation — the agentic-stage loop state.
 // ===========================================================================
 
 /**
  * Whether the agentic stage is waiting on the model (`llm`), on tools
- * (`tools`), or on a compaction round-trip (`compacting`, #85). The in-flight
+ * (`tools`), or on a compaction round-trip (`compacting`). The in-flight
  * fan-out batch exists ONLY in the `tools` variant — "awaiting llm with tools
- * pending" is structurally impossible (the seed's canon §2.6 / Rule 1
+ * pending" is structurally impossible (TEA canon §2.6 / Rule 1
  * impossible-states pin). Discriminated on `kind`.
  *
  * `compacting` is the honest state for the dedicated compaction round-trip
@@ -210,7 +209,7 @@ export interface Conversation<R> {
 // ===========================================================================
 
 /**
- * The snapshotting discriminant (#55). Checkpointing is either OFF — in which
+ * The snapshotting discriminant. Checkpointing is either OFF — in which
  * case `snapshotEvery` is structurally absent and the monitored-run slice never
  * emits a `snapshot_write` Cmd — or ON, in which case `snapshotEvery` is a
  * `number`. A `{ snapshotEvery?: never }` member (rather than a bare optional)
@@ -227,7 +226,7 @@ export type AgentSnapshotConfig =
   | { readonly snapshotEvery: number };
 
 /**
- * The core (non-snapshot, non-compaction) agent knob. The full `AgentConfig`
+ * The core (non-snapshot, non-compaction) agent configuration. The full `AgentConfig`
  * intersects this with the `AgentSnapshotConfig` + `AgentCompactionConfig`
  * discriminants — see those types for why the cadence / policy are discriminated
  * unions rather than bare optionals.
@@ -266,7 +265,7 @@ export interface AgentConfigCore<
 
   // ---- llm-call seam (the brain) ------------------------------------------
   /**
-   * DI port — the brain. `async (messages) => turn` is the common path (#58):
+   * DI port — the brain. `async (messages) => turn` is the common path:
    * the returned turn is validated through the purpose's schema
    * (`agentTurnSchema` for the plain case), so a malformed turn is the run's
    * `llm` failure, not a throw. `(modelId) => Llm` is the advanced form for a
@@ -291,7 +290,7 @@ export interface AgentConfigCore<
   // ---- fan-out seam (the tools) -------------------------------------------
   /** Map one tool call to the effect Cmd the consumer's interpret performs. */
   readonly toolOf: (call: ToolCall) => TC;
-  /** Max tools in flight at once. Omit / `1` → serial dispatch (the seed's behavior). */
+  /** Max tools in flight at once. Omit / `1` → serial dispatch (the default). */
   readonly toolConcurrency?: number;
 
   // ---- the loop wiring -----------------------------------------------------
@@ -331,7 +330,7 @@ export interface AgentConfigCore<
 }
 
 /**
- * The agent knob — the core seams intersected with the snapshotting discriminant
+ * The agent configuration — the core seams intersected with the snapshotting discriminant
  * (`AgentSnapshotConfig`). Type parameters are documented on `AgentConfigCore`;
  * the only addition here is that `snapshotEvery` is the discriminant that drives
  * whether `toMachine` requires (or forbids) the `snapshot_write` interpret cell.
@@ -348,7 +347,7 @@ export type AgentConfig<
   AgentCompactionConfig<R, Msg>;
 
 // ===========================================================================
-// Slice — the Model field this knob owns. Three composed slices + the loop's
+// Slice — the Model field this configuration owns. Three composed slices + the loop's
 // conversation. Plain data end to end → durable + replayable.
 // ===========================================================================
 
@@ -362,7 +361,7 @@ export type AgentFailure =
   | { readonly reason: "llm"; readonly error: unknown; readonly at: number };
 
 /**
- * The agent slice — every composed brick's slice plus the loop's conversation
+ * The agent slice — every composed wrapper's slice plus the loop's conversation
  * and the agent-specific failure annotation.
  *
  *   - `run`          — the `../monitored-run` slice (pipeline position +
@@ -393,7 +392,7 @@ export interface AgentState<
    * brain `resilience` slice so a compaction retry/backoff never disturbs the
    * brain call's breaker or retry counter. Always present (empty `calls` when no
    * compaction is in flight, or when no policy is configured) so the slice stays
-   * a flat plain-data record — durable + replayable like every composed brick.
+   * a flat plain-data record — durable + replayable like every composed wrapper.
    */
   readonly compaction: ResilientState<
     LlmCall<CompactionPurpose>,
@@ -432,11 +431,11 @@ export interface AgentState<
 
 // ===========================================================================
 // Lifecycle status — the ONE typed channel callers read instead of re-deriving
-// the private slice shape (issue #49).
+// the private slice shape.
 // ===========================================================================
 
 /**
- * The unified terminal failure (issue #49). The agent terminates `failed`
+ * The unified terminal failure the agent settles on. The agent terminates `failed`
  * through TWO independent slice channels:
  *
  *   - `state.failure` (`AgentFailure`) — the AGENT'S OWN annotation
@@ -455,7 +454,7 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
 
 /**
  * The agent's lifecycle status — THE single typed channel for "what is this run
- * doing?" (issue #49). A discriminated union on `kind` so any change to the
+ * doing?". A discriminated union on `kind` so any change to the
  * private slice shape (`Awaiting`, the failure channels, `run.phase`) forces a
  * compile error at the call sites that switch on it, instead of silently
  * breaking a hand-rolled re-derivation. Make-invalid-states-unrepresentable:

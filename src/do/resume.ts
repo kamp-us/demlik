@@ -33,7 +33,7 @@ import type { DurableCommandCarrier } from "./deferred-gateway";
 
 /**
  * The typed cold-wake resume port `bootResume` fires through — the agent's
- * `AgentBootPort` (issue #60) generalized to any DO-hosted machine (issue #231).
+ * `AgentBootPort`, generalized to any DO-hosted machine.
  *
  * - `isResumable(state)` — true iff the rehydrated State is mid-loop and needs a
  *   resume dispatch. False on a fresh boot, which makes `bootResume` a no-op.
@@ -93,10 +93,10 @@ export function agentIsResumable<
 }
 
 /**
- * The AGENT specialization of {@link bootResume} (issue #231): after
+ * The AGENT specialization of {@link bootResume}: after
  * `runtime.ready`, self-dispatch `agent_boot` iff the rehydrated slice is
  * resumable, a no-op on a fresh DO. Wires the agent slice's `agentIsResumable`
- * predicate + the agent-owned `agentBootMsg` typed port (issue #60) into the
+ * predicate + the agent-owned `agentBootMsg` typed port into the
  * generalized helper, so the resume dispatch lives in ONE place — see
  * `bootResume`'s docblock for the boot-gate / init-purity rationale.
  *
@@ -124,7 +124,7 @@ export async function autoBoot<
 }
 
 /**
- * RE-EMIT ON ACTIVATION (the #91 wake path). Given a durable carrier whose
+ * Re-fire every round-trip a rehydrated actor still owes, on wake. Given a durable carrier whose
  * recorder was rehydrated from the persisted ledger events (e.g.
  * `durableCommandCarrier(deferredGateway(), pendingEffectsLedger({ events }),
  * …)` on a wake), re-fire every owed-but-unconfirmed round-trip via

@@ -25,7 +25,7 @@
  * again with no counter field on the Model.
  *
  * `reconcile` (the read side's payoff, #214) composes this ack partition with
- * the pure fold seam `foldMsgs` (#211) to perform the whole Gambetta/Valve
+ * the pure fold seam `foldMsgs` to perform the whole Gambetta/Valve
  * reconciliation step in one call. The `foldMsgs` import is the ONLY dependency
  * this leaf takes, and it reaches into the pure-core leaf (`../pure/core`) — NOT
  * the runtime root — so the module stays runtime-free and the client-safe
@@ -134,7 +134,7 @@ export const nextSeq = <T>(buffer: readonly SeqTagged<T>[]): Seq =>
 
 /**
  * The client prediction/reconciliation helper — the Gambetta/Valve
- * authoritative-server loop's reconcile step, generalized (#214, epic #186).
+ * authoritative-server loop's reconcile step, generalized.
  *
  * Given the latest `authoritativeState` from the server, the server's
  * `lastAppliedSeq` ack, and the client's `pending` buffer of seq-tagged inputs,

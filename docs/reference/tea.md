@@ -28,7 +28,7 @@ import { … } from "@demlik/tea";
 | `CmdInput` | Type | The payload a constructor accepts: a plain record spread beside `type`. |
 | `CmdOf` | Type | The Cmd value a def (or a union of defs) builds. |
 | `CmdValue` | Type | The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. |
-| `CombinedManagedResources` | Interface | What `combineManagedResources` returns: the single managed-resource `subscribe` cell for the machine's `subscribe` record, and a `subs(state)` builder for `subscriptions(state)`. |
+| `CombinedManagedResources` | Interface | What `combineManagedResources` returns: the single managed-resource `subscribe` handler for the machine's `subscribe` record, and a `subs(state)` builder for `subscriptions(state)`. |
 | `combineManagedResources` | Function |  |
 | `CtxArg` | Type |  |
 | `defineListener` | Function | Build a listener-backed Sub factory whose cleanup is mandatory and derived. |
@@ -51,7 +51,7 @@ import { … } from "@demlik/tea";
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |
 | `foldMsgs` | Function |  |
-| `FoldRefusal` | Interface | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no cell, where. |
+| `FoldRefusal` | Interface | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no handler, where. |
 | `foldUpdates` | Function |  |
 | `formOf` | Function |  |
 | `fromBroadcastChannel` | Function |  |
@@ -93,7 +93,7 @@ import { … } from "@demlik/tea";
 | `PortEmitter` | Interface | Augmentation injected onto `ctx` inside Cmd handlers. |
 | `PortNameCollisionError` | Class | Thrown by `definePort` when a name has already been registered in the current process. |
 | `QuiescenceTimeoutError` | Class | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
-| `reconcile` | Function | The client prediction/reconciliation helper — the Gambetta/Valve authoritative-server loop's reconcile step, generalized (#214, epic #186). |
+| `reconcile` | Function | The client prediction/reconciliation helper — the Gambetta/Valve authoritative-server loop's reconcile step, generalized. |
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |
 | `replay` | Function |  |
@@ -132,8 +132,8 @@ import { … } from "@demlik/tea";
 | `TransportBattery` | Interface | What the battery returns: a Sub builder (for `subscriptions`), the Sub's `subscribe` handler (for `subscribe.transport`), and a `send(key, outbound)` helper the consumer's Cmd handler calls. |
 | `TransportFactory` | Type | Factory the consumer wires to a platform-specific transport. |
 | `TransportSub` | Interface | The Sub the battery builds. |
-| `tryApplyCell` | Function | `applyCell` with the missing-cell case in the return type. |
-| `tryFoldMsgs` | Function | `foldMsgs` with the missing-cell case in the return type, INCLUDING which message failed. |
+| `tryApplyCell` | Function | `applyCell`, with "no handler for this Msg" moved into the return type instead of a throw. |
+| `tryFoldMsgs` | Function | `foldMsgs`, with the "no handler for this Msg" case in the return type, INCLUDING which message failed. |
 | `tryInterpret` | Function |  |
 | `UpdateForm` | Type |  |
 | `WebSocketFactoryOpts` | Interface |  |

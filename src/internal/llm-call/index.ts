@@ -169,7 +169,7 @@ export type MessageLoader<P extends string, Msg> = (
 export type ModelFactory<Msg> = (modelId: string | null) => Llm<Msg>;
 
 /**
- * The plain-function model port — the common path (#58). One async function
+ * The plain-function model port — the common path. One async function
  * from the assembled messages to the model's answer; the handler validates the
  * answer through the purpose's `Schema` exactly as it re-validates the
  * structured-output path, so a malformed answer is a `resilient_err`, never a
@@ -317,11 +317,11 @@ export interface LlmCallConfig<
 // ===========================================================================
 
 /**
- * One LLM call request — the resilient-call `input` for this knob, carried on
- * the `resilient_run` Cmd as plain data (no closures, invariant 3). Mirrors the
- * seed's purpose-discriminated `CallLlmCmd`: a `purpose` selecting the schema +
- * prompt assembly, the `model` id, and the opaque per-purpose `payload` the
- * loader consumes.
+ * One LLM call request — the resilient-call `input` for this module, carried on
+ * the `resilient_run` Cmd as plain data — no closures, so it survives
+ * persistence and replay. Purpose-discriminated: a `purpose` selecting the
+ * schema + prompt assembly, the `model` id, and the opaque per-purpose
+ * `payload` the loader consumes.
  *
  * `key` defaults to `purpose` when the consumer calls `attempt(s, purpose, …)`,
  * so one in-flight call per purpose is tracked under the resilient-call slice —
@@ -412,7 +412,7 @@ export interface LlmCallPorts<
 }
 
 /**
- * The effect Cmd the knob emits: run the LLM call for `key` with `input`. The
+ * The effect Cmd this module emits: run the LLM call for `key` with `input`. The
  * `input` is the plain `LlmCall` request — the handler reads `purpose` /
  * `model` / `payload` off it (invariant 3: Cmds are data).
  *

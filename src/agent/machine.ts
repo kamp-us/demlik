@@ -1,7 +1,7 @@
 /**
  * @demlik/tea/agent — the wired-machine surface.
  *
- * The Cmd / Msg vocabulary the knob speaks, the knob interface `createAgent`
+ * The Cmd / Msg vocabulary the agent speaks, the handle interface `createAgent`
  * returns (`AgentKnob` / `AgentToMachine`), the do↔agent boot port, the
  * semantic lifecycle event stream + its projector (`agentEvents`), and the two
  * pure wiring helpers `mergeInterpret` / `liftAgent`. The reducer core (the
@@ -37,7 +37,7 @@ import type {
 import type { AgentState, AgentTurn } from "./types";
 
 // ===========================================================================
-// Cmds + Msgs the knob speaks. Generic over the composed bricks' shapes.
+// Cmds + Msgs the agent speaks. Generic over the composed wrappers' shapes.
 // ===========================================================================
 
 /** The brain-call effect Cmd, inherited from `../llm-call`. */
@@ -49,16 +49,16 @@ export type AgentLlmRunCmd<P extends string> = LlmRunCmd<P>;
  * precisely and `toMachine` merges the interpret halves with no laundering cast:
  *
  *   - `AgentLlmRunCmd<P>`     — the brain-call run Cmd (`resilient_run`), folded
- *                              by the wired `brainHandlers` cell.
+ *                              by the wired `brainHandlers` handler.
  *   - `MonitoredRunCmd<unknown>` — the durable checkpoint write the monitored-run
  *                              slice emits, present in the union ONLY when
  *                              checkpointing is on (`Snap = true`). With
  *                              checkpointing off the monitored-run slice never
  *                              emits a `snapshot_write` Cmd, so it is config-derived
  *                              OUT of the emitted set — the consumer is never asked
- *                              to interpret a Cmd that can never fire (#55).
+ *                              to interpret a Cmd that can never fire.
  *   - `TC`                    — the consumer's per-tool effect, mapped to the
- *                              consumer's own tool interpret cell.
+ *                              consumer's own tool interpret handler.
  *
  * `Snap` defaults to `true` so the verb-internal usage (which forwards whatever
  * monitored-run emits) and the published type stay a safe superset; the wired
@@ -77,14 +77,14 @@ export type AgentCmd<
   | TC;
 
 /**
- * The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret` (#55).
+ * The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`.
  * Resolves on the `Snap` discriminant the snapshotting overload of `createAgent`
  * fixes (`true` checkpointing-on / `false` off):
  *
- *   - checkpointing ON  → a REQUIRED `snapshot_write` cell
+ *   - checkpointing ON  → a REQUIRED `snapshot_write` handler
  *     (`Interpret<M, MonitoredRunCmd<unknown>, Ctx>`). A real checkpoint write
  *     MUST be wired — the agent never defaults it to a no-op.
- *   - checkpointing OFF → `{ snapshot_write?: never }`. The cell is FORBIDDEN:
+ *   - checkpointing OFF → `{ snapshot_write?: never }`. The handler is FORBIDDEN:
  *     the Cmd is config-derived out of the emitted set, so wiring it would be
  *     dead code. The consumer cannot even mention `snapshot_write`.
  *
@@ -104,14 +104,14 @@ export type SnapshotInterpret<
  * The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants
  * so the snapshotting / compaction overloads of `createAgent` hand back the right
  * obligations. The `toolInterpret` requires (ON) or forbids (OFF) the
- * `snapshot_write` cell via {@link SnapshotInterpret} and the `compact_run` cell
+ * `snapshot_write` handler via {@link SnapshotInterpret} and the `compact_run` handler
  * via {@link CompactInterpret}, and the machine's Cmd type is the config-derived
  * `AgentCmd<P, TC, Snap, Compact>`.
  *
- * `tools` (#56) is a `toolRouter`: its cells are merged in, its settled
+ * `tools` is a `toolRouter`: its handlers are merged in, its settled
  * `<name>_ok` / `<name>_err` Msgs join the machine's `M` and fold into the
  * conversation, and its Cmds leave the `toolInterpret` obligation — a consumer
- * whose `toolOf` is the router's supplies only the snapshot / compaction cells.
+ * whose `toolOf` is the router's supplies only the snapshot / compaction handlers.
  * With no router (`T = never`) every type here reads exactly as before.
  */
 export type AgentToMachine<
@@ -140,11 +140,11 @@ export type AgentToMachine<
 >;
 
 /**
- * The agent knob `createAgent` returns — the uniform verb contract every tea
+ * The agent handle `createAgent` returns — the uniform verb contract every tea
  * composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers`
  * escape hatch. `Snap` flows ONLY into `toMachine`'s `toolInterpret` obligation
- * (the snapshot derivation, #55); every verb is snapshot-agnostic. The model
- * message shape `Msg` does not appear on the knob surface (it is internal to the
+ * (the snapshot derivation); every verb is snapshot-agnostic. The model
+ * message shape `Msg` does not appear on the handle's surface (it is internal to the
  * brain call's loader), so it is not a type parameter here — only `createAgent`
  * carries it, to thread the config's `loadMessages` / `model` ports.
  */
@@ -227,7 +227,7 @@ export interface AgentKnob<
   ) => AgentDetachedHandlers<P, M>;
 }
 
-/** A verb taking the state + `Args`, returning the knob's `[State, Cmd[]]` tuple. */
+/** A verb taking the state + `Args`, returning the agent's `[State, Cmd[]]` tuple. */
 type AgentVerb1<
   Stage,
   P extends string,
@@ -249,10 +249,10 @@ export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
 
 /**
  * The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared
- * shape of both bricks' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg`
+ * shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg`
  * are both `DeadlineExceeded`). One Msg variant covers both timers; `onTimer`
  * disambiguates by Sub id. This is also the machine Msg the `subscribeDeadline`
- * cell dispatches directly (no wrapping), matching the sibling gold standard.
+ * handler dispatches directly (no wrapping), matching the sibling gold standard.
  */
 export type AgentTimerMsg = LlmTimerMsg;
 
@@ -266,7 +266,7 @@ export type AgentPorts<
 /**
  * The LEGACY detached brain-call handler dictionary `handlers(ports)` returns —
  * the inherited `../llm-call` detached form's exact shape, NOT an `Interpret`.
- * The `resilient_run` cell runs the invoke inside `ctx.waitUntil` and dispatches
+ * The `resilient_run` handler runs the invoke inside `ctx.waitUntil` and dispatches
  * the consumer's `onOk` / `onErr` Msg directly (returning `void`), so it is a
  * fire-and-forget handler with a structural `{ waitUntil, dispatch }` ctx — it
  * does not re-enter the resilient settle Msg and so does not drive the retry
@@ -287,7 +287,7 @@ export type AgentDetachedHandlers<P extends string, M> = {
 };
 
 // ===========================================================================
-// AgentBootPort — the typed do↔agent boot seam (issue #60).
+// AgentBootPort — the typed do↔agent boot seam.
 // ===========================================================================
 //
 // A run that rehydrated mid-loop must re-fire its one outstanding effect on
@@ -337,8 +337,8 @@ export function agentBootMsg(at: number): AgentBootMsg {
  * settle Msg advances both the retry slice and the conversation (the L3 fix).
  * Exposing `agent_turn` as a dispatchable Msg re-opened the stuck-`running` bug:
  * a hand-fed turn folds the conversation without ever re-entering `resilient_ok`,
- * so `succeed` never runs and the resilient slice stays `running` (#54). The
- * `turn` verb remains on the knob for the consumer that wires the verbs by hand
+ * so `succeed` never runs and the resilient slice stays `running`. The
+ * `turn` verb remains on the handle for the consumer that wires the verbs by hand
  * (manual wiring), but it is not part of the one wired machine's Msg surface.
  */
 export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
@@ -365,27 +365,27 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   // llm-call settle shape, dispatched verbatim by the substrate's re-entry.
   | AgentLlmOkMsg<P, O>
   | AgentLlmErrMsg<P>
-  // The compaction settle Msgs RE-ENTER from the compaction interpret cell
-  // (#85) — `compact_ok` folds the summary back (drops the oldest N turns +
+  // The compaction settle Msgs RE-ENTER from the compaction interpret handler
+  // — `compact_ok` folds the summary back (drops the oldest N turns +
   // their tool records, then fires the next brain call), `compact_err` backs off
   // via the compaction slice's retry or — on exhaustion — proceeds without
   // compacting (errors are data). Dedicated discriminants, re-keyed off the
-  // composed resilient settle at the cell boundary.
+  // composed resilient settle at the handler boundary.
   | AgentCompactOkMsg
   | AgentCompactErrMsg
   // The timer Msg is `DeadlineExceeded` itself (not wrapped) so the
-  // `subscribeDeadline` cell dispatches it straight into `update`, exactly as
+  // `subscribeDeadline` handler dispatches it straight into `update`, exactly as
   // the resilient-call / llm-call / monitored-run gold standards wire it.
   | AgentTimerMsg
   | AgentBootMsg;
 
 // ===========================================================================
-// AgentEvent — the SEMANTIC lifecycle event stream (issue #47).
+// AgentEvent — the SEMANTIC lifecycle event stream.
 // ===========================================================================
 
 /**
  * The agent's PUBLIC lifecycle events — the semantic stream a consumer
- * subscribes to via `runtime.on(type, …)` (#47). This is the seam that
+ * subscribes to via `runtime.on(type, …)`. This is the seam that
  * DECOUPLES observability/SSE code from the agent's PRIVATE retry/loop Msg
  * vocabulary: where the old code switched on `resilient_ok` / `agent_tool_ok`
  * (the inherited resilient-call / tool-fan-out plumbing) off the raw `observe`
@@ -415,7 +415,7 @@ export type AgentEvent<R> =
 
 /**
  * Project one APPLIED agent transition `(msg, state)` to its semantic
- * {@link AgentEvent}s (#47) — the `events` projector a consumer passes to
+ * {@link AgentEvent}s — the `events` projector a consumer passes to
  * `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`.
  *
  * This is the ONE place the agent's PRIVATE Msg names are read: it maps
@@ -432,7 +432,7 @@ export type AgentEvent<R> =
  * exactly once (the agent is terminal there and dispatches no further
  * transition), so the event fires once per run.
  *
- * A machine wired with `toMachine({ tools })` (#56) settles tools through the
+ * A machine wired with `toMachine({ tools })` settles tools through the
  * router's `<name>_ok` Msgs instead of `agent_tool_ok`; pass the same router
  * here so those settles project to `ToolSettled` too.
  *
@@ -552,7 +552,7 @@ export function mergeInterpret<
 }
 
 /**
- * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
+ * Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice
  * lives at `state.agent`. Convenience for a host that nests the agent slice
  * under a named field; the single-slice host uses the verbs' tuple directly.
  * PURE — a thin record rebuild, no clock / RNG.

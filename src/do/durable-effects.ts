@@ -108,7 +108,7 @@ export interface OwedEffect<E> {
   readonly effect: E;
 }
 
-/** The empty ledger — the fold's seed (a fresh actor owes nothing). */
+/** The empty ledger — the fold's starting value (a fresh actor owes nothing). */
 export function emptyLedger<E>(): PendingEffectsLedger<E> {
   return new Map<DeliveryId, E>();
 }

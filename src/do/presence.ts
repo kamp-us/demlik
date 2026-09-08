@@ -90,7 +90,7 @@ export interface BroadcastReport {
   readonly skipped: number;
 }
 
-/** Optional knobs for {@link broadcastFrame}. */
+/** Optional settings for {@link broadcastFrame}. */
 export interface BroadcastOptions<S extends PresenceSocket> {
   /**
    * A socket to exclude from the fan-out — typically the sender, so a collab /
@@ -152,7 +152,7 @@ export function broadcastFrame<S extends PresenceSocket>(
   return { sent, skipped };
 }
 
-/** Optional knobs for {@link registerHibernatableSocket} / {@link acceptPresenceSocket}. */
+/** Optional settings for {@link registerHibernatableSocket} / {@link acceptPresenceSocket}. */
 export interface RegisterOptions<A> {
   /**
    * Hibernation tags for the socket — the same strings `ctx.getWebSockets(tag)`

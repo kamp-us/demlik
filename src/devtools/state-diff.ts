@@ -24,7 +24,7 @@ import {
 } from "../internal/persistence/trace-replay/state-walk";
 
 /**
- * A single differing cell between two states.
+ * A single differing leaf value between two states.
  *
  *   - `kind: "added"`   — the path exists in `actual` but not `expected`
  *                         (`expected` is `undefined`).
@@ -45,7 +45,7 @@ export interface StateChange {
 }
 
 /**
- * Deep-walk two states and return EVERY differing cell, in deterministic
+ * Deep-walk two states and return EVERY differing leaf value, in deterministic
  * pre-order (the node before its children; children in array-index order, then
  * sorted-union key order for objects). The empty array means the two states are
  * deeply equal.

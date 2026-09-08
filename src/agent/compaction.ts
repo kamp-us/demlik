@@ -1,5 +1,5 @@
 /**
- * @demlik/tea/agent — the context-compaction seam (#85).
+ * @demlik/tea/agent — the context-compaction seam.
  *
  * The opt-in transcript snapshot-and-compact policy, shaped exactly like
  * `AgentSnapshotConfig` (see `./types`) so a short agent pays nothing and cannot
@@ -22,7 +22,7 @@ import { schemaFromGuard } from "./schema";
 import type { Conversation } from "./types";
 
 /**
- * The reserved purpose the compaction round-trip runs under (#85). Compaction
+ * The reserved purpose the compaction round-trip runs under. Compaction
  * is a DEDICATED resilient LLM call (design B1), NOT one of the consumer's brain
  * purposes `P` — so it carries its own purpose literal, kept in the agent's
  * private `$`-namespace (the same reserved-namespace discipline `with-resilience`
@@ -79,7 +79,7 @@ export interface CompactionSummary {
 }
 
 /**
- * The consumer's compaction policy (#85). One PURE trigger; the impure
+ * The consumer's compaction policy. One PURE trigger; the impure
  * summarize round-trip is composed by the agent (a dedicated resilient LLM call
  * under the reserved `$compact` purpose, inheriting retry/backoff — design B1),
  * so the policy never reaches the model itself.
@@ -108,14 +108,15 @@ export interface CompactionPolicy<R, Msg = unknown> {
 }
 
 /**
- * The compaction discriminant (#85), shaped exactly like {@link
+ * The compaction discriminant, shaped exactly like {@link
  * AgentSnapshotConfig}. Compaction is either OFF —
  * `compaction` is structurally absent and the agent never emits a `compact_run`
  * Cmd — or ON, in which case `compaction` is a {@link CompactionPolicy}. A `{
  * compaction?: never }` member (rather than a bare optional) makes the OFF case
  * load-bearing: it forbids passing `compaction` at all, so `toMachine`
- * config-derives whether the `compact_run` interpret cell is REQUIRED (ON) or
- * FORBIDDEN (OFF) — never a silent no-op cell, the #55 type-lie-killer reused.
+ * config-derives whether the `compact_run` interpret handler is REQUIRED (ON) or
+ * FORBIDDEN (OFF) — never a silent no-op handler, the same type-lie-killer
+ * `AgentSnapshotConfig` uses.
  */
 export type AgentCompactionConfig<R, Msg> =
   | { readonly compaction?: never }
@@ -123,10 +124,10 @@ export type AgentCompactionConfig<R, Msg> =
 
 /**
  * The "summarize the oldest N turns" effect Cmd — the compaction round-trip's
- * carrier (#85). It mirrors the brain `resilient_run` Cmd's shape (a `key` + the
+ * carrier. It mirrors the brain `resilient_run` Cmd's shape (a `key` + the
  * plain `LlmCall<CompactionPurpose>` input, no closures) but under the dedicated
- * `compact_run` discriminant so it routes to the compaction interpret cell, not
- * the brain one. The cell composes the resilient brick (retry/backoff) and
+ * `compact_run` discriminant so it routes to the compaction interpret handler, not
+ * the brain one. The handler composes the resilient-call wrapper (retry/backoff) and
  * returns the re-keyed `compact_ok` / `compact_err` settle for re-entry.
  */
 export type AgentCompactRunCmd = Cmd<typeof MsgType.CompactRun> & {
@@ -152,14 +153,14 @@ export type AgentCompactErrMsg = {
 
 /**
  * The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret`
- * (#85), the exact twin of {@link SnapshotInterpret}.
+ * — the exact twin of {@link SnapshotInterpret}.
  * Resolves on the `Compact` discriminant the compaction overload of
  * `createAgent` fixes:
  *
- *   - compaction ON  → a REQUIRED `compact_run` cell
+ *   - compaction ON  → a REQUIRED `compact_run` handler
  *     (`Interpret<M, AgentCompactRunCmd, Ctx>`). The summarize round-trip MUST be
  *     wired — the agent never defaults it to a no-op.
- *   - compaction OFF → `{ compact_run?: never }`. The cell is FORBIDDEN: with no
+ *   - compaction OFF → `{ compact_run?: never }`. The handler is FORBIDDEN: with no
  *     policy the agent never emits a `compact_run` Cmd, so wiring it would be
  *     dead code. The consumer cannot even mention `compact_run`.
  *
