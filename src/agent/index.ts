@@ -27,9 +27,10 @@
  *     delegates the resilient slice + verbs and reuses the detached handler.
  *   - `../fan-out` — the tool calls a turn produced. Tools dispatch SERIALLY by
  *     default (concurrency 1); fan-out generalizes that to a bounded number
- *     LAUNCHED per transition, `config.toolConcurrency` — a ledger knob, not a
- *     wall-clock one, since `runInterpret` never interleaves two Cmd handlers
- *     (ADR 0018). Each
+ *     LAUNCHED per transition, `config.toolConcurrency`. Above `1` a router's
+ *     tool cells overlap on the clock while `runInterpret` stays serial — the
+ *     fan-out is inside the Cmd handler, and its settles fold in emission
+ *     order (ADR 0018). Each
  *     tool is an `of(call)` Cmd the consumer's own interpret performs; results
  *     route back through `toolOk` / `toolErr`. When the batch drains, the agent
  *     folds the gathered results back into the conversation and fires the next
@@ -157,11 +158,12 @@ import {
   mergeInterpret,
   type SnapshotInterpret,
 } from "./machine";
-import type {
-  AnyToolDef,
-  ToolRouter,
-  WiredToolCmd,
-  WiredToolMsg,
+import {
+  type AnyToolDef,
+  fanOutInterpret,
+  type ToolRouter,
+  type WiredToolCmd,
+  type WiredToolMsg,
 } from "./tool";
 import {
   createToolLadder,
@@ -1447,8 +1449,20 @@ export function createAgent<
     // The router's cells (#56) sit under the consumer's: the router owns the
     // tool Cmds' keys (`Exclude<TC, WiredToolCmd<T>>` took them off the consumer's
     // obligation), the consumer owns the rest, so the two never share a key.
+    // At `toolConcurrency > 1` the router's cells are the FANNING ones (ADR
+    // 0018 option (c)): they launch their tool, return, and settle in
+    // Cmd-emission order through `run`'s own edge, so a turn's calls overlap on
+    // the clock. At the serial default the cells are the exact functions
+    // `toolRouter` built — the knob's own wall-clock promise, and nothing below
+    // it changes.
+    const toolCellsInterpret =
+      tools === undefined
+        ? undefined
+        : (config.toolConcurrency ?? 1) > 1
+          ? fanOutInterpret<T>(tools.interpret)
+          : tools.interpret;
     const consumerInterpret = {
-      ...tools?.interpret,
+      ...toolCellsInterpret,
       ...opts?.toolInterpret,
     } as Interpret<M, NonBrainCmd, Ctx>;
     const interpret: Interpret<M, ACmd, Ctx> = mergeInterpret<

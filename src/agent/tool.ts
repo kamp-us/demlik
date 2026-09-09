@@ -33,7 +33,7 @@ import {
   type TaggedError,
 } from "../index";
 import { MsgType, type MsgTypeValue } from "../protocol";
-import { malformedResult } from "../pure/core";
+import { cmdEdgeOf, detachWorkOf, malformedResult } from "../pure/core";
 import type {
   TaggedFailure,
   ToolCall,
@@ -562,6 +562,92 @@ export function toolRouter<T extends AnyToolDef>(
 
   return { defs, toolOf, interpret, outcomeOf, resilienceOf };
 }
+
+// ===========================================================================
+// fanOutInterpret() — ADR 0018 option (c): overlap INSIDE the Cmd handler.
+// ===========================================================================
+
+/** One interpret cell, erased of its per-tool narrowing. */
+type AnyCell = (
+  cmd: never,
+  ctx: never,
+  dispatch?: (msg: never) => void,
+) => Promise<unknown>;
+
+/**
+ * Give a router's interpret cells real wall-clock overlap without touching the
+ * kernel — pass the table `toolRouter` built, get back one whose cells launch
+ * their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn
+ * while the first tool is still running.
+ *
+ * This is ADR 0018's option (c), and the whole of it. `runInterpret` stays the
+ * serial loop the ADR ruled it must be: it still awaits one handler before
+ * reaching the next Cmd — the handlers just stop being the thing that takes the
+ * time. Three properties are what make that safe, and each is a line below:
+ *
+ * - **Settles fold in Cmd-EMISSION order, never completion order.** Each cell
+ *   chains its dispatch behind the previous cell's, so two tools that overlap
+ *   on the clock still settle a-then-b when a's Cmd was emitted first, whichever
+ *   finished first. That is invariant 2's serializability, and it is what keeps
+ *   a replay of a fanned run identical to the run itself.
+ * - **The settle crosses the SAME edge.** A returned Msg is parsed and stamped
+ *   by `run`'s `cmdEdge`; a dispatched one would not be, so the cell settles
+ *   through `cmdEdgeOf(ctx)` — the edge `run` hands handlers for exactly this.
+ *   One parse, one clock, fanned or not.
+ * - **The work stays counted.** The promise the cell does not return is enlisted
+ *   with `detachWorkOf(ctx)`, so `inFlightCmds` and the dispatch tail see it and
+ *   `stop()` / `idle()` answer under fan-out what they answer serially.
+ *
+ * The ordering has a price, and it is the honest one: a call whose Cmd was
+ * emitted FIRST holds its siblings' settles until it finishes. They still RUN
+ * in parallel — the turn costs the slowest call, not the sum — but a first call
+ * that never returns leaves the later folds parked behind it, exactly as a
+ * serial run would leave them unstarted. `timeoutMs` on the tool is what bounds
+ * that, fanned or not.
+ *
+ * The per-turn LIMIT is not this function's: the agent's fan-out slice already
+ * launches at most `toolConcurrency` calls per transition, so the table simply
+ * must not block. Nothing here is applied below that knob — `toMachine` wires
+ * the bare cells at the serial default, and a tool that never overlaps is the
+ * exact function `toolRouter` built.
+ */
+export function fanOutInterpret<T extends AnyToolDef>(
+  interpret: Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>,
+): Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx> {
+  // The release chain: one per table, so the ordering it imposes is the
+  // ordering of the Cmds that entered THIS machine's interpret.
+  let release: Promise<void> = Promise.resolve();
+  const fanned: Record<string, AnyCell> = {};
+  for (const [type, cell] of Object.entries(
+    interpret as unknown as Record<string, AnyCell>,
+  )) {
+    fanned[type] = async (cmd, ctx, dispatch) => {
+      const edge = cmdEdgeOf(ctx);
+      const detach = detachWorkOf(ctx);
+      // Launched, NOT awaited — this one line is the overlap.
+      const work = (async () => cell(cmd, ctx, dispatch))();
+      const prior = release;
+      const settled = work.then(async (follow) => {
+        // The wait is here rather than before `work` so the tools overlap and
+        // only their SETTLES queue: a tool whose Cmd came second still starts
+        // at once and merely waits its turn to fold.
+        await prior;
+        const msg = edge(cmd, follow);
+        if (msg === undefined || msg === null) return;
+        dispatch?.(msg as never);
+      });
+      // A rejecting cell must not strand the tools behind it — `detach` is what
+      // routes that rejection to the runtime's sink.
+      release = settled.then(swallow, swallow);
+      detach(settled);
+      return undefined;
+    };
+  }
+  return fanned as unknown as Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>;
+}
+
+/** The release chain carries no value and must not break — both arms land here. */
+function swallow(): void {}
 
 // The two settled arms share one shape once the `type` has been matched
 // against the router's own def; `value` / `error` are read per arm.

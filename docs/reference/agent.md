@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (130)
+## Exports (131)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -83,6 +83,7 @@ These are the ones to read first:
 | `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
 | `EndedRun` | Type | The ENDED phases — a run that finished (`done`) or was stopped from outside (`cancelled`). |
+| `fanOutInterpret` | Function | Give a router's interpret cells real wall-clock overlap without touching the kernel — pass the table `toolRouter` built, get back one whose cells launch their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn while the first tool is still running. |
 | `InterpretOverlay` | Type | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |
 | `isAgentTurn` | Function | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |

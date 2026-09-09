@@ -19,6 +19,7 @@ import {
   cmdEdge,
   cmdEdgeOver,
   depsInactive,
+  detachWork,
   structuralHash,
 } from "./pure/core";
 import type {
@@ -334,7 +335,11 @@ export function run<
   const augmentedCtx: Ctx & RequiredCtx<C> & PortEmitter = Object.assign(
     {},
     ctx,
-    { emit: portEmit, [cmdEdge]: settleAtEdge },
+    {
+      emit: portEmit,
+      [cmdEdge]: settleAtEdge,
+      [detachWork]: detachInFlight,
+    },
   );
 
   // Every step chains onto `tail` — the single concurrency gate.
@@ -610,6 +615,34 @@ export function run<
     return Promise.resolve(work).finally(() => {
       inFlightCmds--;
     });
+  }
+
+  /**
+   * Enlist work a handler will NOT return — the `detachWork` seam on ctx.
+   *
+   * A handler that fans out inside its own Cmd (ADR 0018) returns before its
+   * effect finishes, so the promise `trackInFlight` would have counted never
+   * reaches `runInterpret`. Handing it here puts it back on BOTH accountings a
+   * returned promise had: `trackInFlight`, so `stop()` still reports it as
+   * discarded work, and the serial `tail`, so `idle()` drains it rather than
+   * calling a run with tools still running quiescent. The tail extension is
+   * SYNCHRONOUS, so a `drainToQuiescence` that has already read `tail` sees the
+   * reference change and loops again.
+   *
+   * This is not a second interpret loop and it interleaves nothing:
+   * `runInterpret` still runs one handler at a time. It only re-attaches a
+   * promise the handler chose to outlive.
+   */
+  function detachInFlight(work: Promise<unknown>): void {
+    const tracked = trackInFlight(work);
+    // The rejection has no caller — the handler returned already — so it routes
+    // to the sink exactly as an un-awaitable follow-up's does.
+    tracked.catch(reportUndelivered);
+    tail = tail
+      .then(async () => {
+        await tracked;
+      })
+      .catch(() => {});
   }
 
   /**

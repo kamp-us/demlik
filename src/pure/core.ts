@@ -406,6 +406,35 @@ export function cmdEdgeOf(ctx: unknown): CmdEdge {
   return edge ?? ((_, follow) => follow);
 }
 
+// === The detached-work edge — work a handler outlives ===
+//
+// A handler that returns BEFORE its effect finishes (so the serial interpret
+// loop can reach the next Cmd — ADR 0018's fan-out-inside-the-Cmd shape) leaves
+// the runtime with no promise to count. Handing that promise to `detachWorkOf`
+// puts it back on the two accountings a returned promise would have been on:
+// `inFlightCmds`, which `stop()` reports as discarded work, and the serial
+// dispatch tail, which `idle()` drains to quiescence. Without it a fanned run
+// reads as quiescent while its tools are still running.
+
+/** Enlist a promise the handler will not return in the runtime's accounting. */
+export type DetachWork = (work: Promise<unknown>) => void;
+
+/** The ctx key `run` hands its detach seam under — a symbol, like `cmdEdge`. */
+export const detachWork: unique symbol = Symbol("tea.detachWork");
+
+/**
+ * The detach seam `run` put on this ctx, or a no-op when the handler runs
+ * outside `run` (a unit test calling it directly), where there is no tail to
+ * extend and no count to hold.
+ */
+export function detachWorkOf(ctx: unknown): DetachWork {
+  const detach =
+    typeof ctx === "object" && ctx !== null
+      ? (ctx as { [detachWork]?: DetachWork })[detachWork]
+      : undefined;
+  return detach ?? (() => undefined);
+}
+
 function isSettledShape(follow: unknown): follow is {
   readonly type: string;
   readonly cmd: unknown;
