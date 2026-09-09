@@ -17,6 +17,12 @@ import { MsgType } from "../protocol";
 import type { Interpret, RequiredCtx } from "../pure/core";
 import type { RetryPolicy } from "../retry-backoff";
 import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
+import {
+  type AgentCompactOkMsg,
+  type AgentCompactRunCmd,
+  COMPACTION_PURPOSE,
+  type CompactionPolicy,
+} from "./compaction";
 import { createAgent } from "./index";
 import {
   type AgentCmd,
@@ -35,6 +41,7 @@ import {
   type WiredToolMsg,
 } from "./tool";
 import {
+  type AgentConfigCore,
   type AgentState,
   type AgentTurn,
   agentTurnSchema,
@@ -109,12 +116,24 @@ export type DefinedAgentMsg<T extends AnyToolDef> =
   | AgentMachineMsg<LidPurpose, LidOutputs, ToolResult<T>>
   | WiredToolMsg<T>;
 
-/** The Cmd union a defined agent's machine emits — one interpret cell per member. */
+/**
+ * The Cmd union a defined agent's machine emits — one interpret cell per member.
+ *
+ * Snapshotting is fixed OFF (the lid checkpoints through the run's `store`, not
+ * the monitored-run cadence), so `snapshot_write` is out of the union.
+ * Compaction is fixed ON, which is the SUPERSET of the two machines
+ * `defineAgent` builds: with the knob set the `compact_run` cell is the one the
+ * lid wires, and without it the reducer provably emits no such Cmd, so the
+ * machine carries no cell for it and the union simply has a member nothing
+ * reaches. Naming the superset is what lets one type describe both arms — and
+ * it is why `with` may wrap `compact_run` on a compacting agent and gets
+ * `overlaid`'s "this machine has none of that cell" throw on one without.
+ */
 export type DefinedAgentCmd<T extends AnyToolDef> = AgentCmd<
   LidPurpose,
   ToolCmd<T>,
   false,
-  false
+  true
 >;
 
 /**
@@ -164,6 +183,10 @@ export type DefinedAgentModel =
  * one that keeps a run going, `retry`, the brain call's backoff ladder. Omit
  * both guards and the run is unbounded: it ends only when the model stops
  * asking for tools.
+ *
+ * Two more knobs bound what a run COSTS rather than whether it ends:
+ * `compaction`, which stops the transcript growing, and `toolConcurrency`,
+ * which says how many of a turn's tool calls go out at once.
  */
 export interface DefineAgentConfig<T extends AnyToolDef> {
   /** The brain — either {@link DefinedAgentModel} shape. */
@@ -232,6 +255,69 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
     outcome: ToolFailureOf<T>,
     ctx: ToolErrorContext,
   ) => void | Promise<void>;
+  /**
+   * Bounds a run that keeps going without ever failing: the transcript budget,
+   * past which the OLDEST turns are folded into one model-written summary
+   * before the next brain call, so a long run's prompt stops growing instead of
+   * climbing until the provider rejects it.
+   *
+   * The knob is a THRESHOLD, not a policy function — see
+   * {@link DefineAgentCompaction}. `compaction` is what a run tolerates, and the
+   * summarize round-trip that enforces it is wiring, so the lid takes the
+   * former and supplies the latter from the `model` it already has.
+   *
+   * Omit → NO compaction, exactly as before: the transcript grows for as long
+   * as the model keeps asking for tools. Nothing is defaulted on your behalf —
+   * a silent budget would change the prompt every existing caller sends.
+   */
+  readonly compaction?: DefineAgentCompaction;
+  /**
+   * How many of ONE turn's tool calls a transition launches at once. At the
+   * default `1` a turn's calls go out one at a time, each waiting for the last
+   * to settle; raise it and up to that many are launched together, so they are
+   * all in flight in the fan-out ledger rather than queued behind each other.
+   * A turn asking for more calls than this runs them in waves.
+   *
+   * It is a DISPATCH knob, and today it is not a wall-clock one: the kernel
+   * interprets a transition's Cmds one after another (`runInterpret` awaits each
+   * handler), so two launched calls still run back to back and the turn costs
+   * their sum either way. Raising it makes the ledger — and a `store`'s record
+   * of it — say what was launched; it does not make two slow tools finish in the
+   * time of one.
+   *
+   * Omit (or `1`) → serial dispatch, exactly as before.
+   */
+  readonly toolConcurrency?: number;
+}
+
+/**
+ * The lid's compaction budget: the two numbers that say when a transcript is
+ * too long and how much of it survives the fold. Both are plain counts, so the
+ * trigger they build is PURE — a replay re-decides identically, and no clock or
+ * token estimate enters the Model (ADR 0004).
+ *
+ * This is deliberately a threshold rather than the core's `planCompaction`
+ * function: a policy function is a second place a lid agent would have to learn
+ * the conversation shape, and the lid hides wiring, never state (ADR 0015). A
+ * run that needs its own heuristic descends to `createAgent`, whose
+ * `CompactionPolicy` this is built from.
+ */
+export interface DefineAgentCompaction {
+  /**
+   * Fold once the conversation holds at least this many turns, counted BEFORE
+   * the brain call about to fire. Must be at least `1`.
+   */
+  readonly afterTurns: number;
+  /**
+   * How many of the NEWEST turns survive the fold intact, beside the summary.
+   * Everything older becomes the summary's one synthetic head turn. Omit → `0`:
+   * the whole transcript folds into the summary.
+   *
+   * A fold worth fewer than two turns is skipped by the agent itself — one turn
+   * replaced by one summary shrinks nothing — so `keepTurns` within one of
+   * `afterTurns` is a policy that never fires.
+   */
+  readonly keepTurns?: number;
 }
 
 /**
@@ -444,38 +530,67 @@ function definedAgent<T extends AnyToolDef>(
   const machineWith = (
     input: string,
     onChunk: ((chunk: TurnChunk) => void) | undefined,
-  ): DefinedAgentMachine<T> =>
-    overlaid(
-      createAgent<
-        string,
-        LidPurpose,
-        LidOutputs,
-        ToolResult<T>,
-        ToolCmd<T>,
-        AgentMessage
-      >({
-        stages: [input],
-        turnOf: () => "act",
-        schemas: { act: agentTurnSchema },
-        model: brainOf(config.model, onChunk),
-        instructions: config.instructions,
-        payloadOf: promptOf,
-        loadMessages: messagesOf,
-        toolOf: tools.toolOf,
-        // The per-tool timeout / retry knob (#117). The lid grows no option for
-        // it: the policy is declared on the `tool()` that needs it, and the
-        // router is what carries it down to the reducer that runs it.
-        toolResilienceOf: tools.resilienceOf,
-        // The BRAIN-call ladder (#146), which does grow one, because a bare
-        // `model` function has nowhere else to declare it. Forwarded only when
-        // set, so an omitted lid option leaves `AgentConfigCore.retry` unset
-        // and the brain call unbackedoff, byte for byte as before.
-        ...(config.retry !== undefined ? { retry: config.retry } : {}),
-        maxTurns: config.maxTurns,
-        deadlineMs: config.deadlineMs,
-      }).toMachine<DefinedAgentCtx<T>, T>({ tools }),
-      overlays,
-    );
+  ): DefinedAgentMachine<T> => {
+    const brain = brainOf(config.model, onChunk);
+    // The half of the core config that does not depend on whether compaction is
+    // configured. Spread into BOTH arms below rather than mutated into one, so
+    // the two `createAgent` calls are provably the same agent apart from the
+    // compaction discriminant.
+    const core: LidCoreConfig<T> = {
+      stages: [input],
+      turnOf: () => "act" as const,
+      schemas: { act: agentTurnSchema },
+      model: brain,
+      instructions: config.instructions,
+      payloadOf: promptOf,
+      loadMessages: messagesOf,
+      toolOf: tools.toolOf,
+      // The per-tool timeout / retry knob (#117). The lid grows no option for
+      // it: the policy is declared on the `tool()` that needs it, and the
+      // router is what carries it down to the reducer that runs it.
+      toolResilienceOf: tools.resilienceOf,
+      // The BRAIN-call ladder (#146), which does grow one, because a bare
+      // `model` function has nowhere else to declare it. Forwarded only when
+      // set, so an omitted lid option leaves `AgentConfigCore.retry` unset
+      // and the brain call unbackedoff, byte for byte as before.
+      ...(config.retry !== undefined ? { retry: config.retry } : {}),
+      // Forwarded only when set, for the same reason: an omitted knob leaves
+      // `AgentConfigCore.toolConcurrency` unset and the fan-out at its serial
+      // default.
+      ...(config.toolConcurrency !== undefined
+        ? { toolConcurrency: config.toolConcurrency }
+        : {}),
+      maxTurns: config.maxTurns,
+      deadlineMs: config.deadlineMs,
+    };
+    // `AgentCompactionConfig` is a DISCRIMINATED union — compaction is either
+    // structurally absent or a whole policy — and the `compact_run` interpret
+    // obligation is derived from which member was passed. So the two arms are
+    // written out rather than folded into one spread: a conditional spread would
+    // widen the config to a bare optional, which is the very type lie the
+    // discriminant exists to refuse.
+    const compaction = config.compaction;
+    const agent: DefinedAgentMachine<T> =
+      compaction === undefined
+        ? // The one assertion in the pair, and it widens the Cmd union rather
+          // than the interpret obligation: this machine's `AgentCmd` fixes
+          // compaction OFF, `DefinedAgentMachine` names the ON superset, and the
+          // gap is the `compact_run` Cmd a policy-less reducer provably never
+          // emits. Widening a union nothing can produce is sound; the reverse —
+          // claiming a cell that is not wired — is what the discriminant refuses.
+          (createAgent<
+            string,
+            LidPurpose,
+            LidOutputs,
+            ToolResult<T>,
+            ToolCmd<T>,
+            AgentMessage
+          >(core).toMachine<DefinedAgentCtx<T>, T>({
+            tools,
+          }) as DefinedAgentMachine<T>)
+        : compactingMachine(core, compaction, brain, tools);
+    return overlaid(agent, overlays);
+  };
   // The public door down carries no chunk sink: `machine(input)` is handed to
   // the raw kernel by a caller who has no run options to read one from.
   const machine = (input: string): DefinedAgentMachine<T> =>
@@ -611,6 +726,135 @@ function contained<E>(what: string, listener: (event: E) => void) {
     } catch (err) {
       console.warn(`@demlik/tea: a run's ${what} listener threw`, err);
     }
+  };
+}
+
+/**
+ * The `createAgent` config both of `defineAgent`'s arms share — everything but
+ * the compaction discriminant, named so the two arms can be handed one value
+ * and provably differ in that field alone.
+ */
+type LidCoreConfig<T extends AnyToolDef> = AgentConfigCore<
+  string,
+  LidPurpose,
+  LidOutputs,
+  ToolResult<T>,
+  ToolCmd<T>,
+  AgentMessage
+>;
+
+/**
+ * The compacting arm's machine: the same core config plus the policy, wired to
+ * the `compact_run` cell the ON discriminant requires.
+ *
+ * The one assertion lives here, and it is a GENERICS artifact rather than a
+ * claim about the wiring. `toMachine`'s obligation subtracts the router's own
+ * Cmds through `Exclude<TC, WiredToolCmd<T>>`, and `WiredToolCmd` is a
+ * conditional on `T` — unresolvable while `T` is still a type parameter, so TS
+ * cannot see that the router's cells already discharge everything but
+ * `compact_run`. At a concrete `T` it reduces and the obligation is exactly the
+ * cell supplied. `toMachine` spreads the router's table under this one either
+ * way, so nothing here overrides a tool cell.
+ */
+function compactingMachine<T extends AnyToolDef>(
+  core: LidCoreConfig<T>,
+  knob: DefineAgentCompaction,
+  brain: PlainModel<AgentMessage, AgentTurn>,
+  tools: ToolRouter<T>,
+): DefinedAgentMachine<T> {
+  const agent = createAgent<
+    string,
+    LidPurpose,
+    LidOutputs,
+    ToolResult<T>,
+    ToolCmd<T>,
+    AgentMessage
+  >({ ...core, compaction: compactionPolicyOf<ToolResult<T>>(knob) });
+  const wiring = {
+    tools,
+    toolInterpret: { compact_run: summarizeWith(brain) },
+  } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
+  return agent.toMachine<DefinedAgentCtx<T>, T>(wiring);
+}
+
+/**
+ * The system prompt the summarize round-trip runs under. It is the lid's, not
+ * the agent's: the agent's own `instructions` tell the model how to do the job,
+ * and re-sending them here would ask a summarizer to keep working the task.
+ */
+const SUMMARIZE_INSTRUCTION =
+  "Summarize the conversation so far. Preserve the facts, decisions and tool " +
+  "results a continuation would need, and drop everything else. Reply with the " +
+  "summary as your message content and request no tools.";
+
+/**
+ * The core `CompactionPolicy` the lid's threshold knob builds — the whole of the
+ * translation from "how long a transcript I tolerate" to "how many of the oldest
+ * turns to fold now".
+ *
+ * `planCompaction` is PURE and reads only turn counts, so a replay re-decides
+ * identically (design D). Below the threshold it returns `0` and the agent fires
+ * the brain call it was going to fire, which is what makes an unconfigured — and
+ * an under-budget — run byte for byte the run it was before.
+ *
+ * `payloadOf` renders the FOLDING turns and no others: the summarize call is
+ * given exactly the transcript that is about to be dropped, so the summary it
+ * writes is a replacement for that text rather than a restatement of the whole
+ * conversation.
+ */
+function compactionPolicyOf<R>(
+  knob: DefineAgentCompaction,
+): CompactionPolicy<R, AgentMessage> {
+  const keep = knob.keepTurns ?? 0;
+  return {
+    planCompaction: (conversation) =>
+      conversation.turns.length >= knob.afterTurns
+        ? Math.max(0, conversation.turns.length - keep)
+        : 0,
+    payloadOf: (conversation, folding): AgentPrompt<R> => ({
+      instructions: SUMMARIZE_INSTRUCTION,
+      input: null,
+      conversation: {
+        ...conversation,
+        turns: conversation.turns.slice(0, folding),
+        toolRecords: conversation.toolRecords.filter((r) => r.turn < folding),
+      },
+    }),
+  };
+}
+
+/**
+ * The `compact_run` interpret cell the lid wires: the summarize I/O, run through
+ * the SAME `model` the brain calls, because a lid agent has exactly one model
+ * and a second one would be a knob this issue did not add.
+ *
+ * The summary is the returned turn's `content`. A turn is what a
+ * `defineAgent` model resolves, so nothing here asks the adapter for a second
+ * output shape — the tool calls such a turn may carry are ignored, since the
+ * summarizer is not in the loop that could run them.
+ *
+ * A throw propagates: the agent's dedicated compaction resilient slice owns the
+ * retry / backoff and folds a failure as `compact_err`, which proceeds without
+ * compacting rather than failing the run.
+ */
+function summarizeWith(
+  model: PlainModel<AgentMessage, AgentTurn>,
+): (cmd: AgentCompactRunCmd) => Promise<AgentCompactOkMsg> {
+  return async (cmd) => {
+    const payload = cmd.input.payload as AgentPrompt<unknown>;
+    const turn = await model(renderPrompt(payload));
+    // `Date.now()` at the settle, exactly as the composed llm-call handler
+    // stamps the brain call's own settle Msg.
+    return {
+      type: MsgType.CompactOk,
+      key: COMPACTION_PURPOSE,
+      result: {
+        key: COMPACTION_PURPOSE,
+        purpose: COMPACTION_PURPOSE,
+        output: { summary: turn.content },
+      },
+      at: Date.now(),
+    };
   };
 }
 

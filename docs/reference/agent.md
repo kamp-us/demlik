@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (119)
+## Exports (120)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -66,6 +66,7 @@ These are the ones to read first:
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
 | `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself, which is the entry point a newcomer picks, `createAgent` being the layer underneath that you drop to only to walk a stage pipeline of your own. |
+| `DefineAgentCompaction` | Interface | The lid's compaction budget: the two numbers that say when a transcript is too long and how much of it survives the fold. |
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |

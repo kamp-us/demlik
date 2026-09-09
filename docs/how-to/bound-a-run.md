@@ -125,12 +125,22 @@ and went quiet. It is a liveness guard, and it is good at that job.
 | --- | --- | --- |
 | Model round-trips, and so roughly spend | `maxTurns` | Fails the run when the completed-turn count reaches it |
 | A run that has hung | `deadlineMs` | Fails the run after that long with **no advance**; restarts on each advance |
+| How long the prompt gets | `compaction` | Folds the oldest turns into one summary instead of failing anything |
 | Total wall-clock time | — | Not available today — see below |
 | An arbitrary condition on the state | — | Not available today — see below |
 
-Use both together for the common case. `maxTurns` bounds the run's length,
-`deadlineMs` bounds any one stall inside it, and neither substitutes for the
-other.
+Use the two guards together for the common case. `maxTurns` bounds the run's
+length, `deadlineMs` bounds any one stall inside it, and neither substitutes for
+the other.
+
+`compaction` is in the table because it answers a question readers arrive with —
+"how do I stop this thing sending a bigger prompt every turn" — but it is not a
+guard: nothing fails. Set `compaction: { afterTurns: 20 }` and once the
+conversation holds twenty turns the oldest are replaced by one model-written
+summary before the next call, so the transcript stops growing while the run goes
+on. `keepTurns` says how many of the newest survive the fold intact. A long run
+usually wants this **and** `maxTurns`: compaction keeps the prompt payable, and
+only the guard ends the run.
 
 ## What is not available today
 
