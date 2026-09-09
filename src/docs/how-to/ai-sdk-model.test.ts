@@ -43,13 +43,7 @@ import {
  * through the same thirty lines; only the `model` argument changes.
  */
 export function aiSdkModel(model: LanguageModel, tools: readonly AnyToolDef[]) {
-  // No `execute`: tea owns tool execution, so the SDK reports the calls and stops.
-  const declared: ToolSet = Object.fromEntries(
-    tools.map((t) => [
-      t.cmdType,
-      tool({ description: t.description, inputSchema: t.args }),
-    ]),
-  );
+  const declared = declaredTools(tools);
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const result = await generateText({
       model,
@@ -70,6 +64,19 @@ export function aiSdkModel(model: LanguageModel, tools: readonly AnyToolDef[]) {
       provider: result.responseMessages,
     };
   };
+}
+
+/**
+ * The tools, declared to the SDK. No `execute`: tea owns tool execution, so the
+ * SDK reports the calls and stops.
+ */
+function declaredTools(tools: readonly AnyToolDef[]): ToolSet {
+  return Object.fromEntries(
+    tools.map((t) => [
+      t.cmdType,
+      tool({ description: t.description, inputSchema: t.args }),
+    ]),
+  );
 }
 
 /** One tea message in the SDK's shape; the system line goes to `system`. */
@@ -122,18 +129,62 @@ function toModelMessages(m: AgentMessage): ModelMessage[] {
 }
 // #endregion bridge
 
+// #region streaming
+import type { ModelStream } from "@demlik/tea/agent";
+import { streamText } from "ai";
+
+/**
+ * The same bridge over `streamText` — tea's streaming port,
+ * `(messages, { onChunk }) => turn`. It writes each text delta to `onChunk` as
+ * the provider yields it, then resolves the SETTLED turn, assembled from the
+ * SDK's awaited results. The deltas are a side channel; the resolved turn is
+ * the only thing tea folds into the Model.
+ */
+export function aiSdkStreamingModel(
+  model: LanguageModel,
+  tools: readonly AnyToolDef[],
+) {
+  const declared = declaredTools(tools);
+  return async (
+    messages: readonly AgentMessage[],
+    { onChunk }: ModelStream,
+  ): Promise<AgentTurn> => {
+    const result = streamText({
+      model,
+      system: messages.find((m) => m.role === "system")?.content,
+      messages: messages.flatMap(toModelMessages),
+      tools: declared,
+    });
+    // The live half. Nothing here is durable, so nothing here is awaited into
+    // the turn — a run that dies mid-stream resumes from the last turn that
+    // SETTLED, and re-produces this one from scratch.
+    for await (const text of result.textStream) onChunk({ text });
+    return {
+      content: await result.text,
+      toolCalls: (await result.toolCalls).map((c) => ({
+        callId: c.toolCallId,
+        name: c.toolName,
+        args: c.input as Record<string, unknown>,
+      })),
+      provider: await result.responseMessages,
+    };
+  };
+}
+// #endregion streaming
+
 const page = fileURLToPath(
   new URL("../../../docs/how-to/use-a-vercel-ai-sdk-model.md", import.meta.url),
 );
 const self = fileURLToPath(import.meta.url);
 
-/** The text between the `#region bridge` markers, which is what the page shows. */
-async function region(): Promise<string> {
+/** The text between one region's markers, which is what the page shows. */
+async function region(name: string): Promise<string> {
   const source = await readFile(self, "utf8");
   const body = source
-    .split("// #region bridge\n")[1]
-    ?.split("// #endregion bridge\n")[0];
-  if (body === undefined) throw new Error("the bridge region markers are gone");
+    .split(`// #region ${name}\n`)[1]
+    ?.split(`// #endregion ${name}\n`)[0];
+  if (body === undefined)
+    throw new Error(`the ${name} region markers are gone`);
   return body.trimEnd();
 }
 
@@ -147,7 +198,11 @@ async function tsBlocks(): Promise<string[]> {
 
 describe("docs/how-to/use-a-vercel-ai-sdk-model.md (#121)", () => {
   it("shows the compiled bridge verbatim, so the recipe cannot rot", async () => {
-    expect(await tsBlocks()).toContain(await region());
+    expect(await tsBlocks()).toContain(await region("bridge"));
+  });
+
+  it("shows the compiled streamText variant verbatim too (#123)", async () => {
+    expect(await tsBlocks()).toContain(await region("streaming"));
   });
 
   it("names the tutorial section it replaces and links back to it", async () => {
