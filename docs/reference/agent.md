@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (98)
+## Exports (103)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -86,13 +86,18 @@ import { … } from "@demlik/tea/agent";
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`. |
 | `status` | Function | Ask where an agent run stands: pass its state, get back one of `idle`, `running`, `suspended` (with the tool calls it is waiting on), `done` (with the output) or `failed` (with the failure). |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
+| `TaggedFailure` | Type | The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and an unhandled tag is a compile error. |
 | `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a definition you pass to `toolRouter` or `defineAgent`. |
 | `ToolCall` | Interface | One tool the model asked to call this turn. |
 | `ToolCmd` | Type | The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. |
 | `ToolConstructors` | Type | The two constructors a handler is handed, one per channel — `ok` for the value the `ok` schema parses, `fail` for a declared `{ _tag }`. |
 | `ToolDef` | Type | What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>` / `CmdOf<typeof t>` read it like any def) plus the colocated `interpret` handler, the bare `args` schema the router parses a call against, and the `description` a provider adapter declares to the model beside that schema. |
+| `ToolError` | Type | Every failure a router over `T` can settle with — the union `outcomeOf`'s error arm is typed from. |
+| `ToolErrorContext` | Interface | Which call an `onToolError` failure belongs to: the model's `callId` — the fan-out identity the outcome folds back on — and the tool `name` the model asked for, which for an `unknown_tool` is the name it invented rather than any declared tool. |
 | `toolErrorReason` | Function | Turn a tool failure into the human-readable reason string the conversation carries — pass the `{ _tag, ...detail }` a tool failed with, get the tag followed by any remaining detail as JSON. |
 | `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
+| `ToolFailure` | Interface | A settled tool failure as the conversation keeps it: the `{ _tag, …payload }` the tool failed with, spread beside the `reason` string the model reads. |
+| `ToolFailureOf` | Type | The error outcome a router over `T` produces: `{ kind: "error", _tag, …payload, reason }`, discriminable on `_tag` over ToolError. |
 | `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `needs` named, and the typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
 | `ToolInput` | Type | The input a tool Cmd carries: the model's `callId` (the fan-out identity the settle folds back on) and the `args` already parsed against the tool's `input` schema — the boundary parses, the handler trusts. |
 | `ToolMsg` | Type | The settled Msg union a router's handlers return — folded by `toMachine`. |

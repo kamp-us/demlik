@@ -22,6 +22,7 @@ import {
   type AgentTurn,
   type AnyToolDef,
   createAgent,
+  defineAgent,
   type ReservedToolName,
   type Schema,
   type ToolCmd,
@@ -258,3 +259,78 @@ const everyPrefix:
   : false = true;
 void everyDiscriminant;
 void everyPrefix;
+
+// ── 6. a failure's `_tag` is a TYPE the consumer switches on (#115) ─────────
+//
+// The outcome `onToolError` receives is the declared tags, distributed over
+// `{ kind, reason }` — so a `switch` on `_tag` narrows the payload and covering
+// every arm leaves `never`. The union is wider than what one tool declares, and
+// deliberately: `thrown` is on every tool, `malformed_result` is the kernel's,
+// and `unknown_tool` / `malformed_args` are the router's. A consumer who
+// handles only their own tags has not handled a failure the run can produce.
+
+const flaky = tool(
+  "flaky",
+  {
+    description: "Fails in two declared ways.",
+    input: z.object({}),
+    ok: z.string(),
+    err: ["a", "b"],
+  },
+  async (_args, _ctx, { ok }) => ok("fine"),
+);
+
+defineAgent({
+  model: async () => ({ content: "", toolCalls: [] }),
+  tools: [flaky],
+  instructions: "",
+  onToolError: (outcome) => {
+    switch (outcome._tag) {
+      case "a":
+      case "b":
+        return;
+      case "thrown": {
+        // The payload narrows with the tag: `thrown` carries a message.
+        const message: unknown = outcome.message;
+        void message;
+        return;
+      }
+      case "malformed_result":
+      case "unknown_tool":
+      case "malformed_args":
+        return;
+      default:
+        // Exhaustive: every arm above is handled, so nothing is left.
+        return absurd(outcome);
+    }
+  },
+});
+
+defineAgent({
+  model: async () => ({ content: "", toolCalls: [] }),
+  tools: [flaky],
+  instructions: "",
+  onToolError: (outcome) => {
+    switch (outcome._tag) {
+      // @ts-expect-error `c` is not a tag this agent's tools can fail with
+      case "c":
+        return;
+      default:
+        return;
+    }
+  },
+});
+
+// The reason is still there beside the tag — the model's channel, unchanged.
+defineAgent({
+  model: async () => ({ content: "", toolCalls: [] }),
+  tools: [flaky],
+  instructions: "",
+  onToolError: (outcome, ctx) => {
+    const reason: string = outcome.reason;
+    const kind: "error" = outcome.kind;
+    const name: string = ctx.name;
+    const callId: string = ctx.callId;
+    void [reason, kind, name, callId];
+  },
+});

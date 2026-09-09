@@ -27,7 +27,9 @@ import {
 import {
   type AnyToolDef,
   type ToolCmd,
+  type ToolFailureOf,
   type ToolResult,
+  type ToolRouter,
   toolRouter,
   type WiredToolMsg,
 } from "./tool";
@@ -131,6 +133,46 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * watchdog.
    */
   readonly deadlineMs?: number;
+  /**
+   * Observe a tool call that failed, typed against THIS agent's tools: the
+   * outcome is `{ kind: "error", _tag, …payload, reason }` over
+   * `ToolError`'s union — declared tags, `thrown`, `malformed_result`,
+   * `unknown_tool`, `malformed_args` — so a `switch` on `_tag` is exhaustive and an
+   * unhandled failure mode is a compile error rather than a silent turn (#115).
+   * The model still reads `reason` next turn either way — this is the host's
+   * channel beside it, never instead of it.
+   *
+   * Called ONCE per failed call, at the interpret boundary: after the handler
+   * settled, before the failure is folded into the conversation. It is awaited,
+   * so an async hook holds the settle until it resolves — keep it short, and put
+   * anything slow on your own queue.
+   *
+   * A resume calls it for the calls THIS process runs and no others: an outcome
+   * a previous process already folded is in the Model the Store handed back and
+   * is never re-interpreted, so a durable run does not re-fire the hook over its
+   * history.
+   *
+   * The hook is CONTAINED, exactly as `onEvent` is: a throw (or a rejected
+   * promise) is warned about and the run goes on, so `run`'s contract does not
+   * depend on the hook's.
+   *
+   * Omit → the router is wired unwrapped and nothing observes failures.
+   */
+  readonly onToolError?: (
+    outcome: ToolFailureOf<T>,
+    ctx: ToolErrorContext,
+  ) => void | Promise<void>;
+}
+
+/**
+ * Which call an `onToolError` failure belongs to: the model's `callId` — the
+ * fan-out identity the outcome folds back on — and the tool `name` the model
+ * asked for, which for an `unknown_tool` is the name it invented rather than
+ * any declared tool.
+ */
+export interface ToolErrorContext {
+  readonly callId: string;
+  readonly name: string;
 }
 
 /**
@@ -206,7 +248,12 @@ export interface DefinedAgent<T extends AnyToolDef> {
 export function defineAgent<T extends AnyToolDef>(
   config: DefineAgentConfig<T>,
 ): DefinedAgent<T> {
-  const tools = toolRouter(config.tools);
+  const router = toolRouter(config.tools);
+  const { onToolError } = config;
+  // No hook → the router is the plain one, so an omitted `onToolError` leaves
+  // the interpret table the router always built.
+  const tools =
+    onToolError === undefined ? router : withToolErrorHook(router, onToolError);
   const machine = (input: string): DefinedAgentMachine<T> =>
     createAgent<
       string,
@@ -364,6 +411,67 @@ function forwardEvents<T extends AnyToolDef>(
   for (const type of AGENT_EVENT_TYPES) {
     handle.on(type, deliver);
   }
+}
+
+/**
+ * The router with the consumer's `onToolError` spliced into every interpret
+ * handler — the same router, one seam wider.
+ *
+ * The interpret boundary is where the hook belongs, and the two timing clauses
+ * on `onToolError` are properties of that seam rather than bookkeeping this
+ * function does: a handler's settled Msg is read back through the router's own
+ * `outcomeOf` (so the hook and the conversation see ONE rendering of the
+ * failure) and the Msg is returned only after the hook resolves, which is
+ * "before the fold"; and interpret runs only for the effects THIS process
+ * launches, which is "not again on resume". Nothing is folded, counted or
+ * remembered here.
+ *
+ * `tool_rejected` is wrapped like any other handler, so `unknown_tool` and
+ * `malformed_args` reach the hook exactly as a tool's own failure does.
+ */
+function withToolErrorHook<T extends AnyToolDef>(
+  router: ToolRouter<T>,
+  onToolError: NonNullable<DefineAgentConfig<T>["onToolError"]>,
+): ToolRouter<T> {
+  type Handler = (
+    cmd: { readonly type: string },
+    ctx: unknown,
+  ) => Promise<{ readonly type: string } | void>;
+  const handlers = router.interpret as unknown as Record<string, Handler>;
+  const wrapped: Record<string, Handler> = {};
+  for (const [type, handler] of Object.entries(handlers)) {
+    wrapped[type] = async (cmd, ctx) => {
+      const msg = await handler(cmd, ctx);
+      if (msg === undefined) return msg;
+      const settled = router.outcomeOf(msg);
+      if (settled === null || settled.outcome.kind === "ok") return msg;
+      try {
+        await onToolError(settled.outcome as ToolFailureOf<T>, {
+          callId: settled.callId,
+          name: calledName(cmd),
+        });
+      } catch (err) {
+        console.warn("@demlik/tea: a run's onToolError hook threw", err);
+      }
+      return msg;
+    };
+  }
+  return {
+    ...router,
+    interpret: wrapped as unknown as ToolRouter<T>["interpret"],
+  };
+}
+
+/**
+ * The tool name a Cmd was built for: its own `type`, except for the router's
+ * `tool_rejected`, whose type is the router's and whose rejection carries the
+ * name the MODEL asked for — the name a consumer needs to see for an
+ * `unknown_tool`. PURE.
+ */
+function calledName(cmd: { readonly type: string }): string {
+  const rejection = (cmd as { readonly error?: { readonly name?: unknown } })
+    .error;
+  return typeof rejection?.name === "string" ? rejection.name : cmd.type;
 }
 
 /** The Msg that sets a run in motion. */

@@ -1248,9 +1248,16 @@ export function createAgent<
     const foldTool: ToolCell = (s, m) => {
       const settled = tools?.outcomeOf(m);
       if (settled === undefined || settled === null) return [s, []];
-      return settled.outcome.kind === "ok"
-        ? toolOk(s, settled.callId, settled.outcome.result as R, m.at)
-        : toolErr(s, settled.callId, settled.outcome.reason, m.at);
+      // Straight to the shared settle body rather than through `toolOk` /
+      // `toolErr`: those two take a widened `result` / `reason`, and the failure
+      // arm the router built carries its `{ _tag, …payload }` beside the reason
+      // (#115). Re-deriving it from a string here is exactly the loss.
+      return settleTool(
+        s,
+        settled.callId,
+        settled.outcome as ToolOutcome<R>,
+        m.at,
+      );
     };
     const toolCells: Record<string, ToolCell> = {};
     for (const def of tools?.defs ?? []) {

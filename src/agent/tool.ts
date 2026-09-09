@@ -21,7 +21,9 @@ import {
   type CmdDef,
   type CmdOf,
   type CmdValue,
+  type ErrOf,
   type Interpret,
+  type MalformedResult,
   type Needs,
   type NoCtx,
   type OkOf,
@@ -32,7 +34,7 @@ import {
 } from "../index";
 import { MsgType, type MsgTypeValue } from "../protocol";
 import { malformedResult } from "../pure/core";
-import type { ToolCall, ToolOutcome } from "./types";
+import type { TaggedFailure, ToolCall } from "./types";
 
 // ===========================================================================
 // Reserved names — the agent's own Msg vocabulary a tool may not mint over.
@@ -351,10 +353,32 @@ export type WiredToolMsg<T extends AnyToolDef> = [T] extends [never]
 /** The union of every tool's `ok` value — `R` for `createAgent`. */
 export type ToolResult<T extends AnyToolDef> = OkOf<T>;
 
+/**
+ * Every failure a router over `T` can settle with — the union `outcomeOf`'s
+ * error arm is typed from. Four sources, and a consumer branching on `_tag`
+ * meets all four: each tool's DECLARED tags plus the `thrown` `tool()` appends
+ * (`ErrOf<T>`), the kernel's `malformed_result` (a handler returned a value its
+ * own `ok` schema rejects), and the router's own `unknown_tool` /
+ * `malformed_args` rejections.
+ */
+export type ToolError<T extends AnyToolDef> =
+  | ErrOf<T>
+  | MalformedResult
+  | ToolRejection;
+
+/**
+ * The error outcome a router over `T` produces: `{ kind: "error", _tag,
+ * …payload, reason }`, discriminable on `_tag` over {@link ToolError}. This is
+ * what `defineAgent`'s `onToolError` hands the consumer.
+ */
+export type ToolFailureOf<T extends AnyToolDef> = TaggedFailure<ToolError<T>>;
+
 /** One settled tool, read back off a `ToolMsg` by `outcomeOf`. */
-export type ToolSettlement<R> = {
+export type ToolSettlement<R, E extends Tagged = Tagged> = {
   readonly callId: string;
-  readonly outcome: ToolOutcome<R>;
+  readonly outcome:
+    | { readonly kind: "ok"; readonly result: R }
+    | TaggedFailure<E>;
 };
 
 /**
@@ -373,11 +397,12 @@ export interface ToolRouter<T extends AnyToolDef> {
   /**
    * Read a settled tool off a Msg: `null` when the Msg is not one of this
    * router's `<name>_ok` / `<name>_err`. The one place a `{ _tag }` failure is
-   * rendered to the `reason` string the conversation carries.
+   * rendered to the `reason` string the conversation carries — and the tag and
+   * its payload ride beside that rendering, never instead of it (#115).
    */
   readonly outcomeOf: (msg: {
     readonly type: string;
-  }) => ToolSettlement<ToolResult<T>> | null;
+  }) => ToolSettlement<ToolResult<T>, ToolError<T>> | null;
 }
 
 /**
@@ -442,7 +467,7 @@ export function toolRouter<T extends AnyToolDef>(
 
   const outcomeOf = (msg: {
     readonly type: string;
-  }): ToolSettlement<ToolResult<T>> | null => {
+  }): ToolSettlement<ToolResult<T>, ToolError<T>> | null => {
     if (okTypes.has(msg.type)) {
       const ok = msg as unknown as SettledShape<ToolResult<T>>;
       return {
@@ -454,7 +479,16 @@ export function toolRouter<T extends AnyToolDef>(
       const err = msg as unknown as SettledShape<ToolResult<T>>;
       return {
         callId: err.cmd.callId,
-        outcome: { kind: "error", reason: toolErrorReason(err.error) },
+        // The tag and its payload spread FIRST, so `kind` and `reason` are
+        // written over anything a payload field of those names carries: the
+        // discriminant and the model's channel are the router's to state, and a
+        // tool that fails with `{ _tag, kind: "ok" }` must not be able to say
+        // otherwise.
+        outcome: {
+          ...err.error,
+          reason: toolErrorReason(err.error),
+          kind: "error",
+        } as TaggedFailure<ToolError<T>>,
       };
     }
     return null;

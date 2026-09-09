@@ -10,7 +10,7 @@
  * the wired `toMachine`) lives in `./index`.
  */
 
-import type { Cmd } from "../index";
+import type { Cmd, Tagged } from "../index";
 import type { FanOutState } from "../internal/flow/fan-out";
 import type {
   MonitoredRunState,
@@ -134,12 +134,45 @@ export const agentTurnSchema: Schema<AgentTurn> = schemaFromGuard(
 /**
  * One settled tool outcome the consumer routes back into the loop.
  * `ok` carries the result the consumer's interpret produced;
- * `error` carries a reason the model sees (so it recovers rather than stalls —
- * "errors are data").
+ * `error` carries the failure as data — see {@link ToolFailure}.
  */
 export type ToolOutcome<R> =
   | { readonly kind: "ok"; readonly result: R }
-  | { readonly kind: "error"; readonly reason: string };
+  | ToolFailure;
+
+/**
+ * A settled tool failure as the conversation keeps it: the `{ _tag, …payload }`
+ * the tool failed with, spread beside the `reason` string the model reads.
+ *
+ * Both halves are load-bearing and neither replaces the other. `reason` is the
+ * model's channel — `toolErrorReason`'s rendering, which is what the next brain
+ * call carries; `_tag` and the payload are the program's, so host code can
+ * branch on the failure instead of parsing prose out of `reason` (#115). A
+ * payload field never shadows `kind` or `reason`: the router writes those last.
+ *
+ * `_tag` is OPTIONAL here for one reason only — a record persisted by 0.12.x or
+ * earlier was written before the tag was kept, so a Store handing one back has
+ * a failure with no tag, and a required field would be a lie about durable
+ * state. Every failure THIS version mints carries one. For the exhaustive
+ * per-tag union, take `onToolError`'s argument, which is typed from the tools
+ * themselves ({@link ToolFailureOf}).
+ */
+export interface ToolFailure {
+  readonly kind: "error";
+  /** The model-facing rendering — `toolErrorReason(error)`. */
+  readonly reason: string;
+  /** The failure's tag; absent only on a record persisted before 0.13. */
+  readonly _tag?: string;
+}
+
+/**
+ * The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside
+ * each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and
+ * an unhandled tag is a compile error. `ToolFailure` is its erased form.
+ */
+export type TaggedFailure<E extends Tagged> = E extends unknown
+  ? { readonly kind: "error"; readonly reason: string } & E
+  : never;
 
 /**
  * A folded tool record kept on the conversation once a tool settles — the
