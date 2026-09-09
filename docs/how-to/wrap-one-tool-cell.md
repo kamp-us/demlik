@@ -66,6 +66,49 @@ So the door is one over the **effect** boundary, never over the fold:
 A cell that genuinely has to settle differently is a different machine, and
 `createAgent` is where you build one.
 
+The two Msgs in full, as `Cmd.define` mints them:
+
+```ts
+{ type: "fetch_rate_ok",  cmd, value, at }   // `value` is what your `ok` schema parsed
+{ type: "fetch_rate_err", cmd, error, at }   // `error` is a `{ _tag, … }` failure
+```
+
+`cmd` is the Cmd you were handed — `cmd.callId` is the id the fan-out folds on.
+
+## When the tool carries a resilience policy
+
+If the tool declared `timeoutMs` or `retry`, the Msg your cell returns is the
+**same shape** — `fetch_rate_ok` / `fetch_rate_err`, minted by the same
+`Cmd.define`. The ladder is in the reducer, not in the effect, so it changes
+nothing about what `next` resolves. What it changes is what happens to that Msg,
+and there are three facts worth knowing before you print one:
+
+- **Your cell can run more than once for one `cmd.callId`.** Each retry attempt
+  re-enters the same interpret cell with the same Cmd, so a wrapper that counts
+  calls, queues them, or opens a span per call sees one entry per *attempt* — not
+  one per model tool call.
+- **A `fetch_rate_err` you pass through may be absorbed.** The reducer offers
+  each failure to the ladder first; while retry budget remains it arms a timer
+  and folds nothing, so that Msg never reaches the conversation. Returning it
+  unchanged is still the whole contract — the absorbing is the reducer's call,
+  not yours.
+- **The call's final failure may be authored without your cell running at all.**
+  When the budget is spent the reducer settles the call itself, with a
+  `{ kind: "error", _tag, reason }` failure carrying `_tag: "timeout"` or
+  `_tag: "retry_exhausted"` (the latter also carrying `attempts` and the last
+  attempt's `last` reason). That failure is not a `fetch_rate_err` Msg and never
+  passes through an interpret cell, so a wrapper cannot observe it —
+  `defineAgent`'s `onToolError` is where it surfaces.
+
+A timeout also does not cancel the attempt in flight: the handler, and your
+wrapper around it, runs to its own end, and the Msg it eventually resolves
+arrives for a call nothing is waiting on and folds nothing. So a wrapper's
+`finally` still fires, and its Msg still means nothing.
+
+If you were reaching for `resilient_ok` / `resilient_err` — those are the agent's
+own private settle Msgs for the brain call and for compaction. No tool settles
+through them, and a wrapped tool cell never sees one.
+
 ## Composing, and the error you will meet
 
 `with` stacks. The later call is the **outer** wrapper:
