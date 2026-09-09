@@ -204,9 +204,15 @@ export function createAgentHost<
 
   const sse = sseHub<Frame>();
   const now = config.now ?? Date.now;
+  // Every terminal phase, `cancelled` included: a run stopped from outside has
+  // ended, so `done()` must resolve on it rather than wait for a `done` that is
+  // not coming.
   const isTerminal =
     config.terminal ??
-    ((s: S) => s.run.phase === "done" || s.run.phase === "failed");
+    ((s: S) =>
+      s.run.phase === "done" ||
+      s.run.phase === "failed" ||
+      s.run.phase === "cancelled");
 
   // The build-once cell memoizes the IN-FLIGHT build (a Promise), not just the
   // settled runtime (#313). Were it the settled handle, two concurrent

@@ -36,7 +36,7 @@
  *
  * ## Why the run lifecycle is INLINE (run-tracker not extracted)
  *
- * The phase union (`idle` / `running` / `stale` / `done` / `failed`, a
+ * The phase union (`idle` / `running` / `stale` / `done` / `failed` / `cancelled`, a
  * discriminated union carrying only each phase's own data) and its bookkeeping
  * (`runId`, `startedAt`, `lastProgressAt`, `progressSeq`) live directly on this
  * slice rather than behind a `run-tracker` sub-knob.
@@ -224,10 +224,19 @@ interface RunCore<Stage> {
  *   - `failed`  — terminal failure; the typed `failure` reason rides ONLY this
  *                 arm, so it is present iff `phase === "failed"` BY CONSTRUCTION —
  *                 there is no nullable side field to keep in sync.
+ *   - `cancelled` — the consumer stopped the run from outside (`cancel`). Its own
+ *                 phase rather than a `RunFailure` reason, on the same argument
+ *                 that keeps `stale` a phase: a caller who asked for the stop did
+ *                 not suffer a failure, and every "did this fail?" reader would
+ *                 otherwise have to except one reason. Terminal, so it re-enters
+ *                 no verb and arms no watchdog.
  *
  * `runId` is the host-minted run identity, stamped at `start` (the machine never
  * mints — see the audit seed's "run identity is host-minted"). It rides every
- * started phase, but not `idle`.
+ * started phase, but not `idle`. `cancelled` is the one phase reachable from BOTH
+ * sides of that line, so its `runId` is `string | null`: `null` says the run was
+ * cancelled before it ever started and there was no identity to mint, which is a
+ * different fact from a cancelled live run and stays a different value.
  */
 export type MonitoredRunState<Stage> =
   | (RunCore<Stage> & { readonly phase: "idle" })
@@ -238,12 +247,17 @@ export type MonitoredRunState<Stage> =
       readonly phase: "failed";
       readonly runId: string;
       readonly failure: RunFailure<Stage>;
+    })
+  | (RunCore<Stage> & {
+      readonly phase: "cancelled";
+      readonly runId: string | null;
+      readonly at: number;
     });
 
 /**
  * The live (still-timed) phases — `running` or `stale`. The verbs narrow to this
  * before touching the watchdog bookkeeping (`runId` / `progressSeq`), so a
- * settled (`done` / `failed`) or never-started (`idle`) slice can never be bumped
+ * settled (`done` / `failed` / `cancelled`) or never-started (`idle`) slice can never be bumped
  * — the narrow replaces the old `runId === ""` born-live guard.
  */
 type LiveRun<Stage> = Extract<
@@ -467,6 +481,45 @@ export function createMonitoredRun<Stage, V = unknown>(
     return [{ ...s, phase: "stale" }, []];
   }
 
+  // === Verb: cancel ========================================================
+
+  /**
+   * Stop the run from outside and settle it `cancelled` at `at`. The durable half
+   * of an `AbortSignal`: the outcome is a phase in the slice, so a reload reads a
+   * run that ended rather than one to resume.
+   *
+   * Legal from `idle` too, not just the live phases — a signal already aborted
+   * when the run is asked for has to end it BEFORE `start`, and leaving it `idle`
+   * would let the next boot start the very run the caller stopped. That is the
+   * one arm where `runId` is `null`, built explicitly rather than spread so no
+   * stale `failure` or absent `runId` rides along.
+   *
+   * A no-op on a settled run (`done` / `failed` / `cancelled`): a terminal outcome
+   * is already the answer, and an abort landing after it must not overwrite it.
+   * That also makes a second abort idempotent. Emits no Cmd — cancelling issues no
+   * effect, and the in-flight ones it cannot recall are the consumer's to drain.
+   * PURE.
+   */
+  function cancel(
+    s: MonitoredRunState<Stage>,
+    at: number,
+  ): readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]] {
+    if (s.phase !== "idle" && s.phase !== "running" && s.phase !== "stale") {
+      return [s, []];
+    }
+    const next: MonitoredRunState<Stage> = {
+      phase: "cancelled",
+      runId: s.phase === "idle" ? null : s.runId,
+      at,
+      stepStates: s.stepStates,
+      startedAt: s.startedAt,
+      lastProgressAt: s.lastProgressAt,
+      progressSeq: s.progressSeq,
+      snapshot: s.snapshot,
+    };
+    return [next, []];
+  }
+
   // === Verb: advance =======================================================
 
   /**
@@ -484,7 +537,7 @@ export function createMonitoredRun<Stage, V = unknown>(
    *
    * An advance is itself a progress event, so it bumps the watchdog (re-arming
    * the alarm at the new stage) and accounts a snapshot unit. A no-op on a
-   * settled (`done` / `failed`) or never-started (`idle`) run. PURE — `at` is the
+   * settled (`done` / `failed` / `cancelled`) or never-started (`idle`) run. PURE — `at` is the
    * only clock, ids are positional.
    */
   function advance(
@@ -613,7 +666,7 @@ export function createMonitoredRun<Stage, V = unknown>(
    * checkpoint). The pipeline POSITION (`stepStates`) is preserved untouched —
    * that is the whole point of staging: resume at the same stage.
    *
-   * A no-op on a settled (`done` / `failed`) or never-started (`idle`) run. Emits
+   * A no-op on a settled (`done` / `failed` / `cancelled`) or never-started (`idle`) run. Emits
    * NO Cmd — re-emitting the current stage's outstanding effect is the CONSUMER's
    * job (it knows the per-stage Cmd), the audit machine's `outstandingEffect(stage)`
    * pattern. PURE.
@@ -721,6 +774,7 @@ export function createMonitoredRun<Stage, V = unknown>(
     start,
     progress,
     markStale,
+    cancel,
     advance,
     onDeadline,
     boot,

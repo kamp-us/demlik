@@ -303,3 +303,116 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
     expect(probe.stopped).toBe(true);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// #147 — `{ signal, cancel }`: the outside-in stop. Cancellation is a
+// TRANSITION, so the drive resolves on the State the cancel Msg lands rather
+// than throwing past a runtime nobody stopped.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("driveToDone — cancellation via an AbortSignal", () => {
+  type S5 = { readonly phase: "idle" | "running" | "done" | "halted" };
+  type M5 = { readonly type: "start" } | { readonly type: "halt" };
+  type C5 = { readonly type: "loop" };
+
+  // A machine that never finishes on its own: every `start` re-enters itself
+  // through an interpret follow-up, so only a cancel can end the drive.
+  function looper(onLoop: () => void) {
+    const update: Reducer<S5, M5, C5> = {
+      start: (s) =>
+        s.phase === "halted"
+          ? [s, []]
+          : [{ phase: "running" }, [{ type: "loop" }]],
+      halt: () => [{ phase: "halted" }, []],
+    };
+    const interpret: Interpret<M5, C5, undefined> = {
+      loop: async () => {
+        onLoop();
+        return { type: "start" };
+      },
+    };
+    return defineMachine<S5, M5, C5, never, undefined>({
+      init: () => [{ phase: "idle" }, []],
+      update,
+      interpret,
+    });
+  }
+
+  const isEnded5 = (s: S5): boolean =>
+    s.phase === "done" || s.phase === "halted";
+  const cancel5 = () => ({ type: "halt" }) as const;
+
+  it("an already-aborted signal cancels in place of `start`, so its effects never fire", async () => {
+    let loops = 0;
+    const controller = new AbortController();
+    controller.abort();
+    const probe = instrument(
+      run(
+        looper(() => {
+          loops++;
+        }),
+        { ctx: undefined },
+      ),
+    );
+
+    const final = await driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      signal: controller.signal,
+      cancel: cancel5,
+    });
+
+    expect(final).toEqual({ phase: "halted" });
+    expect(loops).toBe(0);
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
+  it("an abort mid-run resolves on the cancelled State and stops the loop", async () => {
+    let loops = 0;
+    const controller = new AbortController();
+    const probe = instrument(
+      run(
+        looper(() => {
+          loops++;
+          if (loops === 2) controller.abort();
+        }),
+        { ctx: undefined },
+      ),
+    );
+
+    const final = await driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      signal: controller.signal,
+      cancel: cancel5,
+    });
+
+    expect(final).toEqual({ phase: "halted" });
+    // The cancel Msg is enqueued on the same serial tail every dispatch uses, so
+    // it lands between transitions: the work already queued folds, and nothing
+    // the machine would have queued after it does. An unbounded loop is the
+    // sharpest way to say that — without the stop this drive never returns.
+    expect(loops).toBeLessThan(5);
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
+  it("resolves the cancellation even with a `failed` predicate wired", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const probe = instrument(
+      run(
+        looper(() => {}),
+        { ctx: undefined },
+      ),
+    );
+
+    const final = await driveToDone(probe.handle, { type: "start" }, isEnded5, {
+      // The drive does not add the cancelled State to the failure set behind the
+      // caller's back: only a State THIS predicate marks rejects, and it does not
+      // mark `halted`.
+      failed: (s) => s.phase === "done",
+      signal: controller.signal,
+      cancel: cancel5,
+    });
+
+    expect(final).toEqual({ phase: "halted" });
+  });
+});

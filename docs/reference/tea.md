@@ -46,7 +46,7 @@ import { … } from "@demlik/tea";
 | `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
 | `DriveStalledError` | Class | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. |
 | `driveToDone` | Function | Drive a machine from `start` to its terminal State in one call, then tear the runtime down. |
-| `DriveToDoneOptions` | Interface | Options for `driveToDone`. |
+| `DriveToDoneOptions` | Type | Options for `driveToDone`. |
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |

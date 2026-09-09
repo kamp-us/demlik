@@ -55,6 +55,13 @@ export const MsgType = {
    * by the agent reducer — see `AgentBootPort` in `../agent`.
    */
   AgentBoot: "agent_boot",
+  /**
+   * Stop the run from outside and settle it `cancelled` — what an `AbortSignal`
+   * handed to `driveToDone` / a defined agent's `run` dispatches on abort. A
+   * transition, never a throw: the outcome lands in the Model, so a reload reads
+   * a run that ended rather than one to resume.
+   */
+  AgentCancel: "agent_cancel",
 
   // --- agent: the context-compaction round-trip (#85) ----------------------
   /**

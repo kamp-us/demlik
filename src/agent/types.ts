@@ -10,7 +10,7 @@
  * the wired `toMachine`) lives in `./index`.
  */
 
-import type { Cmd, Tagged } from "../index";
+import { absurd, type Cmd, type Tagged } from "../index";
 import type { FanOutState } from "../internal/flow/fan-out";
 import type {
   MonitoredRunState,
@@ -706,13 +706,21 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
  *   - `failed`    — terminal failure; `failure` is the UNIFIED channel
  *                   (`AgentTerminalFailure`), absorbing the `state.failure` vs
  *                   `state.run.failure` dual channel so callers stop unioning.
+ *   - `cancelled` — stopped from outside through an `AbortSignal`; `at` is when
+ *                   the stop landed. Terminal and distinct from `failed`: nothing
+ *                   went wrong, the caller asked, so a consumer branching on
+ *                   failure does not have to except one reason. There is no
+ *                   `output` — a cancelled run produced no terminal turn, and a
+ *                   `null` one here would be indistinguishable from a `done` run
+ *                   that produced none.
  */
 export type AgentStatus<Stage> =
   | { readonly kind: "idle" }
   | { readonly kind: "running" }
   | { readonly kind: "suspended"; readonly pending: readonly ToolCall[] }
   | { readonly kind: "done"; readonly output: AgentTurn | null }
-  | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> };
+  | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> }
+  | { readonly kind: "cancelled"; readonly at: number };
 
 /**
  * Ask where an agent run stands: pass its state, get back one of `idle`,
@@ -736,9 +744,16 @@ export type AgentStatus<Stage> =
  *   3. `run.phase === "failed"` → `failed`, carrying `run.failure` (deadline /
  *      stage). The fallback channel.
  *   4. `run.phase === "done"` → `done` with `state.output` (#46).
- *   5. running + conversation + `awaiting.kind === "tools"` → `suspended` with
- *      the outstanding tool calls (`tools.running`). THE resumability condition.
- *   6. otherwise (`running` or `stale`, not awaiting tools) → `running`.
+ *   5. `run.phase === "cancelled"` → `cancelled`, carrying when the stop landed.
+ *   6. `running` / `stale` + conversation + `awaiting.kind === "tools"` →
+ *      `suspended` with the outstanding tool calls (`tools.running`). THE
+ *      resumability condition; otherwise the run reads `running`.
+ *
+ * Steps 2–6 are ONE exhaustive `switch` over `run.phase` closed by `absurd`, not
+ * an `if` chain with a trailing `return { kind: "running" }`. Under the chain a
+ * phase added to the slice and forgotten here reported as `running` — a terminal
+ * run described as live, which is the worst answer this function can give and one
+ * nothing would have caught. The switch turns that omission into a type error.
  */
 export function status<
   Stage,
@@ -752,28 +767,41 @@ export function status<
   if (s.failure !== null) {
     return { kind: "failed", failure: s.failure };
   }
-  // 2) Never started — monitored-run's `idle` phase is exactly the "has this
-  //    actually started?" guard, and the status channel keeps that distinction.
-  if (s.run.phase === "idle") {
-    return { kind: "idle" };
+  // Bound to a local so the switch narrows ONE reference: `absurd(run)` below is
+  // only reachable — and only type-checks — while every phase above returns.
+  const run = s.run;
+  switch (run.phase) {
+    // 2) Never started — monitored-run's `idle` phase is exactly the "has this
+    //    actually started?" guard, and the status channel keeps that distinction.
+    case "idle":
+      return { kind: "idle" };
+    // 3) The monitored-run terminal failure (deadline / stage). `run.failure`
+    //    rides ONLY the `failed` arm of the discriminated union, so narrowing on
+    //    `phase === "failed"` surfaces it with no nullable side field and no
+    //    fabricated fallback — the old "failed-yet-failure-null" state is
+    //    unrepresentable.
+    case "failed":
+      return { kind: "failed", failure: run.failure };
+    // 4) The pipeline finished — the terminal output landed on `state.output`.
+    case "done":
+      return { kind: "done", output: s.output };
+    // 5) Stopped from outside. Terminal, and deliberately NOT folded into
+    //    `failed`: the unified failure channel answers "what went wrong", and
+    //    nothing did.
+    case "cancelled":
+      return { kind: "cancelled", at: run.at };
+    // 6) Live. Awaiting tools is the resumable shape — the outstanding calls are
+    //    the in-flight fan-out batch (`tools.running`); anything else is plain
+    //    `running`, which is also where `stale` reads (a soft mark the next
+    //    progress clears, not an outcome).
+    case "running":
+    case "stale":
+      return s.conversation !== null && s.conversation.awaiting.kind === "tools"
+        ? { kind: "suspended", pending: s.tools.running }
+        : { kind: "running" };
   }
-  // 3) The monitored-run terminal failure (deadline / stage). `run.failure` now
-  //    rides ONLY the `failed` arm of the discriminated union, so narrowing on
-  //    `phase === "failed"` surfaces it with no nullable side field and no
-  //    fabricated fallback — the old "failed-yet-failure-null" state is
-  //    unrepresentable.
-  if (s.run.phase === "failed") {
-    return { kind: "failed", failure: s.run.failure };
-  }
-  // 4) The pipeline finished — the terminal output landed on `state.output`.
-  if (s.run.phase === "done") {
-    return { kind: "done", output: s.output };
-  }
-  // 5) Running + a live conversation awaiting tools → suspended (resumable).
-  //    The outstanding calls are the in-flight fan-out batch (`tools.running`).
-  if (s.conversation !== null && s.conversation.awaiting.kind === "tools") {
-    return { kind: "suspended", pending: s.tools.running };
-  }
-  // 6) Otherwise the run is live (`running` or `stale`) and not awaiting tools.
-  return { kind: "running" };
+  // No `default` arm: an unhandled phase reaches here still typed, and `absurd`
+  // takes only `never` — so adding a phase to the slice breaks the build at
+  // exactly the reader that would otherwise mis-describe it.
+  return absurd(run);
 }
