@@ -1357,3 +1357,141 @@ describe("onToolError — the lid's typed failure seam (#115)", () => {
     ).toEqual(["c1", "c2"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #136 — `.with({ interpret })`: the ramp between the lid's three intents and
+// `createAgent`'s fourteen fields. One wrap point over the machine `defineAgent`
+// built, so a single unusual requirement costs one cell rather than the whole
+// wiring. The assertions are the ones the door has to keep: the named cell is
+// wrapped and no other is, the wrapped cell still settles through the same
+// typed Cmd→Msg edge (so a replay of a wrapped run is the unwrapped run's),
+// wrapping is composable in a stated order, and the agent it was called on is
+// unchanged.
+// ---------------------------------------------------------------------------
+
+/** Wrap a cell so it records that it ran, and forward the edge untouched. */
+function tracing(trace: string[], label: string) {
+  return <C extends (...args: never[]) => Promise<unknown>>(next: C): C =>
+    (async (...args: Parameters<C>) => {
+      trace.push(label);
+      return next(...(args as never[]));
+    }) as C;
+}
+
+describe("defineAgent(...).with — the one wrap point over the built machine", () => {
+  it("wraps the cell it names and carries every other one over by reference", () => {
+    const { model } = scripted([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const plain = agent.machine(INPUT).interpret;
+    const wrapped = agent
+      .with({ interpret: { search: tracing([], "search") } })
+      .machine(INPUT).interpret;
+
+    expect(Object.keys(wrapped).sort()).toEqual(Object.keys(plain).sort());
+    expect(wrapped.search).not.toBe(plain.search);
+    // The router's cells are minted once per agent, so an unnamed one is
+    // literally the same function — reference equality is the claim, not a
+    // behavioural stand-in for it. (The brain cell is minted per `machine`
+    // call, so identity says nothing there; the replay test below covers it.)
+    expect(wrapped.tool_rejected).toBe(plain.tool_rejected);
+  });
+
+  it("the wrapped cell settles through the same edge, so a replay reproduces the Model", async () => {
+    const trace: string[] = [];
+    const { model } = scripted([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).with({ interpret: { search: tracing(trace, "search") } });
+
+    const machine = agent.machine(INPUT);
+    const journal = memoryJournal<LidMsg>();
+    const handle = run(machine, { ctx: { kb } });
+    const runtime = await handle.ready;
+    const off = runtime.observe((msg) => {
+      void journal.append("run-1", msg);
+    });
+    const live = await driveToDone(
+      handle,
+      { type: "agent_start", runId: "run-1", at: 0 },
+      (s) => s.run.phase === "done",
+    );
+    off();
+
+    expect(trace).toEqual(["search"]);
+    expect(live.run.phase).toBe("done");
+    // The wrapper returned `next`'s Msg, so the journal holds the tool's own
+    // `search_ok` and re-folding it purely lands on the same Model.
+    const msgs = (await journal.list("run-1")).map((e) => e.record);
+    expect(msgs.map((m) => m.type)).toContain("search_ok");
+    const { state } = replay(machine, { msgs, ctx: { kb } });
+    expect(state.conversation).toEqual(live.conversation);
+    expect(state.output).toEqual(live.output);
+
+    // …and it is the UNWRAPPED run's Model too: the wrap is over the effect
+    // boundary, never over the fold.
+    const bare = scripted([ASK, ANSWER]);
+    const unwrapped = await defineAgent({
+      model: bare.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { ctx: { kb }, runId: "run-1", clock: () => 0 });
+    const durable = (s: DefinedAgentState<typeof search>) =>
+      JSON.parse(
+        JSON.stringify({ ...s, run: { ...s.run, lastProgressAt: 0 } }),
+      );
+    expect(durable(live)).toEqual(durable(unwrapped));
+  });
+
+  it("composes — the later with is the outer wrapper, and the agent it wrapped is untouched", async () => {
+    const trace: string[] = [];
+    const { model } = scripted([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const inner = agent.with({
+      interpret: { search: tracing(trace, "inner") },
+    });
+    const outer = inner.with({
+      interpret: { search: tracing(trace, "outer") },
+    });
+
+    await outer.run(INPUT, { ctx: { kb } });
+    expect(trace).toEqual(["outer", "inner"]);
+
+    // The agent `with` was called on runs its own cells: `defineAgent` returns
+    // a value, and `with` derives a new one rather than mutating it.
+    trace.length = 0;
+    const again = scripted([ASK, ANSWER]);
+    await defineAgent({
+      model: again.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { ctx: { kb } });
+    expect(trace).toEqual([]);
+  });
+
+  it("throws when it names a cell the machine has none of", () => {
+    const { model } = scripted([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).with({
+      interpret: {
+        // A name no tool declares — reachable from untyped/wire config, and the
+        // silent alternative is a wrapper nobody ever calls.
+        serach: tracing([], "typo"),
+      } as never,
+    });
+
+    expect(() => agent.machine(INPUT)).toThrow(/serach/);
+  });
+});

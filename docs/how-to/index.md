@@ -45,6 +45,10 @@ what you are trying to do, and it names the subpath you need.
   with it from the handler, and read the `ToolOutcome` the model gets back —
   including `thrown`, `unknown_tool` and `malformed_args`, the three failures you
   never declared.
+- [Wrap one tool's interpret cell](./wrap-one-tool-cell.md) — use
+  `defineAgent(cfg).with({ interpret })` to give one tool a behaviour the lid has
+  no option for — a queue, an audit log — without rebuilding the agent with
+  `createAgent`.
 
 ## Harden a call
 
