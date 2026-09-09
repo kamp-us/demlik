@@ -1827,3 +1827,103 @@ describe("defineAgent — the knobs leave the durable Model's shape alone (#149)
     expect(JSON.parse(JSON.stringify(final))).toEqual(final);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #153 — the two stop conditions the lid grew beside `maxTurns` / `deadlineMs`:
+// `maxElapsedMs`, a total wall-clock cap that never restarts, and `stopWhen`, a
+// predicate consulted at the turn boundary. Neither is Model: both are config
+// this boot passed, read in the pure reducer off numbers already on the Model.
+// ---------------------------------------------------------------------------
+
+describe("maxElapsedMs / stopWhen — the lid's other two stop conditions (#153)", () => {
+  type S = DefinedAgentState<typeof search>;
+
+  /** A model that never stops asking, so only a guard can end the run. */
+  function asking() {
+    const seen: (readonly AgentMessage[])[] = [];
+    const model = async (messages: readonly AgentMessage[]) => {
+      seen.push(messages);
+      return ASK;
+    };
+    return { model, seen };
+  }
+
+  it("maxElapsedMs ends an otherwise-unbounded run with elapsed_limit", async () => {
+    const { model, seen } = asking();
+    const failed = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      maxElapsedMs: 30,
+    })
+      .run(INPUT, { ctx: { kb } })
+      .catch((e) => e);
+
+    expect(failed).toBeInstanceOf(DriveFailedError);
+    const state = (failed as DriveFailedError<S>).state;
+    expect(state.failure?.reason).toBe("elapsed_limit");
+    // It got there by running, not by refusing to start.
+    expect(seen.length).toBeGreaterThan(0);
+  });
+
+  it("stopWhen ends the run cancelled — it resolves, and the model is not called again", async () => {
+    const { model, seen } = asking();
+    const final = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      stopWhen: (state) => (state.conversation?.turnCount ?? 0) >= 2,
+    }).run(INPUT, { ctx: { kb } });
+
+    // Two turns went out, the predicate answered `true` on the second boundary,
+    // and no third call was made — a cancelled run, not a failed one.
+    expect(seen).toHaveLength(2);
+    expect(status(final).kind).toBe("cancelled");
+    expect(final.failure).toBeNull();
+    expect(final.conversation?.turnCount).toBe(2);
+  });
+
+  it("a resumed run is governed by the stopWhen THIS boot passed, model uncalled", async () => {
+    // Run 1 parks a Model awaiting its tool, then ends on its turn cap.
+    const first = asking();
+    const live = memoryStore<S>();
+    let parked: S | undefined;
+    const store: Store<S> = {
+      ...live,
+      save: async (state) => {
+        await live.save(state);
+        if (
+          parked === undefined &&
+          state.conversation?.awaiting.kind === "tools"
+        ) {
+          parked = JSON.parse(JSON.stringify(state)) as S;
+        }
+      },
+    };
+    await defineAgent({
+      model: first.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      maxTurns: 1,
+    })
+      .run(INPUT, { ctx: { kb }, store, runId: "run-1" })
+      .catch(() => undefined);
+    if (parked === undefined) throw new Error("never parked");
+    expect(status(parked).kind).toBe("suspended");
+
+    // Run 2 boots those bytes with a predicate the first process never had. The
+    // resumed tool settles, the turn folds, and the predicate stops it there —
+    // so this process makes no model call at all.
+    const second = asking();
+    const final = await defineAgent({
+      model: second.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      stopWhen: () => true,
+    }).run(INPUT, { ctx: { kb }, store: memoryStore(parked), runId: "run-2" });
+
+    expect(second.seen).toEqual([]);
+    expect(status(final).kind).toBe("cancelled");
+    expect(final.run.phase === "cancelled" && final.run.runId).toBe("run-1");
+  });
+});

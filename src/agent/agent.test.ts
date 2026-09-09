@@ -670,6 +670,98 @@ describe("createAgent — guards", () => {
     expect(failed.run.failure).toEqual({ reason: "deadline", at: 2000 });
   });
 
+  // #153 — the two stop conditions that are neither a turn count nor a stall.
+  // Both are read at the SAME turn boundary `maxTurns` is, off numbers already
+  // on the durable Model, so nothing here reads a clock.
+
+  it("maxElapsedMs fails a run that is progressing the whole time", () => {
+    // A 1000ms watchdog beside a 100ms wall-clock budget: every drain bumps the
+    // watchdog, so the deadline is never due and only the elapsed cap can end
+    // this run — the case `deadlineMs` provably does not cover.
+    const agent = makeAgent({ maxElapsedMs: 100, deadlineMs: 1000 });
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(tool("c1")), 10);
+    const [progressed, fired] = agent.toolOk(s, "c1", "x", 20);
+    // 20ms in: under budget, so the loop fires the next brain call as ever.
+    expect(progressed.failure).toBeNull();
+    expect(fired).toEqual([brainRunCmd("plan_turn")]);
+    expect(progressed.run.lastProgressAt).toBe(20);
+
+    s = progressed;
+    [s] = agent.turn(s, turnWith(tool("c2")), 30);
+    const [failed, cmds] = agent.toolOk(s, "c2", "x", 150);
+    expect(failed.failure).toEqual({ reason: "elapsed_limit", at: 150 });
+    expect(agent.isSettled(failed)).toBe(true);
+    expect(cmds).toEqual([]); // no further brain call
+  });
+
+  it("a killed and resumed run continues the ORIGINAL elapsed budget", () => {
+    const agent = makeAgent({ maxElapsedMs: 100 });
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(tool("c1")), 10);
+    // The process dies here; the Model comes back off a store, bytes for bytes.
+    const rehydrated = JSON.parse(JSON.stringify(s)) as typeof s;
+    // `boot` re-seeds the WATCHDOG clock (a cold wake is not a wedge) but not
+    // `startedAt`, so the wall-clock budget still counts from the first start.
+    const [booted] = agent.boot(rehydrated, 400);
+    expect(booted.run.lastProgressAt).toBe(400);
+    expect(booted.run.startedAt).toBe(0);
+    const [failed] = agent.toolOk(booted, "c1", "x", 410);
+    expect(failed.failure).toEqual({ reason: "elapsed_limit", at: 410 });
+  });
+
+  it("stopWhen ends the run cancelled at the turn boundary, with no further model call", () => {
+    const seen: number[] = [];
+    const agent = makeAgent({
+      stopWhen: (state) => {
+        seen.push(state.conversation?.turnCount ?? 0);
+        return (state.conversation?.toolRecords.length ?? 0) >= 1;
+      },
+    });
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(tool("c1")), 10);
+    const [stopped, cmds] = agent.toolOk(s, "c1", "x", 20);
+
+    expect(cmds).toEqual([]);
+    expect(status(stopped)).toEqual({ kind: "cancelled", at: 20 });
+    expect(agent.isSettled(stopped)).toBe(true);
+    // A stop is not a failure — `failure` stays null, so a consumer branching
+    // on it never has to except this one.
+    expect(stopped.failure).toBeNull();
+    // The transcript stands: the predicate was handed the state with the turn
+    // already folded, which is what "at the turn boundary" means.
+    expect(stopped.conversation?.toolRecords).toHaveLength(1);
+    expect(seen).toEqual([1]);
+  });
+
+  it("stopWhen answering false leaves the loop exactly as it was", () => {
+    const agent = makeAgent({ stopWhen: () => false });
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(tool("c1")), 10);
+    const [next, cmds] = agent.toolOk(s, "c1", "x", 20);
+    expect(next.run.phase).toBe("running");
+    expect(cmds).toEqual([brainRunCmd("plan_turn")]);
+  });
+
+  it("maxTurns is read before maxElapsedMs, which is read before stopWhen", () => {
+    // All three would trip on this drain; the failure names the first.
+    const agent = makeAgent({
+      maxTurns: 1,
+      maxElapsedMs: 1,
+      stopWhen: () => true,
+    });
+    let [s] = agent.start(agent.init(), "r", 0);
+    [s] = agent.turn(s, turnWith(tool("c1")), 10);
+    const [failed] = agent.toolOk(s, "c1", "x", 20);
+    expect(failed.failure).toEqual({ reason: "turn_limit", at: 20 });
+
+    const elapsed = makeAgent({ maxElapsedMs: 1, stopWhen: () => true });
+    let [e] = elapsed.start(elapsed.init(), "r", 0);
+    [e] = elapsed.turn(e, turnWith(tool("c1")), 10);
+    const [elapsedFail] = elapsed.toolOk(e, "c1", "x", 20);
+    expect(elapsedFail.failure).toEqual({ reason: "elapsed_limit", at: 20 });
+  });
+
   it("a stale safety timer (old progressSeq) is a no-op", () => {
     const agent = makeAgent({ deadlineMs: 1000 });
     let [s] = agent.start(agent.init(), "r", 100);

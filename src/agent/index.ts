@@ -47,8 +47,10 @@
  *      queued tool. When the batch drains, fold the gathered outcomes into the
  *      conversation, bump the turn count (livelock guard), and fire the next
  *      brain call — `awaiting` flips back to `llm`.
- *   4. The watchdog + turn-limit guard bound the loop; the deadline fires
- *      `failed`, the turn limit fires `failed { turn_limit }`.
+ *   4. The watchdog bounds a stall and the turn boundary's own stop conditions
+ *      bound the loop: the deadline fires `failed`, the turn limit fires
+ *      `failed { turn_limit }`, the wall-clock cap `failed { elapsed_limit }`,
+ *      and the consumer's `stopWhen` settles the run `cancelled`.
  *
  * ## Boot reconcile (crash recovery)
  *
@@ -787,20 +789,16 @@ export function createAgent<
       awaiting: { kind: "llm" },
     };
 
-    // Livelock guard: the bumped turn count crossing maxTurns → terminal fail.
-    if (
-      config.maxTurns !== undefined &&
-      turnedConv.turnCount >= config.maxTurns
-    ) {
-      return failTurnLimit({ ...s, tools, conversation: turnedConv }, at);
-    }
+    // ── The turn boundary's stop conditions, in order. ──
+    const turned: State = { ...s, tools, conversation: turnedConv };
+    const stopped = stopConditions(turned, at);
+    if (stopped !== null) return stopped;
 
     // The tool ledger resets for the next turn's batch regardless of which
     // effect (compaction or brain call) fires next.
     const drained: State = {
-      ...s,
+      ...turned,
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
-      conversation: turnedConv,
     };
 
     // ── Compaction trigger (#85, design B1). BEFORE the next brain call, ask
@@ -877,12 +875,40 @@ export function createAgent<
     ];
   }
 
-  /** Terminal: the livelock guard tripped. Settle the run failed. PURE. */
-  function failTurnLimit(
+  /**
+   * The turn boundary's three stop conditions, consulted in declaration order
+   * on the state a drained batch just folded. Returns the terminal result when
+   * one trips, or `null` for "the loop goes on" — so the caller reads one
+   * branch rather than three, and a fourth guard lands here rather than in the
+   * middle of the drain.
+   *
+   *   - `maxTurns`      → `failure { turn_limit }`. The count the loop keeps.
+   *   - `maxElapsedMs`  → `failure { elapsed_limit }`. `at - run.startedAt`,
+   *                       both of them durable numbers, so the comparison is as
+   *                       replayable as the turn count's — no clock is read
+   *                       here.
+   *   - `stopWhen`      → `cancelled`, the caller's own stop. Not a failure:
+   *                       nothing went wrong, someone asked to stop, which is
+   *                       the same reading an aborted `signal` gets.
+   *
+   * PURE — `at` is the only clock, and `stopWhen` is required pure by contract.
+   */
+  function stopConditions(
     s: State,
     at: number,
-  ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    return [{ ...s, failure: { reason: "turn_limit", at } }, []];
+  ): readonly [State, readonly AgentCmd<P, TC>[]] | null {
+    const turnCount = s.conversation?.turnCount ?? 0;
+    if (config.maxTurns !== undefined && turnCount >= config.maxTurns) {
+      return [{ ...s, failure: { reason: "turn_limit", at } }, []];
+    }
+    if (
+      config.maxElapsedMs !== undefined &&
+      at - s.run.startedAt >= config.maxElapsedMs
+    ) {
+      return [{ ...s, failure: { reason: "elapsed_limit", at } }, []];
+    }
+    if (config.stopWhen?.(s) === true) return cancel(s, at);
+    return null;
   }
 
   // === Verb: succeed / fail (brain-call resilient settles) =================
