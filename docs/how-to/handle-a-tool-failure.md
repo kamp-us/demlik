@@ -175,9 +175,6 @@ hook: no tool called lookyp
 c4 lookyp → {"_tag":"unknown_tool","name":"lookyp","reason":"unknown_tool {\\"name\\":\\"lookyp\\"}","kind":"error"}
 hook: lookup failed with malformed_args
 c5 lookup → {"_tag":"malformed_args","name":"lookup",…,"kind":"error"}
-hook: fetch_rate failed with upstream
-hook: fetch_rate failed with upstream
-hook: fetch_rate failed with upstream
 hook: fetch_rate failed with retry_exhausted
 c6 fetch_rate → {"_tag":"retry_exhausted","attempts":3,"last":"upstream","reason":"retry_exhausted {\\"attempts\\":3,\\"last\\":\\"upstream\\"}","kind":"error"}
 c7 fetch_rate → {"_tag":"timeout","reason":"timeout","kind":"error"}
@@ -229,14 +226,16 @@ the name it invented — there is no declared tool to name there.
 
 Four things worth knowing before you put anything real in it:
 
-- **It fires once per failure the run produces**, which for a tool with a retry
-  ladder is once per *attempt* plus once for the call's own ending. A handler's
-  own failure is announced at the interpret boundary — after the handler
-  settled, before the failure is folded into the conversation. `timeout` and
-  `retry_exhausted` are minted by the reducer rather than by a handler (a
-  timeout has no handler settle at all — the call is over while its attempt is
-  still running), so those two are announced off the fold instead. That is why
-  `c7`'s `hook:` line above prints after its record and the others print before.
+- **It fires once per failed call** — including a call that climbed a retry
+  ladder, whose absorbed attempts the model is not shown and neither are you.
+  *When* it fires depends on whether the tool declared `timeoutMs` or `retry`.
+  A tool that declared neither is announced at the interpret boundary: after
+  the handler settled, before the failure is folded into the conversation. A
+  tool that declared either is announced off the fold instead, because its
+  ending is minted by the reducer rather than by a handler — a timeout has no
+  handler settle at all, since the call is over while its attempt is still
+  running. That is why `c7`'s `hook:` line above prints after its record and
+  the un-laddered ones print before theirs.
 - **It is awaited.** An async hook holds that settle until it resolves, so keep
   it short and put anything slow on your own queue.
 - **A resume does not replay it.** An outcome a previous process already folded

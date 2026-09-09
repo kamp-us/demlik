@@ -296,7 +296,7 @@ describe("the ladder slice is durable", () => {
  * host never hears about, which is the exact loss #115 was filed over.
  */
 describe("the ladder's endings are structured failures like any other", () => {
-  it("hands `timeout` and `retry_exhausted` to onToolError with their payloads", async () => {
+  it("hands `timeout` and `retry_exhausted` to onToolError once per call, with their payloads", async () => {
     const slow = tool(
       "slow",
       {
@@ -328,13 +328,11 @@ describe("the ladder's endings are structured failures like any other", () => {
       model,
       tools: [slow, flaky],
       instructions: "i",
-      onToolError: (outcome) => {
-        // Only the CALL's own ending, not the attempts the ladder absorbed —
-        // `flaky` fails three times and the host is told once about the call.
-        if (outcome._tag === "timeout" || outcome._tag === "retry_exhausted") {
-          hooked.push(outcome);
-        }
-      },
+      // UNFILTERED on purpose. `flaky`'s handler fails three times, and if the
+      // absorbed attempts reached the hook they would land in this array beside
+      // the two endings — so the assertion below is what pins once-per-call,
+      // not a `_tag` test that would have hidden them.
+      onToolError: (outcome) => void hooked.push(outcome),
     });
     await agent.run("go", { store: memoryStore() });
     expect(hooked).toEqual([
@@ -368,25 +366,27 @@ describe("the ladder's endings are structured failures like any other", () => {
     const runId = "resume-me";
     const first = scripted([asks("flaky")]);
     let hooked = 0;
-    const config = {
-      tools: [flaky],
-      instructions: "i",
-      onToolError: (outcome: { readonly _tag?: string }) => {
-        if (outcome._tag === "retry_exhausted") hooked += 1;
-      },
-    };
-    await defineAgent({ ...config, model: first.model }).run("go", {
-      store,
-      runId,
-    });
+    // Built per drive rather than spread from a shared config object: hoisting
+    // the config would need `onToolError`'s parameter annotated, and annotating
+    // it blocks `T` inferring from `tools` — the agent widens to `unknown` and
+    // the `store` below stops matching. The tools type the hook, always.
+    const agentOn = (
+      model: (m: readonly AgentMessage[]) => Promise<AgentTurn>,
+    ) =>
+      defineAgent({
+        model,
+        tools: [flaky],
+        instructions: "i",
+        onToolError: (outcome) => {
+          if (outcome._tag === "retry_exhausted") hooked += 1;
+        },
+      });
+    await agentOn(first.model).run("go", { store, runId });
     expect(hooked).toBe(1);
     // Same store, same runId: the second drive boots on the finished Model, so
     // the folded `retry_exhausted` record is READ and never announced again.
     const second = scripted([]);
-    await defineAgent({ ...config, model: second.model }).run("go", {
-      store,
-      runId,
-    });
+    await agentOn(second.model).run("go", { store, runId });
     expect(hooked).toBe(1);
   });
 });

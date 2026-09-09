@@ -17,12 +17,13 @@ branch on. `toolErrorReason` and the `reason` it renders are unchanged — this 
   `ToolRetryExhausted`).
 - `DefineAgentConfig.onToolError(outcome, ctx)` — optional, with `outcome` typed against this
   agent's own tools: a `switch` on `_tag` narrows the payload and an unhandled failure mode is a
-  compile error. A handler's own failure fires it at the interpret boundary, before the fold;
-  `timeout` and `retry_exhausted` are minted by the reducer rather than by a handler, so those
-  two fire off the fold instead. It is awaited at the interpret boundary, it is not re-fired on
-  resume for an outcome already folded, and a throw is contained and warned like `onEvent`'s.
-  `ToolErrorContext` is its second argument — the `callId` and the tool `name` the model asked
-  for.
+  compile error. It fires once per failed CALL, and the two seams it fires from split on whether
+  the tool declared `timeoutMs` / `retry`: a tool that declared neither is announced at the
+  interpret boundary, before the fold and awaited there; a tool that declared either is announced
+  off the fold, because its ending is minted by the reducer rather than by a handler and its
+  absorbed attempts are failures the run did not produce. It is not re-fired on resume for an
+  outcome already folded, and a throw is contained and warned like `onEvent`'s. `ToolErrorContext`
+  is its second argument — the `callId` and the tool `name` the model asked for.
 
 `AgentVerbs.toolErr` now takes `string | ToolFailure`: a bare `reason` still settles an untagged
 failure exactly as it did, and a whole `ToolFailure` keeps the tag through the fold.

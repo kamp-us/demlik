@@ -178,9 +178,6 @@ console.log("done:", final.output?.content);
  *   c4 lookyp → {"_tag":"unknown_tool","name":"lookyp","reason":"unknown_tool {\"name\":\"lookyp\"}","kind":"error"}
  *   hook: lookup failed with malformed_args
  *   c5 lookup → {"_tag":"malformed_args","name":"lookup",…,"kind":"error"}
- *   hook: fetch_rate failed with upstream
- *   hook: fetch_rate failed with upstream
- *   hook: fetch_rate failed with upstream
  *   hook: fetch_rate failed with retry_exhausted
  *   c6 fetch_rate → {"_tag":"retry_exhausted","attempts":3,"last":"upstream","reason":"retry_exhausted {\"attempts\":3,\"last\":\"upstream\"}","kind":"error"}
  *   c7 fetch_rate → {"_tag":"timeout","reason":"timeout","kind":"error"}
@@ -190,10 +187,10 @@ console.log("done:", final.output?.content);
  * `c6` ran the handler three times and the model is told so; `c7` ran it once
  * and was over at 50ms, while that attempt was still sleeping out its 500ms.
  *
- * Read the `fetch_rate` lines against the two seams the hook has (#115 + #117).
- * The three bare `upstream` ones are ATTEMPTS, announced from the interpret
- * boundary as each handler settles — the model is told about none of them,
- * because the ladder absorbed them. `retry_exhausted` and `timeout` are the
- * CALLS ending, and the reducer mints those, so they are announced off the fold
- * instead: which is why `timeout` prints after `c7`'s record rather than before.
+ * `fetch_rate` gets ONE hook line per call, not one per attempt: it declares a
+ * ladder, so its attempts are announced nowhere and the call's own ending is
+ * announced off the fold. That is also why `timeout` prints after `c7`'s record
+ * while the un-laddered failures print before theirs — a laddered call has no
+ * handler settle to read the ending from, so the fold is the first place it
+ * exists.
  */

@@ -42,8 +42,6 @@ import {
   type ModelStream,
   type StreamingModel,
   status,
-  TOOL_RETRY_EXHAUSTED_TAG,
-  TOOL_TIMEOUT_TAG,
   type ToolCall,
   type ToolOutcome,
   type TurnChunk,
@@ -348,7 +346,9 @@ export function defineAgent<T extends AnyToolDef>(
             }),
     });
     if (onEvent !== undefined) forwardEvents(handle, onEvent);
-    if (onToolError !== undefined) forwardLadderErrors(handle, onToolError);
+    if (onToolError !== undefined) {
+      forwardLadderErrors(handle, router, onToolError);
+    }
     return driveToDone(
       handle,
       (booted) => {
@@ -515,21 +515,27 @@ function forwardEvents<T extends AnyToolDef>(
 }
 
 /**
- * Deliver the two failures the LADDER authors (#117) to `onToolError`.
+ * Deliver a LADDERED call's one failure to `onToolError` (#117 meeting #115).
  *
- * `withToolErrorHook` below wraps interpret, and that is the right seam for
- * every failure a handler settles — but `timeout` and `retry_exhausted` are
- * minted by the reducer, not by a handler, so no interpret call ever carries
- * one. A timeout in particular has no handler settle at all: the call is over
- * while its attempt is still running. Without this the hook would silently never
- * fire for a tool whose `tool()` spec declared `timeoutMs` or `retry`.
+ * `withToolErrorHook` below wraps interpret, and that is the right seam for a
+ * call nothing else owns — but a tool declaring `timeoutMs` or `retry` settles
+ * once per ATTEMPT there, and the attempts a ladder absorbs are not failures the
+ * run produced: the model is shown none of them, and neither is the host. The
+ * call's real ending is minted by the reducer (a timeout has no handler settle
+ * at all — the call is over while its attempt is still running), so it is
+ * readable only off the fold.
  *
- * `observe` is the per-transition seam, so the record is read after its fold
- * rather than before it — the one clause that differs from the interpret seam's,
- * and it differs because there is nothing earlier to read. Everything else
- * holds: once per settled call (the `fired` set), and never on resume for an
- * outcome already folded (the FIRST observed state seeds `fired`, so records a
- * `Store` handed back are seen and not re-announced).
+ * So the two seams SPLIT on one question, `resilienceOf(call) !== null`, and
+ * every call is announced by exactly one of them. That is what makes
+ * once-per-call structural rather than a filter the caller writes: a laddered
+ * call is silent at interpret and announced here, a bare call the other way
+ * round, and neither can announce the other's.
+ *
+ * The cost is that a laddered call's failure is read AFTER its fold rather than
+ * before it — there is nothing earlier to read. The two other clauses hold
+ * unchanged: once per settled call (`fired`), and never re-announced on resume,
+ * because the boot/start transition seeds `fired` with every record the `Store`
+ * handed back and folds none of its own.
  */
 function forwardLadderErrors<T extends AnyToolDef>(
   handle: BootingRuntime<
@@ -537,25 +543,25 @@ function forwardLadderErrors<T extends AnyToolDef>(
     AgentMachineMsg<LidPurpose, LidOutputs, ToolResult<T>> | WiredToolMsg<T>,
     DefinedAgentEvent<T>
   >,
+  router: ToolRouter<T>,
   onToolError: NonNullable<DefineAgentConfig<T>["onToolError"]>,
 ): void {
   const fired = new Set<string>();
-  let seeded = false;
-  handle.observe((_msg, state) => {
+  handle.observe((msg, state) => {
+    // `agent_start` and `agent_boot` are the run's first transition and fold no
+    // tool record of their own, so every record visible under one is history a
+    // `Store` handed back. Reading the Msg rather than "is this the first call"
+    // is what makes that a stated invariant instead of an assumed one.
+    const seeding =
+      msg.type === MsgType.AgentStart || msg.type === MsgType.AgentBoot;
     for (const record of state.conversation?.toolRecords ?? []) {
       const { outcome, call } = record;
       if (outcome.kind !== "error") continue;
       if (fired.has(call.callId)) continue;
       fired.add(call.callId);
-      // The pre-existing records of a resumed run: remembered, never announced.
-      if (!seeded) continue;
-      if (
-        outcome._tag !== TOOL_TIMEOUT_TAG &&
-        outcome._tag !== TOOL_RETRY_EXHAUSTED_TAG
-      ) {
-        // A handler-settled failure the interpret seam already announced.
-        continue;
-      }
+      if (seeding) continue;
+      // A call no ladder owns was announced at the interpret boundary already.
+      if (router.resilienceOf(call) === null) continue;
       void Promise.resolve(
         onToolError(outcome as ToolFailureOf<T>, {
           callId: call.callId,
@@ -565,7 +571,6 @@ function forwardLadderErrors<T extends AnyToolDef>(
         console.warn("@demlik/tea: a run's onToolError hook threw", err);
       });
     }
-    seeded = true;
   });
 }
 
@@ -584,6 +589,12 @@ function forwardLadderErrors<T extends AnyToolDef>(
  *
  * `tool_rejected` is wrapped like any other handler, so `unknown_tool` and
  * `malformed_args` reach the hook exactly as a tool's own failure does.
+ *
+ * A LADDERED call is the one thing this seam stays silent about, because here it
+ * is one settle per ATTEMPT and the absorbed ones are not failures the run
+ * produced. `forwardLadderErrors` above announces those calls off the fold
+ * instead; the two seams split on `resilienceOf` and every call belongs to
+ * exactly one.
  */
 function withToolErrorHook<T extends AnyToolDef>(
   router: ToolRouter<T>,
@@ -601,6 +612,9 @@ function withToolErrorHook<T extends AnyToolDef>(
       if (msg === undefined) return msg;
       const settled = router.outcomeOf(msg);
       if (settled === null || settled.outcome.kind === "ok") return msg;
+      // A laddered call is announced off its fold, once, by
+      // `forwardLadderErrors` — never per attempt from here.
+      if (ownedByLadder(router, cmd, settled.callId)) return msg;
       try {
         await onToolError(settled.outcome as ToolFailureOf<T>, {
           callId: settled.callId,
@@ -616,6 +630,21 @@ function withToolErrorHook<T extends AnyToolDef>(
     ...router,
     interpret: wrapped as unknown as ToolRouter<T>["interpret"],
   };
+}
+
+/**
+ * Whether a ladder owns the call this Cmd is an attempt of — the one question
+ * the two `onToolError` seams split on. Read off the same `resilienceOf` the
+ * reducer runs the ladder from, so the two can never disagree about who
+ * announces a call. A `tool_rejected` names no declared tool, so it is never
+ * laddered and always announced at the interpret boundary. PURE.
+ */
+function ownedByLadder<T extends AnyToolDef>(
+  router: ToolRouter<T>,
+  cmd: { readonly type: string },
+  callId: string,
+): boolean {
+  return router.resilienceOf({ name: cmd.type, callId, args: {} }) !== null;
 }
 
 /**
