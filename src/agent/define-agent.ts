@@ -478,7 +478,9 @@ export interface DefinedAgent<T extends AnyToolDef> {
 /**
  * Define an agent from a model, the tools it may call and its instructions, and
  * get back `run(input)` — a promise of the finished state — plus `machine(input)`
- * for driving the same run yourself.
+ * for driving the same run yourself, which is the entry point a newcomer picks,
+ * `createAgent` being the layer underneath that you drop to only to walk a stage
+ * pipeline of your own.
  *
  * Add `maxTurns` and `deadlineMs` to bound the run; both are described on
  * `DefineAgentConfig`. The run's `input` is its single stage, so it is durable

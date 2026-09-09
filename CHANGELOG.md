@@ -1,5 +1,12 @@
 # @demlik/tea
 
+## 0.13.0
+
+Published on 2026-09-06 by the per-merge publish job, whose version-bump commit was then
+rejected by branch rules and never landed on main. The tag on npm carries none of the work
+merged after it. Its changesets were never consumed; they roll into the next version, the
+first release from the version-PR model.
+
 ## 0.12.0
 
 ### Minor Changes

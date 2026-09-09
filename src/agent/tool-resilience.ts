@@ -160,12 +160,17 @@ export interface ToolLadder<TC> {
     s: ToolResilienceState,
     msg: DeadlineExceeded,
   ) => readonly [ToolResilienceState, ToolTimerOutcome<TC>];
-  /** Re-issue the in-flight attempts a cold boot found — see the note on the body. */
+  /**
+   * Re-issue the in-flight attempts a cold boot found — see the note on the body.
+   * Returns the same outcome shape a timer fire does, because a boot can also END
+   * a call: one whose timeout budget was already spent before the kill settles
+   * here, without its handler being called again.
+   */
   readonly boot: (
     s: ToolResilienceState,
     calls: readonly ToolCall[],
     at: number,
-  ) => readonly [ToolResilienceState, readonly TC[]];
+  ) => readonly [ToolResilienceState, ToolTimerOutcome<TC>];
   /** Every armed retry / timeout timer across every tool's ladder. */
   readonly subs: (s: ToolResilienceState) => readonly DeadlineSub[];
 }
@@ -334,6 +339,7 @@ export function createToolLadder<TC>(
   const boot: ToolLadder<TC>["boot"] = (s, calls, at) => {
     let next = s;
     const cmds: TC[] = [];
+    const settle: ToolSettleOrder[] = [];
     for (const call of calls) {
       const rc = rcFor(call);
       if (rc === null) {
@@ -341,6 +347,15 @@ export function createToolLadder<TC>(
         continue;
       }
       const key = toolCallKey(call.name, call.callId);
+      // Re-anchor this tool's whole slice FIRST. The downtime between the kill
+      // and this wake is time in which no attempt ran, so it is not the tool's
+      // to be charged for; `resume` moves every live call's charging clock to
+      // `at` and leaves the remaining budget alone. It runs before the phase is
+      // read, before `attempt`, and before `subs` derives any timer instant.
+      next = {
+        ...next,
+        [call.name]: rc.resume(sliceOf(next, call.name, rc), at),
+      };
       const phase = sliceOf(next, call.name, rc).calls[key]?.phase;
       // A call the kill caught BETWEEN attempts is not re-issued: its next
       // attempt is already owed to the retry timer, which `subs` re-arms off the
@@ -354,10 +369,19 @@ export function createToolLadder<TC>(
         call,
         at,
       );
+      // The gate settles instead of dispatching when the budget is spent, so a
+      // call that ran out of time before the kill ends HERE — the port is not
+      // called again to produce a result the ladder would throw away.
+      const settled = slice.calls[key];
+      if (settled?.phase === "failed" && isDeadline(settled.error)) {
+        next = { ...next, [call.name]: forget(slice, key) };
+        settle.push({ callId: call.callId, failure: timeoutFailure() });
+        continue;
+      }
       next = { ...next, [call.name]: slice };
       cmds.push(...toLaunchCmds(runCmds));
     }
-    return [next, cmds];
+    return [next, { cmds, settle }];
   };
 
   const subs: ToolLadder<TC>["subs"] = (s) => {

@@ -18,6 +18,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0014](./0014-typed-effect-channels-on-cmd-constructors.md) | Effect's E and R channels are types on Cmd constructors, never Effect values at the core | Accepted | 2026-09-04 |
 | [0015](./0015-hide-the-wiring-never-the-state.md) | A convenience layer hides the wiring, never the state | Accepted | 2026-09-04 |
 | [0016](./0016-removal-lands-in-a-minor-at-0x.md) | While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag | Accepted | 2026-09-04 |
+| [0017](./0017-fencing-is-an-optional-store-widening.md) | Fencing is an optional `Store` widening, and a store conflict is a throw | Accepted | 2026-09-09 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

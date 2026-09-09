@@ -66,6 +66,16 @@ const MALFORMED = "chromeStorageStore: stored value is not a string";
  *
  * `area` defaults to `chrome.storage.local` for production. Tests pass a
  * `fakeChrome().storage.local` in.
+ *
+ * **Not fenced, deliberately (#143).** This is the one shipped factory that
+ * does not implement `FencedStore<S>`, and it opts out rather than faking a
+ * generation counter: `chrome.storage` offers no atomic compare-and-swap and no
+ * cross-context lock, so a version cell here would be read-then-written with a
+ * real race between the two — a fence that reports success while both writers
+ * win, which is worse than no fence. The honest guarantee is the one the
+ * platform gives: a single background service worker per extension is the
+ * single writer, and that is a precondition to keep, not one this store can
+ * enforce. See `docs/explanation/durability-model.md`.
  */
 export function chromeStorageStore<S>(
   key: string,

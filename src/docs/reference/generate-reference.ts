@@ -41,6 +41,19 @@ const PACKAGE_JSON = join(PKG_ROOT, "package.json");
 /** A curated module group — governs the compass layout. */
 type Group = "Core" | "Adapters" | "Machines" | "Resilience" | "Testing";
 
+/**
+ * One row of a page's start-here tier — the handful of symbols a newcomer reads
+ * before the exhaustive table, which is alphabetical and so says nothing about
+ * where to begin. Curated here rather than derived: "where a newcomer starts" is
+ * an editorial fact no docblock carries.
+ */
+interface StartHere {
+  /** Must name a symbol the module actually exports — checked at render. */
+  readonly symbol: string;
+  /** Why a reader picks this one, in one line. */
+  readonly reachFor: string;
+}
+
 interface Curated {
   /** package.json exports subpath, e.g. "." or "./pbt". */
   readonly subpath: string;
@@ -51,6 +64,8 @@ interface Curated {
   /** typedoc module name — "index" for the root barrel, else the dir name. */
   readonly typedocName: string;
   readonly group: Group;
+  /** Optional start-here tier, rendered above the exhaustive export table. */
+  readonly startHere?: readonly StartHere[];
 }
 
 /**
@@ -108,6 +123,33 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     file: "agent.md",
     typedocName: "agent",
     group: "Machines",
+    startHere: [
+      {
+        symbol: "defineAgent",
+        reachFor:
+          "You want an agent: a model, the tools it may call, instructions. This is the entry point — `run(input)` drives it to its finished state.",
+      },
+      {
+        symbol: "tool",
+        reachFor:
+          "Declare one thing the model may call — its input/result schemas, the failures it may name, and the handler.",
+      },
+      {
+        symbol: "ToolOutcome",
+        reachFor:
+          "Read what a settled call hands back, whether it succeeded or failed.",
+      },
+      {
+        symbol: "DefinedAgentState",
+        reachFor:
+          "Type the Model a defined agent persists — what a `Store` reads and writes.",
+      },
+      {
+        symbol: "createAgent",
+        reachFor:
+          "Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express.",
+      },
+    ],
   },
   {
     subpath: "./retry-backoff",
@@ -193,6 +235,38 @@ function tagline(summary: string): string {
   return flat.replace(/^@demlik\/tea[\w/-]*\s*[—-]\s*/, "").trim();
 }
 
+/**
+ * The start-here tier, or nothing when the page curates none. A row naming a
+ * symbol the module does not export is a hard error rather than a quiet skip:
+ * that is exactly the drift this tier is here to survive.
+ */
+function renderStartHere(
+  entry: Curated,
+  symbols: readonly DocSymbol[],
+): string[] {
+  const rows = entry.startHere ?? [];
+  if (rows.length === 0) return [];
+  const exported = new Set(symbols.map((s) => s.name));
+  for (const row of rows) {
+    if (!exported.has(row.symbol)) {
+      throw new Error(
+        `start-here tier for '${entry.importPath}' names '${row.symbol}', which the module does not export`,
+      );
+    }
+  }
+  return [
+    "## Start here",
+    "",
+    "The exports below are alphabetical, which says nothing about where to begin.",
+    "These are the ones to read first:",
+    "",
+    "| Symbol | Reach for it when |",
+    "| --- | --- |",
+    ...rows.map((r) => `| \`${cell(r.symbol)}\` | ${cell(r.reachFor)} |`),
+    "",
+  ];
+}
+
 function renderModulePage(entry: Curated, mod: DocModule): string {
   const intro = tagline(mod.summary);
   const symbols = [...mod.symbols].sort((a, b) => a.name.localeCompare(b.name));
@@ -200,6 +274,7 @@ function renderModulePage(entry: Curated, mod: DocModule): string {
   lines.push(`# ${entry.importPath}`, "");
   if (intro) lines.push(`> ${intro}`, "");
   lines.push("```ts", `import { … } from "${entry.importPath}";`, "```", "");
+  lines.push(...renderStartHere(entry, symbols));
   lines.push(`## Exports (${symbols.length})`, "");
   if (symbols.length === 0) {
     lines.push("_No public exports._", "");

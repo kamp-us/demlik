@@ -55,7 +55,7 @@
  *     (`get` is never consulted); omit `circuit` and every call passes the
  *     breaker; omit `rateLimit` and the bucket never throttles; omit `retry`
  *     and a failure is terminal (no backoff, no timer); omit `deadline` and no
- *     overall wall-clock cap is armed. "Omit a brick → omit its gate" is the
+ *     overall time budget is armed. "Omit a brick → omit its gate" is the
  *     whole config story — there are no other modes.
  *
  * Four later compositions (`llm-call`, `paginated-walk`, `authed-call`,
@@ -175,9 +175,18 @@ export interface CacheConfig {
   readonly ttlMs: number;
 }
 
-/** Overall wall-clock deadline knob — an absolute cap per in-flight call. */
+/**
+ * Overall deadline knob — a budget of IN-PROCESS time per in-flight call.
+ *
+ * The budget is charged in elapsed time this process actually observed, not by
+ * a position on the host's wall clock. Time in which no process exists — a DO
+ * eviction, a crash between attempts, a redeploy — is NOT charged: `resume`
+ * re-anchors every live call's charging clock, so downtime lands outside every
+ * segment. A timeout therefore means "the tool took too long", never "the host
+ * was away too long" (#144).
+ */
 export interface DeadlineConfig {
-  /** Budget from the moment a call starts, in ms. */
+  /** Budget of in-process time from the moment a call starts, in ms. */
   readonly ms: number;
 }
 
@@ -211,16 +220,46 @@ export interface ResilientConfig {
 // ===========================================================================
 
 /**
+ * What is left of one call's deadline budget, and where the currently open
+ * charging segment starts. Plain data, so it persists with the rest of the slice
+ * — but the DURABLE fact is `remainingMs`, a duration, never an instant.
+ *
+ * The accounting has one rule, applied at every transition that carries a clock
+ * (`attempt`'s `at`, a settle Msg's `at`, a timer's `atMs`): charge the segment
+ * that just closed and open a new one at the same instant —
+ * `remainingMs -= at - chargingSinceMs; chargingSinceMs = at`. See {@link charge}.
+ *
+ * `chargingSinceMs` is an IN-PROCESS anchor, not a persisted deadline. It is
+ * meaningful only while the process that wrote it is alive, and `resume` re-bases
+ * it on every live call before anything reads it after a reload — which is what
+ * keeps downtime out of the budget. Nothing derives a timeout from it across a
+ * resume; the only durable answer to "how much budget is left" is `remainingMs`.
+ *
+ * `remainingMs` is `0` when the `deadline` brick is absent, which is also the
+ * "no cap armed" reading `subs` uses — a call with a real budget always has
+ * `remainingMs > 0`, because `gate` settles a call whose budget reached zero
+ * rather than letting it enter `running`.
+ */
+export interface CallBudget {
+  /** In-process ms left when the open segment started. `0` = no deadline brick. */
+  readonly remainingMs: number;
+  /** The instant the open segment started, on the clock of the process that opened it. */
+  readonly chargingSinceMs: number;
+}
+
+/**
  * Per-key call phase. `key` indexes a logical call; several can be in flight at
  * once (the generalization of the example's single `url`). Discriminated on
  * `phase` so each phase carries only its own data (pattern 11):
  *
  *   - `idle`          — never attempted, or fully settled and forgotten.
  *   - `running`       — the effect Cmd is out; awaiting `succeed` / `fail`.
- *                       Carries `deadlineAtMs` (absolute cap, `0` if no deadline
- *                       brick) and the last `input` so a retry can re-issue it.
+ *                       Carries the deadline budget ({@link CallBudget}) and the
+ *                       last `input` so a retry can re-issue it.
  *   - `waiting_retry` — a transient failure backed off; the retry timer is armed
- *                       for `retryAtMs`. Carries `input` for the re-attempt.
+ *                       for `retryAtMs`. Carries `input` for the re-attempt, and
+ *                       the same budget — backoff is in-process time, so it is
+ *                       charged like an attempt.
  *   - `circuit_open`  — the breaker fast-failed this attempt. Terminal for this
  *                       call until the consumer re-attempts after cooldown.
  *   - `succeeded`     — settled OK. `result` is the value the port produced.
@@ -232,13 +271,13 @@ export type CallPhase<I, R> =
   | {
       readonly phase: "running";
       readonly input: I;
-      readonly deadlineAtMs: number;
+      readonly budget: CallBudget;
     }
   | {
       readonly phase: "waiting_retry";
       readonly input: I;
       readonly retryAtMs: number;
-      readonly deadlineAtMs: number;
+      readonly budget: CallBudget;
     }
   | { readonly phase: "circuit_open" }
   | { readonly phase: "succeeded"; readonly result: R }
@@ -339,6 +378,23 @@ function circuitPolicy(config: ResilientConfig) {
   };
 }
 
+/**
+ * Close the open charging segment at `at` and open the next one there: the ONE
+ * place a {@link CallBudget} is debited. Every caller holds `at` as data (a
+ * verb's argument, a Msg's stamp), so the budget advances without any verb
+ * reading a clock. PURE.
+ *
+ * A budget with no deadline brick (`remainingMs` 0) is left alone — there is
+ * nothing to spend, and debiting it would push it negative and read as "spent".
+ * `at` before the anchor cannot happen on a monotonic feed, but a clamped charge
+ * keeps a skewed one from CREDITING budget back.
+ */
+function charge(budget: CallBudget, at: number): CallBudget {
+  if (budget.remainingMs <= 0) return { ...budget, chargingSinceMs: at };
+  const elapsed = Math.max(0, at - budget.chargingSinceMs);
+  return { remainingMs: budget.remainingMs - elapsed, chargingSinceMs: at };
+}
+
 // Sub-id families. Each call's retry timer is a deadline keyed by `key`, so a
 // machine running many concurrent calls reconciles each independently.
 function retryTimerId(key: string): string {
@@ -403,16 +459,46 @@ export function createResilientCall<I, R>(
     return s.retry[key] ?? initRetry();
   }
 
-  /** Compute the absolute deadline for a call starting at `at` (0 = no cap). */
-  function deadlineAt(at: number): number {
-    return config.deadline ? at + config.deadline.ms : 0;
+  /** A fresh full budget for a call starting at `at` (`remainingMs` 0 = no cap). */
+  function freshBudget(at: number): CallBudget {
+    return {
+      remainingMs: config.deadline ? config.deadline.ms : 0,
+      chargingSinceMs: at,
+    };
   }
 
   /**
-   * The shared decision: cache → rate-limit → circuit gate, then either emit
-   * the effect or schedule a retry. `deadlineAtMs` is threaded so a re-attempt
-   * (from `onTimer`) keeps the ORIGINAL overall deadline rather than restarting
-   * it. PURE — `at` is the only clock; `rng` is the injected jitter source.
+   * The budget a call already live under `key` carries forward, charged up to
+   * `at`; a fresh full budget when the key has no live call. This is what makes a
+   * re-attempt share ONE budget with the attempts before it rather than buying a
+   * new one — the in-process invariant the deadline brick has always had.
+   */
+  function budgetFor(
+    s: ResilientState<I, R>,
+    key: string,
+    at: number,
+  ): CallBudget {
+    const call = s.calls[key];
+    if (call?.phase === "running" || call?.phase === "waiting_retry") {
+      return charge(call.budget, at);
+    }
+    return freshBudget(at);
+  }
+
+  /**
+   * The shared decision: budget → cache → rate-limit → circuit gate, then either
+   * emit the effect or schedule a retry. `budget` is threaded so a re-attempt
+   * (from `onTimer`) keeps the ORIGINAL overall budget rather than restarting it.
+   * PURE — `at` is the only clock; `rng` is the injected jitter source.
+   *
+   * ## Why the budget is checked BEFORE the effect is emitted
+   *
+   * The check is step 0 and it settles rather than dispatches. A call whose
+   * budget is spent must not reach the port at all: the port is a real side
+   * effect, and re-issuing an attempt only to settle `deadline_exceeded` when it
+   * returns spends that effect for an answer nobody reads. This is exactly the
+   * resume path's shape — a process that comes back to a spent budget settles
+   * here, with zero further port calls (#144).
    *
    * Used by both `attempt` (fresh call) and `onTimer` (retry timer fired) so
    * the gate logic lives in exactly one place — the example's shared `attempt`
@@ -438,8 +524,25 @@ export function createResilientCall<I, R>(
     key: string,
     input: I,
     at: number,
-    deadlineAtMs: number,
+    budget: CallBudget,
   ): readonly [ResilientState<I, R>, readonly RunCmd<I>[]] {
+    // 0) Budget gate. Skipped without the deadline brick (`remainingMs` stays 0
+    // and never moves). A spent budget settles here — before the cache read, the
+    // token spend and the circuit probe, none of which a dead call should touch.
+    if (config.deadline !== undefined && budget.remainingMs <= 0) {
+      return [
+        setCall(s, key, {
+          phase: "failed",
+          error: {
+            _tag: "deadline_exceeded",
+            id: deadlineTimerId(key),
+            atMs: at,
+          } satisfies DeadlineExceededError,
+        }),
+        [],
+      ];
+    }
+
     // 1) Serve from cache if fresh — no effect at all. Skipped when no cache brick.
     if (config.cache !== undefined) {
       const cached = cacheGet(s.cache, key, at);
@@ -465,7 +568,7 @@ export function createResilientCall<I, R>(
           input,
           "rate_limited",
           at,
-          deadlineAtMs,
+          budget,
         );
       }
     }
@@ -488,7 +591,7 @@ export function createResilientCall<I, R>(
     // 4) All gates passed — emit the effect as data.
     return [
       {
-        ...setCall(s, key, { phase: "running", input, deadlineAtMs }),
+        ...setCall(s, key, { phase: "running", input, budget }),
         circuit,
         bucket,
       },
@@ -515,7 +618,7 @@ export function createResilientCall<I, R>(
     input: I,
     error: unknown,
     at: number,
-    deadlineAtMs: number,
+    budget: CallBudget,
   ): readonly [ResilientState<I, R>, readonly RunCmd<I>[]] {
     if (config.retry === undefined) {
       return [setCall(s, key, { phase: "failed", error }), []];
@@ -531,7 +634,7 @@ export function createResilientCall<I, R>(
         phase: "waiting_retry",
         input,
         retryAtMs,
-        deadlineAtMs,
+        budget,
       }),
       [],
     ];
@@ -553,6 +656,11 @@ export function createResilientCall<I, R>(
    * cache → circuit → rate-limit gate and either emits the `resilient_run`
    * effect, schedules a retry, fast-fails (circuit open), or serves the cache.
    * PURE.
+   *
+   * A key already live keeps the budget it is under (charged up to `at`) rather
+   * than being handed a fresh one, so re-issuing an in-flight call — the boot
+   * path's move — cannot silently extend its deadline. Only a key with no live
+   * call starts a full budget.
    */
   function attempt(
     s: ResilientState<I, R>,
@@ -560,7 +668,32 @@ export function createResilientCall<I, R>(
     input: I,
     at: number,
   ): readonly [ResilientState<I, R>, readonly RunCmd<I>[]] {
-    return gate(s, key, input, at, deadlineAt(at));
+    return gate(s, key, input, at, budgetFor(s, key, at));
+  }
+
+  // === Verb: resume ========================================================
+
+  /**
+   * Re-anchor every live call's charging clock to `at`: the verb a host calls
+   * once on the boot path, before any Sub is armed or any attempt re-issued.
+   *
+   * This is what keeps DOWNTIME out of the budget. `chargingSinceMs` is an
+   * instant on the clock of the process that wrote it; after an eviction, a crash
+   * or a redeploy, the gap between it and now is time in which no attempt ran and
+   * no port was called, so charging it would time a call out on the host's
+   * absence rather than on the tool's slowness. `remainingMs` — the durable half
+   * of the budget — is left exactly as the last live transition set it. PURE.
+   */
+  function resume(s: ResilientState<I, R>, at: number): ResilientState<I, R> {
+    const calls: Record<string, CallPhase<I, R>> = { ...s.calls };
+    for (const [key, call] of Object.entries(calls)) {
+      if (call.phase !== "running" && call.phase !== "waiting_retry") continue;
+      calls[key] = {
+        ...call,
+        budget: { ...call.budget, chargingSinceMs: at },
+      };
+    }
+    return { ...s, calls };
   }
 
   // === Verb: succeed =======================================================
@@ -600,7 +733,10 @@ export function createResilientCall<I, R>(
    * Record a failure for `key`: trip the breaker (it may open), then back off —
    * schedule a retry if `retry` permits, else settle `failed`. PURE — `msg.at`
    * stamps the breaker trip + the retry delay base. Re-issues from the call's
-   * remembered `input` and preserves the original overall `deadlineAtMs`.
+   * remembered `input` and carries the original budget forward, charged up to
+   * `msg.at` — the attempt that just failed spent in-process time, and a retry
+   * ladder shares ONE budget across its attempts rather than getting a fresh one
+   * per attempt.
    */
   function fail(
     s: ResilientState<I, R>,
@@ -612,8 +748,7 @@ export function createResilientCall<I, R>(
     const withCircuit = { ...s, circuit };
     const call = s.calls[key];
     const input = call?.phase === "running" ? call.input : undefined;
-    const deadlineAtMs =
-      call?.phase === "running" ? call.deadlineAtMs : deadlineAt(msg.at);
+    const budget = budgetFor(s, key, msg.at);
     // No remembered input (e.g. a stray fail for a key not running) → just
     // settle failed after tripping the breaker; nothing to re-issue.
     if (input === undefined) {
@@ -622,7 +757,7 @@ export function createResilientCall<I, R>(
         [],
       ];
     }
-    return backoff(withCircuit, key, input, msg.error, msg.at, deadlineAtMs);
+    return backoff(withCircuit, key, input, msg.error, msg.at, budget);
   }
 
   // === Verb: settleFailed ==================================================
@@ -681,7 +816,17 @@ export function createResilientCall<I, R>(
     for (const [key, call] of Object.entries(s.calls)) {
       if (msg.id === retryTimerId(key)) {
         if (call.phase !== "waiting_retry") return [s, []];
-        return gate(s, key, call.input, msg.atMs, call.deadlineAtMs);
+        // The backoff wait was in-process time, so it is charged before the gate
+        // reads the budget — and the gate settles rather than dispatching when
+        // that leaves nothing, which is how a resumed ladder ends without one
+        // more port call.
+        return gate(
+          s,
+          key,
+          call.input,
+          msg.atMs,
+          charge(call.budget, msg.atMs),
+        );
       }
       if (msg.id === deadlineTimerId(key)) {
         // Deadline only fires for a still-active call. A settled call has no
@@ -727,9 +872,18 @@ export function createResilientCall<I, R>(
       if (
         config.deadline !== undefined &&
         (call.phase === "running" || call.phase === "waiting_retry") &&
-        call.deadlineAtMs > 0
+        call.budget.remainingMs > 0
       ) {
-        out.push(deadlineSub(deadlineTimerId(key), call.deadlineAtMs));
+        // The absolute instant the timer arms at is DERIVED here, from the open
+        // segment's anchor plus what is left — it is never persisted, so a slice
+        // that came back from storage arms off the anchor `resume` just re-based
+        // rather than off a stamp the downtime ran past.
+        out.push(
+          deadlineSub(
+            deadlineTimerId(key),
+            call.budget.chargingSinceMs + call.budget.remainingMs,
+          ),
+        );
       }
     }
     return out;
@@ -777,6 +931,7 @@ export function createResilientCall<I, R>(
   return {
     init,
     attempt,
+    resume,
     succeed,
     fail,
     settleFailed,

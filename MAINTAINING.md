@@ -79,6 +79,14 @@ subpath, so the split is documented here rather than flattened.
 | `./extension` | `chromeStorageStore` | `chrome.storage` area | `chromeStorageStore<S>(key, area?)` | mechanism |
 | `./do` | `doStore` | `DurableObjectStorage` | `doStore<S>(storage, parse, key?)` | host |
 
+**Fencing is an opt-in per factory, not a fifth factory** ([ADR
+0017](./.decisions/0017-fencing-is-an-optional-store-widening.md)). `fileStore`, `memoryStore`
+and `doStore` each take `{ fenced: true }` and return a `FencedStore<S>` — the optional widening
+of `Store<S>` that carries a version and a compare-and-swap. `chromeStorageStore` does not, and
+says so in its JSDoc: `chrome.storage` has no atomic compare-and-swap, and a fence that reports
+success while both writers win is worse than none. Adding fencing to a factory is a **minor**;
+`Store<S>` itself is unchanged, so no implementor breaks.
+
 `./react` is a host adapter but binds the runtime to a view; it owns no `Store`
 factory and so has no row. If a future factory is added, prefer the
 mechanism-named form for consistency with the majority — but do **not** rename

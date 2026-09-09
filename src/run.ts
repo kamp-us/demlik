@@ -25,6 +25,7 @@ import type {
   BootingRuntime,
   CtxArg,
   DispatchSettle,
+  FencedStore,
   OnError,
   Runtime,
   RuntimeErrorContext,
@@ -38,6 +39,7 @@ import {
   DriveFailedError,
   DriveStalledError,
   IdentityDropNotice,
+  isFencedStore,
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
@@ -187,6 +189,32 @@ export function run<
   },
 ): BootingRuntime<S, M, E> {
   const { store } = opts;
+  // Fencing is a property of the store the caller handed us, never a flag on
+  // `run` (#143): a store that can refuse a second writer says so, and this is
+  // the one place that decides to use it. `fencedVersion` is the version this
+  // run last observed — read at boot, advanced by every accepted save. A save
+  // that finds a different version throws `StoreConflictError` out of the store,
+  // which is exactly the refusal the loser deserves.
+  const fenced = store !== undefined && isFencedStore(store) ? store : null;
+  let fencedVersion = 0;
+
+  // The read half: take the bytes and remember the version they came at, so the
+  // first save can swap against it.
+  async function readFenced(from: FencedStore<S>): Promise<unknown> {
+    const read = await from.loadFenced();
+    fencedVersion = read.version;
+    return read.raw;
+  }
+
+  // The one write path. Every `store.save` in this runtime goes through here so
+  // the fenced and unfenced stores cannot drift apart at a call site.
+  async function persist(next: S): Promise<void> {
+    if (fenced) {
+      fencedVersion = await fenced.saveFenced(next, fencedVersion);
+      return;
+    }
+    if (store) await store.save(next);
+  }
   // `ctx` is conditionally optional (see `CtxArg`); default the nullish case to
   // `{}` so the augmented-ctx spread and `init(loaded, ctx)` get a value.
   const ctx = (opts.ctx ?? {}) as Ctx & RequiredCtx<C>;
@@ -670,7 +698,7 @@ export function run<
   // supervision branch both end here.
   async function commit(next: S, msg: M, cmds: readonly C[]): Promise<void> {
     state = next;
-    if (store) await store.save(next);
+    await persist(next);
     reconcileSubs();
     await runInterpret(cmds);
     fireListeners();
@@ -791,12 +819,18 @@ export function run<
       // `store.migrate(raw)` is the required parse — `S` on recognized shape,
       // `null` on unrecognized (boots fresh). `migrate` MUST NOT throw; if it
       // does we surface via the boot promise (same as a `load` throw).
-      const raw = await store.load();
+      // A fenced store reads its version in the same breath as its bytes, and
+      // the boot save below is a compare-and-swap like every other. Note which
+      // run loses: reading here means a LATER starter reads the current version
+      // and swaps cleanly, so it takes the fence and the older live writer is
+      // refused at ITS next save. Only a true race — both booting off the same
+      // version before either wrote — is refused HERE, before any effect fires.
+      const raw = fenced ? await readFenced(fenced) : await store.load();
       const parsed = store.migrate(raw);
       const [initialState, initCmds] = machine.init(parsed, ctx);
       state = initialState;
       pendingInitCmds = initCmds;
-      await store.save(state);
+      await persist(state);
     }
     reconcileSubs();
     await runInterpret(pendingInitCmds);
@@ -1022,7 +1056,7 @@ export function run<
       // sink rather than swallowing it (invariant 6).
       if (store && state !== undefined && bootError === null) {
         try {
-          await store.save(state);
+          await persist(state);
         } catch (error) {
           reportError(error, { phase: "stop-save" });
         }

@@ -36,7 +36,8 @@
  * callers. They were dropped in favor of the gateway as the single transport.)
  */
 
-import type { Store } from "../index";
+import type { FencedStore, Store } from "../index";
+import { StoreConflictError } from "../index";
 
 // Durable pending-effects ledger (ADR 0003 primitive #1 — durable effects).
 // A pure fold over `effect_owed` / `effect_confirmed` events (NOT a side
@@ -230,6 +231,16 @@ export interface DoStoreOptions<S> {
    * accept whatever `serialize` produces.
    */
   readonly serialize?: (state: S) => unknown;
+  /**
+   * Refuse a second live writer (#143). With `{ fenced: true }` the returned
+   * store is a `FencedStore<S>`: the version lives in its own storage cell
+   * (`<key>@@version`) and the compare-and-swap runs inside
+   * `storage.transaction`, so the read, the compare and the two writes are one
+   * atomic unit. Inside a single DO the platform already guarantees one writer;
+   * fencing is what refuses a SECOND grain — a stale zombie isolate mid-migration,
+   * or a second DO id pointed at the same state by a routing bug.
+   */
+  readonly fenced?: true;
 }
 
 /**
@@ -274,8 +285,18 @@ export interface DoStoreOptions<S> {
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => S | null,
+  keyOrOptions: DoStoreOptions<S> & { readonly fenced: true },
+): FencedStore<S>;
+export function doStore<S>(
+  storage: DurableObjectStorage,
+  parse: (raw: unknown) => S | null,
+  keyOrOptions?: string | DoStoreOptions<S>,
+): Store<S>;
+export function doStore<S>(
+  storage: DurableObjectStorage,
+  parse: (raw: unknown) => S | null,
   keyOrOptions: string | DoStoreOptions<S> = DEFAULT_STATE_KEY,
-): Store<S> {
+): Store<S> | FencedStore<S> {
   // Normalize the legacy positional `key` string and the options bag to one
   // shape, so the body reads a single `key` + `serialize` regardless of which
   // call form the caller used. Backward-compatible: a string `keyOrOptions`
@@ -286,7 +307,8 @@ export function doStore<S>(
   // Identity by default: the Model is serialized as-is (the plain-JSON path).
   const serialize: (state: S) => unknown =
     options.serialize ?? ((state: S): unknown => state);
-  return {
+  const versionKey = `${key}@@version`;
+  const base: Store<S> = {
     async load(): Promise<unknown> {
       const raw = await storage.get<string>(key);
       if (raw === undefined || raw === null) return null;
@@ -303,6 +325,32 @@ export function doStore<S>(
     },
     migrate(raw: unknown): S | null {
       return parse(raw);
+    },
+  };
+  if (options.fenced !== true) return base;
+
+  return {
+    ...base,
+    fenced: true,
+    async loadFenced(): Promise<{ raw: unknown; version: number }> {
+      const stored = await storage.get<number>(versionKey);
+      return { raw: await base.load(), version: stored ?? 0 };
+    },
+    async saveFenced(state: S, expectedVersion: number): Promise<number> {
+      // `storage.transaction` is the DO's own compare-and-swap primitive: the
+      // read, the compare and both writes commit as one unit, and a throw from
+      // the closure rolls the whole thing back — so a refused save leaves the
+      // state cell exactly as the winner wrote it.
+      return await storage.transaction(async (txn) => {
+        const actual = (await txn.get<number>(versionKey)) ?? 0;
+        if (actual !== expectedVersion) {
+          throw new StoreConflictError(expectedVersion, actual);
+        }
+        const next = expectedVersion + 1;
+        await txn.put(key, JSON.stringify(serialize(state)));
+        await txn.put(versionKey, next);
+        return next;
+      });
     },
   };
 }

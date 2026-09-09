@@ -163,6 +163,7 @@ import {
   createToolLadder,
   isToolTimerId,
   type ToolResilienceState,
+  type ToolTimerOutcome,
 } from "./tool-resilience";
 import type {
   AgentConfig,
@@ -193,7 +194,9 @@ export * from "./types";
 /**
  * Assemble an agent from `config` — the model, the stages it walks, and how a
  * tool call is turned into a command — and get back its `init`, verbs and `subs`
- * plus a `toMachine()` that wires all of it into one machine you hand to `run`.
+ * plus a `toMachine()` that wires all of it into one machine you hand to `run`,
+ * which is the layer to reach for only once `defineAgent` cannot express the run
+ * you want — a newcomer starts there, not here.
  *
  * Pass `snapshotEvery` to have the run persist itself every N steps, and
  * `compaction` to have long conversations summarized as they grow; each one you
@@ -1107,15 +1110,27 @@ export function createAgent<
     msg: AgentTimerMsg,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const [toolResilience, outcome] = ladder.onTimer(toolSlice(s), msg);
+    return applyLadder(s, toolResilience, outcome, msg.atMs);
+  }
+
+  /**
+   * Fold one ladder outcome onto the Model: adopt the new slice, keep the
+   * attempts it authorized, and drive every call it gave up on through
+   * `settleTool` so a ladder-ended call drains its batch and fires the next brain
+   * call exactly as a handler-reported failure would. Shared by the timer fire
+   * and the boot path, which produce the same outcome for the same reason — there
+   * is no second completion path to keep in step. PURE.
+   */
+  function applyLadder(
+    s: State,
+    toolResilience: ToolResilienceState,
+    outcome: ToolTimerOutcome<AgentCmd<P, TC>>,
+    at: number,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
     let next: State = { ...s, toolResilience };
     const cmds: AgentCmd<P, TC>[] = [...outcome.cmds];
     for (const order of outcome.settle) {
-      const [settled, more] = settleTool(
-        next,
-        order.callId,
-        order.failure,
-        msg.atMs,
-      );
+      const [settled, more] = settleTool(next, order.callId, order.failure, at);
       next = settled;
       cmds.push(...more);
     }
@@ -1178,12 +1193,12 @@ export function createAgent<
     // one's next attempt is already owed to the retry timer `subs` re-arms off
     // the rehydrated slice, so re-firing here would buy an attempt the budget
     // never granted and reset the count that survived the kill.
-    const [toolResilience, cmds] = ladder.boot(
+    const [toolResilience, outcome] = ladder.boot(
       toolSlice(rebooted),
       rebooted.tools.running,
       at,
     );
-    return [{ ...rebooted, toolResilience }, cmds];
+    return applyLadder(rebooted, toolResilience, outcome, at);
   }
 
   // === Subs ================================================================

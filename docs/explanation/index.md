@@ -33,4 +33,5 @@ They are one global ADR sequence, indexed in [`.decisions/`](../../.decisions/in
 - [ADR 0011 — Errors are data; a throw is reserved for a contract breach](../../.decisions/0011-errors-as-data.md) — the record behind [Why failures are values and bugs are throws](./errors-as-data.md).
 - [ADR 0015 — A convenience layer hides the wiring, never the state](../../.decisions/0015-hide-the-wiring-never-the-state.md) — what a higher-level API may absorb, and what it may never hide.
 - [ADR 0016 — Removal lands in a minor at 0.x](../../.decisions/0016-removal-lands-in-a-minor-at-0x.md) — why there is no deprecation holding pattern while the package is pre-1.0.
+- [ADR 0017 — Fencing is an optional `Store` widening](../../.decisions/0017-fencing-is-an-optional-store-widening.md) — why refusing a second live writer added an interface instead of changing `Store<S>`.
 - [TEA discipline & patterns](../../.patterns/tea/patterns/README.md) — the conceptual canon the library implements.
