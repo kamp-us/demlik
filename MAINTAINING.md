@@ -48,6 +48,11 @@ export is not done until it has a row here. The list itself is pinned by
 | `./retry-backoff` | battery | call-hardening |
 | `./agent` | experimental | agent layer; the brain migration graduates it |
 
+**A new export added to an existing door inherits that door's stamp** and earns no row of its
+own — the table is per subpath, and a per-export list here would drift the moment a module is
+split. So the agent layer's `transcript` collector is `experimental`, on `./agent`'s promise,
+and graduates with the rest of the layer rather than separately.
+
 ### Internal parts
 
 Everything under `src/internal/` is **not** a tier and carries no promise: the flow family, the
