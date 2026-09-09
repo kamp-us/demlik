@@ -312,7 +312,10 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
 
 describe("driveToDone — cancellation via an AbortSignal", () => {
   type S5 = { readonly phase: "idle" | "running" | "done" | "halted" };
-  type M5 = { readonly type: "start" } | { readonly type: "halt" };
+  type M5 =
+    | { readonly type: "start" }
+    | { readonly type: "halt" }
+    | { readonly type: "boom" };
   type C5 = { readonly type: "loop" };
 
   // A machine that never finishes on its own: every `start` re-enters itself
@@ -324,6 +327,11 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
           ? [s, []]
           : [{ phase: "running" }, [{ type: "loop" }]],
       halt: () => [{ phase: "halted" }, []],
+      // A cancel fold that throws instead of landing a State — the shape a
+      // direct kernel consumer can hand `driveToDone` (#170).
+      boom: () => {
+        throw new Error("cancel fold blew up");
+      },
     };
     const interpret: Interpret<M5, C5, undefined> = {
       loop: async () => {
@@ -414,5 +422,77 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     });
 
     expect(final).toEqual({ phase: "halted" });
+  });
+
+  // #170 — the cancel fold is the only thing that can land the terminal State
+  // on an abort, so a throw there used to leave the drive awaiting a promise
+  // nothing could resolve: no rejection, no `DriveStalledError`, a hang.
+  const boom5 = () => ({ type: "boom" }) as const;
+
+  it("an already-aborted signal whose cancel Msg throws rejects instead of hanging", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const probe = instrument(
+      run(
+        looper(() => {}),
+        // The reduce throw reaches the sink too (invariant 6); the drive's
+        // rejection is the claim under test, not the report.
+        { ctx: undefined, onError: () => {} },
+      ),
+    );
+
+    await expect(
+      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+        signal: controller.signal,
+        cancel: boom5,
+      }),
+    ).rejects.toThrow("cancel fold blew up");
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
+  it("an abort mid-run whose cancel Msg throws rejects too, `started` long since resolved", async () => {
+    const controller = new AbortController();
+    let loops = 0;
+    const probe = instrument(
+      run(
+        looper(() => {
+          loops++;
+          if (loops === 2) controller.abort();
+        }),
+        { ctx: undefined, onError: () => {} },
+      ),
+    );
+
+    await expect(
+      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+        signal: controller.signal,
+        cancel: boom5,
+      }),
+    ).rejects.toThrow("cancel fold blew up");
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
+  it("an already-aborted signal whose cancel lands a `failed` State rejects with DriveFailedError", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const probe = instrument(
+      run(
+        looper(() => {}),
+        { ctx: undefined },
+      ),
+    );
+
+    // The already-aborted exit runs the same `failed` check every other exit
+    // does: same inputs, one answer, whichever path reached the State.
+    await expect(
+      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+        failed: (s) => s.phase === "halted",
+        signal: controller.signal,
+        cancel: cancel5,
+      }),
+    ).rejects.toThrow(DriveFailedError);
+    expect(probe.stopped).toBe(true);
   });
 });

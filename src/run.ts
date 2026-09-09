@@ -1174,7 +1174,10 @@ export type DriveToDoneOptions<
  * lands — no rejection, no `DriveFailedError`, no `AbortError`. That is the whole
  * point of routing a stop through the Model: the outcome is durable, so a killed
  * process resumes reading a run that ended instead of restarting one someone
- * stopped. In-flight effects are not recalled — a promise cannot be cancelled —
+ * stopped. A `cancel` fold that THROWS is the one abort that rejects: it lands
+ * no State, so its error is what the drive has to report, and a State the
+ * caller's `failed` predicate marks rejects on an abort exit exactly as it does
+ * anywhere else. In-flight effects are not recalled — a promise cannot be cancelled —
  * so they settle to their own end and `stop()` drains them as it always did;
  * keeping their results off the public channels is the machine's own business.
  * Omit the pair and every path here behaves exactly as it did before.
@@ -1208,10 +1211,13 @@ export async function driveToDone<
     // already ended keeps the outcome it ended on — an abort arriving after the
     // fact does not restate a finished run as cancelled.
     const booted = runtime.getState();
-    if (settles(booted)) {
-      if (failed(booted)) throw new DriveFailedError(booted);
-      return booted;
-    }
+    // The one exit check every branch below shares: a State the caller's
+    // `failed` predicate marks rejects, wherever the drive reached it.
+    const outcome = (state: S): S => {
+      if (failed(state)) throw new DriveFailedError(state);
+      return state;
+    };
+    if (settles(booted)) return outcome(booted);
     // Attach BEFORE dispatching so a terminal transition landing inside the
     // start dispatch is caught.
     const terminal = new Promise<S>((resolve) => {
@@ -1224,19 +1230,26 @@ export async function driveToDone<
     // one. Work already enqueued when the abort arrives still folds; work the
     // machine would have enqueued after it does not, because the cancelled State
     // is terminal and its verbs stop emitting. `dispatchOnce` (not `dispatch`)
-    // because the cancel has no follow-up chain to drain, and a rejection —
-    // the runtime already tearing down — is nothing this drive can act on: the
-    // terminal it is racing settles the outcome either way.
+    // because the cancel has no follow-up chain to drain. Its rejection is NOT
+    // swallowed: only the cancel fold can land the terminal State on an abort,
+    // so a cancel that throws leaves `terminal` with nothing to resolve it and
+    // the drive would park forever (#170). `cancelFailed` carries that rejection
+    // into whichever race the branch below awaits.
+    let cancelFailed: Promise<never> | undefined;
     if (opts.signal !== undefined) {
       const { signal, cancel } = opts;
+      let onCancelError!: (error: unknown) => void;
+      cancelFailed = new Promise<never>((_resolve, reject) => {
+        onCancelError = reject;
+      });
       const onAbort = () => {
-        runtime.dispatchOnce(cancel(runtime.getState())).catch(() => {});
+        runtime.dispatchOnce(cancel(runtime.getState())).catch(onCancelError);
       };
       // Already aborted → cancel INSTEAD of starting, so `start`'s effects (a
       // model call, for the agent) never fire at all.
       if (signal.aborted) {
         onAbort();
-        return await terminal;
+        return outcome(await Promise.race([terminal, cancelFailed]));
       }
       signal.addEventListener("abort", onAbort, { once: true });
       unlisten = () => signal.removeEventListener("abort", onAbort);
@@ -1256,9 +1269,12 @@ export async function driveToDone<
       }
       return terminal;
     });
-    const state = await Promise.race([terminal, started]);
-    if (failed(state)) throw new DriveFailedError(state);
-    return state;
+    // `cancelFailed` rides the race for the mid-run abort: `started` cannot
+    // carry the cancel's rejection, having usually resolved long before the
+    // abort arrives.
+    const racers: Promise<S>[] = [terminal, started];
+    if (cancelFailed !== undefined) racers.push(cancelFailed);
+    return outcome(await Promise.race(racers));
   } finally {
     detach?.();
     // The abort listener outlives this call unless it is removed: a signal a
