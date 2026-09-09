@@ -151,6 +151,12 @@ is being kept for its state, not its history. If you need the transcript after a
 run ends, capture it as it goes rather than expecting to read it back off the
 finished Model.
 
+Capturing it is one line rather than a fold you write: `transcript()` collects
+the turns off the run's existing event stream, and is not state itself, so the
+clear above is unchanged by attaching one. See
+[Keep the whole transcript](../how-to/show-a-run-in-progress.md#4-keep-the-whole-transcript-with-transcript),
+including what to seed it with when the run is a resume.
+
 ## Further reading
 
 - [Make a machine durable and crash-recoverable](../how-to/make-durable.md) — the

@@ -187,6 +187,7 @@ export * from "./compaction";
 export * from "./define-agent";
 export * from "./machine";
 export * from "./tool";
+export * from "./transcript";
 export * from "./types";
 
 // ===========================================================================

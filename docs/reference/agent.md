@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (124)
+## Exports (130)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -144,6 +144,12 @@ These are the ones to read first:
 | `ToolSettlement` | Type | One settled tool, read back off a `ToolMsg` by `outcomeOf`. |
 | `ToolThrown` | Type | The router-minted failure beside a tool's declared tags: the handler threw (or rejected) with something that is not a declared `{ _tag }`. |
 | `ToolTimedOut` | Interface | A call that spent its `timeoutMs` budget — ToolResilience.timeoutMs. |
+| `transcript` | Function | Open a transcript collector over an agent run's event stream. |
+| `Transcript` | Interface | A live transcript: the listener you wire, and the read you take off it. |
+| `TranscriptOutcome` | Type | Whether the run has finished, and its terminal turn once it has. |
+| `TranscriptSeed` | Interface | The Model a resumed collector starts from — structural on purpose, so any agent state (`DefinedAgentState<T>`, `AgentState<…>`) satisfies it without this module importing the lid, and a bare `{ conversation }` object works in a test. |
+| `TranscriptSnapshot` | Interface | What a collector holds right now — a plain, immutable read. |
+| `TranscriptToolResult` | Interface | One tool call the run settled OK, as the transcript keeps it — the `callId` and the result, which is exactly what the `ToolSettled` event carries. |
 | `TurnChunk` | Interface | One partial piece of a turn the model is still producing — a token delta, as the provider emitted it. |
 | `WiredToolCmd` | Type | `ToolCmd<T>` as `toMachine` reads it: `never` for `T = never` — the "no router" reading it defaults to — so the router-owned `tool_rejected` arm does not leak into a machine that wired no router. |
 | `WiredToolMsg` | Type | `ToolMsg<T>` as `toMachine` / `agentEvents` read it — see `WiredToolCmd`. |

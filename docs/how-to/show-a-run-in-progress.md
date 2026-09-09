@@ -99,3 +99,60 @@ this way:
 `onChunk` is contained exactly as `onEvent` is: a throw is warned about, never
 allowed to reject the model call it fired from. Passing it beside a plain model
 is silent — that model has no deltas to give.
+
+## 4. Keep the whole transcript with `transcript()`
+
+A finished run's Model clears `conversation` to `null` — deliberately, so
+storage kept for a run's state does not accumulate its history
+([What a finished agent run keeps](../explanation/durability-model.md#what-a-finished-agent-run-keeps)).
+The turns are still worth keeping, and `transcript()` keeps them: it is a
+collector over the `onEvent` stream you already have, so you fold nothing
+yourself.
+
+```ts
+import { defineAgent, transcript, type ToolResult } from "@demlik/tea/agent";
+
+const t = transcript<ToolResult<typeof search>>();
+
+const final = await agent.run(input, { store, onEvent: t.onEvent });
+
+const { turns, tools, outcome } = t.read();
+```
+
+`read()` returns a fresh immutable snapshot: `turns` is every model turn in
+order, `tools` is every call that settled OK as `{ callId, result }`, and
+`outcome` is `{ kind: "running" }` until `RunDone` and
+`{ kind: "done", output }` after it — a union rather than a nullable field,
+because a run can legitimately finish with no terminating turn.
+
+It changes nothing about the run. The collector is not state: it is never
+journaled, never written to the `Store`, and never folded into the Model, so a
+run with one attached settles the Model a run without one would have settled —
+`conversation` still `null` at `phase: "done"`, `output` still the answer.
+
+### Seed it when the run is a resume
+
+Events are projected off the transitions **this process** applies (step 2), so a
+resumed run re-emits nothing the killed process settled. A collector that only
+listened would hold the last leg and read like the whole run. The Model your
+`Store` hands back still carries that history in its live conversation, so seed
+from it:
+
+```ts
+// The Model the kill left behind, read back through the store's own migrate.
+const parked = store.migrate(await store.load());
+
+const t = transcript(parked ?? { conversation: null });
+const final = await agent.run(input, { store, onEvent: t.onEvent });
+
+t.read().turns; // the killed process's turns, then this process's
+```
+
+One collector per process is the honest unit. A fresh run needs no seed, and a
+seed taken from an already-finished Model contributes nothing — that Model's
+`conversation` is `null`, and its answer is the `output` you already hold.
+
+**Failed tool calls are not in `tools`.** That is the event stream's shape, not
+a choice this collector makes: `ToolSettled` is projected off the OK settle
+alone. To see failures, pass `onToolError`, whose argument is typed per tag —
+see [Handle a tool failure](./handle-a-tool-failure.md).
