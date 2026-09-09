@@ -204,7 +204,13 @@ export type AnyToolDef = AnyCmdDef & {
 /**
  * Declare one tool the model may call — its name, the schemas for its arguments
  * and result, the failures it may return and the handler that runs it — and get
- * back a definition you pass to `toolRouter` or `defineAgent`.
+ * back a `Cmd<T, E, R>` definition, whose `T` is what `ok` parses and whose `E`
+ * is the `err` tag union, that you pass to `toolRouter` or `defineAgent`.
+ *
+ * So a tool's two declared channels ARE the kernel's two typed effect channels
+ * (ADR 0014), spelled in schemas rather than in type parameters: a settled
+ * failure keeps its `_tag` into the conversation, so a reducer switching over
+ * `err`'s tags is exhaustive and an unhandled one is a compile error.
  *
  * `name` is the name the model calls it
  * by; `description` is the model-facing sentence — the one place it lives — a

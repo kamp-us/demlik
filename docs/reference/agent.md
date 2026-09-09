@@ -91,7 +91,7 @@ import { … } from "@demlik/tea/agent";
 | `StreamingModel` | Type | The streaming model port — `(messages, { onChunk }) => Promise<AgentTurn>`. |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `TaggedFailure` | Type | The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and an unhandled tag is a compile error. |
-| `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a definition you pass to `toolRouter` or `defineAgent`. |
+| `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a `Cmd<T, E, R>` definition, whose `T` is what `ok` parses and whose `E` is the `err` tag union, that you pass to `toolRouter` or `defineAgent`. |
 | `TOOL_RETRY_EXHAUSTED_TAG` | Variable | The reason-tag a tool call that spent its retry budget settles under. |
 | `TOOL_TIMEOUT_TAG` | Variable | The reason-tag a timed-out tool call settles under. |
 | `ToolCall` | Interface | One tool the model asked to call this turn. |

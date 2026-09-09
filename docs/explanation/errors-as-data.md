@@ -51,6 +51,21 @@ switch (state.lastCall._tag) {
 Switch on `_tag`. Do not reach for `instanceof` on a value that came out of
 Model — only the tag survives.
 
+## Where the two kinds show up in the types
+
+The split is not only a convention you follow by hand — it is the two channels of
+[`Cmd<T, E, R>`](../reference/tea.md), the effect type every command in the
+library is defined as. `T` is what the effect settles with when it works, `E` the
+tagged failures it may settle with instead, and `R` the ctx it reads. A tool
+declares both channels in the same shape: its `ok` schema is `T`, its `err` tag
+list is `E`. See [Declare a
+tool](../tutorial/build-a-durable-agent.md#declare-a-tool) for that read on a
+real tool.
+
+A contract breach appears in neither channel. There is no `E` arm for "the wiring
+is wrong", because the whole point of `E` is that the caller has a next move —
+which is the same question this page opened with, now asked by the compiler.
+
 ## Why bugs are not also data
 
 Consistency would say: make everything a value. The problem is that a bug has no
