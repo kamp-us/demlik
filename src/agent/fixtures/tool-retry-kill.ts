@@ -16,7 +16,7 @@
 import { appendFileSync } from "node:fs";
 import { z } from "zod";
 import { fileStore } from "../../node";
-import { type AgentTurn, defineAgent, tool } from "../index";
+import { type AgentMessage, type AgentTurn, defineAgent, tool } from "../index";
 
 const log = process.env.TEA_ATTEMPTS_LOG ?? "";
 const statePath = process.env.TEA_STATE ?? "";
@@ -51,7 +51,7 @@ const ASK: AgentTurn = {
 const GIVE_UP: AgentTurn = { content: "gave up", toolCalls: [] };
 
 const agent = defineAgent({
-  model: async (messages) => {
+  model: async (messages: readonly AgentMessage[]) => {
     // The decision is read off the TRANSCRIPT, never off a counter: a counter
     // lives in the process, so the resumed run would restart at zero and ask for
     // the tool a second time — which would be this fixture lying about how many
