@@ -159,6 +159,11 @@ import type {
   WiredToolCmd,
   WiredToolMsg,
 } from "./tool";
+import {
+  createToolLadder,
+  isToolTimerId,
+  type ToolResilienceState,
+} from "./tool-resilience";
 import type {
   AgentConfig,
   AgentConfigCore,
@@ -167,6 +172,7 @@ import type {
   AgentTurn,
   Conversation,
   ToolCall,
+  ToolFailure,
   ToolOutcome,
 } from "./types";
 
@@ -324,6 +330,19 @@ export function createAgent<
     of: (call) => config.toolOf(call),
   });
 
+  // The PER-TOOL timeout / retry ladders (#117) — one more `resilient-call`
+  // composition, the third. `fan.of` still names the effect, but a tool that
+  // declared a policy does not reach it directly: every launch the fan-out
+  // authorizes is routed through `ladder.launch`, which arms the tool's timeout
+  // and emits the run Cmd, and every settle is offered to the ladder first. A
+  // tool that declared nothing is passed straight through, so the whole feature
+  // is inert for an agent that uses none of it.
+  const ladder = createToolLadder<TC>(
+    config.toolResilienceOf ?? (() => null),
+    config.toolOf,
+    rng,
+  );
+
   type State = AgentState<Stage, P, O, R>;
 
   /** The starting slice — every brick's `init`, no conversation yet. */
@@ -334,6 +353,7 @@ export function createAgent<
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
       conversation: null,
       compaction: compactRc.init(),
+      toolResilience: ladder.init(),
       failure: null,
       output: null,
       instructions: config.instructions ?? null,
@@ -520,17 +540,18 @@ export function createAgent<
     // Collapse duplicates by `callId` (keep first occurrence) so every distinct
     // tool launches exactly once and each `callId` settles exactly once.
     const batch = dedupeByCallId(result.toolCalls);
-    const [tools, launchCmds] = fan.scatter(
-      initFanOut<ToolCall, ToolOutcome<R>>(),
-      batch,
-    );
+    const [tools] = fan.scatter(initFanOut<ToolCall, ToolOutcome<R>>(), batch);
     const nextConv: Conversation<R> = {
       ...withTurn,
       awaiting: { kind: "tools", batchTurn: withTurn.turnCount },
     };
     // An advance of the loop is progress — bump the monitored-run watchdog.
     const [runSlice] = run.progress(s.run, undefined, at);
-    return [{ ...s, run: runSlice, tools, conversation: nextConv }, launchCmds];
+    const [toolResilience, launchCmds] = armLaunch(s, [], tools.running, at);
+    return [
+      { ...s, run: runSlice, tools, toolResilience, conversation: nextConv },
+      launchCmds,
+    ];
   }
 
   /**
@@ -593,7 +614,15 @@ export function createAgent<
     result: R,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    return settleTool(s, callId, { kind: "ok", result }, at);
+    const call = inFlight(s, callId);
+    // A success ends the ladder for this call: `ladder.ok` drops its entry, and
+    // dropping it is what disarms the timeout Sub — so the value settles and no
+    // timer survives to fire against a call that is already folded.
+    const laddered =
+      call === null
+        ? s
+        : { ...s, toolResilience: ladder.ok(toolSlice(s), call, at) };
+    return settleTool(laddered, callId, { kind: "ok", result }, at);
   }
 
   /**
@@ -605,10 +634,70 @@ export function createAgent<
   function toolErr(
     s: State,
     callId: string,
-    reason: string,
+    reported: string | ToolFailure,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    return settleTool(s, callId, { kind: "error", reason }, at);
+    // A bare string is the hand-wired caller's shape and carries no tag — the
+    // one untagged arm `ToolFailure`'s optional `_tag` exists for, beside a
+    // record a pre-0.13 `Store` hands back.
+    const failure: ToolFailure =
+      typeof reported === "string"
+        ? { kind: "error", reason: reported }
+        : reported;
+    const call = inFlight(s, callId);
+    if (call === null) return settleTool(s, callId, failure, at);
+    // Offer the failure to the ladder FIRST. A `null` verdict means it armed
+    // another attempt: the fan-out entry stays `running`, nothing is folded, and
+    // the wait is a timer Sub on the Model rather than an `await` inside a
+    // handler — which is what makes the ladder survive a process kill. Anything
+    // else is the failure the call ends on, ladder-authored or the tool's own —
+    // and either way it is the STRUCTURED failure, so the `_tag` #115 keeps
+    // survives the ladder instead of being flattened by passing through it.
+    const [toolResilience, settled] = ladder.err(
+      toolSlice(s),
+      call,
+      failure,
+      at,
+    );
+    const next: State = { ...s, toolResilience };
+    if (settled === null) return [next, []];
+    return settleTool(next, callId, settled, at);
+  }
+
+  /** The in-flight `ToolCall` for `callId`, or `null` if none is running. PURE. */
+  function inFlight(s: State, callId: string): ToolCall | null {
+    return s.tools.running.find((c) => c.callId === callId) ?? null;
+  }
+
+  /**
+   * The tool-ladder slice, defaulting to empty. The default is the rehydration
+   * guard: a Model persisted before this slice existed comes back without the
+   * field, and it must read as "no tool has laddered" rather than crash. PURE.
+   */
+  function toolSlice(s: State): ToolResilienceState {
+    return s.toolResilience ?? {};
+  }
+
+  /**
+   * Arm every launch the fan-out just authorized. The fan-out's own launch Cmds
+   * are DISCARDED in favour of these: a policied tool's effect must be emitted
+   * by its resilient gate (which is what records the attempt and arms the
+   * timeout), and a bare tool's is re-emitted here identically. The two lists
+   * are the same calls either way — `after \ before` is exactly what the
+   * fan-out moved into `running`. PURE.
+   */
+  function armLaunch(
+    s: State,
+    before: readonly ToolCall[],
+    after: readonly ToolCall[],
+    at: number,
+  ): readonly [ToolResilienceState, readonly TC[]] {
+    const known = new Set(before.map((c) => c.callId));
+    return ladder.launch(
+      toolSlice(s),
+      after.filter((c) => !known.has(c.callId)),
+      at,
+    );
   }
 
   /**
@@ -617,23 +706,32 @@ export function createAgent<
    * fold the turn and fire the next brain call. PURE.
    */
   function settleTool(
-    s: State,
+    prev: State,
     callId: string,
     outcome: ToolOutcome<R>,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    const conv = requireAwaiting(s, "tools");
-    if (conv === null) return [s, []];
+    const conv = requireAwaiting(prev, "tools");
+    if (conv === null) return [prev, []];
 
     // Find the original call (by id) so the folded record carries it. A settle
     // for an unknown / already-settled id is a no-op (fan-out also no-ops it).
-    const call = s.tools.running.find((c) => c.callId === callId);
-    if (call === undefined) return [s, []];
+    const call = prev.tools.running.find((c) => c.callId === callId);
+    if (call === undefined) return [prev, []];
 
-    const [tools, launchCmds] =
+    const [tools] =
       outcome.kind === "ok"
-        ? fan.itemOk(s.tools, callId, outcome)
-        : fan.itemErr(s.tools, callId, outcome);
+        ? fan.itemOk(prev.tools, callId, outcome)
+        : fan.itemErr(prev.tools, callId, outcome);
+    // The freed slot backfills from the queue — those launches are armed exactly
+    // like the batch's first ones, so a queued tool gets its timeout too.
+    const [toolResilience, launchCmds] = armLaunch(
+      prev,
+      prev.tools.running,
+      tools.running,
+      at,
+    );
+    const s: State = { ...prev, toolResilience };
 
     const foldedConv: Conversation<R> = {
       ...conv,
@@ -966,8 +1064,41 @@ export function createAgent<
       const [compaction, cmds] = compact.onTimer(s.compaction, msg);
       return [{ ...s, compaction }, cmds];
     }
+    // A `$tool:`-keyed id is one of the per-tool ladders (#117): either a retry
+    // timer, whose fire IS the next attempt, or a timeout, whose fire ends the
+    // call. Both come back as data the reducer folds — the run cmds to re-issue
+    // and, for a timeout, the settle order the fan-out then folds like any
+    // other failure, so the model reads `timeout` as an ordinary tool error.
+    if (isToolTimerId(msg.id)) return toolTimer(s, msg);
     const [resilience, cmds] = llm.onTimer(s.resilience, msg);
     return [{ ...s, resilience }, cmds];
+  }
+
+  /**
+   * Fold one tool-ladder timer fire: apply it to the slice, emit whatever next
+   * attempt it authorized, and settle every call it gave up on. A timeout's
+   * settle runs through `settleTool`, so a timed-out call drains its batch and
+   * fires the next brain call exactly as a handler-reported failure would —
+   * there is no second completion path to keep in step. PURE.
+   */
+  function toolTimer(
+    s: State,
+    msg: AgentTimerMsg,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const [toolResilience, outcome] = ladder.onTimer(toolSlice(s), msg);
+    let next: State = { ...s, toolResilience };
+    const cmds: AgentCmd<P, TC>[] = [...outcome.cmds];
+    for (const order of outcome.settle) {
+      const [settled, more] = settleTool(
+        next,
+        order.callId,
+        order.failure,
+        msg.atMs,
+      );
+      next = settled;
+      cmds.push(...more);
+    }
+    return [next, cmds];
   }
 
   // === Verb: boot ==========================================================
@@ -1020,16 +1151,26 @@ export function createAgent<
       return [{ ...rebooted, compaction }, cmds];
     }
 
-    // awaiting tools → re-fire every running tool's effect Cmd.
-    const cmds = rebooted.tools.running.map((call) => config.toolOf(call));
-    return [rebooted, cmds];
+    // awaiting tools → re-fire every running tool's effect Cmd, through the
+    // ladder. It re-arms each policied call's timeout and — the point of the
+    // whole exercise — SKIPS a call the kill caught between two attempts: that
+    // one's next attempt is already owed to the retry timer `subs` re-arms off
+    // the rehydrated slice, so re-firing here would buy an attempt the budget
+    // never granted and reset the count that survived the kill.
+    const [toolResilience, cmds] = ladder.boot(
+      toolSlice(rebooted),
+      rebooted.tools.running,
+      at,
+    );
+    return [{ ...rebooted, toolResilience }, cmds];
   }
 
   // === Subs ================================================================
 
   /**
    * The merged subscription set — the brain-call retry timers (`../llm-call`),
-   * the COMPACTION retry timers (the dedicated `$compact` slice, #85), and the
+   * the COMPACTION retry timers (the dedicated `$compact` slice, #85), the
+   * PER-TOOL retry + timeout timers (the `$tool:`-keyed ladders, #117), and the
    * no-progress safety deadline (`../monitored-run`). All are `DeadlineSub`s
    * reconciled by id (the compaction timers are keyed `resilient:*:$compact`,
    * distinct from every brain timer), wired with one `subscribe: { deadline:
@@ -1039,6 +1180,7 @@ export function createAgent<
     return [
       ...llm.subs(s.resilience),
       ...compactRc.subs(s.compaction),
+      ...ladder.subs(toolSlice(s)),
       ...run.subs(s.run),
     ];
   }
@@ -1248,16 +1390,15 @@ export function createAgent<
     const foldTool: ToolCell = (s, m) => {
       const settled = tools?.outcomeOf(m);
       if (settled === undefined || settled === null) return [s, []];
-      // Straight to the shared settle body rather than through `toolOk` /
-      // `toolErr`: those two take a widened `result` / `reason`, and the failure
-      // arm the router built carries its `{ _tag, …payload }` beside the reason
-      // (#115). Re-deriving it from a string here is exactly the loss.
-      return settleTool(
-        s,
-        settled.callId,
-        settled.outcome as ToolOutcome<R>,
-        m.at,
-      );
+      // Through `toolOk` / `toolErr` rather than straight to `settleTool`: those
+      // two are where the per-tool timeout / retry ladder (#117) sees the
+      // settle, and a router tool declaring `retry` must climb it exactly as a
+      // bare one does. `toolErr` takes the WHOLE failure the router built, so
+      // the `{ _tag, …payload }` beside the reason (#115) rides through the
+      // ladder intact — re-deriving it from a string here is exactly the loss.
+      return settled.outcome.kind === "ok"
+        ? toolOk(s, settled.callId, settled.outcome.result as R, m.at)
+        : toolErr(s, settled.callId, settled.outcome, m.at);
     };
     const toolCells: Record<string, ToolCell> = {};
     for (const def of tools?.defs ?? []) {
@@ -1271,6 +1412,9 @@ export function createAgent<
     > = {
       [MsgType.AgentStart]: (s, m) => start(s, m.runId, m.at),
       [MsgType.AgentToolOk]: (s, m) => toolOk(s, m.callId, m.result, m.at),
+      // `agent_tool_err` is `createAgent`'s own raw settle Msg and its wire
+      // shape is a bare `reason` string — a consumer routing their own interpret
+      // through it never declared a tag, so the failure it mints carries none.
       [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
       // The re-entered brain-call settle Msgs (from `brainHandlers`): success
       // runs `succeed` (reset retry + fold the turn), failure runs `fail`.

@@ -299,6 +299,17 @@ defineAgent({
       case "unknown_tool":
       case "malformed_args":
         return;
+      case "timeout":
+        return;
+      case "retry_exhausted": {
+        // The ladder's own arms narrow the same way: `retry_exhausted` carries
+        // the attempt count and the last attempt's reason as fields (#117).
+        const attempts: number = outcome.attempts;
+        const last: string = outcome.last;
+        void attempts;
+        void last;
+        return;
+      }
       default:
         // Exhaustive: every arm above is handled, so nothing is left.
         return absurd(outcome);

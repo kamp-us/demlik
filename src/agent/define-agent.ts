@@ -42,6 +42,8 @@ import {
   type ModelStream,
   type StreamingModel,
   status,
+  TOOL_RETRY_EXHAUSTED_TAG,
+  TOOL_TIMEOUT_TAG,
   type ToolCall,
   type ToolOutcome,
   type TurnChunk,
@@ -320,6 +322,10 @@ export function defineAgent<T extends AnyToolDef>(
       payloadOf: promptOf,
       loadMessages: messagesOf,
       toolOf: tools.toolOf,
+      // The per-tool timeout / retry knob (#117). The lid grows no option for
+      // it: the policy is declared on the `tool()` that needs it, and the router
+      // is what carries it down to the reducer that runs it.
+      toolResilienceOf: tools.resilienceOf,
       maxTurns: config.maxTurns,
       deadlineMs: config.deadlineMs,
     }).toMachine<DefinedAgentCtx<T>, T>({ tools });
@@ -342,6 +348,7 @@ export function defineAgent<T extends AnyToolDef>(
             }),
     });
     if (onEvent !== undefined) forwardEvents(handle, onEvent);
+    if (onToolError !== undefined) forwardLadderErrors(handle, onToolError);
     return driveToDone(
       handle,
       (booted) => {
@@ -505,6 +512,61 @@ function forwardEvents<T extends AnyToolDef>(
   for (const type of AGENT_EVENT_TYPES) {
     handle.on(type, deliver);
   }
+}
+
+/**
+ * Deliver the two failures the LADDER authors (#117) to `onToolError`.
+ *
+ * `withToolErrorHook` below wraps interpret, and that is the right seam for
+ * every failure a handler settles — but `timeout` and `retry_exhausted` are
+ * minted by the reducer, not by a handler, so no interpret call ever carries
+ * one. A timeout in particular has no handler settle at all: the call is over
+ * while its attempt is still running. Without this the hook would silently never
+ * fire for a tool whose `tool()` spec declared `timeoutMs` or `retry`.
+ *
+ * `observe` is the per-transition seam, so the record is read after its fold
+ * rather than before it — the one clause that differs from the interpret seam's,
+ * and it differs because there is nothing earlier to read. Everything else
+ * holds: once per settled call (the `fired` set), and never on resume for an
+ * outcome already folded (the FIRST observed state seeds `fired`, so records a
+ * `Store` handed back are seen and not re-announced).
+ */
+function forwardLadderErrors<T extends AnyToolDef>(
+  handle: BootingRuntime<
+    DefinedAgentState<T>,
+    AgentMachineMsg<LidPurpose, LidOutputs, ToolResult<T>> | WiredToolMsg<T>,
+    DefinedAgentEvent<T>
+  >,
+  onToolError: NonNullable<DefineAgentConfig<T>["onToolError"]>,
+): void {
+  const fired = new Set<string>();
+  let seeded = false;
+  handle.observe((_msg, state) => {
+    for (const record of state.conversation?.toolRecords ?? []) {
+      const { outcome, call } = record;
+      if (outcome.kind !== "error") continue;
+      if (fired.has(call.callId)) continue;
+      fired.add(call.callId);
+      // The pre-existing records of a resumed run: remembered, never announced.
+      if (!seeded) continue;
+      if (
+        outcome._tag !== TOOL_TIMEOUT_TAG &&
+        outcome._tag !== TOOL_RETRY_EXHAUSTED_TAG
+      ) {
+        // A handler-settled failure the interpret seam already announced.
+        continue;
+      }
+      void Promise.resolve(
+        onToolError(outcome as ToolFailureOf<T>, {
+          callId: call.callId,
+          name: call.name,
+        }),
+      ).catch((err: unknown) => {
+        console.warn("@demlik/tea: a run's onToolError hook threw", err);
+      });
+    }
+    seeded = true;
+  });
 }
 
 /**

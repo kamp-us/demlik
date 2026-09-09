@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (108)
+## Exports (114)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -92,6 +92,8 @@ import { … } from "@demlik/tea/agent";
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `TaggedFailure` | Type | The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and an unhandled tag is a compile error. |
 | `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a definition you pass to `toolRouter` or `defineAgent`. |
+| `TOOL_RETRY_EXHAUSTED_TAG` | Variable | The reason-tag a tool call that spent its retry budget settles under. |
+| `TOOL_TIMEOUT_TAG` | Variable | The reason-tag a timed-out tool call settles under. |
 | `ToolCall` | Interface | One tool the model asked to call this turn. |
 | `ToolCmd` | Type | The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. |
 | `ToolConstructors` | Type | The two constructors a handler is handed, one per channel — `ok` for the value the `ok` schema parses, `fail` for a declared `{ _tag }`. |
@@ -110,11 +112,15 @@ import { … } from "@demlik/tea/agent";
 | `ToolRecord` | Interface | A folded tool record kept on the conversation once a tool settles — the call + its outcome, in settle order. |
 | `ToolRejectedCmd` | Type | The Cmd `tool_rejected` builds — the router-owned variant of `ToolCmd`. |
 | `ToolRejection` | Type | A call the router could not hand to a tool: the model named a tool nobody declared, or its `args` failed the tool's `input` schema. |
+| `ToolResilience` | Interface | The per-tool resilience knob — a timeout, a retry ladder, or both, declared on the `tool()` spec and executed by the agent's reducer through `../internal/resilience/resilient-call`. |
+| `ToolResilienceError` | Type | The two failures the ladder itself authors (#117). |
 | `ToolResult` | Type | The union of every tool's `ok` value — `R` for `createAgent`. |
+| `ToolRetryExhausted` | Interface | A call that spent its retry budget — ToolResilience.retry. |
 | `toolRouter` | Function | Fold a set of `tool()`s into one router — pass it the tools, get back the lookup `createAgent` needs, the handlers `toMachine` merges, and a reader that turns a settled message back into a plain outcome. |
 | `ToolRouter` | Interface | What `toolRouter()` returns: the derived `toolOf` for `createAgent`'s config, the interpret table `toMachine({ tools })` merges, the defs it puts on `Machine.cmds`, and the one reader that turns a settled Msg back into the conversation's `ToolOutcome`. |
 | `ToolSettlement` | Type | One settled tool, read back off a `ToolMsg` by `outcomeOf`. |
 | `ToolThrown` | Type | The router-minted failure beside a tool's declared tags: the handler threw (or rejected) with something that is not a declared `{ _tag }`. |
+| `ToolTimedOut` | Interface | A call that spent its `timeoutMs` budget — ToolResilience.timeoutMs. |
 | `TurnChunk` | Interface | One partial piece of a turn the model is still producing — a token delta, as the provider emitted it. |
 | `WiredToolCmd` | Type | `ToolCmd<T>` as `toMachine` reads it: `never` for `T = never` — the "no router" reading it defaults to — so the router-owned `tool_rejected` arm does not leak into a machine that wired no router. |
 | `WiredToolMsg` | Type | `ToolMsg<T>` as `toMachine` / `agentEvents` read it — see `WiredToolCmd`. |

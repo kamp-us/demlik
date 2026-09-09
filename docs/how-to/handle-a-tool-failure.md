@@ -60,6 +60,63 @@ The other two are the router's, not any tool's. `toolOf` is total — it never
 throws inside the reducer — so a call it cannot route rides its own Cmd and
 settles like any other tool failure. Your reducer sees no special case.
 
+## Bound a slow tool, or retry a flaky one
+
+A tool that is *slow* or *intermittently down* is not a failure you can declare —
+there is no tag for "the upstream is having a minute". Declare a budget and a
+ladder on the spec instead, and the agent runs both for you:
+
+```ts
+const fetchRate = tool(
+  "fetch_rate",
+  {
+    description: "Fetch today's exchange rate from the upstream service",
+    input: z.object({ pair: z.string() }),
+    ok: z.object({ rate: z.number() }),
+    err: ["upstream"],
+    // One call gets 50ms, first attempt to last — a retry does not restart it.
+    timeoutMs: 50,
+    // …and a failed attempt is retried twice more, 10ms apart.
+    retry: { baseMs: 10, factor: 1, capMs: 10, jitter: "none", maxAttempts: 3 },
+  },
+  async ({ pair }, _ctx, { ok, fail }) => {
+    /* … */
+  },
+);
+```
+
+Two more reasons join the table, and they read exactly like the others:
+
+| Tag | Minted when | Detail it carries |
+| --- | --- | --- |
+| `timeout` | the call outlived `timeoutMs` | none — the tag is the whole reason |
+| `retry_exhausted` | the `retry` budget is spent | `attempts`, and `last` — the final attempt's own reason |
+
+**Why this is a spec field and not a `for` loop in your handler.** The ladder runs
+in the reducer, so a waiting retry is a `waiting_retry` phase on the durable Model
+with its timer armed as a subscription. Kill the process between two attempts and
+the next run resumes on the attempt it was on. A loop inside the handler lives
+inside the effect boundary, where a crash loses the whole ladder and the resumed
+run starts the budget again — which is the durability this library exists to
+provide, so the appliance should not ask you to trade it away for a retry.
+
+Three things worth knowing before you reach for these:
+
+- **`timeoutMs` is the whole call's budget, not one attempt's.** It is measured
+  from the first attempt and a retry does not restart it, so a `timeoutMs` under
+  your ladder's total backoff will end the call mid-ladder. That is the
+  `resilient-call` deadline the brain call already uses, applied per tool call.
+- **A timeout does not cancel your handler.** A promise cannot be cancelled in
+  JavaScript. The *call* is over at the budget and the loop moves on; the attempt
+  runs to its own end and its late settle folds nothing. If you need the work to
+  actually stop, take an `AbortSignal` in the handler.
+- **Absorbed attempts are invisible to the model.** A retried failure never
+  reaches the conversation — only the final outcome does. The model is not shown
+  a problem the ladder already dealt with.
+
+Declare neither field and nothing changes: no slice entry is minted, no timer is
+armed, and the first failure is the outcome exactly as above.
+
 ## What the model actually receives
 
 A settled call reaches the next brain call as a `tool` message whose `outcome`
@@ -111,20 +168,29 @@ exactly what the adapter renders into the provider's `tool_result` block:
 ```
 hook: lookup missed the key green
 c1 lookup → {"kind":"ok","result":{"hex":"#2563eb"}}
-c2 lookup → {"_tag":"not_found","key":"green","reason":"not_found {\"key\":\"green\"}","kind":"error"}
+c2 lookup → {"_tag":"not_found","key":"green","reason":"not_found {\\"key\\":\\"green\\"}","kind":"error"}
 hook: lookup failed with thrown
-c3 lookup → {"_tag":"thrown","message":"the table went away","reason":"thrown {\"message\":\"the table went away\"}","kind":"error"}
+c3 lookup → {"_tag":"thrown","message":"the table went away","reason":"thrown {\\"message\\":\\"the table went away\\"}","kind":"error"}
 hook: no tool called lookyp
-c4 lookyp → {"_tag":"unknown_tool","name":"lookyp","reason":"unknown_tool {\"name\":\"lookyp\"}","kind":"error"}
+c4 lookyp → {"_tag":"unknown_tool","name":"lookyp","reason":"unknown_tool {\\"name\\":\\"lookyp\\"}","kind":"error"}
 hook: lookup failed with malformed_args
 c5 lookup → {"_tag":"malformed_args","name":"lookup",…,"kind":"error"}
+hook: fetch_rate failed with upstream
+hook: fetch_rate failed with upstream
+hook: fetch_rate failed with upstream
+hook: fetch_rate failed with retry_exhausted
+c6 fetch_rate → {"_tag":"retry_exhausted","attempts":3,"last":"upstream","reason":"retry_exhausted {\\"attempts\\":3,\\"last\\":\\"upstream\\"}","kind":"error"}
+c7 fetch_rate → {"_tag":"timeout","reason":"timeout","kind":"error"}
+hook: fetch_rate failed with timeout
 done: Blue is #2563eb; everything else failed.
 ```
 
 `c1` is the declared success. `c2` is the declared failure. `c3`, `c4` and `c5`
-are the three nobody declared, and note that all four failures are the same
-shape — `{ kind: "error", _tag, …payload, reason }` — so an adapter that renders
-one renders all of them. The `hook:` lines are `onToolError`, below.
+are the three nobody declared. `c6` ran the handler three times before its retry
+budget ran out; `c7` ran it once and was over at 50ms while that attempt was
+still sleeping out its 500ms. Note that all six failures are the same shape —
+`{ kind: "error", _tag, …payload, reason }` — so an adapter that renders one
+renders all of them. The `hook:` lines are `onToolError`, below.
 
 ## Branch on the failure in your own code
 
@@ -151,8 +217,10 @@ const agent = defineAgent({
 `outcome` is typed from **this agent's tools**, so the `switch` narrows the
 payload per tag — `outcome.key` above exists only in the `not_found` arm — and
 the tags it must cover are every failure the run can produce: each tool's
-declared tags, `thrown`, the kernel's `malformed_result`, and the router's
-`unknown_tool` / `malformed_args`. Handle them all and the default arm is
+declared tags, `thrown`, the kernel's `malformed_result`, the router's
+`unknown_tool` / `malformed_args`, and the ladder's `timeout` /
+`retry_exhausted` — the two a `tool()` spec's `timeoutMs` / `retry` can end a
+call with from outside the handler. Handle them all and the default arm is
 `never`; miss one and it is a compile error rather than a failure you find in a
 log.
 
@@ -161,8 +229,14 @@ the name it invented — there is no declared tool to name there.
 
 Four things worth knowing before you put anything real in it:
 
-- **It fires once per failed call**, at the interpret boundary — after the
-  handler settled, before the failure is folded into the conversation.
+- **It fires once per failure the run produces**, which for a tool with a retry
+  ladder is once per *attempt* plus once for the call's own ending. A handler's
+  own failure is announced at the interpret boundary — after the handler
+  settled, before the failure is folded into the conversation. `timeout` and
+  `retry_exhausted` are minted by the reducer rather than by a handler (a
+  timeout has no handler settle at all — the call is over while its attempt is
+  still running), so those two are announced off the fold instead. That is why
+  `c7`'s `hook:` line above prints after its record and the others print before.
 - **It is awaited.** An async hook holds that settle until it resolves, so keep
   it short and put anything slow on your own queue.
 - **A resume does not replay it.** An outcome a previous process already folded

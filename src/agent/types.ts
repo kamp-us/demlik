@@ -24,7 +24,7 @@ import type {
   ResilientState,
   Schema,
 } from "../internal/llm-call";
-import type { RetryPolicy } from "../retry-backoff";
+import type { AnyRetryPolicy, RetryPolicy } from "../retry-backoff";
 import type {
   AgentCompactionConfig,
   CompactionOutputs,
@@ -240,6 +240,79 @@ export type TaggedFailure<E extends Tagged> = E extends unknown
   : never;
 
 /**
+ * The per-tool resilience knob — a timeout, a retry ladder, or both, declared on
+ * the `tool()` spec and executed by the agent's reducer through
+ * `../internal/resilience/resilient-call`.
+ *
+ * Both fields are optional and a tool that names neither behaves exactly as it
+ * did before this knob existed: no slice entry is minted, no timer is armed, and
+ * its settle path is the plain fan-out one. The ladder lives in the Model, so a
+ * process killed between two attempts resumes at the attempt it was on rather
+ * than restarting the run — the property a `Promise.race` or a `for` loop inside
+ * the handler cannot have, because those live inside the effect boundary.
+ */
+export interface ToolResilience {
+  /**
+   * The budget one tool CALL gets, in ms, measured from the first attempt and
+   * NOT restarted by a retry — the overall cap `resilient-call`'s deadline brick
+   * enforces. When it elapses the call settles as a `ToolOutcome` error
+   * carrying `_tag: "timeout"` beside its `reason`, and the loop moves on, whatever the
+   * in-flight attempt does next — its late settle arrives for a call nothing is
+   * waiting on and folds nothing, so a slow tool costs the budget and not the
+   * turn.
+   *
+   * What it does NOT do is cancel the handler: a promise cannot be cancelled in
+   * JavaScript, so the attempt runs to its own end, and `run`'s teardown still
+   * drains it. A handler that resolves LATE is bounded by this knob; a handler
+   * that never resolves at all holds the runtime's shutdown regardless, and
+   * wants an `AbortSignal` in the handler rather than a budget out here.
+   *
+   * Omit → the call has no cap and ends only when its handler settles.
+   */
+  readonly timeoutMs?: number;
+  /**
+   * The backoff ladder a FAILED attempt climbs — the same
+   * `BackoffCurve & RetryBudget` shape `AgentConfigCore.retry` takes for the
+   * brain call. Each failure is recorded in the Model and the next attempt is
+   * armed as a timer Sub, so the wait is durable and the attempt count survives
+   * a reload. When the budget is spent the call settles as a `ToolOutcome` error
+   * carrying `_tag: "retry_exhausted"` beside its `reason`, plus `attempts` and
+   * `last` as fields — see {@link ToolRetryExhausted}.
+   *
+   * Omit → the first failure is the outcome, exactly as before.
+   */
+  readonly retry?: AnyRetryPolicy;
+}
+
+/** The reason-tag a timed-out tool call settles under. */
+export const TOOL_TIMEOUT_TAG = "timeout";
+/** The reason-tag a tool call that spent its retry budget settles under. */
+export const TOOL_RETRY_EXHAUSTED_TAG = "retry_exhausted";
+
+/** A call that spent its `timeoutMs` budget — {@link ToolResilience.timeoutMs}. */
+export interface ToolTimedOut {
+  readonly _tag: typeof TOOL_TIMEOUT_TAG;
+}
+
+/** A call that spent its retry budget — {@link ToolResilience.retry}. */
+export interface ToolRetryExhausted {
+  readonly _tag: typeof TOOL_RETRY_EXHAUSTED_TAG;
+  /** How many attempts the ladder burned, the failed last one included. */
+  readonly attempts: number;
+  /** The last attempt's own `reason`, so the real failure is not buried. */
+  readonly last: string;
+}
+
+/**
+ * The two failures the ladder itself authors (#117). They are in every tool's
+ * error union rather than only a policied tool's: the policy is a `tool()` spec
+ * field a maintainer can add later, and a union that narrowed with it would turn
+ * adding a `timeoutMs` into a silent behaviour change at every `onToolError`
+ * that had switched exhaustively without them.
+ */
+export type ToolResilienceError = ToolTimedOut | ToolRetryExhausted;
+
+/**
  * A folded tool record kept on the conversation once a tool settles — the
  * call + its outcome, in settle order. The consumer's message loader reads
  * these (plus `turns`) to assemble the next brain call's prompt.
@@ -390,6 +463,18 @@ export interface AgentConfigCore<
   // ---- fan-out seam (the tools) -------------------------------------------
   /** Map one tool call to the effect Cmd the consumer's interpret performs. */
   readonly toolOf: (call: ToolCall) => TC;
+  /**
+   * The per-tool timeout / retry knob for a call, read once per launch. `null`
+   * (or an omitted seam) → the tool runs bare and its settle path is the plain
+   * fan-out one, byte for byte what it was before the knob existed.
+   *
+   * This is the seam a `toolRouter` fills from the `tool()` specs
+   * (`router.resilienceOf`), which is how `defineAgent` grows the knob without
+   * growing a lid option: the policy is declared where the tool is. A hand-wired
+   * `createAgent` supplies it directly. It must be PURE and config-derived — the
+   * reducer calls it on the launch path.
+   */
+  readonly toolResilienceOf?: (call: ToolCall) => ToolResilience | null;
   /** Max tools in flight at once. Omit / `1` → serial dispatch (the default). */
   readonly toolConcurrency?: number;
 
@@ -498,6 +583,25 @@ export interface AgentState<
   readonly compaction: ResilientState<
     LlmCall<CompactionPurpose>,
     LlmOk<CompactionPurpose, CompactionOutputs>
+  >;
+  /**
+   * The per-tool timeout / retry ladders (#117) — one dedicated resilient-call
+   * slice PER TOOL NAME, because the policy is declared per tool and one slice
+   * carries one config. Keyed by tool name; each slice's own keys are
+   * {@link toolCallKey}s, so two concurrent calls to the same tool climb
+   * independent ladders while sharing the tool's declared policy.
+   *
+   * A tool declaring neither `timeoutMs` nor `retry` mints no entry, so this is
+   * `{}` for every agent that uses no per-tool knob — the addition costs an
+   * empty record on the durable Model and nothing else.
+   *
+   * The result arm is `null`: a tool's VALUE settles through the fan-out ledger
+   * and the conversation, exactly as before. This slice tracks only the ladder —
+   * which attempt is out, when the next one is due, and when the budget is spent
+   * — which is what has to survive a reload.
+   */
+  readonly toolResilience: Readonly<
+    Record<string, ResilientState<ToolCall, null>>
   >;
   readonly failure: AgentFailure | null;
   /**
