@@ -1,9 +1,9 @@
 /**
- * The two stop conditions `defineAgent` offers, worked end to end — the source
+ * The four stop conditions `defineAgent` offers, worked end to end — the source
  * the how-to guide `docs/how-to/bound-a-run.md` quotes.
  *
- * Story: one scripted model that never stops asking for tools, run three times
- * under three different bounds. No keys, no network.
+ * Story: one scripted model that never stops asking for tools, run five times
+ * under five different bounds. No keys, no network.
  *
  *   1. `maxTurns: 3`   — the run fails at the third completed round-trip.
  *   2. `deadlineMs: 150` over a run that KEEPS MOVING — it does not fire. The
@@ -11,9 +11,13 @@
  *      no-progress watchdog and every advance restarts it.
  *   3. `deadlineMs: 150` over a run that STOPS moving — a tool that sleeps
  *      400ms is 400ms of no progress, so the watchdog fires.
+ *   4. `maxElapsedMs: 150` over that SAME progressing run — it does fire. This
+ *      budget never restarts, so progress buys the run nothing.
+ *   5. `stopWhen` over the same run — the caller's own condition, read at the
+ *      turn boundary, ends it `cancelled` rather than failed.
  *
- * (2) is the whole reason this file exists. `deadlineMs` is not a wall-clock
- * cap on a run and setting it is not a spend cap.
+ * (2) beside (4) is the whole reason this file exists. `deadlineMs` is not a
+ * wall-clock cap on a run and setting it is not a spend cap; `maxElapsedMs` is.
  *
  * Run it:  node --experimental-strip-types examples/agent-stop-conditions.ts
  */
@@ -138,24 +142,70 @@ calls = 0;
 console.log("deadlineMs: 150, stalling →", await ended(() => stalling.run("go")));
 console.log("  model calls:", calls);
 
+// ===========================================================================
+// 4 — `maxElapsedMs` over the SAME 20ms-tick agent that sailed past case 2's
+// deadline. Same budget, same ticks, and this one ends the run: the wall-clock
+// cap counts from the start and never restarts, so progress does not buy time.
+// ===========================================================================
+
+const capped = defineAgent({
+  model: modelAsking(20),
+  tools: [tick],
+  instructions: "You tick.",
+  maxElapsedMs: 150,
+});
+
+calls = 0;
+console.log("maxElapsedMs: 150, progressing →", await ended(() => capped.run("go")));
+console.log("  model calls:", calls);
+
+// ===========================================================================
+// 5 — `stopWhen`: the caller's own condition, read at the turn boundary over
+// the durable Model. Here it is "five turns is enough", which `maxTurns` would
+// also do — the point is that the predicate can read anything the Model holds,
+// and that answering `true` ends the run CANCELLED, so `run` resolves.
+// ===========================================================================
+
+const untilFive = defineAgent({
+  model: modelAsking(1),
+  tools: [tick],
+  instructions: "You tick.",
+  stopWhen: (state) => (state.conversation?.turnCount ?? 0) >= 5,
+});
+
+calls = 0;
+console.log("stopWhen: turnCount >= 5 →", await ended(() => untilFive.run("go")));
+console.log("  model calls:", calls);
+
 /*
  * What it prints. The millisecond figures move a little run to run — the shape
  * is what matters:
  *
- *   maxTurns: 3 → failed with turn_limit after 73ms (guard fired at +72ms)
+ *   maxTurns: 3 → failed with turn_limit after 8ms (guard fired at +8ms)
  *     model calls: 3
- *   deadlineMs: 150, progressing → failed with turn_limit after 748ms (guard fired at +745ms)
+ *   deadlineMs: 150, progressing → failed with turn_limit after 531ms (guard fired at +531ms)
  *     model calls: 25
- *   deadlineMs: 150, stalling → failed with deadline after 407ms (guard fired at +156ms)
+ *   deadlineMs: 150, stalling → failed with deadline after 402ms (guard fired at +150ms)
  *     model calls: 1
+ *   maxElapsedMs: 150, progressing → failed with elapsed_limit after 171ms (guard fired at +171ms)
+ *     model calls: 8
+ *   stopWhen: turnCount >= 5 → resolved after 7ms
+ *     model calls: 5
  *
- * Read the middle line twice. A 150ms `deadlineMs` let a run take 748ms and 25
- * model calls, and what ended it was `maxTurns`, not the budget. Every 20ms tick
- * was an advance, and every advance re-armed the watchdog, so it never came due.
- * Remove `maxTurns: 25` from that agent and it runs forever.
+ * Read the second line beside the fourth. Same agent, same 20ms ticks, two 150ms
+ * budgets. `deadlineMs` let it take 531ms and 25 model calls — every tick was an
+ * advance, and every advance re-armed the watchdog, so it never came due; what
+ * ended that run was `maxTurns`, and without it the run never ends at all.
+ * `maxElapsedMs` ended the same agent at 171ms and 8 calls, because that budget
+ * counts from the start and nothing restarts it.
  *
- * The last line shows the other half: the watchdog fired at +156ms, on schedule,
- * but the promise settled at 407ms — the guard fails the run, it does not cancel
- * the 400ms handler already in flight. So even a watchdog that DOES fire is not
- * an upper bound on how long `run` takes to settle.
+ * The third line shows the other half of the watchdog: it fired at +150ms, on
+ * schedule, but the promise settled at 402ms — the guard fails the run, it does
+ * not cancel the 400ms handler already in flight. So even a guard that DOES fire
+ * is not an upper bound on how long `run` takes to settle, and that is as true of
+ * `maxElapsedMs` as it is of `deadlineMs`.
+ *
+ * The last line is the one that does not say "failed". `stopWhen` is the caller
+ * asking, not a budget being spent, so the run ends `cancelled` and `run`
+ * resolves with the Model rather than rejecting.
  */

@@ -501,9 +501,35 @@ export interface AgentConfigCore<
   /**
    * Livelock guard: bound on model round-trips within one run. On
    * `turnCount >= maxTurns` the run fails `{ reason: "turn_limit" }`. Omit → no
-   * turn guard (only the deadline watchdog bounds the loop).
+   * turn guard (the other stop conditions still bound the loop).
    */
   readonly maxTurns?: number;
+  /**
+   * Wall-clock guard: total milliseconds from `run.startedAt` the run may take.
+   * At the turn boundary, `at - run.startedAt >= maxElapsedMs` fails the run
+   * `{ reason: "elapsed_limit" }`. Unlike `deadlineMs` — a no-progress watchdog
+   * that RESTARTS on every advance — this budget never restarts, so a run that
+   * keeps progressing is bounded by it. Omit → no wall-clock cap.
+   *
+   * `startedAt` is durable, so a resumed run continues the ORIGINAL budget
+   * rather than starting a fresh one; the elapsed span a killed run spent dead
+   * counts against it.
+   */
+  readonly maxElapsedMs?: number;
+  /**
+   * The consumer's own stop condition, consulted at the turn boundary once the
+   * turn-count and wall-clock guards have passed. `true` settles the run
+   * `cancelled` at `at` — the same terminal an aborted `signal` reaches, so the
+   * transcript stands and no further model call goes out. Omit → no predicate.
+   *
+   * Where `maxTurns` and `maxElapsedMs` bound a quantity this agent counts,
+   * this bounds one only the caller can see (a token ledger, an external flag,
+   * a condition on the turns so far). It must be PURE and total over the state
+   * it is handed — the reducer calls it, so a replay of the same Msg log calls
+   * it with the same state and must get the same answer. It is config, not
+   * Model: a resumed run consults the predicate the config passed to THIS boot.
+   */
+  readonly stopWhen?: (state: AgentState<Stage, P, O, R>) => boolean;
 
   // ---- determinism seam ----------------------------------------------------
   /**
@@ -540,11 +566,13 @@ export type AgentConfig<
 
 /**
  * Why a run terminated as `failed`, beyond monitored-run's own reasons. The
- * `turn_limit` reason is the agent's livelock guard; deadline / stage failures
- * surface through the monitored-run slice's own `failure`.
+ * `turn_limit` reason is the agent's livelock guard and `elapsed_limit` its
+ * wall-clock one; deadline / stage failures surface through the monitored-run
+ * slice's own `failure`.
  */
 export type AgentFailure =
   | { readonly reason: "turn_limit"; readonly at: number }
+  | { readonly reason: "elapsed_limit"; readonly at: number }
   | { readonly reason: "llm"; readonly error: unknown; readonly at: number };
 
 /**
@@ -665,7 +693,8 @@ export interface AgentState<
  * through TWO independent slice channels:
  *
  *   - `state.failure` (`AgentFailure`) — the AGENT'S OWN annotation
- *     (`turn_limit` livelock guard / `llm` exhausted-retry). Set WITHOUT moving
+ *     (`turn_limit` livelock guard / `elapsed_limit` wall-clock guard / `llm`
+ *     exhausted-retry). Set WITHOUT moving
  *     `run.phase` (it stays `running`); `isSettled` treats a non-null `failure`
  *     as terminal regardless of `run.phase`.
  *   - `state.run.failure` (`RunFailure`) — the monitored-run channel
@@ -706,10 +735,11 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
  *   - `failed`    — terminal failure; `failure` is the UNIFIED channel
  *                   (`AgentTerminalFailure`), absorbing the `state.failure` vs
  *                   `state.run.failure` dual channel so callers stop unioning.
- *   - `cancelled` — stopped from outside through an `AbortSignal`; `at` is when
- *                   the stop landed. Terminal and distinct from `failed`: nothing
- *                   went wrong, the caller asked, so a consumer branching on
- *                   failure does not have to except one reason. There is no
+ *   - `cancelled` — stopped because the caller asked — an aborted `AbortSignal`,
+ *                   or their own `stopWhen` answering `true` at a turn boundary;
+ *                   `at` is when the stop landed. Terminal and distinct from
+ *                   `failed`: nothing went wrong, the caller asked, so a consumer
+ *                   branching on failure does not have to except one reason. There is no
  *                   `output` — a cancelled run produced no terminal turn, and a
  *                   `null` one here would be indistinguishable from a `done` run
  *                   that produced none.

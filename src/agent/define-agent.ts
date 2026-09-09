@@ -180,10 +180,10 @@ export type DefinedAgentModel =
 
 /**
  * What `defineAgent` takes: the model, the tools and the instructions, plus the
- * two optional guards that stop a run — `maxTurns` and `deadlineMs` — and the
- * one that keeps a run going, `retry`, the brain call's backoff ladder. Omit
- * both guards and the run is unbounded: it ends only when the model stops
- * asking for tools.
+ * four optional guards that stop a run — `maxTurns`, `deadlineMs`,
+ * `maxElapsedMs` and `stopWhen` — and the one that keeps a run going, `retry`,
+ * the brain call's backoff ladder. Omit every guard and the run is unbounded:
+ * it ends only when the model stops asking for tools.
  *
  * Two more knobs bound what a run COSTS rather than whether it ends:
  * `compaction`, which stops the transcript growing, and `toolConcurrency`,
@@ -214,6 +214,39 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * watchdog.
    */
   readonly deadlineMs?: number;
+  /**
+   * Stops a run that keeps going, by the clock: total milliseconds from the
+   * run's start it may take before it fails. This is the total wall-clock cap
+   * `deadlineMs` is not — the budget never restarts, so a run that keeps
+   * progressing is bounded by it where `deadlineMs` would let it run forever,
+   * and it counts elapsed time where `maxTurns` counts round-trips. It is read
+   * at the turn boundary, so like both of those it stops the run rather than
+   * cancelling the work already in flight. Omit → no wall-clock cap.
+   *
+   * The run's start time is on the durable Model, so a run killed and resumed
+   * continues the ORIGINAL budget — the time it spent dead counts against it.
+   *
+   * The same name on a `DurationRetryPolicy` (`retry`, and a tool's own) is the
+   * same idea one altitude down: that one bounds how long ONE call's retry
+   * ladder may keep climbing, this one how long the whole run may take.
+   */
+  readonly maxElapsedMs?: number;
+  /**
+   * Stops a run on a condition only you can see: a predicate consulted at the
+   * turn boundary, after the other three guards have passed, over the run's
+   * durable Model. Answer `true` and the run ends there — settled `cancelled`,
+   * the same terminal an aborted `signal` reaches, with the transcript intact
+   * and no further model call made. Where `maxTurns` and `maxElapsedMs` bound
+   * a quantity the agent counts for you and `deadlineMs` watches for a stall,
+   * this bounds whatever you name — a token ledger you keep, an external flag,
+   * a condition on the turns so far. Omit → no predicate.
+   *
+   * It must be PURE: the reducer calls it, so a replay hands it the same state
+   * and must get the same answer. And it is config rather than Model — a
+   * resumed run consults the predicate the config passed to THIS boot, exactly
+   * as it uses the `maxTurns` passed to this boot.
+   */
+  readonly stopWhen?: (state: DefinedAgentState<T>) => boolean;
   /**
    * The backoff ladder a FAILED BRAIN CALL climbs — the same `RetryPolicy`
    * shape `AgentConfigCore.retry` takes, threaded straight to it, so the ladder
@@ -509,8 +542,8 @@ export interface DefinedAgent<T extends AnyToolDef> {
  * `createAgent` being the layer underneath that you drop to only to walk a stage
  * pipeline of your own.
  *
- * Add `maxTurns` and `deadlineMs` to bound the run; both are described on
- * `DefineAgentConfig`. The run's `input` is its single stage, so it is durable
+ * Add `maxTurns`, `deadlineMs`, `maxElapsedMs` or `stopWhen` to bound the run;
+ * all four are described on `DefineAgentConfig`. The run's `input` is its single stage, so it is durable
  * beside `instructions`, and the prompt is rendered from those two and the
  * conversation on every model call.
  *
@@ -589,6 +622,8 @@ function definedAgent<T extends AnyToolDef>(
         : {}),
       maxTurns: config.maxTurns,
       deadlineMs: config.deadlineMs,
+      maxElapsedMs: config.maxElapsedMs,
+      stopWhen: config.stopWhen,
     };
     // `AgentCompactionConfig` is a DISCRIMINATED union — compaction is either
     // structurally absent or a whole policy — and the `compact_run` interpret
