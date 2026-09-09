@@ -1201,6 +1201,33 @@ export function createAgent<
     return applyLadder(rebooted, toolResilience, outcome, at);
   }
 
+  // === Verb: cancel ========================================================
+
+  /**
+   * Settle the run `cancelled` at `at` — the fold of an aborted `AbortSignal`.
+   * Delegates the phase move to monitored-run and emits NO Cmd, which is the
+   * whole of "stop dispatching new work": from here `isSettled` holds, so every
+   * later Msg — a tool settling, a brain call returning, a retry timer firing —
+   * folds to a no-op and issues nothing. The effects already in flight are not
+   * recallable (a promise cannot be cancelled); they run to their own end, and
+   * the `refusedCalls` discipline (#145) keeps their late results off every
+   * public channel.
+   *
+   * The conversation is left exactly as it stood. Clearing it would destroy the
+   * transcript of the work that DID happen before the stop, and a cancelled run
+   * is a run someone may still want to read.
+   *
+   * A no-op on a settled run — monitored-run's own guard — so an abort racing a
+   * finish never overwrites the outcome that won. PURE.
+   */
+  function cancel(
+    s: State,
+    at: number,
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const [runSlice] = run.cancel(s.run, at);
+    return [{ ...s, run: runSlice }, []];
+  }
+
   // === Subs ================================================================
 
   /**
@@ -1464,6 +1491,7 @@ export function createAgent<
       [MsgType.CompactErr]: (s, m) => compactErr(s, m.key, m, m.at),
       deadline_exceeded: (s, m) => onTimer(s, m),
       [MsgType.AgentBoot]: (s, m) => boot(s, m.at),
+      [MsgType.AgentCancel]: (s, m) => cancel(s, m.at),
     };
     // `ownUpdate` carries every `AgentMachineMsg` cell (checked above);
     // `toolCells` carries one per router def. The join is `Reducer` over the

@@ -334,6 +334,23 @@ export function agentBootMsg(at: number): AgentBootMsg {
   return { type: MsgType.AgentBoot, at };
 }
 
+/**
+ * The Msg an aborted `AbortSignal` fires to settle the run `cancelled`. Owned
+ * here beside the boot Msg for the same reason: the cancel seam lives on the
+ * drive (`driveToDone`'s `cancel`, the lid's `signal`), which is a different
+ * module from the reducer that folds it, so the shape gets ONE home and a
+ * constructor rather than a literal duplicated across the seam.
+ */
+export type AgentCancelMsg = {
+  readonly type: typeof MsgType.AgentCancel;
+  readonly at: number;
+};
+
+/** Construct the `agent_cancel` Msg an abort dispatches. `at` stamps the outcome. */
+export function agentCancelMsg(at: number): AgentCancelMsg {
+  return { type: MsgType.AgentCancel, at };
+}
+
 // ===========================================================================
 // The machine Msg union — the closed set of verb entry points `toMachine` wires.
 // ===========================================================================
@@ -392,7 +409,11 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   // `subscribeDeadline` handler dispatches it straight into `update`, exactly as
   // the resilient-call / llm-call / monitored-run gold standards wire it.
   | AgentTimerMsg
-  | AgentBootMsg;
+  | AgentBootMsg
+  // The outside-in stop. Unlike every other variant here it is dispatched by the
+  // DRIVE rather than re-entered from a handler — an abort is the one transition
+  // whose cause is not the machine's own work settling.
+  | AgentCancelMsg;
 
 // ===========================================================================
 // AgentEvent — the SEMANTIC lifecycle event stream.
@@ -483,6 +504,13 @@ export function agentEvents<
   const tools = opts?.tools;
   return (msg, state) => {
     const events: AgentEvent<R>[] = [];
+    // A cancelled run's public channel is CLOSED. The fold already ignores what
+    // arrives after the stop (`isSettled`), but this projector is Msg-shaped:
+    // without this gate a tool handler that was in flight when the abort landed
+    // would still push its `ToolSettled` to a listener whose run is over. Same
+    // reasoning as `refusedCalls` (#145), one phase up — there the discriminator
+    // is per call, here the whole run is the answer.
+    if (state.run.phase === "cancelled") return events;
     // A call the ladder already settled is silent on EVERY public channel: the
     // fan-out drops its late value, and `state.refusedCalls` is what lets this
     // projector drop the matching event (#145). The `??` is the same
@@ -541,12 +569,16 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
         });
       }
       break;
-    // start / boot / timer / the *_err arms / the compaction settles carry no
-    // public event. (No `default`: the switch is exhaustive over the Msg
+    // start / boot / cancel / timer / the *_err arms / the compaction settles
+    // carry no public event. (No `default`: the switch is exhaustive over the Msg
     // discriminant, so a new Msg variant forces a decision here at compile
     // time.) Compaction is an internal optimization, not a semantic lifecycle
-    // moment a UI folds — its settles are deliberately silent here.
+    // moment a UI folds — its settles are deliberately silent here. Cancel is
+    // silent for a stronger reason: the run the caller stopped owes the public
+    // channel nothing after the stop, so a `RunCancelled` would be one more
+    // late thing to have to ignore.
     case MsgType.AgentStart:
+    case MsgType.AgentCancel:
     case MsgType.AgentToolErr:
     case MsgType.ResilientErr:
     case MsgType.CompactOk:

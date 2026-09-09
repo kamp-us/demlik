@@ -19,12 +19,14 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (120)
+## Exports (122)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `agentBootMsg` | Function | The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches on a resumable rehydrate. |
 | `AgentBootMsg` | Type | The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. |
+| `agentCancelMsg` | Function | Construct the `agent_cancel` Msg an abort dispatches. |
+| `AgentCancelMsg` | Type | The Msg an aborted `AbortSignal` fires to settle the run `cancelled`. |
 | `AgentCmd` | Type | The Cmd union the agent emits, as a CLOSED discriminated union (precise `TC`, not the open `Cmd`) so `Interpret<M, AgentCmd<P, TC>, Ctx>` maps each key precisely and `toMachine` merges the interpret halves with no laundering cast: - `AgentLlmRunCmd<P>` — the brain-call run Cmd (`resilient_run`), folded by the wired `brainHandlers` handler. |
 | `AgentCompactErrMsg` | Type | The compaction round-trip failure settle Msg — carries the typed LlmErr. |
 | `AgentCompactionConfig` | Type | The compaction discriminant, shaped exactly like AgentSnapshotConfig. |

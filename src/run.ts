@@ -1081,8 +1081,45 @@ function isStalled(runtime: object): boolean {
   return live.subs === 0 && live.cmds === 0;
 }
 
+/**
+ * The outside-in stop, as a PAIR. A signal is only cancellation if something can
+ * turn "aborted" into a transition this machine understands, and the kernel has
+ * no built-in cancel Msg any more than it has a built-in terminal set — so the
+ * `signal` and the `cancel` that reads it are one option, present together or
+ * absent together. A discriminated union rather than two optional fields, on the
+ * same reasoning as `AgentCompactionConfig`: a signal with no `cancel` is a stop
+ * button wired to nothing, and that is a state worth making unrepresentable
+ * rather than checking for.
+ */
+type DriveCancellation<S, M> =
+  | {
+      readonly signal?: undefined;
+      readonly cancel?: undefined;
+    }
+  | {
+      /**
+       * Abort the run through this signal. On abort the drive dispatches
+       * `cancel`'s Msg and resolves on the State that lands — it does NOT reject,
+       * and a cancellation is never a `DriveFailedError`. Already aborted when
+       * the drive is called → the cancel Msg goes in place of `start`, so the
+       * run ends without the start's effects ever firing.
+       */
+      readonly signal: AbortSignal;
+      /**
+       * The Msg that settles this machine as cancelled, chosen off the current
+       * State exactly as `start` is. PURE. It must land a State `isTerminal`
+       * holds for — the drive resolves on the terminal predicate, not on the
+       * abort — and that State should be DURABLE, or a reload resumes the run
+       * its caller stopped.
+       */
+      readonly cancel: (state: S) => M;
+    };
+
 /** Options for `driveToDone`. */
-export interface DriveToDoneOptions<S> {
+export type DriveToDoneOptions<
+  S,
+  M extends { type: string } = never,
+> = DriveCancellation<S, M> & {
   /**
    * Marks a terminal State as a FAILURE. A State this holds for ends the drive
    * like any terminal one — the runtime is stopped — but the drive REJECTS with
@@ -1091,7 +1128,7 @@ export interface DriveToDoneOptions<S> {
    * drive never rejects on State, only on a runtime error.
    */
   readonly failed?: (state: S) => boolean;
-}
+};
 
 /**
  * Drive a machine from `start` to its terminal State in one call, then tear the
@@ -1131,11 +1168,23 @@ export interface DriveToDoneOptions<S> {
  * `isTerminal` is caller-supplied, exactly as `run()`'s `terminal` option is —
  * the kernel has no built-in terminal-set concept and this does not add one.
  *
+ * Cancellation is the same story: `{ signal, cancel }` stops the drive from
+ * outside, and it settles the run rather than escaping it. On abort the drive
+ * dispatches `cancel`'s Msg and RESOLVES on the terminal State that transition
+ * lands — no rejection, no `DriveFailedError`, no `AbortError`. That is the whole
+ * point of routing a stop through the Model: the outcome is durable, so a killed
+ * process resumes reading a run that ended instead of restarting one someone
+ * stopped. In-flight effects are not recalled — a promise cannot be cancelled —
+ * so they settle to their own end and `stop()` drains them as it always did;
+ * keeping their results off the public channels is the machine's own business.
+ * Omit the pair and every path here behaves exactly as it did before.
+ *
  * @param handle     the handle `run(machine, opts)` returned.
  * @param start      the Msg that sets the run in motion, or a function choosing
  *                   it off the boot State. PURE.
  * @param isTerminal the terminal predicate over the machine's State. PURE.
- * @param opts       an optional `failed` predicate (see {@link DriveToDoneOptions}).
+ * @param opts       an optional `failed` predicate and an optional
+ *                   `{ signal, cancel }` pair (see {@link DriveToDoneOptions}).
  */
 export async function driveToDone<
   S,
@@ -1145,16 +1194,19 @@ export async function driveToDone<
   handle: BootingRuntime<S, M, E>,
   start: M | ((booted: S) => M),
   isTerminal: (state: S) => boolean,
-  opts: DriveToDoneOptions<S> = {},
+  opts: DriveToDoneOptions<S, M> = {},
 ): Promise<S> {
   const failed = opts.failed ?? (() => false);
   const settles = (state: S): boolean => isTerminal(state) || failed(state);
   let detach: (() => void) | undefined;
+  let unlisten: (() => void) | undefined;
   try {
     const runtime = await handle.ready;
     // A run that rehydrated already terminal has nothing to start: resolve on
     // the boot State without dispatching, so `start`'s Cmds are never left in
-    // flight for `stop()` to discard.
+    // flight for `stop()` to discard. Read BEFORE the signal so a run that
+    // already ended keeps the outcome it ended on — an abort arriving after the
+    // fact does not restate a finished run as cancelled.
     const booted = runtime.getState();
     if (settles(booted)) {
       if (failed(booted)) throw new DriveFailedError(booted);
@@ -1167,6 +1219,28 @@ export async function driveToDone<
         if (settles(state)) resolve(state);
       });
     });
+    // An abort mid-run enqueues the cancel Msg on the SAME serial tail every
+    // other dispatch uses, so it lands between transitions rather than inside
+    // one. Work already enqueued when the abort arrives still folds; work the
+    // machine would have enqueued after it does not, because the cancelled State
+    // is terminal and its verbs stop emitting. `dispatchOnce` (not `dispatch`)
+    // because the cancel has no follow-up chain to drain, and a rejection —
+    // the runtime already tearing down — is nothing this drive can act on: the
+    // terminal it is racing settles the outcome either way.
+    if (opts.signal !== undefined) {
+      const { signal, cancel } = opts;
+      const onAbort = () => {
+        runtime.dispatchOnce(cancel(runtime.getState())).catch(() => {});
+      };
+      // Already aborted → cancel INSTEAD of starting, so `start`'s effects (a
+      // model call, for the agent) never fire at all.
+      if (signal.aborted) {
+        onAbort();
+        return await terminal;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+      unlisten = () => signal.removeEventListener("abort", onAbort);
+    }
     // The race lets a dispatch rejection (reducer / interpret throw, the
     // quiescence cap) surface here instead of floating as an unhandled rejection
     // while the terminal await parks forever.
@@ -1187,6 +1261,10 @@ export async function driveToDone<
     return state;
   } finally {
     detach?.();
+    // The abort listener outlives this call unless it is removed: a signal a
+    // caller reuses across runs would otherwise accumulate one dispatch per run
+    // it has already finished.
+    unlisten?.();
     // `stop()` resolves by contract, so awaiting it here cannot mask the error
     // a rejecting branch above is carrying.
     await handle.stop();

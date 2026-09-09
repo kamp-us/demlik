@@ -20,6 +20,7 @@ switch (st.kind) {
   case "suspended":
   case "done":
   case "failed":
+  case "cancelled":
     break;
   default:
     absurd(st);
@@ -31,8 +32,27 @@ switch (st.kind) {
   case "suspended":
   case "done":
   case "failed":
+  case "cancelled":
     break;
   default:
     // @ts-expect-error `{ kind: "idle" }` is not assignable to `never`
     absurd(st);
+}
+
+// `cancelled` omitted → the residue is `{ kind: "cancelled" }`, not `never`. A
+// stopped run is its OWN terminal answer: a consumer that handles `done` and
+// `failed` has NOT covered every way a run can end, and this is the line that
+// says so. A FRESH binding, because the switches above have already narrowed
+// `st` by flow analysis and a residue test needs the whole union.
+declare const ended: AgentStatus<"plan">;
+switch (ended.kind) {
+  case "idle":
+  case "running":
+  case "suspended":
+  case "done":
+  case "failed":
+    break;
+  default:
+    // @ts-expect-error `{ kind: "cancelled" }` is not assignable to `never`
+    absurd(ended);
 }

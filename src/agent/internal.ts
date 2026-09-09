@@ -100,7 +100,12 @@ export function currentStage<
   return s.run.stepStates.find((i) => i.status === "running")?.input;
 }
 
-/** True iff the run is in a terminal state (monitored-run done/failed, or agent failure). */
+/**
+ * True iff the run is in a terminal state (monitored-run done/failed/cancelled,
+ * or agent failure). Every verb gates on this, so `cancelled` belonging here is
+ * what makes an abort stop the loop: past it, a settling tool or brain call
+ * folds to a no-op and emits nothing.
+ */
 export function isSettled<
   Stage,
   P extends string,
@@ -108,7 +113,10 @@ export function isSettled<
   R,
 >(s: AgentState<Stage, P, O, R>): boolean {
   return (
-    s.run.phase === "done" || s.run.phase === "failed" || s.failure !== null
+    s.run.phase === "done" ||
+    s.run.phase === "failed" ||
+    s.run.phase === "cancelled" ||
+    s.failure !== null
   );
 }
 

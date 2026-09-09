@@ -29,6 +29,7 @@ import {
   type AgentEvent,
   type AgentMachineMsg,
   agentBootMsg,
+  agentCancelMsg,
   agentEvents,
 } from "./machine";
 import {
@@ -390,6 +391,27 @@ export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
    * sink that drops every chunk.
    */
   readonly onChunk?: (chunk: TurnChunk) => void;
+  /**
+   * Stop the run from outside — the stop button's seam. On abort the run settles
+   * on a CANCELLED terminal Model and `run` RESOLVES with it; it does not reject,
+   * and no `DriveFailedError` is thrown. Read the outcome with `status(state)`,
+   * which answers `{ kind: "cancelled", at }` — distinct from `failed`, because a
+   * run someone stopped did not fail.
+   *
+   * The outcome is durable, so it is also the answer on the next boot: a process
+   * killed after an abort resumes reading a run that ENDED, not one to restart.
+   * A signal already aborted when `run` is called ends it before the first model
+   * call is made.
+   *
+   * It stops DISPATCH, not the work already in flight — a promise cannot be
+   * cancelled, so a tool handler mid-call runs to its own end. Those late results
+   * reach no `onEvent`, no `onToolError` and no Model, and they do not hold the
+   * runtime's teardown. Propagating the signal INTO handlers is a separate seam
+   * this option does not open.
+   *
+   * Omit → the run has no stop button and every path behaves exactly as before.
+   */
+  readonly signal?: AbortSignal;
 };
 
 /**
@@ -606,7 +628,7 @@ function definedAgent<T extends AnyToolDef>(
     // kernel wiring it always had.
     const handle = run(machineWith(input, onChunk), {
       ...opts,
-      terminal: isDone,
+      terminal: isEnded,
       events:
         onEvent === undefined
           ? undefined
@@ -618,17 +640,26 @@ function definedAgent<T extends AnyToolDef>(
     if (onToolError !== undefined) {
       forwardLadderErrors(handle, router, onToolError);
     }
-    return driveToDone(
-      handle,
-      (booted) => {
-        const at = (opts.clock ?? Date.now)();
-        return isMidRun(booted)
-          ? agentBootMsg(at)
-          : startMsg(opts.runId ?? crypto.randomUUID(), at);
-      },
-      isDone,
-      { failed: isFailed },
-    );
+    const clock = opts.clock ?? Date.now;
+    const begin = (booted: DefinedAgentState<T>) => {
+      const at = clock();
+      return isMidRun(booted)
+        ? agentBootMsg(at)
+        : startMsg(opts.runId ?? crypto.randomUUID(), at);
+    };
+    // Written as two calls rather than one with a conditional spread, for the
+    // reason `AgentCompactionConfig`'s two arms are: the cancellation option is a
+    // PAIR, and a conditional spread widens it back to two independent optionals
+    // — the signal-with-no-cancel the union exists to refuse.
+    const signal = opts.signal;
+    if (signal === undefined) {
+      return driveToDone(handle, begin, isEnded, { failed: isFailed });
+    }
+    return driveToDone(handle, begin, isEnded, {
+      failed: isFailed,
+      signal,
+      cancel: () => agentCancelMsg(clock()),
+    });
   };
   return {
     machine,
@@ -1121,9 +1152,14 @@ function isMidRun(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
   return kind === "running" || kind === "suspended";
 }
 
-/** The drive's terminal predicate — the pipeline finished. PURE. */
-function isDone(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
-  return s.run.phase === "done";
+/**
+ * The drive's terminal predicate — the run ENDED, by finishing or by being
+ * cancelled. Both are outcomes the drive resolves on and the Store persists, so
+ * both have to read terminal here or an aborted run would wait for a `done` that
+ * is never coming. PURE.
+ */
+function isEnded(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
+  return s.run.phase === "done" || s.run.phase === "cancelled";
 }
 
 /** The drive's failure predicate — either failure channel, via `status`. PURE. */
