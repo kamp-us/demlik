@@ -1558,3 +1558,272 @@ describe("defineAgent — the brain-call retry knob (#146)", () => {
     expect(brain.calls()).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #149 — the two lid knobs the appliance was missing: `compaction`, which
+// bounds a long run's transcript, and `toolConcurrency`, which lets one turn's
+// tools overlap. Both were reachable only by dropping to `createAgent`.
+// ---------------------------------------------------------------------------
+
+const ASK_2: AgentTurn = {
+  content: "one more look",
+  toolCalls: [{ callId: "c2", name: "search", args: { q: "tea" } }],
+};
+
+const ASK_3: AgentTurn = {
+  content: "and one more",
+  toolCalls: [{ callId: "c3", name: "search", args: { q: "tea" } }],
+};
+
+/**
+ * A model that answers the summarize round-trip and the brain call from the
+ * same function, exactly as a real `defineAgent` model does. The two are told
+ * apart by the system message: the lid sends the summarize call its own
+ * instruction, never the agent's.
+ */
+function compactableModel(turns: readonly AgentTurn[]) {
+  const brainPrompts: (readonly AgentMessage[])[] = [];
+  let summaries = 0;
+  let i = 0;
+  const model = async (
+    messages: readonly AgentMessage[],
+  ): Promise<AgentTurn> => {
+    const head = messages[0];
+    const isBrain =
+      head !== undefined &&
+      head.role === "system" &&
+      head.content === INSTRUCTIONS;
+    if (!isBrain) {
+      summaries += 1;
+      return { content: "SUMMARY", toolCalls: [] };
+    }
+    brainPrompts.push(messages);
+    const turn = turns[i] ?? ANSWER;
+    i += 1;
+    return turn;
+  };
+  return { model, brainPrompts, summaries: () => summaries };
+}
+
+describe("defineAgent — the compaction knob (#149)", () => {
+  it("a run past the threshold folds its oldest turns into one summary", async () => {
+    const brain = compactableModel([ASK, ASK_2, ANSWER]);
+    const final = await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 2 },
+    }).run(INPUT, { ctx: { kb }, store: memoryStore() });
+
+    expect(final.run.phase).toBe("done");
+    // The fold actually ran, through the agent's own model.
+    expect(brain.summaries()).toBe(1);
+    // The third brain call reads the summary in place of the two turns and
+    // their tool records — the transcript shrank rather than grew.
+    expect(brain.brainPrompts[2]).toEqual([
+      { role: "system", content: INSTRUCTIONS },
+      { role: "user", content: INPUT },
+      { role: "assistant", content: "SUMMARY", toolCalls: [] },
+    ]);
+    // The dedicated compaction slice settled clean.
+    expect(final.compaction.retry).toEqual({});
+  });
+
+  it("the same run without the knob grows the prompt instead", async () => {
+    const brain = compactableModel([ASK, ASK_2, ANSWER]);
+    const final = await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { ctx: { kb }, store: memoryStore() });
+
+    expect(final.run.phase).toBe("done");
+    // No policy is defaulted in on the caller's behalf.
+    expect(brain.summaries()).toBe(0);
+    // Both turns and both tool outcomes are still in the third prompt: 2 head
+    // messages + 2 × (assistant + tool).
+    expect(brain.brainPrompts[2]).toHaveLength(6);
+  });
+
+  it("a conversation below the threshold is left exactly as it was", async () => {
+    const brain = compactableModel([ASK, ANSWER]);
+    const final = await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 5 },
+    }).run(INPUT, { ctx: { kb }, store: memoryStore() });
+
+    expect(final.run.phase).toBe("done");
+    expect(brain.summaries()).toBe(0);
+    expect(brain.brainPrompts[1]).toHaveLength(4);
+  });
+
+  it("keepTurns leaves that many newest turns beside the summary", async () => {
+    const brain = compactableModel([ASK, ASK_2, ASK_3, ANSWER]);
+    await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 3, keepTurns: 1 },
+    }).run(INPUT, { ctx: { kb }, store: memoryStore() });
+
+    expect(brain.summaries()).toBe(1);
+    // The summary, then the ONE kept turn with its tool outcome.
+    expect(brain.brainPrompts[3]).toEqual([
+      { role: "system", content: INSTRUCTIONS },
+      { role: "user", content: INPUT },
+      { role: "assistant", content: "SUMMARY", toolCalls: [] },
+      { role: "assistant", content: ASK_3.content, toolCalls: ASK_3.toolCalls },
+      {
+        role: "tool",
+        callId: "c3",
+        name: "search",
+        outcome: {
+          kind: "ok",
+          result: { snippet: "TEA folds the loop in one reducer." },
+        },
+      },
+    ]);
+  });
+
+  it("a fold of fewer than two turns is skipped — the core's own no-gain rule", async () => {
+    const brain = compactableModel([ASK, ASK_2, ANSWER]);
+    await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      // Two turns, one kept → one turn to fold, which cannot shrink anything.
+      compaction: { afterTurns: 2, keepTurns: 1 },
+    }).run(INPUT, { ctx: { kb }, store: memoryStore() });
+
+    expect(brain.summaries()).toBe(0);
+    expect(brain.brainPrompts[2]).toHaveLength(6);
+  });
+});
+
+// A tool that records when it starts and when it ends, so two calls in one turn
+// either interleave or do not.
+const slow = tool(
+  "slow",
+  {
+    description: "Take a while.",
+    input: z.object({ id: z.string() }),
+    ok: z.object({ id: z.string() }),
+    err: ["never"],
+    needs: Cmd.needs<{ readonly log: string[] }>(),
+  },
+  async ({ id }, ctx, { ok }) => {
+    ctx.log.push(`start:${id}`);
+    await new Promise((r) => setTimeout(r, 20));
+    ctx.log.push(`end:${id}`);
+    return ok({ id });
+  },
+);
+
+const TWO_SLOW: AgentTurn = {
+  content: "both, please",
+  toolCalls: [
+    { callId: "a", name: "slow", args: { id: "a" } },
+    { callId: "b", name: "slow", args: { id: "b" } },
+  ],
+};
+
+/**
+ * Drive one turn asking for two `slow` calls at the given concurrency, watching
+ * the fan-out ledger as it goes.
+ *
+ * The ledger — not the wall clock — is where this knob is observable. The
+ * kernel's `runInterpret` awaits one Cmd's handler before starting the next, so
+ * two launch Cmds emitted by one transition still run back to back; what the
+ * knob decides is how many calls a transition launches at all, which is exactly
+ * what `running` vs `pending` records.
+ */
+async function twoSlowCalls(concurrency: number | undefined) {
+  const log: string[] = [];
+  const { model } = scripted([TWO_SLOW, ANSWER]);
+  const agent = defineAgent({
+    model,
+    tools: [slow],
+    instructions: INSTRUCTIONS,
+    ...(concurrency === undefined ? {} : { toolConcurrency: concurrency }),
+  });
+  let maxRunning = 0;
+  let everPending = false;
+  const runtime = await run(agent.machine(INPUT), { ctx: { log } }).ready;
+  const off = runtime.observe((_m, s) => {
+    maxRunning = Math.max(maxRunning, s.tools.running.length);
+    everPending ||= s.tools.pending.length > 0;
+  });
+  await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
+  await vi.waitFor(() => expect(runtime.getState().run.phase).toBe("done"));
+  off();
+  await runtime.stop();
+  return { log, ledger: { maxRunning, everPending } };
+}
+
+describe("defineAgent — the toolConcurrency knob (#149)", () => {
+  it("two slow tools in one turn are both in flight when it is set above 1", async () => {
+    const { log, ledger } = await twoSlowCalls(2);
+
+    // Both calls are launched by ONE transition: neither waits in `pending`.
+    expect(ledger.maxRunning).toBe(2);
+    expect(ledger.everPending).toBe(false);
+    // Every call still settled, in the same order the model asked for them.
+    expect(log).toEqual(["start:a", "end:a", "start:b", "end:b"]);
+  });
+
+  it("omitting it keeps today's serial dispatch: one in flight, the rest pending", async () => {
+    const { log, ledger } = await twoSlowCalls(undefined);
+
+    expect(ledger.maxRunning).toBe(1);
+    expect(ledger.everPending).toBe(true);
+    expect(log).toEqual(["start:a", "end:a", "start:b", "end:b"]);
+  });
+
+  it("omitting it keeps today's serial dispatch", async () => {
+    const log: string[] = [];
+    const { model } = scripted([TWO_SLOW, ANSWER]);
+    const final = await defineAgent({
+      model,
+      tools: [slow],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { ctx: { log } });
+
+    expect(final.run.phase).toBe("done");
+    expect(log).toEqual(["start:a", "end:a", "start:b", "end:b"]);
+  });
+});
+
+describe("defineAgent — the knobs leave the durable Model's shape alone (#149)", () => {
+  it("an agent with both set has the same slice keys as a hand-wired createAgent", async () => {
+    const brain = compactableModel([ASK, ASK_2, ANSWER]);
+    const final = await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      compaction: { afterTurns: 2 },
+      toolConcurrency: 4,
+    }).run(INPUT, { ctx: { kb } });
+
+    const tools = toolRouter([search]);
+    const handWired = createAgent<
+      string,
+      "act",
+      { act: AgentTurn },
+      { snippet: string },
+      ReturnType<typeof tools.toolOf>,
+      AgentMessage
+    >({
+      stages: [INPUT],
+      turnOf: () => "act",
+      schemas: { act: { parse: (v) => v as AgentTurn } },
+      model: brain.model,
+      toolOf: tools.toolOf,
+      instructions: INSTRUCTIONS,
+    });
+    const keys = (s: object) => Object.keys(s).sort();
+    expect(keys(final)).toEqual(keys(handWired.init()));
+    expect(JSON.parse(JSON.stringify(final))).toEqual(final);
+  });
+});
