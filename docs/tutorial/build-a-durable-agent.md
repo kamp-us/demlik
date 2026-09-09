@@ -167,6 +167,14 @@ The `input` schema is what the model's arguments are parsed against before the
 handler ever sees them; `description` is the sentence the model reads to decide
 when to call the tool.
 
+`ok` and `err` are the two typed channels of the `Cmd<T, E, R>` this tool mints:
+`ok` is its `T`, `err` its `E`. A failure keeps its `_tag` all the way into the
+conversation, so a reducer that switches over the tags in `err` is exhaustive —
+declare one and forget to handle it and the compiler says so. This tool declares
+`err: []`, which is the empty `E`: it has no failure to name, so there is nothing
+for a reducer to switch on. [Why failures are values and bugs are
+throws](../explanation/errors-as-data.md) is the reasoning behind that shape.
+
 ## Define the agent
 
 `defineAgent` takes the three things that are actually yours to decide — the
