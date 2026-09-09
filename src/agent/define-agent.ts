@@ -11,7 +11,7 @@
  */
 
 import { defineMachine, driveToDone, type Machine, run } from "../index";
-import type { DeadlineSub } from "../internal/flow/monitored-run";
+import type { DeadlineSub, EndedRun } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { MsgType } from "../protocol";
 import type { Interpret, RequiredCtx } from "../pure/core";
@@ -108,6 +108,25 @@ export type DefinedAgentState<T extends AnyToolDef> = AgentState<
   LidOutputs,
   ToolResult<T>
 >;
+
+/**
+ * The Model `run` RESOLVES with — {@link DefinedAgentState} whose `run` slice is
+ * narrowed to the ended phases ({@link EndedRun}).
+ *
+ * `run`'s terminal predicate is `done || cancelled` and its `failed` one rejects,
+ * so the never-started `idle` arm is unreachable on the resolved value. Typing
+ * the promise as the whole Model published that unreachable arm anyway, and
+ * `idle` carries no `runId` — so `(await agent.run(input)).run.runId`, a field
+ * every resolved run has, did not typecheck (#155). The narrow is on what `run`
+ * can RESOLVE; the `idle` arm is untouched and still carries no `runId`.
+ *
+ * `DefinedAgentState` itself stays wide, because it is the DURABLE Model: an
+ * `init` slice is `idle`, and a `Store<DefinedAgentState<T>>` has to hold one.
+ */
+export type DefinedAgentResolvedState<T extends AnyToolDef> = Omit<
+  DefinedAgentState<T>,
+  "run"
+> & { readonly run: EndedRun<string> };
 
 /** The ctx the tools' `needs` demand, intersected — what `run` asks for. */
 export type DefinedAgentCtx<T extends AnyToolDef> = RequiredCtx<ToolCmd<T>>;
@@ -491,13 +510,17 @@ export interface DefinedAgent<T extends AnyToolDef> {
    * back mid-run is booted (`agent_boot`) at its one outstanding effect —
    * same `runId`, no tool re-run — and one already `done` resolves as it is.
    * A fresh start needs an empty Store.
+   *
+   * It resolves with {@link DefinedAgentResolvedState} — the Model whose `run`
+   * slice is narrowed to the ENDED phases, so `(await agent.run(i)).run.runId`
+   * reads without a guard against an `idle` arm this promise cannot produce.
    */
   readonly run: (
     input: string,
     ...opts: [Record<never, never>] extends [DefinedAgentCtx<T>]
       ? [opts?: DefinedAgentRunOptions<T>]
       : [opts: DefinedAgentRunOptions<T>]
-  ) => Promise<DefinedAgentState<T>>;
+  ) => Promise<DefinedAgentResolvedState<T>>;
   /** The machine `run` drives for `input` — the door down to the raw kernel. */
   readonly machine: (input: string) => DefinedAgentMachine<T>;
   /**
@@ -688,13 +711,15 @@ function definedAgent<T extends AnyToolDef>(
     // — the signal-with-no-cancel the union exists to refuse.
     const signal = opts.signal;
     if (signal === undefined) {
-      return driveToDone(handle, begin, isEnded, { failed: isFailed });
+      return ended(driveToDone(handle, begin, isEnded, { failed: isFailed }));
     }
-    return driveToDone(handle, begin, isEnded, {
-      failed: isFailed,
-      signal,
-      cancel: () => agentCancelMsg(clock()),
-    });
+    return ended(
+      driveToDone(handle, begin, isEnded, {
+        failed: isFailed,
+        signal,
+        cancel: () => agentCancelMsg(clock()),
+      }),
+    );
   };
   return {
     machine,
@@ -1195,6 +1220,22 @@ function isMidRun(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
  */
 function isEnded(s: AgentState<string, LidPurpose, LidOutputs, unknown>) {
   return s.run.phase === "done" || s.run.phase === "cancelled";
+}
+
+/**
+ * The drive's resolved State at the type the drive's own predicates already
+ * guarantee. `driveToDone` is typed `Promise<S>` over the machine's whole Model
+ * because its terminal test is an opaque `(s) => boolean` it cannot read as a
+ * type guard — so the narrowing `isEnded` performs is invisible at the seam and
+ * is re-stated here: the promise resolves only where `isEnded` holds (`done` /
+ * `cancelled`), and everything `isFailed` marks rejects. This is the ONE place
+ * the two are joined, so `run`'s public type carries no `idle` arm and no caller
+ * asserts (#155).
+ */
+function ended<T extends AnyToolDef>(
+  drive: Promise<DefinedAgentState<T>>,
+): Promise<DefinedAgentResolvedState<T>> {
+  return drive as Promise<DefinedAgentResolvedState<T>>;
 }
 
 /** The drive's failure predicate — either failure channel, via `status`. PURE. */
