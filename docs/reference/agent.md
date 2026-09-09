@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (103)
+## Exports (108)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
