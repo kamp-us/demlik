@@ -1585,6 +1585,7 @@ export function createAgent<
 export { subscribeDeadline, deadlineSub };
 export type {
   DeadlineSub,
+  EndedRun,
   MonitoredRunCmd,
   RunFailure,
 } from "../internal/flow/monitored-run";

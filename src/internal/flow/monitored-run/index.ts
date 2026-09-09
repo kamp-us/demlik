@@ -266,6 +266,23 @@ type LiveRun<Stage> = Extract<
 >;
 
 /**
+ * The ENDED phases — a run that finished (`done`) or was stopped from outside
+ * (`cancelled`). Every arm here was started or explicitly stopped, so `idle` is
+ * out and `runId` is present on the whole union: a consumer holding one of these
+ * reads the run identity without a `phase` guard the value can never fail.
+ *
+ * It is the resolved half of a drive: a promise that resolves only on an ended
+ * run should say so in its type rather than resolve `MonitoredRunState` and
+ * leave every reader to re-prove the `idle` arm impossible (#155). `cancelled`
+ * keeps its `string | null` `runId` unchanged — a run cancelled before it ever
+ * started genuinely has no identity, and that stays a different value here.
+ */
+export type EndedRun<Stage> = Extract<
+  MonitoredRunState<Stage>,
+  { readonly phase: "done" | "cancelled" }
+>;
+
+/**
  * The outcome a consumer reports to `advance`: the current stage either
  * succeeded (retire it, claim the next) or failed (terminate the run). Plain
  * data — the consumer parses its stage result at its own boundary and hands a
