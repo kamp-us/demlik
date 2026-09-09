@@ -121,6 +121,23 @@ A useful habit when testing: kill the process at several different points, not
 just one, and check that the result is the same. A single well-timed `Ctrl-C`
 that lands outside the window proves less than it looks like it does.
 
+## What a resumed agent run keeps: the prompt it started with
+
+`instructions` is pinned. It is written into the Model when the run's state is
+created — at `init`, before the run's first `agent_start` — and read back from
+there on every brain call, so it is never re-read from your config again. Resume
+a killed run after a redeploy that changed the system prompt and the run
+continues on the **old** prompt; the new string reaches new runs only. That is
+the design, not a defect: the prompt is state rather than a closure so a replay
+reproduces the exact prompt that ran, a rehydrated run stays the run it was, and
+a compaction fold — which touches only the conversation — can never lose it
+([ADR 0004](../../.decisions/0004-agent-context-compaction.md)).
+
+There is no override. **A bad prompt already in flight is ended, not patched**:
+stop the run's process, leave its stored Model alone rather than resuming it, and
+start a **new** run on the new prompt. A run is the unit that carries a prompt,
+so replacing the prompt means replacing the run.
+
 ## What a finished agent run keeps
 
 For the agent layer specifically, one detail surprises people. When a run reaches

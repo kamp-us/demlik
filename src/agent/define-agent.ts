@@ -193,7 +193,12 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
   readonly model: DefinedAgentModel;
   /** The `tool()`s the model may call. */
   readonly tools: readonly T[];
-  /** The system prompt — stored on the Model at `init` (ADR 0004). */
+  /**
+   * The system prompt — stored on the Model at `init` (ADR 0004) and never
+   * re-read, so a resumed run keeps the prompt it started with even across a
+   * redeploy that changed this string; to replace a bad prompt already in
+   * flight, end that run and start a new one rather than resuming it.
+   */
   readonly instructions: string;
   /**
    * Stops a run that keeps going: the maximum number of model round-trips it
