@@ -1174,8 +1174,10 @@ export type DriveToDoneOptions<
  * lands — no rejection, no `DriveFailedError`, no `AbortError`. That is the whole
  * point of routing a stop through the Model: the outcome is durable, so a killed
  * process resumes reading a run that ended instead of restarting one someone
- * stopped. A `cancel` fold that THROWS is the one abort that rejects: it lands
- * no State, so its error is what the drive has to report, and a State the
+ * stopped. A cancel that THROWS is the one abort that rejects: it lands
+ * no State, so its error is what the drive has to report — and that holds
+ * whether the `cancel` function throws synchronously or the fold it produced
+ * throws later, since both leave the run with no State to settle on. A State the
  * caller's `failed` predicate marks rejects on an abort exit exactly as it does
  * anywhere else. In-flight effects are not recalled — a promise cannot be cancelled —
  * so they settle to their own end and `stop()` drains them as it always did;
@@ -1242,8 +1244,19 @@ export async function driveToDone<
       cancelFailed = new Promise<never>((_resolve, reject) => {
         onCancelError = reject;
       });
+      // The try covers the SYNCHRONOUS call site too, not just the dispatch it
+      // returns: a caller-supplied `cancel` that throws before it ever produces
+      // a Msg would otherwise escape this listener, and a listener's throw goes
+      // nowhere — no caller frame to catch it, `terminal` still unresolved, the
+      // drive parked exactly as #170 described (#174). Both throws are the same
+      // fact — the cancel fold could not land a State — so both take the one
+      // route out through `onCancelError`.
       const onAbort = () => {
-        runtime.dispatchOnce(cancel(runtime.getState())).catch(onCancelError);
+        try {
+          runtime.dispatchOnce(cancel(runtime.getState())).catch(onCancelError);
+        } catch (error) {
+          onCancelError(error);
+        }
       };
       // Already aborted → cancel INSTEAD of starting, so `start`'s effects (a
       // model call, for the agent) never fire at all.
