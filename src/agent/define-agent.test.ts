@@ -1712,15 +1712,25 @@ const slow = tool(
     input: z.object({ id: z.string() }),
     ok: z.object({ id: z.string() }),
     err: ["never"],
-    needs: Cmd.needs<{ readonly log: string[] }>(),
+    needs: Cmd.needs<{
+      readonly log: string[];
+      // Per-call durations, so a test can make the SECOND call finish first and
+      // ask what that does to the fold.
+      readonly delayMs?: Readonly<Record<string, number>>;
+    }>(),
   },
   async ({ id }, ctx, { ok }) => {
     ctx.log.push(`start:${id}`);
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, ctx.delayMs?.[id] ?? 20));
     ctx.log.push(`end:${id}`);
     return ok({ id });
   },
 );
+
+/** The Msg union the two-`slow`-calls machine folds — `LidMsg`'s sibling. */
+type SlowMsg =
+  | AgentMachineMsg<"act", { act: AgentTurn }, { id: string }>
+  | WiredToolMsg<typeof slow>;
 
 const TWO_SLOW: AgentTurn = {
   content: "both, please",
@@ -1732,62 +1742,110 @@ const TWO_SLOW: AgentTurn = {
 
 /**
  * Drive one turn asking for two `slow` calls at the given concurrency, watching
- * the fan-out ledger as it goes.
+ * the fan-out ledger and the Msg log as it goes.
  *
- * The ledger — not the wall clock — is where this knob is observable. The
- * kernel's `runInterpret` awaits one Cmd's handler before starting the next, so
- * two launch Cmds emitted by one transition still run back to back; what the
- * knob decides is how many calls a transition launches at all, which is exactly
- * what `running` vs `pending` records.
+ * Two things are observable here and they answer two different questions. The
+ * LEDGER (`running` vs `pending`) says how many calls the transition launched —
+ * that has always been the knob's meaning. The `log` the tool writes says
+ * whether they overlapped on the clock, which is what ADR 0018's option (c)
+ * added. The `msgs` are the third: the order the settles actually folded in.
  */
-async function twoSlowCalls(concurrency: number | undefined) {
+async function twoSlowCalls(
+  concurrency: number | undefined,
+  delayMs?: Readonly<Record<string, number>>,
+) {
   const log: string[] = [];
-  const { model } = scripted([TWO_SLOW, ANSWER]);
+  const msgs: SlowMsg[] = [];
+  const { model, seen } = scripted([TWO_SLOW, ANSWER]);
   const agent = defineAgent({
     model,
     tools: [slow],
     instructions: INSTRUCTIONS,
     ...(concurrency === undefined ? {} : { toolConcurrency: concurrency }),
   });
+  const machine = agent.machine(INPUT);
+  const ctx = { log, ...(delayMs === undefined ? {} : { delayMs }) };
   let maxRunning = 0;
   let everPending = false;
-  const runtime = await run(agent.machine(INPUT), { ctx: { log } }).ready;
-  const off = runtime.observe((_m, s) => {
+  const runtime = await run(machine, { ctx }).ready;
+  const off = runtime.observe((m, s) => {
+    msgs.push(m);
     maxRunning = Math.max(maxRunning, s.tools.running.length);
     everPending ||= s.tools.pending.length > 0;
   });
   await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
   await vi.waitFor(() => expect(runtime.getState().run.phase).toBe("done"));
   off();
+  const final = runtime.getState();
   await runtime.stop();
-  return { log, ledger: { maxRunning, everPending } };
+  return {
+    log,
+    msgs,
+    seen,
+    final,
+    machine,
+    ledger: { maxRunning, everPending },
+  };
 }
 
-// These assert the LEDGER, not the clock, and ADR 0018 is why: `runInterpret`
-// interprets a transition's Cmds one at a time and never interleaves them, so
-// `toolConcurrency` moves calls from `pending` to `running` in the durable
-// Model and changes nothing about wall-clock time. The `["start:a", "end:a",
-// "start:b", "end:b"]` log below is that fact pinned, not a defect — #163 read
-// it as one, and the ruling recorded in 0018 is that the kernel's serial fold
-// stays and real overlap belongs inside the tool-launch Cmd's own handler.
-// A reader about to make `runInterpret` concurrent should read 0018 first.
-describe("defineAgent — the toolConcurrency knob (#149, ruled in ADR 0018)", () => {
-  it("two slow tools in one turn are both in flight when it is set above 1", async () => {
+/** The `callId`s the run's `slow_ok` Msgs settled, in the order they folded. */
+const settledIds = (msgs: readonly SlowMsg[]) =>
+  msgs.flatMap((m) =>
+    m.type === "slow_ok" ? [(m as { cmd: { callId: string } }).cmd.callId] : [],
+  );
+
+// ADR 0018's option (c), built: the kernel's `runInterpret` still interprets a
+// transition's Cmds one at a time and never interleaves two handlers, and the
+// overlap lives inside the tool Cmds' own handlers, which launch and return.
+// So the ledger reads as it always did AND the clock finally agrees with it —
+// without the fold order moving, which is the half these tests exist to hold.
+describe("defineAgent — the toolConcurrency knob (#149, ADR 0018 option (c))", () => {
+  it("two slow tools in one turn overlap on the clock when it is set above 1", async () => {
     const { log, ledger } = await twoSlowCalls(2);
 
     // Both calls are launched by ONE transition: neither waits in `pending`.
     expect(ledger.maxRunning).toBe(2);
     expect(ledger.everPending).toBe(false);
-    // Every call still settled, in the same order the model asked for them.
-    expect(log).toEqual(["start:a", "end:a", "start:b", "end:b"]);
+    // The INTERLEAVING itself, not a total duration: `b` had started before `a`
+    // finished, which no serial dispatch can produce however fast it is.
+    expect(log).toEqual(["start:a", "start:b", "end:a", "end:b"]);
+    expect(log.indexOf("start:b")).toBeLessThan(log.indexOf("end:a"));
   });
 
-  it("omitting it keeps today's serial dispatch: one in flight, the rest pending", async () => {
+  it("omitting it keeps them strictly serial: one in flight, the rest pending", async () => {
     const { log, ledger } = await twoSlowCalls(undefined);
 
     expect(ledger.maxRunning).toBe(1);
     expect(ledger.everPending).toBe(true);
     expect(log).toEqual(["start:a", "end:a", "start:b", "end:b"]);
+  });
+
+  it("settles fold in Cmd-emission order however the calls finish", async () => {
+    // `b` is an order of magnitude faster, so completion order is b-then-a…
+    const { log, msgs, seen } = await twoSlowCalls(2, { a: 60, b: 5 });
+    expect(log).toEqual(["start:a", "start:b", "end:b", "end:a"]);
+
+    // …and the fold is a-then-b anyway, because that is the order the Cmds were
+    // emitted in. This is invariant 2's serializability, and it is the thing
+    // overlap was not allowed to spend: a log replayed later folds these two
+    // Msgs in this order or it is not the same run.
+    expect(settledIds(msgs)).toEqual(["a", "b"]);
+    // And the prompt the model reads next turn carries that order too — the
+    // tool messages are rendered from the settle-ordered records, so a fold in
+    // completion order would show the model its two tools the other way round.
+    const next = seen.at(1) ?? [];
+    expect(next.flatMap((m) => (m.role === "tool" ? [m.callId] : []))).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("a replay of a fanned run reproduces the same Model", async () => {
+    const { msgs, final, machine } = await twoSlowCalls(2, { a: 60, b: 5 });
+
+    // Pure re-fold of exactly what the fanned run folded, no effects run.
+    const { state } = replay(machine, { msgs, ctx: { log: [] } });
+    expect(state).toEqual(final);
   });
 
   it("omitting it keeps today's serial dispatch", async () => {

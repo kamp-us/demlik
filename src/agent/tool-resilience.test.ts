@@ -393,3 +393,109 @@ describe("the ladder's endings are structured failures like any other", () => {
     expect(hooked).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #179 — the ladder under fan-out. `toolConcurrency > 1` overlaps a turn's tool
+// calls inside their own Cmd handlers (ADR 0018 option (c)), and the whole
+// claim of that build is that nothing per-call moves: each launch still arms
+// its own timeout, each settle is still offered to its own ladder, and a call
+// that overlaps a sibling ends exactly as it would have ended alone.
+// ---------------------------------------------------------------------------
+
+describe("the per-call ladder under fan-out (#179)", () => {
+  /** A turn asking for both tools at once — the fan-out this section is about. */
+  const asksBoth: AgentTurn = {
+    content: "both",
+    toolCalls: [
+      { callId: "slow", name: "slow", args: {} },
+      { callId: "quick", name: "quick", args: {} },
+    ],
+  };
+
+  const quick = tool(
+    "quick",
+    {
+      description: "settles at once",
+      input: z.object({}),
+      ok: z.object({ ok: z.boolean() }),
+      err: [],
+    },
+    async (_args, _ctx, { ok }) => ok({ ok: true }),
+  );
+
+  it("times out the slow call on its own budget while its sibling succeeds", async () => {
+    // Overlapping means the fast call finishes FIRST, in the middle of the slow
+    // one's budget. Neither fact reaches the other's ladder.
+    const slow = tool(
+      "slow",
+      {
+        description: "resolves long after its budget",
+        input: z.object({}),
+        ok: z.object({ late: z.boolean() }),
+        err: [],
+        timeoutMs: 10,
+      },
+      async (_args, _ctx, { ok }) => {
+        await new Promise((r) => setTimeout(r, 300));
+        return ok({ late: true });
+      },
+    );
+    const { model, seen } = scripted([asksBoth]);
+    const final = await defineAgent({
+      model,
+      tools: [slow, quick],
+      instructions: "i",
+      toolConcurrency: 2,
+    }).run("go", { store: memoryStore() });
+
+    expect(final.run.phase).toBe("done");
+    // In Cmd-EMISSION order, whichever finished first — and each outcome is the
+    // one that call would have got on its own.
+    expect(shown(seen)).toEqual([
+      { _tag: "timeout", kind: "error", reason: "timeout" },
+      { kind: "ok", result: { ok: true } },
+    ]);
+  });
+
+  it("climbs a retry ladder for the fanned call exactly as for a serial one", async () => {
+    let attempts = 0;
+    const flaky = tool(
+      "slow",
+      {
+        description: "fails twice, then succeeds",
+        input: z.object({}),
+        ok: z.object({ attempts: z.number() }),
+        err: ["upstream"],
+        retry: FAST,
+      },
+      async (_args, _ctx, { ok, fail }) => {
+        attempts += 1;
+        return attempts < 3 ? fail({ _tag: "upstream" }) : ok({ attempts });
+      },
+    );
+    const { model, seen } = scripted([asksBoth]);
+    const final = await defineAgent({
+      model,
+      tools: [flaky, quick],
+      instructions: "i",
+      toolConcurrency: 2,
+    }).run("go", { store: memoryStore() });
+
+    expect(final.run.phase).toBe("done");
+    expect(attempts).toBe(3);
+    // The two failed attempts settled nothing the model saw: the ladder ate
+    // them and the call's ONE outcome is the third attempt's success.
+    //
+    // It is shown SECOND, and that is the ladder rather than the fan-out: a
+    // retried call is re-launched by a LATER transition, so its winning settle
+    // is emitted after the sibling's and folds there. Emission order is exactly
+    // what these records are in — serially too, where the sibling likewise
+    // settles while the ladder is still backing off.
+    expect(shown(seen)).toEqual([
+      { kind: "ok", result: { ok: true } },
+      { kind: "ok", result: { attempts: 3 } },
+    ]);
+    // And the ladder left no entry behind, fanned or not.
+    expect(final.toolResilience.slow?.calls).toEqual({});
+  });
+});

@@ -336,13 +336,13 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * all in flight in the fan-out ledger rather than queued behind each other.
    * A turn asking for more calls than this runs them in waves.
    *
-   * It is a DISPATCH knob and not a wall-clock one: the kernel interprets a
-   * transition's Cmds one after another (`runInterpret` awaits each handler)
-   * and never interleaves them, so two launched calls still run back to back
-   * and the turn costs their sum either way. Raising it makes the ledger — and
-   * a `store`'s record of it — say what was launched; it does not make two slow
-   * tools finish in the time of one. ADR 0018 rules that the serial fold stays
-   * and names where real overlap is to live instead.
+   * Launched together means overlapping on the clock: a turn of two slow tools
+   * costs the slower of them, not their sum. The overlap lives inside the tool
+   * Cmds' own handlers and NOT in the kernel — `runInterpret` still interprets
+   * a transition's Cmds one after another and never interleaves two handlers,
+   * which is ADR 0018's ruling and the reason a replay is unaffected. Settle
+   * Msgs fold in Cmd-EMISSION order whichever call finishes first, so raising
+   * the knob changes the turn's latency and nothing about its Model.
    *
    * Omit (or `1`) → serial dispatch, exactly as before.
    */

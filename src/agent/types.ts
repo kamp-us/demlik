@@ -477,19 +477,24 @@ export interface AgentConfigCore<
    */
   readonly toolResilienceOf?: (call: ToolCall) => ToolResilience | null;
   /**
-   * How many of ONE turn's tool calls a transition LAUNCHES at once — a
-   * dispatch knob, not a wall-clock one. At the default `1` a turn's calls go
-   * out one at a time; raise it and up to that many move from `pending` to
-   * `running` in the fan-out ledger in a single transition, so the durable
-   * Model (and a `store`'s record of it) says what was launched.
+   * How many of ONE turn's tool calls a transition LAUNCHES at once. At the
+   * default `1` a turn's calls go out one at a time; raise it and up to that
+   * many move from `pending` to `running` in the fan-out ledger in a single
+   * transition, so the durable Model (and a `store`'s record of it) says what
+   * was launched.
    *
-   * It does NOT make two slow tools finish in the time of one. `runInterpret`
-   * interprets a transition's Cmds one after another and never interleaves
-   * them, so two launched calls still run back to back and the turn costs their
-   * sum either way. That ordering is a guarantee, not an accident — settle Msgs
-   * fold in Cmd-emission order so a replayed log reproduces the same fold — and
-   * ADR 0018 records why it is not traded for overlap, and where real
-   * wall-clock overlap is to live instead.
+   * Above `1` those calls also OVERLAP on the clock, so a turn of two slow
+   * tools costs the slower rather than the sum — but only for the tool cells a
+   * `toolRouter` owns (the `toMachine({ tools })` path, which `defineAgent`
+   * takes). The overlap lives inside those cells, never in the kernel:
+   * `runInterpret` still interprets a transition's Cmds one after another and
+   * never interleaves two handlers (ADR 0018). A hand-wired `toolInterpret`
+   * cell is yours, so it overlaps only if you write it to.
+   *
+   * Overlapping does NOT reorder the fold. Settle Msgs are dispatched in
+   * Cmd-EMISSION order whichever call finishes first, so a replayed log
+   * reproduces the same Model — invariant 2's serializability, which the knob
+   * was never allowed to spend.
    *
    * Omit (or `1`) → serial dispatch, exactly as before.
    */
