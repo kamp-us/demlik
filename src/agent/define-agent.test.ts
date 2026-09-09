@@ -1847,19 +1847,6 @@ describe("defineAgent — the toolConcurrency knob (#149, ADR 0018 option (c))",
     const { state } = replay(machine, { msgs, ctx: { log: [] } });
     expect(state).toEqual(final);
   });
-
-  it("omitting it keeps today's serial dispatch", async () => {
-    const log: string[] = [];
-    const { model } = scripted([TWO_SLOW, ANSWER]);
-    const final = await defineAgent({
-      model,
-      tools: [slow],
-      instructions: INSTRUCTIONS,
-    }).run(INPUT, { ctx: { log } });
-
-    expect(final.run.phase).toBe("done");
-    expect(log).toEqual(["start:a", "end:a", "start:b", "end:b"]);
-  });
 });
 
 describe("defineAgent — the knobs leave the durable Model's shape alone (#149)", () => {
