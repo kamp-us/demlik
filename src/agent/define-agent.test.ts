@@ -1495,3 +1495,65 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     expect(() => agent.machine(INPUT)).toThrow(/serach/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #146 — the brain-call retry knob on the lid. Two claims live in-process: a
+// declared policy carries a run past a model that throws once, and an omitted
+// one leaves the old behaviour untouched — one throw, one attempt, terminal.
+// The durability half cannot be proved in-process and is
+// `./brain-retry-kill.test.ts`.
+// ---------------------------------------------------------------------------
+
+/** No jitter and a 1ms base, so the ladder's wait costs the test nothing. */
+const BRAIN_RETRY = {
+  baseMs: 1,
+  factor: 1,
+  capMs: 1,
+  maxAttempts: 3,
+  jitter: "none" as const,
+};
+
+/** A model that throws for its first `failures` calls, then answers. */
+function flakyModel(failures: number) {
+  let calls = 0;
+  const model = async (_messages: readonly AgentMessage[]) => {
+    calls += 1;
+    if (calls <= failures) throw new Error("429 from the provider");
+    return ANSWER;
+  };
+  return { model, calls: () => calls };
+}
+
+describe("defineAgent — the brain-call retry knob (#146)", () => {
+  it("a model that throws once and then succeeds completes the run", async () => {
+    const brain = flakyModel(1);
+    const final = await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      retry: BRAIN_RETRY,
+    }).run(INPUT, { ctx: { kb }, store: memoryStore() });
+
+    expect(final.run.phase).toBe("done");
+    expect(final.output).toEqual(ANSWER);
+    // The second attempt is what finished it: the ladder retried rather than
+    // the model having been lucky.
+    expect(brain.calls()).toBe(2);
+  });
+
+  it("omitting it keeps today's behaviour: one throw is terminal after one attempt", async () => {
+    const brain = flakyModel(1);
+    const failed = await defineAgent({
+      model: brain.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    })
+      .run(INPUT, { ctx: { kb } })
+      .catch((e: unknown) => e);
+
+    expect(failed).toBeInstanceOf(DriveFailedError);
+    // No policy is defaulted in on the caller's behalf, so the model was never
+    // called a second time.
+    expect(brain.calls()).toBe(1);
+  });
+});

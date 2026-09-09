@@ -134,3 +134,43 @@ That is the whole recipe: a transient failure moves the machine to
 resets the slice with `initRetry()`. To fire the scheduled retry automatically,
 declare a `deadlineSub` at `retryAtMs` — see the `resilient-fetch` example for
 the timer wiring.
+
+## 6. Retry a `defineAgent`'s brain call
+
+The recipe above is for a call your own reducer owns. An agent's brain call is
+already a resilient slice on the Model, so a `defineAgent` declares the policy
+and writes no timing at all — the lid's `retry` is threaded to the same
+`createAgent` knob, which is why the wait is durable and the attempt count
+survives a reload:
+
+```ts
+import { defineAgent } from "@demlik/tea/agent";
+
+const agent = defineAgent({
+  model,
+  tools: [search],
+  instructions: "You answer with one sentence, citing a search.",
+  // Recommended against a provider 429 / 529: a full-jitter ladder from one
+  // second to a minute, giving up after six attempts. The jitter is what stops
+  // every one of your runs retrying in the same instant after a shared outage,
+  // and the 60s cap is what keeps a long 529 from being hammered.
+  retry: {
+    baseMs: 1_000,
+    factor: 2,
+    capMs: 60_000,
+    maxAttempts: 6,
+    jitter: "full",
+  },
+});
+```
+
+`retry` is opt-in and nothing is defaulted for you: omit it and one throw from
+`model` ends the run after a single attempt, exactly as before. There is no
+`.with({ interpret: … })` in this recipe on purpose — an overlay would put the
+loop inside the effect boundary, where the attempt count lives in the process
+and a restart silently refills the budget.
+
+The lid takes the count-bounded `RetryPolicy` the brain call has always taken,
+so step 5's outage bound is not available here: pick `maxAttempts` and `capMs`
+so the ladder's worst case still fits inside whatever patience the caller above
+the agent has.

@@ -15,6 +15,7 @@ import type { DeadlineSub } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { MsgType } from "../protocol";
 import type { Interpret, RequiredCtx } from "../pure/core";
+import type { RetryPolicy } from "../retry-backoff";
 import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
 import { createAgent } from "./index";
 import {
@@ -159,8 +160,10 @@ export type DefinedAgentModel =
 
 /**
  * What `defineAgent` takes: the model, the tools and the instructions, plus the
- * two optional guards that stop a run — `maxTurns` and `deadlineMs`. Omit both
- * and the run is unbounded: it ends only when the model stops asking for tools.
+ * two optional guards that stop a run — `maxTurns` and `deadlineMs` — and the
+ * one that keeps a run going, `retry`, the brain call's backoff ladder. Omit
+ * both guards and the run is unbounded: it ends only when the model stops
+ * asking for tools.
  */
 export interface DefineAgentConfig<T extends AnyToolDef> {
   /** The brain — either {@link DefinedAgentModel} shape. */
@@ -182,6 +185,24 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * watchdog.
    */
   readonly deadlineMs?: number;
+  /**
+   * The backoff ladder a FAILED BRAIN CALL climbs — the same `RetryPolicy`
+   * shape `AgentConfigCore.retry` takes, threaded straight to it, so the ladder
+   * runs in the resilient slice that already exists and lives on the Model:
+   * each failure is recorded there and the next attempt is armed as a timer
+   * Sub, which is what makes the wait durable and the attempt count survive a
+   * reload.
+   *
+   * The per-tool knob grows no lid option because a `tool()` is a spec object
+   * that declares its own policy (`ToolResilience.retry`). A
+   * `defineAgent` `model` is a bare function with no spec object, so the lid is
+   * the only declaration site a brain-call policy has.
+   *
+   * Omit → NO backoff, exactly as before: one throw from `model` ends the run
+   * after a single attempt. Nothing is defaulted on your behalf — a silent
+   * default would change the failure timing of every existing caller.
+   */
+  readonly retry?: RetryPolicy;
   /**
    * Observe a tool call that failed, typed against THIS agent's tools: the
    * outcome is `{ kind: "error", _tag, …payload, reason }` over
@@ -443,6 +464,11 @@ function definedAgent<T extends AnyToolDef>(
         // it: the policy is declared on the `tool()` that needs it, and the
         // router is what carries it down to the reducer that runs it.
         toolResilienceOf: tools.resilienceOf,
+        // The BRAIN-call ladder (#146), which does grow one, because a bare
+        // `model` function has nowhere else to declare it. Forwarded only when
+        // set, so an omitted lid option leaves `AgentConfigCore.retry` unset
+        // and the brain call unbackedoff, byte for byte as before.
+        ...(config.retry !== undefined ? { retry: config.retry } : {}),
         maxTurns: config.maxTurns,
         deadlineMs: config.deadlineMs,
       }).toMachine<DefinedAgentCtx<T>, T>({ tools }),

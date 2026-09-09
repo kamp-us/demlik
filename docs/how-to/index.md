@@ -54,6 +54,8 @@ what you are trying to do, and it names the subpath you need.
 
 - [Add retry and backoff to a call](./add-resilience.md) — fold
   `@demlik/tea/retry-backoff`'s pure ops into `update` so a flaky call schedules a
-  backed-off retry without your reducer authoring any timing.
+  backed-off retry without your reducer authoring any timing. Ends with the
+  one-field version for a `defineAgent` brain call, and the policy to declare
+  against a provider 429/529.
 
 *Guides are added as the how-to quadrant grows.*
