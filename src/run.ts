@@ -616,6 +616,18 @@ export function run<
    * Run `interpret` for each emitted cmd. A returned follow-up Msg is enqueued
    * onto the tail (NOT dispatched re-entrantly). The first error stops further
    * handlers in this transition.
+   *
+   * THIS LOOP IS SERIAL BY RULING, NOT BY OVERSIGHT (ADR 0018). It interprets a
+   * transition's Cmds one at a time and never interleaves two handlers, so the
+   * Msgs it enqueues fold in Cmd-EMISSION order and a replayed log reproduces
+   * the same fold — invariant 2's serializability, which time-travel and
+   * durable replay are built on. Making this concurrent was proposed (#163,
+   * because `toolConcurrency` reads like a parallelism knob) and REJECTED:
+   * overlap here would fold settle Msgs in completion order and re-specify
+   * first-error semantics and `inFlightCmds` for every machine, including the
+   * consumers who never asked for it. Wall-clock overlap belongs INSIDE one
+   * Cmd's handler — fan out there, settle one Msg per item through this edge —
+   * never across the Cmds of one transition.
    */
   async function runInterpret(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {

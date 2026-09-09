@@ -1561,8 +1561,9 @@ describe("defineAgent — the brain-call retry knob (#146)", () => {
 
 // ---------------------------------------------------------------------------
 // #149 — the two lid knobs the appliance was missing: `compaction`, which
-// bounds a long run's transcript, and `toolConcurrency`, which lets one turn's
-// tools overlap. Both were reachable only by dropping to `createAgent`.
+// bounds a long run's transcript, and `toolConcurrency`, which says how many of
+// one turn's tool calls a transition LAUNCHES. Both were reachable only by
+// dropping to `createAgent`.
 // ---------------------------------------------------------------------------
 
 const ASK_2: AgentTurn = {
@@ -1762,7 +1763,15 @@ async function twoSlowCalls(concurrency: number | undefined) {
   return { log, ledger: { maxRunning, everPending } };
 }
 
-describe("defineAgent — the toolConcurrency knob (#149)", () => {
+// These assert the LEDGER, not the clock, and ADR 0018 is why: `runInterpret`
+// interprets a transition's Cmds one at a time and never interleaves them, so
+// `toolConcurrency` moves calls from `pending` to `running` in the durable
+// Model and changes nothing about wall-clock time. The `["start:a", "end:a",
+// "start:b", "end:b"]` log below is that fact pinned, not a defect — #163 read
+// it as one, and the ruling recorded in 0018 is that the kernel's serial fold
+// stays and real overlap belongs inside the tool-launch Cmd's own handler.
+// A reader about to make `runInterpret` concurrent should read 0018 first.
+describe("defineAgent — the toolConcurrency knob (#149, ruled in ADR 0018)", () => {
   it("two slow tools in one turn are both in flight when it is set above 1", async () => {
     const { log, ledger } = await twoSlowCalls(2);
 
