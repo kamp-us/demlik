@@ -32,7 +32,7 @@ These are the ones to read first:
 | `AgentCompactRunCmd` | Type | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier. |
 | `AgentConfig` | Type | The agent configuration — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
 | `AgentConfigCore` | Interface | The core (non-snapshot, non-compaction) agent configuration. |
-| `AgentDetachedHandlers` | Type | The LEGACY detached brain-call handler dictionary `handlers(ports)` returns, superseded by the `Interpret` table AgentKnob.toMachine wires — reach for `toMachine()` unless you are hand-wiring the verbs yourself. |
+| `AgentDetachedHandlers` | Type | The LEGACY detached brain-call handler dictionary `handlers(ports)` returns, superseded by the `Interpret` table `AgentKnob.toMachine()` wires — reach for `toMachine()` unless you are hand-wiring the verbs yourself. |
 | `AgentEvent` | Type | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)`. |
 | `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
 | `AgentFailure` | Type | Why a run terminated as `failed`, beyond monitored-run's own reasons. |
@@ -65,8 +65,8 @@ These are the ones to read first:
 | `createAgent` | Function | Assemble an agent from `config` — the model, the stages it walks, and how a tool call is turned into a command — and get back its `init`, verbs and `subs` plus a `toMachine()` that wires all of it into one machine you hand to `run`, which is the layer to reach for only once `defineAgent` cannot express the run you want — a newcomer starts there, not here. |
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
-| `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself — the entry point to start from, and the one a newcomer wants, since `createAgent` is the layer underneath it that you drop to only to walk a stage pipeline of your own. |
-| `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs`. |
+| `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself, which is the entry point a newcomer picks, `createAgent` being the layer underneath that you drop to only to walk a stage pipeline of your own. |
+| `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |
 | `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
