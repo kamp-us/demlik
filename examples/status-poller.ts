@@ -1,5 +1,9 @@
 import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
-import type { DeadlineExceeded } from "../src/internal/resilience/deadline";
+import {
+  type DeadlineExceeded,
+  type DeadlineSub,
+  subscribeDeadline,
+} from "../src/internal/resilience/deadline";
 import { createPoller, type PollerState } from "../src/internal/flow/poller";
 import { Result } from "better-result";
 
@@ -39,7 +43,20 @@ function readStatusCmds(cmds: readonly Cmd[]): readonly ReadStatus[] {
   return cmds.filter((c): c is ReadStatus => c.type === "read_status");
 }
 
-export const statusPoller = defineMachine<State, Msg, ReadStatus, Sub, Ctx>({
+// `poll.subs` is typed to the base `Sub` — the poller does not leak its own Sub
+// shape — so the machine narrows to the one variant its `subscribe` table
+// handles, the same way `readStatusCmds` narrows the Cmd side.
+function isDeadlineSub(sub: Sub): sub is DeadlineSub {
+  return sub.type === "deadline";
+}
+
+export const statusPoller = defineMachine<
+  State,
+  Msg,
+  ReadStatus,
+  DeadlineSub,
+  Ctx
+>({
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ jobId: JOB_ID, poll: poll.init() }, []],
 
@@ -67,7 +84,8 @@ export const statusPoller = defineMachine<State, Msg, ReadStatus, Sub, Ctx>({
     },
   },
 
-  subscriptions: (s) => poll.subs(s.poll),
+  subscriptions: (s) => poll.subs(s.poll).filter(isDeadlineSub),
+  subscribe: { deadline: subscribeDeadline },
 
   interpret: {
     read_status: async (cmd, ctx): Promise<Msg> => {
