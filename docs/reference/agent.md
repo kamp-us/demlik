@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (98)
+## Exports (103)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -58,11 +58,13 @@ import { … } from "@demlik/tea/agent";
 | `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
 | `DefinedAgentEvent` | Type | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
 | `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
+| `DefinedAgentModel` | Type | The brain a defined agent runs, in either of its two shapes: - `async (messages) => turn` — the plain port, and the common path. |
 | `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
 | `isAgentTurn` | Function | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
 | `isReservedToolName` | Function | Whether `name` is one `tool()` refuses — the set `ReservedToolName` types. |
+| `isStreamingModel` | Function | Whether a model port wants the ModelStream — read off its declared arity, which is the mark JavaScript already carries. |
 | `LidPurpose` | Type | The one purpose a `defineAgent` agent runs. |
 | `liftAgent` | Function | Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.agent`. |
 | `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this module, carried on the `resilient_run` Cmd as plain data — no closures, so it survives persistence and replay. |
@@ -75,6 +77,7 @@ import { … } from "@demlik/tea/agent";
 | `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
 | `ModelFactory` | Type | The model factory — the first DI port. |
 | `ModelPort` | Type | Either model port. |
+| `ModelStream` | Interface | The side channel a StreamingModel writes its deltas to — the second argument of the streaming port. |
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
 | `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
 | `plainModel` | Function | Lift a plain-function model into the `ModelFactory` port. |
@@ -85,6 +88,7 @@ import { … } from "@demlik/tea/agent";
 | `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call the handler uses to validate the model's output before it settles `resilient_ok`. |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`. |
 | `status` | Function | Ask where an agent run stands: pass its state, get back one of `idle`, `running`, `suspended` (with the tool calls it is waiting on), `done` (with the output) or `failed` (with the failure). |
+| `StreamingModel` | Type | The streaming model port — `(messages, { onChunk }) => Promise<AgentTurn>`. |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a definition you pass to `toolRouter` or `defineAgent`. |
 | `ToolCall` | Interface | One tool the model asked to call this turn. |
@@ -106,5 +110,6 @@ import { … } from "@demlik/tea/agent";
 | `ToolRouter` | Interface | What `toolRouter()` returns: the derived `toolOf` for `createAgent`'s config, the interpret table `toMachine({ tools })` merges, the defs it puts on `Machine.cmds`, and the one reader that turns a settled Msg back into the conversation's `ToolOutcome`. |
 | `ToolSettlement` | Type | One settled tool, read back off a `ToolMsg` by `outcomeOf`. |
 | `ToolThrown` | Type | The router-minted failure beside a tool's declared tags: the handler threw (or rejected) with something that is not a declared `{ _tag }`. |
+| `TurnChunk` | Interface | One partial piece of a turn the model is still producing — a token delta, as the provider emitted it. |
 | `WiredToolCmd` | Type | `ToolCmd<T>` as `toMachine` reads it: `never` for `T = never` — the "no router" reading it defaults to — so the router-owned `tool_rejected` arm does not leak into a machine that wired no router. |
 | `WiredToolMsg` | Type | `ToolMsg<T>` as `toMachine` / `agentEvents` read it — see `WiredToolCmd`. |

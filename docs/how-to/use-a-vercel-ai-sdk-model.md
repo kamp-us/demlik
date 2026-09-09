@@ -39,13 +39,7 @@ import {
  * through the same thirty lines; only the `model` argument changes.
  */
 export function aiSdkModel(model: LanguageModel, tools: readonly AnyToolDef[]) {
-  // No `execute`: tea owns tool execution, so the SDK reports the calls and stops.
-  const declared: ToolSet = Object.fromEntries(
-    tools.map((t) => [
-      t.cmdType,
-      tool({ description: t.description, inputSchema: t.args }),
-    ]),
-  );
+  const declared = declaredTools(tools);
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const result = await generateText({
       model,
@@ -66,6 +60,19 @@ export function aiSdkModel(model: LanguageModel, tools: readonly AnyToolDef[]) {
       provider: result.responseMessages,
     };
   };
+}
+
+/**
+ * The tools, declared to the SDK. No `execute`: tea owns tool execution, so the
+ * SDK reports the calls and stops.
+ */
+function declaredTools(tools: readonly AnyToolDef[]): ToolSet {
+  return Object.fromEntries(
+    tools.map((t) => [
+      t.cmdType,
+      tool({ description: t.description, inputSchema: t.args }),
+    ]),
+  );
 }
 
 /** One tea message in the SDK's shape; the system line goes to `system`. */
@@ -142,6 +149,82 @@ export const agent = defineAgent({
 Changing provider is now one line — `openai("gpt-5")`, `google("gemini-3-pro")`
 — and nothing else in the program moves.
 
+## Stream the turn as it is typed
+
+`generateText` resolves once, with the whole turn. For a chat window you want the
+text as the provider produces it, and tea has a second, optional model port for
+exactly that: `(messages, { onChunk }) => Promise<AgentTurn>`. Same bridge over
+`streamText`, reusing `declaredTools` and `toModelMessages` from above:
+
+```ts
+import type { ModelStream } from "@demlik/tea/agent";
+import { streamText } from "ai";
+
+/**
+ * The same bridge over `streamText` — tea's streaming port,
+ * `(messages, { onChunk }) => turn`. It writes each text delta to `onChunk` as
+ * the provider yields it, then resolves the SETTLED turn, assembled from the
+ * SDK's awaited results. The deltas are a side channel; the resolved turn is
+ * the only thing tea folds into the Model.
+ */
+export function aiSdkStreamingModel(
+  model: LanguageModel,
+  tools: readonly AnyToolDef[],
+) {
+  const declared = declaredTools(tools);
+  return async (
+    messages: readonly AgentMessage[],
+    { onChunk }: ModelStream,
+  ): Promise<AgentTurn> => {
+    const result = streamText({
+      model,
+      system: messages.find((m) => m.role === "system")?.content,
+      messages: messages.flatMap(toModelMessages),
+      tools: declared,
+    });
+    // The live half. Nothing here is durable, so nothing here is awaited into
+    // the turn — a run that dies mid-stream resumes from the last turn that
+    // SETTLED, and re-produces this one from scratch.
+    for await (const text of result.textStream) onChunk({ text });
+    return {
+      content: await result.text,
+      toolCalls: (await result.toolCalls).map((c) => ({
+        callId: c.toolCallId,
+        name: c.toolName,
+        args: c.input as Record<string, unknown>,
+      })),
+      provider: await result.responseMessages,
+    };
+  };
+}
+```
+
+Pass it as `model` and read the deltas off the run:
+
+```ts
+export const agent = defineAgent({
+  model: aiSdkStreamingModel(anthropic("claude-sonnet-4-5"), tools),
+  tools,
+  instructions: "Put red, yellow and blue in the notebook, then finish.",
+});
+
+await agent.run(input, {
+  store,
+  onChunk: (chunk) => process.stdout.write(chunk.text),
+});
+```
+
+There is no config flag for the second shape: `defineAgent` reads the function's
+arity, so the brain you wrote is the brain it calls. What that costs is on
+[`isStreamingModel`](../reference/agent.md) — a model that declares a parameter
+it ignores reads as streaming and is handed a sink it never writes to.
+
+Chunks never become state. They are not journaled, not written to the `Store`
+and not folded into the Model, so the turn a streamed run settles is identical to
+the one `generateText` would have settled, and a resume replays no delta. See
+[Show a run's progress while it runs](./show-a-run-in-progress.md) for the
+turn-level events beside them.
+
 ## The detail that is easy to get wrong
 
 `AgentTurn.provider` is a passthrough slot: tea persists whatever the adapter
@@ -172,5 +255,5 @@ Two constraints follow from tea's Model being durable data:
   and folds the outcomes back as `tool` messages.
 - `AnyToolDef.args` is a Zod schema, which the SDK's `tool()` accepts directly
   as `inputSchema` — no JSON-Schema conversion step.
-- The bridge on this page is compiled and asserted verbatim by
-  `src/docs/how-to/ai-sdk-model.test.ts`, so it cannot drift from `AgentTurn`.
+- Both bridges on this page are compiled and asserted verbatim by
+  `src/docs/how-to/ai-sdk-model.test.ts`, so neither can drift from `AgentTurn`.
