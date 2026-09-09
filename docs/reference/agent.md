@@ -6,6 +6,19 @@
 import { … } from "@demlik/tea/agent";
 ```
 
+## Start here
+
+The exports below are alphabetical, which says nothing about where to begin.
+These are the ones to read first:
+
+| Symbol | Reach for it when |
+| --- | --- |
+| `defineAgent` | You want an agent: a model, the tools it may call, instructions. This is the entry point — `run(input)` drives it to its finished state. |
+| `tool` | Declare one thing the model may call — its input/result schemas, the failures it may name, and the handler. |
+| `ToolOutcome` | Read what a settled call hands back, whether it succeeded or failed. |
+| `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
+| `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
+
 ## Exports (119)
 
 | Symbol | Kind | Summary |
@@ -19,13 +32,13 @@ import { … } from "@demlik/tea/agent";
 | `AgentCompactRunCmd` | Type | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier. |
 | `AgentConfig` | Type | The agent configuration — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
 | `AgentConfigCore` | Interface | The core (non-snapshot, non-compaction) agent configuration. |
-| `AgentDetachedHandlers` | Type | The LEGACY detached brain-call handler dictionary `handlers(ports)` returns — the inherited `../llm-call` detached form's exact shape, NOT an `Interpret`. |
+| `AgentDetachedHandlers` | Type | The LEGACY detached brain-call handler dictionary `handlers(ports)` returns, superseded by the `Interpret` table `AgentKnob.toMachine()` wires — reach for `toMachine()` unless you are hand-wiring the verbs yourself. |
 | `AgentEvent` | Type | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)`. |
 | `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
 | `AgentFailure` | Type | Why a run terminated as `failed`, beyond monitored-run's own reasons. |
 | `AgentKnob` | Interface | The agent handle `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers` escape hatch. |
-| `AgentLlmErrMsg` | Type |  |
-| `AgentLlmOkMsg` | Type | The brain-call success / failure settle Msgs, inherited from `../llm-call`. |
+| `AgentLlmErrMsg` | Type | The brain-call FAILURE settle Msg, inherited from `../llm-call` — it re-enters the agent's `fail` verb, which backs off via the retry ladder rather than ending the run. |
+| `AgentLlmOkMsg` | Type | The brain-call SUCCESS settle Msg, inherited from `../llm-call`. |
 | `AgentLlmRunCmd` | Type | The brain-call effect Cmd, inherited from `../llm-call`. |
 | `AgentMachineMsg` | Type | The agent machine's Msg union — one variant per reducer entry point. |
 | `AgentMessage` | Type | One message a `defineAgent` `model` receives. |
@@ -49,10 +62,10 @@ import { … } from "@demlik/tea/agent";
 | `CompactionSummary` | Interface | The result a compaction round-trip produces — the model's summary of the folded-away turns. |
 | `compactionSummarySchema` | Variable | The `Schema<CompactionSummary>` the compaction call binds — tea's own parse target for the summarize round-trip (it OWNS the `$compact` purpose's output). |
 | `Conversation` | Interface | The agentic-stage conversation — durable inside the agent slice so an eviction mid-loop resumes the exact turn. |
-| `createAgent` | Function | Assemble an agent from `config` — the model, the stages it walks, and how a tool call is turned into a command — and get back its `init`, verbs and `subs` plus a `toMachine()` that wires all of it into one machine you hand to `run`. |
+| `createAgent` | Function | Assemble an agent from `config` — the model, the stages it walks, and how a tool call is turned into a command — and get back its `init`, verbs and `subs` plus a `toMachine()` that wires all of it into one machine you hand to `run`, which is the layer to reach for only once `defineAgent` cannot express the run you want — a newcomer starts there, not here. |
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
-| `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself. |
+| `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself, which is the entry point a newcomer picks, `createAgent` being the layer underneath that you drop to only to walk a stage pipeline of your own. |
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |
@@ -74,7 +87,7 @@ import { … } from "@demlik/tea/agent";
 | `liftAgent` | Function | Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.agent`. |
 | `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this module, carried on the `resilient_run` Cmd as plain data — no closures, so it survives persistence and replay. |
 | `LlmErr` | Interface | The typed failure variant — every failure path surfaces this, tagged by purpose. |
-| `LlmFailMsg` | Type |  |
+| `LlmFailMsg` | Type | The FAILURE settle Msg (`resilient_err`) — resilient-call's `FailMsg` with its `error: unknown` narrowed to the typed `LlmErr`, so the host reducer reads the purpose, the reason and the raw payload without a cast. |
 | `LlmOk` | Interface | The parsed, typed success carried on the `resilient_ok` settle Msg, tagged with its purpose. |
 | `LlmRunCmd` | Type | The effect Cmd this module emits: run the LLM call for `key` with `input`. |
 | `LlmSucceedMsg` | Type | The settle Msgs llm-call's handler RETURNS from `interpret` so the substrate enqueues them as follow-up Msgs (re-entry) into the host reducer — exactly as `../resilient-call` does. |
@@ -118,7 +131,7 @@ import { … } from "@demlik/tea/agent";
 | `ToolRejectedCmd` | Type | The Cmd `tool_rejected` builds — the router-owned variant of `ToolCmd`. |
 | `ToolRejection` | Type | A call the router could not hand to a tool: the model named a tool nobody declared, or its `args` failed the tool's `input` schema. |
 | `ToolResilience` | Interface | The per-tool resilience knob — a timeout, a retry ladder, or both, declared on the `tool()` spec and executed by the agent's reducer through `../internal/resilience/resilient-call`. |
-| `ToolResilienceError` | Type | The two failures the ladder itself authors (#117). |
+| `ToolResilienceError` | Type | The two failures the resilience ladder itself authors — `timeout` and `retry_exhausted`. |
 | `ToolResult` | Type | The union of every tool's `ok` value — `R` for `createAgent`. |
 | `ToolRetryExhausted` | Interface | A call that spent its retry budget — ToolResilience.retry. |
 | `toolRouter` | Function | Fold a set of `tool()`s into one router — pass it the tools, get back the lookup `createAgent` needs, the handlers `toMachine` merges, and a reader that turns a settled message back into a plain outcome. |

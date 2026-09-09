@@ -17,6 +17,7 @@ empty directory:
 pnpm init
 npm pkg set type=module
 pnpm add @demlik/tea @anthropic-ai/sdk zod
+pnpm add -D typescript @types/node @types/ws
 ```
 
 The `type=module` line is not optional. `pnpm init` writes a CommonJS
@@ -24,6 +25,45 @@ The `type=module` line is not optional. `pnpm init` writes a CommonJS
 `"type": "module"` TypeScript rejects them with TS1309 ("await is only allowed
 at the top level of a file when that file is a module"), which points at the
 `await` rather than at the missing field.
+
+`@types/ws` is there because `@demlik/tea/node`'s typings name `ws`, the
+optional peer behind the devtools socket. You never import it; without its types
+the typechecker stops at a module it cannot find.
+
+### Install a typechecker, because it is half the point
+
+You will run this program two ways, and they answer two different questions.
+Node's `--experimental-strip-types` **erases** types; it does not check them, so
+running the program tells you nothing about whether it typechecks. Every claim
+this library makes about failures being caught at compile time is a claim about
+the *other* command. Write a `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}
+```
+
+`allowImportingTsExtensions` is what lets `agent.ts` import `./model.ts` under
+its real name — the same specifier Node's type stripping wants. `noEmit` is
+required with it, and is what you want anyway: Node runs the `.ts` files, so
+there is nothing to emit. The command is:
+
+```sh
+pnpm exec tsc --noEmit
+```
+
+Silence means it typechecks. Run it after every edit below; the last section of
+this lesson is an exercise in making it speak.
 
 The agent is two files. `model.ts` is the brain — the wire format of one model
 provider, nothing about tea. `agent.ts` is the part this lesson is about.
@@ -223,18 +263,30 @@ console.log("done:", final.output?.content);
 boundary; this one trusts the file, which is right for a file this program
 wrote. `DefinedAgentState` is parameterised by the tools the agent may call, so
 it takes their union — with a second tool the type reads
-`DefinedAgentState<typeof note | typeof lookup>`, and so on for a third. Run it:
+`DefinedAgentState<typeof note | typeof lookup>`, and so on for a third.
+Typecheck it, then run it:
 
 ```sh
+pnpm exec tsc --noEmit
 node --experimental-strip-types agent.ts
 ```
 
 You will see three `note:` lines and then `done:`, and two new files beside the
 script: `notes.txt` with the three colours, and `agent.json` — the agent's whole
-Model. A finished run keeps its `run` slice and `output`, the terminating turn
-`runtime.result()` reads; `conversation` is `null`, because the transcript is
-cleared when the run retires. Open `agent.json` mid-run and the conversation is
-there — it is the retire that drops it.
+Model. A finished run keeps its `run` slice and `output`; `conversation` is
+`null`, because the transcript is cleared when the run retires. Open
+`agent.json` mid-run and the conversation is there — it is the retire that drops
+it.
+
+One term you will meet the moment you look past `agent.run`: the **runtime**.
+`agent.run` is a thin drive over the kernel's `run(machine, …)`, which hands
+back a runtime handle rather than a promise — and `runtime.result()` is that
+handle's read of the same finished Model `final` holds above, returning
+`undefined` while the run is still in flight. It is `undefined` unless the run
+was given a `terminal` predicate, which `agent.run` supplies for you; drive
+`agent.machine(input)` yourself and supplying it is yours. Reach for the runtime
+when a promise resolving once at the end is the wrong shape — a chat window, a
+progress line.
 
 `agent.run` resolves once, at the end, which is the wrong shape for a chat window
 or a progress line. To show progress instead of waiting on that one promise, pass
@@ -250,14 +302,20 @@ first `note:` line appears. Then look at what was left behind:
 rm -f agent.json notes.txt
 node --experimental-strip-types agent.ts   # Ctrl-C after the first "note:"
 cat notes.txt                              # one colour
-node -p "require('./agent.json').run.runId"
+node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('./agent.json', 'utf8')).run.runId)"
 ```
+
+That last line is a one-off read of the run id out of the store file. It is
+spelled with `import` rather than `require` for the same reason the project is
+`"type": "module"` — this is an ESM project throughout, and `node -e` would
+otherwise quietly hand you a CommonJS scratchpad the rest of the lesson does not
+live in.
 
 Now run the same command again, with nothing changed:
 
 ```sh
 node --experimental-strip-types agent.ts
-node -p "require('./agent.json').run.runId"
+node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('./agent.json', 'utf8')).run.runId)"
 ```
 
 Two more `note:` lines, then `done:`, and the run id is the one you printed
@@ -291,3 +349,82 @@ plain data, the `Store` is the one seam that persists it, and the reducer never
 knew it was interrupted. To run this exact agent inside a Cloudflare Durable
 Object, where the eviction is the platform's rather than your `Ctrl-C`, see
 [Deploy an agent to a Durable Object](../how-to/deploy-an-agent-to-a-durable-object.md).
+
+## Exercise: make the compiler catch a missing failure
+
+Everything above has asserted that a failure you forget to handle is a compile
+error. Now watch it happen, in three edits and one command.
+
+**First, give the tool a failure to name.** `note` declared `err: []`; declare
+one, and fail with it:
+
+```diff
+     ok: z.object({ saved: z.boolean() }),
+-    err: [],
++    err: ["too_long"],
+   },
+-  async ({ text }, _ctx, { ok }) => {
++  async ({ text }, _ctx, { ok, fail }) => {
++    if (text.length > 80) return fail({ _tag: "too_long", length: text.length });
+     console.log("note:", text);
+```
+
+**Second, handle the failures.** `onToolError` is where your own code reads a
+failed call, and its `outcome` is typed from *this agent's* tools. Add it to the
+`defineAgent` call:
+
+```diff
+   instructions:
+     "You keep a notebook. Save exactly one note per turn; when every fact is saved, answer in one line.",
++  onToolError: (outcome, { name }) => {
++    switch (outcome._tag) {
++      case "too_long":
++        return console.log(`note: refused a line of ${outcome.length} chars`);
++      case "thrown":
++      case "malformed_result":
++      case "unknown_tool":
++      case "malformed_args":
++      case "timeout":
++      case "retry_exhausted":
++        return console.log(`note: ${name} failed with ${outcome._tag}`);
++      default: {
++        const unhandled: never = outcome;
++        return unhandled;
++      }
++    }
++  },
+ });
+```
+
+Six tags you never declared ride beside your one. They are not optional and they
+are not hypothetical: a handler that throws is `thrown`, a model that invents a
+tool name is `unknown_tool`, and [Handle a tool
+failure](../how-to/handle-a-tool-failure.md) walks all six. The `default` arm is
+the whole trick — `outcome` is narrowed to what no `case` above claimed, and
+assigning it to `never` compiles only when that is nothing.
+
+```sh
+pnpm exec tsc --noEmit
+```
+
+Silence. **Third, take one tag away.** Delete the `case "too_long":` arm — the
+two lines you just wrote — and run it again:
+
+```
+agent.ts(39,15): error TS2322: Type '{ readonly kind: "error"; readonly reason: string; }
+  & { readonly [detail: string]: unknown; readonly _tag: "too_long"; }'
+  is not assignable to type 'never'.
+```
+
+(Your line and column will differ; the `_tag: "too_long"` in the middle is the
+part that matters.)
+
+There it is. Not a lint rule, not a runtime warning you would have found in a
+log next Tuesday — a failure the program can produce and does not handle, named
+at the line that fails to handle it, before the program ran once. Put the arm
+back and the compiler goes quiet again.
+
+That is the exhaustiveness the rest of these docs assume. It costs the `default`
+arm above, and it is the reason `err` is a list of tag literals rather than a
+schema: a tag union is a thing a `switch` can be complete over, and a compiler
+can tell you when yours is not.
