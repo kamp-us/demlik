@@ -20,6 +20,7 @@ import type { RetryPolicy } from "../retry-backoff";
 import {
   type AgentMessage,
   type AgentTurn,
+  type DefinedAgentState,
   defineAgent,
   type ToolOutcome,
   tool,
@@ -362,7 +363,9 @@ describe("the ladder's endings are structured failures like any other", () => {
       },
       async (_args, _ctx, { fail }) => fail({ _tag: "upstream" }),
     );
-    const store = memoryStore();
+    // Shared across both runs, so it needs the type the runs would otherwise
+    // infer for it — an untyped `memoryStore()` is a `Store<unknown>`.
+    const store = memoryStore<DefinedAgentState<typeof flaky>>();
     const runId = "resume-me";
     const first = scripted([asks("flaky")]);
     let hooked = 0;
