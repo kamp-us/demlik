@@ -67,8 +67,16 @@ shared file, a shared KV bucket or anything else two processes can open, it is y
 
 Unless you fence. Hand `run` a **`FencedStore`** instead and the substrate enforces it: the store
 carries a version, the runtime reads it at boot and compare-and-swaps on every save, and a run
-whose version another process has already moved past is refused with a `StoreConflictError` —
-thrown at boot, before a single effect fires. The loser does not limp on; it stops.
+whose version another process has already moved past is refused with a `StoreConflictError`.
+The loser does not limp on; it stops.
+
+Which run loses is worth being exact about, because the intuitive answer is backwards. A process
+reads the version **at boot**, so a newly started second process reads whatever is current and its
+own boot save swaps cleanly — **the newer starter takes the fence**. The run that is refused is the
+*older* one, still holding the version it read before, at its next save. It has already fired the
+effects it got to by then. Only in the narrow race where both processes read the same version
+before either wrote does the loser die at boot with nothing done. So fencing buys you **at most one
+live writer from here on** — not a promise that the loser never ran.
 
 ```ts
 import { fileStore } from "@demlik/tea/node";

@@ -84,31 +84,44 @@ const a = await run(downloader, { ctx: undefined, store }).ready;
 ```
 
 The store now carries a version. `run` reads it at boot and compare-and-swaps on
-every save, so a second process that started from a version this one has already
-moved past is refused at its boot save, before any effect runs:
+every save. **The newer starter takes the fence, and the older live writer is
+the one refused** — at its next save, not at the newer one's boot:
 
 ```ts
+// Process B starts while A is still running. B reads the CURRENT version at
+// boot, so B's own boot save swaps cleanly and B runs.
 const second = run(downloader, {
   ctx: undefined,
   store: fileStore("agent.json", parse, { fenced: true }),
 });
 
-await second.ready; // throws StoreConflictError — the run does not start
+await second.ready; // resolves — B now holds the fence
+
+// Process A is still holding the version it read before B moved it on. A's
+// next save is the one that throws StoreConflictError.
+a.dispatch({ type: "chunkDone" }); // A dies here
 ```
 
-Catch it where you start the process, and exit: a conflict means another worker
-owns this run, so there is nothing for this one to do.
+So the guard belongs around the whole run, not only around boot: a conflict can
+surface at any save, and by then this process has already fired the effects it
+got to. Catch it, stop, and exit — another worker owns this run now.
 
 ```ts
 import { StoreConflictError } from "@demlik/tea";
 
 try {
-  await run(downloader, { ctx: undefined, store }).ready;
+  const runtime = await run(downloader, { ctx: undefined, store }).ready;
+  await driveToCompletion(runtime); // your dispatch loop
 } catch (err) {
-  if (err instanceof StoreConflictError) return; // someone else has it
+  if (err instanceof StoreConflictError) return; // someone else has it now
   throw err;
 }
 ```
+
+A conflict at boot is possible too, but only in the narrow race where both
+processes read the same version before either wrote. Fencing gives you
+**at most one live writer from here on**, not a guarantee that the loser never
+started.
 
 `doStore` and `memoryStore` take the same `{ fenced: true }`. `chromeStorageStore`
 does not — `chrome.storage` cannot compare-and-swap atomically, so it stays

@@ -820,9 +820,11 @@ export function run<
       // `null` on unrecognized (boots fresh). `migrate` MUST NOT throw; if it
       // does we surface via the boot promise (same as a `load` throw).
       // A fenced store reads its version in the same breath as its bytes, and
-      // the boot save below is the compare-and-swap that proves this process is
-      // still the only writer. A second run that booted from the same version
-      // is refused HERE, before a single effect fires — `run` does not start.
+      // the boot save below is a compare-and-swap like every other. Note which
+      // run loses: reading here means a LATER starter reads the current version
+      // and swaps cleanly, so it takes the fence and the older live writer is
+      // refused at ITS next save. Only a true race — both booting off the same
+      // version before either wrote — is refused HERE, before any effect fires.
       const raw = fenced ? await readFenced(fenced) : await store.load();
       const parsed = store.migrate(raw);
       const [initialState, initCmds] = machine.init(parsed, ctx);
