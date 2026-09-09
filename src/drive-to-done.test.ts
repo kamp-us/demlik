@@ -474,6 +474,66 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
     expect(probe.stopped).toBe(true);
   });
 
+  // #174 — the same hang one frame earlier: the `cancel` FUNCTION throwing
+  // synchronously, before it ever produces a Msg. `boom5` above is a cancel that
+  // returns fine and blows up in the reducer; this one never returns at all, so
+  // nothing is dispatched and `.catch` has no promise to attach to. Unreachable
+  // through `defineAgent`, which supplies its own cancel; a direct kernel
+  // consumer can hand it either shape.
+  const throwingCancel = (): M5 => {
+    throw new Error("cancel function blew up");
+  };
+
+  it("an abort mid-run whose cancel function throws synchronously rejects instead of hanging", async () => {
+    const controller = new AbortController();
+    let loops = 0;
+    const probe = instrument(
+      run(
+        looper(() => {
+          loops++;
+          if (loops === 2) controller.abort();
+        }),
+        // No cancel Msg is ever produced, so the loop is still turning when the
+        // drive's `finally` stops the runtime and the in-flight `start` is
+        // discarded. That discard is the expected shape of this exit; the sink
+        // keeps the default warn out of the run, and the drive's rejection is
+        // the claim under test.
+        { ctx: undefined, onError: () => {} },
+      ),
+    );
+
+    // Without containment the throw escapes the abort listener: no dispatch is
+    // enqueued, so `terminal` is never resolved and this await never returns.
+    await expect(
+      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+        signal: controller.signal,
+        cancel: throwingCancel,
+      }),
+    ).rejects.toThrow("cancel function blew up");
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
+  it("an already-aborted signal whose cancel function throws synchronously rejects the same way", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const probe = instrument(
+      run(
+        looper(() => {}),
+        { ctx: undefined },
+      ),
+    );
+
+    await expect(
+      driveToDone(probe.handle, { type: "start" }, isEnded5, {
+        signal: controller.signal,
+        cancel: throwingCancel,
+      }),
+    ).rejects.toThrow("cancel function blew up");
+    expect(probe.attached).toBe(0);
+    expect(probe.stopped).toBe(true);
+  });
+
   it("an already-aborted signal whose cancel lands a `failed` State rejects with DriveFailedError", async () => {
     const controller = new AbortController();
     controller.abort();
