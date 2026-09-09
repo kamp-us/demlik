@@ -10,11 +10,11 @@
  * raw kernel `run`. Each hidden thing is a named helper below.
  */
 
-import { driveToDone, type Machine, run } from "../index";
+import { defineMachine, driveToDone, type Machine, run } from "../index";
 import type { DeadlineSub } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { MsgType } from "../protocol";
-import type { RequiredCtx } from "../pure/core";
+import type { Interpret, RequiredCtx } from "../pure/core";
 import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
 import { createAgent } from "./index";
 import {
@@ -103,11 +103,35 @@ export type DefinedAgentState<T extends AnyToolDef> = AgentState<
 /** The ctx the tools' `needs` demand, intersected — what `run` asks for. */
 export type DefinedAgentCtx<T extends AnyToolDef> = RequiredCtx<ToolCmd<T>>;
 
+/** The Msg union a defined agent's machine folds. */
+export type DefinedAgentMsg<T extends AnyToolDef> =
+  | AgentMachineMsg<LidPurpose, LidOutputs, ToolResult<T>>
+  | WiredToolMsg<T>;
+
+/** The Cmd union a defined agent's machine emits — one interpret cell per member. */
+export type DefinedAgentCmd<T extends AnyToolDef> = AgentCmd<
+  LidPurpose,
+  ToolCmd<T>,
+  false,
+  false
+>;
+
+/**
+ * The interpret table of the machine `defineAgent` wired: one cell per
+ * {@link DefinedAgentCmd}, keyed by its `type` — a tool's own Cmd type, the
+ * router's `tool_rejected`, and the agent-owned brain call.
+ */
+export type DefinedAgentInterpret<T extends AnyToolDef> = Interpret<
+  DefinedAgentMsg<T>,
+  DefinedAgentCmd<T>,
+  DefinedAgentCtx<T>
+>;
+
 /** The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. */
 export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
   DefinedAgentState<T>,
-  AgentMachineMsg<LidPurpose, LidOutputs, ToolResult<T>> | WiredToolMsg<T>,
-  AgentCmd<LidPurpose, ToolCmd<T>, false, false>,
+  DefinedAgentMsg<T>,
+  DefinedAgentCmd<T>,
   DeadlineSub,
   DefinedAgentCtx<T>
 >;
@@ -256,6 +280,40 @@ export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
   readonly onChunk?: (chunk: TurnChunk) => void;
 };
 
+/**
+ * One decorator per interpret cell you name: it receives the cell the agent
+ * wired (`next`) and returns the cell that runs in its place. Every key is
+ * optional and a cell nobody names is passed through by REFERENCE, so an
+ * overlay that wraps one tool leaves the others the exact functions
+ * `defineAgent` built.
+ *
+ * The wrapper's signature is the cell's, so calling `next(cmd, ctx, dispatch)`
+ * is how the wrapped work happens — that is the typed Cmd→Msg edge
+ * (`Cmd.define`'s `_ok` / `_err` Msgs), and returning its Msg is what keeps the
+ * fold, and therefore a replay, identical to the unwrapped run's.
+ */
+export type InterpretOverlay<T extends AnyToolDef> = CellWrappers<
+  DefinedAgentInterpret<T>
+>;
+
+/**
+ * The decorator table over an interpret table `I`. Written over a bare type
+ * parameter because `I[K]` is only indexable when `I` is one: applying the
+ * mapped type to `DefinedAgentInterpret<T>` inline leaves TypeScript indexing
+ * an unreduced generic mapped type, which it refuses.
+ */
+type CellWrappers<I> = {
+  readonly [K in keyof I]?: (next: I[K]) => I[K];
+};
+
+/**
+ * What `defineAgent(cfg).with(...)` takes — the one documented wrap point over
+ * the machine the lid built.
+ */
+export interface DefinedAgentOverlay<T extends AnyToolDef> {
+  readonly interpret: InterpretOverlay<T>;
+}
+
 /** What `defineAgent` returns. */
 export interface DefinedAgent<T extends AnyToolDef> {
   /**
@@ -275,6 +333,35 @@ export interface DefinedAgent<T extends AnyToolDef> {
   ) => Promise<DefinedAgentState<T>>;
   /** The machine `run` drives for `input` — the door down to the raw kernel. */
   readonly machine: (input: string) => DefinedAgentMachine<T>;
+  /**
+   * The ramp between the lid and `createAgent`: wrap ONE interpret cell of the
+   * machine this agent builds and get back a NEW defined agent that runs the
+   * wrapped table. The agent it is called on is untouched, and so is every cell
+   * the overlay does not name.
+   *
+   *     const traced = agent.with({
+   *       interpret: {
+   *         fetch_rate: (next) => async (cmd, ctx, dispatch) => {
+   *           console.time(cmd.callId);
+   *           try { return await next(cmd, ctx, dispatch); }
+   *           finally { console.timeEnd(cmd.callId); }
+   *         },
+   *       },
+   *     });
+   *
+   * The wrapped cell settles through the SAME typed Cmd→Msg edge as the cell it
+   * wraps — it returns whatever `next` returned — so the reducer folds the same
+   * Msgs and a replay of a wrapped run is the unwrapped run's replay. That is
+   * the whole contract: the door is one over the effect boundary, never over
+   * the fold. A cell that must settle DIFFERENTLY is a different machine, and
+   * `createAgent` is still where you build one.
+   *
+   * `with` composes — `agent.with(a).with(b)` puts `b`'s wrapper OUTSIDE `a`'s,
+   * so `b` is entered first and `a`'s cell is what its `next` calls. Naming a
+   * cell the machine has none of throws at `machine(input)`, where the table it
+   * is checked against exists.
+   */
+  readonly with: (overlay: DefinedAgentOverlay<T>) => DefinedAgent<T>;
 }
 
 // ===========================================================================
@@ -290,6 +377,10 @@ export interface DefinedAgent<T extends AnyToolDef> {
  * `DefineAgentConfig`. The run's `input` is its single stage, so it is durable
  * beside `instructions`, and the prompt is rendered from those two and the
  * conversation on every model call.
+ *
+ * One unusual requirement does not cost you the lid: `.with({ interpret })`
+ * wraps one interpret cell of the machine this built and hands back another
+ * defined agent, so `createAgent` is for a rebuild rather than for a detour.
  */
 export function defineAgent<T extends AnyToolDef>(
   config: DefineAgentConfig<T>,
@@ -300,33 +391,63 @@ export function defineAgent<T extends AnyToolDef>(
   // the interpret table the router always built.
   const tools =
     onToolError === undefined ? router : withToolErrorHook(router, onToolError);
+  return definedAgent(config, { router, tools }, []);
+}
+
+/** The wiring every agent in one `defineAgent`'s lineage shares. */
+interface LidWiring<T extends AnyToolDef> {
+  readonly router: ToolRouter<T>;
+  readonly tools: ToolRouter<T>;
+}
+
+/**
+ * The defined agent for one config's wiring and the overlays stacked on it so
+ * far. `defineAgent` is this with none; `with` is this with one more, which is
+ * why a wrapped agent is a whole agent (`run`, `machine`, `with` again) rather
+ * than a second kind of thing, and why the agent it was called on never
+ * changes.
+ *
+ * The wiring is passed IN rather than rebuilt, so a `with` derives an agent that
+ * shares the router — and therefore the very interpret cells the overlay does
+ * not name.
+ */
+function definedAgent<T extends AnyToolDef>(
+  config: DefineAgentConfig<T>,
+  wiring: LidWiring<T>,
+  overlays: readonly InterpretOverlay<T>[],
+): DefinedAgent<T> {
+  const { router, tools } = wiring;
+  const { onToolError } = config;
   const machineWith = (
     input: string,
     onChunk: ((chunk: TurnChunk) => void) | undefined,
   ): DefinedAgentMachine<T> =>
-    createAgent<
-      string,
-      LidPurpose,
-      LidOutputs,
-      ToolResult<T>,
-      ToolCmd<T>,
-      AgentMessage
-    >({
-      stages: [input],
-      turnOf: () => "act",
-      schemas: { act: agentTurnSchema },
-      model: brainOf(config.model, onChunk),
-      instructions: config.instructions,
-      payloadOf: promptOf,
-      loadMessages: messagesOf,
-      toolOf: tools.toolOf,
-      // The per-tool timeout / retry knob (#117). The lid grows no option for
-      // it: the policy is declared on the `tool()` that needs it, and the router
-      // is what carries it down to the reducer that runs it.
-      toolResilienceOf: tools.resilienceOf,
-      maxTurns: config.maxTurns,
-      deadlineMs: config.deadlineMs,
-    }).toMachine<DefinedAgentCtx<T>, T>({ tools });
+    overlaid(
+      createAgent<
+        string,
+        LidPurpose,
+        LidOutputs,
+        ToolResult<T>,
+        ToolCmd<T>,
+        AgentMessage
+      >({
+        stages: [input],
+        turnOf: () => "act",
+        schemas: { act: agentTurnSchema },
+        model: brainOf(config.model, onChunk),
+        instructions: config.instructions,
+        payloadOf: promptOf,
+        loadMessages: messagesOf,
+        toolOf: tools.toolOf,
+        // The per-tool timeout / retry knob (#117). The lid grows no option for
+        // it: the policy is declared on the `tool()` that needs it, and the
+        // router is what carries it down to the reducer that runs it.
+        toolResilienceOf: tools.resilienceOf,
+        maxTurns: config.maxTurns,
+        deadlineMs: config.deadlineMs,
+      }).toMachine<DefinedAgentCtx<T>, T>({ tools }),
+      overlays,
+    );
   // The public door down carries no chunk sink: `machine(input)` is handed to
   // the raw kernel by a caller who has no run options to read one from.
   const machine = (input: string): DefinedAgentMachine<T> =>
@@ -361,7 +482,54 @@ export function defineAgent<T extends AnyToolDef>(
       { failed: isFailed },
     );
   };
-  return { machine, run: drive };
+  return {
+    machine,
+    run: drive,
+    with: (overlay) =>
+      definedAgent(config, wiring, [...overlays, overlay.interpret]),
+  };
+}
+
+/**
+ * The machine with each overlay's named cells wrapped, in the order they were
+ * stacked — so the LAST `with` is the outermost wrapper and the innermost
+ * `next` is always the cell the lid itself wired.
+ *
+ * A cell nobody names is carried over by REFERENCE, which is what "unnamed
+ * cells untouched" means literally: the wrapped table holds the same functions
+ * for every other key. The machine is rebuilt as a new object rather than
+ * mutated, because the same `defineAgent` config builds a fresh machine per
+ * `input` and per overlay stack, and it goes back through `defineMachine` so
+ * the `__form` tag a spread drops is stamped again.
+ *
+ * An unknown key throws HERE rather than at `with`: the table to check a name
+ * against is the machine's, and the machine exists only per `input`.
+ */
+function overlaid<T extends AnyToolDef>(
+  machine: DefinedAgentMachine<T>,
+  overlays: readonly InterpretOverlay<T>[],
+): DefinedAgentMachine<T> {
+  if (overlays.length === 0) return machine;
+  type Cell = (...args: never[]) => Promise<unknown>;
+  const cells = { ...(machine.interpret as Record<string, Cell>) };
+  for (const overlay of overlays) {
+    const wrappers = overlay as unknown as Record<string, (next: Cell) => Cell>;
+    for (const [type, wrap] of Object.entries(wrappers)) {
+      const cell = cells[type];
+      if (cell === undefined) {
+        throw new Error(
+          `@demlik/tea: defineAgent(...).with named the interpret cell ` +
+            `"${type}", which this agent's machine has none of. Its cells are: ` +
+            `${Object.keys(cells).sort().join(", ")}.`,
+        );
+      }
+      cells[type] = wrap(cell);
+    }
+  }
+  return defineMachine({
+    ...machine,
+    interpret: cells as DefinedAgentInterpret<T>,
+  } as DefinedAgentMachine<T>);
 }
 
 // ===========================================================================

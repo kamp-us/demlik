@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/agent";
 ```
 
-## Exports (114)
+## Exports (119)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -55,12 +55,17 @@ import { … } from "@demlik/tea/agent";
 | `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself. |
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the two optional guards that stop a run — `maxTurns` and `deadlineMs`. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
+| `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |
 | `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
 | `DefinedAgentEvent` | Type | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
+| `DefinedAgentInterpret` | Type | The interpret table of the machine `defineAgent` wired: one cell per DefinedAgentCmd, keyed by its `type` — a tool's own Cmd type, the router's `tool_rejected`, and the agent-owned brain call. |
 | `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
 | `DefinedAgentModel` | Type | The brain a defined agent runs, in either of its two shapes: - `async (messages) => turn` — the plain port, and the common path. |
+| `DefinedAgentMsg` | Type | The Msg union a defined agent's machine folds. |
+| `DefinedAgentOverlay` | Interface | What `defineAgent(cfg).with(...)` takes — the one documented wrap point over the machine the lid built. |
 | `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
+| `InterpretOverlay` | Type | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |
 | `isAgentTurn` | Function | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
 | `isReservedToolName` | Function | Whether `name` is one `tool()` refuses — the set `ReservedToolName` types. |
