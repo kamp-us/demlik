@@ -1,10 +1,12 @@
 name: publish
 
-# Per-merge publishing for @demlik/tea. Trusted publishing can only ship a NEW version
-# number, so this job is changeset-gated: a merge to main republishes ONLY when a pending
-# changeset declares a bump. `changeset version` consumes the changeset (deleting it), so
-# the version-bump commit this job pushes back leaves no pending changeset — the next
-# triggered run is a clean no-op, no publish loop.
+# Per-merge publishing for @demlik/tea, version-PR model. Trusted publishing can only ship
+# a NEW version number, so this job is version-gated: a merge to main publishes ONLY when
+# package.json's version is not yet on npm. Versioning is a PR — someone runs
+# `pnpm changeset version` on a branch, the queue merges it, this job sees the new
+# number and ships it. The job never pushes to main: branch rules reject a direct push
+# (the 2026-09-06 0.13.0 run published and then lost its version commit to exactly that
+# rejection, leaving every later merge refused as "cannot publish over 0.13.0").
 #
 # WHY scripted, not `changesets/action`: the standard changesets action opens a
 # "Version Packages" PR, and bot-PR creation is org-gated here ("Actions not permitted
@@ -17,10 +19,10 @@ on:
   # Manual trigger so a re-run doesn't need an empty [skip ci]-dodging commit.
   workflow_dispatch:
 
-# Least privilege: contents:write to push the version-bump commit back to main;
-# id-token:write for npm trusted publishing (OIDC — tokenless, no NODE_AUTH_TOKEN).
+# Least privilege: contents:read (the job pushes nothing); id-token:write for npm
+# trusted publishing (OIDC — tokenless, no NODE_AUTH_TOKEN).
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 concurrency:
@@ -64,38 +66,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Detect pending changesets
-        id: changesets
+      - name: Detect whether this version is already on npm
+        id: version
         run: |
-          shopt -s nullglob
-          pending=()
-          for f in .changeset/*.md; do
-            [ "$(basename "$f")" = "README.md" ] && continue
-            pending+=("$f")
-          done
-          if [ "${#pending[@]}" -gt 0 ]; then
-            echo "has_changesets=true" >> "$GITHUB_OUTPUT"
-            printf 'Pending changesets: %s\n' "${pending[*]}"
+          v="$(node -p "require('./package.json').version")"
+          if npm view "@demlik/tea@${v}" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "@demlik/tea@${v} is already published — nothing to do."
           else
-            echo "has_changesets=false" >> "$GITHUB_OUTPUT"
-            echo "No pending changesets — nothing to version or publish."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "@demlik/tea@${v} is not on npm — publishing."
           fi
 
-      - name: Version (consume changesets, bump @demlik/tea)
-        if: steps.changesets.outputs.has_changesets == 'true'
-        run: pnpm changeset version
-
-      # The generated reference stamps the package version, so `changeset version`
-      # invalidates it on every release. Without this, main lands stale the moment a
-      # release merges and the NEXT unrelated PR fails the drift gate holding a diff
-      # it did not cause — which is exactly how 0.5.1 shipped carrying a v0.5.0
-      # stamp. Regenerate here so the bump commit below carries the fresh pages.
-      - name: Regenerate the reference for the new version
-        if: steps.changesets.outputs.has_changesets == 'true'
-        run: pnpm run docs:reference
-
       - name: Build
-        if: steps.changesets.outputs.has_changesets == 'true'
+        if: steps.version.outputs.publish == 'true'
         run: pnpm run build
 
       # Last gate before the tarball is cut. `prepublishOnly` carries this same
@@ -104,7 +88,7 @@ jobs:
       # entirely. Without this step the guard written for the v0.1.1 stale-dist
       # incident does not run on the job that publishes.
       - name: Verify every export resolves in dist
-        if: steps.changesets.outputs.has_changesets == 'true'
+        if: steps.version.outputs.publish == 'true'
         run: node scripts/verify-exports.mjs
 
       # OIDC trusted publishing via pack + `npm publish <tarball>`. `pnpm publish` shells
@@ -122,19 +106,7 @@ jobs:
       # No `--provenance` yet: it was disabled because the old home was a PRIVATE repo. This
       # repo is public, so provenance can be re-enabled as a deliberate follow-up.
       - name: Publish to npm (pack + npm publish tarball, OIDC trusted publishing)
-        if: steps.changesets.outputs.has_changesets == 'true'
+        if: steps.version.outputs.publish == 'true'
         run: |
           pnpm pack --pack-destination "$RUNNER_TEMP"
           npm publish "$RUNNER_TEMP"/demlik-tea-*.tgz --access public
-
-      # Persist the consumed changeset + version bump. A push (not a PR) sidesteps the
-      # org bot-PR gate; [skip ci] keeps it from re-triggering (a re-trigger would find
-      # no pending changeset and no-op anyway).
-      - name: Commit version bump back to main
-        if: steps.changesets.outputs.has_changesets == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "chore: release via changesets [skip ci]"
-          git push origin HEAD:main
