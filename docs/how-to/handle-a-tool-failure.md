@@ -97,7 +97,7 @@ one terminal bound:
 | `baseMs` | `number` | The first delay, before the curve grows it |
 | `factor` | `number` | What each delay is multiplied by (`1` is a flat ladder) |
 | `capMs` | `number` | The ceiling one delay may reach |
-| `jitter` | `"none" \| "full"` | Whether a delay is randomized inside its bound |
+| `jitter` | `"none" \| "full" \| "equal"` | How much of a delay is randomized: none, all of it, or half (`"equal"` keeps a latency floor) |
 
 Then **one** of the three bounds, and a policy declaring none does not
 type-check:
