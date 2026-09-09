@@ -55,8 +55,14 @@ interface; or leave the type alone and make single-writer a documented precondit
    `{ fenced: true }`; the unfenced call is byte-for-byte the old behaviour. Whether the fenced
    path becomes the default is a separate decision for a future major.
 5. **`run` fences on the store it is handed, never on a flag of its own.** It reads the version
-   at boot and swaps on every save, so a run that starts from a version another process has
-   already moved past is refused at its boot save — before a single effect fires.
+   at boot and swaps on every save. Which run loses follows from that ordering, and the
+   intuitive answer is backwards: a run that starts *after* another has moved the version reads
+   the current one at boot, so its boot save swaps cleanly and **the newer starter takes the
+   fence**. The run refused is the **older live writer**, at its next save — by which point it
+   has already fired the effects it got to. The narrow case where a run is refused before a
+   single effect fires is the boot race: both processes read the same version before either
+   wrote, and the loser's own boot save is the swap that fails. So fencing buys at most one live
+   writer from here on; it is not a promise that the loser never ran.
 6. **`chromeStorageStore` opts out honestly.** `chrome.storage` has no atomic compare-and-swap
    and no cross-context lock, so a version cell there would race between its own read and write
    — a fence that reports success while both writers win, which is worse than no fence.
