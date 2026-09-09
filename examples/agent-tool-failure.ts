@@ -17,6 +17,10 @@
  * Only the first is declared anywhere. The other three are why `err: []` never
  * means "this tool cannot fail".
  *
+ * Then a fifth and a sixth, from the `timeoutMs` / `retry` knob on the spec:
+ * `timeout` when a call outlives its budget, and `retry_exhausted` when it spends
+ * one. Both settle as the SAME `{ kind: "error", reason }` the other four do.
+ *
  * Run it:  node --experimental-strip-types examples/agent-tool-failure.ts
  */
 
@@ -54,6 +58,37 @@ const lookup = tool(
 );
 
 // ===========================================================================
+// A tool that is SLOW rather than wrong. `timeoutMs` caps one call and `retry`
+// gives a failed attempt a ladder to climb — both run in the reducer, so the
+// wait is on the Model and a crash mid-ladder resumes at the attempt it was on.
+// ===========================================================================
+
+let rateAttempts = 0;
+
+const fetchRate = tool(
+  "fetch_rate",
+  {
+    description: "Fetch today's exchange rate from the upstream service",
+    input: z.object({ pair: z.string() }),
+    ok: z.object({ rate: z.number() }),
+    err: ["upstream"],
+    // One call gets 50ms, first attempt to last — a retry does not restart it.
+    timeoutMs: 50,
+    // …and a failed attempt is retried twice more, 10ms apart.
+    retry: { baseMs: 10, factor: 1, capMs: 10, jitter: "none", maxAttempts: 3 },
+  },
+  async ({ pair }, _ctx, { ok, fail }) => {
+    rateAttempts += 1;
+    // `usd_eur` is down for good — it burns the ladder and settles exhausted.
+    if (pair === "usd_eur") return fail({ _tag: "upstream" });
+    // `usd_jpy` is not down, just far too slow — the budget ends the call and
+    // the loop moves on without waiting for the attempt still in flight.
+    await new Promise((r) => setTimeout(r, 500));
+    return ok({ rate: 1 });
+  },
+);
+
+// ===========================================================================
 // The FAKE model — a script, plus a printer for the tool messages it receives.
 // ===========================================================================
 
@@ -77,6 +112,13 @@ const SCRIPT: readonly AgentTurn[] = [
     content: "Trying the right tool with the wrong argument type.",
     toolCalls: [{ callId: "c5", name: "lookup", args: { key: 42 } }],
   },
+  {
+    content: "Trying an upstream that is down, and one that is merely slow.",
+    toolCalls: [
+      { callId: "c6", name: "fetch_rate", args: { pair: "usd_eur" } },
+      { callId: "c7", name: "fetch_rate", args: { pair: "usd_jpy" } },
+    ],
+  },
   { content: "Blue is #2563eb; everything else failed.", toolCalls: [] },
 ];
 
@@ -98,7 +140,7 @@ const printed = new Set<string>();
 
 const agent = defineAgent({
   model,
-  tools: [lookup],
+  tools: [lookup, fetchRate],
   instructions: "You look colours up.",
 });
 
@@ -114,5 +156,10 @@ console.log("done:", final.output?.content);
  *   c3 lookup → {"kind":"error","reason":"thrown {\"message\":\"the table went away\"}"}
  *   c4 lookyp → {"kind":"error","reason":"unknown_tool {\"name\":\"lookyp\"}"}
  *   c5 lookup → {"kind":"error","reason":"malformed_args {\"name\":\"lookup\",\"issues\":[{\"path\":\"key\",\"message\":\"Invalid input: expected string, received number\"}]}"}
+ *   c6 fetch_rate → {"kind":"error","reason":"retry_exhausted {\"attempts\":3,\"last\":\"upstream\"}"}
+ *   c7 fetch_rate → {"kind":"error","reason":"timeout"}
  *   done: Blue is #2563eb; everything else failed.
+ *
+ * `c6` ran the handler three times and the model is told so; `c7` ran it once
+ * and was over at 50ms, while that attempt was still sleeping out its 500ms.
  */

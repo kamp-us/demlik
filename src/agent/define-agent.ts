@@ -224,6 +224,10 @@ export function defineAgent<T extends AnyToolDef>(
       payloadOf: promptOf,
       loadMessages: messagesOf,
       toolOf: tools.toolOf,
+      // The per-tool timeout / retry knob (#117). The lid grows no option for
+      // it: the policy is declared on the `tool()` that needs it, and the router
+      // is what carries it down to the reducer that runs it.
+      toolResilienceOf: tools.resilienceOf,
       maxTurns: config.maxTurns,
       deadlineMs: config.deadlineMs,
     }).toMachine<DefinedAgentCtx<T>, T>({ tools });
