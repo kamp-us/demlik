@@ -53,6 +53,45 @@ This is the same guarantee every durable-execution system ships. Exactly-once
 delivery of a real-world side effect is not a thing any of them provide; what
 they provide is at-least-once with a named window, and here it is named.
 
+## What is not guaranteed by default: one writer
+
+**Nothing in a plain `Store` refuses a second process.** `save` is unconditional, so two
+runtimes pointed at the same file — a retried job, a second pod, a developer running the CLI
+twice — both drive the same run to done, and every side effect happens twice. Neither of them
+can tell. Atomic writes do not help here: temp-plus-rename makes one write torn-proof, and says
+nothing about a second writer.
+
+So **single-writer is your precondition to keep** whenever the store is a plain `Store`. Inside a
+Durable Object the platform keeps it for you — one grain, one writer, by construction. On a
+shared file, a shared KV bucket or anything else two processes can open, it is yours.
+
+Unless you fence. Hand `run` a **`FencedStore`** instead and the substrate enforces it: the store
+carries a version, the runtime reads it at boot and compare-and-swaps on every save, and a run
+whose version another process has already moved past is refused with a `StoreConflictError` —
+thrown at boot, before a single effect fires. The loser does not limp on; it stops.
+
+```ts
+import { fileStore } from "@demlik/tea/node";
+
+// Opt in per store. Everything else is the same call you already write.
+const store = fileStore("agent.json", parse, { fenced: true });
+```
+
+Fencing is opt-in for the whole 0.x line, and not every host can offer it honestly:
+
+| Store | Fenced with `{ fenced: true }` | How |
+|---|---|---|
+| `fileStore` (`@demlik/tea/node`) | yes | version stamp beside the file, swapped under a `wx` lock |
+| `doStore` (`@demlik/tea/do`) | yes | compare-and-swap inside `storage.transaction` |
+| `memoryStore` (`@demlik/tea/mem`) | yes | in-process counter |
+| `chromeStorageStore` (`@demlik/tea/extension`) | **no** | `chrome.storage` has no atomic compare-and-swap; a fence there would report success while both writers won |
+
+A conflict is a throw and not a Msg you fold, because there is no correct way for the loser to
+continue — see [ADR 0017](../../.decisions/0017-fencing-is-an-optional-store-widening.md).
+
+Fencing refuses a second **writer**. It does not make effects exactly-once: everything in the
+section above still holds for the process that wins.
+
 ## What you do about it
 
 **Make handlers idempotent, or key them.**

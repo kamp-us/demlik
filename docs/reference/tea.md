@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (129)
+## Exports (133)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -50,6 +50,8 @@ import { … } from "@demlik/tea";
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |
+| `FencedRead` | Interface |  |
+| `FencedStore` | Interface | A `Store<S>` that can refuse a second live writer. |
 | `foldMsgs` | Function |  |
 | `FoldRefusal` | Interface | The refusal `tryFoldMsgs` reports: WHICH msg in the log had no handler, where. |
 | `foldUpdates` | Function |  |
@@ -72,6 +74,7 @@ import { … } from "@demlik/tea";
 | `initAck` | Function | The `Ack` for a server that has applied nothing yet — `ack(NO_ACK)`. |
 | `Interpret` | Type |  |
 | `InterpretDetached` | Type |  |
+| `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
 | `ListenerTarget` | Interface | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
 | `Machine` | Type |  |
 | `MachineShape` | Type |  |
@@ -114,6 +117,7 @@ import { … } from "@demlik/tea";
 | `SettledErr` | Type |  |
 | `SettledOk` | Type |  |
 | `Store` | Interface |  |
+| `StoreConflictError` | Class | Thrown when a fenced save finds a version other than the one it expected — another live writer has this run. |
 | `structuralHash` | Function |  |
 | `Sub` | Type |  |
 | `subId` | Function | Construct a `SubId` from a string. |

@@ -66,8 +66,55 @@ const b = await run(downloader, { ctx: undefined, store: memStore(box) }).ready;
 console.log(b.getState().phase); // "downloading" — exactly where A stopped
 ```
 
-Runtime B never re-ran the earlier chunks; it rehydrated their result. That is
-the whole durability story — the Model is serializable data, the `Store` is the
-one seam that persists it, and the substrate handles the save-then-boot cycle.
+Runtime B never re-ran the earlier chunks; it rehydrated their result. The Model
+is serializable data, the `Store` is the one seam that persists it, and the
+substrate handles the save-then-boot cycle.
+
+## 4. Refuse a second writer, if two processes can reach the storage
+
+A plain `Store` does not refuse anything. Two runtimes pointed at one file both
+drive the run to done and every effect fires twice — a retried job, a second
+pod, the CLI started twice. When that is reachable, ask the store to fence:
+
+```ts
+import { fileStore } from "@demlik/tea/node";
+
+const store = fileStore("agent.json", parse, { fenced: true });
+const a = await run(downloader, { ctx: undefined, store }).ready;
+```
+
+The store now carries a version. `run` reads it at boot and compare-and-swaps on
+every save, so a second process that started from a version this one has already
+moved past is refused at its boot save, before any effect runs:
+
+```ts
+const second = run(downloader, {
+  ctx: undefined,
+  store: fileStore("agent.json", parse, { fenced: true }),
+});
+
+await second.ready; // throws StoreConflictError — the run does not start
+```
+
+Catch it where you start the process, and exit: a conflict means another worker
+owns this run, so there is nothing for this one to do.
+
+```ts
+import { StoreConflictError } from "@demlik/tea";
+
+try {
+  await run(downloader, { ctx: undefined, store }).ready;
+} catch (err) {
+  if (err instanceof StoreConflictError) return; // someone else has it
+  throw err;
+}
+```
+
+`doStore` and `memoryStore` take the same `{ fenced: true }`. `chromeStorageStore`
+does not — `chrome.storage` cannot compare-and-swap atomically, so it stays
+unfenced rather than pretending. Leave fencing off and single-writer is a
+precondition you keep yourself; see
+[What durability actually promises](../explanation/durability-model.md).
+
 For the full agent version (snapshot mid-pipeline, drop the runtime, resume and
 finish across stages), see the `agent-resilient-and-durable` example.

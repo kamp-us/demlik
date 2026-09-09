@@ -28,7 +28,20 @@
  * may pass an explicit `parse` to override.
  */
 
-import type { Store } from "../index";
+import type { FencedStore, Store } from "../index";
+import { StoreConflictError } from "../index";
+
+/** Options for {@link memoryStore}. */
+export interface MemoryStoreOptions {
+  /**
+   * Refuse a second live writer (#143). With `{ fenced: true }` the returned
+   * store is a `FencedStore<S>` whose version is an in-process counter — honest
+   * for this adapter, since the cell it guards is in this process too. Two
+   * `run`s handed the SAME `memoryStore` are the case it catches, and it is the
+   * cheapest way to exercise the fenced path in a test.
+   */
+  readonly fenced?: true;
+}
 
 /**
  * Build an in-memory `Store<S>`.
@@ -43,21 +56,60 @@ import type { Store } from "../index";
  */
 export function memoryStore<S>(
   initial?: S | null,
+  parse?: (raw: unknown) => S | null,
+): Store<S>;
+export function memoryStore<S>(
+  initial: S | null | undefined,
+  parse: ((raw: unknown) => S | null) | undefined,
+  options: MemoryStoreOptions & { readonly fenced: true },
+): FencedStore<S>;
+export function memoryStore<S>(
+  initial?: S | null,
+  parse?: (raw: unknown) => S | null,
+  options?: MemoryStoreOptions,
+): Store<S> | FencedStore<S>;
+export function memoryStore<S>(
+  initial?: S | null,
   parse: (raw: unknown) => S | null = (raw) => raw as S | null,
-): Store<S> {
+  options: MemoryStoreOptions = {},
+): Store<S> | FencedStore<S> {
   // Single internal cell — `undefined` and `null` collapse to one
   // representation so the load site is branchless.
   let cell: S | null = initial ?? null;
+  // The version the cell was last written at. A never-written cell reads `0`,
+  // matching `fileStore`'s absent stamp.
+  let version = 0;
 
-  return {
+  const base: Store<S> = {
     async load(): Promise<unknown> {
       return cell;
     },
     async save(state: S): Promise<void> {
       cell = state;
+      version += 1;
     },
     migrate(raw: unknown): S | null {
       return parse(raw);
+    },
+  };
+  if (options.fenced !== true) return base;
+
+  return {
+    ...base,
+    fenced: true,
+    async loadFenced(): Promise<{ raw: unknown; version: number }> {
+      return { raw: cell, version };
+    },
+    async saveFenced(state: S, expectedVersion: number): Promise<number> {
+      // No lock: the whole store is one process's memory, and this body has no
+      // await before the compare, so nothing can interleave between the check
+      // and the write.
+      if (version !== expectedVersion) {
+        throw new StoreConflictError(expectedVersion, version);
+      }
+      cell = state;
+      version += 1;
+      return version;
     },
   };
 }
