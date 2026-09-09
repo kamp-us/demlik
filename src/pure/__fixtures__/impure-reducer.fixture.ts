@@ -18,5 +18,8 @@ type Msg = { readonly type: "spawn" } | { readonly type: "roll" };
 
 export const impureUpdate: Reducer<State, Msg, never> = {
   spawn: (s) => [{ ...s, id: crypto.randomUUID(), at: Date.now() }, []],
+  // biome-ignore lint/complexity/useDateNow: `new Date()` is the bait — the
+  // guard's own test asserts this line is flagged as "new Date() (reads current
+  // time)", so the suggested `Date.now()` rewrite would delete what is tested.
   roll: (s) => [{ ...s, roll: Math.random(), at: new Date().getTime() }, []],
 };

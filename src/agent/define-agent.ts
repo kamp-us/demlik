@@ -36,9 +36,13 @@ import {
   type AgentTurn,
   agentTurnSchema,
   type Conversation,
+  isStreamingModel,
+  type ModelStream,
+  type StreamingModel,
   status,
   type ToolCall,
   type ToolOutcome,
+  type TurnChunk,
 } from "./types";
 
 // ===========================================================================
@@ -107,13 +111,34 @@ export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
 >;
 
 /**
+ * The brain a defined agent runs, in either of its two shapes:
+ *
+ *   - `async (messages) => turn` — the plain port, and the common path.
+ *   - `async (messages, { onChunk }) => turn` — the same call, plus a side
+ *     channel it may write token deltas to while the turn is in flight.
+ *
+ * `defineAgent` takes one field for both and tells them apart by arity
+ * (`isStreamingModel`), so there is no config flag saying which you passed and
+ * no way for that flag to disagree with the function. Whichever shape you
+ * write, the run's Model is the same: the turn it RESOLVES is what the reducer
+ * folds, and the deltas end at the `onChunk` run option (see
+ * {@link DefinedAgentRunOptions}).
+ *
+ * Both members are unions of one signature so a model written inline still gets
+ * its `messages` parameter typed from the config field.
+ */
+export type DefinedAgentModel =
+  | PlainModel<AgentMessage, AgentTurn>
+  | StreamingModel<AgentMessage, AgentTurn>;
+
+/**
  * What `defineAgent` takes: the model, the tools and the instructions, plus the
  * two optional guards that stop a run — `maxTurns` and `deadlineMs`. Omit both
  * and the run is unbounded: it ends only when the model stops asking for tools.
  */
 export interface DefineAgentConfig<T extends AnyToolDef> {
-  /** The brain: `async (messages) => turn`, validated through `agentTurnSchema`. */
-  readonly model: PlainModel<AgentMessage, AgentTurn>;
+  /** The brain — either {@link DefinedAgentModel} shape. */
+  readonly model: DefinedAgentModel;
   /** The `tool()`s the model may call. */
   readonly tools: readonly T[];
   /** The system prompt — stored on the Model at `init` (ADR 0004). */
@@ -166,6 +191,27 @@ export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
    * Omit → no projector is wired and the run behaves exactly as before.
    */
   readonly onEvent?: (event: DefinedAgentEvent<T>) => void;
+  /**
+   * Observe the token deltas of the turn being produced right now — the
+   * granularity below `onEvent`'s. Wired only when the configured `model` is
+   * the streaming shape (`async (messages, { onChunk }) => turn`); a plain
+   * model has no deltas to give, so passing this beside one is silent.
+   *
+   * Chunks ride a SIDE CHANNEL, never state. They are not projected off
+   * transitions like an {@link AgentEvent} is, because nothing about a chunk is
+   * a transition: it is never journaled, never written to the `Store`, and
+   * never folded into the Model. That is the whole rule this option obeys — a
+   * delta that has not settled is not an outcome, so a run that dies mid-turn
+   * loses its chunks and resumes from the last SETTLED turn, and a resumed run
+   * re-emits nothing it did not itself re-produce.
+   *
+   * The listener is CONTAINED exactly as `onEvent`'s is: a throw is caught and
+   * warned, never allowed to fail the model call it fired from.
+   *
+   * Omit → the streaming model is still invoked in its streaming shape, with a
+   * sink that drops every chunk.
+   */
+  readonly onChunk?: (chunk: TurnChunk) => void;
 };
 
 /** What `defineAgent` returns. */
@@ -207,7 +253,10 @@ export function defineAgent<T extends AnyToolDef>(
   config: DefineAgentConfig<T>,
 ): DefinedAgent<T> {
   const tools = toolRouter(config.tools);
-  const machine = (input: string): DefinedAgentMachine<T> =>
+  const machineWith = (
+    input: string,
+    onChunk: ((chunk: TurnChunk) => void) | undefined,
+  ): DefinedAgentMachine<T> =>
     createAgent<
       string,
       LidPurpose,
@@ -219,7 +268,7 @@ export function defineAgent<T extends AnyToolDef>(
       stages: [input],
       turnOf: () => "act",
       schemas: { act: agentTurnSchema },
-      model: config.model,
+      model: brainOf(config.model, onChunk),
       instructions: config.instructions,
       payloadOf: promptOf,
       loadMessages: messagesOf,
@@ -227,11 +276,15 @@ export function defineAgent<T extends AnyToolDef>(
       maxTurns: config.maxTurns,
       deadlineMs: config.deadlineMs,
     }).toMachine<DefinedAgentCtx<T>, T>({ tools });
+  // The public door down carries no chunk sink: `machine(input)` is handed to
+  // the raw kernel by a caller who has no run options to read one from.
+  const machine = (input: string): DefinedAgentMachine<T> =>
+    machineWith(input, undefined);
   const drive: DefinedAgent<T>["run"] = (input, ...[opts = noHost<T>()]) => {
-    const { onEvent } = opts;
+    const { onEvent, onChunk } = opts;
     // No listener → no projector, so an omitted `onEvent` leaves the run the
     // kernel wiring it always had.
-    const handle = run(machine(input), {
+    const handle = run(machineWith(input, onChunk), {
       ...opts,
       terminal: isDone,
       events:
@@ -260,6 +313,56 @@ export function defineAgent<T extends AnyToolDef>(
 // ===========================================================================
 // The named parts `defineAgent` composes.
 // ===========================================================================
+
+/**
+ * The `ModelPort` `createAgent` is configured with, for either model shape.
+ *
+ * A plain model is passed through UNTOUCHED — same reference, same one-argument
+ * call, so the arity that `isPlainModel` reads (and the misroute error a
+ * non-`async` model earns) is exactly what it was before streaming existed. A
+ * streaming model is wrapped in an `async` one-argument function that binds this
+ * run's sink, which is what makes the sink per-run while `model` stays per-agent.
+ *
+ * The wrapper resolves whatever the streaming model resolves and adds nothing:
+ * the turn still meets `agentTurnSchema` at the same seam, so the settled turn
+ * — and therefore the Model — cannot depend on whether anyone watched.
+ */
+function brainOf(
+  model: DefinedAgentModel,
+  onChunk: ((chunk: TurnChunk) => void) | undefined,
+): PlainModel<AgentMessage, AgentTurn> {
+  if (!isStreamingModel(model)) {
+    return model as PlainModel<AgentMessage, AgentTurn>;
+  }
+  const streaming = model as StreamingModel<AgentMessage, AgentTurn>;
+  const stream: ModelStream = {
+    onChunk: onChunk === undefined ? dropChunk : contained("onChunk", onChunk),
+  };
+  return async (messages) => streaming(messages, stream);
+}
+
+/** The sink a streaming model gets when nobody is watching. PURE. */
+function dropChunk(): void {}
+
+/**
+ * A caller's listener, wrapped so its defects stay its own: a throw is warned
+ * about and swallowed rather than propagated into the run that fired it.
+ *
+ * The run's contract must not depend on the listener's. For `onEvent` the
+ * runtime's own fanout is throw-isolated but routes to `OnError`, whose default
+ * re-throws on a fresh macrotask; for `onChunk` there is no fanout at all — the
+ * sink is called straight from the adapter, so an escaping throw would reject
+ * the model call and settle a `resilient_err` for a defect in a progress bar.
+ */
+function contained<E>(what: string, listener: (event: E) => void) {
+  return (event: E): void => {
+    try {
+      listener(event);
+    } catch (err) {
+      console.warn(`@demlik/tea: a run's ${what} listener threw`, err);
+    }
+  };
+}
 
 /** `payloadOf`: the prompt is the durable state, nothing else. PURE. */
 function promptOf<R>(
@@ -335,12 +438,9 @@ const AGENT_EVENT_TYPES = ["TurnSettled", "ToolSettled", "RunDone"] as const;
 /**
  * Forward the runtime's semantic events to the caller's `onEvent`, CONTAINED.
  *
- * The runtime's own fanout is throw-isolated but routes a listener's throw to
- * `OnError`, whose default re-throws on a fresh macrotask — an uncaught error
- * in the host for a defect that is the consumer's, not the run's. `defineAgent` owns
- * the containment instead: a throwing listener is warned about and the run goes
- * on to its terminal Model, so `run`'s contract does not depend on the
- * listener's.
+ * `defineAgent` owns the containment (see {@link contained}): a throwing
+ * listener is warned about and the run goes on to its terminal Model, so
+ * `run`'s contract does not depend on the listener's.
  *
  * Ordering is the kernel's: one handler per type, all attached before the
  * drive's first dispatch, so events arrive in the order the projector emits
@@ -354,13 +454,7 @@ function forwardEvents<T extends AnyToolDef>(
   >,
   onEvent: (event: DefinedAgentEvent<T>) => void,
 ): void {
-  const deliver = (event: DefinedAgentEvent<T>): void => {
-    try {
-      onEvent(event);
-    } catch (err) {
-      console.warn("@demlik/tea: a run's onEvent listener threw", err);
-    }
-  };
+  const deliver = contained("onEvent", onEvent);
   for (const type of AGENT_EVENT_TYPES) {
     handle.on(type, deliver);
   }
