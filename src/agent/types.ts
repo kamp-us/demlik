@@ -304,7 +304,8 @@ export interface ToolRetryExhausted {
 }
 
 /**
- * The two failures the ladder itself authors (#117). They are in every tool's
+ * The two failures the resilience ladder itself authors — `timeout` and
+ * `retry_exhausted`. They are in every tool's
  * error union rather than only a policied tool's: the policy is a `tool()` spec
  * field a maintainer can add later, and a union that narrowed with it would turn
  * adding a `timeoutMs` into a silent behaviour change at every `onToolError`

@@ -246,11 +246,16 @@ type AgentVerb1<
   ...args: Args
 ) => readonly [AgentState<Stage, P, O, R>, readonly AgentCmd<P, TC>[]];
 
-/** The brain-call success / failure settle Msgs, inherited from `../llm-call`. */
+/** The brain-call SUCCESS settle Msg, inherited from `../llm-call`. */
 export type AgentLlmOkMsg<
   P extends string,
   O extends Record<P, unknown>,
 > = LlmSucceedMsg<P, O>;
+/**
+ * The brain-call FAILURE settle Msg, inherited from `../llm-call` — it re-enters
+ * the agent's `fail` verb, which backs off via the retry ladder rather than
+ * ending the run.
+ */
 export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
 
 /**
@@ -270,8 +275,12 @@ export type AgentPorts<
 > = LlmCallPorts<P, O, M>;
 
 /**
- * The LEGACY detached brain-call handler dictionary `handlers(ports)` returns —
- * the inherited `../llm-call` detached form's exact shape, NOT an `Interpret`.
+ * The LEGACY detached brain-call handler dictionary `handlers(ports)` returns,
+ * superseded by the `Interpret` table `AgentKnob.toMachine()` wires — reach for
+ * `toMachine()` unless you are hand-wiring the verbs yourself.
+ *
+ * It is the inherited `../llm-call` detached form's exact shape, NOT an
+ * `Interpret`.
  * The `resilient_run` handler runs the invoke inside `ctx.waitUntil` and dispatches
  * the consumer's `onOk` / `onErr` Msg directly (returning `void`), so it is a
  * fire-and-forget handler with a structural `{ waitUntil, dispatch }` ctx — it

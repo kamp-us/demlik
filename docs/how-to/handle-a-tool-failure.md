@@ -4,10 +4,11 @@
 know exactly what the model reads on the next turn — including the three
 failures you never declared — and branch on the tag in your own code.
 
-Every sample below is quoted from
-[`examples/agent-tool-failure.ts`](../../examples/agent-tool-failure.ts), which
-runs in-process with a scripted model. Run it and you get the transcript at the
-bottom of this page, verbatim.
+Every sample below is inlined on this page rather than linked out, so it reads
+the same here, on the published site, and in whatever the docs are bundled into.
+The samples are quoted from a runnable script that lives in the repository at
+`examples/agent-tool-failure.ts` — it runs in-process with a scripted model and
+prints the transcript at the bottom of this page, verbatim.
 
 ## Declare the failure tags
 
@@ -84,6 +85,34 @@ const fetchRate = tool(
   },
 );
 ```
+
+### What `retry` actually takes
+
+The literal above is one policy, not the shape. `retry` takes an
+[`AnyRetryPolicy`](../reference/retry-backoff.md) — a backoff curve plus exactly
+one terminal bound:
+
+| Field | Type | What it sets |
+| --- | --- | --- |
+| `baseMs` | `number` | The first delay, before the curve grows it |
+| `factor` | `number` | What each delay is multiplied by (`1` is a flat ladder) |
+| `capMs` | `number` | The ceiling one delay may reach |
+| `jitter` | `"none" \| "full"` | Whether a delay is randomized inside its bound |
+
+Then **one** of the three bounds, and a policy declaring none does not
+type-check:
+
+| Bound | Field(s) | Ends the retrying when |
+| --- | --- | --- |
+| Count | `maxAttempts: number` | that many attempts have been made |
+| Duration | `maxElapsedMs: number`, optional `maxAttempts` | the far side has been unreachable that long |
+| Unbounded | `unbounded: true` | never — the explicit opt-in to retrying forever |
+
+Every field is specified per-symbol in the
+[`@demlik/tea/retry-backoff` reference](../reference/retry-backoff.md) —
+`BackoffCurve`, `CountBound`, `DurationBound`, `Unbounded` — and the same policy
+shape is what a reducer of your own folds in
+[Add retry and backoff to a call](./add-resilience.md).
 
 Two more reasons join the table, and they read exactly like the others:
 

@@ -1,5 +1,11 @@
 # Add retry and backoff to a call
 
+> **Looking for a timeout or retry on an agent's tool?** You do not write any of
+> this. Declare `timeoutMs` / `retry` on the `tool()` spec and the agent's
+> reducer runs the ladder for you — see
+> [Bound a slow tool, or retry a flaky one](./handle-a-tool-failure.md#bound-a-slow-tool-or-retry-a-flaky-one).
+> This page is for retrying a call in a machine you wrote yourself.
+
 To make a flaky call self-heal without your reducer authoring any timing logic,
 fold `@demlik/tea/retry-backoff`'s pure ops into `update` and let the failure Msg
 decide whether to retry.

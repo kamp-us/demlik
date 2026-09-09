@@ -193,7 +193,9 @@ export * from "./types";
 /**
  * Assemble an agent from `config` — the model, the stages it walks, and how a
  * tool call is turned into a command — and get back its `init`, verbs and `subs`
- * plus a `toMachine()` that wires all of it into one machine you hand to `run`.
+ * plus a `toMachine()` that wires all of it into one machine you hand to `run`,
+ * which is the layer to reach for only once `defineAgent` cannot express the run
+ * you want — a newcomer starts there, not here.
  *
  * Pass `snapshotEvery` to have the run persist itself every N steps, and
  * `compaction` to have long conversations summarized as they grow; each one you

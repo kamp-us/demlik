@@ -378,6 +378,11 @@ export type LlmSucceedMsg<
   P extends string,
   O extends Record<P, unknown>,
 > = SucceedMsg<LlmOk<P, O>>;
+/**
+ * The FAILURE settle Msg (`resilient_err`) — resilient-call's `FailMsg` with its
+ * `error: unknown` narrowed to the typed `LlmErr`, so the host reducer reads the
+ * purpose, the reason and the raw payload without a cast.
+ */
 export type LlmFailMsg<P extends string> = Omit<FailMsg, "error"> & {
   readonly error: LlmErr<P>;
 };
