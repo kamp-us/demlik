@@ -84,6 +84,19 @@ persisted shape; widening a handler's `E` to `unknown` to "keep it simple".
   "types on the constructor, data in the record" as the one rule. The reward is that the next
   "let's just use Effect" thread has a settled answer: inside the handler, never at the core.
 
+## Amendments
+
+- **#115 — the `E` channel reaches user code at the tool boundary, not only the model
+  (2026-09-08).** A tool's declared failure tags are the `E` of the Cmd `tool()` mints. Until
+  PR #138 the router rendered them to a `reason: string` before the outcome reached the
+  conversation, so `E` was a better prompt for the model and no discipline for the host. Ruled
+  option (b): `ToolOutcome`'s error arm keeps `{ _tag, …payload }` beside `reason`, and
+  `defineAgent` exposes an optional `onToolError` hook that receives it once per failed call,
+  never again on resume. Router-minted failures (`unknown_tool`, `malformed_args`, `thrown`)
+  and ladder endings (`timeout`, `retry_exhausted`, #117) carry a tag the same way. This is
+  [0011](./0011-errors-as-data.md) applied literally at one more boundary; the decision text
+  above is unchanged.
+
 ## Records
 
 no vocabulary impact — `E`/`R` are Effect's own names, used here only as type-parameter labels;
