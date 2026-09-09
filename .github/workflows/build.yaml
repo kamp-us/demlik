@@ -82,6 +82,16 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      # The only thing here that reaches the package the way an INSTALLER does —
+      # `examples/**` compiled against the published specifiers and `dist`, not
+      # against `src`. `typecheck` compiles `src` against itself and so can never
+      # catch an export map that resolves internally and not from outside. Runs
+      # after Build because `dist` is what it resolves against. Left unwired it
+      # drifted sixteen errors red (#24); a gate that is off is not a gate that is
+      # lenient, it is a gate that is lying.
+      - name: Typecheck consumers
+        run: pnpm run typecheck:consumers
+
       # The dist walker that makes the v0.1.1 failure class (an export map entry
       # with no matching dist/ output — a broken published subpath) unshippable.
       # It is ALSO wired to `prepublishOnly`, but that hook never fires on the

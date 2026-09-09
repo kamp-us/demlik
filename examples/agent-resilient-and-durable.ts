@@ -42,7 +42,6 @@ import {
   type AgentTurn,
   createAgent,
   type DeadlineSub,
-  type MonitoredRunCmd,
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
@@ -282,7 +281,10 @@ type ResearchAgent = ReturnType<
 >;
 type AgentMsg = AgentMachineMsg<Purpose, Outputs, string>;
 type ResearchState = AgentState<Stage, Purpose, Outputs, string>;
-type ResearchCmd = AgentCmd<Purpose, RunTool>;
+// Neither `snapshotEvery` nor compaction is configured on this agent, so the
+// emitted Cmd set is derived WITHOUT `snapshot_write` / `compact_run` — the two
+// `false` discriminants are what keep this alias equal to the machine's own.
+type ResearchCmd = AgentCmd<Purpose, RunTool, false, false>;
 type ResearchMachine = Machine<
   ResearchState,
   AgentMsg,
@@ -315,11 +317,7 @@ function makeAgent(cursor: { i: number }): ResearchAgent {
 // deterministic and offline.
 const FETCH_DOCS_RESULT = "docs: TEA = init + update + view, effects as data.";
 const TOOLS: Record<string, string> = { fetch_docs: FETCH_DOCS_RESULT };
-function toolInterpret(): Interpret<
-  AgentMsg,
-  MonitoredRunCmd<unknown> | RunTool,
-  object
-> {
+function toolInterpret(): Interpret<AgentMsg, RunTool, object> {
   return {
     run_tool: async (cmd): Promise<AgentMsg> => ({
       type: "agent_tool_ok",
@@ -327,9 +325,8 @@ function toolInterpret(): Interpret<
       result: TOOLS[cmd.name] ?? `ran:${cmd.name}`,
       at: 0,
     }),
-    // No `snapshotEvery` is set, so `snapshot_write` is never emitted — but the
-    // closed `AgentCmd` union still requires the cell to type-check.
-    snapshot_write: async () => {},
+    // No `snapshotEvery` is set, so `snapshot_write` is never emitted and the
+    // config-derived obligation FORBIDS the cell — the Cmd is not in the union.
   };
 }
 

@@ -5,13 +5,13 @@ import {
   type Machine,
   type Reducer,
   run,
+  type Sub,
   tryInterpret,
 } from "@demlik/tea";
 import {
   type AgentMachineMsg,
   type AgentTurn,
   createAgent,
-  type MonitoredRunCmd,
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
@@ -495,11 +495,10 @@ const agent = createAgent<
 type Msg = AgentMachineMsg<Purpose, Outputs, ToolResult>;
 type AgentCtx = { readonly now: () => number };
 
-const toolInterpret: Interpret<
-  Msg,
-  MonitoredRunCmd<unknown> | ToolCmd,
-  AgentCtx
-> = {
+// Checkpointing is off on this agent, so `snapshot_write` is config-derived out
+// of the emitted Cmd set and the obligation forbids the handler — the interpret
+// covers the consumer's own tool Cmds and nothing else.
+const toolInterpret: Interpret<Msg, ToolCmd, AgentCtx> = {
   run_crawl: async (cmd, ctx) => {
     const urls = await runCrawlSubRun();
     return {
@@ -523,7 +522,6 @@ const toolInterpret: Interpret<
       at: ctx.now(),
     };
   },
-  snapshot_write: async () => undefined,
 };
 
 const agentMachine = agent.toMachine<AgentCtx>({ toolInterpret });
@@ -546,11 +544,13 @@ const uploaderUpdate: Reducer<UploaderState, UploaderMsg, PublishReportCmd> = {
   ],
 };
 
+// The base uploader arms no Sub of its own — the retry deadline is the
+// `withResilience` wrapper's, added to the Sub union below it.
 const uploaderMachineDef: Machine<
   UploaderState,
   UploaderMsg,
   PublishReportCmd,
-  DeadlineSub,
+  Sub<never>,
   ReportSink
 > = {
   init: (loaded) => (loaded !== null ? [loaded, []] : [{ phase: "idle" }, []]),
