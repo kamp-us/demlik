@@ -49,7 +49,8 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
-import type { Store, Sub, SubId } from "../index";
+import type { FencedStore, Store, Sub, SubId } from "../index";
+import { StoreConflictError } from "../index";
 import {
   type Journal,
   type JournalEntry,
@@ -73,12 +74,30 @@ import { dispatchIfPresent } from "../subs/types";
  * Returning `null` from `parse` means "no usable persisted state" — the
  * substrate boots `init` with `loaded = null`. `parse` must NOT throw per the
  * `Store<S>.migrate` contract.
+ *
+ * Pass `{ fenced: true }` to get a `FencedStore<S>` instead — see
+ * {@link FileStoreOptions}.
  */
 export function fileStore<S>(
   path: string,
   parse: (raw: unknown) => S | null,
-): Store<S> {
-  return {
+): Store<S>;
+export function fileStore<S>(
+  path: string,
+  parse: (raw: unknown) => S | null,
+  options: FileStoreOptions & { readonly fenced: true },
+): FencedStore<S>;
+export function fileStore<S>(
+  path: string,
+  parse: (raw: unknown) => S | null,
+  options?: FileStoreOptions,
+): Store<S> | FencedStore<S>;
+export function fileStore<S>(
+  path: string,
+  parse: (raw: unknown) => S | null,
+  options: FileStoreOptions = {},
+): Store<S> | FencedStore<S> {
+  const base: Store<S> = {
     async load(): Promise<unknown> {
       let raw: string;
       try {
@@ -99,13 +118,99 @@ export function fileStore<S>(
       // partial) and survives process crash / Ctrl-C — the only failure a local
       // resumable run resumes from. fsync (file + dir) would add power-loss
       // durability the use case doesn't need; the substrate serializes saves
-      // through run()'s queue, so there's never a second concurrent writer.
+      // through run()'s queue, so there's never a second concurrent writer
+      // WITHIN one run. Between two runs there is nothing here refusing one —
+      // that is what `{ fenced: true }` below adds (#143).
       const tmp = `${path}.${process.pid}.tmp`;
       await writeFile(tmp, JSON.stringify(state), "utf8");
       await rename(tmp, path);
     },
     migrate(raw: unknown): S | null {
       return parse(raw);
+    },
+  };
+  return options.fenced === true ? fenceFileStore(base, path) : base;
+}
+
+/** Options for {@link fileStore}. */
+export interface FileStoreOptions {
+  /**
+   * Refuse a second live writer (#143). With `{ fenced: true }` the returned
+   * store is a `FencedStore<S>`: it carries a version stamp beside the state
+   * file, and `run` compare-and-swaps against it on every save. A process that
+   * boots reads the current version and takes the fence; the older live writer
+   * that started from the same version is refused with a `StoreConflictError`
+   * at its next save. Omit it and the store is exactly as it was — the last
+   * writer wins, and single-writer is the caller's precondition to keep.
+   */
+  readonly fenced?: true;
+}
+
+/**
+ * The fencing half of {@link fileStore}. The state file itself is unchanged, so
+ * a file written unfenced resumes fenced and back again; the version lives in a
+ * sidecar `<path>.fence` holding a decimal integer, and an absent stamp is `0`.
+ *
+ * The compare-and-swap is taken under the same `wx` lock file `fileJournal`
+ * uses, because `open(…, "wx")` is the one primitive that is atomic ACROSS
+ * PROCESSES. Without it the read-compare-write is a TOCTOU race and two writers
+ * both pass their own check. Rename-over-tmp still does the torn-write work for
+ * each of the two files; the lock does the exclusion no rename could.
+ */
+function fenceFileStore<S>(base: Store<S>, path: string): FencedStore<S> {
+  const fencePath = `${path}.fence`;
+  const lockPath = `${path}.fence.lock`;
+
+  async function readVersion(): Promise<number> {
+    let raw: string;
+    try {
+      raw = await readFile(fencePath, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
+      throw err;
+    }
+    const version = Number.parseInt(raw.trim(), 10);
+    // A stamp we cannot read is not a version we may assume: defaulting it to 0
+    // would let a fresh writer win a fence against a live one.
+    if (!Number.isSafeInteger(version) || version < 0) {
+      throw new Error(
+        `fileStore: version stamp at "${fencePath}" is not an integer: ${raw}`,
+      );
+    }
+    return version;
+  }
+
+  return {
+    ...base,
+    fenced: true,
+    async loadFenced(): Promise<{ raw: unknown; version: number }> {
+      // Version FIRST, bytes second: a writer landing between the two reads
+      // leaves us with a version OLDER than the bytes, so our next save is
+      // refused. Reading bytes first could hand back a version newer than them,
+      // and that save would silently win.
+      const version = await readVersion();
+      return { raw: await base.load(), version };
+    },
+    async saveFenced(state: S, expectedVersion: number): Promise<number> {
+      await mkdir(dirname(path), { recursive: true });
+      await acquireFileLock(dirname(path), lockPath);
+      try {
+        const actual = await readVersion();
+        if (actual !== expectedVersion) {
+          throw new StoreConflictError(expectedVersion, actual);
+        }
+        const next = expectedVersion + 1;
+        // State before stamp. A crash between the two leaves a stamp BEHIND the
+        // bytes, which reads as a conflict for the next writer — the safe
+        // direction. The reverse advertises a write that never landed.
+        await base.save(state);
+        const tmp = `${fencePath}.${process.pid}.tmp`;
+        await writeFile(tmp, String(next), "utf8");
+        await rename(tmp, fencePath);
+        return next;
+      } finally {
+        await unlink(lockPath).catch(() => {});
+      }
     },
   };
 }

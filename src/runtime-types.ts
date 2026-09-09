@@ -496,6 +496,87 @@ export interface Store<S> {
   migrate(raw: unknown): S | null;
 }
 
+// === FencedStore: the same seam, with a second writer refused ===
+//
+// `Store.save` is unconditional, so two live processes pointed at one
+// `agent.json` both drive the run to done and neither can learn it raced (#143).
+// Atomicity of one write (fileStore's temp + rename) is not exclusion between
+// two writers.
+//
+// The fix is an OPTIONAL widening, never a change to `Store<S>` itself: the
+// stable-root interface is implemented by four in-repo adapters and any number
+// of external ones, and none of them breaks here. A store that can fence says so
+// with `fenced: true` and adds two methods beside — NOT overrides of `load` and
+// `save`, because a `load` returning `{ raw, version }` is still assignable to
+// `Promise<unknown>` and would hand every version-blind caller a wrapper blob its
+// `migrate` cannot read. Two names keep the two contracts apart.
+//
+// `version` is opaque to the substrate: a monotone number the store mints. The
+// runtime only ever hands back the one it was given, so a store is free to
+// define it as a file stamp, a DO storage cell, or an in-process counter.
+export interface FencedRead {
+  /** Raw bytes at the key, the `Store.load` contract unchanged. */
+  readonly raw: unknown;
+  /** The version those bytes were written at. A never-written key reads `0`. */
+  readonly version: number;
+}
+
+/**
+ * A `Store<S>` that can refuse a second live writer.
+ *
+ * `run` fences automatically when it is handed one of these: it reads the
+ * version at boot and compare-and-swaps on every save, so a second process that
+ * started from the same version is refused at its first write with a
+ * {@link StoreConflictError}. Hand `run` a plain `Store<S>` and it stays exactly
+ * as it was — the last writer wins, and single-writer is your precondition to
+ * keep (see `docs/explanation/durability-model.md`).
+ *
+ * Fencing is opt-in at 0.x: every shipped factory that can fence takes an
+ * explicit `{ fenced: true }` and returns this type; the unfenced call is
+ * byte-for-byte the old behaviour.
+ */
+export interface FencedStore<S> extends Store<S> {
+  /** Discriminant — the one thing {@link isFencedStore} reads. */
+  readonly fenced: true;
+  /** `load`, plus the version those bytes carry. */
+  loadFenced(): Promise<FencedRead>;
+  /**
+   * Compare-and-swap save. Writes `state` only if the stored version is still
+   * `expectedVersion`, and resolves with the NEW version to swap on next time.
+   * Throws {@link StoreConflictError} when it is not.
+   */
+  saveFenced(state: S, expectedVersion: number): Promise<number>;
+}
+
+/** Narrow a `Store<S>` to a {@link FencedStore} — what `run` uses to decide. */
+export function isFencedStore<S>(store: Store<S>): store is FencedStore<S> {
+  return "fenced" in store && store.fenced === true;
+}
+
+/**
+ * Thrown when a fenced save finds a version other than the one it expected —
+ * another live writer has this run.
+ *
+ * A throw, not a settled failure Msg (ADR 0017, following ADR 0011): a second
+ * claimant is a contract breach of the single-writer promise, not a state this
+ * run can fold and continue from. There is no correct way for the loser to
+ * carry on, so it stops where it stands.
+ */
+export class StoreConflictError extends Error {
+  override readonly name = "StoreConflictError";
+  readonly _tag = "store_conflict" as const;
+  constructor(
+    readonly expectedVersion: number,
+    readonly actualVersion: number,
+  ) {
+    super(
+      `@demlik/tea: store conflict — expected version ${expectedVersion}, ` +
+        `found ${actualVersion}. Another process has written this state; ` +
+        `this run is no longer the single writer and has stopped.`,
+    );
+  }
+}
+
 // === Schema-derived migrate: single-source the durable State ===
 //
 // The boundary parse `migrate(raw)` is two jobs glued together:
