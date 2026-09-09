@@ -14,6 +14,9 @@
  *   3. a hallucinated name  — the router mints `unknown_tool`
  *   4. args off the schema  — the router mints `malformed_args`
  *
+ * Each one reaches the model as a `reason` string AND the host's `onToolError`
+ * as `{ _tag, …payload }` — two readers, one failure, neither lossy.
+ *
  * Only the first is declared anywhere. The other three are why `err: []` never
  * means "this tool cannot fail".
  *
@@ -138,28 +141,56 @@ async function model(messages: readonly AgentMessage[]): Promise<AgentTurn> {
 
 const printed = new Set<string>();
 
+// `onToolError` is the HOST's channel onto the same failure the model reads:
+// the outcome carries `_tag` and its payload structurally, so this switch is
+// exhaustive and a failure mode nobody handled is a compile error.
 const agent = defineAgent({
   model,
   tools: [lookup, fetchRate],
   instructions: "You look colours up.",
+  onToolError: (outcome, { name }) => {
+    switch (outcome._tag) {
+      case "not_found":
+        return console.log(`hook: ${name} missed the key ${outcome.key}`);
+      case "unknown_tool":
+        return console.log(`hook: no tool called ${name}`);
+      default:
+        return console.log(`hook: ${name} failed with ${outcome._tag}`);
+    }
+  },
 });
 
 const final = await agent.run("Find the hex code for blue and for green.");
 console.log("done:", final.output?.content);
 
 /*
- * What it prints — the `outcome` half of each line is exactly the `ToolOutcome`
- * the adapter renders into the provider's `tool_result` block:
+ * What it prints. Each `outcome` is exactly what the adapter renders into the
+ * provider's `tool_result` block — the tag and its payload beside the `reason`
+ * the model reads. `kind` and `reason` are written LAST, so a payload field of
+ * either name can never shadow them:
  *
+ *   hook: lookup missed the key green
  *   c1 lookup → {"kind":"ok","result":{"hex":"#2563eb"}}
- *   c2 lookup → {"kind":"error","reason":"not_found {\"key\":\"green\"}"}
- *   c3 lookup → {"kind":"error","reason":"thrown {\"message\":\"the table went away\"}"}
- *   c4 lookyp → {"kind":"error","reason":"unknown_tool {\"name\":\"lookyp\"}"}
- *   c5 lookup → {"kind":"error","reason":"malformed_args {\"name\":\"lookup\",\"issues\":[{\"path\":\"key\",\"message\":\"Invalid input: expected string, received number\"}]}"}
- *   c6 fetch_rate → {"kind":"error","reason":"retry_exhausted {\"attempts\":3,\"last\":\"upstream\"}"}
- *   c7 fetch_rate → {"kind":"error","reason":"timeout"}
+ *   c2 lookup → {"_tag":"not_found","key":"green","reason":"not_found {\"key\":\"green\"}","kind":"error"}
+ *   hook: lookup failed with thrown
+ *   c3 lookup → {"_tag":"thrown","message":"the table went away","reason":"thrown {\"message\":\"the table went away\"}","kind":"error"}
+ *   hook: no tool called lookyp
+ *   c4 lookyp → {"_tag":"unknown_tool","name":"lookyp","reason":"unknown_tool {\"name\":\"lookyp\"}","kind":"error"}
+ *   hook: lookup failed with malformed_args
+ *   c5 lookup → {"_tag":"malformed_args","name":"lookup",…,"kind":"error"}
+ *   hook: fetch_rate failed with retry_exhausted
+ *   c6 fetch_rate → {"_tag":"retry_exhausted","attempts":3,"last":"upstream","reason":"retry_exhausted {\"attempts\":3,\"last\":\"upstream\"}","kind":"error"}
+ *   c7 fetch_rate → {"_tag":"timeout","reason":"timeout","kind":"error"}
+ *   hook: fetch_rate failed with timeout
  *   done: Blue is #2563eb; everything else failed.
  *
  * `c6` ran the handler three times and the model is told so; `c7` ran it once
  * and was over at 50ms, while that attempt was still sleeping out its 500ms.
+ *
+ * `fetch_rate` gets ONE hook line per call, not one per attempt: it declares a
+ * ladder, so its attempts are announced nowhere and the call's own ending is
+ * announced off the fold. That is also why `timeout` prints after `c7`'s record
+ * while the un-laddered failures print before theirs — a laddered call has no
+ * handler settle to read the ending from, so the fold is the first place it
+ * exists.
  */

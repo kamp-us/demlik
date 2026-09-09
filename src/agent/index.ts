@@ -172,6 +172,7 @@ import type {
   AgentTurn,
   Conversation,
   ToolCall,
+  ToolFailure,
   ToolOutcome,
 } from "./types";
 
@@ -633,26 +634,34 @@ export function createAgent<
   function toolErr(
     s: State,
     callId: string,
-    reason: string,
+    reported: string | ToolFailure,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    // A bare string is the hand-wired caller's shape and carries no tag — the
+    // one untagged arm `ToolFailure`'s optional `_tag` exists for, beside a
+    // record a pre-0.13 `Store` hands back.
+    const failure: ToolFailure =
+      typeof reported === "string"
+        ? { kind: "error", reason: reported }
+        : reported;
     const call = inFlight(s, callId);
-    if (call === null)
-      return settleTool(s, callId, { kind: "error", reason }, at);
+    if (call === null) return settleTool(s, callId, failure, at);
     // Offer the failure to the ladder FIRST. A `null` verdict means it armed
     // another attempt: the fan-out entry stays `running`, nothing is folded, and
     // the wait is a timer Sub on the Model rather than an `await` inside a
     // handler — which is what makes the ladder survive a process kill. Anything
-    // else is the reason the call ends on, ladder-authored or the tool's own.
+    // else is the failure the call ends on, ladder-authored or the tool's own —
+    // and either way it is the STRUCTURED failure, so the `_tag` #115 keeps
+    // survives the ladder instead of being flattened by passing through it.
     const [toolResilience, settled] = ladder.err(
       toolSlice(s),
       call,
-      reason,
+      failure,
       at,
     );
     const next: State = { ...s, toolResilience };
     if (settled === null) return [next, []];
-    return settleTool(next, callId, { kind: "error", reason: settled }, at);
+    return settleTool(next, callId, settled, at);
   }
 
   /** The in-flight `ToolCall` for `callId`, or `null` if none is running. PURE. */
@@ -1083,7 +1092,7 @@ export function createAgent<
       const [settled, more] = settleTool(
         next,
         order.callId,
-        { kind: "error", reason: order.reason },
+        order.failure,
         msg.atMs,
       );
       next = settled;
@@ -1381,9 +1390,15 @@ export function createAgent<
     const foldTool: ToolCell = (s, m) => {
       const settled = tools?.outcomeOf(m);
       if (settled === undefined || settled === null) return [s, []];
+      // Through `toolOk` / `toolErr` rather than straight to `settleTool`: those
+      // two are where the per-tool timeout / retry ladder (#117) sees the
+      // settle, and a router tool declaring `retry` must climb it exactly as a
+      // bare one does. `toolErr` takes the WHOLE failure the router built, so
+      // the `{ _tag, …payload }` beside the reason (#115) rides through the
+      // ladder intact — re-deriving it from a string here is exactly the loss.
       return settled.outcome.kind === "ok"
         ? toolOk(s, settled.callId, settled.outcome.result as R, m.at)
-        : toolErr(s, settled.callId, settled.outcome.reason, m.at);
+        : toolErr(s, settled.callId, settled.outcome, m.at);
     };
     const toolCells: Record<string, ToolCell> = {};
     for (const def of tools?.defs ?? []) {
@@ -1397,6 +1412,9 @@ export function createAgent<
     > = {
       [MsgType.AgentStart]: (s, m) => start(s, m.runId, m.at),
       [MsgType.AgentToolOk]: (s, m) => toolOk(s, m.callId, m.result, m.at),
+      // `agent_tool_err` is `createAgent`'s own raw settle Msg and its wire
+      // shape is a bare `reason` string — a consumer routing their own interpret
+      // through it never declared a tag, so the failure it mints carries none.
       [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
       // The re-entered brain-call settle Msgs (from `brainHandlers`): success
       // runs `succeed` (reset retry + fold the turn), failure runs `fail`.

@@ -1114,3 +1114,246 @@ describe("onChunk — the streaming model port (#123)", () => {
     ).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #115 — the failure a tool declares is data the HOST can branch on, not only
+// prose the model reads. The tag and its payload ride the outcome beside the
+// rendered `reason`; `onToolError` is the lid's typed seam onto them.
+// ---------------------------------------------------------------------------
+
+/** A turn that asks for a search that misses, and for a tool nobody declared. */
+const ASK_BADLY: AgentTurn = {
+  content: "let me try two things",
+  toolCalls: [
+    { callId: "c1", name: "search", args: { q: "nope" } },
+    { callId: "c2", name: "teleport", args: {} },
+  ],
+};
+
+/**
+ * Drive `turns` to done, keeping the last State that still HELD a conversation.
+ * The terminal Model retires it (`conversation: null`), so a fold assertion has
+ * to read the run in flight rather than its answer.
+ */
+async function lastConversationState(turns: readonly AgentTurn[]) {
+  const { model } = scripted(turns);
+  const agent = defineAgent({
+    model,
+    tools: [search],
+    instructions: INSTRUCTIONS,
+  });
+  const handle = run(agent.machine(INPUT), { ctx: { kb } });
+  const runtime = await handle.ready;
+  let held: DefinedAgentState<typeof search> | undefined;
+  const off = runtime.observe((_msg, s) => {
+    if (s.conversation !== null) held = s;
+  });
+  const final = await driveToDone(
+    handle,
+    { type: "agent_start", runId: "run-1", at: 0 },
+    (s) => s.run.phase === "done",
+  );
+  off();
+  if (held === undefined) throw new Error("the run never held a conversation");
+  return { held, final, records: held.conversation?.toolRecords ?? [] };
+}
+
+describe("tool failures carry their tag into the conversation (#115)", () => {
+  it("the folded record keeps `{ _tag, …payload }` beside the reason", async () => {
+    const { records } = await lastConversationState([ASK_BADLY, ANSWER]);
+
+    const byId = new Map(records.map((r) => [r.call.callId, r]));
+    expect(byId.get("c1")?.outcome).toEqual({
+      kind: "error",
+      _tag: "not_found",
+      q: "nope",
+      reason: 'not_found {"q":"nope"}',
+    });
+    expect(byId.get("c2")?.outcome).toEqual({
+      kind: "error",
+      _tag: "unknown_tool",
+      name: "teleport",
+      reason: 'unknown_tool {"name":"teleport"}',
+    });
+  });
+
+  // ADR 0011: a failure is DATA folded into Model, so the widened arm has to
+  // survive the Store like every other byte of the slice — a tag that does not
+  // round-trip is a tag a resumed run cannot branch on.
+  it("the structured outcome survives a Store save/load unchanged", async () => {
+    const { held, records } = await lastConversationState([ASK_BADLY, ANSWER]);
+    expect(records.length).toBe(2);
+
+    const store = memoryStore<DefinedAgentState<typeof search>>();
+    // Through the wire a Store is: serialize, keep, hand back, migrate.
+    await store.save(JSON.parse(JSON.stringify(held)));
+    const loaded = store.migrate(await store.load());
+
+    expect(loaded?.conversation?.toolRecords).toEqual(records);
+  });
+});
+
+describe("onToolError — the lid's typed failure seam (#115)", () => {
+  type Seen = {
+    readonly outcome: { readonly _tag: string; readonly reason: string };
+    readonly name: string;
+    readonly callId: string;
+  };
+
+  /** Drive the two-failure turn, collecting what the hook was handed. */
+  async function collectFailures(
+    hook: (seen: Seen) => void = () => {},
+    turns: readonly AgentTurn[] = [ASK_BADLY, ANSWER],
+  ) {
+    const { model } = scripted(turns);
+    const seen: Seen[] = [];
+    const final = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      onToolError: (outcome, ctx) => {
+        const entry = { outcome, name: ctx.name, callId: ctx.callId };
+        seen.push(entry);
+        hook(entry);
+      },
+    }).run(INPUT, { ctx: { kb } });
+    return { final, seen };
+  }
+
+  it("fires once per failed call, with the tag, the payload and the call it belongs to", async () => {
+    const { final, seen } = await collectFailures();
+
+    expect(seen.map((s) => s.callId)).toEqual(["c1", "c2"]);
+    expect(seen[0]).toEqual({
+      callId: "c1",
+      name: "search",
+      outcome: {
+        kind: "error",
+        _tag: "not_found",
+        q: "nope",
+        reason: 'not_found {"q":"nope"}',
+      },
+    });
+    // A rejection names the tool the MODEL asked for, not the router's own Cmd.
+    expect(seen[1]?.name).toBe("teleport");
+    expect(seen[1]?.outcome._tag).toBe("unknown_tool");
+    expect(final.run.phase).toBe("done");
+  });
+
+  it("is silent on a successful call", async () => {
+    const { final, seen } = await collectFailures(() => {}, [ASK, ANSWER]);
+    expect(seen).toEqual([]);
+    expect(final.output).toEqual(ANSWER);
+  });
+
+  it("wiring it changes nothing about the Model the run reaches", async () => {
+    const PINNED = {
+      ctx: { kb },
+      runId: "run-pinned",
+      clock: () => 0,
+    } as const;
+    const hooked = await defineAgent({
+      model: scripted([ASK_BADLY, ANSWER]).model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      onToolError: () => {},
+    }).run(INPUT, PINNED);
+    const plain = await defineAgent({
+      model: scripted([ASK_BADLY, ANSWER]).model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, PINNED);
+
+    expect(hooked.conversation).toEqual(plain.conversation);
+  });
+
+  it("a hook that throws is contained: the run still resolves, the throw is warned", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { final, seen } = await collectFailures(() => {
+        throw new Error("hook defect");
+      });
+
+      // Both failures were still offered, and the run reached its terminal Model.
+      expect(seen.map((s) => s.callId)).toEqual(["c1", "c2"]);
+      expect(final.run.phase).toBe("done");
+      expect(final.output).toEqual(ANSWER);
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls[0]?.[0]).toMatch(/onToolError hook threw/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("a rejected async hook is contained the same way", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { model } = scripted([ASK_BADLY, ANSWER]);
+      const final = await defineAgent({
+        model,
+        tools: [search],
+        instructions: INSTRUCTIONS,
+        onToolError: async () => {
+          await Promise.reject(new Error("async hook defect"));
+        },
+      }).run(INPUT, { ctx: { kb } });
+
+      expect(final.run.phase).toBe("done");
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("a resumed run does not re-fire it for an outcome already folded", async () => {
+    // Run 1 dies with both failures folded and the next brain call outstanding.
+    const first = scripted([ASK_BADLY, ANSWER]);
+    const handle = run(
+      defineAgent({
+        model: first.model,
+        tools: [search],
+        instructions: INSTRUCTIONS,
+      }).machine(INPUT),
+      { ctx: { kb } },
+    );
+    const runtime = await handle.ready;
+    let snapshot: DefinedAgentState<typeof search> | undefined;
+    const off = runtime.observe((_msg, s) => {
+      if (
+        snapshot === undefined &&
+        s.conversation?.awaiting.kind === "llm" &&
+        s.conversation.toolRecords.length === 2
+      ) {
+        snapshot = JSON.parse(JSON.stringify(s));
+      }
+    });
+    await driveToDone(
+      handle,
+      { type: "agent_start", runId: "run-1", at: 0 },
+      (s) => s.run.phase === "done",
+    );
+    off();
+    if (snapshot === undefined) throw new Error("run 1 never folded its tools");
+
+    // Run 2 boots those bytes. The failures are in the Model it was handed, so
+    // nothing re-interprets them and the hook has nothing to be told about.
+    expect(snapshot.conversation?.toolRecords.length).toBe(2);
+    const second = scripted([ANSWER]);
+    const seen: string[] = [];
+    const final = await defineAgent({
+      model: second.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      onToolError: (_outcome, ctx) => {
+        seen.push(ctx.callId);
+      },
+    }).run(INPUT, { ctx: { kb }, store: memoryStore(snapshot) });
+
+    expect(final.run.phase).toBe("done");
+    expect(seen).toEqual([]);
+    // …and the failures were still in the prompt run 2 sent: folded, not lost.
+    expect(
+      second.seen[0]?.filter((m) => m.role === "tool").map((m) => m.callId),
+    ).toEqual(["c1", "c2"]);
+  });
+});

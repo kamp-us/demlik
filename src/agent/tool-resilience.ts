@@ -34,10 +34,12 @@ import {
   type RunCmd,
 } from "../internal/resilience/resilient-call";
 import { MsgType } from "../protocol";
+import { toolErrorReason } from "./tool";
 import {
   TOOL_RETRY_EXHAUSTED_TAG,
   TOOL_TIMEOUT_TAG,
   type ToolCall,
+  type ToolFailure,
   type ToolResilience,
 } from "./types";
 
@@ -96,10 +98,16 @@ export type ToolResilienceState = Readonly<
   Record<string, ResilientState<ToolCall, null>>
 >;
 
-/** A call the ladder has decided is over — settle it into the fan-out with `reason`. */
+/**
+ * A call the ladder has decided is over — settle it into the fan-out with
+ * `failure`. The failure is structural: it carries the `_tag` the ladder settled
+ * under (`timeout` / `retry_exhausted`) beside the `reason` the model reads, so
+ * a ladder-authored ending is discriminable by host code exactly as a tool's own
+ * declared failure is (#115).
+ */
 export interface ToolSettleOrder {
   readonly callId: string;
-  readonly reason: string;
+  readonly failure: ToolFailure;
 }
 
 /** What a timer fire produced: launches to re-issue, and calls the ladder gave up on. */
@@ -137,14 +145,16 @@ export interface ToolLadder<TC> {
   /**
    * Record a failed attempt. The second element is `null` when the ladder
    * ABSORBED the failure — another attempt is armed, the fan-out must not see
-   * it — and the reason to settle with when the call is over.
+   * it — and the failure to settle with when the call is over. That failure is
+   * either the attempt's own, passed through untouched, or the ladder's
+   * `retry_exhausted` one; both carry a `_tag` beside the model's `reason`.
    */
   readonly err: (
     s: ToolResilienceState,
     call: ToolCall,
-    reason: string,
+    failure: ToolFailure,
     at: number,
-  ) => readonly [ToolResilienceState, string | null];
+  ) => readonly [ToolResilienceState, ToolFailure | null];
   /** A tool ladder's timer fired: re-issue the next attempt, or give the call up. */
   readonly onTimer: (
     s: ToolResilienceState,
@@ -256,9 +266,9 @@ export function createToolLadder<TC>(
     return { ...s, [call.name]: forget(slice, key) };
   };
 
-  const err: ToolLadder<TC>["err"] = (s, call, reason, at) => {
+  const err: ToolLadder<TC>["err"] = (s, call, failure, at) => {
     const rc = rcFor(call);
-    if (rc === null) return [s, reason];
+    if (rc === null) return [s, failure];
     const key = toolCallKey(call.name, call.callId);
     const before = sliceOf(s, call.name, rc);
     // `fail` records the attempt and consults the policy: it either arms the
@@ -268,7 +278,7 @@ export function createToolLadder<TC>(
     const [slice] = rc.fail(before, key, {
       type: MsgType.ResilientErr,
       key,
-      error: reason,
+      error: failure,
       at,
     });
     if (slice.calls[key]?.phase === "waiting_retry") {
@@ -283,8 +293,8 @@ export function createToolLadder<TC>(
     const attempts = before.retry[key]?.attempt;
     const settled =
       resilienceOf(call)?.retry === undefined
-        ? reason
-        : exhaustedReason((attempts ?? 0) + 1, reason);
+        ? failure
+        : exhaustedFailure((attempts ?? 0) + 1, failure);
     return [{ ...s, [call.name]: forget(slice, key) }, settled];
   };
 
@@ -311,7 +321,7 @@ export function createToolLadder<TC>(
         { ...s, [parsed.name]: forget(next, key) },
         {
           cmds: [],
-          settle: [{ callId: parsed.callId, reason: TOOL_TIMEOUT_TAG }],
+          settle: [{ callId: parsed.callId, failure: timeoutFailure() }],
         },
       ];
     }
@@ -412,10 +422,34 @@ function isDeadline(error: unknown): boolean {
 }
 
 /**
- * The reason a spent ladder settles under: the tag, the attempts it burned, and
+ * The failure a spent ladder settles under: the tag, the attempts it burned, and
  * the last attempt's own reason — so the model reads the actual failure and not
- * only the fact that a budget ran out. PURE.
+ * only the fact that a budget ran out, and host code branching on
+ * `_tag === "retry_exhausted"` reads `attempts` and `last` as fields rather than
+ * parsing them back out of the sentence. PURE.
  */
-function exhaustedReason(attempts: number, last: string): string {
-  return `${TOOL_RETRY_EXHAUSTED_TAG} ${JSON.stringify({ attempts, last })}`;
+function exhaustedFailure(attempts: number, last: ToolFailure): ToolFailure {
+  return taggedFailure({
+    _tag: TOOL_RETRY_EXHAUSTED_TAG,
+    attempts,
+    last: last.reason,
+  });
+}
+
+/** The failure a call that spent its `timeoutMs` budget settles under. PURE. */
+function timeoutFailure(): ToolFailure {
+  return taggedFailure({ _tag: TOOL_TIMEOUT_TAG });
+}
+
+/**
+ * Render a ladder-authored `{ _tag, …payload }` into the settled failure: the
+ * tag and its payload spread first, then `reason` and `kind` written over them,
+ * exactly as the router does for a tool's own declared failure. One rendering
+ * rule for both sources is what makes `onToolError`'s `switch` total. PURE.
+ */
+function taggedFailure(tagged: {
+  readonly _tag: string;
+  readonly [field: string]: unknown;
+}): ToolFailure {
+  return { ...tagged, reason: toolErrorReason(tagged), kind: "error" };
 }

@@ -1,8 +1,8 @@
 # Handle a tool failure
 
-**Goal:** declare a failure a tool may name, fail with it from the handler, and
+**Goal:** declare a failure a tool may name, fail with it from the handler,
 know exactly what the model reads on the next turn — including the three
-failures you never declared.
+failures you never declared — and branch on the tag in your own code.
 
 Every sample below is quoted from
 [`examples/agent-tool-failure.ts`](../../examples/agent-tool-failure.ts), which
@@ -125,7 +125,7 @@ is a `ToolOutcome<R>`:
 ```ts
 type ToolOutcome<R> =
   | { readonly kind: "ok"; readonly result: R }
-  | { readonly kind: "error"; readonly reason: string };
+  | { readonly kind: "error"; readonly reason: string; readonly _tag?: string };
 ```
 
 That is the whole union. Discriminate on `kind`; there is no third arm and no
@@ -143,10 +143,22 @@ So a `fail({ _tag: "gone" })` with no detail renders as exactly `gone`, and the
 detail you put beside the tag survives the rendering intact — which is the point.
 The model reads this next turn and is expected to recover from it.
 
-**The tag is flattened into that string.** By the time a `ToolOutcome` reaches
-your adapter there is no `_tag` field left to switch on; if you need to branch
-per failure, branch inside your handler or parse the leading token of `reason`
-yourself.
+**The tag rides beside that string, it is not replaced by it.** The `{ _tag,
+…payload }` you failed with is spread onto the outcome, so the failure the model
+reads as prose is the same failure your code reads as data:
+
+```json
+{"_tag":"not_found","key":"green","reason":"not_found {\"key\":\"green\"}","kind":"error"}
+```
+
+`kind` and `reason` are written last, so a payload field of either name can
+never shadow the discriminant or the model's channel.
+
+Why `_tag` is *optional* in the union above: a run persisted by 0.12.x or
+earlier was written before the tag was kept, so a `Store` can hand back a
+failure that has none. For the exhaustive per-tag type — where an unhandled
+failure is a compile error — take `onToolError` below, which is typed from the
+tools themselves.
 
 ## The transcript
 
@@ -154,21 +166,87 @@ Running the example prints one line per settled call — the `outcome` half is
 exactly what the adapter renders into the provider's `tool_result` block:
 
 ```
+hook: lookup missed the key green
 c1 lookup → {"kind":"ok","result":{"hex":"#2563eb"}}
-c2 lookup → {"kind":"error","reason":"not_found {\"key\":\"green\"}"}
-c3 lookup → {"kind":"error","reason":"thrown {\"message\":\"the table went away\"}"}
-c4 lookyp → {"kind":"error","reason":"unknown_tool {\"name\":\"lookyp\"}"}
-c5 lookup → {"kind":"error","reason":"malformed_args {\"name\":\"lookup\",\"issues\":[{\"path\":\"key\",\"message\":\"Invalid input: expected string, received number\"}]}"}
-c6 fetch_rate → {"kind":"error","reason":"retry_exhausted {\"attempts\":3,\"last\":\"upstream\"}"}
-c7 fetch_rate → {"kind":"error","reason":"timeout"}
+c2 lookup → {"_tag":"not_found","key":"green","reason":"not_found {\\"key\\":\\"green\\"}","kind":"error"}
+hook: lookup failed with thrown
+c3 lookup → {"_tag":"thrown","message":"the table went away","reason":"thrown {\\"message\\":\\"the table went away\\"}","kind":"error"}
+hook: no tool called lookyp
+c4 lookyp → {"_tag":"unknown_tool","name":"lookyp","reason":"unknown_tool {\\"name\\":\\"lookyp\\"}","kind":"error"}
+hook: lookup failed with malformed_args
+c5 lookup → {"_tag":"malformed_args","name":"lookup",…,"kind":"error"}
+hook: fetch_rate failed with retry_exhausted
+c6 fetch_rate → {"_tag":"retry_exhausted","attempts":3,"last":"upstream","reason":"retry_exhausted {\\"attempts\\":3,\\"last\\":\\"upstream\\"}","kind":"error"}
+c7 fetch_rate → {"_tag":"timeout","reason":"timeout","kind":"error"}
+hook: fetch_rate failed with timeout
 done: Blue is #2563eb; everything else failed.
 ```
 
 `c1` is the declared success. `c2` is the declared failure. `c3`, `c4` and `c5`
-are the three nobody declared. `c6` ran the handler three times before the budget
-ran out; `c7` ran it once and was over at 50ms while that attempt was still
-sleeping out its 500ms. Note that all six failures are the same shape —
-`{ kind: "error", reason }` — so an adapter that renders one renders all of them.
+are the three nobody declared. `c6` ran the handler three times before its retry
+budget ran out; `c7` ran it once and was over at 50ms while that attempt was
+still sleeping out its 500ms. Note that all six failures are the same shape —
+`{ kind: "error", _tag, …payload, reason }` — so an adapter that renders one
+renders all of them. The `hook:` lines are `onToolError`, below.
+
+## Branch on the failure in your own code
+
+The model gets `reason`. Your program gets the tag, through `onToolError`:
+
+```ts
+const agent = defineAgent({
+  model,
+  tools: [lookup],
+  instructions: "You look colours up.",
+  onToolError: (outcome, { name }) => {
+    switch (outcome._tag) {
+      case "not_found":
+        return console.log(`hook: ${name} missed the key ${outcome.key}`);
+      case "unknown_tool":
+        return console.log(`hook: no tool called ${name}`);
+      default:
+        return console.log(`hook: ${name} failed with ${outcome._tag}`);
+    }
+  },
+});
+```
+
+`outcome` is typed from **this agent's tools**, so the `switch` narrows the
+payload per tag — `outcome.key` above exists only in the `not_found` arm — and
+the tags it must cover are every failure the run can produce: each tool's
+declared tags, `thrown`, the kernel's `malformed_result`, the router's
+`unknown_tool` / `malformed_args`, and the ladder's `timeout` /
+`retry_exhausted` — the two a `tool()` spec's `timeoutMs` / `retry` can end a
+call with from outside the handler. Handle them all and the default arm is
+`never`; miss one and it is a compile error rather than a failure you find in a
+log.
+
+`ctx.name` is the tool the **model** asked for, which for an `unknown_tool` is
+the name it invented — there is no declared tool to name there.
+
+Four things worth knowing before you put anything real in it:
+
+- **It fires once per failed call** — including a call that climbed a retry
+  ladder, whose absorbed attempts the model is not shown and neither are you.
+  *When* it fires depends on whether the tool declared `timeoutMs` or `retry`.
+  A tool that declared neither is announced at the interpret boundary: after
+  the handler settled, before the failure is folded into the conversation. A
+  tool that declared either is announced off the fold instead, because its
+  ending is minted by the reducer rather than by a handler — a timeout has no
+  handler settle at all, since the call is over while its attempt is still
+  running. That is why `c7`'s `hook:` line above prints after its record and
+  the un-laddered ones print before theirs.
+- **It is awaited.** An async hook holds that settle until it resolves, so keep
+  it short and put anything slow on your own queue.
+- **A resume does not replay it.** An outcome a previous process already folded
+  is in the Model the `Store` handed back and is never re-interpreted, so a
+  durable run does not re-fire the hook over its own history.
+- **A throw is contained**, exactly as `onEvent`'s is: it is warned about and
+  the run goes on. The hook cannot fail the run.
+
+It observes; it does not decide. The model still reads `reason` next turn either
+way — the hook cannot suppress a failure, retry it, or rewrite what the model is
+told. Use it to log, to count, to page.
 
 ## Render it for your provider
 
@@ -202,4 +280,4 @@ instead of retrying the identical one.
 - [Build a durable agent](../tutorial/build-a-durable-agent.md) — where `tool()`
   and the adapter are introduced.
 - [`@demlik/tea/agent` reference](../reference/agent.md) — `tool`, `toolRouter`,
-  `toolErrorReason`, `ToolOutcome`.
+  `toolErrorReason`, `ToolOutcome`, `ToolError`, `defineAgent`.

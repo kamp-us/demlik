@@ -20,6 +20,7 @@ import type { RetryPolicy } from "../retry-backoff";
 import {
   type AgentMessage,
   type AgentTurn,
+  type DefinedAgentState,
   defineAgent,
   type ToolOutcome,
   tool,
@@ -95,7 +96,12 @@ describe("tool() — timeoutMs", () => {
     // The model is shown exactly one outcome for the call, and it is the
     // timeout: the handler's late success arrives for a callId nothing is
     // waiting on any more, so it settles nothing.
-    expect(shown(seen)).toEqual([{ kind: "error", reason: "timeout" }]);
+    // The `_tag` rides beside the model's `reason` here exactly as a tool's own
+    // declared failure does (#115) — a ladder-authored ending is not a second
+    // class of outcome, so host code branches on it the same way.
+    expect(shown(seen)).toEqual([
+      { _tag: "timeout", kind: "error", reason: "timeout" },
+    ]);
   });
 
   it("leaves no ladder entry behind once the call is over", async () => {
@@ -280,5 +286,110 @@ describe("the ladder slice is durable", () => {
     const agent = defineAgent({ model, tools: [flaky], instructions: "i" });
     const final = await agent.run("go", { store: memoryStore() });
     expect(JSON.parse(JSON.stringify(final))).toEqual(final);
+  });
+});
+
+/**
+ * The seam where #117 meets #115. The ladder ends a call from OUTSIDE the
+ * handler, so its two endings have no interpret settle to be read off — and the
+ * `onToolError` hook lives at the interpret boundary. Left alone, a tool that
+ * declared `timeoutMs` or `retry` would settle a failure the model reads and the
+ * host never hears about, which is the exact loss #115 was filed over.
+ */
+describe("the ladder's endings are structured failures like any other", () => {
+  it("hands `timeout` and `retry_exhausted` to onToolError once per call, with their payloads", async () => {
+    const slow = tool(
+      "slow",
+      {
+        description: "resolves long after its budget",
+        input: z.object({}),
+        ok: z.object({}),
+        err: [],
+        timeoutMs: 10,
+      },
+      async (_args, _ctx, { ok }) => {
+        await new Promise((r) => setTimeout(r, 300));
+        return ok({});
+      },
+    );
+    const flaky = tool(
+      "flaky",
+      {
+        description: "always fails",
+        input: z.object({}),
+        ok: z.object({}),
+        err: ["upstream"],
+        retry: FAST,
+      },
+      async (_args, _ctx, { fail }) => fail({ _tag: "upstream" }),
+    );
+    const { model } = scripted([asks("slow", "c1"), asks("flaky", "c2")]);
+    const hooked: unknown[] = [];
+    const agent = defineAgent({
+      model,
+      tools: [slow, flaky],
+      instructions: "i",
+      // UNFILTERED on purpose. `flaky`'s handler fails three times, and if the
+      // absorbed attempts reached the hook they would land in this array beside
+      // the two endings — so the assertion below is what pins once-per-call,
+      // not a `_tag` test that would have hidden them.
+      onToolError: (outcome) => void hooked.push(outcome),
+    });
+    await agent.run("go", { store: memoryStore() });
+    expect(hooked).toEqual([
+      { _tag: "timeout", kind: "error", reason: "timeout" },
+      {
+        _tag: "retry_exhausted",
+        attempts: FAST.maxAttempts,
+        last: "upstream",
+        kind: "error",
+        reason: `retry_exhausted {"attempts":${FAST.maxAttempts},"last":"upstream"}`,
+      },
+    ]);
+  });
+
+  it("does not re-announce a ladder failure a resumed run already folded", async () => {
+    // The hook's "not again on resume" clause has to hold for the fold-read
+    // path too: a `Store` hands back a Model whose records already carry the
+    // ladder's ending, and re-firing there would double every host's count.
+    const flaky = tool(
+      "flaky",
+      {
+        description: "always fails",
+        input: z.object({}),
+        ok: z.object({}),
+        err: ["upstream"],
+        retry: FAST,
+      },
+      async (_args, _ctx, { fail }) => fail({ _tag: "upstream" }),
+    );
+    // Shared across both runs, so it needs the type the runs would otherwise
+    // infer for it — an untyped `memoryStore()` is a `Store<unknown>`.
+    const store = memoryStore<DefinedAgentState<typeof flaky>>();
+    const runId = "resume-me";
+    const first = scripted([asks("flaky")]);
+    let hooked = 0;
+    // Built per drive rather than spread from a shared config object: hoisting
+    // the config would need `onToolError`'s parameter annotated, and annotating
+    // it blocks `T` inferring from `tools` — the agent widens to `unknown` and
+    // the `store` below stops matching. The tools type the hook, always.
+    const agentOn = (
+      model: (m: readonly AgentMessage[]) => Promise<AgentTurn>,
+    ) =>
+      defineAgent({
+        model,
+        tools: [flaky],
+        instructions: "i",
+        onToolError: (outcome) => {
+          if (outcome._tag === "retry_exhausted") hooked += 1;
+        },
+      });
+    await agentOn(first.model).run("go", { store, runId });
+    expect(hooked).toBe(1);
+    // Same store, same runId: the second drive boots on the finished Model, so
+    // the folded `retry_exhausted` record is READ and never announced again.
+    const second = scripted([]);
+    await agentOn(second.model).run("go", { store, runId });
+    expect(hooked).toBe(1);
   });
 });

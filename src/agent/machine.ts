@@ -34,7 +34,7 @@ import type {
   WiredToolCmd,
   WiredToolMsg,
 } from "./tool";
-import type { AgentState, AgentTurn } from "./types";
+import type { AgentState, AgentTurn, ToolFailure } from "./types";
 
 // ===========================================================================
 // Cmds + Msgs the agent speaks. Generic over the composed wrappers' shapes.
@@ -175,13 +175,19 @@ export interface AgentKnob<
     TC,
     [callId: string, result: R, at: number]
   >;
+  /**
+   * A bare `reason` string still works and settles an untagged failure — the
+   * hand-wired shape this verb has always had. Hand it a whole `ToolFailure`
+   * instead to keep the `{ _tag, …payload }` beside that reason, which is what
+   * `onToolError` and any host code discriminating on `_tag` then read (#115).
+   */
   readonly toolErr: AgentVerb1<
     Stage,
     P,
     O,
     R,
     TC,
-    [callId: string, reason: string, at: number]
+    [callId: string, failure: string | ToolFailure, at: number]
   >;
   readonly succeed: AgentVerb1<
     Stage,

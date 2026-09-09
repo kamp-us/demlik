@@ -255,7 +255,7 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
     expect(() => toolRouter([search, search])).toThrow(/declared twice/);
   });
 
-  it("outcomeOf reads a settled tool off its Msg and renders the failure as a reason", () => {
+  it("outcomeOf reads a settled tool off its Msg, tag and payload beside the reason", () => {
     const cmd = search({ callId: "c1", args: { q: "tea" } });
     expect(tools.outcomeOf(search.ok(cmd, { snippet: "s" }, 1))).toEqual({
       callId: "c1",
@@ -265,9 +265,29 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
       tools.outcomeOf(search.err(cmd, { _tag: "not_found", q: "x" }, 1)),
     ).toEqual({
       callId: "c1",
-      outcome: { kind: "error", reason: 'not_found {"q":"x"}' },
+      outcome: {
+        kind: "error",
+        _tag: "not_found",
+        q: "x",
+        reason: 'not_found {"q":"x"}',
+      },
     });
     expect(tools.outcomeOf({ type: "agent_start" })).toBeNull();
+  });
+
+  // The payload is the tool's, the discriminant and the model's channel are the
+  // router's — so a tool failing with a payload field called `kind` or `reason`
+  // widens nothing and lies about nothing (#115).
+  it("a payload field never shadows `kind` or `reason`", () => {
+    const cmd = search({ callId: "c1", args: { q: "tea" } });
+    const settled = tools.outcomeOf(
+      search.err(cmd, { _tag: "not_found", kind: "ok", reason: "mine" }, 1),
+    );
+    expect(settled?.outcome.kind).toBe("error");
+    expect(settled?.outcome).toMatchObject({
+      _tag: "not_found",
+      reason: 'not_found {"kind":"ok","reason":"mine"}',
+    });
   });
 
   it("toolErrorReason: the bare tag when there is no detail", () => {
@@ -396,7 +416,7 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
     ]);
   });
 
-  it("the folded records carry the parsed ok value and the rendered `{ _tag }` reasons", async () => {
+  it("the folded records carry the parsed ok value and the structured `{ _tag }` failures", async () => {
     const { records } = await drive([
       {
         content: "look",
@@ -416,16 +436,24 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
       kind: "ok",
       result: { snippet: "TEA folds the loop in one reducer." },
     });
+    // Each folded failure keeps the tag and payload it failed with beside the
+    // rendered reason — the router's, the tool's and the kernel's alike (#115).
     expect(byId.get("c2")?.outcome).toEqual({
       kind: "error",
+      _tag: "not_found",
+      q: "nope",
       reason: 'not_found {"q":"nope"}',
     });
     expect(byId.get("c3")?.outcome).toEqual({
       kind: "error",
+      _tag: "thrown",
+      message: "kb offline",
       reason: 'thrown {"message":"kb offline"}',
     });
     expect(byId.get("c5")?.outcome).toEqual({
       kind: "error",
+      _tag: "unknown_tool",
+      name: "teleport",
       reason: 'unknown_tool {"name":"teleport"}',
     });
     expect(byId.get("c7")?.outcome).toEqual({ kind: "ok", result: 0 });
