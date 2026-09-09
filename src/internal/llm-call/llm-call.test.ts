@@ -120,7 +120,8 @@ describe("createLlmCall — slice + verbs are resilient-call's (composition)", (
     expect(s.calls.plan).toEqual({
       phase: "running",
       input: call,
-      deadlineAtMs: 0, // no deadline brick → 0
+      // No deadline brick → nothing to spend; the anchor still tracks `at`.
+      budget: { remainingMs: 0, chargingSinceMs: 0 },
     });
   });
 
@@ -167,7 +168,7 @@ describe("createLlmCall — slice + verbs are resilient-call's (composition)", (
       phase: "waiting_retry",
       input: call,
       retryAtMs: 100,
-      deadlineAtMs: 0,
+      budget: { remainingMs: 0, chargingSinceMs: 100 },
     });
   });
 

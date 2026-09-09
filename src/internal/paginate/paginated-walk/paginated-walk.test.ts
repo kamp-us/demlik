@@ -159,7 +159,7 @@ describe("createPaginatedWalk — start", () => {
     expect(s.resilience.calls[PAGE_KEY]).toEqual({
       phase: "running",
       input: 0,
-      deadlineAtMs: 5_000,
+      budget: { remainingMs: 5_000, chargingSinceMs: 0 },
     });
   });
 
@@ -383,7 +383,8 @@ describe("createPaginatedWalk — pageErr (back off, don't advance)", () => {
       phase: "waiting_retry",
       input: 0,
       retryAtMs: 100, // rngZero → delay 0
-      deadlineAtMs: 5_000, // preserved from the original fetch (start at at=0)
+      // One budget across attempts: the original 5s, minus the 100ms spent.
+      budget: { remainingMs: 4_900, chargingSinceMs: 100 },
     });
   });
 
