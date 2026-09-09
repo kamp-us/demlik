@@ -32,7 +32,7 @@ import {
 } from "../index";
 import { MsgType, type MsgTypeValue } from "../protocol";
 import { malformedResult } from "../pure/core";
-import type { ToolCall, ToolOutcome } from "./types";
+import type { ToolCall, ToolOutcome, ToolResilience } from "./types";
 
 // ===========================================================================
 // Reserved names — the agent's own Msg vocabulary a tool may not mint over.
@@ -175,6 +175,11 @@ export type ToolDef<
 > = CmdDef<Name, ToolInput<Args>, Ok, E, R> & {
   readonly description: string;
   readonly args: z.ZodType<Args>;
+  /**
+   * The timeout / retry knob this tool declared, or `null` when it declared
+   * neither. `toolRouter` serves it to the agent as `resilienceOf`.
+   */
+  readonly resilience: ToolResilience | null;
   readonly interpret: (
     cmd: CmdValue<Name, ToolInput<Args>, E, R>,
     ctx: R & PortEmitter,
@@ -185,6 +190,7 @@ export type ToolDef<
 export type AnyToolDef = AnyCmdDef & {
   readonly description: string;
   readonly args: z.ZodType;
+  readonly resilience: ToolResilience | null;
   readonly interpret: (cmd: never, ctx: never) => Promise<unknown>;
 };
 
@@ -223,6 +229,24 @@ export function tool<
     readonly ok: z.ZodType<Ok>;
     readonly err: Tags;
     readonly needs?: Needs<R>;
+    /**
+     * The budget one call of this tool gets, in ms — the overall cap, measured
+     * from the first attempt and not restarted by a retry. When it elapses the
+     * call settles as a `ToolOutcome` error reading `timeout` and the loop moves
+     * on; the attempt is NOT cancelled (a promise cannot be), so it runs to its
+     * own end and its late settle folds nothing. Omit → no cap.
+     */
+    readonly timeoutMs?: number;
+    /**
+     * The backoff ladder a failed attempt of this tool climbs — the same
+     * `{ baseMs, factor, capMs, jitter, maxAttempts }` shape the brain call's
+     * `retry` takes. The ladder is folded into the Model and its wait is a timer
+     * Sub, so a process killed between two attempts resumes at the attempt it
+     * was on. A spent budget settles as a `ToolOutcome` error reading
+     * `retry_exhausted` with the attempt count and the last attempt's reason.
+     * Omit → the first failure is the outcome.
+     */
+    readonly retry?: ToolResilience["retry"];
   },
   handler: ToolHandler<Args, Ok, TaggedError<Tags[number]>, R>,
 ): ToolDef<Name, Args, Ok, TaggedError<Tags[number] | "thrown">, R> {
@@ -282,8 +306,26 @@ export function tool<
   return Object.assign(def, {
     description: spec.description,
     args: spec.input,
+    resilience: resilienceOf(spec),
     interpret,
   });
+}
+
+/**
+ * The declared knob as one value, or `null` when neither field was named. The
+ * `null` is load-bearing: it is what tells the ladder to leave this tool on the
+ * plain fan-out path, so a tool that declares nothing keeps behaving exactly as
+ * it did before the knob existed. PURE.
+ */
+function resilienceOf(spec: {
+  readonly timeoutMs?: number;
+  readonly retry?: ToolResilience["retry"];
+}): ToolResilience | null {
+  if (spec.timeoutMs === undefined && spec.retry === undefined) return null;
+  return {
+    ...(spec.timeoutMs !== undefined ? { timeoutMs: spec.timeoutMs } : {}),
+    ...(spec.retry !== undefined ? { retry: spec.retry } : {}),
+  };
 }
 
 function isTagged(value: unknown): value is Tagged {
@@ -370,6 +412,13 @@ export interface ToolRouter<T extends AnyToolDef> {
   readonly toolOf: (call: ToolCall) => ToolCmd<T>;
   /** One interpret handler per tool plus the `tool_rejected` handler. */
   readonly interpret: Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>;
+  /**
+   * The timeout / retry knob the called tool declared — `AgentConfigCore`'s
+   * `toolResilienceOf` seam, filled from the `tool()` specs. `null` for a tool
+   * that declared neither field and for a call no tool answers (the rejection
+   * path settles in the reducer and never runs an effect to time out). PURE.
+   */
+  readonly resilienceOf: (call: ToolCall) => ToolResilience | null;
   /**
    * Read a settled tool off a Msg: `null` when the Msg is not one of this
    * router's `<name>_ok` / `<name>_err`. The one place a `{ _tag }` failure is
@@ -460,7 +509,10 @@ export function toolRouter<T extends AnyToolDef>(
     return null;
   };
 
-  return { defs, toolOf, interpret, outcomeOf };
+  const resilienceOf = (call: ToolCall): ToolResilience | null =>
+    byName.get(call.name)?.resilience ?? null;
+
+  return { defs, toolOf, interpret, outcomeOf, resilienceOf };
 }
 
 // The two settled arms share one shape once the `type` has been matched
