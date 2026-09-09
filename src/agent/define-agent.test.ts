@@ -1111,6 +1111,10 @@ describe("onChunk — the streaming model port (#123)", () => {
         async (_m: readonly AgentMessage[], _s: ModelStream) => ANSWER,
       ),
     ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // #115 — the failure a tool declares is data the HOST can branch on, not only
 // prose the model reads. The tag and its payload ride the outcome beside the
 // rendered `reason`; `onToolError` is the lid's typed seam onto them.
