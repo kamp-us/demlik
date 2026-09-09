@@ -16,7 +16,8 @@ what you are trying to do, and it names the subpath you need.
 - [Show a run's progress while it runs](./show-a-run-in-progress.md) — pass
   `onEvent` to `agent.run` and observe the run's `TurnSettled` / `ToolSettled` /
   `RunDone` events as the kernel settles them, instead of waiting on the one
-  promise that resolves at the end.
+  promise that resolves at the end, and `onChunk` for the token deltas below a
+  turn.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.
@@ -26,7 +27,8 @@ what you are trying to do, and it names the subpath you need.
 - [Use a Vercel AI SDK model as the agent's brain](./use-a-vercel-ai-sdk-model.md) —
   bridge `generateText` to tea's `(messages) => AgentTurn` port so any provider the
   AI SDK speaks works, replacing the tutorial's hand-written Anthropic adapter and
-  round-tripping signed reasoning through `AgentTurn.provider`.
+  round-tripping signed reasoning through `AgentTurn.provider` — plus the
+  `streamText` variant for the streaming port.
 
 ## Test and verify
 

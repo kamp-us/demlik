@@ -76,6 +76,71 @@ export interface AgentTurn {
 }
 
 /**
+ * One partial piece of a turn the model is still producing — a token delta, as
+ * the provider emitted it.
+ *
+ * A chunk is NOT state. It never reaches the Model, the journal or the Store:
+ * by the time a turn is durable it has settled, and a delta that has not settled
+ * is not an outcome ADR 0011 could fold. So `TurnChunk` carries only what a
+ * progress surface renders — the text so far — and carries no identity, because
+ * an identity would invite someone to store it.
+ */
+export interface TurnChunk {
+  /** The text delta this chunk adds to the turn's `content`. */
+  readonly text: string;
+}
+
+/**
+ * The side channel a {@link StreamingModel} writes its deltas to — the second
+ * argument of the streaming port. One sink, called synchronously by the adapter
+ * as the provider yields; a throw from it is contained by the caller that
+ * supplied it, so a progress surface's defect cannot fail a model call.
+ */
+export interface ModelStream {
+  /** Hand one delta to whoever is watching this run. */
+  readonly onChunk: (chunk: TurnChunk) => void;
+}
+
+/**
+ * The streaming model port — `(messages, { onChunk }) => Promise<AgentTurn>`.
+ *
+ * The second, OPTIONAL shape of the brain. It differs from
+ * `PlainModel<Msg, T>` in one thing: it is handed a {@link ModelStream} it may
+ * write deltas to while the turn is in flight. What it RESOLVES is the same
+ * settled turn the plain port resolves, and that turn is the only thing the
+ * reducer ever sees — the deltas are a side channel that ends at the caller's
+ * listener.
+ *
+ * A `PlainModel` is assignable here (a function may declare fewer parameters
+ * than its type), which is what lets one config field accept either shape.
+ * `isStreamingModel` tells them apart at runtime so a plain model is still
+ * invoked with exactly one argument, as it always was.
+ */
+export type StreamingModel<Msg, T = unknown> = (
+  messages: readonly Msg[],
+  stream: ModelStream,
+) => Promise<T>;
+
+/**
+ * Whether a model port wants the {@link ModelStream} — read off its declared
+ * arity, which is the mark JavaScript already carries. No config flag, and no
+ * marker property for a consumer to forget: a brain written
+ * `async (messages, { onChunk }) => …` streams, and one written
+ * `async (messages) => …` does not.
+ *
+ * The cost of the arity read is the cost of every arity read — a model that
+ * declares a parameter it ignores, or takes `...args`, reads as the other shape.
+ * Both misreads are benign: a `...args` model is handed no stream and emits no
+ * chunks; a model with an unused second parameter is handed a stream it never
+ * writes to. Neither can change the settled turn. PURE.
+ */
+export function isStreamingModel(
+  model: (...args: never[]) => unknown,
+): boolean {
+  return model.length >= 2;
+}
+
+/**
  * Narrow an unknown to a `ToolCall` — the per-element witness `isAgentTurn`
  * folds over the `toolCalls` array. Checks the three load-bearing fields:
  * `callId`/`name` are strings, `args` is a non-null object. PURE — allocates no

@@ -23,9 +23,12 @@ import {
   type DefinedAgentState,
   defineAgent,
   isAgentTurn,
+  isStreamingModel,
   type LlmRunCmd,
+  type ModelStream,
   renderPrompt,
   status,
+  type TurnChunk,
   tool,
   toolRouter,
   type WiredToolMsg,
@@ -874,6 +877,240 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// #123 — the streaming model port. `defineAgent` takes a second, optional brain
+// shape — `async (messages, { onChunk }) => turn` — and forwards its deltas to
+// the `onChunk` run option. The ruling these tests pin is "streaming is a side
+// channel, never state": a chunk never reaches the Model, so the settled turn is
+// the same whether or not anyone watched, a replay reproduces that Model, and a
+// resume re-emits nothing.
+// ---------------------------------------------------------------------------
+
+describe("onChunk — the streaming model port (#123)", () => {
+  const PINNED = {
+    ctx: { kb },
+    runId: "run-pinned",
+    clock: () => 0,
+  } as const;
+
+  /**
+   * The same scripted brain as `scripted`, in the STREAMING shape: it emits one
+   * chunk per word of the turn it is about to resolve, then resolves that exact
+   * turn. Written inline with no parameter annotations, so the config field's
+   * type is what makes `messages` and `onChunk` typed — a reader pastes this.
+   */
+  function streamed(turns: readonly AgentTurn[]) {
+    const seen: (readonly AgentMessage[])[] = [];
+    let i = 0;
+    const model = async (
+      messages: readonly AgentMessage[],
+      { onChunk }: ModelStream,
+    ) => {
+      seen.push(messages);
+      const turn = turns[i] ?? { content: "", toolCalls: [] };
+      i += 1;
+      for (const text of turn.content.split(" ")) onChunk({ text });
+      return turn;
+    };
+    return { model, seen };
+  }
+
+  const words = (turn: AgentTurn) => turn.content.split(" ");
+
+  it("forwards the model's deltas to onChunk, each before the turn it belongs to settles", async () => {
+    const { model } = streamed([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const trace: string[] = [];
+    const final = await agent.run(INPUT, {
+      ...PINNED,
+      onChunk: (chunk) => trace.push(`chunk:${chunk.text}`),
+      onEvent: (event) => trace.push(event.type),
+    });
+
+    // Every delta the model wrote, in the order it wrote them.
+    expect(trace.filter((t) => t.startsWith("chunk:"))).toEqual(
+      [...words(ASK), ...words(ANSWER)].map((w) => `chunk:${w}`),
+    );
+    // And each turn's deltas arrive while that turn is still in flight — the
+    // whole point of the seam — so they land before its `TurnSettled`. Only
+    // that relation is asserted: how a chunk interleaves with an event of
+    // ANOTHER turn is the kernel's scheduling, not this seam's contract.
+    const settles = trace.flatMap((t, i) => (t === "TurnSettled" ? [i] : []));
+    const lastOf = (turn: AgentTurn) =>
+      trace.lastIndexOf(`chunk:${words(turn).at(-1)}`);
+    expect(lastOf(ASK)).toBeLessThan(settles[0] ?? -1);
+    expect(lastOf(ANSWER)).toBeLessThan(settles[1] ?? -1);
+    expect(trace.at(-1)).toBe("RunDone");
+    expect(final.output).toEqual(ANSWER);
+  });
+
+  it("the settled Model is identical whether or not the chunks were consumed", async () => {
+    const drive = (onChunk?: (chunk: TurnChunk) => void) =>
+      defineAgent({
+        model: streamed([ASK, ANSWER]).model,
+        tools: [search],
+        instructions: INSTRUCTIONS,
+      }).run(INPUT, { ...PINNED, onChunk });
+
+    const chunks: TurnChunk[] = [];
+    const watched = await drive((chunk) => chunks.push(chunk));
+    const unwatched = await drive();
+
+    // Chunks did flow — otherwise this asserts nothing.
+    expect(chunks.map((c) => c.text)).toEqual([
+      ...words(ASK),
+      ...words(ANSWER),
+    ]);
+    // And the durable Model does not record that they did — the two runs
+    // serialize to the same bytes. `run.lastProgressAt` is normalized away: it
+    // is the watchdog's wall clock, the run's timing rather than its contract.
+    const durable = (s: DefinedAgentState<typeof search>) =>
+      JSON.parse(
+        JSON.stringify({ ...s, run: { ...s.run, lastProgressAt: 0 } }),
+      );
+    expect(durable(unwatched)).toEqual(durable(watched));
+  });
+
+  it("a replay of a streamed run reproduces the same Model, with no chunk in the journal", async () => {
+    const { model } = streamed([ASK, ANSWER]);
+    const agent = defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const machine = agent.machine(INPUT);
+    const journal = memoryJournal<LidMsg>();
+    const handle = run(machine, { ctx: { kb } });
+    const runtime = await handle.ready;
+    const off = runtime.observe((msg) => {
+      void journal.append("run-1", msg);
+    });
+    const live = await driveToDone(
+      handle,
+      { type: "agent_start", runId: "run-1", at: 0 },
+      (s) => s.run.phase === "done",
+    );
+    off();
+
+    // Re-fold the recorded Msgs, purely. The replay makes no model call, so it
+    // produces no chunk — and it does not need one, because the journal records
+    // the settled turns and a chunk was never a Msg to record.
+    const msgs = (await journal.list("run-1")).map((e) => e.record);
+    const { state } = replay(machine, { msgs, ctx: { kb } });
+    expect(state.conversation).toEqual(live.conversation);
+    expect(state.output).toEqual(live.output);
+    expect(JSON.stringify(msgs)).not.toContain("onChunk");
+  });
+
+  it("a resumed run re-emits no chunk of a turn that already settled", async () => {
+    // Run 1 dies with the first turn and its tool settled — every delta of that
+    // turn is spent. A listener on run 2 must hear only run 2's own turn.
+    const first = streamed([ASK, ANSWER]);
+    const agent = defineAgent({
+      model: first.model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    });
+    const handle = run(agent.machine(INPUT), { ctx: { kb } });
+    const runtime = await handle.ready;
+    let snapshot: DefinedAgentState<typeof search> | undefined;
+    const off = runtime.observe((_msg, s) => {
+      if (
+        snapshot === undefined &&
+        s.conversation?.awaiting.kind === "llm" &&
+        s.conversation.toolRecords.length === 1
+      ) {
+        snapshot = JSON.parse(JSON.stringify(s));
+      }
+    });
+    await driveToDone(
+      handle,
+      { type: "agent_start", runId: "run-1", at: 0 },
+      (s) => s.run.phase === "done",
+    );
+    off();
+    if (snapshot === undefined) throw new Error("run 1 never settled its tool");
+
+    const chunks: TurnChunk[] = [];
+    const final = await defineAgent({
+      model: streamed([ANSWER]).model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, {
+      ctx: { kb },
+      store: memoryStore(snapshot),
+      onChunk: (chunk) => chunks.push(chunk),
+    });
+
+    expect(final.run.phase).toBe("done");
+    expect(chunks.map((c) => c.text)).toEqual(words(ANSWER));
+  });
+
+  it("a plain model is invoked exactly as before: one argument, no chunks", async () => {
+    // `rest` is not counted by `Function.length`, so this reads as the plain
+    // shape — and it records what the port was actually handed.
+    const rests: number[] = [];
+    let i = 0;
+    const turns = [ASK, ANSWER];
+    const model = async (
+      _messages: readonly AgentMessage[],
+      ...rest: readonly unknown[]
+    ) => {
+      rests.push(rest.length);
+      const turn = turns[i] ?? ANSWER;
+      i += 1;
+      return turn;
+    };
+    const chunks: TurnChunk[] = [];
+    const final = await defineAgent({
+      model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, { ...PINNED, onChunk: (chunk) => chunks.push(chunk) });
+
+    expect(final.output).toEqual(ANSWER);
+    expect(rests).toEqual([0, 0]);
+    expect(chunks).toEqual([]);
+  });
+
+  it("a throwing onChunk is contained: the run still resolves, the throw is warned", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const final = await defineAgent({
+        model: streamed([ASK, ANSWER]).model,
+        tools: [search],
+        instructions: INSTRUCTIONS,
+      }).run(INPUT, {
+        ...PINNED,
+        onChunk: () => {
+          throw new Error("progress bar defect");
+        },
+      });
+
+      // The model call did not reject, so no `resilient_err` was settled for a
+      // defect in the listener — the run reached its terminal Model.
+      expect(final.run.phase).toBe("done");
+      expect(final.output).toEqual(ANSWER);
+      expect(warn).toHaveBeenCalledTimes(
+        words(ASK).length + words(ANSWER).length,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("isStreamingModel reads the arity, so neither shape needs a config flag", () => {
+    expect(
+      isStreamingModel(async (_m: readonly AgentMessage[]) => ANSWER),
+    ).toBe(false);
+    expect(
+      isStreamingModel(
+        async (_m: readonly AgentMessage[], _s: ModelStream) => ANSWER,
+      ),
+    ).toBe(true);
 // #115 — the failure a tool declares is data the HOST can branch on, not only
 // prose the model reads. The tag and its payload ride the outcome beside the
 // rendered `reason`; `onToolError` is the lid's typed seam onto them.
