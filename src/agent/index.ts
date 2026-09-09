@@ -26,8 +26,10 @@
  *     `LlmCall` per turn, structured-output parsed, retry composed in. The agent
  *     delegates the resilient slice + verbs and reuses the detached handler.
  *   - `../fan-out` — the tool calls a turn produced. Tools dispatch SERIALLY by
- *     default (concurrency 1); fan-out generalizes that to bounded concurrency
- *     `config.toolConcurrency`. Each
+ *     default (concurrency 1); fan-out generalizes that to a bounded number
+ *     LAUNCHED per transition, `config.toolConcurrency` — a ledger knob, not a
+ *     wall-clock one, since `runInterpret` never interleaves two Cmd handlers
+ *     (ADR 0018). Each
  *     tool is an `of(call)` Cmd the consumer's own interpret performs; results
  *     route back through `toolOk` / `toolErr`. When the batch drains, the agent
  *     folds the gathered results back into the conversation and fires the next
@@ -85,7 +87,7 @@
  *     schemas: { plan: planSchema, act: turnSchema, report: reportSchema },
  *     turnOf: (stage) => stageToPurpose[stage],   // which brain call a stage runs
  *     toolOf: (call): RunTool => ({ type: "run_tool", ...call }),
- *     toolConcurrency: 1,                          // serial (default)
+ *     toolConcurrency: 1,                          // launched per transition
  *     deadlineMs: 10 * 60_000,
  *     maxTurns: 60,
  *     retry: defaultRetryPolicy,
