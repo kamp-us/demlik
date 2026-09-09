@@ -142,6 +142,7 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
         "conversation",
         "compaction",
         "toolResilience",
+        "refusedCalls",
         "failure",
         "output",
         "instructions",

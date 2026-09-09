@@ -438,6 +438,15 @@ export type AgentEvent<R> =
  * exactly once (the agent is terminal there and dispatches no further
  * transition), so the event fires once per run.
  *
+ * A `ToolSettled` is gated on `state.refusedCalls` (#145): a call whose public
+ * outcome was already a failure — the ladder's `timeout` / `retry_exhausted`,
+ * or the tool's own error — never emits a success here, however late its
+ * abandoned attempt resolves. Both settle arms read the same list, so a
+ * router-wired agent and a fan-out-wired one are silent on the same calls, and
+ * the decision is made in the PURE layer rather than filtered at a
+ * subscription seam — `runtime.on` and `defineAgent`'s `onEvent` see one
+ * stream.
+ *
  * A machine wired with `toMachine({ tools })` settles tools through the
  * router's `<name>_ok` Msgs instead of `agent_tool_ok`; pass the same router
  * here so those settles project to `ToolSettled` too.
@@ -465,11 +474,16 @@ export function agentEvents<
   const tools = opts?.tools;
   return (msg, state) => {
     const events: AgentEvent<R>[] = [];
+    // A call the ladder already settled is silent on EVERY public channel: the
+    // fan-out drops its late value, and `state.refusedCalls` is what lets this
+    // projector drop the matching event (#145). The `??` is the same
+    // rehydration guard the reducer's own reader carries.
+    const refused = new Set(state.refusedCalls ?? []);
     const routed = tools === undefined ? null : tools.outcomeOf(msg);
     if (routed !== null) {
       // A router-settled tool: its `_ok` is the public ToolSettled, its `_err`
       // stays silent like `agent_tool_err`. The router's `R` is the machine's.
-      if (routed.outcome.kind === "ok") {
+      if (routed.outcome.kind === "ok" && !refused.has(routed.callId)) {
         events.push({
           type: "ToolSettled",
           callId: routed.callId,
@@ -477,7 +491,7 @@ export function agentEvents<
         });
       }
     } else {
-      projectOwn(msg as AgentMachineMsg<P, O, R>, events);
+      projectOwn(msg as AgentMachineMsg<P, O, R>, events, refused);
     }
     // RunDone is a STATE-shaped event (the run's terminal output, #46), not a
     // Msg-shaped one: the transition that lands `done` is the final brain turn
@@ -496,6 +510,7 @@ export function agentEvents<
 function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   msg: AgentMachineMsg<P, O, R>,
   events: AgentEvent<R>[],
+  refused: ReadonlySet<string>,
 ): void {
   switch (msg.type) {
     case MsgType.ResilientOk:
@@ -506,12 +521,16 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
       events.push({ type: "TurnSettled", turn: msg.result.output });
       break;
     case MsgType.AgentToolOk:
-      // The PRIVATE tool-fan-out settle Msg → the public ToolSettled.
-      events.push({
-        type: "ToolSettled",
-        callId: msg.callId,
-        result: msg.result,
-      });
+      // The PRIVATE tool-fan-out settle Msg → the public ToolSettled, unless
+      // this `callId` already ended in a failure the model was told about: then
+      // this is the abandoned attempt resolving late, and it is refused (#145).
+      if (!refused.has(msg.callId)) {
+        events.push({
+          type: "ToolSettled",
+          callId: msg.callId,
+          result: msg.result,
+        });
+      }
       break;
     // start / boot / timer / the *_err arms / the compaction settles carry no
     // public event. (No `default`: the switch is exhaustive over the Msg

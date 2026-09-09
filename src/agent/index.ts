@@ -354,6 +354,7 @@ export function createAgent<
       conversation: null,
       compaction: compactRc.init(),
       toolResilience: ladder.init(),
+      refusedCalls: [],
       failure: null,
       output: null,
       instructions: config.instructions ?? null,
@@ -491,6 +492,9 @@ export function createAgent<
       // A restart also clears any prior compaction slice — a fresh run never
       // inherits the previous run's summarize retry bookkeeping (#85).
       compaction: compactRc.init(),
+      // …and the prior run's refusals: those `callId`s belong to a batch this
+      // run will never settle, so carrying them would only grow the Model (#145).
+      refusedCalls: [],
     };
     return fireBrainCall(withRun, at);
   }
@@ -679,6 +683,16 @@ export function createAgent<
   }
 
   /**
+   * The refused-`callId` list, defaulting to empty — the same rehydration guard
+   * `toolSlice` carries, for the same reason: a Model persisted before the
+   * field existed comes back without it, and it must read as "nothing refused
+   * yet" rather than crash. PURE.
+   */
+  function refusedOf(s: State): readonly string[] {
+    return s.refusedCalls ?? [];
+  }
+
+  /**
    * Arm every launch the fan-out just authorized. The fan-out's own launch Cmds
    * are DISCARDED in favour of these: a policied tool's effect must be emitted
    * by its resilient gate (which is what records the attempt and arms the
@@ -731,7 +745,14 @@ export function createAgent<
       tools.running,
       at,
     );
-    const s: State = { ...prev, toolResilience };
+    // A failure IS this call's public outcome: `onToolError` reports it now, so
+    // any later success for the same `callId` is a late result of an abandoned
+    // attempt and must be silent on every public channel (#145). Recorded here,
+    // at the one settle body both the ladder's deadline arm and a tool's own
+    // error pass through, so the projector needs no second rule per source.
+    const refusedCalls =
+      outcome.kind === "ok" ? refusedOf(prev) : [...refusedOf(prev), callId];
+    const s: State = { ...prev, toolResilience, refusedCalls };
 
     const foldedConv: Conversation<R> = {
       ...conv,

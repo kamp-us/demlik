@@ -603,6 +603,26 @@ export interface AgentState<
   readonly toolResilience: Readonly<
     Record<string, ResilientState<ToolCall, null>>
   >;
+  /**
+   * The `callId`s whose PUBLIC outcome is already a failure (#145) — a tool the
+   * ladder settled on its deadline or on a spent retry budget, or one whose own
+   * error was folded. A promise cannot be cancelled, so the abandoned attempt
+   * may still resolve; when it does, its late `_ok` names a `callId` listed
+   * here and every public channel stays silent about it.
+   *
+   * The fan-out already drops the late value (its entry is gone, so the fold is
+   * a no-op), but "folds nothing" and "emits nothing" are two different facts:
+   * the event projector is Msg-shaped and would otherwise push a `ToolSettled`
+   * for a `callId` `onToolError` already reported as `{ _tag: "timeout" }`. The
+   * projector reads the post-transition state, by which point the ladder has
+   * forgotten the key, so the discriminator is carried HERE rather than derived
+   * from a presence check that erases both readings.
+   *
+   * Plain data, one string per failed call, cleared by `start` with the rest of
+   * the prior run's bookkeeping. It survives the batch drain and the stage
+   * retire on purpose — that is exactly when a late settle arrives.
+   */
+  readonly refusedCalls: readonly string[];
   readonly failure: AgentFailure | null;
   /**
    * The run's terminal output — the FIRST-CLASS result (issue #46). `null`
