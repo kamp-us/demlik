@@ -158,7 +158,7 @@ describe("createResilientCall — the gate (attempt)", () => {
     expect(s.calls.k).toEqual({
       phase: "running",
       input: "payload",
-      deadlineAtMs: 5_042,
+      budget: { remainingMs: 5_000, chargingSinceMs: 42 },
     });
     expect(s.bucket.tokens).toBe(1); // one token consumed
   });
@@ -254,7 +254,9 @@ describe("createResilientCall — succeed / fail", () => {
       phase: "waiting_retry",
       input: "in",
       retryAtMs: 100,
-      deadlineAtMs: 5_100, // deadline preserved from the original attempt
+      // One budget across attempts: attempt and failure both at 100, so
+      // nothing is charged yet and the full 5s carries into the retry.
+      budget: { remainingMs: 5_000, chargingSinceMs: 100 },
     });
   });
 
@@ -402,6 +404,102 @@ describe("createResilientCall — subs", () => {
       true,
     );
     expect(subs.length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The deadline budget — charged in in-process elapsed time, read before the
+// effect is emitted (#144). The bug this pins was an absolute wall-clock stamp
+// on the phase: it kept running while no process existed, so a resumed ladder
+// re-issued an attempt it had no budget for and discarded the result.
+// ---------------------------------------------------------------------------
+
+describe("createResilientCall — the deadline budget", () => {
+  it("charges only the time between transitions, and settles when it is gone", () => {
+    const rc = createResilientCall<string, string>(fullConfig, rngZero);
+    let s = rc.init();
+    [s] = rc.attempt(s, "k", "in", 0);
+    // The attempt burns 4_900 of the 5_000ms budget before failing.
+    [s] = rc.fail(s, "k", {
+      type: "resilient_err",
+      key: "k",
+      error: "e",
+      at: 4_900,
+    });
+    expect(s.calls.k).toMatchObject({
+      phase: "waiting_retry",
+      budget: { remainingMs: 100, chargingSinceMs: 4_900 },
+    });
+
+    // The retry timer fires 200ms later — past what is left. The gate settles
+    // there, BEFORE the effect: no run Cmd, so the port is never reached for a
+    // result the call could not use.
+    const [spent, cmds] = rc.onTimer(s, {
+      type: "deadline_exceeded",
+      id: "resilient:retry:k",
+      atMs: 5_100,
+    });
+    expect(cmds).toEqual([]);
+    expect(spent.calls.k).toEqual({
+      phase: "failed",
+      error: {
+        _tag: "deadline_exceeded",
+        id: "resilient:deadline:k",
+        atMs: 5_100,
+      },
+    });
+  });
+
+  it("resume re-anchors a live call without spending or refunding its budget", () => {
+    const rc = createResilientCall<string, string>(fullConfig, rngZero);
+    let s = rc.init();
+    [s] = rc.attempt(s, "k", "in", 0);
+    [s] = rc.fail(s, "k", {
+      type: "resilient_err",
+      key: "k",
+      error: "e",
+      at: 1_000,
+    });
+    // An hour of downtime, then a wake. `remainingMs` is untouched — the gap is
+    // time in which no attempt ran — and the anchor moves to the wake, so the
+    // deadline Sub arms for what is left rather than for an instant long past.
+    const woken = rc.resume(JSON.parse(JSON.stringify(s)), 3_600_000);
+    expect(woken.calls.k).toMatchObject({
+      phase: "waiting_retry",
+      budget: { remainingMs: 4_000, chargingSinceMs: 3_600_000 },
+    });
+    expect(rc.subs(woken)).toContainEqual(
+      deadlineSub("resilient:deadline:k", 3_600_000 + 4_000),
+    );
+  });
+
+  it("leaves a call with no deadline brick unbudgeted forever", () => {
+    const rc = createResilientCall<string, string>(
+      {
+        retry: {
+          baseMs: 1,
+          factor: 1,
+          capMs: 1,
+          maxAttempts: 3,
+          jitter: "none",
+        },
+      },
+      rngZero,
+    );
+    let s = rc.init();
+    [s] = rc.attempt(s, "k", "in", 0);
+    // A budget of 0 means "no cap", never "spent": a huge elapsed gap neither
+    // pushes it negative nor settles the call.
+    [s] = rc.fail(s, "k", {
+      type: "resilient_err",
+      key: "k",
+      error: "e",
+      at: 9_999_999,
+    });
+    expect(s.calls.k).toMatchObject({
+      phase: "waiting_retry",
+      budget: { remainingMs: 0 },
+    });
   });
 });
 

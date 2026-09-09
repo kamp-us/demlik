@@ -419,7 +419,8 @@ describe("createReconciler — scan resilience", () => {
       phase: "waiting_retry",
       input: 0,
       retryAtMs: 100, // rngZero → delay 0
-      deadlineAtMs: 5_000,
+      // 5s budget opened at 0, charged the 100ms the failed page fetch took.
+      budget: { remainingMs: 4_900, chargingSinceMs: 100 },
     });
   });
 

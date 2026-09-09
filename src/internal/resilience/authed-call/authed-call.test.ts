@@ -171,7 +171,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     expect(s.resilience.calls.k).toEqual({
       phase: "running",
       input: "payload",
-      deadlineAtMs: 5_042,
+      budget: { remainingMs: 5_000, chargingSinceMs: 42 },
     });
   });
 
@@ -199,7 +199,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
       phase: "waiting_retry",
       input: "in",
       retryAtMs: 100,
-      deadlineAtMs: 5_100,
+      budget: { remainingMs: 5_000, chargingSinceMs: 100 },
     });
     // The auth dimension is untouched by a generic failure.
     expect(s.auth).toEqual({ token: null, stale: false });
