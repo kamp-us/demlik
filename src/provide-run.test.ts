@@ -13,6 +13,7 @@ import {
   type Reducer,
   replay,
   run,
+  type Store,
   value,
 } from "./index";
 import { memoryStore } from "./mem";
@@ -259,6 +260,75 @@ describe("run(ctx: provide(…)) — failure at the edges", () => {
     expect(reported).toEqual([{ error: failure, phase: "provide" }]);
 
     await handle.stop();
+  });
+
+  // A boot failure AFTER the graph opened is the other half of the same
+  // symmetry (#185): `open()` unwinds its own acquire half, so a later boot step
+  // has to unwind the whole graph before `ready` rejects. Without it a host that
+  // awaits `ready` and rethrows — the shape the scope how-to §3 shows — leaks
+  // every provider until someone remembers to call `stop()`.
+  it("releases the graph in reverse when `store.load()` throws after it opened", async () => {
+    const trace: string[] = [];
+    const store: Store<State> = {
+      load: () => Promise.reject(new Error("disk gone")),
+      save: () => Promise.resolve(),
+      migrate: () => null,
+    };
+
+    const handle = run(dbMachine(), { ctx: dbGraph(trace), store });
+    const failure = await handle.ready.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect((failure as Error).message).toBe("disk gone");
+    expect(trace).toEqual([
+      "acquire:config",
+      "acquire:db",
+      "release:db",
+      "release:config",
+    ]);
+
+    // The rejection already ended the lifetime, so the `stop()` a careful host
+    // still calls is a no-op — never a second release.
+    await handle.stop();
+    expect(trace).toEqual([
+      "acquire:config",
+      "acquire:db",
+      "release:db",
+      "release:config",
+    ]);
+  });
+
+  it("releases the graph in reverse when `store.migrate()` throws after it opened", async () => {
+    const trace: string[] = [];
+    const store: Store<State> = {
+      load: () => Promise.resolve({ phase: "running", writes: 0 }),
+      save: () => Promise.resolve(),
+      migrate: () => {
+        throw new Error("unreadable schema");
+      },
+    };
+
+    const handle = run(dbMachine(), { ctx: dbGraph(trace), store });
+    const failure = await handle.ready.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect((failure as Error).message).toBe("unreadable schema");
+    expect(trace).toEqual([
+      "acquire:config",
+      "acquire:db",
+      "release:db",
+      "release:config",
+    ]);
+
+    await handle.stop();
+    expect(trace.filter((line) => line.startsWith("release:"))).toEqual([
+      "release:db",
+      "release:config",
+    ]);
   });
 
   it("routes a throwing release to `onError` without stranding its siblings", async () => {
