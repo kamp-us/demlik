@@ -44,7 +44,7 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found", "rate_limited"],
-    needs: Cmd.needs<KbCtx>(),
+    requirements: Cmd.requirements<KbCtx>(),
   },
   async ({ q }, ctx, { ok, fail }) => {
     // The `R` slice lands on the handler's ctx: `ctx.kb` is typed.

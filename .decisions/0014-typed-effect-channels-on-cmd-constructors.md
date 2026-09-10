@@ -96,6 +96,15 @@ persisted shape; widening a handler's `E` to `unknown` to "keep it simple".
   and ladder endings (`timeout`, `retry_exhausted`, #117) carry a tag the same way. This is
   [0011](./0011-errors-as-data.md) applied literally at one more boundary; the decision text
   above is unchanged.
+- **#189 — one word per concept for the `R` channel (2026-09-10).** `R` is glossed
+  **Requirements**, Effect's word. A Cmd declares it with `requirements`
+  (`requirements: Cmd.requirements<{ db: Db }>()`, read back as `RequirementsOf<C>`) — the full
+  word, so there is no `requires`/`requirements` duality — and what SATISFIES it
+  is `provide`. `deps` stays on `layer` and means something else: the edges between providers in
+  the host-side graph, DI's word for DI's concept ([0019](./0019-a-host-side-provider-graph-satisfies-r.md)).
+  The field shipped as `needs`, which matches no reference system; it was renamed with no alias
+  because it was still unreleased ([0016](./0016-removal-lands-in-a-minor-at-0x.md)). Ruling:
+  Can, 2026-09-10, on https://github.com/kamp-us/demlik/issues/189.
 
 ## Records
 
