@@ -109,7 +109,7 @@ export const telemetryEmit = Cmd.define("$telemetry:emit", {
   input: z.object({ event: z.custom<TelemetryEvent>() }),
   ok: z.void(),
   err: [],
-  needs: Cmd.needs<TelemetryPorts>(),
+  requires: Cmd.requires<TelemetryPorts>(),
 });
 export type TelemetryEmitCmd = CmdOf<typeof telemetryEmit>;
 

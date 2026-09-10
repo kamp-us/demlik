@@ -84,8 +84,6 @@ import { … } from "@demlik/tea";
 | `ManagedResourceBattery` | Interface | What the battery returns: a `.sub(key)` builder for `subscriptions`, the `.subscribe` handler for the machine's `subscribe` record, a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held, and a `.subIdFor(key)` for tests. |
 | `ManagedResourceSub` | Interface | The Sub the battery builds. |
 | `msgKeysOf` | Function |  |
-| `Needs` | Type | Phantom carrier for a Cmd's `R`. |
-| `NeedsOf` | Type |  |
 | `nextSeq` | Function | The next sequence number to assign: one past the highest `seq` in the buffer, or `0` for an empty buffer. |
 | `NO_ACK` | Variable | The "nothing applied yet" cursor — the ack value for a server that has applied no client input at all. |
 | `NoCellError` | Class |  |
@@ -110,6 +108,8 @@ import { … } from "@demlik/tea";
 | `Reducer` | Type |  |
 | `replay` | Function |  |
 | `RequiredCtx` | Type | The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected. |
+| `Requires` | Type | Phantom carrier for a Cmd's `R`. |
+| `RequiresOf` | Type |  |
 | `run` | Function |  |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |

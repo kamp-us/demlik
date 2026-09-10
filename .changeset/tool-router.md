@@ -5,10 +5,10 @@
 `tool()` + `toolRouter()` on `@demlik/tea/agent` (experimental tier). Declare a tool once and
 derive what a consumer used to hand-write twice — the `toolOf` mapping and the interpret cell.
 
-- `tool(name, { input, ok, err, needs }, handler)` — one colocated value built on `Cmd.define`
+- `tool(name, { input, ok, err, requires }, handler)` — one colocated value built on `Cmd.define`
   (#44). The Cmd's input is the model's call `{ callId, args }` with `args` parsed against
   `input`; the handler returns `Result<Ok, E>` over the declared `_tag` union (an undeclared tag
-  is a compile error) and reads the `needs` slice off its ctx, demanded at `run`. The cell
+  is a compile error) and reads the `requires` slice off its ctx, demanded at `run`. The cell
   settles through the minted `<name>_ok` / `<name>_err`: a thrown handler becomes `_err`
   (`{ _tag: "thrown", message }`, or the thrown `_tag` when it is a declared one), never a
   rejection; an `_ok` value the `ok` schema rejects becomes the kernel's `malformed_result`.

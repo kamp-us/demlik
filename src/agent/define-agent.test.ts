@@ -55,7 +55,7 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found"],
-    needs: Cmd.needs<{ readonly kb: Kb }>(),
+    requires: Cmd.requires<{ readonly kb: Kb }>(),
   },
   async ({ q }, ctx, { ok, fail }) => {
     const snippet = ctx.kb.lookup(q);
@@ -1712,7 +1712,7 @@ const slow = tool(
     input: z.object({ id: z.string() }),
     ok: z.object({ id: z.string() }),
     err: ["never"],
-    needs: Cmd.needs<{
+    requires: Cmd.requires<{
       readonly log: string[];
       // Per-call durations, so a test can make the SECOND call finish first and
       // ask what that does to the fold.

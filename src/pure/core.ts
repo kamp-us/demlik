@@ -163,13 +163,13 @@ export type Cmd<T extends string = string, E = unknown, R = unknown> = {
 
 // === Typed effect channels: reading `E` and `R` back off a Cmd (ADR 0014) ===
 //
-// `NeedsOf<C>` is one Cmd's `R`; `RequiredCtx<C>` is the intersection over a
+// `RequiresOf<C>` is one Cmd's `R`; `RequiredCtx<C>` is the intersection over a
 // whole Cmd union — what `run` demands of `ctx` beside the machine's own `Ctx`.
-// An untyped Cmd (`{ type }`, `__r` absent) infers `unknown` — "needs
+// An untyped Cmd (`{ type }`, `__r` absent) infers `unknown` — "requires
 // nothing", the identity of `&` — so a machine of hand-written Cmds demands
 // exactly what it demanded before. `never` (a cmdless machine) intersects to
 // `unknown` too.
-export type NeedsOf<C> = C extends { readonly __r?: infer R } ? R : unknown;
+export type RequiresOf<C> = C extends { readonly __r?: infer R } ? R : unknown;
 
 /** The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. */
 export type ErrorsOf<C> = C extends { readonly __e?: infer E } ? E : unknown;
@@ -183,11 +183,11 @@ type UnionToIntersection<U> = (
   : never;
 
 // `unknown` is the identity of `&` but the annihilator of `|`: a union of
-// `NeedsOf` over a MIXED Cmd set (`{ http } | unknown`) collapses to `unknown`
-// before it can be intersected, and the machine demands nothing. Box each
-// member first so the "needs nothing" arms can be dropped, not absorbed.
-type NeedsBoxed<C> = C extends unknown ? [NeedsOf<C>] : never;
-type KnownNeeds<B> = B extends [infer R]
+// `RequiresOf` over a MIXED Cmd set (`{ http } | unknown`) collapses to
+// `unknown` before it can be intersected, and the machine demands nothing. Box
+// each member first so the "requires nothing" arms can be dropped, not absorbed.
+type RequiresBoxed<C> = C extends unknown ? [RequiresOf<C>] : never;
+type KnownRequires<B> = B extends [infer R]
   ? unknown extends R
     ? never
     : R
@@ -197,14 +197,16 @@ type KnownNeeds<B> = B extends [infer R]
  * The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected.
  * `run` types its `ctx` as `Ctx & RequiredCtx<C>`, so handing a machine whose
  * Cmds need `{ http }` to a `run` whose ctx lacks it is a compile error. A Cmd
- * that needs nothing — untyped, or `Cmd.define`d without `needs` — leaves the
- * demand of its siblings intact (#56).
+ * that requires nothing — untyped, or `Cmd.define`d without `requires` — leaves
+ * the demand of its siblings intact (#56).
  *
  * This is the requirement. `provide` is what satisfies it: hand `run` a
  * `provide({ … })` graph in place of the object and the same `Ctx` is built once
  * at boot, in dependency order, and released in reverse when the run ends.
  */
-export type RequiredCtx<C> = UnionToIntersection<KnownNeeds<NeedsBoxed<C>>>;
+export type RequiredCtx<C> = UnionToIntersection<
+  KnownRequires<RequiresBoxed<C>>
+>;
 
 // === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1) ===
 //
@@ -217,7 +219,7 @@ export type RequiredCtx<C> = UnionToIntersection<KnownNeeds<NeedsBoxed<C>>>;
 // Everything a constructor names is a TYPE or a SCHEMA; the value it returns is
 // still the dead record `{ type, ...input }`. `input` and `ok` are zod schemas
 // (zod is the one runtime dependency this adds); `err` is the `_tag` list a
-// handler may settle with; `needs` is the `Ctx` slice the handler reads.
+// handler may settle with; `requires` is the `Ctx` slice the handler reads.
 //
 // The failure union always carries one kernel tag beside the declared ones:
 // `MalformedResult`, minted at the interpret edge when a handler's `_ok` value
@@ -273,11 +275,11 @@ export function malformedResult(
 export type CmdInput = { readonly type?: never } & Record<string, unknown>;
 
 /**
- * Phantom carrier for a Cmd's `R`. `Cmd.needs<{ http: Http }>()` is how a
+ * Phantom carrier for a Cmd's `R`. `Cmd.requires<{ http: Http }>()` is how a
  * declaration names the `Ctx` slice its handler reads — a type, not a value, so
  * nothing is constructed and nothing is checked at runtime.
  */
-export type Needs<R> = { readonly __r?: R };
+export type Requires<R> = { readonly __r?: R };
 
 /** The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. */
 export type CmdValue<
@@ -514,7 +516,7 @@ function defineCmd<
     readonly input: z.ZodType<Input>;
     readonly ok: z.ZodType<Ok>;
     readonly err: Tags;
-    readonly needs?: Needs<R>;
+    readonly requires?: Requires<R>;
   },
 ): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>, R> {
   type E = TaggedError<Tags[number]>;
@@ -970,11 +972,11 @@ export const Cmd = {
    *     input: z.object({ url: z.string() }),
    *     ok: z.object({ status: z.number(), body: z.string() }),
    *     err: ["not_found", "timeout"],
-   *     needs: Cmd.needs<{ http: Http }>(),
+   *     requires: Cmd.requires<{ http: Http }>(),
    *   });
    *
    * `err` is the `_tag` list the handler may settle with; the runtime adds
-   * `malformed_result` for an `_ok` value the `ok` schema rejects. `needs`
+   * `malformed_result` for an `_ok` value the `ok` schema rejects. `requires`
    * names the `Ctx` slice the handler reads — `run` refuses a ctx without it.
    */
   define: defineCmd,
@@ -983,7 +985,7 @@ export const Cmd = {
    * Name a Cmd's `R` — the `Ctx` slice its handler reads. A phantom: nothing
    * is built, nothing is checked at runtime; the type is what `run` reads.
    */
-  needs: <R>(): Needs<R> => ({}),
+  requires: <R>(): Requires<R> => ({}),
 
   /**
    * The empty Cmd array. Typed `readonly never[]` so it's assignable to any
@@ -1416,10 +1418,10 @@ export type NoCtx = Readonly<Record<never, never>>;
 // re-declaring the mapped type at every effects module.
 //
 // **The `R` channel lands here.** A cell's `ctx` is the machine's `Ctx`
-// intersected with ITS Cmd's `NeedsOf` — so a `Cmd.define`d effect's handler
+// intersected with ITS Cmd's `RequiresOf` — so a `Cmd.define`d effect's handler
 // reads `ctx.http` typed, while `run` (via `RequiredCtx`) is what guarantees
-// the slice was actually supplied. An untyped Cmd's `NeedsOf` is `unknown`, so
-// every hand-written handler's `ctx` is exactly what it was.
+// the slice was actually supplied. An untyped Cmd's `RequiresOf` is `unknown`,
+// so every hand-written handler's `ctx` is exactly what it was.
 //
 // Strengthens invariant 2 (the record form has no fall-through default to
 // hide impurity behind) and invariant 7 (identity is explicit — the Cmd
@@ -1427,7 +1429,7 @@ export type NoCtx = Readonly<Record<never, never>>;
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: (
     cmd: Extract<C, { type: K }>,
-    ctx: Ctx & NeedsOf<Extract<C, { type: K }>> & PortEmitter,
+    ctx: Ctx & RequiresOf<Extract<C, { type: K }>> & PortEmitter,
     dispatch?: (msg: M) => void,
     // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
   ) => Promise<M | void>;

@@ -689,7 +689,7 @@ export function run<
       const returned = await trackInFlight(
         handler(
           cmd as Extract<C, { type: C["type"] }>,
-          // The handler's cell demands `Ctx & NeedsOf<its Cmd>`; the runtime
+          // The handler's cell demands `Ctx & RequiresOf<its Cmd>`; the runtime
           // holds `Ctx & RequiredCtx<C>` — the intersection over EVERY Cmd, so
           // a superset of any one cell's slice. The widening is sound by
           // construction; `tsc` cannot see through the generic `C` to prove it.
