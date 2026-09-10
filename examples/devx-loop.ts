@@ -9,7 +9,7 @@
  * Run it:  node packages/tea/examples/devx-loop.ts   (Node 23 strips types)
  */
 
-import { type Cmd, defineMachine, noop, run, type Sub } from "@demlik/tea";
+import { defineMachine, noop, run } from "@demlik/tea";
 import { toMermaid } from "@demlik/tea/machine-viz";
 import { parseJSONL, recorder } from "../src/internal/persistence/recorder";
 import { replayTrace } from "../src/internal/persistence/trace-replay";
@@ -29,19 +29,14 @@ type Msg =
   | { type: "apply_discount"; pct: number }
   | { type: "checkout" };
 
-type NoCmd = Cmd<never>;
-type NoSub = Sub<never>;
-type NoCtx = Record<string, never>;
-
-const init = (loaded: Order | null): readonly [Order, readonly NoCmd[]] => [
-  loaded ?? { type: "open", subtotal: 0, discountPct: 0 },
-  [],
-];
-
 // --- v1: SHIPPED WITH A BUG. apply_discount discounts the subtotal in place,
 //     then checkout discounts again -> the customer is double-discounted. ---
-const orderV1 = defineMachine<Order, Msg, NoCmd, NoSub, NoCtx>({
-  init,
+const orderV1 = defineMachine({
+  types: { model: {} as Order, msg: {} as Msg },
+  init: (loaded) => [
+    loaded ?? { type: "open", subtotal: 0, discountPct: 0 },
+    [],
+  ],
   update: {
     open: {
       add_item: (s, m) => [{ ...s, subtotal: s.subtotal + m.price }, []],
@@ -65,8 +60,12 @@ const orderV1 = defineMachine<Order, Msg, NoCmd, NoSub, NoCtx>({
 });
 
 // --- v2: THE FIX. apply_discount only records the pct; checkout applies once. ---
-const orderV2 = defineMachine<Order, Msg, NoCmd, NoSub, NoCtx>({
-  init,
+const orderV2 = defineMachine({
+  types: { model: {} as Order, msg: {} as Msg },
+  init: (loaded) => [
+    loaded ?? { type: "open", subtotal: 0, discountPct: 0 },
+    [],
+  ],
   update: {
     open: {
       add_item: (s, m) => [{ ...s, subtotal: s.subtotal + m.price }, []],

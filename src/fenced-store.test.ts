@@ -40,7 +40,8 @@ const update: Reducer<NoteState, NoteMsg, never> = {
   note: (state, msg) => [{ notes: [...state.notes, msg.text] }, []],
 };
 
-const noteMachine = defineMachine<NoteState, NoteMsg, never, never, undefined>({
+const noteMachine = defineMachine({
+  types: { model: {} as NoteState, msg: {} as NoteMsg, ctx: undefined },
   init: (loaded) => [loaded ?? { notes: [] }, []],
   update,
 });

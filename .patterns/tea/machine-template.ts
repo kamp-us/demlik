@@ -60,7 +60,17 @@ type Ctx = Record<string, never>;
 // ---------------------------------------------------------------------------
 // Machine
 // ---------------------------------------------------------------------------
-export const machine = defineMachine<State, Msg, Commands, Subs, Ctx>({
+export const machine = defineMachine({
+  // 0. Types — the slots no value in this object implies, named once. Model and
+  //    Msg always; `cmd` / `sub` / `ctx` only when nothing else says them.
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as Commands,
+    sub: {} as Subs,
+    ctx: {} as Ctx,
+  },
+
   // 6. Init — returns [state, cmds].
   //    See: .patterns/tea/patterns/15-decisions.md (decision 2: init shape)
   init: (loaded) => [loaded ?? { type: "idle" }, Cmd.none],

@@ -84,7 +84,8 @@ describe("fileStore", () => {
     const update: Reducer<S, M, never> = {
       inc: (s) => [{ n: s.n + 1 }, []],
     };
-    const machine = defineMachine<S, M, never, never, undefined>({
+    const machine = defineMachine({
+      types: { model: {} as S, msg: {} as M, ctx: undefined },
       init: (loaded) => [loaded ?? { n: 0 }, []],
       update,
     });
@@ -126,13 +127,13 @@ function timerMachine(delayMs: number, repeat: boolean) {
     disarm: (s) => [{ ...s, phase: "idle" }, []],
     tick: (s) => [{ ...s, ticks: s.ticks + 1 }, []],
   };
-  return defineMachine<
-    TickState,
-    TickMsg,
-    never,
-    NodeSub<TickMsg>,
-    NodeSubscribeCtx
-  >({
+  return defineMachine({
+    types: {
+      model: {} as TickState,
+      msg: {} as TickMsg,
+      sub: {} as NodeSub<TickMsg>,
+      ctx: {} as NodeSubscribeCtx,
+    },
     init: () => [{ phase: "idle", ticks: 0 }, []],
     update,
     subscriptions: (s) =>
@@ -208,13 +209,13 @@ describe("nodeSubscribe: node_signal", () => {
       disarm: (s) => [{ ...s, phase: "idle" }, []],
       sig: (s) => [{ ...s, caught: s.caught + 1 }, []],
     };
-    return defineMachine<
-      SigState,
-      SigMsg,
-      never,
-      NodeSub<SigMsg>,
-      NodeSubscribeCtx
-    >({
+    return defineMachine({
+      types: {
+        model: {} as SigState,
+        msg: {} as SigMsg,
+        sub: {} as NodeSub<SigMsg>,
+        ctx: {} as NodeSubscribeCtx,
+      },
       init: () => [{ phase: "idle", caught: 0 }, []],
       update,
       subscriptions: (s) =>
@@ -282,31 +283,35 @@ function wsMachine(url: string) {
     ws_frame: (s, m) => [{ ...s, frames: [...s.frames, m.data] }, []],
     ws_closed: (s, m) => [{ ...s, closedWith: m.code }, []],
   };
-  return defineMachine<WsState, WsMsg, never, NodeSub<WsMsg>, NodeSubscribeCtx>(
-    {
-      init: () => [
-        { phase: "idle", frames: [], opened: false, closedWith: null },
-        [],
-      ],
-      update,
-      subscriptions: (s) =>
-        s.phase === "connected"
-          ? [
-              {
-                id: "ws1",
-                type: "node_ws",
-                url,
-                onOpen: () => ({ type: "ws_open" }),
-                // Frames prefixed "drop:" exercise the null-drop seam.
-                onMessage: (data) =>
-                  data.startsWith("drop:") ? null : { type: "ws_frame", data },
-                onClose: (code) => ({ type: "ws_closed", code }),
-              },
-            ]
-          : [],
-      subscribe: nodeSubscribe<WsMsg, NodeSubscribeCtx>(),
+  return defineMachine({
+    types: {
+      model: {} as WsState,
+      msg: {} as WsMsg,
+      sub: {} as NodeSub<WsMsg>,
+      ctx: {} as NodeSubscribeCtx,
     },
-  );
+    init: () => [
+      { phase: "idle", frames: [], opened: false, closedWith: null },
+      [],
+    ],
+    update,
+    subscriptions: (s) =>
+      s.phase === "connected"
+        ? [
+            {
+              id: "ws1",
+              type: "node_ws",
+              url,
+              onOpen: () => ({ type: "ws_open" }),
+              // Frames prefixed "drop:" exercise the null-drop seam.
+              onMessage: (data) =>
+                data.startsWith("drop:") ? null : { type: "ws_frame", data },
+              onClose: (code) => ({ type: "ws_closed", code }),
+            },
+          ]
+        : [],
+    subscribe: nodeSubscribe<WsMsg, NodeSubscribeCtx>(),
+  });
 }
 
 describe("nodeSubscribe: node_ws through a real run", () => {

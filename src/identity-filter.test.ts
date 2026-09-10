@@ -45,7 +45,8 @@ const identity: Identity<State, Msg> = {
 };
 
 function machine(withIdentity: boolean) {
-  return defineMachine<State, Msg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: undefined },
     init: () => [{ runId: null, applied: [] }, []],
     update,
     ...(withIdentity ? { identity } : {}),
@@ -115,7 +116,12 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
       readonly key: { b: string; a: string };
     };
     const rt = await run(
-      defineMachine<CompositeState, CompositeMsg, never, never, undefined>({
+      defineMachine({
+        types: {
+          model: {} as CompositeState,
+          msg: {} as CompositeMsg,
+          ctx: undefined,
+        },
         init: () => [{ key: { a: "1", b: "2" }, hits: 0 }, []],
         // `hits` is what makes the drop observable — a state-preserving cell
         // would look identical whether the Msg landed or was filtered out.
@@ -209,7 +215,8 @@ describe("Identity — the drop is observable", () => {
 // ───────────────────────────────────────────────────────────────────────────
 describe("Identity — a throwing projection is supervised, not raw", () => {
   const throwing = (which: "ofState" | "ofMsg") =>
-    defineMachine<State, Msg, never, never, undefined>({
+    defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
       init: () => [{ runId: "r1", applied: [] }, []],
       update,
       identity: {
@@ -272,13 +279,8 @@ describe("Identity — a non-plain identity fails loudly, never permissively", (
   };
   type DateMsg = { readonly type: "work"; readonly startedAt: Date };
 
-  const dateMachine = defineMachine<
-    DateState,
-    DateMsg,
-    never,
-    never,
-    undefined
-  >({
+  const dateMachine = defineMachine({
+    types: { model: {} as DateState, msg: {} as DateMsg, ctx: undefined },
     init: () => [{ startedAt: new Date(1_000), applied: 0 }, []],
     update: { work: (s) => [{ ...s, applied: s.applied + 1 }, []] },
     identity: {

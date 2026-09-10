@@ -50,8 +50,14 @@ const update: Reducer<State, Msg, never> = {
 function machineFor(
   battery: ReturnType<typeof defineManagedResource<string, Handle, NoCtx>>,
 ) {
-  return defineMachine<State, Msg, never, ManagedResourceSub<string>, NoCtx>({
-    init: () => [{ runId: "run-1" }, []],
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as ManagedResourceSub<string>,
+      ctx: {} as NoCtx,
+    },
+    init: (_loaded) => [{ runId: "run-1" }, []],
     update,
     subscriptions: (s) => (s.runId === null ? [] : [battery.sub(s.runId)]),
     subscribe: { managed_resource: battery.subscribe },
@@ -306,14 +312,14 @@ describe("combineManagedResources — one cell, derived list and routing", () =>
   }
 
   function multiMachine(combined: ReturnType<typeof twoResources>["combined"]) {
-    return defineMachine<
-      MultiState,
-      MultiMsg,
-      never,
-      ManagedResourceSub<string>,
-      NoCtx
-    >({
-      init: () => [{ phase: "idle" }, []],
+    return defineMachine({
+      types: {
+        model: {} as MultiState,
+        msg: {} as MultiMsg,
+        sub: {} as ManagedResourceSub<string>,
+        ctx: {} as NoCtx,
+      },
+      init: (_loaded) => [{ phase: "idle" }, []],
       update: multiUpdate,
       subscriptions: (s) => combined.subs(s),
       subscribe: { managed_resource: combined.subscribe },
@@ -393,8 +399,9 @@ describe("defineManagedResource.depKeyed — one subs entry, no router", () => {
       typeof defineManagedResource<string, Handle, NoCtx>
     >[]
   ) {
-    return defineMachine<State, Msg, never, never, NoCtx>({
-      init: () => [{ runId: "run-1" }, []],
+    return defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
+      init: (_loaded) => [{ runId: "run-1" }, []],
       update,
       subs: batteries.map((b) => b.depKeyed((s: State) => s.runId)),
     });

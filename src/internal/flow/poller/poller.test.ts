@@ -366,13 +366,14 @@ const poll = makePoller({
 });
 
 function pollerMachine() {
-  return defineMachine<
-    AppState,
-    AppMsg,
-    Cmd<"fetch_status">,
-    DeadlineExceeded,
-    undefined
-  >({
+  return defineMachine({
+    types: {
+      model: {} as AppState,
+      msg: {} as AppMsg,
+      cmd: {} as Cmd<"fetch_status">,
+      sub: {} as DeadlineExceeded,
+      ctx: undefined,
+    },
     init: (loaded) => [loaded ?? { poll: poll.init() }, []],
     update: {
       begin: (s, m) => {
@@ -548,13 +549,14 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
       return r;
     };
 
-    const machine = defineMachine<
-      AppState,
-      AppMsg,
-      Cmd<"fetch_status">,
-      DeadlineExceeded,
-      undefined
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as AppState,
+        msg: {} as AppMsg,
+        cmd: {} as Cmd<"fetch_status">,
+        sub: {} as DeadlineExceeded,
+        ctx: undefined,
+      },
       init: () => [{ poll: poll.init() }, []],
       update: {
         begin: (s, m) => {
@@ -925,13 +927,14 @@ describe("createPoller — wired into a REAL runtime (duration-bounded outage)",
       rngZero,
     );
 
-    const machine = defineMachine<
-      AppState,
-      AppMsg,
-      Cmd<"fetch_status">,
-      DeadlineExceeded,
-      undefined
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as AppState,
+        msg: {} as AppMsg,
+        cmd: {} as Cmd<"fetch_status">,
+        sub: {} as DeadlineExceeded,
+        ctx: undefined,
+      },
       init: () => [{ poll: durationPoll.init() }, []],
       update: {
         begin: (s, m) => {

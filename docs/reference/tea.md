@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (146)
+## Exports (147)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -80,6 +80,7 @@ import { … } from "@demlik/tea";
 | `ListenerTarget` | Interface | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
 | `Machine` | Type |  |
 | `MachineShape` | Type |  |
+| `MachineTypes` | Type | The `types` option: the slots of a machine's shape that no value in the object can imply, declared once as phantom values (`{} as Model`). |
 | `MalformedResult` | Type | The kernel-minted failure: a handler returned a `_ok` value the Cmd's `ok` schema rejects. |
 | `ManagedResourceBattery` | Interface | What the battery returns: a `.sub(key)` builder for `subscriptions`, the `.subscribe` handler for the machine's `subscribe` record, a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held, and a `.subIdFor(key)` for tests. |
 | `ManagedResourceSub` | Interface | The Sub the battery builds. |

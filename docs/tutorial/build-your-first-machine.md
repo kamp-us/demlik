@@ -53,7 +53,8 @@ next state plus any effects to run. Here you emit no effects, so every cell
 returns an empty effect list `[]`:
 
 ```ts
-const downloader = defineMachine<State, Msg, never, never, undefined>({
+const downloader = defineMachine({
+  types: { model: {} as State, msg: {} as Msg },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]
@@ -73,6 +74,11 @@ const downloader = defineMachine<State, Msg, never, never, undefined>({
   },
 });
 ```
+
+`types` names your Model and your Msg once, as values — `{} as State` carries
+the type and nothing else. Everything after it is inferred from it: `s` and `m`
+in every cell are already narrowed, and a Msg variant with no cell is a compile
+error. You never write a type argument on `defineMachine`.
 
 `init` returns the starting state (and rehydrates a loaded snapshot when one is
 handed in — you can ignore that for now). Each `update` cell returns

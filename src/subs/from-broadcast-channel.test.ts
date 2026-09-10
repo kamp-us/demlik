@@ -63,7 +63,13 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function busMachine(channelName: string) {
-  return defineMachine<State, Msg, never, BusSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as BusSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ armed: true, seen: [] }, []],
     update,
     subscriptions: (s) =>

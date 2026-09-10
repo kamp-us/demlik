@@ -24,7 +24,8 @@ const pubUpdate: Reducer<PubState, PubMsg, never> = {
   noop: (s) => [s, []],
 };
 function publisherMachine() {
-  return defineMachine<PubState, PubMsg, never, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as PubState, msg: {} as PubMsg, ctx: {} as NoCtx },
     init: () => [{ count: 0 }, []],
     update: pubUpdate,
   });
@@ -43,7 +44,13 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function consumerMachine(port: Port<number>) {
-  return defineMachine<State, Msg, never, LevelSub, Ctx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as LevelSub,
+      ctx: {} as Ctx,
+    },
     init: () => [{ armed: true, levels: [] }, []],
     update,
     subscriptions: (s) =>

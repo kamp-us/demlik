@@ -131,7 +131,8 @@ fetch.err(cmd, { _tag: "malformed_result", issues: [] });
 
 // ── 4. `defineMachine({ cmds })` derives the settled half of `M` ────────────
 
-const machine = defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
+const machine = defineMachine({
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
   cmds: [fetch],
   init: () => [{ body: null, lastTag: null }, []],
   update: exhaustive,
@@ -149,10 +150,13 @@ const machine = defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
 const onlyUser: Reducer<Model, Msg, FetchCmd> = {
   go: (m) => [m, [fetch({ url: "/" })]],
 };
-defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
+defineMachine({
+  // A MISSING property is reported at the machine literal's first property, so
+  // the directive sits on `types` rather than on `update`.
+  // @ts-expect-error `fetch_ok` and `fetch_err` cells are missing
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
   cmds: [fetch],
   init: () => [{ body: null, lastTag: null }, []],
-  // @ts-expect-error `fetch_ok` and `fetch_err` cells are missing
   update: onlyUser,
   interpret: { fetch: async () => undefined },
 });
@@ -197,7 +201,8 @@ void nothing;
 
 // A machine with NO typed Cmds still runs ctx-less (the #182 win is untouched).
 type PureMsg = { readonly type: "bump" };
-const pure = defineMachine<{ n: number }, PureMsg, never, never, NoCtx>({
+const pure = defineMachine({
+  types: { model: {} as { n: number }, msg: {} as PureMsg, ctx: {} as NoCtx },
   init: () => [{ n: 0 }, []],
   update: { bump: (s) => [{ n: s.n + 1 }, []] },
 });

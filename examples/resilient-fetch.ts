@@ -19,6 +19,14 @@
 
 import { type Cmd, defineMachine, run, tryInterpret } from "@demlik/tea";
 import {
+  defaultRetryPolicy,
+  initRetry,
+  nextDelayMs,
+  type RetryState,
+  recordFailure,
+  shouldRetry,
+} from "@demlik/tea/retry-backoff";
+import {
   get as cacheGet,
   set as cacheSet,
   initCache,
@@ -43,14 +51,6 @@ import {
   type TokenBucket,
   tryConsume,
 } from "../src/internal/resilience/rate-limit";
-import {
-  defaultRetryPolicy,
-  initRetry,
-  nextDelayMs,
-  type RetryState,
-  recordFailure,
-  shouldRetry,
-} from "@demlik/tea/retry-backoff";
 
 // === Model: reliability modules composed as plain fields ===
 type Phase =
@@ -155,7 +155,14 @@ function attempt(
   ];
 }
 
-export const resilientFetch = defineMachine<State, Msg, DoFetch, Sub, Ctx>({
+export const resilientFetch = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as DoFetch,
+    sub: {} as Sub,
+    ctx: {} as Ctx,
+  },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]

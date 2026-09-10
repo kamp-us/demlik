@@ -543,13 +543,14 @@ function makeMachine(
   >[0] = { ...baseConfig, rateLimit: undefined },
 ) {
   const rec = make(config);
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof rec.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof rec.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ rec: rec.init() }, []],
     update: {
@@ -672,13 +673,14 @@ function makeRePlanMachine() {
   const { idOf: _idOf, ...noIdOf } = baseConfig;
   void _idOf;
   const rec = make({ ...noIdOf, rateLimit: undefined } as typeof baseConfig);
-  const machine = defineMachine<
-    HostState,
-    RePlanHostMsg,
-    HostCmd,
-    ReturnType<typeof rec.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as RePlanHostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof rec.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ rec: rec.init() }, []],
     update: {

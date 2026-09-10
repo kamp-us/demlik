@@ -70,13 +70,14 @@ function makeMachine(
   rng = rngZero,
 ) {
   const ac = createAuthedCall<string, string>(config, rng);
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof ac.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof ac.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ authed: ac.init() }, []],
     update: {
@@ -767,7 +768,13 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
       },
       rngZero,
     );
-    return defineMachine<WState, WMsg, WCmd, never, WCtx>({
+    return defineMachine({
+      types: {
+        model: {} as WState,
+        msg: {} as WMsg,
+        cmd: {} as WCmd,
+        ctx: {} as WCtx,
+      },
       init: (loaded) =>
         loaded !== null ? [loaded, []] : [{ authed: ac.init() }, []],
       update: {

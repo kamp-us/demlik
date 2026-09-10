@@ -34,8 +34,9 @@ describe("NoCellError — reducer form", () => {
   };
 
   function machine() {
-    return defineMachine<State, Msg, never, never, undefined>({
-      init: () => [{ count: 0 }, []],
+    return defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
+      init: (_loaded) => [{ count: 0 }, []],
       update,
     });
   }
@@ -91,8 +92,9 @@ describe("NoCellError — transitions form carries the current state name", () =
   };
 
   function machine() {
-    return defineMachine<State, Msg, never, never, undefined>({
-      init: () => [{ type: "idle" }, []],
+    return defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
+      init: (_loaded) => [{ type: "idle" }, []],
       update,
     });
   }
@@ -176,8 +178,14 @@ describe("vertical tracer — a real Sub union wired through subscribe runs live
   };
 
   function machine() {
-    return defineMachine<State, Msg, never, TickSub, undefined>({
-      init: () => [{ type: "idle", ticks: 0 }, []],
+    return defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as TickSub,
+        ctx: undefined,
+      },
+      init: (_loaded) => [{ type: "idle", ticks: 0 }, []],
       update,
       subscriptions: (s) =>
         s.type === "running" ? [{ id: subId("tick"), type: "tick" }] : [],

@@ -1,5 +1,8 @@
 import { type Cmd, defineMachine, run } from "@demlik/tea";
-import { createIntake, type IntakeState } from "../src/internal/idempotency/idempotent-intake";
+import {
+  createIntake,
+  type IntakeState,
+} from "../src/internal/idempotency/idempotent-intake";
 
 interface PaymentEvent {
   readonly id: string;
@@ -51,7 +54,14 @@ interface Ctx {
   charge: (event: PaymentEvent) => Receipt;
 }
 
-export const webhookIntake = defineMachine<State, Msg, AppCmd, Sub, Ctx>({
+export const webhookIntake = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as AppCmd,
+    sub: {} as Sub,
+    ctx: {} as Ctx,
+  },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]

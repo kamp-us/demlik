@@ -52,7 +52,13 @@ interface FetchCtx {
 }
 
 function makeBase() {
-  return defineMachine<FetchState, FetchMsg, FetchCmd, never, FetchCtx>({
+  return defineMachine({
+    types: {
+      model: {} as FetchState,
+      msg: {} as FetchMsg,
+      cmd: {} as FetchCmd,
+      ctx: {} as FetchCtx,
+    },
     init: (loaded) => [loaded ?? { url: null, body: null }, []],
     update: {
       // `load` emits BOTH a non-target `log` Cmd AND the target `do_fetch` —
@@ -208,13 +214,13 @@ describe("withResilience — intercepting conformance gate", () => {
 describe("withResilience — reserved namespace guard", () => {
   it("throws if the base declares a reserved $resilience:run interpret key", () => {
     type SquatCmd = Cmd<"$resilience:run"> & { readonly note: string };
-    const squatting = defineMachine<
-      FetchState,
-      FetchMsg,
-      SquatCmd,
-      never,
-      FetchCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as SquatCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { url: null, body: null }, []],
       update: {
         load: (s) => [s, [{ type: "$resilience:run", note: "base-owned" }]],
@@ -239,13 +245,13 @@ describe("withResilience — reserved namespace guard", () => {
   it("throws if the base declares a reserved $resilience:ok UPDATE key", () => {
     // The base reducer squats on `$resilience:ok` — the wrapper's `succeed`
     // cell would be silently shadowed.
-    const squatting = defineMachine<
-      FetchState,
-      { readonly type: "$resilience:ok" } | FetchMsg,
-      DoFetchCmd,
-      never,
-      FetchCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as { readonly type: "$resilience:ok" } | FetchMsg,
+        cmd: {} as DoFetchCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { url: null, body: null }, []],
       update: {
         "$resilience:ok": (s) => [s, []],
@@ -269,13 +275,13 @@ describe("withResilience — reserved namespace guard", () => {
 
   it("throws if the base declares a reserved $resilience:err INTERPRET key", () => {
     type ErrCmd = Cmd<"$resilience:err"> & { readonly note: string };
-    const squatting = defineMachine<
-      FetchState,
-      FetchMsg,
-      ErrCmd,
-      never,
-      FetchCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as ErrCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { url: null, body: null }, []],
       update: {
         load: (s) => [s, []],
@@ -310,7 +316,13 @@ describe("withResilience — reserved namespace guard", () => {
       | { readonly type: "note" }
       | { readonly type: "$resilience:ok" };
 
-    const squatting = defineMachine<TState, TMsg, DoFetchCmd, never, FetchCtx>({
+    const squatting = defineMachine({
+      types: {
+        model: {} as TState,
+        msg: {} as TMsg,
+        cmd: {} as DoFetchCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { type: "idle", url: null }, []],
       update: {
         idle: {
@@ -344,13 +356,14 @@ describe("withResilience — reserved namespace guard", () => {
 
   it("throws if the base declares a reserved $resilience:timer SUBSCRIBE key", () => {
     type TimerSub = { id: ReturnType<typeof subId>; type: "$resilience:timer" };
-    const squatting = defineMachine<
-      FetchState,
-      FetchMsg,
-      DoFetchCmd,
-      TimerSub,
-      FetchCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as DoFetchCmd,
+        sub: {} as TimerSub,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { url: null, body: null }, []],
       update: {
         load: (s) => [s, []],
@@ -426,7 +439,13 @@ describe("withResilience — construction guard: target needs a base interpret h
   // nothing to perform. (Built by hand rather than via makeBase so the gap is
   // explicit.)
   function makeBaseWithoutTargetHandler() {
-    return defineMachine<FetchState, FetchMsg, FetchCmd, never, FetchCtx>({
+    return defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as FetchCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { url: null, body: null }, []],
       update: {
         load: (_s, m) => [
@@ -639,26 +658,30 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
   });
 
   it("a `void` resolution leaves `base` unchanged and dispatches no extra Msg", async () => {
-    const base = defineMachine<FetchState, FetchMsg, FetchCmd, never, FetchCtx>(
-      {
-        init: (loaded) => [loaded ?? { url: null, body: null }, []],
-        update: {
-          load: (_s, m) => [
-            { url: m.url, body: null },
-            [{ type: "do_fetch", url: m.url }],
-          ],
-          loaded: (s, m) => [{ ...s, body: m.body }, []],
-          note: (s) => [s, []],
-        },
-        interpret: {
-          // Fire-and-forget target: resolves nothing.
-          do_fetch: async (cmd, ctx) => {
-            await ctx.fetchUrl(cmd.url);
-          },
-          log: async () => {},
-        },
+    const base = defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as FetchCmd,
+        ctx: {} as FetchCtx,
       },
-    );
+      init: (loaded) => [loaded ?? { url: null, body: null }, []],
+      update: {
+        load: (_s, m) => [
+          { url: m.url, body: null },
+          [{ type: "do_fetch", url: m.url }],
+        ],
+        loaded: (s, m) => [{ ...s, body: m.body }, []],
+        note: (s) => [s, []],
+      },
+      interpret: {
+        // Fire-and-forget target: resolves nothing.
+        do_fetch: async (cmd, ctx) => {
+          await ctx.fetchUrl(cmd.url);
+        },
+        log: async () => {},
+      },
+    });
     const wrapped = withResilience(base, config);
     const ctx: FetchCtx = {
       fetchUrl: async () => "ignored",
@@ -686,7 +709,13 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
   // the next page (until the body says it is the last) and logs it. The
   // re-emitted target must be RETAGGED; the `log` must ride through raw.
   function makeChainingBase() {
-    return defineMachine<FetchState, FetchMsg, FetchCmd, never, FetchCtx>({
+    return defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as FetchCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [loaded ?? { url: null, body: null }, []],
       update: {
         load: (_s, m) => [
@@ -1104,7 +1133,13 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
 
   function makeBootBase() {
     // A base whose init emits BOTH a non-target `log` and the target `do_fetch`.
-    return defineMachine<FetchState, FetchMsg, FetchCmd, never, FetchCtx>({
+    return defineMachine({
+      types: {
+        model: {} as FetchState,
+        msg: {} as FetchMsg,
+        cmd: {} as FetchCmd,
+        ctx: {} as FetchCtx,
+      },
       init: (loaded) => [
         loaded ?? { url: "/boot", body: null },
         [

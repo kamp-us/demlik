@@ -40,7 +40,13 @@ function throwingMachine() {
       throw REDUCE_BOOM;
     },
   };
-  return defineMachine<State, Msg, Cmd, never, undefined>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      cmd: {} as Cmd,
+      ctx: undefined,
+    },
     init: (loaded) => [(loaded as State | null) ?? { n: 0 }, []],
     update,
   });

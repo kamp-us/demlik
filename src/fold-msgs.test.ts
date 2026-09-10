@@ -39,7 +39,8 @@ function counterMachine() {
     add: (s, m) => [{ count: s.count + m.n }, []],
     reset: () => [{ count: 0 }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: () => [{ count: 0 }, []],
     update,
   });
@@ -60,7 +61,8 @@ function lightMachine() {
       stop: () => [{ type: "red" }, []],
     },
   };
-  return defineMachine<LightState, LightMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: () => [{ type: "red" }, []],
     update,
   });
@@ -131,7 +133,14 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
       },
     };
 
-    const m = defineMachine<FxState, FxMsg, FxCmd, FxSub, undefined>({
+    const m = defineMachine({
+      types: {
+        model: {} as FxState,
+        msg: {} as FxMsg,
+        cmd: {} as FxCmd,
+        sub: {} as FxSub,
+        ctx: undefined,
+      },
       init: () => {
         fired.init = true;
         throw new Error("init fired — foldMsgs must enter from base, not init");

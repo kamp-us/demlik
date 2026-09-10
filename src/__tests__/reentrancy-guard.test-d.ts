@@ -55,19 +55,20 @@ const branded = asReducer<State, Msg, NoCmd>({
 void branded;
 
 // ── NEGATIVE: an async reducer cell fails under `defineMachine` too ─────────────
-// Under a failed overload the error surfaces at the call, so the directive sits
-// on the `defineMachine(` line rather than the cell.
-// @ts-expect-error async reducer cell makes the machine literal fail to type-check
-defineMachine<State, Msg, NoCmd, never, undefined>({
+// One Msg variant, so the failed overload reports at exactly the offending cell
+// and the directive pins that cell rather than a sibling it took down with it.
+defineMachine({
+  types: { model: {} as State, msg: {} as { type: "inc" } },
   init: () => [{ count: 0 }, []],
   update: {
+    // @ts-expect-error async reducer cell returns a Promise — rejected
     inc: async (s, _m) => [{ count: s.count + 1 }, []],
-    dec: (s, _m) => [{ count: s.count - 1 }, []],
   },
 });
 
 // ── POSITIVE: a pure synchronous machine compiles ───────────────────────────────
-const syncMachine = defineMachine<State, Msg, NoCmd, never, undefined>({
+const syncMachine = defineMachine({
+  types: { model: {} as State, msg: {} as Msg },
   init: () => [{ count: 0 }, []],
   update: {
     inc: (s, _m) => [{ count: s.count + 1 }, []],
@@ -87,19 +88,15 @@ void annotated;
 type Phase = { type: "idle" } | { type: "busy" };
 type PhaseMsg = { type: "go" } | { type: "stop" };
 
-// NEGATIVE: an async transition cell makes the table fail to type-check; the
-// error surfaces at the `defineMachine(` call.
-// @ts-expect-error async transition cell returns a Promise — rejected
-defineMachine<Phase, PhaseMsg, NoCmd, never, undefined>({
-  init: () => [{ type: "idle" }, []],
+// NEGATIVE: an async transition cell makes the table fail to type-check. One
+// phase and one Msg variant, for the same reason as the reducer case above.
+defineMachine({
+  types: { model: {} as { type: "idle" }, msg: {} as { type: "go" } },
+  init: (loaded) => [loaded ?? { type: "idle" }, []],
   update: {
     idle: {
-      go: async (_s, _m) => [{ type: "busy" }, []],
-      stop: (s, _m) => [s, []],
-    },
-    busy: {
-      go: (s, _m) => [s, []],
-      stop: (_s, _m) => [{ type: "idle" }, []],
+      // @ts-expect-error async transition cell returns a Promise — rejected
+      go: async (s, _m) => [s, []],
     },
   },
 });

@@ -74,7 +74,13 @@ const flakyWorker = (job: Job): Promise<string> =>
     ? Promise.reject(new Error(`negative payload ${job.payload}`))
     : Promise.resolve(`processed ${job.name} -> ${job.payload * 2}`);
 
-export const jobQueue = defineMachine<State, Msg, JobCmd, never, Ctx>({
+export const jobQueue = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as JobCmd,
+    ctx: {} as Ctx,
+  },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]

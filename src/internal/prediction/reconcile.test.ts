@@ -31,7 +31,8 @@ function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
     add: (s, m) => [{ count: s.count + m.n }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: () => [{ count: 0 }, []],
     update,
   });

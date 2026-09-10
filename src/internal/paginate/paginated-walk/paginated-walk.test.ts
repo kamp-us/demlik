@@ -77,13 +77,14 @@ function makeMachine(
   rng = rngZero,
 ) {
   const walk = createPaginatedWalk<number, Page, IndexCmd>(config, rng);
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof walk.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof walk.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ walk: walk.init() }, []],
     update: {
@@ -629,13 +630,14 @@ function wiredMachine(
   run_: (cursor: number) => Promise<Page>,
 ) {
   const walk = createPaginatedWalk<number, Page, IndexCmd>(config, rngZero);
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof walk.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof walk.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ walk: walk.init() }, []],
     update: {

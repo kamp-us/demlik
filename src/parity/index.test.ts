@@ -31,7 +31,8 @@ type FindingSpec = { ruleId: string; selector: string; severity: Severity };
 
 // The GOLDEN engine — appends every finding.
 function auditMachine() {
-  return defineMachine<State, Msg, Cmd<never>, never, Ctx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
     init: (loaded) => [loaded ?? { type: "audit", findings: [] }, Cmd.none],
     update: {
       found: (s, m) => [
@@ -45,7 +46,8 @@ function auditMachine() {
 // The DIVERGENT engine — the seeded one-finding drift: it DROPS `info`
 // findings. Replaying a golden trace against it must be CAUGHT by the gate.
 function auditMachineDropsInfo() {
-  return defineMachine<State, Msg, Cmd<never>, never, Ctx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
     init: (loaded) => [loaded ?? { type: "audit", findings: [] }, Cmd.none],
     update: {
       found: (s, m) =>

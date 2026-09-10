@@ -80,7 +80,13 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function streamMachine() {
-  return defineMachine<State, Msg, never, StreamSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as StreamSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ armed: true, frames: [], errors: 0, opens: 0 }, []],
     update,
     subscriptions: (s) =>
@@ -144,7 +150,13 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
 
   it("omitted optional callbacks attach no error/open listeners at all", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
-    const machine = defineMachine<State, Msg, never, StreamSub, NoCtx>({
+    const machine = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as StreamSub,
+        ctx: {} as NoCtx,
+      },
       init: () => [{ armed: true, frames: [], errors: 0, opens: 0 }, []],
       update,
       subscriptions: (s) =>

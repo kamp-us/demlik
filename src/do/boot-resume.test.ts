@@ -48,13 +48,13 @@ const workerResumePort: ResumePort<WorkerState, WorkerMsg> = {
 // Build a machine whose interpret pushes to a caller-owned effect log, so the
 // test observes exactly how many times the effect fired across a wake.
 function makeWorker(effects: number[]) {
-  return defineMachine<
-    WorkerState,
-    WorkerMsg,
-    DoWorkCmd,
-    never,
-    Record<never, never>
-  >({
+  return defineMachine({
+    types: {
+      model: {} as WorkerState,
+      msg: {} as WorkerMsg,
+      cmd: {} as DoWorkCmd,
+      ctx: {} as Record<never, never>,
+    },
     // Rehydrate branch is PURE (zero Cmds) per Invariant 2 — the effect is
     // re-fired by `bootResume`, never by init. Fresh boot starts idle; work is
     // kicked by a `begin` Msg, not a boot Cmd.
@@ -70,7 +70,7 @@ function makeWorker(effects: number[]) {
       work_done: (s) => [{ ...s, done: s.done + 1, inFlight: false }, []],
     },
     interpret: {
-      do_work: async () => {
+      do_work: async (_cmd) => {
         effects.push(1);
         return { type: "work_done" };
       },

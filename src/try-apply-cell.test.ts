@@ -38,7 +38,8 @@ function counterMachine() {
     bump: (s) => [{ count: s.count + 1 }, []],
     reset: () => [{ count: 0 }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: () => [{ count: 0 }, []],
     update,
   });
@@ -53,7 +54,8 @@ function lightMachine() {
     // No `go` cell in `green` — the state-sensitive refusal.
     green: { stop: () => [{ type: "red" }, []] },
   } as unknown as Transitions<LightState, LightMsg, never>;
-  return defineMachine<LightState, LightMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: () => [{ type: "red" }, []],
     update,
     interpret: {} as Interpret<LightMsg, never, undefined>,
@@ -146,13 +148,12 @@ describe("tryApplyCell", () => {
 
   it("a cell that THROWS from its own body still propagates — that is a bug, not data", () => {
     const boom = new Error("cell bug");
-    const machine = defineMachine<
-      CounterState,
-      CounterMsg,
-      never,
-      never,
-      undefined
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        ctx: undefined,
+      },
       init: () => [{ count: 0 }, []],
       update: {
         bump: () => {
@@ -257,13 +258,12 @@ describe("tryFoldMsgs", () => {
   it("keeps foldMsgs' dev-mode purity discipline — a mutating cell trips", () => {
     // `foldMsgs` deep-freezes the input state in DEV so an in-place mutation
     // fails loudly. The Result twin must not quietly relax that.
-    const machine = defineMachine<
-      CounterState,
-      CounterMsg,
-      never,
-      never,
-      undefined
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        ctx: undefined,
+      },
       init: () => [{ count: 0 }, []],
       update: {
         bump: (s: CounterState) => {

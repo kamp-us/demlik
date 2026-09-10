@@ -286,7 +286,12 @@ describe("composition — the marker lives in the Store alongside State", () => 
       ],
     };
     const machine = () =>
-      defineMachine<Model, Msg, never, never, Record<string, never>>({
+      defineMachine({
+        types: {
+          model: {} as Model,
+          msg: {} as Msg,
+          ctx: {} as Record<string, never>,
+        },
         init: (loaded) => [loaded ?? { applied: emptyApplied() }, []],
         update,
         subscribe: {},

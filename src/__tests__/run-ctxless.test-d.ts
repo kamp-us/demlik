@@ -22,7 +22,8 @@ const pureUpdate: Reducer<State, Msg, never> = {
 
 // A PURE machine: Ctx = NoCtx (reads nothing from ctx).
 function pureMachine() {
-  return defineMachine<State, Msg, never, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
     init: () => [{ count: 0 }, []],
     update: pureUpdate,
   });
@@ -30,7 +31,12 @@ function pureMachine() {
 
 // vortex-style pure grain: Ctx = Record<string, never>.
 function recordNeverMachine() {
-  return defineMachine<State, Msg, never, never, Record<string, never>>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      ctx: {} as Record<string, never>,
+    },
     init: () => [{ count: 0 }, []],
     update: pureUpdate,
   });
@@ -39,7 +45,8 @@ function recordNeverMachine() {
 // A CONTEXT-BEARING machine: Ctx has a field `init` reads.
 type DbCtx = { readonly db: { readonly read: () => number } };
 function dbMachine() {
-  return defineMachine<State, Msg, never, never, DbCtx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as DbCtx },
     init: (_loaded, ctx) => [{ count: ctx.db.read() }, []],
     update: pureUpdate,
   });

@@ -20,7 +20,8 @@ type JobMsg =
 const isDone = (s: JobState): boolean => s.phase === "done";
 
 function makeJob(initial: JobState["phase"] = "idle") {
-  return defineMachine<JobState, JobMsg, never, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as JobState, msg: {} as JobMsg, ctx: {} as NoCtx },
     init: (loaded) => [loaded ?? { phase: initial }, []],
     update: {
       start: () => [{ phase: "working" }, []],

@@ -18,7 +18,8 @@ function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
     inc: (s) => [{ n: s.n + 1 }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     // Rehydrate contract: loaded !== null MUST return [loaded, []].
     init: (loaded) => [loaded ?? { n: 0 }, []],
     update,

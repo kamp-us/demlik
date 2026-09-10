@@ -83,7 +83,13 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function wsMachine() {
-  return defineMachine<State, Msg, never, WsSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as WsSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [
       { armed: true, frames: [], opens: 0, errors: 0, closes: [] },
       [],

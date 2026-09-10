@@ -230,7 +230,8 @@ const update: Reducer<State, Msg, Cmd> = {
   snapshot_failed: (s) => [s, []],
 };
 
-const machine = defineMachine<State, Msg, Cmd, never, undefined>({
+const machine = defineMachine({
+  types: { model: {} as State, msg: {} as Msg, cmd: {} as Cmd, ctx: undefined },
   init: (loaded) =>
     loaded ? [loaded, []] : [{ run: { step: 0 }, snap: knob.init() }, []],
   update,
@@ -655,7 +656,13 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
       },
       snapshot_load_failed: (s) => [s, []],
     };
-    return defineMachine<RecState, RecMsg, Cmd, never, undefined>({
+    return defineMachine({
+      types: {
+        model: {} as RecState,
+        msg: {} as RecMsg,
+        cmd: {} as Cmd,
+        ctx: undefined,
+      },
       // Fresh init — step 0. Recovery overwrites this via snapshot_loaded.
       init: (loaded) =>
         loaded

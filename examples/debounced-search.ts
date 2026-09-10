@@ -25,7 +25,14 @@ interface Ctx {
   search: (query: string) => Promise<readonly string[]>;
 }
 
-export const debouncedSearch = defineMachine<State, Msg, DoSearch, Sub, Ctx>({
+export const debouncedSearch = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as DoSearch,
+    sub: {} as Sub,
+    ctx: {} as Ctx,
+  },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]

@@ -85,7 +85,8 @@ In `@demlik/tea` the same loop is expressed as:
 ```ts
 import { defineMachine, run } from "@demlik/tea";
 
-const machine = defineMachine<Model, Msg, Cmd, Sub, Ctx>({
+const machine = defineMachine({
+  types: { model: {} as Model, msg: {} as Msg, cmd: {} as Cmd, sub: {} as Sub, ctx: {} as Ctx },
   init: (loaded, ctx) => [initialModel, []],          // (Model, [Cmd])
   update: (state, msg) => [nextModel, [cmd]],         // pure
   subscriptions: (state) => [sub],                    // pure list of Sub
@@ -122,7 +123,8 @@ In `@demlik/tea` you build the same thing by returning `[next, []]` from
 `update` and omitting `interpret` for any commands:
 
 ```ts
-const machine = defineMachine<number, "inc" | "dec", never, never, {}>({
+const machine = defineMachine({
+  types: { model: {} as number, msg: {} as "inc" | "dec", ctx: {} as {} },
   init: () => [0, []],
   update: (n, msg) => [msg === "inc" ? n + 1 : n - 1, []],
   interpret: {} as never,

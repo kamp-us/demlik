@@ -56,7 +56,12 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function counter() {
-  return defineMachine<State, Msg, never, never, Record<string, never>>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      ctx: {} as Record<string, never>,
+    },
     init: (loaded) => [loaded ?? { type: "counting", count: 0, log: [] }, []],
     update,
     subscribe: {},

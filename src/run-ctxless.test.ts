@@ -19,7 +19,8 @@ function pureMachine() {
   const update: Reducer<State, Msg, never> = {
     bump: (s) => [{ count: s.count + 1 }, []],
   };
-  return defineMachine<State, Msg, never, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
     init: () => [{ count: 0 }, []],
     update,
   });

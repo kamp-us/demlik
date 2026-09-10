@@ -41,7 +41,13 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       // Every loop schedules another tick — the tail advances forever.
       loop: async () => ({ type: "tick" }),
     };
-    return defineMachine<State, Msg, LoopCmd, never, undefined>({
+    return defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as LoopCmd,
+        ctx: undefined,
+      },
       // Kick the loop off at boot.
       init: () => [{ ticks: 0 }, [{ type: "loop" }]],
       update,
@@ -95,7 +101,8 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       // One advance, then a terminal `done` — the chain ends.
       advance: async () => ({ type: "done" }),
     };
-    const machine = defineMachine<S2, M2, C2, never, undefined>({
+    const machine = defineMachine({
+      types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
       init: () => [{ n: 0 }, []],
       update,
       interpret,
@@ -130,7 +137,8 @@ describe("follow-up dispatch failures route to the onError sink", () => {
         throw FOLLOW_UP_ERROR;
       },
     };
-    const machine = defineMachine<S2, M2, C2, never, undefined>({
+    const machine = defineMachine({
+      types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
       init: () => [{ seen: false }, []],
       update,
       interpret,
@@ -182,7 +190,13 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       // The follow-up the pre-#50 `dispatch` did NOT await.
       step: async () => ({ type: "bump" }),
     };
-    return defineMachine<State, Msg, Cmds, never, undefined>({
+    return defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Cmds,
+        ctx: undefined,
+      },
       init: () => [{ steps: 0, bumped: false }, []],
       update,
       interpret,
@@ -228,7 +242,13 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
         return { type: "mark" };
       },
     };
-    return defineMachine<State, GatedMsg, GatedCmds, never, undefined>({
+    return defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as GatedMsg,
+        cmd: {} as GatedCmds,
+        ctx: undefined,
+      },
       init: () => [{ steps: 0, bumped: false }, []],
       update,
       interpret,
@@ -288,7 +308,8 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     const interpret: Interpret<M2, C2, undefined> = {
       loop: async () => ({ type: "tick" }),
     };
-    const machine = defineMachine<S2, M2, C2, never, undefined>({
+    const machine = defineMachine({
+      types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
       init: () => [{ ticks: 0 }, []],
       update,
       interpret,
@@ -315,7 +336,8 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
         throw REDUCER_ERROR;
       },
     };
-    const machine = defineMachine<S2, M2, Cmd, never, undefined>({
+    const machine = defineMachine({
+      types: { model: {} as S2, msg: {} as M2, cmd: {} as Cmd, ctx: undefined },
       init: () => [{ n: 0 }, []],
       update,
     });
@@ -338,7 +360,13 @@ describe("stop-save failure routes to the onError sink (no silent data loss)", (
     const update: Reducer<State, Msg, Cmd> = {
       inc: (s) => [{ n: s.n + 1 }, []],
     };
-    return defineMachine<State, Msg, Cmd, never, undefined>({
+    return defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Cmd,
+        ctx: undefined,
+      },
       init: (loaded) => [(loaded as State | null) ?? { n: 0 }, []],
       update,
     });
@@ -422,7 +450,8 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
         throw BOOM;
       },
     };
-    return defineMachine<S, M, C, never, undefined>({
+    return defineMachine({
+      types: { model: {} as S, msg: {} as M, cmd: {} as C, ctx: undefined },
       init: () => [{ _: 0 }, []],
       update,
       interpret,
