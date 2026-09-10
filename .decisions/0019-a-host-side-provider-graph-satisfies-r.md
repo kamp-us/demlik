@@ -84,3 +84,13 @@ put behind a door of its own.
   `RuntimeErrorContext` — a throwing `release` has no caller to reject at, the run being over.
 - The tea-effect split (#36/#37) can later map a real Effect `Layer` onto this shape. Nothing here
   depends on Effect.
+
+## Amendments
+
+- **#186 — item 4: `UnknownProviderError` is no longer reachable from a map `provide` typechecked.
+  A provider's dependency NAMES are now bound to `keyof M`, the way Effect's `Layer<ROut, E, RIn>`
+  makes requirements a type parameter, so a misspelled dependency is a compile error at the call
+  site instead of a boot-time throw. The error class stays for the untyped path — a cast map, one
+  assembled at runtime, one read back through an erased `Provider<unknown, …>` — where there was
+  never a key set to check against. Ruling: Can, 2026-09-09, on
+  https://github.com/kamp-us/demlik/issues/186.**

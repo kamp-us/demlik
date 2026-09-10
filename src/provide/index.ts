@@ -59,10 +59,22 @@ const providedBrand: unique symbol = Symbol("demlik-tea.provided");
  * `D` is the shape `acquire` receives — a record of the resolved values of
  * {@link Provider.deps}. Build one with {@link layer} or {@link value} rather
  * than by hand; the constructors are what keep `deps` and `D` in step.
+ *
+ * `K` is the dependency NAME set — the keys `deps` may spell. {@link layer}
+ * infers it from the literal you pass, and {@link provide} constrains it to the
+ * map's own keys, so a misspelled dependency is a compile error at the call site
+ * rather than an {@link UnknownProviderError} at `open()`. It defaults to
+ * `string`, which is the untyped reading: a `Provider<T, D>` written by hand
+ * still names its deps with plain strings, and only the map it is passed to
+ * narrows them.
  */
-export interface Provider<T, D = Record<never, never>> {
+export interface Provider<
+  T,
+  D = Record<never, never>,
+  K extends string = string,
+> {
   /** Names of the sibling providers `acquire` reads, resolved before it runs. */
-  readonly deps: readonly string[];
+  readonly deps: readonly K[];
   /**
    * Build the value. May be async; may read its declared `deps`.
    *
@@ -84,14 +96,22 @@ export interface Provider<T, D = Record<never, never>> {
 }
 
 /** A provider whose value and dep shape are erased — the map's element type. */
-type AnyProvider = Provider<unknown, never>;
+type AnyProvider = Provider<unknown, never, string>;
 
 /**
  * The `ctx` a provider map produces: each key mapped to its provider's value.
  */
 export type ProvidedCtx<M> = {
-  [K in keyof M]: M[K] extends Provider<infer T, never> ? T : never;
+  [K in keyof M]: M[K] extends Provider<infer T, never, string> ? T : never;
 };
+
+/**
+ * A provider with no dependencies — {@link layer}'s one-argument form and
+ * {@link value}. Its `K` is `never`, so an empty `deps` fits EVERY map: a
+ * leaf provider is admissible wherever it is declared, whatever keys the map
+ * around it happens to have.
+ */
+type LeafProvider<T> = Provider<T, Record<never, never>, never>;
 
 /**
  * A live scope — the `ctx` its graph produced, plus the one call that tears it
@@ -157,6 +177,13 @@ export class ProvideFailedError extends Error {
 /**
  * A provider named a dependency the map has no key for. A contract breach
  * (ADR 0011) — the wiring itself is wrong, so it throws rather than settling.
+ *
+ * `provide` binds `deps` to `keyof M`, so a map it typechecked can never raise
+ * this: the typo is a compile error at the call site instead. What is left is
+ * the UNTYPED path — a map cast (`as never`, `as any`), assembled at runtime, or
+ * read back through an erased `Provider<unknown, …>` — where there was no key
+ * set to check against. The error stays because that path is real, not because
+ * the typed one still needs it.
  */
 export class UnknownProviderError extends Error {
   readonly _tag = "unknown_provider" as const;
@@ -196,22 +223,25 @@ export class ProviderCycleError extends Error {
 export function layer<T>(
   acquire: () => T | Promise<T>,
   release?: (value: T) => unknown,
-): Provider<T>;
+): LeafProvider<T>;
 /**
  * Declare a provider that depends on siblings. `deps` names them; `acquire`
  * receives their resolved values as a record, and the annotation you give that
  * parameter is what types `D`.
+ *
+ * The names are inferred as literals, not widened to `string`, so {@link provide}
+ * can check them against the map's keys.
  */
-export function layer<T, D>(
-  deps: readonly string[],
+export function layer<T, D, K extends string>(
+  deps: readonly K[],
   acquire: (deps: D) => T | Promise<T>,
   release?: (value: T) => unknown,
-): Provider<T, D>;
-export function layer<T, D>(
-  first: readonly string[] | (() => T | Promise<T>),
+): Provider<T, D, K>;
+export function layer<T, D, K extends string>(
+  first: readonly K[] | (() => T | Promise<T>),
   second?: ((deps: D) => T | Promise<T>) | ((value: T) => unknown),
   third?: (value: T) => unknown,
-): Provider<T, D> {
+): Provider<T, D, K> {
   // The two forms are told apart by the FIRST argument's kind, never by arity:
   // `layer(acquire)` and `layer(deps, acquire)` are both length 1-or-2 at the
   // call site once a `release` is optional.
@@ -234,23 +264,29 @@ export function layer<T, D>(
  * and no lifetime. The escape hatch for the config object, the clock, the
  * `fetch` you were handed: things a `ctx` carries that were never resources.
  */
-export function value<T>(v: T): Provider<T> {
+export function value<T>(v: T): LeafProvider<T> {
   return { deps: [], acquire: () => v };
 }
 
 /**
  * Build an unopened provider graph from a map of providers.
  *
- * The map's own key set is the resulting `ctx`'s shape, and each provider's
- * `acquire` parameter is checked against that shape — so a provider that reads
- * `{ config: Config }` beside a `config` provider of some other type is a
- * compile error here, not a surprise at 3 a.m.
+ * The map's own key set is the resulting `ctx`'s shape, and each provider is
+ * checked against that shape on BOTH of its ends — so both halves of a wiring
+ * mistake are a compile error here, not a surprise at 3 a.m.:
+ *
+ * - the `acquire` parameter, so a provider that reads `{ config: Config }`
+ *   beside a `config` provider of some other type does not compile;
+ * - the `deps` names, bound to `keyof M`, so `layer(["confg"], …)` does not
+ *   compile either.
  *
  * Nothing is acquired until the graph is opened — by `run`, at boot, or by
  * {@link Provided.open}.
  */
 export function provide<
-  M extends { [K in keyof M]: Provider<unknown, ProvidedCtx<M>> },
+  M extends {
+    [K in keyof M]: Provider<unknown, ProvidedCtx<M>, Extract<keyof M, string>>;
+  },
 >(map: M): Provided<ProvidedCtx<M>> {
   // Snapshot the map's own keys once, in declaration order: that order is the
   // tie-break the topological walk falls back on, so two runs of one graph
