@@ -1366,7 +1366,3 @@ export function tryInterpret<C extends Cmd, Ok, M, Ctx>(
     });
   };
 }
-
-// `types` + `cmds`, Transitions form.
-
-// `types` + `cmds`, Transitions form.
