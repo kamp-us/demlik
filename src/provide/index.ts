@@ -64,9 +64,16 @@ const providedBrand: unique symbol = Symbol("demlik-tea.provided");
  * infers it from the literal you pass, and {@link provide} constrains it to the
  * map's own keys, so a misspelled dependency is a compile error at the call site
  * rather than an {@link UnknownProviderError} at `open()`. It defaults to
- * `string`, which is the untyped reading: a `Provider<T, D>` written by hand
- * still names its deps with plain strings, and only the map it is passed to
- * narrows them.
+ * `string` — the untyped reading, for a provider read back off an erased map.
+ *
+ * MIGRATION: that default is why an ANNOTATION of the two-argument form no
+ * longer fits inside {@link provide}. `readonly string[]` is not assignable to
+ * `readonly ("config" | "db")[]`, so `const db: Provider<string, D> = …` is
+ * rejected — a leaf `Provider<Config>` with `deps: []` included, since the
+ * default is what is compared, not the value. Either name the key set,
+ * `Provider<string, D, "config" | "db">`, or drop the annotation and let
+ * {@link layer} / {@link value} infer `K` from the literal, which is the shape
+ * this API is written for.
  */
 export interface Provider<
   T,
@@ -108,8 +115,12 @@ export type ProvidedCtx<M> = {
 /**
  * A provider with no dependencies — {@link layer}'s one-argument form and
  * {@link value}. Its `K` is `never`, so an empty `deps` fits EVERY map: a
- * leaf provider is admissible wherever it is declared, whatever keys the map
- * around it happens to have.
+ * leaf provider built through those constructors is admissible wherever it is
+ * declared, whatever keys the map around it happens to have.
+ *
+ * It is the CONSTRUCTED form that this holds for. Annotating the same value
+ * `Provider<T>` puts `K` back at its `string` default and outside `provide`'s
+ * constraint — see the migration note on {@link Provider}.
  */
 type LeafProvider<T> = Provider<T, Record<never, never>, never>;
 

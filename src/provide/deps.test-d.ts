@@ -11,7 +11,7 @@
 // sit on a line that genuinely fails to type-check — an unused one is itself an
 // error, which is what makes this a test rather than a comment.
 
-import { layer, provide, value } from "./index";
+import { layer, type Provider, provide, value } from "./index";
 
 type Config = { url: string };
 
@@ -81,3 +81,41 @@ provide({
 // `keyof M` must not make them harder to place.
 provide({ clock: value(() => 42) });
 provide({ clock: value(() => 42), rng: layer(() => Math.random) });
+
+// ── …but only in its CONSTRUCTED form: an annotation is the migration ──────
+//
+// The cases above all let `layer`/`value` infer `K` from the literal. Writing
+// the type down instead puts `K` back at its `string` default, and `readonly
+// string[]` does not fit `readonly (keyof M)[]` — the break the changeset and
+// the `Provider` tsdoc describe. These cases are what makes the next change to
+// `provide`'s constraint confront it rather than rediscover it.
+
+const annotatedLeaf: Provider<Config> = {
+  deps: [],
+  acquire: () => ({ url: "postgres://x" }),
+};
+const annotatedDep: Provider<string, { config: Config }> = {
+  deps: ["config"],
+  acquire: (deps) => `db@${deps.config.url}`,
+};
+
+provide({
+  // @ts-expect-error the annotation's `K` is `string`, not this map's keys —
+  // and a leaf provider with `deps: []` is caught too, since the default is
+  // what is compared rather than the value.
+  config: annotatedLeaf,
+  // @ts-expect-error same default, on a provider that does name a dependency.
+  db: annotatedDep,
+});
+
+// The migration: name the key set, and the annotated form fits again.
+const migratedLeaf: Provider<Config, Record<never, never>, "config" | "db"> = {
+  deps: [],
+  acquire: () => ({ url: "postgres://x" }),
+};
+const migratedDep: Provider<string, { config: Config }, "config" | "db"> = {
+  deps: ["config"],
+  acquire: (deps) => `db@${deps.config.url}`,
+};
+
+provide({ config: migratedLeaf, db: migratedDep });

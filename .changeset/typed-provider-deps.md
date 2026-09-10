@@ -22,5 +22,19 @@ one read back through an erased `Provider<unknown, …>` — where there is no k
 against.
 
 Minor rather than patch because the tightening rejects code that used to compile. `layer`, `value`
-and the acquisition order they produce are unchanged; a hand-written `Provider<T, D>` still names
-its deps with plain `string`, and only the map it is passed to narrows them.
+and the acquisition order they produce are unchanged, and a graph built through them needs no edit.
+
+**What breaks: an explicit `Provider` ANNOTATION.** `K` defaults to `string`, so `readonly
+string[]` no longer fits the `readonly (keyof M)[]` the map wants — including a leaf provider whose
+`deps` is `[]`, because the annotation's default is what is compared, not the value:
+
+```ts
+// Was: compiled. Now: TS2322 — `string` is not assignable to `"config" | "db"`.
+const config: Provider<Config> = { deps: [], acquire: () => ({ url: "postgres://x" }) };
+const db: Provider<string, { config: Config }> = { deps: ["config"], acquire: (d) => connect(d.config.url) };
+
+// Fix, either: name the key set…
+const db: Provider<string, { config: Config }, "config" | "db"> = { … };
+// …or drop the annotation and let the constructors infer it (preferred).
+const db = layer(["config"], (d: { config: Config }) => connect(d.config.url));
+```
