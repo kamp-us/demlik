@@ -32,8 +32,9 @@ function lightMachine() {
     red: { go: () => [{ type: "green" }, []], stop: (s) => [s, []] },
     green: { go: (s) => [s, []], stop: () => [{ type: "red" }, []] },
   };
-  return defineMachine<LightState, LightMsg, never, never, undefined>({
-    init: () => [{ type: "red" }, []],
+  return defineMachine({
+    types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
+    init: (_loaded) => [{ type: "red" }, []],
     update,
     interpret: {} as Interpret<LightMsg, never, undefined>,
   });
@@ -47,7 +48,8 @@ function counterMachine() {
     bump: (s) => [{ count: s.count + 1 }, []],
     reset: () => [{ count: 0 }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: () => [{ count: 0 }, []],
     update,
   });
@@ -69,7 +71,8 @@ describe("describeMachine — transitions form", () => {
     // genuinely differ. This is the case the cast at the consumer existed for.
     type S = { readonly type: string };
     type M = { readonly type: string };
-    const m = defineMachine<S, M, never, never, undefined>({
+    const m = defineMachine({
+      types: { model: {} as S, msg: {} as M, ctx: undefined },
       init: () => [{ type: "idle" }, []],
       update: {
         idle: { start: () => [{ type: "busy" }, []] },

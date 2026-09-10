@@ -11,13 +11,13 @@ type LightMsg = { type: "go" } | { type: "caution" } | { type: "stop" };
 type LightCmd = Cmd<never>;
 type LightCtx = Record<string, never>;
 
-const trafficLight = defineMachine<
-  LightState,
-  LightMsg,
-  LightCmd,
-  never,
-  LightCtx
->({
+const trafficLight = defineMachine({
+  types: {
+    model: {} as LightState,
+    msg: {} as LightMsg,
+    cmd: {} as LightCmd,
+    ctx: {} as LightCtx,
+  },
   init: (loaded) => [loaded ?? { type: "red" }, Cmd.none],
   update: {
     red: {
@@ -48,13 +48,12 @@ type CounterMsg =
   | { type: "decrement" }
   | { type: "reset" };
 
-const counter = defineMachine<
-  CounterState,
-  CounterMsg,
-  Cmd<never>,
-  never,
-  Record<string, never>
->({
+const counter = defineMachine({
+  types: {
+    model: {} as CounterState,
+    msg: {} as CounterMsg,
+    ctx: {} as Record<string, never>,
+  },
   init: (loaded) => [loaded ?? { count: 0 }, Cmd.none],
   update: {
     increment: (s) => [{ count: s.count + 1 }, Cmd.none],
@@ -134,13 +133,13 @@ describe("toMermaid — Reducer form", () => {
 
 describe("toMermaid — subscriptions annotation", () => {
   type SubState = { type: "idle" } | { type: "running" };
-  const withSubs = defineMachine<
-    SubState,
-    { type: "start" } | { type: "stop" },
-    Cmd<never>,
-    { type: "tick"; id: import("../index").SubId },
-    Record<string, never>
-  >({
+  const withSubs = defineMachine({
+    types: {
+      model: {} as SubState,
+      msg: {} as { type: "start" } | { type: "stop" },
+      sub: {} as { type: "tick"; id: import("../index").SubId },
+      ctx: {} as Record<string, never>,
+    },
     init: (loaded) => [loaded ?? { type: "idle" }, Cmd.none],
     update: {
       idle: {

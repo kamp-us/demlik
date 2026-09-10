@@ -204,3 +204,28 @@ const pure = defineMachine({
 void run(pure, {});
 const stillNoCtx: NoCtx = {};
 void stillNoCtx;
+
+// ── 7. the table form with NO cmds — `C` stays the cmdless marker ───────────
+
+type Order =
+  | { readonly type: "open"; readonly subtotal: number }
+  | { readonly type: "closed"; readonly total: number };
+type OrderMsg =
+  | { readonly type: "add"; readonly price: number }
+  | { readonly type: "close" };
+
+const pureTable = defineMachine({
+  types: { model: {} as Order, msg: {} as OrderMsg },
+  init: (loaded) => [loaded ?? { type: "open", subtotal: 0 }, []],
+  update: {
+    open: {
+      add: (s, m) => [{ ...s, subtotal: s.subtotal + m.price }, []],
+      close: (s) => [{ type: "closed", total: s.subtotal }, []],
+    },
+    closed: {
+      add: (s) => [s, []],
+      close: (s) => [s, []],
+    },
+  },
+});
+void run(pureTable, {});

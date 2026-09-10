@@ -234,13 +234,13 @@ type Msg =
 
 const machineFan = createFanOut(withJoin);
 
-const machine = defineMachine<
-  MachineState,
-  Msg,
-  Crawl | ReportDone,
-  never,
-  undefined
->({
+const machine = defineMachine({
+  types: {
+    model: {} as MachineState,
+    msg: {} as Msg,
+    cmd: {} as Crawl | ReportDone,
+    ctx: undefined,
+  },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]
@@ -641,13 +641,13 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
     const fan = createFanOut(withJoin);
     const ctx: WiredCtx = { runtime: null };
 
-    const machine = defineMachine<
-      WiredState,
-      WiredMsg,
-      Crawl | ReportDone,
-      never,
-      WiredCtx
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as WiredState,
+        msg: {} as WiredMsg,
+        cmd: {} as Crawl | ReportDone,
+        ctx: {} as WiredCtx,
+      },
       init: () => [{ fanOut: initFanOut<Item, Result>(), reports: [] }, []],
       update: {
         start: (s, m) => {

@@ -59,7 +59,13 @@ function note(state: State, line: string): State {
   return { ...state, log: [...state.log, line] };
 }
 
-export const checkout = defineMachine<State, Msg, StepCmd, never, Ctx>({
+export const checkout = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as StepCmd,
+    ctx: {} as Ctx,
+  },
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ saga: saga.init(), log: [] }, []],
 

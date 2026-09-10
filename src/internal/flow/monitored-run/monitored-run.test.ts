@@ -601,13 +601,14 @@ function makeMachine(
     snapshot_saved: (s, m) => [{ run: run.confirmSnapshot(s.run, m) }, []],
     snapshot_failed: (s) => [s, []],
   };
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof run.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof run.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ run: run.init() }, []],
     update,

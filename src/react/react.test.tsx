@@ -41,7 +41,8 @@ function counterMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
     inc: (s) => [{ n: s.n + 1 }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: (loaded) => [loaded ?? { n: 0 }, []],
     update,
   });
@@ -134,7 +135,13 @@ describe("useMachine", () => {
         };
       },
     };
-    const machine = defineMachine<Phase, M, never, ProbeSub, undefined>({
+    const machine = defineMachine({
+      types: {
+        model: {} as Phase,
+        msg: {} as M,
+        sub: {} as ProbeSub,
+        ctx: undefined,
+      },
       init: () => [{ phase: "armed" }, []],
       update: { noop: (s) => [s, []] },
       subscriptions: () => [{ id: "p1", type: "probe" }],
@@ -229,7 +236,13 @@ describe("useMachine — loud on discard", () => {
         await park;
       },
     };
-    return defineMachine<WizardState, WizardMsg, SaveCmd, never, WizardCtx>({
+    return defineMachine({
+      types: {
+        model: {} as WizardState,
+        msg: {} as WizardMsg,
+        cmd: {} as SaveCmd,
+        ctx: {} as WizardCtx,
+      },
       init: () => [{ step: 0 }, []],
       update,
       interpret,

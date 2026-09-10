@@ -23,7 +23,13 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function tickMachine(intervalMs: number) {
-  return defineMachine<State, Msg, never, TickSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TickSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ armed: true, ticks: 0 }, []],
     update,
     subscriptions: (s) =>

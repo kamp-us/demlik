@@ -219,13 +219,13 @@ type IntakeMsg =
 describe("machine wiring (replay through testing helpers)", () => {
   const intake = createIntake<Hook, Charged>({ keyOf });
 
-  const machine = defineMachine<
-    IntakeState<Hook, Charged>,
-    IntakeMsg,
-    IntakeCmd<Hook, Charged>,
-    never,
-    Record<string, never>
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as IntakeState<Hook, Charged>,
+      msg: {} as IntakeMsg,
+      cmd: {} as IntakeCmd<Hook, Charged>,
+      ctx: {} as Record<string, never>,
+    },
     init: (loaded) => [loaded ?? intake.init(), []],
     update: {
       receive: (s, m) => intake.receive(s, m.payload, m.at, m.id),
@@ -613,13 +613,13 @@ function memStore<S>(): Store<S> & { snapshot(): S | null } {
 }
 
 function wiredMachine(intake: ReturnType<typeof createIntake<Hook, Charged>>) {
-  return defineMachine<
-    IntakeState<Hook, Charged>,
-    WiredMsg,
-    WiredCmd,
-    never,
-    WiredCtx
-  >({
+  return defineMachine({
+    types: {
+      model: {} as IntakeState<Hook, Charged>,
+      msg: {} as WiredMsg,
+      cmd: {} as WiredCmd,
+      ctx: {} as WiredCtx,
+    },
     init: (loaded) => [loaded ?? intake.init(), []],
     update: {
       receive: (s, m) => intake.receive(s, m.payload, m.at, m.id),
@@ -690,13 +690,13 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
     // key stays PENDING for the whole test (simulating slow in-flight work).
     const intake = createIntake<Hook, Charged>({ keyOf, ttlMs: 1000 });
     const ctx: WiredCtx = { processed: new Map(), clock: { value: 0 } };
-    const machine = defineMachine<
-      IntakeState<Hook, Charged>,
-      WiredMsg,
-      WiredCmd,
-      never,
-      WiredCtx
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as IntakeState<Hook, Charged>,
+        msg: {} as WiredMsg,
+        cmd: {} as WiredCmd,
+        ctx: {} as WiredCtx,
+      },
       init: (loaded) => [loaded ?? intake.init(), []],
       update: {
         receive: (s, m) => intake.receive(s, m.payload, m.at, m.id),

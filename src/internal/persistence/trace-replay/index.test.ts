@@ -14,7 +14,8 @@ type Ctx = Record<string, never>;
 
 // The ORIGINAL reducer: completing an item flips its status to "done".
 function queueMachine() {
-  return defineMachine<State, Msg, Cmd<never>, never, Ctx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
     init: (loaded) => [
       loaded ?? { type: "queue", items: [], processed: 0 },
       Cmd.none,
@@ -42,7 +43,8 @@ function queueMachine() {
 // `status`, only bumping `processed`. Replaying a trace recorded against the
 // original against THIS machine must diverge at `state.items[i].status`.
 function queueMachineBuggyStatus() {
-  return defineMachine<State, Msg, Cmd<never>, never, Ctx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
     init: (loaded) => [
       loaded ?? { type: "queue", items: [], processed: 0 },
       Cmd.none,

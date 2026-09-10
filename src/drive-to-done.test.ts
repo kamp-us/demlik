@@ -50,7 +50,13 @@ function jobMachine() {
     next: async () => ({ type: "step" }),
     explode: async () => ({ type: "blow_up" }),
   };
-  return defineMachine<State, Msg, JobCmd, never, undefined>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      cmd: {} as JobCmd,
+      ctx: undefined,
+    },
     init: (loaded) => [loaded ?? { phase: "idle", steps: 0 }, []],
     update,
     interpret,
@@ -173,8 +179,9 @@ describe("driveToDone — typed rejections (#57)", () => {
     const interpret: Interpret<M2, C2, undefined> = {
       loop: async () => ({ type: "tick" }),
     };
-    const livelock = defineMachine<S2, M2, C2, never, undefined>({
-      init: () => [{ ticks: 0 }, []],
+    const livelock = defineMachine({
+      types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
+      init: (_loaded) => [{ ticks: 0 }, []],
       update,
       interpret,
     });
@@ -201,8 +208,9 @@ describe("driveToDone — typed rejections (#57)", () => {
       start: () => [{ phase: "waiting" }, []],
       finish: () => [{ phase: "done" }, []],
     };
-    const parker = defineMachine<S3, M3, never, never, undefined>({
-      init: () => [{ phase: "idle" }, []],
+    const parker = defineMachine({
+      types: { model: {} as S3, msg: {} as M3, ctx: undefined },
+      init: (_loaded) => [{ phase: "idle" }, []],
       update,
     });
     const probe = instrument(run(parker, { ctx: undefined }));
@@ -264,8 +272,9 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
   };
 
   it("dep-keyed Sub (`machine.subs`): resolves with the State the Sub delivered", async () => {
-    const machine = defineMachine<S4, M4, never, never, undefined>({
-      init: () => [{ phase: "idle" }, []],
+    const machine = defineMachine({
+      types: { model: {} as S4, msg: {} as M4, ctx: undefined },
+      init: (_loaded) => [{ phase: "idle" }, []],
       update,
       subs: [
         {
@@ -285,8 +294,9 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
 
   it("manual Sub (`subscriptions` + `subscribe`): resolves with the State the Sub delivered", async () => {
     type U4 = { readonly type: "timer"; readonly id: SubId };
-    const machine = defineMachine<S4, M4, never, U4, undefined>({
-      init: () => [{ phase: "idle" }, []],
+    const machine = defineMachine({
+      types: { model: {} as S4, msg: {} as M4, sub: {} as U4, ctx: undefined },
+      init: (_loaded) => [{ phase: "idle" }, []],
       update,
       subscriptions: (s) =>
         s.phase === "waiting" ? [{ type: "timer", id: subId("finish") }] : [],
@@ -339,8 +349,9 @@ describe("driveToDone — cancellation via an AbortSignal", () => {
         return { type: "start" };
       },
     };
-    return defineMachine<S5, M5, C5, never, undefined>({
-      init: () => [{ phase: "idle" }, []],
+    return defineMachine({
+      types: { model: {} as S5, msg: {} as M5, cmd: {} as C5, ctx: undefined },
+      init: (_loaded) => [{ phase: "idle" }, []],
       update,
       interpret,
     });

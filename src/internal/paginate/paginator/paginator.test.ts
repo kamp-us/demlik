@@ -439,17 +439,21 @@ type WalkMsg =
 type WalkCmd = Cmd<"noop">;
 
 function makeWalkMachine(policy: PaginatorPolicy<number>) {
-  return defineMachine<PaginatorState<number>, WalkMsg, WalkCmd, never, object>(
-    {
-      init: (loaded) => [loaded ?? initPaginator<number>(), []],
-      update: {
-        start: (s) => [start(s, policy), []],
-        page: (s, m) => [recordPage(s, m.count, m.next, policy), []],
-        drain: (s, m) => [drain(s, m.n), []],
-        resume: (s) => [resume(s, policy), []],
-      },
+  return defineMachine({
+    types: {
+      model: {} as PaginatorState<number>,
+      msg: {} as WalkMsg,
+      cmd: {} as WalkCmd,
+      ctx: {} as object,
     },
-  );
+    init: (loaded) => [loaded ?? initPaginator<number>(), []],
+    update: {
+      start: (s) => [start(s, policy), []],
+      page: (s, m) => [recordPage(s, m.count, m.next, policy), []],
+      drain: (s, m) => [drain(s, m.n), []],
+      resume: (s) => [resume(s, policy), []],
+    },
+  });
 }
 
 describe("paginator — wired in a real machine (replay end-state)", () => {

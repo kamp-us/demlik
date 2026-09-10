@@ -99,7 +99,13 @@ function seamBattery() {
 }
 
 function machineFor(seam: ReturnType<typeof seamBattery>, runId = "run-1") {
-  return defineMachine<State, Msg, never, TransportSub<string>, Ctx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TransportSub<string>,
+      ctx: {} as Ctx,
+    },
     init: () => [{ runId, heard: [] }, []],
     update,
     subscriptions: (s) => (s.runId === null ? [] : [seam.sub(s.runId)]),
@@ -286,7 +292,8 @@ describe("fromTransport.depKeyed — the seam as a dep-keyed Sub", () => {
     seam: ReturnType<typeof seamBattery>,
     runId = "run-1",
   ) {
-    return defineMachine<State, Msg, never, never, Ctx>({
+    return defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
       init: () => [{ runId, heard: [] }, []],
       update,
       subs: [seam.depKeyed((s: State) => s.runId)],

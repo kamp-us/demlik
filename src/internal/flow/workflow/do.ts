@@ -213,13 +213,13 @@ function workflowMachine<A, R, F>(
   ref: WorkflowRef<A, R, F>,
   steps: WorkflowSteps<A>,
 ): WorkflowMachine<A, R, F> {
-  return defineMachine<
-    WorkflowGrainState<A, R, F>,
-    WorkflowMsg<R, F>,
-    WorkflowGrainCmd<A>,
-    WorkflowGrainSub,
-    WorkflowGrainCtx<A, R, F>
-  >({
+  return defineMachine({
+    types: {
+      model: {} as WorkflowGrainState<A, R, F>,
+      msg: {} as WorkflowMsg<R, F>,
+      sub: {} as WorkflowGrainSub,
+      ctx: {} as WorkflowGrainCtx<A, R, F>,
+    },
     // Fresh boot seeds the workflow over `steps`, owing + dispatching the first
     // activity (the owe ledger event is captured into the carried state, the
     // dispatch Cmd is emitted for the grain to perform post-persist). A cold

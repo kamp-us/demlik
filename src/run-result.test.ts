@@ -22,8 +22,9 @@ function counterMachine() {
     bump: (s) => [{ ...s, count: s.count + 1 }, []],
     finish: (s) => [{ ...s, phase: "done", output: `done@${s.count}` }, []],
   };
-  return defineMachine<State, Msg, never, never, undefined>({
-    init: () => [{ phase: "running", count: 0, output: null }, []],
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: undefined },
+    init: (_loaded) => [{ phase: "running", count: 0, output: null }, []],
     update,
     interpret: {} as Interpret<Msg, never, undefined>,
   });

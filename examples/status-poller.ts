@@ -1,11 +1,11 @@
 import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
+import { Result } from "better-result";
+import { createPoller, type PollerState } from "../src/internal/flow/poller";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
   subscribeDeadline,
 } from "../src/internal/resilience/deadline";
-import { createPoller, type PollerState } from "../src/internal/flow/poller";
-import { Result } from "better-result";
 
 type JobStatus = {
   readonly status: "pending" | "ready";
@@ -50,13 +50,14 @@ function isDeadlineSub(sub: Sub): sub is DeadlineSub {
   return sub.type === "deadline";
 }
 
-export const statusPoller = defineMachine<
-  State,
-  Msg,
-  ReadStatus,
-  DeadlineSub,
-  Ctx
->({
+export const statusPoller = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as ReadStatus,
+    sub: {} as DeadlineSub,
+    ctx: {} as Ctx,
+  },
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ jobId: JOB_ID, poll: poll.init() }, []],
 

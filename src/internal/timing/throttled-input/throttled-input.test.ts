@@ -437,7 +437,13 @@ type AppMsg =
 describe("createThrottledInput — wired into a machine", () => {
   const gate = createThrottledInput(allGates);
 
-  const machine = defineMachine<AppState, AppMsg, EmitCmd, never, undefined>({
+  const machine = defineMachine({
+    types: {
+      model: {} as AppState,
+      msg: {} as AppMsg,
+      cmd: {} as EmitCmd,
+      ctx: undefined,
+    },
     init: (loaded) => [loaded ?? { search: gate.init() }, []],
     update: {
       typed: (s, m) => {

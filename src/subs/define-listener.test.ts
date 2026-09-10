@@ -64,7 +64,13 @@ function machineFor(
     },
   });
 
-  return defineMachine<State, Msg, never, TickSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TickSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ armed: true, seen: [] }, []],
     update,
     subscriptions: (s) =>

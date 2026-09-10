@@ -88,7 +88,8 @@ describe("schemaMigrate — wired as a real Store.migrate", () => {
   const update: Reducer<State, Msg, never> = {
     bump: (s) => [{ ...s, count: s.count + 1 }, []],
   };
-  const machine = defineMachine<State, Msg, never, never, undefined>({
+  const machine = defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: undefined },
     init: (loaded) => [loaded ?? { count: 0, label: "fresh" }, []],
     update,
     interpret: {} as Interpret<Msg, never, undefined>,

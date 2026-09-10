@@ -29,13 +29,12 @@ type CmdlessCtx = Record<string, never>;
 // A cmdless grain: `Cmd = never`, so the `Machine` conditional relaxes
 // `interpret` to optional and this machine legitimately declares none — exactly
 // the shape of vortex's `ArenaCmd = never` arena grain.
-const cmdlessMachine = defineMachine<
-  CmdlessState,
-  CmdlessMsg,
-  never,
-  never,
-  CmdlessCtx
->({
+const cmdlessMachine = defineMachine({
+  types: {
+    model: {} as CmdlessState,
+    msg: {} as CmdlessMsg,
+    ctx: {} as CmdlessCtx,
+  },
   init: (loaded) => [loaded ?? { type: "counting", count: 0 }, []],
   update: {
     inc: (s) => [{ ...s, count: s.count + 1 }, []],
@@ -66,13 +65,13 @@ export const _assertHandle: _AssertHandle = true;
 // `interpret` the conditional requires — proving the change is a relaxation
 // scoped to `Cmd = never`, not a loosening of the guard for real commands.
 type CmdfulCmd = { readonly type: "persist"; readonly payload: string };
-const cmdfulMachine = defineMachine<
-  CmdlessState,
-  CmdlessMsg,
-  CmdfulCmd,
-  never,
-  CmdlessCtx
->({
+const cmdfulMachine = defineMachine({
+  types: {
+    model: {} as CmdlessState,
+    msg: {} as CmdlessMsg,
+    cmd: {} as CmdfulCmd,
+    ctx: {} as CmdlessCtx,
+  },
   init: (loaded) => [loaded ?? { type: "counting", count: 0 }, []],
   update: {
     inc: (s) => [

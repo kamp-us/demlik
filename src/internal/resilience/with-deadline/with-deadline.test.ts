@@ -27,26 +27,30 @@ interface CounterCtx {
 }
 
 function makeBase() {
-  return defineMachine<CounterState, CounterMsg, PersistCmd, never, CounterCtx>(
-    {
-      init: (loaded) => [loaded ?? { count: 0 }, []],
-      update: {
-        inc: (s, m) => {
-          const count = s.count + m.by;
-          return [{ count }, [{ type: "persist", count }]];
-        },
-        reset: () => [{ count: 0 }, []],
-        // `heartbeat` is a no-op base transition — used to test that a
-        // non-progress Msg does NOT re-arm the deadline.
-        heartbeat: (s) => [s, []],
+  return defineMachine({
+    types: {
+      model: {} as CounterState,
+      msg: {} as CounterMsg,
+      cmd: {} as PersistCmd,
+      ctx: {} as CounterCtx,
+    },
+    init: (loaded) => [loaded ?? { count: 0 }, []],
+    update: {
+      inc: (s, m) => {
+        const count = s.count + m.by;
+        return [{ count }, [{ type: "persist", count }]];
       },
-      interpret: {
-        persist: async (cmd, ctx) => {
-          await ctx.persist(cmd.count);
-        },
+      reset: () => [{ count: 0 }, []],
+      // `heartbeat` is a no-op base transition — used to test that a
+      // non-progress Msg does NOT re-arm the deadline.
+      heartbeat: (s) => [s, []],
+    },
+    interpret: {
+      persist: async (cmd, ctx) => {
+        await ctx.persist(cmd.count);
       },
     },
-  );
+  });
 }
 
 const MSGS: readonly CounterMsg[] = [
@@ -327,13 +331,14 @@ describe("withDeadline — subscriptions reconcile by id", () => {
   it("merges base subs WITH the deadline sub (base sub preserved)", () => {
     // A base that arms its own sub proves the merge keeps both.
     type Tick = { id: string; type: "tick" };
-    const ticking = defineMachine<
-      CounterState,
-      CounterMsg,
-      PersistCmd,
-      Tick,
-      CounterCtx
-    >({
+    const ticking = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        cmd: {} as PersistCmd,
+        sub: {} as Tick,
+        ctx: {} as CounterCtx,
+      },
       init: (loaded) => [loaded ?? { count: 0 }, []],
       update: {
         inc: (s, m) => [{ count: s.count + m.by }, []],
@@ -455,13 +460,13 @@ describe("withDeadline — real run() with fake timers", () => {
 describe("withDeadline — reserved-namespace guards", () => {
   it("throws if the base squats on the $deadline:decision interpret handler", () => {
     type SquatCmd = Cmd<"$deadline:decision"> & { readonly note: string };
-    const squatting = defineMachine<
-      CounterState,
-      CounterMsg,
-      SquatCmd,
-      never,
-      CounterCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        cmd: {} as SquatCmd,
+        ctx: {} as CounterCtx,
+      },
       init: (loaded) => [loaded ?? { count: 0 }, []],
       update: {
         inc: (s, m) => [
@@ -482,13 +487,14 @@ describe("withDeadline — reserved-namespace guards", () => {
 
   it("throws if the base squats on the $deadline:timeout subscribe handler", () => {
     type SquatSub = { id: string; type: "$deadline:timeout" };
-    const squatting = defineMachine<
-      CounterState,
-      CounterMsg,
-      PersistCmd,
-      SquatSub,
-      CounterCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        cmd: {} as PersistCmd,
+        sub: {} as SquatSub,
+        ctx: {} as CounterCtx,
+      },
       init: (loaded) => [loaded ?? { count: 0 }, []],
       update: {
         inc: (s, m) => [{ count: s.count + m.by }, []],

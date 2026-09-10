@@ -67,8 +67,14 @@ function dbMachine() {
       // No follow-up Msg: the write is the whole effect.
     },
   };
-  return defineMachine<State, Msg, { readonly type: "persist" }, never, Ctx>({
-    init: () => [{ phase: "running", writes: 0 }, []],
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      cmd: {} as { readonly type: "persist" },
+      ctx: {} as Ctx,
+    },
+    init: (_loaded) => [{ phase: "running", writes: 0 }, []],
     update,
     interpret,
   });

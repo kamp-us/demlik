@@ -77,9 +77,10 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
  * value is an `_ok` or a `malformed_result`.
  */
 function machineOver(work: (cmd: FetchCmd, http: Http) => Promise<unknown>) {
-  return defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
     cmds: [fetch],
-    init: () => [initial, []],
+    init: (_loaded) => [initial, []],
     update,
     interpret: {
       fetch: async (cmd, ctx) =>
@@ -216,9 +217,10 @@ describe("settle — the Result lives in the helper, the kernel sees a Msg", () 
       Result<{ body: string }, { _tag: "not_found" } | { _tag: "timeout" }>
     >,
   ) {
-    return defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
+    return defineMachine({
+      types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
       cmds: [fetch],
-      init: () => [initial, []],
+      init: (_loaded) => [initial, []],
       update,
       interpret: { fetch: settle(fetch, (cmd) => work(cmd)) },
     });
@@ -248,9 +250,10 @@ describe("settle — the Result lives in the helper, the kernel sees a Msg", () 
 
   it("the handler's ctx carries the Cmd's `R` slice", async () => {
     const urls: string[] = [];
-    const m = defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
+    const m = defineMachine({
+      types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
       cmds: [fetch],
-      init: () => [initial, []],
+      init: (_loaded) => [initial, []],
       update,
       interpret: {
         fetch: settle(fetch, async (cmd, ctx) => {
@@ -280,13 +283,14 @@ describe("a machine of hand-written Cmds is untouched", () => {
     type S = { readonly n: number };
     type M = { readonly type: "bump" } | { readonly type: "bumped" };
     type C = { readonly type: "later" };
-    const m = defineMachine<S, M, C, never, NoCtx>({
-      init: () => [{ n: 0 }, []],
+    const m = defineMachine({
+      types: { model: {} as S, msg: {} as M, cmd: {} as C, ctx: {} as NoCtx },
+      init: (_loaded) => [{ n: 0 }, []],
       update: {
         bump: (s) => [s, [{ type: "later" }]],
         bumped: (s) => [{ n: s.n + 1 }, []],
       },
-      interpret: { later: async () => ({ type: "bumped" }) },
+      interpret: { later: async (_cmd) => ({ type: "bumped" }) },
     });
     const seen: M[] = [];
     const rt = await run(m, {}).ready;

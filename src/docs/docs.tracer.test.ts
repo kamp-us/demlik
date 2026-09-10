@@ -56,7 +56,8 @@ type DlMsg =
   | { readonly type: "start"; readonly total: number }
   | { readonly type: "chunk"; readonly size: number };
 
-const downloader = defineMachine<DlState, DlMsg, never, never, undefined>({
+const downloader = defineMachine({
+  types: { model: {} as DlState, msg: {} as DlMsg, ctx: undefined },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]
@@ -143,7 +144,13 @@ interface RfCtx {
   readonly http: (url: string) => Promise<string>;
 }
 
-const resilientFetch = defineMachine<RfState, RfMsg, DoFetch, never, RfCtx>({
+const resilientFetch = defineMachine({
+  types: {
+    model: {} as RfState,
+    msg: {} as RfMsg,
+    cmd: {} as DoFetch,
+    ctx: {} as RfCtx,
+  },
   init: (loaded) =>
     loaded !== null
       ? [loaded, []]
@@ -301,7 +308,8 @@ describe("how-to — replay a recorded run in a test", () => {
 
 type CountState = { readonly count: number };
 type CountMsg = { readonly type: "inc" };
-const counter = defineMachine<CountState, CountMsg, never, never, undefined>({
+const counter = defineMachine({
+  types: { model: {} as CountState, msg: {} as CountMsg, ctx: undefined },
   init: () => [{ count: 0 }, []],
   update: { inc: (s) => [{ count: s.count + 1 }, []] },
 });

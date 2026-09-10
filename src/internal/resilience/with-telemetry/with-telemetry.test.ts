@@ -29,24 +29,28 @@ interface CounterCtx {
 }
 
 function makeBase() {
-  return defineMachine<CounterState, CounterMsg, PersistCmd, never, CounterCtx>(
-    {
-      init: (loaded) => [loaded ?? { count: 0 }, []],
-      update: {
-        inc: (s, m) => {
-          const count = s.count + m.by;
-          return [{ count }, [{ type: "persist", count }]];
-        },
-        // `reset` emits NO base Cmd — proves the wrapper still emits its own.
-        reset: () => [{ count: 0 }, []],
+  return defineMachine({
+    types: {
+      model: {} as CounterState,
+      msg: {} as CounterMsg,
+      cmd: {} as PersistCmd,
+      ctx: {} as CounterCtx,
+    },
+    init: (loaded) => [loaded ?? { count: 0 }, []],
+    update: {
+      inc: (s, m) => {
+        const count = s.count + m.by;
+        return [{ count }, [{ type: "persist", count }]];
       },
-      interpret: {
-        persist: async (cmd, ctx) => {
-          await ctx.persist(cmd.count);
-        },
+      // `reset` emits NO base Cmd — proves the wrapper still emits its own.
+      reset: () => [{ count: 0 }, []],
+    },
+    interpret: {
+      persist: async (cmd, ctx) => {
+        await ctx.persist(cmd.count);
       },
     },
-  );
+  });
 }
 
 const MSGS: readonly CounterMsg[] = [
@@ -222,13 +226,13 @@ describe("withTelemetry — real runtime drives the sink", () => {
     // A base that squats on the wrapper's reserved Cmd namespace. The interpret
     // spread would SILENTLY clobber this handler; the wrap-time guard refuses.
     type SquatCmd = Cmd<"$telemetry:emit"> & { readonly note: string };
-    const squatting = defineMachine<
-      CounterState,
-      CounterMsg,
-      SquatCmd,
-      never,
-      CounterCtx
-    >({
+    const squatting = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        cmd: {} as SquatCmd,
+        ctx: {} as CounterCtx,
+      },
       init: (loaded) => [loaded ?? { count: 0 }, []],
       update: {
         inc: (s, m) => [

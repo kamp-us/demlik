@@ -96,7 +96,13 @@ interface ToolCtx {
   readonly weather: (city: string) => Promise<string>;
 }
 
-const toolStep = defineMachine<ToolState, ToolMsg, CallTool, never, ToolCtx>({
+const toolStep = defineMachine({
+  types: {
+    model: {} as ToolState,
+    msg: {} as ToolMsg,
+    cmd: {} as CallTool,
+    ctx: {} as ToolCtx,
+  },
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ status: "idle", result: null }, []],
   update: {
@@ -519,13 +525,13 @@ function buildBuggyMachine(): ResearchMachine {
   };
 
   // Reuse the good machine's other fields verbatim; swap in the buggy update.
-  return defineMachine<
-    ResearchState,
-    AgentMsg,
-    ResearchCmd,
-    DeadlineSub,
-    object
-  >({
+  return defineMachine({
+    types: {
+      model: {} as ResearchState,
+      msg: {} as AgentMsg,
+      cmd: {} as ResearchCmd,
+      sub: {} as DeadlineSub,
+    },
     init: good.init,
     update: buggyUpdate,
     subscriptions: good.subscriptions,

@@ -56,8 +56,9 @@ function raggedTable(): Record<
 }
 
 function raggedMachine() {
-  return defineMachine<DynState, DynMsg, never, never, undefined>({
-    init: () => [{ type: "idle" }, []],
+  return defineMachine({
+    types: { model: {} as DynState, msg: {} as DynMsg, ctx: undefined },
+    init: (_loaded) => [{ type: "idle" }, []],
     update: raggedTable() as unknown as Transitions<DynState, DynMsg, never>,
     interpret: {} as Interpret<DynMsg, never, undefined>,
   });
@@ -124,8 +125,9 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
       red: { go: () => [{ type: "green" }, []], stop: (s) => [s, []] },
       green: { go: (s) => [s, []], stop: () => [{ type: "red" }, []] },
     };
-    const m = defineMachine<LightState, LightMsg, never, never, undefined>({
-      init: () => [{ type: "red" }, []],
+    const m = defineMachine({
+      types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
+      init: (_loaded) => [{ type: "red" }, []],
       update,
       interpret: {} as Interpret<LightMsg, never, undefined>,
     });
@@ -142,8 +144,9 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
       bump: (s) => [{ count: s.count + 1 }, []],
       reset: () => [{ count: 0 }, []],
     };
-    const m = defineMachine<S, M, never, never, undefined>({
-      init: () => [{ count: 0 }, []],
+    const m = defineMachine({
+      types: { model: {} as S, msg: {} as M, ctx: undefined },
+      init: (_loaded) => [{ count: 0 }, []],
       update,
     });
     expect(msgKeysOf(m)).toEqual(["bump", "reset"]);
@@ -179,8 +182,9 @@ describe("the wrappers stop losing cells for a ragged base", () => {
   });
 
   it("withDeadline's reserved-namespace scan sees a later row's $deadline: Msg", () => {
-    const squatter = defineMachine<DynState, DynMsg, never, never, undefined>({
-      init: () => [{ type: "idle" }, []],
+    const squatter = defineMachine({
+      types: { model: {} as DynState, msg: {} as DynMsg, ctx: undefined },
+      init: (_loaded) => [{ type: "idle" }, []],
       update: {
         idle: { start: () => [{ type: "busy" }, []] },
         // The squat hides in row TWO — invisible to the first-row reading, so

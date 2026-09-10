@@ -341,13 +341,13 @@ function lift(
   return [{ ...s, saga }, cmds];
 }
 
-const machine = defineMachine<
-  MachineState,
-  Msg,
-  Forward | Undo,
-  never,
-  undefined
->({
+const machine = defineMachine({
+  types: {
+    model: {} as MachineState,
+    msg: {} as Msg,
+    cmd: {} as Forward | Undo,
+    ctx: undefined,
+  },
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ saga: initSaga() }, []],
   update: {

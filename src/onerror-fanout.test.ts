@@ -57,7 +57,14 @@ function fanoutMachine(opts?: {
   const subscribe: Subscribe<Msg, TickSub, undefined> = {
     tick: () => opts?.cleanup ?? (() => {}),
   };
-  return defineMachine<State, Msg, PingCmd, TickSub, undefined>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      cmd: {} as PingCmd,
+      sub: {} as TickSub,
+      ctx: undefined,
+    },
     init: () => [{ n: 0, subOn: opts?.subOn ?? false }, []],
     update,
     interpret,

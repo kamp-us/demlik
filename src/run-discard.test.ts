@@ -42,7 +42,13 @@ function parkingMachine(park: Promise<void>) {
       return { type: "arrived" as const };
     },
   };
-  return defineMachine<State, Msg, FetchCmd, never, undefined>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      cmd: {} as FetchCmd,
+      ctx: undefined,
+    },
     init: () => [{ started: 0, done: 0 }, []],
     update,
     interpret,
@@ -172,7 +178,13 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
 
   it("does not strand the count when an in-flight handler rejects", async () => {
     const seen: RuntimeErrorContext[] = [];
-    const boom = defineMachine<State, Msg, FetchCmd, never, undefined>({
+    const boom = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as FetchCmd,
+        ctx: undefined,
+      },
       init: () => [{ started: 0, done: 0 }, []],
       update: {
         go: (s) => [{ ...s, started: s.started + 1 }, [{ type: "fetch" }]],
@@ -265,7 +277,13 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
         onDispatch(dispatch);
       },
     };
-    return defineMachine<State, Msg2, SlowCmd, never, undefined>({
+    return defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg2,
+        cmd: {} as SlowCmd,
+        ctx: undefined,
+      },
       init: () => [{ started: 0, done: 0 }, []],
       update,
       interpret,

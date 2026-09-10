@@ -19,7 +19,12 @@ type Msg =
   | { type: "note"; text: string };
 
 function counter() {
-  return defineMachine<State, Msg, Cmd<never>, never, Record<string, never>>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      ctx: {} as Record<string, never>,
+    },
     init: (loaded) => [
       loaded ?? { type: "counting", count: 0, log: [] },
       Cmd.none,

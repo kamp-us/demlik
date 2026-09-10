@@ -48,7 +48,13 @@ const update: Reducer<State, Msg, Start> = {
 
 describe("wrapDetached — the typed Cmd→Msg edge", () => {
   it("fires the terminal Msg through the kernel-injected dispatch", async () => {
-    const machine = defineMachine<State, Msg, Start, never, undefined>({
+    const machine = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Start,
+        ctx: undefined,
+      },
       init: () => [{ phase: "idle" }, []],
       update,
       interpret: { start_graph: wrapDetached(startGraph) } satisfies Interpret<
@@ -103,7 +109,13 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
     > = async (_cmd, _ctx, dispatch) => {
       dispatch({ type: "graph_finished" });
     };
-    const machine = defineMachine<State, Msg, Start, never, undefined>({
+    const machine = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Start,
+        ctx: undefined,
+      },
       init: () => [{ phase: "idle" }, []],
       update,
       interpret: { start_graph: wrapDetached(reentrant) } satisfies Interpret<
@@ -122,7 +134,13 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
   it("a plain leaf handler ignores the third arg entirely (additive)", async () => {
     // The pre-existing authoring style: return the follow-up Msg, declare only
     // `(cmd, ctx)`. Still assignable, still works.
-    const machine = defineMachine<State, Msg, Start, never, undefined>({
+    const machine = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Start,
+        ctx: undefined,
+      },
       init: () => [{ phase: "idle" }, []],
       update,
       interpret: {

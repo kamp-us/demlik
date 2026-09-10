@@ -58,13 +58,14 @@ function makeMachine(
   rng = rngZero,
 ) {
   const rc = createResilientCall<string, string>(config, rng);
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof rc.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof rc.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ resilience: rc.init() }, []],
     update: {
@@ -913,7 +914,13 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     ctx: WCtx,
   ) {
     const rc = createResilientCall<string, string>(config, rngZero);
-    return defineMachine<WState, WMsg, WCmd, never, WCtx>({
+    return defineMachine({
+      types: {
+        model: {} as WState,
+        msg: {} as WMsg,
+        cmd: {} as WCmd,
+        ctx: {} as WCtx,
+      },
       init: (loaded) =>
         loaded !== null ? [loaded, []] : [{ resilience: rc.init() }, []],
       update: {
@@ -1207,13 +1214,14 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
       { retry: outageBudget },
       rngZero,
     );
-    const machine = defineMachine<
-      DState,
-      DMsg,
-      RunCmd<string>,
-      ReturnType<typeof rc.subs>[number],
-      object
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as DState,
+        msg: {} as DMsg,
+        cmd: {} as RunCmd<string>,
+        sub: {} as ReturnType<typeof rc.subs>[number],
+        ctx: {} as object,
+      },
       init: (loaded) =>
         loaded !== null ? [loaded, []] : [{ resilience: rc.init() }, []],
       update: {

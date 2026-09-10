@@ -47,7 +47,13 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function pingMachine(target: FakeTarget) {
-  return defineMachine<State, Msg, never, PingSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as PingSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ armed: true, pings: 0 }, []],
     update,
     subscriptions: (s) =>

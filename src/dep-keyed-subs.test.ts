@@ -51,7 +51,8 @@ function recordingEntry(log: string[]): DepKeyedSub<State, Msg, undefined> {
 function machineWith(
   subs: ReadonlyArray<DepKeyedSub<State, Msg, undefined>>,
 ): ReturnType<typeof defineMachine<State, Msg, never, never, undefined>> {
-  return defineMachine<State, Msg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: undefined },
     init: () => [{ runId: null, phase: "idle" }, []],
     update,
     subs,
@@ -205,7 +206,8 @@ describe("dep-keyed Subs — the reconcile contract", () => {
 
 describe("dep-keyed Subs — additivity", () => {
   it("a machine with no `subs` field reconciles exactly as before", async () => {
-    const noSubs = defineMachine<State, Msg, never, never, undefined>({
+    const noSubs = defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
       interpret: {} as Interpret<Msg, never, undefined>,
@@ -219,7 +221,13 @@ describe("dep-keyed Subs — additivity", () => {
   it("`subs` and the manual `subscriptions` escape hatch feed ONE reconcile pass", async () => {
     const log: string[] = [];
     type ManualSub = Sub<"manual">;
-    const both = defineMachine<State, Msg, never, ManualSub, undefined>({
+    const both = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as ManualSub,
+        ctx: undefined,
+      },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
       subs: [recordingEntry(log)],
@@ -253,7 +261,13 @@ describe("dep-keyed Subs — additivity", () => {
     // rather than being overwritten by the manual pass's own (absent) error.
     const log: string[] = [];
     type ManualSub = Sub<"manual">;
-    const both = defineMachine<State, Msg, never, ManualSub, undefined>({
+    const both = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as ManualSub,
+        ctx: undefined,
+      },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
       subs: [
@@ -301,7 +315,8 @@ describe("dep-keyed Subs — `undefined` deps mean inactive, exactly like null",
   ): ReturnType<
     typeof defineMachine<OptState, OptMsg, never, never, undefined>
   > {
-    return defineMachine<OptState, OptMsg, never, never, undefined>({
+    return defineMachine({
+      types: { model: {} as OptState, msg: {} as OptMsg, ctx: undefined },
       init: () => [{}, []],
       update: {
         start: (_s, m) => [{ runId: m.runId }, []],
@@ -380,7 +395,13 @@ describe("dep-keyed Subs — a throwing `deps` is isolated like a throwing `sour
   it("does not strand the manual `subscriptions` aggregate after the loop", async () => {
     const log: string[] = [];
     type ManualSub = Sub<"manual">;
-    const both = defineMachine<State, Msg, never, ManualSub, undefined>({
+    const both = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as ManualSub,
+        ctx: undefined,
+      },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
       subs: [boomDeps],
@@ -416,7 +437,8 @@ describe("dep-keyed Subs — a non-plain deps slice fails loudly, never silently
 
   it("refuses to key a Sub on a Date instead of collapsing every slice into one id", async () => {
     const log: string[] = [];
-    const clock = defineMachine<ClockState, ClockMsg, never, never, undefined>({
+    const clock = defineMachine({
+      types: { model: {} as ClockState, msg: {} as ClockMsg, ctx: undefined },
       init: () => [{ startedAt: null }, []],
       update: { restart: (_s, m) => [{ startedAt: m.startedAt }, []] },
       subs: [
@@ -480,7 +502,13 @@ describe("dep-keyed Subs — a dispatch during teardown reaches the sink, not th
     const reports: Array<{ error: unknown; phase: string }> = [];
     let fire: (() => void) | undefined;
     type ManualSub = Sub<"manual">;
-    const manual = defineMachine<State, Msg, never, ManualSub, undefined>({
+    const manual = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as ManualSub,
+        ctx: undefined,
+      },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
       subscriptions: (s) =>
@@ -533,7 +561,8 @@ describe("replay — the dep-keyed desired set, without wiring anything", () => 
   });
 
   it("reports [] for a machine that declares no `subs`", () => {
-    const noSubs = defineMachine<State, Msg, never, never, undefined>({
+    const noSubs = defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
       interpret: {} as Interpret<Msg, never, undefined>,

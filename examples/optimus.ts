@@ -15,8 +15,11 @@ import {
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
-import { createIntake, type IntakeCmd } from "../src/internal/idempotency/idempotent-intake";
 import { toMermaid } from "@demlik/tea/machine-viz";
+import {
+  createIntake,
+  type IntakeCmd,
+} from "../src/internal/idempotency/idempotent-intake";
 import {
   createPaginatedWalk,
   type PageErrMsg,
@@ -26,6 +29,7 @@ import {
   subscribeDeadline as subscribeWalkDeadline,
 } from "../src/internal/paginate/paginated-walk";
 import { recorder } from "../src/internal/persistence/recorder";
+import { replayTrace } from "../src/internal/persistence/trace-replay";
 import {
   createResilientCall,
   type DeadlineSub,
@@ -35,7 +39,6 @@ import {
   type SucceedMsg,
   subscribeDeadline as subscribeAuditDeadline,
 } from "../src/internal/resilience/resilient-call";
-import { replayTrace } from "../src/internal/persistence/trace-replay";
 import { withDeadline } from "../src/internal/resilience/with-deadline";
 import { withResilience } from "../src/internal/resilience/with-resilience";
 import { withTelemetry } from "../src/internal/resilience/with-telemetry";
@@ -243,13 +246,14 @@ const crawler = createPaginatedWalk<WalkCursor, SitemapPage, never>(
   () => 0,
 );
 
-const walkMachine = defineMachine<
-  WalkState,
-  WalkMsg,
-  WalkCmd,
-  DeadlineSub,
-  WalkCtx
->({
+const walkMachine = defineMachine({
+  types: {
+    model: {} as WalkState,
+    msg: {} as WalkMsg,
+    cmd: {} as WalkCmd,
+    sub: {} as DeadlineSub,
+    ctx: {} as WalkCtx,
+  },
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ walk: crawler.init() }, []],
   update: {
@@ -346,13 +350,14 @@ const auditCall = createResilientCall<string, AuditFinding>(
 
 const AUDIT_KEY = "audit";
 
-const auditMachine = defineMachine<
-  AuditCallState,
-  AuditCallMsg,
-  AuditCallCmd,
-  DeadlineSub,
-  AuditCtx
->({
+const auditMachine = defineMachine({
+  types: {
+    model: {} as AuditCallState,
+    msg: {} as AuditCallMsg,
+    cmd: {} as AuditCallCmd,
+    sub: {} as DeadlineSub,
+    ctx: {} as AuditCtx,
+  },
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ resilience: auditCall.init() }, []],
   update: {

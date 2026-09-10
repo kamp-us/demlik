@@ -27,7 +27,8 @@ function reducerMachine() {
   const update: Reducer<CounterState, CounterMsg, never> = {
     bump: (s) => [{ count: s.count + 1 }, []],
   };
-  return defineMachine<CounterState, CounterMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: () => [{ count: 0 }, []],
     update,
     interpret: {} as Interpret<CounterMsg, never, undefined>,
@@ -48,7 +49,8 @@ function transitionsMachine() {
       stop: () => [{ type: "red" }, []],
     },
   };
-  return defineMachine<LightState, LightMsg, never, never, undefined>({
+  return defineMachine({
+    types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: () => [{ type: "red" }, []],
     update,
     interpret: {} as Interpret<LightMsg, never, undefined>,
@@ -101,7 +103,8 @@ describe("__form is authoritative over the structural heuristic (#57)", () => {
       go: () => undefined,
     });
     const update = { tick } as unknown as Reducer<CState, CMsg, never>;
-    const m = defineMachine<CState, CMsg, never, never, undefined>({
+    const m = defineMachine({
+      types: { model: {} as CState, msg: {} as CMsg, ctx: undefined },
       init: () => [{ n: 0 }, []],
       update,
       interpret: {} as Interpret<CMsg, never, undefined>,

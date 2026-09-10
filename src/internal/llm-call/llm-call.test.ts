@@ -547,13 +547,14 @@ describe("createLlmCall — wired in a machine (replay)", () => {
     { model: fakeModel(async () => ({ steps: [] })), schemas, retry },
     rngZero,
   );
-  const machine = defineMachine<
-    HostState,
-    HostMsg,
-    HostCmd,
-    ReturnType<typeof llm.subs>[number],
-    object
-  >({
+  const machine = defineMachine({
+    types: {
+      model: {} as HostState,
+      msg: {} as HostMsg,
+      cmd: {} as HostCmd,
+      sub: {} as ReturnType<typeof llm.subs>[number],
+      ctx: {} as object,
+    },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ resilience: llm.init() }, []],
     update: {
@@ -714,13 +715,14 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
       },
       rngZero,
     );
-    const machine = defineMachine<
-      WState,
-      WMsg,
-      WCmd,
-      ReturnType<typeof llm.subs>[number],
-      WCtx
-    >({
+    const machine = defineMachine({
+      types: {
+        model: {} as WState,
+        msg: {} as WMsg,
+        cmd: {} as WCmd,
+        sub: {} as ReturnType<typeof llm.subs>[number],
+        ctx: {} as WCtx,
+      },
       init: (loaded) =>
         loaded !== null ? [loaded, []] : [{ resilience: llm.init() }, []],
       update: {

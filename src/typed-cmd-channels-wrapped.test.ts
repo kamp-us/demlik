@@ -64,7 +64,8 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
 
 /** Same shape as the bare test: the "server" picks the boundary case. */
 function machineOver(answer: () => Promise<unknown>) {
-  return defineMachine<Model, Msg, typeof fetch, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
     cmds: [fetch],
     init: () => [initial, []],
     update,

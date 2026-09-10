@@ -39,7 +39,8 @@ const subscriptions = (_s: State): readonly TickSub[] => [
 
 // A subless machine (U = never) still compiles with NEITHER field.
 export function sublessNever() {
-  return defineMachine<State, Msg, never, never, NoCtx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
     init: () => [{ count: 0 }, []],
     update,
   });
@@ -47,7 +48,8 @@ export function sublessNever() {
 
 // `Sub<never>` (the spelled-out form) is equally exempt.
 export function sublessSubNever() {
-  return defineMachine<State, Msg, never, Sub<never>, NoCtx>({
+  return defineMachine({
+    types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
     init: () => [{ count: 0 }, []],
     update,
   });
@@ -55,7 +57,13 @@ export function sublessSubNever() {
 
 // A real Sub union with BOTH fields wired compiles.
 export function subsWired() {
-  return defineMachine<State, Msg, never, TickSub, NoCtx>({
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TickSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ count: 0 }, []],
     update,
     subscriptions,
@@ -64,10 +72,17 @@ export function subsWired() {
 }
 
 // A real Sub union WITHOUT `subscribe` fails to compile — the silent-no-subs
-// hole this test pins shut.
+// hole this test pins shut. A MISSING property is reported at the machine
+// literal's first property, so every directive below sits on `types`.
 export function subsWithoutSubscribe() {
-  // @ts-expect-error — U is a real Sub union, so `subscribe` is required
-  return defineMachine<State, Msg, never, TickSub, NoCtx>({
+  return defineMachine({
+    // @ts-expect-error — U is a real Sub union, so `subscribe` is required
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TickSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ count: 0 }, []],
     update,
     subscriptions,
@@ -77,8 +92,14 @@ export function subsWithoutSubscribe() {
 // A real Sub union WITHOUT `subscriptions` fails too — a subscribe map with no
 // declaration function can never be reconciled in.
 export function subsWithoutSubscriptions() {
-  // @ts-expect-error — U is a real Sub union, so `subscriptions` is required
-  return defineMachine<State, Msg, never, TickSub, NoCtx>({
+  return defineMachine({
+    // @ts-expect-error — U is a real Sub union, so `subscriptions` is required
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TickSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ count: 0 }, []],
     update,
     subscribe,
@@ -87,8 +108,14 @@ export function subsWithoutSubscriptions() {
 
 // A real Sub union with NEITHER field is doubly wrong.
 export function subsWithNeither() {
-  // @ts-expect-error — U is a real Sub union, so both fields are required
-  return defineMachine<State, Msg, never, TickSub, NoCtx>({
+  return defineMachine({
+    // @ts-expect-error — U is a real Sub union, so both fields are required
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as TickSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ count: 0 }, []],
     update,
   });
@@ -100,8 +127,14 @@ export function subsWithNeither() {
 type ASub = Sub<"a">;
 type BSub = Sub<"b">;
 export function multiVariantUnion() {
-  // @ts-expect-error — a real (multi-variant) Sub union still requires both
-  return defineMachine<State, Msg, never, ASub | BSub, NoCtx>({
+  return defineMachine({
+    // @ts-expect-error — a real (multi-variant) Sub union still requires both
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as ASub | BSub,
+      ctx: {} as NoCtx,
+    },
     init: () => [{ count: 0 }, []],
     update,
   });

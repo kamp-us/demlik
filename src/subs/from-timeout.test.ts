@@ -27,8 +27,14 @@ const update: Reducer<State, Msg, never> = {
 };
 
 function timeoutMachine(delayMs: number) {
-  return defineMachine<State, Msg, never, ExpireSub, NoCtx>({
-    init: () => [{ phase: "waiting" }, []],
+  return defineMachine({
+    types: {
+      model: {} as State,
+      msg: {} as Msg,
+      sub: {} as ExpireSub,
+      ctx: {} as NoCtx,
+    },
+    init: (_loaded) => [{ phase: "waiting" }, []],
     update,
     subscriptions: (s) =>
       s.phase === "waiting"
