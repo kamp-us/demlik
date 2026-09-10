@@ -820,6 +820,110 @@ export interface Runtime<
 // branch by value shape. Strengthens invariant 2 (record forms have no
 // fall-through default) and invariant 7 (the variant set is load-bearing).
 
+// === `types`-form overloads — Model and Msg named once, as values ===
+//
+// `S` and `M` cannot be INFERRED from `update`: every cell there is
+// contextually typed BY them, so the only inference site is the one the author
+// writes. Before `types` that site was the explicit type-argument list, which
+// made a five-slot positional signature (`defineMachine<Model, Msg, typeof
+// lookup | typeof audit, never, NoCtx>`) plus a hand-spelled `Settled<typeof
+// lookup>` union the entry price of writing a machine (#190).
+//
+// `types` moves that one site into the object, as values:
+//
+//   defineMachine({
+//     types: { model: {} as Model, msg: {} as Msg },
+//     cmds: [lookup, audit],
+//     …
+//   })
+//
+// and everything else is derived exactly as it already was — `C` and the
+// settled half of `M` from `cmds`, and each interpret handler's `ctx` from its
+// own Cmd's requirements (`Interpret` already intersects `RequirementsOf` onto
+// the cell's `ctx`, so a `Cmd.define`d effect types its handler with no
+// `types.ctx` at all). The shape is XState v5's `setup({ types })` in tea's
+// vocabulary; the keys are `model`, `msg`, `cmd`, `sub`, `ctx` — the words this
+// library already uses for those five slots.
+//
+// `NoInfer` around the WHOLE machine body is what makes the one site the only
+// site: `init`'s return and every cell's `SyncReturn<S, C>` are otherwise
+// competing inference sites, and a candidate from either widens the Model past
+// what `types.model` declared (a bare `[{ n: 0 }, []]` infers `{ n: number }`
+// and wins over the branded Model). Wrapping the body — rather than each `S` /
+// `M` / `C` / `Ctx` occurrence inside it — is load-bearing: `NoInfer<X>` reads
+// as a contextual type for a nested function's PARAMETERS either way, but only
+// the outer form keeps the freshness of an object literal a nested function
+// RETURNS, and every cell returns one.
+//
+// The one shape that still needs help is a zero-parameter `init` returning a
+// fresh state literal on a DISCRIMINATED Model: with no parameter the function
+// is not context-sensitive, so it is checked before `S` is fixed and
+// `{ type: "idle" }` widens to `{ type: string }`. Take `loaded` (which the
+// rehydrate contract wants named anyway) or name the initial state as a const.
+//
+// `types.cmd` / `types.sub` carry the hand-written unions — a machine that
+// predates `Cmd.define` has no `cmds` list to derive `C` from, and `U` has no
+// value-level source at all now that the body infers nothing. Both are OPTIONAL
+// and both default to the cmdless / subless marker, so a pure machine names
+// neither.
+//
+// Two overloads, not four: `update`'s Reducer-vs-Transitions split stays the
+// union `Machine.update` already carries, because the concrete form the caller
+// sees comes off the RETURN type, which is identical either way. Splitting it
+// here instead cost the `types` calls their contextual typing — with four
+// candidate signatures over one context-sensitive object literal, resolution
+// settled on a later overload and every cell fell to `any`.
+
+/**
+ * The `types` option: the slots of a machine's shape that no value in the
+ * object can imply, declared once as phantom values (`{} as Model`).
+ *
+ * `model` and `msg` are always named. `cmd` is named only by a machine whose
+ * Cmds are hand-written records rather than `Cmd.define` constructors listed
+ * under `cmds`; `sub` only by one whose Sub union `subscriptions` does not
+ * imply; `ctx` only by one whose handlers read a `Ctx` slice no Cmd's
+ * `requirements` declares.
+ */
+export type MachineTypes<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = {
+  readonly model: S;
+  readonly msg: M;
+  readonly cmd?: C;
+  readonly sub?: U;
+  readonly ctx?: Ctx;
+};
+
+// `types` + `cmds` — `C` and the settled half of `M` derive from the defs.
+export function defineMachine<
+  S,
+  M extends { type: string },
+  D extends AnyCmdDef,
+  U extends Sub = Sub<never>,
+  Ctx = unknown,
+>(
+  m: NoInfer<Omit<Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
+    readonly types: MachineTypes<S, M, Cmd<never>, U, Ctx>;
+    readonly cmds: readonly D[];
+  },
+): Machine<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
+// `types` without `cmds` — `C` comes from `types.cmd`.
+export function defineMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd = Cmd<never>,
+  U extends Sub = Sub<never>,
+  Ctx = unknown,
+>(
+  m: NoInfer<Machine<S, M, C, U, Ctx>> & {
+    readonly types: MachineTypes<S, M, C, U, Ctx>;
+  },
+): Machine<S, M, C, U, Ctx>;
+
 // `cmds`-form overloads — the machine names its typed Cmd constructors
 // (`Cmd.define`) and the effect half of its shape is DERIVED (ADR 0014): `C` is
 // the union of the values the defs build, and `M` is the user's own Msg union
@@ -1262,3 +1366,7 @@ export function tryInterpret<C extends Cmd, Ok, M, Ctx>(
     });
   };
 }
+
+// `types` + `cmds`, Transitions form.
+
+// `types` + `cmds`, Transitions form.
