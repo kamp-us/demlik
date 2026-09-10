@@ -4,6 +4,8 @@
  * live in `./runtime-types`.
  */
 
+import type { Provided, Scope } from "./provide";
+import { isProvided } from "./provide";
 import type {
   Dispose,
   Interpret,
@@ -24,13 +26,13 @@ import {
 } from "./pure/core";
 import type {
   BootingRuntime,
-  CtxArg,
   DispatchSettle,
   FencedStore,
   OnError,
   Runtime,
   RuntimeErrorContext,
   RuntimeErrorPhase,
+  ScopedCtxArg,
   Store,
   Supervision,
 } from "./runtime-types";
@@ -137,8 +139,10 @@ export function run<
   // `Ctx & RequiredCtx<C>`: the machine's own ctx PLUS every typed Cmd's `R`
   // (ADR 0014 §3). A machine whose Cmds need `{ http }` cannot be run without
   // it — the missing dependency is a compile error here, not `undefined` in a
-  // handler at 3 a.m.
-  opts: CtxArg<Ctx & RequiredCtx<C>> & {
+  // handler at 3 a.m. `ScopedCtxArg` widens that one field to accept a
+  // `provide({ … })` graph in place of the object, and nothing else changes:
+  // the requirement is the same type either way, only who builds it differs.
+  opts: ScopedCtxArg<Ctx & RequiredCtx<C>> & {
     store?: Store<S>;
     onError?: OnError;
     /**
@@ -216,9 +220,21 @@ export function run<
     }
     if (store) await store.save(next);
   }
+  // A provider graph (`provide({ … })`) handed as `ctx` is not a `ctx` yet — it
+  // is the recipe for one, and every `acquire` may be async. So the graph is set
+  // aside here and opened as the FIRST thing boot does; `ctx` stands empty until
+  // then, and nothing reads it before boot on this path (see the `pendingInitCmds`
+  // guard below).
+  const provided = isProvided<Ctx & RequiredCtx<C>>(
+    opts.ctx as (Ctx & RequiredCtx<C>) | Provided<Ctx & RequiredCtx<C>>,
+  )
+    ? (opts.ctx as unknown as Provided<Ctx & RequiredCtx<C>>)
+    : null;
   // `ctx` is conditionally optional (see `CtxArg`); default the nullish case to
   // `{}` so the augmented-ctx spread and `init(loaded, ctx)` get a value.
-  const ctx = (opts.ctx ?? {}) as Ctx & RequiredCtx<C>;
+  let ctx = (provided ? {} : (opts.ctx ?? {})) as Ctx & RequiredCtx<C>;
+  // The graph's teardown, learned when it opens. `stop()` is the one caller.
+  let releaseProvided: (() => Promise<void>) | null = null;
   const clock = opts.clock ?? Date.now;
   const idleCap = opts.__idleCap ?? 100_000;
   const disposeTimeoutMs = opts.disposeTimeoutMs ?? 5_000;
@@ -332,15 +348,19 @@ export function run<
   // mutating the caller's ctx (which may be shared across runtimes / tests).
   // `Object.assign`, not a spread: `RequiredCtx<C>` is an intersection tsc
   // cannot prove is an object type while `C` is generic, and a spread refuses it.
-  const augmentedCtx: Ctx & RequiredCtx<C> & PortEmitter = Object.assign(
-    {},
-    ctx,
-    {
+  //
+  // `let`, and rebuilt at boot on the `provide` path: a provider graph's `ctx`
+  // does not exist until its `acquire`s have run, and those are async. The bare
+  // path builds it here, unchanged and synchronous.
+  let augmentedCtx: Ctx & RequiredCtx<C> & PortEmitter = buildAugmentedCtx();
+
+  function buildAugmentedCtx(): Ctx & RequiredCtx<C> & PortEmitter {
+    return Object.assign({}, ctx, {
       emit: portEmit,
       [cmdEdge]: settleAtEdge,
       [detachWork]: detachInFlight,
-    },
-  );
+    });
+  }
 
   // Every step chains onto `tail` — the single concurrency gate.
   let tail: Promise<void> = Promise.resolve();
@@ -851,14 +871,43 @@ export function run<
   // first tail entry. With a store we cannot `init` synchronously (we'd invent a
   // loaded value), so the full path runs there; `store.load` throws propagate
   // via the boot promise.
+  //
+  // A provider graph defers that synchronous init too: `init` reads `ctx`, and
+  // on this path `ctx` does not exist until the graph has been acquired. Nothing
+  // is lost — `getState()` lives on `Runtime`, which is only reachable through
+  // `await ready`, so a deferred init is invisible at the type level.
   let pendingInitCmds: readonly C[] = [];
-  if (!store) {
+  if (!store && !provided) {
     const [initialState, initCmds] = machine.init(null, ctx);
     state = initialState;
     pendingInitCmds = initCmds;
   }
 
   async function stepBootEffects(): Promise<void> {
+    if (provided) {
+      // Acquire the whole graph before anything can read `ctx`. A failure has
+      // already unwound whatever it acquired (see `provide`) and arrives as a
+      // typed `ProvideFailedError` — reported under `"provide"` so a host with a
+      // sink sees it, then rethrown so it rejects `ready` like any boot failure
+      // rather than escaping as an uncaught throw.
+      let scope: Scope<Ctx & RequiredCtx<C>>;
+      try {
+        scope = await provided.open((error, provider) => {
+          reportError(error, { phase: "provide", provider });
+        });
+      } catch (error) {
+        reportError(error, { phase: "provide" });
+        throw error;
+      }
+      ctx = scope.ctx;
+      releaseProvided = scope.release;
+      augmentedCtx = buildAugmentedCtx();
+      if (!store) {
+        const [initialState, initCmds] = machine.init(null, ctx);
+        state = initialState;
+        pendingInitCmds = initCmds;
+      }
+    }
     if (store) {
       // Boundary parse (invariant 8): `store.load()` returns `unknown`;
       // `store.migrate(raw)` is the required parse — `S` on recognized shape,
@@ -1106,6 +1155,12 @@ export function run<
           reportError(error, { phase: "stop-save" });
         }
       }
+      // LAST: release the provider graph. Every terminal a run has funnels
+      // through here — `driveToDone` calls `stop()` in a `finally`, so done,
+      // failed and cancelled all reach it — and it runs after the final save
+      // because a provider may be the very thing that save wrote through.
+      // Idempotent inside the scope, so a second `stop()` cannot double-free.
+      if (releaseProvided) await releaseProvided();
     },
   };
 

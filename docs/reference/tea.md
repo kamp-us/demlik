@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (133)
+## Exports (146)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ import { … } from "@demlik/tea";
 | `BootingRuntime` | Interface |  |
 | `Branded` | Type |  |
 | `CancelTimer` | Type | Cancels a scheduled reconnect timer (the inverse of `schedule`). |
-| `Cmd` | Type |  |
+| `Cmd` | Type | A tagged-union, one-shot effect — JSON-plain, hashable, replayable. |
 | `Cmd` | Variable |  |
 | `CmdDef` | Interface | What `Cmd.define` returns: the Cmd builder itself (`fetch({ url })`), with the minted Msg builders and the declaration hung on it. |
 | `CmdInput` | Type | The payload a constructor accepts: a plain record spread beside `type`. |
@@ -75,6 +75,8 @@ import { … } from "@demlik/tea";
 | `Interpret` | Type |  |
 | `InterpretDetached` | Type |  |
 | `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
+| `isProvided` | Function | Is this `ctx` argument an unopened provider graph rather than a plain `ctx`? |
+| `layer` | Function | Declare a provider with no dependencies: an `acquire` and an optional `release`. |
 | `ListenerTarget` | Interface | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
 | `Machine` | Type |  |
 | `MachineShape` | Type |  |
@@ -91,10 +93,17 @@ import { … } from "@demlik/tea";
 | `noop` | Function |  |
 | `OkOf` | Type | The `Ok` a def's handler must produce. |
 | `OnError` | Type | Sink for runtime failures that have no caller to reject at. |
+| `OnReleaseError` | Type | Sink for a `release` that threw. |
 | `partitionByAck` | Function | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
 | `Port` | Interface |  |
 | `PortEmitter` | Interface | Augmentation injected onto `ctx` inside Cmd handlers. |
 | `PortNameCollisionError` | Class | Thrown by `definePort` when a name has already been registered in the current process. |
+| `provide` | Function | Build an unopened provider graph from a map of providers. |
+| `Provided` | Interface | An unopened provider graph. |
+| `ProvidedCtx` | Type | The `ctx` a provider map produces: each key mapped to its provider's value. |
+| `ProvideFailedError` | Class | An `acquire` failed. |
+| `Provider` | Interface | One node of the graph: an `acquire`, an optional `release`, and the names of the sibling providers `acquire` reads. |
+| `ProviderCycleError` | Class | The dependency graph has a cycle, so no acquisition order exists. |
 | `QuiescenceTimeoutError` | Class | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
 | `reconcile` | Function | The client prediction/reconciliation helper — the Gambetta/Valve authoritative-server loop's reconcile step, generalized. |
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
@@ -110,6 +119,8 @@ import { … } from "@demlik/tea";
 | `RuntimeRef` | Interface |  |
 | `Schema` | Interface |  |
 | `schemaMigrate` | Function | Build a `Store.migrate` from a schema (job 1) and an optional thin `upcast` (job 2). |
+| `Scope` | Interface | A live scope — the `ctx` its graph produced, plus the one call that tears it down. |
+| `ScopedCtxArg` | Type | `run`'s `ctx` field: the `Ctx` object, or a `provide` graph that builds one. |
 | `Seq` | Type | A monotonic, non-negative sequence number tagging one client-predicted command. |
 | `SeqTagged` | Interface | A command (or `Msg`) tagged with the `seq` the client assigned it. |
 | `settle` | Function |  |
@@ -139,7 +150,9 @@ import { … } from "@demlik/tea";
 | `tryApplyCell` | Function | `applyCell`, with "no handler for this Msg" moved into the return type instead of a throw. |
 | `tryFoldMsgs` | Function | `foldMsgs`, with the "no handler for this Msg" case in the return type, INCLUDING which message failed. |
 | `tryInterpret` | Function |  |
+| `UnknownProviderError` | Class | A provider named a dependency the map has no key for. |
 | `UpdateForm` | Type |  |
+| `value` | Function | Lift an already-built value into the graph — a provider with no `acquire` work and no lifetime. |
 | `WebSocketFactoryOpts` | Interface |  |
 | `WebSocketSubData` | Type |  |
 | `wrapDetached` | Function |  |
