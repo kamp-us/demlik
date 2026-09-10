@@ -908,6 +908,22 @@ export function run<
         pendingInitCmds = initCmds;
       }
     }
+    // The graph is acquired from here on, so every remaining boot step is inside
+    // its lifetime — a `store.load` / `migrate` / interpret throw releases it
+    // before rejecting `ready`, exactly as `open()` unwinds its own acquire half.
+    // Otherwise a host that awaits `ready` and rethrows (the shape
+    // `docs/how-to/scope-a-resource-across-a-run.md` §3 shows) leaks every
+    // provider until someone calls `stop()`. `releaseAll` is idempotent, so the
+    // `stop()` that follows such a rejection is a no-op, never a double release.
+    try {
+      await bootAfterProvide();
+    } catch (error) {
+      if (releaseProvided) await releaseProvided();
+      throw error;
+    }
+  }
+
+  async function bootAfterProvide(): Promise<void> {
     if (store) {
       // Boundary parse (invariant 8): `store.load()` returns `unknown`;
       // `store.migrate(raw)` is the required parse — `S` on recognized shape,
