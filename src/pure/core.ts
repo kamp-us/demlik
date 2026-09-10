@@ -129,17 +129,30 @@ export function without<V>(
 //     …`). A reducer's `_err` cell reads it, so a new failure mode is a compile
 //     error at the cell, not a runtime surprise. Defaults to `unknown`, the
 //     "untyped" reading every hand-written battery Cmd has today.
-//   - `R` — the slice of `Ctx` this Cmd's interpret handler needs. `run` demands
-//     the intersection of every Cmd's `R` (`RequiredCtx`), so a missing
-//     dependency fails at `run`, not at 3 a.m. Defaults to `unknown` — "needs
-//     nothing", and the identity of `&`, so `Ctx & RequiredCtx<C>` is exactly
-//     `Ctx` for a machine with no typed Cmds. (`{}` would read the same in
-//     prose but is NOT the identity: `Ctx & {}` refuses an unconstrained
+//   - `R` — REQUIREMENTS: the slice of `Ctx` this Cmd's interpret handler needs.
+//     `run` demands the intersection of every Cmd's `R` (`RequiredCtx`), so a
+//     missing dependency fails at `run`, not at 3 a.m. Defaults to `unknown` —
+//     "needs nothing", and the identity of `&`, so `Ctx & RequiredCtx<C>` is
+//     exactly `Ctx` for a machine with no typed Cmds. (`{}` would read the same
+//     in prose but is NOT the identity: `Ctx & {}` refuses an unconstrained
 //     `Ctx`, which every host adapter has.)
 //
 // Both channels are named by `Cmd.define`; a Cmd literal never spells them.
 // Every existing `Cmd<A>` and every battery's local Cmd union compiles unchanged
 // — the phantoms are optional, so a `{ type }` literal still satisfies `Cmd`.
+/**
+ * A tagged-union, one-shot effect — JSON-plain, hashable, replayable.
+ *
+ * `T` is the tag. `E` and `R` are Effect's Error and **Requirements** channels,
+ * carried as phantom type parameters (ADR 0014): `E` is the `_tag` union this
+ * Cmd can settle with, and `R` is the slice of `Ctx` its interpret handler
+ * reads. `R` is a requirement, not a wiring — what SATISFIES it is the `ctx`
+ * handed to `run`, built by hand or by a `provide` graph that acquires each
+ * dependency once and releases it when the run ends.
+ *
+ * @see {@link RequiredCtx} — every Cmd's `R`, intersected: what `run` demands.
+ * @see `provide` — the host-side graph that builds a `ctx` satisfying `R`.
+ */
 export type Cmd<T extends string = string, E = unknown, R = unknown> = {
   readonly type: T;
   /** Phantom — the `_tag` union this Cmd can settle with. Never assigned. */
@@ -186,6 +199,10 @@ type KnownNeeds<B> = B extends [infer R]
  * Cmds need `{ http }` to a `run` whose ctx lacks it is a compile error. A Cmd
  * that needs nothing — untyped, or `Cmd.define`d without `needs` — leaves the
  * demand of its siblings intact (#56).
+ *
+ * This is the requirement. `provide` is what satisfies it: hand `run` a
+ * `provide({ … })` graph in place of the object and the same `Ctx` is built once
+ * at boot, in dependency order, and released in reverse when the run ends.
  */
 export type RequiredCtx<C> = UnionToIntersection<KnownNeeds<NeedsBoxed<C>>>;
 

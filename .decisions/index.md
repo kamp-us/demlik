@@ -20,6 +20,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0016](./0016-removal-lands-in-a-minor-at-0x.md) | While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag | Accepted | 2026-09-04 |
 | [0017](./0017-fencing-is-an-optional-store-widening.md) | Fencing is an optional `Store` widening, and a store conflict is a throw | Accepted | 2026-09-09 |
 | [0018](./0018-tool-overlap-inside-the-cmd-handler.md) | `runInterpret` stays serial; tool overlap lives inside the tool Cmd handler | Accepted | 2026-09-09 |
+| [0019](./0019-a-host-side-provider-graph-satisfies-r.md) | A host-side provider graph satisfies R, copying Effect's Layer + Scope | Accepted | 2026-09-09 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

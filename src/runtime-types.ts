@@ -8,6 +8,7 @@
  */
 
 import { Result } from "better-result";
+import type { Provided } from "./provide";
 import type {
   AnyCmdDef,
   CmdOf,
@@ -164,6 +165,11 @@ export function __resetPortRegistry(): void {
  *   `"discard"`: the loss is the FILTER WORKING, not a teardown, and a host
  *   routing it (a metric, a 409 back to the caller) wants it apart from
  *   unmount-time noise. Warn-only, like every `RuntimeDiscardNotice`.
+ * - `"provide"` — a `provide({ … })` graph handed to `run` as `ctx`. Two
+ *   witnesses: an `acquire` failed at boot (a `ProvideFailedError`, ALSO the
+ *   rejection of `ready`, so this report is the copy a sink gets rather than the
+ *   only route out), and a `release` threw during `stop()`, which carries
+ *   `context.provider` and has no other route out at all — the run is over.
  *
  * The phase never decides fatality — the ERROR CLASS does (`RuntimeDiscardNotice`
  * warns, everything else rethrows). A phase is attached by the report site, so a
@@ -181,11 +187,18 @@ export type RuntimeErrorPhase =
   | "port-emit"
   | "sub-cleanup"
   | "discard"
-  | "identity-drop";
+  | "identity-drop"
+  | "provide";
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
   readonly phase: RuntimeErrorPhase;
+  /**
+   * The provider key a `"provide"` report is about — set when a `release` threw
+   * (the run is over; the throw has nowhere else to go). Absent on the acquire
+   * report, which also rejects `ready` with a `ProvideFailedError` that names it.
+   */
+  readonly provider?: string;
 }
 
 /**
@@ -925,6 +938,24 @@ export function asReducer<S, M extends { type: string }, C extends Cmd>(
 export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
   ? { ctx?: Ctx }
   : { ctx: Ctx };
+
+// === ScopedCtxArg<Ctx>: `run`'s `ctx` field — the object, or the graph ===
+//
+// `CtxArg<Ctx>` widened by exactly one alternative: a `provide({ … })` graph
+// that BUILDS a `Ctx`, which `run` acquires at boot and releases at `stop()`.
+// The requirement is the same `Ctx` either way — only who assembles it moves.
+// Kept separate from `CtxArg` on purpose: the other `CtxArg` sites (`replay`'s
+// seed, `defineAgent`'s options) hand their `ctx` to a PURE fold, and a fold has
+// no boot to acquire in and no terminal to release at, so widening them would
+// promise a lifetime nothing there could honour.
+/**
+ * `run`'s `ctx` field: the `Ctx` object, or a `provide` graph that builds one.
+ * Conditionally optional exactly like {@link CtxArg} — a machine that reads
+ * nothing from `ctx` may omit it.
+ */
+export type ScopedCtxArg<Ctx> = [Record<never, never>] extends [Ctx]
+  ? { ctx?: Ctx | Provided<Ctx> }
+  : { ctx: Ctx | Provided<Ctx> };
 
 // === replay: pure unit-test helper ===
 //

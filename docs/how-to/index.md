@@ -18,6 +18,10 @@ what you are trying to do, and it names the subpath you need.
   `RunDone` events as the kernel settles them, instead of waiting on the one
   promise that resolves at the end, and `onChunk` for the token deltas below a
   turn.
+- [Scope a resource across a run](./scope-a-resource-across-a-run.md) — hand `run`
+  a `provide` graph instead of a `ctx` object so a db handle is acquired once at
+  boot, in dependency order, and released in reverse when the run ends — done,
+  failed or cancelled.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.

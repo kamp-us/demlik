@@ -11,6 +11,11 @@
  */
 
 export * from "./observability";
+// The host-side provider graph — `provide` / `layer` / `value` — lands on the
+// ROOT door beside `run`, not on a subpath of its own. It has no host-specific
+// half: `/node`, `/do` and `/mem` are `Store` adapters, and this satisfies a
+// Cmd's `R` at `run`'s `ctx` seam, which every one of them shares.
+export * from "./provide";
 // `./pure` and `./subs` are no longer doors of their own (#51): the closing
 // sweep pinned the export map to the public doors, and ADR 0016 moves parts
 // rather than dropping them — so the whole runtime-free surface and the whole

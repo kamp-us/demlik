@@ -32,7 +32,7 @@ export is not done until it has a row here. The list itself is pinned by
 
 | Subpath | Tier stamp | Notes |
 |---|---|---|
-| `.` | stable | the sentence: run / defineMachine / replay / supervision / ports — plus the runtime-free surface and the Sub factories |
+| `.` | stable | the sentence: run / defineMachine / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the `provide` graph that satisfies a Cmd's `R` |
 | `./testing` | stable | testing infra is kernel |
 | `./pbt` | stable | arbitraries + runners, one door |
 | `./do` | stable | durable/host seam |
