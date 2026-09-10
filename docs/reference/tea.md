@@ -108,8 +108,8 @@ import { … } from "@demlik/tea";
 | `Reducer` | Type |  |
 | `replay` | Function |  |
 | `RequiredCtx` | Type | The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected. |
-| `Requires` | Type | Phantom carrier for a Cmd's `R`. |
-| `RequiresOf` | Type |  |
+| `Requirements` | Type | Phantom carrier for a Cmd's `R`. |
+| `RequirementsOf` | Type |  |
 | `run` | Function |  |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |

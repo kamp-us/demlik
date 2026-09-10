@@ -35,7 +35,7 @@ const fetch = Cmd.define("fetch", {
   input: z.object({ url: z.string() }),
   ok: z.object({ body: z.string() }),
   err: ["not_found", "timeout"],
-  requires: Cmd.requires<HttpCtx>(),
+  requirements: Cmd.requirements<HttpCtx>(),
 });
 
 type FetchCmd = ReturnType<typeof fetch>;

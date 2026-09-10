@@ -7,10 +7,10 @@ Typed effect channels on Cmd constructors (ADR 0014). Additive kernel types — 
 
 - `Cmd<T, E, R>` — `E` (the `_tag` union a Cmd can settle with) and `R` (the `Ctx` slice its
   handler needs) ride as phantom type parameters; the runtime value stays `{ type }`.
-- `Cmd.define(name, { input, ok, err, requires })` — the typed constructor. Returns the Cmd builder
+- `Cmd.define(name, { input, ok, err, requirements })` — the typed constructor. Returns the Cmd builder
   (`fetch({ url })` → `{ type: "fetch", url }`) carrying `ok(cmd, value)` / `err(cmd, error)`
   Msg builders and the declaration; `Settled<typeof fetch>` is its `fetch_ok` / `fetch_err`
-  Msg union. `Cmd.requires<R>()` names the `R` slice. `input` / `ok` are zod schemas — `zod` is
+  Msg union. `Cmd.requirements<R>()` names the `R` slice. `input` / `ok` are zod schemas — `zod` is
   now a runtime dependency.
 - `defineMachine({ cmds: [fetch], … })` derives the machine's Cmd union and the settled half of
   its `M` from the constructors; the reducer must carry the `_ok` / `_err` cells without the

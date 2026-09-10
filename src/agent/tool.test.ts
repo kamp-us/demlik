@@ -35,7 +35,7 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found"],
-    requires: Cmd.requires<KbCtx>(),
+    requirements: Cmd.requirements<KbCtx>(),
   },
   async ({ q }, ctx, { ok, fail }) => {
     if (q === "boom") throw new Error("kb offline");

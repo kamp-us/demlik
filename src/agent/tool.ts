@@ -27,7 +27,7 @@ import {
   type NoCtx,
   type OkOf,
   type PortEmitter,
-  type Requires,
+  type Requirements,
   type Settled,
   type Tagged,
   type TaggedError,
@@ -154,7 +154,7 @@ export type ToolConstructors<Ok, E extends Tagged> = {
 };
 
 /**
- * A tool's handler: the parsed `args`, the ctx slice `requires` named, and the
+ * A tool's handler: the parsed `args`, the ctx slice `requirements` named, and the
  * typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what
  * the `ok` schema parses, `E` the declared `_tag` union. An undeclared tag
  * does not compile.
@@ -218,7 +218,7 @@ export type AnyToolDef = AnyCmdDef & {
  * `description`, OpenAI `function.description`) so the model can tell when to
  * call the tool, read off `def.description`, never off the `input` schema;
  * `input` parses the model's `args`; `ok` parses the handler's value at the
- * edge; `err` is the `_tag` list the handler may fail with; `requires` is the ctx
+ * edge; `err` is the `_tag` list the handler may fail with; `requirements` is the ctx
  * slice it reads, demanded at `run`. The handler returns one of the two
  * constructors it is handed — `ok(value)` or the typed `fail({ _tag })`; a
  * throw settles `<name>_err` — with the thrown `_tag` when it is a declared
@@ -241,7 +241,7 @@ export function tool<
     readonly input: z.ZodType<Args>;
     readonly ok: z.ZodType<Ok>;
     readonly err: Tags;
-    readonly requires?: Requires<R>;
+    readonly requirements?: Requirements<R>;
     /**
      * The budget one call of this tool gets, in ms — the overall cap, measured
      * from the first attempt and not restarted by a retry. When it elapses the
@@ -278,7 +278,7 @@ export function tool<
     }) as z.ZodType<ToolInput<Args>>,
     ok: spec.ok,
     err: [...spec.err, "thrown"] as readonly (Tags[number] | "thrown")[],
-    requires: spec.requires,
+    requirements: spec.requirements,
   });
   type C = CmdValue<Name, ToolInput<Args>, E, R>;
   const declared = new Set<string>(spec.err);

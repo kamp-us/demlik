@@ -19,7 +19,7 @@ import type {
   Port,
   PortEmitter,
   Reducer,
-  RequiresOf,
+  RequirementsOf,
   Settled,
   Sub,
   Transitions,
@@ -1216,11 +1216,11 @@ export function settle<D extends AnyCmdDef, Ctx>(
   def: D,
   work: (
     cmd: CmdOf<D>,
-    ctx: Ctx & RequiresOf<CmdOf<D>> & PortEmitter,
+    ctx: Ctx & RequirementsOf<CmdOf<D>> & PortEmitter,
   ) => Promise<Result<OkOf<D>, ErrOf<D>>>,
 ): (
   cmd: CmdOf<D>,
-  ctx: Ctx & RequiresOf<CmdOf<D>> & PortEmitter,
+  ctx: Ctx & RequirementsOf<CmdOf<D>> & PortEmitter,
 ) => Promise<Settled<D>> {
   // `AnyCmdDef` is the declaration-erased view the runtime reads; the two
   // builders live on the full `CmdDef`, which every `D` structurally is.
