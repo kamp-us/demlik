@@ -85,6 +85,16 @@ handed in — you can ignore that for now). Each `update` cell returns
 `[nextState, effects]`. When enough bytes have arrived, the `chunk` cell flips
 `phase` to `"done"` — that is your terminal state.
 
+That second slot is where Cmds go, and there is one rule worth learning before
+you put anything in it: **a Cmd is one-shot work, and the runtime waits for it
+before folding anything else.** Emit a Cmd whose handler sleeps on a timer or
+polls until something changes, and every message behind it waits too — the
+machine stops folding and nothing says why. Anything that *watches* rather than
+*does* belongs in a Sub instead. [Cmd or Sub: do this once, or tell me
+whenever](../explanation/cmd-or-sub.md) works the distinction through a real
+example; the short test is that if the handler would `await` something that is
+not the work itself, it is a Sub.
+
 ## Run it and watch it finish
 
 `run` builds a live runtime. Tell it which states count as finished with a

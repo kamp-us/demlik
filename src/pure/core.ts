@@ -1099,6 +1099,8 @@ export const Cmd = {
    * `err` is the `_tag` list the handler may settle with; the runtime adds
    * `malformed_result` for an `_ok` value the `ok` schema rejects. `requirements`
    * names the `Ctx` slice the handler reads — `run` refuses a ctx without it.
+   *
+   * A Cmd must not wait; see `DepKeyedSub` for anything that watches.
    */
   define: defineCmd,
 
