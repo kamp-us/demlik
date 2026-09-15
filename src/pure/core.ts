@@ -689,24 +689,32 @@ function stateNameOf(state: unknown): string {
 // reducer form never consults the state, so the flat table's keys ARE the
 // answer and nothing throws.
 //
+// A NULLISH state is not an untagged state — it is no state at all, so it
+// accepts nothing in either form (#196). Reading `.type` off it would have
+// thrown under the transitions form, which the doc below promises never
+// happens, and answering the flat table's keys under the reducer form would
+// name a set for a machine that has not booted.
+//
 // Returns a fresh array, empty when the state has no cells — never `undefined`,
 // so a caller can `.includes` the result without a null check.
 /**
  * The Msg types this machine would accept in this state — the same set a
  * `NoCellError` reports, asked before anything is dispatched. Returns the
  * state's own row keys in transitions form and the flat table's keys in
- * reducer form, and an empty array (never `undefined`, never a throw) for a
- * state with no cells or no row at all.
+ * reducer form, counting only keys whose cell is a function, and an empty
+ * array (never `undefined`, never a throw) for a state with no cells, no row
+ * at all, or no state value at all.
  */
 export function acceptedTypes<S>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
 ): readonly string[] {
+  if (state === undefined || state === null) return [];
   if (formOf(machine) === "reducer") {
     // Dispatch here never consults the state, so the flat table's own keys are
     // the whole accepted set — the same reading `msgKeysOf` gives this form,
     // and it is well-defined for an untagged state.
-    return Object.keys(machine.update);
+    return cellKeysOf(machine.update);
   }
   const table = machine.update as Record<
     string,
@@ -715,7 +723,18 @@ export function acceptedTypes<S>(
   const row = table[(state as unknown as { type: string }).type];
   // A state with no row at all — a type-bypassed or absent `state.type` —
   // accepts nothing, which is true of it.
-  return row === undefined || row === null ? [] : Object.keys(row);
+  return row === undefined || row === null ? [] : cellKeysOf(row);
+}
+
+// `lookupCell` admits a cell only on `typeof cell === "function"`, so the
+// accept-set reading applies the SAME admission (#196). A non-function row
+// value is unreachable through the mapped `Transitions`/`Reducer` types and
+// reachable through a cast or wire-shaped data, and reporting one as accepted
+// promises a dispatch the refusal path would then refuse.
+function cellKeysOf(row: object): readonly string[] {
+  return Object.keys(row).filter(
+    (key) => typeof (row as Record<string, unknown>)[key] === "function",
+  );
 }
 
 // === lookupCell: THE single cell SELECTION, split from the invocation ===
