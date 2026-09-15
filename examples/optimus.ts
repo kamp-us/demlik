@@ -16,10 +16,7 @@ import {
   type ToolCall,
 } from "@demlik/tea/agent";
 import { toMermaid } from "@demlik/tea/machine-viz";
-import {
-  createIntake,
-  type IntakeCmd,
-} from "../src/internal/idempotency/idempotent-intake";
+import { createIntake, type IntakeCmd } from "@demlik/tea/idempotency";
 import {
   createPaginatedWalk,
   type PageErrMsg,
@@ -27,21 +24,20 @@ import {
   type PaginatedWalkState,
   type PaginatedWalkTimerMsg,
   subscribeDeadline as subscribeWalkDeadline,
-} from "../src/internal/paginate/paginated-walk";
-import { recorder } from "../src/internal/persistence/recorder";
-import { replayTrace } from "../src/internal/persistence/trace-replay";
+} from "@demlik/tea/paginate";
+import { recorder, replayTrace } from "@demlik/tea/persistence";
 import {
   createResilientCall,
   type DeadlineSub,
   type FailMsg,
   type ResilientState,
   type RunCmd,
-  type SucceedMsg,
   subscribeDeadline as subscribeAuditDeadline,
-} from "../src/internal/resilience/resilient-call";
-import { withDeadline } from "../src/internal/resilience/with-deadline";
-import { withResilience } from "../src/internal/resilience/with-resilience";
-import { withTelemetry } from "../src/internal/resilience/with-telemetry";
+  type SucceedMsg,
+  withDeadline,
+  withResilience,
+  withTelemetry,
+} from "@demlik/tea/resilience";
 
 type Stage = "plan" | "crawl" | "audit" | "report";
 type Purpose = Stage;

@@ -1,11 +1,11 @@
 import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
 import { Result } from "better-result";
-import { createPoller, type PollerState } from "../src/internal/flow/poller";
+import { createPoller, type PollerState } from "@demlik/tea/flow";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
   subscribeDeadline,
-} from "../src/internal/resilience/deadline";
+} from "@demlik/tea/resilience";
 
 type JobStatus = {
   readonly status: "pending" | "ready";
