@@ -48,6 +48,7 @@ export type {
   Dispose,
   ErrOf,
   ErrorsOf,
+  ExhaustiveTransitions,
   Identity,
   Interpret,
   InterpretDetached,

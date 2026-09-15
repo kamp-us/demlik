@@ -7,6 +7,10 @@ straight through without following a link.
 - [Cmd or Sub: do this once, or tell me whenever](./cmd-or-sub.md) — why a Cmd
   that waits stops the machine folding, why a watcher belongs in a Sub instead,
   and the one question that tells the two apart.
+- [Which update form, and what a missing cell means](./pick-an-update-form.md) —
+  reducer table or state × message table, why a missing transitions cell is a
+  declared refusal rather than an omission, and how to ask a state what it
+  accepts before you dispatch.
 - [What durability actually promises](./durability-model.md) — how state survives
   a crash, why effects are at-least-once rather than exactly-once, the window
   where a handler can run twice, and what to do about it.

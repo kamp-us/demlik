@@ -1016,23 +1016,77 @@ export type Reducer<S, M extends { type: string }, C extends Cmd> = {
 // === Transitions<S, M, C>: table form of `update` for state-machine-shaped machines ===
 //
 // When `State` is itself a discriminated union (`State.type` is the active
-// phase), the table form makes every (state.type × msg.type) cell explicit at
-// the type level. Missing a cell — e.g. forgetting how `phase: "settling"`
-// handles `msg.type: "tab_stepped"` — fails to compile. No nested switch, no
-// fall-through, no `_ -> (state, [])` default branch hiding regressions.
+// phase), the table form keys every cell by (state.type × msg.type). Each cell
+// receives the narrowed `State` for its phase and the narrowed `Msg` for its
+// variant via two `Extract` lookups. Phantom-narrow at the type level; pure
+// data at runtime.
 //
-// Each cell receives the narrowed `State` for its phase and the narrowed
-// `Msg` for its variant via two `Extract` lookups. Phantom-narrow at the
-// type level; pure data at runtime.
+// The ROW is required and the CELL is optional, and that asymmetry is the whole
+// declaration (#203). A state must appear — adding a phase to `S` is a
+// compile-time obligation to say what it does, and a state that accepts nothing
+// writes the empty row `{}` rather than being silently absent. A cell is
+// optional because a MISSING cell is a declared refusal, not an omission: it
+// says this state does not accept that message, exactly as a statechart's `on`
+// lists the events a state handles and XState treats an unlisted event as no
+// transition. What tea does differently is stay loud (ADR 0011) — `lookupCell`
+// misses, and the dispatch raises `NoCellError` naming `acceptedTypes`, or
+// `tryApplyCell` returns it as data. Nothing is silently absorbed.
+//
+// Required cells made every phase check an `if (msg.phase !== …) return [s, []]`
+// inside a cell that had to exist, which both cost a 6×9 machine 54 cells and
+// made `acceptedTypes` report every message type for every state — truthfully,
+// and uselessly, for anything asking which buttons to light.
 //
 // `defineMachine` accepts a third `update` form for `Transitions<S, M, C>` —
-// the runtime dispatches via `update[state.type][msg.type](state, msg)`.
+// the runtime dispatches via `update[state.type]?.[msg.type]`.
 //
-// Strengthens invariant 2 (table form has no fall-through default),
-// invariant 6 (runtime walks the table predictably, no hidden dispatch
-// fallback), and invariant 7 (both state.type and msg.type are load-bearing
-// at the type level).
+// Authors who want the old floor back take it per machine with
+// `ExhaustiveTransitions<S, M, C>` below; it is opt-in, never the default.
+//
+// Strengthens invariant 2 (table form has no fall-through default — an absent
+// cell refuses, it does not fall through), invariant 6 (runtime walks the table
+// predictably, no hidden dispatch fallback), and invariant 7 (both state.type
+// and msg.type are load-bearing at the type level).
+/**
+ * The state × message table form of `update`. Every state of `S` needs a row;
+ * a cell inside a row is optional, and leaving one out DECLARES that the state
+ * does not accept that message — the runtime refuses it with `NoCellError`
+ * naming `acceptedTypes`. `ExhaustiveTransitions` requires every cell instead.
+ */
 export type Transitions<
+  S extends { type: string },
+  M extends { type: string },
+  C extends Cmd,
+> = {
+  [P in S["type"]]: Partial<ExhaustiveTransitions<S, M, C>[P]>;
+};
+
+// === ExhaustiveTransitions: the opt-in "every cell must exist" floor ===
+//
+// The same table with every cell REQUIRED — what `Transitions` was before
+// optional cells landed (#203). It is one definition, not a second copy:
+// `Transitions` is this type with each row made `Partial`, so the cell
+// signature can never drift between the two.
+//
+// Reach for it when a machine genuinely wants the compiler to force a decision
+// per (state, message) pair — a protocol where every pair is meaningful, or a
+// table under review. The cost is the one that made it a bad default: every
+// refusal has to be spelled as a cell that returns `[state, []]`, and every
+// state then reports every message type from `acceptedTypes`.
+//
+// Use it as an annotation on the table, then hand the table to `defineMachine`:
+//
+//   const update: ExhaustiveTransitions<State, Msg, Cmds> = { … };
+//   export const machine = defineMachine({ init, update, interpret });
+//
+// `satisfies` works the same way and keeps the literal's own type.
+/**
+ * `Transitions<S, M, C>` with every cell REQUIRED — the opt-in floor for a
+ * machine that wants the compiler to force a decision on every (state,
+ * message) pair. An annotation on your own table, not a third update form:
+ * `defineMachine` takes the annotated table unchanged.
+ */
+export type ExhaustiveTransitions<
   S extends { type: string },
   M extends { type: string },
   C extends Cmd,

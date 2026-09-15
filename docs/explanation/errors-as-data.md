@@ -16,7 +16,7 @@ caller have a next move?**
 | A call's deadline lapsed | retry, or give up on this item | `{ _tag: "deadline_exceeded", … }` in Model |
 | A call came back 401 | send the user to log in again | `{ _tag: "unauthorized", … }` in Model |
 | Two ports share a name | none — the wiring is wrong | `throw new PortNameCollisionError(…)` |
-| A reducer has no cell for a Msg | none — the machine is incomplete | `throw new NoCellError(…)` |
+| A machine has no cell for a Msg | none — the dispatch was invalid here | `throw new NoCellError(…)` |
 
 The first two are outcomes of a program that is working correctly; the world
 just said no. The last two mean the code itself is wrong, and no handler

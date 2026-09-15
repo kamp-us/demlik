@@ -147,3 +147,10 @@ That is the property every other part of tea is built on: a run is data you can
 re-fold. Once you trust it, testing becomes "replay the messages and check the
 state," and debugging a production run becomes "replay its recorded trace
 locally." Both start right here, with a Model, a Msg, and a pure `update`.
+
+The `update` you just wrote is the **reducer form** — one flat cell per message
+type. A machine whose Model carries a phase has a second form open to it, a
+table keyed by state and then message, where leaving a cell out declares that
+the state does not accept that message at all. Which one to reach for, and what
+that absence promises, is [Which update form, and what a missing cell
+means](../explanation/pick-an-update-form.md).
