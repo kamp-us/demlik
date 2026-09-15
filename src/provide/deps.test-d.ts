@@ -119,3 +119,20 @@ const migratedDep: Provider<string, { config: Config }, "config" | "db"> = {
 };
 
 provide({ config: migratedLeaf, db: migratedDep });
+
+// ── The dep names are literals at the `layer` call, not only at `provide` ──
+//
+// `K` carries the `const` modifier (#206): TypeScript 7.0.2 widened
+// `["config"]` to `string[]` here where 5.x kept the literal, and every
+// provider in every map then failed `provide`'s key constraint. Pinning the
+// literal at the constructor is what makes the cases above hold on both.
+
+const literalDeps = layer(
+  ["config", "db"],
+  (deps: { config: Config; db: string }) => `${deps.db}/${deps.config.url}`,
+);
+const depsAreLiteral: readonly ("config" | "db")[] = literalDeps.deps;
+void depsAreLiteral;
+// @ts-expect-error `K` is the literal set, so a name outside it is refused.
+const depsAreNotString: readonly ("config" | "db")[] = literalDeps.deps as readonly string[];
+void depsAreNotString;
