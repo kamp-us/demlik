@@ -1,5 +1,5 @@
 import { type Cmd, defineMachine, run } from "@demlik/tea";
-import { debounce } from "../src/internal/timing/debounce";
+import { debounce } from "@demlik/tea/timing";
 
 type Phase = "idle" | "typing" | "searching" | "results";
 

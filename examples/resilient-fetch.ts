@@ -29,28 +29,22 @@ import {
 import {
   get as cacheGet,
   set as cacheSet,
-  initCache,
-  type TtlCache,
-} from "../src/internal/resilience/cache";
-import {
-  type CircuitState,
   canPass,
-  defaultCircuitPolicy,
-  initCircuit,
-  onFailure,
-  onSuccess,
-} from "../src/internal/resilience/circuit-breaker";
-import {
+  type CircuitState,
   type DeadlineExceeded,
   type DeadlineSub,
   deadlineSub,
-  subscribeDeadline,
-} from "../src/internal/resilience/deadline";
-import {
+  defaultCircuitPolicy,
   initBucket,
+  initCache,
+  initCircuit,
+  onFailure,
+  onSuccess,
+  subscribeDeadline,
   type TokenBucket,
   tryConsume,
-} from "../src/internal/resilience/rate-limit";
+  type TtlCache,
+} from "@demlik/tea/resilience";
 
 // === Model: reliability modules composed as plain fields ===
 type Phase =
