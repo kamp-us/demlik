@@ -68,7 +68,7 @@ const thrownCases: readonly ThrownCase[] = [
   },
   {
     name: "NoCellError",
-    make: () => new NoCellError("unknown_msg", "SomeState"),
+    make: () => new NoCellError("unknown_msg", "SomeState", ["known_msg"]),
     ctor: NoCellError,
     tag: "NoCellError",
   },

@@ -1236,7 +1236,8 @@ export function wrapDetached<
  * instead of a throw.
  *
  * `Ok` carries the handler's `[nextState, cmds]` verbatim; `Err` carries the same
- * `NoCellError` (msg.type + state name) `applyCell` would have thrown. Dispatch
+ * `NoCellError` (msg.type + state name + accepted set) `applyCell` would have
+ * thrown — both read one `lookupCell`, so neither can under-report. Dispatch
  * inside `run` keeps using the throwing `applyCell` — this is for callers that
  * step a machine themselves.
  */
@@ -1245,11 +1246,13 @@ export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
   state: S,
   msg: M,
 ): Result<readonly [S, readonly C[]], NoCellError> {
-  const { cell, stateName } = lookupCell<S, M, C>(machine, state, msg);
-  if (cell === undefined) {
-    return Result.err(new NoCellError(msg.type, stateName));
+  const found = lookupCell<S, M, C>(machine, state, msg);
+  if (found.cell === undefined) {
+    return Result.err(
+      new NoCellError(msg.type, found.stateName, found.acceptedTypes),
+    );
   }
-  return Result.ok(cell(state, msg));
+  return Result.ok(found.cell(state, msg));
 }
 
 /**
@@ -1266,7 +1269,7 @@ export interface FoldRefusal<M> {
   readonly index: number;
   /** The offending Msg itself — so the caller can print it, not just point. */
   readonly msg: M;
-  /** The underlying cell-lookup failure, carrying msg.type + state name. */
+  /** The underlying cell-lookup failure: msg.type + state name + accepted set. */
   readonly error: NoCellError;
 }
 

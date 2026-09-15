@@ -79,6 +79,10 @@ export type {
 // the identity comparison are both derived from it, and a client-safe consumer
 // that folds a machine needs the same key rendering the kernel uses.
 export {
+  // `acceptedTypes` answers about the state VALUE a caller holds, where
+  // `acceptsOf` answers about a `state.type` a tool already named. It is the
+  // same reading the refusal carries — `lookupCell`'s miss arm calls it.
+  acceptedTypes,
   acceptsOf,
   Cmd,
   describeMachine,

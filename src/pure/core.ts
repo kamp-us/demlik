@@ -631,18 +631,35 @@ export function formOf(machine: {
 // guard lives in `applyCell` because it is the single dispatch primitive
 // every stepping site goes through (#275), so one guard covers `run`,
 // replay/foldMsgs, the PBT fold runner, and the withX wrappers.
+//
+// It also carries `acceptedTypes` — what the refusing state WOULD have taken
+// (#14). Without it a caller learns "not this one" and nothing else, so
+// discovering that a state accepts nothing at all took one refusal per Msg
+// type: N probe dispatches to establish one fact. The empty set is the
+// load-bearing case, so the message states it in words rather than rendering an
+// empty list — a caller skimming `accepts: []` reads a formatting artefact,
+// not a dead end.
 export class NoCellError extends Error {
   override readonly name = "NoCellError";
   readonly _tag = "NoCellError" as const;
   constructor(
     public readonly msgType: string,
     public readonly stateName: string,
+    /** The Msg types the refusing state has cells for; empty when it has none. */
+    public readonly acceptedTypes: readonly string[],
   ) {
     super(
+      // The pre-#14 text is kept VERBATIM as a prefix: a caller matching on it
+      // keeps matching, and the new clause only ever appends.
       `@demlik/tea: no update cell for msg.type "${msgType}" in state ` +
         `"${stateName}" — the machine's update does not handle this Msg ` +
         `(an unknown wire msg.type, or a missing cell reached by bypassing ` +
-        `the mapped types).`,
+        `the mapped types).` +
+        (acceptedTypes.length === 0
+          ? ` This state accepts no Msg at all.`
+          : ` This state accepts: ${acceptedTypes
+              .map((t) => `"${t}"`)
+              .join(", ")}.`),
     );
   }
 }
@@ -655,6 +672,50 @@ function stateNameOf(state: unknown): string {
     if (typeof t === "string") return t;
   }
   return "(untagged state)";
+}
+
+// === acceptedTypes: what a state WOULD take, asked before the refusal ===
+//
+// The refusal's `acceptedTypes` and this helper are ONE reading, not two that
+// agree by inspection: `lookupCell`'s miss arm calls this function, so a caller
+// that asks first and a caller that dispatches and catches can never be told
+// different things about the same `(machine, state)` pair (#14, folded #21).
+//
+// It takes a STATE, not a `state.type`, which is what separates it from
+// `acceptsOf` next door: `acceptsOf` answers about a state NAME a tool already
+// has in hand, and this answers about the state value a caller is actually
+// holding — including a reducer-form state that carries no discriminant at all.
+// That untagged case is handled exactly as the refusal path handles it: the
+// reducer form never consults the state, so the flat table's keys ARE the
+// answer and nothing throws.
+//
+// Returns a fresh array, empty when the state has no cells — never `undefined`,
+// so a caller can `.includes` the result without a null check.
+/**
+ * The Msg types this machine would accept in this state — the same set a
+ * `NoCellError` reports, asked before anything is dispatched. Returns the
+ * state's own row keys in transitions form and the flat table's keys in
+ * reducer form, and an empty array (never `undefined`, never a throw) for a
+ * state with no cells or no row at all.
+ */
+export function acceptedTypes<S>(
+  machine: { update: object; __form?: UpdateForm },
+  state: S,
+): readonly string[] {
+  if (formOf(machine) === "reducer") {
+    // Dispatch here never consults the state, so the flat table's own keys are
+    // the whole accepted set — the same reading `msgKeysOf` gives this form,
+    // and it is well-defined for an untagged state.
+    return Object.keys(machine.update);
+  }
+  const table = machine.update as Record<
+    string,
+    Record<string, unknown> | undefined
+  >;
+  const row = table[(state as unknown as { type: string }).type];
+  // A state with no row at all — a type-bypassed or absent `state.type` —
+  // accepts nothing, which is true of it.
+  return row === undefined || row === null ? [] : Object.keys(row);
 }
 
 // === lookupCell: THE single cell SELECTION, split from the invocation ===
@@ -670,23 +731,42 @@ function stateNameOf(state: unknown): string {
 // the `stateName` the `NoCellError` message needs — the caller decides whether
 // that absence becomes a throw or an `Err`.
 //
-// Pure and allocation-light: one small record per lookup, never a closure.
+// The MISS arm additionally carries `acceptedTypes`, and it is a union rather
+// than one optional field because the accepted set is only ever a fact about a
+// refusal: on a hit there is no set to state, and a field holding `[]` there
+// would read as "accepts nothing" to anyone who looked (#14).
+//
+// Pure and allocation-light: one small record per lookup, never a closure. The
+// keys array is allocated on the miss arm only, so the dispatch hot path is
+// unchanged.
+export type CellLookup<S, M, C extends Cmd> =
+  | {
+      readonly cell: (state: S, msg: M) => readonly [S, readonly C[]];
+      readonly stateName: string;
+    }
+  | {
+      readonly cell: undefined;
+      readonly stateName: string;
+      readonly acceptedTypes: readonly string[];
+    };
+
 export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
-): {
-  readonly cell: ((state: S, msg: M) => readonly [S, readonly C[]]) | undefined;
-  readonly stateName: string;
-} {
+): CellLookup<S, M, C> {
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
   if (formOf(machine) === "reducer") {
     const record = machine.update as Record<string, CellFn | undefined>;
     const cell = record[msg.type];
-    return {
-      cell: typeof cell === "function" ? cell : undefined,
-      stateName: stateNameOf(state),
-    };
+    const stateName = stateNameOf(state);
+    return typeof cell === "function"
+      ? { cell, stateName }
+      : {
+          cell: undefined,
+          stateName,
+          acceptedTypes: acceptedTypes(machine, state),
+        };
   }
   const table = machine.update as Record<
     string,
@@ -699,10 +779,14 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   // this line (#275).
   const stateKey = (state as unknown as { type: string }).type;
   const cell = table[stateKey]?.[msg.type];
-  return {
-    cell: typeof cell === "function" ? cell : undefined,
-    stateName: String(stateKey),
-  };
+  const stateName = String(stateKey);
+  return typeof cell === "function"
+    ? { cell, stateName }
+    : {
+        cell: undefined,
+        stateName,
+        acceptedTypes: acceptedTypes(machine, state),
+      };
 }
 
 // === applyCell: THE single reducer-vs-transitions dispatch primitive ===
@@ -724,9 +808,11 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
-  const { cell, stateName } = lookupCell<S, M, C>(machine, state, msg);
-  if (cell === undefined) throw new NoCellError(msg.type, stateName);
-  return cell(state, msg);
+  const found = lookupCell<S, M, C>(machine, state, msg);
+  if (found.cell === undefined) {
+    throw new NoCellError(msg.type, found.stateName, found.acceptedTypes);
+  }
+  return found.cell(state, msg);
 }
 
 // === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===

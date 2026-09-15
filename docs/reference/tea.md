@@ -6,11 +6,12 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (147)
+## Exports (148)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `absurd` | Function | Compile-time exhaustiveness assertion for default branches of switches over discriminated unions narrowed by hand (Sub handlers, message-bridge dispatchers, port fanouts) — TS narrows the operand to `never` only if every variant is covered, so adding one produces a compile error at the `absurd(x)` site. |
+| `acceptedTypes` | Function | The Msg types this machine would accept in this state — the same set a `NoCellError` reports, asked before anything is dispatched. |
 | `acceptsOf` | Function |  |
 | `ack` | Function | Construct an `Ack` for a last-applied sequence number. |
 | `Ack` | Interface | The authoritative side's acknowledgement: the highest `seq` it has applied. |

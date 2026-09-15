@@ -62,6 +62,11 @@ export type {
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives in `src/pure/`).
 export {
+  // `acceptedTypes` answers about the state VALUE a caller holds, where
+  // `acceptsOf` answers about a `state.type` a tool already named. It is the
+  // same reading a refusal carries — `lookupCell`'s miss arm calls it — so
+  // asking first and dispatching-and-catching can never disagree.
+  acceptedTypes,
   acceptsOf,
   applyCell,
   // The DEV-checked twin of `applyCell` (deepFreeze + assertPureResult around
