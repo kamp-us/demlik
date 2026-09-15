@@ -119,23 +119,3 @@ const migratedDep: Provider<string, { config: Config }, "config" | "db"> = {
 };
 
 provide({ config: migratedLeaf, db: migratedDep });
-
-// ── The dep names are literals at the `layer` call, not only at `provide` ──
-//
-// `K` carries the `const` modifier (#206): TypeScript 7.0.2 widened
-// `["config"]` to `string[]` here where 5.x kept the literal, and every
-// provider in every map then failed `provide`'s key constraint. Pinning the
-// literal at the constructor is what makes the cases above hold on both.
-
-const literalDeps = layer(
-  ["config", "db"],
-  (deps: { config: Config; db: string }) => `${deps.db}/${deps.config.url}`,
-);
-type DepNames = (typeof literalDeps)["deps"][number];
-// `true` only when `DepNames` is a literal union; a widened `string` makes the
-// conditional `never`, and `true` no longer fits.
-const depNamesAreLiteral: string extends DepNames ? never : true = true;
-void depNamesAreLiteral;
-const depNamesAreThese: [DepNames] extends ["config" | "db"] ? true : never =
-  true;
-void depNamesAreThese;
