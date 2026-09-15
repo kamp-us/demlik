@@ -131,8 +131,11 @@ const literalDeps = layer(
   ["config", "db"],
   (deps: { config: Config; db: string }) => `${deps.db}/${deps.config.url}`,
 );
-const depsAreLiteral: readonly ("config" | "db")[] = literalDeps.deps;
-void depsAreLiteral;
-// @ts-expect-error `K` is the literal set, so a name outside it is refused.
-const depsAreNotString: readonly ("config" | "db")[] = literalDeps.deps as readonly string[];
-void depsAreNotString;
+type DepNames = (typeof literalDeps)["deps"][number];
+// `true` only when `DepNames` is a literal union; a widened `string` makes the
+// conditional `never`, and `true` no longer fits.
+const depNamesAreLiteral: string extends DepNames ? never : true = true;
+void depNamesAreLiteral;
+const depNamesAreThese: [DepNames] extends ["config" | "db"] ? true : never =
+  true;
+void depNamesAreThese;
