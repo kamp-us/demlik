@@ -707,7 +707,22 @@ export interface BootingRuntime<
 > extends RuntimeRef<M> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
+  /**
+   * Register a zero-arg change notifier, fired for every applied transition
+   * with the fold's State already committed — `getState()` inside the listener
+   * reads it, not the State before. A `dispatch` issued from the listener is
+   * SCHEDULED onto the serial tail behind the fold that fired it, never folded
+   * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
+   * deferral; two listeners issuing in order fold in that order.
+   */
   subscribe(listener: () => void): () => void;
+  /**
+   * Register a `(msg, state)` trace hook, fired for every applied transition
+   * with the fold's committed State. A `dispatch` issued from the observer is
+   * SCHEDULED onto the serial tail behind the fold that fired it, never folded
+   * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
+   * deferral; two listeners issuing in order fold in that order.
+   */
   observe(observer: (msg: M, state: S) => void): () => void;
   /**
    * Subscribe to the INITIAL State — the boot transition. Fires exactly once:
