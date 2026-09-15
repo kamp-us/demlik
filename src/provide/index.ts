@@ -241,14 +241,17 @@ export function layer<T>(
  * parameter is what types `D`.
  *
  * The names are inferred as literals, not widened to `string`, so {@link provide}
- * can check them against the map's keys.
+ * can check them against the map's keys. `const K` is what pins that: without
+ * the modifier TypeScript 7 widens `["config"]` to `string[]` here where 5.x
+ * kept the literal, and every provider in the map then fails `provide`'s
+ * key constraint with "`string` is not assignable to `"config" | …`".
  */
-export function layer<T, D, K extends string>(
+export function layer<T, D, const K extends string>(
   deps: readonly K[],
   acquire: (deps: D) => T | Promise<T>,
   release?: (value: T) => unknown,
 ): Provider<T, D, K>;
-export function layer<T, D, K extends string>(
+export function layer<T, D, const K extends string>(
   first: readonly K[] | (() => T | Promise<T>),
   second?: ((deps: D) => T | Promise<T>) | ((value: T) => unknown),
   third?: (value: T) => unknown,
