@@ -52,6 +52,14 @@ describe("acceptedTypes — transitions form", () => {
     // Untagged under the transitions form is the same fact: no row, no cells.
     expect(acceptedTypes(machine, { count: 1 })).toEqual([]);
   });
+
+  it("a nullish state is read without a throw, and accepts nothing", () => {
+    // The doc promises this function never throws; before #196 the row lookup
+    // dereferenced `state.type` and a pre-boot `null` crashed the caller that
+    // trusted it.
+    expect(acceptedTypes(machine, undefined)).toEqual([]);
+    expect(acceptedTypes(machine, null)).toEqual([]);
+  });
 });
 
 describe("acceptedTypes — reducer form", () => {
@@ -73,8 +81,14 @@ describe("acceptedTypes — reducer form", () => {
     // path reaches the same set and only the state NAME degrades to a
     // placeholder; neither path throws on the untagged read.
     expect(acceptedTypes(machine, { count: 3 })).toEqual(["bump", "reset"]);
-    expect(acceptedTypes(machine, undefined)).toEqual(["bump", "reset"]);
-    expect(acceptedTypes(machine, null)).toEqual(["bump", "reset"]);
+  });
+
+  it("a nullish state is no state at all and accepts nothing", () => {
+    // Untagged is a state whose shape carries no discriminant; nullish is the
+    // absence of a state — a caller holding a pre-boot `null` is told nothing
+    // is dispatchable rather than being handed the whole flat table (#196).
+    expect(acceptedTypes(machine, undefined)).toEqual([]);
+    expect(acceptedTypes(machine, null)).toEqual([]);
   });
 
   it("an empty update returns an empty array", () => {
@@ -159,6 +173,64 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
     fc.assert(
       fc.property(
         reducerArb,
+        fc.constantFrom(...MSG_TYPES, "unmapped"),
+        (machine, msgType) => agrees(machine, { type: "counting" }, msgType),
+      ),
+    );
+  });
+
+  // The mapped `Transitions`/`Reducer` types forbid a non-function cell, so
+  // this case is reachable only through a cast — which is exactly how wire
+  // data and a hand-shaped table reach the kernel. `lookupCell` admits a cell
+  // on `typeof cell === "function"`, so a row value that is a string, a number
+  // or `null` must be omitted from the accept-set too: reported as accepted it
+  // would promise a dispatch the refusal path then refuses (#196).
+  const notACell = fc.constantFrom<unknown>(
+    "not a cell",
+    0,
+    null,
+    { call: true },
+    [],
+  );
+
+  /** A row value that is a cell about half the time and junk the rest. */
+  const cellOrJunk = fc
+    .oneof(fc.constant<unknown>(undefined), notACell)
+    .map((junk) => (junk === undefined ? cell() : junk));
+
+  const poisonedTransitionsArb = fc
+    .tuple(
+      ...STATE_TYPES.map(() =>
+        fc.dictionary(fc.constantFrom(...MSG_TYPES), cellOrJunk),
+      ),
+    )
+    .map((rows) => ({
+      __form: "transitions" as const,
+      update: Object.fromEntries(
+        STATE_TYPES.map((name, i) => [name, rows[i] ?? {}]),
+      ),
+    }));
+
+  const poisonedReducerArb = fc
+    .dictionary(fc.constantFrom(...MSG_TYPES), cellOrJunk)
+    .map((update) => ({ __form: "reducer" as const, update }));
+
+  it("transitions form: a cast-in non-function cell is omitted, and the refusal agrees", () => {
+    fc.assert(
+      fc.property(
+        poisonedTransitionsArb,
+        fc.constantFrom(...STATE_TYPES, "unmapped"),
+        fc.constantFrom(...MSG_TYPES, "unmapped"),
+        (machine, stateType, msgType) =>
+          agrees(machine, { type: stateType }, msgType),
+      ),
+    );
+  });
+
+  it("reducer form: a cast-in non-function cell is omitted, and the refusal agrees", () => {
+    fc.assert(
+      fc.property(
+        poisonedReducerArb,
         fc.constantFrom(...MSG_TYPES, "unmapped"),
         (machine, msgType) => agrees(machine, { type: "counting" }, msgType),
       ),
