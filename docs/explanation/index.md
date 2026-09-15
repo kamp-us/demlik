@@ -13,6 +13,10 @@ straight through without following a link.
 - [What each import is allowed to do to you](./export-tiers.md) — the `stable` /
   `battery` / `experimental` tiers, what each promises across a version bump, and
   why the surface is not flat.
+- [Coexisting with Cloudflare's `agents` SDK](./agents-sdk-coexistence.md) — who
+  owns the alarm, the state cell and the loop when you are already inside an
+  `agents` subclass, and which `@demlik/tea/do` exports you can adopt one at a
+  time rather than all at once.
 
 ## Further reading — the decision records
 
