@@ -134,7 +134,7 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
    */
   const agrees = (
     machine: { update: object; __form?: "reducer" | "transitions" },
-    state: { type: string },
+    state: { type: string } | null | undefined,
     msgType: string,
   ) => {
     const asked = acceptedTypes(machine, state);
@@ -235,5 +235,71 @@ describe("acceptedTypes agrees with the refusal — property (#21)", () => {
         (machine, msgType) => agrees(machine, { type: "counting" }, msgType),
       ),
     );
+  });
+
+  // The agreement is stated over the NULLISH state too (#199). It is the one
+  // case where the two forms previously diverged in opposite directions:
+  // transitions threw a `TypeError` off the row lookup, and reducer ran a cell
+  // for a machine that had not booted while the helper answered `[]`. Both now
+  // refuse, so `asked` being empty and `applyCell` refusing everything are the
+  // same fact here as everywhere else.
+  const nullishArb = fc.constantFrom<null | undefined>(null, undefined);
+
+  it("transitions form: a nullish state refuses every Msg, and the refusal agrees", () => {
+    fc.assert(
+      fc.property(
+        transitionsArb,
+        nullishArb,
+        fc.constantFrom(...MSG_TYPES, "unmapped"),
+        (machine, state, msgType) => agrees(machine, state, msgType),
+      ),
+    );
+  });
+
+  it("reducer form: a nullish state refuses every Msg, and the refusal agrees", () => {
+    fc.assert(
+      fc.property(
+        reducerArb,
+        nullishArb,
+        fc.constantFrom(...MSG_TYPES, "unmapped"),
+        (machine, state, msgType) => agrees(machine, state, msgType),
+      ),
+    );
+  });
+});
+
+describe("applyCell on a nullish state — NoCellError, never a TypeError (#199)", () => {
+  const transitions = {
+    __form: "transitions" as const,
+    update: { idle: { start: cell() } },
+  };
+  const reducer = {
+    __form: "reducer" as const,
+    update: { bump: cell(), reset: cell() },
+  };
+
+  const refusalOf = (
+    machine: { update: object; __form?: "reducer" | "transitions" },
+    state: null | undefined,
+    msgType: string,
+  ) => {
+    try {
+      applyCell(machine, state, { type: msgType });
+    } catch (err) {
+      return err;
+    }
+    return undefined;
+  };
+
+  it.each([
+    ["transitions", transitions, "start"],
+    ["reducer", reducer, "bump"],
+  ] as const)("%s form: refuses a Msg the machine otherwise accepts", (_form, machine, msgType) => {
+    for (const state of [null, undefined] as const) {
+      const err = refusalOf(machine, state, msgType);
+      expect(err).toBeInstanceOf(NoCellError);
+      expect((err as NoCellError).acceptedTypes).toEqual([]);
+      expect((err as NoCellError).stateName).toBe("(no state)");
+    }
   });
 });
