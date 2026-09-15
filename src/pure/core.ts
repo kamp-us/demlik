@@ -667,7 +667,8 @@ export class NoCellError extends Error {
 // Reducer-form State carries no mandatory discriminant; best-effort read of a
 // string `state.type` for the error, else a placeholder.
 function stateNameOf(state: unknown): string {
-  if (typeof state === "object" && state !== null && "type" in state) {
+  if (state === undefined || state === null) return "(no state)";
+  if (typeof state === "object" && "type" in state) {
     const t = (state as { type: unknown }).type;
     if (typeof t === "string") return t;
   }
@@ -775,6 +776,19 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
   msg: M,
 ): CellLookup<S, M, C> {
   type CellFn = (state: S, msg: M) => readonly [S, readonly C[]];
+  // A nullish state is no state at all, and it refuses BEFORE the form branch
+  // in both forms (#199). Under transitions, reading `.type` off it threw a
+  // `TypeError` where the whole path otherwise raises `NoCellError`; under
+  // reducer, dispatch never consults the state, so a cell would have RUN on a
+  // machine that has not booted — and `acceptedTypes` already answers `[]`
+  // there (#196), which this arm is what makes true.
+  if (state === undefined || state === null) {
+    return {
+      cell: undefined,
+      stateName: stateNameOf(state),
+      acceptedTypes: acceptedTypes(machine, state),
+    };
+  }
   if (formOf(machine) === "reducer") {
     const record = machine.update as Record<string, CellFn | undefined>;
     const cell = record[msg.type];
