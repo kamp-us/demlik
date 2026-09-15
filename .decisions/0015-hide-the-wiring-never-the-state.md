@@ -90,3 +90,14 @@ governs (Model, Cmd, lid altitude) are already canonized.
   to public standard, never to a grouped public door; a part is exported only on a real external
   callsite (today `./retry-backoff`). Ruling: epic #41's 2026-09-04 grilling session, recorded at
   https://github.com/kamp-us/demlik/issues/41#issuecomment-5556466033 (2026-09-06).**
+
+- **#205 — supersedes the #83 amendment above. A finished battery built to public standard is
+  reached through a grouped public door at `battery` tier, and it is opened because it is
+  finished, not because an external callsite already asks for it. The Banned paragraph's "a
+  collapse may move a part to a grouped door, never drop the part" now reads literally: the
+  grouped door is the destination, not a shape to avoid. Seven doors exist — `./idempotency`,
+  `./flow`, `./resilience`, `./timing`, `./persistence`, `./paginate`, `./work-queue` — each a
+  re-export file over `src/internal/`, so the lid rule this ADR states is untouched: a door
+  hides nothing, it only makes reachable what the source already shows. `journal`, `prediction`
+  and `llm-call` stay internal. Ruling: the Ruling section of
+  https://github.com/kamp-us/demlik/issues/205 (Can, 2026-09-14).**

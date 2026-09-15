@@ -90,3 +90,13 @@ no vocabulary impact.
   move — `./retry-backoff` stays a bare public door, and no `./resilience` door exists. Ruling:
   epic #41's 2026-09-04 grilling session, recorded at
   https://github.com/kamp-us/demlik/issues/41#issuecomment-5556466033 (2026-09-06).**
+
+- **#205 — supersedes the #83 amendment above. `./resilience` exists, and so do `./idempotency`,
+  `./flow`, `./timing`, `./persistence`, `./paginate` and `./work-queue`: seven grouped public
+  doors at `battery` tier, each a re-export file over the modules that stay in `src/internal/`.
+  Item 1's `./retry-backoff` → `./resilience` `{ retryBackoff }` example therefore reads as
+  written again. A part is exported when it is finished and built to public standard, not only
+  on a real external callsite. What this does not change is the removal ritual itself: a
+  `battery` door is removable, and its removal lands in one minor with a changeset callout,
+  exactly as this ADR requires. Ruling: the Ruling section of
+  https://github.com/kamp-us/demlik/issues/205 (Can, 2026-09-14).**

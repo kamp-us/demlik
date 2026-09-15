@@ -27,6 +27,16 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 ## Resilience
 
 - [`@demlik/tea/retry-backoff`](./retry-backoff.md)
+- [`@demlik/tea/resilience`](./resilience.md)
+- [`@demlik/tea/timing`](./timing.md)
+
+## Batteries
+
+- [`@demlik/tea/flow`](./flow.md)
+- [`@demlik/tea/idempotency`](./idempotency.md)
+- [`@demlik/tea/persistence`](./persistence.md)
+- [`@demlik/tea/paginate`](./paginate.md)
+- [`@demlik/tea/work-queue`](./work-queue.md)
 
 ## Testing
 
