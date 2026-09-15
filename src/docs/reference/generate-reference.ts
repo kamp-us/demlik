@@ -39,7 +39,13 @@ const MODEL_JSON = join(PKG_ROOT, ".typedoc", "model.json");
 const PACKAGE_JSON = join(PKG_ROOT, "package.json");
 
 /** A curated module group — governs the compass layout. */
-type Group = "Core" | "Adapters" | "Machines" | "Resilience" | "Testing";
+type Group =
+  | "Core"
+  | "Adapters"
+  | "Machines"
+  | "Resilience"
+  | "Batteries"
+  | "Testing";
 
 /**
  * One row of a page's start-here tier — the handful of symbols a newcomer reads
@@ -159,6 +165,55 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Resilience",
   },
   {
+    subpath: "./resilience",
+    importPath: "@demlik/tea/resilience",
+    file: "resilience.md",
+    typedocName: "resilience",
+    group: "Resilience",
+  },
+  {
+    subpath: "./timing",
+    importPath: "@demlik/tea/timing",
+    file: "timing.md",
+    typedocName: "timing",
+    group: "Resilience",
+  },
+  {
+    subpath: "./flow",
+    importPath: "@demlik/tea/flow",
+    file: "flow.md",
+    typedocName: "flow",
+    group: "Batteries",
+  },
+  {
+    subpath: "./idempotency",
+    importPath: "@demlik/tea/idempotency",
+    file: "idempotency.md",
+    typedocName: "idempotency",
+    group: "Batteries",
+  },
+  {
+    subpath: "./persistence",
+    importPath: "@demlik/tea/persistence",
+    file: "persistence.md",
+    typedocName: "persistence",
+    group: "Batteries",
+  },
+  {
+    subpath: "./paginate",
+    importPath: "@demlik/tea/paginate",
+    file: "paginate.md",
+    typedocName: "paginate",
+    group: "Batteries",
+  },
+  {
+    subpath: "./work-queue",
+    importPath: "@demlik/tea/work-queue",
+    file: "work-queue.md",
+    typedocName: "work-queue",
+    group: "Batteries",
+  },
+  {
     subpath: "./testing",
     importPath: "@demlik/tea/testing",
     file: "testing.md",
@@ -186,6 +241,7 @@ const GROUP_ORDER: readonly Group[] = [
   "Adapters",
   "Machines",
   "Resilience",
+  "Batteries",
   "Testing",
 ];
 

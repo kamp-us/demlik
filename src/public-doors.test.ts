@@ -33,13 +33,22 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * The public doors, exactly. Thirteen module doors plus the two non-module
+ * The public doors, exactly. Twenty module doors plus the two non-module
  * entries — `./package.json` (metadata passthrough) and
  * `./devtools/styles.css` (the asset stays with its door).
  *
  * `./devtools`, `./machine-viz` and `./parity` are here rather than folded
  * because each has a live external callsite (ADR 0016 as amended by #83): a
  * part someone imports keeps its own door.
+ *
+ * The seven grouped `battery` doors are the sweep's other direction (#205).
+ * The sweep closed sixty-odd doors because each was a permanent promise bought
+ * for one caller's convenience; these seven are bought deliberately, at a tier
+ * that may break in a minor, because the modules behind them are finished and
+ * tested and a consumer who needs one has otherwise to copy the source. They
+ * are grouped rather than per-module for the same reason the sweep happened:
+ * seven promises, not forty. Each is a re-export file over
+ * `src/internal/<door>/` — nothing moved to open one.
  */
 const PUBLIC_DOORS = [
   ".",
@@ -52,6 +61,13 @@ const PUBLIC_DOORS = [
   "./pbt",
   "./agent",
   "./retry-backoff",
+  "./idempotency",
+  "./flow",
+  "./resilience",
+  "./timing",
+  "./persistence",
+  "./paginate",
+  "./work-queue",
   "./devtools",
   "./machine-viz",
   "./parity",

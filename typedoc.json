@@ -10,6 +10,13 @@
     "src/extension/index.ts",
     "src/agent/index.ts",
     "src/retry-backoff/index.ts",
+    "src/idempotency/index.ts",
+    "src/flow/index.ts",
+    "src/resilience/index.ts",
+    "src/timing/index.ts",
+    "src/persistence/index.ts",
+    "src/paginate/index.ts",
+    "src/work-queue/index.ts",
     "src/testing/index.ts",
     "src/pbt/index.ts",
     "src/devtools/index.ts"

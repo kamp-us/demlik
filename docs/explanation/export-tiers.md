@@ -18,10 +18,28 @@ the per-subpath roster. Breaking changes here are deliberate and rare. While the
 explicit callout in the changelog; from 1.0 it forces a **major**. This is the
 promise you are buying if you build a product on the library.
 
-**`battery` — a published named pattern built over the kernel.** Today
-`./retry-backoff`. A battery **may break in a minor**, before and after 1.0,
-provided the changelog for that minor says so. The point of the tier is that a
-battery break never forces a major on someone who never imported it.
+**`battery` — a published named pattern built over the kernel.** A battery
+**may break in a minor**, before and after 1.0, provided the changelog for that
+minor says so. The point of the tier is that a battery break never forces a
+major on someone who never imported it.
+
+The batteries are grouped, one door per group. Each door is a re-export file
+over `src/internal/`, so nothing about a battery moves when its door opens:
+
+| Door | What is behind it |
+|---|---|
+| `@demlik/tea/idempotency` | dedupe by key, cache the result, replay it to every duplicate arrival |
+| `@demlik/tea/flow` | fan-out, saga, workflow, poller, reconciler, batch window, monitored run, await-terminal |
+| `@demlik/tea/resilience` | deadlines, retries, circuit breakers, rate limits, TTL cache, token refresh, and the `with*` wrappers |
+| `@demlik/tea/timing` | debounce, throttle, throttled input |
+| `@demlik/tea/persistence` | record a run, replay a trace, checkpoint a long-running machine |
+| `@demlik/tea/paginate` | the cursor walk, and the resumable end-to-end traversal over it |
+| `@demlik/tea/work-queue` | the queue lifecycle over `Store<S>`: adapter, pure ops, verb seam |
+| `@demlik/tea/retry-backoff` | exponential backoff with jitter and a cap, plus the retry-attempt state |
+
+Grouped rather than one door per module on purpose: a door is a permanent
+promise and a maintenance cost, so seven of them is a bill this library can pay
+where forty was not. Within a door, the whole group moves at the group's tier.
 
 **`experimental` — no stability promise.** Today `./agent`. It may change or
 disappear in **any** release. It carries the highest strategic weight and the
@@ -36,9 +54,12 @@ that happens by drift.
 - **Reaching for `./agent`?** Do it — it is the headline surface — but pin an
   exact version and read the changelog before you bump. Treat an upgrade as a
   small migration rather than a routine patch.
+- **Reaching for a battery?** Import it through its door, never through a deep
+  path into `src/internal/`. The door is the promise; the file layout behind it
+  is not, and the two are deliberately allowed to diverge.
 - **An import that is not in the export map is not a public API.** The package
-  has real internal code — flow, resilience, timing, persistence ops, most of the
-  journal — that it depends on and does not invite you to import. It has no tier
+  has real internal code — the journal, the prediction and LLM-call plumbing —
+  that it depends on and does not invite you to import. It has no tier
   and no promise, and it can move or vanish with no changelog entry at all. If you
   can only reach something by a deep path into files, that is the library telling
   you it is not yours.

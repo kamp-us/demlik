@@ -28,6 +28,7 @@ export interface DocModule {
 // typedoc ReflectionKind is a numeric bitflag. Only the kinds a public module
 // barrel can re-export at top level are mapped; anything else renders "Other".
 const KIND_MODULE = 2;
+const KIND_REFERENCE = 4194304;
 const KIND_LABELS: ReadonlyMap<number, string> = new Map([
   [4, "Namespace"],
   [8, "Enum"],
@@ -72,6 +73,60 @@ function extractSummary(comment: unknown): string {
 }
 
 /**
+ * Every reflection in the project, by id — the lookup {@link resolveReference}
+ * needs. Built once per parse by walking the whole tree, because a reference
+ * and its target routinely live on different modules.
+ */
+function indexById(
+  root: Record<string, unknown>,
+): Map<number, Record<string, unknown>> {
+  const byId = new Map<number, Record<string, unknown>>();
+  const visit = (node: unknown): void => {
+    if (!isRecord(node)) return;
+    if (typeof node.id === "number") byId.set(node.id, node);
+    if (Array.isArray(node.children)) for (const c of node.children) visit(c);
+  };
+  visit(root);
+  return byId;
+}
+
+/**
+ * Follow a re-export to the declaration it names.
+ *
+ * typedoc emits a symbol as a `Reference` (kind 4194304) whenever the module
+ * exporting it is not the module declaring it — which is what EVERY entry point
+ * that re-exports another entry point's symbol produces. Read as-is, such a row
+ * renders "Reference" with an empty summary: the reader is told the name exists
+ * and nothing else, and the page silently got worse the moment a door opened
+ * over a module another door already carried (#205).
+ *
+ * A re-export is the same declaration reached by another path, so the row
+ * renders the TARGET's kind and TSDoc under the name the module exports it as.
+ * A reference whose target is missing from the project — one pointing outside
+ * it, the shape `excludeExternals` leaves behind — falls back to the reference
+ * itself rather than throwing: an unresolvable pointer is a thin row, not a
+ * malformed model.
+ */
+function resolveReference(
+  sym: Record<string, unknown>,
+  byId: ReadonlyMap<number, Record<string, unknown>>,
+): Record<string, unknown> {
+  const seen = new Set<number>();
+  let current = sym;
+  while (
+    current.kind === KIND_REFERENCE &&
+    typeof current.target === "number"
+  ) {
+    if (seen.has(current.target)) return current;
+    seen.add(current.target);
+    const next = byId.get(current.target);
+    if (next === undefined) return current;
+    current = next;
+  }
+  return current;
+}
+
+/**
  * Parse the raw typedoc project JSON into the curated module list. Throws a
  * descriptive error if the tree is not the expected `{ children: Module[] }`
  * shape — a malformed model must fail loudly, never silently emit empty docs.
@@ -82,6 +137,7 @@ export function parseTypedocModel(raw: unknown): DocModule[] {
       "typedoc model: expected an object with a `children` array",
     );
   }
+  const byId = indexById(raw);
   const modules: DocModule[] = [];
   for (const child of raw.children) {
     if (!isRecord(child)) {
@@ -103,10 +159,15 @@ export function parseTypedocModel(raw: unknown): DocModule[] {
           `typedoc model: a symbol on module '${child.name}' is malformed`,
         );
       }
+      // The name is the module's (that is how a consumer imports it); the kind
+      // and the TSDoc are the declaration's, followed through any re-export.
+      const decl = resolveReference(sym, byId);
       symbols.push({
         name: sym.name,
-        kindLabel: kindLabel(sym.kind),
-        summary: firstSentence(extractSummary(symbolComment(sym))),
+        kindLabel: kindLabel(
+          typeof decl.kind === "number" ? decl.kind : sym.kind,
+        ),
+        summary: firstSentence(extractSummary(symbolComment(decl))),
       });
     }
     modules.push({

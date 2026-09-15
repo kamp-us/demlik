@@ -67,6 +67,34 @@
       "types": "./dist/retry-backoff/index.d.ts",
       "import": "./dist/retry-backoff/index.js"
     },
+    "./idempotency": {
+      "types": "./dist/idempotency/index.d.ts",
+      "import": "./dist/idempotency/index.js"
+    },
+    "./flow": {
+      "types": "./dist/flow/index.d.ts",
+      "import": "./dist/flow/index.js"
+    },
+    "./resilience": {
+      "types": "./dist/resilience/index.d.ts",
+      "import": "./dist/resilience/index.js"
+    },
+    "./timing": {
+      "types": "./dist/timing/index.d.ts",
+      "import": "./dist/timing/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "import": "./dist/persistence/index.js"
+    },
+    "./paginate": {
+      "types": "./dist/paginate/index.d.ts",
+      "import": "./dist/paginate/index.js"
+    },
+    "./work-queue": {
+      "types": "./dist/work-queue/index.d.ts",
+      "import": "./dist/work-queue/index.js"
+    },
     "./devtools": {
       "types": "./dist/devtools/index.d.ts",
       "import": "./dist/devtools/index.js"
