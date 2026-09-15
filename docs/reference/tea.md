@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (148)
+## Exports (149)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -51,6 +51,7 @@ import { … } from "@demlik/tea";
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |
+| `ExhaustiveTransitions` | Type | `Transitions<S, M, C>` with every cell REQUIRED — the opt-in floor for a machine that wants the compiler to force a decision on every (state, message) pair. |
 | `FencedRead` | Interface |  |
 | `FencedStore` | Interface | A `Store<S>` that can refuse a second live writer. |
 | `foldMsgs` | Function |  |
@@ -144,7 +145,7 @@ import { … } from "@demlik/tea";
 | `Tagged` | Type | The shape every settled failure has (ADR 0011): a plain `_tag` record. |
 | `TaggedError` | Type | One declared failure per tag. |
 | `tagSeq` | Function | Tag a command/`Msg` with its sequence number. |
-| `Transitions` | Type |  |
+| `Transitions` | Type | The state × message table form of `update`. |
 | `Transport` | Interface | Duplex transport. |
 | `TransportBattery` | Interface | What the battery returns: a Sub builder (for `subscriptions`), the Sub's `subscribe` handler (for `subscribe.transport`), and a `send(key, outbound)` helper the consumer's Cmd handler calls. |
 | `TransportFactory` | Type | Factory the consumer wires to a platform-specific transport. |
