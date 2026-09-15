@@ -4,6 +4,10 @@ Understanding-oriented discussion of `@demlik/tea` — why it is shaped the way 
 is, and what each shape promises you. These pages stand on their own; read one
 straight through without following a link.
 
+- [Which update form, and what a missing cell means](./pick-an-update-form.md) —
+  reducer table or state × message table, why a missing transitions cell is a
+  declared refusal rather than an omission, and how to ask a state what it
+  accepts before you dispatch.
 - [What durability actually promises](./durability-model.md) — how state survives
   a crash, why effects are at-least-once rather than exactly-once, the window
   where a handler can run twice, and what to do about it.
