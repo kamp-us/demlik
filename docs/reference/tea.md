@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (152)
+## Exports (155)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -82,6 +82,7 @@ import { … } from "@demlik/tea";
 | `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
 | `isProvided` | Function | Is this `ctx` argument an unopened provider graph rather than a plain `ctx`? |
 | `layer` | Function | Declare a provider with no dependencies: an `acquire` and an optional `release`. |
+| `liftSlice` | Function | Lift a battery verb's result into the host state that carries its slice. |
 | `ListenerTarget` | Interface | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
 | `Machine` | Type |  |
 | `MachineShape` | Type |  |
@@ -109,6 +110,8 @@ import { … } from "@demlik/tea";
 | `Provider` | Interface | One node of the graph: an `acquire`, an optional `release`, and the names of the sibling providers `acquire` reads. |
 | `ProviderCycleError` | Class | The dependency graph has a cycle, so no acquisition order exists. |
 | `QuiescenceTimeoutError` | Class | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
+| `readInOrder` | Function | Run a composed read through `order` and return the first answer any step gives, or `absent` when every one defers. |
+| `ReadStep` | Interface | One step of a composed read: the slice it consults, under the name that slice goes by. |
 | `reconcile` | Function | The client prediction/reconciliation helper — the Gambetta/Valve authoritative-server loop's reconcile step, generalized. |
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |

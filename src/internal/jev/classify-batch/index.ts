@@ -59,6 +59,7 @@
  *   interpret: classify.handlers(),
  */
 
+import { liftSlice, type ReadStep, readInOrder } from "../../../compose";
 import type { Cmd } from "../../../index";
 import {
   type BatchWindow,
@@ -344,8 +345,7 @@ export function createClassifyBatch<I, C extends string>(
       id: cmd.items.map(config.keyOf).join("\u0000"),
       items: cmd.items,
     }));
-    const [next, cmds] = fanOut.scatter(state.fanOut, batches);
-    return [{ ...state, fanOut: next }, cmds];
+    return liftSlice("fanOut", state, fanOut.scatter(state.fanOut, batches));
   }
 
   /**
@@ -369,14 +369,22 @@ export function createClassifyBatch<I, C extends string>(
 
     const failed: Record<string, JevAskErr> = { ...state.failed };
     delete failed[key];
-    const [nextWindow, flushed] = window.add(state.window, item, at);
-    return scatter({ ...state, failed, window: nextWindow }, flushed);
+    const [buffered, flushed] = liftSlice(
+      "window",
+      { ...state, failed },
+      window.add(state.window, item, at),
+    );
+    return scatter(buffered, flushed);
   }
 
   /** The time window closed: flush whatever is buffered. PURE. */
   function onWindow(state: State, at: number): readonly [State, Cmds] {
-    const [nextWindow, flushed] = window.onWindow(state.window, at);
-    return scatter({ ...state, window: nextWindow }, flushed);
+    const [closed, flushed] = liftSlice(
+      "window",
+      state,
+      window.onWindow(state.window, at),
+    );
+    return scatter(closed, flushed);
   }
 
   /**
@@ -401,8 +409,11 @@ export function createClassifyBatch<I, C extends string>(
     const failed: Record<string, JevAskErr> = { ...state.failed };
     for (const key of Object.keys(msg.result.answers)) delete failed[key];
 
-    const [nextFanOut, cmds] = fanOut.itemOk(state.fanOut, msg.key, msg.result);
-    return [{ ...state, cache, failed, fanOut: nextFanOut }, cmds];
+    return liftSlice(
+      "fanOut",
+      { ...state, cache, failed },
+      fanOut.itemOk(state.fanOut, msg.key, msg.result),
+    );
   }
 
   /**
@@ -423,14 +434,61 @@ export function createClassifyBatch<I, C extends string>(
     if (batch !== undefined) {
       for (const item of batch.items) failed[config.keyOf(item)] = msg.error;
     }
-    const [nextFanOut, cmds] = fanOut.itemErr(state.fanOut, msg.key, msg.error);
-    return [{ ...state, failed, fanOut: nextFanOut }, cmds];
+    return liftSlice(
+      "fanOut",
+      { ...state, failed },
+      fanOut.itemErr(state.fanOut, msg.key, msg.error),
+    );
   }
 
   /** The eviction tick fired: drop every entry expired at `at`. PURE. */
   function onEvict(state: State, at: number): readonly [State, Cmds] {
-    return [{ ...state, cache: evictExpired(state.cache, at) }, []];
+    return liftSlice("cache", state, [evictExpired(state.cache, at), []]);
   }
+
+  /**
+   * The precedence of {@link answerFor}'s composed read, as DATA — the order
+   * the three battery slices are consulted in, cache first.
+   *
+   * Written as a value rather than as three `if` statements because this read
+   * is where the composition's one escaped defect lived: a key whose batch
+   * failed and which the host then re-added is IN FLIGHT, and reading `failed`
+   * before the in-flight slices told a polling host to stop waiting for work
+   * that was running (`bec6545`, criterion 7 of #214). As a value the order is
+   * nameable and directly assertable — the per-battery suites cannot see it at
+   * all.
+   *
+   * `cache` first: an unexpired answer is the strongest fact any slice holds.
+   * `failed` next: a standing mark means the last attempt ended and none has
+   * started since, because every path that starts one clears the mark. The
+   * in-flight slices last, and only then is the key genuinely `absent`.
+   */
+  const ANSWER_ORDER: readonly ReadStep<
+    { readonly state: State; readonly key: string; readonly at: number },
+    KeyAnswer<C>
+  >[] = [
+    {
+      name: "cache",
+      read: ({ state, key, at }) => {
+        const answer = cacheGet(state.cache, key, at);
+        return answer === undefined
+          ? undefined
+          : { status: "answered", answer };
+      },
+    },
+    {
+      name: "failed",
+      read: ({ state, key }) => {
+        const error = state.failed[key];
+        return error === undefined ? undefined : { status: "failed", error };
+      },
+    },
+    {
+      name: "inFlight",
+      read: ({ state, key }) =>
+        keysInFlight(state).has(key) ? { status: "pending" } : undefined,
+    },
+  ];
 
   /**
    * What is known about `key` at `at`. PURE, derived — it stores nothing.
@@ -438,14 +496,12 @@ export function createClassifyBatch<I, C extends string>(
    * `at` is a parameter rather than a clock read because a TTL answer is only
    * an answer relative to an instant, and this module reads no clock anywhere.
    * The host passes the `at` of the Msg it is handling.
+   *
+   * The precedence is {@link ANSWER_ORDER}, not this function's statement
+   * order; `absent` is what every slice deferring means.
    */
   function answerFor(state: State, key: string, at: number): KeyAnswer<C> {
-    const answer = cacheGet(state.cache, key, at);
-    if (answer !== undefined) return { status: "answered", answer };
-    const error = state.failed[key];
-    if (error !== undefined) return { status: "failed", error };
-    if (keysInFlight(state).has(key)) return { status: "pending" };
-    return { status: "absent" };
+    return readInOrder({ state, key, at }, ANSWER_ORDER, { status: "absent" });
   }
 
   /**
