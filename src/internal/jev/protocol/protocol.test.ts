@@ -232,6 +232,39 @@ describe("parseAnswers — every failure is one `JevErr`", () => {
     });
   });
 
+  it("off-criteria probabilities: one error names both what is missing and what is extra", () => {
+    const parsed = parseAnswers(
+      questions,
+      withAnswer("category", {
+        type: "choice",
+        choice: "groceries",
+        probabilities: { groceries: 0.9, rent: 0.1 },
+        confidence: 0.5,
+      }),
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toEqual({
+      _tag: "off_criteria_probabilities",
+      id: "category",
+      missing: ["dining"],
+      extra: ["rent"],
+      options: ["groceries", "dining"],
+    });
+  });
+
+  it("malformed answer: a number that is not finite is not a number", () => {
+    for (const noul of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const parsed = parseAnswers(
+        questions,
+        withAnswer("is_urgent", { type: "noul", noul }),
+      );
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) expect(parsed.error._tag).toBe("malformed_answer");
+    }
+  });
+
   it("`isJevErr` answers `true` for every arm, the newest included", () => {
     const parsed = parseAnswers(
       questions,

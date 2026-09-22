@@ -46,12 +46,19 @@
  * network actually produced. Every `unknown` reaches a `JevErr`; nothing
  * reaches a `throw`.
  *
- * Both halves of a choice question's claim are checked, because both are cast
- * away at the tail of `parseAnswers`: `choice` must be one of the criteria
- * keys, and `probabilities` must be keyed by EXACTLY those keys — none
- * missing, none extra. A partial distribution typed `Record<K, number>` is the
- * representable-invalid state this module exists to refuse, and it arrives
- * through this gate or not at all.
+ * The check itself is a `zod` schema DERIVED from the questions map, so the
+ * typed value is what `safeParse` returns rather than something asserted after
+ * a hand-walk. Both halves of a choice question's claim are structural in that
+ * schema: `choice` is a `z.enum` over the criteria keys, and `probabilities`
+ * is a strict `z.object` whose shape IS those keys — so a distribution missing
+ * one or carrying an extra fails the schema rather than a separate arm a later
+ * reader has to remember. A partial distribution typed `Record<K, number>` is
+ * the representable-invalid state this module exists to refuse, and it arrives
+ * through this gate or not at all. The envelope is checked by the same schema:
+ * `model` is a string and `usage` carries two finite numbers.
+ *
+ * `safeParse`, never `parse`: a zod failure is turned into a `JevErr` value by
+ * mapping its first issue's path onto the arm that names it.
  *
  * ## Why status classification lives here and not in `ask`
  *
@@ -70,6 +77,8 @@
  * `422`, at the price of unreadable diagnostics on every ordinary Score. They
  * are the API's `422`, which `classifyStatus` already calls terminal.
  */
+
+import { z } from "zod";
 
 // ── the shared instruction / description slot ──────────────────────────────
 
@@ -348,15 +357,9 @@ type Obj = Readonly<Record<string, unknown>>;
 const isObj = (v: unknown): v is Obj =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-const isNum = (v: unknown): v is number =>
-  typeof v === "number" && Number.isFinite(v);
-
-/** Every value of `v` is a finite number. `v` itself must already be an object. */
-const isNumMap = (v: unknown): v is Readonly<Record<string, number>> =>
-  isObj(v) && Object.values(v).every(isNum);
-
-const isStrMap = (v: unknown): v is Readonly<Record<string, string>> =>
-  isObj(v) && Object.values(v).every((x) => typeof x === "string");
+/** The value under `key`, or `undefined` where there is no object to read. */
+const at = (value: unknown, key: string): unknown =>
+  isObj(value) ? value[key] : undefined;
 
 const err = (
   error: JevErr,
@@ -365,158 +368,201 @@ const err = (
   error,
 });
 
+// ── the schema the questions derive ────────────────────────────────
+
+/** A finite number: the wire carries no `NaN` and no infinity. */
+const finite = z.number().finite();
+
 /**
- * Check one answer against the question that asked for it.
+ * The schema of one answer, built from the question that asked for it.
  *
- * Returns `undefined` on a match — the answer is then structurally the shape
- * `JevAnswerFor<Q>` names, and the cast at the end of `parseAnswers` is that
- * fact rather than a hope. Returning the error instead of throwing keeps the
- * whole walk branch-free of `try`.
+ * Key order is load-bearing — zod reports issues in shape order and
+ * {@link toJevErr} maps the FIRST one, so this order is the precedence between
+ * two arms that could both fire on one answer.
  */
-const checkAnswer = (
-  id: string,
-  question: JevQuestion,
-  answer: unknown,
-): JevErr | undefined => {
-  if (!isObj(answer)) {
+const answerSchema = (question: JevQuestion): z.ZodType => {
+  switch (question.type) {
+    case "noul":
+      return z.object({ type: z.literal("noul"), noul: finite });
+    case "score":
+      return z.object({
+        type: z.literal("score"),
+        confidence: finite,
+        score: finite,
+        legend: z.record(z.string(), z.string()),
+        probabilities: z.record(z.string(), finite),
+      });
+    case "choice": {
+      const options = Object.keys(question.criteria);
+      return z.object({
+        type: z.literal("choice"),
+        choice: z.enum(options),
+        confidence: finite,
+        // `JevChoiceAnswer<K>` types `probabilities` as TOTAL over the criteria
+        // keys. A strict object whose shape is those keys IS that claim: a
+        // missing key fails the shape, an extra one is unrecognized.
+        probabilities: z.strictObject(
+          Object.fromEntries(options.map((k) => [k, finite])),
+        ),
+      });
+    }
+  }
+};
+
+/**
+ * The answers map's schema, keyed by the ids the request asked about.
+ *
+ * Unknown ids are dropped rather than refused — `z.object` strips them — which
+ * is the question-driven reading: the questions are the contract, and a wider
+ * response still satisfies it.
+ *
+ * The one assertion in this module lives here, and it is about the SHAPE, not
+ * about a body: `Object.entries` loses the literal key types, so the object
+ * built id-for-id out of `questions` types as `Record<string, unknown>`. Every
+ * per-id obligation `JevAnswers<Q>` states is the schema this line names, and
+ * `parseAnswers` needs no assertion of its own because of it.
+ */
+const jevAnswersSchema = <Q extends JevQuestionMap>(
+  questions: Q,
+): z.ZodType<JevAnswers<Q>> =>
+  z.object(
+    Object.fromEntries(
+      Object.entries(questions).map(([id, question]) => [
+        id,
+        answerSchema(question),
+      ]),
+    ),
+  ) as unknown as z.ZodType<JevAnswers<Q>>;
+
+/** The whole response body: the envelope, with the answers map inside it. */
+const responseSchema = <Q extends JevQuestionMap>(questions: Q) =>
+  z.object({
+    model: z.string(),
+    usage: z.object({ input_tokens: finite, output_tokens: finite }),
+    answers: jevAnswersSchema(questions),
+  });
+
+// ── the failure the schema produces, as data ───────────────────────
+
+/** What a failed field of an answer says, where the path alone names it. */
+const ANSWER_FIELD_REASON: Readonly<Record<string, string>> = {
+  confidence: "`confidence` is not a number",
+  score: "`score` is not a number",
+  legend: "`legend` is not a map of strings",
+  probabilities: "`probabilities` is not a map of numbers",
+  choice: "`choice` is not a string",
+  noul: "`noul` is not a number",
+};
+
+/**
+ * Map one zod issue onto the `JevErr` arm that names it.
+ *
+ * The issue's path says where, and `body` says what was actually there — which
+ * is the difference between "this answer picked an option nobody offered" and
+ * "this answer's `choice` is not even a string", two arms one failed `z.enum`
+ * covers.
+ */
+const toJevErr = (
+  questions: JevQuestionMap,
+  body: unknown,
+  issue: z.core.$ZodIssue | undefined,
+): JevErr => {
+  const [head, id, field] = issue?.path ?? [];
+
+  if (head === "model") {
+    return { _tag: "malformed_body", reason: "`model` is not a string" };
+  }
+  if (head === "usage") {
+    return {
+      _tag: "malformed_body",
+      reason: "`usage` is not `{ input_tokens, output_tokens }`",
+    };
+  }
+  if (head !== "answers") {
+    return { _tag: "malformed_body", reason: "body is not an object" };
+  }
+
+  const answers = at(body, "answers");
+  if (!isObj(answers) || typeof id !== "string") {
+    return { _tag: "malformed_body", reason: "`answers` is not an object" };
+  }
+  if (!Object.hasOwn(answers, id)) return { _tag: "missing_answer", id };
+
+  const answer = answers[id];
+  const question = questions[id];
+  if (question === undefined || field === undefined) {
     return { _tag: "malformed_answer", id, reason: "answer is not an object" };
   }
-  const received = answer["type"];
-  if (typeof received !== "string") {
-    return { _tag: "malformed_answer", id, reason: "answer has no `type`" };
-  }
-  if (received !== question.type) {
-    return {
-      _tag: "answer_type_mismatch",
-      id,
-      expected: question.type,
-      received,
-    };
+
+  if (field === "type") {
+    const received = at(answer, "type");
+    return typeof received === "string"
+      ? { _tag: "answer_type_mismatch", id, expected: question.type, received }
+      : { _tag: "malformed_answer", id, reason: "answer has no `type`" };
   }
 
-  if (question.type === "noul") {
-    return isNum(answer["noul"])
-      ? undefined
-      : { _tag: "malformed_answer", id, reason: "`noul` is not a number" };
-  }
+  if (question.type === "choice") {
+    const options = Object.keys(question.criteria);
 
-  if (!isNum(answer["confidence"])) {
-    return {
-      _tag: "malformed_answer",
-      id,
-      reason: "`confidence` is not a number",
-    };
-  }
-  const probabilities = answer["probabilities"];
-  if (!isNumMap(probabilities)) {
-    return {
-      _tag: "malformed_answer",
-      id,
-      reason: "`probabilities` is not a map of numbers",
-    };
-  }
-
-  if (question.type === "score") {
-    if (!isNum(answer["score"])) {
-      return {
-        _tag: "malformed_answer",
-        id,
-        reason: "`score` is not a number",
-      };
+    if (field === "choice") {
+      const choice = at(answer, "choice");
+      if (typeof choice === "string") {
+        return { _tag: "off_criteria_choice", id, choice, options };
+      }
     }
-    return isStrMap(answer["legend"])
-      ? undefined
-      : {
-          _tag: "malformed_answer",
+
+    if (field === "probabilities") {
+      const probabilities = at(answer, "probabilities");
+      // A key the shape names and the body carries is a BAD VALUE; one the body
+      // does not carry, or one the criteria do not name, is a totality failure.
+      const key = issue?.path[3];
+      const badValue =
+        isObj(probabilities) &&
+        typeof key === "string" &&
+        Object.hasOwn(probabilities, key);
+      if (isObj(probabilities) && !badValue) {
+        return {
+          _tag: "off_criteria_probabilities",
           id,
-          reason: "`legend` is not a map of strings",
+          missing: options.filter((k) => !Object.hasOwn(probabilities, k)),
+          extra: Object.keys(probabilities).filter((k) => !options.includes(k)),
+          options,
         };
+      }
+    }
   }
 
-  // choice — the two checks the type-level contract rests on.
-  const choice = answer["choice"];
-  if (typeof choice !== "string") {
-    return { _tag: "malformed_answer", id, reason: "`choice` is not a string" };
-  }
-  const options = Object.keys(question.criteria);
-  if (!options.includes(choice)) {
-    return { _tag: "off_criteria_choice", id, choice, options };
-  }
-
-  // `JevChoiceAnswer<K>` says `probabilities` is TOTAL over the criteria keys
-  // and carries nothing else. A `Record<K, number>` the bytes under-fill is
-  // exactly the value the cast at the tail of `parseAnswers` would otherwise
-  // launder into the caller's hands.
-  const missing = options.filter((k) => !Object.hasOwn(probabilities, k));
-  const extra = Object.keys(probabilities).filter((k) => !options.includes(k));
-  return missing.length === 0 && extra.length === 0
-    ? undefined
-    : { _tag: "off_criteria_probabilities", id, missing, extra, options };
+  const named =
+    typeof field === "string" ? ANSWER_FIELD_REASON[field] : undefined;
+  return {
+    _tag: "malformed_answer",
+    id,
+    reason: named ?? issue?.message ?? "answer is malformed",
+  };
 };
+
+// ── parsing ──────────────────────────────────────────────
 
 /**
  * Turn an `unknown` response body into the typed answers for `questions`, or
  * into one `JevErr`. Pure, total, and never throwing on any input.
  *
- * The walk is question-driven, not body-driven: every id the request asked
- * about must be answered, and each answer is checked against ITS question's
- * type and — for a choice — against that question's own criteria keys, both as
- * the `choice` picked and as the exact key set of `probabilities`. An
- * answer under an id nobody asked about is ignored rather than refused; the
- * questions are the contract, and a wider response still satisfies it.
+ * The schema is question-driven: every id the request asked about must be
+ * answered, each answer is checked against ITS question's type and — for a
+ * choice — against that question's own criteria keys, both as the `choice`
+ * picked and as the exact key set of `probabilities`. An answer under an id
+ * nobody asked about is dropped rather than refused.
  */
 export const parseAnswers = <Q extends JevQuestionMap>(
   questions: Q,
   body: unknown,
 ): JevParse<Q> => {
-  if (!isObj(body))
-    return err({ _tag: "malformed_body", reason: "body is not an object" });
-
-  const model = body["model"];
-  if (typeof model !== "string") {
-    return err({ _tag: "malformed_body", reason: "`model` is not a string" });
+  const parsed = responseSchema(questions).safeParse(body);
+  if (!parsed.success) {
+    return err(toJevErr(questions, body, parsed.error.issues[0]));
   }
-
-  const usage = body["usage"];
-  if (
-    !isObj(usage) ||
-    !isNum(usage["input_tokens"]) ||
-    !isNum(usage["output_tokens"])
-  ) {
-    return err({
-      _tag: "malformed_body",
-      reason: "`usage` is not `{ input_tokens, output_tokens }`",
-    });
-  }
-
-  const answers = body["answers"];
-  if (!isObj(answers)) {
-    return err({
-      _tag: "malformed_body",
-      reason: "`answers` is not an object",
-    });
-  }
-
-  for (const [id, question] of Object.entries(questions)) {
-    if (!Object.hasOwn(answers, id)) {
-      return err({ _tag: "missing_answer", id });
-    }
-    const bad = checkAnswer(id, question, answers[id]);
-    if (bad !== undefined) return err(bad);
-  }
-
-  return {
-    ok: true,
-    // Every id of `questions` passed `checkAnswer`, which is exactly the set of
-    // obligations `JevAnswers<Q>` states. `unknown` is the bridge because the
-    // per-id narrowing happened in a loop, where the compiler cannot carry it.
-    answers: answers as unknown as JevAnswers<Q>,
-    model,
-    usage: {
-      input_tokens: usage["input_tokens"],
-      output_tokens: usage["output_tokens"],
-    },
-  };
+  const { answers, model, usage } = parsed.data;
+  return { ok: true, answers, model, usage };
 };
 
 // ── status classification ──────────────────────────────────────────────────
