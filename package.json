@@ -95,6 +95,10 @@
       "types": "./dist/work-queue/index.d.ts",
       "import": "./dist/work-queue/index.js"
     },
+    "./jev": {
+      "types": "./dist/jev/index.d.ts",
+      "import": "./dist/jev/index.js"
+    },
     "./devtools": {
       "types": "./dist/devtools/index.d.ts",
       "import": "./dist/devtools/index.js"

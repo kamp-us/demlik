@@ -23,6 +23,7 @@ export default defineConfig({
     "persistence/index": "src/persistence/index.ts",
     "paginate/index": "src/paginate/index.ts",
     "work-queue/index": "src/work-queue/index.ts",
+    "jev/index": "src/jev/index.ts",
     "machine-viz/index": "src/machine-viz/index.ts",
     "agent/index": "src/agent/index.ts",
     "parity/index": "src/parity/index.ts",

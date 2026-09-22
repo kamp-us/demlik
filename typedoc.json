@@ -17,6 +17,7 @@
     "src/persistence/index.ts",
     "src/paginate/index.ts",
     "src/work-queue/index.ts",
+    "src/jev/index.ts",
     "src/testing/index.ts",
     "src/pbt/index.ts",
     "src/devtools/index.ts"

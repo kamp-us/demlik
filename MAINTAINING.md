@@ -53,6 +53,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./persistence` | battery | record a run, replay a trace, checkpoint a long-running machine |
 | `./paginate` | battery | the cursor walk, and the resumable end-to-end traversal over it |
 | `./work-queue` | battery | queue lifecycle over `Store<S>`: the adapter, the pure ops, the verb seam |
+| `./jev` | battery | TypeSafe Jev (System One): the wire contract, the one `ask` Cmd over it, and the batching composition — and it breaks when that third-party wire contract does |
 | `./agent` | experimental | agent layer; the brain migration graduates it |
 
 **A new export added to an existing door inherits that door's stamp** and earns no row of its
