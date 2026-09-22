@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (111)
+## Exports (117)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -46,7 +46,9 @@ import { … } from "@demlik/tea/resilience";
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
 | `DeadlineTimeoutSub` | Type | The relative-timeout Sub the wrapper arms while `phase === "armed"`. |
+| `DEFAULT_RESILIENT_NAME` | Variable | The family every unnamed knob speaks: `resilient_run` / `resilient_ok` / `resilient_err`. |
 | `defaultCircuitPolicy` | Variable | Sensible defaults: trip after 5 consecutive failures, cool down for 30s, admit a single probe before deciding. |
+| `DefaultResilientName` | Type |  |
 | `evictExpired` | Function | Physically drop every entry expired at `nowMs` (`nowMs >= expiresAtMs`). |
 | `FailMsg` | Type |  |
 | `get` | Function | The cached `value` for `key` iff present AND unexpired at `nowMs`, else `undefined`. |
@@ -81,7 +83,11 @@ import { … } from "@demlik/tea/resilience";
 | `ResilienceTimerSub` | Type | The Sub the wrapper adds — a deadline-style timer in the `$resilience` family. |
 | `ResilientCallDeadlineConfig` | Interface | Overall deadline knob — a budget of IN-PROCESS time per in-flight call. |
 | `ResilientConfig` | Interface | The resilience knob. |
+| `ResilientErrType` | Type | The failure settle Msg's `type` for the `N` family. |
+| `ResilientHandlers` | Type | What `handlers(ports)` returns: the interpret cell for this knob's run Cmd, under that Cmd's own name. |
+| `ResilientOkType` | Type | The success settle Msg's `type` for the `N` family. |
 | `ResilientPorts` | Interface | Ports the consumer supplies to `handlers`. |
+| `ResilientRunType` | Type | The run Cmd's `type` for the `N` family. |
 | `ResilientState` | Interface | The slice. |
 | `ResilientTimerMsg` | Type | The retry / deadline timer Msg — `DeadlineExceeded`, keyed by the call `key`. |
 | `RetryExhaustedError` | Class | Raised when `retryToSuccess` exhausts the retry bound without a success — the `maxAttempts`-th recorded failure refuses another attempt. |

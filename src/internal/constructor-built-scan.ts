@@ -18,6 +18,14 @@
  *      is the drift this catches. Msg and Sub literals share the `type:` key
  *      and are deliberately NOT in scope: only the names a def claims count.
  *
+ * A def may claim a FAMILY of names rather than one: `Cmd.define(`${name}_run`,
+ * …)` mints `resilient_run` unnamed and `jev_run` named, so there is no single
+ * literal to register. The scanner records the template's static tail (`_run`)
+ * in {@link Scan.definedSuffixes}, and a literal ENDING in one is drift exactly
+ * as a literal matching a concrete name is — which keeps the check wider than
+ * it was, not narrower: `type: "jev_run"` is caught beside `type:
+ * MsgType.ResilientRun`.
+ *
  * Comments are blanked before scanning (JSDoc quotes the old literal shape as
  * prose), with newlines kept so a hit reports its real line.
  */
@@ -35,6 +43,8 @@ export type Hit = {
 
 export type Scan = {
   readonly defined: ReadonlySet<string>;
+  /** Static tails of the name families a `Cmd.define(`${x}TAIL`, …)` claims. */
+  readonly definedSuffixes: ReadonlySet<string>;
   readonly handTypes: readonly Hit[];
   readonly literals: readonly Hit[];
 };
@@ -78,15 +88,23 @@ function lineOf(src: string, index: number): number {
 }
 
 const DEFINE = /\bCmd\.define\(\s*(?:"([^"]+)"|MsgType\.(\w+))/g;
+// The family form: a template whose one interpolation is the family name and
+// whose static tail is the channel — `Cmd.define(`${name}_run`, …)`.
+const DEFINE_FAMILY = /\bCmd\.define\(\s*`\$\{[^}]+\}([^`]+)`/g;
 const HAND_TYPE = /\bCmd<\s*(?:"([^"]+)"|typeof MsgType\.(\w+))\s*>/g;
 const LITERAL = /\btype:\s*(?:"([^"]+)"|MsgType\.(\w+))/g;
 
 export function scan(files: readonly SourceFile[]): Scan {
   const defined = new Set<string>();
+  const definedSuffixes = new Set<string>();
   const handTypes: Hit[] = [];
   for (const [file, raw] of files) {
     const src = withoutComments(raw);
     for (const m of src.matchAll(DEFINE)) defined.add(discriminant(m[1], m[2]));
+    for (const m of src.matchAll(DEFINE_FAMILY)) {
+      const tail = m[1];
+      if (tail !== undefined) definedSuffixes.add(tail);
+    }
     for (const m of src.matchAll(HAND_TYPE)) {
       handTypes.push({
         file,
@@ -100,9 +118,11 @@ export function scan(files: readonly SourceFile[]): Scan {
     const src = withoutComments(raw);
     for (const m of src.matchAll(LITERAL)) {
       const name = discriminant(m[1], m[2]);
-      if (defined.has(name))
-        literals.push({ file, line: lineOf(src, m.index), name });
+      const claimed =
+        defined.has(name) ||
+        [...definedSuffixes].some((tail) => name.endsWith(tail));
+      if (claimed) literals.push({ file, line: lineOf(src, m.index), name });
     }
   }
-  return { defined, handTypes, literals };
+  return { defined, definedSuffixes, handTypes, literals };
 }

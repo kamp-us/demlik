@@ -1283,3 +1283,190 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
     await runtime.stop();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Two knobs, one machine (#229). Unnamed, both settle through `resilient_ok` /
+// `resilient_err`: one cell per name, carrying the UNION of both payloads, and
+// the consumer discriminates by hand on `key` — a switch the type checker
+// cannot grade. Named apart, each knob owns a cell already narrowed to its own
+// payload, which is what these tests pin.
+// ---------------------------------------------------------------------------
+
+describe("createResilientCall — two named knobs in one machine", () => {
+  interface Answer {
+    readonly verdict: "yes" | "no";
+  }
+  interface Draft {
+    readonly text: string;
+  }
+
+  interface TwoState {
+    readonly jev: ResilientState<string, Answer>;
+    readonly llm: ResilientState<string, Draft>;
+  }
+  type TwoMsg =
+    | { type: "ask"; key: string; input: string; at: number }
+    | { type: "draft"; key: string; input: string; at: number }
+    | SucceedMsg<Answer, "jev">
+    | FailMsg<"jev">
+    | SucceedMsg<Draft, "llm">
+    | FailMsg<"llm">
+    | ResilientTimerMsg;
+  type TwoCmd = RunCmd<string, "jev"> | RunCmd<string, "llm">;
+
+  const jev = createResilientCall<string, Answer, "jev">(
+    { name: "jev", ...fullConfig },
+    rngZero,
+  );
+  const llm = createResilientCall<string, Draft, "llm">(
+    { name: "llm", ...fullConfig },
+    rngZero,
+  );
+
+  const twoMachine = defineMachine({
+    types: {
+      model: {} as TwoState,
+      msg: {} as TwoMsg,
+      cmd: {} as TwoCmd,
+      sub: {} as ReturnType<typeof jev.subs>[number],
+      ctx: {} as object,
+    },
+    init: (loaded) =>
+      loaded !== null
+        ? [loaded, []]
+        : [{ jev: jev.init(), llm: llm.init() }, []],
+    update: {
+      ask: (s, m) => {
+        const [slice, cmds] = jev.attempt(s.jev, m.key, m.input, m.at);
+        return [{ ...s, jev: slice }, cmds];
+      },
+      draft: (s, m) => {
+        const [slice, cmds] = llm.attempt(s.llm, m.key, m.input, m.at);
+        return [{ ...s, llm: slice }, cmds];
+      },
+      // No `key` switch anywhere below: the cell's name already says which
+      // knob settled, so `m.result` is `Answer` here and `Draft` two cells
+      // down. Under one shared `resilient_ok` cell both would be a union.
+      jev_ok: (s, m) => {
+        const verdict: Answer["verdict"] = m.result.verdict;
+        void verdict;
+        const [slice, cmds] = jev.succeed(s.jev, m.key, m);
+        return [{ ...s, jev: slice }, cmds];
+      },
+      jev_err: (s, m) => {
+        const [slice, cmds] = jev.fail(s.jev, m.key, m);
+        return [{ ...s, jev: slice }, cmds];
+      },
+      llm_ok: (s, m) => {
+        const text: string = m.result.text;
+        void text;
+        const [slice, cmds] = llm.succeed(s.llm, m.key, m);
+        return [{ ...s, llm: slice }, cmds];
+      },
+      llm_err: (s, m) => {
+        const [slice, cmds] = llm.fail(s.llm, m.key, m);
+        return [{ ...s, llm: slice }, cmds];
+      },
+      deadline_exceeded: (s, m) => {
+        const [jevSlice] = jev.onTimer(s.jev, m);
+        const [llmSlice] = llm.onTimer(s.llm, m);
+        return [{ jev: jevSlice, llm: llmSlice }, []];
+      },
+    },
+    subscriptions: (s) => [...jev.subs(s.jev), ...llm.subs(s.llm)],
+    subscribe: { deadline: () => () => {} },
+  });
+
+  const two = bindMachine(twoMachine, ctx);
+
+  it("each knob emits its own run Cmd, not one shared `resilient_run`", () => {
+    two.expectCmdSequence(
+      {
+        msgs: [
+          { type: "ask", key: "k", input: "q", at: 0 },
+          { type: "draft", key: "k", input: "p", at: 0 },
+        ],
+      },
+      [
+        { type: "jev_run", key: "k", input: "q" },
+        { type: "llm_run", key: "k", input: "p" },
+      ],
+    );
+  });
+
+  it("each knob settles into its own cell with its own payload", () => {
+    const { state } = two.replay({
+      msgs: [
+        { type: "ask", key: "k", input: "q", at: 0 },
+        { type: "draft", key: "k", input: "p", at: 0 },
+        { type: "jev_ok", key: "k", result: { verdict: "yes" }, at: 1 },
+        { type: "llm_ok", key: "k", result: { text: "hello" }, at: 1 },
+      ],
+    });
+    expect(state.jev.calls.k).toEqual({
+      phase: "succeeded",
+      result: { verdict: "yes" },
+    });
+    expect(state.llm.calls.k).toEqual({
+      phase: "succeeded",
+      result: { text: "hello" },
+    });
+  });
+
+  it("one knob's failure leaves the sibling sharing its key untouched", () => {
+    const { state, subs } = two.replay({
+      msgs: [
+        { type: "ask", key: "k", input: "q", at: 0 },
+        { type: "draft", key: "k", input: "p", at: 0 },
+        { type: "jev_err", key: "k", error: "boom", at: 0 },
+        { type: "llm_ok", key: "k", result: { text: "hello" }, at: 0 },
+      ],
+    });
+    expect(state.jev.calls.k).toMatchObject({ phase: "waiting_retry" });
+    expect(state.llm.calls.k).toEqual({
+      phase: "succeeded",
+      result: { text: "hello" },
+    });
+    // The retry timer is the failed knob's alone — Subs reconcile by id, so the
+    // name has to lead the id or the two knobs would share one timer on `k`.
+    expect(subs).toEqual([
+      deadlineSub("jev:retry:k", 0),
+      deadlineSub("jev:deadline:k", 5_000),
+    ]);
+  });
+
+  it("each knob's handlers record is keyed by its own run Cmd", async () => {
+    const jevSettle = await jev
+      .handlers({
+        run: async (): Promise<Answer> => ({ verdict: "no" }),
+      })
+      .jev_run({ type: "jev_run", key: "k", input: "q" }, {} as never);
+    const llmSettle = await llm
+      .handlers({
+        run: async (): Promise<Draft> => ({ text: "hi" }),
+      })
+      .llm_run({ type: "llm_run", key: "k", input: "p" }, {} as never);
+    expect(jevSettle.type).toBe("jev_ok");
+    expect(llmSettle.type).toBe("llm_ok");
+  });
+});
+
+describe("createResilientCall — the unnamed default is unchanged", () => {
+  it("omitting `name` keeps the `resilient_*` vocabulary verbatim", () => {
+    const rc = createResilientCall<string, string>(fullConfig, rngZero);
+    const [, cmds] = rc.attempt(rc.init(), "k", "in", 0);
+    expect(cmds[0]?.type).toBe("resilient_run");
+    expect(Object.keys(rc.handlers({ run: async () => "x" }))).toEqual([
+      "resilient_run",
+    ]);
+  });
+
+  it("passing the default name explicitly is the same knob", () => {
+    const named = createResilientCall<string, string, "resilient">(
+      { name: "resilient", ...fullConfig },
+      rngZero,
+    );
+    const [, cmds] = named.attempt(named.init(), "k", "in", 0);
+    expect(cmds[0]?.type).toBe("resilient_run");
+  });
+});
