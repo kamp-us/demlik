@@ -232,49 +232,58 @@ inside a reducer verb.
 
 ## 4. Drive it in a test
 
-`bindMachine` from [`@demlik/tea/testing`](../reference/testing.md) gives you the
-machine's `step` synchronously. Feed the Msg, run the real interpret handler
-over each Cmd, feed the settle Msg back — the runtime's own loop, said in a
-shape a test can assert between folds.
+`drive` from [`@demlik/tea/testing`](../reference/testing.md) runs the machine
+the way the runtime does — fold the Msg, hand every emitted Cmd to the real
+interpret handler, feed each settle Msg back, stop when the machine is quiet —
+with no runtime, no clock and no socket anywhere on the path. It returns the
+settled `state` **and** the `trace`: every Cmd dispatched and every Msg folded,
+in order.
 
 ```ts
-import { bindMachine } from "@demlik/tea/testing";
+import { type DriveResult, drive } from "@demlik/tea/testing";
+
+/** What one driven classification hands back: the settled state and the history. */
+export type Classified = DriveResult<
+  ExpenseState,
+  ExpenseMsg,
+  JevCmd<Questions>
+>;
 
 /**
- * Feed one `classify`, run the real interpret handler over every Cmd it
- * emitted, and feed the settle Msg back — which is what the runtime does, said
- * synchronously so a test can assert on the state between two folds.
+ * Feed one `classify` and let `drive` do what the runtime does: run the real
+ * interpret handlers over every Cmd, feed each settle Msg back, and stop when
+ * the machine is quiet. It returns the settled state AND the `trace` — every
+ * Cmd dispatched and every Msg folded, in order.
  */
-export async function classifyOne(
+export function classifyOne(
   ask: Ask,
   key: string,
   memo: string,
-): Promise<ExpenseState> {
-  const bound = bindMachine(expenseMachine(ask), undefined);
-  let [state, cmds] = bound.step(
+): Promise<Classified> {
+  return drive(
+    expenseMachine(ask),
     { resilience: ask.init(), verdicts: {} },
     { type: "classify", key, memo, at: 0 },
+    ask.handlers(),
   );
-  for (let guard = 0; guard < 10 && cmds.length > 0; guard += 1) {
-    const pending = cmds;
-    cmds = [];
-    for (const cmd of pending) {
-      const settle = await ask.handlers().resilient_run(cmd);
-      const next = bound.step(state, settle);
-      state = next[0];
-      cmds = [...cmds, ...next[1]];
-    }
-  }
-  return state;
 }
 ```
 
-Then the assertions are plain data:
+`ask.handlers()` is the same record the machine declares as its `interpret`, so
+the test drives the **real** interpreter and mocks only the port beneath it. A
+machine that never settles is a throw (`DriveRoundsExceededError`, carrying the
+partial trace), never a half-driven state handed back as if it were done.
+
+Then the assertions are plain data — and the `trace` answers questions the
+settled state cannot:
 
 ```ts
 const ask = createJevAsk({ questions, port: fakeJev([["dining", 0.93]]) });
-const state = await classifyOne(ask, "tx-1", "PIZZA NAPOLI 24.10 EUR");
+const { state, trace } = await classifyOne(ask, "tx-1", "PIZZA NAPOLI 24.10 EUR");
 expect(state.verdicts["tx-1"]).toEqual({ kind: "booked", category: "dining" });
+// The door was asked EXACTLY once, so this is a first-attempt answer and not
+// the end of a retry ladder.
+expect(trace.filter((entry) => entry.kind === "cmd")).toHaveLength(1);
 ```
 
 Swap `0.93` for `0.41` and the same machine returns
