@@ -1,7 +1,7 @@
 ---
 id: 0014
 title: Effect's E and R channels are types on Cmd constructors, never Effect values at the core
-status: accepted
+status: amended-in-part by [0020](0020-tea-owns-no-dependency-injection.md)
 date: 2026-09-04
 tags: []
 ---
