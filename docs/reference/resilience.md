@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (125)
+## Exports (129)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -41,6 +41,9 @@ import { … } from "@demlik/tea/resilience";
 | `deadlineExceededMsg` | Function | Construct the deadline-exceeded Msg. |
 | `DeadlineExceededMsg` | Interface | The Msg the timeout Sub dispatches when `config.ms` elapses with no accepted progress. |
 | `DeadlineModel` | Interface | The composed Model. |
+| `deadlineMsgType` | Function | The one place the named tag is spelled. |
+| `DeadlineMsgType` | Type | The dispatched Msg's tag, derived from the deadline's optional name. |
+| `DeadlineNameOf` | Type | The name the deadline Sub carries for the `N` family — `undefined` for the default family (no name at all, so the bare literal is dispatched), the name itself otherwise. |
 | `DeadlineOpts` | Type | Additive options the `deadlineSub` factory folds onto the Sub literal. |
 | `DeadlineSettled` | Interface | What MountConfig.onDeadline is handed: the one call the timer cell just settled `failed`, named by its `key`, carrying the error the slice settled with and the timer Msg that produced it. |
 | `DeadlineSlice` | Interface | The wrapper's Model slice. |
@@ -89,13 +92,14 @@ import { … } from "@demlik/tea/resilience";
 | `ResilienceTimerSub` | Type | The Sub the wrapper adds — a deadline-style timer in the `$resilience` family. |
 | `ResilientCallDeadlineConfig` | Interface | Overall deadline knob — a budget of IN-PROCESS time per in-flight call. |
 | `ResilientConfig` | Interface | The resilience knob. |
+| `ResilientDeadlineType` | Type | The deadline Msg tag this knob's timers dispatch, derived from its name the same way `<name>_ok` / `<name>_err` are. |
 | `ResilientErrType` | Type | The failure settle Msg's `type` for the `N` family. |
 | `ResilientHandlers` | Type | What `handlers(ports)` returns: the interpret cell for this knob's run Cmd, under that Cmd's own name. |
 | `ResilientOkType` | Type | The success settle Msg's `type` for the `N` family. |
 | `ResilientPorts` | Interface | Ports the consumer supplies to `handlers`. |
 | `ResilientRunType` | Type | The run Cmd's `type` for the `N` family. |
 | `ResilientState` | Interface | The slice. |
-| `ResilientTimerMsg` | Type | The retry / deadline timer Msg — `DeadlineExceeded`, keyed by the call `key`. |
+| `ResilientTimerMsg` | Type | The retry / deadline timer Msg — a `DeadlineExceeded` whose tag is this knob's (ResilientDeadlineType), keyed by the call `key` through the Sub `id`. |
 | `RetryExhaustedError` | Class | Raised when `retryToSuccess` exhausts the retry bound without a success — the `maxAttempts`-th recorded failure refuses another attempt. |
 | `retryToSuccess` | Function | Fire-and-await bounded retry: invoke the fallible `port`, and on each thrown failure fold it through `./retry-backoff` — record it, and if the policy still permits an attempt, back off `nextDelayMs` and retry; otherwise REJECT with RetryExhaustedError. |
 | `RetryToSuccessOptions` | Interface | Options for retryToSuccess. |

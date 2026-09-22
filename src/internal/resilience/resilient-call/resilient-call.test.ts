@@ -7,6 +7,7 @@ import type {
   TimedRetryState,
 } from "../../../retry-backoff";
 import { bindMachine } from "../../../testing";
+import { deadlineExceeded, subscribeWith } from "../deadline";
 import {
   createResilientCall,
   type DeadlineExceededError,
@@ -1431,9 +1432,11 @@ describe("createResilientCall — two named knobs in one machine", () => {
     });
     // The retry timer is the failed knob's alone — Subs reconcile by id, so the
     // name has to lead the id or the two knobs would share one timer on `k`.
+    // It leads the Msg too (#238): the Sub carries the name, so what it
+    // dispatches is `jev_deadline`, not a `deadline_exceeded` both knobs claim.
     expect(subs).toEqual([
-      deadlineSub("jev:retry:k", 0),
-      deadlineSub("jev:deadline:k", 5_000),
+      deadlineSub("jev:retry:k", 0, { name: "jev" }),
+      deadlineSub("jev:deadline:k", 5_000, { name: "jev" }),
     ]);
   });
 
@@ -1893,8 +1896,8 @@ describe("mountResilientCall — settle cells carry the knob's own Msg names", (
   it("a named knob mounts into `<name>_ok` / `<name>_err`, not `resilient_*`", () => {
     const mounted = mountNamed("jev");
     expect(Object.keys(mounted.update).sort()).toEqual([
-      "deadline_exceeded",
       "go",
+      "jev_deadline",
       "jev_err",
       "jev_ok",
     ]);
@@ -1931,12 +1934,216 @@ describe("mountResilientCall — settle cells carry the knob's own Msg names", (
     const llm = mountNamed("llm");
     const cells = { ...jev.update, ...llm.update };
     expect(Object.keys(cells).sort()).toEqual([
-      "deadline_exceeded",
       "go",
+      "jev_deadline",
       "jev_err",
       "jev_ok",
+      "llm_deadline",
       "llm_err",
       "llm_ok",
     ]);
+  });
+});
+
+// ===========================================================================
+// The deadline cell carries the knob's name too (#238).
+//
+// `mountResilientCall` name-spaced `<name>_ok` / `<name>_err` but left the
+// deadline cell on the unqualified `deadline_exceeded` literal, so two mounts
+// spread into one `defineMachine` agreed on that ONE key and the last spread
+// silently dropped the other knob's deadline fold. Nothing failed: both cells
+// had the same key and a compatible signature, so the type checker graded it
+// clean and the losing knob simply never saw its deadline.
+//
+// The fix is at the Msg: the deadline Sub carries the knob's name, so a named
+// knob dispatches `<name>_deadline` and mounts into its own cell. These two
+// pin both halves — the collision is gone, and the unnamed default is not.
+// ===========================================================================
+
+describe("mountResilientCall — the deadline cell is name-spaced too", () => {
+  interface TwoState {
+    readonly jev: ResilientState<string, string>;
+    readonly llm: ResilientState<string, string>;
+    readonly folds: readonly string[];
+  }
+
+  type Go = { type: "go"; key: string; input: string; at: number };
+
+  // One mount per knob, both folding into the SAME `folds` field, so a dropped
+  // cell shows up as a missing entry rather than as a silently identical Model.
+  function mountKnob<N extends "jev" | "llm">(name: N, slice: N) {
+    const rc = createResilientCall<string, string, N>(
+      { name, deadline: { ms: 5_000 } },
+      rngZero,
+    );
+    const mounted = mountResilientCall(
+      { ...rc, handlers: () => rc.handlers({ run: async () => "VALUE" }) },
+      {
+        slice,
+        attempt: {
+          on: `go_${name}` as `go_${N}`,
+          run: (s, m: Go) => rc.attempt(s, m.key, m.input, m.at),
+        },
+        onDeadline: (model: TwoState, settled) => [
+          { ...model, folds: [...model.folds, `${name}:${settled.key}`] },
+          [],
+        ],
+      },
+    );
+    return { rc, mounted };
+  }
+
+  it("two mounted knobs each fold their OWN deadline, neither overwritten", () => {
+    const jev = mountKnob("jev", "jev");
+    const llm = mountKnob("llm", "llm");
+
+    // The whole point: ONE machine, both mounts spread into one `update`.
+    const machine = defineMachine<TwoState, Record<string, unknown>, never>({
+      init: (loaded) =>
+        loaded !== null
+          ? [loaded, []]
+          : [{ ...jev.mounted.init(), ...llm.mounted.init(), folds: [] }, []],
+      update: { ...jev.mounted.update, ...llm.mounted.update } as never,
+    });
+    // Against `origin/main` there is ONE deadline key here, not two: both
+    // mounts wrote `deadline_exceeded` and the second spread won.
+    expect(Object.keys(machine.update).sort()).toEqual([
+      "go_jev",
+      "go_llm",
+      "jev_deadline",
+      "jev_err",
+      "jev_ok",
+      "llm_deadline",
+      "llm_err",
+      "llm_ok",
+    ]);
+
+    const bound = bindMachine(machine, {});
+    const [seeded] = machine.init(null);
+    const [a] = bound.step(seeded, {
+      type: "go_jev",
+      key: "ka",
+      input: "in",
+      at: 0,
+    });
+    const [both] = bound.step(a, {
+      type: "go_llm",
+      key: "kb",
+      input: "in",
+      at: 0,
+    });
+
+    // Fire each knob's deadline in turn, each under its own tag and its own id.
+    const [afterJev] = bound.step(both, {
+      type: "jev_deadline",
+      id: "jev:deadline:ka",
+      atMs: 5_000,
+    });
+    expect(afterJev.jev.calls.ka?.phase).toBe("failed");
+    expect(afterJev.llm.calls.kb?.phase).toBe("running");
+    expect(afterJev.folds).toEqual(["jev:ka"]);
+
+    const [afterBoth] = bound.step(afterJev, {
+      type: "llm_deadline",
+      id: "llm:deadline:kb",
+      atMs: 5_000,
+    });
+    expect(afterBoth.llm.calls.kb?.phase).toBe("failed");
+    // Each fold ran exactly once, for its own call. On `origin/main` the llm
+    // cell had eaten the jev one, so `jev:ka` is absent here.
+    expect(afterBoth.folds).toEqual(["jev:ka", "llm:kb"]);
+  });
+
+  it("each knob's deadline Sub carries its own name, so the tags differ", () => {
+    const jev = mountKnob("jev", "jev");
+    const llm = mountKnob("llm", "llm");
+    const [seeded] = [
+      { ...jev.mounted.init(), ...llm.mounted.init(), folds: [] } as TwoState,
+    ];
+    const [running] = jev.mounted.update.go_jev(seeded, {
+      type: "go_jev",
+      key: "ka",
+      input: "in",
+      at: 0,
+    });
+    expect(jev.mounted.subscriptions(running)).toEqual([
+      deadlineSub("jev:deadline:ka", 5_000, { name: "jev" }),
+    ]);
+    // The name leads the Msg the Sub dispatches, not only the Sub id — the id
+    // was already scoped before #238 and the collision was on the tag.
+    expect(
+      subscribeWith<"jev">((_id, _atMs, msg) => {
+        expect(msg.type).toBe("jev_deadline");
+        return () => {};
+      })(
+        deadlineSub("jev:deadline:ka", 5_000, { name: "jev" }),
+        undefined,
+        () => {},
+      ),
+    ).toBeTypeOf("function");
+    // And an unnamed knob's Sub carries no name at all, so it still dispatches
+    // the bare literal.
+    expect(deadlineExceeded("resilient:deadline:k", 5_000).type).toBe(
+      "deadline_exceeded",
+    );
+  });
+
+  it("an unnamed knob still mounts and fires `deadline_exceeded` end to end", () => {
+    interface OneState {
+      readonly resilience: ResilientState<string, string>;
+      readonly folds: readonly string[];
+    }
+    const rc = createResilientCall<string, string>(
+      { deadline: { ms: 5_000 } },
+      rngZero,
+    );
+    const mounted = mountResilientCall(
+      { ...rc, handlers: () => rc.handlers({ run: async () => "VALUE" }) },
+      {
+        slice: "resilience",
+        attempt: {
+          on: "go",
+          run: (s, m: Go) => rc.attempt(s, m.key, m.input, m.at),
+        },
+        onDeadline: (model: OneState, settled) => [
+          { ...model, folds: [...model.folds, settled.key] },
+          [],
+        ],
+      },
+    );
+
+    // The pre-existing wiring, untouched: the cell key, the Sub, and the Msg
+    // tag are all the bare literal a machine wired before #238 is spread for.
+    expect(Object.keys(mounted.update).sort()).toEqual([
+      "deadline_exceeded",
+      "go",
+      "resilient_err",
+      "resilient_ok",
+    ]);
+
+    const machine = defineMachine<OneState, Record<string, unknown>, never>({
+      init: (loaded) =>
+        loaded !== null ? [loaded, []] : [{ ...mounted.init(), folds: [] }, []],
+      update: mounted.update as never,
+    });
+    const bound = bindMachine(machine, {});
+    const [seeded] = machine.init(null);
+    const [running] = bound.step(seeded, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    expect(mounted.subscriptions(running)).toEqual([
+      deadlineSub("resilient:deadline:k", 5_000),
+    ]);
+
+    const [dead] = bound.step(running, {
+      type: "deadline_exceeded",
+      id: "resilient:deadline:k",
+      atMs: 5_000,
+    });
+    expect(dead.resilience.calls.k?.phase).toBe("failed");
+    expect(dead.folds).toEqual(["k"]);
   });
 });

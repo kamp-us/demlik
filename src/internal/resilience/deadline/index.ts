@@ -62,9 +62,10 @@ import type { SubscribeHandler } from "../../../subs/types";
  * noun that doubles as the SubId family); same shape family as the
  * `TimeoutSubData` the `fromTimeout` factory consumes.
  */
-export type DeadlineSub = Sub<"deadline"> & {
-  readonly atMs: number;
-} & DeadlineOpts;
+export type DeadlineSub<N extends string | undefined = undefined> =
+  Sub<"deadline"> & {
+    readonly atMs: number;
+  } & DeadlineOpts<N>;
 
 /**
  * Additive options the `deadlineSub` factory folds onto the Sub literal. This
@@ -76,11 +77,24 @@ export type DeadlineSub = Sub<"deadline"> & {
  * they ask for what they need by name, never positionally, so a shape extension
  * never rewrites the ~13 `deadlineSub(id, atMs)` call sites.
  *
- * Empty today on purpose — the seam exists before the first extension does, so
- * the first field is a one-line additive change, not a 13-site migration.
+ * The first field to land here is {@link DeadlineOpts.name} — the knob name the
+ * dispatched Msg tag is derived from — and it landed exactly that way: one
+ * optional member, zero rewritten call sites.
  */
-// biome-ignore lint/complexity/noBannedTypes: intentional empty extension seam — fields are added additively (see doc above).
-export type DeadlineOpts = {};
+export type DeadlineOpts<N extends string | undefined = undefined> = {
+  /**
+   * The knob this deadline belongs to. Present → the dispatched Msg's tag is
+   * `` `${name}_deadline` ``; absent → the tag stays the bare
+   * `"deadline_exceeded"` every machine wired before this field is already
+   * handling. `N` is the name as a TYPE as well as a value, so a consumer's
+   * cell key and the Msg type are derived from one place and cannot drift.
+   *
+   * Name a deadline when a machine arms more than one family of them. The Sub
+   * *id* was already scoped (`` `${name}:deadline:${key}` ``); this scopes the
+   * Msg the Sub dispatches, which is what a reducer cell keys off.
+   */
+  readonly name?: N;
+};
 
 /**
  * The Msg the deadline dispatches when the wall clock crosses `atMs`. Exported
@@ -95,11 +109,22 @@ export type DeadlineOpts = {};
  * they prefer — `deadlineExceeded(...)` only fixes the wire shape, not the
  * consumer's local dialect.
  */
-export type DeadlineExceeded = {
-  readonly type: "deadline_exceeded";
+export type DeadlineExceeded<N extends string | undefined = undefined> = {
+  readonly type: DeadlineMsgType<N>;
   readonly id: string;
   readonly atMs: number;
 };
+
+/**
+ * The dispatched Msg's tag, derived from the deadline's optional name. A named
+ * deadline speaks `` `${N}_deadline` ``; an unnamed one speaks the bare
+ * `"deadline_exceeded"` literal, which is what `DeadlineExceeded` with no type
+ * argument still means — so every machine wired before the name existed keeps
+ * the exact type it had.
+ */
+export type DeadlineMsgType<N extends string | undefined> = N extends string
+  ? `${N}_deadline`
+  : "deadline_exceeded";
 
 /**
  * Build a deadline Sub literal. Pure data — no clock read, no timer; the timer
@@ -123,11 +148,11 @@ export type DeadlineExceeded = {
  *             optionality is the future-proofing seam — extending the shape
  *             never breaks an existing `deadlineSub(id, atMs)` call site.
  */
-export function deadlineSub(
+export function deadlineSub<N extends string | undefined = undefined>(
   id: string,
   atMs: number,
-  opts?: DeadlineOpts,
-): DeadlineSub {
+  opts?: DeadlineOpts<N>,
+): DeadlineSub<N> {
   return { ...opts, id: subId(id), type: "deadline", atMs };
 }
 
@@ -174,11 +199,16 @@ export type ArmTimer<M> = (
  * `subscribeWith(setTimeoutArmTimer())`, so there is one deadline surface and
  * one anchor, not a second one per host.
  */
-export function subscribeWith(
-  armTimer: ArmTimer<DeadlineExceeded>,
-): SubscribeHandler<DeadlineSub, DeadlineExceeded, unknown> {
+export function subscribeWith<N extends string | undefined = undefined>(
+  armTimer: ArmTimer<DeadlineExceeded<N>>,
+): SubscribeHandler<DeadlineSub<N>, DeadlineExceeded<N>, unknown> {
   return (sub, _ctx, dispatch) =>
-    armTimer(sub.id, sub.atMs, deadlineExceeded(sub.id, sub.atMs), dispatch);
+    armTimer(
+      sub.id,
+      sub.atMs,
+      deadlineExceeded(sub.id, sub.atMs, sub.name),
+      dispatch,
+    );
 }
 
 /**
@@ -194,14 +224,17 @@ export function subscribeWith(
  * it plugs its own `armTimer` (a `do_alarm` registration) into
  * {@link subscribeWith}.
  */
-export function setTimeoutArmTimer(): ArmTimer<DeadlineExceeded> {
+export function setTimeoutArmTimer<
+  N extends string | undefined = undefined,
+>(): ArmTimer<DeadlineExceeded<N>> {
   return (id, atMs, msg, dispatch) => {
     // Recompute the remaining delay from the CURRENT clock so a late subscribe
     // (post-rehydrate) still targets the correct absolute moment.
     const delayMs = Math.max(0, atMs - Date.now());
-    return fromTimeout<Sub<"deadline"> & { delayMs: number }, DeadlineExceeded>(
-      () => msg,
-    )({ id, type: "deadline", delayMs }, undefined, dispatch);
+    return fromTimeout<
+      Sub<"deadline"> & { delayMs: number },
+      DeadlineExceeded<N>
+    >(() => msg)({ id, type: "deadline", delayMs }, undefined, dispatch);
   };
 }
 
@@ -220,18 +253,46 @@ export function setTimeoutArmTimer(): ArmTimer<DeadlineExceeded> {
  *   subscribe: {
  *     deadline: subscribeDeadline,
  *   }
+ *
+ * Generic in the deadline's name so ONE handler serves every knob in a machine:
+ * the tag it dispatches is read off the Sub's own `name`, so a machine mounting
+ * a named knob beside an unnamed one wires this same cell once and each Sub
+ * still dispatches its own tag.
  */
-export const subscribeDeadline: SubscribeHandler<
-  DeadlineSub,
-  DeadlineExceeded,
-  unknown
-> = subscribeWith(setTimeoutArmTimer());
+export const subscribeDeadline: <N extends string | undefined = undefined>(
+  sub: DeadlineSub<N>,
+  ctx: unknown,
+  dispatch: (msg: DeadlineExceeded<N>) => void,
+) => () => void = <N extends string | undefined>(
+  sub: DeadlineSub<N>,
+  ctx: unknown,
+  dispatch: (msg: DeadlineExceeded<N>) => void,
+) => subscribeWith<N>(setTimeoutArmTimer<N>())(sub, ctx, dispatch);
 
 /**
  * Construct the Msg the deadline dispatches. Exported so consumers can build /
  * assert the same shape (and so the subscribe cell and tests share one
  * constructor rather than two literals that can drift).
  */
-export function deadlineExceeded(id: string, atMs: number): DeadlineExceeded {
-  return { type: "deadline_exceeded", id, atMs };
+export function deadlineExceeded<N extends string | undefined = undefined>(
+  id: string,
+  atMs: number,
+  name?: N,
+): DeadlineExceeded<N> {
+  return { type: deadlineMsgType(name), id, atMs };
+}
+
+/**
+ * The one place the named tag is spelled. `undefined` → the bare
+ * `"deadline_exceeded"` literal; a name → `` `${name}_deadline` ``. Exported so
+ * a consumer keying a reducer cell off a named deadline derives the key from
+ * the same function the Sub dispatches through, instead of re-spelling the
+ * template and drifting.
+ */
+export function deadlineMsgType<N extends string | undefined>(
+  name?: N,
+): DeadlineMsgType<N> {
+  return (
+    name === undefined ? "deadline_exceeded" : `${name}_deadline`
+  ) as DeadlineMsgType<N>;
 }
