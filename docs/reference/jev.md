@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/jev";
 ```
 
-## Exports (60)
+## Exports (62)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ import { … } from "@demlik/tea/jev";
 | `JevChoiceAnswer` | Interface | The chosen option and the full distribution over the options. |
 | `JevChoiceCriteria` | Type | A choice question's rubric: option key → description, or `null` where an option needs no extra detail. |
 | `JevChoiceQuestion` | Interface | Pick one option from a set you define. |
+| `JevCmd` | Type | The Cmd type a host machine declares in `types.cmd` when it splices a createJevAsk knob in — JevAskCmd under the name a `types` block reads well with. |
 | `JevErr` | Type | Every way a response can fail to be the answers to the questions asked. |
 | `JevFailMsg` | Type | The failure settle Msg — resilient-call's, with `error` narrowed to JevAskErr. |
 | `JevFallback` | Type | The pure decider that answers when the network cannot. |
@@ -61,6 +62,7 @@ import { … } from "@demlik/tea/jev";
 | `JevScoreCriteria` | Type | A score question's rubric: an ORDERED list of level descriptions, at least two of them. |
 | `JevScoreQuestion` | Interface | Rate the state along an ordered rubric. |
 | `JevState` | Type | The content to evaluate: text, or structured data. |
+| `JevSub` | Type | The Sub type a host machine declares in `types.sub` — the deadline Sub `subs` emits, inherited from resilient-call. |
 | `JevSucceedMsg` | Type | The success settle Msg — resilient-call's, with `result` narrowed to JevOk. |
 | `JevText` | Type | What every `instructions` and every criterion description accepts. |
 | `JevTimerMsg` | Type | The retry / deadline timer Msg — `DeadlineExceeded`, inherited. |

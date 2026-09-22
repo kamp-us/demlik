@@ -55,9 +55,11 @@ export type Category = keyof Questions["category"]["criteria"];
 import { defineMachine } from "@demlik/tea";
 import {
   createJevAsk,
+  type JevCmd,
   type JevFailMsg,
   type JevOk,
   type JevRequest,
+  type JevSub,
   type JevSucceedMsg,
   type JevTimerMsg,
   liftJevAsk,
@@ -97,23 +99,21 @@ export function expenseMachine(ask: Ask) {
     types: {
       model: {} as ExpenseState,
       msg: {} as ExpenseMsg,
-      cmd: {} as ReturnType<Ask["attempt"]>[1][number],
-      sub: {} as ReturnType<Ask["subs"]>[number],
+      cmd: {} as JevCmd<Questions>,
+      sub: {} as JevSub,
       ctx: undefined,
     },
-    init: (loaded: ExpenseState | null) =>
+    init: (loaded) =>
       loaded !== null
-        ? ([loaded, []] as const)
-        : ([{ resilience: ask.init(), verdicts: {} }, []] as const),
+        ? [loaded, []]
+        : [{ resilience: ask.init(), verdicts: {} }, []],
     update: {
-      classify: (
-        s: ExpenseState,
-        m: { key: string; memo: string; at: number },
-      ) => liftJevAsk(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
+      classify: (s, m) =>
+        liftJevAsk(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
 
       // Run the inherited verb FIRST so the backoff loop advances, THEN fold
       // the answer in. `answer.choice` is `Category` here, not `string`.
-      resilient_ok: (s: ExpenseState, m: JevSucceedMsg<Questions>) => {
+      resilient_ok: (s, m) => {
         const [slice, cmds] = ask.succeed(s.resilience, m.key, m);
         const answer = m.result.answers.category;
         const verdict: Verdict =
@@ -127,10 +127,10 @@ export function expenseMachine(ask: Ask) {
             verdicts: { ...s.verdicts, [m.key]: verdict },
           },
           cmds,
-        ] as const;
+        ];
       },
 
-      resilient_err: (s: ExpenseState, m: JevFailMsg) => {
+      resilient_err: (s, m) => {
         const [slice, cmds] = ask.fail(s.resilience, m.key, m);
         return [
           {
@@ -138,17 +138,16 @@ export function expenseMachine(ask: Ask) {
             resilience: slice,
             verdicts: {
               ...s.verdicts,
-              [m.key]: { kind: "triage", why: m.error._tag } as Verdict,
+              [m.key]: { kind: "triage", why: m.error._tag },
             },
           },
           cmds,
-        ] as const;
+        ];
       },
 
-      deadline_exceeded: (s: ExpenseState, m: JevTimerMsg) =>
-        liftJevAsk(s, ask.onTimer(s.resilience, m)),
+      deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
     },
-    subscriptions: (s: ExpenseState) => ask.subs(s.resilience),
+    subscriptions: (s) => ask.subs(s.resilience),
     subscribe: { deadline: subscribeDeadline },
     interpret: ask.handlers(),
   });

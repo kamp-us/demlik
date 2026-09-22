@@ -532,6 +532,24 @@ export function createJevAsk<Q extends JevQuestionMap>(
 }
 
 /**
+ * The Cmd type a host machine declares in `types.cmd` when it splices a
+ * {@link createJevAsk} knob in — {@link JevAskCmd} under the name a `types`
+ * block reads well with. It is stated here so a host writes `cmd: {} as
+ * JevCmd<Questions>` rather than deriving it from the knob's shape, which is
+ * what `ReturnType<Ask["attempt"]>[1][number]` used to be doing at every call
+ * site: a spelling of the same type that breaks the moment `attempt`'s tuple
+ * changes, and that reads as machinery rather than as a name.
+ */
+export type JevCmd<Q extends JevQuestionMap> = JevAskCmd<Q>;
+
+/**
+ * The Sub type a host machine declares in `types.sub` — the deadline Sub
+ * `subs` emits, inherited from resilient-call. Named here for the same reason
+ * as {@link JevCmd}: a host names the type, it does not re-derive it.
+ */
+export type JevSub = DeadlineSub;
+
+/**
  * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
  * lives at `state.resilience` — resilient-call's convenience, re-typed for this
  * door's slice so a consumer wires one import. Pure.

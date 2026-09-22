@@ -9,10 +9,12 @@
 import { defineMachine, type Reducer, run } from "@demlik/tea";
 import {
   createJevAsk,
+  type JevCmd,
   type JevFailMsg,
   type JevOk,
   type JevPort,
   type JevRequest,
+  type JevSub,
   type JevSucceedMsg,
   type JevTimerMsg,
   jevQuestions,
@@ -68,8 +70,6 @@ type Msg =
   | JevTimerMsg;
 
 type Ask = ReturnType<typeof createJevAsk<Questions>>;
-type JevCmd = ReturnType<Ask["attempt"]>[1][number];
-type JevSub = ReturnType<Ask["subs"]>[number];
 
 /** Below this the answer goes to a human. The threshold is the HOST's rule. */
 const CONFIDENCE_FLOOR = 0.8;
@@ -79,7 +79,7 @@ const CONFIDENCE_FLOOR = 0.8;
 // loop advances, then folds this machine's own state around the result.
 // ---------------------------------------------------------------------------
 
-function update(ask: Ask): Reducer<State, Msg, JevCmd> {
+function update(ask: Ask): Reducer<State, Msg, JevCmd<Questions>> {
   return {
     classify: (s, m) =>
       liftJevAsk(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
@@ -118,22 +118,23 @@ function update(ask: Ask): Reducer<State, Msg, JevCmd> {
       ];
     },
 
-    deadline_exceeded: (s, m) =>
-      liftJevAsk(s, ask.onTimer(s.resilience, m)),
+    deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
   };
 }
 
 function expenseMachine(ask: Ask) {
-  return defineMachine<State, Msg, JevCmd, JevSub, undefined>({
+  return defineMachine({
     types: {
       model: {} as State,
       msg: {} as Msg,
-      cmd: {} as JevCmd,
+      cmd: {} as JevCmd<Questions>,
       sub: {} as JevSub,
       ctx: undefined,
     },
     init: (loaded) =>
-      loaded !== null ? [loaded, []] : [{ resilience: ask.init(), verdicts: {} }, []],
+      loaded !== null
+        ? [loaded, []]
+        : [{ resilience: ask.init(), verdicts: {} }, []],
     update: update(ask),
     subscriptions: (s) => ask.subs(s.resilience),
     subscribe: { deadline: subscribeDeadline },
