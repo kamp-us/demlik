@@ -379,6 +379,23 @@ const finite = z.number().finite();
  * Key order is load-bearing — zod reports issues in shape order and
  * {@link toJevErr} maps the FIRST one, so this order is the precedence between
  * two arms that could both fire on one answer.
+ *
+ * That precedence is a DELIBERATE CHANGE from the hand-walk this replaced, not
+ * a reproduction of it. The old walk read `confidence`, then `probabilities`,
+ * then `choice`, then off-criteria membership, then totality — so a choice
+ * answer that was wrong in two places reported the scalar fault. The order
+ * here reads the answer's own subject first: `choice`, the thing the question
+ * asked for, then `confidence`, then the `probabilities` distribution over it.
+ * A multi-fault body therefore names the semantically interesting arm — an
+ * `off_criteria_choice` rather than a bad `confidence` — which is the better
+ * report for a caller deciding whether to re-ask the model.
+ *
+ * Exact restoration is not reachable by key order at all: the old walk tested
+ * `choice` membership BEFORE `probabilities` totality, while the strict object
+ * folds membership and totality into one shape whose internal order is zod's.
+ *
+ * The precedence is pinned by the "multi-fault precedence" cases in
+ * `protocol.test.ts`, so a later reorder fails a test rather than this comment.
  */
 const answerSchema = (question: JevQuestion): z.ZodType => {
   switch (question.type) {
@@ -414,7 +431,9 @@ const answerSchema = (question: JevQuestion): z.ZodType => {
  *
  * Unknown ids are dropped rather than refused — `z.object` strips them — which
  * is the question-driven reading: the questions are the contract, and a wider
- * response still satisfies it.
+ * response still satisfies it. Dropped means dropped: what comes back is a
+ * fresh parsed object, not an alias of the body's own `answers`, so a caller
+ * reaching past the type for an id it never asked about no longer finds one.
  *
  * The one assertion in this module lives here, and it is about the SHAPE, not
  * about a body: `Object.entries` loses the literal key types, so the object
