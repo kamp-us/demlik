@@ -1,7 +1,7 @@
 ---
 id: 0019
 title: A host-side provider graph satisfies R, copying Effect's Layer + Scope
-status: accepted
+status: superseded by [0020](0020-tea-owns-no-dependency-injection.md)
 date: 2026-09-09
 tags: []
 ---
