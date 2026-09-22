@@ -232,6 +232,140 @@ describe("parseAnswers — every failure is one `JevErr`", () => {
     });
   });
 
+  it("off-criteria probabilities: one error names both what is missing and what is extra", () => {
+    const parsed = parseAnswers(
+      questions,
+      withAnswer("category", {
+        type: "choice",
+        choice: "groceries",
+        probabilities: { groceries: 0.9, rent: 0.1 },
+        confidence: 0.5,
+      }),
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toEqual({
+      _tag: "off_criteria_probabilities",
+      id: "category",
+      missing: ["dining"],
+      extra: ["rent"],
+      options: ["groceries", "dining"],
+    });
+  });
+
+  it("malformed answer: a number that is not finite is not a number", () => {
+    for (const noul of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const parsed = parseAnswers(
+        questions,
+        withAnswer("is_urgent", { type: "noul", noul }),
+      );
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) expect(parsed.error._tag).toBe("malformed_answer");
+    }
+  });
+
+  // The schema's key order is the precedence between two arms that could both
+  // fire on one answer, and that order deliberately differs from the hand-walk
+  // this module replaced (see `answerSchema`'s docblock). These cases pin the
+  // chosen precedence so a later reorder fails here rather than silently.
+  describe("multi-fault precedence", () => {
+    it("a choice answer reports its `choice` before its `confidence`", () => {
+      const offCriteria = parseAnswers(
+        questions,
+        withAnswer("category", {
+          type: "choice",
+          choice: "rent",
+          probabilities: { groceries: 0.9, dining: 0.1 },
+          confidence: "high",
+        }),
+      );
+      expect(offCriteria.ok).toBe(false);
+      if (offCriteria.ok) return;
+      expect(offCriteria.error).toEqual({
+        _tag: "off_criteria_choice",
+        id: "category",
+        choice: "rent",
+        options: ["groceries", "dining"],
+      });
+
+      const notAString = parseAnswers(
+        questions,
+        withAnswer("category", {
+          type: "choice",
+          choice: 7,
+          probabilities: { groceries: 0.9, dining: 0.1 },
+          confidence: "high",
+        }),
+      );
+      expect(notAString.ok).toBe(false);
+      if (notAString.ok) return;
+      expect(notAString.error).toEqual({
+        _tag: "malformed_answer",
+        id: "category",
+        reason: "`choice` is not a string",
+      });
+    });
+
+    it("a choice answer reports its `choice` before its `probabilities`", () => {
+      const parsed = parseAnswers(
+        questions,
+        withAnswer("category", {
+          type: "choice",
+          choice: "rent",
+          probabilities: "not a map",
+          confidence: 0.5,
+        }),
+      );
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) return;
+      expect(parsed.error).toEqual({
+        _tag: "off_criteria_choice",
+        id: "category",
+        choice: "rent",
+        options: ["groceries", "dining"],
+      });
+    });
+
+    it("a score answer reports `score` then `legend` before `probabilities`", () => {
+      const badScore = parseAnswers(
+        questions,
+        withAnswer("frustration", {
+          type: "score",
+          score: "high",
+          legend: { "0": "Calm" },
+          probabilities: "not a map",
+          confidence: 0.5,
+        }),
+      );
+      expect(badScore.ok).toBe(false);
+      if (badScore.ok) return;
+      expect(badScore.error).toEqual({
+        _tag: "malformed_answer",
+        id: "frustration",
+        reason: "`score` is not a number",
+      });
+
+      const badLegend = parseAnswers(
+        questions,
+        withAnswer("frustration", {
+          type: "score",
+          score: 1,
+          legend: { "0": 0 },
+          probabilities: "not a map",
+          confidence: 0.5,
+        }),
+      );
+      expect(badLegend.ok).toBe(false);
+      if (badLegend.ok) return;
+      expect(badLegend.error).toEqual({
+        _tag: "malformed_answer",
+        id: "frustration",
+        reason: "`legend` is not a map of strings",
+      });
+    });
+  });
+
   it("`isJevErr` answers `true` for every arm, the newest included", () => {
     const parsed = parseAnswers(
       questions,
