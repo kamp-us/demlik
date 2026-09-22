@@ -155,6 +155,7 @@
  */
 
 import { z } from "zod";
+import { liftSlice } from "../../../compose";
 import { Cmd, type CmdOf, type NoCtx, tryInterpret } from "../../../index";
 import type { MsgType } from "../../../protocol";
 import { without } from "../../../pure/core";
@@ -1087,6 +1088,10 @@ export function createResilientCall<
  * record rebuild, no clock / RNG. Under `withResilience` the wrapper owns
  * `model.$resilience`, so there is nothing to lift; this is for the embedded
  * slice consumers only.
+ *
+ * The record rebuild itself is `liftSlice` from the root door (#231) — this
+ * stays as the named, pre-keyed convenience for the `state.resilience` field,
+ * unchanged in name, signature and subpath.
  */
 export function liftResilience<
   S extends { resilience: ResilientState<I, R> },
@@ -1095,9 +1100,9 @@ export function liftResilience<
   C extends Cmd,
 >(
   state: S,
-  [slice, cmds]: readonly [ResilientState<I, R>, readonly C[]],
+  result: readonly [ResilientState<I, R>, readonly C[]],
 ): readonly [S, readonly C[]] {
-  return [{ ...state, resilience: slice }, cmds];
+  return liftSlice("resilience", state, result);
 }
 
 // ===========================================================================

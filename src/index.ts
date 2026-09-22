@@ -10,6 +10,11 @@
  * unchanged.
  */
 
+// The composition seam — `liftSlice` / `readInOrder`, the layer between a
+// battery and a door. It lands on the ROOT door rather than a battery subpath
+// for the same reason `provide` does: both `./resilience` and `./jev` import
+// it, so it cannot live inside either one.
+export * from "./compose";
 export * from "./observability";
 // The host-side provider graph — `provide` / `layer` / `value` — lands on the
 // ROOT door beside `run`, not on a subpath of its own. It has no host-specific

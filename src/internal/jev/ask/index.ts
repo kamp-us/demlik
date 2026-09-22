@@ -83,6 +83,7 @@
  * and spreads the rest.
  */
 
+import { liftSlice } from "../../../compose";
 import { describeError } from "../../../describe-error";
 import type { Cmd } from "../../../index";
 import { MsgType } from "../../../protocol";
@@ -93,7 +94,6 @@ import {
   type DeadlineSub,
   deadlineSub,
   type FailMsg,
-  liftResilience,
   mountResilientCall,
   type ResilientConfig,
   type ResilientState,
@@ -578,6 +578,10 @@ export type JevSub = DeadlineSub;
  * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
  * lives at `state.resilience` — resilient-call's convenience, re-typed for this
  * door's slice so a consumer wires one import. Pure.
+ *
+ * The record rebuild is `liftSlice` from the root door (#231), the same helper
+ * `liftResilience` is expressed over — this stays as the named, pre-keyed
+ * convenience for this door, unchanged in name, signature and subpath.
  */
 export function liftJevAsk<
   S extends { resilience: ResilientState<JevRequest<Q>, JevOk<Q>> },
@@ -587,7 +591,7 @@ export function liftJevAsk<
   state: S,
   result: readonly [ResilientState<JevRequest<Q>, JevOk<Q>>, readonly C[]],
 ): readonly [S, readonly C[]] {
-  return liftResilience(state, result);
+  return liftSlice("resilience", state, result);
 }
 
 /**
