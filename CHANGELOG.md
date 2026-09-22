@@ -1,5 +1,128 @@
 # @demlik/tea
 
+## 0.15.0
+
+### Minor Changes
+
+- `liftSlice` and `readInOrder` on the root door — compose battery slices without
+  re-deriving the lens.
+
+  A composition that owns several pure battery slices (a batch window, a fan-out,
+  a cache) used to hand-write the lift for every verb (`{ ...s, slice }`) and
+  re-derive the precedence of every derived read; the jev `classify-batch`
+  composition shipped a stale-read bug from exactly that. `liftSlice(key)` turns a
+  `(slice) => [slice, cmds]` verb into a `(s) => [s, cmds]` one, and
+  `readInOrder(steps)` states a derived read's precedence as data instead of as
+  the order of `if`s. `liftResilience` and `liftJevAsk` keep their names,
+  signatures and subpaths and now delegate to `liftSlice`; `classify-batch` reads
+  through `readInOrder`. No new dependency.
+
+- f7e4e6d: `mountResilientCall` — mount a resilient-call knob with a spread instead of
+  eight hand-spliced wiring points.
+
+  Splicing `createJevAsk` or `createLlmCall` into a machine meant writing `init`,
+  the attempt cell, `succeed`, `fail`, `onTimer`, `subs`, `subscribe` and
+  `interpret` by hand, and three of those failed only at runtime: folding the
+  result before the inherited verb wedged the slice at `running`, a dispatching
+  interpret handler settled one invoke and stalled the loop, and an omitted
+  `subscribe: { deadline: subscribeDeadline }` meant a backed-off retry never
+  fired.
+
+  `mountResilientCall(knob, { slice, attempt, onOk, onErr, onDeadline })` returns
+  `{ init, update, subscriptions, subscribe, interpret }` fragments a consumer
+  spreads into `defineMachine`. The settle cells run the inherited verb and hand
+  the already-settled model to the fold, so the ordering bug is not expressible;
+  `subscribe` and `interpret` ride on the fragments, so neither can be forgotten.
+
+  There are three folds rather than two because there are three settle paths. A
+  call that exhausts its deadline settles `failed` inside the slice and emits no
+  settle Msg, so it reaches no `onErr`; `onDeadline` is that failure class's fold,
+  handed the key and the slice's own error. Omit it and only the slice advances,
+  exactly as omitting `onOk` / `onErr` does.
+
+  The two settle cells are keyed off the knob's own Msg names, so a knob built
+  `createResilientCall<I, R, "jev">({ name: "jev" })` mounts into `jev_ok` /
+  `jev_err` and two named knobs spread into four distinct cells. An unnamed knob
+  is `resilient`, so the keys read `resilient_ok` / `resilient_err` as before. The
+  knob itself now carries that `name` as a readable field.
+
+  Per ADR 0015 it hides assembly and nothing else: the resilience slice stays a
+  plain readable Model field, and every verb the mount calls is still exported and
+  callable by hand.
+
+  New on `@demlik/tea/resilience` (and re-exported from `@demlik/tea/jev`):
+  `mountResilientCall`, plus the types `DeadlineSettled`, `MountableKnob`,
+  `MountConfig`, `MountedCell`, `MountedResilientCall`, `Settle` and
+  `SettleFold`.
+
+- 38cf090: `createResilientCall` accepts an optional `name`, so a knob owns its settle Msgs
+
+  A resilient-call knob built with `{ name: "jev" }` emits `jev_run` and settles
+  through `jev_ok` / `jev_err`, and the settle Msg types are generic in that name.
+  A machine mounting two knobs of the family under distinct names therefore gets
+  one `update` cell per knob, each already narrowed to that knob's payload —
+  replacing the hand-written `key` switch that a single shared cell forced, which
+  the type checker could not grade. The name leads the retry and deadline Sub ids
+  as well (`jev:retry:<key>`), so two knobs cannot share one timer on one key.
+
+  The deadline Msg follows the name too: a knob built with `{ name: "jev" }`
+  receives `jev_deadline`, not `deadline_exceeded`, and `mountResilientCall` keys
+  its deadline cell off the knob's name, so two mounted knobs no longer collide on
+  one cell. An unnamed knob still receives `deadline_exceeded`, byte for byte.
+
+  **`resilient_ok` / `resilient_err` — and `resilient_run`, and the
+  `resilient:retry:<key>` / `resilient:deadline:<key>` Sub ids — remain the
+  default for every knob that passes no name.** Nothing changes for an existing
+  machine, example or doc unless it opts in.
+
+  `N` is not inferable from the knob's input and result types, so an opted-in knob
+  spells all three type arguments:
+  `createResilientCall<In, Out, "jev">({ name: "jev", ... })`. The `name` field is
+  typed at `N`, so the value and the type cannot drift apart.
+
+- f5cea99: `@demlik/tea/testing` publishes `drive` — the runtime's Cmd→handler→settle-Msg
+  loop as one call, for a test.
+
+  `bindMachine` returns the Cmds a fold emitted and stops; performing them was
+  the caller's, so every consumer test exercising a Cmd-emitting machine
+  hand-wrote the same guarded loop (including the one the jev how-to shipped as
+  a thing to copy).
+
+  ```ts
+  import { drive } from "@demlik/tea/testing";
+
+  const { state, trace } = await drive(
+    machine,
+    initial,
+    { type: "classify", key, memo, at: 0 },
+    ask.handlers()
+  );
+  ```
+
+  `drive` composes `bindMachine`'s synchronous `step` and adds no second reducer
+  path — no `Runtime`, no observation, no clock. It returns the **history** as
+  well as the endpoint: `trace` is every Cmd dispatched and every Msg folded, in
+  order, so a test asserts on the sequence too, and replaying the trace's Msgs
+  through `replay` from the same initial state reproduces the returned `state`.
+
+  Exceeding `maxRounds` (default 100) throws `DriveRoundsExceededError` carrying
+  the round count and the partial trace, rather than returning a half-driven
+  state a test would assert green on. A rejecting handler's own error propagates
+  unchanged, with the partial trace recoverable via `driveTraceOf`.
+
+  Also exported: `DriveResult`, `DriveTraceEntry`, `DriveOptions`,
+  `DriveCtxArg`, `DriveNoHandlerError`, `DEFAULT_MAX_ROUNDS`.
+
+### Patch Changes
+
+- `parseAnswers` in `@demlik/tea/jev` validates through a zod schema derived from
+  the questions map instead of hand-written guards followed by a cast; the accept
+  set is unchanged. One observable difference: a body with several faults at once
+  now reports the arm zod's strict object shape reaches first (membership and
+  totality are one check), where the old walk reported whichever guard ran first.
+  Single-fault bodies map to the same `JevErr` arm as before; the multi-fault
+  precedence is pinned by tests and stated in the module docblock.
+
 ## 0.14.0
 
 ### Minor Changes
