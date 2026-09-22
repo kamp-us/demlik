@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  dep,
   layer,
   ProvideFailedError,
   ProviderCycleError,
@@ -261,5 +262,58 @@ describe("provide — wiring that cannot stand up (contract breaches)", () => {
 
     expect(failure).toBeInstanceOf(ProviderCycleError);
     expect((failure as ProviderCycleError).cycle).toEqual(["a", "b", "a"]);
+  });
+});
+
+describe("dependency tokens", () => {
+  it("collapses a token to its name, so `deps` is a name list either way", () => {
+    const Config = dep<{ url: string }>()("config");
+
+    expect(Config.name).toBe("config");
+    expect(layer([Config], ({ config }) => config.url).deps).toEqual([
+      "config",
+    ]);
+    expect(
+      layer(["config"], (deps: { config: { url: string } }) => deps.config.url)
+        .deps,
+    ).toEqual(["config"]);
+  });
+
+  it("wires a graph declared with tokens exactly as the string form does", async () => {
+    const Config = dep<{ url: string }>()("config");
+    const Db = dep<string>()("db");
+
+    const scope = await provide({
+      config: value({ url: "postgres://x" }),
+      db: layer([Config], ({ config }) => `db@${config.url}`),
+      cache: layer([Config, Db], ({ config, db }) => `${db}/${config.url}`),
+    }).open();
+
+    expect(scope.ctx).toEqual({
+      config: { url: "postgres://x" },
+      db: "db@postgres://x",
+      cache: "db@postgres://x/postgres://x",
+    });
+    await scope.release();
+  });
+
+  it("releases a token-declared provider in reverse, as any other", async () => {
+    const order: string[] = [];
+    const Config = dep<string>()("config");
+
+    const scope = await provide({
+      config: layer(
+        () => "cfg",
+        () => void order.push("config"),
+      ),
+      db: layer(
+        [Config],
+        ({ config }) => `db@${config}`,
+        () => void order.push("db"),
+      ),
+    }).open();
+    await scope.release();
+
+    expect(order).toEqual(["db", "config"]);
   });
 });

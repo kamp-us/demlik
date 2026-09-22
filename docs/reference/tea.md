@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (149)
+## Exports (152)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -37,7 +37,10 @@ import { … } from "@demlik/tea";
 | `defineManagedResource` | Function | Build the battery. |
 | `DefineManagedResourceOpts` | Interface |  |
 | `definePort` | Function | Define a typed port. |
+| `dep` | Function | Mint a typed dependency token: `dep<Config>()("config")`. |
 | `DepKeyedSub` | Interface |  |
+| `DepsOf` | Type | The `acquire` parameter a tuple of DepTokens describes: one property per token, named by the token and typed with what it carries. |
+| `DepToken` | Interface | A typed dependency name — Effect's `Context.Tag`. |
 | `describeMachine` | Function |  |
 | `detectUpdateForm` | Function |  |
 | `DispatchDiscardedError` | Class | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |

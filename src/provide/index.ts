@@ -29,20 +29,31 @@
  *    then surfaces as a typed `ProvideFailedError` (ADR 0011) — never a throw
  *    that escapes `run`.
  *
+ * A dependency is named with a TOKEN that carries its value type, so `acquire`
+ * needs no parameter annotation and a name the tokens do not list is a compile
+ * error where it is written. That is Effect's `Context.Tag` — a token carrying
+ * name and type together, with the requirement set derived from what the
+ * constructor reads (ZIO's `ZLayer` + `ZIO.service[T]` is the same move):
+ *
  * ```ts
+ * const Config = dep<{ url: string }>()("config");
+ *
  * const scoped = provide({
  *   config: value({ url: "postgres://…" }),
- *   db: layer(
- *     ["config"],
- *     ({ config }: { config: { url: string } }) => connect(config.url),
- *     (db) => db.close(),
- *   ),
+ *   db: layer([Config], ({ config }) => connect(config.url), (db) => db.close()),
  * });
  *
  * // Either hand it straight to `run` — which acquires at boot and releases at
  * // `stop()` — or open it yourself when the host wires its own `ctx`.
  * const state = await driveToDone(run(machine, { ctx: scoped }), start, isDone);
  * ```
+ *
+ * The string-array form — `layer(["config"], ({ config }: { config: C }) => …)`
+ * — is the UNTYPED escape hatch it remains beside. It spells each dependency
+ * twice, once in `deps` and once in the annotation, and nothing ties the two
+ * together until `provide` compares both against the map. Reach for it where
+ * there is no token to hand: a dep name computed rather than written, or a graph
+ * assembled against a `ctx` shape declared elsewhere.
  */
 
 /**
@@ -228,6 +239,66 @@ export class ProviderCycleError extends Error {
 }
 
 /**
+ * Phantom key carrying a {@link DepToken}'s VALUE type. Declared, never
+ * assigned: `dep` builds a token whose only runtime field is `name`, and this
+ * property exists so the type survives into {@link DepsOf}. Symbol keyed and
+ * module-private, so it reaches no export and no object literal can collide
+ * with it.
+ *
+ * Typed `(probe: never) => T`, which makes the token COVARIANT in `T`: a
+ * `DepToken<"config", Config>` is readable through the `DepToken<string,
+ * unknown>` bound {@link layer}'s tuple is constrained by, while the value type
+ * itself is still recovered exactly by {@link DepValue}'s `infer`.
+ */
+declare const depValue: unique symbol;
+
+/**
+ * A typed dependency name — Effect's `Context.Tag`. It carries the dependency's
+ * literal NAME and its VALUE type in one value, so {@link layer} derives the
+ * whole `acquire` parameter from the tokens and the caller annotates nothing.
+ *
+ * Build one with {@link dep}; the phantom field is not yours to write.
+ */
+export interface DepToken<N extends string = string, T = unknown> {
+  /** The provider key this token stands for — the `keyof M` `provide` checks. */
+  readonly name: N;
+  /** Phantom — see the note on `depValue`. Never present at runtime. */
+  readonly [depValue]?: (probe: never) => T;
+}
+
+/** The value type a {@link DepToken} carries. */
+type DepValue<Token> = Token extends DepToken<string, infer T> ? T : never;
+
+/**
+ * The `acquire` parameter a tuple of {@link DepToken}s describes: one property
+ * per token, named by the token and typed with what it carries. This is the
+ * derivation that removes the second spelling — `D` is no longer annotated, it
+ * falls out of `deps`.
+ */
+export type DepsOf<Tokens extends readonly DepToken<string, unknown>[]> = {
+  [N in Tokens[number]["name"]]: DepValue<Extract<Tokens[number], { name: N }>>;
+};
+
+/**
+ * Mint a typed dependency token: `dep<Config>()("config")`.
+ *
+ * CURRIED because TypeScript infers type arguments all-or-nothing — naming `T`
+ * in a single call would force `N` to be spelled too, and a spelled `N` is the
+ * widening this token exists to prevent. Effect's `Context.Tag("name")<Self,
+ * Shape>()` curries for the same reason; this one takes the type first so the
+ * name stays inferred from the literal.
+ *
+ * ```ts
+ * const Config = dep<{ url: string }>()("config");
+ * const Db = dep<Connection>()("db");
+ * const cache = layer([Config, Db], ({ config, db }) => …);
+ * ```
+ */
+export function dep<T>(): <const N extends string>(name: N) => DepToken<N, T> {
+  return (name) => ({ name });
+}
+
+/**
  * Declare a provider with no dependencies: an `acquire` and an optional
  * `release`.
  */
@@ -236,9 +307,43 @@ export function layer<T>(
   release?: (value: T) => unknown,
 ): LeafProvider<T>;
 /**
- * Declare a provider that depends on siblings. `deps` names them; `acquire`
- * receives their resolved values as a record, and the annotation you give that
- * parameter is what types `D`.
+ * Declare a provider that depends on siblings, naming each one with a
+ * {@link DepToken} — the TYPED route, and the one to reach for.
+ *
+ * `D` is {@link DepsOf} the tuple, so `acquire` takes NO annotation: its
+ * parameter is already a record of exactly the tokens' names at exactly the
+ * tokens' types. Both halves of a dependency mistake then land at THIS call —
+ * destructuring a property the tuple does not name does not compile, and
+ * reading one at the wrong type does not either — instead of surfacing inside
+ * `provide`'s `M` constraint as a message about the map.
+ *
+ * ```ts
+ * const Config = dep<Config>()("config");
+ * const db = layer([Config], ({ config }) => connect(config.url), (c) => c.end());
+ * ```
+ *
+ * This is Effect's `Context.Tag`, and ZIO's `ZIO.service[T]`: the requirement
+ * set is derived from what the constructor reads rather than restated beside it.
+ */
+export function layer<
+  T,
+  const Tokens extends readonly DepToken<string, unknown>[],
+>(
+  deps: Tokens,
+  acquire: (deps: DepsOf<Tokens>) => T | Promise<T>,
+  release?: (value: T) => unknown,
+): Provider<T, DepsOf<Tokens>, Tokens[number]["name"]>;
+/**
+ * Declare a provider that depends on siblings, naming each one with a STRING —
+ * the untyped escape hatch. `deps` names them; `acquire` receives their resolved
+ * values as a record, and the annotation you give that parameter is what types
+ * `D`.
+ *
+ * Nothing ties the two spellings together: `layer(["config"], ({ config }: {
+ * cfg: C }) => …)` type-checks here and fails later, inside `provide`'s `M`
+ * constraint, in the map's vocabulary rather than the typo's. Prefer the token
+ * overload above, which derives the annotation instead of restating it; reach
+ * for this one where there is no token to hand.
  *
  * The names are inferred as literals, not widened to `string`, so {@link provide}
  * can check them against the map's keys. `const K` is what pins that: without
@@ -252,7 +357,7 @@ export function layer<T, D, const K extends string>(
   release?: (value: T) => unknown,
 ): Provider<T, D, K>;
 export function layer<T, D, const K extends string>(
-  first: readonly K[] | (() => T | Promise<T>),
+  first: readonly (K | DepToken<K, unknown>)[] | (() => T | Promise<T>),
   second?: ((deps: D) => T | Promise<T>) | ((value: T) => unknown),
   third?: (value: T) => unknown,
 ): Provider<T, D, K> {
@@ -267,7 +372,12 @@ export function layer<T, D, const K extends string>(
     };
   }
   return {
-    deps: first,
+    // Tokens collapse to their names here: `deps` is a name list at runtime
+    // whichever overload wrote it, so the walk in `provide` stays one path and
+    // a graph assembled from tokens journals nothing extra.
+    deps: first.map((entry) =>
+      typeof entry === "string" ? entry : entry.name,
+    ),
     acquire: second as (deps: D) => T | Promise<T>,
     release: third,
   };
