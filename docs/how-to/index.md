@@ -57,6 +57,14 @@ what you are trying to do, and it names the subpath you need.
   no option for — a queue, an audit log — without rebuilding the agent with
   `createAgent`.
 
+## Compose batteries into one door
+
+- [Compose two battery slices into one door](./compose-two-battery-slices.md) —
+  thread each battery verb's `[slice, cmds]` back into the host Model with
+  `liftSlice`, whose key is checked against the Model, and state a read that
+  spans both slices as a named `readInOrder` precedence you can assert on
+  instead of two `if` statements nothing can name.
+
 ## Harden a call
 
 - [Add retry and backoff to a call](./add-resilience.md) — fold

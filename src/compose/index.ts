@@ -15,6 +15,10 @@
  * (Effect's types, never its runtime values) between them settle why this is
  * forty lines here rather than a dependency.
  *
+ * `docs/how-to/compose-two-battery-slices.md` wires both end to end over a
+ * two-battery door, and its `ts` blocks are compiled and run as
+ * `src/docs/how-to/compose-slices.test.ts`.
+ *
  * Both are pure: no clock, no RNG, no storage, nothing captured. A `liftSlice`
  * result is a fresh record and a Cmd array, so ADR 0014's journal/hash promise
  * over a reducer's return value is untouched.
