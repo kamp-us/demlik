@@ -265,6 +265,34 @@ export type JevErr =
       readonly reason: string;
     };
 
+/**
+ * The tags {@link JevErr} is closed over — the single reading of that union's
+ * membership, so nothing downstream re-derives it from a `"_tag" in x` test.
+ */
+const JEV_ERR_TAGS: ReadonlySet<string> = new Set([
+  "malformed_body",
+  "missing_answer",
+  "answer_type_mismatch",
+  "off_criteria_choice",
+  "malformed_answer",
+]);
+
+/**
+ * Is `value` a {@link JevErr}?
+ *
+ * The discriminant is the `_tag` VALUE against the closed set above, never the
+ * bare presence of the key. A `JevAnswers` map is keyed by the caller's own
+ * question ids, so a caller may legally name a question `_tag` — and then
+ * `"_tag" in answers` is `true`. The value under it is an ANSWER, which is
+ * always an object and never one of these five string literals, so reading the
+ * value is the one test a caller's id space cannot reach.
+ */
+export function isJevErr(value: object): value is JevErr {
+  if (!("_tag" in value)) return false;
+  const tag: unknown = (value as { readonly _tag: unknown })._tag;
+  return typeof tag === "string" && JEV_ERR_TAGS.has(tag);
+}
+
 /** What `parseAnswers` returns: typed answers, or one `JevErr`. Never a throw. */
 export type JevParse<Q extends JevQuestionMap> =
   | {

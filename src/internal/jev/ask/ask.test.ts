@@ -453,3 +453,67 @@ describe("createJevAsk — the handler returns the enriched settle Msg", () => {
     expect(msg.error).toEqual({ _tag: "http_retry", status: 529 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// The answers map is keyed by the CALLER's question ids, so `_tag` is a legal
+// id. The fallback's ok/err discriminant must not read it as a refusal.
+// ---------------------------------------------------------------------------
+
+describe("createJevAsk — a caller may name a question `_tag`", () => {
+  const tagQuestions = jevQuestions({
+    _tag: {
+      type: "choice",
+      instructions: "Which budget line is this?",
+      criteria: { groceries: "Supermarkets", dining: "Restaurants" },
+    },
+  });
+  type TagQuestions = typeof tagQuestions;
+
+  const tagAnswers = {
+    _tag: {
+      type: "choice",
+      choice: "dining",
+      probabilities: { groceries: 0.1, dining: 0.9 },
+      confidence: 0.9,
+    },
+  } as unknown as JevAnswers<TagQuestions>;
+
+  it("settles a successful fallback ok rather than as a JevErr", async () => {
+    const ask = createJevAsk<TagQuestions>(
+      { questions: tagQuestions, retry, fallback: () => tagAnswers },
+      rngZero,
+    );
+    const [s1, cmds] = ask.attempt(ask.init(), "k", "a receipt", 0);
+    const cmd = cmds[0];
+    if (cmd === undefined) throw new Error("expected one ask Cmd");
+
+    const settle = await ask.handlers().resilient_run(cmd);
+    expect(settle.type).toBe("resilient_ok");
+    if (settle.type !== "resilient_ok") return;
+    expect(settle.result).toEqual({
+      answers: tagAnswers,
+      model: "jev-latest",
+      usage: { input_tokens: 0, output_tokens: 0 },
+      source: "fallback",
+    });
+
+    const [s2] = ask.succeed(s1, "k", settle);
+    const call = s2.calls.k;
+    expect(call?.phase).toBe("succeeded");
+  });
+
+  it("still settles a refusing fallback as its JevErr", async () => {
+    const refusal: JevErr = { _tag: "malformed_body", reason: "offline" };
+    const ask = createJevAsk<TagQuestions>(
+      { questions: tagQuestions, retry, fallback: () => refusal },
+      rngZero,
+    );
+    const [, cmds] = ask.attempt(ask.init(), "k", "a receipt", 0);
+    const cmd = cmds[0];
+    if (cmd === undefined) throw new Error("expected one ask Cmd");
+
+    const settle = (await ask.handlers().resilient_run(cmd)) as JevFailMsg;
+    expect(settle.type).toBe("resilient_err");
+    expect(settle.error).toEqual(refusal);
+  });
+});

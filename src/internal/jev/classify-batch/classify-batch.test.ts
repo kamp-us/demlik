@@ -264,6 +264,33 @@ describe("failure — marked in the slice, never written to the cache", () => {
       answer: answerOf("dining"),
     });
   });
+
+  it("reports a re-added key as pending, not as the previous attempt's failure", () => {
+    const k = knob({ maxItems: 2 });
+    const items = txns(2);
+    const [s1, first] = addAll(k, k.init(), items, 0);
+    const [s2] = k.onBatchErr(s1, errFor(only(first), 10));
+    expect(k.answerFor(s2, "m0", 10).status).toBe("failed");
+
+    // Re-add ONE key of the failed batch: it is in flight again from here.
+    const [s3, second] = k.add(s2, items[0] as Txn, 20);
+    expect(second).toEqual([]);
+    expect(k.answerFor(s3, "m0", 20)).toEqual({ status: "pending" });
+    // Its batch-mate was not re-added, so its failure still stands.
+    expect(k.answerFor(s3, "m1", 20).status).toBe("failed");
+
+    // It stays pending for the whole of the new call — through the flush …
+    const [s4, flushed] = k.onWindow(s3, 30);
+    expect(flushed).toHaveLength(1);
+    expect(k.answerFor(s4, "m0", 30)).toEqual({ status: "pending" });
+
+    // … and only the new batch settling moves it off pending.
+    const [s5] = k.onBatchOk(s4, okFor(only(flushed), 40));
+    expect(k.answerFor(s5, "m0", 40)).toEqual({
+      status: "answered",
+      answer: answerOf("dining"),
+    });
+  });
 });
 
 describe("in-flight keys", () => {

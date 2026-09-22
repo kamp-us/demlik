@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/jev";
 ```
 
-## Exports (62)
+## Exports (63)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -26,6 +26,7 @@ import { … } from "@demlik/tea/jev";
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
 | `DEFAULT_CLASSIFY_MAX_ITEMS` | Variable | The default page size — the one the grill settled on for Jev. |
 | `DEFAULT_JEV_MODEL` | Variable | The model the door asks for when config names none. |
+| `isJevErr` | Function | Is `value` a JevErr? |
 | `isTransientJevAskErr` | Function | Does this failure deserve another attempt? |
 | `ItemAnswer` | Type | The answer one item's question yields. |
 | `ItemQuestion` | Type | The one `choice` question an item is asked. |

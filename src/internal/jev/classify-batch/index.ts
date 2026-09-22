@@ -355,14 +355,22 @@ export function createClassifyBatch<I, C extends string>(
    * the cache hit is the whole point of the cache, and the other two are what
    * keeps one key out of two batches at once — which is the property that makes
    * a batch's id a usable identity and an answer's key unambiguous.
+   *
+   * An item that is NOT dropped loses its standing failure mark, exactly as
+   * {@link onBatchOk} clears one: from the instant the key is buffered it is in
+   * flight again, and a `failed` entry left standing would make `answerFor`
+   * report the PREVIOUS attempt's error for the whole of the new one — telling a
+   * host that polls it to stop waiting for work that is running.
    */
   function add(state: State, item: I, at: number): readonly [State, Cmds] {
     const key = config.keyOf(item);
     if (cacheHas(state.cache, key, at)) return [state, []];
     if (keysInFlight(state).has(key)) return [state, []];
 
+    const failed: Record<string, JevAskErr> = { ...state.failed };
+    delete failed[key];
     const [nextWindow, flushed] = window.add(state.window, item, at);
-    return scatter({ ...state, window: nextWindow }, flushed);
+    return scatter({ ...state, failed, window: nextWindow }, flushed);
   }
 
   /** The time window closed: flush whatever is buffered. PURE. */

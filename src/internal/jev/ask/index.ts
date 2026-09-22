@@ -95,6 +95,7 @@ import {
 } from "../../resilience/resilient-call";
 import {
   classifyStatus,
+  isJevErr,
   type JevAnswers,
   type JevErr,
   type JevQuestionMap,
@@ -308,13 +309,18 @@ export function createJevAsk<Q extends JevQuestionMap>(
   type State = ResilientState<JevRequest<Q>, JevOk<Q>>;
 
   /**
-   * A fallback's answer or its refusal. `_tag` is the discriminant: every
-   * `JevErr` member carries one and an answers map is keyed by question ids,
-   * which the protocol child never lets start with `_tag` by accident — the
-   * questions are the caller's own literal keys.
+   * A fallback's answer or its refusal.
+   *
+   * The discriminant is the protocol child's own {@link isJevErr} — the `_tag`
+   * VALUE read against the closed `JevErr` tag set. Testing for the KEY instead
+   * reads a caller's question ids as a discriminant they never agreed to: a
+   * question legally named `_tag` makes `"_tag" in decided` true on a perfectly
+   * good answers map, and the successful fallback then settles as a refusal
+   * carrying the answers map as its error. An answer is always an object and
+   * never one of those five tag literals, so the value test cannot collide.
    */
   function isErrDecision(decided: JevAnswers<Q> | JevErr): decided is JevErr {
-    return "_tag" in decided;
+    return isJevErr(decided);
   }
 
   /** The request a call under `key` is live with, or `undefined` if it is not live. */
