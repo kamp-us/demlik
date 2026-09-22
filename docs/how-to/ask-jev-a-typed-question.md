@@ -49,14 +49,14 @@ being exhaustive says so at compile time.
 `createJevAsk` returns a knob over
 [`@demlik/tea/resilience`](../reference/resilience.md)'s resilient-call: `init`,
 `attempt`, `succeed`, `fail`, `onTimer` and `subs` are that machine's verbs, and
-`handlers()` is the one interpret cell that touches the network. Your reducer
-runs the inherited verb first so the backoff loop advances, then folds the
-answer into your own state.
+`handlers()` is the one interpret cell that touches the network. Mounting it by
+hand is eight wiring points, three of which fail only at runtime — so mount it
+with `mountResilientCall` instead and spread the fragments it returns.
 
-`types` names the four types once — `JevCmd<Questions>` and `JevSub` are the
-door's own names for the Cmd it emits and the Sub it asks for — and every
-`update` cell is inferred from that block, so `s` and `m` arrive narrowed
-without an annotation on a single one of them.
+You still write two things: the cell that STARTS a call (only your Msg knows
+which field carries the key, the content and the instant) and what to do with a
+settled answer. The fold is handed the model the inherited verb already settled,
+so the backoff loop always advances first.
 
 The confidence branch is the part that is yours. `JevOk` hands back the
 confidence and decides nothing with it, on purpose: what counts as confident
@@ -73,9 +73,8 @@ import {
   type JevSub,
   type JevSucceedMsg,
   type JevTimerMsg,
-  liftJevAsk,
+  mountResilientCall,
   type ResilientState,
-  subscribeDeadline,
 } from "@demlik/tea/jev";
 
 /** Where one expense ended up. `triage` is a human's queue, not a category. */
@@ -89,13 +88,16 @@ export interface ExpenseState {
   readonly verdicts: Readonly<Record<string, Verdict>>;
 }
 
+/** The Msg that starts one call. `mount` needs its type to write that cell. */
+export interface Classify {
+  readonly type: "classify";
+  readonly key: string;
+  readonly memo: string;
+  readonly at: number;
+}
+
 export type ExpenseMsg =
-  | {
-      readonly type: "classify";
-      readonly key: string;
-      readonly memo: string;
-      readonly at: number;
-    }
+  | Classify
   | JevSucceedMsg<Questions>
   | JevFailMsg
   | JevTimerMsg;
@@ -105,7 +107,36 @@ type Ask = ReturnType<typeof createJevAsk<Questions>>;
 /** Below this, a human looks at it. The threshold is the HOST's rule to set. */
 export const CONFIDENCE_FLOOR = 0.8;
 
+/**
+ * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
+ * ALREADY settled, so there is no cell to put in the wrong order, and
+ * `subscribe` / `interpret` ride along on the fragments rather than being
+ * remembered. `answer.choice` is `Category` here, not `string`.
+ */
+export function mountAsk(ask: Ask) {
+  return mountResilientCall(ask, {
+    slice: "resilience",
+    attempt: {
+      on: "classify",
+      run: (slice, m: Classify) => ask.attempt(slice, m.key, m.memo, m.at),
+    },
+    onOk: (s: ExpenseState, m) => {
+      const answer = m.result.answers.category;
+      const verdict: Verdict =
+        answer.confidence >= CONFIDENCE_FLOOR
+          ? { kind: "booked", category: answer.choice }
+          : { kind: "triage", why: `confidence ${answer.confidence}` };
+      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
+    },
+    onErr: (s: ExpenseState, m) => {
+      const verdict: Verdict = { kind: "triage", why: m.error._tag };
+      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
+    },
+  });
+}
+
 export function expenseMachine(ask: Ask) {
+  const mounted = mountAsk(ask);
   return defineMachine({
     types: {
       model: {} as ExpenseState,
@@ -117,62 +148,30 @@ export function expenseMachine(ask: Ask) {
     init: (loaded) =>
       loaded !== null
         ? [loaded, []]
-        : [{ resilience: ask.init(), verdicts: {} }, []],
-    update: {
-      classify: (s, m) =>
-        liftJevAsk(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
-
-      // Run the inherited verb FIRST so the backoff loop advances, THEN fold
-      // the answer in. `answer.choice` is `Category` here, not `string`.
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = ask.succeed(s.resilience, m.key, m);
-        const answer = m.result.answers.category;
-        const verdict: Verdict =
-          answer.confidence >= CONFIDENCE_FLOOR
-            ? { kind: "booked", category: answer.choice }
-            : { kind: "triage", why: `confidence ${answer.confidence}` };
-        return [
-          {
-            ...s,
-            resilience: slice,
-            verdicts: { ...s.verdicts, [m.key]: verdict },
-          },
-          cmds,
-        ];
-      },
-
-      resilient_err: (s, m) => {
-        const [slice, cmds] = ask.fail(s.resilience, m.key, m);
-        return [
-          {
-            ...s,
-            resilience: slice,
-            verdicts: {
-              ...s.verdicts,
-              [m.key]: { kind: "triage", why: m.error._tag },
-            },
-          },
-          cmds,
-        ];
-      },
-
-      deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
-    },
-    subscriptions: (s) => ask.subs(s.resilience),
-    subscribe: { deadline: subscribeDeadline },
-    interpret: ask.handlers(),
+        : [{ ...mounted.init(), verdicts: {} }, []],
+    update: { ...mounted.update },
+    subscriptions: mounted.subscriptions,
+    subscribe: mounted.subscribe,
+    interpret: mounted.interpret,
   });
 }
 ```
 
-Three things to keep as they are:
+The three rules this page used to ask you to remember are now shapes you cannot
+get wrong: `onOk` never sees the pre-settle slice, `interpret` is the door's
+returning handler rather than one you re-declare, and `subscribe` rides on the
+fragments, so a backed-off retry is armed by construction.
 
-- **`resilient_ok` calls `ask.succeed` before it reads `m.result`.** Folding
-  first and settling second leaves the slice wedged at `running`.
-- **`interpret: ask.handlers()`** returns the settle Msg rather than dispatching
-  one, so it re-enters through your `resilient_ok` / `resilient_err` arms.
-- **`subscribe: { deadline: subscribeDeadline }`** is what makes a backed-off
-  retry actually fire. Omit it and a transient failure waits forever.
+What the mount does *not* take away is the state
+([ADR 0015](../../.decisions/0015-hide-the-wiring-never-the-state.md)):
+`resilience` stays a plain field you read, `replay` sees and the journal prints,
+and `ask.succeed` / `ask.fail` / `ask.onTimer` / `liftJevAsk` stay exported — a
+settle cell the fold cannot express is yours to write by hand and spread beside
+the rest.
+
+`types` is still yours to write, and `JevCmd<Questions>` / `JevSub` are the
+door's own names for the Cmd it emits and the Sub it asks for; every `update`
+cell is inferred from that block.
 
 ## 3. Give it a port — or don't
 

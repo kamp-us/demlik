@@ -12,6 +12,7 @@ import {
   type DeadlineExceededError,
   deadlineSub,
   type FailMsg,
+  mountResilientCall,
   type ResilientState,
   type ResilientTimerMsg,
   type RunCmd,
@@ -1468,5 +1469,394 @@ describe("createResilientCall — the unnamed default is unchanged", () => {
     );
     const [, cmds] = named.attempt(named.init(), "k", "in", 0);
     expect(cmds[0]?.type).toBe("resilient_run");
+  });
+});
+
+// ===========================================================================
+// mountResilientCall — the eight wiring points as fragments (#228).
+// ===========================================================================
+
+describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
+  interface MState {
+    readonly resilience: ResilientState<string, string>;
+    readonly result: string | null;
+    readonly failure: unknown;
+    /** What `calls.k.phase` read as at the moment `onOk` / `onErr` was called. */
+    readonly phaseSeenByFold: string | null;
+  }
+  type Go = { type: "go"; key: string; input: string; at: number };
+  type MMsg = Go | SucceedMsg<string> | FailMsg | ResilientTimerMsg;
+
+  function mount(
+    config: Parameters<typeof createResilientCall>[0],
+    outcomes: ("ok" | "fail")[] = [],
+  ) {
+    const rc = createResilientCall<string, string>(config, rngZero);
+    // Every entry is one call that actually reached the port — the ground truth
+    // for "did the mounted interpret cell really run the effect".
+    const calls: string[] = [];
+    // This knob's `handlers` takes ports, so it is bound before the mount reads
+    // it. The doors that mount directly (`jev/ask`, `llm-call`) expose a
+    // nullary `handlers()` and are passed straight in.
+    const mounted = mountResilientCall(
+      {
+        ...rc,
+        handlers: () =>
+          rc.handlers({
+            run: async (input) => {
+              calls.push(input);
+              if (outcomes.shift() === "fail") throw { _tag: "backend_down" };
+              return "VALUE";
+            },
+          }),
+      },
+      {
+        slice: "resilience",
+        attempt: {
+          on: "go",
+          run: (slice, m: Go) => rc.attempt(slice, m.key, m.input, m.at),
+        },
+        onOk: (model: MState, m) => [
+          {
+            ...model,
+            result: m.result,
+            phaseSeenByFold: model.resilience.calls[m.key]?.phase ?? null,
+          },
+          [],
+        ],
+        onErr: (model: MState, m) => [
+          {
+            ...model,
+            failure: m.error,
+            phaseSeenByFold: model.resilience.calls[m.key]?.phase ?? null,
+          },
+          [],
+        ],
+      },
+    );
+    const machine = defineMachine({
+      types: {
+        model: {} as MState,
+        msg: {} as MMsg,
+        cmd: {} as RunCmd<string>,
+        sub: {} as ReturnType<typeof rc.subs>[number],
+        ctx: {} as object,
+      },
+      init: (loaded) =>
+        loaded !== null
+          ? [loaded, []]
+          : [
+              {
+                ...mounted.init(),
+                result: null,
+                failure: null,
+                phaseSeenByFold: null,
+              },
+              [],
+            ],
+      update: { ...mounted.update },
+      subscriptions: mounted.subscriptions,
+      subscribe: mounted.subscribe,
+      interpret: mounted.interpret,
+    });
+    return { rc, mounted, machine, calls };
+  }
+
+  const start: MState = {
+    resilience: createResilientCall<string, string>({}, rngZero).init(),
+    result: null,
+    failure: null,
+    phaseSeenByFold: null,
+  };
+
+  it("attempt → transient failure → backoff → retry timer → success", () => {
+    const { mounted, machine } = mount({
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 1_000,
+        maxAttempts: 3,
+        jitter: "full",
+      },
+      deadline: { ms: 5_000 },
+    });
+    const bound = bindMachine(machine, ctx);
+
+    const [running, runCmds] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    expect(running.resilience.calls.k?.phase).toBe("running");
+    expect(runCmds).toHaveLength(1);
+
+    const [waiting] = bound.step(running, {
+      type: "resilient_err",
+      key: "k",
+      error: { _tag: "backend_down" },
+      at: 10,
+    });
+    expect(waiting.resilience.calls.k?.phase).toBe("waiting_retry");
+    expect(waiting.failure).toEqual({ _tag: "backend_down" });
+
+    // `subscriptions` is the fragment's, so the retry timer is armed off the
+    // same slice the settle cell just wrote.
+    expect(mounted.subscriptions(waiting).map((s) => s.id)).toContain(
+      "resilient:retry:k",
+    );
+
+    const [retried, retryCmds] = bound.step(waiting, {
+      type: "deadline_exceeded",
+      id: "resilient:retry:k",
+      atMs: 10,
+    });
+    expect(retried.resilience.calls.k?.phase).toBe("running");
+    expect(retryCmds).toHaveLength(1);
+
+    const [done] = bound.step(retried, {
+      type: "resilient_ok",
+      key: "k",
+      result: "VALUE",
+      at: 20,
+    });
+    expect(done.resilience.calls.k?.phase).toBe("succeeded");
+    expect(done.result).toBe("VALUE");
+  });
+
+  it("settles the deadline path through the mounted timer cell", () => {
+    const { machine } = mount({
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 1_000,
+        maxAttempts: 3,
+        jitter: "full",
+      },
+      deadline: { ms: 50 },
+    });
+    const bound = bindMachine(machine, ctx);
+    const [running] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    const [expired] = bound.step(running, {
+      type: "deadline_exceeded",
+      id: "resilient:deadline:k",
+      atMs: 50,
+    });
+    const call = expired.resilience.calls.k;
+    expect(call?.phase).toBe("failed");
+    expect(call?.phase === "failed" && call.error).toEqual({
+      _tag: "deadline_exceeded",
+      id: "resilient:deadline:k",
+      atMs: 50,
+    } satisfies DeadlineExceededError);
+  });
+
+  it("settles the terminal-failure path and folds the error", () => {
+    const { machine } = mount({
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 1_000,
+        maxAttempts: 1,
+        jitter: "full",
+      },
+    });
+    const bound = bindMachine(machine, ctx);
+    const [running] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    const [failed, cmds] = bound.step(running, {
+      type: "resilient_err",
+      key: "k",
+      error: { _tag: "gone" },
+      at: 5,
+    });
+    expect(failed.resilience.calls.k?.phase).toBe("failed");
+    expect(failed.failure).toEqual({ _tag: "gone" });
+    expect(cmds).toEqual([]);
+  });
+
+  it("runs the inherited verb BEFORE the fold — the wedge is unrepresentable", () => {
+    const { machine } = mount({
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 1_000,
+        maxAttempts: 3,
+        jitter: "full",
+      },
+    });
+    const bound = bindMachine(machine, ctx);
+    const [running] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+
+    const [ok] = bound.step(running, {
+      type: "resilient_ok",
+      key: "k",
+      result: "VALUE",
+      at: 1,
+    });
+    expect(ok.phaseSeenByFold).toBe("succeeded");
+
+    const [err] = bound.step(running, {
+      type: "resilient_err",
+      key: "k",
+      error: { _tag: "gone" },
+      at: 1,
+    });
+    expect(err.phaseSeenByFold).toBe("waiting_retry");
+  });
+
+  it("`interpret` is the returning form — it re-enters through the settle cells", async () => {
+    const { machine, calls } = mount({}, ["ok"]);
+    const bound = bindMachine(machine, ctx);
+    const [running, cmds] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    const first = cmds[0];
+    if (first === undefined) throw new Error("no Cmd emitted");
+
+    const settle = await machine.interpret.resilient_run(first, ctx);
+    expect(calls).toEqual(["in"]);
+    expect(settle.type).toBe("resilient_ok");
+
+    const [done] = bound.step(running, settle);
+    expect(done.result).toBe("VALUE");
+    expect(done.resilience.calls.k?.phase).toBe("succeeded");
+  });
+
+  it("hides assembly only: the slice is plain data and the verbs stay callable", () => {
+    const { rc, mounted, machine } = mount({
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 1_000,
+        maxAttempts: 3,
+        jitter: "full",
+      },
+    });
+    const bound = bindMachine(machine, ctx);
+    const [running] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+
+    // ADR 0015 — the durable Model stays readable and round-trips as JSON.
+    expect(JSON.parse(JSON.stringify(running.resilience))).toEqual(
+      running.resilience,
+    );
+
+    // ADR 0015 — the escape hatch: the verbs the mount calls are still callable
+    // by hand, and produce exactly the slice the mounted cell produced.
+    const settleMsg: SucceedMsg<string> = {
+      type: "resilient_ok",
+      key: "k",
+      result: "VALUE",
+      at: 1,
+    };
+    const byHand = rc.succeed(running.resilience, "k", settleMsg);
+    const [mountedOk] = mounted.update.resilient_ok(running, settleMsg);
+    expect(mountedOk.resilience).toEqual(byHand[0]);
+
+    // `subscribe` carries the real deadline cell, so a backed-off retry cannot
+    // be left unarmed by a consumer that spread the fragments.
+    expect(mounted.subscribe.deadline).toBe(subscribeDeadline);
+  });
+});
+
+// ===========================================================================
+// The mount keys its settle cells off the knob's OWN name (#228 over #229).
+// A knob named `jev` emits `jev_ok` / `jev_err`, so a mount that spelled the
+// `resilient_*` literals would spread two cells nothing ever dispatches to —
+// well-typed, silent, and wrong only at runtime. These pin the join.
+// ===========================================================================
+
+describe("mountResilientCall — settle cells carry the knob's own Msg names", () => {
+  interface NState {
+    readonly resilience: ResilientState<string, string>;
+    readonly result: string | null;
+  }
+  type Go = { type: "go"; key: string; input: string; at: number };
+
+  function mountNamed<N extends string>(name: N) {
+    const rc = createResilientCall<string, string, N>({ name }, rngZero);
+    return mountResilientCall(
+      { ...rc, handlers: () => rc.handlers({ run: async () => "VALUE" }) },
+      {
+        slice: "resilience",
+        attempt: {
+          on: "go",
+          run: (slice, m: Go) => rc.attempt(slice, m.key, m.input, m.at),
+        },
+        onOk: (model: NState, m) => [{ ...model, result: m.result }, []],
+      },
+    );
+  }
+
+  it("a named knob mounts into `<name>_ok` / `<name>_err`, not `resilient_*`", () => {
+    const mounted = mountNamed("jev");
+    expect(Object.keys(mounted.update).sort()).toEqual([
+      "deadline_exceeded",
+      "go",
+      "jev_err",
+      "jev_ok",
+    ]);
+  });
+
+  it("the named cell settles the slice and folds, exactly as the default one does", () => {
+    const mounted = mountNamed("jev");
+    const start: NState = {
+      resilience: mounted.init().resilience,
+      result: null,
+    };
+    const [running] = mounted.update.go(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    expect(running.resilience.calls.k?.phase).toBe("running");
+
+    const [settled] = mounted.update.jev_ok(running, {
+      type: "jev_ok",
+      key: "k",
+      result: "VALUE",
+      at: 1,
+    } as never);
+    // The inherited verb ran before the fold: the slice is `succeeded` and the
+    // consumer's `result` is written — the ordering `mount` makes unwritable.
+    expect(settled.resilience.calls.k?.phase).toBe("succeeded");
+    expect(settled.result).toBe("VALUE");
+  });
+
+  it("two named knobs mount into four distinct cells, so neither shadows the other", () => {
+    const jev = mountNamed("jev");
+    const llm = mountNamed("llm");
+    const cells = { ...jev.update, ...llm.update };
+    expect(Object.keys(cells).sort()).toEqual([
+      "deadline_exceeded",
+      "go",
+      "jev_err",
+      "jev_ok",
+      "llm_err",
+      "llm_ok",
+    ]);
   });
 });

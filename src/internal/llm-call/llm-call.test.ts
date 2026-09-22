@@ -14,6 +14,7 @@ import {
   type LlmSucceedMsg,
   type LlmTimerMsg,
   type ModelPort,
+  mountResilientCall,
   PLAIN_MODEL_MISROUTE_REASON,
   plainModel,
   type ResilientState,
@@ -1108,6 +1109,190 @@ describe("createLlmCall — properties", () => {
           return true;
         },
       ),
+    );
+  });
+});
+
+// ===========================================================================
+// mountResilientCall — the llm-call knob mounts, and behaves as it did (#228).
+// ===========================================================================
+
+describe("createLlmCall — mounted through mountResilientCall", () => {
+  interface MState {
+    readonly resilience: ResilientState<
+      LlmCall<Purpose>,
+      LlmOk<Purpose, Outputs>
+    >;
+    readonly output: PlanOut | null;
+    readonly failure: LlmErr<Purpose> | null;
+  }
+  interface CallLlm {
+    readonly type: "call_llm";
+    readonly input: LlmCall<Purpose>;
+    readonly at: number;
+  }
+  type MMsg =
+    | CallLlm
+    | LlmSucceedMsg<Purpose, Outputs>
+    | LlmFailMsg<Purpose>
+    | LlmTimerMsg;
+
+  function mounted(
+    invoke: (messages: readonly Message[]) => Promise<unknown>,
+    seen: LlmCall<Purpose>[] = [],
+  ) {
+    const llm = createLlmCall<Purpose, Outputs, Message>(
+      {
+        model: fakeModel(invoke),
+        schemas,
+        retry,
+        loadMessages: loaderOf(seen),
+      },
+      rngZero,
+    );
+    const knob = mountResilientCall(llm, {
+      slice: "resilience",
+      attempt: {
+        on: "call_llm",
+        run: (slice, m: CallLlm) => llm.attempt(slice, m.input, m.at),
+      },
+      onOk: (s: MState, m) => [
+        { ...s, output: m.result.output as PlanOut },
+        [],
+      ],
+      onErr: (s: MState, m) => [{ ...s, failure: m.error }, []],
+    });
+    const machine = defineMachine({
+      types: {
+        model: {} as MState,
+        msg: {} as MMsg,
+        cmd: {} as LlmRunCmd<Purpose>,
+        sub: {} as ReturnType<typeof llm.subs>[number],
+        ctx: undefined,
+      },
+      init: (loaded) =>
+        loaded !== null
+          ? [loaded, []]
+          : [{ ...knob.init(), output: null, failure: null }, []],
+      update: { ...knob.update },
+      subscriptions: knob.subscriptions,
+      subscribe: knob.subscribe,
+      interpret: knob.interpret,
+    });
+    return { llm, knob, machine };
+  }
+
+  const call: LlmCall<Purpose> = { purpose: "plan", payload: "go" };
+
+  it("drives attempt → transient failure → backoff → retry → success", async () => {
+    const outcomes: ("throw" | "ok")[] = ["throw", "ok"];
+    const { knob, machine } = mounted(async () => {
+      if (outcomes.shift() === "throw") throw new Error("model down");
+      return { steps: ["a"] };
+    });
+    const bound = bindMachine(machine, undefined);
+    const start: MState = {
+      resilience: knob.init().resilience,
+      output: null,
+      failure: null,
+    };
+
+    const [running, cmds] = bound.step(start, {
+      type: "call_llm",
+      input: call,
+      at: 0,
+    });
+    expect(running.resilience.calls.plan?.phase).toBe("running");
+    const first = cmds[0];
+    if (first === undefined) throw new Error("no Cmd emitted");
+
+    // The mounted interpret cell is the RETURNING form, so its settle Msg goes
+    // straight back through the mounted settle cell.
+    const failed = await machine.interpret.resilient_run(first, undefined);
+    const [waiting] = bound.step(running, failed);
+    expect(waiting.resilience.calls.plan?.phase).toBe("waiting_retry");
+    expect(waiting.failure?.purpose).toBe("plan");
+
+    // The retry timer the mounted `subscriptions` arms re-issues the call.
+    expect(knob.subscriptions(waiting).map((s) => s.id)).toContain(
+      "resilient:retry:plan",
+    );
+    const [retried, retryCmds] = bound.step(waiting, {
+      type: "deadline_exceeded",
+      id: "resilient:retry:plan",
+      atMs: 0,
+    });
+    const second = retryCmds[0];
+    if (second === undefined) throw new Error("no retry Cmd emitted");
+
+    const ok = await machine.interpret.resilient_run(second, undefined);
+    const [done] = bound.step(retried, ok);
+    expect(done.resilience.calls.plan?.phase).toBe("succeeded");
+    expect(done.output).toEqual({ steps: ["a"] });
+  });
+
+  it("settles a structured-output parse failure as a terminal LlmErr", async () => {
+    const { knob, machine } = mounted(async () => ({ steps: "not an array" }));
+    const bound = bindMachine(machine, undefined);
+    const start: MState = {
+      resilience: knob.init().resilience,
+      output: null,
+      failure: null,
+    };
+    let [state, cmds] = bound.step(start, {
+      type: "call_llm",
+      input: call,
+      at: 0,
+    });
+    // Three attempts is the whole `maxAttempts` budget; the last one settles.
+    for (let guard = 0; guard < 6 && cmds.length > 0; guard += 1) {
+      const pending = cmds;
+      cmds = [];
+      for (const cmd of pending) {
+        const settle = await machine.interpret.resilient_run(cmd, undefined);
+        const next = bound.step(state, settle);
+        state = next[0];
+        cmds = [...cmds, ...next[1]];
+        if (state.resilience.calls.plan?.phase === "waiting_retry") {
+          const timed = bound.step(state, {
+            type: "deadline_exceeded",
+            id: "resilient:retry:plan",
+            atMs: 0,
+          });
+          state = timed[0];
+          cmds = [...cmds, ...timed[1]];
+        }
+      }
+    }
+    expect(state.resilience.calls.plan?.phase).toBe("failed");
+    expect(state.failure?.purpose).toBe("plan");
+    expect(state.output).toBeNull();
+  });
+
+  it("hides assembly only: the verbs stay callable and agree with the mount", () => {
+    const { llm, knob } = mounted(async () => ({ steps: [] }));
+    const start: MState = {
+      resilience: knob.init().resilience,
+      output: null,
+      failure: null,
+    };
+    const [running] = knob.update.call_llm(start, {
+      type: "call_llm",
+      input: call,
+      at: 0,
+    });
+    const settleMsg: LlmSucceedMsg<Purpose, Outputs> = {
+      type: "resilient_ok",
+      key: "plan",
+      result: { purpose: "plan", output: { steps: ["a"] } },
+      at: 1,
+    };
+    const byHand = llm.succeed(running.resilience, "plan", settleMsg);
+    const [mountedOk] = knob.update.resilient_ok(running, settleMsg);
+    expect(mountedOk.resilience).toEqual(byHand[0]);
+    // ADR 0015 — the durable slice is still plain, readable JSON.
+    expect(JSON.parse(JSON.stringify(mountedOk.resilience))).toEqual(
+      mountedOk.resilience,
     );
   });
 });

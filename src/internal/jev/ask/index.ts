@@ -52,27 +52,32 @@
  *     retry: defaultRetryPolicy,
  *   });
  *
+ *   // `mountResilientCall` pre-assembles the wiring. The settle cells run the
+ *   // inherited verb and hand the ALREADY-settled model to `onOk` / `onErr`,
+ *   // so the fold-before-settle order that wedges the slice at `running` is
+ *   // not something a mounted cell can express; `subscribe` and `interpret`
+ *   // ride along, so neither can be forgotten.
+ *   const mounted = mountResilientCall(ask, {
+ *     slice: "resilience",
+ *     attempt: {
+ *       on: "ask_jev",
+ *       run: (slice, m: AskJev) => ask.attempt(slice, m.key, m.state, m.at),
+ *     },
+ *     onOk: (s, m) => [{ ...s, answers: m.result.answers }, []],
+ *     onErr: (s, m) => [{ ...s, failure: m.error }, []],
+ *   });
+ *
  *   // in the machine:
- *   init: () => [{ resilience: ask.init() }, []],
- *   update: {
- *     ask_jev: (s, m) => liftJevAsk(s, ask.attempt(s.resilience, m.key, m.state, m.at)),
- *     // `resilient_ok` / `resilient_err` RE-ENTER from `handlers` (the settle
- *     // Msg the interpret handler returns). Run the inherited verb FIRST so the
- *     // backoff loop advances, THEN fold `m.result` / `m.error` into the host's
- *     // own state — the enrichment belongs in the reducer arm, not the handler.
- *     resilient_ok: (s, m) => {
- *       const [slice, cmds] = ask.succeed(s.resilience, m.key, m);
- *       return [{ ...s, resilience: slice, answers: m.result.answers }, cmds];
- *     },
- *     resilient_err: (s, m) => {
- *       const [slice, cmds] = ask.fail(s.resilience, m.key, m);
- *       return [{ ...s, resilience: slice, failure: m.error }, cmds];
- *     },
- *     deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
- *   },
- *   subscriptions: (s) => ask.subs(s.resilience),
- *   subscribe: { deadline: subscribeDeadline },
- *   interpret: ask.handlers(),
+ *   init: () => [{ ...mounted.init(), answers: null, failure: null }, []],
+ *   update: { ...mounted.update },
+ *   subscriptions: mounted.subscriptions,
+ *   subscribe: mounted.subscribe,
+ *   interpret: mounted.interpret,
+ *
+ * The slice stays a plain readable field at `resilience`, and every verb above
+ * is still exported: a consumer that wants a settle cell the mount cannot
+ * express writes that one cell with `ask.succeed` / `ask.fail` / `liftJevAsk`
+ * and spreads the rest.
  */
 
 import { describeError } from "../../../describe-error";
@@ -86,6 +91,7 @@ import {
   deadlineSub,
   type FailMsg,
   liftResilience,
+  mountResilientCall,
   type ResilientConfig,
   type ResilientState,
   type RunCmd,
@@ -534,7 +540,17 @@ export function createJevAsk<Q extends JevQuestionMap>(
     return { resilient_run: (cmd: JevAskCmd<Q>) => settleOf(cmd) };
   }
 
-  return { init, attempt, succeed, fail, onTimer, subs, handlers, ask };
+  return {
+    name: rc.name,
+    init,
+    attempt,
+    succeed,
+    fail,
+    onTimer,
+    subs,
+    handlers,
+    ask,
+  };
 }
 
 /**
@@ -574,7 +590,9 @@ export function liftJevAsk<
 /**
  * Re-export the deadline Sub primitives (inherited from resilient-call) so a
  * consumer wires one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal `subs` emits.
+ * `deadlineSub` builds the Sub literal `subs` emits. `mountResilientCall` rides
+ * the same import for the same reason — a knob from this door mounts with no
+ * second package specifier.
  */
-export { subscribeDeadline, deadlineSub };
+export { subscribeDeadline, deadlineSub, mountResilientCall };
 export type { DeadlineSub, DeadlineExceeded, ResilientState };

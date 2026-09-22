@@ -62,9 +62,8 @@ import {
   type JevSub,
   type JevSucceedMsg,
   type JevTimerMsg,
-  liftJevAsk,
+  mountResilientCall,
   type ResilientState,
-  subscribeDeadline,
 } from "@demlik/tea/jev";
 
 /** Where one expense ended up. `triage` is a human's queue, not a category. */
@@ -78,13 +77,16 @@ export interface ExpenseState {
   readonly verdicts: Readonly<Record<string, Verdict>>;
 }
 
+/** The Msg that starts one call. `mount` needs its type to write that cell. */
+export interface Classify {
+  readonly type: "classify";
+  readonly key: string;
+  readonly memo: string;
+  readonly at: number;
+}
+
 export type ExpenseMsg =
-  | {
-      readonly type: "classify";
-      readonly key: string;
-      readonly memo: string;
-      readonly at: number;
-    }
+  | Classify
   | JevSucceedMsg<Questions>
   | JevFailMsg
   | JevTimerMsg;
@@ -94,7 +96,36 @@ type Ask = ReturnType<typeof createJevAsk<Questions>>;
 /** Below this, a human looks at it. The threshold is the HOST's rule to set. */
 export const CONFIDENCE_FLOOR = 0.8;
 
+/**
+ * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
+ * ALREADY settled, so there is no cell to put in the wrong order, and
+ * `subscribe` / `interpret` ride along on the fragments rather than being
+ * remembered. `answer.choice` is `Category` here, not `string`.
+ */
+export function mountAsk(ask: Ask) {
+  return mountResilientCall(ask, {
+    slice: "resilience",
+    attempt: {
+      on: "classify",
+      run: (slice, m: Classify) => ask.attempt(slice, m.key, m.memo, m.at),
+    },
+    onOk: (s: ExpenseState, m) => {
+      const answer = m.result.answers.category;
+      const verdict: Verdict =
+        answer.confidence >= CONFIDENCE_FLOOR
+          ? { kind: "booked", category: answer.choice }
+          : { kind: "triage", why: `confidence ${answer.confidence}` };
+      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
+    },
+    onErr: (s: ExpenseState, m) => {
+      const verdict: Verdict = { kind: "triage", why: m.error._tag };
+      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
+    },
+  });
+}
+
 export function expenseMachine(ask: Ask) {
+  const mounted = mountAsk(ask);
   return defineMachine({
     types: {
       model: {} as ExpenseState,
@@ -106,50 +137,11 @@ export function expenseMachine(ask: Ask) {
     init: (loaded) =>
       loaded !== null
         ? [loaded, []]
-        : [{ resilience: ask.init(), verdicts: {} }, []],
-    update: {
-      classify: (s, m) =>
-        liftJevAsk(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
-
-      // Run the inherited verb FIRST so the backoff loop advances, THEN fold
-      // the answer in. `answer.choice` is `Category` here, not `string`.
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = ask.succeed(s.resilience, m.key, m);
-        const answer = m.result.answers.category;
-        const verdict: Verdict =
-          answer.confidence >= CONFIDENCE_FLOOR
-            ? { kind: "booked", category: answer.choice }
-            : { kind: "triage", why: `confidence ${answer.confidence}` };
-        return [
-          {
-            ...s,
-            resilience: slice,
-            verdicts: { ...s.verdicts, [m.key]: verdict },
-          },
-          cmds,
-        ];
-      },
-
-      resilient_err: (s, m) => {
-        const [slice, cmds] = ask.fail(s.resilience, m.key, m);
-        return [
-          {
-            ...s,
-            resilience: slice,
-            verdicts: {
-              ...s.verdicts,
-              [m.key]: { kind: "triage", why: m.error._tag },
-            },
-          },
-          cmds,
-        ];
-      },
-
-      deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
-    },
-    subscriptions: (s) => ask.subs(s.resilience),
-    subscribe: { deadline: subscribeDeadline },
-    interpret: ask.handlers(),
+        : [{ ...mounted.init(), verdicts: {} }, []],
+    update: { ...mounted.update },
+    subscriptions: mounted.subscriptions,
+    subscribe: mounted.subscribe,
+    interpret: mounted.interpret,
   });
 }
 // #endregion machine

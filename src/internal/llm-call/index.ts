@@ -70,28 +70,32 @@
  *     loadMessages: defaultMessagesLoader,
  *   });
  *
+ *   // `mountResilientCall` pre-assembles the wiring. The settle cells run the
+ *   // inherited verb and hand the ALREADY-settled model to `onOk` / `onErr`,
+ *   // so the fold-before-settle order that wedges the slice at `running` is
+ *   // not something a mounted cell can express; `subscribe` and `interpret`
+ *   // ride along, so neither can be forgotten.
+ *   const mounted = mountResilientCall(llm, {
+ *     slice: "resilience",
+ *     attempt: {
+ *       on: "call_llm",
+ *       run: (slice, m: CallLlm) => llm.attempt(slice, m.input, m.at),
+ *     },
+ *     onOk: (s, m) => [{ ...s, output: m.result.output }, []],
+ *     onErr: (s, m) => [{ ...s, failure: m.error }, []],
+ *   });
+ *
  *   // in the machine:
- *   init: () => [{ resilience: llm.init() }, []],
- *   update: {
- *     call_llm:  (s, m) => lift(s, llm.attempt(s.resilience, m.input, m.at)),
- *     // `resilient_ok` / `resilient_err` RE-ENTER from `handlers` (the settle
- *     // Msg the interpret handler returns). Run the inherited verb FIRST so the
- *     // succeed/fail → backoff → onTimer loop advances, THEN fold the enriched
- *     // payload (`m.result: LlmOk` / `m.error: LlmErr`) into the host's own
- *     // state — the enrichment lives in the reducer arm, not the handler.
- *     resilient_ok:  (s, m) => {
- *       const [slice, cmds] = llm.succeed(s.resilience, m.key, m);
- *       return [{ ...s, resilience: slice, output: m.result.output }, cmds];
- *     },
- *     resilient_err: (s, m) => {
- *       const [slice, cmds] = llm.fail(s.resilience, m.key, m);
- *       return [{ ...s, resilience: slice, failure: m.error }, cmds];
- *     },
- *     deadline_exceeded: (s, m) => lift(s, llm.onTimer(s.resilience, m)),
- *   },
- *   subscriptions: (s) => llm.subs(s.resilience),
- *   subscribe: { deadline: subscribeDeadline },
- *   interpret: llm.handlers(),
+ *   init: () => [{ ...mounted.init(), output: null, failure: null }, []],
+ *   update: { ...mounted.update },
+ *   subscriptions: mounted.subscriptions,
+ *   subscribe: mounted.subscribe,
+ *   interpret: mounted.interpret,
+ *
+ * The slice stays a plain readable field at `resilience`, and every verb above
+ * is still exported: a consumer that wants a settle cell the mount cannot
+ * express writes that one cell with `llm.succeed` / `llm.fail` / `liftLlmCall`
+ * and spreads the rest.
  */
 
 import { describeError } from "../../describe-error";
@@ -105,6 +109,7 @@ import {
   deadlineSub,
   type FailMsg,
   liftResilience,
+  mountResilientCall,
   type ResilientConfig,
   type ResilientState,
   type RunCmd,
@@ -696,7 +701,17 @@ export function createLlmCall<
     };
   }
 
-  return { init, attempt, succeed, fail, onTimer, subs, handlers, invokeOne };
+  return {
+    name: rc.name,
+    init,
+    attempt,
+    succeed,
+    fail,
+    onTimer,
+    subs,
+    handlers,
+    invokeOne,
+  };
 }
 
 /**
@@ -719,7 +734,9 @@ export function liftLlmCall<
 /**
  * Re-export the deadline Sub primitives (inherited from resilient-call) so
  * consumers wire one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal `subs` emits.
+ * `deadlineSub` builds the Sub literal `subs` emits. `mountResilientCall` rides
+ * the same import for the same reason — a knob from this module mounts with no
+ * second package specifier.
  */
-export { subscribeDeadline, deadlineSub };
+export { subscribeDeadline, deadlineSub, mountResilientCall };
 export type { DeadlineSub, DeadlineExceeded, ResilientState };

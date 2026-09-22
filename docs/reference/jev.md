@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/jev";
 ```
 
-## Exports (63)
+## Exports (64)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -70,6 +70,7 @@ import { … } from "@demlik/tea/jev";
 | `JevUsage` | Interface | Token usage for the request. |
 | `KeyAnswer` | Type | What ClassifyBatchKnob.answerFor reports about one key. |
 | `liftJevAsk` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience` — resilient-call's convenience, re-typed for this door's slice so a consumer wires one import. |
+| `mountResilientCall` | Function | Pre-assemble a resilient-call knob into the fragments a machine definition spreads, so mounting one is a spread instead of eight hand-spliced points. |
 | `parseAnswers` | Function | Turn an `unknown` response body into the typed answers for `questions`, or into one `JevErr`. |
 | `ResilientState` | Interface | The slice. |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
