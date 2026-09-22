@@ -13,8 +13,8 @@
  * (`tsconfig.test.json`, gated in CI as `typecheck:test`), and the tests below
  * assert the page's `ts` blocks are this file's `#region` bodies verbatim. The
  * page cannot drift from a compiling artifact, because the page IS the
- * artifact. The last region is driven through `replay`'s bound `step` against a
- * fake port, so the recipe is proven to RUN and not only to compile.
+ * artifact. The last region is driven through `@demlik/tea/testing`'s `drive`
+ * against a fake port, so the recipe is proven to RUN and not only to compile.
  */
 
 // biome-ignore-all assist/source/organizeImports: the `#region` markers below
@@ -199,34 +199,32 @@ export function fakeJev(
 // #endregion fake
 
 // #region drive
-import { bindMachine } from "@demlik/tea/testing";
+import { type DriveResult, drive } from "@demlik/tea/testing";
+
+/** What one driven classification hands back: the settled state and the history. */
+export type Classified = DriveResult<
+  ExpenseState,
+  ExpenseMsg,
+  JevCmd<Questions>
+>;
 
 /**
- * Feed one `classify`, run the real interpret handler over every Cmd it
- * emitted, and feed the settle Msg back — which is what the runtime does, said
- * synchronously so a test can assert on the state between two folds.
+ * Feed one `classify` and let `drive` do what the runtime does: run the real
+ * interpret handlers over every Cmd, feed each settle Msg back, and stop when
+ * the machine is quiet. It returns the settled state AND the `trace` — every
+ * Cmd dispatched and every Msg folded, in order.
  */
-export async function classifyOne(
+export function classifyOne(
   ask: Ask,
   key: string,
   memo: string,
-): Promise<ExpenseState> {
-  const bound = bindMachine(expenseMachine(ask), undefined);
-  let [state, cmds] = bound.step(
+): Promise<Classified> {
+  return drive(
+    expenseMachine(ask),
     { resilience: ask.init(), verdicts: {} },
     { type: "classify", key, memo, at: 0 },
+    ask.handlers(),
   );
-  for (let guard = 0; guard < 10 && cmds.length > 0; guard += 1) {
-    const pending = cmds;
-    cmds = [];
-    for (const cmd of pending) {
-      const settle = await ask.handlers().resilient_run(cmd);
-      const next = bound.step(state, settle);
-      state = next[0];
-      cmds = [...cmds, ...next[1]];
-    }
-  }
-  return state;
 }
 // #endregion drive
 
@@ -236,11 +234,18 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
       questions,
       port: fakeJev([["dining", 0.93]]),
     });
-    const state = await classifyOne(ask, "tx-1", "PIZZA NAPOLI 24.10 EUR");
+    const { state, trace } = await classifyOne(
+      ask,
+      "tx-1",
+      "PIZZA NAPOLI 24.10 EUR",
+    );
     expect(state.verdicts["tx-1"]).toEqual({
       kind: "booked",
       category: "dining",
     });
+    // The trace is what the loop could not express: the door was asked EXACTLY
+    // once, so the booked verdict is a first-attempt answer and not a retry.
+    expect(trace.filter((entry) => entry.kind === "cmd")).toHaveLength(1);
   });
 
   it("sends a low-confidence answer to triage instead of booking it", async () => {
@@ -248,7 +253,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
       questions,
       port: fakeJev([["transport", 0.41]]),
     });
-    const state = await classifyOne(ask, "tx-2", "SQ *UNKNOWN 8.00 EUR");
+    const { state } = await classifyOne(ask, "tx-2", "SQ *UNKNOWN 8.00 EUR");
     expect(state.verdicts["tx-2"]).toEqual({
       kind: "triage",
       why: "confidence 0.41",
@@ -267,7 +272,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
         },
       }),
     });
-    const state = await classifyOne(ask, "tx-3", "SUPERMARKET 12.00 EUR");
+    const { state } = await classifyOne(ask, "tx-3", "SUPERMARKET 12.00 EUR");
     expect(state.verdicts["tx-3"]).toEqual({
       kind: "booked",
       category: "groceries",

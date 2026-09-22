@@ -2,10 +2,13 @@
  * @packageDocumentation
  * @demlik/tea/testing — test-side ergonomics over @demlik/tea's pure substrate.
  *
- * Three concerns share the subpath:
+ * Four concerns share the subpath:
  *
  *   - Assertions — `expectFinalState`, `expectCmdEmitted`,
  *     `expectCmdSequence`, `expectActiveSubs`, `step` (assertions.ts).
+ *   - Driving — `drive`, the runtime's Cmd→handler→settle-Msg loop said once,
+ *     returning `{ state, trace }` so a test asserts on the sequence as well
+ *     as the endpoint (drive.ts).
  *   - Runtime hole — `noopRuntime` for ctx slots that demand a `Runtime<...>`
  *     reference replay never dereferences (noop-runtime.ts).
  *   - State scaffolding — `stateFactory` for typed phase-constructor APIs
@@ -35,6 +38,17 @@ export {
   step,
 } from "./assertions";
 export { type BoundMachine, bindMachine } from "./bind-machine";
+export {
+  DEFAULT_MAX_ROUNDS,
+  type DriveCtxArg,
+  DriveNoHandlerError,
+  type DriveOptions,
+  type DriveResult,
+  DriveRoundsExceededError,
+  type DriveTraceEntry,
+  drive,
+  driveTraceOf,
+} from "./drive";
 export { noopRuntime } from "./noop-runtime";
 export {
   type StateFactoryAPI,
