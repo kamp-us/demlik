@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 21 public subpaths. Curated
+The complete export catalog — all 22 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -14,6 +14,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./extension`](./extension.md) | Chrome service-worker host adapter for @demlik/tea. |
 | [`./flow`](./flow.md) | the multi-step control-flow batteries: fan a batch out, run steps in order and compensate on failure, poll until a predicate holds, reconcile desired against actual. |
 | [`./idempotency`](./idempotency.md) | do-it-once: dedupe by key, cache the result, and replay that result to every duplicate arrival. |
+| [`./jev`](./jev.md) | ask TypeSafe **Jev** (System One) a map of typed questions and get a typed answer back under each name: the wire contract, the one Cmd that issues the call, and the batching composition over it. |
 | `./machine-viz` | turn a `Machine` into a Mermaid diagram string. |
 | [`./mem`](./mem.md) | in-memory `Store<S>` adapter for `@demlik/tea`. |
 | [`./node`](./node.md) | Node host adapter for `@demlik/tea`. |

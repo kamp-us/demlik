@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // A DOOR CARRIES EVERY MODULE BEHIND IT — BY SYMBOL, NOT BY NAME.
 //
-// The seven `battery` doors (#205) are re-export files over `src/internal/`,
-// and the two ways one silently stops carrying a module are both quiet:
+// The `battery` doors — the seven grouped ones from #205 plus `./jev` (#219) —
+// are re-export files over `src/internal/`, and the two ways one silently stops
+// carrying a module are both quiet:
 //
 //   - `export *` from two modules that declare the SAME name is `TS2308`, so
 //     the honest fix is to name a winner. The dishonest one is to star one
@@ -96,6 +97,14 @@ const DOORS: ReadonlyMap<string, readonly string[]> = new Map([
       "internal/work-queue",
       "internal/work-queue/ops.ts",
       "internal/work-queue/adapter.ts",
+    ],
+  ],
+  [
+    "jev",
+    [
+      "internal/jev/protocol",
+      "internal/jev/ask",
+      "internal/jev/classify-batch",
     ],
   ],
 ]);

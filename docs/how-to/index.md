@@ -65,4 +65,11 @@ what you are trying to do, and it names the subpath you need.
   one-field version for a `defineAgent` brain call, and the policy to declare
   against a provider 429/529.
 
+## Classify something
+
+- [Ask Jev a typed question](./ask-jev-a-typed-question.md) — send a rubric to
+  TypeSafe Jev with `@demlik/tea/jev` and get the answer back narrowed to the
+  criteria keys you wrote, with the HTTP caller injected as a port so the whole
+  call replays in a test without a key.
+
 *Guides are added as the how-to quadrant grows.*

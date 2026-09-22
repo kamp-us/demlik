@@ -214,6 +214,13 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Batteries",
   },
   {
+    subpath: "./jev",
+    importPath: "@demlik/tea/jev",
+    file: "jev.md",
+    typedocName: "jev",
+    group: "Batteries",
+  },
+  {
     subpath: "./testing",
     importPath: "@demlik/tea/testing",
     file: "testing.md",

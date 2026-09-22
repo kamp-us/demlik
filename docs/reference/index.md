@@ -37,6 +37,7 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 - [`@demlik/tea/persistence`](./persistence.md)
 - [`@demlik/tea/paginate`](./paginate.md)
 - [`@demlik/tea/work-queue`](./work-queue.md)
+- [`@demlik/tea/jev`](./jev.md)
 
 ## Testing
 
