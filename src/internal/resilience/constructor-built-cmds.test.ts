@@ -17,13 +17,20 @@ describe("resilience family — every emitted Cmd is constructor-built", () => {
   it("declares each Cmd the family emits through Cmd.define", () => {
     expect([...result.defined].sort()).toEqual(
       [
-        MsgType.ResilientRun,
         "$resilience:run",
         "$deadline:decision",
         "$telemetry:emit",
         "refresh_token",
       ].sort(),
     );
+  });
+
+  it("declares resilient-call's run Cmd as a NAME FAMILY, not one literal", () => {
+    // `createResilientCall` stamps `<name>_run`, so the def claims every name
+    // in the family (`resilient_run` unnamed, `jev_run` named) rather than one
+    // string. The suffix is what the literal check tests membership against.
+    expect([...result.definedSuffixes]).toEqual(["_run"]);
+    expect(MsgType.ResilientRun.endsWith("_run")).toBe(true);
   });
 
   it('carries no hand-written Cmd<"…"> type', () => {

@@ -66,10 +66,15 @@ export type {
   CircuitConfig,
   DeadlineConfig as ResilientCallDeadlineConfig,
   DeadlineExceededError,
+  DefaultResilientName,
   FailMsg,
   RateLimitConfig,
   ResilientConfig,
+  ResilientErrType,
+  ResilientHandlers,
+  ResilientOkType,
   ResilientPorts,
+  ResilientRunType,
   ResilientState,
   ResilientTimerMsg,
   RunCmd,
@@ -78,6 +83,7 @@ export type {
 } from "../internal/resilience/resilient-call";
 export {
   createResilientCall,
+  DEFAULT_RESILIENT_NAME,
   liftResilience,
   runCmdDef,
 } from "../internal/resilience/resilient-call";
