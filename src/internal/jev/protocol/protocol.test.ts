@@ -7,7 +7,7 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { classifyStatus, jevQuestions, parseAnswers } from "./index";
+import { classifyStatus, isJevErr, jevQuestions, parseAnswers } from "./index";
 
 const questions = jevQuestions({
   category: {
@@ -108,6 +108,20 @@ describe("parseAnswers — the happy path", () => {
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.answers.pick.choice).toBe("a");
   });
+
+  it("accepts a choice `probabilities` total over the criteria in any key order", () => {
+    const parsed = parseAnswers(
+      questions,
+      withAnswer("category", {
+        type: "choice",
+        choice: "dining",
+        probabilities: { dining: 0.6, groceries: 0.4 },
+        confidence: 0.5,
+      }),
+    );
+
+    expect(parsed.ok).toBe(true);
+  });
 });
 
 describe("parseAnswers — every failure is one `JevErr`", () => {
@@ -172,6 +186,66 @@ describe("parseAnswers — every failure is one `JevErr`", () => {
       choice: "other",
       options: ["groceries", "dining"],
     });
+  });
+
+  it("off-criteria probabilities: the distribution under-fills the criteria", () => {
+    const parsed = parseAnswers(
+      questions,
+      withAnswer("category", {
+        type: "choice",
+        choice: "groceries",
+        probabilities: { groceries: 1 },
+        confidence: 0.5,
+      }),
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toEqual({
+      _tag: "off_criteria_probabilities",
+      id: "category",
+      missing: ["dining"],
+      extra: [],
+      options: ["groceries", "dining"],
+    });
+  });
+
+  it("off-criteria probabilities: the distribution carries a key that is not a criterion", () => {
+    const parsed = parseAnswers(
+      questions,
+      withAnswer("category", {
+        type: "choice",
+        choice: "groceries",
+        probabilities: { groceries: 0.7, dining: 0.2, rent: 0.1 },
+        confidence: 0.5,
+      }),
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toEqual({
+      _tag: "off_criteria_probabilities",
+      id: "category",
+      missing: [],
+      extra: ["rent"],
+      options: ["groceries", "dining"],
+    });
+  });
+
+  it("`isJevErr` answers `true` for every arm, the newest included", () => {
+    const parsed = parseAnswers(
+      questions,
+      withAnswer("category", {
+        type: "choice",
+        choice: "groceries",
+        probabilities: { groceries: 1 },
+        confidence: 0.5,
+      }),
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(isJevErr(parsed.error)).toBe(true);
   });
 
   it("malformed answer: the `type` is right and the payload is not", () => {

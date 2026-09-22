@@ -197,6 +197,10 @@ export function fakeJev(
     const next = queue.shift();
     if (next === undefined) return { status: 529, body: {} };
     const [choice, confidence] = next;
+    // `probabilities` is TOTAL over the criteria keys on the wire, so a fake
+    // that names only the winner is a body `parseAnswers` refuses. Spread the
+    // remaining mass over the other two and let the winner overwrite its own.
+    const rest = (1 - confidence) / 2;
     return {
       status: 200,
       body: {
@@ -206,7 +210,12 @@ export function fakeJev(
             type: "choice",
             choice,
             confidence,
-            probabilities: { [choice]: confidence },
+            probabilities: {
+              groceries: rest,
+              dining: rest,
+              transport: rest,
+              [choice]: confidence,
+            },
           },
         },
         usage: { input_tokens: 9, output_tokens: 2 },
