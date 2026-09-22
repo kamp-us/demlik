@@ -1,0 +1,17 @@
+{
+  // The EDITOR's view of the examples: published specifiers resolve to `src`,
+  // so go-to-definition lands on source and nothing needs a build first.
+  //
+  // CI never reads this file. `pnpm typecheck:consumers` runs
+  // `tsconfig.consumers.json`, which still resolves against `dist` the way an
+  // installer does — that check is the reason the examples exist.
+  // Same mapping as `tsconfig.test.json`.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@demlik/tea": ["../src/index.ts"],
+      "@demlik/tea/*": ["../src/*/index.ts", "../src/*"]
+    }
+  },
+  "include": ["**/*.ts"]
+}
