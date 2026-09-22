@@ -1,5 +1,936 @@
 # @demlik/tea
 
+## 0.14.0
+
+### Minor Changes
+
+- af74406: A run can be stopped from outside. `agent.run(input, { signal })` and
+  `driveToDone(handle, start, isTerminal, { signal, cancel })` take an
+  `AbortSignal`, and an abort is a TRANSITION rather than a throw: the run settles
+  on a new `cancelled` terminal outcome and the call RESOLVES with it. Nothing
+  rejects, and a cancellation is never a `DriveFailedError` — a stop button is not
+  a failure.
+
+  The outcome is in the Model, which is the point. A process killed after an abort
+  resumes reading a run that ENDED, instead of restarting the run its user
+  stopped. `status(state)` answers `{ kind: "cancelled", at }`, a member of the
+  status union in its own right — a consumer handling `done` and `failed` has not
+  covered every way a run can end, and now the compiler says so.
+
+  A signal already aborted when `run` is called ends the run before the first
+  model call is made.
+
+  What cancellation does NOT do is recall work already in flight: a promise cannot
+  be cancelled, so a tool handler mid-call runs to its own end. Its result reaches
+  no `onEvent` listener and never folds into the Model, and it does not hold the
+  runtime's teardown. Propagating the signal INTO handlers is a separate seam this
+  does not open.
+
+  Omit the signal and every existing run path behaves exactly as before.
+
+  `DriveToDoneOptions` is now a type alias rather than an interface, because
+  `signal` and `cancel` are a PAIR — the kernel has no built-in cancel Msg, so a
+  signal with nothing to dispatch is a stop button wired to nothing, and the union
+  makes that unrepresentable. Every existing use as a type is unaffected; a
+  consumer that `extends` it must switch to an intersection.
+
+- a18b660: The bare flow knobs move inside the package (ADR 0015, ADR 0016). Eight battery subpaths
+  leave `exports`; every primitive they published still exists, under
+  `src/internal/flow/`, and is no longer importable from outside the package. `saga` and
+  `workflow` stay two separate modules (ADR 0010: the boundary is compensation); only their
+  doors close.
+
+  | Removed door                 | Internal home                      |
+  | ---------------------------- | ---------------------------------- |
+  | `@demlik/tea/fan-out`        | `src/internal/flow/fan-out`        |
+  | `@demlik/tea/monitored-run`  | `src/internal/flow/monitored-run`  |
+  | `@demlik/tea/poller`         | `src/internal/flow/poller`         |
+  | `@demlik/tea/reconciler`     | `src/internal/flow/reconciler`     |
+  | `@demlik/tea/saga`           | `src/internal/flow/saga`           |
+  | `@demlik/tea/workflow`       | `src/internal/flow/workflow`       |
+  | `@demlik/tea/await-terminal` | `src/internal/flow/await-terminal` |
+  | `@demlik/tea/batch-window`   | `src/internal/flow/batch-window`   |
+
+  `workflow`'s two Cmds — `workflow_activity`, `workflow_compensation` — are now built by
+  `Cmd.define` constructors (`workflowActivityDef<A>()`, `workflowCompensationDef<A>()`), so
+  each carries its input shape as a type. The emitted records are unchanged; a ledger written
+  before this release folds identically. The other moved modules emit no Cmds of their own.
+
+  `docs/reference/saga.md` and `docs/reference/workflow.md` go with their doors.
+
+- 897a0de: The grouped battery doors are open. Seven new subpaths, all `battery` tier:
+
+  | Door                      | What is behind it                                                                                                                                                                |
+  | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `@demlik/tea/idempotency` | `idempotency`, `idempotent-intake`                                                                                                                                               |
+  | `@demlik/tea/flow`        | `await-terminal`, `batch-window`, `fan-out`, `monitored-run`, `poller`, `reconciler`, `saga`, `workflow`                                                                         |
+  | `@demlik/tea/resilience`  | `authed-call`, `cache`, `circuit-breaker`, `deadline`, `rate-limit`, `resilient-call`, `retry-to-success`, `token-refresh`, `with-deadline`, `with-resilience`, `with-telemetry` |
+  | `@demlik/tea/timing`      | `debounce`, `throttle`, `throttled-input`                                                                                                                                        |
+  | `@demlik/tea/persistence` | `recorder`, `snapshot`, `trace-replay`                                                                                                                                           |
+  | `@demlik/tea/paginate`    | `paginator`, `paginated-walk`                                                                                                                                                    |
+  | `@demlik/tea/work-queue`  | `work-queue`, its pure `ops`, and the `adapter` verb seam                                                                                                                        |
+
+  A consumer who needed exactly-once payouts or a compensating workflow had to
+  copy the source: the modules were finished and tested and simply unreachable.
+  Each door is a re-export file over `src/internal/`, so nothing moved, nothing
+  was renamed, and no module's own file path changed.
+
+  `battery` means these may break in a minor, before and after 1.0, provided the
+  changelog for that minor says so — a weaker promise than `stable`, and the
+  reason a battery break never forces a major on someone who never imported one.
+  The doors are grouped rather than one-per-module because a door is a permanent
+  promise and a maintenance cost; `MAINTAINING.md` carries the tier row for each.
+
+  One name needed a decision. `resilient-call` and `with-deadline` each declare a
+  different `DeadlineConfig` — a per-call in-process budget, and an inactivity
+  window with a progress predicate. On `@demlik/tea/resilience`, `DeadlineConfig`
+  is `with-deadline`'s, the consumer-facing wrapper's knob; `resilient-call`'s is
+  carried through as `ResilientCallDeadlineConfig`. Both are reachable.
+
+  `@demlik/tea/idempotency` and `@demlik/tea/work-queue` were published before and
+  closed by the v0.13.0 sweep. They are open again at `battery`, re-exporting the
+  same modules from their in-tree home.
+
+  Reference pages are generated for all seven. The generator now follows a
+  re-export to the declaration it names, so a symbol one door carries from another
+  module's declaration renders its real kind and summary instead of an empty
+  `Reference` row.
+
+- 5ca5dbe: The composed-flow families move inside the package (ADR 0015, ADR 0016). Eleven battery
+  subpaths leave `exports`; every primitive they published still exists, under
+  `src/internal/{timing,paginate,idempotency,work-queue}/`, and is no longer importable from
+  outside the package. `debounce`, `throttle` and `throttled-input` stay three separate
+  modules (ADR 0010's no-collapse verdict); only their doors close.
+
+  | Removed door                      | Internal home                                  |
+  | --------------------------------- | ---------------------------------------------- |
+  | `@demlik/tea/debounce`            | `src/internal/timing/debounce`                 |
+  | `@demlik/tea/throttle`            | `src/internal/timing/throttle`                 |
+  | `@demlik/tea/throttled-input`     | `src/internal/timing/throttled-input`          |
+  | `@demlik/tea/paginator`           | `src/internal/paginate/paginator`              |
+  | `@demlik/tea/paginated-walk`      | `src/internal/paginate/paginated-walk`         |
+  | `@demlik/tea/idempotency`         | `src/internal/idempotency/idempotency`         |
+  | `@demlik/tea/idempotency/adapter` | `src/internal/idempotency/idempotency/adapter` |
+  | `@demlik/tea/idempotent-intake`   | `src/internal/idempotency/idempotent-intake`   |
+  | `@demlik/tea/work-queue`          | `src/internal/work-queue`                      |
+  | `@demlik/tea/work-queue/ops`      | `src/internal/work-queue/ops`                  |
+  | `@demlik/tea/work-queue/adapter`  | `src/internal/work-queue/adapter`              |
+
+  `idempotent-intake`'s two Cmds — `intake:process`, `intake:replay` — are now built by
+  `Cmd.define` constructors (`intakeProcessDef<P>()`, `intakeReplayDef<R>()`), so each carries
+  its input shape as a type. The emitted records are unchanged; a replay log written before
+  this release folds identically. The other moved modules emit no Cmds of their own.
+
+  `docs/reference/work-queue.md` goes with its door.
+
+- 447c3f9: `defineAgent(cfg)` grows `.with({ interpret })`, so one unusual requirement costs one
+  interpret cell instead of a rebuild under `createAgent`.
+
+  The gap it closes is the ramp: three intents on one side, fourteen fields on the other, and
+  nothing in between. `.with` wraps a NAMED cell of the machine the lid already built and
+  returns another defined agent — `run`, `machine`, `with` again — so the agent it was called
+  on is unchanged and every cell the overlay does not name is carried over by reference.
+
+  ```ts
+  const queued = defineAgent({ model, tools: [fetchRate], instructions }).with({
+    interpret: {
+      fetch_rate: (next) => async (cmd, ctx, dispatch) =>
+        inTurn(() => next(cmd, ctx, dispatch)),
+    },
+  });
+  ```
+
+  The wrapped cell settles through the SAME typed Cmd→Msg edge as the cell it wraps: `next`
+  resolves the `Cmd.define`d `<tool>_ok` / `<tool>_err` Msg carrying the call's own `callId`,
+  and returning it unchanged is what keeps the fold — and a replay of the wrapped run —
+  identical to the unwrapped run's. That is the door's whole contract: it is one over the
+  effect boundary, never over the fold. A cell that must settle differently is a different
+  machine, and `createAgent` is still where you build one.
+
+  `with` composes, later call outermost (`a.with(x).with(y)` enters `y` first). Naming a cell
+  the machine has none of throws at `machine(input)` — where the table to check the name
+  against exists — listing the cells it does have.
+
+  Additive: an agent that never calls `with` builds the same machine, from the same cells, as
+  before. New types beside it: `DefinedAgentMsg`, `DefinedAgentCmd`, `DefinedAgentInterpret`,
+  `InterpretOverlay`, `DefinedAgentOverlay`.
+
+- 45f5d5d: `defineAgent({ model, tools, instructions })` on `@demlik/tea/agent` (experimental tier) —
+  the lid over `createAgent`. Three intents in, `{ run(input), machine(input) }` out: the
+  single-stage wiring (`stages`, `turnOf`, `schemas`) is defaulted, the tool cells derive from
+  `toolRouter`, the prompt renders off the Model, and the drive loop is `driveToDone`. It hides
+  wiring, never state (ADR 0015): the Model has the same slice keys as a hand-wired
+  `createAgent` machine, and `machine(input)` feeds the raw `run`.
+
+  `instructions` is durable. `AgentState` gains an `instructions: string | null` slot on both
+  paths, set at `init` from the new `createAgent` config field of the same name and never
+  touched by a compaction fold, so a replay reproduces the exact prompt that ran and a
+  rehydrated run keeps the prompt it started with (ADR 0004). `payloadOf` receives it as a
+  third argument. A Model persisted before the slot existed rehydrates with `null`.
+
+- f91388e: `defineMachine` names Model and Msg once, as values, under a new `types` option — no type
+  arguments, no hand-spelled `Settled<typeof cmd>` union, no separate `Reducer<…>` annotation.
+
+  ```ts
+  const machine = defineMachine({
+    types: { model: {} as Model, msg: {} as Msg },
+    cmds: [lookup, audit],
+    init: (loaded) => [loaded ?? initial, []],
+    update: {
+      go: (m, msg) => …,
+      lookup_ok: (m, msg) => …, // settled cells inferred from `cmds`
+      …
+    },
+    interpret: { lookup: settle(lookup, async (cmd, ctx) => …) },
+  });
+  ```
+
+  `S` and `M` come from `types`; `C` and the settled half of `M` from `cmds`; each interpret
+  handler's `ctx` from its own Cmd's `requirements`. `run(machine, { ctx })` demands exactly what
+  it demanded before.
+
+  **Migration.** The five-slot explicit-generic form still compiles and is not deprecated in this
+  release, so nothing breaks. To move a call site:
+
+  ```diff
+  -defineMachine<Model, Msg, typeof lookup, never, NoCtx>({
+  +defineMachine({
+  +  types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
+     cmds: [lookup],
+  ```
+
+  `cmd` and `sub` under `types` carry a hand-written Cmd / Sub union — the slots `cmds` and
+  `subscriptions` cannot imply. Drop the slot entirely where the old call passed `never`.
+
+  One shape needs a nudge: a **zero-parameter** function returning a fresh discriminated literal
+  (`init: () => [{ type: "idle" }, []]`, `interpret: { x: async () => ({ type: "done" }) }`) is
+  checked before the type parameters are fixed, so `"idle"` widens to `string`. Name the parameter
+  you are ignoring — `init: (_loaded) => …` — and it narrows again.
+
+  `Settled`, `Reducer`, `Transitions` and `NoCtx` stay exported for a reducer split into its own
+  file.
+
+- 32a296b: `driveToDone(handle, start, isTerminal, { failed? })` runs a machine from its
+  start Msg to its terminal State in one call and stops the runtime on every exit.
+
+  It replaces the six-step loop every "run this machine to done" caller
+  hand-wired — `await ready`, `observe`, park a promise, `dispatch(start)`,
+  `getState()`, `stop()` — whose two quiet failure modes were an observer left
+  attached and a `stop` never awaited. The observer is detached and `stop()`
+  awaited whether the drive resolves or rejects.
+
+  Rejections are typed. A final State the caller's `failed` predicate marks
+  rejects with the new `DriveFailedError<S>`, the State riding on `error.state`.
+  A machine that never settles rejects with the existing `QuiescenceTimeoutError`
+  from the cap `dispatch` already enforces — no second clock.
+
+- f2fceb0: **Breaking:** two dead `@deprecated` aliases are removed outright (ADR 0016).
+
+  - `diff` under `./parity` — use `parityEqual`. Same function, the
+    non-inverted name: it returns `true` when the two values are equal.
+  - `ContextFree` under `./pure` and the root — use `NoCtx`. Same type, the
+    one name for the context-free-ctx marker.
+
+  Neither had an in-tree use; both existed only to wait out a minor.
+
+- e9e4111: A `Store` can now refuse a second live writer. Two runtimes pointed at one
+  `agent.json` both drove the same run to done — `save` was unconditional, so the
+  last writer won and neither could learn it had raced.
+
+  New on the root subpath: `FencedStore<S>`, an optional widening of `Store<S>`
+  that adds `fenced: true`, `loadFenced()` (bytes plus the version they were
+  written at) and `saveFenced(state, expectedVersion)` (compare-and-swap);
+  `isFencedStore`; and `StoreConflictError` (`_tag: "store_conflict"`), thrown when
+  a swap finds a version other than the one it expected. `run` and
+  `defineAgent().run` fence automatically when handed a fenced store: they read the
+  version at boot and swap on every save. A run started after another has moved the
+  version reads the current one, so the newer starter takes the fence and the older
+  live writer is refused at its next save — having already fired the effects it
+  reached by then. Only the boot race, where both processes read one version before
+  either wrote, is refused before a single effect fires. Fencing buys at most one
+  live writer from here on, not a guarantee that the loser never ran.
+
+  `Store<S>` itself is unchanged and no implementor breaks. Fencing is opt-in per
+  store for all of 0.x — `fileStore(path, parse, { fenced: true })` (version stamp
+  guarded by a `wx` lock), `doStore(storage, parse, { fenced: true })` (inside
+  `storage.transaction`), `memoryStore(initial, parse, { fenced: true })`. The
+  unfenced call is byte-for-byte the old behaviour. `chromeStorageStore` stays
+  unfenced deliberately: `chrome.storage` has no atomic compare-and-swap.
+
+  See [ADR 0017](../.decisions/0017-fencing-is-an-optional-store-widening.md).
+
+- 7159a87: A resource can have a lifetime that spans a run. `provide({ … })` builds the
+  `ctx` object `run` already takes, from a graph of providers with `acquire` and
+  `release`, and `run` accepts it in place of the object:
+
+  ```ts
+  const scoped = provide({
+    config: value({ url: process.env.DATABASE_URL ?? "" }),
+    db: layer(
+      ["config"],
+      ({ config }: { config: { url: string } }) => connect(config.url),
+      (db) => db.close()
+    ),
+  });
+
+  await driveToDone(run(machine, { ctx: scoped, store }), start, isDone);
+  ```
+
+  The contract is Effect's `Layer` + `Scope`, copied point for point rather than
+  invented: acquired once per run in dependency order and memoized, so a provider
+  two others depend on is acquired exactly once; released in reverse acquisition
+  order, exactly once, on every terminal — done, failed and cancelled all funnel
+  through `stop()`. A `release` that throws does not stop its siblings and is
+  reported to `onError` under `phase: "provide"` with the provider's key on
+  `context.provider`.
+
+  An `acquire` that fails releases what it had already acquired, in reverse, and
+  surfaces as a typed `ProvideFailedError` naming the provider — it rejects
+  `ready`, never escaping `run` as an uncaught throw.
+
+  This is what a Cmd's `R` channel always meant. A `Cmd` is journaled data and a
+  provider is a closure, so the Cmd can only ever carry the requirement — the
+  graph that satisfies it lives in the host. The journal is unchanged: a run on a
+  `provide` graph writes byte-identical bytes to the same run on a hand-built
+  `ctx`, and replay, being a fold over Msgs, never calls an `acquire`.
+
+  Works the same under `/node`, `/do` and `/mem` — those are `Store` adapters and
+  this is the `ctx` seam all three share. `defineAgent`'s run options take the
+  same widening, so an agent's tools get scoped resources too.
+
+- 8609e71: `@demlik/tea/jev` is open — one new subpath at `battery` tier, over three
+  modules:
+
+  | Module           | What it is                                                                                                                           |
+  | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+  | `protocol`       | TypeSafe Jev's wire contract as types plus two pure functions, `parseAnswers` and `classifyStatus`. No I/O.                          |
+  | `ask`            | One Cmd over `resilient-call` that issues the call, with the HTTP caller injected as a `JevPort` and a pure `JevFallback` behind it. |
+  | `classify-batch` | A stream of items turned into Jev calls by wiring `batch-window`, `fan-out` and the TTL `cache` around `ask`.                        |
+
+  A Jev call is a map of questions you name, and an answer comes back under each
+  name. The point of typing it is that a `choice` question's `criteria` keys ARE
+  its answer's `choice` domain — write the rubric once and the narrowing is free
+  at the call site:
+
+  ```ts
+  import { createJevAsk, jevQuestions } from "@demlik/tea/jev";
+
+  const questions = jevQuestions({
+    category: {
+      type: "choice",
+      instructions: "Which budget line is this?",
+      criteria: { groceries: "Supermarkets", dining: "Restaurants" },
+    },
+  });
+  // answers.category.choice : "groceries" | "dining"
+  ```
+
+  The door owns no API key: whoever builds the `JevPort` adapter owns the
+  `Authorization` header, and a scripted test fake satisfies the same type — which
+  is what makes a Jev-backed machine replayable.
+
+  `battery` means this may break in a minor, before and after 1.0, provided the
+  changelog for that minor says so. It is the honest tier here for a second
+  reason: the door speaks a third-party wire contract, and a break upstream is a
+  break here.
+
+  The door is a re-export file over `src/internal/jev/`; nothing moved and nothing
+  was renamed to open it. `docs/reference/jev.md` is generated with the rest, and
+  [Ask Jev a typed question](https://github.com/kamp-us/demlik/blob/main/docs/how-to/ask-jev-a-typed-question.md)
+  wires a small machine end to end.
+
+- e1d1d1a: Refusals name the accepted set, and `acceptedTypes(machine, state)` lets a caller ask first.
+
+  A refusal used to carry `msgType` and `stateName` — what was refused and where — but not what the
+  state would have taken, so learning that a state accepts nothing at all cost one dispatch per Msg
+  type. `NoCellError` now also carries `acceptedTypes: readonly string[]`, read at the moment
+  `lookupCell` makes the selection and the row is in hand, and the message states it: the accepted
+  types when there are any, and "this state accepts no Msg at all" when there are none. The empty
+  case is the one a caller acting on a possibly-final state most needs, so it is words rather than an
+  empty pair of brackets.
+
+  `acceptedTypes(machine, state)` answers the same question before anything is dispatched — the
+  transitions form from the state's own row, the reducer form from the flat table's keys, an empty
+  array for a state with no cells. `lookupCell`'s miss arm calls that same function, so asking first
+  and dispatching-and-catching cannot be told different things about one `(machine, state)` pair; a
+  property test asserts it over ragged tables in both forms. It sits beside `acceptsOf`, which
+  answers about a `state.type` a tool already named rather than the state value a caller is holding.
+
+  **Breaking for direct constructors only:** `new NoCellError(msgType, stateName)` now takes a third
+  argument, `acceptedTypes`. Every in-package construction site passes it; a caller that only catches
+  and reads the error is unaffected.
+
+- c596afd: A transitions cell is optional: a missing cell declares that the state does not accept that message.
+
+  `Transitions<S, M, C>` required every (state.type × msg.type) cell, so a machine could not say "in
+  this state, only these messages are valid". A 6-state, 9-message machine was 54 cells, most of them
+  `(s) => [s, []]`, and `acceptedTypes(machine, state)` had to report every message type for every
+  state — truthfully, and uselessly for a panel deciding which buttons to light, a test asserting a
+  phase's surface, or an agent driver deciding what to dispatch. The phase check moved into the cell
+  as an `if (m.phase !== "paying") return [m, []]`, where a considered refusal and an unfinished case
+  read identically.
+
+  Cells are now optional, the way a statechart's `on` block lists the events a state handles and
+  XState treats an unlisted event as no transition. What tea does differently is stay loud
+  (ADR 0011): the runtime half already existed, so dispatching a message with no cell raises
+  `NoCellError` naming the accepted set, and `tryApplyCell` returns that refusal as data. Nothing is
+  silently ignored.
+
+  The **row** stays required. Adding a member to your State union is still a compile-time obligation
+  to say what that phase does; a phase that accepts nothing writes the empty row `{}` and means it.
+
+  `ExhaustiveTransitions<S, M, C>` is the old floor, opt-in per machine — the same table with every
+  cell required. Annotate your table with it and hand it to `defineMachine` unchanged; it is an
+  annotation, not a third update form.
+
+  The new explanation page [Which update form, and what a missing cell
+  means](https://github.com/kamp-us/demlik/blob/main/docs/explanation/pick-an-update-form.md) covers
+  the choice and what the absence promises.
+
+  **Migration: none.** An existing full table typechecks unchanged — optional cells only widen what
+  is accepted. The reducer form is untouched; it remains the form for machines with no state
+  discriminant.
+
+- e3a8aa8: `tool()` grows `timeoutMs` and `retry`, so a `defineAgent` user can bound or retry one
+  flaky tool without reaching down to `createAgent`.
+
+  Both run in the reducer, through the same `resilient-call` family the brain call already
+  uses, so the ladder is DATA on the durable Model rather than control flow inside the
+  handler: a waiting retry is a `waiting_retry` phase with its timer armed as a
+  subscription, and a process killed between two attempts resumes on the attempt it was on
+  instead of refilling the budget. That is the property the only previously reachable
+  recourse — a `Promise.race` or a `for` loop inside the handler — cannot have, because it
+  lives inside the effect boundary.
+
+  ```ts
+  const fetchRate = tool(
+    "fetch_rate",
+    {
+      description: "Fetch today's exchange rate",
+      input: z.object({ pair: z.string() }),
+      ok: z.object({ rate: z.number() }),
+      err: ["upstream"],
+      timeoutMs: 5_000,
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 5_000,
+        jitter: "full",
+        maxAttempts: 3,
+      },
+    },
+    handler
+  );
+  ```
+
+  A spent budget settles as `{ kind: "error", reason: 'retry_exhausted {"attempts":3,"last":"upstream"}' }`
+  and an elapsed one as `{ kind: "error", reason: "timeout" }` — the same `ToolOutcome`
+  shape every other tool failure already has, so an adapter that renders one renders these.
+  Absorbed attempts never reach the conversation.
+
+  Additive on every surface. A tool that declares neither field mints no slice entry, arms
+  no timer, and behaves exactly as before. Two things are new beside the spec fields: the
+  `AgentState.toolResilience` slice (`{}` for an agent that uses no knob) and the
+  `AgentConfigCore.toolResilienceOf` seam a hand-wired `createAgent` fills, which
+  `toolRouter` now serves as `resilienceOf`.
+
+  `timeoutMs` is the whole call's budget, not one attempt's — measured from the first
+  attempt, and a retry does not restart it. It does not cancel the handler either: a promise
+  cannot be cancelled in JavaScript, so the call is over at the budget and the loop moves on
+  while the attempt runs to its own end, folding nothing when it settles late.
+
+- 78bf096: The persistence / observability modules and the agent-side leaves move inside the package
+  (ADR 0015, ADR 0016). Six subpaths leave `exports`; every primitive they published still
+  exists under `src/internal/`, and none of them is importable from outside the package.
+
+  | Removed door               | New home                                |
+  | -------------------------- | --------------------------------------- |
+  | `@demlik/tea/recorder`     | `src/internal/persistence/recorder`     |
+  | `@demlik/tea/snapshot`     | `src/internal/persistence/snapshot`     |
+  | `@demlik/tea/trace-replay` | `src/internal/persistence/trace-replay` |
+  | `@demlik/tea/journal`      | `src/internal/journal`                  |
+  | `@demlik/tea/prediction`   | `src/internal/prediction`               |
+  | `@demlik/tea/llm-call`     | `src/internal/llm-call`                 |
+
+  **`@demlik/tea/machine-viz` stays where it is.** It is a `stable` subpath with real external
+  callsites, and ADR 0016 (as amended by #83) keeps such a part on its own bare door rather than
+  folding it into a grouped one — the same shape `@demlik/tea/retry-backoff` takes. `toMermaid`,
+  `MachineVizOptions`, `safeId` and `safeLabel` are unchanged, and nothing about that door moves.
+
+  `fileJournal` stays on `@demlik/tea/node` and the prediction ack primitive (`ack`, `initAck`,
+  `NO_ACK`, `nextSeq`, `partitionByAck`, `reconcile`, `tagSeq`, and their types) stays on
+  `@demlik/tea/pure`; those were always the public route, and only the mechanism-named doors
+  behind them close. `@demlik/tea/agent` keeps re-exporting the `llm-call` types it did.
+
+  `snapshot`'s two Cmds — `snapshot_write`, `snapshot_load` — are now built by `Cmd.define`
+  constructors (`snapshotWriteDef<V>()`, `snapshotLoad`), so each carries its input shape as a
+  type. The emitted records are unchanged; a checkpoint log written before this release folds
+  identically. The other moved modules emit no Cmds of their own.
+
+  `docs/reference/llm-call.md` goes with its door.
+
+- 2353649: `createAgent` and `createLlmCall` take a plain function as the model.
+
+  `model: async (messages) => turn` is now the common path where the
+  `(modelId) => Llm` factory was required. The returned turn is validated
+  through the purpose's schema (`agentTurnSchema` for the plain agent case),
+  so a malformed answer surfaces as the run's `llm` failure exactly as a
+  structured-output mismatch does — data on the settle Msg, never a throw
+  out of the handler. The factory, and `withStructuredOutput(schema)` on it,
+  stays the advanced form for a model that binds the schema itself.
+
+  A bare `async` function is read as the plain port by its `AsyncFunction`
+  tag; a sync function that returns a promise (`(m) => client.chat(m)`) goes
+  through the exported `plainModel(fn)` to lift it into the factory shape.
+  Passed bare, such a function is refused on its first call with an `LlmErr`
+  whose `reason` is `PLAIN_MODEL_MISROUTE_REASON` — it names `plainModel(fn)`
+  as the fix, and never reaches `withStructuredOutput`. `ModelPort` names the
+  union, `PlainModel` the plain member. All under `./agent` and `./llm-call`,
+  experimental tier.
+
+- 311f8d7: **Thirteen doors.** The export map is the contract, and it had grown to sixty-odd subpaths — most
+  of them a convenience for one caller that became a permanent semver promise the moment it
+  published. It now carries exactly the public doors: `@demlik/tea`, `/do`, `/node`, `/mem`,
+  `/react`, `/extension`, `/testing`, `/pbt`, `/agent`, `/retry-backoff`, `/devtools`,
+  `/machine-viz` and `/parity`, plus `/package.json` and `/devtools/styles.css` (the asset stays
+  with its door). A test pins the list, so a fourteenth door is now a decision made in the diff
+  that adds it rather than a thing that happens.
+
+  Nothing was dropped — the sub-doors folded into their parents as named exports, and every symbol
+  they published is still exported, from one specifier up:
+
+  - `@demlik/tea/pure` → `@demlik/tea`. The runtime-free surface (`Machine`, `Cmd`, `foldMsgs`,
+    `applyCellChecked`, the prediction/ack helpers, …) is on the root door. The runtime-free
+    _guarantee_ is unchanged and still enforced in-tree: nothing under `src/pure/` may import the
+    runtime.
+  - `@demlik/tea/subs` → `@demlik/tea`. `fromInterval`, `fromTimeout`, `fromEventTarget`,
+    `fromEventSource`, `fromBroadcastChannel`, `fromPort`, `fromWebSocket`,
+    `fromReconnectingWebSocket`, `defineListener`, `managedResource` and the transport types.
+  - `@demlik/tea/extension/react` → `@demlik/tea/extension`. `useBackgroundRuntime`,
+    `createBackgroundRuntimeContext` and their option/result types. The background service worker
+    stays React-free: the re-export is side-effect-free, so a bundle that names no hook shakes React
+    out.
+  - `@demlik/tea/extension/subs` → `@demlik/tea/extension`. `fromChromeAlarm` and the other
+    chrome-event Sub factories.
+  - `@demlik/tea/extension/test-utils` → `@demlik/tea/extension`. `fakeChrome` / `FakeChrome`.
+  - `@demlik/tea/pbt/arbitraries` → `@demlik/tea/pbt`. `arbMsg`, `arbMsgSequence`,
+    `arbConstantMsg`, `arbGuidedSequence`, `arbRecordMsg`, `stubCtxThrowingProxy`,
+    `MsgArbitraryTable`.
+  - `@demlik/tea/pbt/runners` → `@demlik/tea/pbt`. `propertyInvariant`, `propertyTerminates`,
+    `propertyTrace`, `foldEvents`, `Step`.
+
+  Migration is one edit per import: drop the sub-path, keep the names.
+
+- dd24db6: **BREAKING (experimental tier): the `chart` family is removed.** Nine subpaths are gone from the
+  export map:
+
+  - `@demlik/tea/chart`
+  - `@demlik/tea/chart/inspect`
+  - `@demlik/tea/chart/inspect/react`
+  - `@demlik/tea/chart/inspect/styles.css`
+  - `@demlik/tea/chart/report`
+  - `@demlik/tea/chart/lane`
+  - `@demlik/tea/chart/lane/react`
+  - `@demlik/tea/chart/lane/styles.css`
+  - `@demlik/tea/chart/lane/server`
+
+  All nine carried the `experimental` tier in `MAINTAINING.md`, which is why this is a `minor` and
+  not a `major`.
+
+  **There is no replacement and no migration path.** Chart authored a machine as config and drew a
+  fabrika lane; neither belongs in a state-machine substrate. The kernel (`defineMachine`, `run`,
+  `replay`) and `@demlik/tea/machine-viz` are unaffected — nothing outside `src/chart/` imported it.
+
+  **Last version that ships it: `0.13.0`.** The last commit carrying `src/chart/` is
+  `78bf0966` (`git show 78bf0966` restores any of it). Git history is the archive; the code was not
+  extracted to another package.
+
+  **Known affected consumer:** `kamp-us/phoenix` imports `@demlik/tea/chart/lane/server` and will
+  break on the next release. Pin `@demlik/tea@0.13.0` or vendor the module from the commit above.
+  Migrating phoenix is tracked separately.
+
+- 933f624: `Cmd.define`'s `R` channel is declared with `requirements`, not `needs` — one word per concept,
+  and it is Effect's ("Requirements"). `deps` keeps its own meaning on `layer`: the edges between
+  providers in the host-side graph. No alias — the field never shipped (ADR 0014 amendment #189).
+
+  Migration: rename `needs` → `requirements`, `Cmd.needs<R>()` → `Cmd.requirements<R>()`, and
+  `NeedsOf<C>` → `RequirementsOf<C>`. `RequiredCtx<C>` is unchanged.
+
+- c289944: The resilience family moves inside the package (ADR 0015, ADR 0016). Eleven battery
+  subpaths leave `exports`; every primitive they published still exists, under
+  `src/internal/resilience/`, and is no longer importable from outside the package. Only
+  `@demlik/tea/retry-backoff` remains public in this family — Binclusive imports it — and it is
+  unchanged.
+
+  | Removed door                   | Internal home                              |
+  | ------------------------------ | ------------------------------------------ |
+  | `@demlik/tea/resilient-call`   | `src/internal/resilience/resilient-call`   |
+  | `@demlik/tea/with-resilience`  | `src/internal/resilience/with-resilience`  |
+  | `@demlik/tea/authed-call`      | `src/internal/resilience/authed-call`      |
+  | `@demlik/tea/cache`            | `src/internal/resilience/cache`            |
+  | `@demlik/tea/circuit-breaker`  | `src/internal/resilience/circuit-breaker`  |
+  | `@demlik/tea/deadline`         | `src/internal/resilience/deadline`         |
+  | `@demlik/tea/rate-limit`       | `src/internal/resilience/rate-limit`       |
+  | `@demlik/tea/retry-to-success` | `src/internal/resilience/retry-to-success` |
+  | `@demlik/tea/token-refresh`    | `src/internal/resilience/token-refresh`    |
+  | `@demlik/tea/with-deadline`    | `src/internal/resilience/with-deadline`    |
+  | `@demlik/tea/with-telemetry`   | `src/internal/resilience/with-telemetry`   |
+
+  The `@deprecated` stamp on `resilient-call` goes with its door: the module is
+  `with-resilience`'s implementation and stays, internal.
+
+  Every Cmd these modules emit is now built by a `Cmd.define` constructor — `resilient_run`,
+  `$resilience:run`, `$deadline:decision`, `$telemetry:emit`, `refresh_token` — so each carries
+  its input schema, result schema and failure tags as types. The emitted records are unchanged;
+  a replay log written before this release folds identically.
+
+- 0271b0d: `AgentStatus` on `@demlik/tea/agent` (experimental tier) gains an `idle` member, and `status(s)`
+  returns `{ kind: "idle" }` for a Model whose `run.phase === "idle"` — the slice straight out of
+  `init`, before any `agent_start`. Previously such a Model fell through to `running`, so a caller
+  deciding "start or resume" off `status` booted a run that had not begun, and a DO host reading a
+  hydrated-but-unstarted Model reported it live. A `stale` run still reads `running`; `failed`,
+  `done` and `suspended` are unchanged. An exhaustive `switch` over `status(s).kind` now needs an
+  `idle` arm.
+- 8f36bcc: A second, optional model port shape on `@demlik/tea/agent` —
+  `async (messages, { onChunk }) => turn`. `defineAgent` takes one `model` field for
+  both shapes and tells them apart by arity (`isStreamingModel`), so a plain
+  `async (messages) => turn` brain is still invoked with exactly one argument and
+  nothing about an existing agent moves. New vocabulary: `TurnChunk`,
+  `ModelStream`, `StreamingModel`, `DefinedAgentModel`, `isStreamingModel`.
+
+  The deltas leave through a new `onChunk` run option, contained the way `onEvent`
+  is — a throwing listener is warned about, never allowed to reject the model call
+  it fired from.
+
+  Streaming is a side channel, never state. A chunk is not journaled, not written
+  to the `Store` and never folded into the Model, so the turn a streamed run
+  settles is identical to the one a plain model would have settled, a replay
+  reproduces that Model with no chunk in the journal, and a resume re-emits no
+  delta of a turn that already settled.
+
+- 5aa1c6a: A tool failure on `@demlik/tea/agent` (experimental tier) keeps its tag. `ToolOutcome`'s error
+  arm now carries the `{ _tag, …payload }` the tool failed with, spread beside the `reason` string
+  it always carried, so the failure the model reads as prose is the same failure host code can
+  branch on. `toolErrorReason` and the `reason` it renders are unchanged — this is additive (#115).
+
+  - `ToolFailure` — the stored error arm, `{ kind: "error", reason, _tag? }`. `_tag` is optional
+    for one reason: a run persisted by 0.12.x was written before the tag was kept, so a `Store` can
+    hand back a failure that has none. Every failure this version mints carries one.
+  - `ToolError<T>` / `ToolFailureOf<T>` / `TaggedFailure<E>` — the failure union a router over `T`
+    can settle with, and that union distributed over `{ kind, reason }`. Declared tags, `thrown`,
+    the kernel's `malformed_result`, the router's `unknown_tool` / `malformed_args`, and the
+    ladder's `timeout` / `retry_exhausted` (`ToolResilienceError`, new here: `ToolTimedOut` and
+    `ToolRetryExhausted`).
+  - `DefineAgentConfig.onToolError(outcome, ctx)` — optional, with `outcome` typed against this
+    agent's own tools: a `switch` on `_tag` narrows the payload and an unhandled failure mode is a
+    compile error. It fires once per failed CALL, and the two seams it fires from split on whether
+    the tool declared `timeoutMs` / `retry`: a tool that declared neither is announced at the
+    interpret boundary, before the fold and awaited there; a tool that declared either is announced
+    off the fold, because its ending is minted by the reducer rather than by a handler and its
+    absorbed attempts are failures the run did not produce. It is not re-fired on resume for an
+    outcome already folded, and a throw is contained and warned like `onEvent`'s. `ToolErrorContext`
+    is its second argument — the `callId` and the tool `name` the model asked for.
+
+  `AgentVerbs.toolErr` now takes `string | ToolFailure`: a bare `reason` still settles an untagged
+  failure exactly as it did, and a whole `ToolFailure` keeps the tag through the fold.
+
+  Router-minted and ladder-minted failures carry their tag the same way, and `kind` / `reason` are
+  written last, so a payload field of either name can never shadow the discriminant or the model's
+  channel. Code that
+  reads `outcome.reason` or discriminates on `outcome.kind` is unaffected.
+
+- e04944e: `tool()` takes a required `description` — the model-facing sentence a provider adapter declares
+  to the model beside the schema (Anthropic `description`, OpenAI `function.description`) — and
+  surfaces it as `description: string` on `ToolDef` / `AnyToolDef` (experimental tier, #91). An
+  adapter reads `t.description`, never a `.describe()` off the `input` schema: that one describes
+  the arguments object and lands inside the emitted JSON schema, a different field on every wire
+  format.
+- d76da43: `tool()` on `@demlik/tea/agent` (experimental tier) hands its handler both settle constructors.
+  The third argument is now `{ ok, fail }` instead of the bare `fail`, so a handler writes
+  `ok(value)` for the success arm and never imports `better-result` itself — under pnpm's strict
+  `node_modules` that transitive import did not resolve, and the tutorial's install line had grown a
+  fourth package (#94).
+
+  - `ToolOk<Ok, E>` — `ok(value)`, with `Ok` fixed to what the `ok` schema parses.
+  - `ToolConstructors<Ok, E>` — the `{ ok, fail }` pair, the handler's third parameter.
+  - `ToolHandler` is `(args, ctx, { ok, fail }) => Promise<Result<Ok, E>>`. A handler written
+    against the positional `fail` reads `fail` as the pair now and does not compile; destructure
+    it: `async (args, ctx, { ok, fail }) => …`.
+
+- 0b14c96: `tool()` + `toolRouter()` on `@demlik/tea/agent` (experimental tier). Declare a tool once and
+  derive what a consumer used to hand-write twice — the `toolOf` mapping and the interpret cell.
+
+  - `tool(name, { input, ok, err, requirements }, handler)` — one colocated value built on `Cmd.define`
+    (#44). The Cmd's input is the model's call `{ callId, args }` with `args` parsed against
+    `input`; the handler returns `Result<Ok, E>` over the declared `_tag` union (an undeclared tag
+    is a compile error) and reads the `requirements` slice off its ctx, demanded at `run`. The cell
+    settles through the minted `<name>_ok` / `<name>_err`: a thrown handler becomes `_err`
+    (`{ _tag: "thrown", message }`, or the thrown `_tag` when it is a declared one), never a
+    rejection; an `_ok` value the `ok` schema rejects becomes the kernel's `malformed_result`.
+  - `toolRouter([...tools])` — `toolOf` (total: an unknown name or args failing the schema ride a
+    `tool_rejected` Cmd that settles as an error the model sees), the `interpret` table, the `defs`
+    for `Machine.cmds`, and `outcomeOf` for reading a settled tool off its Msg.
+  - `createAgent(...).toMachine({ tools })` — merges the router's cells, folds its `<name>_ok` /
+    `<name>_err` into the conversation, and takes the tool Cmds off the `toolInterpret`
+    obligation. `agentEvents({ tools })` projects those settles to `ToolSettled`. Both are
+    additive: with no router every existing config and `toolInterpret` compiles unchanged.
+
+- 989e607: Typed effect channels on Cmd constructors (ADR 0014). Additive kernel types — every existing
+  `Cmd<A>`, battery Cmd union and machine compiles unchanged.
+
+  - `Cmd<T, E, R>` — `E` (the `_tag` union a Cmd can settle with) and `R` (the `Ctx` slice its
+    handler needs) ride as phantom type parameters; the runtime value stays `{ type }`.
+  - `Cmd.define(name, { input, ok, err, requirements })` — the typed constructor. Returns the Cmd builder
+    (`fetch({ url })` → `{ type: "fetch", url }`) carrying `ok(cmd, value)` / `err(cmd, error)`
+    Msg builders and the declaration; `Settled<typeof fetch>` is its `fetch_ok` / `fetch_err`
+    Msg union. `Cmd.requirements<R>()` names the `R` slice. `input` / `ok` are zod schemas — `zod` is
+    now a runtime dependency.
+  - `defineMachine({ cmds: [fetch], … })` derives the machine's Cmd union and the settled half of
+    its `M` from the constructors; the reducer must carry the `_ok` / `_err` cells without the
+    user naming them in `Msg`.
+  - `run` types `ctx` as `Ctx & RequiredCtx<C>` — a ctx missing a key any Cmd's `R` names is a
+    compile error. `useMachine` and `agentHost` thread the same demand. An
+    `Interpret` cell's `ctx` carries its own Cmd's `R`.
+  - Boundary enforcement: a handler's `_ok` value is parsed against the `ok` schema at the
+    interpret edge; a value that fails becomes the minted `_err` carrying
+    `{ _tag: "malformed_result", issues }` and never reaches Model. The parsed (stripped) value
+    is what lands. `run({ clock })` stamps `at` on every settled Msg (default `Date.now`).
+  - `settle(def, work)` — `tryInterpret`'s successor for a typed Cmd: `work` returns
+    `Result<Ok, E>` with both channels inferred from the def; the helper maps the arms onto the
+    minted Msgs. `Interpret` keeps returning `Promise<M | void>`.
+
+- 131a416: `provide`: a misspelled dependency is now a compile error, not a boot-time throw.
+
+  `Provider` gains a third type parameter — the dependency NAME set — and `provide` binds it to
+  `keyof M`. Following Effect's `Layer<ROut, E, RIn>`, where requirements are a type parameter and a
+  graph that does not satisfy them is refused by the compiler:
+
+  ```ts
+  provide({
+    config: value({ url: "postgres://x" }),
+    // Was: compiled, then threw `UnknownProviderError` at `open()`.
+    // Now:  does not compile — "confg" is not a key of this map.
+    db: layer(["confg"], (deps: { config: Config }) =>
+      connect(deps.config.url)
+    ),
+  });
+  ```
+
+  `UnknownProviderError` stays, for the untyped path only — a cast map, one assembled at runtime,
+  one read back through an erased `Provider<unknown, …>` — where there is no key set to check
+  against.
+
+  Minor rather than patch because the tightening rejects code that used to compile. `layer`, `value`
+  and the acquisition order they produce are unchanged, and a graph built through them needs no edit.
+
+  **What breaks: an explicit `Provider` ANNOTATION.** `K` defaults to `string`, so `readonly
+string[]` no longer fits the `readonly (keyof M)[]` the map wants — including a leaf provider whose
+  `deps` is `[]`, because the annotation's default is what is compared, not the value:
+
+  ```ts
+  // Was: compiled. Now: TS2322 — `string` is not assignable to `"config" | "db"`.
+  const config: Provider<Config> = { deps: [], acquire: () => ({ url: "postgres://x" }) };
+  const db: Provider<string, { config: Config }> = { deps: ["config"], acquire: (d) => connect(d.config.url) };
+
+  // Fix, either: name the key set…
+  const db: Provider<string, { config: Config }, "config" | "db"> = { … };
+  // …or drop the annotation and let the constructors infer it (preferred).
+  const db = layer(["config"], (d: { config: Config }) => connect(d.config.url));
+  ```
+
+### Patch Changes
+
+- 0991b24: `acceptedTypes` keeps its "never throws" promise, and reports only cells a dispatch would accept.
+
+  Two ways the helper disagreed with the refusal path it is supposed to be one reading with. Under
+  the transitions form it dereferenced `state.type` unguarded, so a caller trusting the documented
+  "never throws" and asking about a pre-boot `undefined` or `null` state crashed. And it returned
+  every key of the state's row, while `lookupCell` admits a cell only on
+  `typeof cell === "function"` — so a non-function row value, reachable through a cast or from wire
+  data, was reported as accepted and then refused on dispatch.
+
+  A nullish state now answers `[]` in both forms: untagged is a state carrying no discriminant,
+  nullish is no state at all, and nothing is dispatchable against it. The accept-set reading now
+  applies `lookupCell`'s own function admission, so the set a caller is handed and the set a
+  `NoCellError` reports name the same cells. The existing agreement property test is extended with
+  ragged tables carrying cast-in non-function row values.
+
+- e4add87: ADR 0014 gains an amendment recording the #115 ruling: a tool's declared failure tags now
+  reach user code as `{ _tag, …payload }` on `ToolOutcome` and through `defineAgent`'s
+  `onToolError`, not only the model as a rendered `reason`.
+- 92afb6b: `applyCell` refuses a nullish state with `NoCellError`, in both update forms.
+
+  The refusal side of the asymmetry `acceptedTypes` had fixed. Under the transitions form
+  `lookupCell` dereferenced `state.type` before checking the state existed, so
+  `applyCell(machine, null, msg)` threw a bare `TypeError` where every other refusal on that path
+  raises the typed error callers already handle. Under the reducer form it was worse than a crash:
+  dispatch never consults the state, so a cell RAN against a machine that had not booted, while
+  `acceptedTypes` answered `[]` for the same pair.
+
+  A nullish state now refuses before the form branch, with `acceptedTypes: []` and the state name
+  `(no state)` — untagged is a state carrying no discriminant, nullish is the absence of one. The
+  agreement property is extended over the nullish state, so "the helper omits it" and "dispatch
+  refuses it" stay one reading there too.
+
+- 7128b06: `driveToDone` no longer hangs when a caller-supplied `cancel` throws
+  synchronously on a mid-run abort.
+
+  The abort listener already routed a rejected cancel dispatch — a reducer or
+  `interpret` that throws after the Msg is produced — into the drive's rejection.
+  A `cancel` function that threw before returning a Msg escaped the listener
+  instead: nothing was dispatched, so the terminal promise had nothing to resolve
+  it and the drive parked forever. Both throws now take the one route out, so the
+  returned promise rejects with the thrown error and the runtime is stopped.
+
+  Unreachable through `defineAgent`, which supplies its own `cancel`; this bites a
+  direct kernel consumer passing `{ signal, cancel }` to `driveToDone`.
+
+- 8323465: The hand-authored Diátaxis quadrants catch up with the doors the internalization epic closed
+  (ADR 0015, ADR 0016). No behaviour changes; every page under `docs/tutorial/`, `docs/how-to/`
+  and `docs/explanation/` now names only a subpath `package.json` `exports` still carries.
+
+  Six how-tos are retired, each because its _subject_ module is now `src/internal/` and the guide
+  cannot be followed at all:
+
+  | Retired page                               | Subject door, now internal     | Where the capability is                    |
+  | ------------------------------------------ | ------------------------------ | ------------------------------------------ |
+  | `docs/how-to/call-an-authenticated-api.md` | `@demlik/tea/authed-call`      | `src/internal/resilience/authed-call`      |
+  | `docs/how-to/retry-until-it-succeeds.md`   | `@demlik/tea/retry-to-success` | `src/internal/resilience/retry-to-success` |
+  | `docs/how-to/await-a-terminal-state.md`    | `@demlik/tea/await-terminal`   | `src/internal/flow/await-terminal`         |
+  | `docs/how-to/batch-work-into-windows.md`   | `@demlik/tea/batch-window`     | `src/internal/flow/batch-window`           |
+  | `docs/how-to/debounce-input-durably.md`    | `@demlik/tea/throttled-input`  | `src/internal/timing/throttled-input`      |
+  | `docs/how-to/reconcile-desired-state.md`   | `@demlik/tea/reconciler`       | `src/internal/flow/reconciler`             |
+
+  Their `docs/how-to/index.md` rows go with them. For a retry ladder from outside the package the
+  public route is `@demlik/tea/retry-backoff` — [Add retry and backoff to a
+  call](../docs/how-to/add-resilience.md) — and the L2 intent layer is where these jobs come back.
+
+  Pages that only mentioned a closed door keep their subject and lose the specifier:
+  `gate-a-refactor-on-parity.md` now keeps its golden as plain JSON through `@demlik/tea/parity`
+  rather than re-hydrating JSONL with the internal `parseJSONL`; `replay-in-a-test.md` points at
+  `parity` for the record-then-replay loop; `add-resilience.md` drops the wrapper section, whose
+  `createPoller` / `withResilience` are both internal now; and the deadline Sub is named as a
+  behaviour where no public specifier exists for it.
+
+  `src/docs/doc-specifiers.test.ts` is the guard so it does not recur: it fails when any
+  hand-authored `.md` under `docs/` names a `@demlik/tea/*` specifier the export map does not
+  carry.
+
+- 7ce98fb: `driveToDone` no longer hangs when `start`'s follow-up chain quiesces on a
+  State that is neither terminal nor `failed`. When the runtime has no live Sub
+  (manual or dep-keyed) and no Cmd in flight at that point, nothing inside it can
+  deliver another transition, so the drive now rejects with the new
+  `DriveStalledError<S>` — the stalled State riding on `error.state`, sibling to
+  `DriveFailedError` — and `stop()` is awaited before it settles, as the docstring
+  already promised for every exit.
+
+  A Sub-driven machine is unchanged: a Sub that delivers the terminal Msg after
+  the dispatch quiesces keeps the drive waiting, and it resolves on that State.
+
+- 6cee530: `@demlik/tea/node` now imports with no `ws` installed. The built door carried a static top-level
+  `import WebSocket from "ws"` while `ws` is declared an OPTIONAL peer, so a consumer who installed
+  only the tutorial's three packages hit `ERR_MODULE_NOT_FOUND` on their first import of `fileStore`.
+  `ws` is loaded on first use inside the `node_ws` Sub instead — `fileStore` and `fileJournal` no
+  longer pay for a dependency they never touch, and a `node_ws` Sub opened without `ws` installed
+  throws a message naming the package to install.
+- fffab4d: `subscribe` and `observe` now say what a dispatch from inside a listener does.
+  It is scheduled, never applied: the message is enqueued onto the serial tail
+  behind the fold that fired the listener, so it is never folded re-entrantly and
+  never discarded, and two listeners issuing in order fold in that order.
+  `getState()` inside a `subscribe` listener reads the State the fold just
+  committed — the same State `observe` receives for that fold.
+
+  That is the rule the runtime already ran by, and the rule nobody could read. A
+  caller who could not tell scheduled from dropped reached for a
+  `setTimeout(fn, 0)` deferral to make the dispatch land; none is needed, and the
+  guarantee is now pinned by tests as well as written down.
+
+- ec87946: The `/agent` surface now names `Cmd<T, E, R>`, so a reader told the kernel has typed effect
+  channels (ADR 0014) can find them where they are actually spelled. No behaviour changes.
+
+  `tool()`'s docblock says it returns a `Cmd<T, E, R>` definition whose `T` is what `ok` parses and
+  whose `E` is the `err` tag union — in its first sentence, which is the part `docs/reference` is
+  generated from, so the reference row carries it too. The tutorial's "Declare a tool" section makes
+  the same read on the tool it just declared, including what the empty `err: []` means, and
+  `docs/explanation/errors-as-data.md` links back to it while naming the effect type once.
+
+- da24ca7: `@demlik/tea/parity` now re-exports `Trace` and `RecorderOptions` as types.
+
+  Both already appeared in the door's published signatures — `Recording.trace()` returns a
+  `Trace<S, M>`, `goldenReplay` accepts one bare, `recordRun` takes `RecorderOptions` — but
+  neither had a name a consumer could import once `@demlik/tea/recorder` went internal. So
+  annotating a fixture, typing an options constant, or giving a wrapper an explicit return type
+  meant `ReturnType<typeof rec.trace>`.
+
+  ```ts
+  import {
+    goldenReplay,
+    type RecorderOptions,
+    type Trace,
+  } from "@demlik/tea/parity";
+
+  const opts: RecorderOptions = { captureSteps: true };
+  const golden: Trace<AuditState, AuditMsg> = JSON.parse(fixture);
+  ```
+
+  No runtime change and no `exports` change: this widens the type surface inside an existing
+  door. `docs/how-to/gate-a-refactor-on-parity.md` names `Trace` directly now.
+
+- e3407bd: A boot failure after the provider graph opened now releases it. `run` acquires a
+  `provide({ … })` graph as boot's first step; if a later boot step threw —
+  `store.load()`, `store.migrate()`, the boot save, or the initial interpret —
+  `ready` rejected with every provider still acquired, and only a `stop()` the
+  host had no reason to call would close them. The remaining boot steps now run
+  inside the graph's lifetime, so a throw releases every acquired provider in
+  reverse before the rejection surfaces, symmetric with the unwind `open()`
+  already does for a failed `acquire`.
+
+  `Scope.release` is idempotent, so the `stop()` a careful host still calls after
+  such a rejection stays a no-op and never double-releases.
+
+- 268163d: `tool()` on `@demlik/tea/agent` (experimental tier) refuses a reserved name. A tool's name is the
+  prefix of its `<name>_ok` / `<name>_err` settle Msgs and its own interpret key, so a tool named
+  `agent_tool`, `resilient`, `compact`, `compact_run`, `tool_rejected` or `snapshot_write` used to
+  overwrite the agent's own reducer or interpret cell through `toMachine`'s last-wins spread — with
+  no error at construction, `run` or dispatch (#72).
+
+  - `ReservedToolName` — every protocol discriminant in `MsgType` and every prefix a `_ok` / `_err`
+    / `_run` entry was minted from, plus the router's `tool_rejected` and the checkpoint cell
+    `snapshot_write`. Derived from `MsgType`, so a new entry there reserves its name and its prefix
+    with no second edit.
+  - `tool("compact", …)` is a compile error; a reserved name that reaches `tool()` as a widened
+    `string` throws `tool: "compact" is reserved — it is an agent-owned Msg prefix`, the same
+    declaration-bug refusal `toolRouter` gives a name declared twice.
+  - `isReservedToolName(name)` — the runtime guard, exported beside the type.
+
+- fe07a88: `agent.run(...)` now resolves at the type it always produced. Its promise
+  resolves only on an ENDED run — `done`, or `cancelled` — and rejects on a
+  failure, but it was typed as the whole durable Model, which includes the
+  never-started `idle` arm. `idle` deliberately carries no `runId` (identity is
+  minted at `start`), so `(await agent.run(input)).run.runId` — a field every
+  resolved run has at runtime — did not typecheck, and the reader's only moves
+  were a cast or a `phase` guard that can never fail.
+
+  `run` now resolves `DefinedAgentResolvedState<T>`: the same Model with its `run`
+  slice narrowed to `EndedRun`, the `done` / `cancelled` subset. `final.run.runId`
+  reads bare. Its type is `string | null`, not `string`, because a run cancelled
+  through an already-aborted signal ends before `start` mints an identity — that
+  is a real outcome of this call and stays a distinguishable value.
+
+  Nothing widens: the `idle` arm is untouched and still carries no `runId`, and
+  `DefinedAgentState` — the DURABLE Model, which a `Store` must be able to hold at
+  `init` — is unchanged. `@demlik/tea/agent` is an experimental door, and this is
+  a narrowing of what a promise resolves: code reading a field off the resolved
+  value keeps compiling, while code assigning it to a variable annotated with the
+  whole `MonitoredRunState` union does not.
+
+- 19eef4e: `withDeadline`, `withTelemetry` and `withResilience` no longer drop `machine.cmds`, so `run`'s
+  interpret edge parses a `Cmd.define`d handler's `_ok` value and stamps `at` on the wrapped machine
+  exactly as on the bare one (#66). A malformed result behind a wrap now becomes the minted `_err`
+  carrying `malformed_result` instead of reaching the reducer raw. `withResilience`'s
+  `$resilience:run` carrier settles the target's result through the same edge `run` uses, handed
+  over on ctx, so the parsed and stamped Msg is what lands as the call's `result`.
+
 ## 0.13.0
 
 Published on 2026-09-06 by the per-merge publish job, whose version-bump commit was then
