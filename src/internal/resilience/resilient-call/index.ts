@@ -184,6 +184,7 @@ import {
 import {
   type DeadlineExceeded,
   type DeadlineSub,
+  deadlineMsgType,
   deadlineSub,
   subscribeDeadline,
 } from "../deadline";
@@ -451,8 +452,33 @@ export type FailMsg<N extends string = DefaultResilientName> = {
   readonly at: number;
 };
 
-/** The retry / deadline timer Msg — `DeadlineExceeded`, keyed by the call `key`. */
-export type ResilientTimerMsg = DeadlineExceeded;
+/**
+ * The deadline Msg tag this knob's timers dispatch, derived from its name the
+ * same way `<name>_ok` / `<name>_err` are. The DEFAULT family keeps the bare
+ * `"deadline_exceeded"` literal — that is the tag every machine wired before
+ * the name existed already handles, and `mountResilientCall` still returns a
+ * `deadline_exceeded` cell for an unnamed knob.
+ */
+export type ResilientDeadlineType<N extends string = DefaultResilientName> =
+  N extends DefaultResilientName ? "deadline_exceeded" : `${N}_deadline`;
+
+/**
+ * The name the deadline Sub carries for the `N` family — `undefined` for the
+ * default family (no name at all, so the bare literal is dispatched), the name
+ * itself otherwise. One conditional, so the value and {@link
+ * ResilientDeadlineType} can never disagree about which family is unnamed.
+ */
+export type DeadlineNameOf<N extends string = DefaultResilientName> =
+  N extends DefaultResilientName ? undefined : N;
+
+/**
+ * The retry / deadline timer Msg — a `DeadlineExceeded` whose tag is this
+ * knob's ({@link ResilientDeadlineType}), keyed by the call `key` through the
+ * Sub `id`. Bare `ResilientTimerMsg` is the default family's, so it is the same
+ * `DeadlineExceeded` it has always been.
+ */
+export type ResilientTimerMsg<N extends string = DefaultResilientName> =
+  DeadlineExceeded<DeadlineNameOf<N>>;
 
 /**
  * The plain-data error a deadline-failed call settles with. A `{_tag, ...}`
@@ -531,6 +557,18 @@ function deadlineTimerId(name: string, key: string): string {
   return `${name}:deadline:${key}`;
 }
 
+/**
+ * The deadline Sub's `name` for a knob's family — the value side of
+ * {@link DeadlineNameOf}. The default family maps to `undefined` (no name),
+ * which is what keeps an unnamed knob dispatching the bare `deadline_exceeded`
+ * literal rather than a `resilient_deadline` nobody is wired for.
+ */
+function deadlineNameOf<N extends string>(name: N): DeadlineNameOf<N> {
+  return (
+    name === DEFAULT_RESILIENT_NAME ? undefined : name
+  ) as DeadlineNameOf<N>;
+}
+
 // ===========================================================================
 // The knob factory.
 // ===========================================================================
@@ -564,6 +602,12 @@ export function createResilientCall<
   // built from — so the Cmd and the Msgs it settles into can never disagree.
   const okType = `${name}_ok` as ResilientOkType<N>;
   const errType = `${name}_err` as ResilientErrType<N>;
+  // The name the deadline Sub carries, which is what fixes the Msg tag it
+  // dispatches. `undefined` for the DEFAULT family: an unnamed knob must keep
+  // dispatching the bare `deadline_exceeded` literal every existing machine is
+  // wired against, so the default is not merely spelled the same — it is the
+  // absence of a name, exactly as before this parameter existed.
+  const deadlineName = deadlineNameOf(name);
 
   /** The starting slice. Bricks not in `config` still get a default value. */
   function init(): ResilientState<I, R> {
@@ -996,11 +1040,17 @@ export function createResilientCall<
    * phase change cancels the matching timer automatically — no manual
    * `clearTimeout`. Wire `subscribe: { deadline: subscribeDeadline }`.
    */
-  function subs(s: ResilientState<I, R>): readonly DeadlineSub[] {
-    const out: DeadlineSub[] = [];
+  function subs(
+    s: ResilientState<I, R>,
+  ): readonly DeadlineSub<DeadlineNameOf<N>>[] {
+    const out: DeadlineSub<DeadlineNameOf<N>>[] = [];
     for (const [key, call] of Object.entries(s.calls)) {
       if (call.phase === "waiting_retry") {
-        out.push(deadlineSub(retryTimerId(name, key), call.retryAtMs));
+        out.push(
+          deadlineSub(retryTimerId(name, key), call.retryAtMs, {
+            name: deadlineName,
+          }),
+        );
       }
       if (
         config.deadline !== undefined &&
@@ -1015,6 +1065,7 @@ export function createResilientCall<
           deadlineSub(
             deadlineTimerId(name, key),
             call.budget.chargingSinceMs + call.budget.remainingMs,
+            { name: deadlineName },
           ),
         );
       }
@@ -1144,8 +1195,8 @@ export interface MountableKnob<
   init(): ResilientState<I, R>;
   succeed(s: ResilientState<I, R>, key: string, msg: OkMsg): Settle<I, R>;
   fail(s: ResilientState<I, R>, key: string, msg: ErrMsg): Settle<I, R>;
-  onTimer(s: ResilientState<I, R>, msg: ResilientTimerMsg): Settle<I, R>;
-  subs(s: ResilientState<I, R>): readonly DeadlineSub[];
+  onTimer(s: ResilientState<I, R>, msg: ResilientTimerMsg<N>): Settle<I, R>;
+  subs(s: ResilientState<I, R>): readonly DeadlineSub<DeadlineNameOf<N>>[];
   handlers(): Handlers;
 }
 
@@ -1187,6 +1238,7 @@ export interface MountConfig<
   OkMsg,
   ErrMsg,
   C extends Cmd,
+  N extends string = DefaultResilientName,
 > {
   /** The Model field carrying the knob's slice. */
   readonly slice: Slice;
@@ -1215,7 +1267,7 @@ export interface MountConfig<
    * callback a call that dies on its budget advances the slice and folds
    * nothing — the shape that used to be a documented caveat.
    *
-   * It runs once per call the `deadline_exceeded` cell moved INTO `failed`:
+   * It runs once per call the knob's deadline cell moved INTO `failed`:
    * the deadline fire itself, and the resumed retry whose gate found the
    * budget spent. A plain backoff tick, a stale fire and an already-`failed`
    * call fold nothing. `error` is the slice's own settled error — a
@@ -1223,7 +1275,7 @@ export interface MountConfig<
    *
    * Omit and only the slice advances, exactly as the other two do.
    */
-  readonly onDeadline?: SettleFold<Model, DeadlineSettled, C>;
+  readonly onDeadline?: SettleFold<Model, DeadlineSettled<N>, C>;
 }
 
 /**
@@ -1233,13 +1285,17 @@ export interface MountConfig<
  * ever sees — no settle Msg exists for this failure class, which is the whole
  * reason the callback is here.
  */
-export interface DeadlineSettled {
+export interface DeadlineSettled<N extends string = DefaultResilientName> {
   /** The call key that settled. */
   readonly key: string;
   /** The error now on the slice — a {@link DeadlineExceededError} on the deadline path. */
   readonly error: unknown;
-  /** The timer Msg whose fire settled it. */
-  readonly msg: ResilientTimerMsg;
+  /**
+   * The timer Msg whose fire settled it — this knob's own tag, so a fold on a
+   * knob named `jev` is handed a `jev_deadline` and one on an unnamed knob a
+   * `deadline_exceeded`.
+   */
+  readonly msg: ResilientTimerMsg<N>;
 }
 
 /**
@@ -1270,10 +1326,16 @@ export interface MountedResilientCall<
    * `name: "jev"` mounts into `jev_ok` / `jev_err` and two named knobs in one
    * machine spread into four distinct cells instead of colliding on one. An
    * unnamed knob is `resilient`, so the keys read `resilient_ok` /
-   * `resilient_err` exactly as they always have. `deadline_exceeded` is the
-   * protocol's timer Msg and carries no name; the cell it lands on folds
-   * through {@link MountConfig.onDeadline}, since a call the timer settles
-   * emits no settle Msg and so reaches no `onErr`.
+   * `resilient_err` exactly as they always have.
+   *
+   * The deadline cell is keyed the same way (#238). A knob's deadline Sub
+   * carries its name, so a knob built as `name: "jev"` dispatches
+   * `jev_deadline` and mounts into a `jev_deadline` cell; an unnamed knob still
+   * dispatches and mounts `deadline_exceeded`. Before that, both mounts wrote
+   * the one unqualified `deadline_exceeded` key and the last spread silently
+   * dropped the other knob's deadline fold. The cell folds through
+   * {@link MountConfig.onDeadline}, since a call the timer settles emits no
+   * settle Msg and so reaches no `onErr`.
    */
   readonly update: Readonly<
     Record<AttemptType, MountedCell<Model, AttemptMsg, I, C>>
@@ -1282,9 +1344,14 @@ export interface MountedResilientCall<
   } & {
     readonly [K in ResilientErrType<N>]: MountedCell<Model, ErrMsg, I, C>;
   } & {
-    readonly deadline_exceeded: MountedCell<Model, ResilientTimerMsg, I, C>;
+    readonly [K in ResilientDeadlineType<N>]: MountedCell<
+      Model,
+      ResilientTimerMsg<N>,
+      I,
+      C
+    >;
   };
-  subscriptions(model: Model): readonly DeadlineSub[];
+  subscriptions(model: Model): readonly DeadlineSub<DeadlineNameOf<N>>[];
   readonly subscribe: { readonly deadline: typeof subscribeDeadline };
   readonly interpret: Handlers;
 }
@@ -1340,7 +1407,8 @@ export function mountResilientCall<
     AttemptMsg,
     OkMsg,
     ErrMsg,
-    C
+    C,
+    N
   >,
 ): MountedResilientCall<
   Model,
@@ -1398,11 +1466,19 @@ export function mountResilientCall<
       (s, key, msg) => knob.fail(s, key, msg),
       onErr,
     ),
-    // The one settle path that carries no Msg: `onTimer` writes `failed`
-    // straight into the slice, so a mounted `onErr` never sees it. The cell
-    // reads the transition off the two slices instead of inventing a Msg —
+    // The one settle path that carries no settle Msg: `onTimer` writes
+    // `failed` straight into the slice, so a mounted `onErr` never sees it. The
+    // cell reads the transition off the two slices instead of inventing a Msg —
     // whichever key moved INTO `failed` is the call that just died.
-    deadline_exceeded: (model: Model, msg: ResilientTimerMsg) => {
+    //
+    // Keyed off the knob's name for the same reason the two settle cells are
+    // (#238): the knob's deadline Sub dispatches `<name>_deadline`, so a cell
+    // spelling the bare literal would be one two named knobs both claim — and
+    // the second spread into `defineMachine` would silently win.
+    [deadlineMsgType(deadlineNameOf(knob.name))]: (
+      model: Model,
+      msg: ResilientTimerMsg<N>,
+    ) => {
       const before = model[slice];
       const [next, cmds] = knob.onTimer(before, msg);
       const advanced = put(model, next);
