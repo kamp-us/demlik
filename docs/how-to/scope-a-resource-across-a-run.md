@@ -15,22 +15,33 @@ satisfies it.
 `layer(acquire, release?)` is a provider with no dependencies. `value(v)` lifts
 something already built — a config object, a clock — into the graph.
 
+A provider that depends on siblings names each one with a `dep` token, which
+carries the dependency's name and its type together:
+
 ```ts
-import { layer, provide, value } from "@demlik/tea";
+import { dep, layer, provide, value } from "@demlik/tea";
+
+const Config = dep<{ url: string }>()("config");
 
 const scoped = provide({
   config: value({ url: process.env.DATABASE_URL ?? "" }),
-  db: layer(
-    ["config"],
-    ({ config }: { config: { url: string } }) => connect(config.url),
-    (db) => db.close(),
-  ),
+  db: layer([Config], ({ config }) => connect(config.url), (db) => db.close()),
 });
 ```
 
-The three-argument form is the one with dependencies: `["config"]` names the
-siblings, and the annotation on `acquire`'s parameter is what types them. Both
-`acquire` and `release` may be async — the graph awaits each.
+`acquire` takes no annotation: its parameter is derived from the tokens, so
+`config` is already typed and a property the token list does not name does not
+compile *here*, at the `layer` call. This is Effect's `Context.Tag`.
+
+Both `acquire` and `release` may be async — the graph awaits each.
+
+### The string form, where there is no token to hand
+
+`layer(["config"], ({ config }: { config: { url: string } }) => …)` still works
+and still type-checks against the map. It is the untyped escape hatch: it spells
+each dependency twice, and a mismatch between the two spellings surfaces at the
+`provide` call, in the map's vocabulary rather than the typo's. Reach for it when
+a dep name is computed rather than written.
 
 ## 2. Hand the graph to `run` in place of `ctx`
 

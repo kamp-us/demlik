@@ -11,7 +11,7 @@
 // sit on a line that genuinely fails to type-check — an unused one is itself an
 // error, which is what makes this a test rather than a comment.
 
-import { layer, type Provider, provide, value } from "./index";
+import { dep, layer, type Provider, provide, value } from "./index";
 
 type Config = { url: string };
 
@@ -119,3 +119,68 @@ const migratedDep: Provider<string, { config: Config }, "config" | "db"> = {
 };
 
 provide({ config: migratedLeaf, db: migratedDep });
+
+// ── The token form derives the annotation instead of restating it (#201) ───
+//
+// `dep<T>()("name")` carries the literal name and the value type in one value,
+// so `layer([ConfigTag], ({ config }) => …)` needs no annotation on `acquire`
+// and both halves of a dependency mistake land at the `layer` call rather than
+// inside `provide`'s `M` constraint. This is Effect's `Context.Tag`.
+
+const ConfigTag = dep<Config>()("config");
+const DbTag = dep<string>()("db");
+
+const tokened = provide({
+  config: value<Config>({ url: "postgres://x" }),
+  db: layer([ConfigTag], ({ config }) => `db@${config.url}`),
+  cache: layer([ConfigTag, DbTag], ({ config, db }) => `${db}/${config.url}`),
+});
+
+// The `ctx` it produces is keyed and typed exactly as the string form's is.
+const tokenedCtx: Promise<{ config: Config; db: string; cache: string }> =
+  tokened.open().then((scope) => scope.ctx);
+void tokenedCtx;
+
+// The derived parameter carries the token's type rather than `unknown`, and the
+// provider's `K` is the token's name — so this annotation fits with no widening.
+const derived: Provider<string, { config: Config }, "config"> = layer(
+  [ConfigTag],
+  ({ config }) => config.url,
+);
+void derived;
+
+// A token the surrounding map has no key for is a compile error at `provide`,
+// exactly as a string dep name is: the token's name is bound to `keyof M` too.
+const SecretsTag = dep<string>()("secrets");
+provide({
+  config: value<Config>({ url: "postgres://x" }),
+  // @ts-expect-error `secrets` is a key of no map.
+  db: layer([SecretsTag], ({ secrets }) => `db@${secrets}`),
+});
+
+// A destructured property the tuple does NOT name fails HERE, at the `layer`
+// call — the whole point of the token form, and not deferred to `provide`.
+layer(
+  [ConfigTag],
+  // @ts-expect-error `db` is not a property of the record `[ConfigTag]` derives.
+  ({ config, db }) => `${config.url}${db}`,
+);
+
+// Reading a named dependency at the wrong type fails at `layer` as well.
+layer(
+  [ConfigTag],
+  // @ts-expect-error `config` is a `Config`, so it has no `port`.
+  ({ config }) => config.port,
+);
+
+// A token whose name IS a key of the map but whose type is not what the map
+// provides still fails at `provide`, the check that predates this overload.
+const WrongConfigTag = dep<number>()("config");
+provide({
+  config: value<Config>({ url: "postgres://x" }),
+  // @ts-expect-error the map's `config` is a `Config`, not a `number`.
+  db: layer([WrongConfigTag], ({ config }) => `db@${config}`),
+});
+
+// An empty token tuple is the zero-dep form, admissible in every map.
+provide({ clock: layer([], () => 42) });
