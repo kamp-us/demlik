@@ -46,6 +46,13 @@
  * network actually produced. Every `unknown` reaches a `JevErr`; nothing
  * reaches a `throw`.
  *
+ * Both halves of a choice question's claim are checked, because both are cast
+ * away at the tail of `parseAnswers`: `choice` must be one of the criteria
+ * keys, and `probabilities` must be keyed by EXACTLY those keys — none
+ * missing, none extra. A partial distribution typed `Record<K, number>` is the
+ * representable-invalid state this module exists to refuse, and it arrives
+ * through this gate or not at all.
+ *
  * ## Why status classification lives here and not in `ask`
  *
  * "429 and 529 back off, everything else non-2xx is terminal" is a fact about
@@ -257,6 +264,17 @@ export type JevErr =
       readonly choice: string;
       readonly options: readonly string[];
     }
+  /** A choice answer's `probabilities` keys are not exactly its question's
+   *  criteria keys. `JevChoiceAnswer<K>` types that map as TOTAL over `K`, so
+   *  a partial or off-criteria one is the representable-invalid state this
+   *  module exists to refuse. `missing` and `extra` say which way it failed. */
+  | {
+      readonly _tag: "off_criteria_probabilities";
+      readonly id: string;
+      readonly missing: readonly string[];
+      readonly extra: readonly string[];
+      readonly options: readonly string[];
+    }
   /** The answer's `type` is right and its payload is not — a missing
    *  `confidence`, a `probabilities` that is not a number map, and so on. */
   | {
@@ -266,16 +284,32 @@ export type JevErr =
     };
 
 /**
- * The tags {@link JevErr} is closed over — the single reading of that union's
- * membership, so nothing downstream re-derives it from a `"_tag" in x` test.
+ * The tags {@link JevErr} is closed over, witnessed against the union.
+ *
+ * The `satisfies` is the point: it is the compiler checking this record's keys
+ * against `JevErr["_tag"]` in BOTH directions — a union arm with no entry here
+ * fails totality, and an entry naming no arm fails the excess-property check
+ * on the literal. Before it, the set was `ReadonlySet<string>` and a new arm
+ * was tied to its runtime guard by reviewer attention alone: omit the entry
+ * and {@link isJevErr} silently answers `false` for that arm forever.
  */
-const JEV_ERR_TAGS: ReadonlySet<string> = new Set([
-  "malformed_body",
-  "missing_answer",
-  "answer_type_mismatch",
-  "off_criteria_choice",
-  "malformed_answer",
-]);
+const JEV_ERR_TAG_WITNESS = {
+  malformed_body: true,
+  missing_answer: true,
+  answer_type_mismatch: true,
+  off_criteria_choice: true,
+  off_criteria_probabilities: true,
+  malformed_answer: true,
+} as const satisfies Record<JevErr["_tag"], true>;
+
+/**
+ * The membership set {@link isJevErr} tests against — the single reading of
+ * the union's tags, so nothing downstream re-derives it from a `"_tag" in x`
+ * test.
+ */
+const JEV_ERR_TAGS: ReadonlySet<JevErr["_tag"]> = new Set(
+  Object.keys(JEV_ERR_TAG_WITNESS) as readonly JevErr["_tag"][],
+);
 
 /**
  * Is `value` a {@link JevErr}?
@@ -284,13 +318,17 @@ const JEV_ERR_TAGS: ReadonlySet<string> = new Set([
  * bare presence of the key. A `JevAnswers` map is keyed by the caller's own
  * question ids, so a caller may legally name a question `_tag` — and then
  * `"_tag" in answers` is `true`. The value under it is an ANSWER, which is
- * always an object and never one of these five string literals, so reading the
+ * always an object and never one of these string literals, so reading the
  * value is the one test a caller's id space cannot reach.
  */
 export function isJevErr(value: object): value is JevErr {
   if (!("_tag" in value)) return false;
   const tag: unknown = (value as { readonly _tag: unknown })._tag;
-  return typeof tag === "string" && JEV_ERR_TAGS.has(tag);
+  // The set is keyed over the union's tags, and the question being asked is
+  // whether an arbitrary string is one of them — a read-only widening, sound
+  // because `has` only ever reads.
+  const tags: ReadonlySet<string> = JEV_ERR_TAGS;
+  return typeof tag === "string" && tags.has(tag);
 }
 
 /** What `parseAnswers` returns: typed answers, or one `JevErr`. Never a throw. */
@@ -369,7 +407,8 @@ const checkAnswer = (
       reason: "`confidence` is not a number",
     };
   }
-  if (!isNumMap(answer["probabilities"])) {
+  const probabilities = answer["probabilities"];
+  if (!isNumMap(probabilities)) {
     return {
       _tag: "malformed_answer",
       id,
@@ -394,15 +433,25 @@ const checkAnswer = (
         };
   }
 
-  // choice — the one check the type-level contract rests on.
+  // choice — the two checks the type-level contract rests on.
   const choice = answer["choice"];
   if (typeof choice !== "string") {
     return { _tag: "malformed_answer", id, reason: "`choice` is not a string" };
   }
   const options = Object.keys(question.criteria);
-  return options.includes(choice)
+  if (!options.includes(choice)) {
+    return { _tag: "off_criteria_choice", id, choice, options };
+  }
+
+  // `JevChoiceAnswer<K>` says `probabilities` is TOTAL over the criteria keys
+  // and carries nothing else. A `Record<K, number>` the bytes under-fill is
+  // exactly the value the cast at the tail of `parseAnswers` would otherwise
+  // launder into the caller's hands.
+  const missing = options.filter((k) => !Object.hasOwn(probabilities, k));
+  const extra = Object.keys(probabilities).filter((k) => !options.includes(k));
+  return missing.length === 0 && extra.length === 0
     ? undefined
-    : { _tag: "off_criteria_choice", id, choice, options };
+    : { _tag: "off_criteria_probabilities", id, missing, extra, options };
 };
 
 /**
@@ -411,7 +460,8 @@ const checkAnswer = (
  *
  * The walk is question-driven, not body-driven: every id the request asked
  * about must be answered, and each answer is checked against ITS question's
- * type and — for a choice — against that question's own criteria keys. An
+ * type and — for a choice — against that question's own criteria keys, both as
+ * the `choice` picked and as the exact key set of `probabilities`. An
  * answer under an id nobody asked about is ignored rather than refused; the
  * questions are the contract, and a wider response still satisfies it.
  */
