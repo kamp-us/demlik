@@ -10,6 +10,7 @@ import { bindMachine } from "../../../testing";
 import {
   createResilientCall,
   type DeadlineExceededError,
+  type DeadlineSettled,
   deadlineSub,
   type FailMsg,
   mountResilientCall,
@@ -1495,6 +1496,9 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
     // Every entry is one call that actually reached the port — the ground truth
     // for "did the mounted interpret cell really run the effect".
     const calls: string[] = [];
+    // Every `onDeadline` fold, in order — the ground truth for "did the timer
+    // cell reach the consumer at all, and exactly once".
+    const deadlineFolds: DeadlineSettled[] = [];
     // This knob's `handlers` takes ports, so it is bound before the mount reads
     // it. The doors that mount directly (`jev/ask`, `llm-call`) expose a
     // nullary `handlers()` and are passed straight in.
@@ -1532,6 +1536,19 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
           },
           [],
         ],
+        // The failure class that carries no settle Msg: without this the
+        // deadline would advance the slice and fold nothing.
+        onDeadline: (model: MState, m) => {
+          deadlineFolds.push(m);
+          return [
+            {
+              ...model,
+              failure: m.error,
+              phaseSeenByFold: model.resilience.calls[m.key]?.phase ?? null,
+            },
+            [],
+          ];
+        },
       },
     );
     const machine = defineMachine({
@@ -1559,7 +1576,7 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
       subscribe: mounted.subscribe,
       interpret: mounted.interpret,
     });
-    return { rc, mounted, machine, calls };
+    return { rc, mounted, machine, calls, deadlineFolds };
   }
 
   const start: MState = {
@@ -1624,8 +1641,8 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
     expect(done.result).toBe("VALUE");
   });
 
-  it("settles the deadline path through the mounted timer cell", () => {
-    const { machine } = mount({
+  it("settles the deadline path through the mounted timer cell, and folds it", () => {
+    const { machine, deadlineFolds } = mount({
       retry: {
         baseMs: 100,
         factor: 2,
@@ -1654,6 +1671,69 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
       id: "resilient:deadline:k",
       atMs: 50,
     } satisfies DeadlineExceededError);
+
+    // AC10: the failure class that emits no settle Msg still reaches the
+    // consumer's fold — once, named by key, carrying the slice's own error.
+    expect(deadlineFolds).toHaveLength(1);
+    expect(deadlineFolds[0]?.key).toBe("k");
+    expect(deadlineFolds[0]?.error).toEqual({
+      _tag: "deadline_exceeded",
+      id: "resilient:deadline:k",
+      atMs: 50,
+    } satisfies DeadlineExceededError);
+    expect(expired.failure).toEqual(deadlineFolds[0]?.error);
+    // The fold sees the ALREADY-settled slice, like the other two do.
+    expect(expired.phaseSeenByFold).toBe("failed");
+  });
+
+  it("a plain backoff tick and a stale deadline fire fold nothing", () => {
+    const { machine, deadlineFolds } = mount({
+      retry: {
+        baseMs: 100,
+        factor: 2,
+        capMs: 1_000,
+        maxAttempts: 3,
+        jitter: "full",
+      },
+      deadline: { ms: 5_000 },
+    });
+    const bound = bindMachine(machine, ctx);
+    const [running] = bound.step(start, {
+      type: "go",
+      key: "k",
+      input: "in",
+      at: 0,
+    });
+    const [waiting] = bound.step(running, {
+      type: "resilient_err",
+      key: "k",
+      error: { _tag: "backend_down" },
+      at: 10,
+    });
+    // The retry timer re-gates the call — no terminal transition, no fold.
+    const [retried] = bound.step(waiting, {
+      type: "deadline_exceeded",
+      id: "resilient:retry:k",
+      atMs: 10,
+    });
+    expect(retried.resilience.calls.k?.phase).toBe("running");
+    expect(deadlineFolds).toHaveLength(0);
+
+    // Settle it, then fire the deadline late: a stale fire for a call that is
+    // no longer in flight is a no-op, so it must not fold either.
+    const [done] = bound.step(retried, {
+      type: "resilient_ok",
+      key: "k",
+      result: "VALUE",
+      at: 20,
+    });
+    const [after] = bound.step(done, {
+      type: "deadline_exceeded",
+      id: "resilient:deadline:k",
+      atMs: 5_000,
+    });
+    expect(after.resilience.calls.k?.phase).toBe("succeeded");
+    expect(deadlineFolds).toHaveLength(0);
   });
 
   it("settles the terminal-failure path and folds the error", () => {

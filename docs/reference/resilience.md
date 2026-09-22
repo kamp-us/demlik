@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (124)
+## Exports (125)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ import { … } from "@demlik/tea/resilience";
 | `DeadlineExceededMsg` | Interface | The Msg the timeout Sub dispatches when `config.ms` elapses with no accepted progress. |
 | `DeadlineModel` | Interface | The composed Model. |
 | `DeadlineOpts` | Type | Additive options the `deadlineSub` factory folds onto the Sub literal. |
+| `DeadlineSettled` | Interface | What MountConfig.onDeadline is handed: the one call the timer cell just settled `failed`, named by its `key`, carrying the error the slice settled with and the timer Msg that produced it. |
 | `DeadlineSlice` | Interface | The wrapper's Model slice. |
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |

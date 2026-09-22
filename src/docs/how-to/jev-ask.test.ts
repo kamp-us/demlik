@@ -121,6 +121,13 @@ export function mountAsk(ask: Ask) {
       const verdict: Verdict = { kind: "triage", why: m.error._tag };
       return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
     },
+    // A call that dies on its deadline settles inside the slice and emits no
+    // settle Msg, so it never reaches `onErr`. Omit this and an expense whose
+    // budget runs out gets no verdict written at all.
+    onDeadline: (s: ExpenseState, m) => {
+      const verdict: Verdict = { kind: "triage", why: "deadline_exceeded" };
+      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
+    },
   });
 }
 

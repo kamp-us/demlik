@@ -132,6 +132,13 @@ export function mountAsk(ask: Ask) {
       const verdict: Verdict = { kind: "triage", why: m.error._tag };
       return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
     },
+    // A call that dies on its deadline settles inside the slice and emits no
+    // settle Msg, so it never reaches `onErr`. Omit this and an expense whose
+    // budget runs out gets no verdict written at all.
+    onDeadline: (s: ExpenseState, m) => {
+      const verdict: Verdict = { kind: "triage", why: "deadline_exceeded" };
+      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
+    },
   });
 }
 
@@ -161,6 +168,11 @@ The three rules this page used to ask you to remember are now shapes you cannot
 get wrong: `onOk` never sees the pre-settle slice, `interpret` is the door's
 returning handler rather than one you re-declare, and `subscribe` rides on the
 fragments, so a backed-off retry is armed by construction.
+
+Three folds, not two. A call that runs out of its deadline settles `failed`
+inside the slice with no settle Msg to carry it, so `onErr` never sees that
+failure class — `onDeadline` is where it lands. Omit it and the slice still
+advances; nothing downstream of it runs.
 
 What the mount does *not* take away is the state
 ([ADR 0015](../../.decisions/0015-hide-the-wiring-never-the-state.md)):

@@ -66,6 +66,7 @@ export type {
   CircuitConfig,
   DeadlineConfig as ResilientCallDeadlineConfig,
   DeadlineExceededError,
+  DeadlineSettled,
   DefaultResilientName,
   FailMsg,
   MountableKnob,

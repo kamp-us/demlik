@@ -1203,6 +1203,38 @@ export interface MountConfig<
   readonly onOk?: SettleFold<Model, OkMsg, C>;
   /** Fold a settled failure into the Model. Omit and only the slice advances. */
   readonly onErr?: SettleFold<Model, ErrMsg, C>;
+  /**
+   * Fold a call the TIMER settled into the Model. This is the third failure
+   * class, and it never reaches {@link MountConfig.onErr}: a deadline fire
+   * settles `failed` inside the slice and emits no settle Msg, so without this
+   * callback a call that dies on its budget advances the slice and folds
+   * nothing — the shape that used to be a documented caveat.
+   *
+   * It runs once per call the `deadline_exceeded` cell moved INTO `failed`:
+   * the deadline fire itself, and the resumed retry whose gate found the
+   * budget spent. A plain backoff tick, a stale fire and an already-`failed`
+   * call fold nothing. `error` is the slice's own settled error — a
+   * {@link DeadlineExceededError} on the deadline path.
+   *
+   * Omit and only the slice advances, exactly as the other two do.
+   */
+  readonly onDeadline?: SettleFold<Model, DeadlineSettled, C>;
+}
+
+/**
+ * What {@link MountConfig.onDeadline} is handed: the one call the timer cell
+ * just settled `failed`, named by its `key`, carrying the error the slice
+ * settled with and the timer Msg that produced it. It is not a Msg the reducer
+ * ever sees — no settle Msg exists for this failure class, which is the whole
+ * reason the callback is here.
+ */
+export interface DeadlineSettled {
+  /** The call key that settled. */
+  readonly key: string;
+  /** The error now on the slice — a {@link DeadlineExceededError} on the deadline path. */
+  readonly error: unknown;
+  /** The timer Msg whose fire settled it. */
+  readonly msg: ResilientTimerMsg;
 }
 
 /**
@@ -1234,7 +1266,9 @@ export interface MountedResilientCall<
    * machine spread into four distinct cells instead of colliding on one. An
    * unnamed knob is `resilient`, so the keys read `resilient_ok` /
    * `resilient_err` exactly as they always have. `deadline_exceeded` is the
-   * protocol's timer Msg and carries no name.
+   * protocol's timer Msg and carries no name; the cell it lands on folds
+   * through {@link MountConfig.onDeadline}, since a call the timer settles
+   * emits no settle Msg and so reaches no `onErr`.
    */
   readonly update: Readonly<
     Record<AttemptType, MountedCell<Model, AttemptMsg, I, C>>
@@ -1265,6 +1299,11 @@ export interface MountedResilientCall<
  *     substitute a dispatching handler for it.
  *   - `subscribe` carries `subscribeDeadline`, so the retry timer is armed by
  *     construction rather than by remembering.
+ *
+ * A deadline-exceeded call settles inside the slice and emits no settle Msg, so
+ * it reaches no `onErr`. {@link MountConfig.onDeadline} is that failure class's
+ * fold — omit it and the slice still advances, exactly as omitting `onErr`
+ * does.
  *
  * Nothing is taken away. The slice stays a plain field at `slice` that the
  * consumer reads, `replay` sees and the journal prints, and every verb the
@@ -1311,7 +1350,7 @@ export function mountResilientCall<
   Handlers,
   N
 > {
-  const { slice, attempt, onOk, onErr } = config;
+  const { slice, attempt, onOk, onErr, onDeadline } = config;
 
   // A computed key of a generic literal type widens to a string index
   // signature, which is the one place this file asserts: the assertion says
@@ -1354,9 +1393,25 @@ export function mountResilientCall<
       (s, key, msg) => knob.fail(s, key, msg),
       onErr,
     ),
+    // The one settle path that carries no Msg: `onTimer` writes `failed`
+    // straight into the slice, so a mounted `onErr` never sees it. The cell
+    // reads the transition off the two slices instead of inventing a Msg —
+    // whichever key moved INTO `failed` is the call that just died.
     deadline_exceeded: (model: Model, msg: ResilientTimerMsg) => {
-      const [next, cmds] = knob.onTimer(model[slice], msg);
-      return [put(model, next), cmds] as const;
+      const before = model[slice];
+      const [next, cmds] = knob.onTimer(before, msg);
+      const advanced = put(model, next);
+      if (onDeadline === undefined) return [advanced, cmds] as const;
+      let folded = advanced;
+      const extra: C[] = [];
+      for (const [key, call] of Object.entries(next.calls)) {
+        if (call.phase !== "failed") continue;
+        if (before.calls[key]?.phase === "failed") continue;
+        const [m, c] = onDeadline(folded, { key, error: call.error, msg });
+        folded = m;
+        extra.push(...c);
+      }
+      return [folded, [...cmds, ...extra]] as const;
     },
   } as MountedResilientCall<
     Model,

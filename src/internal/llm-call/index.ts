@@ -83,6 +83,9 @@
  *     },
  *     onOk: (s, m) => [{ ...s, output: m.result.output }, []],
  *     onErr: (s, m) => [{ ...s, failure: m.error }, []],
+ *     // A deadline-exceeded call settles inside the slice and emits no
+ *     // settle Msg, so it reaches no `onErr`. This is its fold.
+ *     onDeadline: (s, m) => [{ ...s, failure: m.error }, []],
  *   });
  *
  *   // in the machine:
