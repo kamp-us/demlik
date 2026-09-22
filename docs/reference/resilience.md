@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (117)
+## Exports (125)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ import { … } from "@demlik/tea/resilience";
 | `DeadlineExceededMsg` | Interface | The Msg the timeout Sub dispatches when `config.ms` elapses with no accepted progress. |
 | `DeadlineModel` | Interface | The composed Model. |
 | `DeadlineOpts` | Type | Additive options the `deadlineSub` factory folds onto the Sub literal. |
+| `DeadlineSettled` | Interface | What MountConfig.onDeadline is handed: the one call the timer cell just settled `failed`, named by its `key`, carrying the error the slice settled with and the timer Msg that produced it. |
 | `DeadlineSlice` | Interface | The wrapper's Model slice. |
 | `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
 | `DeadlineSub` | Type | The Sub variant a deadline produces. |
@@ -60,6 +61,11 @@ import { … } from "@demlik/tea/resilience";
 | `initWindow` | Function | Create an empty window. |
 | `liftAuthed` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.authed`. |
 | `liftResilience` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience`. |
+| `MountableKnob` | Interface | The part of a resilient-call knob mountResilientCall needs. |
+| `MountConfig` | Interface | What to mount, and where. |
+| `MountedCell` | Type | One cell of the update fragment mountResilientCall returns. |
+| `MountedResilientCall` | Interface | The four fragments a consumer spreads into `defineMachine`. |
+| `mountResilientCall` | Function | Pre-assemble a resilient-call knob into the fragments a machine definition spreads, so mounting one is a spread instead of eight hand-spliced points. |
 | `onFailure` | Function | Record a failed guarded call. |
 | `onSuccess` | Function | Record a successful guarded call. |
 | `ProgressPredicate` | Type | A predicate over a Msg that decides whether it re-arms the deadline. |
@@ -98,6 +104,8 @@ import { … } from "@demlik/tea/resilience";
 | `RunCmdDef` | Type |  |
 | `set` | Function | Write `key → value` with an absolute expiry of `nowMs + ttlMs`. |
 | `setTimeoutArmTimer` | Function | The `setTimeout` timer backing — for node / browser / any host whose timer is a plain `setTimeout`. |
+| `Settle` | Type | What every verb of a knob in this family hands back. |
+| `SettleFold` | Type | The consumer's half of a settle cell: fold the settled answer into the machine's own Model. |
 | `SlidingWindow` | Interface | A sliding-window log: the timestamps of every hit still inside the trailing `windowMs`, capped at `limit` events per window. |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `subscribeWith` | Function | Build the `subscribe["deadline"]` cell from a host-plugged `armTimer`. |

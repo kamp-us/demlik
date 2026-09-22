@@ -96,17 +96,34 @@
  *     deadline: { ms: 5_000 },
  *   });
  *
+ *   // `mountResilientCall` pre-assembles the wiring; the one cell it cannot
+ *   // write is `attempt`, whose arguments only the consumer's Msg knows. This
+ *   // knob's `handlers` takes ports, so it is bound before the mount reads it —
+ *   // `../../jev/ask` and `../../llm-call` expose a nullary `handlers()` and
+ *   // are passed straight in.
+ *   const mounted = mountResilientCall({
+ *     ...rc,
+ *     handlers: () => rc.handlers({ run: ctx.call }),
+ *   }, {
+ *     slice: "resilience",
+ *     attempt: {
+ *       on: "fetch",
+ *       run: (slice, m: Fetch) => rc.attempt(slice, m.key, m.input, m.at),
+ *     },
+ *     onOk: (model, m) => [{ ...model, result: m.result }, []],
+ *   });
+ *
  *   // in the machine:
- *   init: () => [{ resilience: rc.init() }, []],
- *   update: {
- *     fetch:   (s, m) => lift(s, rc.attempt(s.resilience, m.key, m.input, m.at)),
- *     call_ok: (s, m) => lift(s, rc.succeed(s.resilience, m.key, m)),
- *     call_err:(s, m) => lift(s, rc.fail(s.resilience, m.key, m)),
- *     retry_due:(s, m) => lift(s, rc.onTimer(s.resilience, m)),
- *   },
- *   subscriptions: (s) => rc.subs(s.resilience),
- *   subscribe: { deadline: subscribeDeadline },
- *   interpret: rc.handlers({ run: ctx.call }),
+ *   init: () => [{ ...mounted.init(), result: null }, []],
+ *   update: { ...mounted.update },
+ *   subscriptions: mounted.subscriptions,
+ *   subscribe: mounted.subscribe,
+ *   interpret: mounted.interpret,
+ *
+ * The six verbs stay exported and callable by hand for a consumer that wants a
+ * cell the mount cannot express (ADR 0015's escape hatch): `rc.succeed(...)`,
+ * `rc.fail(...)`, `rc.onTimer(...)` and `liftResilience` splice exactly as
+ * before.
  *
  * ## Naming a knob, when a machine mounts more than one
  *
@@ -130,6 +147,11 @@
  * type arguments; `config.name` is typed at `N`, so value and type cannot
  * drift. Omit `name` and every one of those strings is `resilient*` exactly as
  * it has always been — no existing machine changes.
+ *
+ * `mountResilientCall` reads the same name off the knob, so a mounted named
+ * knob's settle cells are `jev_ok` / `jev_err` too — the mount never spells the
+ * `resilient_*` literals, and two named knobs mounted into one machine spread
+ * into four distinct cells.
  */
 
 import { z } from "zod";
@@ -1041,6 +1063,11 @@ export function createResilientCall<
   }
 
   return {
+    // The Msg-name family this knob speaks, as a VALUE typed at `N`. `mount`
+    // keys its settle cells off this rather than off the `resilient_*`
+    // literals, so a named knob mounts into its own cells (#229) and the Cmd,
+    // the Msgs, the Sub ids and the mounted cells all derive from one name.
+    name,
     init,
     attempt,
     resume,
@@ -1071,6 +1098,345 @@ export function liftResilience<
   [slice, cmds]: readonly [ResilientState<I, R>, readonly C[]],
 ): readonly [S, readonly C[]] {
   return [{ ...state, resilience: slice }, cmds];
+}
+
+// ===========================================================================
+// mount — the eight hand-spliced wiring points, pre-assembled.
+// ===========================================================================
+
+/** What every verb of a knob in this family hands back. */
+export type Settle<I, R> = readonly [
+  ResilientState<I, R>,
+  readonly RunCmd<I>[],
+];
+
+/**
+ * The part of a resilient-call knob {@link mountResilientCall} needs. This knob
+ * satisfies it, and so does every knob that delegates these verbs to it —
+ * `internal/jev/ask` and `internal/llm-call` both do, which is why the mount is
+ * written against the shape rather than against either door.
+ *
+ * `OkMsg` / `ErrMsg` are parameters rather than {@link SucceedMsg} /
+ * {@link FailMsg} because an inheriting knob narrows them: jev-ask's `fail`
+ * takes a `JevFailMsg` whose `error` is a typed `JevAskErr`, and a mount that
+ * fixed the supertype would hand that verb a widened Msg.
+ */
+export interface MountableKnob<
+  I,
+  R,
+  OkMsg,
+  ErrMsg,
+  Handlers,
+  N extends string = DefaultResilientName,
+> {
+  /**
+   * The Msg-name family this knob settles into — `<name>_ok` / `<name>_err`
+   * (#229). The mount reads it rather than assuming `resilient_*`, so a named
+   * knob mounts into the cells it actually emits; an unnamed one is
+   * `resilient`, so nothing a machine already spread changes.
+   */
+  readonly name: N;
+  init(): ResilientState<I, R>;
+  succeed(s: ResilientState<I, R>, key: string, msg: OkMsg): Settle<I, R>;
+  fail(s: ResilientState<I, R>, key: string, msg: ErrMsg): Settle<I, R>;
+  onTimer(s: ResilientState<I, R>, msg: ResilientTimerMsg): Settle<I, R>;
+  subs(s: ResilientState<I, R>): readonly DeadlineSub[];
+  handlers(): Handlers;
+}
+
+/**
+ * The consumer's half of a settle cell: fold the settled answer into the
+ * machine's own Model.
+ *
+ * It is handed the Model the inherited verb ALREADY settled — the slice at
+ * `slice` is the post-`succeed` / post-`fail` one — so the ordering that wedges
+ * a call at `running` is not something this callback can express. It returns
+ * the repo's universal cell shape so a fold that needs to chain an effect
+ * (book the answer, then write it somewhere) returns that Cmd like any other
+ * reducer cell would.
+ */
+export type SettleFold<Model, M, C extends Cmd> = (
+  model: Model,
+  msg: M,
+) => readonly [Model, readonly C[]];
+
+/** One cell of the update fragment {@link mountResilientCall} returns. */
+export type MountedCell<Model, M, I, C extends Cmd> = (
+  model: Model,
+  msg: M,
+) => readonly [Model, readonly (RunCmd<I> | C)[]];
+
+/**
+ * What to mount, and where. `slice` names the Model field the knob's state
+ * lives on — a plain, readable field, per
+ * [ADR 0015](../../../../.decisions/0015-hide-the-wiring-never-the-state.md):
+ * the mount absorbs the assembly and hides none of the durable state.
+ */
+export interface MountConfig<
+  Model,
+  Slice extends string,
+  I,
+  R,
+  AttemptType extends string,
+  AttemptMsg,
+  OkMsg,
+  ErrMsg,
+  C extends Cmd,
+> {
+  /** The Model field carrying the knob's slice. */
+  readonly slice: Slice;
+  /**
+   * The cell that starts a call. Its shape is the one wiring point the mount
+   * cannot supply: each door's `attempt` takes its own arguments (jev-ask reads
+   * a key, a state and an instant; llm-call reads a request), and only the
+   * consumer knows which Msg field carries each. `run` is that one line.
+   */
+  readonly attempt: {
+    /** The Msg type that starts a call — the key the cell lands on. */
+    readonly on: AttemptType;
+    readonly run: (
+      slice: ResilientState<I, R>,
+      msg: AttemptMsg,
+    ) => Settle<I, R>;
+  };
+  /** Fold a settled success into the Model. Omit and only the slice advances. */
+  readonly onOk?: SettleFold<Model, OkMsg, C>;
+  /** Fold a settled failure into the Model. Omit and only the slice advances. */
+  readonly onErr?: SettleFold<Model, ErrMsg, C>;
+  /**
+   * Fold a call the TIMER settled into the Model. This is the third failure
+   * class, and it never reaches {@link MountConfig.onErr}: a deadline fire
+   * settles `failed` inside the slice and emits no settle Msg, so without this
+   * callback a call that dies on its budget advances the slice and folds
+   * nothing — the shape that used to be a documented caveat.
+   *
+   * It runs once per call the `deadline_exceeded` cell moved INTO `failed`:
+   * the deadline fire itself, and the resumed retry whose gate found the
+   * budget spent. A plain backoff tick, a stale fire and an already-`failed`
+   * call fold nothing. `error` is the slice's own settled error — a
+   * {@link DeadlineExceededError} on the deadline path.
+   *
+   * Omit and only the slice advances, exactly as the other two do.
+   */
+  readonly onDeadline?: SettleFold<Model, DeadlineSettled, C>;
+}
+
+/**
+ * What {@link MountConfig.onDeadline} is handed: the one call the timer cell
+ * just settled `failed`, named by its `key`, carrying the error the slice
+ * settled with and the timer Msg that produced it. It is not a Msg the reducer
+ * ever sees — no settle Msg exists for this failure class, which is the whole
+ * reason the callback is here.
+ */
+export interface DeadlineSettled {
+  /** The call key that settled. */
+  readonly key: string;
+  /** The error now on the slice — a {@link DeadlineExceededError} on the deadline path. */
+  readonly error: unknown;
+  /** The timer Msg whose fire settled it. */
+  readonly msg: ResilientTimerMsg;
+}
+
+/**
+ * The four fragments a consumer spreads into `defineMachine`. Together with
+ * `init` they are the eight wiring points; none of them is optional at the type
+ * level, so a consumer that mounts cannot omit `subscribe` (a backed-off retry
+ * that never fires) or re-implement `interpret` as a dispatching handler.
+ */
+export interface MountedResilientCall<
+  Model,
+  Slice extends string,
+  I,
+  R,
+  AttemptType extends string,
+  AttemptMsg,
+  OkMsg,
+  ErrMsg,
+  C extends Cmd,
+  Handlers,
+  N extends string = DefaultResilientName,
+> {
+  /** The starting slice under its field name — spread into the machine's `init`. */
+  init(): { readonly [K in Slice]: ResilientState<I, R> };
+  /**
+   * The three settle cells plus the attempt cell, to spread into `update`.
+   *
+   * The two settle keys are the knob's OWN Msg names (#229), so a knob built as
+   * `name: "jev"` mounts into `jev_ok` / `jev_err` and two named knobs in one
+   * machine spread into four distinct cells instead of colliding on one. An
+   * unnamed knob is `resilient`, so the keys read `resilient_ok` /
+   * `resilient_err` exactly as they always have. `deadline_exceeded` is the
+   * protocol's timer Msg and carries no name; the cell it lands on folds
+   * through {@link MountConfig.onDeadline}, since a call the timer settles
+   * emits no settle Msg and so reaches no `onErr`.
+   */
+  readonly update: Readonly<
+    Record<AttemptType, MountedCell<Model, AttemptMsg, I, C>>
+  > & {
+    readonly [K in ResilientOkType<N>]: MountedCell<Model, OkMsg, I, C>;
+  } & {
+    readonly [K in ResilientErrType<N>]: MountedCell<Model, ErrMsg, I, C>;
+  } & {
+    readonly deadline_exceeded: MountedCell<Model, ResilientTimerMsg, I, C>;
+  };
+  subscriptions(model: Model): readonly DeadlineSub[];
+  readonly subscribe: { readonly deadline: typeof subscribeDeadline };
+  readonly interpret: Handlers;
+}
+
+/**
+ * Pre-assemble a resilient-call knob into the fragments a machine definition
+ * spreads, so mounting one is a spread instead of eight hand-spliced points.
+ *
+ * The three points that used to fail only at runtime are gone at the type
+ * level rather than documented:
+ *
+ *   - The settle cells run the inherited `succeed` / `fail` verb and hand the
+ *     already-settled Model to {@link SettleFold}. There is no cell for a
+ *     consumer to write in the wrong order.
+ *   - `interpret` is `knob.handlers()` — the form that RETURNS the settle Msg
+ *     so it re-enters the reducer. A consumer that spreads the fragment cannot
+ *     substitute a dispatching handler for it.
+ *   - `subscribe` carries `subscribeDeadline`, so the retry timer is armed by
+ *     construction rather than by remembering.
+ *
+ * A deadline-exceeded call settles inside the slice and emits no settle Msg, so
+ * it reaches no `onErr`. {@link MountConfig.onDeadline} is that failure class's
+ * fold — omit it and the slice still advances, exactly as omitting `onErr`
+ * does.
+ *
+ * Nothing is taken away. The slice stays a plain field at `slice` that the
+ * consumer reads, `replay` sees and the journal prints, and every verb the
+ * fragments call is still exported and callable by hand — a consumer that
+ * wants a settle cell this shape cannot express writes that one cell itself and
+ * spreads the rest. PURE: a record of closures over `knob` and `config`, no
+ * clock and no RNG.
+ */
+export function mountResilientCall<
+  Slice extends string,
+  I,
+  R,
+  Model extends { readonly [K in Slice]: ResilientState<I, R> },
+  AttemptType extends string,
+  AttemptMsg,
+  OkMsg extends { readonly key: string },
+  ErrMsg extends { readonly key: string },
+  Handlers,
+  C extends Cmd = never,
+  N extends string = DefaultResilientName,
+>(
+  knob: MountableKnob<I, R, OkMsg, ErrMsg, Handlers, N>,
+  config: MountConfig<
+    Model,
+    Slice,
+    I,
+    R,
+    AttemptType,
+    AttemptMsg,
+    OkMsg,
+    ErrMsg,
+    C
+  >,
+): MountedResilientCall<
+  Model,
+  Slice,
+  I,
+  R,
+  AttemptType,
+  AttemptMsg,
+  OkMsg,
+  ErrMsg,
+  C,
+  Handlers,
+  N
+> {
+  const { slice, attempt, onOk, onErr, onDeadline } = config;
+
+  // A computed key of a generic literal type widens to a string index
+  // signature, which is the one place this file asserts: the assertion says
+  // only what `Slice extends string` already pins.
+  function put(model: Model, next: ResilientState<I, R>): Model {
+    return {
+      ...model,
+      ...({ [slice]: next } as { readonly [K in Slice]: ResilientState<I, R> }),
+    };
+  }
+
+  // The settle shape both `resilient_ok` and `resilient_err` have: inherited
+  // verb, then the consumer's fold over the Model it settled.
+  function settle<M extends { readonly key: string }>(
+    verb: (s: ResilientState<I, R>, key: string, msg: M) => Settle<I, R>,
+    fold: SettleFold<Model, M, C> | undefined,
+  ): MountedCell<Model, M, I, C> {
+    return (model, msg) => {
+      const [next, cmds] = verb(model[slice], msg.key, msg);
+      const settled = put(model, next);
+      if (fold === undefined) return [settled, cmds];
+      const [folded, extra] = fold(settled, msg);
+      return [folded, [...cmds, ...extra]];
+    };
+  }
+
+  const update = {
+    [attempt.on]: (model: Model, msg: AttemptMsg) => {
+      const [next, cmds] = attempt.run(model[slice], msg);
+      return [put(model, next), cmds] as const;
+    },
+    // Keyed off the knob's own name, not the `resilient_*` literals: a knob
+    // built with `name: "jev"` emits `jev_ok` / `jev_err`, and a mount that
+    // spelled the literals would spread cells nothing ever dispatches to.
+    [`${knob.name}_ok`]: settle<OkMsg>(
+      (s, key, msg) => knob.succeed(s, key, msg),
+      onOk,
+    ),
+    [`${knob.name}_err`]: settle<ErrMsg>(
+      (s, key, msg) => knob.fail(s, key, msg),
+      onErr,
+    ),
+    // The one settle path that carries no Msg: `onTimer` writes `failed`
+    // straight into the slice, so a mounted `onErr` never sees it. The cell
+    // reads the transition off the two slices instead of inventing a Msg —
+    // whichever key moved INTO `failed` is the call that just died.
+    deadline_exceeded: (model: Model, msg: ResilientTimerMsg) => {
+      const before = model[slice];
+      const [next, cmds] = knob.onTimer(before, msg);
+      const advanced = put(model, next);
+      if (onDeadline === undefined) return [advanced, cmds] as const;
+      let folded = advanced;
+      const extra: C[] = [];
+      for (const [key, call] of Object.entries(next.calls)) {
+        if (call.phase !== "failed") continue;
+        if (before.calls[key]?.phase === "failed") continue;
+        const [m, c] = onDeadline(folded, { key, error: call.error, msg });
+        folded = m;
+        extra.push(...c);
+      }
+      return [folded, [...cmds, ...extra]] as const;
+    },
+  } as MountedResilientCall<
+    Model,
+    Slice,
+    I,
+    R,
+    AttemptType,
+    AttemptMsg,
+    OkMsg,
+    ErrMsg,
+    C,
+    Handlers,
+    N
+  >["update"];
+
+  return {
+    init: () =>
+      ({ [slice]: knob.init() }) as {
+        readonly [K in Slice]: ResilientState<I, R>;
+      },
+    update,
+    subscriptions: (model) => knob.subs(model[slice]),
+    subscribe: { deadline: subscribeDeadline },
+    interpret: knob.handlers(),
+  };
 }
 
 /**

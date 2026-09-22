@@ -66,8 +66,13 @@ export type {
   CircuitConfig,
   DeadlineConfig as ResilientCallDeadlineConfig,
   DeadlineExceededError,
+  DeadlineSettled,
   DefaultResilientName,
   FailMsg,
+  MountableKnob,
+  MountConfig,
+  MountedCell,
+  MountedResilientCall,
   RateLimitConfig,
   ResilientConfig,
   ResilientErrType,
@@ -79,12 +84,15 @@ export type {
   ResilientTimerMsg,
   RunCmd,
   RunCmdDef,
+  Settle,
+  SettleFold,
   SucceedMsg,
 } from "../internal/resilience/resilient-call";
 export {
   createResilientCall,
   DEFAULT_RESILIENT_NAME,
   liftResilience,
+  mountResilientCall,
   runCmdDef,
 } from "../internal/resilience/resilient-call";
 export * from "../internal/resilience/retry-to-success";

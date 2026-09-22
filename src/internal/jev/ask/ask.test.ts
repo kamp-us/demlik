@@ -189,6 +189,7 @@ describe("createJevAsk — the slice and verbs are resilient-call's", () => {
       "fail",
       "handlers",
       "init",
+      "name",
       "onTimer",
       "subs",
       "succeed",
