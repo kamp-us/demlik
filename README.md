@@ -48,8 +48,8 @@ runtime.getState(); // { count: 1 }
 
 ## Two engines, one machine
 
-The package has three entry points. A machine file imports only the first, so
-it runs unchanged on either engine.
+The core is `@demlik/tea`, and each engine has its own entry point. A machine
+file imports only the core, so it runs unchanged on either engine.
 
 - `@demlik/tea` — the core: `defineMachine`, `Cmd`, `replay` and the types. It
   imports no engine.
