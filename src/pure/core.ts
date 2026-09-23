@@ -1750,10 +1750,10 @@ export type NoCtx = Readonly<Record<never, never>>;
 // Additive: the third arg is OPTIONAL (`dispatch?: (msg: M) => void`), so a
 // handler declaring only `(cmd, ctx)` stays assignable, and a unit test that
 // invokes a handler directly with two args still typechecks. The kernel ALWAYS
-// passes the dispatch (see `callHandler` in `../promise/loop.ts`); the optionality is
-// purely a backward-compatibility affordance on the TYPE, not a runtime "maybe
-// absent". A handler authored via `wrapDetached` receives a NARROWER view of
-// this dispatch (only its declared result-Msg set).
+// passes the dispatch (see `callHandler` in `../internal/engine/loop.ts`); the
+// optionality is purely a backward-compatibility affordance on the TYPE, not a
+// runtime "maybe absent". A handler authored via `wrapDetached` receives a
+// NARROWER view of this dispatch (only its declared result-Msg set).
 //
 // A named type so consumers can type the free-standing handler dictionary
 // they hand `run` with `Interpret<MyMsg, MyCmd, MyCtx>` instead of

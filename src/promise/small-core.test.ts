@@ -23,14 +23,18 @@ import { cmdEdgeOf } from "../pure/core";
 import { run } from "./index";
 
 // ───────────────────────────────────────────────────────────────────────────
-// The small core (#280, spike #264). `./loop` knows no built-in; every one of
-// them comes back as an extension. This file pins the spike's eleven cases
-// against the real loop, plus the two it left out: the `stop()` drain/discard
-// gate and the ctx contribution a composed handler settles through.
+// The small core (#280, spike #264). `src/internal/engine/loop.ts` knows no
+// built-in; every one of them comes back as an extension. This file pins the
+// spike's eleven cases against the real loop, plus the two it left out: the
+// `stop()` drain/discard gate and the ctx contribution a composed handler
+// settles through.
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("the core loop file names no built-in", () => {
-  const source = readFileSync(new URL("./loop.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("../internal/engine/loop.ts", import.meta.url),
+    "utf8",
+  );
 
   it.each([
     ["identity", /identity/i],

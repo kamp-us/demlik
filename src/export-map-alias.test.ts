@@ -42,14 +42,6 @@ function moduleDoors(): string[] {
     .map(([spec]) => spec.slice(2));
 }
 
-/**
- * Doors published empty on purpose. `./effect` opens before the Effect engine
- * lands so the entry-point guard covers it from day one (#275). It resolves
- * like any door, but it has no exports yet. Once the engine fills it, this
- * test fails and the door leaves this set.
- */
-const EMPTY_DOORS: ReadonlySet<string> = new Set(["effect"]);
-
 describe("every published door resolves under the test alias", () => {
   it("resolves the bare root", () => {
     expect(typeof defineMachine).toBe("function");
@@ -62,7 +54,6 @@ describe("every published door resolves under the test alias", () => {
     const mod = (await import(
       /* @vite-ignore */ `@demlik/tea/${sub}`
     )) as Record<string, unknown>;
-    if (EMPTY_DOORS.has(sub)) expect(Object.keys(mod)).toEqual([]);
-    else expect(Object.keys(mod).length).toBeGreaterThan(0);
+    expect(Object.keys(mod).length).toBeGreaterThan(0);
   });
 });

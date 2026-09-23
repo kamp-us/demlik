@@ -1,8 +1,17 @@
 /**
- * The Promise engine's core loop (#280, spike #264). It does five things and
+ * The core loop both engines run (#280, spike #264). It does five things and
  * nothing else: it keeps one serial tail, folds a Msg into a transition, saves
  * before any effect, reconciles the running Subs, and runs the transition's
  * Cmds, dispatching what they return. It has no special case for any built-in.
+ *
+ * One loop, not one per engine (#283). The loop calls a handler and a runner
+ * through erased signatures and awaits a Promise either way, so an engine's
+ * own types never pass through it. The Effect engine turns each handler and
+ * runner into a fiber at its own edge, run with the services the caller
+ * provided, so Effect services (`R`) reach every handler without the loop
+ * carrying a type slot for them — the gap spike #260's generic loop left open.
+ * Sharing the loop is also what makes the two engines' traces identical: the
+ * fold, the save order and the built-ins are the same code.
  *
  * Everything else `run` offers is an {@link Extension} built on five points:
  *
@@ -19,29 +28,29 @@
  *
  * An extension may also add methods to the run handle (`handle`). Array order
  * is nesting order: the first extension's middleware is the outermost, and
- * commit callbacks run first to last. `run` fixes that order; it is not a
- * user-facing plugin API (#268).
+ * commit callbacks run first to last. `builtinExtensions` (`./builtins`) fixes
+ * that order for every engine; it is not a user-facing plugin API (#268).
  *
  * `stop()` is the core's own lifecycle, because the gate it drives is what every
  * dispatch passes through: open → draining → closed, never backwards.
  */
 
-import type { Dispose, Sub, SubEntry } from "../pure/core";
-import { desiredSub, detachWork } from "../pure/core";
+import type { Dispose, Sub, SubEntry } from "../../pure/core";
+import { desiredSub, detachWork } from "../../pure/core";
 import type {
   DispatchSettle,
   OnError,
   RuntimeErrorContext,
   RuntimeErrorPhase,
   Store,
-} from "../runtime-types";
+} from "../../runtime-types";
 import {
   DispatchDiscardedError,
   DisposeTimeoutNotice,
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
-} from "../runtime-types";
+} from "../../runtime-types";
 
 // === The extension points ===
 

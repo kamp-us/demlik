@@ -34,7 +34,7 @@ export is not done until it has a row here. The list itself is pinned by
 |---|---|---|
 | `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine |
 | `./promise` | stable | the Promise engine: `run` and `driveToDone`, moved off `.` |
-| `./effect` | experimental | the Effect engine, empty until it lands; `effect` is an optional peer, and only this entry may import it |
+| `./effect` | experimental | the Effect engine: `run` with Effect handlers, Stream sub runners, Layers and interruption, against Effect v4 RC; `effect` is an optional peer, and only this entry may import it |
 | `./testing` | stable | testing infra is kernel |
 | `./pbt` | stable | arbitraries + runners, one door |
 | `./do` | stable | durable/host seam |
