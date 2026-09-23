@@ -61,15 +61,27 @@ Every in-tree Sub is ported. By subpath:
   channel) is a new id, so the runner restarts; it used to be ignored.
   `defineManagedResource` and `fromTransport` take the Sub type as their first
   type parameter (`name`) and return `{ type, depKeyed(when), subscribe, … }`.
-  Removed: their `.sub(key)` and `.subIdFor(key)`, `defineManagedResource`'s
-  `.gated(when)`, `combineManagedResources`, `GatedManagedResource`,
-  `CombinedManagedResources`. `ManagedResourceSub` / `TransportSub` are
-  `Sub<N, TKey>`.
+  `ManagedResourceSub` / `TransportSub` are `Sub<N, TKey>`. Removed, each
+  with what replaces it:
+  - `.sub(key)` → `.depKeyed(when)`. Put the entry in `subs` and move the
+    `if` that picked the key into `when(state)`, returning `null` for off.
+  - `.subIdFor(key)` → `subIdOf(battery.type, key)`. The id is derived from
+    the type and the key now.
+  - `defineManagedResource`'s `.gated(when)` and `GatedManagedResource` →
+    `.depKeyed(when)`. It takes the same `when` and gives a `subs` entry.
+  - `combineManagedResources` and `CombinedManagedResources` → nothing to
+    combine. Each battery's `name` is its own Sub type, so list each
+    battery's `.depKeyed(when)` in `subs` and put each `.subscribe` in the
+    `subscribe` table under its `type`: `subscribe: { [a.type]: a.subscribe,
+    [b.type]: b.subscribe }`.
 - `./node`: `NodeWsSub` / `NodeTimerSub` / `NodeSignalSub` carry plain deps
   (`NodeWsDeps { key, url }`, `NodeTimerDeps`, `NodeSignalDeps`). The ws
   callbacks move to `nodeSubscribe({ ws: { onMessage, onOpen?, onClose?,
   onError? } })`. The ws registry and `sendToWebSocket(ctx, key, data)` key on
-  your `key`, not a `SubId`. Removed: `AssertNodeSubIsSub`.
+  your `key`, not a `SubId`. Removed: `AssertNodeSubIsSub`, with no
+  replacement needed. It was a compile-time check that `NodeSub` fits `Sub`;
+  each node Sub is now declared as a `Sub<"type", Deps>`, so the fit holds by
+  construction. Delete any reference to it.
 - `./resilience` (battery): `DeadlineSub` is one deadline entry. A machine arms
   a battery's deadlines as ONE `deadline` Sub: `subs: [deadlinesSub((s) =>
   rc.subs(s.slice))]` and `run(machine, { subscribe: { deadline:
