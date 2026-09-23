@@ -14,8 +14,8 @@ library you already use (zod, or Effect Schema through
 `Schema.toStandardSchemaV1`). The host and
 testing adapters ride on optional peers you add only for the surface you use:
 `react` / `react-dom` (the `./react` hooks), `ws` (Node WebSocket subs),
-`fast-check` (the `./pbt` property-testing helpers), and `vitest` (the testing
-utilities).
+`fast-check` (the `./pbt` property-testing helpers), `vitest` (the testing
+utilities), and `effect` (the `./effect` engine).
 
 ## Quickstart
 
@@ -45,6 +45,24 @@ const runtime = await run(counter, { ctx: {} }).ready;
 await runtime.dispatch({ type: "increment" });
 runtime.getState(); // { count: 1 }
 ```
+
+## Two engines, one machine
+
+The package has three entry points. A machine file imports only the first, so
+it runs unchanged on either engine.
+
+- `@demlik/tea` — the core: `defineMachine`, `Cmd`, `replay` and the types. It
+  imports no engine.
+- `@demlik/tea/promise` — the Promise engine. Handlers return Promises.
+- `@demlik/tea/effect` — the Effect engine (`experimental`, Effect v4). Handlers
+  return Effects, services come from your Layers, and closing the scope
+  interrupts whatever is in flight.
+
+[Run a machine on the Promise engine](https://github.com/kamp-us/demlik/blob/main/docs/how-to/run-on-the-promise-engine.md)
+and [on the Effect engine](https://github.com/kamp-us/demlik/blob/main/docs/how-to/run-on-the-effect-engine.md)
+build on the same machine file. Coming from 0.15?
+[The migration guide](https://github.com/kamp-us/demlik/blob/main/docs/how-to/migrate-from-0-15.md)
+shows every removed or reshaped API, before and after.
 
 ## Documentation
 

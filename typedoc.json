@@ -4,6 +4,7 @@
   "entryPoints": [
     "src/index.ts",
     "src/promise/index.ts",
+    "src/effect/index.ts",
     "src/react/index.ts",
     "src/do/index.ts",
     "src/node/index.ts",

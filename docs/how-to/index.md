@@ -4,8 +4,21 @@ Goal-oriented directions for getting a specific job done with `@demlik/tea`.
 Grouped by the job, not by the module — reach for the guide whose title matches
 what you are trying to do, and it names the subpath you need.
 
+## Upgrade
+
+- [Migrate from 0.15 to the two-engine release](./migrate-from-0-15.md) — every
+  removed or reshaped API, before and after: `run` on `@demlik/tea/promise`,
+  handlers and Sub runners at `run`, Subs as `{ type, deps }` data, handler
+  outcomes, and the end of `provide`, `mount*` and the `with*` wrappers.
+
 ## Run a machine somewhere
 
+- [Run a machine on the Promise engine](./run-on-the-promise-engine.md) — hand
+  `run` from `@demlik/tea/promise` Promise handlers for a machine file that
+  imports only `@demlik/tea`.
+- [Run a machine on the Effect engine](./run-on-the-effect-engine.md) — run the
+  same machine file with `run` from `@demlik/tea/effect`: Effect handlers,
+  services from your Layers, and interruption when the scope closes.
 - [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
   `Store` so the Model survives a Durable Object eviction and resumes on the next
   boot.
