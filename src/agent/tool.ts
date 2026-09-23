@@ -68,10 +68,13 @@ const SNAPSHOT_WRITE_TYPE = "snapshot_write";
  * A tool name `tool()` refuses. A tool's name is its Cmd `type` — so
  * its interpret key — and the prefix of its settle Msgs, so every string
  * already spoken by the protocol is taken twice over: the settle prefixes
- * (`resilient`, `agent_tool`, `compact`) would overwrite the agent's own
+ * (`resilient_run`, `agent_tool`, `compact`) would overwrite the agent's own
  * reducer handlers through `toMachine`'s last-wins spread, and the discriminants
  * themselves (`compact_run`, `resilient_run`, …) would shadow the interpret
- * handler of that name. Both halves derive from `MsgType`: a new entry there
+ * handler of that name. `resilient` is reserved as a Cmd prefix — the part
+ * before `_run` in the brain Cmd `resilient_run` — not as a settle prefix: its
+ * `resilient_ok` / `resilient_err` name nothing the agent settles. Both halves
+ * derive from `MsgType`: a new entry there
  * reserves its name and its prefix with no second edit. The two names outside
  * the protocol are the router's own `tool_rejected` and the checkpoint handler
  * `snapshot_write`, which `toMachine` merges under the consumer's key.
