@@ -1,18 +1,19 @@
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, replay, run } from "../../../index";
+import { defineMachine, replay } from "../../../index";
+import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
+import { deadlineSub } from "../deadline";
+import { runCmdDef } from "../resilient-call";
 import {
-  type RefreshTokenCmd,
+  refreshToken,
   refreshTokenCmd,
   type Token,
   type TokenRefreshMsg,
-  tokenRefreshedMsg,
 } from "../token-refresh";
 import {
   type AuthedState,
   createAuthedCall,
-  deadlineSub,
   type FailMsg,
   type ResilientTimerMsg,
   type RunCmd,
@@ -30,10 +31,14 @@ const rngZero = () => 0;
 
 const refresh = async () => tok(10_000, "fresh");
 
+// The engine-minted `refresh_token_ok` a landed mint re-enters as.
+const refreshed = (token: Token, at: number) =>
+  refreshToken.ok(refreshTokenCmd(), token, at);
+
 // A full resilient config + auth fields. retry/maxAttempts 3 so we can tell a
 // 401 (terminal after one refresh) apart from a transient failure (backs off).
+// The token mint is not config: it is the `refresh_token` Cmd's handler.
 const fullConfig = {
-  refresh,
   cache: { ttlMs: 1_000 },
   circuit: { threshold: 2, cooldownMs: 500 },
   rateLimit: { capacity: 5, refillPerSec: 1 },
@@ -59,7 +64,7 @@ interface HostState {
 type HostMsg =
   | { type: "attempt"; key: string; input: string; at: number }
   | { type: "unauthorized"; key: string; at: number }
-  | { type: "token_refreshed"; token: Token; at: number }
+  | TokenRefreshMsg
   | SucceedMsg<string>
   | FailMsg
   | ResilientTimerMsg;
@@ -75,7 +80,6 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof ac.subs>[number],
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -85,32 +89,32 @@ function makeMachine(
         const [slice, cmds] = ac.attempt(s.authed, m.key, m.input, m.at);
         return [{ authed: slice }, cmds];
       },
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = ac.succeed(s.authed, m.key, m);
+      resilient_run_ok: (s, m) => {
+        const [slice, cmds] = ac.succeed(s.authed, m);
         return [{ authed: slice }, cmds];
       },
-      resilient_err: (s, m) => {
-        const [slice, cmds] = ac.fail(s.authed, m.key, m);
+      resilient_run_err: (s, m) => {
+        const [slice, cmds] = ac.fail(s.authed, m);
         return [{ authed: slice }, cmds];
       },
       unauthorized: (s, m) => {
         const [slice, cmds] = ac.on401(s.authed, m.key, m.at);
         return [{ authed: slice }, cmds];
       },
-      token_refreshed: (s, m) => {
+      refresh_token_ok: (s, m) => {
         const [slice, cmds] = ac.onRefreshed(
-          ac.installToken(s.authed, m.token),
+          ac.installToken(s.authed, m.value),
           m.at,
         );
         return [{ authed: slice }, cmds];
       },
+      refresh_token_err: (s) => [s, []],
       deadline_exceeded: (s, m) => {
         const [slice, cmds] = ac.onTimer(s.authed, m);
         return [{ authed: slice }, cmds];
       },
     },
-    subscriptions: (s) => ac.subs(s.authed),
-    subscribe: { deadline: () => () => {} },
+    subs: [{ type: "timer", deps: (s: HostState) => ac.timer(s.authed) }],
   });
   return { ac, machine };
 }
@@ -133,18 +137,17 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-const okMsg = (key: string, result: string, at = 0): SucceedMsg<string> => ({
-  type: "resilient_ok",
-  key,
-  result,
-  at,
-});
-const errMsg = (key: string, error: unknown, at = 0): FailMsg => ({
-  type: "resilient_err",
-  key,
-  error,
-  at,
-});
+// The engine-minted settle Msgs of the run Cmd, as a real handler's outcome
+// would produce them.
+const runDef = runCmdDef<string, string>();
+const okMsg = (key: string, result: string, at = 0): SucceedMsg<string> =>
+  runDef.ok(runDef({ key, input: "in" }), result, at);
+const errMsg = (key: string, cause: unknown, at = 0): FailMsg =>
+  runDef.err(
+    runDef({ key, input: "in" }),
+    { _tag: "port_rejected", cause },
+    at,
+  );
 
 describe("createAuthedCall — init", () => {
   it("composes resilient-call's slice + token-refresh's slice + empty auth bookkeeping", () => {
@@ -180,7 +183,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
     let s = ac.init();
     [s] = ac.attempt(s, "k", "in", 0);
-    [s] = ac.succeed(s, "k", okMsg("k", "VALUE", 0));
+    [s] = ac.succeed(s, okMsg("k", "VALUE", 0));
     expect(s.resilience.calls.k).toEqual({
       phase: "succeeded",
       result: "VALUE",
@@ -194,7 +197,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
     let s = ac.init();
     [s] = ac.attempt(s, "k", "in", 100);
-    [s] = ac.fail(s, "k", errMsg("k", "5xx", 100));
+    [s] = ac.fail(s, errMsg("k", "5xx", 100));
     // rngZero → delay 0 → retryAtMs == at; deadline preserved.
     expect(s.resilience.calls.k).toEqual({
       phase: "waiting_retry",
@@ -210,7 +213,7 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
     let s = ac.init();
     [s] = ac.attempt(s, "k", "in", 0);
-    [s] = ac.fail(s, "k", errMsg("k", "e", 0));
+    [s] = ac.fail(s, errMsg("k", "e", 0));
     const [s2, cmds] = ac.onTimer(s, {
       type: "deadline_exceeded",
       id: "resilient:retry:k",
@@ -220,16 +223,23 @@ describe("createAuthedCall — delegated resilient verbs", () => {
     expect(s2.resilience.calls.k.phase).toBe("running");
   });
 
-  it("subs are exactly resilient-call's — auth arms no timers", () => {
+  it("deadlines are exactly resilient-call's — auth arms no timers", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
     let s = ac.init();
     [s] = ac.attempt(s, "k", "in", 100);
-    expect(ac.subs(s)).toEqual([deadlineSub("resilient:deadline:k", 5_100)]);
-    [s] = ac.fail(s, "k", errMsg("k", "e", 100));
-    expect(ac.subs(s)).toEqual([
+    expect(ac.deadlines(s)).toEqual([
+      deadlineSub("resilient:deadline:k", 5_100),
+    ]);
+    [s] = ac.fail(s, errMsg("k", "e", 100));
+    expect(ac.deadlines(s)).toEqual([
       deadlineSub("resilient:retry:k", 100),
       deadlineSub("resilient:deadline:k", 5_100),
     ]);
+    // The built-in timer arms the soonest one, counted from the slice's clock.
+    expect(ac.timer(s)).toEqual({
+      ms: 0,
+      msg: { type: "deadline_exceeded", id: "resilient:retry:k", atMs: 100 },
+    });
   });
 });
 
@@ -318,7 +328,7 @@ describe("createAuthedCall — the 401 dance (refresh → retry once)", () => {
     [s] = ac.attempt(s, "k", "in", 0);
     [s] = ac.on401(s, "k", 0); // parked
     // The original in-flight effect actually came back OK (raced the refresh).
-    [s] = ac.succeed(s, "k", okMsg("k", "OK", 0));
+    [s] = ac.succeed(s, okMsg("k", "OK", 0));
     expect(s.resilience.calls.k).toEqual({ phase: "succeeded", result: "OK" });
     expect(s.authRetry.k).toBeUndefined();
     expect(s.pendingAuthRetry.k).toBeUndefined();
@@ -336,41 +346,18 @@ describe("createAuthedCall — needsRefresh (re-exposed token-refresh verb)", ()
   });
 });
 
-describe("createAuthedCall — handlers splice both ports", () => {
-  it("routes a resolving run port to resilient_ok", async () => {
+describe("createAuthedCall — two Cmd defs, no handlers (ADR 0021)", () => {
+  it("exposes the run and refresh Cmd defs and ships no handler", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
-    const h = ac.handlers({ run: async (input) => `r:${input}`, refresh });
-    const msg = await h.resilient_run(
-      { type: "resilient_run", key: "k", input: "hi" },
-      {} as never,
-    );
-    expect(msg?.type).toBe("resilient_ok");
-    if (msg?.type === "resilient_ok") expect(msg.result).toBe("r:hi");
+    expect(ac.run.cmdType).toBe("resilient_run");
+    expect(ac.refresh).toBe(refreshToken);
+    expect("handlers" in ac).toBe(false);
   });
 
-  it("routes the refresh port to token_refreshed", async () => {
-    const minted = tok(9999, "minted");
+  it("the run Cmd a verb emits is the def's own value", () => {
     const ac = createAuthedCall<string, string>(fullConfig, rngZero);
-    const h = ac.handlers({
-      run: async () => "x",
-      refresh: async () => minted,
-    });
-    const msg = await h.refresh_token(refreshTokenCmd(), {} as never);
-    expect(msg).toEqual(tokenRefreshedMsg(minted));
-  });
-
-  it("routes a rejecting refresh port to token_refresh_failed without throwing", async () => {
-    const boom = new Error("mint down");
-    const ac = createAuthedCall<string, string>(fullConfig, rngZero);
-    const h = ac.handlers({
-      run: async () => "x",
-      refresh: async () => {
-        throw boom;
-      },
-    });
-    const msg = await h.refresh_token(refreshTokenCmd(), {} as never);
-    expect(msg?.type).toBe("token_refresh_failed");
-    if (msg?.type === "token_refresh_failed") expect(msg.error).toBe(boom);
+    const [, cmds] = ac.attempt(ac.init(), "k", "hi", 0);
+    expect(cmds).toEqual([ac.run({ key: "k", input: "hi" })]);
   });
 });
 
@@ -395,7 +382,7 @@ describe("createAuthedCall — wired in a machine (replay)", () => {
       msgs: [
         { type: "attempt", key: "k", input: "in", at: 0 },
         { type: "unauthorized", key: "k", at: 0 },
-        { type: "token_refreshed", token: tok(10_000, "new"), at: 10 },
+        refreshed(tok(10_000, "new"), 10),
       ],
     });
     // replay accumulates cmds across the whole sequence: the original run, the
@@ -417,8 +404,8 @@ describe("createAuthedCall — wired in a machine (replay)", () => {
       msgs: [
         { type: "attempt", key: "k", input: "in", at: 0 },
         { type: "unauthorized", key: "k", at: 0 },
-        { type: "token_refreshed", token: tok(10_000, "new"), at: 10 },
-        { type: "resilient_ok", key: "k", result: "DONE", at: 20 },
+        refreshed(tok(10_000, "new"), 10),
+        okMsg("k", "DONE", 20),
       ],
     });
     expect(state.authed.resilience.calls.k).toEqual({
@@ -458,7 +445,7 @@ describe("createAuthedCall — properties", () => {
 
         // A transient failure from the running state backs the call off into
         // `waiting_retry` — exercises a nested write into `resilience.calls`.
-        const [s3] = ac.fail(s1, "k", errMsg("k", "5xx", at));
+        const [s3] = ac.fail(s1, errMsg("k", "5xx", at));
         deepFreeze(s3);
         expect(s3).not.toBe(s1);
 
@@ -481,7 +468,7 @@ describe("createAuthedCall — properties", () => {
         expect(s5).not.toBe(s3);
 
         // Success settles the call and forgets its auth bookkeeping.
-        const [s6] = ac.succeed(s1, "k", okMsg("k", input, at));
+        const [s6] = ac.succeed(s1, okMsg("k", input, at));
         expect(s6).not.toBe(s1);
 
         return true;
@@ -615,10 +602,10 @@ describe("createAuthedCall — properties", () => {
               [s] = ac.on401(s, a.key, a.at);
               break;
             case "ok":
-              [s] = ac.succeed(s, a.key, okMsg(a.key, "VALUE", a.at));
+              [s] = ac.succeed(s, okMsg(a.key, "VALUE", a.at));
               break;
             case "fail":
-              [s] = ac.fail(s, a.key, errMsg(a.key, { _tag: "5xx" }, a.at));
+              [s] = ac.fail(s, errMsg(a.key, { _tag: "5xx" }, a.at));
               break;
             case "refreshed":
               [s] = ac.onRefreshed(
@@ -658,11 +645,7 @@ describe("createAuthedCall — properties", () => {
           key: fc.constantFrom("a", "b"),
           at: fc.nat(10_000),
         }),
-        fc.record({
-          type: fc.constant("token_refreshed" as const),
-          token: fc.constant(tok(1_000_000, "t")),
-          at: fc.nat(10_000),
-        }),
+        fc.nat(10_000).map((at) => refreshed(tok(1_000_000, "t"), at)),
       ),
       { maxLength: 25 },
     );
@@ -688,13 +671,13 @@ describe("createAuthedCall — properties", () => {
 // END STATE of the SHARED circuit breaker after a 401.
 //
 // Here we build an actual `run()` Runtime from the knob's verbs + handlers. The
-// `run` port and the `refresh` port are both wired into `interpret`, so a
-// backend outcome RE-ENTERS the machine exactly as production does:
+// `run` port and the `refresh` port are both wired into `interpret` as outcome
+// handlers, so the engine mints each settle Msg exactly as production does:
 //
-//   attempt → (Cmd) resilient_run → run port → (follow-up Msg) resilient_ok
-//                                              / unauthorized→on401
-//   on401   → (Cmd) refresh_token  → refresh port → (follow-up Msg)
-//                                                    token_refreshed → re-issue
+//   attempt → (Cmd) resilient_run → run port → (minted Msg) resilient_run_ok
+//                                              / 401 sentinel→on401
+//   on401   → (Cmd) refresh_token  → refresh port → (minted Msg)
+//                                                    refresh_token_ok → re-issue
 //
 // We drive a two-key scenario over ONE shared breaker (threshold 1) and assert
 // the breaker is still CLOSED after key "a" exhausts its 401 budget and settles
@@ -717,18 +700,14 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
   interface WState {
     readonly authed: AuthedState<string, string>;
   }
-  // The 401 trigger the run port emits when the backend rejects a credential. It
-  // re-enters as a follow-up Msg and is folded by on401 — exactly the production
-  // path (the run port distinguishes a 401 from a generic 5xx).
+  // The 401 trigger a host can dispatch when the backend rejects a credential;
+  // it is folded by on401 — exactly the production path (the run port
+  // distinguishes a 401 from a generic 5xx).
   type WMsg =
     | { type: "attempt"; key: string; input: string; at: number }
     | { type: "unauthorized"; key: string; at: number }
     | { type: "nop" }
-    | SucceedMsg<string>
-    | FailMsg
-    | TokenRefreshMsg
     | ResilientTimerMsg;
-  type WCmd = RunCmd<string> | RefreshTokenCmd;
 
   // The downstream ports. `outcomes` is a per-key queue the run port pops: each
   // call returns "ok", throws a generic failure ("fail"), or signals a 401
@@ -742,16 +721,15 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
   }
 
   // A run port that distinguishes a 401 from a generic failure. On "401" it
-  // returns a sentinel result the reducer turns into an `unauthorized` Msg —
-  // modelling a guard that inspects the HTTP status. Throwing on "401" would
-  // route to resilient_err (a generic failure), which is exactly NOT the 401
-  // path; instead we surface it as a tagged OK value and let the host fork.
+  // returns a sentinel result the `resilient_run_ok` cell forks to on401 —
+  // modelling a guard that inspects the HTTP status. Returning an `err` on "401"
+  // would mint resilient_run_err (a generic failure), which is exactly NOT the
+  // 401 path; instead we surface it as a sentinel OK value and let the host fork.
   const RUN_401 = "__401__";
 
   function wiredMachine(ctx: WCtx, breakerThreshold = 1) {
     const ac = createAuthedCall<string, string>(
       {
-        refresh,
         // ONE shared breaker. Threshold is a knob per scenario: 1 for the
         // breaker-pollution test (a single `fail` opens it, so we can SEE a
         // terminal 401 must NOT call `fail`); higher for the waiting_retry test
@@ -768,13 +746,15 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
       },
       rngZero,
     );
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as WState,
         msg: {} as WMsg,
-        cmd: {} as WCmd,
         ctx: {} as WCtx,
       },
+      // Both Cmds are `Cmd.define`d: listing them is what makes the engine mint
+      // their settled Msgs from the handlers' outcomes.
+      cmds: [ac.run, ac.refresh],
       init: (loaded) =>
         loaded !== null ? [loaded, []] : [{ authed: ac.init() }, []],
       update: {
@@ -784,51 +764,69 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
         },
         // The run port resolved with the 401 sentinel → fork to on401, the real
         // production path for a credential rejection.
-        resilient_ok: (s, m) => {
-          if (m.result === RUN_401) {
-            const [slice, cmds] = ac.on401(s.authed, m.key, m.at);
+        resilient_run_ok: (s, m) => {
+          if (m.value === RUN_401) {
+            const [slice, cmds] = ac.on401(s.authed, m.cmd.key, m.at);
             return [{ authed: slice }, cmds];
           }
-          const [slice, cmds] = ac.succeed(s.authed, m.key, m);
+          const [slice, cmds] = ac.succeed(s.authed, m);
           return [{ authed: slice }, cmds];
         },
-        resilient_err: (s, m) => {
-          const [slice, cmds] = ac.fail(s.authed, m.key, m);
+        resilient_run_err: (s, m) => {
+          const [slice, cmds] = ac.fail(s.authed, m);
           return [{ authed: slice }, cmds];
         },
         unauthorized: (s, m) => {
           const [slice, cmds] = ac.on401(s.authed, m.key, m.at);
           return [{ authed: slice }, cmds];
         },
-        token_refreshed: (s, m) => {
+        refresh_token_ok: (s, m) => {
           const [slice, cmds] = ac.onRefreshed(
-            ac.installToken(s.authed, m.token),
+            ac.installToken(s.authed, m.value),
             ctx.now.value,
           );
           return [{ authed: slice }, cmds];
         },
-        token_refresh_failed: (s) => [s, []],
+        refresh_token_err: (s) => [s, []],
         deadline_exceeded: (s, m) => {
           const [slice, cmds] = ac.onTimer(s.authed, m);
           return [{ authed: slice }, cmds];
         },
         nop: (s) => [s, []],
       },
-      // The REAL handlers — both ports spliced. The run port re-enters via
-      // resilient_ok / resilient_err; the refresh port re-enters via
-      // token_refreshed / token_refresh_failed.
-      interpret: ac.handlers({
-        run: async (_input, key) => {
-          const queue = ctx.outcomes[key] ?? [];
-          const outcome = queue.shift() ?? "ok";
-          ctx.reached.push(key);
-          if (outcome === "fail") throw { _tag: "backend_down" };
-          if (outcome === "401") return RUN_401;
-          return "VALUE";
-        },
-        refresh,
-      }),
     });
+    // The host's two handlers, returning outcomes. The engine mints the run
+    // Cmd's into resilient_run_ok / resilient_run_err, and the refresh Cmd's
+    // into refresh_token_ok / refresh_token_err, and each re-enters the machine.
+    const interpret = {
+      resilient_run: async (
+        cmd: RunCmd<string>,
+        {
+          ok,
+          err,
+        }: {
+          ok: (v: string) => unknown;
+          err: (e: { _tag: "port_rejected"; cause: unknown }) => unknown;
+        },
+      ) => {
+        const queue = ctx.outcomes[cmd.key] ?? [];
+        const outcome = queue.shift() ?? "ok";
+        ctx.reached.push(cmd.key);
+        if (outcome === "fail") {
+          return err({
+            _tag: "port_rejected",
+            cause: { _tag: "backend_down" },
+          });
+        }
+        if (outcome === "401") return ok(RUN_401);
+        return ok("VALUE");
+      },
+      refresh_token: async (
+        _cmd: unknown,
+        { ok }: { ok: (t: Token) => unknown },
+      ) => ok(await refresh()),
+    };
+    return { machine, interpret: interpret as never };
   }
 
   // Drain the re-entrant follow-up chain: each `await dispatch` settles only its
@@ -864,8 +862,8 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     drainLedger = () => ctx.reached.length;
     vi.spyOn(Date, "now").mockImplementation(() => ctx.now.value);
 
-    const machine = wiredMachine(ctx);
-    const runtime = await run(machine, { ctx }).ready;
+    const { machine, interpret } = wiredMachine(ctx);
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     // (1) attempt key "a" — reaches the backend, comes back 401, parks + asks
     // for a refresh; the refresh port re-enters with a fresh token and re-issues
@@ -931,8 +929,8 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     // Breaker threshold 5 → the single generic failure does NOT open the
     // breaker, so the re-issue after refresh can reach the backend. This test is
     // about the dropped refresh, not the breaker.
-    const machine = wiredMachine(ctx, 5);
-    const runtime = await run(machine, { ctx }).ready;
+    const { machine, interpret } = wiredMachine(ctx, 5);
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     // (1) attempt "a" — backend FAILS generically → retry brick backs it off
     // into waiting_retry (NOT running). The breaker (threshold 5) does NOT trip.

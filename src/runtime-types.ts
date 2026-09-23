@@ -2,24 +2,23 @@
  * @demlik/tea runtime interface surface + pure helpers — the public types,
  * interfaces, and construction/composition helpers the runtime (`./run`)
  * implements against: `Store`, the error-sink and supervision contracts, the
- * `RuntimeRef` / `BootingRuntime` / `Runtime` handle hierarchy, `definePort`, the
+ * engine-neutral `RunHandle` / `BootedRunHandle` every engine's `run` returns,
+ * the Promise engine's `RuntimeRef` / `BootingRuntime` / `Runtime` handle
+ * hierarchy that widens it, `definePort`, the
  * identity-typed constructors `defineMachine` / `asReducer`, and the pure tools
  * `replay` (compose without running) and `tryInterpret` (Railway).
  */
 
-import { Result } from "better-result";
-import type { Provided } from "./provide";
 import type {
   AnyCmdDef,
+  BuiltinSub,
   CmdOf,
-  ErrOf,
   InterpretDetached,
   Machine,
-  OkOf,
   Port,
   PortEmitter,
   Reducer,
-  RequirementsOf,
+  RunHandlers,
   Settled,
   Sub,
   Transitions,
@@ -29,12 +28,13 @@ import {
   assertPureResult,
   type Cmd,
   deepFreeze,
-  depsInactive,
+  desiredSub,
   detectUpdateForm,
   foldUpdates,
   lookupCell,
   NoCellError,
-  structuralHash,
+  Outcome,
+  subEntriesOf,
   type UpdateForm,
 } from "./pure/core";
 
@@ -86,9 +86,8 @@ const definedPortNames = new Set<string>();
 
 /**
  * Thrown by `definePort` when a name has already been registered in the current
- * process. Symmetric with `SubIdCollisionError` (thrown by `reconcileSubs`) —
- * both mechanize invariant 7 (identity is explicit) at the runtime layer the
- * type system cannot reach (string names compared at runtime).
+ * process. It mechanizes invariant 7 (identity is explicit) at the runtime
+ * layer the type system cannot reach (string names compared at runtime).
  */
 export class PortNameCollisionError extends Error {
   override readonly name = "PortNameCollisionError";
@@ -98,25 +97,6 @@ export class PortNameCollisionError extends Error {
       `definePort: a port named "${portName}" was already defined. ` +
         `Each definePort call must use a unique name. ` +
         `If two modules need the same port, export it from one module and import it.`,
-    );
-  }
-}
-
-/**
- * Thrown by `reconcileSubs` when, within ONE desired subscription set, two subs
- * share an `id` but declare different `type`s — a silent bug class the type
- * system cannot reach (ids are strings compared at runtime). The symmetric twin
- * of `PortNameCollisionError`: both mechanize invariant 7 (identity is explicit)
- * at the runtime layer. Same id across transitions is the no-churn case and does
- * NOT throw; only a within-set type conflict does.
- */
-export class SubIdCollisionError extends Error {
-  override readonly name = "SubIdCollisionError";
-  readonly _tag = "SubIdCollisionError" as const;
-  constructor(id: string, declaredType: string, conflictingType: string) {
-    super(
-      `@demlik/tea: Sub.id collision: id="${id}" declared as ` +
-        `type="${declaredType}" and type="${conflictingType}"`,
     );
   }
 }
@@ -141,13 +121,19 @@ export function __resetPortRegistry(): void {
  *   re-dispatched (the original dispatcher already resolved, so no caller).
  *   A rejection caused by `stop()`'s own teardown is NOT this phase — see
  *   `"discard"`.
+ * - `"interpret"` — a `Cmd.define`d handler failed outside its declared
+ *   channel (ADR 0021): it threw, returned an `Err` whose tag it does not
+ *   declare (`UndeclaredFailureError`), or returned something the engine cannot
+ *   mint (`OutcomeContractError`, `AsyncSchemaError`). No `_err` Msg is
+ *   dispatched, and the dispatch that emitted the Cmd still resolves.
  * - `"stop-save"` — the final `store.save(state)` inside `stop()` threw
  *   (`stop()` resolves regardless, so without the sink this was silent loss).
  * - `"reduce"` — the pure `update` (reducer) threw synchronously; the configured
  *   `Supervision` strategy decides what happens next, but the throw is surfaced
  *   here as data first.
  * - `"listener"` — a `runtime.subscribe(...)` listener threw during fanout.
- * - `"observer"` — a `runtime.observe(...)` observer threw during fanout.
+ * - `"observer"` — a `runtime.observe(...)` observer threw during fanout, or
+ *   the `telemetry` sink threw or rejected.
  * - `"event"` — the `events` projector or an `on(type, ...)` handler threw.
  * - `"boot"` — an `onBoot` handler threw (boot fanout, or a late registration).
  * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
@@ -165,11 +151,6 @@ export function __resetPortRegistry(): void {
  *   `"discard"`: the loss is the FILTER WORKING, not a teardown, and a host
  *   routing it (a metric, a 409 back to the caller) wants it apart from
  *   unmount-time noise. Warn-only, like every `RuntimeDiscardNotice`.
- * - `"provide"` — a `provide({ … })` graph handed to `run` as `ctx`. Two
- *   witnesses: an `acquire` failed at boot (a `ProvideFailedError`, ALSO the
- *   rejection of `ready`, so this report is the copy a sink gets rather than the
- *   only route out), and a `release` threw during `stop()`, which carries
- *   `context.provider` and has no other route out at all — the run is over.
  *
  * The phase never decides fatality — the ERROR CLASS does (`RuntimeDiscardNotice`
  * warns, everything else rethrows). A phase is attached by the report site, so a
@@ -178,6 +159,7 @@ export function __resetPortRegistry(): void {
  */
 export type RuntimeErrorPhase =
   | "follow-up"
+  | "interpret"
   | "stop-save"
   | "reduce"
   | "listener"
@@ -187,18 +169,31 @@ export type RuntimeErrorPhase =
   | "port-emit"
   | "sub-cleanup"
   | "discard"
-  | "identity-drop"
-  | "provide";
+  | "identity-drop";
+
+/**
+ * What the `telemetry` sink passed to `run` receives, once per APPLIED
+ * transition. Plain data, so a recorded stream stays durable.
+ */
+export interface TelemetryEvent {
+  /** This run's applied transitions so far, counted from 1. Boot is not one. */
+  readonly seq: number;
+  /** The `Msg.type` that drove the transition. */
+  readonly msgType: string;
+  /** When the transition committed, read off `run`'s `clock` (ms since epoch). */
+  readonly at: number;
+}
+
+/**
+ * The `telemetry` option of `run`: a fire-and-forget sink. The run never waits
+ * on it, and a throw or rejection reaches `onError` under `"observer"` without
+ * touching the run.
+ */
+export type TelemetrySink = (event: TelemetryEvent) => void | Promise<void>;
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
   readonly phase: RuntimeErrorPhase;
-  /**
-   * The provider key a `"provide"` report is about — set when a `release` threw
-   * (the run is over; the throw has nowhere else to go). Absent on the acquire
-   * report, which also rejects `ready` with a `ProvideFailedError` that names it.
-   */
-  readonly provider?: string;
 }
 
 /**
@@ -297,7 +292,7 @@ export class DriveFailedError<S> extends Error {
 /**
  * Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State
  * that is neither terminal nor `failed` AND nothing in the runtime can still
- * transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. Waiting
+ * transition it — no live Sub, no in-flight Cmd. Waiting
  * past that point is not the Sub-driven contract, it is a leak: no transition is
  * coming, so the drive would hang with the runtime alive and `stop()` never
  * reached. The rejection carries the stalled State on `error.state`, sibling to
@@ -683,28 +678,117 @@ export interface RuntimeRef<M extends { type: string }> {
   dispatchOnce(msg: M): Promise<void>;
 }
 
+// === RunHandle: the handle every engine's `run` returns (#281, #250) ===
+//
+// The engine-neutral part of a running machine: what a host adapter needs and
+// nothing an engine has to invent. Both engines' `run` return a `RunHandle`, so
+// `/react` and `/do` are typed against it and never against one engine's
+// runtime. It splits the same way the Promise engine's handle does: before boot
+// there is no State to read, so `getState` lives only on the
+// `BootedRunHandle` that `ready` resolves to.
+
+/**
+ * What an engine's `run` returns: queue a Msg, listen, wait for boot, stop.
+ * `getState` is not here — there is no State until boot runs, so it lives on
+ * the {@link BootedRunHandle} that `ready` resolves to. `E` is the machine's
+ * semantic event union (see `on`); `never` when the run projects none.
+ */
+export interface RunHandle<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> {
+  /** Put a Msg in the inbox; resolves once the engine has processed it. */
+  dispatch(msg: M): Promise<void>;
+  /** A zero-arg change notifier, fired after each applied transition. */
+  subscribe(listener: () => void): () => void;
+  /** A `(msg, state)` hook, fired after each applied transition. */
+  observe(observer: (msg: M, state: S) => void): () => void;
+  /** Fires once with the initial State — at once if boot already ran. */
+  onBoot(handler: (state: S) => void): () => void;
+  /** Subscribe to the semantic event of `type` the run's `events` projects. */
+  on<K extends E["type"]>(
+    type: K,
+    handler: (event: Extract<E, { type: K }>) => void,
+  ): () => void;
+  /** Resolves to the booted handle once boot completes. */
+  readonly ready: Promise<BootedRunHandle<S, M, E>>;
+  /** Stop the run; resolves once the engine has torn it down. */
+  stop(): Promise<void>;
+}
+
+/** A {@link RunHandle} whose boot has completed, so its State exists. */
+export interface BootedRunHandle<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> extends RunHandle<S, M, E> {
+  /** The current State. Total. */
+  getState(): S;
+  readonly ready: Promise<BootedRunHandle<S, M, E>>;
+}
+
+/**
+ * The options every engine's `run` accepts: the `ctx`, the handlers the
+ * machine runs under, an optional `store`, and the `events` projector that
+ * feeds `on`. An engine may take more; a host adapter hands only these.
+ */
+export type RunOptions<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+  E extends { type: string } = never,
+> = CtxArg<Ctx> &
+  RunHandlers<M, C, U, Ctx> & {
+    readonly store?: Store<S>;
+    readonly events?: (msg: M, state: S) => readonly E[];
+  };
+
+/**
+ * An engine's `run`, seen from a host adapter: a machine and its
+ * {@link RunOptions} in, a {@link RunHandle} out. `useMachine` and
+ * `createAgentHost` take one, so they run on whichever engine the caller
+ * imported — `run` from `@demlik/tea/promise` fits it as it is.
+ */
+export type EngineRun<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+  E extends { type: string } = never,
+> = (
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: RunOptions<S, M, C, U, Ctx, E>,
+) => RunHandle<S, M, E>;
+
 // === BootingRuntime: handle returned SYNCHRONOUSLY from run() ===
-//
-// `run()` returns a `BootingRuntime<S, M>` the instant it is called, while boot
-// is still in flight. It exposes exactly the surface TOTAL before boot: queue a
-// dispatch, subscribe, observe, wire a Port, stop. What you may NOT do is read
-// State (`getState`) or wait for quiescence (`idle`) — those need the initial
-// State to exist, and are the difference between a BootingRuntime and a
-// `Runtime`, enforced at the type level so "read State before boot" is a COMPILE
-// error, not a runtime throw.
-//
-// `subscribe` is the React-shaped change notifier (zero-arg, paired with
-// `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
-// for every APPLIED transition; boot is delivered via `onBoot` instead, so
-// `observe`'s `msg` is total (never `null`). `on(type, handler)` is the SEMANTIC
-// event channel: only the public, `type`-narrowed events a machine projects,
-// never its PRIVATE Msg vocabulary. `E` defaults to `never` (no projector → `on`
-// uncallable).
+
+/**
+ * What the Promise engine's `run` returns, the instant it is called, while boot
+ * is still in flight: its {@link RunHandle}, widened with Ports and
+ * `dispatchOnce`. It exposes exactly the surface total before boot — queue a
+ * dispatch, subscribe, observe, wire a Port, stop. Reading State (`getState`)
+ * and waiting for quiescence (`idle`) need the initial State to exist, so they
+ * live on the {@link Runtime} that `ready` resolves to; "read State before boot"
+ * is a compile error, not a runtime throw.
+ *
+ * `subscribe` is the React-shaped change notifier (zero-arg, paired with
+ * `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
+ * for every applied transition; boot is delivered via `onBoot` instead, so
+ * `observe`'s `msg` is total (never `null`). `on(type, handler)` is the semantic
+ * event channel: only the public, `type`-narrowed events a machine projects,
+ * never its private Msg vocabulary. `E` defaults to `never` (no projector → `on`
+ * uncallable).
+ */
 export interface BootingRuntime<
   S,
   M extends { type: string },
   E extends { type: string } = never,
-> extends RuntimeRef<M> {
+> extends RuntimeRef<M>,
+    RunHandle<S, M, E> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
   /**
@@ -774,12 +858,16 @@ export interface BootingRuntime<
 }
 
 // === Runtime: the BOOTED handle `ready` resolves to ===
-//
-// A `BootingRuntime<S, M>` whose boot has completed. It adds the two members
-// only meaningful once the initial State exists — `getState()` (total) and
-// `idle()` (quiescence) — and narrows `ready` to resolve to itself. You never
-// construct one directly; you obtain it via `await bootingRuntime.ready`, which
-// makes "read State before boot" unrepresentable rather than merely discouraged.
+
+/**
+ * The Promise engine's booted handle — what {@link BootingRuntime}'s `ready`
+ * resolves to once boot completes. It adds the members only meaningful once the
+ * initial State exists — `getState()` (total), `idle()` (quiescence), and the
+ * `result()` / `done()` reads of the terminal State — and narrows `ready` to
+ * resolve to itself. You never construct one directly; you obtain it via
+ * `await bootingRuntime.ready`, which makes "read State before boot"
+ * unrepresentable rather than merely discouraged.
+ */
 export interface Runtime<
   S,
   M extends { type: string },
@@ -853,10 +941,7 @@ export interface Runtime<
 //   })
 //
 // and everything else is derived exactly as it already was — `C` and the
-// settled half of `M` from `cmds`, and each interpret handler's `ctx` from its
-// own Cmd's requirements (`Interpret` already intersects `RequirementsOf` onto
-// the cell's `ctx`, so a `Cmd.define`d effect types its handler with no
-// `types.ctx` at all). The shape is XState v5's `setup({ types })` in tea's
+// settled half of `M` from `cmds`. The shape is XState v5's `setup({ types })` in tea's
 // vocabulary; the keys are `model`, `msg`, `cmd`, `sub`, `ctx` — the words this
 // library already uses for those five slots.
 //
@@ -895,9 +980,9 @@ export interface Runtime<
  *
  * `model` and `msg` are always named. `cmd` is named only by a machine whose
  * Cmds are hand-written records rather than `Cmd.define` constructors listed
- * under `cmds`; `sub` only by one whose Sub union `subscriptions` does not
- * imply; `ctx` only by one whose handlers read a `Ctx` slice no Cmd's
- * `requirements` declares.
+ * under `cmds`; `sub` only by one that declares Subs other than the built-in
+ * `timer` (its union of `Sub<type, deps>`); `ctx` only by one whose `init`
+ * reads a `Ctx` or whose handlers are typed against one.
  */
 export type MachineTypes<
   S,
@@ -1058,39 +1143,18 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
   ? { ctx?: Ctx }
   : { ctx: Ctx };
 
-// === ScopedCtxArg<Ctx>: `run`'s `ctx` field — the object, or the graph ===
-//
-// `CtxArg<Ctx>` widened by exactly one alternative: a `provide({ … })` graph
-// that BUILDS a `Ctx`, which `run` acquires at boot and releases at `stop()`.
-// The requirement is the same `Ctx` either way — only who assembles it moves.
-// Kept separate from `CtxArg` on purpose: the other `CtxArg` sites (`replay`'s
-// seed, `defineAgent`'s options) hand their `ctx` to a PURE fold, and a fold has
-// no boot to acquire in and no terminal to release at, so widening them would
-// promise a lifetime nothing there could honour.
-/**
- * `run`'s `ctx` field: the `Ctx` object, or a `provide` graph that builds one.
- * Conditionally optional exactly like {@link CtxArg} — a machine that reads
- * nothing from `ctx` may omit it.
- */
-export type ScopedCtxArg<Ctx> = [Record<never, never>] extends [Ctx]
-  ? { ctx?: Ctx | Provided<Ctx> }
-  : { ctx: Ctx | Provided<Ctx> };
-
 // === replay: pure unit-test helper ===
 //
 // Composes `init(loaded ?? null, ctx)` then `update(state, msg)` for each msg.
 // Returns the final state plus the cmds that *would* have been emitted and the
-// subs that *would* have been desired at the final state. It does NOT call any
+// Subs that *would* be running at the final state. It does NOT call any
 // `interpret[type]` handler, does NOT touch `Store`, and does NOT start any
-// subscription. `subscriptions` IS called to derive `subs` — that lets tests
-// assert what would be wired up without actually wiring it.
+// subscription.
 //
-// Dep-keyed Subs are reported in `depSubs`: for each `machine.subs` entry
-// active at the FINAL state (its `deps` non-null), the entry's `index` and the
-// derived `id` (`structuralHash(deps)`) — so a test can assert "the deadline +
-// checkpoint + bridge dep-subs are armed in `running`" without wiring any
-// source. Same intent as `subs` for the manual path: assert the desired set
-// purely. `source` is NEVER called (replay starts no subscription).
+// `subs` is each `machine.subs` entry that is on at the final state, as its
+// runner would see it — `{ id, type, deps }`, the id derived exactly as the
+// engine derives it — deduplicated by id the way the engine runs them. So a
+// test asserts "the retry timer is armed in `waiting`" without wiring a runner.
 export function replay<
   S,
   M extends { type: string },
@@ -1103,8 +1167,7 @@ export function replay<
 ): {
   state: S;
   cmds: C[];
-  subs: U[];
-  depSubs: { index: number; id: string }[];
+  subs: (U | BuiltinSub<M>)[];
 } {
   // Coerce undefined → null so `replay` with `loaded: undefined` calls
   // `init(null, ctx)`.
@@ -1135,23 +1198,17 @@ export function replay<
   );
   const cmds: C[] = [...initCmds, ...foldedCmds];
 
-  const subs: U[] = machine.subscriptions
-    ? [...machine.subscriptions(state)]
-    : [];
-
-  // The dep-keyed desired set at the final state — `deps` only, never `source`.
-  const depSubs: { index: number; id: string }[] = [];
-  if (machine.subs) {
-    for (const [index, entry] of machine.subs.entries()) {
-      const deps = entry.deps(state);
-      // Same gate the runtime reconciles on (`depsInactive`), not a second
-      // spelling of it — a `deps` returning `undefined` means inactive here too.
-      if (!depsInactive(deps))
-        depSubs.push({ index, id: structuralHash(deps) });
+  // The desired set at the final state, through the one derivation the
+  // engines reconcile with (`desiredSub`) — never a runner.
+  const byId = new Map<string, U | BuiltinSub<M>>();
+  for (const entry of subEntriesOf<S>(machine)) {
+    const sub = desiredSub(entry, state);
+    if (sub !== null && !byId.has(sub.id)) {
+      byId.set(sub.id, sub as U | BuiltinSub<M>);
     }
   }
 
-  return { state, cmds, subs, depSubs };
+  return { state, cmds, subs: [...byId.values()] };
 }
 
 // === wrapDetached: the typed Cmd→Msg edge for a detached interpret handler ===
@@ -1232,16 +1289,14 @@ export function wrapDetached<
 // around every step — control flow through the exception channel, and a `catch`
 // wide enough to swallow a genuine bug thrown from inside a cell.
 //
-// So: the same operations with the refusal in the return type. The idiom is
-// `better-result`, exactly as `tryInterpret` below uses it — the package's one
-// runtime dependency, already the house Railway spelling.
+// So: the same operations with the refusal in the return type — the core's own
+// `Outcome` record (ADR 0021), the same one a `Cmd.define`d handler returns.
 //
-// PLACEMENT: these live here and not in `pure/core` because `pure/core` is the
-// runtime-free leaf and must import NOTHING — `better-result` included (see its
-// header). The pure half of the work is the shared `lookupCell` primitive,
-// which DOES live there; these are the `Result` skins over it. `applyCell` and
-// `tryApplyCell` therefore select the same cell by construction, not by two
-// copies of the form-branching agreeing by luck.
+// PLACEMENT: these live here and not in `pure/core` because they are the
+// caller-facing skins; the pure half of the work is the shared `lookupCell`
+// primitive, which DOES live there. `applyCell` and `tryApplyCell` therefore
+// select the same cell by construction, not by two copies of the
+// form-branching agreeing by luck.
 //
 // NOT a general try/catch: a cell that THROWS from inside its own body is a bug
 // in the machine, and it propagates. Only the ABSENCE of a cell is data here.
@@ -1260,20 +1315,20 @@ export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
-): Result<readonly [S, readonly C[]], NoCellError> {
+): Outcome<readonly [S, readonly C[]], NoCellError> {
   const found = lookupCell<S, M, C>(machine, state, msg);
   if (found.cell === undefined) {
-    return Result.err(
+    return Outcome.err(
       new NoCellError(msg.type, found.stateName, found.acceptedTypes),
     );
   }
-  return Result.ok(found.cell(state, msg));
+  return Outcome.ok(found.cell(state, msg));
 }
 
 /**
  * The refusal `tryFoldMsgs` reports: WHICH msg in the log had no handler, where.
  *
- * A plain record, not a new `Error` subclass — it is a `Result` payload, never
+ * A plain record, not a new `Error` subclass — it is an `Outcome` payload, never
  * thrown, and the actual error is the existing `NoCellError` it carries. The
  * package's thrown-error idiom (`class extends Error` + `_tag`, pinned by
  * `error-idiom.test.ts`) applies to errors raised at the runtime edge; this one
@@ -1293,7 +1348,7 @@ export interface FoldRefusal<M> {
  * INCLUDING which message failed.
  *
  * The motivating use is "this persisted log does not replay — tell the user
- * where". A bare `Result<S, NoCellError>` cannot: the error names the msg.type
+ * where". A bare `Outcome<S, NoCellError>` cannot: the error names the msg.type
  * and the state, but a log usually contains that type many times, so the
  * INDEX is the load-bearing fact. The fold stops at the first refusal (state
  * past that point is not defined) and returns it.
@@ -1305,82 +1360,40 @@ export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   base: S,
   msgs: readonly M[],
-): Result<S, FoldRefusal<M>> {
+): Outcome<S, FoldRefusal<M>> {
   let state = base;
   for (const [index, msg] of msgs.entries()) {
     if (__DEV__) deepFreeze(state);
     const stepped = tryApplyCell<S, M, C>(machine, state, msg);
-    if (Result.isError(stepped)) {
-      return Result.err({ index, msg, error: stepped.error });
+    if (stepped._tag === "Err") {
+      return Outcome.err({ index, msg, error: stepped.error });
     }
     if (__DEV__) assertPureResult(stepped.value, msg.type);
     state = stepped.value[0];
   }
-  return Result.ok(state);
+  return Outcome.ok(state);
 }
 
-// === settle: the typed interpret cell for a `Cmd.define`d effect ===
-//
-// `tryInterpret`'s successor for a typed Cmd (ADR 0014 §2). The handler body
-// returns `Result<Ok, E>` with BOTH channels inferred from the def — `Ok` is
-// what the `ok` schema parses, `E` is the declared `_tag` union — and this
-// maps the two arms onto the minted Msgs: `Ok` → `def.ok(cmd, value)`, `Err` →
-// `def.err(cmd, error)`. The `Result` lives here, in the helper, and never
-// enters the kernel contract: the cell still resolves to a plain Msg
-// (`Interpret` keeps returning `Promise<M | void>`), and `run`'s interpret edge
-// then parses the `_ok` value against the schema and stamps `at`.
-//
-// NOT a try/catch: a `work` that THROWS is a bug in the handler, and it
-// propagates to the error sink like any other interpret throw. A failure the
-// caller has a next move for is an `Err` with one of the declared tags —
-// that is the whole point of naming them (0011).
-export function settle<D extends AnyCmdDef, Ctx>(
-  def: D,
-  work: (
-    cmd: CmdOf<D>,
-    ctx: Ctx & RequirementsOf<CmdOf<D>> & PortEmitter,
-  ) => Promise<Result<OkOf<D>, ErrOf<D>>>,
-): (
-  cmd: CmdOf<D>,
-  ctx: Ctx & RequirementsOf<CmdOf<D>> & PortEmitter,
-) => Promise<Settled<D>> {
-  // `AnyCmdDef` is the declaration-erased view the runtime reads; the two
-  // builders live on the full `CmdDef`, which every `D` structurally is.
-  const builders = def as unknown as {
-    readonly ok: (cmd: CmdOf<D>, value: OkOf<D>) => Settled<D>;
-    readonly err: (cmd: CmdOf<D>, error: ErrOf<D>) => Settled<D>;
-  };
-  return async (cmd, ctx) => {
-    const result = await work(cmd, ctx);
-    return result.match({
-      ok: (value) => builders.ok(cmd, value),
-      err: (error) => builders.err(cmd, error),
-    });
-  };
-}
-
-// === tryInterpret: Railway sugar over `Result.tryPromise` ===
+// === tryInterpret: Railway sugar for a hand-written Cmd's handler ===
 //
 // Wraps a fallible `(cmd, ctx) => Promise<Ok>` into a handler for
-// `interpret[type]`: on success resolves `onOk(value, cmd)`, on rejection
-// `onErr(error, cmd)`. It NEVER rejects (assuming `onOk`/`onErr` are total).
-//
-// We use the `{try, catch: (e) => e}` form (not the one-arg thunk) so the
-// original error passes through untouched — the one-arg form wraps errors in
-// `UnhandledException`, which would break `instanceof` checks inside `onErr`.
+// `interpret[type]`: on success resolves `onOk(value, cmd)`, on rejection (or a
+// synchronous throw) `onErr(error, cmd)`, with the original error untouched so
+// `instanceof` checks inside `onErr` hold. It NEVER rejects (assuming
+// `onOk`/`onErr` are total). A `Cmd.define`d Cmd needs none of this: its
+// handler returns an `Outcome` and the engine mints the Msg (ADR 0021).
 export function tryInterpret<C extends Cmd, Ok, M, Ctx>(
   work: (cmd: C, ctx: Ctx) => Promise<Ok>,
   onOk: (value: Ok, cmd: C) => M,
   onErr: (error: unknown, cmd: C) => M,
 ): (cmd: C, ctx: Ctx) => Promise<M> {
   return async (cmd, ctx) => {
-    const result = await Result.tryPromise({
-      try: () => work(cmd, ctx),
-      catch: (error: unknown): unknown => error,
-    });
-    return result.match({
-      ok: (value) => onOk(value, cmd),
-      err: (error) => onErr(error, cmd),
-    });
+    let value: Ok;
+    try {
+      value = await work(cmd, ctx);
+    } catch (error) {
+      return onErr(error, cmd);
+    }
+    return onOk(value, cmd);
   };
 }

@@ -44,9 +44,9 @@
 //     the resync hook: the place to dispatch a "re-fetch the authoritative
 //     snapshot, discard predicted state" Msg after the transport recovered.
 //
-// Like `fromWebSocket`, `wsUrl` lives on the Sub (`WebSocketSubData`); every
-// reconnect reads `sub.wsUrl` afresh, so a reconcile that re-subscribes with a
-// new url reconnects to the new endpoint.
+// Like `fromWebSocket`, `wsUrl` lives in the Sub's `deps` (`WebSocketSubData`).
+// A changed url is a new id, so the engine tears this runner down (no
+// reconnect) and starts a fresh one against the new endpoint.
 // ---------------------------------------------------------------------------
 
 import type { Sub } from "../index";
@@ -91,7 +91,10 @@ const defaultSchedule = (fn: () => void, ms: number): CancelTimer => {
   return () => clearTimeout(handle);
 };
 
-export function fromReconnectingWebSocket<S extends Sub & WebSocketSubData, M>(
+export function fromReconnectingWebSocket<
+  S extends Sub<string, WebSocketSubData>,
+  M,
+>(
   opts: ReconnectingWebSocketFactoryOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {
   const backoffBaseMs = opts.backoffBaseMs ?? 250;
@@ -125,7 +128,7 @@ export function fromReconnectingWebSocket<S extends Sub & WebSocketSubData, M>(
     };
 
     function open(): void {
-      const socket = connect(sub.wsUrl);
+      const socket = connect(sub.deps.wsUrl);
       ws = socket;
 
       socket.onopen = (): void => {

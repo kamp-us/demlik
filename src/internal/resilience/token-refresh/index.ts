@@ -4,10 +4,9 @@
  *
  * This is the L1 brick `authed-call` (#10 in the composition specs) stacks on:
  * a token slice `{ token, stale }` plus pure transitions that decide *when* a
- * credential must be re-minted, and one `handlers(ports)` splice that performs
- * the re-mint. It follows the uniform knob contract every composition wears —
- * `createTokenRefresh(config) → { init, <verbs>, handlers }` — so a consumer
- * spreads ~3 hooks into their machine instead of hand-wiring the refresh dance.
+ * credential must be re-minted, and one `Cmd.define`d Cmd (`refresh_token`)
+ * that asks for the re-mint. You write that Cmd's handler in your engine's
+ * style (ADR 0021); the knob ships no I/O.
  *
  * It is a LEAF module in the same mold as `@demlik/tea/retry-backoff`: it
  * depends only on the core (`../index`), never on a sibling brick. The two
@@ -19,8 +18,8 @@
  *   - **Replayable** — every transition is a pure verb returning
  *     `readonly [State, Cmd[]]`. No verb reads the wall clock or performs I/O,
  *     so `replay` reconstructs the slice exactly. Time enters ONLY as an `at`
- *     parameter the caller stamps; the network fetch enters ONLY at the
- *     `handlers` boundary. This keeps the substrate's purity invariants intact
+ *     parameter the caller stamps; the network fetch enters ONLY in the
+ *     `refresh_token` handler you write. This keeps the substrate's purity invariants intact
  *     (invariant 2: pure transitions; invariant 4: I/O is an effect, not a
  *     reducer body).
  *
@@ -62,21 +61,32 @@
  *   // on a 401 from a guarded call:
  *   got_401: (s) => [{ ...s, auth: tr.on401(s.auth) }, []],
  *
- *   // when the refresh port resolves:
- *   token_refreshed: (s, msg) => [{ ...s, auth: tr.refreshed(s.auth, msg.token) }, []],
+ *   // when the refresh lands (the engine mints `refresh_token_ok`):
+ *   refresh_token_ok: (s, msg) => [{ ...s, auth: tr.refreshed(s.auth, msg.value) }, []],
  *
- *   // splice the I/O:
- *   interpret: { ...tr.handlers({ refresh: () => mySdk.mintToken() }) },
+ *   // and where the machine runs, the handler you write for the Cmd:
+ *   run(machine, {
+ *     interpret: {
+ *       refresh_token: async (_cmd, { ok, err }) => {
+ *         try { return ok(await mySdk.mintToken()); }
+ *         catch (cause) { return err({ _tag: "token_refresh_failed", cause }); }
+ *       },
+ *     },
+ *   });
  *
- * NOT a substrate primitive: from `../index` it reuses only the `Cmd` /
- * `Interpret` types and the `tryInterpret` Railway helper (a runtime function,
- * not a type) that every effectful brick uses — and no sibling brick. It is a
- * leaf utility internal to the package (`src/internal/resilience/`, #46).
+ * NOT a substrate primitive: from `../index` it reuses only `Cmd.define` — and
+ * no sibling brick. It is a leaf utility internal to the package
+ * (`src/internal/resilience/`, #46).
  */
 
-import { z } from "zod";
-import { Cmd, type CmdOf, type Interpret, tryInterpret } from "../../../index";
-import { MsgType } from "../../../protocol";
+import {
+  Cmd,
+  type CmdOf,
+  type SettledErr,
+  type SettledOk,
+  type TaggedError,
+} from "../../../index";
+import { unchecked } from "../../schema";
 
 /**
  * A minted credential: the opaque `value` to send on the wire, and the absolute
@@ -151,14 +161,15 @@ export function initTokenRefresh(): TokenState {
 
 /**
  * The Cmd this knob emits to ask the runtime to mint a fresh token. Plain data
- * (no closure — invariant 1) carrying nothing: the refresh port takes no input,
- * and the slice the result installs is read off the follow-up Msg, not this
- * Cmd. The consumer unions this into their machine's Cmd type and lets
- * `handlers` interpret it.
+ * (no closure — invariant 1) carrying nothing: the refresh takes no input, and
+ * the slice the result installs is read off the settled Msg, not this Cmd.
+ * List it in the machine's `cmds`; its handler returns `ok(token)` or
+ * `err({ _tag: "token_refresh_failed", … })`, and the engine mints
+ * `refresh_token_ok` / `refresh_token_err`.
  */
 export const refreshToken = Cmd.define("refresh_token", {
-  input: z.object({}),
-  ok: z.custom<Token>(),
+  input: unchecked<Record<string, never>>(),
+  ok: unchecked<Token>(),
   err: ["token_refresh_failed"],
 });
 export type RefreshTokenCmd = CmdOf<typeof refreshToken>;
@@ -169,56 +180,35 @@ export function refreshTokenCmd(): RefreshTokenCmd {
 }
 
 /**
- * The Msg the refresh port dispatches on success — carries the freshly minted
- * `Token`. The consumer unions this into their Msg type and handles it by
- * folding `refreshed(state, msg.token)` into the slice.
+ * The Msg the engine mints when the `refresh_token` handler returns
+ * `ok(token)`: `value` is the freshly minted `Token`. Fold it with
+ * `refreshed(state, msg.value)`.
  */
-export interface TokenRefreshedMsg {
-  readonly type: typeof MsgType.TokenRefreshed;
-  readonly token: Token;
-}
-
-/** Construct a `token_refreshed` Msg carrying the new token. */
-export function tokenRefreshedMsg(token: Token): TokenRefreshedMsg {
-  return { type: MsgType.TokenRefreshed, token };
-}
+export type TokenRefreshedMsg = SettledOk<
+  "refresh_token",
+  RefreshTokenCmd,
+  Token
+>;
 
 /**
- * The Msg the refresh port dispatches on failure — carries the rejection so the
- * consumer's reducer can decide whether to back off, surface an error, or give
- * up (errors are data: it is dispatched, never swallowed). The slice itself is
- * left untouched by a failed refresh — the held token (if any) stays held and
- * stale stays set, so the consumer can retry; clearing it is the consumer's
- * policy, expressed in their reducer.
+ * The Msg the engine mints when the handler returns
+ * `err({ _tag: "token_refresh_failed", … })` — errors are data, never
+ * swallowed. The slice is left untouched by a failed refresh: the held token
+ * (if any) stays held and stale stays set, so the consumer can retry; clearing
+ * it is the consumer's policy, expressed in their reducer.
  */
-export interface TokenRefreshFailedMsg {
-  readonly type: typeof MsgType.TokenRefreshFailed;
-  readonly error: unknown;
-}
+export type TokenRefreshFailedMsg = SettledErr<
+  "refresh_token",
+  RefreshTokenCmd,
+  TaggedError<"token_refresh_failed">
+>;
 
-/** Construct a `token_refresh_failed` Msg carrying the rejection. */
-export function tokenRefreshFailedMsg(error: unknown): TokenRefreshFailedMsg {
-  return { type: MsgType.TokenRefreshFailed, error };
-}
-
-/** The two Msgs the refresh port can produce. Union for a consumer's Msg type. */
+/** The two Msgs a refresh can settle with. Union for a consumer's Msg type. */
 export type TokenRefreshMsg = TokenRefreshedMsg | TokenRefreshFailedMsg;
 
-/** The ports this knob's `handlers` splice needs — the single refresh DI seam. */
-export interface TokenRefreshPorts {
-  /**
-   * Mint a fresh credential. Called ONLY from the `refresh_token` interpret
-   * handler — never from a verb — so the network I/O and any clock the issuer
-   * reads stay at the effect boundary. May reject; the rejection is routed to
-   * `token_refresh_failed` (errors are data), never thrown into the runtime.
-   */
-  readonly refresh: () => Promise<Token>;
-}
-
 /**
- * The knob: hand it a config, get back the slice initializer, the pure verbs,
- * and the `handlers` splice. Mirrors every L2 composition's uniform contract so
- * the call sites read identically across bricks.
+ * The knob: hand it a config, get back the slice initializer and the pure
+ * verbs, plus the `refresh_token` Cmd def (`run`) to list in `cmds`.
  *
  * @example
  *   const tr = createTokenRefresh({ skewMs: 30_000 });
@@ -321,52 +311,22 @@ export function createTokenRefresh(config: TokenRefreshConfig = {}) {
   function ensureFresh(
     state: TokenState,
     at: number,
-  ): readonly [TokenState, readonly Cmd[]] {
+  ): readonly [TokenState, readonly RefreshTokenCmd[]] {
     if (needsRefresh(state, at)) {
       return [state, [refreshTokenCmd()]];
     }
     return [state, []];
   }
 
-  /**
-   * The interpret splice: wraps the injected `refresh` port and routes its
-   * Ok/Err to `token_refreshed` / `token_refresh_failed` Msgs via the core's
-   * `tryInterpret` Railway helper. Spread the result into a consumer's
-   * `interpret` map:
-   *
-   *   interpret: { ...other, ...tr.handlers({ refresh: () => sdk.mintToken() }) }
-   *
-   * The port is the ONLY place the network (and any clock the issuer reads) is
-   * touched — every verb above stays pure. `tryInterpret` guarantees the
-   * handler never rejects: a port rejection becomes a `token_refresh_failed`
-   * Msg (errors are data), so the runtime's dispatch loop is never poisoned by
-   * an unhandled rejection.
-   */
-  function handlers(
-    ports: TokenRefreshPorts,
-  ): Interpret<TokenRefreshMsg, RefreshTokenCmd, unknown> {
-    return {
-      refresh_token: tryInterpret<
-        RefreshTokenCmd,
-        Token,
-        TokenRefreshMsg,
-        unknown
-      >(
-        () => ports.refresh(),
-        (token) => tokenRefreshedMsg(token),
-        (error) => tokenRefreshFailedMsg(error),
-      ),
-    };
-  }
-
   return {
+    /** The `refresh_token` Cmd def — list it in the machine's `cmds`. */
+    run: refreshToken,
     /** The slice initializer — spread into the consumer's `init`. */
     init: initTokenRefresh,
     needsRefresh,
     on401,
     refreshed,
     ensureFresh,
-    handlers,
   };
 }
 

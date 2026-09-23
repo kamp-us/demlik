@@ -99,5 +99,5 @@ const interpret = {
 type Msg =
   | { type: "Roll" }
   | { type: "NewFace"; face: number }
-  | { type: "GotText"; result: Result<string, Error> }
+  | { type: "GotText"; result: Outcome<string, Error> }
 ```

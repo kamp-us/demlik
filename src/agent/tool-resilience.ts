@@ -26,14 +26,15 @@
  * the resilience family already holds, lifted to the tool set.
  */
 
+import type {
+  DeadlineExceeded,
+  DeadlineSub,
+} from "../internal/resilience/deadline";
 import {
   createResilientCall,
-  type DeadlineExceeded,
-  type DeadlineSub,
   type ResilientState,
   type RunCmd,
 } from "../internal/resilience/resilient-call";
-import { MsgType } from "../protocol";
 import { toolErrorReason } from "./tool";
 import {
   TOOL_RETRY_EXHAUSTED_TAG,
@@ -263,9 +264,8 @@ export function createToolLadder<TC>(
     // the fan-out ledger, and duplicating it here would put one fact in two
     // places on the durable Model.
     const { call: slice } = rc.settle(sliceOf(s, call.name, rc), {
-      type: MsgType.ResilientOk,
-      key,
-      result: null,
+      cmd: { key },
+      value: null,
       at,
     });
     return { ...s, [call.name]: forget(slice, key) };
@@ -281,8 +281,7 @@ export function createToolLadder<TC>(
     // the key `failed`. Both outcomes are Model writes — nothing is retried
     // inside an effect, which is the whole point of routing through here.
     const { call: slice, outcome } = rc.settle(before, {
-      type: MsgType.ResilientErr,
-      key,
+      cmd: { key },
       error: failure,
       at,
     });
@@ -392,7 +391,7 @@ export function createToolLadder<TC>(
       // live call → nothing to arm, and nothing to rebuild it from.
       const sample = firstInput(slice);
       const rc = sample === null ? null : rcFor(sample);
-      if (rc !== null) out.push(...rc.subs(slice));
+      if (rc !== null) out.push(...rc.deadlines(slice));
     }
     return out;
   };

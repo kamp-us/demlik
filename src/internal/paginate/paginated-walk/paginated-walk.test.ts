@@ -1,10 +1,18 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, replay, run } from "../../../index";
+import {
+  type Cmd,
+  defineMachine,
+  type OutcomeHelpers,
+  replay,
+  type TaggedError,
+} from "../../../index";
+import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
+import { deadlineSub } from "../../resilience/deadline";
+import { runCmdDef } from "../../resilience/resilient-call";
 import {
   createPaginatedWalk,
-  deadlineSub,
   type FetchPageCmd,
   PAGE_KEY,
   type PageErrMsg,
@@ -57,7 +65,8 @@ const baseConfig = {
 
 // ---------------------------------------------------------------------------
 // A minimal host machine that wires the knob's slice as a single `walk` field.
-// The inherited resilient_ok / resilient_err Msgs map to pageOk / pageErr.
+// The engine-minted resilient_run_ok / resilient_run_err Msgs map to pageOk /
+// pageErr.
 // ---------------------------------------------------------------------------
 
 interface HostState {
@@ -82,9 +91,9 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof walk.subs>[number],
       ctx: {} as object,
     },
+    cmds: [walk.fetch],
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ walk: walk.init() }, []],
     update: {
@@ -92,12 +101,12 @@ function makeMachine(
         const [slice, cmds] = walk.start(s.walk, m.at);
         return [{ walk: slice }, cmds];
       },
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = walk.pageOk(s.walk, m.result, m.at);
+      resilient_run_ok: (s, m) => {
+        const [slice, cmds] = walk.pageOk(s.walk, m);
         return [{ walk: slice }, cmds];
       },
-      resilient_err: (s, m) => {
-        const [slice, cmds] = walk.pageErr(s.walk, m.error, m.at);
+      resilient_run_err: (s, m) => {
+        const [slice, cmds] = walk.pageErr(s.walk, m);
         return [{ walk: slice }, cmds];
       },
       deadline_exceeded: (s, m) => {
@@ -105,27 +114,26 @@ function makeMachine(
         return [{ walk: slice }, cmds];
       },
     },
-    subscriptions: (s) => walk.subs(s.walk),
-    subscribe: { deadline: () => () => {} },
+    subs: [{ type: "timer", deps: (s: HostState) => walk.timer(s.walk) }],
   });
   return { walk, machine };
 }
 
 const ctx = {} as object;
 
-// Convenience constructors for the inherited settle Msgs.
-const okMsg = (result: Page, at: number): PageOkMsg<Page> => ({
-  type: "resilient_ok",
-  key: PAGE_KEY,
-  result,
-  at,
-});
-const errMsg = (error: unknown, at: number): PageErrMsg => ({
-  type: "resilient_err",
-  key: PAGE_KEY,
-  error,
-  at,
-});
+// Convenience constructors for the settle Msgs the engine mints from the page
+// fetch's outcome — built with the run Cmd def's own `ok` / `err`.
+const fetchDef = runCmdDef<number, Page>();
+const okMsg = (result: Page, at: number): PageOkMsg<Page> =>
+  fetchDef.ok(fetchDef({ key: PAGE_KEY, input: 0 }), result, at);
+const errMsg = (cause: unknown, at: number): PageErrMsg =>
+  fetchDef.err(
+    fetchDef({ key: PAGE_KEY, input: 0 }),
+    { _tag: "port_rejected", cause },
+    at,
+  );
+/** The error a failed page fetch settles with: the handler's `port_rejected`. */
+const rejected = (cause: unknown) => ({ _tag: "port_rejected", cause });
 
 const fetchCmd = (offset: number): FetchPageCmd<number> => ({
   type: "resilient_run",
@@ -193,7 +201,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    const [s2, cmds] = walk.pageOk(s, page(0), 10);
+    const [s2, cmds] = walk.pageOk(s, okMsg(page(0), 10));
     // onPage(page 0) cmd, then the next page-fetch effect for cursor 1.
     expect(cmds).toEqual([{ type: "index", offset: 0 }, fetchCmd(1)]);
     expect(s2.walk.phase).toBe("fetching");
@@ -208,7 +216,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    const [s2, cmds] = walk.pageOk(s, page(0, true), 10);
+    const [s2, cmds] = walk.pageOk(s, okMsg(page(0, true), 10));
     // The last page still emits its onPage cmd, but NO next fetch.
     expect(cmds).toEqual([{ type: "index", offset: 0 }]);
     expect(s2.walk.phase).toBe("done");
@@ -224,7 +232,7 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     [s] = walk.start(s, 0);
     // The last page finishes the walk → no next fetch overwrites PAGE_KEY, so
     // the settled-succeeded slot is observable.
-    [s] = walk.pageOk(s, page(0, true), 10);
+    [s] = walk.pageOk(s, okMsg(page(0, true), 10));
     expect(s.resilience.calls[PAGE_KEY]).toEqual({
       phase: "succeeded",
       result: page(0, true),
@@ -238,9 +246,9 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0, true), 10); // → done
+    [s] = walk.pageOk(s, okMsg(page(0, true), 10)); // → done
     const before = s.walk;
-    const [s2, cmds] = walk.pageOk(s, page(5), 20);
+    const [s2, cmds] = walk.pageOk(s, okMsg(page(5), 20));
     // The paginator is done → recordPage absorbs it: cursor + counters frozen.
     expect(s2.walk).toEqual(before);
     // onPage still fires (the consumer's per-page work runs on any success).
@@ -255,9 +263,9 @@ describe("createPaginatedWalk — pageOk (advance / finish)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0), 0); // → fetch 1
-    [s] = walk.pageOk(s, page(1), 0); // → fetch 2
-    const [s3, cmds] = walk.pageOk(s, page(2, true), 0); // → done
+    [s] = walk.pageOk(s, okMsg(page(0), 0)); // → fetch 1
+    [s] = walk.pageOk(s, okMsg(page(1), 0)); // → fetch 2
+    const [s3, cmds] = walk.pageOk(s, okMsg(page(2, true), 0)); // → done
     expect(s3.walk.pages).toBe(3);
     expect(walk.isComplete(s3)).toBe(true);
     expect(cmds).toEqual([{ type: "index", offset: 2 }]); // last page: no fetch
@@ -273,7 +281,7 @@ describe("createPaginatedWalk — backpressure (paused)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    const [s2, cmds] = walk.pageOk(s, page(0), 0);
+    const [s2, cmds] = walk.pageOk(s, okMsg(page(0), 0));
     expect(s2.walk.phase).toBe("paused");
     if (s2.walk.phase === "paused") expect(s2.walk.cursor).toBe(1);
     // onPage cmd only — the next fetch is withheld until drained / resumed.
@@ -289,7 +297,7 @@ describe("createPaginatedWalk — drain / resume (the two-way valve)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0), 0); // → paused on cursor 1, seen 1
+    [s] = walk.pageOk(s, okMsg(page(0), 0)); // → paused on cursor 1, seen 1
     expect(s.walk.phase).toBe("paused");
 
     let cmds: readonly (FetchPageCmd<number> | IndexCmd)[];
@@ -311,7 +319,7 @@ describe("createPaginatedWalk — drain / resume (the two-way valve)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0), 0); // → paused, seen 1 (still at the mark)
+    [s] = walk.pageOk(s, okMsg(page(0), 0)); // → paused, seen 1 (still at the mark)
     const before = s;
     const [after, cmds] = walk.resume(s, 100);
     expect(cmds).toEqual([]);
@@ -325,7 +333,7 @@ describe("createPaginatedWalk — drain / resume (the two-way valve)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0), 0); // → paused
+    [s] = walk.pageOk(s, okMsg(page(0), 0)); // → paused
     const before = s;
     const [after, cmds] = walk.drain(s, 0);
     expect(cmds).toEqual([]);
@@ -342,13 +350,13 @@ describe("createPaginatedWalk — failure / isStuck (observable dead walk)", () 
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageErr(s, boom, 0); // no retry → terminal failed
+    [s] = walk.pageErr(s, errMsg(boom, 0)); // no retry → terminal failed
     expect(s.resilience.calls[PAGE_KEY]?.phase).toBe("failed");
     // The paginator never advanced and never finished — the walk is stuck.
     expect(s.walk.phase).toBe("fetching");
     expect(walk.isComplete(s)).toBe(false);
     expect(walk.isStuck(s)).toBe(true);
-    expect(walk.failure(s)).toEqual(boom);
+    expect(walk.failure(s)).toEqual(rejected(boom));
   });
 
   it("a healthy walk is never stuck and reports no failure", () => {
@@ -360,7 +368,7 @@ describe("createPaginatedWalk — failure / isStuck (observable dead walk)", () 
     [s] = walk.start(s, 0);
     expect(walk.isStuck(s)).toBe(false);
     expect(walk.failure(s)).toBeUndefined();
-    [s] = walk.pageOk(s, page(0, true), 0); // → done
+    [s] = walk.pageOk(s, okMsg(page(0, true), 0)); // → done
     expect(walk.isStuck(s)).toBe(false); // done is a healthy finish, not stuck
     expect(walk.failure(s)).toBeUndefined();
   });
@@ -374,7 +382,7 @@ describe("createPaginatedWalk — pageErr (back off, don't advance)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    const [s2, cmds] = walk.pageErr(s, "boom", 100);
+    const [s2, cmds] = walk.pageErr(s, errMsg("boom", 100));
     // No fetch emitted (backed off), paginator still parked on cursor 0.
     expect(cmds).toEqual([]);
     expect(s2.walk.phase).toBe("fetching");
@@ -396,9 +404,9 @@ describe("createPaginatedWalk — pageErr (back off, don't advance)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0, true), 10); // → done, slot succeeded
+    [s] = walk.pageOk(s, okMsg(page(0, true), 10)); // → done, slot succeeded
     const before = s;
-    const [after, cmds] = walk.pageErr(s, "late-boom", 20);
+    const [after, cmds] = walk.pageErr(s, errMsg("late-boom", 20));
     expect(cmds).toEqual([]);
     expect(after).toBe(before); // pure no-op preserves identity
     // The settled-succeeded slot is NOT clobbered to failed.
@@ -417,10 +425,10 @@ describe("createPaginatedWalk — pageErr (back off, don't advance)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0), 0); // → paused on cursor 1
+    [s] = walk.pageOk(s, okMsg(page(0), 0)); // → paused on cursor 1
     expect(s.walk.phase).toBe("paused");
     const before = s;
-    const [after, cmds] = walk.pageErr(s, "boom", 5);
+    const [after, cmds] = walk.pageErr(s, errMsg("boom", 5));
     expect(cmds).toEqual([]);
     expect(after).toBe(before);
   });
@@ -439,7 +447,7 @@ describe("createPaginatedWalk — pageErr (back off, don't advance)", () => {
         id: `resilient:retry:${PAGE_KEY}`,
         atMs: 0,
       });
-      [s] = walk.pageErr(s, `e${i}`, 0);
+      [s] = walk.pageErr(s, errMsg(`e${i}`, 0));
     }
     expect(s.resilience.calls[PAGE_KEY]?.phase).toBe("failed");
     // The paginator never advanced past the failing cursor.
@@ -456,7 +464,7 @@ describe("createPaginatedWalk — onTimer (retry the same page)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageErr(s, "boom", 0);
+    [s] = walk.pageErr(s, errMsg("boom", 0));
     expect(s.resilience.calls[PAGE_KEY]?.phase).toBe("waiting_retry");
     const [s2, cmds] = walk.onTimer(s, {
       type: "deadline_exceeded",
@@ -475,7 +483,7 @@ describe("createPaginatedWalk — onTimer (retry the same page)", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0), 0); // settle the fetch succeeded
+    [s] = walk.pageOk(s, okMsg(page(0), 0)); // settle the fetch succeeded
     const before = s;
     const [after, cmds] = walk.onTimer(s, {
       type: "deadline_exceeded",
@@ -483,7 +491,10 @@ describe("createPaginatedWalk — onTimer (retry the same page)", () => {
       atMs: 0,
     });
     expect(cmds).toEqual([]);
-    expect(after).toBe(before); // identity unchanged
+    // Nothing moved: the walk and every call are untouched (only the slice's
+    // clock records the fire).
+    expect(after.walk).toBe(before.walk);
+    expect(after.resilience.calls).toEqual(before.resilience.calls);
   });
 });
 
@@ -494,7 +505,7 @@ describe("createPaginatedWalk — subs", () => {
       rngZero,
     );
     const [s] = walk.start(walk.init(), 100);
-    expect(walk.subs(s)).toEqual([
+    expect(walk.deadlines(s)).toEqual([
       deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_100),
     ]);
   });
@@ -506,8 +517,8 @@ describe("createPaginatedWalk — subs", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 100);
-    [s] = walk.pageErr(s, "e", 100);
-    expect(walk.subs(s)).toEqual([
+    [s] = walk.pageErr(s, errMsg("e", 100));
+    expect(walk.deadlines(s)).toEqual([
       deadlineSub(`resilient:retry:${PAGE_KEY}`, 100),
       deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_100),
     ]);
@@ -520,49 +531,18 @@ describe("createPaginatedWalk — subs", () => {
     );
     let s = walk.init();
     [s] = walk.start(s, 0);
-    [s] = walk.pageOk(s, page(0, true), 0);
-    expect(walk.subs(s)).toEqual([]);
-  });
-});
-
-describe("createPaginatedWalk — handlers route Ok/Err to settle Msgs", () => {
-  it("routes a resolving fetch port to a resilient_ok msg carrying the page", async () => {
-    const walk = createPaginatedWalk<number, Page, IndexCmd>(
-      baseConfig,
-      rngZero,
-    );
-    const handler = walk.handlers({
-      run: async (cursor) => page(cursor),
-    }).resilient_run;
-    const msg = await handler(fetchCmd(7), {} as never);
-    expect(msg?.type).toBe("resilient_ok");
-    if (msg?.type === "resilient_ok") {
-      expect(msg.key).toBe(PAGE_KEY);
-      expect(msg.result).toEqual(page(7));
-    }
-  });
-
-  it("routes a rejecting fetch port to a resilient_err msg carrying the original error", async () => {
-    const walk = createPaginatedWalk<number, Page, IndexCmd>(
-      baseConfig,
-      rngZero,
-    );
-    const boom = new Error("upstream 500");
-    const handler = walk.handlers({
-      run: async () => {
-        throw boom;
-      },
-    }).resilient_run;
-    const msg = await handler(fetchCmd(0), {} as never);
-    expect(msg?.type).toBe("resilient_err");
-    if (msg?.type === "resilient_err") expect(msg.error).toBe(boom);
+    [s] = walk.pageOk(s, okMsg(page(0, true), 0));
+    expect(walk.deadlines(s)).toEqual([]);
   });
 });
 
 describe("createPaginatedWalk — wired in a machine (replay)", () => {
   // No rate limit so every page fetch passes immediately — the clean-sequence
   // assertions below observe the unthrottled fetch → index → fetch cadence.
-  const { machine } = makeMachine({ ...baseConfig, rateLimit: undefined });
+  const { walk, machine } = makeMachine({
+    ...baseConfig,
+    rateLimit: undefined,
+  });
   const bound = bindMachine(machine, ctx);
 
   it("init produces an idle walk with no subs", () => {
@@ -602,29 +582,43 @@ describe("createPaginatedWalk — wired in a machine (replay)", () => {
   });
 
   it("start → page_err leaves a retry + deadline timer desired", () => {
-    bound.expectActiveSubs(
-      { msgs: [{ type: "start", at: 0 }, errMsg("e", 0)] },
-      [
-        deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
-        deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
-      ],
-    );
+    const { state, subs } = bound.replay({
+      msgs: [{ type: "start", at: 0 }, errMsg("e", 0)],
+    });
+    expect(walk.deadlines(state.walk)).toEqual([
+      deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
+      deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
+    ]);
+    // The built-in `timer` Sub arms the soonest of them — the retry.
+    expect(subs).toEqual([
+      expect.objectContaining({
+        type: "timer",
+        deps: {
+          ms: 0,
+          msg: {
+            type: "deadline_exceeded",
+            id: `resilient:retry:${PAGE_KEY}`,
+            atMs: 0,
+          },
+        },
+      }),
+    ]);
   });
 });
 
 // ---------------------------------------------------------------------------
 // WIRED end-to-end machine tests. These build a REAL runtime via `run`, with a
-// real fetch port whose resolution re-enters the machine through `interpret`'s
-// follow-up Msg (enqueued on the dispatch tail — genuine re-entry, not a
-// hand-fed Msg). The scenario is driven to its END STATE, and the END STATE is
+// real fetch port whose outcome the engine mints into a settle Msg (enqueued
+// on the dispatch tail — genuine re-entry, not a hand-fed Msg). The scenario is driven to its END STATE, and the END STATE is
 // asserted — not the intermediate Msgs. This is the test class that was MISSING
 // (the bugs below shipped green because every prior test hand-fed the settle
 // Msgs and never let a stray one race a settled walk through the real loop).
 // ---------------------------------------------------------------------------
 
-// A runtime-wired host. `interpret` runs the consumer's fetch port; its result
-// is the `resilient_ok` / `resilient_err` Msg the runtime enqueues back onto
-// the tail — the page fetch genuinely re-enters the bound machine.
+// A runtime-wired host. `interpret` is the page-fetch handler the consumer
+// writes: it returns an outcome, the engine mints the `resilient_run_ok` /
+// `resilient_run_err` Msg and enqueues it back onto the tail — the page fetch
+// genuinely re-enters the bound machine.
 function wiredMachine(
   config: Parameters<typeof createPaginatedWalk<number, Page, IndexCmd>>[0],
   run_: (cursor: number) => Promise<Page>,
@@ -635,9 +629,9 @@ function wiredMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof walk.subs>[number],
       ctx: {} as object,
     },
+    cmds: [walk.fetch],
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ walk: walk.init() }, []],
     update: {
@@ -645,12 +639,12 @@ function wiredMachine(
         const [slice, cmds] = walk.start(s.walk, m.at);
         return [{ walk: slice }, cmds];
       },
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = walk.pageOk(s.walk, m.result, m.at);
+      resilient_run_ok: (s, m) => {
+        const [slice, cmds] = walk.pageOk(s.walk, m);
         return [{ walk: slice }, cmds];
       },
-      resilient_err: (s, m) => {
-        const [slice, cmds] = walk.pageErr(s.walk, m.error, m.at);
+      resilient_run_err: (s, m) => {
+        const [slice, cmds] = walk.pageErr(s.walk, m);
         return [{ walk: slice }, cmds];
       },
       deadline_exceeded: (s, m) => {
@@ -658,11 +652,27 @@ function wiredMachine(
         return [{ walk: slice }, cmds];
       },
     },
-    subscriptions: (s) => walk.subs(s.walk),
-    subscribe: { deadline: () => () => {} },
-    interpret: walk.handlers({ run: run_ }),
+    subs: [{ type: "timer", deps: (s: HostState) => walk.timer(s.walk) }],
   });
-  return { walk, machine };
+  return {
+    walk,
+    machine,
+    interpret: {
+      resilient_run: async (
+        cmd: FetchPageCmd<number>,
+        { ok, err }: OutcomeHelpers<Page, TaggedError<"port_rejected">>,
+      ) => {
+        try {
+          return ok(await run_(cmd.input));
+        } catch (cause) {
+          return err({ _tag: "port_rejected", cause });
+        }
+      },
+      index: async () => undefined,
+    },
+    // No timer ever fires in these scenarios.
+    subscribe: { timer: () => () => {} },
+  };
 }
 
 // Spin the microtask queue until `predicate(getState())` holds (the runtime
@@ -692,10 +702,13 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
   it("DEFECT 1: a stray page_err after the walk settles done is a pure no-op — the succeeded page-fetch slot and the SHARED breaker survive", async () => {
     // The port always resolves page 0 as the LAST page → the walk finishes done
     // with PAGE_KEY settled `succeeded` and the breaker untouched.
-    const { machine } = wiredMachine(oneShotConfig, async () => page(0, true));
-    const rt = await run(machine, { ctx }).ready;
+    const { machine, interpret, subscribe } = wiredMachine(
+      oneShotConfig,
+      async () => page(0, true),
+    );
+    const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
-    // Drive: start → fetch(0) → port resolves → resilient_ok re-enters → done.
+    // Drive: start → fetch(0) → port resolves → resilient_run_ok re-enters → done.
     await rt.dispatch({ type: "start", at: 0 });
     await settleUntil(
       () => rt.getState(),
@@ -733,11 +746,11 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
 
   it("DEFECT 2: backpressure is a real valve — drain + resume re-open a paused walk and fetch the parked cursor end-to-end", async () => {
     // hwm 1, pageSize 1 → the first page pauses the walk on cursor 1.
-    const { walk, machine } = wiredMachine(
+    const { walk, machine, interpret, subscribe } = wiredMachine(
       { ...baseConfig, rateLimit: undefined, highWaterMark: 1 },
       async (cursor) => page(cursor, cursor >= 2),
     );
-    const rt = await run(machine, { ctx }).ready;
+    const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     await settleUntil(
@@ -769,17 +782,17 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
   it("DEFECT 3: a terminal page failure makes the walk OBSERVABLY stuck — isStuck() / failure() surface a dead walk", async () => {
     // No retry → the first failure is terminal; the port always throws.
     const boom = { _tag: "upstream_down" as const };
-    const { walk, machine } = wiredMachine(
+    const { walk, machine, interpret, subscribe } = wiredMachine(
       { ...baseConfig, rateLimit: undefined, retry: undefined },
       async () => {
         throw boom;
       },
     );
-    const rt = await run(machine, { ctx }).ready;
+    const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     // Drive until the fetch slot terminally fails (re-entered via interpret's
-    // resilient_err follow-up). The paginator stays parked on cursor 0.
+    // resilient_run_err). The paginator stays parked on cursor 0.
     await settleUntil(
       () => rt.getState(),
       (s) => s.walk.resilience.calls[PAGE_KEY]?.phase === "failed",
@@ -792,7 +805,7 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
     expect(walk.isComplete(end)).toBe(false);
     // The dead-walk signal a consumer polls — errors are data, not silence.
     expect(walk.isStuck(end)).toBe(true);
-    expect(walk.failure(end)).toEqual(boom);
+    expect(walk.failure(end)).toEqual(rejected(boom));
     await rt.stop();
   });
 });
@@ -813,8 +826,8 @@ describe("createPaginatedWalk — properties", () => {
         const frozen = Object.freeze({ ...s0 });
         const [s1] = walk.start(frozen, at);
         expect(s1).not.toBe(frozen);
-        const [s2] = walk.pageOk(s1, page(off), at);
-        const [s3] = walk.pageErr(s1, "e", at);
+        const [s2] = walk.pageOk(s1, okMsg(page(off), at));
+        const [s3] = walk.pageErr(s1, errMsg("e", at));
         expect(s2).not.toBe(s1);
         expect(s3).not.toBe(s1);
         return true;
@@ -853,10 +866,10 @@ describe("createPaginatedWalk — properties", () => {
               [s, cmds] = walk.start(s, a.at);
               break;
             case "ok":
-              [s, cmds] = walk.pageOk(s, page(cursor++, a.last), a.at);
+              [s, cmds] = walk.pageOk(s, okMsg(page(cursor++, a.last), a.at));
               break;
             case "err":
-              [s, cmds] = walk.pageErr(s, "e", a.at);
+              [s, cmds] = walk.pageErr(s, errMsg("e", a.at));
               break;
             case "retry":
               [s, cmds] = walk.onTimer(s, {
@@ -891,7 +904,7 @@ describe("createPaginatedWalk — properties", () => {
         for (let i = 0; i < n; i++) {
           const isLast = i === n - 1;
           let cmds: readonly (FetchPageCmd<number> | IndexCmd)[];
-          [s, cmds] = walk.pageOk(s, page(i, isLast), 0);
+          [s, cmds] = walk.pageOk(s, okMsg(page(i, isLast), 0));
           for (const c of cmds) if (c.type === "index") indexed.push(c.offset);
         }
         // Every cursor 0..n-1 indexed exactly once, in order.
@@ -908,22 +921,17 @@ describe("createPaginatedWalk — properties", () => {
     const msgArb = fc.array(
       fc.oneof(
         fc.record({ type: fc.constant("start" as const), at: fc.nat(10_000) }),
-        fc.record({
-          type: fc.constant("resilient_ok" as const),
-          key: fc.constant(PAGE_KEY),
-          result: fc.record({
-            offset: fc.nat(20),
-            items: fc.constant(["r"] as const),
-            last: fc.boolean(),
-          }),
-          at: fc.nat(10_000),
-        }),
-        fc.record({
-          type: fc.constant("resilient_err" as const),
-          key: fc.constant(PAGE_KEY),
-          error: fc.constant("e"),
-          at: fc.nat(10_000),
-        }),
+        fc
+          .record({
+            result: fc.record({
+              offset: fc.nat(20),
+              items: fc.constant(["r"] as const),
+              last: fc.boolean(),
+            }),
+            at: fc.nat(10_000),
+          })
+          .map(({ result, at }) => okMsg(result, at)),
+        fc.nat(10_000).map((at) => errMsg("e", at)),
       ),
       { maxLength: 20 },
     );
@@ -1001,10 +1009,10 @@ describe("createPaginatedWalk — properties", () => {
               [s] = walk.start(s, op.at);
               break;
             case "ok":
-              [s] = walk.pageOk(s, page(cursor++, op.last), op.at);
+              [s] = walk.pageOk(s, okMsg(page(cursor++, op.last), op.at));
               break;
             case "err":
-              [s] = walk.pageErr(s, boom, op.at);
+              [s] = walk.pageErr(s, errMsg(boom, op.at));
               break;
             case "retry":
               [s] = walk.onTimer(s, {

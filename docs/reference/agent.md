@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (131)
+## Exports (134)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -34,24 +34,22 @@ These are the ones to read first:
 | `AgentCompactRunCmd` | Type | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier. |
 | `AgentConfig` | Type | The agent configuration — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
 | `AgentConfigCore` | Interface | The core (non-snapshot, non-compaction) agent configuration. |
-| `AgentDetachedHandlers` | Type | The LEGACY detached brain-call handler dictionary `handlers(ports)` returns, superseded by the `Interpret` table `AgentKnob.toMachine()` wires — reach for `toMachine()` unless you are hand-wiring the verbs yourself. |
 | `AgentEvent` | Type | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)`. |
 | `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
 | `AgentFailure` | Type | Why a run terminated as `failed`, beyond monitored-run's own reasons. |
-| `AgentKnob` | Interface | The agent handle `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers` escape hatch. |
-| `AgentLlmErrMsg` | Type | The brain-call FAILURE settle Msg, inherited from `../llm-call` — it re-enters the agent's `fail` verb, which backs off via the retry ladder rather than ending the run. |
+| `AgentKnob` | Interface | The agent handle `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and `brainInterpret`, the brain call's handler for a consumer wiring the verbs by hand. |
+| `AgentLlmErrMsg` | Type | The brain-call FAILURE settle Msg, inherited from `../llm-call` — the engine mints it from the brain handler's outcome and it drives the agent's `fail` verb, which backs off via the retry ladder rather than ending the run. |
 | `AgentLlmOkMsg` | Type | The brain-call SUCCESS settle Msg, inherited from `../llm-call`. |
 | `AgentLlmRunCmd` | Type | The brain-call effect Cmd, inherited from `../llm-call`. |
 | `AgentMachineMsg` | Type | The agent machine's Msg union — one variant per reducer entry point. |
 | `AgentMessage` | Type | One message a `defineAgent` `model` receives. |
-| `AgentPorts` | Type | Ports the consumer supplies to the llm-call handler — re-exported shape. |
 | `AgentPrompt` | Interface | The brain-call payload `defineAgent` builds from the durable state — everything `messagesOf` renders, so the prompt is a pure function of the Model and the resilient slice carries exactly what was sent. |
 | `AgentSnapshotConfig` | Type | The snapshotting discriminant. |
 | `AgentState` | Interface | The agent slice — every composed wrapper's slice plus the loop's conversation and the agent-specific failure annotation. |
 | `AgentStatus` | Type | The agent's lifecycle status — THE single typed channel for "what is this run doing?". |
 | `AgentTerminalFailure` | Type | The unified terminal failure the agent settles on. |
 | `AgentTimerMsg` | Type | The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg` are both `DeadlineExceeded`). |
-| `AgentToMachine` | Type | The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants so the snapshotting / compaction overloads of `createAgent` hand back the right obligations. |
+| `AgentToMachine` | Type | The `toMachine` signature. |
 | `AgentTurn` | Interface | One model turn: the narration `content` the model produced and the `toolCalls` it asked us to run. |
 | `agentTurnSchema` | Variable | The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain call binds when the agentic purpose's output is a bare `AgentTurn` (the common case). |
 | `AnyToolDef` | Type | The declaration-erased view the router reads. |
@@ -65,23 +63,26 @@ These are the ones to read first:
 | `compactionSummarySchema` | Variable | The `Schema<CompactionSummary>` the compaction call binds — tea's own parse target for the summarize round-trip (it OWNS the `$compact` purpose's output). |
 | `Conversation` | Interface | The agentic-stage conversation — durable inside the agent slice so an eviction mid-loop resumes the exact turn. |
 | `createAgent` | Function | Assemble an agent from `config` — the model, the stages it walks, and how a tool call is turned into a command — and get back its `init`, verbs and `subs` plus a `toMachine()` that wires all of it into one machine you hand to `run`, which is the layer to reach for only once `defineAgent` cannot express the run you want — a newcomer starts there, not here. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
-| `DeadlineSub` | Type | The Sub variant a deadline produces. |
+| `deadlinesSub` | Function | The `subs` entry that arms whatever deadlines `select` lists at a state: subs: [deadlinesSub((s: State) => rc.subs(s.resilience))], // run(machine, { subscribe: { deadline: subscribeDeadline } }) |
+| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
+| `deadlineSub` | Function | Build a deadline literal. |
+| `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself, which is the entry point a newcomer picks, `createAgent` being the layer underneath that you drop to only to walk a stage pipeline of your own. |
 | `DefineAgentCompaction` | Interface | The lid's compaction budget: the two numbers that say when a transcript is too long and how much of it survives the fold. |
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the four optional guards that stop a run — `maxTurns`, `deadlineMs`, `maxElapsedMs` and `stopWhen` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |
-| `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
+| `DefinedAgentCtx` | Type | The ctx the tools' handlers read, intersected — what `run` asks for. |
 | `DefinedAgentEvent` | Type | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
 | `DefinedAgentInterpret` | Type | The interpret table of the machine `defineAgent` wired: one cell per DefinedAgentCmd, keyed by its `type` — a tool's own Cmd type, the router's `tool_rejected`, and the agent-owned brain call. |
-| `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
+| `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input`. |
 | `DefinedAgentModel` | Type | The brain a defined agent runs, in either of its two shapes: - `async (messages) => turn` — the plain port, and the common path. |
 | `DefinedAgentMsg` | Type | The Msg union a defined agent's machine folds. |
 | `DefinedAgentOverlay` | Interface | What `defineAgent(cfg).with(...)` takes — the one documented wrap point over the machine the lid built. |
 | `DefinedAgentResolvedState` | Type | The Model `run` RESOLVES with — DefinedAgentState whose `run` slice is narrowed to the ended phases (EndedRun). |
 | `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
+| `DefinedAgentWired` | Type | The machine `defineAgent` builds per `input` beside the handlers it runs under — the interpret table and the `deadline` runner (a machine carries none — #278, #279). |
 | `EndedRun` | Type | The ENDED phases — a run that finished (`done`) or was stopped from outside (`cancelled`). |
 | `fanOutInterpret` | Function | Give a router's interpret cells real wall-clock overlap without touching the kernel — pass the table `toolRouter` built, get back one whose cells launch their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn while the first tool is still running. |
 | `InterpretOverlay` | Type | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |
@@ -91,12 +92,13 @@ These are the ones to read first:
 | `isStreamingModel` | Function | Whether a model port wants the ModelStream — read off its declared arity, which is the mark JavaScript already carries. |
 | `LidPurpose` | Type | The one purpose a `defineAgent` agent runs. |
 | `liftAgent` | Function | Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.agent`. |
+| `Llm` | Interface | The minimal chat-model contract every model the handler talks to must satisfy — the seed's `InjectableChatModel`, trimmed to the one operation the brain call drives for brain-only stages: `withStructuredOutput(schema)` → a runnable whose `invoke(messages)` resolves to a typed object matching `schema`. |
 | `LlmCall` | Interface | One LLM call request — the resilient-call `input` for this module, carried on the `resilient_run` Cmd as plain data — no closures, so it survives persistence and replay. |
 | `LlmErr` | Interface | The typed failure variant — every failure path surfaces this, tagged by purpose. |
-| `LlmFailMsg` | Type | The FAILURE settle Msg (`resilient_err`) — resilient-call's `FailMsg` with its `error: unknown` narrowed to the typed `LlmErr`, so the host reducer reads the purpose, the reason and the raw payload without a cast. |
-| `LlmOk` | Interface | The parsed, typed success carried on the `resilient_ok` settle Msg, tagged with its purpose. |
+| `LlmFailMsg` | Type | The failure Msg the engine mints — resilient-call's. |
+| `LlmOk` | Interface | The parsed, typed success carried on `resilient_run_ok`, tagged with its purpose. |
 | `LlmRunCmd` | Type | The effect Cmd this module emits: run the LLM call for `key` with `input`. |
-| `LlmSucceedMsg` | Type | The settle Msgs llm-call's handler RETURNS from `interpret` so the substrate enqueues them as follow-up Msgs (re-entry) into the host reducer — exactly as `../resilient-call` does. |
+| `LlmSucceedMsg` | Type | The success Msg the engine mints — resilient-call's, with the parsed `LlmOk`. |
 | `mergeInterpret` | Function | Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over the same Msg union `M` and Ctx) into the full `Interpret<M, A \| B, Ctx>`. |
 | `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
 | `ModelFactory` | Type | The model factory — the first DI port. |
@@ -109,13 +111,13 @@ These are the ones to read first:
 | `renderPrompt` | Function | The prompt as messages: the head, then each turn with its tool outcomes. |
 | `ReservedToolName` | Type | A tool name `tool()` refuses. |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
-| `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call the handler uses to validate the model's output before it settles `resilient_ok`. |
+| `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call `decode` uses to validate the model's output before it settles `resilient_run_ok`. |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`. |
 | `status` | Function | Ask where an agent run stands: pass its state, get back one of `idle`, `running`, `suspended` (with the tool calls it is waiting on), `done` (with the output) or `failed` (with the failure). |
 | `StreamingModel` | Type | The streaming model port — `(messages, { onChunk }) => Promise<AgentTurn>`. |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
+| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
 | `TaggedFailure` | Type | The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and an unhandled tag is a compile error. |
-| `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a `Cmd<T, E, R>` definition, whose `T` is what `ok` parses and whose `E` is the `err` tag union, that you pass to `toolRouter` or `defineAgent`. |
+| `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a `Cmd<T, Ok, E>` definition, whose `Ok` is what `ok` parses and whose `E` is the `err` tag union, that you pass to `toolRouter` or `defineAgent`. |
 | `TOOL_RETRY_EXHAUSTED_TAG` | Variable | The reason-tag a tool call that spent its retry budget settles under. |
 | `TOOL_TIMEOUT_TAG` | Variable | The reason-tag a timed-out tool call settles under. |
 | `ToolCall` | Interface | One tool the model asked to call this turn. |
@@ -128,7 +130,7 @@ These are the ones to read first:
 | `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
 | `ToolFailure` | Interface | A settled tool failure as the conversation keeps it: the `{ _tag, …payload }` the tool failed with, spread beside the `reason` string the model reads. |
 | `ToolFailureOf` | Type | The error outcome a router over `T` produces: `{ kind: "error", _tag, …payload, reason }`, discriminable on `_tag` over ToolError. |
-| `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `requirements` named, and the typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
+| `ToolHandler` | Type | A tool's handler: the parsed `args`, the plain `ctx` the host handed `run`, and the typed `{ ok, fail }`, to an outcome over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
 | `ToolInput` | Type | The input a tool Cmd carries: the model's `callId` (the fan-out identity the settle folds back on) and the `args` already parsed against the tool's `input` schema — the boundary parses, the handler trusts. |
 | `ToolMsg` | Type | The settled Msg union a router's handlers return — folded by `toMachine`. |
 | `ToolOk` | Type | The typed success constructor a handler receives: `ok(value)` with `Ok` fixed to what the `ok` schema parses, so a value of the wrong shape is refused where it is written. |
@@ -142,6 +144,7 @@ These are the ones to read first:
 | `ToolRetryExhausted` | Interface | A call that spent its retry budget — ToolResilience.retry. |
 | `toolRouter` | Function | Fold a set of `tool()`s into one router — pass it the tools, get back the lookup `createAgent` needs, the handlers `toMachine` merges, and a reader that turns a settled message back into a plain outcome. |
 | `ToolRouter` | Interface | What `toolRouter()` returns: the derived `toolOf` for `createAgent`'s config, the interpret table `toMachine({ tools })` merges, the defs it puts on `Machine.cmds`, and the one reader that turns a settled Msg back into the conversation's `ToolOutcome`. |
+| `ToolsCtx` | Type | The ctx a tool set's handlers read, intersected — what `run` asks the host for once the tools are wired into a machine. |
 | `ToolSettlement` | Type | One settled tool, read back off a `ToolMsg` by `outcomeOf`. |
 | `ToolThrown` | Type | The router-minted failure beside a tool's declared tags: the handler threw (or rejected) with something that is not a declared `{ _tag }`. |
 | `ToolTimedOut` | Interface | A call that spent its `timeoutMs` budget — ToolResilience.timeoutMs. |

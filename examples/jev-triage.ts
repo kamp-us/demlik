@@ -6,21 +6,17 @@
 // `tsconfig.consumers.json` resolves these specifiers against `dist`, not
 // `src`, so an export map that resolves internally and not from outside fails
 // here rather than in someone's project.
-import { defineMachine, type Reducer, run } from "@demlik/tea";
+import { defineMachine, type Interpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   createJevAsk,
   type JevCmd,
-  type JevFailMsg,
+  type JevHttpReply,
   type JevOk,
-  type JevPort,
   type JevRequest,
-  type JevSub,
-  type JevSucceedMsg,
   type JevTimerMsg,
   jevQuestions,
-  liftJevAsk,
   type ResilientState,
-  subscribeDeadline,
 } from "@demlik/tea/jev";
 
 // ---------------------------------------------------------------------------
@@ -65,61 +61,53 @@ type Msg =
       readonly memo: string;
       readonly at: number;
     }
-  | JevSucceedMsg<Questions>
-  | JevFailMsg
   | JevTimerMsg;
 
 type Ask = ReturnType<typeof createJevAsk<Questions>>;
+type Call = State["resilience"]["calls"][string];
 
 /** Below this the answer goes to a human. The threshold is the HOST's rule. */
 const CONFIDENCE_FLOOR = 0.8;
 
 // ---------------------------------------------------------------------------
-// The reducer. Every arm runs the knob's inherited verb FIRST so the backoff
-// loop advances, then folds this machine's own state around the result.
+// The machine. Every cell runs the knob's verb FIRST so the backoff loop
+// advances, then reads the verdict off the slice it settled.
 // ---------------------------------------------------------------------------
 
-function update(ask: Ask): Reducer<State, Msg, JevCmd<Questions>> {
-  return {
-    classify: (s, m) =>
-      liftJevAsk(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
+/**
+ * The verdict a settled call earns. `answer.choice` is `Category`, not
+ * `string` — the whole point of the rubric being a value the compiler can
+ * read. A call still backing off has none yet.
+ */
+function verdictOf(call: Call | undefined): Verdict | undefined {
+  switch (call?.phase) {
+    case "succeeded": {
+      const answer = call.result.answers.category;
+      return answer.confidence >= CONFIDENCE_FLOOR
+        ? { kind: "booked", category: answer.choice }
+        : { kind: "triage", why: `confidence ${answer.confidence}` };
+    }
+    case "failed":
+      return { kind: "triage", why: (call.error as { _tag: string })._tag };
+    default:
+      return undefined;
+  }
+}
 
-    resilient_ok: (s, m) => {
-      const [slice, cmds] = ask.succeed(s.resilience, m.key, m);
-      const answer = m.result.answers.category;
-      // `answer.choice` is `Category`, not `string` — the whole point of the
-      // rubric being a value the compiler can read.
-      const verdict: Verdict =
-        answer.confidence >= CONFIDENCE_FLOOR
-          ? { kind: "booked", category: answer.choice }
-          : { kind: "triage", why: `confidence ${answer.confidence}` };
-      return [
-        {
-          ...s,
-          resilience: slice,
-          verdicts: { ...s.verdicts, [m.key]: verdict },
-        },
-        cmds,
-      ];
-    },
-
-    resilient_err: (s, m) => {
-      const [slice, cmds] = ask.fail(s.resilience, m.key, m);
-      return [
-        {
-          ...s,
-          resilience: slice,
-          verdicts: {
-            ...s.verdicts,
-            [m.key]: { kind: "triage", why: m.error._tag },
-          },
-        },
-        cmds,
-      ];
-    },
-
-    deadline_exceeded: (s, m) => liftJevAsk(s, ask.onTimer(s.resilience, m)),
-  };
+/** Put the knob's settled slice back, with every verdict it now holds. */
+function settle(
+  s: State,
+  [resilience, cmds]: readonly [
+    State["resilience"],
+    readonly JevCmd<Questions>[],
+  ],
+): readonly [State, readonly JevCmd<Questions>[]] {
+  const verdicts = { ...s.verdicts };
+  for (const [key, call] of Object.entries(resilience.calls)) {
+    const verdict = verdictOf(call);
+    if (verdict !== undefined) verdicts[key] = verdict;
+  }
+  return [{ resilience, verdicts }, cmds];
 }
 
 function expenseMachine(ask: Ask) {
@@ -127,28 +115,38 @@ function expenseMachine(ask: Ask) {
     types: {
       model: {} as State,
       msg: {} as Msg,
-      cmd: {} as JevCmd<Questions>,
-      sub: {} as JevSub,
       ctx: undefined,
     },
+    // The ask Cmd: the engine turns the handler's outcome into
+    // `resilient_run_ok` / `resilient_run_err`.
+    cmds: [ask.run],
     init: (loaded) =>
       loaded !== null
         ? [loaded, []]
         : [{ resilience: ask.init(), verdicts: {} }, []],
-    update: update(ask),
-    subscriptions: (s) => ask.subs(s.resilience),
-    subscribe: { deadline: subscribeDeadline },
-    interpret: ask.handlers(),
+    update: {
+      classify: (s, m) =>
+        settle(s, ask.attempt(s.resilience, m.key, m.memo, m.at)),
+      resilient_run_ok: (s, m) => settle(s, ask.succeed(s.resilience, m)),
+      resilient_run_err: (s, m) => settle(s, ask.fail(s.resilience, m)),
+      deadline_exceeded: (s, m) => settle(s, ask.onTimer(s.resilience, m)),
+    },
+    // The retry timer. `timer` is built into the engine.
+    subs: [{ type: "timer", deps: (s: State) => ask.timer(s.resilience) }],
   });
 }
 
 // ---------------------------------------------------------------------------
-// The one seam that touches the network. The door holds no key: this closure
-// does, which is what lets a test hand the same type a scripted function.
+// The one seam that touches the network: the handler you write. The door holds
+// no key — this closure does, which is what lets a test hand the same type a
+// scripted function.
 // ---------------------------------------------------------------------------
 
-export function fetchJevPort(apiKey: string): JevPort<Questions> {
-  return async (request, signal) => {
+/** One HTTP call to Jev: a request in, the undecoded reply out. */
+type CallJev = (request: JevRequest<Questions>) => Promise<JevHttpReply>;
+
+export function fetchJev(apiKey: string): CallJev {
+  return async (request) => {
     const response = await fetch("https://api.typesafe.ai/v1/systemone", {
       method: "POST",
       headers: {
@@ -156,20 +154,35 @@ export function fetchJevPort(apiKey: string): JevPort<Questions> {
         "content-type": "application/json",
       },
       body: JSON.stringify(request),
-      ...(signal === undefined ? {} : { signal }),
     });
     return { status: response.status, body: await response.json() };
   };
 }
 
+/** The handler: call Jev, and let the knob's `decode` build the outcome. */
+function jevHandler(
+  ask: Ask,
+  callJev: CallJev,
+): Interpret<Msg, JevCmd<Questions>, unknown> {
+  return {
+    resilient_run: async (cmd) => {
+      try {
+        return ask.decode(cmd.input, await callJev(cmd.input));
+      } catch (cause) {
+        return ask.rejected(cause);
+      }
+    },
+  };
+}
+
 /**
  * The same type, scripted. `main` below uses this one so the example runs
- * offline and deterministically; swap in `fetchJevPort(key)` and nothing else
- * in this file changes, which is the property the port seam buys.
+ * offline and deterministically; swap in `fetchJev(key)` and nothing else
+ * in this file changes, which is the property the handler seam buys.
  */
-function scriptedJevPort(
+function scriptedJev(
   answers: Readonly<Record<string, readonly [Category, number]>>,
-): JevPort<Questions> {
+): CallJev {
   return async (request) => {
     const memo = String(request.state);
     const hit = Object.entries(answers).find(([needle]) =>
@@ -177,6 +190,9 @@ function scriptedJevPort(
     );
     if (hit === undefined) return { status: 422, body: {} };
     const [choice, confidence] = hit[1];
+    // `probabilities` is TOTAL over the criteria keys on the wire: spread the
+    // remaining mass over the other two and let the winner overwrite its own.
+    const rest = (1 - confidence) / 2;
     return {
       status: 200,
       body: {
@@ -186,7 +202,12 @@ function scriptedJevPort(
             type: "choice",
             choice,
             confidence,
-            probabilities: { [choice]: confidence },
+            probabilities: {
+              groceries: rest,
+              dining: rest,
+              transport: rest,
+              [choice]: confidence,
+            },
           },
         },
         usage: { input_tokens: 9, output_tokens: 2 },
@@ -209,11 +230,6 @@ const EXPENSES = [
 async function main() {
   const ask = createJevAsk({
     questions,
-    port: scriptedJevPort({
-      PIZZA: ["dining", 0.93],
-      SUPERMARKT: ["groceries", 0.88],
-      UNMARKED: ["transport", 0.41],
-    }),
     retry: {
       baseMs: 200,
       factor: 2,
@@ -223,7 +239,18 @@ async function main() {
     },
   });
 
-  const runtime = await run(expenseMachine(ask), { ctx: undefined }).ready;
+  // The machine is data; the handler rides beside it into `run`.
+  const runtime = await run(expenseMachine(ask), {
+    ctx: undefined,
+    interpret: jevHandler(
+      ask,
+      scriptedJev({
+        PIZZA: ["dining", 0.93],
+        SUPERMARKT: ["groceries", 0.88],
+        UNMARKED: ["transport", 0.41],
+      }),
+    ),
+  }).ready;
 
   for (const expense of EXPENSES) {
     runtime.dispatch({

@@ -6,8 +6,8 @@ import {
   type Reducer,
   RuntimeDiscardedError,
   type RuntimeErrorContext,
-  run,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Loud on discard (issue #365). A host that lets go of a runtime while
@@ -26,7 +26,7 @@ type State = { readonly started: number; readonly done: number };
 type Msg = { readonly type: "go" } | { readonly type: "arrived" };
 type FetchCmd = { readonly type: "fetch" };
 
-// A machine whose one Cmd parks on a caller-controlled promise, so a test can
+// A machine (and its handlers) whose one Cmd parks on a caller-controlled promise, so a test can
 // hold a Cmd "in flight" across a `stop()` and release it afterwards. Its
 // handler ALWAYS returns the terminal Msg — releasing the park after `stop()`
 // therefore re-dispatches into a runtime that is tearing down, which is the
@@ -42,7 +42,7 @@ function parkingMachine(park: Promise<void>) {
       return { type: "arrived" as const };
     },
   };
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as State,
       msg: {} as Msg,
@@ -51,8 +51,8 @@ function parkingMachine(park: Promise<void>) {
     },
     init: () => [{ started: 0, done: 0 }, []],
     update,
-    interpret,
   });
+  return { machine, interpret };
 }
 
 // Let every already-queued microtask run — the report of a refused re-dispatch
@@ -93,7 +93,9 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
         resolve();
       };
     });
-    const runtime = await run(parkingMachine(park), {
+    const { machine, interpret } = parkingMachine(park);
+    const runtime = await run(machine, {
+      interpret,
       ctx: undefined,
       onError: (error, context) => {
         seen.push({ error, context });
@@ -123,7 +125,9 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
   it("stays silent when the runtime is quiescent at stop time", async () => {
     const seen: RuntimeErrorContext[] = [];
     const park = Promise.resolve();
-    const runtime = await run(parkingMachine(park), {
+    const { machine, interpret } = parkingMachine(park);
+    const runtime = await run(machine, {
+      interpret,
       ctx: undefined,
       onError: (_error, context) => {
         seen.push(context);
@@ -152,7 +156,11 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
     // notice must not become an uncaught error just because a host unmounted
     // during a fetch. The parked Cmd DOES return a follow-up Msg here: the whole
     // mid-flight teardown, end to end, must stay warn-only.
-    const runtime = await run(parkingMachine(park), { ctx: undefined }).ready;
+    const { machine, interpret } = parkingMachine(park);
+    const runtime = await run(machine, {
+      interpret,
+      ctx: undefined,
+    }).ready;
 
     void runtime.dispatch({ type: "go" });
     await Promise.resolve();
@@ -190,14 +198,14 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
         go: (s) => [{ ...s, started: s.started + 1 }, [{ type: "fetch" }]],
         arrived: (s) => [{ ...s, done: s.done + 1 }, []],
       } satisfies Reducer<State, Msg, FetchCmd>,
+    });
+    const runtime = await run(boom, {
+      ctx: undefined,
       interpret: {
         fetch: async () => {
           throw new Error("cmd failed");
         },
       } satisfies Interpret<Msg, FetchCmd, undefined>,
-    });
-    const runtime = await run(boom, {
-      ctx: undefined,
       onError: (_error, context) => {
         seen.push(context);
       },
@@ -230,7 +238,9 @@ describe("a throwing consumer sink is never swallowed by the discard branch", ()
       };
     });
 
-    const runtime = await run(parkingMachine(park), {
+    const { machine, interpret } = parkingMachine(park);
+    const runtime = await run(machine, {
+      interpret,
       ctx: undefined,
       onError: (_error, context) => {
         if (context.phase === "discard") throw SINK_BOOM;
@@ -263,7 +273,7 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
   type Msg2 = { readonly type: "go" } | { readonly type: "late" };
   type SlowCmd = { readonly type: "slow" };
 
-  // Captures the injected detached dispatch so a test can fire a Msg at a
+  // A machine and handlers that capture the injected detached dispatch so a test can fire a Msg at a
   // chosen moment — the shape a `ctx.waitUntil` tail has in production.
   function detachedMachine(
     onDispatch: (dispatch: (msg: Msg2) => void) => void,
@@ -277,7 +287,7 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
         onDispatch(dispatch);
       },
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as State,
         msg: {} as Msg2,
@@ -286,8 +296,8 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
       },
       init: () => [{ started: 0, done: 0 }, []],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
   it("reports a Msg refused AFTER stop() returned as an error, not a discard", async () => {
@@ -296,17 +306,16 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
     const seen: { error: unknown; context: RuntimeErrorContext }[] = [];
     let dispatchLate: ((msg: Msg2) => void) | undefined;
 
-    const runtime = await run(
-      detachedMachine((dispatch) => {
-        dispatchLate = dispatch;
-      }),
-      {
-        ctx: undefined,
-        onError: (error, context) => {
-          seen.push({ error, context });
-        },
+    const { machine, interpret } = detachedMachine((dispatch) => {
+      dispatchLate = dispatch;
+    });
+    const runtime = await run(machine, {
+      interpret,
+      ctx: undefined,
+      onError: (error, context) => {
+        seen.push({ error, context });
       },
-    ).ready;
+    }).ready;
 
     await runtime.dispatch({ type: "go" });
     // Fully torn down: nothing is in flight, so no discard is reported.
@@ -336,17 +345,16 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
     const seen: { error: unknown; context: RuntimeErrorContext }[] = [];
     let dispatchDuringDrain: ((msg: Msg2) => void) | undefined;
 
-    const runtime = await run(
-      detachedMachine((dispatch) => {
-        dispatchDuringDrain = dispatch;
-      }),
-      {
-        ctx: undefined,
-        onError: (error, context) => {
-          seen.push({ error, context });
-        },
+    const { machine, interpret } = detachedMachine((dispatch) => {
+      dispatchDuringDrain = dispatch;
+    });
+    const runtime = await run(machine, {
+      interpret,
+      ctx: undefined,
+      onError: (error, context) => {
+        seen.push({ error, context });
       },
-    ).ready;
+    }).ready;
 
     await runtime.dispatch({ type: "go" });
     const stopping = runtime.stop();
@@ -368,12 +376,10 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
 
     // No sink — the consumer who configured nothing must not get an uncaught
     // error out of a teardown that raced an in-flight handler.
-    const runtime = await run(
-      detachedMachine((dispatch) => {
-        dispatchDuringDrain = dispatch;
-      }),
-      { ctx: undefined },
-    ).ready;
+    const { machine, interpret } = detachedMachine((dispatch) => {
+      dispatchDuringDrain = dispatch;
+    });
+    const runtime = await run(machine, { interpret, ctx: undefined }).ready;
 
     await runtime.dispatch({ type: "go" });
     const stopping = runtime.stop();

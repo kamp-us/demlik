@@ -10,6 +10,6 @@ import { … } from "@demlik/tea/react";
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
-| `useMachine` | Function | Build and own a `Runtime<S, M>` for the lifetime of the component mount. |
-| `UseMachineOpts` | Interface | Options passed to `useMachine`. |
-| `useRuntime` | Function | Lower-level escape hatch: consume an externally-built `Runtime<S, M>`. |
+| `useMachine` | Function | Build and own a run of `machine` for the lifetime of the component mount, on the engine whose `run` the caller hands in. |
+| `UseMachineOpts` | Type | Options passed to `useMachine`. |
+| `useRuntime` | Function | Lower-level escape hatch: consume an externally-built, booted run — any engine's BootedRunHandle (the Promise engine's `Runtime` is one). |

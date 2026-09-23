@@ -19,7 +19,8 @@
  * Run it:  node packages/tea/examples/agent-research-loop.ts   (Node 23 strips types)
  */
 
-import { type Interpret, run } from "@demlik/tea";
+import { type Interpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   type AgentMachineMsg,
   type AgentTurn,
@@ -267,7 +268,7 @@ function narrate(msg: Msg) {
     case "agent_start":
       console.log("start → fire the first brain call");
       break;
-    case "resilient_ok": {
+    case "resilient_run_ok": {
       // A brain call settled — pull the turn it produced (FIFO; survives the
       // conversation reset an empty-tool advance performs).
       const entry = produced.shift();
@@ -317,8 +318,8 @@ async function main() {
     },
   };
 
-  const machine = agent.toMachine<Ctx>({ toolInterpret });
-  const runtime = await run(machine, { ctx }).ready;
+  const wired = agent.toMachine<Ctx>({ toolInterpret });
+  const runtime = await run(wired.machine, { ...wired, ctx }).ready;
 
   line("the agent loop, narrated");
   console.log(

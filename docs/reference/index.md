@@ -11,6 +11,8 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 ## Core
 
 - [`@demlik/tea`](./tea.md)
+- [`@demlik/tea/promise`](./promise.md)
+- [`@demlik/tea/effect`](./effect.md)
 
 ## Adapters
 

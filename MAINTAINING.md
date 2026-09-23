@@ -32,7 +32,9 @@ export is not done until it has a row here. The list itself is pinned by
 
 | Subpath | Tier stamp | Notes |
 |---|---|---|
-| `.` | stable | the sentence: run / defineMachine / replay / supervision / ports — plus the runtime-free surface, the Sub factories, the `provide` graph that satisfies a Cmd's `R`, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import |
+| `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine |
+| `./promise` | stable | the Promise engine: `run` and `driveToDone`, moved off `.` |
+| `./effect` | experimental | the Effect engine: `run` with Effect handlers, Stream sub runners, Layers and interruption, against Effect v4 RC; `effect` is an optional peer, and only this entry may import it |
 | `./testing` | stable | testing infra is kernel |
 | `./pbt` | stable | arbitraries + runners, one door |
 | `./do` | stable | durable/host seam |
@@ -48,7 +50,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./retry-backoff` | battery | call-hardening |
 | `./idempotency` | battery | do-it-once: dedupe by key, cache the result, replay it to duplicates |
 | `./flow` | battery | multi-step control flow: fan-out, saga, workflow, poller, reconciler, batch window, monitored run, await-terminal |
-| `./resilience` | battery | call-hardening: deadlines, retries, breakers, rate limits, TTL cache, token refresh, and the `with*` wrappers |
+| `./resilience` | battery | call-hardening: deadlines, retries, breakers, rate limits, TTL cache, token refresh, as plain functions and `Cmd.define`d Cmds (ADR 0022) |
 | `./timing` | battery | call-rate: debounce, throttle, throttled input |
 | `./persistence` | battery | record a run, replay a trace, checkpoint a long-running machine |
 | `./paginate` | battery | the cursor walk, and the resumable end-to-end traversal over it |

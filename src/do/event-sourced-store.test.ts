@@ -14,8 +14,9 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Reducer, replay, run } from "../index";
+import { defineMachine, type Reducer, replay } from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
+import { run } from "../promise";
 import { doEventSourcedStore } from "./event-sourced-store";
 
 // ── A tiny counter machine with a few Msg variants. ─────────────────────────
@@ -51,7 +52,6 @@ function counter() {
     },
     init: (loaded) => [loaded ?? { type: "counting", count: 0, log: [] }, []],
     update,
-    subscribe: {},
   });
 }
 

@@ -18,8 +18,8 @@
  *   - `../token-refresh` owns the credential lifecycle: the `{ token, stale }`
  *     slice and the decisions about *when* a token must be refreshed (expiry
  *     skew, or a reactive 401). This knob adds the one verb resilient-call has
- *     no concept of — `on401` — and routes the refresh I/O through token-
- *     refresh's `refresh_token` handler.
+ *     no concept of — `on401` — and asks for a fresh token with token-refresh's
+ *     `refresh_token` Cmd.
  *
  * So the slice is exactly *resilient-call's slice + token-refresh's slice*:
  *
@@ -55,14 +55,13 @@
  *   - **Replayable** — every verb returns `readonly [State, Cmd[]]` and never
  *     reads the wall clock or RNG. Time arrives as an `at` parameter; the RNG
  *     for retry jitter is injected once at `createAuthedCall(config, rng)` and
- *     handed straight to the resilient-call knob. The only clock / network reads
- *     live in `handlers` (the effect boundary) — resilient-call's `run` port and
- *     token-refresh's `refresh` port.
+ *     handed straight to the resilient-call knob. The knob ships no I/O: the
+ *     call and the token mint are two `Cmd.define`d Cmds whose handlers you
+ *     write (ADR 0021).
  *
  * ## Typical wiring
  *
  *   const ac = createAuthedCall<string, Resp>({
- *     refresh: () => sdk.mintToken(),
  *     retry: defaultRetryPolicy,
  *     circuit: { threshold: 5, cooldownMs: 30_000 },
  *     deadline: { ms: 5_000 },
@@ -70,36 +69,40 @@
  *   });
  *
  *   // in the machine:
+ *   cmds: [ac.run, ac.refresh],
  *   init: () => [ac.init(), []],
  *   update: {
  *     fetch:   (s, m) => ac.attempt(s, m.key, m.input, m.at),
- *     call_ok: (s, m) => ac.succeed(s, m.key, m),
- *     call_err:(s, m) => ac.fail(s, m.key, m),
+ *     resilient_run_ok:  (s, m) => ac.succeed(s, m),
+ *     resilient_run_err: (s, m) => ac.fail(s, m),
  *     got_401: (s, m) => ac.on401(s, m.key, m.at),
- *     token_refreshed: (s, m) => ac.onRefreshed(ac.installToken(s, m.token), m.at),
- *     retry_due: (s, m) => ac.onTimer(s, m),
+ *     refresh_token_ok: (s, m) => ac.onRefreshed(ac.installToken(s, m.value), m.at),
+ *     refresh_token_err: (s) => [s, []],
+ *     deadline_exceeded: (s, m) => ac.onTimer(s, m),
  *   },
- *   subscriptions: (s) => ac.subs(s),
- *   subscribe: { deadline: subscribeDeadline },
- *   interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() }),
+ *   subs: [{ type: "timer", deps: (s) => ac.timer(s) }],
+ *
+ *   // and where it runs — the two handlers you write:
+ *   run(machine, {
+ *     interpret: {
+ *       resilient_run: async (cmd, { ok, err }) => …,  // the call itself
+ *       refresh_token: async (_cmd, { ok, err }) => …, // mint a Token
+ *     },
+ *   });
  */
 
 import type { Cmd } from "../../../index";
 import type { MsgType } from "../../../protocol";
 import { without } from "../../../pure/core";
+import type { DeadlineSub } from "../deadline";
 import {
   createResilientCall,
-  type DeadlineExceeded,
-  type DeadlineSub,
-  deadlineSub,
   type FailMsg,
   type ResilientConfig,
-  type ResilientPorts,
   type ResilientState,
   type ResilientTimerMsg,
   type RunCmd,
   type SucceedMsg,
-  subscribeDeadline,
 } from "../resilient-call";
 import {
   createTokenRefresh,
@@ -108,32 +111,25 @@ import {
   type Token,
   type TokenRefreshConfig,
   type TokenRefreshMsg,
-  type TokenRefreshPorts,
   type TokenState,
 } from "../token-refresh";
 
 // ===========================================================================
-// Config — the knob. The resilient-call config PLUS the two token-refresh
-// fields. Every field optional except `refresh` (the credential is the whole
-// point: without a mint port there is nothing to authenticate with).
+// Config — the knob. The resilient-call config PLUS token-refresh's skew.
 // ===========================================================================
 
 /**
  * The authed-call knob. It is `ResilientConfig` widened by the token dimension:
  *
- *   - `refresh` — the ONLY required field: the port that mints a fresh `Token`.
- *     Identical to token-refresh's `TokenRefreshPorts.refresh`; it is hoisted
- *     onto the config (not the ports) so the consumer spells the credential
- *     source once, the same way `rng` is curried onto the factory.
  *   - `skewMs` — token-refresh's refresh-ahead skew (optional, defaults to 0).
  *   - every `ResilientConfig` field (`retry` / `circuit` / `rateLimit` /
  *     `cache` / `deadline`) — passed straight through to the resilient-call
  *     knob, each still optional, each still "omit a brick → omit its gate".
+ *
+ * The token mint is not on the config: it is the `refresh_token` Cmd, and its
+ * handler is yours.
  */
-export interface AuthedConfig extends ResilientConfig, TokenRefreshConfig {
-  /** Mint a fresh credential. The single DI seam the auth dimension adds. */
-  readonly refresh: () => Promise<Token>;
-}
+export type AuthedConfig = ResilientConfig & TokenRefreshConfig;
 
 // ===========================================================================
 // Slice — resilient-call's slice + token-refresh's slice + the auth-retry
@@ -195,12 +191,6 @@ export type UnauthorizedError = {
   readonly key: string;
 };
 
-/** Ports `handlers` needs — resilient-call's run port AND token-refresh's refresh port. */
-export interface AuthedPorts<I, R> extends ResilientPorts<I, R> {
-  /** Mint a fresh credential. Mirrors `AuthedConfig.refresh` for symmetry at the splice site. */
-  readonly refresh: () => Promise<Token>;
-}
-
 // ===========================================================================
 // The knob factory.
 // ===========================================================================
@@ -215,7 +205,7 @@ export interface AuthedPorts<I, R> extends ResilientPorts<I, R> {
  * `onRefreshed`, `installToken`). `I` is the port input type, `R` the result.
  */
 export function createAuthedCall<I, R>(
-  config: AuthedConfig,
+  config: AuthedConfig = {},
   rng: () => number = Math.random,
 ) {
   // Delegate ALL call resilience to the root composition. The resilient config
@@ -291,18 +281,17 @@ export function createAuthedCall<I, R>(
   // === Verb: succeed =======================================================
 
   /**
-   * Record a success for `key`: delegate to resilient-call (closes the breaker,
-   * fills the cache, resets retry) and clear this key's auth-retry bookkeeping —
-   * the call settled, so its 401 budget and any parked input are forgotten.
-   * PURE.
+   * Record a success for `msg.cmd.key`: delegate to resilient-call (closes the
+   * breaker, fills the cache, resets retry) and clear this key's auth-retry
+   * bookkeeping — the call settled, so its 401 budget and any parked input are
+   * forgotten. PURE.
    */
   function succeed(
     s: AuthedState<I, R>,
-    key: string,
     msg: SucceedMsg<R>,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
-    const settled = clearAuthKey(s, key);
-    const { call, cmds } = rc.settle(settled.resilience, { ...msg, key });
+    const settled = clearAuthKey(s, msg.cmd.key);
+    const { call, cmds } = rc.settle(settled.resilience, msg);
     return liftResilient(settled, [call, cmds]);
   }
 
@@ -320,15 +309,15 @@ export function createAuthedCall<I, R>(
    */
   function fail(
     s: AuthedState<I, R>,
-    key: string,
     msg: FailMsg,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
     // If the resilient verb settles this call, forget its auth bookkeeping too.
-    const { call: resilience, cmds } = rc.settle(s.resilience, {
-      ...msg,
-      key,
-    });
-    const next = settleAuthIfDone({ ...s, resilience }, key, resilience);
+    const { call: resilience, cmds } = rc.settle(s.resilience, msg);
+    const next = settleAuthIfDone(
+      { ...s, resilience },
+      msg.cmd.key,
+      resilience,
+    );
     return [next, cmds];
   }
 
@@ -355,15 +344,13 @@ export function createAuthedCall<I, R>(
    * would punish a healthy target and burn the retry budget on a request that a
    * plain re-issue cannot fix).
    *
-   * PURE — `at` is carried for symmetry with the other verbs (the refresh Cmd
-   * itself carries no time; the refresh port stamps its own result Msg).
+   * PURE — `at` is the instant a terminal 401 settles the call at.
    */
   function on401(
     s: AuthedState<I, R>,
     key: string,
     at: number,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
-    void at; // carried for symmetry; the async refresh's result Msg stamps the clock.
     const spent = s.authRetry[key] ?? 0;
     const call = s.resilience.calls[key];
     // A 401 can arrive while the call is `running` OR after a transient failure
@@ -380,7 +367,7 @@ export function createAuthedCall<I, R>(
     // `settleFailed`, NOT `fail` — a 401 is not a breaker / retry signal.
     if (spent >= 1 || input === undefined) {
       const error: UnauthorizedError = { _tag: "unauthorized", key };
-      const [settled] = rc.settleFailed(s.resilience, key, error);
+      const [settled] = rc.settleFailed(s.resilience, key, error, at);
       return [{ ...clearAuthKey(s, key), resilience: settled }, []];
     }
 
@@ -401,7 +388,7 @@ export function createAuthedCall<I, R>(
   /**
    * Fold a freshly minted `token` into the auth slice (delegates to token-
    * refresh's `refreshed`: installs the token, clears `stale`). PURE. Call this
-   * from the `token_refreshed` reducer cell, then chain `onRefreshed` to re-fire
+   * from the `refresh_token_ok` reducer cell, then chain `onRefreshed` to re-fire
    * the parked calls. Split from `onRefreshed` so a consumer can install a token
    * without auto-retrying (e.g. a proactive expiry refresh with nothing parked).
    */
@@ -447,7 +434,7 @@ export function createAuthedCall<I, R>(
    */
   function onTimer(
     s: AuthedState<I, R>,
-    msg: ResilientTimerMsg,
+    msg: ResilientTimerMsg | { readonly id: string; readonly atMs: number },
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
     const [resilience, cmds] = rc.onTimer(s.resilience, msg);
     const next = settleAuthIfDone({ ...s, resilience }, undefined, resilience);
@@ -476,39 +463,31 @@ export function createAuthedCall<I, R>(
     return next;
   }
 
-  // === Subs ================================================================
+  // === Timers ==============================================================
 
   /**
-   * Pre-wired subscriptions — exactly resilient-call's (retry + deadline timers
-   * keyed per call). The auth dimension arms NO timers: a refresh is a one-shot
-   * Cmd, not a recurring sub, and the parked-call re-issue is driven by the
-   * `token_refreshed` Msg, not a timer. Wire `subscribe: { deadline:
-   * subscribeDeadline }`.
+   * The deadlines this slice waits on — exactly resilient-call's (retry +
+   * deadline timers keyed per call). The auth dimension arms NO timers: a
+   * refresh is a one-shot Cmd, and the parked-call re-issue is driven by the
+   * `refresh_token_ok` Msg, not a timer.
    */
-  function subs(s: AuthedState<I, R>): readonly DeadlineSub[] {
-    return rc.subs(s.resilience);
+  function deadlines(s: AuthedState<I, R>): readonly DeadlineSub[] {
+    return rc.deadlines(s.resilience);
   }
 
-  // === Handlers ============================================================
-
   /**
-   * Pre-wired interpret handlers: resilient-call's `resilient_run` (wraps the
-   * `run` port) AND token-refresh's `refresh_token` (wraps the `refresh` port).
-   * Both route Ok/Err through `tryInterpret`, stamping `Date.now()` at the
-   * effect boundary — the only clock reads in the whole module. Assign to the
-   * machine's `interpret`:
-   *
-   *   interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() })
+   * The built-in `timer` Sub's deps: resilient-call's `timer` over the
+   * `resilience` field. Declare `{ type: "timer", deps: (s) => ac.timer(s) }`.
    */
-  function handlers(ports: AuthedPorts<I, R>) {
-    const trPorts: TokenRefreshPorts = { refresh: ports.refresh };
-    return {
-      ...rc.handlers({ run: ports.run }),
-      ...tr.handlers(trPorts),
-    };
+  function timer(s: AuthedState<I, R>) {
+    return rc.timer(s.resilience);
   }
 
   return {
+    /** The call's `Cmd.define`d run Cmd — list it in `cmds`. */
+    run: rc.run,
+    /** token-refresh's `refresh_token` Cmd def — list it in `cmds`. */
+    refresh: tr.run,
     init,
     attempt,
     succeed,
@@ -520,8 +499,8 @@ export function createAuthedCall<I, R>(
     /** token-refresh's call-boundary verb, re-exposed for proactive expiry refresh. */
     needsRefresh: (s: AuthedState<I, R>, at: number) =>
       tr.needsRefresh(s.auth, at),
-    subs,
-    handlers,
+    deadlines,
+    timer,
   };
 }
 
@@ -547,15 +526,10 @@ export function liftAuthed<
 }
 
 /**
- * Re-export the deadline Sub primitives (this knob's `subs` emits `DeadlineSub`s,
- * inherited from resilient-call) and the token-refresh Msg constructors a
- * consumer wires into their reducer, so the whole composition imports from one
- * subpath.
+ * Re-export the types a consumer wires into their reducer, so the whole
+ * composition imports from one subpath.
  */
-export { subscribeDeadline, deadlineSub };
 export type {
-  DeadlineSub,
-  DeadlineExceeded,
   ResilientState,
   TokenState,
   Token,

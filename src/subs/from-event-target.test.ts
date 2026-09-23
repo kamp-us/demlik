@@ -1,17 +1,11 @@
 import { describe, expect, it } from "vitest";
-import {
-  defineMachine,
-  type NoCtx,
-  type Reducer,
-  run,
-  type Sub,
-  subId,
-} from "../index";
+import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
+import { run } from "../promise";
 import { fromEventTarget } from "./from-event-target";
 import type { MinimalEvent, MinimalEventTarget } from "./platform";
 
 // Lifecycle contract under a real runtime (issue #286): the listener attaches
-// when the Sub enters `subscriptions(state)`, delivered events fold into
+// when the Sub's `deps` turns non-null, delivered events fold into
 // State (with `msgFn → null` dropped), and reconciling the Sub out removes
 // the exact listener instance from the target.
 
@@ -37,7 +31,7 @@ class FakeTarget implements MinimalEventTarget {
   }
 }
 
-type PingSub = Sub<"ping">;
+type PingSub = Sub<"ping", Readonly<Record<string, never>>>;
 type State = { readonly armed: boolean; readonly pings: number };
 type Msg = { readonly type: "ping" } | { readonly type: "disarm" };
 
@@ -46,26 +40,26 @@ const update: Reducer<State, Msg, never> = {
   disarm: (s) => [{ ...s, armed: false }, []],
 };
 
-function pingMachine(target: FakeTarget) {
-  return defineMachine({
-    types: {
-      model: {} as State,
-      msg: {} as Msg,
-      sub: {} as PingSub,
-      ctx: {} as NoCtx,
-    },
-    init: () => [{ armed: true, pings: 0 }, []],
-    update,
-    subscriptions: (s) =>
-      s.armed ? [{ id: subId("ping"), type: "ping" }] : [],
-    subscribe: {
-      ping: fromEventTarget<PingSub, Msg>(
-        () => target,
-        "ping",
-        (event) => ("skip" in event ? null : { type: "ping" }),
-      ),
-    },
-  });
+const pingMachine = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    sub: {} as PingSub,
+    ctx: {} as NoCtx,
+  },
+  init: () => [{ armed: true, pings: 0 }, []],
+  update,
+  subs: [{ type: "ping", deps: (s) => (s.armed ? {} : null) }],
+});
+
+function pingRunners(target: FakeTarget) {
+  return {
+    ping: fromEventTarget<PingSub, Msg>(
+      () => target,
+      "ping",
+      (event) => ("skip" in event ? null : { type: "ping" }),
+    ),
+  };
 }
 
 describe("fromEventTarget — subscribe → deliver → cleanup against a real runtime", () => {
@@ -73,7 +67,7 @@ describe("fromEventTarget — subscribe → deliver → cleanup against a real r
     const target = new FakeTarget();
     expect(target.count("ping")).toBe(0);
 
-    const rt = await run(pingMachine(target), {}).ready;
+    const rt = await run(pingMachine, { subscribe: pingRunners(target) }).ready;
     expect(target.count("ping")).toBe(1); // boot reconcile attached it
 
     target.fire({ type: "ping" });
@@ -86,7 +80,7 @@ describe("fromEventTarget — subscribe → deliver → cleanup against a real r
 
   it("msgFn → null drops the emission but keeps the listener armed", async () => {
     const target = new FakeTarget();
-    const rt = await run(pingMachine(target), {}).ready;
+    const rt = await run(pingMachine, { subscribe: pingRunners(target) }).ready;
 
     const skipped: MinimalEvent & { skip: true } = { type: "ping", skip: true };
     target.fire(skipped);
@@ -102,7 +96,7 @@ describe("fromEventTarget — subscribe → deliver → cleanup against a real r
 
   it("reconciling the Sub out removes the listener — later events deliver nothing", async () => {
     const target = new FakeTarget();
-    const rt = await run(pingMachine(target), {}).ready;
+    const rt = await run(pingMachine, { subscribe: pingRunners(target) }).ready;
 
     await rt.dispatch({ type: "disarm" });
     expect(target.count("ping")).toBe(0); // removeEventListener ran

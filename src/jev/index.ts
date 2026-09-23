@@ -12,18 +12,18 @@
  *   (`parseAnswers`, `classifyStatus`) and no I/O. A `choice` question's
  *   `criteria` keys ARE its answer's `choice` domain, so writing the rubric
  *   once buys the narrowing at the call site.
- * - `ask` — one Cmd over `internal/resilience/resilient-call` with the HTTP
- *   caller injected as a `JevPort` and a pure `JevFallback` behind it. It owns
- *   no key, no clock and no retry loop of its own.
+ * - `ask` — one `Cmd.define`d Cmd over `internal/resilience/resilient-call`,
+ *   the pure functions that turn Jev's HTTP reply into that Cmd's outcome, and
+ *   a pure `JevFallback` behind it. The HTTP call is the handler you write; the
+ *   door owns no key, no clock, no I/O and no retry loop of its own.
  * - `classify-batch` — a stream of items turned into Jev calls by wiring
  *   `flow/batch-window`, `flow/fan-out` and `resilience/cache` around `ask`.
  *   It writes no chunker, cache, limiter or retry; it is the wiring.
  *
  * No name is declared twice behind this door, so every module is starred and
  * nothing is enumerated by hand — unlike `../resilience/index.ts`, which has to
- * name a winner for its two `DeadlineConfig` declarations. `ask` also forwards
- * the deadline Sub trio and `ResilientState` from resilient-call, which is the
- * one declaration of each behind this door.
+ * name a winner for its `DeadlineConfig`. `ask` also forwards `ResilientState`
+ * from resilient-call, which is the one declaration of it behind this door.
  *
  * `battery` tier (MAINTAINING.md): a published named pattern over the kernel,
  * which may break in a minor provided the changelog for that minor says so.

@@ -60,7 +60,9 @@
  *   },
  *
  *   // Subs — the knob owns the interval/backoff deadline:
- *   subscriptions: (s) => poll.subs(s.poll),
+ *   types: { ..., sub: {} as DeadlinesSub },
+ *   subs: [deadlinesSub((s) => poll.subs(s.poll))],
+ *   // at run: run(machine, { interpret, subscribe: { deadline: subscribeDeadline } })
  *
  * The cadence has exactly ONE source: the `everyMs` deadline Sub. `start`,
  * `tickResult`, and `tickErr` only RE-ARM the deadline (they emit no cadence
@@ -78,13 +80,13 @@
  *     verb body names the global RNG). `replay` reconstructs a poll run exactly.
  *
  * NOT a substrate primitive: it depends only on sibling subpaths
- * (`../deadline`, `../retry-backoff`, `../idempotency`) and the core `Cmd` /
- * `Sub` types. Internal since #48 — not published on any subpath; reached from
+ * (`../deadline`, `../retry-backoff`, `../idempotency`) and the core `Cmd`
+ * type. Internal since #48 — not published on any subpath; reached from
  * inside the package as `internal/flow/poller`. The L1 escape hatch is those
  * three siblings threaded by hand.
  */
 
-import type { Cmd, Sub } from "../../../index";
+import type { Cmd } from "../../../index";
 import {
   type AnyRetryPolicy,
   asRng,
@@ -117,7 +119,7 @@ export interface PollerConfig<State, R> {
    * The stop predicate, read against the consumer's whole Model. When it
    * returns `true`, the poller is DONE: `subs` returns `[]` (the timer
    * disarms) and no further tick is scheduled. Pure — it must not read the
-   * clock or mutate; the substrate calls it inside `subscriptions(state)`.
+   * clock or mutate; the consumer's reducer cell calls it (`untilHeld`).
    */
   readonly until: (state: State) => boolean;
   /**
@@ -231,21 +233,18 @@ export type PollerDone<R> = Extract<PollerState<R>, { phase: "done" }>;
 export type PollerGaveUp<R> = Extract<PollerState<R>, { phase: "gave_up" }>;
 
 /**
- * The poller Sub type — a `../deadline` Sub under a fixed id family. One id per
- * knob instance keeps the reconcile pass from churning the timer: the same id
- * across transitions means "same armed deadline", even as `nextAtMs` advances.
+ * The deadline the poller lists — a `../deadline` entry under the
+ * `poller:tick:` id family (see `pollerSubId`).
  */
 export type PollerSub = DeadlineSub;
 
 /**
- * The Sub id the poller arms its tick deadline under, keyed on the absolute
- * target. The id ROTATES per target because a one-shot deadline timer is
- * exhausted once it fires and the substrate reconciles subs by `id` alone: a
- * fixed id would leave the fired timer registered and never re-arm, so the
- * cadence would die after exactly one tick. Encoding `atMs` in the id makes each
- * cadence/backoff target a distinct identity — the reconcile pass retires the
- * spent timer and arms the next — while a resumed poller re-arms the SAME id
- * from its persisted `nextAtMs` (eviction is idempotent).
+ * The id the poller arms its tick deadline under, keyed on the absolute target.
+ * A one-shot deadline timer is exhausted once it fires, so each cadence/backoff
+ * target must be a distinct deadline: a new `nextAtMs` changes the `deadline`
+ * Sub's deps, the engine retires the spent timer and arms the next, and the
+ * fired Msg's `id` names the target it was armed for. A resumed poller re-arms
+ * the SAME deadline from its persisted `nextAtMs` (eviction is idempotent).
  *
  * A single poller machine arms exactly one tick timer at a time; a consumer
  * running several pollers on one machine namespaces them by composing the knob
@@ -259,13 +258,12 @@ function pollerSubId(atMs: number): string {
  * The knob handle returned by `createPoller`. Spread its hooks into your
  * machine: `init()` seeds the slice, `start(...)` arms the first tick,
  * `tickResult` / `tickErr` are the two update verbs, and `subs(...)` returns the
- * timer Sub while the poller is live.
+ * tick deadline while the poller is live.
  *
  * Pure-ops + subs module: there is no `handlers(ports)` cell. The poller's I/O
  * is the consumer's own `onTick` Cmd run by the consumer's `interpret` — the
- * knob never owns a port. (Compare `../deadline`, which ships a `subscribe`
- * cell; the poller reuses `../deadline`'s, so it has nothing of its own to
- * splice into `interpret`.)
+ * knob never owns a port. (Compare `../deadline`, which ships a `deadline`
+ * runner; the poller reuses it, so it has nothing of its own to hand `run`.)
  */
 export interface Poller<
   // State is a phantom-style parameter — present so consumers can spell
@@ -369,16 +367,16 @@ export interface Poller<
     at: number,
   ): readonly [PollerPolling<R> | PollerGaveUp<R>, readonly Cmd[]];
   /**
-   * The pre-wired subscriptions cell. Returns the single tick-deadline Sub
-   * while the poller is `"polling"` with an armed `nextAtMs`; returns `[]`
-   * once `"done"` / `"gave_up"` (the timer disarms) or before `start`. Assign
-   * directly: `subscriptions: (s) => poll.subs(s.poll)`.
+   * The tick deadline, listed while the poller is `"polling"` with an armed
+   * `nextAtMs`; `[]` once `"done"` / `"gave_up"` (the timer disarms) or before
+   * `start`. Declare it on the machine:
+   * `subs: [deadlinesSub((s) => poll.subs(s.poll))]`.
    *
-   * The `DeadlineSub` it returns is consumed by `../deadline`'s
-   * `subscribeDeadline` cell, which the consumer wires into `subscribe` —
-   * the poller does not redraw the timer lifecycle.
+   * The list is armed by `../deadline`'s `subscribeDeadline` runner, which the
+   * consumer passes to `run` as `subscribe.deadline` — the poller does not
+   * redraw the timer lifecycle.
    */
-  subs(state: PollerState<R>): readonly Sub[];
+  subs(state: PollerState<R>): readonly PollerSub[];
 }
 
 /**
@@ -577,21 +575,15 @@ export function createPoller<State, R>(
     ];
   }
 
-  function subs(state: PollerState<R>): readonly Sub[] {
+  function subs(state: PollerState<R>): readonly PollerSub[] {
     // Arm the tick deadline only while live. `phase` is the authority (so a
     // mis-passed `untilHeld` into `tickResult` cannot resurrect a finished
     // poller); `nextAtMs` is the absolute target `../deadline` translates to a
     // remaining delay at subscribe time — a resumed poller re-arms the exact
     // persisted moment.
     if (state.phase !== "polling" || state.nextAtMs === null) return [];
-    // The Sub id ROTATES with the target. A one-shot deadline timer is
-    // exhausted once it fires, and the substrate's reconcile pass keys identity
-    // by `id` alone — a fixed id would leave the fired timer in the registry and
-    // NEVER re-arm for the next cadence (cadence dies after one tick). Folding
-    // `nextAtMs` into the id makes each successive target a distinct identity:
-    // the reconcile pass retires the spent timer (old id absent from the desired
-    // set) and arms the next one (new id). A resumed poller re-arms the SAME id
-    // from its persisted `nextAtMs`, so eviction is idempotent.
+    // Each target is its own deadline (see `pollerSubId`): a new `nextAtMs`
+    // restarts the `deadline` Sub, retiring the spent one-shot timer.
     return [deadlineSub(pollerSubId(state.nextAtMs), state.nextAtMs)];
   }
 

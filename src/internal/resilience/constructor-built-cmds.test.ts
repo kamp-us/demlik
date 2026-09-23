@@ -15,14 +15,7 @@ describe("resilience family — every emitted Cmd is constructor-built", () => {
   const result = scan(files);
 
   it("declares each Cmd the family emits through Cmd.define", () => {
-    expect([...result.defined].sort()).toEqual(
-      [
-        "$resilience:run",
-        "$deadline:decision",
-        "$telemetry:emit",
-        "refresh_token",
-      ].sort(),
-    );
+    expect([...result.defined].sort()).toEqual(["refresh_token"]);
   });
 
   it("declares resilient-call's run Cmd as a NAME FAMILY, not one literal", () => {
@@ -47,14 +40,14 @@ describe("resilience family — every emitted Cmd is constructor-built", () => {
       [
         "drifted.ts",
         [
-          'const emit = { type: "$telemetry:emit", event };',
-          '/* a comment quoting { type: "$telemetry:emit" } is not a hit */',
+          'const mint = { type: "refresh_token" };',
+          '/* a comment quoting { type: "refresh_token" } is not a hit */',
           "const run = { type: MsgType.ResilientRun, key, input };",
         ].join("\n"),
       ],
     ]);
     expect(drifted.literals).toEqual([
-      { file: "drifted.ts", line: 1, name: "$telemetry:emit" },
+      { file: "drifted.ts", line: 1, name: "refresh_token" },
       { file: "drifted.ts", line: 3, name: MsgType.ResilientRun },
     ]);
   });

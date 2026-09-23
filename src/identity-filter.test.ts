@@ -3,11 +3,10 @@ import {
   defineMachine,
   type Identity,
   IdentityDropNotice,
-  type Interpret,
   type Reducer,
   RuntimeDiscardNotice,
-  run,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // The instance-identity filter. Declared once on the machine, enforced by the
@@ -50,7 +49,6 @@ function machine(withIdentity: boolean) {
     init: () => [{ runId: null, applied: [] }, []],
     update,
     ...(withIdentity ? { identity } : {}),
-    interpret: {} as Interpret<Msg, never, undefined>,
   });
 }
 
@@ -130,7 +128,6 @@ describe("Identity — the kernel-enforced mis-addressed drop", () => {
           ofState: (s) => s.key ?? undefined,
           ofMsg: (m) => m.key,
         },
-        interpret: {} as Interpret<CompositeMsg, never, undefined>,
       }),
       { ctx: undefined },
     ).ready;
@@ -229,7 +226,6 @@ describe("Identity — a throwing projection is supervised, not raw", () => {
           return m.type === "ping" ? undefined : m.runId;
         },
       },
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
 
   it('routes an `ofMsg` throw through the sink under `phase: "reduce"`', async () => {
@@ -287,7 +283,6 @@ describe("Identity — a non-plain identity fails loudly, never permissively", (
       ofState: (s) => s.startedAt ?? undefined,
       ofMsg: (m) => m.startedAt,
     },
-    interpret: {} as Interpret<DateMsg, never, undefined>,
   });
 
   it("does not admit a foreign run's message just because both identities are Dates", async () => {

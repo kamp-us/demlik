@@ -51,15 +51,13 @@
  * is supplied by the caller's `idOf` so `scatter` is deterministic, and the
  * launch effects are plain data the runtime performs (invariant 3).
  *
- * `handlers(ports)` is the I/O splice: it wires the runtime side that actually
- * runs each launched `of(item)` Cmd. Because `of` already produces a fully
- * caller-defined Cmd, fan-out does NOT own the interpret handler for it — the
- * consumer's own `interpret` performs the effect and routes Ok/Err back to the
- * `itemOk` / `itemErr` verbs (the same shape resilient-fetch uses with
- * `tryInterpret`). `handlers` therefore exposes the one piece fan-out CAN
- * pre-wire generically: emitting the gathered batch onto a typed Port when the
- * batch completes, for consumers that observe completion out-of-band rather
- * than through the `join` Cmd.
+ * Fan-out does NOT own the interpret handler for a launched `of(item)` Cmd: `of`
+ * already produces a fully caller-defined Cmd, so the consumer's own
+ * `interpret` performs the effect and routes Ok/Err back to the `itemOk` /
+ * `itemErr` verbs. `completion(ports)` is the one piece fan-out CAN pre-wire
+ * generically: emitting the gathered batch onto a typed Port when the batch
+ * completes, for consumers that observe completion out-of-band rather than
+ * through the `join` Cmd.
  *
  * NOT a substrate primitive: it depends only on `../work-queue`'s pure types +
  * blessed ops and the core `Cmd` / `Port` types. Internal since #48 — not
@@ -167,7 +165,7 @@ export interface FanOutState<I, R> {
  *
  * Field optionality follows the resilient-call rule — omit `join`, omit the
  * completion Cmd (a consumer that observes `isComplete` itself, or wires the
- * `handlers` Port, doesn't need one).
+ * `completion` Port, doesn't need one).
  */
 export interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
   /** Max in-flight `of(item)` effects. Clamped to `>= 1` (a 0/negative cap would deadlock). */
@@ -185,7 +183,7 @@ export interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
   /**
    * Optional: fold the gathered done-results into a single completion Cmd,
    * fired exactly once at the transition that empties `pending` + `running`.
-   * Omit to drive completion off `isComplete` (or the `handlers` Port) instead.
+   * Omit to drive completion off `isComplete` (or the `completion` Port) instead.
    */
   readonly join?: (results: readonly R[]) => J;
 }
@@ -359,7 +357,7 @@ function settleOne<I, R>(
 
 /**
  * Optional Port for observing batch completion out-of-band. When a consumer
- * passes `handlers(ports)` a `complete` Port, the runtime side can emit the
+ * passes `completion(ports)` a `complete` Port, the runtime side can emit the
  * gathered results onto it the moment `isComplete` flips true — distinct from
  * the in-band `join` Cmd (which threads back through `update`). Use the Port
  * for "tell the outside world the batch finished" without folding a completion
@@ -373,7 +371,7 @@ export interface FanOutPorts<R> {
 /**
  * Build the fan-out knob from `config`. Returns the uniform combinator
  * contract: `init` for the owned slice, the three settle verbs + the derived
- * `isComplete`, and `handlers` for the optional out-of-band completion Port.
+ * `isComplete`, and `completion` for the optional out-of-band completion Port.
  *
  * No `subs` — fan-out runs no timers (the spec pins "Subs: none"). The
  * per-item effect's lifetime is owned by the consumer's `interpret`, and
@@ -547,7 +545,7 @@ export function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
    * runtime `observe` (e.g. `runtime.observe((_, s) => emit(s.fanOut))`); fan-out
    * stays out of the dispatch loop, matching `historyTracker`'s discipline.
    */
-  function handlers(ports: FanOutPorts<R>) {
+  function completion(ports: FanOutPorts<R>) {
     return {
       /**
        * Emit the gathered done-results onto `ports.complete` iff `state` is a
@@ -574,6 +572,6 @@ export function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
     itemOk,
     itemErr,
     isComplete,
-    handlers,
+    completion,
   };
 }

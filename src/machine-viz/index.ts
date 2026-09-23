@@ -18,14 +18,15 @@
  *
  * What we MUST NOT do (these are the effectful paths, off-limits here):
  *   - call `interpret[*]` handlers (perform I/O)
- *   - call `subscribe[*]` handlers (install listeners)
+ *   - call `subscribe[*]` runners (install listeners)
  *   - call `run` / the runtime
- * We MAY call `init`, `update[*]` cells, and `subscriptions(state)` — all pure
- * by the invariants (same set `replay` is allowed to touch).
+ * We MAY call `init`, `update[*]` cells, and each `subs` entry's `deps(state)`
+ * — all pure by the invariants (same set `replay` is allowed to touch).
  */
 
 import type { Cmd, Machine, Sub } from "../index";
 import { formOf } from "../index";
+import { desiredSub, subEntriesOf } from "../pure/core";
 import { safeId, safeLabel } from "./mermaid-id";
 
 // The sanitizers live in a dependency-free module and are re-exported here,
@@ -130,7 +131,7 @@ export function toMermaid<
     });
   }
 
-  // Subscriptions annotation — pure call to `subscriptions(sampleState)` per
+  // Subscriptions annotation — pure call to each `subs` entry's `deps` per
   // sampled state. Skipped entirely when no state samples are provided (we
   // refuse to invent a state to feed it).
   emitSubscriptions(machine, lines, stateSamples);
@@ -288,11 +289,11 @@ function resolveEdge<S, M extends { type: string }, C extends Cmd>(
 // === Subscriptions annotation ===
 
 /**
- * For each sampled state, call the (pure) `subscriptions(state)` description
- * function and annotate which Sub types are active in that state as a Mermaid
- * note. We call `subscriptions` (the description) but NEVER `subscribe[*]` (the
- * effectful installer) — same boundary `replay` honors. Skipped when no state
- * samples are provided or the machine declares no `subscriptions`.
+ * For each sampled state, read which `subs` entries are on there (their pure
+ * `deps`) and annotate those Sub types as a Mermaid note. We read `deps` (the
+ * description) but NEVER a `subscribe[*]` runner (the effectful installer) —
+ * same boundary `replay` honors. Skipped when no state samples are provided or
+ * the machine declares no `subs`.
  */
 function emitSubscriptions<
   S,
@@ -305,15 +306,18 @@ function emitSubscriptions<
   lines: string[],
   stateSamples: Partial<Record<string, S>>,
 ): void {
-  if (machine.subscriptions === undefined) return;
+  const entries = subEntriesOf<S>(machine);
+  if (entries.length === 0) return;
   const stateTypes = Object.keys(stateSamples);
   if (stateTypes.length === 0) return;
 
   for (const st of stateTypes) {
     const sample = stateSamples[st];
     if (sample === undefined) continue;
-    const subs = machine.subscriptions(sample);
-    const subTypes = subs.map((s) => s.type);
+    const subTypes = entries.flatMap((entry) => {
+      const sub = desiredSub(entry, sample);
+      return sub === null ? [] : [sub.type];
+    });
     const body =
       subTypes.length === 0
         ? "(no active subs)"

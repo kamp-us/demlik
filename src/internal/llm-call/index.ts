@@ -5,319 +5,120 @@
  * since #49 — not published on any subpath; `@demlik/tea/agent` re-exports
  * the types a consumer meets.
  *
- * This is the ~60-line `call_llm` handler from the audit-agent seed
- * (`interpret.ts` / `effects.ts`) collapsed into the uniform L2 knob: a config
- * object, the resilient-call slice it inherits, and one interpret handler that
- * assembles messages, binds the structured-output schema for the call's
- * `purpose`, invokes the model (retry composed from `../resilient-call`, NOT
- * reinvented), parses the output, and RETURNS the enriched resilient settle Msg
- * (`resilient_ok` / `resilient_err`) so it re-enters the host reducer and drives
- * the inherited succeed/fail → backoff → onTimer loop.
+ * This is the ~60-line `call_llm` handler from the audit-agent seed collapsed
+ * into plain functions (ADR 0022): a config object, the resilient-call slice it
+ * inherits, the `Cmd.define`d run Cmd, and the pure pieces a handler needs to
+ * turn a model's raw answer into that Cmd's outcome. It ships no I/O (ADR
+ * 0021): invoking the model is the handler YOU write, in your engine's style —
+ * `@demlik/tea/agent` writes the Promise one — and it hands the model's raw
+ * answer to `decode`.
  *
  * ## What it adds over `../resilient-call`
  *
- *   - **Two DI ports** (the seed's two seams):
- *       1. `model` — either `async (messages) => answer`, the plain-function
- *          port (#58), or `(modelId) => LLM`, the model factory that binds the
- *          structured-output schema itself. Tests pass a fake so the handler
- *          runs end-to-end without touching a real provider; the production
- *          worker wires `createChatModel(env, …)`.
- *       2. `loadMessages: Loader` — the SDK / message loader. The seed lazy-
- *          imports `@langchain/core/messages` (a top-level `import type` blows
- *          up the workers test runner); the loader keeps that import lazy and
- *          stubbable. It produces the `BaseMessage[]` for a given call.
  *   - **Structured-output parse** — each `purpose` maps to a `Schema` in
- *     `config.schemas`. The handler binds `model.withStructuredOutput(schema)`
- *     so the invoke resolves to a typed object; a `Schema.parse` that throws
- *     becomes a `resilient_err` carrying an `LlmErr` (a parse failure is a
- *     failure, not a stall — "errors are data"). `withStructuredOutput` is the
- *     seed's brain-only path; the fake model in tests returns the typed object
- *     directly.
- *   - **A typed failure variant** — every failure (model throw, timeout-via-
- *     retry-exhaustion, schema parse) is surfaced as the `LlmErr` carried on the
- *     enriched `resilient_err` settle Msg, tagged with the `purpose` so the
- *     consumer's reducer routes per-stage. The seed dispatched
- *     `llm_failed{purpose}`; the consumer rebuilds that shape in its reducer arm
- *     from `m.error: LlmErr`.
+ *     `config.schemas`. `decode(cmd, raw)` runs `schemas[purpose].parse` over
+ *     the model's answer: a pass is the parsed, purpose-tagged `LlmOk`; a throw
+ *     is a `port_rejected` failure (a parse failure is a failure, not a stall —
+ *     "errors are data"), and a malformed answer never becomes a corrupt
+ *     success.
+ *   - **A typed failure variant** — every failure (model throw, schema parse)
+ *     settles as `resilient_run_err`, and `fail` / `errOf` read it back as the
+ *     typed `LlmErr`, tagged with the `purpose` so the consumer's reducer routes
+ *     per-stage.
  *
  * ## Inheriting resilient-call by composition (not reinvention)
  *
  * The retry / backoff lives in `../resilient-call`: `createLlmCall` builds a
- * `createResilientCall` knob over the model-invoke port and DELEGATES `init`,
- * `attempt`, `onTimer`, `subs` to it verbatim, and `succeed` / `fail` to its
- * `settle` — the slice is literally resilient-call's slice (the spec's "retry lives here"). There is no
- * second backoff implementation here. The handler runs the invoke through the
- * resilient-call handler so a transient model failure backs off exactly as a
- * resilient HTTP call would; the `purpose`-branch + structured parse wrap the
- * port the resilient handler drives.
+ * `createResilientCall` knob and DELEGATES `init`, `attempt`, `onTimer`,
+ * `deadlines`, `timer` to it verbatim, and `succeed` / `fail` to its `settle`
+ * — the slice is literally resilient-call's slice. There is no second backoff
+ * implementation here.
  *
  * ## The two non-negotiables (canon, inherited)
  *
  *   - **Durable** — the slice is resilient-call's plain-data slice (a Model
- *     field). Input carried on the `resilient_run` Cmd is the plain
- *     `LlmCall` request (purpose + modelId + payload) — no closures.
- *   - **Replayable** — every transition is a resilient-call verb; the handler
- *     is the only impurity, and the one clock read is `Date.now()` at the
- *     effect boundary (inside the handler), exactly as the seed stamped its
- *     `llm_responded` / `llm_failed` Msgs.
+ *     field). Input carried on the `resilient_run` Cmd is the plain `LlmCall`
+ *     request (purpose + modelId + payload) — no closures.
+ *   - **Replayable** — every transition is a resilient-call verb; nothing here
+ *     reads a clock. The settled Msgs carry the `at` the engine stamps.
  *
  * ## Typical wiring
  *
  *   const llm = createLlmCall<MyPurpose, MyOutputs>({
- *     model: (id) => createChatModel(env, id),
  *     schemas: { plan: planSchema, report: reportSchema },
  *     retry: defaultRetryPolicy,
- *     loadMessages: defaultMessagesLoader,
- *   });
- *
- *   // `mountResilientCall` pre-assembles the wiring. The settle cells run the
- *   // inherited verb and hand the ALREADY-settled model to `onOk` / `onErr`,
- *   // so the fold-before-settle order that wedges the slice at `running` is
- *   // not something a mounted cell can express; `subscribe` and `interpret`
- *   // ride along, so neither can be forgotten.
- *   const mounted = mountResilientCall(llm, {
- *     slice: "resilience",
- *     attempt: {
- *       on: "call_llm",
- *       run: (slice, m: CallLlm) => llm.attempt(slice, m.input, m.at),
- *     },
- *     onOk: (s, m) => [{ ...s, output: m.result.output }, []],
- *     onErr: (s, m) => [{ ...s, failure: m.error }, []],
- *     // A deadline-exceeded call settles inside the slice and emits no
- *     // settle Msg, so it reaches no `onErr`. This is its fold.
- *     onDeadline: (s, m) => [{ ...s, failure: m.error }, []],
  *   });
  *
  *   // in the machine:
- *   init: () => [{ ...mounted.init(), output: null, failure: null }, []],
- *   update: { ...mounted.update },
- *   subscriptions: mounted.subscriptions,
- *   subscribe: mounted.subscribe,
- *   interpret: mounted.interpret,
+ *   cmds: [llm.run],
+ *   update: {
+ *     call_llm: (s, m) => liftLlmCall(s, llm.attempt(s.resilience, m.input, m.at)),
+ *     resilient_run_ok: (s, m) => …llm.succeed(s.resilience, m)… m.value.output …,
+ *     resilient_run_err: (s, m) => …llm.fail(s.resilience, m)… llm.errOf(m) …,
+ *     deadline_exceeded: (s, m) => liftLlmCall(s, llm.onTimer(s.resilience, m)),
+ *   },
+ *   subs: [{ type: "timer", deps: (s) => llm.timer(s.resilience) }],
  *
- * The slice stays a plain readable field at `resilience`, and every verb above
- * is still exported: a consumer that wants a settle cell the mount cannot
- * express writes that one cell with `llm.succeed` / `llm.fail` / `liftLlmCall`
- * and spreads the rest.
+ *   // and where it runs — invoking the model is your handler:
+ *   run(machine, {
+ *     interpret: {
+ *       resilient_run: async (cmd) => {
+ *         try { return llm.decode(cmd, await model(cmd.input)); }
+ *         catch (cause) { return llm.rejected(cause); }
+ *       },
+ *     },
+ *   });
  */
 
 import { describeError } from "../../describe-error";
-import type { Cmd } from "../../index";
-import { MsgType } from "../../protocol";
+import { type Cmd, Outcome } from "../../index";
 import type { RetryPolicy } from "../../retry-backoff";
+import type { DeadlineExceeded, DeadlineSub } from "../resilience/deadline";
 import {
   createResilientCall,
-  type DeadlineExceeded,
-  type DeadlineSub,
-  deadlineSub,
   type FailMsg,
   liftResilience,
-  mountResilientCall,
   type ResilientConfig,
   type ResilientState,
   type RunCmd,
   type SucceedMsg,
-  subscribeDeadline,
 } from "../resilience/resilient-call";
 
 // ===========================================================================
-// The DI port surfaces — model factory + structured output + message loader.
+// The structured-output schema contract.
 // ===========================================================================
 
 /**
  * The minimal structured-output schema contract: `parse(unknown) => T`, the
- * zod-style call the handler uses to validate the model's output before it
- * settles `resilient_ok`. A throwing `parse` (the zod contract on invalid
- * input) propagates out of `invokeOne` and is caught by the resilient handler,
- * which settles `resilient_err` (enriched to `LlmErr`) — a parse failure is a
- * failure, never a silent pass. Structural so a real `z.ZodType<T>` satisfies
- * it without an import.
+ * zod-style call `decode` uses to validate the model's output before it
+ * settles `resilient_run_ok`. A throwing `parse` (the zod contract on invalid
+ * input) becomes a `port_rejected` outcome — a parse failure is a failure,
+ * never a silent pass. Structural so a real `z.ZodType<T>` satisfies it
+ * without an import.
  */
 export interface Schema<T> {
   /** Validate + narrow `value` to `T`, or throw on mismatch (the zod contract). */
   parse(value: unknown): T;
 }
 
-/**
- * The minimal chat-model contract every model the handler talks to must
- * satisfy — the seed's `InjectableChatModel`, trimmed to the one operation
- * llm-call drives for brain-only stages:
- *
- *   `withStructuredOutput(schema)` → a runnable whose `invoke(messages)`
- *   resolves to a typed object matching `schema`.
- *
- * `BaseChatModel` from `@langchain/core` is the runtime type; this surface
- * names only what llm-call calls so a test fake can ignore the rest. Generic
- * over the message shape `Msg` so a consumer's loader and model agree on it
- * without llm-call inspecting messages.
- */
-export interface Llm<Msg> {
-  withStructuredOutput<T>(schema: Schema<T>): {
-    invoke(messages: readonly Msg[]): Promise<T>;
-  };
-}
-
-/**
- * Build the `Msg[]` the handler hands to the bound model for a given call. The
- * SDK / message-assembly seam — the seed's `buildBaseMessages` + the lazy
- * `loadMessages` loader rolled into one injected port. Async because the seed
- * lazy-imports the SDK (a top-level `import type` of the langchain messages
- * package explodes the workers test runner). Receives the full `LlmCall` so it
- * can branch on `purpose` exactly as the seed's `buildBaseMessages` did.
- */
-export type MessageLoader<P extends string, Msg> = (
-  call: LlmCall<P>,
-) => Promise<readonly Msg[]>;
-
-/**
- * The model factory — the first DI port. `(modelId) => Llm`. Tests pass a fake
- * builder; production wires `createChatModel(env, getModelConfig(id))`. `null`
- * means "the host's default model" (the seed's `string | null`).
- */
-export type ModelFactory<Msg> = (modelId: string | null) => Llm<Msg>;
-
-/**
- * The plain-function model port — the common path. One async function
- * from the assembled messages to the model's answer; the handler validates the
- * answer through the purpose's `Schema` exactly as it re-validates the
- * structured-output path, so a malformed answer is a `resilient_err`, never a
- * corrupt success. `ModelFactory` → `withStructuredOutput(schema).invoke(...)`
- * stays the advanced form for a model that binds the schema itself.
- *
- * `T` is the answer type the schema narrows to — for the agent, an `AgentTurn`.
- */
-export type PlainModel<Msg, T = unknown> = (
-  messages: readonly Msg[],
-) => Promise<T>;
-
-/**
- * Either model port. A bare `async` function is read as a `PlainModel` (see
- * {@link asModelFactory}); a sync function is the factory.
- */
-export type ModelPort<Msg, T = unknown> =
-  | ModelFactory<Msg>
-  | PlainModel<Msg, T>;
-
-/**
- * Lift a plain-function model into the `ModelFactory` port. The factory ignores
- * `modelId` (the function IS the model) and its `Llm` runs the bound schema over
- * the function's answer, so both ports meet the handler as one shape.
- *
- * Reach for this explicitly when the function is not declared `async` — a sync
- * function that returns a promise (`(m) => client.chat(m)`) carries no runtime
- * mark that tells it apart from a factory. Passed bare, `asModelFactory`
- * refuses it on the first call with an `LlmErr` whose reason is
- * {@link PLAIN_MODEL_MISROUTE_REASON}.
- */
-export function plainModel<Msg, T>(fn: PlainModel<Msg, T>): ModelFactory<Msg> {
-  return () => ({
-    withStructuredOutput<U>(schema: Schema<U>) {
-      return {
-        invoke: async (messages: readonly Msg[]): Promise<U> =>
-          schema.parse(await fn(messages)),
-      };
-    },
-  });
-}
-
-/**
- * Narrow a `ModelPort` to its plain-function member. The two ports are both
- * unary functions, so the only runtime mark that separates them is the
- * `AsyncFunction` tag an `async` declaration carries — a factory is never
- * `async` (its `Llm` is read synchronously). A promise-returning sync function
- * goes through {@link plainModel} instead.
- */
-export function isPlainModel<Msg, T>(
-  model: ModelPort<Msg, T>,
-): model is PlainModel<Msg, T> {
-  return Object.prototype.toString.call(model) === "[object AsyncFunction]";
-}
-
-/**
- * The reason an `LlmErr` carries when a sync promise-returning function was
- * passed as `model` bare — the one runtime shape neither port can own.
- */
-export const PLAIN_MODEL_MISROUTE_REASON =
-  "model: a sync function returned a Promise where an Llm was expected — " +
-  "a promise-returning model that is not declared `async` must be wrapped in " +
-  "plainModel(fn) (see the llm-call module)";
-
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "then" in value &&
-    typeof (value as { then: unknown }).then === "function"
-  );
-}
-
-/**
- * Resolve either model port to the factory the handler drives.
- *
- * A sync function that returns a promise (`(m) => client.chat(m)`) carries no
- * runtime mark, so it reaches here as a factory and is called with `modelId`.
- * The one thing that tells it apart is what it returns: an `Llm` is never a
- * thenable. The resolved factory refuses that answer with
- * {@link PLAIN_MODEL_MISROUTE_REASON} before anything touches
- * `.withStructuredOutput`, so the misroute surfaces as an `LlmErr` naming the
- * fix — never as a bare `TypeError` off a property that is not there.
- */
-export function asModelFactory<Msg, T>(
-  model: ModelPort<Msg, T>,
-): ModelFactory<Msg> {
-  if (isPlainModel(model)) return plainModel(model);
-  return (modelId) => {
-    const llm = model(modelId);
-    if (isThenable(llm)) {
-      // The misrouted call already happened; settle its promise quietly so a
-      // rejection there is not an unhandled one beside the error we do raise.
-      llm.then(undefined, () => undefined);
-      throw new Error(PLAIN_MODEL_MISROUTE_REASON);
-    }
-    return llm;
-  };
-}
-
 // ===========================================================================
-// Config — the knob. `model` + `schemas` required (the two DI ports + the
-// per-purpose parse target); `retry` + `loadMessages` optional.
+// Config — the knob. `schemas` required; `retry` optional.
 // ===========================================================================
 
 /**
- * The llm-call knob. `model` and `schemas` are the load-bearing pair — the
- * model factory DI port and the per-purpose structured-output targets; the
- * rest is optional, exactly the resilient-call "omit a brick → omit its gate"
- * story for `retry`:
- *
- *   - `model`        — DI port 1: a plain `async (messages) => answer`
- *                      function (the common path), or the model factory
- *                      `(modelId) => Llm` that binds the schema itself.
- *   - `schemas`      — one `Schema` per `Purpose`. The handler binds
- *                      `schemas[call.purpose]` as the structured-output target.
- *   - `retry`        — backoff policy, composed straight into `../resilient-
- *                      call`. Omit it and a model failure is terminal (no
- *                      backoff), exactly as resilient-call with no retry brick.
- *   - `loadMessages` — DI port 2: the SDK / message loader. Omit it and the
- *                      handler invokes the bound model with `[]` (a degenerate
- *                      but valid call) — provide it to assemble real messages.
+ * The llm-call knob. `schemas` is the load-bearing field — the per-purpose
+ * structured-output targets `decode` parses against; `retry` is the
+ * resilient-call "omit a brick → omit its gate" story. Omit it and a model
+ * failure is terminal (no backoff).
  *
  * `P` is the purpose union (e.g. `"plan" | "report"`); `O` maps each purpose to
- * its parsed output type; `Msg` is the model's message shape (threaded through
- * the loader + model so llm-call never inspects a message).
+ * its parsed output type.
  */
-export interface LlmCallConfig<
-  P extends string,
-  O extends Record<P, unknown>,
-  Msg = unknown,
-> {
-  /** DI port 1 — `async (messages) => answer`, or the factory `(modelId) => Llm`. */
-  readonly model: ModelPort<Msg, O[P]>;
-  /** One structured-output schema per purpose; the parse target the handler binds. */
+export interface LlmCallConfig<P extends string, O extends Record<P, unknown>> {
+  /** One structured-output schema per purpose; the parse target `decode` binds. */
   readonly schemas: { readonly [K in P]: Schema<O[K]> };
   /** Backoff policy, composed into `../resilient-call`. Omit → no backoff. */
   readonly retry?: RetryPolicy;
-  /** DI port 2 — the SDK / message loader. Omit → the handler invokes with `[]`. */
-  readonly loadMessages?: MessageLoader<P, Msg>;
 }
 
 // ===========================================================================
@@ -329,9 +130,9 @@ export interface LlmCallConfig<
  * the `resilient_run` Cmd as plain data — no closures, so it survives
  * persistence and replay. Purpose-discriminated: a `purpose` selecting the
  * schema + prompt assembly, the `model` id, and the opaque per-purpose
- * `payload` the loader consumes.
+ * `payload` the handler's message loader consumes.
  *
- * `key` defaults to `purpose` when the consumer calls `attempt(s, purpose, …)`,
+ * `key` defaults to `purpose` when the consumer calls `attempt(s, input, at)`,
  * so one in-flight call per purpose is tracked under the resilient-call slice —
  * the common single-call-per-stage shape. A consumer that fans out many calls
  * of one purpose passes a distinct `key`.
@@ -341,11 +142,11 @@ export interface LlmCall<P extends string> {
   readonly purpose: P;
   /** The model id to invoke; `null` = the host's default model. */
   readonly model: string | null;
-  /** The per-purpose prompt payload the `MessageLoader` consumes. Opaque to the knob. */
+  /** The per-purpose prompt payload the message loader consumes. Opaque to the knob. */
   readonly payload: unknown;
 }
 
-/** The parsed, typed success carried on the `resilient_ok` settle Msg, tagged with its purpose. */
+/** The parsed, typed success carried on `resilient_run_ok`, tagged with its purpose. */
 export interface LlmOk<P extends string, O extends Record<P, unknown>> {
   readonly key: string;
   readonly purpose: P;
@@ -363,78 +164,37 @@ export interface LlmErr<P extends string> {
 }
 
 /**
- * The settle Msgs llm-call's handler RETURNS from `interpret` so the substrate
- * enqueues them as follow-up Msgs (re-entry) into the host reducer — exactly as
- * `../resilient-call` does. They are the resilient-call settle Msgs with the
- * payloads ENRICHED to llm-call's typed variants: `result` is the parsed,
- * purpose-tagged `LlmOk`; `error` is the typed `LlmErr` (purpose + reason +
- * raw). The host wires `resilient_ok` → `succeed` and `resilient_err` → `fail`
- * reducer arms (the doc-comment wiring), and folds the enriched payload into its
- * own state there — llm-call never forces a Msg vocabulary on the host, and the
- * settle Msg drives the inherited succeed/fail → backoff → onTimer loop instead
- * of bypassing it.
+ * How a failure crosses the handler: the run Cmd's declared `port_rejected`
+ * tag with the raw failure on `cause`. `errOf` reads it back as {@link LlmErr}.
  */
-//
-// The success Msg is `../resilient-call`'s `SucceedMsg` specialized to the parsed
-// `LlmOk` result — NOT a re-declared shape — so the verb returns (`succeed`'s
-// argument, the handler's resolve) thread through with no cast. The failure Msg
-// is the resilient `FailMsg` with its `error: unknown` NARROWED to the typed
-// `LlmErr`: every value the handler enriches is an `LlmErr`, and `LlmErr` is
-// assignable to `unknown`, so `LlmFailMsg` flows into `rc.settle` (which takes the
-// wide `FailMsg`) directly while the host reducer reads the narrow `error` type.
+export type LlmRejected = {
+  readonly _tag: "port_rejected";
+  readonly cause: unknown;
+};
+
+/**
+ * The effect Cmd this module emits: run the LLM call for `key` with `input`. It
+ * is `../resilient-call`'s `Cmd.define`d `RunCmd` specialized to the `LlmCall`
+ * input — NOT a re-declared shape — so the resilient verbs' return tuples
+ * thread through `attempt` / `succeed` / `fail` / `onTimer` with no cast.
+ */
+export type LlmRunCmd<P extends string> = RunCmd<LlmCall<P>>;
+
+/** The success Msg the engine mints — resilient-call's, with the parsed `LlmOk`. */
 export type LlmSucceedMsg<
   P extends string,
   O extends Record<P, unknown>,
-> = SucceedMsg<LlmOk<P, O>>;
+> = SucceedMsg<LlmOk<P, O>, "resilient", LlmCall<P>>;
+
 /**
- * The FAILURE settle Msg (`resilient_err`) — resilient-call's `FailMsg` with its
- * `error: unknown` narrowed to the typed `LlmErr`, so the host reducer reads the
- * purpose, the reason and the raw payload without a cast.
+ * The failure Msg the engine mints — resilient-call's. Its `error` is the
+ * handler's `port_rejected` (an {@link LlmRejected} when the handler used
+ * `decode` / `rejected`); read it as the typed {@link LlmErr} with `errOf`.
  */
-export type LlmFailMsg<P extends string> = Omit<FailMsg, "error"> & {
-  readonly error: LlmErr<P>;
-};
+export type LlmFailMsg<P extends string> = FailMsg<"resilient", LlmCall<P>>;
 
 /** The retry / deadline timer Msg — `DeadlineExceeded`, inherited from resilient-call. */
 export type LlmTimerMsg = DeadlineExceeded;
-
-/**
- * The ports the LEGACY detached `handlers(ports)` form takes. Two outbound Msg
- * builders the handler hands the typed Ok / Err; the consumer returns its own
- * Msg (or `undefined`). KEPT only for `../agent`, which still inherits the
- * detached shape; that path does NOT drive the retry loop (it dispatches the
- * consumer's Msg directly and never re-enters the resilient settle Msg). New
- * consumers use the no-arg `handlers()` form, which RETURNS the settle Msg for
- * re-entry and drives the inherited succeed/fail → backoff → onTimer loop.
- * `../agent` carries the same retry-loop gap and is fixed separately.
- *
- * The builders return `M | undefined` — `undefined` is the "dispatch nothing"
- * sentinel the detached form checks (`!== undefined`), spelled as `undefined`
- * rather than `void` so the union is unambiguous (a `void` member of a union is
- * confusing and reads as "may return anything").
- */
-export interface LlmCallPorts<
-  P extends string,
-  O extends Record<P, unknown>,
-  M,
-> {
-  /** Build the Msg dispatched on a parsed success. Return `undefined` to dispatch nothing. */
-  readonly onOk: (ok: LlmOk<P, O>) => M | undefined;
-  /** Build the Msg dispatched on any failure (throw / retry-exhausted / parse). */
-  readonly onErr: (err: LlmErr<P>) => M | undefined;
-}
-
-/**
- * The effect Cmd this module emits: run the LLM call for `key` with `input`. The
- * `input` is the plain `LlmCall` request — the handler reads `purpose` /
- * `model` / `payload` off it (invariant 3: Cmds are data).
- *
- * It is `../resilient-call`'s `RunCmd` specialized to the `LlmCall` input — NOT a
- * re-declared shape — so the resilient verbs' return tuples (`[State, RunCmd[]]`)
- * are this exact type and thread through `attempt` / `succeed` / `fail` /
- * `onTimer` with no cast.
- */
-export type LlmRunCmd<P extends string> = RunCmd<LlmCall<P>>;
 
 // ===========================================================================
 // The knob factory.
@@ -445,33 +205,24 @@ export type LlmRunCmd<P extends string> = RunCmd<LlmCall<P>>;
  * retry jitter (pass a fixed `() => 0.5` in tests to pin backoff; defaults to
  * `Math.random`, read only at the resilient-call verb boundary).
  *
- * Returns the uniform L2 knob contract. The slice + verbs (`init`, `attempt`,
- * `succeed`, `fail`, `onTimer`, `subs`) are DELEGATED to a `../resilient-call`
- * knob built over the structured-output model-invoke port — no second backoff
- * here. `handlers` is the one new piece: the purpose-branching, schema-parsing
- * wrapper that returns the enriched resilient settle Msg for re-entry.
+ * The slice + verbs (`init`, `attempt`, `succeed`, `fail`, `onTimer`,
+ * `deadlines`, `timer`) are DELEGATED to a `../resilient-call` knob — no second
+ * backoff here. `decode` / `rejected` / `errOf` are the pure pieces that turn a
+ * model's answer into the run Cmd's outcome and read a failure back.
  *
- * `P` is the purpose union, `O` the purpose→output map, `Msg` the model's
- * message shape.
+ * `P` is the purpose union, `O` the purpose→output map.
  */
-export function createLlmCall<
-  P extends string,
-  O extends Record<P, unknown>,
-  Msg = unknown,
->(config: LlmCallConfig<P, O, Msg>, rng: () => number = Math.random) {
-  // ---- The composed resilient-call knob ----------------------------------
-  //
-  // The resilient-call input is the full `LlmCall` request; its result is the
-  // PARSED, typed `LlmOk`. Only the `retry` brick is forwarded — llm-call does
-  // not expose circuit / rate-limit / cache / deadline knobs (a stage call is
-  // a single brain invocation, not a keyed downstream target). Omitting those
-  // bricks omits their gates, exactly as resilient-call documents.
+export function createLlmCall<P extends string, O extends Record<P, unknown>>(
+  config: LlmCallConfig<P, O>,
+  rng: () => number = Math.random,
+) {
+  // Only the `retry` brick is forwarded — a stage call is a single brain
+  // invocation, not a keyed downstream target, so llm-call exposes no circuit /
+  // rate-limit / cache / deadline knobs.
   const resilientConfig: ResilientConfig = {
     ...(config.retry === undefined ? {} : { retry: config.retry }),
   };
   const rc = createResilientCall<LlmCall<P>, LlmOk<P, O>>(resilientConfig, rng);
-  // Both model ports meet the handler as the factory shape (#58).
-  const modelOf = asModelFactory(config.model);
 
   /** The slice this knob owns — resilient-call's slice verbatim. */
   type State = ResilientState<LlmCall<P>, LlmOk<P, O>>;
@@ -482,10 +233,10 @@ export function createLlmCall<
   }
 
   /**
-   * Start (or restart) an LLM call. `keyOrPurpose` defaults the resilient-call
-   * `key` to the call's `purpose` so one in-flight call per stage is tracked
-   * under the slice (the common shape); pass a distinct key to fan out. PURE —
-   * delegates straight to resilient-call's gate.
+   * Start (or restart) an LLM call. `key` defaults to the call's `purpose` so
+   * one in-flight call per stage is tracked under the slice (the common shape);
+   * pass a distinct key to fan out. PURE — delegates straight to
+   * resilient-call's gate.
    */
   function attempt(
     s: State,
@@ -496,27 +247,41 @@ export function createLlmCall<
     return rc.attempt(s, key, input, at);
   }
 
-  /** Record a parsed success for `key`. PURE — resilient-call's `settle`. */
+  /** Record a parsed success. PURE — resilient-call's `settle`. */
   function succeed(
     s: State,
-    key: string,
     msg: LlmSucceedMsg<P, O>,
   ): readonly [State, readonly LlmRunCmd<P>[]] {
-    const { call, cmds } = rc.settle(s, { ...msg, key });
+    const { call, cmds } = rc.settle(s, msg);
     return [call, cmds];
   }
 
   /**
-   * Record a failure for `key`: back off via the inherited retry, or settle
-   * `failed`. PURE — resilient-call's `settle`. The `error` is the typed
-   * `LlmErr`, carried on the call's `failed` phase for the consumer to read.
+   * Read a settled failure as the typed {@link LlmErr}: the call's key and
+   * purpose off the run Cmd, and the handler's `cause` (or the whole error,
+   * when the handler returned no `cause`). PURE.
+   */
+  function errOf(msg: LlmFailMsg<P>): LlmErr<P> {
+    const error = msg.error;
+    const cause = "cause" in error ? error.cause : error;
+    return {
+      key: msg.cmd.key,
+      purpose: msg.cmd.input.purpose,
+      reason: describeError(cause),
+      error: cause,
+    };
+  }
+
+  /**
+   * Record a failure: back off via the inherited retry, or settle `failed`.
+   * PURE — resilient-call's `settle`. The `failed` phase carries the typed
+   * {@link LlmErr}, never the handler's carrier.
    */
   function fail(
     s: State,
-    key: string,
     msg: LlmFailMsg<P>,
   ): readonly [State, readonly LlmRunCmd<P>[]] {
-    const { call, cmds } = rc.settle(s, { ...msg, key });
+    const { call, cmds } = rc.settle(s, { ...msg, error: errOf(msg) });
     return [call, cmds];
   }
 
@@ -528,194 +293,54 @@ export function createLlmCall<
     return rc.onTimer(s, msg);
   }
 
-  /** Pre-wired subs — resilient-call's retry-timer subscriptions. */
-  function subs(s: State): readonly DeadlineSub[] {
-    return rc.subs(s);
+  /** The call's deadlines — resilient-call's retry and deadline timers. */
+  function deadlines(s: State): readonly DeadlineSub[] {
+    return rc.deadlines(s);
   }
 
-  // ---- The model-invoke port the resilient handler drives ----------------
-
   /**
-   * Run ONE LLM call: assemble messages via the loader, bind the purpose's
-   * structured-output schema, invoke, and parse. Returns the typed `LlmOk` on
-   * success; throws on any failure (model throw OR schema parse) so the
-   * resilient-call handler routes it to a failure Msg + backoff. This is the
-   * single port resilient-call wraps — the retry / timeout machinery lives in
-   * resilient-call, never here ("do NOT reinvent backoff").
-   *
-   * The seed's two paths collapse to one: every brain-only purpose goes through
-   * `withStructuredOutput(schema)`. The `parse` re-validates the output (a fake
-   * model might skip validation, and a real provider can drift) so a malformed
-   * structured response is a failure, not a corrupt success.
+   * Turn a model's raw answer into the run Cmd's outcome. PURE: parse it with
+   * the call's purpose schema. A pass is the parsed, purpose-tagged `LlmOk`,
+   * keyed by the Cmd's own `key` (so a fanned-out success carries the key its
+   * failure would); a `parse` throw is a `port_rejected` outcome carrying the
+   * throw.
    */
-  async function invokeOne(input: LlmCall<P>): Promise<LlmOk<P, O>> {
-    const model = modelOf(input.model);
-    const messages = config.loadMessages
-      ? await config.loadMessages(input)
-      : [];
-    const schema = config.schemas[input.purpose];
-    const structured = model.withStructuredOutput(schema);
-    const raw = await structured.invoke(messages);
-    // Re-validate at the boundary — a parse throw becomes a `resilient_err`
-    // (enriched to `LlmErr`) settle Msg upstream, never a corrupt success.
-    const output = schema.parse(raw);
-    return { key: input.purpose, purpose: input.purpose, output };
-  }
-
-  // ---- Handlers — the one new piece, composed onto resilient-call --------
-
-  /**
-   * Pre-wired interpret handler for `resilient_run`. Composes
-   * `../resilient-call`'s `resilient_run` handler over the `invokeOne` port and
-   * RETURNS the resilient settle Msg — it does NOT dispatch the consumer's Msg
-   * itself. Returning the settle Msg is the whole point: the substrate enqueues
-   * an interpret handler's returned Msg as a FOLLOW-UP (re-entry) onto the
-   * dispatch tail, so the host reducer's `resilient_ok` / `resilient_err` arms
-   * run `succeed` / `fail`, which advances the inherited retry loop
-   * (succeed/fail → backoff → onTimer → re-issue). A handler that instead
-   * `dispatch`ed an enriched Msg directly would settle ONE invoke and bypass
-   * that loop entirely — the slice would never leave `running`, the breaker
-   * would never trip/close, and the retry counter would never reset.
-   *
-   * Resilience is composed, not reimplemented: the body delegates to the
-   * resilient-call handler's Railway-routed invoke (Ok → `resilient_ok`, Err →
-   * `resilient_err`), so a transient model failure backs off via the inherited
-   * retry exactly as resilient-call decides. The ONE enrichment llm-call adds is
-   * mapping the settle PAYLOADS into its typed variants:
-   *
-   *   - success → `result` is already the parsed `LlmOk` (`invokeOne` returns
-   *     it), so the resilient `resilient_ok` Msg is the llm-call `LlmSucceedMsg`
-   *     as-is.
-   *   - failure → the resilient `resilient_err` carries the RAW throw (a model
-   *     503 or a `schema.parse` throw). We rebuild it into the typed `LlmErr`
-   *     (purpose + reason + raw) so the host reducer routes per-stage.
-   *
-   * The host folds the enriched payload into its own state in the reducer arm
-   * (the doc-comment wiring), NOT here — the handler stays the one impurity
-   * (the `invokeOne` await + the `Date.now()` stamp the resilient handler makes)
-   * and the reducer stays pure.
-   */
-  // The resilient-call `resilient_run` handler over `invokeOne` — the shared
-  // Railway-routed invoke (Ok → resilient_ok Msg, Err → resilient_err Msg). Both
-  // handler forms below build on it; the settle shape is composed, not reinvented.
-  const resilientRunHandler = rc.handlers({
-    run: (input) => invokeOne(input),
-  }).resilient_run;
-
-  /**
-   * Await one composed invoke and resolve to the ENRICHED resilient settle Msg
-   * (`resilient_ok` carrying the parsed `LlmOk`, or `resilient_err` carrying the
-   * typed `LlmErr`). The shared core both handler forms reuse.
-   */
-  async function settleOf(
+  function decode(
     cmd: LlmRunCmd<P>,
-  ): Promise<LlmSucceedMsg<P, O> | LlmFailMsg<P>> {
-    // `resilientRunHandler` never rejects (tryInterpret contract) — it resolves
-    // to a `resilient_ok` / `resilient_err` settle Msg stamped with `Date.now()`.
-    // Its `ctx` slot is `NoCtx` (the resilient-call work fn reads no ctx — a
-    // DELIBERATE context-free seam, not accidental `unknown`), so the empty
-    // record satisfies it without a cast.
-    const settle = await resilientRunHandler(cmd, {});
-    if (settle.type === MsgType.ResilientOk) {
-      // `result` is the parsed `LlmOk` from `invokeOne`, which hardcoded its
-      // `key` to `purpose` (the port receives no key). Re-key it to `cmd.key` —
-      // the fan-out key `attempt` threaded in — so a fanned-out success carries
-      // the SAME key its failure would (`settleOf`'s err path below uses
-      // `cmd.key`), never the collapsed purpose. `settle.key` is already
-      // `cmd.key`; this aligns the enriched `LlmOk.key` inside it.
-      return { ...settle, result: { ...settle.result, key: cmd.key } };
+    raw: unknown,
+  ): Outcome<LlmOk<P, O>, LlmRejected> {
+    const { purpose } = cmd.input;
+    try {
+      const output = config.schemas[purpose].parse(raw);
+      return Outcome.ok({ key: cmd.key, purpose, output });
+    } catch (cause) {
+      return rejected(cause);
     }
-    // resilient_err — enrich the raw throw into the typed `LlmErr`, keeping the
-    // resilient Msg's `key` / `at` so the host reducer's `fail` verb re-issues
-    // from the remembered input and backs off on schedule.
-    const rawError: unknown = settle.error;
-    const err: LlmErr<P> = {
-      key: cmd.key,
-      purpose: cmd.input.purpose,
-      reason: describeError(rawError),
-      error: rawError,
-    };
-    return {
-      type: MsgType.ResilientErr,
-      key: settle.key,
-      error: err,
-      at: settle.at,
-    };
   }
 
-  /**
-   * Pre-wired interpret handler for `resilient_run`. TWO forms:
-   *
-   *   - `handlers()` (no args, the FIXED primary) — RETURNS the enriched
-   *     resilient settle Msg. The substrate enqueues an interpret handler's
-   *     returned Msg as a FOLLOW-UP (re-entry) onto the dispatch tail, so the
-   *     host reducer's `resilient_ok` / `resilient_err` arms run `succeed` /
-   *     `fail`, advancing the inherited retry loop (succeed/fail → backoff →
-   *     onTimer → re-issue). This is the correct wiring; the module doc shows it.
-   *
-   *   - `handlers(ports)` (LEGACY, detached) — runs the invoke inside
-   *     `ctx.waitUntil` and dispatches the consumer's `onOk` / `onErr` Msg
-   *     directly. KEPT only for `../agent`, which still inherits this shape. It
-   *     does NOT drive the retry loop (it never re-enters the settle Msg, so
-   *     `succeed` / `fail` never run) — `../agent` carries the same gap and is
-   *     fixed in its own pass. New consumers MUST use the no-arg form.
-   *
-   * Resilience is composed, not reimplemented: both forms delegate to the
-   * resilient-call handler's Railway-routed invoke and add only the typed
-   * `LlmOk` / `LlmErr` enrichment. The ONE impurity is the `invokeOne` await +
-   * the `Date.now()` stamp the resilient handler makes; the reducer stays pure.
-   */
-  function handlers(): {
-    resilient_run: (
-      cmd: LlmRunCmd<P>,
-    ) => Promise<LlmSucceedMsg<P, O> | LlmFailMsg<P>>;
-  };
-  function handlers<M>(ports: LlmCallPorts<P, O, M>): {
-    resilient_run: (
-      cmd: LlmRunCmd<P>,
-      ctx: { waitUntil(p: Promise<unknown>): void; dispatch(msg: M): unknown },
-    ) => void;
-  };
-  function handlers<M>(ports?: LlmCallPorts<P, O, M>) {
-    if (ports === undefined) {
-      // FIXED primary: return the settle Msg for re-entry — drives the loop.
-      return { resilient_run: (cmd: LlmRunCmd<P>) => settleOf(cmd) };
-    }
-    // LEGACY detached form — kept for `../agent` (see doc above). Dispatches the
-    // consumer's Msg directly; does not re-enter the settle Msg.
-    return {
-      resilient_run: (
-        cmd: LlmRunCmd<P>,
-        ctx: {
-          waitUntil(p: Promise<unknown>): void;
-          dispatch(msg: M): unknown;
-        },
-      ): void => {
-        const fired = (async () => {
-          const settle = await settleOf(cmd);
-          if (settle.type === MsgType.ResilientOk) {
-            const msg = ports.onOk(settle.result);
-            if (msg !== undefined) await ctx.dispatch(msg);
-            return;
-          }
-          const msg = ports.onErr(settle.error);
-          if (msg !== undefined) await ctx.dispatch(msg);
-        })();
-        ctx.waitUntil(fired);
-      },
-    };
+  /** The outcome for a model call that threw. PURE. */
+  function rejected(cause: unknown): Outcome<never, LlmRejected> {
+    return Outcome.err({ _tag: "port_rejected", cause });
   }
 
   return {
     name: rc.name,
+    /** The `Cmd.define`d run Cmd — list it in the machine's `cmds`. */
+    run: rc.run,
     init,
     attempt,
     succeed,
     fail,
+    errOf,
     onTimer,
-    subs,
-    handlers,
-    invokeOne,
+    deadlines,
+    /** The built-in `timer` Sub's deps — resilient-call's `timer`. */
+    timer: rc.timer,
+    decode,
+    rejected,
+    /** The structured-output schema for `purpose`. */
+    schemaOf: <K extends P>(purpose: K): Schema<O[K]> =>
+      config.schemas[purpose],
   };
 }
 
@@ -736,12 +361,4 @@ export function liftLlmCall<
   return liftResilience(state, result);
 }
 
-/**
- * Re-export the deadline Sub primitives (inherited from resilient-call) so
- * consumers wire one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal `subs` emits. `mountResilientCall` rides
- * the same import for the same reason — a knob from this module mounts with no
- * second package specifier.
- */
-export { subscribeDeadline, deadlineSub, mountResilientCall };
 export type { DeadlineSub, DeadlineExceeded, ResilientState };

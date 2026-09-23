@@ -145,3 +145,11 @@ describe("structuralHash — loud failure on non-plain objects", () => {
     expect(structuralHash(bag)).toBe(structuralHash({ runId: "r1" }));
   });
 });
+
+describe("structuralHash — an undefined-valued key", () => {
+  it("hashes like an absent key, as JSON does", () => {
+    expect(structuralHash({ id: "a", name: undefined })).toBe(
+      structuralHash({ id: "a" }),
+    );
+  });
+});

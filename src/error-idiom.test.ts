@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  AsyncSchemaError,
   DriveFailedError,
   DriveStalledError,
   NoCellError,
+  OutcomeContractError,
   PortNameCollisionError,
   QuiescenceTimeoutError,
-  SubIdCollisionError,
+  UndeclaredFailureError,
 } from "./index";
 import { TerminalTimeoutError } from "./internal/flow/await-terminal";
 import type { UnauthorizedError } from "./internal/resilience/authed-call";
@@ -22,8 +24,8 @@ import { RetryExhaustedError } from "./internal/resilience/retry-to-success";
 //   (1) THROWN / boundary errors — raised at the runtime edge, never folded
 //       into Model. `class extends Error` + `readonly _tag` literal, so a
 //       consumer can branch by `instanceof` OR by tag.
-//       → PortNameCollisionError, QuiescenceTimeoutError, SubIdCollisionError,
-//         NoCellError, TerminalTimeoutError, RetryExhaustedError.
+//       → PortNameCollisionError, QuiescenceTimeoutError, NoCellError,
+//         TerminalTimeoutError, RetryExhaustedError.
 //
 //   (2) SETTLED-VALUE errors — folded INTO a machine's Model (`call.error`,
 //       `settleFailed`) and persisted into a `Store<S>` that reloads via plain
@@ -61,12 +63,6 @@ const thrownCases: readonly ThrownCase[] = [
     tag: "QuiescenceTimeoutError",
   },
   {
-    name: "SubIdCollisionError",
-    make: () => new SubIdCollisionError("dup-id", "timer", "poller"),
-    ctor: SubIdCollisionError,
-    tag: "SubIdCollisionError",
-  },
-  {
     name: "NoCellError",
     make: () => new NoCellError("unknown_msg", "SomeState", ["known_msg"]),
     ctor: NoCellError,
@@ -95,6 +91,24 @@ const thrownCases: readonly ThrownCase[] = [
     make: () => new DriveStalledError({ phase: "waiting" }),
     ctor: DriveStalledError,
     tag: "DriveStalledError",
+  },
+  {
+    name: "UndeclaredFailureError",
+    make: () => new UndeclaredFailureError("fetch", { _tag: "x" }, ["y"]),
+    ctor: UndeclaredFailureError,
+    tag: "UndeclaredFailureError",
+  },
+  {
+    name: "OutcomeContractError",
+    make: () => new OutcomeContractError("fetch", "returned 42"),
+    ctor: OutcomeContractError,
+    tag: "OutcomeContractError",
+  },
+  {
+    name: "AsyncSchemaError",
+    make: () => new AsyncSchemaError("the ok schema"),
+    ctor: AsyncSchemaError,
+    tag: "AsyncSchemaError",
   },
 ];
 

@@ -34,14 +34,16 @@
 // Strengthens invariant 9 (the testing surface is named and small).
 // ---------------------------------------------------------------------------
 
-import type {
-  Cmd,
-  CtxArg,
-  Interpret,
-  Machine,
-  PortEmitter,
-  Sub,
+import {
+  type Cmd,
+  type CtxArg,
+  type Interpret,
+  type Machine,
+  Outcome,
+  type PortEmitter,
+  type Sub,
 } from "../index";
+import { cmdEdge, cmdEdgeOver } from "../pure/core";
 import { bindMachine } from "./bind-machine";
 
 /**
@@ -103,6 +105,12 @@ export type DriveOptions<Ctx> = DriveCtxArg<Ctx> & {
    * {@link DEFAULT_MAX_ROUNDS} (100).
    */
   readonly maxRounds?: number;
+  /**
+   * The clock that stamps `at` on a `Cmd.define`d Cmd's minted `_ok` / `_err`
+   * Msg — the one `run` takes. Defaults to `Date.now`; pin it for a test that
+   * asserts on `at`.
+   */
+  readonly clock?: () => number;
 };
 
 /**
@@ -185,8 +193,8 @@ export function driveTraceOf<M, C>(
  * `handlers`, feeding every settle Msg back until the machine goes quiet, and
  * hand back the settled state together with the whole history.
  *
- * `handlers` is the same record the machine declares as its `interpret` (e.g.
- * `ask.handlers()` for a jev knob), so the test drives the real interpreter and
+ * `handlers` is the same table a host hands `run` as its `interpret` (e.g.
+ * a jev knob's `resilient_run` handler), so the test drives the real interpreter and
  * mocks only the port beneath it.
  *
  * One round is: fold every pending Msg, then await a handler for every Cmd
@@ -219,17 +227,29 @@ export async function drive<
     ? [opts?: DriveOptions<Ctx>]
     : [opts: DriveOptions<Ctx>]
 ): Promise<DriveResult<S, M, C>> {
-  const options = (opts ?? {}) as { ctx?: Ctx; maxRounds?: number };
+  const options = (opts ?? {}) as {
+    ctx?: Ctx;
+    maxRounds?: number;
+    clock?: () => number;
+  };
   const maxRounds = options.maxRounds ?? DEFAULT_MAX_ROUNDS;
   const bound = bindMachine(machine, options.ctx as Ctx);
 
-  // A handler's ctx is `Ctx & RequirementsOf<C> & PortEmitter`. The Ctx half is
-  // the caller's; the PortEmitter half is the kernel's, and a driven test has
-  // no kernel — so a no-op `emit` stands in, placed FIRST so a caller's own
-  // `emit` wins.
+  // The `Cmd.define` edge `run` applies (ADR 0021): a defined Cmd's handler
+  // returns an outcome, and the edge mints it into the def's `_ok` / `_err`
+  // Msg. A hand-written Cmd's return passes through untouched.
+  const settle = cmdEdgeOver(machine.cmds ?? [], options.clock ?? Date.now);
+
+  // A handler's ctx is `Ctx & PortEmitter`, plus the `ok` / `err` builders and
+  // the edge a defined Cmd's handler is handed. The Ctx half is the caller's;
+  // the rest is the kernel's, and a driven test has no kernel — so a no-op
+  // `emit` stands in, placed FIRST so a caller's own `emit` wins.
   const noopEmit: PortEmitter = { emit: () => {} };
   const handlerCtx = {
     ...noopEmit,
+    ok: Outcome.ok,
+    err: Outcome.err,
+    [cmdEdge]: settle,
     ...(options.ctx as unknown as Record<string, unknown> | undefined),
   };
 
@@ -278,11 +298,14 @@ export async function drive<
         throw new DriveNoHandlerError<M, C>(cmd.type, trace);
       }
       // biome-ignore lint/suspicious/noConfusingVoidType: mirrors `Interpret`'s own cell return — a follow-up Msg, or nothing
-      let settle: M | void;
+      let settled: M | void;
       try {
-        settle = await cell(cmd, handlerCtx, (fired) => {
-          pending.push(fired);
-        });
+        settled = settle(
+          cmd,
+          await cell(cmd, handlerCtx, (fired) => {
+            pending.push(fired);
+          }),
+        ) as M | undefined;
       } catch (err) {
         // Unswallowed: the handler's own error is what leaves `drive`, so a
         // test's `instanceof` / `_tag` branch still lands. The trace rides on
@@ -297,7 +320,7 @@ export async function drive<
         }
         throw err;
       }
-      if (settle !== undefined) pending.push(settle);
+      if (settled !== undefined) pending.push(settled);
     }
   }
 

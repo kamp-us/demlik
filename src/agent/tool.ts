@@ -12,8 +12,7 @@
  * those settles into the conversation, so a consumer names nothing twice.
  */
 
-import { Result } from "better-result";
-import { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { describeError } from "../describe-error";
 import {
   type AnyCmdDef,
@@ -24,16 +23,21 @@ import {
   type ErrOf,
   type Interpret,
   type MalformedResult,
-  type NoCtx,
   type OkOf,
+  Outcome,
   type PortEmitter,
-  type Requirements,
   type Settled,
   type Tagged,
   type TaggedError,
 } from "../index";
+import { rejectAll, unchecked } from "../internal/schema";
 import { MsgType, type MsgTypeValue } from "../protocol";
-import { cmdEdgeOf, detachWorkOf, malformedResult } from "../pure/core";
+import {
+  cmdEdgeOf,
+  detachWorkOf,
+  malformedResult,
+  validateSync,
+} from "../pure/core";
 import type {
   TaggedFailure,
   ToolCall,
@@ -46,8 +50,8 @@ import type {
 // ===========================================================================
 
 /**
- * The prefix a protocol discriminant was minted from: `resilient_ok` →
- * `resilient`, `compact_run` → `compact`. A tool named by that prefix would
+ * The prefix a protocol discriminant was minted from: `resilient_run_ok` →
+ * `resilient_run`, `compact_run` → `compact`. A tool named by that prefix would
  * mint the same `<name>_ok` / `<name>_err` the agent's reducer already owns.
  */
 type SettlePrefixOf<T extends string> = T extends
@@ -64,10 +68,13 @@ const SNAPSHOT_WRITE_TYPE = "snapshot_write";
  * A tool name `tool()` refuses. A tool's name is its Cmd `type` — so
  * its interpret key — and the prefix of its settle Msgs, so every string
  * already spoken by the protocol is taken twice over: the settle prefixes
- * (`resilient`, `agent_tool`, `compact`) would overwrite the agent's own
+ * (`resilient_run`, `agent_tool`, `compact`) would overwrite the agent's own
  * reducer handlers through `toMachine`'s last-wins spread, and the discriminants
  * themselves (`compact_run`, `resilient_run`, …) would shadow the interpret
- * handler of that name. Both halves derive from `MsgType`: a new entry there
+ * handler of that name. `resilient` is reserved as a Cmd prefix — the part
+ * before `_run` in the brain Cmd `resilient_run` — not as a settle prefix: its
+ * `resilient_ok` / `resilient_err` name nothing the agent settles. Both halves
+ * derive from `MsgType`: a new entry there
  * reserves its name and its prefix with no second edit. The two names outside
  * the protocol are the router's own `tool_rejected` and the checkpoint handler
  * `snapshot_write`, which `toMachine` merges under the consumer's key.
@@ -132,7 +139,7 @@ export type ToolThrown = { readonly _tag: "thrown"; readonly message: string };
  * fixed to what the `ok` schema parses, so a value of the wrong shape is
  * refused where it is written.
  */
-export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Result<Ok, E>;
+export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Outcome<Ok, E>;
 
 /**
  * The typed failure constructor a handler receives: `fail({ _tag })` with `E`
@@ -140,13 +147,12 @@ export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Result<Ok, E>;
  * is written. (A bare `{ _tag: "x" }` built elsewhere infers `_tag: string`
  * and cannot be — the parameter type is what keeps it literal.)
  */
-export type ToolFail<Ok, E extends Tagged> = (error: E) => Result<Ok, E>;
+export type ToolFail<Ok, E extends Tagged> = (error: E) => Outcome<Ok, E>;
 
 /**
  * The two constructors a handler is handed, one per channel — `ok` for the
- * value the `ok` schema parses, `fail` for a declared `{ _tag }`. Both are
- * tea's, so a handler settles either arm without naming the result library
- * underneath.
+ * value the `ok` schema parses, `fail` for a declared `{ _tag }`. Both build
+ * the core's `Outcome` record (ADR 0021).
  */
 export type ToolConstructors<Ok, E extends Tagged> = {
   readonly ok: ToolOk<Ok, E>;
@@ -154,16 +160,17 @@ export type ToolConstructors<Ok, E extends Tagged> = {
 };
 
 /**
- * A tool's handler: the parsed `args`, the ctx slice `requirements` named, and the
- * typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what
- * the `ok` schema parses, `E` the declared `_tag` union. An undeclared tag
- * does not compile.
+ * A tool's handler: the parsed `args`, the plain `ctx` the host handed `run`,
+ * and the typed `{ ok, fail }`, to an outcome over the declared channels — `Ok`
+ * is what the `ok` schema parses, `E` the declared `_tag` union. An undeclared
+ * tag does not compile. `Ctx` is whatever the handler annotates its `ctx`
+ * parameter with; tea does no dependency injection (ADR 0020).
  */
-export type ToolHandler<Args, Ok, E extends Tagged, R> = (
+export type ToolHandler<Args, Ok, E extends Tagged, Ctx> = (
   args: Args,
-  ctx: R & PortEmitter,
+  ctx: Ctx & PortEmitter,
   settle: ToolConstructors<Ok, E>,
-) => Promise<Result<Ok, E>>;
+) => Promise<Outcome<Ok, E>>;
 
 /**
  * What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>`
@@ -171,32 +178,39 @@ export type ToolHandler<Args, Ok, E extends Tagged, R> = (
  * the bare `args` schema the router parses a call against, and the
  * `description` a provider adapter declares to the model beside that schema.
  * `E` is the full failure union the Cmd settles with — the declared tags plus
- * `thrown`.
+ * `thrown`. `Ctx` is the ctx the colocated handler reads — a fact about the
+ * handler, never about the Cmd it builds (ADR 0020).
  */
 export type ToolDef<
   Name extends string,
   Args,
   Ok,
   E extends Tagged,
-  R,
-> = CmdDef<Name, ToolInput<Args>, Ok, E, R> & {
+  Ctx,
+> = CmdDef<Name, ToolInput<Args>, Ok, E> & {
   readonly description: string;
-  readonly args: z.ZodType<Args>;
+  readonly args: StandardSchemaV1<unknown, Args>;
   /**
    * The timeout / retry knob this tool declared, or `null` when it declared
    * neither. `toolRouter` serves it to the agent as `resilienceOf`.
    */
   readonly resilience: ToolResilience | null;
+  /**
+   * The colocated handler, as an interpret cell: it returns the tool's
+   * outcome, and the engine mints `<name>_ok` / `<name>_err` from it.
+   */
   readonly interpret: (
-    cmd: CmdValue<Name, ToolInput<Args>, E, R>,
-    ctx: R & PortEmitter,
-  ) => Promise<Settled<CmdDef<Name, ToolInput<Args>, Ok, E, R>>>;
+    cmd: CmdValue<Name, ToolInput<Args>, Ok, E>,
+    ctx: Ctx & PortEmitter,
+  ) => Promise<Outcome<Ok, E>>;
+  /** Phantom — the ctx the handler reads. Never assigned. */
+  readonly __ctx?: Ctx;
 };
 
 /** The declaration-erased view the router reads. */
 export type AnyToolDef = AnyCmdDef & {
   readonly description: string;
-  readonly args: z.ZodType;
+  readonly args: StandardSchemaV1;
   readonly resilience: ToolResilience | null;
   readonly interpret: (cmd: never, ctx: never) => Promise<unknown>;
 };
@@ -204,7 +218,7 @@ export type AnyToolDef = AnyCmdDef & {
 /**
  * Declare one tool the model may call — its name, the schemas for its arguments
  * and result, the failures it may return and the handler that runs it — and get
- * back a `Cmd<T, E, R>` definition, whose `T` is what `ok` parses and whose `E`
+ * back a `Cmd<T, Ok, E>` definition, whose `Ok` is what `ok` parses and whose `E`
  * is the `err` tag union, that you pass to `toolRouter` or `defineAgent`.
  *
  * So a tool's two declared channels ARE the kernel's two typed effect channels
@@ -218,9 +232,10 @@ export type AnyToolDef = AnyCmdDef & {
  * `description`, OpenAI `function.description`) so the model can tell when to
  * call the tool, read off `def.description`, never off the `input` schema;
  * `input` parses the model's `args`; `ok` parses the handler's value at the
- * edge; `err` is the `_tag` list the handler may fail with; `requirements` is the ctx
- * slice it reads, demanded at `run`. The handler returns one of the two
- * constructors it is handed — `ok(value)` or the typed `fail({ _tag })`; a
+ * edge; `err` is the `_tag` list the handler may fail with. The handler reads
+ * its services off the plain `ctx` `run` was handed — annotate its `ctx`
+ * parameter and `defineAgent` asks for that ctx at `run`. The handler returns
+ * one of the two constructors it is handed — `ok(value)` or the typed `fail({ _tag })`; a
  * throw settles `<name>_err` — with the thrown `_tag` when it is a declared
  * one, else as `{ _tag: "thrown", message }`.
  *
@@ -233,15 +248,14 @@ export function tool<
   Args,
   Ok,
   const Tags extends readonly string[],
-  R = unknown,
+  Ctx = unknown,
 >(
   name: Name & NotReserved<Name>,
   spec: {
     readonly description: string;
-    readonly input: z.ZodType<Args>;
-    readonly ok: z.ZodType<Ok>;
+    readonly input: StandardSchemaV1<unknown, Args>;
+    readonly ok: StandardSchemaV1<unknown, Ok>;
     readonly err: Tags;
-    readonly requirements?: Requirements<R>;
     /**
      * The budget one call of this tool gets, in ms — the overall cap, measured
      * from the first attempt and not restarted by a retry. When it elapses the
@@ -262,60 +276,43 @@ export function tool<
      */
     readonly retry?: ToolResilience["retry"];
   },
-  handler: ToolHandler<Args, Ok, TaggedError<Tags[number]>, R>,
-): ToolDef<Name, Args, Ok, TaggedError<Tags[number] | "thrown">, R> {
+  handler: ToolHandler<Args, Ok, TaggedError<Tags[number]>, Ctx>,
+): ToolDef<Name, Args, Ok, TaggedError<Tags[number] | "thrown">, Ctx> {
   if (isReservedToolName(name)) {
     throw new Error(
       `tool: "${name}" is reserved — it is an agent-owned Msg prefix`,
     );
   }
   type E = TaggedError<Tags[number] | "thrown">;
-  type Def = CmdDef<Name, ToolInput<Args>, Ok, E, R>;
+  type Def = CmdDef<Name, ToolInput<Args>, Ok, E>;
   const def: Def = Cmd.define(name as Name, {
-    input: z.object({
-      callId: z.string(),
-      args: spec.input,
-    }) as z.ZodType<ToolInput<Args>>,
+    // The router parses `args` against `spec.input` before it builds the Cmd,
+    // so the Cmd's own input schema only names the type.
+    input: unchecked<ToolInput<Args>>(),
     ok: spec.ok,
     err: [...spec.err, "thrown"] as readonly (Tags[number] | "thrown")[],
-    requirements: spec.requirements,
   });
-  type C = CmdValue<Name, ToolInput<Args>, E, R>;
+  type C = CmdValue<Name, ToolInput<Args>, Ok, E>;
   const declared = new Set<string>(spec.err);
   const settle: ToolConstructors<Ok, TaggedError<Tags[number]>> = {
-    ok: (value) => Result.ok(value),
-    fail: (error) => Result.err(error),
+    ok: Outcome.ok,
+    fail: Outcome.err,
   };
   const asDeclared = (thrown: unknown): E => {
     if (isTagged(thrown) && declared.has(thrown._tag)) return thrown as E;
     return { _tag: "thrown", message: describeError(thrown) };
   };
+  // A throw is data here, not a contract breach: `thrown` is one of the tool's
+  // declared tags, so the engine mints it into `<name>_err` like any other.
   const interpret = async (
     cmd: C,
-    ctx: R & PortEmitter,
-  ): Promise<Settled<Def>> => {
-    let result: Result<Ok, TaggedError<Tags[number]>>;
+    ctx: Ctx & PortEmitter,
+  ): Promise<Outcome<Ok, E>> => {
     try {
-      result = await handler(cmd.args, ctx, settle);
+      return await handler(cmd.args, ctx, settle);
     } catch (thrown) {
-      return def.err(cmd, asDeclared(thrown));
+      return Outcome.err(asDeclared(thrown));
     }
-    return result.match({
-      ok: (value): Settled<Def> => {
-        // The same parse `run`'s edge applies when the def is on
-        // `Machine.cmds` — done here too so the handler is honest on its own.
-        // `at` is the runtime's to stamp, exactly as the def's builders leave it.
-        const parsed = spec.ok.safeParse(value);
-        return parsed.success
-          ? def.ok(cmd, parsed.data)
-          : ({
-              type: def.errType,
-              cmd,
-              error: malformedResult(parsed.error.issues),
-            } as Settled<Def>);
-      },
-      err: (error) => def.err(cmd, error),
-    });
   };
   return Object.assign(def, {
     description: spec.description,
@@ -372,10 +369,11 @@ export type ToolRejection =
     };
 
 const rejected = Cmd.define(REJECTED_TYPE, {
-  input: z.custom<{ readonly callId: string; readonly error: ToolRejection }>(
-    () => true,
-  ),
-  ok: z.never(),
+  input: unchecked<{
+    readonly callId: string;
+    readonly error: ToolRejection;
+  }>(),
+  ok: rejectAll,
   err: ["unknown_tool", "malformed_args"],
 });
 
@@ -384,6 +382,35 @@ export type ToolRejectedCmd = CmdOf<typeof rejected>;
 
 /** The Cmd union a router's `toolOf` produces — `TC` for `createAgent`. */
 export type ToolCmd<T extends AnyToolDef> = CmdOf<T> | ToolRejectedCmd;
+
+/** The ctx one tool's handler reads; `unknown` for a handler that reads none. */
+type ToolCtxOf<T> = T extends { readonly __ctx?: infer Ctx } ? Ctx : unknown;
+
+type UnionToIntersection<U> = (
+  U extends unknown
+    ? (u: U) => void
+    : never
+) extends (u: infer I) => void
+  ? I
+  : never;
+
+// `unknown` absorbs a union (`{ kb } | unknown` is `unknown`), so each tool's
+// ctx is boxed first and the "reads nothing" arms dropped before intersecting.
+type ToolCtxBoxed<T> = T extends unknown ? [ToolCtxOf<T>] : never;
+type KnownToolCtx<B> = B extends [infer Ctx]
+  ? unknown extends Ctx
+    ? never
+    : Ctx
+  : never;
+
+/**
+ * The ctx a tool set's handlers read, intersected — what `run` asks the host
+ * for once the tools are wired into a machine. A tool whose handler reads
+ * nothing leaves its siblings' demand intact.
+ */
+export type ToolsCtx<T extends AnyToolDef> = UnionToIntersection<
+  KnownToolCtx<ToolCtxBoxed<T>>
+>;
 
 /** The settled Msg union a router's handlers return — folded by `toMachine`. */
 export type ToolMsg<T extends AnyToolDef> =
@@ -449,7 +476,7 @@ export interface ToolRouter<T extends AnyToolDef> {
   /** The `toolOf` for `createAgent`: total, pure, parses `args` at the edge. */
   readonly toolOf: (call: ToolCall) => ToolCmd<T>;
   /** One interpret handler per tool plus the `tool_rejected` handler. */
-  readonly interpret: Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>;
+  readonly interpret: Interpret<ToolMsg<T>, ToolCmd<T>, ToolsCtx<T>>;
   /**
    * The timeout / retry knob the called tool declared — `AgentConfigCore`'s
    * `toolResilienceOf` seam, filled from the `tool()` specs. `null` for a tool
@@ -498,26 +525,29 @@ export function toolRouter<T extends AnyToolDef>(
         error: { _tag: "unknown_tool", name: call.name },
       });
     }
-    const parsed = t.args.safeParse(call.args);
-    if (!parsed.success) {
+    const parsed = validateSync(
+      t.args,
+      call.args,
+      `the "${call.name}" tool's input schema`,
+    );
+    if (parsed.issues !== undefined) {
       return rejected({
         callId: call.callId,
         error: {
           _tag: "malformed_args",
           name: call.name,
-          issues: malformedResult(parsed.error.issues).issues,
+          issues: malformedResult(parsed.issues).issues,
         },
       });
     }
     // `t` is the def the name resolved to, so its constructor builds exactly
     // the `CmdOf<T>` arm for that name; `AnyToolDef` erases the call signature.
     const build = t as unknown as (input: ToolInput<unknown>) => CmdOf<T>;
-    return build({ callId: call.callId, args: parsed.data });
+    return build({ callId: call.callId, args: parsed.value });
   };
 
   const handlers: Record<string, unknown> = {
-    [rejected.cmdType]: async (cmd: ToolRejectedCmd) =>
-      rejected.err(cmd, cmd.error),
+    [rejected.cmdType]: async (cmd: ToolRejectedCmd) => Outcome.err(cmd.error),
   };
   for (const t of tools) handlers[t.cmdType] = t.interpret;
   // Each handler is the def's own typed `interpret`, keyed by the `type` it
@@ -525,7 +555,7 @@ export function toolRouter<T extends AnyToolDef>(
   const interpret = handlers as unknown as Interpret<
     ToolMsg<T>,
     ToolCmd<T>,
-    NoCtx
+    ToolsCtx<T>
   >;
 
   const outcomeOf = (msg: {
@@ -612,8 +642,8 @@ type AnyCell = (
  * exact function `toolRouter` built.
  */
 export function fanOutInterpret<T extends AnyToolDef>(
-  interpret: Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>,
-): Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx> {
+  interpret: Interpret<ToolMsg<T>, ToolCmd<T>, ToolsCtx<T>>,
+): Interpret<ToolMsg<T>, ToolCmd<T>, ToolsCtx<T>> {
   // The release chain: one per table, so the ordering it imposes is the
   // ordering of the Cmds that entered THIS machine's interpret.
   let release: Promise<void> = Promise.resolve();
@@ -643,7 +673,7 @@ export function fanOutInterpret<T extends AnyToolDef>(
       return undefined;
     };
   }
-  return fanned as unknown as Interpret<ToolMsg<T>, ToolCmd<T>, NoCtx>;
+  return fanned as unknown as Interpret<ToolMsg<T>, ToolCmd<T>, ToolsCtx<T>>;
 }
 
 /** The release chain carries no value and must not break — both arms land here. */

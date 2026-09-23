@@ -1,43 +1,12 @@
 /**
  * @packageDocumentation
  *
- * Internal to the package (`src/internal/resilience/`, #46). The published
- * `./resilient-call` door is closed; the consumer-facing shape is the
- * higher-order `withResilience(base, config)` wrapper in `../with-resilience`
- * (TEA-idiomatic: it wraps any existing machine instead of forcing a bespoke
- * embedded slice), and this module is its implementation. The APIs are NOT
- * drop-in; migration map, for the in-tree embedded-slice consumers:
- *
- *   - `createResilientCall(config, rng)` + hand-wiring `init` / the verbs /
- *     `subs` / `handlers` into your machine → `withResilience(base, { target,
- *     ...bricks }, rng)`. Nothing is wired by hand anymore: the wrapper
- *     intercepts the `target` base Cmd and routes it through the gate.
- *   - `ResilientConfig` bricks (`retry` / `circuit` / `rateLimit` / `cache` /
- *     `deadline`) → unchanged; `ResilienceConfig` extends the same knob and
- *     adds `target` (required), `keyOf?` (per-call key — was `attempt`'s `key`
- *     argument), and `at?` (time-as-data reader — REQUIRED with any
- *     time-sensitive brick; `withResilience` throws at construction without it).
- *   - The slice at your chosen Model field + `liftResilience` → the wrapper
- *     owns `model.$resilience`; there is nothing to lift.
- *   - Verbs `attempt` / `settle` / `onTimer` → internal to the
- *     wrapper; results route as `$resilience:ok` / `$resilience:err` /
- *     `$resilience:timer` Msgs through the merged `update` (the old
- *     `resilient_run` / `resilient_ok` / `resilient_err` vocabulary is renamed
- *     into the `$resilience:` namespace).
- *   - `settleFailed` → NO equivalent. It exists for embedded-slice consumers
- *     (`authed-call`, `paginated-walk`) that settle a call without touching the
- *     breaker; the wrapper exposes no caller-facing settle verb.
- *   - `handlers(ports)` / `subs(state)` / the `subscribeDeadline` re-export →
- *     handled by the wrapper; run the returned machine like any other.
- *
- * The in-tree modules that embed the slice (`with-resilience` itself, `agent`,
- * `llm-call`, `authed-call`, `reconciler`, `paginated-walk`) import this module
- * directly — that is its role.
+ * Internal to the package (`src/internal/resilience/`, #46); consumers reach it
+ * through `@demlik/tea/resilience`.
  *
  * internal/resilience/resilient-call — the ROOT composition: a single resilience knob
  * that bundles cache → circuit-breaker → rate-limit → exponential-backoff retry
- * (with a deadline-driven retry timer) around any fallible `(input) => Promise`
- * port.
+ * (with a deadline-driven retry timer) around one fallible piece of work.
  *
  * This is `examples/resilient-fetch.ts`'s hand-wired `attempt()` generalized:
  *
@@ -47,10 +16,12 @@
  *     circuit breaker and token bucket are shared (one downstream target, one
  *     breaker / one bucket — the example's implicit single-target assumption
  *     made explicit).
- *   - It is **config-driven**, not hand-wired. You hand `createResilientCall`
- *     a `ResilientConfig` and get back the uniform knob contract every L2
- *     composition exposes: `init()`, the three verbs (`attempt` / `settle` /
- *     `onTimer`), `subs(state)`, and `handlers(ports)`.
+ *   - It is **config-driven**. You hand `createResilientCall` a
+ *     `ResilientConfig` and get back plain functions: `init()`, the verbs
+ *     (`attempt` / `settle` / `onTimer` / `resume` / `settleFailed`), the
+ *     `deadlines(state)` list and the `timer(state)` that arms it, and `run` —
+ *     the `Cmd.define`d Cmd the knob emits. You call them from your own
+ *     `update` (ADR 0022); nothing mounts or wraps your machine.
  *   - Every brick is **optional**. Omit `cache` and the cache gate disappears
  *     (`get` is never consulted); omit `circuit` and every call passes the
  *     breaker; omit `rateLimit` and the bucket never throttles; omit `retry`
@@ -71,14 +42,37 @@
  *   - **Replayable** — every transition is a verb returning new state + Cmds;
  *     `replay` reconstructs it exactly. Nothing here closes over time or RNG.
  *
+ * ## The work runs in your handler (ADR 0021)
+ *
+ * The knob ships no engine code. Its one effect is the `run` Cmd
+ * (`<name>_run`), built with `Cmd.define`, and you interpret it in your
+ * engine's own style. The handler returns an outcome and the engine mints
+ * `<name>_run_ok` / `<name>_run_err`, which `settle` reads:
+ *
+ *   interpret: {
+ *     resilient_run: async (cmd, { ok, err }) => {
+ *       try { return ok(await fetchUser(cmd.input)); }
+ *       catch (cause) { return err({ _tag: "port_rejected", cause }); }
+ *     },
+ *   }
+ *
+ * A failure the handler does not return as a declared tag (a throw, an
+ * undeclared tag) is a contract breach: it goes to the error sink and never
+ * reaches `settle`, so it is never retried.
+ *
  * ## Where the clock / RNG live
  *
- * Inside the verbs: nowhere. Time arrives as `at` on `attempt` / `onTimer` and
- * is carried on the result / timer Msgs the consumer dispatches. Jitter RNG is
- * injected once at `createResilientCall(config, rng)` and threaded into
- * `nextDelayMs` at the verb boundary — deterministic in tests, `Math.random`
- * by default. The ONLY clock read is `Date.now()` inside the `handlers` port
- * (the effect boundary), exactly as `resilient-fetch.ts` stamps its result Msgs.
+ * Inside the verbs: nowhere. Time arrives as `at` on `attempt` / `resume` /
+ * `settleFailed`, as the `at` the engine stamps on a settled Msg, and as `atMs`
+ * on a timer Msg. Jitter RNG is injected once at
+ * `createResilientCall(config, rng)` and threaded into `nextDelayMs` at the
+ * verb boundary — deterministic in tests, `Math.random` by default.
+ *
+ * Every clocked verb also records its instant on the slice (`clockMs`). That is
+ * what lets `timer(state)` hand the built-in `timer` Sub a RELATIVE countdown to
+ * the soonest deadline without reading a clock: the Sub's deps change whenever
+ * the slice's clock moves, so the engine restarts the countdown from that
+ * instant.
  *
  * That same `at` is what makes a DURATION-bounded retry budget reachable here:
  * `recordFailure` / `shouldRetry` are fed the failure's observation instant,
@@ -108,51 +102,49 @@
  *   }
  *
  *   // in the machine:
- *   init: () => [{ resilience: rc.init(), result: null }, []],
  *   update: {
  *     fetch: (s, m) => liftResilience(s, rc.attempt(s.resilience, m.key, m.input, m.at)),
- *     resilient_ok:  (s, m) => onSettle(s, rc.settle(s.resilience, m)),
- *     resilient_err: (s, m) => onSettle(s, rc.settle(s.resilience, m)),
+ *     resilient_run_ok:  (s, m) => onSettle(s, rc.settle(s.resilience, m)),
+ *     resilient_run_err: (s, m) => onSettle(s, rc.settle(s.resilience, m)),
  *     deadline_exceeded: (s, m) => liftResilience(s, rc.onTimer(s.resilience, m)),
  *   },
- *   subscriptions: (s) => rc.subs(s.resilience),
- *   subscribe: { deadline: subscribeDeadline },
- *   interpret: rc.handlers({ run: ctx.call }),
+ *   subs: [{ type: "timer", deps: (s) => rc.timer(s.resilience) }],
  *
+ * `timer` is the engine's built-in Sub, so `run` needs no `subscribe` for it.
  * `docs/how-to/hand-wire-a-resilient-call.md` walks the whole machine.
  *
- * ## Naming a knob, when a machine mounts more than one
+ * ## Naming a knob, when a machine holds more than one
  *
- * Every knob above speaks `resilient_run` / `resilient_ok` / `resilient_err`,
- * so TWO of them in one machine meet in one `resilient_ok` cell whose `result`
- * is the union of both payloads — discriminated by hand on `key`, which the
- * type checker cannot grade. `config.name` renames the whole family, Cmd and
- * both settle Msgs together:
+ * Every knob above speaks `resilient_run` / `resilient_run_ok` /
+ * `resilient_run_err`, so TWO of them in one machine meet in one
+ * `resilient_run_ok` cell whose `value` is the union of both payloads —
+ * discriminated by hand on `cmd.key`, which the type checker cannot grade.
+ * `config.name` renames the whole family, Cmd and both settle Msgs together:
  *
  *   const jev = createResilientCall<JevRequest, JevOk, "jev">({ name: "jev" });
  *   const llm = createResilientCall<LlmCall, LlmOk, "llm">({ name: "llm" });
  *
  *   update: {
- *     jev_ok: (s, m) => …,   // m.result is JevOk — no `key` switch
- *     llm_ok: (s, m) => …,   // m.result is LlmOk
+ *     jev_run_ok: (s, m) => …,   // m.value is JevOk — no `key` switch
+ *     llm_run_ok: (s, m) => …,   // m.value is LlmOk
  *   }
  *
- * The name leads the retry / deadline Sub ids too (`jev:retry:<key>`), because
- * Subs reconcile by id and two knobs would otherwise share one timer per key.
+ * The name leads the retry / deadline ids too (`jev:retry:<key>`), because a
+ * fired timer is routed by its id and two knobs would otherwise answer each
+ * other's timer on a shared key, and it names the timer Msg (`jev_deadline`).
  * `N` is not inferable from `I` / `R`, so an opted-in knob spells all three
  * type arguments; `config.name` is typed at `N`, so value and type cannot
- * drift. Omit `name` and every one of those strings is `resilient*` exactly as
- * it has always been — no existing machine changes.
- *
- * `mountResilientCall` reads the same name off the knob, so a mounted named
- * knob's settle cells are `jev_ok` / `jev_err` too — the mount never spells the
- * `resilient_*` literals, and two named knobs mounted into one machine spread
- * into four distinct cells.
+ * drift. Omit `name` and every one of those strings is `resilient*`.
  */
 
-import { z } from "zod";
 import { liftSlice } from "../../../compose";
-import { Cmd, type CmdOf, type NoCtx, tryInterpret } from "../../../index";
+import {
+  Cmd,
+  type CmdOf,
+  type MalformedResult,
+  type TaggedError,
+  type TimerDeps,
+} from "../../../index";
 import type { MsgType } from "../../../protocol";
 import { without } from "../../../pure/core";
 import {
@@ -164,6 +156,7 @@ import {
   recordFailure,
   shouldRetry,
 } from "../../../retry-backoff";
+import { unchecked } from "../../schema";
 import {
   get as cacheGet,
   set as cacheSet,
@@ -180,9 +173,8 @@ import {
 import {
   type DeadlineExceeded,
   type DeadlineSub,
-  deadlineMsgType,
   deadlineSub,
-  subscribeDeadline,
+  nextTimer,
 } from "../deadline";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
 
@@ -238,9 +230,9 @@ export interface DeadlineConfig {
 // ===========================================================================
 
 /**
- * The family every unnamed knob speaks: `resilient_run` / `resilient_ok` /
- * `resilient_err`. Identical to the `MsgType.Resilient*` literals, which stay
- * the vocabulary of every knob that passes no name.
+ * The family every unnamed knob speaks: `resilient_run` / `resilient_run_ok` /
+ * `resilient_run_err`. Identical to the `MsgType.Resilient*` literals, which
+ * stay the vocabulary of every knob that passes no name.
  */
 export const DEFAULT_RESILIENT_NAME = "resilient";
 export type DefaultResilientName = typeof DEFAULT_RESILIENT_NAME;
@@ -252,17 +244,17 @@ export type DefaultResilientName = typeof DEFAULT_RESILIENT_NAME;
 const _runIsProtocol: typeof MsgType.ResilientRun =
   `${DEFAULT_RESILIENT_NAME}_run` as const;
 const _okIsProtocol: typeof MsgType.ResilientOk =
-  `${DEFAULT_RESILIENT_NAME}_ok` as const;
+  `${DEFAULT_RESILIENT_NAME}_run_ok` as const;
 const _errIsProtocol: typeof MsgType.ResilientErr =
-  `${DEFAULT_RESILIENT_NAME}_err` as const;
+  `${DEFAULT_RESILIENT_NAME}_run_err` as const;
 void [_runIsProtocol, _okIsProtocol, _errIsProtocol];
 
 /** The run Cmd's `type` for the `N` family. */
 export type ResilientRunType<N extends string> = `${N}_run`;
-/** The success settle Msg's `type` for the `N` family. */
-export type ResilientOkType<N extends string> = `${N}_ok`;
-/** The failure settle Msg's `type` for the `N` family. */
-export type ResilientErrType<N extends string> = `${N}_err`;
+/** The success settle Msg's `type` for the `N` family — minted by the engine. */
+export type ResilientOkType<N extends string> = `${N}_run_ok`;
+/** The failure settle Msg's `type` for the `N` family — minted by the engine. */
+export type ResilientErrType<N extends string> = `${N}_run_err`;
 
 /**
  * The resilience knob. EVERY field is optional: omit a brick and its gate is
@@ -275,12 +267,13 @@ export type ResilientErrType<N extends string> = `${N}_err`;
  */
 export interface ResilientConfig<N extends string = DefaultResilientName> {
   /**
-   * What this knob's Cmd and settle Msgs are called: `<name>_run`, `<name>_ok`,
-   * `<name>_err`. Omit it and the family is `resilient` — `resilient_run` /
-   * `resilient_ok` / `resilient_err`, exactly as before this parameter existed.
+   * What this knob's Cmd and settle Msgs are called: `<name>_run`, and the
+   * `<name>_run_ok` / `<name>_run_err` the engine mints from the run handler's
+   * outcome. Omit it and the family is `resilient` — `resilient_run` /
+   * `resilient_run_ok` / `resilient_run_err`.
    *
-   * Name a knob when a machine mounts more than one of the resilient family.
-   * Two unnamed knobs meet in ONE `resilient_ok` cell whose payload is the union
+   * Name a knob when a machine holds more than one of the resilient family.
+   * Two unnamed knobs meet in ONE `resilient_run_ok` cell whose payload is the union
    * of both results, and the consumer discriminates by hand on `key` — which the
    * type checker cannot see. Under distinct names each knob settles into its own
    * cell, already narrowed to its own payload.
@@ -400,6 +393,14 @@ export interface ResilientState<I, R> {
   readonly retry: Readonly<Record<string, RetryState>>;
   readonly cache: TtlCache<R>;
   readonly calls: Readonly<Record<string, CallPhase<I, R>>>;
+  /**
+   * The instant of the latest clocked transition this slice saw — the `at` of
+   * the last `attempt` / `resume` / `settleFailed`, settled Msg or timer fire.
+   * `timer` counts the soonest deadline down from it, so the built-in `timer`
+   * Sub gets a relative `ms` without anything reading a clock. `0` until the
+   * first clocked transition.
+   */
+  readonly clockMs: number;
 }
 
 // ===========================================================================
@@ -407,16 +408,26 @@ export interface ResilientState<I, R> {
 // ===========================================================================
 
 /**
- * The one effect this knob emits: "run the port for `key` with `input`". The
- * consumer's `handlers(ports)` interprets it; it carries no closure — `input`
- * is plain data (invariant 3).
+ * The failures a run handler may return (ADR 0021). `port_rejected` is the
+ * work failing — carry the cause beside the tag (`err({ _tag: "port_rejected",
+ * cause })`); `deadline_exceeded` is a handler that timed the work out itself.
+ * Either one settles as `<name>_run_err` and feeds the retry / breaker. Any
+ * other failure is a contract breach and goes to the error sink.
+ */
+export type RunErr = TaggedError<"port_rejected" | "deadline_exceeded">;
+
+/**
+ * The one effect this knob emits: "run the work for `key` with `input`". It is
+ * `Cmd.define`d, so the handler you write for it returns an outcome and the
+ * engine mints `<name>_run_ok` / `<name>_run_err` (ADR 0021). It carries no
+ * closure — `input` is plain data (invariant 3).
  */
 export function runCmdDef<I, R, N extends string = DefaultResilientName>(
   name: N = DEFAULT_RESILIENT_NAME as N,
 ) {
   return Cmd.define(`${name}_run` as ResilientRunType<N>, {
-    input: z.custom<{ readonly key: string; readonly input: I }>(),
-    ok: z.custom<R>(),
+    input: unchecked<{ readonly key: string; readonly input: I }>(),
+    ok: unchecked<R>(),
     err: ["port_rejected", "deadline_exceeded"],
   });
 }
@@ -425,28 +436,70 @@ export type RunCmdDef<
   R,
   N extends string = DefaultResilientName,
 > = ReturnType<typeof runCmdDef<I, R, N>>;
-export type RunCmd<I, N extends string = DefaultResilientName> = CmdOf<
-  RunCmdDef<I, unknown, N>
->;
+/**
+ * The run Cmd value. `R` is its settle value — `unknown` reads any knob's run
+ * Cmd; the knob's own verbs emit it at their `R`, which is what lets a machine
+ * list `cmds: [rc.run]` and take the verbs' Cmds as its own.
+ */
+export type RunCmd<
+  I,
+  N extends string = DefaultResilientName,
+  R = unknown,
+> = CmdOf<RunCmdDef<I, R, N>>;
 
 /**
- * Settle Msgs the `handlers` port dispatches back. `at` is stamped at the
- * boundary. Both are generic in the knob's name family `N`, so two knobs named
- * apart land in two `update` cells whose payloads are already narrowed — the
- * `key` switch a single shared cell forces is gone.
+ * The settle Msgs the engine mints from a run handler's outcome:
+ * `<name>_run_ok` carrying the handler's `value`, `<name>_run_err` carrying its
+ * declared `error`. Each carries the run Cmd it settles (`cmd.key` names the
+ * call) and the `at` the engine stamped. Both are generic in the knob's name
+ * family `N`, so two knobs named apart land in two `update` cells whose
+ * payloads are already narrowed.
+ *
+ * They are the `SettledOk` / `SettledErr` pair `Cmd.define` mints, spelled out
+ * so a helper that folds the error into a richer type of its own (llm-call's
+ * `LlmErr`, jev-ask's `JevAskErr`) can hand `settle` its Msg with `E` widened.
  */
-export type SucceedMsg<R, N extends string = DefaultResilientName> = {
+export type SucceedMsg<
+  R,
+  N extends string = DefaultResilientName,
+  I = unknown,
+> = {
   readonly type: ResilientOkType<N>;
-  readonly key: string;
-  readonly result: R;
+  readonly cmd: RunCmd<I, N>;
+  readonly value: R;
   readonly at: number;
 };
-export type FailMsg<N extends string = DefaultResilientName> = {
+export type FailMsg<
+  N extends string = DefaultResilientName,
+  I = unknown,
+  E = RunErr | MalformedResult,
+> = {
   readonly type: ResilientErrType<N>;
-  readonly key: string;
-  readonly error: unknown;
+  readonly cmd: RunCmd<I, N>;
+  readonly error: E;
   readonly at: number;
 };
+
+/**
+ * What `settle` reads off a settled Msg: the call's `key` (on `cmd`), the
+ * engine's `at`, and the handler's `value` or `error`. {@link SucceedMsg} and
+ * {@link FailMsg} are both one of these, so an engine-minted Msg passes
+ * straight in; a helper that settles from its own data (a fallback answer, a
+ * compaction summary) builds the record without inventing a whole run Cmd.
+ */
+export type SettleMsg<R, N extends string = DefaultResilientName> =
+  | {
+      readonly type?: ResilientOkType<N>;
+      readonly cmd: { readonly key: string };
+      readonly value: R;
+      readonly at: number;
+    }
+  | {
+      readonly type?: ResilientErrType<N>;
+      readonly cmd: { readonly key: string };
+      readonly error: unknown;
+      readonly at: number;
+    };
 
 /**
  * How a settled call ended — the third thing `settle` hands back, and the only
@@ -470,22 +523,20 @@ export type SettleOutcome<R> =
  */
 export interface SettleResult<I, R, N extends string = DefaultResilientName> {
   readonly call: ResilientState<I, R>;
-  readonly cmds: readonly RunCmd<I, N>[];
+  readonly cmds: readonly RunCmd<I, N, R>[];
   readonly outcome: SettleOutcome<R>;
 }
 
 /**
  * The deadline Msg tag this knob's timers dispatch, derived from its name the
- * same way `<name>_ok` / `<name>_err` are. The DEFAULT family keeps the bare
- * `"deadline_exceeded"` literal — that is the tag every machine wired before
- * the name existed already handles, and `mountResilientCall` still returns a
- * `deadline_exceeded` cell for an unnamed knob.
+ * same way the settle Msgs are. The DEFAULT family keeps the bare
+ * `"deadline_exceeded"` literal.
  */
 export type ResilientDeadlineType<N extends string = DefaultResilientName> =
   N extends DefaultResilientName ? "deadline_exceeded" : `${N}_deadline`;
 
 /**
- * The name the deadline Sub carries for the `N` family — `undefined` for the
+ * The name a deadline carries for the `N` family — `undefined` for the
  * default family (no name at all, so the bare literal is dispatched), the name
  * itself otherwise. One conditional, so the value and {@link
  * ResilientDeadlineType} can never disagree about which family is unnamed.
@@ -514,25 +565,6 @@ export type DeadlineExceededError = {
   readonly id: string;
   readonly atMs: number;
 };
-
-/**
- * What `handlers(ports)` returns: the interpret cell for this knob's run Cmd,
- * under that Cmd's own name. A named knob contributes `<name>_run`, so two
- * knobs' handler records merge into one `interpret` without either shadowing
- * the other.
- */
-export type ResilientHandlers<I, R, N extends string = DefaultResilientName> = {
-  readonly [K in ResilientRunType<N>]: (
-    cmd: RunCmd<I, N>,
-    ctx: NoCtx,
-  ) => Promise<SucceedMsg<R, N> | FailMsg<N>>;
-};
-
-/** Ports the consumer supplies to `handlers`. */
-export interface ResilientPorts<I, R> {
-  /** The fallible work this knob wraps. A throw settles as `<name>_err`. */
-  readonly run: (input: I, key: string) => Promise<R>;
-}
 
 // ===========================================================================
 // Internal brick-policy derivation — config → the L1 policy shapes.
@@ -566,10 +598,11 @@ function charge(budget: CallBudget, at: number): CallBudget {
   return { remainingMs: budget.remainingMs - elapsed, chargingSinceMs: at };
 }
 
-// Sub-id families. Each call's retry timer is a deadline keyed by `key`, so a
-// machine running many concurrent calls reconciles each independently. The
-// knob's `name` leads the id for the same reason it leads the Msg types: Subs
-// reconcile by id, so two knobs sharing a key would otherwise share one timer.
+// Deadline-id families. Each call's retry timer is a deadline keyed by `key`, so
+// a machine running many concurrent calls arms and routes each independently.
+// The knob's `name` leads the id for the same reason it leads the Msg types: a
+// fired timer is routed by its id, so two knobs sharing a key would otherwise
+// answer each other's timer.
 // The default `resilient` name reproduces the ids exactly as they have always
 // read.
 function retryTimerId(name: string, key: string): string {
@@ -602,10 +635,8 @@ function deadlineNameOf<N extends string>(name: N): DeadlineNameOf<N> {
  * curried onto the factory rather than threaded through every verb so callers
  * spell the determinism choice once.
  *
- * Returns the uniform L2 knob contract. `I` is the port input type, `R` the
- * port result type. Consumers outside the package reach this through
- * `withResilience` (`../with-resilience`) — see the migration map at the top
- * of this module.
+ * Returns plain functions and the run Cmd def (ADR 0022) — see the module doc
+ * for the wiring. `I` is the work's input type, `R` its result type.
  */
 export function createResilientCall<
   I,
@@ -620,11 +651,7 @@ export function createResilientCall<
   // unchanged; `asRng` is the single point it's branded for `nextDelayMs`.
   const rngBranded = asRng(rng);
   const runCmd = runCmdDef<I, R, N>(name);
-  // The two settle names, derived once from the same `name` the Cmd def is
-  // built from — so the Cmd and the Msgs it settles into can never disagree.
-  const okType = `${name}_ok` as ResilientOkType<N>;
-  const errType = `${name}_err` as ResilientErrType<N>;
-  // The name the deadline Sub carries, which is what fixes the Msg tag it
+  // The name each deadline carries, which is what fixes the Msg tag it
   // dispatches. `undefined` for the DEFAULT family: an unnamed knob must keep
   // dispatching the bare `deadline_exceeded` literal every existing machine is
   // wired against, so the default is not merely spelled the same — it is the
@@ -650,7 +677,13 @@ export function createResilientCall<
       retry: {},
       cache: initCache<R>(),
       calls: {},
+      clockMs: 0,
     };
+  }
+
+  /** Record `at` as the latest instant this slice saw (see `clockMs`). */
+  function tick(s: ResilientState<I, R>, at: number): ResilientState<I, R> {
+    return s.clockMs === at ? s : { ...s, clockMs: at };
   }
 
   /** Read this key's retry state, defaulting to a fresh one. */
@@ -724,7 +757,7 @@ export function createResilientCall<
     input: I,
     at: number,
     budget: CallBudget,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
+  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N, R>[]] {
     // 0) Budget gate. Skipped without the deadline brick (`remainingMs` stays 0
     // and never moves). A spent budget settles here — before the cache read, the
     // token spend and the circuit probe, none of which a dead call should touch.
@@ -818,7 +851,7 @@ export function createResilientCall<
     error: unknown,
     at: number,
     budget: CallBudget,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
+  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N, R>[]] {
     if (config.retry === undefined) {
       return [setCall(s, key, { phase: "failed", error }), []];
     }
@@ -866,8 +899,8 @@ export function createResilientCall<
     key: string,
     input: I,
     at: number,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
-    return gate(s, key, input, at, budgetFor(s, key, at));
+  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N, R>[]] {
+    return gate(tick(s, at), key, input, at, budgetFor(s, key, at));
   }
 
   // === Verb: resume ========================================================
@@ -892,7 +925,7 @@ export function createResilientCall<
         budget: { ...call.budget, chargingSinceMs: at },
       };
     }
-    return { ...s, calls };
+    return { ...s, calls, clockMs: at };
   }
 
   // === The two record steps `settle` is built from ==========================
@@ -905,19 +938,19 @@ export function createResilientCall<
    */
   function recordOk(
     s: ResilientState<I, R>,
-    msg: SucceedMsg<R, N>,
+    msg: Extract<SettleMsg<R, N>, { readonly value: R }>,
   ): ResilientState<I, R> {
-    const { key } = msg;
+    const { key } = msg.cmd;
     const circuit =
       cPolicy !== null ? onSuccess(s.circuit, cPolicy) : s.circuit;
     const cache =
       config.cache !== undefined
-        ? cacheSet(s.cache, key, msg.result, msg.at, config.cache.ttlMs)
+        ? cacheSet(s.cache, key, msg.value, msg.at, config.cache.ttlMs)
         : s.cache;
     // Drop this key's retry counter — a success ends the retry run.
     const retry = without(s.retry, key);
     return {
-      ...setCall(s, key, { phase: "succeeded", result: msg.result }),
+      ...setCall(s, key, { phase: "succeeded", result: msg.value }),
       circuit,
       cache,
       retry,
@@ -935,9 +968,9 @@ export function createResilientCall<
    */
   function recordErr(
     s: ResilientState<I, R>,
-    msg: FailMsg<N>,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
-    const { key } = msg;
+    msg: Extract<SettleMsg<R, N>, { readonly error: unknown }>,
+  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N, R>[]] {
+    const { key } = msg.cmd;
     const circuit =
       cPolicy !== null ? onFailure(s.circuit, cPolicy, msg.at) : s.circuit;
     const withCircuit = { ...s, circuit };
@@ -955,21 +988,23 @@ export function createResilientCall<
     return backoff(withCircuit, key, input, msg.error, msg.at, budget);
   }
 
-  function isOk(msg: SucceedMsg<R, N> | FailMsg<N>): msg is SucceedMsg<R, N> {
-    return msg.type === okType;
+  function isOk(
+    msg: SettleMsg<R, N>,
+  ): msg is Extract<SettleMsg<R, N>, { readonly value: R }> {
+    return "value" in msg;
   }
 
   // === Verb: settle ========================================================
 
   /**
-   * Settle the call a `<name>_ok` / `<name>_err` Msg answers, keyed off
-   * `msg.key`, and say how it ended. PURE.
+   * Settle the call a `<name>_run_ok` / `<name>_run_err` Msg answers, keyed off
+   * `msg.cmd.key`, and say how it ended. PURE.
    *
    * A success closes the breaker, fills the cache and ends the retry run; the
-   * outcome is `done` with the port's value. A failure trips the breaker and
+   * outcome is `done` with the handler's value. A failure trips the breaker and
    * backs off: `retrying` while the retry policy allows another attempt, and
    * `failed` with the error once it does not. A `retrying` call waits on the
-   * retry timer `subs` arms; its fire re-issues the run Cmd through `onTimer`.
+   * retry timer `timer` arms; its fire re-issues the run Cmd through `onTimer`.
    *
    * The settled slice, its Cmds and the outcome come back together, and the
    * result value is reachable ONLY through `outcome`. So a hand-wired settle
@@ -978,21 +1013,22 @@ export function createResilientCall<
    */
   function settle(
     s: ResilientState<I, R>,
-    msg: SucceedMsg<R, N> | FailMsg<N>,
+    msg: SettleMsg<R, N>,
   ): SettleResult<I, R, N> {
+    const now = tick(s, msg.at);
     if (isOk(msg)) {
       return {
-        call: recordOk(s, msg),
+        call: recordOk(now, msg),
         cmds: [],
-        outcome: { kind: "done", value: msg.result },
+        outcome: { kind: "done", value: msg.value },
       };
     }
-    const [call, cmds] = recordErr(s, msg);
+    const [call, cmds] = recordErr(now, msg);
     return {
       call,
       cmds,
       outcome:
-        call.calls[msg.key]?.phase === "waiting_retry"
+        call.calls[msg.cmd.key]?.phase === "waiting_retry"
           ? { kind: "retrying" }
           : { kind: "failed", error: msg.error },
     };
@@ -1025,13 +1061,17 @@ export function createResilientCall<
    * starts a fresh retry run. Both sibling knobs previously hand-rolled this by
    * splicing `calls` directly; this verb gives them one named, tested entry
    * point so the slice's settle invariants live in exactly one place.
+   *
+   * `at` is the instant the caller decided it — recorded as the slice's clock,
+   * since ending a call can change which deadline `timer` counts down to.
    */
   function settleFailed(
     s: ResilientState<I, R>,
     key: string,
     error: unknown,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
-    return [setCall(s, key, { phase: "failed", error }), []];
+    at: number,
+  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N, R>[]] {
+    return [setCall(tick(s, at), key, { phase: "failed", error }), []];
   }
 
   // === Verb: onTimer =======================================================
@@ -1045,13 +1085,15 @@ export function createResilientCall<
    *                      deadline error, no matter the current phase.
    *
    * A timer for a key no longer `waiting_retry` (retry) / no longer in flight
-   * (deadline) is a no-op — the reconcile pass races the result; the verb must
-   * tolerate a stale fire. PURE.
+   * (deadline) leaves the calls alone — the reconcile pass races the result;
+   * the verb must tolerate a stale fire. Every fire records `msg.atMs` as the
+   * slice's clock, so `timer` re-arms from it. PURE.
    */
   function onTimer(
-    s: ResilientState<I, R>,
-    msg: ResilientTimerMsg,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
+    slice: ResilientState<I, R>,
+    msg: { readonly id: string; readonly atMs: number },
+  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N, R>[]] {
+    const s = tick(slice, msg.atMs);
     for (const [key, call] of Object.entries(s.calls)) {
       if (msg.id === retryTimerId(name, key)) {
         if (call.phase !== "waiting_retry") return [s, []];
@@ -1093,16 +1135,15 @@ export function createResilientCall<
     return [s, []];
   }
 
-  // === Subs ================================================================
+  // === Timers ==============================================================
 
   /**
-   * Pre-wired subscriptions: a retry timer for every `waiting_retry` call, and
-   * (when the `deadline` brick is configured) an overall deadline timer for
-   * every still-active call. Both are `DeadlineSub`s reconciled by id, so a
-   * phase change cancels the matching timer automatically — no manual
-   * `clearTimeout`. Wire `subscribe: { deadline: subscribeDeadline }`.
+   * The deadlines this slice is waiting on: a retry timer for every
+   * `waiting_retry` call, and (when the `deadline` brick is configured) an
+   * overall deadline timer for every still-active call. Each is an absolute
+   * instant; `timer` arms the soonest. PURE.
    */
-  function subs(
+  function deadlines(
     s: ResilientState<I, R>,
   ): readonly DeadlineSub<DeadlineNameOf<N>>[] {
     const out: DeadlineSub<DeadlineNameOf<N>>[] = [];
@@ -1135,61 +1176,38 @@ export function createResilientCall<
     return out;
   }
 
-  // === Handlers ============================================================
-
   /**
-   * Pre-wired interpret handler for `resilient_run`. Wraps the consumer's
-   * `run` port via `tryInterpret` (Railway): success → `resilient_ok`, failure
-   * → `resilient_err`, each stamped with `Date.now()` at the effect boundary —
-   * the ONE permitted clock read (interpret is impure; the reducer never reads
-   * the clock). Assign to the machine's `interpret`:
+   * The built-in `timer` Sub's deps for this slice: the soonest of
+   * {@link deadlines}, counted down from the slice's `clockMs`, or `null` when
+   * nothing is waiting. Declare it in the machine and `run` needs no runner:
    *
-   *   interpret: rc.handlers({ run: (input, key) => ctx.callBackend(input) })
+   *   subs: [{ type: "timer", deps: (s) => rc.timer(s.call) }]
+   *
+   * Its fire is this knob's timer Msg (`deadline_exceeded`, or
+   * `<name>_deadline` for a named knob); route it to `onTimer`. A phase change
+   * drops the matching deadline, and the new deps restart the countdown — no
+   * manual `clearTimeout`. PURE.
    */
-  function handlers(ports: ResilientPorts<I, R>): ResilientHandlers<I, R, N> {
-    const handle = tryInterpret<
-      RunCmd<I, N>,
-      R,
-      SucceedMsg<R, N> | FailMsg<N>,
-      // The work fn reads nothing from ctx — it forwards `cmd.input` to the
-      // consumer-supplied `run` port. `NoCtx` (not `unknown`) marks this as a
-      // DELIBERATE context-free seam, so callers see intent, not looseness.
-      NoCtx
-    >(
-      (cmd) => ports.run(cmd.input, cmd.key),
-      (result, cmd): SucceedMsg<R, N> => ({
-        type: okType,
-        key: cmd.key,
-        result,
-        at: Date.now(),
-      }),
-      (error, cmd): FailMsg<N> => ({
-        type: errType,
-        key: cmd.key,
-        error,
-        at: Date.now(),
-      }),
-    );
-    // The key is `${name}_run`, a template-literal type TS cannot see through
-    // in an object literal; the mapped return type above is the declaration
-    // that carries it to the caller.
-    return { [runCmd.cmdType]: handle } as ResilientHandlers<I, R, N>;
+  function timer(
+    s: ResilientState<I, R>,
+  ): TimerDeps<ResilientTimerMsg<N>> | null {
+    return nextTimer(deadlines(s), s.clockMs);
   }
 
   return {
-    // The Msg-name family this knob speaks, as a VALUE typed at `N`. `mount`
-    // keys its settle cells off this rather than off the `resilient_*`
-    // literals, so a named knob mounts into its own cells (#229) and the Cmd,
-    // the Msgs, the Sub ids and the mounted cells all derive from one name.
+    // The Msg-name family this knob speaks, as a VALUE typed at `N`: the Cmd,
+    // the settle Msgs and the timer ids all derive from it.
     name,
+    /** The `Cmd.define`d run Cmd; list it in the machine's `cmds`. */
+    run: runCmd,
     init,
     attempt,
     resume,
     settle,
     settleFailed,
     onTimer,
-    subs,
-    handlers,
+    deadlines,
+    timer,
   };
 }
 
@@ -1197,9 +1215,7 @@ export function createResilientCall<
  * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the
  * slice lives at `state.resilience`. A convenience for the common single-slice
  * host; consumers with a differently-named field spread by hand. Pure — a thin
- * record rebuild, no clock / RNG. Under `withResilience` the wrapper owns
- * `model.$resilience`, so there is nothing to lift; this is for the embedded
- * slice consumers only.
+ * record rebuild, no clock / RNG.
  *
  * The record rebuild itself is `liftSlice` from the root door (#231) — this
  * stays as the named, pre-keyed convenience for the `state.resilience` field,
@@ -1216,375 +1232,3 @@ export function liftResilience<
 ): readonly [S, readonly C[]] {
   return liftSlice("resilience", state, result);
 }
-
-// ===========================================================================
-// mount — the eight hand-spliced wiring points, pre-assembled.
-// ===========================================================================
-
-/** What every verb of a knob in this family hands back. */
-export type Settle<I, R> = readonly [
-  ResilientState<I, R>,
-  readonly RunCmd<I>[],
-];
-
-/**
- * The part of a resilient-call knob {@link mountResilientCall} needs: the
- * two-verb `succeed` / `fail` shape `internal/jev/ask` and `internal/llm-call`
- * expose. The base knob settles through one `settle` verb instead (#271), so
- * mounting it directly means binding those two verbs to `settle` by hand.
- *
- * `OkMsg` / `ErrMsg` are parameters rather than {@link SucceedMsg} /
- * {@link FailMsg} because an inheriting knob narrows them: jev-ask's `fail`
- * takes a `JevFailMsg` whose `error` is a typed `JevAskErr`, and a mount that
- * fixed the supertype would hand that verb a widened Msg.
- */
-export interface MountableKnob<
-  I,
-  R,
-  OkMsg,
-  ErrMsg,
-  Handlers,
-  N extends string = DefaultResilientName,
-> {
-  /**
-   * The Msg-name family this knob settles into — `<name>_ok` / `<name>_err`
-   * (#229). The mount reads it rather than assuming `resilient_*`, so a named
-   * knob mounts into the cells it actually emits; an unnamed one is
-   * `resilient`, so nothing a machine already spread changes.
-   */
-  readonly name: N;
-  init(): ResilientState<I, R>;
-  succeed(s: ResilientState<I, R>, key: string, msg: OkMsg): Settle<I, R>;
-  fail(s: ResilientState<I, R>, key: string, msg: ErrMsg): Settle<I, R>;
-  onTimer(s: ResilientState<I, R>, msg: ResilientTimerMsg<N>): Settle<I, R>;
-  subs(s: ResilientState<I, R>): readonly DeadlineSub<DeadlineNameOf<N>>[];
-  handlers(): Handlers;
-}
-
-/**
- * The consumer's half of a settle cell: fold the settled answer into the
- * machine's own Model.
- *
- * It is handed the Model the inherited verb ALREADY settled — the slice at
- * `slice` is the post-`succeed` / post-`fail` one — so the ordering that wedges
- * a call at `running` is not something this callback can express. It returns
- * the repo's universal cell shape so a fold that needs to chain an effect
- * (book the answer, then write it somewhere) returns that Cmd like any other
- * reducer cell would.
- */
-export type SettleFold<Model, M, C extends Cmd> = (
-  model: Model,
-  msg: M,
-) => readonly [Model, readonly C[]];
-
-/** One cell of the update fragment {@link mountResilientCall} returns. */
-export type MountedCell<Model, M, I, C extends Cmd> = (
-  model: Model,
-  msg: M,
-) => readonly [Model, readonly (RunCmd<I> | C)[]];
-
-/**
- * What to mount, and where. `slice` names the Model field the knob's state
- * lives on — a plain, readable field, per
- * [ADR 0015](../../../../.decisions/0015-hide-the-wiring-never-the-state.md):
- * the mount absorbs the assembly and hides none of the durable state.
- */
-export interface MountConfig<
-  Model,
-  Slice extends string,
-  I,
-  R,
-  AttemptType extends string,
-  AttemptMsg,
-  OkMsg,
-  ErrMsg,
-  C extends Cmd,
-  N extends string = DefaultResilientName,
-> {
-  /** The Model field carrying the knob's slice. */
-  readonly slice: Slice;
-  /**
-   * The cell that starts a call. Its shape is the one wiring point the mount
-   * cannot supply: each door's `attempt` takes its own arguments (jev-ask reads
-   * a key, a state and an instant; llm-call reads a request), and only the
-   * consumer knows which Msg field carries each. `run` is that one line.
-   */
-  readonly attempt: {
-    /** The Msg type that starts a call — the key the cell lands on. */
-    readonly on: AttemptType;
-    readonly run: (
-      slice: ResilientState<I, R>,
-      msg: AttemptMsg,
-    ) => Settle<I, R>;
-  };
-  /** Fold a settled success into the Model. Omit and only the slice advances. */
-  readonly onOk?: SettleFold<Model, OkMsg, C>;
-  /** Fold a settled failure into the Model. Omit and only the slice advances. */
-  readonly onErr?: SettleFold<Model, ErrMsg, C>;
-  /**
-   * Fold a call the TIMER settled into the Model. This is the third failure
-   * class, and it never reaches {@link MountConfig.onErr}: a deadline fire
-   * settles `failed` inside the slice and emits no settle Msg, so without this
-   * callback a call that dies on its budget advances the slice and folds
-   * nothing — the shape that used to be a documented caveat.
-   *
-   * It runs once per call the knob's deadline cell moved INTO `failed`:
-   * the deadline fire itself, and the resumed retry whose gate found the
-   * budget spent. A plain backoff tick, a stale fire and an already-`failed`
-   * call fold nothing. `error` is the slice's own settled error — a
-   * {@link DeadlineExceededError} on the deadline path.
-   *
-   * Omit and only the slice advances, exactly as the other two do.
-   */
-  readonly onDeadline?: SettleFold<Model, DeadlineSettled<N>, C>;
-}
-
-/**
- * What {@link MountConfig.onDeadline} is handed: the one call the timer cell
- * just settled `failed`, named by its `key`, carrying the error the slice
- * settled with and the timer Msg that produced it. It is not a Msg the reducer
- * ever sees — no settle Msg exists for this failure class, which is the whole
- * reason the callback is here.
- */
-export interface DeadlineSettled<N extends string = DefaultResilientName> {
-  /** The call key that settled. */
-  readonly key: string;
-  /** The error now on the slice — a {@link DeadlineExceededError} on the deadline path. */
-  readonly error: unknown;
-  /**
-   * The timer Msg whose fire settled it — this knob's own tag, so a fold on a
-   * knob named `jev` is handed a `jev_deadline` and one on an unnamed knob a
-   * `deadline_exceeded`.
-   */
-  readonly msg: ResilientTimerMsg<N>;
-}
-
-/**
- * The four fragments a consumer spreads into `defineMachine`. Together with
- * `init` they are the eight wiring points; none of them is optional at the type
- * level, so a consumer that mounts cannot omit `subscribe` (a backed-off retry
- * that never fires) or re-implement `interpret` as a dispatching handler.
- */
-export interface MountedResilientCall<
-  Model,
-  Slice extends string,
-  I,
-  R,
-  AttemptType extends string,
-  AttemptMsg,
-  OkMsg,
-  ErrMsg,
-  C extends Cmd,
-  Handlers,
-  N extends string = DefaultResilientName,
-> {
-  /** The starting slice under its field name — spread into the machine's `init`. */
-  init(): { readonly [K in Slice]: ResilientState<I, R> };
-  /**
-   * The three settle cells plus the attempt cell, to spread into `update`.
-   *
-   * The two settle keys are the knob's OWN Msg names (#229), so a knob built as
-   * `name: "jev"` mounts into `jev_ok` / `jev_err` and two named knobs in one
-   * machine spread into four distinct cells instead of colliding on one. An
-   * unnamed knob is `resilient`, so the keys read `resilient_ok` /
-   * `resilient_err` exactly as they always have.
-   *
-   * The deadline cell is keyed the same way (#238). A knob's deadline Sub
-   * carries its name, so a knob built as `name: "jev"` dispatches
-   * `jev_deadline` and mounts into a `jev_deadline` cell; an unnamed knob still
-   * dispatches and mounts `deadline_exceeded`. Before that, both mounts wrote
-   * the one unqualified `deadline_exceeded` key and the last spread silently
-   * dropped the other knob's deadline fold. The cell folds through
-   * {@link MountConfig.onDeadline}, since a call the timer settles emits no
-   * settle Msg and so reaches no `onErr`.
-   */
-  readonly update: Readonly<
-    Record<AttemptType, MountedCell<Model, AttemptMsg, I, C>>
-  > & {
-    readonly [K in ResilientOkType<N>]: MountedCell<Model, OkMsg, I, C>;
-  } & {
-    readonly [K in ResilientErrType<N>]: MountedCell<Model, ErrMsg, I, C>;
-  } & {
-    readonly [K in ResilientDeadlineType<N>]: MountedCell<
-      Model,
-      ResilientTimerMsg<N>,
-      I,
-      C
-    >;
-  };
-  subscriptions(model: Model): readonly DeadlineSub<DeadlineNameOf<N>>[];
-  readonly subscribe: { readonly deadline: typeof subscribeDeadline };
-  readonly interpret: Handlers;
-}
-
-/**
- * Pre-assemble a resilient-call knob into the fragments a machine definition
- * spreads, so mounting one is a spread instead of eight hand-spliced points.
- *
- * The three points that used to fail only at runtime are gone at the type
- * level rather than documented:
- *
- *   - The settle cells run the inherited `succeed` / `fail` verb and hand the
- *     already-settled Model to {@link SettleFold}. There is no cell for a
- *     consumer to write in the wrong order.
- *   - `interpret` is `knob.handlers()` — the form that RETURNS the settle Msg
- *     so it re-enters the reducer. A consumer that spreads the fragment cannot
- *     substitute a dispatching handler for it.
- *   - `subscribe` carries `subscribeDeadline`, so the retry timer is armed by
- *     construction rather than by remembering.
- *
- * A deadline-exceeded call settles inside the slice and emits no settle Msg, so
- * it reaches no `onErr`. {@link MountConfig.onDeadline} is that failure class's
- * fold — omit it and the slice still advances, exactly as omitting `onErr`
- * does.
- *
- * Nothing is taken away. The slice stays a plain field at `slice` that the
- * consumer reads, `replay` sees and the journal prints, and every verb the
- * fragments call is still exported and callable by hand — a consumer that
- * wants a settle cell this shape cannot express writes that one cell itself and
- * spreads the rest. PURE: a record of closures over `knob` and `config`, no
- * clock and no RNG.
- */
-export function mountResilientCall<
-  Slice extends string,
-  I,
-  R,
-  Model extends { readonly [K in Slice]: ResilientState<I, R> },
-  AttemptType extends string,
-  AttemptMsg,
-  OkMsg extends { readonly key: string },
-  ErrMsg extends { readonly key: string },
-  Handlers,
-  C extends Cmd = never,
-  N extends string = DefaultResilientName,
->(
-  knob: MountableKnob<I, R, OkMsg, ErrMsg, Handlers, N>,
-  config: MountConfig<
-    Model,
-    Slice,
-    I,
-    R,
-    AttemptType,
-    AttemptMsg,
-    OkMsg,
-    ErrMsg,
-    C,
-    N
-  >,
-): MountedResilientCall<
-  Model,
-  Slice,
-  I,
-  R,
-  AttemptType,
-  AttemptMsg,
-  OkMsg,
-  ErrMsg,
-  C,
-  Handlers,
-  N
-> {
-  const { slice, attempt, onOk, onErr, onDeadline } = config;
-
-  // A computed key of a generic literal type widens to a string index
-  // signature, which is the one place this file asserts: the assertion says
-  // only what `Slice extends string` already pins.
-  function put(model: Model, next: ResilientState<I, R>): Model {
-    return {
-      ...model,
-      ...({ [slice]: next } as { readonly [K in Slice]: ResilientState<I, R> }),
-    };
-  }
-
-  // The settle shape both `resilient_ok` and `resilient_err` have: inherited
-  // verb, then the consumer's fold over the Model it settled.
-  function settle<M extends { readonly key: string }>(
-    verb: (s: ResilientState<I, R>, key: string, msg: M) => Settle<I, R>,
-    fold: SettleFold<Model, M, C> | undefined,
-  ): MountedCell<Model, M, I, C> {
-    return (model, msg) => {
-      const [next, cmds] = verb(model[slice], msg.key, msg);
-      const settled = put(model, next);
-      if (fold === undefined) return [settled, cmds];
-      const [folded, extra] = fold(settled, msg);
-      return [folded, [...cmds, ...extra]];
-    };
-  }
-
-  const update = {
-    [attempt.on]: (model: Model, msg: AttemptMsg) => {
-      const [next, cmds] = attempt.run(model[slice], msg);
-      return [put(model, next), cmds] as const;
-    },
-    // Keyed off the knob's own name, not the `resilient_*` literals: a knob
-    // built with `name: "jev"` emits `jev_ok` / `jev_err`, and a mount that
-    // spelled the literals would spread cells nothing ever dispatches to.
-    [`${knob.name}_ok`]: settle<OkMsg>(
-      (s, key, msg) => knob.succeed(s, key, msg),
-      onOk,
-    ),
-    [`${knob.name}_err`]: settle<ErrMsg>(
-      (s, key, msg) => knob.fail(s, key, msg),
-      onErr,
-    ),
-    // The one settle path that carries no settle Msg: `onTimer` writes
-    // `failed` straight into the slice, so a mounted `onErr` never sees it. The
-    // cell reads the transition off the two slices instead of inventing a Msg —
-    // whichever key moved INTO `failed` is the call that just died.
-    //
-    // Keyed off the knob's name for the same reason the two settle cells are
-    // (#238): the knob's deadline Sub dispatches `<name>_deadline`, so a cell
-    // spelling the bare literal would be one two named knobs both claim — and
-    // the second spread into `defineMachine` would silently win.
-    [deadlineMsgType(deadlineNameOf(knob.name))]: (
-      model: Model,
-      msg: ResilientTimerMsg<N>,
-    ) => {
-      const before = model[slice];
-      const [next, cmds] = knob.onTimer(before, msg);
-      const advanced = put(model, next);
-      if (onDeadline === undefined) return [advanced, cmds] as const;
-      let folded = advanced;
-      const extra: C[] = [];
-      for (const [key, call] of Object.entries(next.calls)) {
-        if (call.phase !== "failed") continue;
-        if (before.calls[key]?.phase === "failed") continue;
-        const [m, c] = onDeadline(folded, { key, error: call.error, msg });
-        folded = m;
-        extra.push(...c);
-      }
-      return [folded, [...cmds, ...extra]] as const;
-    },
-  } as MountedResilientCall<
-    Model,
-    Slice,
-    I,
-    R,
-    AttemptType,
-    AttemptMsg,
-    OkMsg,
-    ErrMsg,
-    C,
-    Handlers,
-    N
-  >["update"];
-
-  return {
-    init: () =>
-      ({ [slice]: knob.init() }) as {
-        readonly [K in Slice]: ResilientState<I, R>;
-      },
-    update,
-    subscriptions: (model) => knob.subs(model[slice]),
-    subscribe: { deadline: subscribeDeadline },
-    interpret: knob.handlers(),
-  };
-}
-
-/**
- * Re-export the deadline Sub primitives so consumers (and tests) wire one
- * import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the
- * Sub literal this knob's `subs` emits.
- */
-export { subscribeDeadline, deadlineSub };
-export type { DeadlineSub, DeadlineExceeded };

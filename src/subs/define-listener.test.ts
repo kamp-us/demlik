@@ -1,12 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  defineMachine,
-  type NoCtx,
-  type Reducer,
-  run,
-  type Sub,
-  subId,
-} from "../index";
+import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
+import { run } from "../promise";
 import { defineListener } from "./define-listener";
 
 // The two silent leaks `defineListener` makes unrepresentable (see the module
@@ -14,7 +8,7 @@ import { defineListener } from "./define-listener";
 // `remove` handed a DIFFERENT function than `add` saw. Both are checked here
 // against a fake target that records the exact references it was given.
 
-type TickSub = Sub<"tick"> & { readonly channel: string };
+type TickSub = Sub<"tick", { readonly channel: string }>;
 type State = { readonly armed: boolean; readonly seen: readonly number[] };
 type Msg =
   | { readonly type: "tick"; readonly value: number }
@@ -50,7 +44,19 @@ function fakeTarget() {
   };
 }
 
-function machineFor(
+const machine = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    sub: {} as TickSub,
+    ctx: {} as NoCtx,
+  },
+  init: () => [{ armed: true, seen: [] }, []],
+  update,
+  subs: [{ type: "tick", deps: (s) => (s.armed ? { channel: "main" } : null) }],
+});
+
+function runnersFor(
   target: ReturnType<typeof fakeTarget>,
   seenSubs: TickSub[] = [],
 ) {
@@ -64,32 +70,18 @@ function machineFor(
     },
   });
 
-  return defineMachine({
-    types: {
-      model: {} as State,
-      msg: {} as Msg,
-      sub: {} as TickSub,
-      ctx: {} as NoCtx,
-    },
-    init: () => [{ armed: true, seen: [] }, []],
-    update,
-    subscriptions: (s) =>
-      s.armed
-        ? [{ id: subId("tick:main"), type: "tick", channel: "main" }]
-        : [],
-    subscribe: {
-      // Drop-on-null: negatives are filtered, the listener stays armed.
-      tick: fromFake<Msg>((_sub, value) =>
-        value < 0 ? null : { type: "tick", value },
-      ),
-    },
-  });
+  return {
+    // Drop-on-null: negatives are filtered, the listener stays armed.
+    tick: fromFake<Msg>((_sub, value) =>
+      value < 0 ? null : { type: "tick", value },
+    ),
+  };
 }
 
 describe("defineListener — derived, reference-identical cleanup", () => {
   it("adds on subscribe and folds emitted values into State", async () => {
     const target = fakeTarget();
-    const rt = await run(machineFor(target), {}).ready;
+    const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
 
     expect(target.armedCount).toBe(1);
     target.emit(7);
@@ -102,7 +94,7 @@ describe("defineListener — derived, reference-identical cleanup", () => {
 
   it("removes the IDENTICAL reference it added — no phantom remove, no leak", async () => {
     const target = fakeTarget();
-    const rt = await run(machineFor(target), {}).ready;
+    const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
 
     await rt.dispatch({ type: "disarm" });
 
@@ -119,7 +111,7 @@ describe("defineListener — derived, reference-identical cleanup", () => {
 
   it("cleanup is not a no-op — post-teardown emissions never reach the machine", async () => {
     const target = fakeTarget();
-    const rt = await run(machineFor(target), {}).ready;
+    const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
 
     target.emit(1);
     await rt.idle();
@@ -135,7 +127,7 @@ describe("defineListener — derived, reference-identical cleanup", () => {
 
   it("msgFn → null drops the dispatch but leaves the listener armed", async () => {
     const target = fakeTarget();
-    const rt = await run(machineFor(target), {}).ready;
+    const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
 
     target.emit(-5);
     await rt.idle();
@@ -152,19 +144,21 @@ describe("defineListener — derived, reference-identical cleanup", () => {
   it("passes the concrete Sub to add/remove so the target can be keyed on it", async () => {
     const target = fakeTarget();
     const seenSubs: TickSub[] = [];
-    const rt = await run(machineFor(target, seenSubs), {}).ready;
+    const rt = await run(machine, {
+      subscribe: runnersFor(target, seenSubs),
+    }).ready;
 
     expect(seenSubs).toHaveLength(1);
-    // No cast at the substrate edge — `channel` is readable because `S` is
-    // pinned when the target is defined.
-    expect(seenSubs[0]?.channel).toBe("main");
+    // No cast at the substrate edge — `deps.channel` is readable because `S`
+    // is pinned when the target is defined.
+    expect(seenSubs[0]?.deps.channel).toBe("main");
 
     await rt.stop();
   });
 
   it("stop() tears the listener down too", async () => {
     const target = fakeTarget();
-    const rt = await run(machineFor(target), {}).ready;
+    const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
     expect(target.armedCount).toBe(1);
 
     await rt.stop();
@@ -173,7 +167,7 @@ describe("defineListener — derived, reference-identical cleanup", () => {
 
   it("dispatches nothing when the projection returns null for every event", async () => {
     const target = fakeTarget();
-    const rt = await run(machineFor(target), {}).ready;
+    const rt = await run(machine, { subscribe: runnersFor(target) }).ready;
     const observed = vi.fn();
     rt.observe(observed);
 

@@ -22,14 +22,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  type Cmd,
-  defineMachine,
-  replay,
-  run,
-  type Store,
-  tryInterpret,
-} from "../index";
+import { type Cmd, defineMachine, replay, type Store } from "../index";
+import { run } from "../promise";
 import { useMachine } from "../react/index";
 import {
   defaultRetryPolicy,
@@ -182,13 +176,6 @@ const resilientFetch = defineMachine({
       ];
     },
   },
-  interpret: {
-    do_fetch: tryInterpret<DoFetch, string, RfMsg, RfCtx>(
-      (cmd, ctx) => ctx.http(cmd.url),
-      (body) => ({ type: "fetch_ok", body }),
-      (err) => ({ type: "fetch_err", error: String(err), at: Date.now() }),
-    ),
-  },
 });
 
 describe("how-to — add resilience (retry/backoff) to a call", () => {
@@ -320,8 +307,8 @@ describe("how-to — drive a machine from React", () => {
   });
 
   it("advances state on dispatch through the run-loop useMachine wraps", async () => {
-    // `useMachine(machine, { ctx })` internally does `run(machine, { ctx })`
-    // and returns `[state, dispatch]`. We drive that engine directly.
+    // `useMachine(machine, { ctx, run })` calls the `run` it is handed and
+    // returns `[state, dispatch]`. We drive the Promise engine's `run` directly.
     const runtime = await run(counter, { ctx: undefined }).ready;
     expect(runtime.getState().count).toBe(0); // initial
     await runtime.dispatch({ type: "inc" });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Interpret, type Reducer, run } from "./index";
+import { defineMachine, type Reducer } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // First-class run result (#46): `Runtime.result()` / `Runtime.done()`, driven
@@ -26,7 +27,6 @@ function counterMachine() {
     types: { model: {} as State, msg: {} as Msg, ctx: undefined },
     init: (_loaded) => [{ phase: "running", count: 0, output: null }, []],
     update,
-    interpret: {} as Interpret<Msg, never, undefined>,
   });
 }
 

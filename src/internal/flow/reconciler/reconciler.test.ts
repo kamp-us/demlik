@@ -7,9 +7,10 @@ import {
   type PageErrMsg,
   type PageOkMsg,
 } from "../../paginate/paginated-walk";
+import { deadlineSub } from "../../resilience/deadline";
+import { runCmdDef } from "../../resilience/resilient-call";
 import {
   createReconciler,
-  deadlineSub,
   type ReconcilerState,
   type ReconcilerTimerMsg,
   type ScanPageCmd,
@@ -126,19 +127,17 @@ const make = (
 ): Rec =>
   createReconciler<Node, Desired, Page, Change, ApplyCmd, number>(config, rng);
 
-// Convenience constructors for the inherited scan settle Msgs.
-const okMsg = (result: Page, at: number): PageOkMsg<Page> => ({
-  type: "resilient_ok",
-  key: PAGE_KEY,
-  result,
-  at,
-});
-const errMsg = (error: unknown, at: number): PageErrMsg => ({
-  type: "resilient_err",
-  key: PAGE_KEY,
-  error,
-  at,
-});
+// Convenience constructors for the scan settle Msgs the engine mints from the
+// page fetch's outcome — built with the run Cmd def's own `ok` / `err`.
+const scanDef = runCmdDef<number, Page>();
+const okMsg = (result: Page, at: number): PageOkMsg<Page> =>
+  scanDef.ok(scanDef({ key: PAGE_KEY, input: 0 }), result, at);
+const errMsg = (cause: unknown, at: number): PageErrMsg =>
+  scanDef.err(
+    scanDef({ key: PAGE_KEY, input: 0 }),
+    { _tag: "port_rejected", cause },
+    at,
+  );
 const fetchCmd = (offset: number): ScanPageCmd<number> => ({
   type: "resilient_run",
   key: PAGE_KEY,
@@ -198,7 +197,7 @@ describe("createReconciler — pageOk (accumulate + advance)", () => {
     const rec = make();
     let s = rec.init();
     [s] = rec.scan(s, 0);
-    const [s2, cmds] = rec.pageOk(s, page(0, [node("a", 1)]), 10);
+    const [s2, cmds] = rec.pageOk(s, okMsg(page(0, [node("a", 1)]), 10));
     expect(s2.actual).toEqual([node("a", 1)]);
     expect(s2.phase).toBe("scanning");
     // Next scan page fetched (offset 1).
@@ -209,8 +208,8 @@ describe("createReconciler — pageOk (accumulate + advance)", () => {
     const rec = make({ ...baseConfig, rateLimit: undefined });
     let s = rec.init();
     [s] = rec.scan(s, 0);
-    [s] = rec.pageOk(s, page(0, [node("a", 1)]), 0);
-    [s] = rec.pageOk(s, page(1, [node("b", 2), node("c", 0)]), 0);
+    [s] = rec.pageOk(s, okMsg(page(0, [node("a", 1)]), 0));
+    [s] = rec.pageOk(s, okMsg(page(1, [node("b", 2), node("c", 0)]), 0));
     expect(s.actual).toEqual([node("a", 1), node("b", 2), node("c", 0)]);
   });
 });
@@ -228,8 +227,7 @@ describe("createReconciler — plan on scan completion", () => {
     [s] = rec.scan(s, 0);
     const [s2, cmds] = rec.pageOk(
       s,
-      page(0, [node("a", 1), node("b", 2), node("c", 0)], true),
-      10,
+      okMsg(page(0, [node("a", 1), node("b", 2), node("c", 0)], true), 10),
     );
     expect(s2.phase).toBe("applying");
     expect(s2.plan).toEqual([
@@ -247,8 +245,7 @@ describe("createReconciler — plan on scan completion", () => {
     [s] = rec.scan(s, 0);
     const [s2, cmds] = rec.pageOk(
       s,
-      page(0, [node("a", 2), node("b", 2), node("c", 2)], true),
-      10,
+      okMsg(page(0, [node("a", 2), node("b", 2), node("c", 2)], true), 10),
     );
     expect(s2.phase).toBe("done");
     expect(s2.plan).toEqual([]);
@@ -270,8 +267,7 @@ describe("createReconciler — apply loop", () => {
     // b@2 is already at target (not planned); a@1 and c@0 lag → plan [a, c].
     [s, cmds] = rec.pageOk(
       s,
-      page(0, [node("a", 1), node("b", 2), node("c", 0)], true),
-      0,
+      okMsg(page(0, [node("a", 1), node("b", 2), node("c", 0)], true), 0),
     );
     expect(cmds).toEqual([applyCmd("a", 2)]); // first change
 
@@ -295,8 +291,7 @@ describe("createReconciler — apply loop", () => {
     [s] = rec.scan(s, 0);
     [s] = rec.pageOk(
       s,
-      page(0, [node("a", 1), node("b", 2), node("c", 2)], true),
-      0,
+      okMsg(page(0, [node("a", 1), node("b", 2), node("c", 2)], true), 0),
     );
     [s] = rec.applied(s, { nodeId: "a", to: 2 }, 0);
     expect(s.applied.entries.a?.value).toEqual({ nodeId: "a", to: 2 });
@@ -309,8 +304,7 @@ describe("createReconciler — apply loop", () => {
     [s] = rec.scan(s, 0);
     [s] = rec.pageOk(
       s,
-      page(0, [node("a", 1), node("b", 2), node("c", 2)], true),
-      0,
+      okMsg(page(0, [node("a", 1), node("b", 2), node("c", 2)], true), 0),
     );
     [s] = rec.applied(s, { nodeId: "a", to: 2 }, 0); // → done
     const before = s;
@@ -332,8 +326,7 @@ describe("createReconciler — idempotent re-apply (eviction resume)", () => {
     // Plan: a, c (both lag; b@2 already at target → not planned).
     [s] = rec.pageOk(
       s,
-      page(0, [node("a", 1), node("b", 2), node("c", 0)], true),
-      0,
+      okMsg(page(0, [node("a", 1), node("b", 2), node("c", 0)], true), 0),
     );
     // Apply a.
     [s] = rec.applied(s, { nodeId: "a", to: 2 }, 0);
@@ -357,8 +350,7 @@ describe("createReconciler — idempotent re-apply (eviction resume)", () => {
     [s] = rec.scan(s, 0);
     [s] = rec.pageOk(
       s,
-      page(0, [node("a", 1), node("b", 2), node("c", 0)], true),
-      0,
+      okMsg(page(0, [node("a", 1), node("b", 2), node("c", 0)], true), 0),
     );
     [s] = rec.applied(s, { nodeId: "a", to: 2 }, 0);
     [s] = rec.applied(s, { nodeId: "c", to: 2 }, 0); // done, both in ledger
@@ -412,7 +404,7 @@ describe("createReconciler — scan resilience", () => {
     const rec = make();
     let s = rec.init();
     [s] = rec.scan(s, 0);
-    const [s2, cmds] = rec.pageErr(s, "boom", 100);
+    const [s2, cmds] = rec.pageErr(s, errMsg("boom", 100));
     expect(cmds).toEqual([]); // backed off
     expect(s2.phase).toBe("scanning");
     expect(s2.walk.resilience.calls[PAGE_KEY]).toEqual({
@@ -428,7 +420,7 @@ describe("createReconciler — scan resilience", () => {
     const rec = make();
     let s = rec.init();
     [s] = rec.scan(s, 0);
-    [s] = rec.pageErr(s, "boom", 0);
+    [s] = rec.pageErr(s, errMsg("boom", 0));
     const [s2, cmds] = rec.onTimer(s, {
       type: "deadline_exceeded",
       id: `resilient:retry:${PAGE_KEY}`,
@@ -449,7 +441,7 @@ describe("createReconciler — scan resilience", () => {
         id: `resilient:retry:${PAGE_KEY}`,
         atMs: 0,
       });
-      [s] = rec.pageErr(s, `e${i}`, 0);
+      [s] = rec.pageErr(s, errMsg(`e${i}`, 0));
     }
     expect(s.walk.resilience.calls[PAGE_KEY]?.phase).toBe("failed");
     expect(s.phase).toBe("failed");
@@ -460,7 +452,7 @@ describe("createReconciler — scan resilience", () => {
     const rec = make();
     let s = rec.init();
     [s] = rec.scan(s, 0);
-    [s] = rec.pageOk(s, page(0, [node("a", 1)], true), 0); // scan done → applying
+    [s] = rec.pageOk(s, okMsg(page(0, [node("a", 1)], true), 0)); // scan done → applying
     const before = s;
     const [after, cmds] = rec.onTimer(s, {
       type: "deadline_exceeded",
@@ -480,7 +472,7 @@ describe("createReconciler — subs", () => {
   it("arms a scan deadline timer while a scan page is in flight", () => {
     const rec = make();
     const [s] = rec.scan(rec.init(), 100);
-    expect(rec.subs(s)).toEqual([
+    expect(rec.deadlines(s)).toEqual([
       deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_100),
     ]);
   });
@@ -489,36 +481,8 @@ describe("createReconciler — subs", () => {
     const rec = make({ ...baseConfig, rateLimit: undefined });
     let s = rec.init();
     [s] = rec.scan(s, 0);
-    [s] = rec.pageOk(s, page(0, [node("a", 1)], true), 0); // → applying
-    expect(rec.subs(s)).toEqual([]);
-  });
-});
-
-// ===========================================================================
-// handlers — the scan port routes Ok/Err to settle Msgs
-// ===========================================================================
-
-describe("createReconciler — handlers route scan Ok/Err", () => {
-  it("routes a resolving actual-list fetch to a resilient_ok msg carrying the page", async () => {
-    const rec = make();
-    const p = page(3, [node("x", 1)]);
-    const handler = rec.handlers({ run: async () => p }).resilient_run;
-    const msg = await handler(fetchCmd(3), {} as never);
-    expect(msg?.type).toBe("resilient_ok");
-    if (msg?.type === "resilient_ok") expect(msg.result).toEqual(p);
-  });
-
-  it("routes a rejecting fetch to a resilient_err msg carrying the original error", async () => {
-    const rec = make();
-    const boom = new Error("list 500");
-    const handler = rec.handlers({
-      run: async () => {
-        throw boom;
-      },
-    }).resilient_run;
-    const msg = await handler(fetchCmd(0), {} as never);
-    expect(msg?.type).toBe("resilient_err");
-    if (msg?.type === "resilient_err") expect(msg.error).toBe(boom);
+    [s] = rec.pageOk(s, okMsg(page(0, [node("a", 1)], true), 0)); // → applying
+    expect(rec.deadlines(s)).toEqual([]);
   });
 });
 
@@ -548,7 +512,6 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof rec.subs>[number],
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -558,12 +521,12 @@ function makeMachine(
         const [slice, cmds] = rec.scan(s.rec, m.at);
         return [{ rec: slice }, cmds];
       },
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = rec.pageOk(s.rec, m.result, m.at);
+      resilient_run_ok: (s, m) => {
+        const [slice, cmds] = rec.pageOk(s.rec, m);
         return [{ rec: slice }, cmds];
       },
-      resilient_err: (s, m) => {
-        const [slice, cmds] = rec.pageErr(s.rec, m.error, m.at);
+      resilient_run_err: (s, m) => {
+        const [slice, cmds] = rec.pageErr(s.rec, m);
         return [{ rec: slice }, cmds];
       },
       change_done: (s, m) => {
@@ -575,8 +538,7 @@ function makeMachine(
         return [{ rec: slice }, cmds];
       },
     },
-    subscriptions: (s) => rec.subs(s.rec),
-    subscribe: { deadline: () => () => {} },
+    subs: [{ type: "timer", deps: (s: HostState) => rec.timer(s.rec) }],
   });
   return { rec, machine };
 }
@@ -584,7 +546,7 @@ function makeMachine(
 const ctx = {} as object;
 
 describe("createReconciler — wired in a machine (replay)", () => {
-  const { machine } = makeMachine();
+  const { rec, machine } = makeMachine();
   const bound = bindMachine(machine, ctx);
 
   it("init produces an idle reconcile with no subs", () => {
@@ -626,13 +588,27 @@ describe("createReconciler — wired in a machine (replay)", () => {
   });
 
   it("reconcile → scan err leaves a retry + deadline timer desired", () => {
-    bound.expectActiveSubs(
-      { msgs: [{ type: "reconcile", at: 0 }, errMsg("e", 0)] },
-      [
-        deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
-        deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
-      ],
-    );
+    const { state, subs } = bound.replay({
+      msgs: [{ type: "reconcile", at: 0 }, errMsg("e", 0)],
+    });
+    expect(rec.deadlines(state.rec)).toEqual([
+      deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
+      deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
+    ]);
+    // The built-in `timer` Sub arms the soonest of them — the retry.
+    expect(subs).toEqual([
+      expect.objectContaining({
+        type: "timer",
+        deps: {
+          ms: 0,
+          msg: {
+            type: "deadline_exceeded",
+            id: `resilient:retry:${PAGE_KEY}`,
+            atMs: 0,
+          },
+        },
+      }),
+    ]);
   });
 });
 
@@ -678,7 +654,6 @@ function makeRePlanMachine() {
       model: {} as HostState,
       msg: {} as RePlanHostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof rec.subs>[number],
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -688,12 +663,12 @@ function makeRePlanMachine() {
         const [slice, cmds] = rec.scan(s.rec, m.at);
         return [{ rec: slice }, cmds];
       },
-      resilient_ok: (s, m) => {
-        const [slice, cmds] = rec.pageOk(s.rec, m.result, m.at);
+      resilient_run_ok: (s, m) => {
+        const [slice, cmds] = rec.pageOk(s.rec, m);
         return [{ rec: slice }, cmds];
       },
-      resilient_err: (s, m) => {
-        const [slice, cmds] = rec.pageErr(s.rec, m.error, m.at);
+      resilient_run_err: (s, m) => {
+        const [slice, cmds] = rec.pageErr(s.rec, m);
         return [{ rec: slice }, cmds];
       },
       change_done: (s, m) => {
@@ -709,8 +684,7 @@ function makeRePlanMachine() {
         return [{ rec: slice }, cmds];
       },
     },
-    subscriptions: (s) => rec.subs(s.rec),
-    subscribe: { deadline: () => () => {} },
+    subs: [{ type: "timer", deps: (s: HostState) => rec.timer(s.rec) }],
   });
   return { rec, machine };
 }
@@ -779,16 +753,21 @@ describe("createReconciler — properties", () => {
 
         // A mid-scan slice carries a non-empty `actual` array — freeze it whole
         // and run the page verbs against it to catch a nested array splice.
-        const mid = deepFreeze(rec.pageOk(s1, page(0, [node("a", 1)]), at)[0]);
-        const [s2] = rec.pageOk(mid, page(1, [node("b", 1)]), at);
-        const [s3] = rec.pageErr(mid, "e", at);
+        const mid = deepFreeze(
+          rec.pageOk(s1, okMsg(page(0, [node("a", 1)]), at))[0],
+        );
+        const [s2] = rec.pageOk(mid, okMsg(page(1, [node("b", 1)]), at));
+        const [s3] = rec.pageErr(mid, errMsg("e", at));
         expect(s2).not.toBe(mid);
         expect(s3).not.toBe(mid);
 
         // An applying slice carries a `plan` array + a populated `applied`
         // ledger — freeze the whole graph and drive the apply loop against it.
         const applying = deepFreeze(
-          rec.pageOk(s1, page(0, [node("a", 1), node("c", 0)], true), at)[0],
+          rec.pageOk(
+            s1,
+            okMsg(page(0, [node("a", 1), node("c", 0)], true), at),
+          )[0],
         );
         const [s4] = rec.applyNext(applying, at);
         const [s5] = rec.applied(applying, { nodeId: "a", to: 2 }, at);
@@ -836,12 +815,11 @@ describe("createReconciler — properties", () => {
             case "ok":
               [s, cmds] = rec.pageOk(
                 s,
-                page(off++, [node(idAt(off), 0)], a.last),
-                a.at,
+                okMsg(page(off++, [node(idAt(off), 0)], a.last), a.at),
               );
               break;
             case "err":
-              [s, cmds] = rec.pageErr(s, "e", a.at);
+              [s, cmds] = rec.pageErr(s, errMsg("e", a.at));
               break;
             case "done":
               [s, cmds] = rec.applied(s, { nodeId: idAt(cur++), to: 2 }, a.at);
@@ -885,7 +863,7 @@ describe("createReconciler — properties", () => {
             node("c", versions.c),
           ];
           let cmds: readonly Cmd[];
-          [s, cmds] = rec.pageOk(s, page(0, actualNodes, true), 0);
+          [s, cmds] = rec.pageOk(s, okMsg(page(0, actualNodes, true), 0));
 
           // The changes that SHOULD be applied: every id whose version < 2,
           // in desired.ids order.
@@ -925,16 +903,16 @@ describe("createReconciler — properties", () => {
           type: fc.constant("reconcile" as const),
           at: fc.nat(10_000),
         }),
-        fc.record({
-          type: fc.constant("resilient_ok" as const),
-          key: fc.constant(PAGE_KEY),
-          result: fc.record({
-            offset: fc.nat(20),
-            nodes: fc.constant([node("a", 0)] as const),
-            last: fc.boolean(),
-          }),
-          at: fc.nat(10_000),
-        }),
+        fc
+          .record({
+            result: fc.record({
+              offset: fc.nat(20),
+              nodes: fc.constant([node("a", 0)] as const),
+              last: fc.boolean(),
+            }),
+            at: fc.nat(10_000),
+          })
+          .map(({ result, at }) => okMsg(result, at)),
         fc.record({
           type: fc.constant("change_done" as const),
           change: fc.constant({ nodeId: "a", to: 2 } as const),
@@ -987,16 +965,18 @@ describe("createReconciler — properties", () => {
           let cmds: readonly Cmd[];
           [done, cmds] = rec.pageOk(
             done,
-            page(
-              0,
-              [
-                node("a", versions.a),
-                node("b", versions.b),
-                node("c", versions.c),
-              ],
-              true,
+            okMsg(
+              page(
+                0,
+                [
+                  node("a", versions.a),
+                  node("b", versions.b),
+                  node("c", versions.c),
+                ],
+                true,
+              ),
+              at,
             ),
-            at,
           );
           let guard = 0;
           while (done.phase === "applying" && guard++ < 10) {
@@ -1022,7 +1002,10 @@ describe("createReconciler — properties", () => {
             });
             // A non-`Error` plain-data error keeps the sentinel JSON-stable; an
             // `Error` here would already round-trip to `{}` inside resilient-call.
-            [failed] = rec.pageErr(failed, { _tag: "scan_failed", i }, at);
+            [failed] = rec.pageErr(
+              failed,
+              errMsg({ _tag: "scan_failed", i }, at),
+            );
           }
           expect(failed.phase).toBe("failed");
           expect(JSON.parse(JSON.stringify(failed))).toEqual(failed);

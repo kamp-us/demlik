@@ -10,7 +10,7 @@
  * and the vortex arena tick (`room.ts` `armTick` + `onTick`) replicates the
  * exact shape for the 18 Hz game clock. The two old `do_alarm`/`do_ws` Subs were
  * dropped (see `./index`'s historical note) because `toMachine` fixes the agent
- * machine's Sub type to `DeadlineSub`, so they could never union into a grain's
+ * machine's Sub type to `DeadlinesSub`, so they could never union into a grain's
  * Sub set — leaving the alarm re-arm a HOST concern with no first-class home.
  *
  * {@link durableTimer} is that home: a tiny, transport- and Msg-agnostic helper

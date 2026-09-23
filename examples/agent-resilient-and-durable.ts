@@ -6,9 +6,10 @@
  * FAKE tools (no API key, no secrets, runs anywhere):
  *
  *   ACT 1  RELIABILITY — a tool call hits a flaky API (fails once, succeeds the
- *          retry). One line of `withResilience(...)` (circuit + rateLimit +
- *          retry) then `withDeadline(...)` makes it self-heal. The machine never
- *          authored a retry; the wrapper diverted the effect through the gate.
+ *          retry). The machine calls `createResilientCall`'s plain functions
+ *          (circuit + rateLimit + retry) from its own `update`, and it
+ *          self-heals: the retry is data in the Model, never a loop in a
+ *          handler.
  *
  *   ACT 2  DURABILITY — run a real `createAgent` agent partway, `JSON.stringify`
  *          its Model (it is plain data), DROP the runtime, and resume a FRESH
@@ -25,28 +26,24 @@
  *          (Node 23 strips the types; no build step for the example itself.)
  */
 
-import {
-  type Cmd,
-  defineMachine,
-  type Interpret,
-  type Machine,
-  type Reducer,
-  type Runtime,
-  run,
-  type Store,
-} from "@demlik/tea";
+import { defineMachine, type Interpret, type Machine, type Reducer, type Runtime, type Store } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   type AgentCmd,
   type AgentMachineMsg,
   type AgentState,
   type AgentTurn,
   createAgent,
-  type DeadlineSub,
+  type DeadlinesSub,
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
 import { recorder, replayTrace } from "@demlik/tea/persistence";
-import { withDeadline, withResilience } from "@demlik/tea/resilience";
+import {
+  createResilientCall,
+  type ResilientState,
+  type ResilientTimerMsg,
+} from "@demlik/tea/resilience";
 
 // ===========================================================================
 // Tiny presentation helpers — narrate the story, nothing load-bearing.
@@ -68,26 +65,42 @@ async function until(cond: () => boolean, label: string): Promise<void> {
 // ===========================================================================
 // ACT 1 — RELIABILITY
 //
-// A focused machine: ONE agent tool call against a flaky weather API. The base
-// machine authors only the plain effect Cmd `call_tool`; `withResilience`
-// diverts it through cache → circuit → rateLimit → retry, and `withDeadline`
-// caps the whole thing. The base never sees a retry — the wrapper owns it.
+// A focused machine: ONE agent tool call against a flaky weather API. The
+// resilience is a knob of plain functions (`createResilientCall`) the machine
+// calls from its own `update`: `attempt` gates the call through circuit →
+// rate limit, `settle` folds the result or backs off, `onTimer` re-issues it,
+// and the engine's built-in `timer` arms the retry. The one effect is the
+// knob's `Cmd.define`d `resilient_run`, and its handler just returns an
+// outcome — the machine never writes a retry loop.
 // ===========================================================================
 
+/** The resilience knob: the call's input is a city, its result the forecast. */
+const weatherCall = createResilientCall<string, string>(
+  {
+    circuit: { threshold: 3, cooldownMs: 1 }, // open after repeated failures
+    rateLimit: { capacity: 5, refillPerSec: 5 }, // token bucket per call key
+    retry: {
+      baseMs: 10, // tiny backoff → the demo stays snappy + deterministic
+      factor: 2,
+      capMs: 50,
+      maxAttempts: 5,
+      jitter: "none", // pinned: no RNG in the delay
+    },
+  },
+  () => 0, // injected jitter RNG (unused with jitter:"none") — pinned anyway
+);
+
 interface ToolState {
-  readonly status: "idle" | "calling" | "done";
+  /** The knob's slice — plain data, so it persists and replays with the rest. */
+  readonly call: ResilientState<string, string>;
   readonly result: string | null;
 }
 
 // `call` carries `at` — the wall time the triggering Msg supplies as data
-// (time-as-data). The resilience wrapper reads it off this Msg to gate the cold
-// attempt, so the breaker / bucket compare against real wall time, never `0`.
+// (time-as-data), so the breaker and bucket compare against real wall time.
 type ToolMsg =
   | { readonly type: "call"; readonly city: string; readonly at: number }
-  | { readonly type: "tool_ok"; readonly result: string };
-
-// The TARGET effect Cmd — the base emits it plainly; the wrapper hardens it.
-type CallTool = Cmd<"call_tool"> & { readonly city: string };
+  | ResilientTimerMsg;
 
 interface ToolCtx {
   // The flaky downstream — throws the first time, succeeds the retry.
@@ -98,30 +111,56 @@ const toolStep = defineMachine({
   types: {
     model: {} as ToolState,
     msg: {} as ToolMsg,
-    cmd: {} as CallTool,
     ctx: {} as ToolCtx,
   },
+  cmds: [weatherCall.run],
   init: (loaded) =>
-    loaded !== null ? [loaded, []] : [{ status: "idle", result: null }, []],
+    loaded !== null
+      ? [loaded, []]
+      : [{ call: weatherCall.init(), result: null }, []],
   update: {
-    call: (_s, m) => [
-      { status: "calling", result: null },
-      [{ type: "call_tool", city: m.city }],
-    ],
-    // The follow-up the base interpret returns on success — records the result.
-    tool_ok: (_s, m) => [{ status: "done", result: m.result }, []],
-  },
-  interpret: {
-    // The TARGET's base handler — the actual fallible work the wrapper wraps.
-    call_tool: async (cmd, ctx): Promise<ToolMsg> => {
-      const result = await ctx.weather(cmd.city);
-      return { type: "tool_ok", result };
+    call: (s, m) => {
+      const [call, cmds] = weatherCall.attempt(s.call, m.city, m.city, m.at);
+      return [{ ...s, call }, cmds];
+    },
+    // Both settle Msgs go through `settle`: a success folds the result in, a
+    // failure backs off and waits on the retry timer.
+    resilient_run_ok: (s, m) => {
+      const { call, cmds, outcome } = weatherCall.settle(s.call, m);
+      const result = outcome.kind === "done" ? outcome.value : s.result;
+      return [{ call, result }, cmds];
+    },
+    resilient_run_err: (s, m) => {
+      const { call, cmds } = weatherCall.settle(s.call, m);
+      return [{ ...s, call }, cmds];
+    },
+    // The retry timer fired: `onTimer` re-gates and re-issues the call.
+    deadline_exceeded: (s, m) => {
+      const [call, cmds] = weatherCall.onTimer(s.call, m);
+      return [{ ...s, call }, cmds];
     },
   },
+  subs: [{ type: "timer", deps: (s: ToolState) => weatherCall.timer(s.call) }],
 });
 
+// The machine is data; its handler rides beside it, and `run` takes it. It
+// returns an outcome — the engine turns it into the settle Msg.
+const toolStepInterpret: Interpret<
+  ToolMsg,
+  ReturnType<typeof weatherCall.run>,
+  ToolCtx
+> = {
+  resilient_run: async (cmd, ctx) => {
+    try {
+      return ctx.ok(await ctx.weather(cmd.input));
+    } catch (cause) {
+      return ctx.err({ _tag: "port_rejected", cause: String(cause) });
+    }
+  },
+};
+
 async function act1Reliability() {
-  line("ACT 1 — RELIABILITY: the retry you do not write");
+  line("ACT 1 — RELIABILITY: the retry is data, not a loop");
 
   // The flaky tool: attempt #1 throws (transient 503), attempt #2 returns.
   let attempts = 0;
@@ -135,61 +174,35 @@ async function act1Reliability() {
     },
   };
 
-  // ONE line of wrapping. The base `toolStep` knows nothing about any of it.
-  const resilient = withResilience(
-    toolStep,
-    {
-      target: "call_tool", // harden THIS Cmd; everything else passes through
-      at: (m) => (m.type === "call" ? m.at : 0), // cold-gate wall time, as data
-      circuit: { threshold: 3, cooldownMs: 1 }, // open after repeated failures
-      rateLimit: { capacity: 5, refillPerSec: 5 }, // token bucket per call key
-      retry: {
-        baseMs: 10, // tiny backoff → the demo stays snappy + deterministic
-        factor: 2,
-        capMs: 50,
-        maxAttempts: 5,
-        jitter: "none", // pinned: no RNG in the delay
-      },
-    },
-    () => 0, // injected jitter RNG (unused with jitter:"none") — pinned anyway
-  );
-  const guarded = withDeadline(resilient, { ms: 10_000 });
-
-  const runtime = await run(guarded, { ctx }).ready;
+  const runtime = await run(toolStep, { interpret: toolStepInterpret, ctx })
+    .ready;
 
   say("the agent dispatched ONE tool call: weather('Istanbul')");
   await runtime.dispatch({ type: "call", city: "Istanbul", at: Date.now() });
 
-  // The wrapper diverts the effect through its gate: the first attempt throws,
-  // it schedules a retry timer, fires it, re-gates, and the second attempt
-  // succeeds. The recovered result + the breaker/retry state live in the
-  // wrapper's `$resilience` slice — the base never authored a line of it.
+  // The first attempt throws, `settle` backs off and the retry timer fires,
+  // `onTimer` re-gates, and the second attempt succeeds. The recovered result
+  // and the breaker/retry state live in the machine's own `call` slice.
   await until(
-    () =>
-      runtime.getState().base.$resilience.calls.call_tool?.phase ===
-      "succeeded",
+    () => runtime.getState().call.calls.Istanbul?.phase === "succeeded",
     "tool recovered",
   );
 
-  const r = runtime.getState().base.$resilience;
-  const call = r.calls.call_tool;
+  const r = runtime.getState().call;
+  const call = r.calls.Istanbul;
   say(
     `tool hit the flaky API ${attempts}× (attempt 1 threw 503, attempt 2 recovered)`,
   );
-  say(`$resilience.call phase: ${call?.phase}`);
-  say(
-    `$resilience.call result: ${JSON.stringify(call?.phase === "succeeded" ? call.result : null)}`,
-  );
+  say(`call phase: ${call?.phase}`);
+  say(`result: ${JSON.stringify(runtime.getState().result)}`);
   say(
     `circuit breaker now: ${r.circuit.phase} (it absorbed the failure, then closed)`,
   );
+  say(`retry slice for the call: ${JSON.stringify(r.retry)}  ← reset on success`);
   say(
-    `retry slice for the call: ${JSON.stringify(r.retry)}  ← reset on success`,
-  );
-  say(
-    "→ the base machine authored ONE effect Cmd. withResilience retried +\n" +
-      "  recovered it; withDeadline caps the whole thing. Reliability is a\n" +
-      "  function over machine data — not code your reducer ever wrote.",
+    "→ the machine wired four plain functions and one handler. The retry,\n" +
+      "  the breaker and the backoff are data in the Model — not a loop your\n" +
+      "  handler ever ran.",
   );
   await runtime.stop();
 }
@@ -293,7 +306,7 @@ type ResearchMachine = Machine<
   ResearchState,
   AgentMsg,
   ResearchCmd,
-  DeadlineSub,
+  DeadlinesSub,
   object
 >;
 
@@ -400,8 +413,9 @@ async function act2Durability() {
   //     model's script continues at turn #1 (the empty turn that finishes
   //     research); in production the prompt is rebuilt from the durable turns. ---
   const agentB = makeAgent({ i: 1 });
-  const machineB = agentB.toMachine<object>({ toolInterpret: toolInterpret() });
-  const runtimeB = await run(machineB, {
+  const wiredB = agentB.toMachine<object>({ toolInterpret: toolInterpret() });
+  const runtimeB = await run(wiredB.machine, {
+    ...wiredB,
     ctx: {} as object,
     store: snapshotStore(snapshot),
   }).ready;
@@ -445,8 +459,11 @@ async function act3Replay() {
   // --- IN PROD: run the agent end to end, recording every Msg. ---
   const cursor = { i: 0 };
   const agent = makeAgent(cursor);
-  const machine = agent.toMachine<object>({ toolInterpret: toolInterpret() });
-  const runtime = await run(machine, { ctx: {} as object }).ready;
+  const wired = agent.toMachine<object>({ toolInterpret: toolInterpret() });
+  const runtime = await run(wired.machine, {
+    ...wired,
+    ctx: {} as object,
+  }).ready;
   const rec = recorder<ResearchState, AgentMsg>(runtime);
 
   say("prod: recording the Msg trace of a full agent run...");
@@ -466,7 +483,7 @@ async function act3Replay() {
   // never `interpret`, so the fake model + tools are NEVER called again.
   const sameMachine = makeAgent({ i: 0 }).toMachine<object>({
     toolInterpret: toolInterpret(),
-  });
+  }).machine;
   const onSame = replayTrace(sameMachine, trace, {} as object);
   say(`\nreplayTrace(same reducer)   matches: ${onSame.matches}`);
   say(
@@ -493,26 +510,28 @@ async function act3Replay() {
 
 /**
  * The same agent machine, but with a planted regression: when the brain-success
- * cell (`resilient_ok`) retires the LAST stage, the buggy variant FORGETS to let
+ * cell (`resilient_run_ok`) retires the LAST stage, the buggy variant FORGETS to let
  * the conversation clear — it re-attaches the conversation the correct reducer
  * nulled. A classic "stuck agent" leak. We reuse the real machine's cells and
  * override exactly one, faithful to the real types — no `any`, no laundering.
  */
 function buildBuggyMachine(): ResearchMachine {
   const agent = makeAgent({ i: 0 });
-  const good = agent.toMachine<object>({ toolInterpret: toolInterpret() });
+  const good = agent.toMachine<object>({
+    toolInterpret: toolInterpret(),
+  }).machine;
 
   // The agent's `update` is a flat `Reducer` (one cell per Msg.type). Spread it,
-  // then override the `resilient_ok` cell to plant the leak.
+  // then override the `resilient_run_ok` cell to plant the leak.
   const goodUpdate = good.update as Reducer<
     ResearchState,
     AgentMsg,
     ResearchCmd
   >;
-  const realResilientOk = goodUpdate.resilient_ok;
+  const realResilientOk = goodUpdate.resilient_run_ok;
   const buggyUpdate: Reducer<ResearchState, AgentMsg, ResearchCmd> = {
     ...goodUpdate,
-    resilient_ok: (s, m) => {
+    resilient_run_ok: (s, m) => {
       const [next, cmds] = realResilientOk(s, m);
       if (next.run.phase === "done" && next.conversation === null) {
         // BUG: re-attach the conversation the correct reducer cleared.
@@ -528,13 +547,14 @@ function buildBuggyMachine(): ResearchMachine {
       model: {} as ResearchState,
       msg: {} as AgentMsg,
       cmd: {} as ResearchCmd,
-      sub: {} as DeadlineSub,
+      sub: {} as DeadlinesSub,
     },
     init: good.init,
     update: buggyUpdate,
-    subscriptions: good.subscriptions,
-    subscribe: good.subscribe,
-    interpret: good.interpret,
+    subs: good.subs,
+    // The brain run Cmd is `Cmd.define`d: its def rides over so the engine
+    // still mints the brain's settle Msgs.
+    ...(good.cmds !== undefined ? { cmds: good.cmds } : {}),
   });
 }
 

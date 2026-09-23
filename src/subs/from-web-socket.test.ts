@@ -1,12 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  defineMachine,
-  type NoCtx,
-  type Reducer,
-  run,
-  type Sub,
-  subId,
-} from "../index";
+import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
+import { run } from "../promise";
 import { fromWebSocket, type WebSocketSubData } from "./from-web-socket";
 import type {
   MinimalCloseEvent,
@@ -16,7 +10,7 @@ import type {
 } from "./platform";
 
 // Lifecycle contract under a real runtime (issue #286): the socket opens
-// (wsUrl read off the Sub) when the Sub enters `subscriptions(state)`, the
+// (wsUrl read off the Sub's deps) when its `deps` turns non-null, the
 // four lifecycle events route through their callbacks into State, and
 // reconciling the Sub out detaches the handlers BEFORE close(1000) — so the
 // substrate-initiated teardown never fires the consumer's onClose Msg.
@@ -52,7 +46,7 @@ class FakeSocket implements MinimalWebSocket {
   }
 }
 
-type WsSub = Sub<"ws"> & WebSocketSubData;
+type WsSub = Sub<"ws", WebSocketSubData>;
 type State = {
   readonly armed: boolean;
   readonly frames: readonly unknown[];
@@ -95,19 +89,20 @@ function wsMachine() {
       [],
     ],
     update,
-    subscriptions: (s) =>
-      s.armed ? [{ id: subId("ws"), type: "ws", wsUrl: "ws://x/ws" }] : [],
-    subscribe: {
-      ws: fromWebSocket<WsSub, Msg>({
-        onMessage: (data) =>
-          data === "drop-me" ? null : { type: "frame", data },
-        onOpen: () => ({ type: "ws_open" }),
-        onError: () => ({ type: "ws_error" }),
-        onClose: (code, reason) => ({ type: "ws_close", code, reason }),
-      }),
-    },
+    subs: [
+      { type: "ws", deps: (s) => (s.armed ? { wsUrl: "ws://x/ws" } : null) },
+    ],
   });
 }
+
+const subscribe = {
+  ws: fromWebSocket<WsSub, Msg>({
+    onMessage: (data) => (data === "drop-me" ? null : { type: "frame", data }),
+    onOpen: () => ({ type: "ws_open" }),
+    onError: () => ({ type: "ws_error" }),
+    onClose: (code, reason) => ({ type: "ws_close", code, reason }),
+  }),
+};
 
 describe("fromWebSocket — subscribe → deliver → cleanup against a real runtime", () => {
   afterEach(() => {
@@ -117,7 +112,7 @@ describe("fromWebSocket — subscribe → deliver → cleanup against a real run
 
   it("opens the socket at boot (wsUrl off the Sub) and routes all four lifecycle events", async () => {
     vi.stubGlobal("WebSocket", FakeSocket);
-    const rt = await run(wsMachine(), {}).ready;
+    const rt = await run(wsMachine(), { subscribe }).ready;
 
     expect(FakeSocket.instances).toHaveLength(1);
     const ws = FakeSocket.instances[0];
@@ -140,7 +135,7 @@ describe("fromWebSocket — subscribe → deliver → cleanup against a real run
 
   it("onMessage → null drops the frame but keeps the socket attached", async () => {
     vi.stubGlobal("WebSocket", FakeSocket);
-    const rt = await run(wsMachine(), {}).ready;
+    const rt = await run(wsMachine(), { subscribe }).ready;
     const ws = FakeSocket.instances[0];
 
     ws.fireMessage("drop-me");
@@ -156,7 +151,7 @@ describe("fromWebSocket — subscribe → deliver → cleanup against a real run
 
   it("reconciling the Sub out detaches handlers BEFORE close(1000) — no onClose Msg from teardown", async () => {
     vi.stubGlobal("WebSocket", FakeSocket);
-    const rt = await run(wsMachine(), {}).ready;
+    const rt = await run(wsMachine(), { subscribe }).ready;
     const ws = FakeSocket.instances[0];
     ws.fireOpen();
     await rt.idle();

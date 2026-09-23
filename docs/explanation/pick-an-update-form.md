@@ -84,7 +84,7 @@ applyCell(machine, { type: "done", cups: 1 }, { type: "tick" });
 
 // The same refusal as a value, for a caller that wants to branch on it:
 const r = tryApplyCell(machine, { type: "done", cups: 1 }, { type: "tick" });
-Result.isError(r) && r.error.acceptedTypes; // ["collect"]
+r._tag === "Err" && r.error.acceptedTypes; // ["collect"]
 ```
 
 `acceptedTypes` and the error's own `acceptedTypes` are one reading, not two

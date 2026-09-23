@@ -12,8 +12,8 @@
  * (via the llm-call message loader), the schemas, and the model. `createAgent(config)` returns the uniform handle contract every
  * composition exposes (`init` / verbs returning `readonly [State, Cmd[]]` /
  * `subs`) AND a ready-to-`run` `defineMachine` (`toMachine`) — THE one wired
- * path. (`unsafeDetachedHandlers` is the hand-wiring escape hatch; its name
- * advertises that it does not drive the retry loop.)
+ * path. (`brainInterpret` and `brain` are the pieces a consumer wiring the
+ * verbs by hand reaches for.)
  *
  * ## The composition (three siblings wired into ONE machine)
  *
@@ -24,7 +24,8 @@
  *     delegates `start` / `advance` / `progress` / `onDeadline` / `boot` to it.
  *   - `../llm-call` — every brain call. One
  *     `LlmCall` per turn, structured-output parsed, retry composed in. The agent
- *     delegates the resilient slice + verbs and reuses the detached handler.
+ *     delegates the resilient slice + verbs, and owns the one Promise handler
+ *     that invokes the model (`./model`).
  *   - `../fan-out` — the tool calls a turn produced. Tools dispatch SERIALLY by
  *     default (concurrency 1); fan-out generalizes that to a bounded number
  *     LAUNCHED per transition, `config.toolConcurrency`. Above `1` a router's
@@ -96,8 +97,8 @@
  *   });
  *   // The consumer supplies the per-tool (+ snapshot) interpret; the agent owns
  *   // the brain interpret and merges them in `toMachine`.
- *   const machine = agent.toMachine({ toolInterpret });
- *   const runtime = run(machine, { ctx, store });
+ *   const wired = agent.toMachine({ toolInterpret });
+ *   const runtime = run(wired.machine, { ...wired, ctx, store });
  */
 
 import {
@@ -106,24 +107,27 @@ import {
   type Interpret,
   type Machine,
   type Reducer,
+  type Subscribe,
 } from "../index";
 import { createFanOut, initFanOut } from "../internal/flow/fan-out";
 import {
   createMonitoredRun,
-  type DeadlineSub,
   type MonitoredRunCmd,
 } from "../internal/flow/monitored-run";
 import {
   createLlmCall,
-  deadlineSub,
   type LlmCall,
-  type LlmFailMsg,
   type LlmOk,
   type LlmRunCmd,
-  type LlmSucceedMsg,
   type ResilientState,
-  subscribeDeadline,
 } from "../internal/llm-call";
+import {
+  type DeadlineSub,
+  type DeadlinesSub,
+  deadlineSub,
+  deadlinesSub,
+  subscribeDeadline,
+} from "../internal/resilience/deadline";
 import { createResilientCall } from "../internal/resilience/resilient-call";
 import { MsgType } from "../protocol";
 import {
@@ -147,21 +151,21 @@ import {
 } from "./internal";
 import {
   type AgentCmd,
-  type AgentDetachedHandlers,
   type AgentKnob,
   type AgentLlmErrMsg,
   type AgentLlmOkMsg,
   type AgentLlmRunCmd,
   type AgentMachineMsg,
-  type AgentPorts,
   type AgentTimerMsg,
   mergeInterpret,
   type SnapshotInterpret,
 } from "./machine";
+import { brainHandler } from "./model";
 import {
   type AnyToolDef,
   fanOutInterpret,
   type ToolRouter,
+  type ToolsCtx,
   type WiredToolCmd,
   type WiredToolMsg,
 } from "./tool";
@@ -210,7 +214,6 @@ export * from "./types";
  * pass obliges you to supply the matching handler at `toMachine`, and each one
  * you omit forbids it. `rng` is the determinism seam for the retry backoff —
  * pass a fixed `() => 0` to pin it in tests; omit for `Math.random`.
- * `unsafeDetachedHandlers` is the hand-wiring escape hatch.
  *
  * The four overloads exist because the two obligations are derived
  * from the `config` VALUE, never inferred. `{ snapshotEvery: number }` REQUIRES
@@ -297,17 +300,22 @@ export function createAgent<
       : {}),
   });
 
-  const llm = createLlmCall<P, O, Msg>(
+  const llm = createLlmCall<P, O>(
     {
-      model: config.model,
       schemas: config.schemas,
       ...(config.retry !== undefined ? { retry: config.retry } : {}),
-      ...(config.loadMessages !== undefined
-        ? { loadMessages: config.loadMessages }
-        : {}),
     },
     rng,
   );
+  // The one handler that invokes the model: the config's two ports around the
+  // pure `llm` knob, returning the outcome the engine mints into
+  // `resilient_run_ok` / `resilient_run_err` (ADR 0021).
+  const invokeBrain = brainHandler<P, O, Msg>(llm, {
+    model: config.model,
+    ...(config.loadMessages !== undefined
+      ? { loadMessages: config.loadMessages }
+      : {}),
+  });
 
   // The DEDICATED compaction round-trip's resilient slice (#85, design B1) — a
   // SECOND resilient-call slice keyed on the reserved `$compact` purpose, so the
@@ -914,20 +922,20 @@ export function createAgent<
   // === Verb: succeed / fail (brain-call resilient settles) =================
 
   /**
-   * Fold a brain-call SUCCESS — the FIXED single entry the re-entered
-   * `resilient_ok` settle Msg drives. Two halves, in order:
+   * Fold a brain-call SUCCESS — the single entry the engine-minted
+   * `resilient_run_ok` Msg drives. Two halves, in order:
    *
    *   1. The RETRY layer: `llm.succeed` closes the breaker and DROPS this key's
    *      retry counter. This is the half the old detached wiring skipped — the
    *      detached handler dispatched the parsed turn directly and never
-   *      re-entered `resilient_ok`, so `succeed` never ran, the resilient slice
+   *      settled the brain call, so `succeed` never ran, the resilient slice
    *      stayed stuck `running`, the breaker never closed, and the retry counter
    *      ACCUMULATED across the run (a later transient failure would trip
    *      `maxAttempts` prematurely). Running it here resets the retry slice every
    *      turn — a clean retry slice across the whole run.
-   *   2. The LOOP: fold the parsed `AgentTurn` (`msg.result.output`) through
+   *   2. The LOOP: fold the parsed `AgentTurn` (`msg.value.output`) through
    *      `turn`, which scatters this turn's tools (or advances the pipeline on an
-   *      empty turn). One re-entered settle Msg now advances BOTH the resilient
+   *      empty turn). One engine-minted settle Msg now advances BOTH the resilient
    *      slice AND the conversation, so the loop actually progresses to a
    *      terminal `done`.
    *
@@ -935,19 +943,18 @@ export function createAgent<
    */
   function succeed(
     s: State,
-    key: string,
     msg: AgentLlmOkMsg<P, O>,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     // 1) Advance the retry layer — resets retry[key], closes the breaker.
-    const [resilience, retryCmds] = llm.succeed(s.resilience, key, msg);
+    const [resilience, retryCmds] = llm.succeed(s.resilience, msg);
     const settled: State = { ...s, resilience };
     // 2) Fold the parsed turn into the loop (scatter tools / advance the stage).
-    //    `msg.result.output` is `O[P]`, and the `O extends Record<P, AgentTurn>`
+    //    `msg.value.output` is `O[P]`, and the `O extends Record<P, AgentTurn>`
     //    bound pins every purpose's output to an `AgentTurn` — so it feeds `turn`
     //    with NO cast. The rule lives in the type (invariant 8: no `as` past the
     //    boundary), not in a doc-comment the compiler cannot enforce.
-    const [withTurn, turnCmds] = turn(settled, msg.result.output, at);
+    const [withTurn, turnCmds] = turn(settled, msg.value.output, at);
     return [withTurn, [...retryCmds, ...turnCmds]];
   }
 
@@ -955,22 +962,22 @@ export function createAgent<
    * Record a brain-call failure: back off via the inherited retry (re-arming
    * the retry timer), or — when retry is exhausted / absent — the resilient
    * slice settles the call `failed`. The agent also stamps an `llm` failure on
-   * its own slice so a consumer can render the terminal cause. PURE.
+   * its own slice so a consumer can render the terminal cause — the typed
+   * `LlmErr` `llm.errOf` reads off the Msg. PURE.
    */
   function fail(
     s: State,
-    key: string,
     msg: AgentLlmErrMsg<P>,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    const [resilience, cmds] = llm.fail(s.resilience, key, msg);
+    const [resilience, cmds] = llm.fail(s.resilience, msg);
     // If the resilient slice settled this call terminally (no retry pending),
     // surface the agent-level llm failure too. A `waiting_retry` phase means a
     // retry is armed → not terminal → leave `failure` untouched.
-    const call = resilience.calls[key];
+    const call = resilience.calls[msg.cmd.key];
     const failure: AgentFailure | null =
       call?.phase === "failed"
-        ? { reason: "llm", error: msg.error, at }
+        ? { reason: "llm", error: llm.errOf(msg), at }
         : s.failure;
     return [{ ...s, resilience, failure }, cmds];
   }
@@ -1003,11 +1010,10 @@ export function createAgent<
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     // 1) Advance the compaction retry layer — resets retry[$compact], closes the
     //    compaction breaker. Reuses resilient-call's `settle` on the dedicated
-    //    slice; the enriched `LlmSucceedMsg` is the `compact_ok` payload as-is.
+    //    slice; the parsed `LlmOk` the `compact_ok` carries is its value.
     const { call: compaction, cmds: retryCmds } = compact.settle(s.compaction, {
-      type: MsgType.ResilientOk,
-      key,
-      result: msg.result,
+      cmd: { key },
+      value: msg.result,
       at: msg.at,
     });
     const settledRetry: State = { ...s, compaction };
@@ -1057,8 +1063,7 @@ export function createAgent<
       cmds,
       outcome,
     } = compact.settle(s.compaction, {
-      type: MsgType.ResilientErr,
-      key,
+      cmd: { key },
       error: msg.error,
       at: msg.at,
     });
@@ -1260,100 +1265,58 @@ export function createAgent<
   // === Subs ================================================================
 
   /**
-   * The merged subscription set — the brain-call retry timers (`../llm-call`),
+   * The merged deadline list — the brain-call retry timers (`../llm-call`),
    * the COMPACTION retry timers (the dedicated `$compact` slice, #85), the
    * PER-TOOL retry + timeout timers (the `$tool:`-keyed ladders, #117), and the
    * no-progress safety deadline (`../monitored-run`). All are `DeadlineSub`s
-   * reconciled by id (the compaction timers are keyed `resilient:*:$compact`,
-   * distinct from every brain timer), wired with one `subscribe: { deadline:
-   * subscribeDeadline }` cell. PURE.
+   * told apart by id (the compaction timers are keyed `resilient:*:$compact`,
+   * distinct from every brain timer), armed by ONE `deadline` Sub
+   * (`deadlinesSub`) and its `subscribeDeadline` runner. PURE.
    */
   function subs(s: State): readonly DeadlineSub[] {
     return [
-      ...llm.subs(s.resilience),
-      ...compactRc.subs(s.compaction),
+      ...llm.deadlines(s.resilience),
+      ...compactRc.deadlines(s.compaction),
       ...ladder.subs(toolSlice(s)),
-      ...run.subs(s.run),
+      ...run.deadlines(s.run),
     ];
   }
 
   // === Handlers ============================================================
 
   /**
-   * The brain-call interpret handler — DETACHED, inherited from `../llm-call`.
-   * It assembles messages, binds the purpose schema, invokes (retry composed),
-   * parses, and dispatches the consumer's `onOk` / `onErr` Msg (carrying the
-   * parsed `AgentTurn` for `onOk`).
-   *
-   * UNSAFE — kept ONLY as a deliberate escape hatch for the consumer that wires
-   * the verbs by hand and wants the fire-and-forget dispatch shape. It does NOT
-   * drive the inherited retry loop (it never re-enters the `resilient_ok` settle
-   * Msg, so `succeed` / `fail` never run — the breaker never closes, the retry
-   * counter never resets). The `unsafe` prefix is the warning the name carries:
-   * `toMachine` is THE wired path (it uses the FIXED `brainHandlers` below, which
-   * returns the settle Msg for re-entry and drives the loop correctly), and this
-   * detached form is named `unsafeDetachedHandlers` so the broken-by-design
-   * behaviour is visible at the call site, not buried in a doc-comment a consumer
-   * meets only after autocomplete already offered it. A consumer reaches for it
-   * only when it has accepted owning the retry wiring itself. See llm-call's
-   * `handlers` doc (the same retry-loop gap).
-   *
-   * Returns the inherited detached shape verbatim (`AgentDetachedHandlers`) — a
-   * fire-and-forget `resilient_run` cell, NOT an `Interpret` (it returns `void`
-   * and takes the structural `{ waitUntil, dispatch }` ctx the detached form
-   * runs the invoke against). The type is named precisely so no cast launders a
-   * `void`-returning cell into the re-entry `Interpret` contract.
-   *
-   * The per-tool effects are NOT handled here — `config.toolOf` produces a Cmd
-   * the consumer's OWN interpret performs (the agent never owns the tool I/O;
-   * the seed's `send_tool_call` handler is the consumer's), routing Ok/Err back
-   * to `toolOk` / `toolErr`. This matches fan-out's "the consumer owns `of`'s
-   * interpret" discipline.
-   */
-  function unsafeDetachedHandlers<M>(
-    ports: AgentPorts<P, O, M>,
-  ): AgentDetachedHandlers<P, M> {
-    return llm.handlers(ports);
-  }
-
-  /**
-   * The FIXED brain-call interpret handler — the no-arg `../llm-call` form that
-   * RETURNS the enriched resilient settle Msg (`resilient_ok` carrying the
-   * parsed `LlmOk`, or `resilient_err` carrying the typed `LlmErr`). The
-   * substrate enqueues an interpret handler's returned Msg as a FOLLOW-UP
-   * (re-entry) onto the dispatch tail, so the machine's `resilient_ok` /
-   * `resilient_err` reducer arms run `succeed` / `fail`, advancing the inherited
-   * retry loop (succeed/fail → backoff → onTimer → re-issue) AND folding the
-   * parsed turn into the conversation. This is the wiring that lets the loop
-   * reach a clean terminal `done` with a reset retry slice — the headline L3 fix.
+   * The brain-call interpret handler — the `resilient_run` cell `toMachine`
+   * wires, built from the config's `model` / `loadMessages` ports (`./model`).
+   * It assembles messages, binds the purpose schema, invokes, and RETURNS the
+   * outcome `llm.decode` builds: the brain Cmd is `Cmd.define`d, so the engine
+   * mints `resilient_run_ok` / `resilient_run_err` from it (ADR 0021), and
+   * dispatches them to the reducer's `succeed` / `fail` arms — which advance
+   * the inherited retry loop AND fold the parsed turn into the conversation.
    */
   function brainHandlers<Ctx>(): Interpret<
-    LlmSucceedMsg<P, O> | LlmFailMsg<P>,
+    AgentLlmOkMsg<P, O> | AgentLlmErrMsg<P>,
     AgentLlmRunCmd<P>,
     Ctx
   > {
-    // `llm.handlers()` is `{ resilient_run: (cmd: LlmRunCmd<P>) => Promise<
-    // LlmSucceedMsg<P,O> | LlmFailMsg<P>> }`. That is structurally an
-    // `Interpret` over the single `resilient_run` Cmd: the cell may ignore the
-    // `ctx` param (a handler taking fewer args is assignable), and its returned
-    // settle Msg is the exact `M` subset. No cast — the precise type holds.
-    return llm.handlers();
+    return { resilient_run: invokeBrain };
   }
 
   /**
-   * Wire the agent into a single runnable `defineMachine`. The host Msg union is
-   * the closed set of verb entry points; `update` routes each to the matching
-   * verb, `subscriptions` merges the two bricks' subs, `subscribe` wires the one
-   * deadline cell, and `interpret` is the FIXED brain-call handler.
+   * Wire the agent into a single runnable `defineMachine`, returned as a
+   * `Wired` beside its handlers. The host Msg union is the closed set of verb
+   * entry points; `update` routes each to the matching verb, `subs` declares
+   * one `deadline` Sub over every brick's deadlines, `subscribe` carries its
+   * runner, and `interpret` is the FIXED brain-call handler.
    *
-   * The brain call uses the FIXED no-arg `../llm-call` handler (`brainHandlers`):
-   * its returned `resilient_ok` / `resilient_err` settle Msg RE-ENTERS the
-   * reducer, where the `resilient_ok` arm runs `succeed` (reset retry + close
-   * breaker + fold the parsed turn) and the `resilient_err` arm runs `fail`
-   * (back off via retry, re-arm the timer). This is what drives the loop to a
-   * clean terminal `done` with a reset retry slice — fixing the L3 break where
-   * the old detached handler dispatched the turn directly, never re-entered the
-   * settle Msg, and so `succeed` never ran (stuck `running`, accumulating retry).
+   * The brain call uses the FIXED no-arg handler (`brainHandlers`): it returns
+   * the call's outcome, and the engine mints `resilient_run_ok` /
+   * `resilient_run_err` from it (ADR 0021). The `resilient_run_ok` arm runs
+   * `succeed` (reset retry + close breaker + fold the parsed turn) and the
+   * `resilient_run_err` arm runs `fail` (back off via retry, re-arm the timer).
+   * This is what drives the loop to a clean terminal `done` with a reset retry
+   * slice — fixing the L3 break where the old detached handler dispatched the
+   * turn directly, never settled the brain call, and so `succeed` never ran
+   * (stuck `running`, accumulating retry).
    *
    * The consumer supplies only the per-tool interpret (the agent owns the brain
    * interpret now; no `ports` to supply — the parsed turn is folded by `succeed`,
@@ -1401,13 +1364,25 @@ export function createAgent<
         boolean,
         Ctx
       >;
-  }): Machine<
-    State,
-    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
-    AgentCmd<P, TC, boolean, boolean>,
-    DeadlineSub,
-    Ctx
-  > {
+  }): {
+    readonly machine: Machine<
+      State,
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      AgentCmd<P, TC, boolean, boolean>,
+      DeadlinesSub,
+      Ctx & ToolsCtx<T>
+    >;
+    readonly interpret: Interpret<
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      AgentCmd<P, TC, boolean, boolean>,
+      Ctx & ToolsCtx<T>
+    >;
+    readonly subscribe: Subscribe<
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      DeadlinesSub,
+      Ctx & ToolsCtx<T>
+    >;
+  } {
     type M = AgentMachineMsg<P, O, R> | WiredToolMsg<T>;
     const tools = opts?.tools;
     // The implementation is typed at `Snap = boolean` — the SUPERSET that
@@ -1427,9 +1402,9 @@ export function createAgent<
     // IN (policy) or OUT (`{ compact_run?: never }`) of the obligation (#55 reuse).
     type NonBrainCmd = TC | MonitoredRunCmd<unknown> | AgentCompactRunCmd;
     type ACmd = AgentLlmRunCmd<P> | NonBrainCmd;
-    // The FIXED brain handler returns the settle Msg for re-entry; the substrate
-    // enqueues it as a follow-up dispatched back into `update` (the `resilient_*`
-    // arms below). It is PRECISELY an `Interpret` over the brain Cmd
+    // The FIXED brain handler returns an outcome; the engine mints the
+    // `resilient_run_ok` / `resilient_run_err` Msg from it and dispatches that
+    // into `update` (the `resilient_run_*` arms below). It is PRECISELY an `Interpret` over the brain Cmd
     // (`AgentLlmRunCmd<P>`); the consumer's `toolInterpret` is PRECISELY an
     // `Interpret` over the rest of the config-derived union (`TC`, and
     // `snapshot_write` only when snapshotting). `mergeInterpret` joins the two
@@ -1520,10 +1495,10 @@ export function createAgent<
       // shape is a bare `reason` string — a consumer routing their own interpret
       // through it never declared a tag, so the failure it mints carries none.
       [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
-      // The re-entered brain-call settle Msgs (from `brainHandlers`): success
-      // runs `succeed` (reset retry + fold the turn), failure runs `fail`.
-      [MsgType.ResilientOk]: (s, m) => succeed(s, m.key, m, m.at),
-      [MsgType.ResilientErr]: (s, m) => fail(s, m.key, m, m.at),
+      // The engine-minted brain-call settle Msgs (from `brainHandlers`' outcome):
+      // success runs `succeed` (reset retry + fold the turn), failure runs `fail`.
+      [MsgType.ResilientOk]: (s, m) => succeed(s, m, m.at),
+      [MsgType.ResilientErr]: (s, m) => fail(s, m, m.at),
       // The re-entered compaction settle Msgs (from the consumer's `compact_run`
       // cell, #85): `compact_ok` folds the summary back (drop oldest turns +
       // their records, fire the next brain call), `compact_err` backs off via the
@@ -1545,10 +1520,10 @@ export function createAgent<
     >;
 
     // Build the machine as a fully-typed `Machine<...>` const, then pass it
-    // through `defineMachine`'s identity. Annotating the const resolves the
-    // `Machine` type's conditional `interpret` requirement against the concrete
+    // through `defineMachine`'s identity. Annotating the const pins the concrete
     // type params here; calling `defineMachine` with explicit type args instead
-    // would defer that conditional over the generic `TC` and fail the overload.
+    // would defer the `Machine` type's conditionals over the generic `TC` and
+    // fail the overload.
     //
     // The machine's Cmd type is the config-derived `ACmd`. `update` is the
     // `AgentCmd<P, TC>` superset reducer; narrowing it to `Reducer<State, M,
@@ -1557,15 +1532,27 @@ export function createAgent<
     // drops, so the reducer's emitted arrays provably stay within `ACmd[]`. This
     // is the same shape as `mergeInterpret`'s one sound mapped-type identity: the
     // soundness lives in a documented seam, not smuggled at every verb.
-    const machine: Machine<State, M, ACmd, DeadlineSub, Ctx> = {
+    const machine: Machine<State, M, ACmd, DeadlinesSub, Ctx> = {
       init: (loaded) => (loaded !== null ? [loaded, []] : [init(), []]),
       update: update as Reducer<State, M, ACmd>,
-      subscriptions: (s) => subs(s),
-      subscribe: { deadline: subscribeDeadline },
-      interpret,
-      ...(tools !== undefined ? { cmds: tools.defs } : {}),
+      subs: [deadlinesSub(subs)],
+      // The brain run Cmd is `Cmd.define`d: listing it is what makes the
+      // engine mint `resilient_run_ok` / `resilient_run_err` from the brain
+      // handler's outcome. The router's defs ride beside it.
+      cmds: [llm.run, ...(tools?.defs ?? [])],
     };
-    return defineMachine(machine);
+    // The machine carries no handlers (#278, #279): `interpret` and the
+    // `deadline` runner ride beside it, for the caller to hand `run`.
+    // `interpret` is already checked as `Interpret<M, ACmd, Ctx>` where it is
+    // built; each cell's form is conditional on whether its Cmd is
+    // `Cmd.define`d (ADR 0021), and over the generic `TC` TS defers that and
+    // cannot relate the two mapped types, so the checked table is handed over
+    // unrelated here.
+    return {
+      machine: defineMachine(machine),
+      interpret: interpret as never,
+      subscribe: { deadline: subscribeDeadline },
+    };
   }
 
   return {
@@ -1584,22 +1571,23 @@ export function createAgent<
     currentStage,
     brainCall,
     subs,
-    // `toMachine` is THE wired path. `unsafeDetachedHandlers` is the
-    // hand-wiring escape hatch — named to advertise the retry-loop gap so it is
-    // never mistaken for the loop driver (#54).
+    // `toMachine` is THE wired path; `brainInterpret` / `brain` are the two
+    // pieces a consumer wiring the verbs by hand needs.
     toMachine,
-    unsafeDetachedHandlers,
+    brainInterpret: brainHandlers,
+    brain: llm.run,
   };
 }
 
 /**
- * Re-export the deadline Sub primitives so consumers (and tests) wire one
- * import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds
- * the Sub literal both composed wrappers' `subs` emit.
+ * Re-export the deadline primitives so consumers (and tests) wire one import:
+ * `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's
+ * `subs` entry, and `deadlineSub` builds the entry both composed wrappers'
+ * `subs` list.
  */
-export { subscribeDeadline, deadlineSub };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
+export type { DeadlineSub, DeadlinesSub };
 export type {
-  DeadlineSub,
   EndedRun,
   MonitoredRunCmd,
   RunFailure,
@@ -1611,10 +1599,13 @@ export type {
   LlmOk,
   LlmRunCmd,
   LlmSucceedMsg,
+  Schema,
+} from "../internal/llm-call";
+export type {
+  Llm,
   MessageLoader,
   ModelFactory,
   ModelPort,
   PlainModel,
-  Schema,
-} from "../internal/llm-call";
-export { PLAIN_MODEL_MISROUTE_REASON, plainModel } from "../internal/llm-call";
+} from "./model";
+export { PLAIN_MODEL_MISROUTE_REASON, plainModel } from "./model";

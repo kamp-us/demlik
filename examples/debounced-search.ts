@@ -1,4 +1,5 @@
-import { type Cmd, defineMachine, run } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { debounce } from "@demlik/tea/timing";
 
 type Phase = "idle" | "typing" | "searching" | "results";
@@ -70,14 +71,15 @@ export const debouncedSearch = defineMachine({
 
     drain: (s) => [s, []],
   },
-
-  interpret: {
-    do_search: async (cmd, ctx) => {
-      const hits = await ctx.search(cmd.query);
-      return { type: "search_ok", query: cmd.query, hits };
-    },
-  },
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+export const debouncedSearchInterpret: Interpret<Msg, DoSearch, Ctx> = {
+  do_search: async (cmd, ctx) => {
+    const hits = await ctx.search(cmd.query);
+    return { type: "search_ok", query: cmd.query, hits };
+  },
+};
 
 const CORPUS = [
   "terraform the durable object",
@@ -99,6 +101,7 @@ function fakeSearch(searchLog: string[]): Ctx["search"] {
 async function main(): Promise<void> {
   const searchLog: string[] = [];
   const runtime = await run(debouncedSearch, {
+    interpret: debouncedSearchInterpret,
     ctx: { search: fakeSearch(searchLog) },
   }).ready;
 

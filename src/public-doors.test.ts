@@ -33,9 +33,12 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * The public doors, exactly. Twenty-one module doors plus the two non-module
+ * The public doors, exactly. Twenty-three module doors plus the two non-module
  * entries — `./package.json` (metadata passthrough) and
  * `./devtools/styles.css` (the asset stays with its door).
+ *
+ * `./promise` and `./effect` are the two engines beside the neutral core at
+ * `.` (#274 R2.1).
  *
  * `./devtools`, `./machine-viz` and `./parity` are here rather than folded
  * because each has a live external callsite (ADR 0016 as amended by #83): a
@@ -54,6 +57,8 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  */
 const PUBLIC_DOORS = [
   ".",
+  "./promise",
+  "./effect",
   "./do",
   "./node",
   "./mem",

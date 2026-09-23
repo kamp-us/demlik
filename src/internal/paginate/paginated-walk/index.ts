@@ -52,11 +52,12 @@
  *
  * ## Where the clock / RNG live
  *
- * Inside the verbs: nowhere. `at` arrives on `start` / `pageOk` / `pageErr` /
- * `onTimer` and is threaded straight into the underlying resilient-call gate (so
- * a rate-limited or retried page measures backoff from that `at`). The jitter
- * RNG is injected at construction. The only clock read is `Date.now()` inside
- * the resilient-call `handlers` port (the effect boundary), inherited unchanged.
+ * Inside the verbs: nowhere. `at` arrives on `start` / `resume`, on the settled
+ * Msg `pageOk` / `pageErr` read (stamped by the engine), and on the timer Msg
+ * `onTimer` reads, and is threaded straight into the underlying resilient-call
+ * gate (so a rate-limited or retried page measures backoff from that `at`). The
+ * jitter RNG is injected at construction. The knob ships no I/O: the page
+ * fetch is resilient-call's `Cmd.define`d run Cmd, and its handler is yours.
  *
  * ## The fixed fetch key
  *
@@ -77,37 +78,42 @@
  *   });
  *
  *   // in the machine:
+ *   cmds: [walk.fetch],
  *   init: () => [{ walk: walk.init() }, []],
  *   update: {
  *     start:    (s, m)  => lift(s, walk.start(s.walk, m.at)),
- *     page_ok:  (s, m)  => lift(s, walk.pageOk(s.walk, m.result, m.at)),
- *     page_err: (s, m)  => lift(s, walk.pageErr(s.walk, m.error, m.at)),
- *     retry_due:(s, m)  => lift(s, walk.onTimer(s.walk, m)),
+ *     resilient_run_ok:  (s, m) => lift(s, walk.pageOk(s.walk, m)),
+ *     resilient_run_err: (s, m) => lift(s, walk.pageErr(s.walk, m)),
+ *     deadline_exceeded: (s, m) => lift(s, walk.onTimer(s.walk, m)),
  *     drained:  (s, m)  => lift(s, walk.drain(s.walk, m.n)),
  *     resume:   (s, m)  => lift(s, walk.resume(s.walk, m.at)),
  *   },
- *   subscriptions: (s) => walk.subs(s.walk),
- *   subscribe: { deadline: subscribeDeadline },
- *   interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }),
+ *   subs: [{ type: "timer", deps: (s) => walk.timer(s.walk) }],
+ *
+ *   // and where it runs — the page fetch is the handler you write:
+ *   run(machine, {
+ *     interpret: {
+ *       resilient_run: async (cmd, { ok, err }) => {
+ *         try { return ok(await api.fetchPage(cmd.input)); }
+ *         catch (cause) { return err({ _tag: "port_rejected", cause }); }
+ *       },
+ *     },
+ *   });
  */
 
 import type { Cmd } from "../../../index";
-import { MsgType } from "../../../protocol";
 import type { RetryPolicy } from "../../../retry-backoff";
+import type { DeadlineSub } from "../../resilience/deadline";
 import {
   type CircuitConfig,
   createResilientCall,
   type DeadlineConfig,
-  type DeadlineSub,
-  deadlineSub,
   type FailMsg,
   type RateLimitConfig,
-  type ResilientPorts,
   type ResilientState,
   type ResilientTimerMsg,
   type RunCmd,
   type SucceedMsg,
-  subscribeDeadline,
 } from "../../resilience/resilient-call";
 import {
   drain as drainWalk,
@@ -213,24 +219,17 @@ export interface PaginatedWalkState<Cursor, Page> {
 /**
  * The page-fetch effect this knob emits: the inherited `resilient_run` Cmd from
  * resilient-call, whose `input` is the `Cursor` to fetch and whose `key` is the
- * fixed `PAGE_KEY`. The consumer's `handlers(ports)` interprets it.
+ * fixed `PAGE_KEY`. It is `Cmd.define`d; the handler you write for it fetches
+ * one page and returns `ok(page)` or `err({ _tag: "port_rejected", … })`.
  */
 export type FetchPageCmd<Cursor> = RunCmd<Cursor>;
 
-/** Page-settled Msgs the `handlers` port dispatches back (inherited verbatim). */
+/** The page-settled Msgs the engine mints from that handler's outcome. */
 export type PageOkMsg<Page> = SucceedMsg<Page>;
 export type PageErrMsg = FailMsg;
 
 /** The retry / deadline timer Msg — inherited from resilient-call. */
 export type PaginatedWalkTimerMsg = ResilientTimerMsg;
-
-/**
- * Ports the consumer supplies to `handlers`. `run(cursor)` fetches ONE page for
- * the given cursor; throwing routes to `pageErr` (and thus the resilience
- * backoff). Same shape as resilient-call's port, specialized to the page fetch.
- */
-export interface PaginatedWalkPorts<Cursor, Page>
-  extends ResilientPorts<Cursor, Page> {}
 
 // ===========================================================================
 // The fixed key. A walk fetches one page at a time → exactly one logical
@@ -251,8 +250,9 @@ export const PAGE_KEY = "page";
  * defaults to `Math.random` (read at the verb boundary inside resilient-call,
  * never in a `paginated-walk` verb). Inherited straight from resilient-call.
  *
- * Returns the uniform L2 knob contract: `init()`, the verbs `start` / `pageOk`
- * / `pageErr` / `onTimer`, `subs(state)`, and `handlers(ports)`. `Cursor` is
+ * Returns plain functions: `init()`, the verbs `start` / `pageOk` / `pageErr`
+ * / `onTimer`, `deadlines(state)` / `timer(state)`, and the page-fetch Cmd def
+ * (`fetch`) to list in the machine's `cmds`. `Cursor` is
  * the page handle, `Page` the fetch result, `EmittedCmd` the consumer's
  * per-page Cmds plus the inherited `FetchPageCmd`.
  */
@@ -284,7 +284,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
   type OutCmd = FetchPageCmd<Cursor> | EmittedCmd;
 
   /** Replace the resilience slice, leaving `walk` untouched. */
-  function withResilience(
+  function withSlice(
     s: PaginatedWalkState<Cursor, Page>,
     resilience: ResilientState<Cursor, Page>,
   ): PaginatedWalkState<Cursor, Page> {
@@ -315,7 +315,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     readonly FetchPageCmd<Cursor>[],
   ] {
     const [resilience, cmds] = rc.attempt(s.resilience, PAGE_KEY, cursor, at);
-    return [withResilience(s, resilience), cmds];
+    return [withSlice(s, resilience), cmds];
   }
 
   /**
@@ -365,8 +365,8 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
   // === Verb: pageOk ========================================================
 
   /**
-   * Record a successfully fetched `page` and decide what comes next. PURE —
-   * `at` is the cache / next-fetch clock.
+   * Record a successfully fetched page (the engine-minted `msg.value`) and
+   * decide what comes next. PURE — `msg.at` is the cache / next-fetch clock.
    *
    *   1. Settle the resilient call OK (closes the breaker, fills the cache,
    *      resets the page-fetch retry counter) — inherited from resilient-call.
@@ -386,16 +386,11 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
    */
   function pageOk(
     s: PaginatedWalkState<Cursor, Page>,
-    page: Page,
-    at: number,
+    msg: PageOkMsg<Page>,
   ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
+    const { value: page, at } = msg;
     // 1) Settle the underlying resilient call as a success.
-    const { call: resilience } = rc.settle(s.resilience, {
-      type: MsgType.ResilientOk,
-      key: PAGE_KEY,
-      result: page,
-      at,
-    });
+    const { call: resilience } = rc.settle(s.resilience, msg);
 
     // 2) Advance the paginator with the page's contribution + the next cursor.
     const count = config.pageSize ? config.pageSize(page) : 1;
@@ -444,8 +439,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
    */
   function pageErr(
     s: PaginatedWalkState<Cursor, Page>,
-    error: unknown,
-    at: number,
+    msg: PageErrMsg,
   ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
     // Only a `fetching` paginator has an outstanding page fetch to fail. On any
     // other phase the fail would corrupt shared resilience state for a fetch
@@ -453,13 +447,8 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     if (s.walk.phase !== "fetching") {
       return [s, []];
     }
-    const { call: resilience, cmds } = rc.settle(s.resilience, {
-      type: MsgType.ResilientErr,
-      key: PAGE_KEY,
-      error,
-      at,
-    });
-    return [withResilience(s, resilience), cmds];
+    const { call: resilience, cmds } = rc.settle(s.resilience, msg);
+    return [withSlice(s, resilience), cmds];
   }
 
   // === Verb: onTimer =======================================================
@@ -487,11 +476,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
       return [s, []];
     }
     const [resilience, cmds] = rc.onTimer(s.resilience, msg);
-    if (resilience === s.resilience) {
-      // Inherited no-op identity → keep our slice identity too (pure no-op).
-      return [s, []];
-    }
-    return [withResilience(s, resilience), cmds];
+    return [withSlice(s, resilience), cmds];
   }
 
   // === Verb: drain =========================================================
@@ -592,38 +577,30 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     return s.resilience.calls[PAGE_KEY]?.phase === "failed" && !isDone(s.walk);
   }
 
-  // === Subs ================================================================
+  // === Timers ==============================================================
 
   /**
-   * Pre-wired subscriptions: exactly the resilient-call subs for the page
-   * fetch — a retry timer while the fetch is `waiting_retry`, and (with the
-   * `deadline` brick) a per-fetch deadline timer while it is active. Reconciled
-   * by id, so a phase change cancels the matching timer automatically. Wire
-   * `subscribe: { deadline: subscribeDeadline }` (re-exported below).
+   * The page fetch's deadlines — exactly resilient-call's: a retry timer while
+   * the fetch is `waiting_retry`, and (with the `deadline` brick) a per-fetch
+   * deadline timer while it is active.
    */
-  function subs(s: PaginatedWalkState<Cursor, Page>): readonly DeadlineSub[] {
-    return rc.subs(s.resilience);
+  function deadlines(
+    s: PaginatedWalkState<Cursor, Page>,
+  ): readonly DeadlineSub[] {
+    return rc.deadlines(s.resilience);
   }
 
-  // === Handlers ============================================================
-
   /**
-   * Pre-wired interpret handler for the page-fetch effect. Inherited from
-   * resilient-call (`resilient_run`): wraps the consumer's `run(cursor)` port
-   * via `tryInterpret` (Railway) — success → `resilient_ok` (handled by
-   * `pageOk`), failure → `resilient_err` (handled by `pageErr`), each stamped
-   * with `Date.now()` at the effect boundary (the ONE permitted clock read).
-   *
-   *   interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) })
-   *
-   * The consumer maps the inherited Msg types to their `pageOk` / `pageErr`
-   * reducer cells (the wire shape is `resilient_ok` / `resilient_err`).
+   * The built-in `timer` Sub's deps: resilient-call's `timer` over the fetch's
+   * slice. Declare `{ type: "timer", deps: (s) => walk.timer(s.walk) }`.
    */
-  function handlers(ports: PaginatedWalkPorts<Cursor, Page>) {
-    return rc.handlers(ports);
+  function timer(s: PaginatedWalkState<Cursor, Page>) {
+    return rc.timer(s.resilience);
   }
 
   return {
+    /** The page-fetch Cmd def — list it in the machine's `cmds`. */
+    fetch: rc.run,
     init,
     start,
     pageOk,
@@ -634,8 +611,8 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     isComplete,
     failure,
     isStuck,
-    subs,
-    handlers,
+    deadlines,
+    timer,
   };
 }
 
@@ -656,11 +633,3 @@ export function liftWalk<
 ): readonly [S, readonly C[]] {
   return [{ ...state, walk: slice }, cmds];
 }
-
-/**
- * Re-export the deadline Sub primitives (inherited from resilient-call) so
- * consumers wire one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal this knob's `subs` emits.
- */
-export { subscribeDeadline, deadlineSub };
-export type { DeadlineSub };

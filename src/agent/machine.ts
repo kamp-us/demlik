@@ -8,19 +8,21 @@
  * `createAgent` factory that implements this surface) lives in `./index`.
  */
 
-import type { Cmd, Interpret, Machine } from "../index";
-import type {
-  DeadlineSub,
-  MonitoredRunCmd,
-} from "../internal/flow/monitored-run";
+import type { Cmd, Interpret, Machine, Subscribe } from "../index";
+import type { MonitoredRunCmd } from "../internal/flow/monitored-run";
 import type {
   LlmCall,
-  LlmCallPorts,
   LlmFailMsg,
+  LlmOk,
   LlmRunCmd,
   LlmSucceedMsg,
   LlmTimerMsg,
 } from "../internal/llm-call";
+import type {
+  DeadlineSub,
+  DeadlinesSub,
+} from "../internal/resilience/deadline";
+import type { RunCmdDef } from "../internal/resilience/resilient-call";
 import { MsgType } from "../protocol";
 import type {
   AgentCompactErrMsg,
@@ -31,6 +33,7 @@ import type {
 import type {
   AnyToolDef,
   ToolRouter,
+  ToolsCtx,
   WiredToolCmd,
   WiredToolMsg,
 } from "./tool";
@@ -101,7 +104,10 @@ export type SnapshotInterpret<
   : { readonly snapshot_write?: never };
 
 /**
- * The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants
+ * The `toMachine` signature. It returns a `Wired`: the machine and, beside it,
+ * the merged `interpret` table and the `deadline` runner its one Sub needs — a
+ * machine carries no handlers (#278, #279), so it is run as
+ * `run(wired.machine, { ...wired, ctx })`. Parametrized on the `Snap` + `Compact` discriminants
  * so the snapshotting / compaction overloads of `createAgent` hand back the right
  * obligations. The `toolInterpret` requires (ON) or forbids (OFF) the
  * `snapshot_write` handler via {@link SnapshotInterpret} and the `compact_run` handler
@@ -131,18 +137,31 @@ export type AgentToMachine<
   > &
     SnapshotInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Snap, Ctx> &
     CompactInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Compact, Ctx>;
-}) => Machine<
-  AgentState<Stage, P, O, R>,
-  AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
-  AgentCmd<P, TC, Snap, Compact>,
-  DeadlineSub,
-  Ctx
->;
+}) => {
+  readonly machine: Machine<
+    AgentState<Stage, P, O, R>,
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    AgentCmd<P, TC, Snap, Compact>,
+    DeadlinesSub,
+    Ctx & ToolsCtx<T>
+  >;
+  readonly interpret: Interpret<
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    AgentCmd<P, TC, Snap, Compact>,
+    Ctx & ToolsCtx<T>
+  >;
+  readonly subscribe: Subscribe<
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    DeadlinesSub,
+    Ctx & ToolsCtx<T>
+  >;
+};
 
 /**
  * The agent handle `createAgent` returns — the uniform verb contract every tea
- * composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers`
- * escape hatch. `Snap` flows ONLY into `toMachine`'s `toolInterpret` obligation
+ * composition exposes, plus the wired `toMachine` and `brainInterpret`, the
+ * brain call's handler for a consumer wiring the verbs by hand. `Snap` flows
+ * ONLY into `toMachine`'s `toolInterpret` obligation
  * (the snapshot derivation); every verb is snapshot-agnostic. The model
  * message shape `Msg` does not appear on the handle's surface (it is internal to the
  * brain call's loader), so it is not a type parameter here — only `createAgent`
@@ -195,7 +214,7 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [key: string, msg: AgentLlmOkMsg<P, O>, at: number]
+    [msg: AgentLlmOkMsg<P, O>, at: number]
   >;
   readonly fail: AgentVerb1<
     Stage,
@@ -203,7 +222,7 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [key: string, msg: AgentLlmErrMsg<P>, at: number]
+    [msg: AgentLlmErrMsg<P>, at: number]
   >;
   readonly compactOk: AgentVerb1<
     Stage,
@@ -228,9 +247,19 @@ export interface AgentKnob<
   readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
   readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
   readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
-  readonly unsafeDetachedHandlers: <M>(
-    ports: AgentPorts<P, O, M>,
-  ) => AgentDetachedHandlers<P, M>;
+  /**
+   * The brain call's `resilient_run` handler — the one `toMachine` wires. Its
+   * Cmd is `Cmd.define`d, so it returns an outcome and the engine mints the
+   * `resilient_run_ok` / `resilient_run_err` Msg that `succeed` / `fail` fold
+   * (ADR 0021). List `AgentKnob`'s brain Cmd def in `cmds` when you hand-wire.
+   */
+  readonly brainInterpret: () => Interpret<
+    AgentLlmOkMsg<P, O> | AgentLlmErrMsg<P>,
+    AgentLlmRunCmd<P>,
+    unknown
+  >;
+  /** The brain call's `Cmd.define`d run Cmd def — list it in `cmds` when you hand-wire. */
+  readonly brain: RunCmdDef<LlmCall<P>, LlmOk<P, O>>;
 }
 
 /** A verb taking the state + `Args`, returning the agent's `[State, Cmd[]]` tuple. */
@@ -252,8 +281,8 @@ export type AgentLlmOkMsg<
   O extends Record<P, unknown>,
 > = LlmSucceedMsg<P, O>;
 /**
- * The brain-call FAILURE settle Msg, inherited from `../llm-call` — it re-enters
- * the agent's `fail` verb, which backs off via the retry ladder rather than
+ * The brain-call FAILURE settle Msg, inherited from `../llm-call` — the engine
+ * mints it from the brain handler's outcome and it drives the agent's `fail` verb, which backs off via the retry ladder rather than
  * ending the run.
  */
 export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
@@ -262,44 +291,11 @@ export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
  * The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared
  * shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg`
  * are both `DeadlineExceeded`). One Msg variant covers both timers; `onTimer`
- * disambiguates by Sub id. This is also the machine Msg the `subscribeDeadline`
- * handler dispatches directly (no wrapping), matching the sibling gold standard.
+ * disambiguates by deadline id. This is also the machine Msg the
+ * `subscribeDeadline` runner dispatches directly (no wrapping), matching the
+ * sibling gold standard.
  */
 export type AgentTimerMsg = LlmTimerMsg;
-
-/** Ports the consumer supplies to the llm-call handler — re-exported shape. */
-export type AgentPorts<
-  P extends string,
-  O extends Record<P, unknown>,
-  M,
-> = LlmCallPorts<P, O, M>;
-
-/**
- * The LEGACY detached brain-call handler dictionary `handlers(ports)` returns,
- * superseded by the `Interpret` table `AgentKnob.toMachine()` wires — reach for
- * `toMachine()` unless you are hand-wiring the verbs yourself.
- *
- * It is the inherited `../llm-call` detached form's exact shape, NOT an
- * `Interpret`.
- * The `resilient_run` handler runs the invoke inside `ctx.waitUntil` and dispatches
- * the consumer's `onOk` / `onErr` Msg directly (returning `void`), so it is a
- * fire-and-forget handler with a structural `{ waitUntil, dispatch }` ctx — it
- * does not re-enter the resilient settle Msg and so does not drive the retry
- * loop. Naming the type precisely (rather than laundering it through
- * `as unknown as Interpret<...>`) keeps `agent.unsafeDetachedHandlers(ports)` honest: the
- * consumer that wires the verbs by hand gets the real detached shape, and its
- * `resilient_run` is callable with a plain Cmd + a `{ waitUntil, dispatch }` ctx
- * with no `as never` at the call site.
- */
-export type AgentDetachedHandlers<P extends string, M> = {
-  readonly resilient_run: (
-    cmd: AgentLlmRunCmd<P>,
-    ctx: {
-      waitUntil(p: Promise<unknown>): void;
-      dispatch(msg: M): unknown;
-    },
-  ) => void;
-};
 
 // ===========================================================================
 // AgentBootPort — the typed do↔agent boot seam.
@@ -359,16 +355,16 @@ export function agentCancelMsg(at: number): AgentCancelMsg {
  * The agent machine's Msg union — one variant per reducer entry point. A
  * consumer using `toMachine` dispatches `agent_start` to begin and `agent_tool_ok`
  * / `agent_tool_err` to route settled tools back; the brain-call settle Msgs
- * (`resilient_ok` / `resilient_err`) RE-ENTER from the FIXED `brainHandlers`
- * (the substrate enqueues an interpret handler's returned Msg as a follow-up),
- * driving `succeed` / `fail`. Time enters via `at` on every variant — the
+ * (`resilient_run_ok` / `resilient_run_err`) are minted by the engine from the
+ * outcome the FIXED `brainHandlers` returns (ADR 0021), driving `succeed` /
+ * `fail`. Time enters via `at` on every variant — the
  * reducer never reads the clock.
  *
  * There is deliberately NO `agent_turn` variant here. The wired loop folds a
- * model turn INSIDE `succeed` from the re-entered `resilient_ok` — a single
+ * model turn INSIDE `succeed` from the minted `resilient_run_ok` — a single
  * settle Msg advances both the retry slice and the conversation (the L3 fix).
  * Exposing `agent_turn` as a dispatchable Msg re-opened the stuck-`running` bug:
- * a hand-fed turn folds the conversation without ever re-entering `resilient_ok`,
+ * a hand-fed turn folds the conversation without ever settling `resilient_run_ok`,
  * so `succeed` never runs and the resilient slice stays `running`. The
  * `turn` verb remains on the handle for the consumer that wires the verbs by hand
  * (manual wiring), but it is not part of the one wired machine's Msg surface.
@@ -391,10 +387,10 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
       readonly reason: string;
       readonly at: number;
     }
-  // The brain-call settle Msgs RE-ENTER straight from `brainHandlers` (no
-  // wrapping) — `resilient_ok` runs `succeed` (reset retry + fold the turn),
-  // `resilient_err` runs `fail` (back off via retry). This is the inherited
-  // llm-call settle shape, dispatched verbatim by the substrate's re-entry.
+  // The brain-call settle Msgs the engine mints from `brainHandlers`' outcome
+  // (ADR 0021) — `resilient_run_ok` runs `succeed` (reset retry + fold the
+  // turn), `resilient_run_err` runs `fail` (back off via retry). This is the
+  // inherited llm-call settle shape.
   | AgentLlmOkMsg<P, O>
   | AgentLlmErrMsg<P>
   // The compaction settle Msgs RE-ENTER from the compaction interpret handler
@@ -406,7 +402,7 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | AgentCompactOkMsg
   | AgentCompactErrMsg
   // The timer Msg is `DeadlineExceeded` itself (not wrapped) so the
-  // `subscribeDeadline` handler dispatches it straight into `update`, exactly as
+  // `subscribeDeadline` runner dispatches it straight into `update`, exactly as
   // the resilient-call / llm-call / monitored-run gold standards wire it.
   | AgentTimerMsg
   | AgentBootMsg
@@ -431,7 +427,7 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  * the retry plumbing is renamed.
  *
  *   - `TurnSettled` — a brain turn settled (the model produced an `AgentTurn`).
- *     Projected off the private `resilient_ok` settle Msg; carries the parsed
+ *     Projected off the private `resilient_run_ok` settle Msg; carries the parsed
  *     `turn` (the narration + tool calls the model asked for).
  *   - `ToolSettled` — a tool call settled OK. Projected off the private
  *     `agent_tool_ok` Msg; carries the `callId` and the tool `result`.
@@ -455,7 +451,7 @@ export type AgentEvent<R> =
  * `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`.
  *
  * This is the ONE place the agent's PRIVATE Msg names are read: it maps
- * `resilient_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
+ * `resilient_run_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
  * the post-transition `run.phase` for `RunDone`. The mapping is total over the
  * Msg union (a `default`-free switch on the discriminant) and returns `[]` for
  * the transitions that carry no public event (start / boot / timer / the error
@@ -463,7 +459,7 @@ export type AgentEvent<R> =
  *
  * A single transition may emit more than one event: the brain turn that retires
  * the final stage settles a turn (`TurnSettled`) AND finishes the run
- * (`RunDone`) — both are projected from that one `resilient_ok` transition.
+ * (`RunDone`) — both are projected from that one `resilient_run_ok` transition.
  * `RunDone` is gated on `run.phase === "done"`, which the wired loop reaches
  * exactly once (the agent is terminal there and dispatches no further
  * transition), so the event fires once per run.
@@ -552,10 +548,10 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   switch (msg.type) {
     case MsgType.ResilientOk:
       // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
-      // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
+      // `value.output` is the parsed `AgentTurn` (the `O extends Record<P,
       // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
       // same reasoning `state.output` relies on, #46/#48).
-      events.push({ type: "TurnSettled", turn: msg.result.output });
+      events.push({ type: "TurnSettled", turn: msg.value.output });
       break;
     case MsgType.AgentToolOk:
       // The PRIVATE tool-fan-out settle Msg → the public ToolSettled, unless

@@ -9,14 +9,23 @@
 //      the kernel's `malformed_result`.
 //   2. `toolOf` / `interpret` are derived — nothing per tool is hand-written,
 //      and `toMachine({ tools })` leaves no tool cell on `toolInterpret`.
-//   3. A `needs` slice a tool names is demanded at `run` — a ctx without it
-//      does not compile.
+//   3. The ctx a tool's handler annotates is demanded at `run` — a ctx
+//      without it does not compile. The tool's Cmd carries no requirements;
+//      the ctx is a fact about the handler (ADR 0020).
 //   4. A reserved name — an agent-owned Msg prefix or discriminant — does not
 //      compile as `tool()`'s `name` (#72); the set derives from `MsgType`.
 //   5. `description` is required on the spec and read back off the def (#91).
 
 import { z } from "zod";
-import { absurd, Cmd, type PortEmitter, run, type Settled } from "../index";
+import {
+  absurd,
+  type ErrOf,
+  type OkOf,
+  type OutcomeHelpers,
+  type PortEmitter,
+  type Settled,
+} from "../index";
+import { run } from "../promise";
 import type { MsgTypeValue } from "../protocol";
 import {
   type AgentTurn,
@@ -44,10 +53,9 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found", "rate_limited"],
-    requirements: Cmd.requirements<KbCtx>(),
   },
-  async ({ q }, ctx, { ok, fail }) => {
-    // The `R` slice lands on the handler's ctx: `ctx.kb` is typed.
+  async ({ q }, ctx: KbCtx, { ok, fail }) => {
+    // The handler names the ctx it reads: `ctx.kb` is typed.
     const snippet = ctx.kb.lookup(q);
     if (snippet === undefined) return fail({ _tag: "not_found" });
     // Detail rides beside the tag.
@@ -160,7 +168,7 @@ const agent = createAgent<Stage, Purpose, Outputs, R, ToolCmd<Tool>, unknown>({
 
 // With the router wired, `toolInterpret` owes nothing: every tool cell is the
 // router's, snapshotting and compaction are off.
-const machine = agent.toMachine({ tools });
+const { machine, interpret, subscribe } = agent.toMachine({ tools });
 
 // Without the router, the consumer still owes a cell per tool Cmd — the
 // pre-#56 contract is unchanged.
@@ -175,25 +183,28 @@ const settledOnM: Parameters<typeof machine.update.search_ok>[1] = search.ok(
 );
 void settledOnM;
 
-// The router's cells are plain `Interpret` cells over the tool Cmd.
+// The router's cells are `Interpret` cells over the tool Cmd: a
+// `Cmd.define`d Cmd's cell, so its ctx carries the outcome builders (ADR 0021).
 const cell: (
   cmd: ReturnType<typeof search>,
-  ctx: KbCtx & PortEmitter,
+  ctx: KbCtx &
+    PortEmitter &
+    OutcomeHelpers<OkOf<typeof search>, ErrOf<typeof search>>,
 ) => Promise<unknown> = tools.interpret.search;
 void cell;
 
-// ── 3. `run` demands every tool's `needs` on ctx ────────────────────────────
+// ── 3. `run` demands the ctx every tool's handler reads ─────────────────────
 
 const kb: Kb = { lookup: () => undefined };
 
 // POSITIVE: the slice `search` needs is supplied.
-run(machine, { ctx: { kb } });
+run(machine, { ctx: { kb }, interpret, subscribe });
 
-// NEGATIVE: `search` names `kb`; a ctx without it does not compile.
+// NEGATIVE: `search`'s handler reads `kb`; a ctx without it does not compile.
 // @ts-expect-error ctx lacks `kb`
-run(machine, { ctx: {} });
-// @ts-expect-error ctx cannot be omitted while a tool names a requirement
-run(machine, {});
+run(machine, { ctx: {}, interpret, subscribe });
+// @ts-expect-error ctx cannot be omitted while a tool's handler reads a key
+run(machine, { interpret, subscribe });
 
 // ── 4. a reserved name does not compile (#72) ───────────────────────────────
 
@@ -213,7 +224,7 @@ const noop = async (
 // the router's own rejection def.
 // @ts-expect-error `agent_tool` mints `agent_tool_ok` / `agent_tool_err`
 tool("agent_tool", spec, noop);
-// @ts-expect-error `resilient` mints `resilient_ok` / `resilient_err`
+// @ts-expect-error `resilient` is the prefix of the brain Cmd `resilient_run`
 tool("resilient", spec, noop);
 // @ts-expect-error `compact` mints `compact_ok` / `compact_err`
 tool("compact", spec, noop);

@@ -3,20 +3,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { defineMachine, type Reducer, run } from "../index";
+import { defineMachine, type Reducer } from "../index";
+import { run } from "../promise";
 import {
   fileStore,
-  type NodeSub,
+  type NodeSignalSub,
   type NodeSubscribeCtx,
+  type NodeTimerSub,
+  type NodeWsSub,
   nodeSubscribe,
   sendToWebSocket,
 } from "./index";
 
 // ───────────────────────────────────────────────────────────────────────────
 // @demlik/tea/node — fileStore (atomic JSON persistence) + nodeSubscribe (the
-// node_ws / node_timer / node_signal handler registry). Each surface is
-// exercised through a real `run()`: machines whose subscriptions list the
-// node Subs, with the substrate's reconciler driving install and teardown.
+// node_ws / node_timer / node_signal runners). Each surface is exercised
+// through a real `run()`: machines whose `subs` declare the node Subs, with
+// the engine's reconciler driving install and teardown.
 // ───────────────────────────────────────────────────────────────────────────
 
 function parseCounter(raw: unknown): { n: number } | null {
@@ -131,34 +134,35 @@ function timerMachine(delayMs: number, repeat: boolean) {
     types: {
       model: {} as TickState,
       msg: {} as TickMsg,
-      sub: {} as NodeSub<TickMsg>,
+      sub: {} as NodeTimerSub<TickMsg>,
       ctx: {} as NodeSubscribeCtx,
     },
-    init: () => [{ phase: "idle", ticks: 0 }, []],
+    init: (): [TickState, []] => [{ phase: "idle", ticks: 0 }, []],
     update,
-    subscriptions: (s) =>
-      s.phase === "armed"
-        ? [
-            {
-              id: "t1",
-              type: "node_timer",
-              delayMs,
-              msg: { type: "tick" },
-              repeat,
-            },
-          ]
-        : [],
-    subscribe: nodeSubscribe<TickMsg, NodeSubscribeCtx>(),
+    subs: [
+      {
+        type: "node_timer",
+        deps: (s) =>
+          s.phase === "armed"
+            ? { delayMs, msg: { type: "tick" }, repeat }
+            : null,
+      },
+    ],
   });
+}
+
+function runTimer(delayMs: number, repeat: boolean) {
+  return run(timerMachine(delayMs, repeat), {
+    subscribe: nodeSubscribe<TickMsg>(),
+    ctx: { wsRegistry: new Map() },
+  }).ready;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("nodeSubscribe: node_timer", () => {
   it("a one-shot timer dispatches its msg once after delayMs", async () => {
-    const runtime = await run(timerMachine(5, false), {
-      ctx: { wsRegistry: new Map() },
-    }).ready;
+    const runtime = await runTimer(5, false);
     await runtime.dispatch({ type: "arm" });
     await sleep(30);
     await runtime.idle();
@@ -166,10 +170,8 @@ describe("nodeSubscribe: node_timer", () => {
     await runtime.stop();
   });
 
-  it("a repeating timer keeps firing while listed, and cleanup stops it", async () => {
-    const runtime = await run(timerMachine(5, true), {
-      ctx: { wsRegistry: new Map() },
-    }).ready;
+  it("a repeating timer keeps firing while on, and cleanup stops it", async () => {
+    const runtime = await runTimer(5, true);
     await runtime.dispatch({ type: "arm" });
     await sleep(40);
     await runtime.dispatch({ type: "disarm" });
@@ -177,7 +179,7 @@ describe("nodeSubscribe: node_timer", () => {
     const ticksAtDisarm = runtime.getState().ticks;
     expect(ticksAtDisarm).toBeGreaterThanOrEqual(2);
 
-    // The reconciler ran the cleanup when `subscriptions` dropped the sub —
+    // The reconciler ran the cleanup when the sub's `deps` went null —
     // the interval is cleared, so the count is frozen.
     await sleep(40);
     expect(runtime.getState().ticks).toBe(ticksAtDisarm);
@@ -185,9 +187,7 @@ describe("nodeSubscribe: node_timer", () => {
   });
 
   it("leaving the phase before a one-shot fires cancels it", async () => {
-    const runtime = await run(timerMachine(30, false), {
-      ctx: { wsRegistry: new Map() },
-    }).ready;
+    const runtime = await runTimer(30, false);
     await runtime.dispatch({ type: "arm" });
     await runtime.dispatch({ type: "disarm" }); // cleanup clears the pending timeout
     await sleep(60);
@@ -213,28 +213,26 @@ describe("nodeSubscribe: node_signal", () => {
       types: {
         model: {} as SigState,
         msg: {} as SigMsg,
-        sub: {} as NodeSub<SigMsg>,
+        sub: {} as NodeSignalSub<SigMsg>,
         ctx: {} as NodeSubscribeCtx,
       },
-      init: () => [{ phase: "idle", caught: 0 }, []],
+      init: (): [SigState, []] => [{ phase: "idle", caught: 0 }, []],
       update,
-      subscriptions: (s) =>
-        s.phase === "armed"
-          ? [
-              {
-                id: "sig1",
-                type: "node_signal",
-                signal: "SIGUSR2",
-                msg: { type: "sig" },
-              },
-            ]
-          : [],
-      subscribe: nodeSubscribe<SigMsg, NodeSubscribeCtx>(),
+      subs: [
+        {
+          type: "node_signal",
+          deps: (s) =>
+            s.phase === "armed"
+              ? { signal: "SIGUSR2", msg: { type: "sig" } }
+              : null,
+        },
+      ],
     });
   }
 
   it("dispatches the msg when the signal fires, and detaches on cleanup", async () => {
     const runtime = await run(signalMachine(), {
+      subscribe: nodeSubscribe<SigMsg>(),
       ctx: { wsRegistry: new Map() },
     }).ready;
 
@@ -287,32 +285,32 @@ function wsMachine(url: string) {
     types: {
       model: {} as WsState,
       msg: {} as WsMsg,
-      sub: {} as NodeSub<WsMsg>,
+      sub: {} as NodeWsSub,
       ctx: {} as NodeSubscribeCtx,
     },
-    init: () => [
+    init: (): [WsState, []] => [
       { phase: "idle", frames: [], opened: false, closedWith: null },
       [],
     ],
     update,
-    subscriptions: (s) =>
-      s.phase === "connected"
-        ? [
-            {
-              id: "ws1",
-              type: "node_ws",
-              url,
-              onOpen: () => ({ type: "ws_open" }),
-              // Frames prefixed "drop:" exercise the null-drop seam.
-              onMessage: (data) =>
-                data.startsWith("drop:") ? null : { type: "ws_frame", data },
-              onClose: (code) => ({ type: "ws_closed", code }),
-            },
-          ]
-        : [],
-    subscribe: nodeSubscribe<WsMsg, NodeSubscribeCtx>(),
+    subs: [
+      {
+        type: "node_ws",
+        deps: (s) => (s.phase === "connected" ? { key: "ws1", url } : null),
+      },
+    ],
   });
 }
+
+const wsSubscribe = nodeSubscribe<WsMsg, NodeSubscribeCtx>({
+  ws: {
+    onOpen: () => ({ type: "ws_open" }),
+    // Frames prefixed "drop:" exercise the null-drop seam.
+    onMessage: (data) =>
+      data.startsWith("drop:") ? null : { type: "ws_frame", data },
+    onClose: (code) => ({ type: "ws_closed", code }),
+  },
+});
 
 describe("nodeSubscribe: node_ws through a real run", () => {
   let server: WebSocketServer;
@@ -351,7 +349,8 @@ describe("nodeSubscribe: node_ws through a real run", () => {
       });
     });
 
-    const runtime = await run(wsMachine(url), { ctx }).ready;
+    const runtime = await run(wsMachine(url), { subscribe: wsSubscribe, ctx })
+      .ready;
     await runtime.dispatch({ type: "connect" });
 
     const peer = await serverSide;
@@ -382,7 +381,8 @@ describe("nodeSubscribe: node_ws through a real run", () => {
       });
     });
 
-    const runtime = await run(wsMachine(url), { ctx }).ready;
+    const runtime = await run(wsMachine(url), { subscribe: wsSubscribe, ctx })
+      .ready;
 
     // Nothing registered yet — a write is a boolean no-op, never a throw.
     expect(sendToWebSocket(ctx, "ws1", "too early")).toBe(false);
@@ -395,7 +395,7 @@ describe("nodeSubscribe: node_ws through a real run", () => {
     expect(sendToWebSocket(ctx, "ws1", "ping-from-cmd")).toBe(true);
     await expect(received).resolves.toBe("ping-from-cmd");
 
-    // Unknown id — false.
+    // Unknown key — false.
     expect(sendToWebSocket(ctx, "nope", "x")).toBe(false);
 
     await runtime.dispatch({ type: "hangup" });
@@ -408,7 +408,10 @@ describe("nodeSubscribe: node_ws through a real run", () => {
     // the refusal lands. Reconcile it out immediately — the cleanup must take
     // the terminate() path and absorb the teardown-induced 'error'.
     const ctx: NodeSubscribeCtx = { wsRegistry: new Map() };
-    const runtime = await run(wsMachine("ws://127.0.0.1:1"), { ctx }).ready;
+    const runtime = await run(wsMachine("ws://127.0.0.1:1"), {
+      subscribe: wsSubscribe,
+      ctx,
+    }).ready;
 
     await runtime.dispatch({ type: "connect" });
     expect(ctx.wsRegistry.has("ws1")).toBe(true);
@@ -421,5 +424,65 @@ describe("nodeSubscribe: node_ws through a real run", () => {
     expect(runtime.getState().opened).toBe(false);
     expect(runtime.getState().closedWith).toBeNull();
     await runtime.stop();
+  });
+
+  it("refuses a second live socket under a key that is already registered", async () => {
+    // Two entries, same `deps.key`, different urls: distinct Sub ids, so the
+    // engine starts both — but `sendToWebSocket` could not tell them apart.
+    const machine = defineMachine({
+      types: {
+        model: {} as WsState,
+        msg: {} as WsMsg,
+        sub: {} as NodeWsSub,
+        ctx: {} as NodeSubscribeCtx,
+      },
+      init: (): [WsState, []] => [
+        { phase: "idle", frames: [], opened: false, closedWith: null },
+        [],
+      ],
+      update: {
+        connect: (s) => [{ ...s, phase: "connected" }, []],
+        hangup: (s) => [{ ...s, phase: "idle" }, []],
+        ws_open: (s) => [s, []],
+        ws_frame: (s) => [s, []],
+        ws_closed: (s) => [s, []],
+      } satisfies Reducer<WsState, WsMsg, never>,
+      subs: [
+        {
+          type: "node_ws",
+          deps: (s) =>
+            s.phase === "connected"
+              ? { key: "ws1", url: "ws://127.0.0.1:1/a" }
+              : null,
+        },
+        {
+          type: "node_ws",
+          deps: (s) =>
+            s.phase === "connected"
+              ? { key: "ws1", url: "ws://127.0.0.1:1/b" }
+              : null,
+        },
+      ],
+    });
+    const ctx: NodeSubscribeCtx = { wsRegistry: new Map() };
+    const runtime = await run(machine, { subscribe: wsSubscribe, ctx }).ready;
+
+    await expect(runtime.dispatch({ type: "connect" })).rejects.toThrow(
+      /already registered under key "ws1"/,
+    );
+    await runtime.stop();
+    expect(ctx.wsRegistry.size).toBe(0);
+  });
+
+  it("a machine that declares node_ws cannot run without the ws handlers", () => {
+    const ctx: NodeSubscribeCtx = { wsRegistry: new Map() };
+    // Type-level only: the handler-less table has no `node_ws` runner.
+    const start = () =>
+      run(wsMachine(url), {
+        // @ts-expect-error — `node_ws` is missing without `{ ws }`.
+        subscribe: nodeSubscribe<WsMsg>(),
+        ctx,
+      });
+    expect(typeof start).toBe("function");
   });
 });

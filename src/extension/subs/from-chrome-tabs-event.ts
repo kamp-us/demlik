@@ -16,7 +16,7 @@
 //     single listener per event name. The listener fires `msgFn(sub)`;
 //     event-specific payloads (`activeInfo`, `tabId`, `changeInfo`,
 //     `removeInfo`) are NOT forwarded — consumers that care about which
-//     event fired model that as separate Subs with different ids.
+//     event fired model that as separate Subs with different types.
 //
 //   - `fireOnMount?: boolean` — synthetic immediate dispatch at subscribe
 //     time. Most "watch tabs" subscriptions need the first emission to

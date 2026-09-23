@@ -21,8 +21,9 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Reducer, run } from "../index";
+import { defineMachine, type Reducer } from "../index";
 import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "../pbt";
+import { run } from "../promise";
 import { sseHub, sseProjection } from "./host";
 import {
   driveProjections,
@@ -64,7 +65,6 @@ function counter() {
     },
     init: (loaded) => [loaded ?? { type: "counting", count: 0, log: [] }, []],
     update,
-    subscribe: {},
   });
 }
 

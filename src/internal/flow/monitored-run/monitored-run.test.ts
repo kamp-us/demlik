@@ -1,11 +1,15 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Reducer } from "../../../index";
+import { defineMachine, type Reducer, subIdOf } from "../../../index";
+import { run as runMachine } from "../../../promise";
 import { bindMachine } from "../../../testing";
-import { type SnapshotStore, snapshotSaved } from "../../persistence/snapshot";
+import {
+  type SnapshotFailedMsg,
+  snapshotWriteDef,
+} from "../../persistence/snapshot";
+import { deadlineSub } from "../../resilience/deadline";
 import {
   createMonitoredRun,
-  deadlineSub,
   type MonitoredRunState,
   type MonitoredRunTimerMsg,
   type SnapshotSavedMsg,
@@ -16,6 +20,16 @@ import {
 // stand-in so the payload threading is observable in the emitted write Cmd.
 type Stage = "plan" | "test" | "report";
 type Checkpoint = { readonly step: number };
+
+// The engine-minted ack for the write that decided checkpoint `seq` at `at`.
+const writeDef = snapshotWriteDef<Checkpoint>();
+function snapshotSaved(seq: number, at: number): SnapshotSavedMsg<Checkpoint> {
+  return writeDef.ok(
+    writeDef({ key: "@@snapshot", seq, at, payload: { step: 0 } }),
+    undefined,
+    at,
+  );
+}
 
 const STAGES: readonly Stage[] = ["plan", "test", "report"];
 
@@ -71,7 +85,7 @@ describe("createMonitoredRun — init", () => {
     expect(started.stepStates).toEqual([]); // no pipeline
     expect(cmds).toEqual([]);
     // No deadlineMs → no watchdog Sub.
-    expect(run.subs(started)).toEqual([]);
+    expect(run.deadlines(started)).toEqual([]);
   });
 });
 
@@ -245,7 +259,9 @@ describe("createMonitoredRun — subs (the watchdog)", () => {
       deadlineMs: 600,
     });
     const [s] = run.start(run.init(), "run-x", 100);
-    expect(run.subs(s)).toEqual([deadlineSub("monitored:safety:run-x:0", 700)]);
+    expect(run.deadlines(s)).toEqual([
+      deadlineSub("monitored:safety:run-x:0", 700),
+    ]);
   });
 
   it("a progress event retires the old alarm id and arms a new one", () => {
@@ -254,10 +270,12 @@ describe("createMonitoredRun — subs (the watchdog)", () => {
       deadlineMs: 600,
     });
     let [s] = run.start(run.init(), "run-x", 100);
-    expect(run.subs(s)[0]?.id).toBe("monitored:safety:run-x:0");
+    expect(run.deadlines(s)[0]?.id).toBe("monitored:safety:run-x:0");
     [s] = run.progress(s, { step: 1 }, 250);
     // New id (seq bumped) + new target (lastProgressAt moved).
-    expect(run.subs(s)).toEqual([deadlineSub("monitored:safety:run-x:1", 850)]);
+    expect(run.deadlines(s)).toEqual([
+      deadlineSub("monitored:safety:run-x:1", 850),
+    ]);
   });
 
   it("a stale run still arms the watchdog (it is still resumable, still being timed)", () => {
@@ -267,20 +285,22 @@ describe("createMonitoredRun — subs (the watchdog)", () => {
     });
     let [s] = run.start(run.init(), "run-x", 100);
     [s] = run.markStale(s);
-    expect(run.subs(s)).toEqual([deadlineSub("monitored:safety:run-x:0", 700)]);
+    expect(run.deadlines(s)).toEqual([
+      deadlineSub("monitored:safety:run-x:0", 700),
+    ]);
   });
 
   it("a settled run desires no watchdog", () => {
     const run = createMonitoredRun<never, Checkpoint>({ deadlineMs: 600 });
     let [s] = run.start(run.init(), "r", 0);
     [s] = run.advance(s, { step: 1 }, { kind: "ok" }, 1); // done
-    expect(run.subs(s)).toEqual([]);
+    expect(run.deadlines(s)).toEqual([]);
   });
 
   it("omitting deadlineMs arms no watchdog at all", () => {
     const run = createMonitoredRun<Stage, Checkpoint>({ stages: STAGES });
     const [s] = run.start(run.init(), "r", 0);
-    expect(run.subs(s)).toEqual([]);
+    expect(run.deadlines(s)).toEqual([]);
   });
 });
 
@@ -358,7 +378,7 @@ describe("createMonitoredRun — boot", () => {
     // Watchdog re-armed from NOW (not the pre-crash lastProgressAt).
     expect(booted.lastProgressAt).toBe(999_999);
     expect(booted.progressSeq).toBe(2); // bumped → fresh alarm id
-    expect(run.subs(booted)).toEqual([
+    expect(run.deadlines(booted)).toEqual([
       deadlineSub("monitored:safety:run-x:2", 999_999 + 600),
     ]);
   });
@@ -468,75 +488,90 @@ describe("createMonitoredRun — snapshot composition", () => {
 });
 
 // ---------------------------------------------------------------------------
-// handlers — the checkpoint write boundary
+// The checkpoint write — its Cmd def and a host handler driven through `run`
 // ---------------------------------------------------------------------------
 
-describe("createMonitoredRun — handlers", () => {
-  function fakeStore<Vv>(): SnapshotStore<Vv> & {
-    puts: { key: string; value: Vv }[];
-  } {
-    const cell = new Map<string, Vv>();
-    const puts: { key: string; value: Vv }[] = [];
-    return {
-      puts,
-      async get(key) {
-        return cell.has(key) ? (cell.get(key) as Vv) : null;
-      },
-      async put(key, value) {
-        cell.set(key, value);
-        puts.push({ key, value });
-      },
-    };
-  }
+describe("createMonitoredRun — the checkpoint Cmd (no handlers, ADR 0021)", () => {
+  type WState = { readonly run: MonitoredRunState<Stage> };
+  type WMsg =
+    | { readonly type: "begin"; readonly runId: string; readonly at: number }
+    | { readonly type: "tick"; readonly at: number };
 
-  it("puts the payload and routes success to snapshot_saved", async () => {
+  // A host that checkpoints every progress unit, with the write handler it
+  // owns: `put` to `store`, return an outcome, let the engine mint the ack.
+  function wired(put: (key: string, value: Checkpoint) => Promise<void>) {
     const run = createMonitoredRun<Stage, Checkpoint>({
       stages: STAGES,
       snapshotEvery: 1,
       snapshotKey: "run/cp",
     });
-    const store = fakeStore<Checkpoint>();
-    const handlers = run.handlers({ store });
-    const follow = await handlers.snapshot_write(
-      {
-        type: "snapshot_write",
-        key: "run/cp",
-        seq: 3,
-        at: 12,
-        payload: { step: 4 },
+    const machine = defineMachine({
+      types: { model: {} as WState, msg: {} as WMsg, ctx: undefined },
+      cmds: [run.checkpoint],
+      init: () => [{ run: run.init() }, []],
+      update: {
+        begin: (s, m) => {
+          const [slice, cmds] = run.start(s.run, m.runId, m.at);
+          return [{ run: slice }, cmds];
+        },
+        tick: (s, m) => {
+          const [slice, cmds] = run.progress(
+            s.run,
+            { step: s.run.progressSeq + 1 },
+            m.at,
+          );
+          return [{ run: slice }, cmds];
+        },
+        snapshot_write_ok: (s, m) => [
+          { run: run.confirmSnapshot(s.run, m) },
+          [],
+        ],
+        snapshot_write_err: (s) => [s, []],
       },
-      {} as never,
-    );
-    expect(store.puts).toEqual([{ key: "run/cp", value: { step: 4 } }]);
-    expect(follow).toEqual(snapshotSaved(3, 12));
+    });
+    return runMachine(machine, {
+      ctx: undefined,
+      interpret: {
+        snapshot_write: async (cmd, { ok, err }) => {
+          try {
+            await put(cmd.key, cmd.payload);
+            return ok(undefined);
+          } catch (cause) {
+            return err({ _tag: "snapshot_write_failed", cause });
+          }
+        },
+      },
+    });
+  }
+
+  it("exposes the checkpoint Cmd def and ships no handler", () => {
+    const run = createMonitoredRun<Stage, Checkpoint>({ snapshotEvery: 1 });
+    expect(run.checkpoint.cmdType).toBe("snapshot_write");
+    expect("handlers" in run).toBe(false);
   });
 
-  it("routes a rejecting put to snapshot_failed (Railway — never throws)", async () => {
-    const boom = new Error("R2 down");
-    const store: SnapshotStore<Checkpoint> = {
-      async get() {
-        return null;
-      },
-      async put() {
-        throw boom;
-      },
-    };
-    const run = createMonitoredRun<Stage, Checkpoint>({
-      stages: STAGES,
-      snapshotEvery: 1,
-    });
-    const handlers = run.handlers({ store });
-    const follow = await handlers.snapshot_write(
-      {
-        type: "snapshot_write",
-        key: "@@snapshot",
-        seq: 1,
-        at: 1,
-        payload: { step: 1 },
-      },
-      {} as never,
-    );
-    expect(follow).toEqual({ type: "snapshot_failed", seq: 1, error: boom });
+  it("puts the payload, and the minted snapshot_write_ok advances the watermark", async () => {
+    const puts: { key: string; value: Checkpoint }[] = [];
+    const runtime = await wired(async (key, value) => {
+      puts.push({ key, value });
+    }).ready;
+    await runtime.dispatch({ type: "begin", runId: "r", at: 0 });
+    await runtime.dispatch({ type: "tick", at: 12 });
+    await runtime.stop();
+    expect(puts).toEqual([{ key: "run/cp", value: { step: 1 } }]);
+    expect(runtime.getState().run.snapshot.lastSavedSeq).toBe(1);
+    expect(runtime.getState().run.snapshot.lastSavedAt).toBe(12);
+  });
+
+  it("a rejecting put settles snapshot_write_err — the watermark stays put", async () => {
+    const runtime = await wired(async () => {
+      throw new Error("R2 down");
+    }).ready;
+    await runtime.dispatch({ type: "begin", runId: "r", at: 0 });
+    await runtime.dispatch({ type: "tick", at: 1 });
+    await runtime.stop();
+    expect(runtime.getState().run.snapshot.seq).toBe(1);
+    expect(runtime.getState().run.snapshot.lastSavedSeq).toBeNull();
   });
 });
 
@@ -555,20 +590,9 @@ type HostMsg =
   | { readonly type: "tick"; readonly at: number }
   | { readonly type: "boot"; readonly at: number }
   | MonitoredRunTimerMsg
-  | SnapshotSavedMsg
-  | {
-      readonly type: "snapshot_failed";
-      readonly seq: number;
-      readonly error: unknown;
-    };
+  | SnapshotSavedMsg<Checkpoint>
+  | SnapshotFailedMsg<Checkpoint>;
 type HostCmd = SnapshotWriteCmd<Checkpoint>;
-
-const fakeStore: SnapshotStore<Checkpoint> = {
-  async get() {
-    return null;
-  },
-  async put() {},
-};
 
 function makeMachine(
   config: Parameters<typeof createMonitoredRun<Stage, Checkpoint>>[0],
@@ -598,23 +622,21 @@ function makeMachine(
       const [slice, cmds] = run.onDeadline(s.run, m);
       return [{ run: slice }, cmds];
     },
-    snapshot_saved: (s, m) => [{ run: run.confirmSnapshot(s.run, m) }, []],
-    snapshot_failed: (s) => [s, []],
+    snapshot_write_ok: (s, m) => [{ run: run.confirmSnapshot(s.run, m) }, []],
+    snapshot_write_err: (s) => [s, []],
   };
   const machine = defineMachine({
     types: {
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof run.subs>[number],
       ctx: {} as object,
     },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ run: run.init() }, []],
     update,
-    subscriptions: (s) => run.subs(s.run),
-    subscribe: { deadline: () => () => {} },
-    interpret: run.handlers({ store: fakeStore }),
+    // The watchdog rides the engine's built-in `timer` — no runner to wire.
+    subs: [{ type: "timer", deps: (s: HostState) => run.timer(s.run) }],
   });
   return { run, machine };
 }
@@ -647,7 +669,29 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
           { type: "step", result: { kind: "ok" }, at: 100 },
         ],
       },
-      [deadlineSub("monitored:safety:r:1", 1100)],
+      [
+        {
+          // `deadlineMs` counted from the latest progress (`at` 100), firing
+          // the alarm keyed on the bumped seq.
+          id: subIdOf("timer", {
+            ms: 1000,
+            msg: {
+              type: "deadline_exceeded",
+              id: "monitored:safety:r:1",
+              atMs: 1100,
+            },
+          }),
+          type: "timer",
+          deps: {
+            ms: 1000,
+            msg: {
+              type: "deadline_exceeded",
+              id: "monitored:safety:r:1",
+              atMs: 1100,
+            },
+          },
+        },
+      ],
     );
   });
 
@@ -698,7 +742,7 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
   // (loaded: null, NO `begin` Msg), read the watchdog the machine actually
   // desires off the booted slice, then dispatch the exact alarm that watchdog
   // would fire back THROUGH the bound machine — the same path the live runtime
-  // takes when the subscribe cell's `setTimeout(fn, 0)` lands. We assert the
+  // takes when the deadline runner's `setTimeout(fn, 0)` lands. We assert the
   // END STATE, not the hand-fed Msg. Pre-fix: subs arms the born-live deadline
   // and the run lands `failed`. Post-fix: the unstarted slice arms nothing and
   // a stray alarm cannot un-start the run.
@@ -725,10 +769,15 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
       //    tick. We synthesize that alarm from whatever the machine ACTUALLY
       //    desired (not a hard-coded id) so this test tracks the real wiring.
       const booted = bound.replay({ msgs: [] });
-      const armed = booted.subs[0]; // pre-fix: born-live deadline; post-fix: undefined
+      const first = booted.subs[0];
+      // pre-fix: born-live deadline; post-fix: undefined
+      const armed =
+        first?.type === "timer"
+          ? (first.deps as { msg: MonitoredRunTimerMsg }).msg
+          : undefined;
 
       // 2. Build the alarm Msg the armed watchdog would dispatch and RE-ENTER
-      //    it through the bound machine, the same dispatch the subscribe cell
+      //    it through the bound machine, the same dispatch the deadline runner
       //    performs. If nothing was armed there is no alarm to fire — synthesize
       //    the worst-case stray fire against the empty-runId/seq-0 slice to
       //    prove even a rogue alarm cannot un-start the run.

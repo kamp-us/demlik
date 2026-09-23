@@ -10,7 +10,8 @@
  * Globals are NOT enabled in vitest.config.ts — describe/it/expect are imported.
  */
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, run, type Store } from "../index";
+import { type Cmd, defineMachine, type Interpret, type Store } from "../index";
+import { run } from "../promise";
 import { bootResume, type ResumePort } from "./host";
 
 // A minimal non-agent durable grain: it processes one unit of work at a time.
@@ -45,10 +46,10 @@ const workerResumePort: ResumePort<WorkerState, WorkerMsg> = {
   resumeMsg: resumeWorkMsg,
 };
 
-// Build a machine whose interpret pushes to a caller-owned effect log, so the
+// Build a machine and handlers that push to a caller-owned effect log, so the
 // test observes exactly how many times the effect fired across a wake.
 function makeWorker(effects: number[]) {
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as WorkerState,
       msg: {} as WorkerMsg,
@@ -69,13 +70,14 @@ function makeWorker(effects: number[]) {
           : [s, []],
       work_done: (s) => [{ ...s, done: s.done + 1, inFlight: false }, []],
     },
-    interpret: {
-      do_work: async (_cmd) => {
-        effects.push(1);
-        return { type: "work_done" };
-      },
-    },
   });
+  const interpret: Interpret<WorkerMsg, DoWorkCmd, Record<never, never>> = {
+    do_work: async (_cmd) => {
+      effects.push(1);
+      return { type: "work_done" };
+    },
+  };
+  return { machine, interpret };
 }
 
 // A tiny in-memory `Store<S>` — `load` returns the seeded raw (null = fresh
@@ -98,7 +100,8 @@ function memStore(seed: WorkerState | null): Store<WorkerState> {
 describe("bootResume — cold-wake resume for a non-agent durable machine (#231)", () => {
   it("is a no-op on a fresh (non-rehydrated) machine", async () => {
     const effects: number[] = [];
-    const booting = run(makeWorker(effects), { store: memStore(null) });
+    const { machine, interpret } = makeWorker(effects);
+    const booting = run(machine, { interpret, store: memStore(null) });
     await bootResume(booting, workerResumePort, () => 999);
     const runtime = await booting.ready;
 
@@ -112,7 +115,8 @@ describe("bootResume — cold-wake resume for a non-agent durable machine (#231)
     const effects: number[] = [];
     // Persisted mid-loop: two units already completed & folded, one in flight.
     const evicted: WorkerState = { done: 2, inFlight: true, resumedAt: null };
-    const booting = run(makeWorker(effects), { store: memStore(evicted) });
+    const { machine, interpret } = makeWorker(effects);
+    const booting = run(machine, { interpret, store: memStore(evicted) });
 
     await bootResume(booting, workerResumePort, () => 777);
     const runtime = await booting.ready;
@@ -132,7 +136,8 @@ describe("bootResume — cold-wake resume for a non-agent durable machine (#231)
   it("without bootResume, a rehydrated machine stays stuck — init emits zero Cmds (Invariant 2)", async () => {
     const effects: number[] = [];
     const evicted: WorkerState = { done: 2, inFlight: true, resumedAt: null };
-    const booting = run(makeWorker(effects), { store: memStore(evicted) });
+    const { machine, interpret } = makeWorker(effects);
+    const booting = run(machine, { interpret, store: memStore(evicted) });
 
     // Boot WITHOUT the resume dispatch: the rehydrate branch fired no Cmd, so
     // nothing advances the in-flight unit. This is exactly the silent-broken

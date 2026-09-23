@@ -10,7 +10,6 @@
 // lives in `accepted-types.test.ts`; this pins the end of that property an
 // author can actually write.
 
-import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import {
   acceptedTypes,
@@ -50,7 +49,6 @@ const machine = defineMachine<State, Msg, never, never, unknown>({
       collect: () => [{ type: "idle" }, []],
     },
   },
-  interpret: {},
 });
 
 describe("ragged transitions table (#203)", () => {
@@ -94,8 +92,8 @@ describe("ragged transitions table (#203)", () => {
       { type: "done", cups: 1 },
       { type: "tick" },
     );
-    expect(Result.isError(refusal)).toBe(true);
-    if (!Result.isError(refusal)) return;
+    expect(refusal._tag).toBe("Err");
+    if (refusal._tag !== "Err") return;
     expect(refusal.error).toBeInstanceOf(NoCellError);
     expect(refusal.error.acceptedTypes).toEqual(["collect"]);
   });

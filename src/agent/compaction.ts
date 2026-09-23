@@ -10,14 +10,9 @@
  */
 
 import type { Cmd, Interpret } from "../index";
-import type {
-  LlmCall,
-  LlmErr,
-  LlmOk,
-  MessageLoader,
-  Schema,
-} from "../internal/llm-call";
+import type { LlmCall, LlmErr, LlmOk, Schema } from "../internal/llm-call";
 import type { MsgType } from "../protocol";
+import type { MessageLoader } from "./model";
 import { schemaFromGuard } from "./schema";
 import type { Conversation } from "./types";
 

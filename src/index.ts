@@ -2,25 +2,18 @@
  * @packageDocumentation
  * @demlik/tea — TEA-faithful state machine substrate.
  *
- * Root barrel. The runtime surface is split across three concern modules —
- * `./runtime-types` (the interface surface + the pure construction/composition
- * helpers: `defineMachine`, `asReducer`, `replay`, `tryInterpret`), `./run`
- * (`run` + boot + the serial dispatch loop), and `./observability`
- * (`historyTracker`) — and re-exported here so the public `@demlik/tea` entry is
- * unchanged.
+ * Root barrel — the neutral core. It carries `defineMachine`, `Cmd`, `replay`
+ * and the pure types, and it imports no engine: `run` lives on
+ * `@demlik/tea/promise`, and the Effect engine on `@demlik/tea/effect`.
+ * `src/entry-points.import-graph.test.ts` fails the build if that changes.
  */
 
 // The composition seam — `liftSlice` / `readInOrder`, the layer between a
 // battery and a door. It lands on the ROOT door rather than a battery subpath
-// for the same reason `provide` does: both `./resilience` and `./jev` import
-// it, so it cannot live inside either one.
+// because both `./resilience` and `./jev` import it, so it cannot live inside
+// either one.
 export * from "./compose";
 export * from "./observability";
-// The host-side provider graph — `provide` / `layer` / `value` — lands on the
-// ROOT door beside `run`, not on a subpath of its own. It has no host-specific
-// half: `/node`, `/do` and `/mem` are `Store` adapters, and this satisfies a
-// Cmd's `R` at `run`'s `ctx` seam, which every one of them shares.
-export * from "./provide";
 // `./pure` and `./subs` are no longer doors of their own (#51): the closing
 // sweep pinned the export map to the public doors, and ADR 0016 moves parts
 // rather than dropping them — so the whole runtime-free surface and the whole
@@ -30,10 +23,13 @@ export * from "./provide";
 export * from "./pure";
 export type {
   AnyCmdDef,
+  BuiltinSub,
+  BuiltinSubType,
   CmdDef,
   CmdInput,
   CmdOf,
   CmdValue,
+  DeclaredErrorsOf,
   DepKeyedSub,
   Dispose,
   ErrOf,
@@ -41,33 +37,40 @@ export type {
   ExhaustiveTransitions,
   Identity,
   Interpret,
+  InterpretArg,
+  InterpretCell,
   InterpretDetached,
   Machine,
   MachineShape,
   MalformedResult,
   NoCtx,
   OkOf,
+  OkOfCmd,
+  OutcomeHelpers,
   Port,
   PortEmitter,
   Reducer,
-  RequiredCtx,
-  Requirements,
-  RequirementsOf,
+  RunHandlers,
   Settled,
   SettledErr,
   SettledOk,
   Sub,
   SubId,
   Subscribe,
+  SubscribeArg,
   SyncReturn,
   Tagged,
   TaggedError,
+  TimerDeps,
+  TimerSub,
   Transitions,
   UpdateForm,
+  Wired,
 } from "./pure/core";
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives in `src/pure/`).
 export {
+  AsyncSchemaError,
   // `acceptedTypes` answers about the state VALUE a caller holds, where
   // `acceptsOf` answers about a `state.type` a tool already named. It is the
   // same reading a refusal carries — `lookupCell`'s miss arm calls it — so
@@ -91,9 +94,12 @@ export {
   formOf,
   msgKeysOf,
   NoCellError,
+  Outcome,
+  OutcomeContractError,
   structuralHash,
   subId,
+  subIdOf,
+  UndeclaredFailureError,
 } from "./pure/core";
-export * from "./run";
 export * from "./runtime-types";
 export * from "./subs";

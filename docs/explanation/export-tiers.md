@@ -30,7 +30,7 @@ over `src/internal/`, so nothing about a battery moves when its door opens:
 |---|---|
 | `@demlik/tea/idempotency` | dedupe by key, cache the result, replay it to every duplicate arrival |
 | `@demlik/tea/flow` | fan-out, saga, workflow, poller, reconciler, batch window, monitored run, await-terminal |
-| `@demlik/tea/resilience` | deadlines, retries, circuit breakers, rate limits, TTL cache, token refresh, and the `with*` wrappers |
+| `@demlik/tea/resilience` | deadlines, retries, circuit breakers, rate limits, TTL cache, token refresh — plain functions you call from `update` |
 | `@demlik/tea/timing` | debounce, throttle, throttled input |
 | `@demlik/tea/persistence` | record a run, replay a trace, checkpoint a long-running machine |
 | `@demlik/tea/paginate` | the cursor walk, and the resumable end-to-end traversal over it |

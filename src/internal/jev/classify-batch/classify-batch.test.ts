@@ -3,7 +3,8 @@ import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { MsgType } from "../../../protocol";
-import type { JevPort } from "../ask";
+import type { JevHttpReply } from "../ask";
+import type { JevRequest } from "../protocol";
 import {
   type Batch,
   type ClassifyBatchCmd,
@@ -35,7 +36,7 @@ function make(
     maxMs: number;
     concurrency: number;
     ttlMs: number;
-    port: JevPort<ItemQuestions<Line>>;
+    evictEveryMs: number;
   }> = {},
 ) {
   return createClassifyBatch<Txn, Line>({
@@ -45,7 +46,9 @@ function make(
     maxMs: over.maxMs ?? 2_000,
     concurrency: over.concurrency ?? 8,
     ttlMs: over.ttlMs ?? 60_000,
-    ...(over.port === undefined ? {} : { port: over.port }),
+    ...(over.evictEveryMs === undefined
+      ? {}
+      : { evictEveryMs: over.evictEveryMs }),
   });
 }
 
@@ -76,8 +79,8 @@ function okFor(
   }
   return {
     type: MsgType.ResilientOk,
-    key: cmd.key,
-    result: {
+    cmd,
+    value: {
       answers,
       model: "jev-latest",
       usage: { input_tokens: 1, output_tokens: 1 },
@@ -93,10 +96,29 @@ const errFor = (
   at: number,
 ): ClassifyBatchErrMsg => ({
   type: MsgType.ResilientErr,
-  key: cmd.key,
-  error: { _tag: "http_terminal", status: 401 },
+  cmd,
+  error: {
+    _tag: "port_rejected",
+    jev: { _tag: "http_terminal", status: 401 },
+  },
   at,
 });
+
+/**
+ * The handler a host writes (ADR 0021): hand Jev's reply to `decode`, then mint
+ * the settle Msg from the outcome the way the engine's edge does.
+ */
+async function handle(
+  k: ReturnType<typeof make>,
+  cmd: ClassifyBatchCmd<Line>,
+  http: (request: JevRequest<ItemQuestions<Line>>) => Promise<JevHttpReply>,
+  at: number,
+): Promise<ClassifyBatchOkMsg<Line> | ClassifyBatchErrMsg> {
+  const outcome = k.decode(cmd.input, await http(cmd.input));
+  return outcome._tag === "Ok"
+    ? { type: MsgType.ResilientOk, cmd, value: outcome.value, at }
+    : { type: MsgType.ResilientErr, cmd, error: outcome.error, at };
+}
 
 /** Drive `add` over every item, gathering the Cmds each transition emitted. */
 function addAll(
@@ -138,7 +160,7 @@ describe("createClassifyBatch — the composition, not a reimplementation", () =
       "createBatchWindow",
       "createFanOut",
       "../../resilience/cache",
-      "createJevAsk",
+      "decodeJevReply",
     ]) {
       expect(source).toContain(composed);
     }
@@ -230,7 +252,7 @@ describe("warm cache — a cached key never enters a batch", () => {
 });
 
 describe("failure — marked in the slice, never written to the cache", () => {
-  it("marks every key of a resilient_err batch failed and leaves the cache clean", () => {
+  it("marks every key of a resilient_run_err batch failed and leaves the cache clean", () => {
     const k = knob({ maxItems: 3 });
     const items = txns(3);
     const [s1, cmds] = addAll(k, k.init(), items, 0);
@@ -339,6 +361,28 @@ describe("eviction is a Msg", () => {
       { id: "jev-classify-batch", type: "deadline", atMs: 1_500 },
     ]);
   });
+
+  it("mounts the window's built-in timer, plus the eviction tick when a period is set", () => {
+    const k = knob({ maxItems: 10, maxMs: 500, evictEveryMs: 60_000 });
+    const [s1] = addAll(k, k.init(), txns(1), 1_000);
+    const model = { classify: s1 };
+    const entries = k.subEntries((m: typeof model) => m.classify);
+    expect(entries.map((e) => [e.type, e.deps(model)])).toEqual([
+      [
+        "timer",
+        {
+          ms: 500,
+          msg: {
+            type: "deadline_exceeded",
+            id: "jev-classify-batch",
+            atMs: 1_500,
+          },
+        },
+      ],
+      ["cache", { name: "jev-classify-batch", intervalMs: 60_000 }],
+    ]);
+    expect(knob().subEntries((m: typeof model) => m.classify)).toHaveLength(1);
+  });
 });
 
 describe("property — every key in exactly one batch", () => {
@@ -372,7 +416,9 @@ describe("property — every key in exactly one batch", () => {
 
 describe("the effect boundary is `../ask`'s", () => {
   it("parses a batch response into the per-key answers", async () => {
-    const port: JevPort<ItemQuestions<Line>> = async (request) => ({
+    const http = async (
+      request: JevRequest<ItemQuestions<Line>>,
+    ): Promise<JevHttpReply> => ({
       status: 200,
       body: {
         model: "jev-1",
@@ -386,9 +432,9 @@ describe("the effect boundary is `../ask`'s", () => {
       },
     });
 
-    const k = make({ maxItems: 2, port });
+    const k = make({ maxItems: 2 });
     const [s1, cmds] = addAll(k, k.init(), txns(2), 0);
-    const settle = await k.handlers().resilient_run(only(cmds));
+    const settle = await handle(k, only(cmds), http, 0);
 
     expect(settle.type).toBe(MsgType.ResilientOk);
     const [s2] = k.onBatchOk(s1, settle as ClassifyBatchOkMsg<Line>);
@@ -399,13 +445,13 @@ describe("the effect boundary is `../ask`'s", () => {
   });
 
   it("settles a 401 as the typed terminal error", async () => {
-    const port: JevPort<ItemQuestions<Line>> = async () => ({
+    const http = async (): Promise<JevHttpReply> => ({
       status: 401,
       body: {},
     });
-    const k = make({ maxItems: 1, port });
+    const k = make({ maxItems: 1 });
     const [s1, cmds] = addAll(k, k.init(), txns(1), 0);
-    const settle = await k.handlers().resilient_run(only(cmds));
+    const settle = await handle(k, only(cmds), http, 0);
 
     expect(settle.type).toBe(MsgType.ResilientErr);
     const [s2] = k.onBatchErr(s1, settle as ClassifyBatchErrMsg);

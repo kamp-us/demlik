@@ -5,20 +5,24 @@
 // directive becomes "unused" and `tsc` fails the package.
 //
 // The contract: Model and Msg are named ONCE, as values, under `types`.
-// Everything else is derived — `C` and the settled half of `M` from `cmds`, `U`
-// from `subscriptions`, `Ctx` from each Cmd's own requirements. No call site
-// writes a type argument, a `Settled<…>` union, or a `Reducer<…>` annotation.
+// Everything else is derived — `C` and the settled half of `M` from `cmds`; a
+// hand-written Cmd or Sub union is a value under `types.cmd` / `types.sub`,
+// and the built-in `timer` needs no naming at all. `Ctx` is the plain object
+// the handlers read, named under `types.ctx` (ADR 0020: a Cmd carries no
+// requirements). No call site writes a type argument, a `Settled<…>` union,
+// or a `Reducer<…>` annotation.
 
-import { Result } from "better-result";
 import { z } from "zod";
 import {
   Cmd,
   defineMachine,
+  type Interpret,
+  type Machine,
   type NoCtx,
   type Reducer,
-  run,
-  settle,
+  type Sub,
 } from "../index";
+import { run } from "../promise";
 
 type Http = { readonly get: (url: string) => Promise<string> };
 type HttpCtx = { readonly http: Http };
@@ -29,14 +33,12 @@ const lookup = Cmd.define("lookup", {
   input: z.object({ id: z.string() }),
   ok: z.object({ name: z.string() }),
   err: ["not_found"],
-  requirements: Cmd.requirements<HttpCtx>(),
 });
 
 const audit = Cmd.define("audit", {
   input: z.object({ line: z.string() }),
   ok: z.object({ written: z.boolean() }),
   err: ["io"],
-  requirements: Cmd.requirements<AuditCtx>(),
 });
 
 type Model = { readonly name: string | null; readonly note: string };
@@ -45,7 +47,7 @@ type Msg = { readonly type: "go"; readonly id: string };
 // ── 1. the playground shape: zero type arguments, zero annotations ──────────
 
 const machine = defineMachine({
-  types: { model: {} as Model, msg: {} as Msg },
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx & AuditCtx },
   cmds: [lookup, audit],
   init: (loaded) => [loaded ?? { name: null, note: "" }, []],
   update: {
@@ -59,22 +61,12 @@ const machine = defineMachine({
     audit_ok: (m) => [m, []],
     audit_err: (m) => [m, []],
   },
-  interpret: {
-    // `ctx` is typed from the Cmd's own requirements — no `types.ctx`.
-    lookup: settle(lookup, async (cmd, ctx) =>
-      Result.ok({ name: await ctx.http.get(cmd.id) }),
-    ),
-    audit: settle(audit, async (cmd, ctx) => {
-      await ctx.audit.write(cmd.line);
-      return Result.ok({ written: true });
-    }),
-  },
 });
 
 // ── 2. inside `update`, a settled cell's `msg` is the settled Msg ───────────
 
-defineMachine({
-  types: { model: {} as Model, msg: {} as Msg },
+const settled = defineMachine({
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
   cmds: [lookup],
   init: () => [{ name: null, note: "" }, []],
   update: {
@@ -85,11 +77,6 @@ defineMachine({
       return [m, []];
     },
     lookup_err: (m) => [m, []],
-  },
-  interpret: {
-    lookup: settle(lookup, async (cmd, ctx) =>
-      Result.ok({ name: await ctx.http.get(cmd.id) }),
-    ),
   },
 });
 
@@ -108,15 +95,40 @@ const onlyUserCells: Reducer<Model, Msg, ReturnType<typeof lookup>> = {
 const notEnough: typeof machine.update = onlyUserCells;
 void notEnough;
 
-// ── 3. `run` demands the same ctx as before (RequiredCtx unchanged) ─────────
+// ── 3. `run` demands the machine's plain ctx and types its handlers ─────────
 
 declare const http: Http;
 declare const auditor: Audit;
 
-void run(machine, { ctx: { http, audit: auditor } });
+void run(machine, {
+  ctx: { http, audit: auditor },
+  interpret: {
+    // `cmd` and `ctx` are typed from the machine: `cmds` and `types.ctx`.
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
+    audit: async (cmd, ctx) => {
+      await ctx.audit.write(cmd.line);
+      return ctx.ok({ written: true });
+    },
+  },
+});
 
-// @ts-expect-error — `audit` missing from ctx; `RequiredCtx` still binds.
-void run(machine, { ctx: { http } });
+void run(settled, {
+  ctx: { http },
+  interpret: {
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
+  },
+});
+
+// The machine's own handler table, read off its type, so the case below fails
+// on `ctx` alone.
+type MachineInterpret =
+  typeof machine extends Machine<infer _S, infer M, infer C, infer _U, infer X>
+    ? Interpret<M, C, X>
+    : never;
+declare const machineInterpret: MachineInterpret;
+
+// @ts-expect-error — `audit` missing from ctx; `types.ctx` binds.
+void run(machine, { ctx: { http }, interpret: machineInterpret });
 
 // ── 4. the Transitions (2-D table) form works through `types` the same way ──
 
@@ -128,7 +140,7 @@ type PhaseMsg = { readonly type: "start"; readonly id: string };
 const idle: Phase = { type: "idle" };
 
 const table = defineMachine({
-  types: { model: {} as Phase, msg: {} as PhaseMsg },
+  types: { model: {} as Phase, msg: {} as PhaseMsg, ctx: {} as HttpCtx },
   cmds: [lookup],
   init: (loaded) => [loaded ?? { type: "idle" }, []],
   update: {
@@ -150,14 +162,14 @@ const table = defineMachine({
       lookup_err: (s) => [s, []],
     },
   },
-  interpret: {
-    lookup: settle(lookup, async (cmd, ctx) =>
-      Result.ok({ name: await ctx.http.get(cmd.id) }),
-    ),
-  },
 });
 
-void run(table, { ctx: { http } });
+void run(table, {
+  ctx: { http },
+  interpret: {
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
+  },
+});
 
 // ── 5. hand-written Cmd / Sub unions ride `types.cmd` / `types.sub` ─────────
 //
@@ -181,6 +193,11 @@ const handWritten = defineMachine({
     bump: (m) => [{ n: m.n + 1 }, [{ type: "persist", n: m.n + 1 }]],
     saved: (m) => [m, []],
   },
+});
+
+declare const db: DbCtx["db"];
+void run(handWritten, {
+  ctx: { db },
   interpret: {
     persist: async (cmd, ctx) => {
       await ctx.db.put(cmd.n);
@@ -189,10 +206,37 @@ const handWritten = defineMachine({
   },
 });
 
-declare const db: DbCtx["db"];
-void run(handWritten, { ctx: { db } });
+// A Sub union is named the same way, and it types both the `subs` entries on
+// the machine and the runner `run` is handed for each type.
+type Poll = Sub<"poll", { readonly every: number }>;
 
-// ── 6. a pure machine: no cmds, no ctx, `interpret` stays optional ──────────
+const polling = defineMachine({
+  types: {
+    model: {} as { readonly n: number },
+    msg: {} as Count,
+    sub: {} as Poll,
+  },
+  init: () => [{ n: 0 }, []],
+  update: {
+    bump: (m) => [{ n: m.n + 1 }, []],
+    saved: (m) => [m, []],
+  },
+  subs: [{ type: "poll", deps: (m) => ({ every: 1_000 * (m.n + 1) }) }],
+});
+
+void run(polling, {
+  subscribe: {
+    poll: (sub, _ctx, dispatch) => {
+      const timer = setInterval(
+        () => dispatch({ type: "bump" }),
+        sub.deps.every,
+      );
+      return () => clearInterval(timer);
+    },
+  },
+});
+
+// ── 6. a pure machine: no cmds, no ctx, `run` needs no `interpret` ──────────
 
 const pure = defineMachine({
   types: { model: {} as { readonly n: number }, msg: {} as { type: "tick" } },

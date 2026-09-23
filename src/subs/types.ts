@@ -1,35 +1,38 @@
 // ---------------------------------------------------------------------------
-// SubscribeHandler<S, M, Ctx> — the structural shape of a single entry in
-// `Machine.subscribe`. Pulled out as a named type so factory return types
-// in this subpath can match the substrate's expected `subscribe` cell shape
-// without re-deriving it from `Machine`'s mapped type.
+// SubscribeHandler<S, M, Ctx> — the structural shape of one sub runner: one
+// entry of the `subscribe` table handed to `run`. Pulled out as a named type
+// so factory return types in this subpath can match the engine's `Subscribe`
+// entry without re-deriving it from the mapped type.
 //
-// A Sub factory in this subpath returns a `SubscribeHandler<S, M, Ctx>` —
-// the same `(sub, ctx, dispatch) => cleanup` shape the substrate expects in
-// `machine.subscribe[type]`. Callers assign the factory's return value
-// directly to a subscribe cell:
+// The machine declares a Sub as data in `subs`; a factory in this subpath
+// returns the runner for that Sub's type, which the caller hands to `run`:
 //
-//   subscribe: {
-//     "audit-idle": fromPort(
-//       (ctx) => ctx.auditRuntime,
-//       auditIdlePort,
-//       (idle) => ({ type: "audit:idle", idle }),
-//     ),
-//   }
+//   subs: [{ type: "audit-idle", deps: (s) => (s.watching ? {} : null) }],
+//   // …
+//   run(machine, {
+//     subscribe: {
+//       "audit-idle": fromPort(
+//         (ctx) => ctx.auditRuntime,
+//         auditIdlePort,
+//         (idle) => ({ type: "audit:idle", idle }),
+//       ),
+//     },
+//   });
 //
 // The factory absorbs the lifecycle (subscribe + cleanup); the caller keeps
-// the intent (which port, which msg). Strengthens invariant 9 (the surface
-// for cross-cutting Sub topologies is named, small, and exported from one
-// subpath instead of redrawn at every call site).
+// the intent (which port, which msg). A runner reads its data off `sub.deps`.
+// Strengthens invariant 9 (the surface for cross-cutting Sub topologies is
+// named, small, and exported from one subpath instead of redrawn at every
+// call site).
 // ---------------------------------------------------------------------------
 
-import type { Sub } from "../index";
+import type { Dispose, Sub } from "../index";
 
 export type SubscribeHandler<S extends Sub, M, Ctx> = (
   sub: S,
   ctx: Ctx,
   dispatch: (msg: M) => void,
-) => () => void;
+) => Dispose;
 
 // ---------------------------------------------------------------------------
 // dispatchIfPresent — the null-drop dispatch idiom every Sub factory in this

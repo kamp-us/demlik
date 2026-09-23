@@ -4,12 +4,11 @@ import {
   defineMachine,
   NoCellError,
   type Reducer,
-  run,
   type Sub,
   type Subscribe,
-  subId,
   type Transitions,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // #276 — the runtime cell-lookup guard + the subscribe vertical tracer.
@@ -20,9 +19,9 @@ import {
 //     actionable. These tests pin the named `NoCellError` that replaces it,
 //     carrying both facts, thrown from the ONE dispatch primitive (#275) so
 //     every stepping site (run, replay, PBT, withX) gets the same error.
-// (b) The tracer: a machine with a REAL Sub union and `subscribe` wired sees
-//     `reconcileSubs` invoke the handler in a real `run` — the subscription
-//     is observed live, not just compiled.
+// (b) The tracer: a machine with a REAL Sub union, run with its `subscribe`
+//     runner, sees `reconcileSubs` invoke the runner in a real `run` — the
+//     subscription is observed live, not just compiled.
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("NoCellError — reducer form", () => {
@@ -258,10 +257,10 @@ describe("NoCellError — the accepted set (#14)", () => {
 });
 
 describe("vertical tracer — a real Sub union wired through subscribe runs live (#276)", () => {
-  // A two-phase machine: `start` moves to `running`, whose subscriptions
-  // declare one `tick` Sub. The subscribe handler fires a `ticked` follow-up
-  // and records its own invocation + cleanup — proving `reconcileSubs`
-  // started it in a real run and reconciled it out on the transition away.
+  // A two-phase machine: `start` moves to `running`, where its one `tick`
+  // entry turns on. The runner fires a `ticked` follow-up and records its own
+  // invocation + cleanup — proving `reconcileSubs` started it in a real run
+  // and reconciled it out on the transition away.
   type State =
     | { readonly type: "idle"; readonly ticks: number }
     | { readonly type: "running"; readonly ticks: number };
@@ -269,7 +268,7 @@ describe("vertical tracer — a real Sub union wired through subscribe runs live
     | { readonly type: "start" }
     | { readonly type: "ticked" }
     | { readonly type: "halt" };
-  type TickSub = Sub<"tick">;
+  type TickSub = Sub<"tick", { readonly phase: "running" }>;
 
   const started = vi.fn();
   const cleaned = vi.fn();
@@ -305,16 +304,19 @@ describe("vertical tracer — a real Sub union wired through subscribe runs live
       },
       init: (_loaded) => [{ type: "idle", ticks: 0 }, []],
       update,
-      subscriptions: (s) =>
-        s.type === "running" ? [{ id: subId("tick"), type: "tick" }] : [],
-      subscribe,
+      subs: [
+        {
+          type: "tick",
+          deps: (s) => (s.type === "running" ? { phase: "running" } : null),
+        },
+      ],
     });
   }
 
   it("reconcileSubs invokes the handler live, its dispatch lands, and cleanup fires on the way out", async () => {
     started.mockClear();
     cleaned.mockClear();
-    const runtime = await run(machine(), { ctx: undefined }).ready;
+    const runtime = await run(machine(), { ctx: undefined, subscribe }).ready;
 
     expect(started).not.toHaveBeenCalled(); // idle declares no subs
 

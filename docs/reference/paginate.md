@@ -6,13 +6,11 @@
 import { … } from "@demlik/tea/paginate";
 ```
 
-## Exports (22)
+## Exports (18)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `createPaginatedWalk` | Function | Build a paginated-walk knob from `config`. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
-| `DeadlineSub` | Type | The Sub variant a deadline produces. |
 | `defaultPaginatorPolicy` | Variable | Sensible defaults: start from a numeric offset of `0`, pause after 1000 un-drained items. |
 | `drain` | Function | Acknowledge that the consumer finished processing `n` items, lowering the backpressure gauge. |
 | `FetchPageCmd` | Type | The page-fetch effect this knob emits: the inherited `resilient_run` Cmd from resilient-call, whose `input` is the `Cursor` to fetch and whose `key` is the fixed `PAGE_KEY`. |
@@ -21,9 +19,8 @@ import { … } from "@demlik/tea/paginate";
 | `liftWalk` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.walk`. |
 | `PAGE_KEY` | Variable | The single resilient-call key every page fetch runs under. |
 | `PageErrMsg` | Type |  |
-| `PageOkMsg` | Type | Page-settled Msgs the `handlers` port dispatches back (inherited verbatim). |
+| `PageOkMsg` | Type | The page-settled Msgs the engine mints from that handler's outcome. |
 | `PaginatedWalkConfig` | Interface | The paginated-walk knob. |
-| `PaginatedWalkPorts` | Interface | Ports the consumer supplies to `handlers`. |
 | `PaginatedWalkState` | Interface | The slice. |
 | `PaginatedWalkTimerMsg` | Type | The retry / deadline timer Msg — inherited from resilient-call. |
 | `PaginatorPolicy` | Interface | Paginator policy — pure configuration, no mutable state. |
@@ -31,4 +28,3 @@ import { … } from "@demlik/tea/paginate";
 | `recordPage` | Function | Record the result of the outstanding fetch and decide what comes next. |
 | `resume` | Function | Re-open the backpressure valve after a `drain`. |
 | `start` | Function | Arm the first fetch. |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |

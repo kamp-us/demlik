@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type Reducer } from "../../../index";
-import { bindMachine } from "../../../testing";
+import { describe, expect, it } from "vitest";
+import { defineMachine } from "../../../index";
+import { drive } from "../../../testing";
+import { deadlineSub } from "../../resilience/deadline";
 import {
   type JevAnswers,
   type JevErr,
@@ -9,16 +10,18 @@ import {
 } from "../protocol";
 import {
   createJevAsk,
-  type DeadlineSub,
-  deadlineSub,
+  decodeJevReply,
   type JevAskCmd,
   type JevAskErr,
   type JevFailMsg,
+  type JevHttpReply,
   type JevOk,
-  type JevPort,
   type JevSucceedMsg,
   type JevTimerMsg,
   jevAskCmdDef,
+  jevAskErrOf,
+  jevCallThrew,
+  offlineJevAnswer,
   type ResilientState,
 } from "./index";
 
@@ -49,16 +52,19 @@ const okBody = {
   usage: { input_tokens: 11, output_tokens: 3 },
 };
 
-/** A port that pops one scripted `[status, body]` per call and counts its calls. */
-function scriptedPort(script: readonly (readonly [number, unknown])[]) {
+/** The HTTP call a handler makes — the test's stand-in for `fetch`. */
+type JevHttp = (request: JevRequest<Questions>) => Promise<JevHttpReply>;
+
+/** An HTTP stand-in that pops one scripted `[status, body]` per call and counts its calls. */
+function scriptedHttp(script: readonly (readonly [number, unknown])[]) {
   const calls: number[] = [];
   const queue = [...script];
-  const port: JevPort<Questions> = async () => {
+  const http: JevHttp = async () => {
     const next = queue.shift() ?? ([200, okBody] as const);
     calls.push(next[0]);
     return { status: next[0], body: next[1] };
   };
-  return { port, calls };
+  return { http, calls };
 }
 
 // rng pinned to 0 → "full" jitter collapses the backoff delay to 0, so
@@ -73,10 +79,16 @@ const retry = {
   jitter: "full" as const,
 };
 
+const request: JevRequest<Questions> = {
+  state: "x",
+  model: "jev-latest",
+  questions,
+};
+
 // ---------------------------------------------------------------------------
 // The host machine — the knob spliced into a reducer exactly as its docblock
-// wires it. `drive` runs the REAL interpret handler between steps, so the port
-// is actually called and the settle Msg re-enters through `replay`.
+// wires it, with the run Cmd listed in `cmds` so the engine (here `drive`)
+// mints `resilient_run_ok` / `resilient_run_err` from the handler's outcome.
 // ---------------------------------------------------------------------------
 
 interface HostState {
@@ -84,52 +96,62 @@ interface HostState {
 }
 type HostMsg =
   | { type: "ask"; key: string; content: string; at: number }
-  | JevSucceedMsg<Questions>
-  | JevFailMsg
   | JevTimerMsg;
 
 /** The knob, as the host sees it. */
 type Ask = ReturnType<typeof createJevAsk<Questions>>;
-type HostCmd = JevAskCmd<Questions>;
-
-/** The host reducer the module docblock wires — every arm is the knob's verb. */
-function hostUpdate(ask: Ask): Reducer<HostState, HostMsg, HostCmd> {
-  return {
-    ask: (s, m) => {
-      const [slice, cmds] = ask.attempt(s.resilience, m.key, m.content, m.at);
-      return [{ resilience: slice }, cmds];
-    },
-    resilient_ok: (s, m) => {
-      const [slice, cmds] = ask.succeed(s.resilience, m.key, m);
-      return [{ resilience: slice }, cmds];
-    },
-    resilient_err: (s, m) => {
-      const [slice, cmds] = ask.fail(s.resilience, m.key, m);
-      return [{ resilience: slice }, cmds];
-    },
-    deadline_exceeded: (s, m) => {
-      const [slice, cmds] = ask.onTimer(s.resilience, m);
-      return [{ resilience: slice }, cmds];
-    },
-  };
-}
 
 function hostMachine(ask: Ask) {
-  return defineMachine<HostState, HostMsg, HostCmd, DeadlineSub, undefined>({
+  // The machine is typed with `types.cmd` and gets `cmds` spread on after:
+  // the verbs emit `JevAskCmd` (resilient-call's `RunCmd`, whose `Ok` phantom
+  // is `unknown`), which the `cmds`-derived `C` (`Ok` = `JevOk`) refuses.
+  const machine = defineMachine({
     types: {
       model: {} as HostState,
-      msg: {} as HostMsg,
-      cmd: {} as HostCmd,
-      sub: {} as DeadlineSub,
+      msg: {} as HostMsg | JevSucceedMsg<Questions> | JevFailMsg,
+      cmd: {} as JevAskCmd<Questions>,
       ctx: undefined,
     },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ resilience: ask.init() }, []],
-    update: hostUpdate(ask),
-    subscriptions: (s) => ask.subs(s.resilience),
-    subscribe: { deadline: () => () => {} },
-    interpret: ask.handlers(),
+    update: {
+      ask: (s, m) => {
+        const [slice, cmds] = ask.attempt(s.resilience, m.key, m.content, m.at);
+        return [{ resilience: slice }, cmds];
+      },
+      resilient_run_ok: (s, m) => {
+        const [slice, cmds] = ask.succeed(s.resilience, m);
+        return [{ resilience: slice }, cmds];
+      },
+      resilient_run_err: (s, m) => {
+        const [slice, cmds] = ask.fail(s.resilience, m);
+        return [{ resilience: slice }, cmds];
+      },
+      deadline_exceeded: (s, m) => {
+        const [slice, cmds] = ask.onTimer(s.resilience, m);
+        return [{ resilience: slice }, cmds];
+      },
+    },
+    subs: [{ type: "timer", deps: (s: HostState) => ask.timer(s.resilience) }],
   });
+  return { ...machine, cmds: [ask.run] };
+}
+
+/**
+ * The handler a host writes (ADR 0021): call Jev and hand the reply to
+ * `decode`, `rejected` on a throw — or, with no key at all, `offline`.
+ */
+function interpretWith(ask: Ask, http?: JevHttp) {
+  return {
+    resilient_run: async (cmd: { readonly input: JevRequest<Questions> }) => {
+      if (http === undefined) return ask.offline(cmd.input);
+      try {
+        return ask.decode(cmd.input, await http(cmd.input));
+      } catch (cause) {
+        return ask.rejected(cause);
+      }
+    },
+  };
 }
 
 /** The call phase under `key`, refusing the "no such call" read outright. */
@@ -140,41 +162,33 @@ function callOf(state: HostState, key = "k") {
 }
 
 /**
- * Drive one call to its fixed point through `replay`'s bound `step`: feed the
- * Msg, run the real handler over every Cmd the reducer emitted, feed the settle
- * Msg back, and fire a retry timer by hand whenever the slice is waiting for
- * one. Returns the final host state.
+ * Drive one call to its fixed point through `drive` (the real handler, the
+ * real `Cmd.define` edge), and fire a retry timer by hand whenever the slice is
+ * waiting for one. Returns the final host state.
  */
-async function drive(
+async function settle(
   ask: Ask,
   key: string,
   content: string,
+  http?: JevHttp,
 ): Promise<HostState> {
-  const bound = bindMachine(hostMachine(ask), undefined);
-  let [state, cmds] = bound.step(
-    { resilience: ask.init() },
-    {
-      type: "ask",
-      key,
-      content,
-      at: 0,
-    },
-  );
+  const machine = hostMachine(ask);
+  const interpret = interpretWith(ask, http);
+  let state: HostState = { resilience: ask.init() };
+  let msg: HostMsg = { type: "ask", key, content, at: 0 };
   for (let guard = 0; guard < 20; guard += 1) {
-    for (const cmd of cmds) {
-      const settle = await ask.handlers().resilient_run(cmd);
-      [state, cmds] = bound.step(state, settle);
-    }
-    if (cmds.length > 0) continue;
+    ({ state } = await drive(machine, state, msg, interpret, {
+      clock: () => 0,
+    }));
     const call = callOf(state, key);
     if (call.phase !== "waiting_retry") return state;
-    [state, cmds] = bound.step(state, {
+    msg = {
       type: "deadline_exceeded",
       id: `resilient:retry:${key}`,
       atMs: call.retryAtMs,
-    });
+    };
   }
-  throw new Error("drive: did not settle");
+  throw new Error("settle: did not settle");
 }
 
 // ---------------------------------------------------------------------------
@@ -182,17 +196,20 @@ async function drive(
 describe("createJevAsk — the slice and verbs are resilient-call's", () => {
   const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
 
-  it("exposes the knob contract and inherits the resilient slice", () => {
+  it("exposes plain functions and the run Cmd, and inherits the resilient slice", () => {
     expect(Object.keys(ask).sort()).toEqual([
-      "ask",
       "attempt",
+      "deadlines",
+      "decode",
       "fail",
-      "handlers",
       "init",
       "name",
+      "offline",
       "onTimer",
-      "subs",
+      "rejected",
+      "run",
       "succeed",
+      "timer",
     ]);
     const s = ask.init();
     expect(s.calls).toEqual({});
@@ -209,6 +226,7 @@ describe("createJevAsk — the slice and verbs are resilient-call's", () => {
         input: { state: "a receipt", model: "jev-latest", questions },
       },
     ]);
+    expect(ask.run.cmdType).toBe(jevAskCmdDef<Questions>().cmdType);
     expect(s.calls.k).toEqual({
       phase: "running",
       input: { state: "a receipt", model: "jev-latest", questions },
@@ -216,34 +234,37 @@ describe("createJevAsk — the slice and verbs are resilient-call's", () => {
     });
   });
 
-  it("succeed / onTimer / subs are resilient-call's verbs, not a second loop", () => {
+  it("succeed / onTimer / deadlines / timer are resilient-call's verbs, not a second loop", () => {
     const result: JevOk<Questions> = {
       answers: okBody.answers as unknown as JevAnswers<Questions>,
       model: "jev-1",
       usage: { input_tokens: 1, output_tokens: 1 },
       source: "port",
     };
+    const cmd = ask.run({ key: "k", input: request });
     let s = ask.init();
     [s] = ask.attempt(s, "k", "x", 0);
-    [s] = ask.succeed(s, "k", {
-      type: "resilient_ok",
-      key: "k",
-      result,
-      at: 0,
-    });
+    [s] = ask.succeed(s, ask.run.ok(cmd, result, 0));
     expect(s.calls.k).toEqual({ phase: "succeeded", result });
-    expect(ask.subs(s)).toEqual([]);
+    expect(ask.deadlines(s)).toEqual([]);
+    expect(ask.timer(s)).toBeNull();
 
     // A transient failure arms the inherited retry timer; onTimer re-issues it.
     let t = ask.init();
     [t] = ask.attempt(t, "k", "x", 0);
-    [t] = ask.fail(t, "k", {
-      type: "resilient_err",
-      key: "k",
-      error: { _tag: "http_retry", status: 429 },
-      at: 0,
+    [t] = ask.fail(
+      t,
+      ask.run.err(
+        cmd,
+        { _tag: "port_rejected", jev: { _tag: "http_retry", status: 429 } },
+        0,
+      ),
+    );
+    expect(ask.deadlines(t)).toEqual([deadlineSub("resilient:retry:k", 0)]);
+    expect(ask.timer(t)).toEqual({
+      ms: 0,
+      msg: { type: "deadline_exceeded", id: "resilient:retry:k", atMs: 0 },
     });
-    expect(ask.subs(t)).toEqual([deadlineSub("resilient:retry:k", 0)]);
     const [, cmds] = ask.onTimer(t, {
       type: "deadline_exceeded",
       id: "resilient:retry:k",
@@ -251,16 +272,33 @@ describe("createJevAsk — the slice and verbs are resilient-call's", () => {
     });
     expect(cmds).toHaveLength(1);
   });
+
+  it("fail stores the typed JevAskErr, never the port_rejected carrier", () => {
+    let t = ask.init();
+    [t] = ask.attempt(t, "k", "x", 0);
+    [t] = ask.fail(
+      t,
+      ask.run.err(
+        ask.run({ key: "k", input: request }),
+        { _tag: "port_rejected", jev: { _tag: "http_terminal", status: 401 } },
+        0,
+      ),
+    );
+    expect(t.calls.k).toEqual({
+      phase: "failed",
+      error: { _tag: "http_terminal", status: 401 },
+    });
+  });
 });
 
-describe("createJevAsk — driven through replay against a scripted port", () => {
-  it("[429, 200] settles resilient_ok once, after one backoff, with typed answers", async () => {
-    const { port, calls } = scriptedPort([
+describe("createJevAsk — driven through the engine edge against a scripted HTTP call", () => {
+  it("[429, 200] settles resilient_run_ok once, after one backoff, with typed answers", async () => {
+    const { http, calls } = scriptedHttp([
       [429, { detail: "slow down" }],
       [200, okBody],
     ]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const state = await settle(ask, "k", "a receipt", http);
 
     const call = callOf(state);
     expect(call.phase).toBe("succeeded");
@@ -279,10 +317,10 @@ describe("createJevAsk — driven through replay against a scripted port", () =>
     expect(state.resilience.retry).toEqual({});
   });
 
-  it("[401] settles resilient_err carrying a JevAskErr and calls the port once", async () => {
-    const { port, calls } = scriptedPort([[401, { detail: "bad key" }]]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+  it("[401] settles resilient_run_err carrying a JevAskErr and calls once", async () => {
+    const { http, calls } = scriptedHttp([[401, { detail: "bad key" }]]);
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const state = await settle(ask, "k", "a receipt", http);
 
     const call = callOf(state);
     expect(call.phase).toBe("failed");
@@ -296,11 +334,11 @@ describe("createJevAsk — driven through replay against a scripted port", () =>
   });
 
   it("a 200 with a malformed body settles the protocol child's parse error", async () => {
-    const { port, calls } = scriptedPort([
+    const { http, calls } = scriptedHttp([
       [200, { model: "jev-1", answers: {}, usage: okBody.usage }],
     ]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const state = await settle(ask, "k", "a receipt", http);
 
     const call = callOf(state);
     expect(call.phase).toBe("failed");
@@ -311,9 +349,9 @@ describe("createJevAsk — driven through replay against a scripted port", () =>
   });
 
   it("a body that is not an object settles malformed_body and nothing throws out", async () => {
-    const { port } = scriptedPort([[200, "not json at all"]]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+    const { http } = scriptedHttp([[200, "not json at all"]]);
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const state = await settle(ask, "k", "a receipt", http);
 
     const call = callOf(state);
     expect(call.phase).toBe("failed");
@@ -321,15 +359,15 @@ describe("createJevAsk — driven through replay against a scripted port", () =>
     expect((call.error as JevAskErr)._tag).toBe("malformed_body");
   });
 
-  it("a port that rejects is transient: it backs off and the next attempt settles", async () => {
+  it("a call that throws is transient: it backs off and the next attempt settles", async () => {
     let n = 0;
-    const port: JevPort<Questions> = async () => {
+    const http: JevHttp = async () => {
       n += 1;
       if (n === 1) throw new Error("ECONNRESET");
       return { status: 200, body: okBody };
     };
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const state = await settle(ask, "k", "a receipt", http);
     expect(callOf(state).phase).toBe("succeeded");
     expect(n).toBe(2);
   });
@@ -338,20 +376,20 @@ describe("createJevAsk — driven through replay against a scripted port", () =>
 describe("createJevAsk — the fallback", () => {
   const answers = okBody.answers as unknown as JevAnswers<Questions>;
 
-  it("with no port and a fallback, it settles from the fallback and calls no port", async () => {
+  it("with no key and a fallback, it settles from the fallback and makes no HTTP call", async () => {
     const seen: string[] = [];
     const ask = createJevAsk<Questions>(
       {
         questions,
         retry,
-        fallback: (request) => {
-          seen.push(String(request.state));
+        fallback: (req) => {
+          seen.push(String(req.state));
           return answers;
         },
       },
       rngZero,
     );
-    const state = await drive(ask, "k", "a receipt");
+    const state = await settle(ask, "k", "a receipt");
 
     const call = callOf(state);
     expect(call.phase).toBe("succeeded");
@@ -365,9 +403,9 @@ describe("createJevAsk — the fallback", () => {
     expect(seen).toEqual(["a receipt"]);
   });
 
-  it("with neither a port nor a fallback, it settles resilient_err", async () => {
+  it("with neither a key nor a fallback, it settles resilient_run_err", async () => {
     const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+    const state = await settle(ask, "k", "a receipt");
 
     const call = callOf(state);
     expect(call.phase).toBe("failed");
@@ -381,7 +419,7 @@ describe("createJevAsk — the fallback", () => {
       { questions, retry, fallback: () => refusal },
       rngZero,
     );
-    const state = await drive(ask, "k", "a receipt");
+    const state = await settle(ask, "k", "a receipt");
 
     const call = callOf(state);
     expect(call.phase).toBe("failed");
@@ -390,16 +428,16 @@ describe("createJevAsk — the fallback", () => {
   });
 
   it("an exhausted retry budget hands the call to the fallback", async () => {
-    const { port, calls } = scriptedPort([
+    const { http, calls } = scriptedHttp([
       [429, {}],
       [429, {}],
       [429, {}],
     ]);
     const ask = createJevAsk<Questions>(
-      { questions, port, retry, fallback: () => answers },
+      { questions, retry, fallback: () => answers },
       rngZero,
     );
-    const state = await drive(ask, "k", "a receipt");
+    const state = await settle(ask, "k", "a receipt", http);
 
     // Three attempts is the whole budget; the fallback answers rather than the
     // call settling failed.
@@ -411,13 +449,13 @@ describe("createJevAsk — the fallback", () => {
   });
 
   it("an exhausted budget with NO fallback settles the last transient error", async () => {
-    const { port, calls } = scriptedPort([
+    const { http, calls } = scriptedHttp([
       [429, {}],
       [429, {}],
       [429, {}],
     ]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const state = await drive(ask, "k", "a receipt");
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const state = await settle(ask, "k", "a receipt", http);
 
     expect(calls).toHaveLength(3);
     const call = callOf(state);
@@ -427,31 +465,58 @@ describe("createJevAsk — the fallback", () => {
   });
 });
 
-describe("createJevAsk — the handler returns the enriched settle Msg", () => {
-  it("returns resilient_ok carrying the parsed JevOk, stamped at the boundary", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(42);
-    const { port } = scriptedPort([[200, okBody]]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const msg = await ask.handlers().resilient_run({
-      type: "resilient_run",
-      key: "k",
-      input: { state: "x", model: "jev-latest", questions },
-    });
-    expect(msg.type).toBe("resilient_ok");
-    expect(msg.at).toBe(42);
-    vi.restoreAllMocks();
+describe("createJevAsk — the outcome builders a handler returns", () => {
+  it("decode turns a 200 into the parsed JevOk, and the edge stamps `at`", async () => {
+    const ask = createJevAsk<Questions>({ questions, retry }, rngZero);
+    const outcome = decodeJevReply(request, { status: 200, body: okBody });
+    expect(outcome._tag).toBe("Ok");
+    if (outcome._tag !== "Ok") return;
+    expect(outcome.value.source).toBe("port");
+
+    const { trace } = await drive(
+      hostMachine(ask),
+      { resilience: ask.init() },
+      { type: "ask", key: "k", content: "x", at: 0 },
+      interpretWith(ask, async () => ({ status: 200, body: okBody })),
+      { clock: () => 42 },
+    );
+    const settled = trace.find(
+      (e) => e.kind === "msg" && e.msg.type === "resilient_run_ok",
+    );
+    expect(
+      settled?.kind === "msg" && "at" in settled.msg && settled.msg.at,
+    ).toBe(42);
   });
 
-  it("returns resilient_err carrying the typed JevAskErr, never a raw throw", async () => {
-    const { port } = scriptedPort([[529, {}]]);
-    const ask = createJevAsk<Questions>({ questions, port, retry }, rngZero);
-    const msg = (await ask.handlers().resilient_run({
-      type: "resilient_run",
-      key: "k",
-      input: { state: "x", model: "jev-latest", questions },
-    })) as JevFailMsg;
-    expect(msg.type).toBe("resilient_err");
-    expect(msg.error).toEqual({ _tag: "http_retry", status: 529 });
+  it("decode turns a 529 into the typed transient JevAskErr, never a raw throw", () => {
+    const outcome = decodeJevReply(request, { status: 529, body: {} });
+    expect(outcome).toEqual({
+      _tag: "Err",
+      error: {
+        _tag: "port_rejected",
+        jev: { _tag: "http_retry", status: 529 },
+      },
+    });
+    if (outcome._tag !== "Err") return;
+    expect(jevAskErrOf(outcome.error)).toEqual({
+      _tag: "http_retry",
+      status: 529,
+    });
+  });
+
+  it("jevCallThrew is the transient port_threw; a foreign failure reads the same", () => {
+    const outcome = jevCallThrew(new Error("ECONNRESET"));
+    expect(outcome._tag).toBe("Err");
+    if (outcome._tag !== "Err") return;
+    expect(jevAskErrOf(outcome.error)._tag).toBe("port_threw");
+    expect(jevAskErrOf({ _tag: "deadline_exceeded" })._tag).toBe("port_threw");
+  });
+
+  it("offlineJevAnswer with no fallback is no_answer_path", () => {
+    expect(offlineJevAnswer(request, undefined)).toEqual({
+      _tag: "Err",
+      error: { _tag: "port_rejected", jev: { _tag: "no_answer_path" } },
+    });
   });
 });
 
@@ -479,42 +544,48 @@ describe("createJevAsk — a caller may name a question `_tag`", () => {
     },
   } as unknown as JevAnswers<TagQuestions>;
 
-  it("settles a successful fallback ok rather than as a JevErr", async () => {
+  it("settles a successful fallback ok rather than as a JevErr", () => {
     const ask = createJevAsk<TagQuestions>(
       { questions: tagQuestions, retry, fallback: () => tagAnswers },
       rngZero,
     );
     const [s1, cmds] = ask.attempt(ask.init(), "k", "a receipt", 0);
-    const cmd = cmds[0];
-    if (cmd === undefined) throw new Error("expected one ask Cmd");
+    const emitted = cmds[0];
+    if (emitted === undefined) throw new Error("expected one ask Cmd");
 
-    const settle = await ask.handlers().resilient_run(cmd);
-    expect(settle.type).toBe("resilient_ok");
-    if (settle.type !== "resilient_ok") return;
-    expect(settle.result).toEqual({
+    const outcome = ask.offline(emitted.input);
+    expect(outcome._tag).toBe("Ok");
+    if (outcome._tag !== "Ok") return;
+    expect(outcome.value).toEqual({
       answers: tagAnswers,
       model: "jev-latest",
       usage: { input_tokens: 0, output_tokens: 0 },
       source: "fallback",
     });
 
-    const [s2] = ask.succeed(s1, "k", settle);
-    const call = s2.calls.k;
-    expect(call?.phase).toBe("succeeded");
+    const cmd = ask.run({ key: emitted.key, input: emitted.input });
+    const [s2] = ask.succeed(s1, ask.run.ok(cmd, outcome.value, 0));
+    expect(s2.calls.k?.phase).toBe("succeeded");
   });
 
-  it("still settles a refusing fallback as its JevErr", async () => {
+  it("still settles a refusing fallback as its JevErr", () => {
     const refusal: JevErr = { _tag: "malformed_body", reason: "offline" };
     const ask = createJevAsk<TagQuestions>(
       { questions: tagQuestions, retry, fallback: () => refusal },
       rngZero,
     );
-    const [, cmds] = ask.attempt(ask.init(), "k", "a receipt", 0);
-    const cmd = cmds[0];
-    if (cmd === undefined) throw new Error("expected one ask Cmd");
+    const [s1, cmds] = ask.attempt(ask.init(), "k", "a receipt", 0);
+    const emitted = cmds[0];
+    if (emitted === undefined) throw new Error("expected one ask Cmd");
 
-    const settle = (await ask.handlers().resilient_run(cmd)) as JevFailMsg;
-    expect(settle.type).toBe("resilient_err");
-    expect(settle.error).toEqual(refusal);
+    const outcome = ask.offline(emitted.input);
+    expect(outcome).toEqual({
+      _tag: "Err",
+      error: { _tag: "port_rejected", jev: refusal },
+    });
+    if (outcome._tag !== "Err") return;
+    const cmd = ask.run({ key: emitted.key, input: emitted.input });
+    const [s2] = ask.fail(s1, ask.run.err(cmd, outcome.error, 0));
+    expect(s2.calls.k).toEqual({ phase: "failed", error: refusal });
   });
 });

@@ -179,7 +179,7 @@ between steps — without moving your orchestrator.
 | `stepHost`, `runStepLoop` | yes | drives a `StepEngine` you implement |
 | `broadcastFrame`, `acceptPresenceSocket`, `registerHibernatableSocket`, `presenceCount` | yes | take the socket set as input |
 | `sseHub` | yes | a generic fan-out hub over any event type `E` |
-| `bootResume`, `agentIsResumable` | partly | `bootResume` needs a `BootingRuntime`; `agentIsResumable` is a pure predicate over an `AgentState` |
+| `bootResume`, `agentIsResumable` | partly | `bootResume` needs a `RunHandle`; `agentIsResumable` is a pure predicate over an `AgentState` |
 | `sseProjection`, `driveProjections`, `runProjection` | partly | fold over a `(Model, Msg)` transition stream — yours to supply, but it must be one |
 | `reissueSurvivingEffects` | no | reads a `DurableCommandCarrier` built by the gateway |
 | `deferredGateway`, `durableDeferredGateway`, `durableCommandCarrier` | no | the gateway *is* the transport for a `/do`-hosted agent |

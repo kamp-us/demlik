@@ -31,6 +31,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./promise": {
+      "types": "./dist/promise/index.d.ts",
+      "import": "./dist/promise/index.js"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "import": "./dist/effect/index.js"
+    },
     "./do": {
       "types": "./dist/do/index.d.ts",
       "import": "./dist/do/index.js"
@@ -132,10 +140,10 @@
     "release": "changeset"
   },
   "dependencies": {
-    "better-result": "^2.5.2",
-    "zod": "^4.5.4"
+    "@standard-schema/spec": "^1.1.0"
   },
   "peerDependencies": {
+    "effect": "^4.0.0-rc.0",
     "fast-check": "^3 || ^4",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19",
@@ -143,6 +151,9 @@
     "ws": "^8"
   },
   "peerDependenciesMeta": {
+    "effect": {
+      "optional": true
+    },
     "fast-check": {
       "optional": true
     },
@@ -171,6 +182,7 @@
     "@types/react-dom": "19.0.3",
     "@types/ws": "8.5.14",
     "ai": "^7.0.93",
+    "effect": "4.0.0-rc.117",
     "fast-check": "^3.23.0",
     "happy-dom": "^20.9.0",
     "react": "19.0.0",
@@ -180,7 +192,8 @@
     "typescript": "5.7.3",
     "vite": "^8.2.1",
     "vitest": "~3.0.7",
-    "ws": "8.18.1"
+    "ws": "8.18.1",
+    "zod": "^4.5.4"
   },
   "publishConfig": {
     "access": "public"

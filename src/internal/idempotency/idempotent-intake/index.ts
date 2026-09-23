@@ -84,8 +84,8 @@
  * and thread them by hand.
  */
 
-import { z } from "zod";
 import { Cmd, type CmdOf } from "../../../index";
+import { unchecked, undefinedOnly } from "../../schema";
 import type { QueueItem } from "../../work-queue";
 import { queueAdapter } from "../../work-queue/adapter";
 import type { IdempotencyStore } from "../idempotency";
@@ -158,13 +158,13 @@ export interface IntakeState<P, R> {
 // knob's own type parameters, so each def is minted per knob by a factory
 // (`createIntake` calls it once) rather than a module-scope constant — the
 // same shape `resilient-call`'s `runCmdDef<I, R>()` takes. The host performs
-// them and settles nothing back through intake, hence `ok: z.void()` and an
+// them and settles nothing back through intake, hence `ok: undefinedOnly` and an
 // empty `err` list.
 
 /** A genuinely-new payload was accepted and enqueued — go run the work. */
 export function intakeProcessDef<P>() {
   return Cmd.define("intake:process", {
-    input: z.custom<{
+    input: unchecked<{
       /** The dedupe key the payload was filed under. */
       readonly key: string;
       /** The enqueued queue-item id (the same `id` passed to `receive`). */
@@ -172,7 +172,7 @@ export function intakeProcessDef<P>() {
       /** The original payload, for the worker to process. */
       readonly payload: P;
     }>(),
-    ok: z.void(),
+    ok: undefinedOnly,
     err: [],
   });
 }
@@ -184,13 +184,13 @@ export type IntakeProcessCmd<P> = CmdOf<ReturnType<typeof intakeProcessDef<P>>>;
  */
 export function intakeReplayDef<R>() {
   return Cmd.define("intake:replay", {
-    input: z.custom<{
+    input: unchecked<{
       /** The dedupe key whose cached result is being replayed. */
       readonly key: string;
       /** The result the ORIGINAL request produced, recalled from the cache. */
       readonly result: R;
     }>(),
-    ok: z.void(),
+    ok: undefinedOnly,
     err: [],
   });
 }

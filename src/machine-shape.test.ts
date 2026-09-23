@@ -3,11 +3,9 @@ import {
   acceptsOf,
   defineMachine,
   describeMachine,
-  type Interpret,
   type Reducer,
   type Transitions,
 } from "./index";
-import { withTelemetry } from "./internal/resilience/with-telemetry";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `describeMachine` / `acceptsOf` — the per-state accept-sets as a public
@@ -18,10 +16,10 @@ import { withTelemetry } from "./internal/resilience/with-telemetry";
 // Two things are pinned here, and the second is the reason it is a FUNCTION
 // and not a property on the machine:
 //   1. the reading itself, per form;
-//   2. that the `withX` wrappers destroy any property hung on a machine — they
-//      return a fresh object literal — so a property-based design would go
-//      blank on the first wrap while a derived reading keeps telling the truth
-//      about the machine it is handed.
+//   2. that anything which rebuilds a machine as a fresh object literal drops
+//      a property hung on it, so a property-based design would go blank on
+//      the first rebuild while a derived reading keeps telling the truth about
+//      the machine it is handed.
 // ───────────────────────────────────────────────────────────────────────────
 
 type LightState = { readonly type: "red" } | { readonly type: "green" };
@@ -36,7 +34,6 @@ function lightMachine() {
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: (_loaded) => [{ type: "red" }, []],
     update,
-    interpret: {} as Interpret<LightMsg, never, undefined>,
   });
 }
 
@@ -78,7 +75,6 @@ describe("describeMachine — transitions form", () => {
         idle: { start: () => [{ type: "busy" }, []] },
         busy: { cancel: () => [{ type: "idle" }, []], tick: (s: S) => [s, []] },
       } as unknown as Transitions<S, M, never>,
-      interpret: {} as Interpret<M, never, undefined>,
     });
     const shape = describeMachine(m);
     expect(shape.form).toBe("transitions");
@@ -126,31 +122,5 @@ describe("acceptsOf", () => {
     const m = counterMachine();
     expect(acceptsOf(m, "anything")).toEqual(["bump", "reset"]);
     expect(acceptsOf(m, "")).toEqual(["bump", "reset"]);
-  });
-});
-
-describe("why a derived reading and not a property on the machine", () => {
-  it("a withX wrapper returns a FRESH object literal — properties do not survive", () => {
-    const base = lightMachine();
-    // Hang a marker on the base the way a property-based design would.
-    const tagged = Object.assign(base, { __marker: "present" });
-    const wrapped = withTelemetry(tagged) as unknown as {
-      __marker?: string;
-      __form?: string;
-    };
-    // Gone. The wrapper builds `{ init, update, subscriptions, subscribe,
-    // interpret }` from scratch; nothing else crosses the boundary. Note the
-    // `__form` tag stamped by `defineMachine` is lost for the same reason.
-    expect(wrapped.__marker).toBeUndefined();
-    expect(wrapped.__form).toBeUndefined();
-  });
-
-  it("the derived reading tells the truth about the WRAPPED machine", () => {
-    // The wrapper flattens a transitions base into a reducer over the composed
-    // Model — so the wrapped machine really has no per-state accept-sets, and
-    // `describeMachine` says exactly that rather than echoing the base.
-    const shape = describeMachine(withTelemetry(lightMachine()));
-    expect(shape.form).toBe("reducer");
-    expect(shape.msgs).toEqual(["go", "stop"]);
   });
 });

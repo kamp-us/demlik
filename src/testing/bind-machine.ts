@@ -22,7 +22,13 @@
 // ---------------------------------------------------------------------------
 
 import { expect } from "vitest";
-import { type Cmd, type Machine, replay, type Sub } from "../index";
+import {
+  type BuiltinSub,
+  type Cmd,
+  type Machine,
+  replay,
+  type Sub,
+} from "../index";
 
 /**
  * Replay options shape used by every bound method. `ctx` is captured by
@@ -83,7 +89,7 @@ export interface BoundMachine<
    */
   expectActiveSubs(
     opts: BoundOpts<S, M>,
-    expected: readonly NoInfer<U>[],
+    expected: readonly NoInfer<U | BuiltinSub<M>>[],
   ): void;
   /**
    * Bound `replay` — returns `{ state, cmds, subs }` for the given opts.
@@ -93,7 +99,7 @@ export interface BoundMachine<
   replay(opts: BoundOpts<S, M>): {
     state: S;
     cmds: readonly C[];
-    subs: readonly U[];
+    subs: readonly (U | BuiltinSub<M>)[];
   };
 }
 

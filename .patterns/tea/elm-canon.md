@@ -83,18 +83,22 @@ state is reachable, every transition is observable.
 In `@demlik/tea` the same loop is expressed as:
 
 ```ts
-import { defineMachine, run } from "@demlik/tea";
+import { defineMachine } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 
 const machine = defineMachine({
   types: { model: {} as Model, msg: {} as Msg, cmd: {} as Cmd, sub: {} as Sub, ctx: {} as Ctx },
   init: (loaded, ctx) => [initialModel, []],          // (Model, [Cmd])
   update: (state, msg) => [nextModel, [cmd]],         // pure
-  subscriptions: (state) => [sub],                    // pure list of Sub
-  interpret: { cmdType: async (cmd, ctx) => msg },    // host: turns Cmd → Msg
-  subscribe: { subType: (sub, ctx, dispatch) => () => cleanup },
+  subs: [{ type: "subType", deps: (state) => slice }], // pure; null = off
 });
 
-const runtime = run(machine, { ctx, store });
+// host: turns Cmd → Msg and runs each Sub. Handed to `run` beside the
+// machine, never on it.
+const interpret = { cmdType: async (cmd, ctx) => msg };
+const subscribe = { subType: (sub, ctx, dispatch) => () => cleanup };
+
+const runtime = run(machine, { ctx, store, interpret, subscribe });
 ```
 
 The shape is the same. The difference is that Elm has a single, opinionated
@@ -120,19 +124,18 @@ example, the increment/decrement counter, the form validator — all
 `Browser.sandbox`.
 
 In `@demlik/tea` you build the same thing by returning `[next, []]` from
-`update` and omitting `interpret` for any commands:
+`update`; a machine that emits no Cmd needs no `interpret` at `run`:
 
 ```ts
 const machine = defineMachine({
   types: { model: {} as number, msg: {} as "inc" | "dec", ctx: {} as {} },
   init: () => [0, []],
   update: (n, msg) => [msg === "inc" ? n + 1 : n - 1, []],
-  interpret: {} as never,
 });
 
 // in a React component
 function Counter() {
-  const [count, dispatch] = useMachine(machine, { ctx: {} });
+  const [count, dispatch] = useMachine(machine, { run, ctx: {} });
   return (
     <>
       <button onClick={() => dispatch("dec")}>-</button>
@@ -174,18 +177,25 @@ The whole-program shape is what `@demlik/tea` calls a `Machine`:
 
 ```ts
 // packages/tea/src/index.ts
-export interface Machine<S, M, C extends Cmd, U extends Sub, Ctx> {
+export type Machine<S, M, C extends Cmd, U extends Sub, Ctx> = {
   init: (loaded: S | null, ctx: Ctx) => [S, readonly C[]];
   update: (state: S, msg: M) => [S, readonly C[]];
-  subscriptions?: (state: S) => readonly U[];
-  interpret: { [K in C["type"]]: (cmd: Extract<C, { type: K }>, ctx: Ctx & PortEmitter) => Promise<M | void> };
-  subscribe?: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx: Ctx, dispatch: (msg: M) => Promise<void>) => () => void };
-}
+  // one entry per Sub: its type, and the state slice it depends on
+  subs?: ReadonlyArray<{ type: U["type"]; deps: (state: S) => U["deps"] | null }>;
+};
+
+// …and the handlers, handed to `run` beside it:
+run(machine, {
+  ctx,
+  interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | void> },
+  subscribe: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx, dispatch) => Dispose },
+});
 ```
 
 Key difference: Elm's runtime owns `interpret` (the implementation of every
-Cmd type) and `subscribe` (the runtime side of every Sub type). We move
-those into the Machine itself, keyed by tag, so the host can supply them.
+Cmd type) and `subscribe` (the runtime side of every Sub type). We hand
+both to `run`, keyed by tag, so the host supplies them — except the built-in
+`timer`, which every engine ships (Elm's `Time.every` analogue, one-shot).
 That's how the same `Machine` can run inside React, a Durable Object, a
 service worker, or a Node test process without the pure code changing.
 
@@ -247,7 +257,7 @@ export type Cmd<T extends string = string> = { type: T };
 
 // concrete:
 type AppCmd =
-  | { type: "http_get"; url: string; into: (result: Result<HttpError, string>) => Msg }
+  | { type: "http_get"; url: string; into: (result: Outcome<string, HttpError>) => Msg }
   | { type: "log"; line: string };
 ```
 
@@ -261,8 +271,8 @@ A handler in `interpret` runs the actual work:
 interpret: {
   http_get: tryInterpret(
     async (cmd, ctx) => fetch(cmd.url).then(r => r.text()),
-    (text, cmd) => cmd.into(Result.ok(text)),
-    (err, cmd) => cmd.into(Result.err(toHttpError(err))),
+    (text, cmd) => cmd.into(Outcome.ok(text)),
+    (err, cmd) => cmd.into(Outcome.err(toHttpError(err))),
   ),
   log: async (cmd, _ctx) => {
     console.log(cmd.line);
@@ -271,10 +281,11 @@ interpret: {
 }
 ```
 
-`tryInterpret` is our Railway-style sugar (see Section 4.6) over
-`Result.tryPromise` from `better-result`. It guarantees the handler never
-rejects — the success or failure both become a Msg the update function can
-case on.
+`tryInterpret` is our Railway-style sugar (see Section 4.6) over a
+`try` / `catch`. It guarantees the handler never rejects — the success or
+failure both become a Msg the update function can case on. A `Cmd.define`d
+Cmd needs no sugar: its handler returns an `Outcome` and the engine mints the
+Msg ([ADR 0021](../../.decisions/0021-handler-outcome-becomes-the-msg.md)).
 
 ### 2.5 `Sub` — continuous sources of Msgs
 
@@ -293,25 +304,42 @@ function is *called every transition*, and the difference between the new
 returned list and the previously-active set drives the actual `addEventListener` /
 `setInterval` / `setTimeout` plumbing.
 
-Ours uses the identical rule. The `Sub.id` field is the diff key:
+Ours uses the identical rule. The difference is who writes the id: in Elm
+the Sub value's structure is its identity, and ours derives the id the same
+way — `structuralHash({ type, deps })`. The machine declares each Sub as
+data; the runner that does the plumbing is handed to `run`:
 
 ```ts
-// packages/tea/src/index.ts
-export type Sub<T extends string = string> = { id: string; type: T };
+// src/pure/core.ts
+export type Sub<T extends string = string, D = unknown> = {
+  readonly id: SubId; readonly type: T; readonly deps: D;
+};
 
-// subscriptions returns the desired set; runtime diffs against current registry
-type AppSub =
-  | { id: string; type: "tick"; every: number; into: (now: number) => Msg }
-  | { id: string; type: "ws"; socketId: string; msg: (data: string) => Msg };
+type AppSub = Sub<"ws", { readonly socketId: string }>;
 
-subscriptions: (state) => state.phase === "running" ? [
-  { id: "main-tick", type: "tick", every: 1000, into: (now) => ({ tag: "tick", now }) },
-] : []
+// the machine: each entry names a type and the state slice it depends on
+subs: [
+  // built-in: Elm's `Time.every`, one-shot — dispatch `msg` after `ms`
+  {
+    type: "timer",
+    deps: (state) =>
+      state.phase === "running" ? { ms: 1000, msg: { type: "tick" } } : null,
+  },
+  {
+    type: "ws",
+    deps: (state) =>
+      state.phase === "running" ? { socketId: state.socketId } : null,
+  },
+],
+
+// at run: the runner for each non-built-in type
+run(machine, { subscribe: { ws: (sub, ctx, dispatch) => open(sub.deps.socketId, dispatch) } });
 ```
 
-Reconcile logic: `packages/tea/src/index.ts:reconcileSubs`. Same id across
-transitions = same subscription, no churn. To *force* a restart, emit a
-different id (`main-tick-v2`).
+Reconcile logic: `src/promise/loop.ts:reconcileSubs`. Same id across
+transitions = same subscription, no churn. A Sub restarts exactly when its
+`deps` value changes; to *force* a restart, put the thing that should
+restart it into `deps`.
 
 ### 2.6 Effects: HTTP
 
@@ -335,19 +363,19 @@ The Result type Elm uses for HTTP:
 GotText (Result Http.Error String)
 ```
 
-We use `better-result`:
+We use the core's plain `Outcome` record (ADR 0021), so tea names no
+`Result` library:
 
 ```ts
-import { Result } from "better-result";
+import type { Outcome } from "@demlik/tea";
 
-type Msg = { tag: "got_text"; result: Result<HttpError, string> };
+type Msg = { tag: "got_text"; result: Outcome<string, HttpError> };
 
 update: (state, msg) => {
   if (msg.tag !== "got_text") return [state, []];
-  return msg.result.match({
-    ok: (text) => [{ phase: "success", text }, []],
-    err: (_) => [{ phase: "failure" }, []],
-  });
+  return msg.result._tag === "Ok"
+    ? [{ phase: "success", text: msg.result.value }, []]
+    : [{ phase: "failure" }, []];
 }
 ```
 
@@ -373,8 +401,8 @@ Http.expectJson GotQuote quoteDecoder
 ```
 
 Our equivalent: a zod schema at the boundary. The decoder turns unknown
-bytes into a parsed domain type or a parse error — same shape as
-`Result.tryPromise`:
+bytes into a parsed domain type or a parse error, and `tryInterpret` turns
+either into an `Outcome`:
 
 ```ts
 import { z } from "zod";
@@ -390,8 +418,8 @@ type Quote = z.infer<typeof Quote>;
 interpret: {
   http_get_quote: tryInterpret(
     async (cmd, ctx) => Quote.parse(await fetch(cmd.url).then(r => r.json())),
-    (quote, cmd) => cmd.into(Result.ok(quote)),
-    (err, cmd) => cmd.into(Result.err(toHttpError(err))),
+    (quote, cmd) => cmd.into(Outcome.ok(quote)),
+    (err, cmd) => cmd.into(Outcome.err(toHttpError(err))),
   ),
 }
 ```
@@ -645,7 +673,7 @@ We do *not* have the language enforcing this — TypeScript lets you
   haven't named yet.
 - `init` is pure modulo the `ctx` arg. Same rule.
 - The only place side-effects belong is `interpret` handlers and
-  `subscribe` handlers. Those *are* the runtime.
+  `subscribe` runners. Those *are* the runtime.
 
 Biome lint enforces purity on files matching reducer / phase globs (the
 `Date`, `fetch`, `crypto`, `uuid` ban). For surfaces not yet covered by
@@ -677,29 +705,23 @@ Elm guide: `error_handling/result.md`.
 `Result error value = Ok value | Err error`. Used wherever something can
 fail with a *reason* (HTTP, JSON parse, file read).
 
-Direct port — `better-result`'s `Result<E, T>` is structurally identical:
+Direct port — the core's `Outcome<Ok, E>` is the same two-arm record
+([ADR 0021](../../.decisions/0021-handler-outcome-becomes-the-msg.md)):
 
 ```ts
-import { Result } from "better-result";
+import { Outcome } from "@demlik/tea";
 
 // constructors
-Result.ok(42)            // Ok 42
-Result.err("nope")       // Err "nope"
+Outcome.ok(42)           // Ok 42
+Outcome.err("nope")      // Err "nope"
 
 // pattern match
-result.match({
-  ok: (value) => ...,
-  err: (error) => ...,
-})
-
-// async lift (try/catch as data, not control flow)
-const r = await Result.tryPromise({
-  try:   () => fetch(url).then(r => r.json()),
-  catch: (e) => toAppError(e),
-});
+result._tag === "Ok" ? result.value : result.error
 ```
 
-Our `tryInterpret` (Section 4.6) is sugar over this. It's the Railway
+A `Cmd.define`d handler returns one and the engine mints `<name>_ok` /
+`<name>_err`. Our `tryInterpret` (Section 4.6) is the same idea for a
+hand-written Cmd. It's the Railway
 pattern at the boundary: every Cmd handler is "fallible work, two named
 outcomes." See `docs/design-patterns.md` "Railway."
 
@@ -762,7 +784,7 @@ Direct map:
 | `type alias Model = { count : Int }` | `type Model = { count: number }` (or `interface Model {...}`) |
 | `case msg of Inc -> ... ; Dec -> ...` | `switch (msg.tag) { case "inc": ... }` or chained `if (msg.tag === "...")` |
 | `Maybe a` | `T \| null` (see 2.15) |
-| `Result e a` | `Result<E, T>` from `better-result` |
+| `Result e a` | `Outcome<T, E>` from `@demlik/tea` |
 
 The `tag` discriminant is convention — pick a name, use it everywhere in a
 codebase. Our codebase uses `type`. (`{ type: "..." }` rather than `{ tag:
@@ -808,11 +830,12 @@ Direct analogue to `Browser.element`. The three rules
    `useSyncExternalStore`, not the older `useState`-+-`useEffect` pattern.
 
 ```ts
+import { run } from "@demlik/tea/promise";
 import { useMachine } from "@demlik/tea/react";
 
 function CounterPage() {
   const ctx = useMemo(() => ({ random: cryptoRandom }), []);
-  const [state, dispatch] = useMachine(counterMachine, { ctx });
+  const [state, dispatch] = useMachine(counterMachine, { run, ctx });
   return <button onClick={() => dispatch({ type: "inc" })}>{state.count}</button>;
 }
 ```
@@ -978,7 +1001,7 @@ interpret: {
 }
 ```
 
-Wraps `Result.tryPromise`. Guarantees the handler resolves with an Ok-Msg
+Wraps a `try` / `catch`. Guarantees the handler resolves with an Ok-Msg
 or an Err-Msg, never rejects. This is the boundary where Elm's `Result e
 a` lives and our type system catches up.
 
@@ -1105,8 +1128,8 @@ When reviewing TEA code in this repo, this is the checklist.
 | `observe` consumer filtering for one Msg variant | Wrong channel | `Port<T>` |
 | Parent reaches into child's Model | Composition leak | Lift state up; child takes props + onChange |
 | `Cmd` handler returns nothing on failure | Silent failure | `tryInterpret` with two Msg outcomes |
-| Same `Sub.id` across reconciliation, different behavior | Identity drift | Emit a new id when behavior changes |
-| `subscribe` handler with side-effectful setup but no cleanup | Leaked subscription | Return cleanup function from `subscribe[type]` |
+| A runner reading something outside `sub.deps` that changes | Identity drift — the id holds, the behavior moved | Put it in `deps`, so a change restarts the Sub |
+| `subscribe` runner with side-effectful setup but no cleanup | Leaked subscription | Return cleanup function from `subscribe[type]` |
 
 ---
 
@@ -1119,7 +1142,7 @@ When reviewing TEA code in this repo, this is the checklist.
 | Update | `update : Msg -> Model -> (Model, Cmd Msg)` | `update: (state: S, msg: M) => [S, readonly C[]]` |
 | View | `view : Model -> Html Msg` | A React component reading state via `useMachine` |
 | Cmd | `Cmd msg` value | `{ type: "..." }` tagged variant; handler in `interpret` |
-| Sub | `Sub msg` value | `{ id: "...", type: "..." }`; handler in `subscribe` |
+| Sub | `Sub msg` value | `subs: [{ type, deps(state) }]` entry; runner in `subscribe` at `run` |
 | Port (outgoing) | `port sendFoo : Foo -> Cmd msg` | `Port<Foo>` + `ctx.emit(port, value)` |
 | Port (incoming) | `port onFoo : (Foo -> msg) -> Sub msg` | `Sub` variant that dispatches `Foo` |
 | Flag | `Browser.element { init = init }` arg | `ctx` arg to `init(loaded, ctx)` |

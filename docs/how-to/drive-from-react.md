@@ -3,15 +3,16 @@
 To use a `@demlik/tea` machine as a component's state, reach for `useMachine`
 from `@demlik/tea/react`. It builds and owns a runtime for the lifetime of the
 mount and hands you back a `[state, dispatch]` pair shaped exactly like
-`useReducer`.
+`useReducer`. The hook imports no engine: you hand it the engine's `run`.
 
 ## 1. Call `useMachine` in your component
 
 ```tsx
+import { run } from "@demlik/tea/promise";
 import { useMachine } from "@demlik/tea/react";
 
 function Downloader() {
-  const [state, dispatch] = useMachine(downloader, { ctx: undefined });
+  const [state, dispatch] = useMachine(downloader, { run, ctx: undefined });
 
   return (
     <div>
@@ -30,22 +31,54 @@ function Downloader() {
 ```
 
 Each `dispatch` folds a Msg through `update` and re-renders with the next state.
-Under the hood `useMachine` calls `run(machine, { ctx })`, subscribes via
-`useSyncExternalStore` (so it is tearing-free under React 18's concurrent
-rendering), and calls `runtime.stop()` on unmount to drain the queue and clean up
-every active subscription.
+Under the hood `useMachine` calls the `run` you passed with
+`(machine, { ctx, interpret, subscribe })`,
+subscribes via `useSyncExternalStore` (so it is tearing-free under React 18's
+concurrent rendering), and calls `runtime.stop()` on unmount to drain the queue
+and stop every running Sub.
 
-## 2. Pass a `ctx` when your effects need one
+## 2. Hand it the handlers, and a `ctx` when they need one
 
-If your machine's `interpret` reads dependencies — an HTTP client, a clock — pass
-them through `ctx`. Keep the `ctx` object identity stable (define it outside the
-component or memoize it), because `useMachine` rebuilds the runtime whenever the
-machine, `ctx`, or `store` identity changes:
+A machine that emits Cmds needs the handlers that perform them. Pass them as
+`interpret`, the same map `run` takes. If those handlers read dependencies — an
+HTTP client, a clock — pass them through `ctx`. Keep the `ctx` object identity
+stable (define it outside the component or memoize it), because `useMachine`
+rebuilds the runtime whenever the machine, `run`, `ctx`, or `store` identity
+changes:
 
 ```tsx
 const ctx = useMemo(() => ({ http: (url: string) => fetch(url).then((r) => r.text()) }), []);
-const [state, dispatch] = useMachine(resilientFetch, { ctx });
+const [state, dispatch] = useMachine(resilientFetch, {
+  run,
+  ctx,
+  interpret: resilientFetchInterpret,
+});
 ```
+
+A machine that declares Subs of its own (anything past the built-in `timer`)
+needs their runners too. Pass them as `subscribe`, again the same map `run`
+takes — the hook requires it exactly when `run` would:
+
+```tsx
+const [state, dispatch] = useMachine(jobWatcher, {
+  run,
+  ctx,
+  subscribe: {
+    job_poll: (sub, _ctx, dispatch) => {
+      const timer = setInterval(
+        () => dispatch({ type: "poll_due", jobId: sub.deps.jobId }),
+        2_000,
+      );
+      return () => clearInterval(timer);
+    },
+  },
+});
+```
+
+`interpret` and `subscribe` are the exception to that identity rule. The hook
+reads each handler from the latest render when a Cmd runs or a Sub starts, so a
+handler table written inline — one that closes over props or state — never
+rebuilds the runtime.
 
 ## 3. Persist across mounts with a `store`
 
@@ -54,7 +87,7 @@ Pass a `store` in the same options object to make the component's machine durabl
 as in "Make a machine durable and crash-recoverable":
 
 ```tsx
-const [state, dispatch] = useMachine(downloader, { ctx: undefined, store });
+const [state, dispatch] = useMachine(downloader, { run, ctx: undefined, store });
 ```
 
 When you need the runtime handle itself (to call `done()`, attach an `observe`

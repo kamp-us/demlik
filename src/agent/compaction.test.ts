@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Interpret, run } from "../index";
+import type { Interpret } from "../index";
+import { run } from "../promise";
 import { bindMachine } from "../testing";
 import {
   type AgentCompactErrMsg,
@@ -147,14 +148,18 @@ const compactOk = (summary: string): AgentCompactOkMsg => ({
   at: 0,
 });
 
-// The re-entered brain-call success settle Msg.
+// The brain-call success settle Msg the engine mints from the brain handler's outcome.
 const brainOk = (
   purpose: Purpose,
   output: AgentTurn,
 ): AgentLlmOkMsg<Purpose, Outputs> => ({
-  type: "resilient_ok",
-  key: purpose,
-  result: { key: purpose, purpose, output },
+  type: "resilient_run_ok",
+  cmd: {
+    type: "resilient_run",
+    key: purpose,
+    input: { purpose, model: null, payload: null },
+  },
+  value: { key: purpose, purpose, output },
   at: 0,
 });
 
@@ -561,7 +566,7 @@ describe("compaction — replay byte-identity with a mid-loop compaction", () =>
   const compactInterpret: Interpret<M, AgentCompactRunCmd, object> = {
     compact_run: async () => compactOk("SUM"),
   };
-  const machine = agent.toMachine<object>({
+  const { machine } = agent.toMachine<object>({
     toolInterpret: compactInterpret as Interpret<
       M,
       ToolCmd | AgentCompactRunCmd,
@@ -596,7 +601,7 @@ describe("compaction — replay byte-identity with a mid-loop compaction", () =>
     const conv = state.conversation;
     if (conv === null) throw new Error("expected a conversation");
     // turns: [summary] (2 folded into 1) + the brain call re-fired afterwards
-    // produced no new turn (no resilient_ok for it in the log).
+    // produced no new turn (no resilient_run_ok for it in the log).
     expect(conv.turns[0]).toEqual({ content: "SUM", toolCalls: [] });
     expect(conv.awaiting).toEqual({ kind: "llm" });
     // No surviving tool record from a folded turn.
@@ -665,8 +670,14 @@ describe("compaction — WIRED machine drives a real compaction round-trip", () 
     const reachedDone = new Promise<void>((res) => {
       resolveDone = res;
     });
-    const machine = agent.toMachine<object>({ toolInterpret });
-    const runtime = await run(machine, { ctx: {} as object }).ready;
+    const { machine, interpret, subscribe } = agent.toMachine<object>({
+      toolInterpret,
+    });
+    const runtime = await run(machine, {
+      ctx: {} as object,
+      interpret,
+      subscribe,
+    }).ready;
     const off = runtime.observe((_m, state) => {
       if (state.run.phase === "done" || state.run.phase === "failed") {
         resolveDone();

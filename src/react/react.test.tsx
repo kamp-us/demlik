@@ -7,12 +7,12 @@ import {
   type Interpret,
   type Reducer,
   RuntimeDiscardedError,
-  run,
   type Store,
   type Sub,
   type Subscribe,
 } from "../index";
 import { memoryStore } from "../mem";
+import { run } from "../promise";
 import { useMachine, useRuntime } from "./index";
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -64,13 +64,97 @@ afterEach(async () => {
   container.remove();
 });
 
+type LabelState = { readonly label: string };
+type LabelMsg =
+  | { readonly type: "load" }
+  | { readonly type: "loaded"; readonly label: string };
+type LabelCmd = { readonly type: "read_label" };
+
+function labelMachine() {
+  const update: Reducer<LabelState, LabelMsg, LabelCmd> = {
+    load: (s) => [s, [{ type: "read_label" }]],
+    loaded: (_s, m) => [{ label: m.label }, []],
+  };
+  return defineMachine({
+    types: {
+      model: {} as LabelState,
+      msg: {} as LabelMsg,
+      cmd: {} as LabelCmd,
+      ctx: undefined,
+    },
+    init: () => [{ label: "none" }, []],
+    update,
+  });
+}
+
+describe("useMachine — handlers at the hook (#278)", () => {
+  it("runs the machine's Cmds through the `interpret` handed to the hook", async () => {
+    let dispatch: ((msg: LabelMsg) => Promise<void>) | null = null;
+    const machine = labelMachine();
+
+    function Label() {
+      const [state, d] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        interpret: {
+          read_label: async () => ({ type: "loaded", label: "done" }),
+        },
+      });
+      dispatch = d;
+      return <span>{state.label}</span>;
+    }
+
+    await act(async () => {
+      root.render(<Label />);
+    });
+    await act(async () => {
+      await dispatch?.({ type: "load" });
+    });
+    expect(container.textContent).toBe("done");
+  });
+
+  it("reads the latest render's handler without rebooting the runtime", async () => {
+    let dispatch: ((msg: LabelMsg) => Promise<void>) | null = null;
+    const machine = labelMachine();
+    const runtimes = new Set<unknown>();
+
+    function Label({ suffix }: { readonly suffix: string }) {
+      const [state, d] = useMachine(machine, {
+        run,
+        ctx: undefined,
+        // A fresh table every render, closing over the prop.
+        interpret: {
+          read_label: async () => ({ type: "loaded", label: `v-${suffix}` }),
+        },
+      });
+      dispatch = d;
+      runtimes.add(d);
+      return <span>{state.label}</span>;
+    }
+
+    await act(async () => {
+      root.render(<Label suffix="1" />);
+    });
+    await act(async () => {
+      root.render(<Label suffix="2" />);
+    });
+    await act(async () => {
+      await dispatch?.({ type: "load" });
+    });
+
+    expect(container.textContent).toBe("v-2");
+    // One runtime across both renders: the inline table never re-keyed it.
+    expect(runtimes.size).toBe(1);
+  });
+});
+
 describe("useMachine", () => {
   it("renders the machine's state and re-renders on dispatch", async () => {
     let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
     const machine = counterMachine();
 
     function Counter() {
-      const [state, d] = useMachine(machine, { ctx: undefined });
+      const [state, d] = useMachine(machine, { run, ctx: undefined });
       dispatch = d;
       return <span data-testid="n">{state.n}</span>;
     }
@@ -101,7 +185,7 @@ describe("useMachine", () => {
     const machine = counterMachine();
 
     function Counter() {
-      const [state] = useMachine(machine, { ctx: undefined, store });
+      const [state] = useMachine(machine, { run, ctx: undefined, store });
       return <span>{state.n}</span>;
     }
 
@@ -125,7 +209,7 @@ describe("useMachine", () => {
   it("unmount stops the runtime: active sub cleanups run", async () => {
     type Phase = { readonly phase: "armed" };
     type M = { readonly type: "noop" };
-    type ProbeSub = { id: string; type: "probe" } & Sub;
+    type ProbeSub = Sub<"probe", { readonly name: string }>;
     const log: string[] = [];
     const subscribe: Subscribe<M, ProbeSub, undefined> = {
       probe: () => {
@@ -144,12 +228,11 @@ describe("useMachine", () => {
       },
       init: () => [{ phase: "armed" }, []],
       update: { noop: (s) => [s, []] },
-      subscriptions: () => [{ id: "p1", type: "probe" }],
-      subscribe,
+      subs: [{ type: "probe", deps: () => ({ name: "p1" }) }],
     });
 
     function Host() {
-      useMachine(machine, { ctx: undefined });
+      useMachine(machine, { run, ctx: undefined, subscribe });
       return null;
     }
 
@@ -174,7 +257,7 @@ describe("useMachine", () => {
     let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
 
     function Counter() {
-      const [state, d] = useMachine(machine, { ctx: undefined, store });
+      const [state, d] = useMachine(machine, { run, ctx: undefined, store });
       dispatch = d;
       return <span>{state.n}</span>;
     }
@@ -236,7 +319,7 @@ describe("useMachine — loud on discard", () => {
         await park;
       },
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as WizardState,
         msg: {} as WizardMsg,
@@ -245,11 +328,14 @@ describe("useMachine — loud on discard", () => {
       },
       init: () => [{ step: 0 }, []],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
-  function mountWizard(machine: ReturnType<typeof wizardMachine>) {
+  function mountWizard({
+    machine,
+    interpret,
+  }: ReturnType<typeof wizardMachine>) {
     let dispatch: ((msg: WizardMsg) => Promise<void>) | null = null;
     function Wizard({ userId }: { userId: string }) {
       // The defect's exact shape: the ctx is DERIVED from a value the flow
@@ -257,7 +343,7 @@ describe("useMachine — loud on discard", () => {
       // across renders and mints exactly one fresh identity when `userId`
       // changes, which is the moment the runtime is replaced.
       const ctx = useMemo<WizardCtx>(() => ({ userId }), [userId]);
-      const [state, d] = useMachine(machine, { ctx });
+      const [state, d] = useMachine(machine, { run, ctx, interpret });
       dispatch = d;
       return <span>{state.step}</span>;
     }
@@ -324,6 +410,31 @@ describe("useMachine — loud on discard", () => {
 
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("useMachine — the engine is an input (#281)", () => {
+  it("boots through the `run` it is handed, once per mount", async () => {
+    const engine = vi.fn(run) as typeof run;
+    const machine = counterMachine();
+    let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
+
+    function Counter() {
+      const [state, d] = useMachine(machine, { run: engine, ctx: undefined });
+      dispatch = d;
+      return <span>{state.n}</span>;
+    }
+
+    await act(async () => {
+      root.render(<Counter />);
+    });
+    await act(async () => {
+      await dispatch?.({ type: "inc" });
+    });
+
+    expect(container.textContent).toBe("1");
+    expect(engine).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(engine).mock.calls[0]?.[0]).toBe(machine);
   });
 });
 

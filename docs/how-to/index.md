@@ -4,8 +4,21 @@ Goal-oriented directions for getting a specific job done with `@demlik/tea`.
 Grouped by the job, not by the module — reach for the guide whose title matches
 what you are trying to do, and it names the subpath you need.
 
+## Upgrade
+
+- [Migrate from 0.15 to the two-engine release](./migrate-from-0-15.md) — every
+  removed or reshaped API, before and after: `run` on `@demlik/tea/promise`,
+  handlers and Sub runners at `run`, Subs as `{ type, deps }` data, handler
+  outcomes, and the end of `provide`, `mount*` and the `with*` wrappers.
+
 ## Run a machine somewhere
 
+- [Run a machine on the Promise engine](./run-on-the-promise-engine.md) — hand
+  `run` from `@demlik/tea/promise` Promise handlers for a machine file that
+  imports only `@demlik/tea`.
+- [Run a machine on the Effect engine](./run-on-the-effect-engine.md) — run the
+  same machine file with `run` from `@demlik/tea/effect`: Effect handlers,
+  services from your Layers, and interruption when the scope closes.
 - [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
   `Store` so the Model survives a Durable Object eviction and resumes on the next
   boot.
@@ -18,10 +31,6 @@ what you are trying to do, and it names the subpath you need.
   `RunDone` events as the kernel settles them, instead of waiting on the one
   promise that resolves at the end, and `onChunk` for the token deltas below a
   turn.
-- [Scope a resource across a run](./scope-a-resource-across-a-run.md) — hand `run`
-  a `provide` graph instead of a `ctx` object so a db handle is acquired once at
-  boot, in dependency order, and released in reverse when the run ends — done,
-  failed or cancelled.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.
@@ -75,13 +84,13 @@ what you are trying to do, and it names the subpath you need.
 - [Hand-wire a resilient call](./hand-wire-a-resilient-call.md) — wire
   `@demlik/tea/resilience`'s `createResilientCall` knob into your own `update`
   cell by cell, with `settle` and an `onSettle` helper of your own, so a call
-  gets retry, backoff and a circuit breaker without `mountResilientCall`.
+  gets retry, backoff and a circuit breaker from plain functions.
 
 ## Classify something
 
 - [Ask Jev a typed question](./ask-jev-a-typed-question.md) — send a rubric to
   TypeSafe Jev with `@demlik/tea/jev` and get the answer back narrowed to the
-  criteria keys you wrote, with the HTTP caller injected as a port so the whole
+  criteria keys you wrote, with the HTTP call as a handler you write so the whole
   call replays in a test without a key.
 
 *Guides are added as the how-to quadrant grows.*

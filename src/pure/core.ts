@@ -7,19 +7,20 @@
  * `Reducer`, `Transitions`, `Cmd`, `Sub`, `Port`, …).
  *
  * **Dependency direction (the actual decoupling):** this module imports
- * NOTHING from the runtime — no `better-result`, no `run`/host/`Store`. The
+ * NOTHING from the runtime — no `run`/host/`Store`. The
  * runtime (`run`, the host, interpret, `Store`, subscribe — all in
  * `../index.ts`) imports *from* here; never the reverse. The root door
  * re-exports this surface through `./index.ts`, and
  * `pure/import-graph.test.ts` is the regression fence asserting the pure
  * entrypoint's import graph never reaches `run`.
  *
- * The one external name it reaches for is zod's TYPE surface (`import type`),
- * erased at compile time — `Cmd.define` accepts zod schemas, and the parse
- * against them happens at the interpret edge in `../run.ts`, never here.
+ * The one external name it reaches for is the Standard Schema TYPE surface
+ * (`import type` from `@standard-schema/spec`), erased at compile time —
+ * `Cmd.define` accepts any Standard Schema (zod, Effect Schema through
+ * `Schema.toStandardSchemaV1`, …), and it imports no schema library.
  */
 
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 // === Dev-mode invariant enforcement ===
 //
@@ -120,111 +121,96 @@ export function without<V>(
 
 // === Cmd: tagged-union, one-shot effect ===
 //
-// `E` and `R` are Effect's error and requirements channels, carried as PHANTOM
-// type parameters (ADR 0014): the runtime value stays `{ readonly type: T }` —
-// JSON-plain, hashable, replayable — and the two channels ride on optional
-// fields that are never assigned, exactly as `Port.__t` carries its `T`.
+// `Ok` and `E` are carried as PHANTOM type parameters (ADR 0014): the runtime
+// value stays `{ readonly type: T }` — JSON-plain, hashable, replayable — and
+// the two channels ride on optional fields that are never assigned, exactly as
+// `Port.__t` carries its `T`.
 //
+//   - `Ok` — the value this Cmd settles with on success. Defaults to `unknown`.
 //   - `E` — the `_tag` union this Cmd can settle with (`{ _tag: "timeout" } |
 //     …`). A reducer's `_err` cell reads it, so a new failure mode is a compile
 //     error at the cell, not a runtime surprise. Defaults to `unknown`, the
 //     "untyped" reading every hand-written battery Cmd has today.
-//   - `R` — REQUIREMENTS: the slice of `Ctx` this Cmd's interpret handler needs.
-//     `run` demands the intersection of every Cmd's `R` (`RequiredCtx`), so a
-//     missing dependency fails at `run`, not at 3 a.m. Defaults to `unknown` —
-//     "needs nothing", and the identity of `&`, so `Ctx & RequiredCtx<C>` is
-//     exactly `Ctx` for a machine with no typed Cmds. (`{}` would read the same
-//     in prose but is NOT the identity: `Ctx & {}` refuses an unconstrained
-//     `Ctx`, which every host adapter has.)
+//
+// A Cmd names no requirements (ADR 0020): which services run it is a fact
+// about the handler that interprets it, not about the journaled Cmd.
 //
 // Both channels are named by `Cmd.define`; a Cmd literal never spells them.
-// Every existing `Cmd<A>` and every battery's local Cmd union compiles unchanged
-// — the phantoms are optional, so a `{ type }` literal still satisfies `Cmd`.
+// The phantoms are optional, so a `{ type }` literal still satisfies `Cmd`.
 /**
  * A tagged-union, one-shot effect — JSON-plain, hashable, replayable.
  *
- * `T` is the tag. `E` and `R` are Effect's Error and **Requirements** channels,
- * carried as phantom type parameters (ADR 0014): `E` is the `_tag` union this
- * Cmd can settle with, and `R` is the slice of `Ctx` its interpret handler
- * reads. `R` is a requirement, not a wiring — what SATISFIES it is the `ctx`
- * handed to `run`, built by hand or by a `provide` graph that acquires each
- * dependency once and releases it when the run ends.
- *
- * @see {@link RequiredCtx} — every Cmd's `R`, intersected: what `run` demands.
- * @see `provide` — the host-side graph that builds a `ctx` satisfying `R`.
+ * `T` is the tag. `Ok` and `E` are phantom type parameters (ADR 0014): `Ok` is
+ * the value this Cmd settles with, and `E` is the `_tag` union it can fail
+ * with. A Cmd carries no requirements (ADR 0020) — its handler gets its
+ * services from the plain `ctx` handed to `run`.
  */
-export type Cmd<T extends string = string, E = unknown, R = unknown> = {
+export type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
   readonly type: T;
+  /** Phantom — the value this Cmd settles with. Never assigned. */
+  readonly __ok?: Ok;
   /** Phantom — the `_tag` union this Cmd can settle with. Never assigned. */
   readonly __e?: E;
-  /** Phantom — the `Ctx` slice this Cmd's handler needs. Never assigned. */
-  readonly __r?: R;
 };
-
-// === Typed effect channels: reading `E` and `R` back off a Cmd (ADR 0014) ===
-//
-// `RequirementsOf<C>` is one Cmd's `R`; `RequiredCtx<C>` is the intersection over a
-// whole Cmd union — what `run` demands of `ctx` beside the machine's own `Ctx`.
-// An untyped Cmd (`{ type }`, `__r` absent) infers `unknown` — "requires
-// nothing", the identity of `&` — so a machine of hand-written Cmds demands
-// exactly what it demanded before. `never` (a cmdless machine) intersects to
-// `unknown` too.
-export type RequirementsOf<C> = C extends { readonly __r?: infer R }
-  ? R
-  : unknown;
 
 /** The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. */
 export type ErrorsOf<C> = C extends { readonly __e?: infer E } ? E : unknown;
 
-type UnionToIntersection<U> = (
-  U extends unknown
-    ? (u: U) => void
-    : never
-) extends (u: infer I) => void
-  ? I
-  : never;
+// === Outcome: what a `Cmd.define`d handler returns (ADR 0021) ===
+//
+// A handler reports whether the work succeeded and with what; the ENGINE turns
+// that into the Cmd's `<name>_ok` / `<name>_err` Msg. The record is plain and
+// tagged, so the core names no `Result` library and each engine converts its own
+// native result into it at its edge.
 
-// `unknown` is the identity of `&` but the annihilator of `|`: a union of
-// `RequirementsOf` over a MIXED Cmd set (`{ http } | unknown`) collapses to
-// `unknown` before it can be intersected, and the machine demands nothing. Box
-// each member first so the "requires nothing" arms can be dropped, not absorbed.
-type RequirementsBoxed<C> = C extends unknown ? [RequirementsOf<C>] : never;
-type KnownRequirements<B> = B extends [infer R]
-  ? unknown extends R
-    ? never
-    : R
-  : never;
+/** The result a `Cmd.define`d handler returns: its value, or a declared failure. */
+export type Outcome<Ok, E> =
+  | { readonly _tag: "Ok"; readonly value: Ok }
+  | { readonly _tag: "Err"; readonly error: E };
 
 /**
- * The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected.
- * `run` types its `ctx` as `Ctx & RequiredCtx<C>`, so handing a machine whose
- * Cmds need `{ http }` to a `run` whose ctx lacks it is a compile error. A Cmd
- * that requires nothing — untyped, or `Cmd.define`d without `requirements` — leaves
- * the demand of its siblings intact (#56).
- *
- * This is the requirement. `provide` is what satisfies it: hand `run` a
- * `provide({ … })` graph in place of the object and the same `Ctx` is built once
- * at boot, in dependency order, and released in reverse when the run ends.
+ * The two builders the Promise engine hands a `Cmd.define`d handler on its
+ * ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared
+ * tags.
  */
-export type RequiredCtx<C> = UnionToIntersection<
-  KnownRequirements<RequirementsBoxed<C>>
->;
+export interface OutcomeHelpers<Ok, E> {
+  readonly ok: (value: Ok) => Outcome<Ok, never>;
+  readonly err: (error: E) => Outcome<never, E>;
+}
 
-// === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1) ===
+/**
+ * Build an {@link Outcome} outside a handler's helpers — in a test that calls a
+ * handler directly, or in an adapter converting another result type.
+ */
+export const Outcome = {
+  ok: <Ok>(value: Ok): Outcome<Ok, never> => ({ _tag: "Ok", value }),
+  err: <E>(error: E): Outcome<never, E> => ({ _tag: "Err", error }),
+} as const;
+
+function isOutcome(value: unknown): value is Outcome<unknown, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const tag = (value as { _tag?: unknown })._tag;
+  return (
+    (tag === "Ok" && "value" in value) || (tag === "Err" && "error" in value)
+  );
+}
+
+// === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1, 0021) ===
 //
 // "Types on the constructor, data in the record." A Cmd built by hand carries
-// no `E` and no `R`; one built by `Cmd.define` carries both, and the minted
+// no `Ok` and no `E`; one built by `Cmd.define` carries both, and the minted
 // settled Msgs (`<name>_ok` / `<name>_err`) are derived from the same
 // declaration — so the reducer, the interpret handler and the runtime edge all
 // read ONE source for what this effect can produce.
 //
 // Everything a constructor names is a TYPE or a SCHEMA; the value it returns is
-// still the dead record `{ type, ...input }`. `input` and `ok` are zod schemas
-// (zod is the one runtime dependency this adds); `err` is the `_tag` list a
-// handler may settle with; `requirements` is the `Ctx` slice the handler reads.
+// still the dead record `{ type, ...input }`. `input` and `ok` are Standard
+// Schemas (https://standardschema.dev) — zod passes straight in, Effect Schema
+// through `Schema.toStandardSchemaV1` — and `err` is the `_tag` list a handler
+// may fail with.
 //
 // The failure union always carries one kernel tag beside the declared ones:
-// `MalformedResult`, minted at the interpret edge when a handler's `_ok` value
+// `MalformedResult`, minted at the interpret edge when a handler's `Ok` value
 // fails the `ok` schema. Invariant 8 (the boundary parses, the core trusts): a
 // corrupt result becomes a typed `_err` the reducer already has a cell for, and
 // never reaches Model.
@@ -242,9 +228,9 @@ export type TaggedError<Tag extends string> = Tag extends string
   : never;
 
 /**
- * The kernel-minted failure: a handler returned a `_ok` value the Cmd's `ok`
+ * The kernel-minted failure: a handler returned an `Ok` value the Cmd's `ok`
  * schema rejects. Plain data, so it folds into Model like any settled error;
- * `issues` is zod's issue list flattened to `path` + `message` strings.
+ * `issues` is the schema's issue list flattened to `path` + `message` strings.
  */
 export type MalformedResult = {
   readonly _tag: "malformed_result";
@@ -254,20 +240,111 @@ export type MalformedResult = {
   }>;
 };
 
-/** Render zod's issue list into the JSON-plain `MalformedResult`. */
+/** Render a Standard Schema issue list into the JSON-plain `MalformedResult`. */
 export function malformedResult(
-  issues: ReadonlyArray<{
-    readonly path: ReadonlyArray<PropertyKey>;
-    readonly message: string;
-  }>,
+  issues: ReadonlyArray<StandardSchemaV1.Issue>,
 ): MalformedResult {
   return {
     _tag: "malformed_result",
     issues: issues.map((issue) => ({
-      path: issue.path.map(String).join("."),
+      path: (issue.path ?? [])
+        .map((segment) =>
+          String(typeof segment === "object" ? segment.key : segment),
+        )
+        .join("."),
       message: issue.message,
     })),
   };
+}
+
+/**
+ * A schema whose `validate` returned a Promise where the kernel needs an answer
+ * now — the `ok` check at the interpret edge, the `args` check in a reducer.
+ * A contract breach (ADR 0021 §5): it goes to the error sink.
+ */
+export class AsyncSchemaError extends Error {
+  override readonly name = "AsyncSchemaError";
+  readonly _tag = "AsyncSchemaError" as const;
+  constructor(
+    /** What the schema was checking, e.g. `the "fetch" Cmd's ok schema`. */
+    public readonly where: string,
+  ) {
+    super(
+      `@demlik/tea: ${where} validated asynchronously. tea checks schemas ` +
+        `synchronously, so a schema whose \`~standard.validate\` returns a ` +
+        `Promise cannot be used here.`,
+    );
+  }
+}
+
+/**
+ * Run a Standard Schema synchronously. Throws {@link AsyncSchemaError} when the
+ * schema answers with a Promise; `where` names the check for that message.
+ */
+export function validateSync<T>(
+  schema: StandardSchemaV1<unknown, T>,
+  value: unknown,
+  where: string,
+): StandardSchemaV1.Result<T> {
+  const result = schema["~standard"].validate(value);
+  if (result instanceof Promise) {
+    // Nobody awaits it; keep a late rejection from surfacing as unhandled.
+    result.catch(() => {});
+    throw new AsyncSchemaError(where);
+  }
+  return result;
+}
+
+/**
+ * A `Cmd.define`d handler failed outside its declared channel: its `Err` carried
+ * no `_tag`, or a tag the def does not declare. A contract breach (ADR 0011,
+ * 0021 §4): it goes to the error sink, never to `<name>_err`.
+ */
+export class UndeclaredFailureError extends Error {
+  override readonly name = "UndeclaredFailureError";
+  readonly _tag = "UndeclaredFailureError" as const;
+  constructor(
+    public readonly cmdType: string,
+    /** The `error` the handler's `Err` carried, verbatim. */
+    public readonly failure: unknown,
+    /** The tags the def declares. */
+    public readonly declared: readonly string[],
+  ) {
+    super(
+      `@demlik/tea: the "${cmdType}" handler failed with ${describeTag(failure)}, ` +
+        `which its Cmd.define does not declare (declared: ` +
+        `${declared.length === 0 ? "none" : declared.map((t) => `"${t}"`).join(", ")}). ` +
+        `An undeclared failure goes to the error sink, never to "${cmdType}_err".`,
+    );
+  }
+}
+
+function describeTag(failure: unknown): string {
+  const tag =
+    typeof failure === "object" && failure !== null
+      ? (failure as { _tag?: unknown })._tag
+      : undefined;
+  return typeof tag === "string" ? `_tag "${tag}"` : "a value with no _tag";
+}
+
+/**
+ * A `Cmd.define`d handler returned something the engine cannot settle: any Msg
+ * (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler —
+ * ADR 0021), or any other value that is neither an {@link Outcome} nor nothing.
+ */
+export class OutcomeContractError extends Error {
+  override readonly name = "OutcomeContractError";
+  readonly _tag = "OutcomeContractError" as const;
+  constructor(
+    public readonly cmdType: string,
+    detail: string,
+  ) {
+    super(
+      `@demlik/tea: the "${cmdType}" handler ${detail}. A Cmd.define'd ` +
+        `handler returns an outcome — \`ok(value)\` or \`err({ _tag })\` — and ` +
+        `the engine mints "${cmdType}_ok" / "${cmdType}_err" from it.`,
+    );
+  }
 }
 
 /**
@@ -276,20 +353,13 @@ export function malformedResult(
  */
 export type CmdInput = { readonly type?: never } & Record<string, unknown>;
 
-/**
- * Phantom carrier for a Cmd's `R`. `Cmd.requirements<{ http: Http }>()` is how a
- * declaration names the `Ctx` slice its handler reads — a type, not a value, so
- * nothing is constructed and nothing is checked at runtime.
- */
-export type Requirements<R> = { readonly __r?: R };
-
 /** The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. */
 export type CmdValue<
   Name extends string,
   Input extends CmdInput,
+  Ok,
   E extends Tagged,
-  R,
-> = Cmd<Name, E | MalformedResult, R> & Readonly<Input>;
+> = Cmd<Name, Ok, E | MalformedResult> & Readonly<Input>;
 
 export type SettledOk<Name extends string, C, Ok> = {
   readonly type: `${Name}_ok`;
@@ -312,35 +382,34 @@ export type SettledErr<Name extends string, C, E extends Tagged> = {
  * the minted Msg builders and the declaration hung on it. `E` here is the
  * DECLARED tag union; the settled `_err` arm widens it by `MalformedResult`.
  *
- * `ok` / `err` take an optional `at` for minting OUTSIDE the runtime (a
- * `replay` log, a unit test); inside `run` the interpret edge stamps it from
- * the clock, so a handler never reads `Date.now()` itself.
+ * `ok` / `err` mint a settled Msg OUTSIDE the runtime (a `replay` log, a unit
+ * test) and take an optional `at`. A handler never calls them: it returns an
+ * {@link Outcome}, and inside `run` the interpret edge mints and stamps.
  */
 export interface CmdDef<
   Name extends string,
   Input extends CmdInput,
   Ok,
   E extends Tagged,
-  R,
 > {
-  (input: Input): CmdValue<Name, Input, E, R>;
+  (input: Input): CmdValue<Name, Input, Ok, E>;
   /** The `type` discriminant of every Cmd this builds. */
   readonly cmdType: Name;
   readonly okType: `${Name}_ok`;
   readonly errType: `${Name}_err`;
   readonly ok: (
-    cmd: CmdValue<Name, Input, E, R>,
+    cmd: CmdValue<Name, Input, Ok, E>,
     value: Ok,
     at?: number,
-  ) => SettledOk<Name, CmdValue<Name, Input, E, R>, Ok>;
+  ) => SettledOk<Name, CmdValue<Name, Input, Ok, E>, Ok>;
   readonly err: (
-    cmd: CmdValue<Name, Input, E, R>,
+    cmd: CmdValue<Name, Input, Ok, E>,
     error: E,
     at?: number,
-  ) => SettledErr<Name, CmdValue<Name, Input, E, R>, E>;
+  ) => SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>;
   readonly schema: {
-    readonly input: z.ZodType<Input>;
-    readonly ok: z.ZodType<Ok>;
+    readonly input: StandardSchemaV1<unknown, Input>;
+    readonly ok: StandardSchemaV1<unknown, Ok>;
   };
   /** The declared `_tag` list, verbatim. */
   readonly errTags: ReadonlyArray<E["_tag"]>;
@@ -348,45 +417,58 @@ export interface CmdDef<
 
 /**
  * The declaration-erased view the runtime reads: which `type` a def builds,
- * which two Msg types it settles with, and the `ok` schema the edge parses
- * against. Every `CmdDef<…>` is one of these structurally.
+ * which two Msg types it settles with, the `ok` schema the edge parses against
+ * and the tags an `Err` may carry. Every `CmdDef<…>` is one of these
+ * structurally.
  */
 export type AnyCmdDef = {
   readonly cmdType: string;
   readonly okType: string;
   readonly errType: string;
-  readonly schema: { readonly ok: z.ZodType };
+  readonly schema: { readonly ok: StandardSchemaV1 };
+  readonly errTags: ReadonlyArray<string>;
 };
 
 // === The interpret edge — the boundary a `Cmd.define`d result crosses ===
 //
 // `run` builds ONE edge over `machine.cmds` and its clock, applies it to every
 // interpret handler's return, and hands the same edge to the handlers under
-// `cmdEdge` on ctx (beside `emit`). The hand-off is for a wrapper that invokes
-// a base handler INSIDE its own — `withResilience`'s `$resilience:run` carrier
-// — where `run`'s edge sees the carrier's `type`, never the def's, so the
-// base result would cross unparsed (#66). Settling through `cmdEdgeOf(ctx)`
-// at the site the def's handler is actually invoked keeps one parse and one
-// clock for the bare and the wrapped machine alike.
+// `cmdEdge` on ctx (beside `emit`). The hand-off is for a handler that invokes
+// another def's handler INSIDE its own — the agent's fanned tool cells — where
+// `run`'s edge sees the carrier's `type`,
+// never the def's, so the base outcome would cross unminted (#66). Settling
+// through `cmdEdgeOf(ctx)` at the site the def's handler is actually invoked
+// keeps one mint, one parse and one clock for the bare and the wrapped machine
+// alike.
 
-/** Settle one handler's follow-up: parse an `_ok`, stamp `at`, or pass through. */
+/**
+ * Settle one handler's return: mint a def's outcome into its `_ok` / `_err`
+ * Msg, or pass a hand-written Cmd's return through. Throws on a contract breach.
+ */
 export type CmdEdge = (
   cmd: { readonly type: string },
-  follow: unknown,
+  returned: unknown,
 ) => unknown;
 
 /** The ctx key `run` hands its edge under. A symbol, so no Ctx port can collide. */
 export const cmdEdge: unique symbol = Symbol("tea.cmdEdge");
 
 /**
- * The edge over a def list (invariant 8: the boundary parses, the core trusts).
- * For a follow-up that is a def's own settled Msg: an `_ok` whose `value` fails
- * the `ok` schema becomes the minted `_err` carrying `malformed_result`, so a
- * corrupt result never reaches a reducer cell that would fold it into Model; an
- * `_ok` that passes carries the PARSED value (zod's strip/transform applied);
- * either arm gets `at` from the clock unless the builder was handed one.
- * Anything else — a hand-written Cmd's follow-up, a Msg outside the settled
- * pair — passes through untouched.
+ * The edge over a def list (ADR 0021; invariant 8: the boundary parses, the
+ * core trusts). For a Cmd one of `defs` builds, the handler's return is:
+ *
+ *   - `Ok` — parsed against the `ok` schema: a pass mints `<name>_ok` carrying
+ *     the PARSED value (the schema's strip / transform applied), a fail mints
+ *     `<name>_err` carrying `malformed_result`, so a corrupt result never
+ *     reaches a reducer cell that would fold it into Model;
+ *   - `Err` — minted into `<name>_err` when its `_tag` is declared, and thrown
+ *     as {@link UndeclaredFailureError} when it is not;
+ *   - nothing — nothing is dispatched;
+ *   - anything else, a Msg included — thrown as {@link OutcomeContractError}.
+ *     The engine mints a defined Cmd's Msg, never the handler.
+ *
+ * Minted Msgs are stamped with `at` from the clock. A Cmd no def builds — a
+ * hand-written Cmd's follow-up — passes through untouched.
  */
 export function cmdEdgeOver(
   defs: Iterable<AnyCmdDef>,
@@ -394,25 +476,62 @@ export function cmdEdgeOver(
 ): CmdEdge {
   const byType = new Map<string, AnyCmdDef>();
   for (const def of defs) byType.set(def.cmdType, def);
-  return (cmd, follow) => {
+  return (cmd, returned) => {
     const def = byType.get(cmd.type);
-    if (def === undefined || !isSettledShape(follow)) return follow;
-    const at = follow.at ?? clock();
-    if (follow.type === def.okType) {
-      const parsed = def.schema.ok.safeParse(follow.value);
-      if (!parsed.success) {
-        return {
-          type: def.errType,
-          cmd: follow.cmd,
-          error: malformedResult(parsed.error.issues),
-          at,
-        };
-      }
-      return { ...follow, value: parsed.data, at };
-    }
-    if (follow.type === def.errType) return { ...follow, at };
-    return follow;
+    if (def === undefined) return returned;
+    if (returned === undefined || returned === null) return undefined;
+    if (isOutcome(returned)) return mint(def, cmd, returned, clock());
+    throw new OutcomeContractError(def.cmdType, describeReturn(def, returned));
   };
+}
+
+function describeReturn(def: AnyCmdDef, returned: unknown): string {
+  const type =
+    typeof returned === "object"
+      ? (returned as { type?: unknown }).type
+      : undefined;
+  if (typeof type !== "string") {
+    return "returned a value that is not an outcome";
+  }
+  if (type === def.okType || type === def.errType) {
+    return `returned its own "${type}" Msg`;
+  }
+  return `returned the "${type}" Msg`;
+}
+
+function mint(
+  def: AnyCmdDef,
+  cmd: unknown,
+  outcome: Outcome<unknown, unknown>,
+  at: number,
+): { readonly type: string; readonly cmd: unknown; readonly at: number } & (
+  | { readonly value: unknown }
+  | { readonly error: unknown }
+) {
+  if (outcome._tag === "Err") {
+    const tag =
+      typeof outcome.error === "object" && outcome.error !== null
+        ? (outcome.error as { _tag?: unknown })._tag
+        : undefined;
+    if (typeof tag !== "string" || !def.errTags.includes(tag)) {
+      throw new UndeclaredFailureError(def.cmdType, outcome.error, def.errTags);
+    }
+    return { type: def.errType, cmd, error: outcome.error, at };
+  }
+  const parsed = validateSync(
+    def.schema.ok,
+    outcome.value,
+    `the "${def.cmdType}" Cmd's ok schema`,
+  );
+  if (parsed.issues !== undefined) {
+    return {
+      type: def.errType,
+      cmd,
+      error: malformedResult(parsed.issues),
+      at,
+    };
+  }
+  return { type: def.okType, cmd, value: parsed.value, at };
 }
 
 /**
@@ -424,7 +543,7 @@ export function cmdEdgeOf(ctx: unknown): CmdEdge {
     typeof ctx === "object" && ctx !== null
       ? (ctx as { [cmdEdge]?: CmdEdge })[cmdEdge]
       : undefined;
-  return edge ?? ((_, follow) => follow);
+  return edge ?? ((_, returned) => returned);
 }
 
 // === The detached-work edge — work a handler outlives ===
@@ -456,19 +575,6 @@ export function detachWorkOf(ctx: unknown): DetachWork {
   return detach ?? (() => undefined);
 }
 
-function isSettledShape(follow: unknown): follow is {
-  readonly type: string;
-  readonly cmd: unknown;
-  readonly value?: unknown;
-  readonly at?: number;
-} {
-  return (
-    typeof follow === "object" &&
-    follow !== null &&
-    typeof (follow as { type?: unknown }).type === "string"
-  );
-}
-
 /** The Cmd value a def (or a union of defs) builds. */
 // (`infer C extends Cmd` keeps the derived union inside `Machine`'s `C extends
 // Cmd` constraint — without it the inference site is unconstrained.)
@@ -484,10 +590,10 @@ export type CmdOf<D extends AnyCmdDef> = D extends ((
  * into the machine's `M` so the user never spells the effect half of it.
  */
 export type Settled<D extends AnyCmdDef> =
-  D extends CmdDef<infer Name, infer Input, infer Ok, infer E, infer R>
+  D extends CmdDef<infer Name, infer Input, infer Ok, infer E>
     ?
-        | SettledOk<Name, CmdValue<Name, Input, E, R>, Ok>
-        | SettledErr<Name, CmdValue<Name, Input, E, R>, E>
+        | SettledOk<Name, CmdValue<Name, Input, Ok, E>, Ok>
+        | SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>
     : never;
 
 // Both read one slot of a `CmdDef`; every OTHER slot is `infer`red too, because
@@ -496,33 +602,27 @@ export type Settled<D extends AnyCmdDef> =
 
 /** The `Ok` a def's handler must produce. */
 export type OkOf<D extends AnyCmdDef> =
-  D extends CmdDef<infer _Name, infer _Input, infer Ok, infer _E, infer _R>
-    ? Ok
-    : never;
+  D extends CmdDef<infer _Name, infer _Input, infer Ok, infer _E> ? Ok : never;
 
 /** The DECLARED failure union a def's handler may settle with. */
 export type ErrOf<D extends AnyCmdDef> =
-  D extends CmdDef<infer _Name, infer _Input, infer _Ok, infer E, infer _R>
-    ? E
-    : never;
+  D extends CmdDef<infer _Name, infer _Input, infer _Ok, infer E> ? E : never;
 
 function defineCmd<
   const Name extends string,
   Input extends CmdInput,
   Ok,
   const Tags extends readonly string[],
-  R = unknown,
 >(
   name: Name,
   spec: {
-    readonly input: z.ZodType<Input>;
-    readonly ok: z.ZodType<Ok>;
+    readonly input: StandardSchemaV1<unknown, Input>;
+    readonly ok: StandardSchemaV1<unknown, Ok>;
     readonly err: Tags;
-    readonly requirements?: Requirements<R>;
   },
-): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>, R> {
+): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>> {
   type E = TaggedError<Tags[number]>;
-  type C = CmdValue<Name, Input, E, R>;
+  type C = CmdValue<Name, Input, Ok, E>;
   const okType = `${name}_ok` as const;
   const errType = `${name}_err` as const;
   const build = (input: Input): C => ({ ...input, type: name });
@@ -833,9 +933,8 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
 // sites that want them. A missing cell throws `NoCellError` (#276), never a
 // bare TypeError.
 //
-// The `Result`-returning twin is `tryApplyCell` (`@demlik/tea` root; it needs
-// `better-result`, which this pure leaf must not import). Both read the SAME
-// `lookupCell`, so "which cell" is decided once.
+// The `Outcome`-returning twin is `tryApplyCell` (in `../runtime-types`).
+// Both read the SAME `lookupCell`, so "which cell" is decided once.
 export function applyCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
@@ -848,23 +947,35 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
   return found.cell(state, msg);
 }
 
-// === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
+// === checkedStep: one fold step wrapped in the DEV pre/post invariant pair ===
 //
 // The dev-mode discipline every fold site shares: `deepFreeze` the input `state`
 // so a reducer that mutates it in place trips synchronously, then
-// `assertPureResult` the returned `[state, cmds]` shape. Both guards compile out
-// of production (`__DEV__`). `run`'s dispatch loop and `foldUpdates` both step
-// through THIS wrapper so the invariant enforcement lives in exactly one place
-// and cannot drift between the runtime and the pure fold.
+// `assertPureResult` the returned `[state, cmds]` shape (a `null` — a fold that
+// chose no transition — has no shape to check). Both guards compile out of
+// production (`__DEV__`). `run`'s dev-check extension and `foldUpdates` both
+// step through THIS function so the invariant enforcement lives in exactly one
+// place and cannot drift between the runtime and the pure fold.
+export function checkedStep<S, M extends { type: string }, R>(
+  state: S,
+  msg: M,
+  step: (state: S, msg: M) => R,
+): R {
+  if (__DEV__) deepFreeze(state);
+  const result = step(state, msg);
+  if (__DEV__ && result !== null) assertPureResult(result, msg.type);
+  return result;
+}
+
+// === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
 export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
-  if (__DEV__) deepFreeze(state);
-  const result = applyCell<S, M, C>(machine, state, msg);
-  if (__DEV__) assertPureResult(result, msg.type);
-  return result;
+  return checkedStep(state, msg, (s: S, m: M) =>
+    applyCell<S, M, C>(machine, s, m),
+  );
 }
 
 // === msgKeysOf: recover the Msg.type set from either update form ===
@@ -882,11 +993,10 @@ export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
 // bind. A table assembled DYNAMICALLY — the discriminants widened to plain
 // `string`, rows pushed in a loop — is structurally ragged, and reading row
 // zero then under-reports the Msg union. That under-report is not cosmetic:
-// all three withX wrappers build their flat merged Reducer by iterating
-// `msgKeysOf(base)`, so a Msg missing from row zero got NO cell in the wrapped
-// machine and threw `NoCellError` at dispatch for a Msg the base handles
-// perfectly well; and `withDeadline`'s reserved-namespace scan silently missed
-// a `$deadline:`-prefixed base Msg that appeared only in a later row.
+// the `withX` wrappers (since removed, ADR 0022) built their flat merged
+// Reducer by iterating `msgKeysOf(base)`, so a Msg missing from row zero got
+// NO cell in the wrapped machine and threw `NoCellError` at dispatch for a Msg
+// the base handles perfectly well.
 //
 // The widening is pure: for any total table the returned array is identical
 // (same keys, same order). Cost goes from O(msgs) to O(states × msgs), paid
@@ -925,8 +1035,8 @@ export function msgKeysOf(machine: {
 // This is a DERIVED READING over the table, deliberately NOT a property on the
 // machine. It has to be: every `withX` wrapper builds a fresh flat
 // `Record<string, Cell>`, casts it to `Reducer`, and returns a NEW object
-// literal carrying `init`/`update`/`subscriptions`/`subscribe`/`interpret`
-// plus the base's `cmds` — the one property a wrapper forwards on purpose,
+// literal carrying `init`/`update`/`subs` plus the
+// base's `cmds` — the one property a wrapper forwards on purpose,
 // because `run`'s interpret edge reads it (#66). Any OTHER property hung on a
 // machine is destroyed by the first wrap, and the wrapped table is
 // reducer-form regardless of the base's. A function over `(update, formOf)`
@@ -1077,7 +1187,7 @@ export type Transitions<
 // Use it as an annotation on the table, then hand the table to `defineMachine`:
 //
 //   const update: ExhaustiveTransitions<State, Msg, Cmds> = { … };
-//   export const machine = defineMachine({ init, update, interpret });
+//   export const machine = defineMachine({ init, update });
 //
 // `satisfies` works the same way and keeps the literal's own type.
 /**
@@ -1136,33 +1246,36 @@ export type ExhaustiveTransitions<
 // every Transitions cell). The namespace pins that intent at the call site.
 export const Cmd = {
   /**
-   * Declare a typed Cmd constructor (ADR 0014). Returns the builder —
+   * Declare a typed Cmd constructor (ADR 0014, 0021). Returns the builder —
    * `fetch({ url })` yields `{ type: "fetch", url }` — carrying the minted Msg
-   * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` and the
-   * declaration the runtime edge parses against. `Settled<typeof fetch>` is
-   * the two-arm Msg union it settles with; `defineMachine({ cmds: [fetch] })`
-   * folds that union into the machine's `M`.
+   * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` (for replay
+   * logs and tests) and the declaration the runtime edge parses against.
+   * `Settled<typeof fetch>` is the two-arm Msg union it settles with;
+   * `defineMachine({ cmds: [fetch] })` folds that union into the machine's `M`.
    *
    *   const fetch = Cmd.define("fetch", {
    *     input: z.object({ url: z.string() }),
    *     ok: z.object({ status: z.number(), body: z.string() }),
    *     err: ["not_found", "timeout"],
-   *     requirements: Cmd.requirements<{ http: Http }>(),
    *   });
    *
-   * `err` is the `_tag` list the handler may settle with; the runtime adds
-   * `malformed_result` for an `_ok` value the `ok` schema rejects. `requirements`
-   * names the `Ctx` slice the handler reads — `run` refuses a ctx without it.
+   * `input` and `ok` take any Standard Schema whose `validate` is synchronous:
+   * zod directly, Effect Schema through `Schema.toStandardSchemaV1(...)`. `err`
+   * is the `_tag` list the handler may fail with; the runtime adds
+   * `malformed_result` for an `Ok` value the `ok` schema rejects.
+   *
+   * The handler returns an outcome and the engine mints the Msg:
+   *
+   *   fetch: async (cmd, { ok, err }) =>
+   *     res.status === 404 ? err({ _tag: "not_found" }) : ok(await res.json()),
+   *
+   * A throw or an undeclared tag goes to the error sink, never to `fetch_err`.
+   * The handler reads its services off the plain `ctx` handed to `run` (ADR
+   * 0020).
    *
    * A Cmd must not wait; see `DepKeyedSub` for anything that watches.
    */
   define: defineCmd,
-
-  /**
-   * Name a Cmd's `R` — the `Ctx` slice its handler reads. A phantom: nothing
-   * is built, nothing is checked at runtime; the type is what `run` reads.
-   */
-  requirements: <R>(): Requirements<R> => ({}),
 
   /**
    * The empty Cmd array. Typed `readonly never[]` so it's assignable to any
@@ -1257,26 +1370,58 @@ export function subId(s: string): SubId {
   return s as SubId;
 }
 
-// === Sub: tagged-union, continuous source of msgs; stable id used for diff/reconcile ===
-export type Sub<T extends string = string> = {
+// === Sub: a running subscription, as its runner sees it ===
+//
+// A machine never builds one of these. It declares `{ type, deps(state) }` in
+// `subs` (see `DepKeyedSub`), and the engine derives the rest: `deps` is the
+// value `deps(state)` returned, and `id` is `structuralHash({ type, deps })`.
+// So a runner reads its data off `sub.deps`, and `id` changes exactly when the
+// type or the deps value does — which is when the engine restarts the runner.
+export type Sub<T extends string = string, D = unknown> = {
   readonly id: SubId;
   readonly type: T;
+  readonly deps: D;
 };
 
-// === Dispose: the cleanup a dep-keyed Sub's source returns ===
+// === Dispose: the cleanup a sub runner returns ===
 //
-// A `source` opens a resource and returns the function that closes it. The
-// substrate's reconcile calls it when the Sub's `deps` go null (torn down) or
-// change (re-armed: old `Dispose` then a fresh `source`). Same contract as the
-// `() => void` cleanup every `subscribe[type]` handler returns — named so a
-// dep-keyed Sub's `source` reads as "open → returns close".
+// A runner opens a resource and returns the function that closes it. The
+// engine calls it when the Sub's `deps` go null (torn down), change (restarted:
+// old `Dispose`, then a fresh runner) or when the runtime stops. A returned
+// Promise is awaited by `stop()` (bounded).
 export type Dispose = () => void | Promise<void>;
+
+// === Built-in sub runners: names every engine ships ===
+//
+// Each engine ships a runner for these Sub types, so a machine declares one
+// and passes no `subscribe` entry for it (#270 R1.1). A `subscribe` entry of
+// the same name handed to `run` replaces the built-in (#270 R2.1) — a test
+// swaps in a fake clock that way.
+//
+// `timer` dispatches `deps.msg` once, `deps.ms` after it starts. A changed
+// `ms` or `msg` is a changed `deps`, so the engine restarts the countdown.
+/** The `deps` a `timer` Sub declares: fire `msg` once, `ms` after it starts. */
+export type TimerDeps<M> = { readonly ms: number; readonly msg: M };
+/** The built-in `timer` Sub, as its runner sees it. */
+export type TimerSub<M> = Sub<"timer", TimerDeps<M>>;
+/** The Sub types every engine ships a runner for. */
+export type BuiltinSubType = "timer";
+/** The built-in Subs a machine over `M` may declare without declaring them. */
+export type BuiltinSub<M> = TimerSub<M>;
+
+/**
+ * The one `id` of a Sub: a structural hash of its `type` and its `deps`
+ * value. Same type and same deps → same id → the running Sub is left alone.
+ */
+export function subIdOf(type: string, deps: unknown): SubId {
+  return subId(structuralHash({ type, deps }));
+}
 
 // === depsInactive: the dep-keyed gate, defined ONCE ===
 //
-// "This Sub has no slice in this state" is one fact read by two places — the
-// runtime's `reconcileDepSubs` and `replay`'s desired-set projection — so it
-// gets one definition rather than a `deps === null` written twice.
+// "This Sub has no slice in this state" is one fact every engine's reconcile
+// and `replay`'s desired set read (all through `desiredSub`), so it gets one
+// definition rather than a `deps === null` written at each.
 //
 // It reads NULLISH, not `null`. `(s) => s.runId` over an optional field is the
 // natural projection an author writes, and it yields `undefined` on the states
@@ -1375,7 +1520,11 @@ function stableStringify(value: unknown): string {
       );
     }
     const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
+    // A key holding `undefined` is an absent key, as in JSON: `{ name:
+    // undefined }` and `{}` are one slice, so they are one id.
+    const keys = Object.keys(obj)
+      .filter((k) => obj[k] !== undefined)
+      .sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
   }
   // bigint / symbol — not JSON-representable; same class of error as function.
@@ -1385,60 +1534,70 @@ function stableStringify(value: unknown): string {
   );
 }
 
-// === DepKeyedSub<S, M, Ctx>: a Sub whose identity AND gate fall out of `deps` ===
+// === DepKeyedSub<S, U>: what a machine declares in `subs` ===
 //
-// The author declares the slice of state the Sub depends on (`deps`) and how
-// to open the resource for that slice (`source`). The substrate derives BOTH:
+// The machine names a Sub's `type` and the slice of state it depends on
+// (`deps`). That is all it says — a Sub is data (#251 R1.4, spike #252). The
+// engine derives the rest:
 //
-//   - the **id** = `structuralHash(deps(state))` — changes exactly when the
-//     slice changes (re-arm), stable otherwise (no churn). The author never
-//     writes `subId(...)` — the hand-written subId was the drift away from
-//     Elm's structural identity, which this restores.
-//   - the **gate** = `deps(state)` returning `null` ⇒ inactive in this state
-//     (dispose if running); non-null ⇒ active. The substrate folds every
-//     `DepKeyedSub` into its own active set, so the author deletes the central
-//     `subscriptions(state)` aggregate — there is no list to forget to edit
-//     when a new phase is added (a per-Sub gate travels with the Sub).
+//   - the **gate** = `deps(state)` nullish ⇒ off in this state (stopped if
+//     running); anything else ⇒ on.
+//   - the **id** = `structuralHash({ type, deps })` — changes exactly when the
+//     slice changes (restart), stable otherwise (left alone). A constant `deps`
+//     (`() => ({ name: "main" })`) is a Sub that runs for the machine's life.
+//   - the **runner** = `subscribe[type]` handed to `run`, or the engine's
+//     built-in of that name (`timer`). The runner gets `{ id, type, deps }`.
 //
-// This is the FoldKit `modelToDependencies` shape: a Sub names the state slice
-// it depends on, the kernel keys on that slice. The manual `subscriptions?:`
-// field stays as the documented escape hatch (see `Machine`).
+// This is the FoldKit `modelToDependencies` shape, and Elm's: a Sub names the
+// state slice it depends on, the kernel keys on that slice, and the code that
+// opens the resource lives with the host, never on the machine.
 //
-// `source` returns a `Dispose`. On a `deps` change the substrate runs the old
-// `Dispose` then re-runs `source` with the new deps (re-arm); on `deps` going
-// null it runs `Dispose` (teardown). The same reconcile machinery the manual
-// `Sub` path uses (`reconcileSubs` in `../run.ts`) — no second loop.
+// `DepKeyedSub<S, U>` distributes over the Sub union `U`: each variant
+// `Sub<T, D>` becomes `{ type: T; deps: (state: S) => D | null | undefined }`,
+// so an entry's `deps` is checked against the data its runner will read.
 //
-// Strengthens invariant 4 (external lifecycle owned by the substrate — the
-// dep-keyed Sub is reconciled, never hand-driven) and invariant 7 (identity is
-// explicit — derived deterministically from `deps`, never an ad-hoc string).
-export interface DepKeyedSub<S, M, Ctx = unknown> {
-  /**
-   * The slice of state this Sub depends on. `null` OR `undefined` ⇒ the Sub is
-   * inactive in this state (the substrate disposes it if it was running) — see
-   * `depsInactive`, so `(s) => s.optionalRunId` gates correctly. Otherwise the
-   * Sub is active, keyed on `structuralHash(deps)`.
-   *
-   * Pure (invariant 2). Plain JSON-compatible data only (invariant 1) — the
-   * structural hash walks it deterministically and THROWS on a `Date`, `Map`,
-   * `Set`, `Error` or class instance rather than collapsing them all onto one
-   * id. Project such a value first (`startedAt.toISOString()`).
-   */
+// Strengthens invariant 4 (external lifecycle owned by the substrate) and
+// invariant 7 (identity derived, never hand-authored).
+export type DepKeyedSub<S, U extends Sub = Sub> =
+  U extends Sub<infer T, infer D>
+    ? {
+        readonly type: T;
+        /**
+         * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+         * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+         * correctly. Pure (invariant 2). Plain JSON-compatible data only
+         * (invariant 1): the structural hash THROWS on a `Date`, `Map`, `Set`,
+         * `Error` or class instance rather than collapsing them onto one id.
+         */
+        readonly deps: (state: S) => D | null | undefined;
+      }
+    : never;
+
+// === desiredSub: one entry's Sub at one state, derived ONCE ===
+//
+// The engines' reconcile and `replay`'s desired set both ask "what Sub does
+// this entry want in this state?", so the answer has one definition: `null`
+// when the entry is off, else `{ id, type, deps }` with the derived id. It may
+// throw — `deps` is user code, and `structuralHash` refuses non-plain data —
+// and each caller decides what a throw means for it.
+/** An entry of `Machine.subs`, read structurally (its `U` erased). */
+export type SubEntry<S> = {
+  readonly type: string;
   readonly deps: (state: S) => unknown;
-  /**
-   * Open the resource for the current `state` (whose `deps` the kernel just
-   * found non-null). Receives `dispatch` to fire follow-up Msgs (a timer's
-   * fire, an inbound frame) and the machine's `ctx` (the host's transport
-   * factory, storage handles). Returns the `Dispose` the substrate runs on
-   * teardown / re-arm. Same role as a `subscribe[type]` handler's returned
-   * cleanup.
-   *
-   * `source` takes `state` (not the deps slice) so the slice type `D` never
-   * escapes the entry — each battery's `.depKeyed` closes over its own typed
-   * deps internally (cast-free existential: the entry that produced the deps
-   * is the entry that consumes them).
-   */
-  readonly source: (state: S, dispatch: (msg: M) => void, ctx: Ctx) => Dispose;
+};
+
+/** The entries of `machine.subs`, read structurally. */
+export function subEntriesOf<S>(machine: {
+  readonly subs?: ReadonlyArray<unknown>;
+}): readonly SubEntry<S>[] {
+  return (machine.subs ?? []) as readonly SubEntry<S>[];
+}
+
+/** The Sub `entry` wants at `state`, or `null` when it is off there. */
+export function desiredSub<S>(entry: SubEntry<S>, state: S): Sub | null {
+  const deps = entry.deps(state);
+  if (depsInactive(deps)) return null;
+  return { id: subIdOf(entry.type, deps), type: entry.type, deps };
 }
 
 // === Identity<S, M>: declare the instance's identity once; the kernel drops
@@ -1585,32 +1744,59 @@ export type NoCtx = Readonly<Record<never, never>>;
 // Additive: the third arg is OPTIONAL (`dispatch?: (msg: M) => void`), so a
 // handler declaring only `(cmd, ctx)` stays assignable, and a unit test that
 // invokes a handler directly with two args still typechecks. The kernel ALWAYS
-// passes the dispatch (see `runInterpret` in `../run.ts`); the optionality is
-// purely a backward-compatibility affordance on the TYPE, not a runtime "maybe
-// absent". A handler authored via `wrapDetached` receives a NARROWER view of
-// this dispatch (only its declared result-Msg set).
+// passes the dispatch (see `callHandler` in `../internal/engine/loop.ts`); the
+// optionality is purely a backward-compatibility affordance on the TYPE, not a
+// runtime "maybe absent". A handler authored via `wrapDetached` receives a
+// NARROWER view of this dispatch (only its declared result-Msg set).
 //
-// Hoisted out of `Machine.interpret` so consumers can type a free-standing
-// handler dictionary with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
+// A named type so consumers can type the free-standing handler dictionary
+// they hand `run` with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
 // re-declaring the mapped type at every effects module.
 //
-// **The `R` channel lands here.** A cell's `ctx` is the machine's `Ctx`
-// intersected with ITS Cmd's `RequirementsOf` — so a `Cmd.define`d effect's handler
-// reads `ctx.http` typed, while `run` (via `RequiredCtx`) is what guarantees
-// the slice was actually supplied. An untyped Cmd's `RequirementsOf` is `unknown`,
-// so every hand-written handler's `ctx` is exactly what it was.
+// A cell's `ctx` is the machine's plain `Ctx` plus the kernel's `emit`; tea
+// does no dependency injection (ADR 0020), so every handler reads the same
+// object `run` was handed.
 //
 // Strengthens invariant 2 (the record form has no fall-through default to
 // hide impurity behind) and invariant 7 (identity is explicit — the Cmd
 // variant set is load-bearing at the type level).
+//
+// **A `Cmd.define`d Cmd's cell returns an `Outcome` (ADR 0021).** Its ctx also
+// carries the `ok` / `err` builders (`OutcomeHelpers`), `err` typed to the
+// def's declared tags, and the engine mints `<name>_ok` / `<name>_err` from
+// what it returns. Such a cell resolves to an outcome or nothing, never a Msg.
+// A hand-written Cmd's cell is unchanged.
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
-  [K in C["type"]]: (
-    cmd: Extract<C, { type: K }>,
-    ctx: Ctx & RequirementsOf<Extract<C, { type: K }>> & PortEmitter,
-    dispatch?: (msg: M) => void,
-    // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
-  ) => Promise<M | void>;
+  [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
 };
+
+/**
+ * One cell of {@link Interpret}: the outcome-returning form for a
+ * `Cmd.define`d Cmd, the Msg-returning form for a hand-written one. A Cmd is
+ * `Cmd.define`d exactly when its `E` phantom is declared (not `unknown`).
+ */
+export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
+  unknown extends ErrorsOf<C>
+    ? (
+        cmd: C,
+        ctx: Ctx & PortEmitter,
+        dispatch?: (msg: M) => void,
+        // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
+      ) => Promise<M | void>
+    : (
+        cmd: C,
+        ctx: Ctx &
+          PortEmitter &
+          OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
+        dispatch?: (msg: M) => void,
+        // biome-ignore lint/suspicious/noConfusingVoidType: as above — a no-return body is legal
+      ) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
+
+/** The value a Cmd settles with; `unknown` for a hand-written Cmd. */
+export type OkOfCmd<C> = C extends { readonly __ok?: infer Ok } ? Ok : unknown;
+
+/** The failures a `Cmd.define`d Cmd's handler may return: its declared tags. */
+export type DeclaredErrorsOf<C> = Exclude<ErrorsOf<C>, MalformedResult>;
 
 // === InterpretDetached<C, Allowed, Ctx>: a detached interpret handler ===
 //
@@ -1638,23 +1824,21 @@ export type InterpretDetached<
   dispatch: (msg: Allowed) => void,
 ) => Promise<void>;
 
-// === Subscribe<M, U, Ctx>: record-of-handlers form of `subscribe` ===
+// === Subscribe<M, U, Ctx>: the sub runners an engine is handed at run ===
 //
-// Flat dispatch table keyed by `Sub.type`. Each cell receives the narrowed
-// Sub, the Ctx, and a `dispatch` to fire follow-up Msgs. Returns a cleanup
-// function the substrate calls when the Sub is reconciled out (state
-// transitioned away). The mapped type guarantees every Sub variant has a
-// handler at the type level; runtime dispatch is a single property lookup.
+// Flat table keyed by `Sub.type`. Each runner receives the running Sub
+// (`{ id, type, deps }`), the Ctx, and a `dispatch` to fire follow-up Msgs, and
+// returns the `Dispose` the engine calls when the Sub stops. The mapped type
+// guarantees every Sub variant has a runner at the type level.
 //
-// The cleanup shares `Dispose`'s shape: a returned Promise is AWAITED by
-// `stop()` (bounded), so an async teardown a host relies on before evicting the
-// isolate actually completes. Mid-run reconcile does not await it — the
-// reconcile pass is synchronous by construction (invariant 2) — but the promise
-// is tracked from the moment it exists, so `stop()` catches it either way.
+// A returned Promise from the `Dispose` is AWAITED by `stop()` (bounded), so an
+// async teardown a host relies on before evicting the isolate actually
+// completes. Mid-run reconcile does not await it — the reconcile pass is
+// synchronous by construction (invariant 2) — but the promise is tracked from
+// the moment it exists, so `stop()` catches it either way.
 //
-// Hoisted out of `Machine.subscribe` so consumers can type a free-standing
-// handler dictionary with `Subscribe<MyMsg, MySub, MyCtx>` instead of
-// re-declaring the mapped type at every subs module.
+// A runner's `dispatch` never runs a transition on the runner's own call
+// stack (spike #260): the engine queues the Msg behind the step in progress.
 //
 // Strengthens invariant 7 (identity is explicit — the Sub variant set is
 // load-bearing at the type level).
@@ -1665,6 +1849,77 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
     dispatch: (msg: M) => void,
   ) => Dispose;
 };
+
+// === InterpretArg / RunHandlers: the handlers an engine is handed at run ===
+//
+// The Cmd handlers live beside the machine, never on it (#251 R1.1): every
+// engine's `run(machine, { interpret, subscribe })` and `/react`'s
+// `useMachine(machine, { interpret, … })` take them in their options. So the
+// requiredness `Machine.interpret` used to carry lives here instead: a machine
+// that emits no Cmd (`C` is `Cmd<never>`) has nothing to interpret and may omit
+// the map, and one that emits a real Cmd union must hand over a handler for
+// every variant. The tuple-wrap (`[C] extends [Cmd<never>]`) disables the
+// distributive conditional, so a real union never degrades to optional because
+// one arm happens to be `Cmd<never>`.
+/**
+ * The `interpret` option of an engine's `run`: optional for a machine that
+ * emits no Cmd, required — one handler per Cmd variant — for one that does.
+ */
+export type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [
+  C,
+] extends [Cmd<never>]
+  ? { interpret?: Interpret<M, C, Ctx> }
+  : { interpret: Interpret<M, C, Ctx> };
+
+/**
+ * The `subscribe` option of an engine's `run`: one runner per Sub type the
+ * machine declares, except the built-ins (`timer`) the engine already ships.
+ * Optional when every declared type is a built-in. An entry named after a
+ * built-in replaces it (#270 R2.1), which is how a test drives time.
+ */
+export type SubscribeArg<M extends { type: string }, U extends Sub, Ctx> = [
+  Exclude<U["type"], BuiltinSubType>,
+] extends [never]
+  ? {
+      readonly subscribe?: Partial<
+        // `Exclude` drops the subless marker `Sub<never>`, whose `never` type
+        // would otherwise match every key.
+        Subscribe<M, Exclude<U, Sub<never>> | BuiltinSub<M>, Ctx>
+      >;
+    }
+  : {
+      readonly subscribe: Subscribe<
+        M,
+        Exclude<U, { readonly type: BuiltinSubType }>,
+        Ctx
+      > &
+        Partial<Subscribe<M, BuiltinSub<M>, Ctx>>;
+    };
+
+/**
+ * The handlers an engine is handed beside a machine: the {@link InterpretArg}
+ * Cmd handlers and the {@link SubscribeArg} sub runners. A machine carries
+ * neither — it is data, and one machine file runs under any engine.
+ */
+export type RunHandlers<
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = InterpretArg<M, C, Ctx> & SubscribeArg<M, U, Ctx>;
+
+/**
+ * A machine beside the handlers it runs under — what a wrapper, a battery's
+ * `toMachine` or an agent host hands around, and what an engine takes apart:
+ * `run(wired.machine, { ...wired, ctx })`.
+ */
+export type Wired<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = { readonly machine: Machine<S, M, C, U, Ctx> } & RunHandlers<M, C, U, Ctx>;
 
 // === Machine: pure data, host-agnostic ===
 //
@@ -1682,13 +1937,11 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
 // `M` is constrained to `{ type: string }` because both record forms require
 // a string discriminant.
 //
-// `interpret` is conditionally optional: when `C` is `Cmd<never>` the
-// interpret map is keyed by `never`, so the only valid value is `{}`. Forcing
-// every cmdless machine to write `interpret: {} as never` is ceremony for a
-// shape the type already pins. The tuple-wrap (`[C] extends [Cmd<never>]`)
-// disables distributive conditional so a real cmd union (e.g.
-// `Cmd<"a"> | Cmd<"b">`) doesn't degrade to optional just because one arm
-// happens to be `Cmd<never>`. Same trick the `update` field uses.
+// A machine carries no handlers (#251 R1.1, R1.4). `interpret` and the sub
+// runners are code, and the machine is data: they arrive where the machine is
+// run — `run(machine, { interpret, subscribe })`, `useMachine(machine, { … })`
+// — so one machine file runs unchanged under any engine. Their conditional
+// requiredness lives on {@link RunHandlers}.
 export type Machine<
   S,
   M extends { type: string },
@@ -1731,24 +1984,27 @@ export type Machine<
     // member.
     | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
   /**
-   * Dep-keyed Subs. Each declares the state slice it depends on; the substrate
-   * derives the id (`structuralHash(deps)`) and the gate (`deps` non-null) and
-   * folds them into the SAME reconcile loop `subscriptions` feeds. The author
-   * never writes `subId(...)` and never lists Subs in a central
-   * `subscriptions(state)` aggregate — a per-Sub gate travels with the Sub, so
-   * a new phase can't silently forget to arm it.
+   * The machine's Subs, as data: each entry names a Sub `type` and the state
+   * slice it depends on (`deps`). The engine derives the id
+   * (`structuralHash({ type, deps })`) and the gate (`deps` non-null), starts
+   * the runner for `type` when an entry turns on, leaves it alone while the id
+   * holds, restarts it when the id changes, and stops it on `null` or `stop()`.
    *
-   * The deps slice type is erased to `unknown` per entry — each Sub's slice
-   * differs, but the slice type never crosses this field (the kernel only needs
-   * to hash it and pass `state` back to that same entry's `source`).
-   *
-   * Optional and independent of `subscriptions` / `subscribe`: a machine that
-   * omits `subs` reconciles exactly as before.
+   * `U` is the machine's own Sub union (`types.sub`); the built-in `timer`
+   * (`{ type: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
    *
    * Strengthens invariant 4 (lifecycle owned by the substrate) and invariant 7
    * (identity derived, not hand-authored).
    */
-  subs?: ReadonlyArray<DepKeyedSub<S, M, Ctx>>;
+  readonly subs?: ReadonlyArray<DepKeyedSub<S, U | BuiltinSub<M>>>;
+  /**
+   * Phantom — never assigned, never read. `subs` reaches `U` only through a
+   * conditional type, which is no inference site, so this is the slot a caller
+   * like `run(machine, …)` infers the Sub union from (and so what types its
+   * `subscribe` runners). Same device as `Cmd`'s `__ok`. Tuple-wrapped so an
+   * empty union (`never`) is still a candidate rather than `undefined`.
+   */
+  readonly __sub?: readonly [U];
   /**
    * Instance-identity filter. Declares THIS instance's identity once; the
    * substrate drops any message addressed to a DIFFERENT identity before it
@@ -1767,14 +2023,6 @@ export type Machine<
    */
   identity?: Identity<S, M>;
   /**
-   * Manual Sub aggregate — the documented escape hatch, KEPT alongside `subs`.
-   * The machine that needs cross-Sub logic the per-Sub `deps` fold can't
-   * express lists Subs here; the substrate reconciles them via `subscribe`.
-   * Both paths feed ONE reconcile pass.
-   */
-  subscriptions?: (state: S) => readonly U[];
-  subscribe?: Subscribe<M, U, Ctx>;
-  /**
    * The update form ("reducer" | "transitions"), stamped non-enumerably by
    * `defineMachine` at construction (see `UpdateForm` / `formOf`). Optional in
    * the type so the structural `Machine` annotation form keeps accepting plain
@@ -1782,23 +2030,7 @@ export type Machine<
    * `detectUpdateForm` when the tag is absent. Never written by hand.
    */
   readonly __form?: UpdateForm;
-} & ([C] extends [Cmd<never>]
-  ? { interpret?: Interpret<M, C, Ctx> }
-  : { interpret: Interpret<M, C, Ctx> }) &
-  // `subscribe`/`subscriptions` are conditionally REQUIRED the same way
-  // `interpret` is (#276): a machine declaring a real Sub union without a
-  // subscribe map compiled and silently wired no subs (`reconcileSubs` skips
-  // undefined handlers) — the exact silent-failure class the `interpret`
-  // conditional prevents. The optional declarations above stay as U's
-  // inference sites (a conditional type is not an inference site); this
-  // intersection only adds requiredness when U is a real union. Same
-  // tuple-wrap trick as `interpret` to disable distribution.
-  ([U] extends [Sub<never>]
-    ? unknown
-    : {
-        subscriptions: (state: S) => readonly U[];
-        subscribe: Subscribe<M, U, Ctx>;
-      });
+};
 
 // === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
 //

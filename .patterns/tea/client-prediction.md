@@ -79,7 +79,7 @@ inputs.
 ## The runtime-free boundary — why the client bundle stays small
 
 A browser client must not drag the server runtime (`run`, the host, `Store`,
-interpret, subscriptions) into its bundle. ADR 0006 makes that a **structural
+interpret handlers, sub runners) into its bundle. ADR 0006 makes that a **structural
 guarantee, not a tree-shaking accident**:
 
 - The seam ships on the root door **`@demlik/tea`** — the fold seam

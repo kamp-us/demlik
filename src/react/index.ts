@@ -30,41 +30,65 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import {
-  type BootingRuntime,
-  type Cmd,
-  type Machine,
-  type RequiredCtx,
-  type Runtime,
-  run,
-  type Store,
-  type Sub,
+import type {
+  BootedRunHandle,
+  Cmd,
+  EngineRun,
+  Interpret,
+  Machine,
+  RunHandle,
+  RunHandlers,
+  RunOptions,
+  Store,
+  Sub,
+  Subscribe,
 } from "../index";
 
 /**
- * Options passed to `useMachine`. The shape is intentionally minimal — `ctx`
+ * Options passed to `useMachine`. `run` is the engine's `run` — `run` from
+ * `@demlik/tea/promise`, or any engine's; the hook imports no engine. `ctx`
  * is required (every machine has one), `store` is optional (omit it for
- * volatile-state machines).
+ * volatile-state machines), and the handlers are the ones `run` takes beside
+ * the machine: `interpret` (required once the machine emits a Cmd) and the
+ * `subscribe` runners (required once the machine declares a Sub type other
+ * than the built-in `timer`) — see {@link RunHandlers}. Same requiredness as
+ * `run`, because it is the same type.
  *
- * **Identity matters.** The runtime is memoized on `[machine, opts.ctx,
- * opts.store]`. A new `ctx` reference rebuilds the runtime. Always `useMemo`
+ * **The handlers are read fresh, never memoized on.** A handler table written
+ * inline in the component is a new object every render; keying the runtime on
+ * it would reboot the machine on every render. So `useMachine` hands `run` a
+ * table that looks each cell up on the latest render's `interpret` /
+ * `subscribe` at the moment a Cmd runs or a Sub starts — a handler may close
+ * over props and state freely.
+ *
+ * **Identity matters.** The runtime is memoized on `[machine, opts.run,
+ * opts.ctx, opts.store]`. A new `ctx` reference rebuilds the runtime, and so
+ * does a new `run` — pass the engine's own function, not an inline wrapper. Always `useMemo`
  * (or otherwise stabilize) the ctx at the call site. See README.
  *
  * Forgetting to is no longer silent: the replaced runtime's `stop()` reports
  * `RuntimeDiscardedError` under `phase: "discard"` when Cmds were still in
  * flight, which the substrate's default sink warns about (issue #365).
  */
-export interface UseMachineOpts<S, Ctx> {
+export type UseMachineOpts<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = {
+  run: EngineRun<S, M, C, U, Ctx>;
   ctx: Ctx;
   store?: Store<S>;
-}
+} & RunHandlers<M, C, U, Ctx>;
 
 /**
- * Build and own a `Runtime<S, M>` for the lifetime of the component mount.
+ * Build and own a run of `machine` for the lifetime of the component mount, on
+ * the engine whose `run` the caller hands in.
  *
- * - Builds via `useMemo(() => run(machine, opts), [machine, opts.ctx,
- *   opts.store])` — runtime is recreated when ANY of the three identities
- *   change.
+ * - Builds via `useMemo(() => opts.run(machine, opts), [machine, opts.run,
+ *   opts.ctx, opts.store])` — the run is recreated when ANY of those
+ *   identities change.
  * - Subscribes via `useSyncExternalStore(runtime.subscribe, runtime.getState,
  *   runtime.getState)` — tearing-free under React 18 concurrent rendering.
  * - On unmount (or any dep change), `useEffect` cleanup calls
@@ -83,27 +107,48 @@ export function useMachine<
   Ctx,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  // The ctx `run` demands: the machine's own plus every typed Cmd's `R`.
-  opts: UseMachineOpts<S, Ctx & RequiredCtx<C>>,
+  opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx>>,
 ): [S, (msg: M) => Promise<void>] {
-  // Deps are literal: machine identity, ctx identity, store identity. NOT
-  // `[opts]` (would rebuild every render — callers pass fresh objects).
-  // We pass explicit fields to `run()` so the closure captures only the
-  // deps in the array — keeps biome's `useExhaustiveDependencies` happy
-  // without lying about what the memo actually depends on.
+  // Deps are literal: machine, engine, ctx and store identity. NOT `[opts]`
+  // (would rebuild every render — callers pass fresh objects). We pass
+  // explicit fields to `run()` so the closure captures only the deps in the
+  // array — keeps biome's `useExhaustiveDependencies` happy without lying
+  // about what the memo actually depends on.
+  const run = opts.run;
   const ctx = opts.ctx;
   const store = opts.store;
-  // `run()` returns a `BootingRuntime<S, M>` SYNCHRONOUSLY (issue #45) — exactly
+  // The latest render's handlers, read per call (see `UseMachineOpts`). Written
+  // during render on purpose: a Cmd a transition emits runs after the render
+  // that produced it, so the table it reads is never older than that render.
+  const handlersRef = useRef<RunHandlers<M, C, U, Ctx>>(opts);
+  handlersRef.current = opts;
+  const handlers = useMemo(
+    () => ({
+      interpret: latestTable(
+        () => (handlersRef.current as { interpret?: object }).interpret,
+      ) as Interpret<M, C, Ctx>,
+      subscribe: latestTable(() => handlersRef.current.subscribe) as Partial<
+        Subscribe<M, U, Ctx>
+      >,
+    }),
+    [],
+  );
+  // `run()` returns a `RunHandle<S, M>` SYNCHRONOUSLY (issue #45) — exactly
   // what `useMemo` needs. We never `await` here: awaiting would force an async
   // memo, a null first-commit state, and a resolved-flag dance. Instead we hold
-  // the booting handle and capture the booted `Runtime` (the only thing with a
-  // total `getState`) once `ready` resolves.
-  const booting = useMemo<BootingRuntime<S, M>>(
-    () => run(machine, { ctx, store }),
-    [machine, ctx, store],
+  // the booting handle and capture the booted one (the only thing with a total
+  // `getState`) once `ready` resolves.
+  const booting = useMemo<RunHandle<S, M>>(
+    () =>
+      run(machine, {
+        ctx,
+        store,
+        ...handlers,
+      } as RunOptions<S, M, C, U, Ctx>),
+    [machine, run, ctx, store, handlers],
   );
 
-  // Captures the booted `Runtime` once `ready` resolves. Until then it is
+  // Captures the booted handle once `ready` resolves. Until then it is
   // `null` and `getSnapshot` serves `preliminaryState`. Reset whenever the
   // booting handle identity changes (a new machine/ctx/store mount).
   //
@@ -116,7 +161,7 @@ export function useMachine<
   // store-backed mount would stay stuck on the preliminary state until the
   // next unrelated transition. Bumping a reducer when we capture the booted
   // runtime forces the render that swaps preliminary → real state.
-  const readyRef = useRef<Runtime<S, M> | null>(null);
+  const readyRef = useRef<BootedRunHandle<S, M> | null>(null);
   const [, markBooted] = useReducer((tick: number) => tick + 1, 0);
 
   // Preliminary state computed sync from `machine.init(null, ctx)`. This is
@@ -137,7 +182,7 @@ export function useMachine<
 
   // `getSnapshot` reads the booted runtime if `ready` has resolved (the ref is
   // populated), else falls back to the preliminary state. No try/catch dance
-  // anymore — pre-boot there is simply no booted `Runtime` to read from, so
+  // anymore — pre-boot there is simply no booted handle to read from, so
   // the fallback is structural, not exception-driven.
   const getSnapshot = (): S =>
     readyRef.current !== null ? readyRef.current.getState() : preliminaryState;
@@ -178,7 +223,23 @@ export function useMachine<
 }
 
 /**
- * Lower-level escape hatch: consume an externally-built `Runtime<S, M>`.
+ * A handler table whose every cell is looked up on `current()` at the moment it
+ * is read, so `run` — which reads a cell per Cmd / per Sub start — always sees
+ * the latest render's handler without the runtime being rebuilt.
+ */
+function latestTable(current: () => object | undefined): object {
+  return new Proxy(
+    {},
+    {
+      get: (_target, type) =>
+        (current() as Record<PropertyKey, unknown> | undefined)?.[type],
+    },
+  );
+}
+
+/**
+ * Lower-level escape hatch: consume an externally-built, booted run — any
+ * engine's {@link BootedRunHandle} (the Promise engine's `Runtime` is one).
  *
  * Use this when the runtime is owned by something OTHER than the component —
  * a parent component, a test harness, a singleton. **The component does NOT
@@ -190,9 +251,11 @@ export function useMachine<
  *
  * Returns `[state, dispatch]` — same shape as `useMachine`.
  */
-export function useRuntime<S, M extends { type: string }>(
-  runtime: Runtime<S, M>,
-): [S, (msg: M) => Promise<void>] {
+export function useRuntime<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+>(runtime: BootedRunHandle<S, M, E>): [S, (msg: M) => Promise<void>] {
   const state = useSyncExternalStore(
     runtime.subscribe,
     runtime.getState,

@@ -44,19 +44,24 @@ export type Category = keyof Questions["category"]["criteria"];
 rubric, so adding an option to `criteria` widens it and a `switch` that stopped
 being exhaustive says so at compile time.
 
-## 2. Build the knob and splice it into the reducer
+## 2. Build the knob and wire it into your reducer
 
 `createJevAsk` returns a knob over
-[`@demlik/tea/resilience`](../reference/resilience.md)'s resilient-call: `init`,
-`attempt`, `succeed`, `fail`, `onTimer` and `subs` are that machine's verbs, and
-`handlers()` is the one interpret cell that touches the network. Mounting it by
-hand is eight wiring points, three of which fail only at runtime — so mount it
-with `mountResilientCall` instead and spread the fragments it returns.
+[`@demlik/tea/resilience`](../reference/resilience.md)'s resilient-call. It is
+plain functions: `init`, `attempt`, `succeed`, `fail`, `onTimer` and `timer` are
+that knob's verbs, and `run` is its one Cmd. You call them from your own
+`update`. Nothing mounts or wraps your machine.
 
-You still write two things: the cell that STARTS a call (only your Msg knows
-which field carries the key, the content and the instant) and what to do with a
-settled answer. The fold is handed the model the inherited verb already settled,
-so the backoff loop always advances first.
+`run` is built with `Cmd.define`. List it in `cmds`, and the engine turns your
+handler's result into one of two Msgs: `resilient_run_ok` or
+`resilient_run_err`. Each carries the Cmd it answers, so `m.cmd.key` says which
+call settled.
+
+Read the verdict off the slice after the knob's verb ran, never off the Msg.
+That way a call that is still backing off has no verdict yet, and an answer the
+fallback gave on a spent budget books like any other. A call that runs out of
+its deadline settles `failed` inside the slice with no settle Msg at all, so
+the `deadline_exceeded` cell reads the slice too.
 
 The confidence branch is the part that is yours. `JevOk` hands back the
 confidence and decides nothing with it, on purpose: what counts as confident
@@ -67,13 +72,9 @@ import { defineMachine } from "@demlik/tea";
 import {
   createJevAsk,
   type JevCmd,
-  type JevFailMsg,
   type JevOk,
   type JevRequest,
-  type JevSub,
-  type JevSucceedMsg,
   type JevTimerMsg,
-  mountResilientCall,
   type ResilientState,
 } from "@demlik/tea/jev";
 
@@ -88,7 +89,7 @@ export interface ExpenseState {
   readonly verdicts: Readonly<Record<string, Verdict>>;
 }
 
-/** The Msg that starts one call. `mount` needs its type to write that cell. */
+/** The Msg that starts one call. */
 export interface Classify {
   readonly type: "classify";
   readonly key: string;
@@ -96,113 +97,139 @@ export interface Classify {
   readonly at: number;
 }
 
-export type ExpenseMsg =
-  | Classify
-  | JevSucceedMsg<Questions>
-  | JevFailMsg
-  | JevTimerMsg;
+export type ExpenseMsg = Classify | JevTimerMsg;
 
 type Ask = ReturnType<typeof createJevAsk<Questions>>;
+type Call = ExpenseState["resilience"]["calls"][string];
 
 /** Below this, a human looks at it. The threshold is the HOST's rule to set. */
 export const CONFIDENCE_FLOOR = 0.8;
 
 /**
- * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
- * ALREADY settled, so there is no cell to put in the wrong order, and
- * `subscribe` / `interpret` ride along on the fragments rather than being
- * remembered. `answer.choice` is `Category` here, not `string`.
+ * The verdict a settled call earns, read off the slice AFTER the knob's verb
+ * ran — so a retry that is still backing off has no verdict yet, and an answer
+ * the fallback gave on a spent budget books like any other.
+ * `answer.choice` is `Category` here, not `string`.
  */
-export function mountAsk(ask: Ask) {
-  return mountResilientCall(ask, {
-    slice: "resilience",
-    attempt: {
-      on: "classify",
-      run: (slice, m: Classify) => ask.attempt(slice, m.key, m.memo, m.at),
-    },
-    onOk: (s: ExpenseState, m) => {
-      const answer = m.result.answers.category;
-      const verdict: Verdict =
-        answer.confidence >= CONFIDENCE_FLOOR
-          ? { kind: "booked", category: answer.choice }
-          : { kind: "triage", why: `confidence ${answer.confidence}` };
-      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
-    },
-    onErr: (s: ExpenseState, m) => {
-      const verdict: Verdict = { kind: "triage", why: m.error._tag };
-      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
-    },
-    // A call that dies on its deadline settles inside the slice and emits no
-    // settle Msg, so it never reaches `onErr`. Omit this and an expense whose
-    // budget runs out gets no verdict written at all.
-    onDeadline: (s: ExpenseState, m) => {
-      const verdict: Verdict = { kind: "triage", why: "deadline_exceeded" };
-      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
-    },
-  });
+function verdictOf(call: Call | undefined): Verdict | undefined {
+  switch (call?.phase) {
+    case "succeeded": {
+      const answer = call.result.answers.category;
+      return answer.confidence >= CONFIDENCE_FLOOR
+        ? { kind: "booked", category: answer.choice }
+        : { kind: "triage", why: `confidence ${answer.confidence}` };
+    }
+    case "failed":
+      return { kind: "triage", why: (call.error as { _tag: string })._tag };
+    default:
+      return undefined;
+  }
 }
 
+/** Put the knob's settled slice back, with the verdict for `key` if it has one. */
+function settle(
+  s: ExpenseState,
+  key: string,
+  [resilience, cmds]: readonly [
+    ExpenseState["resilience"],
+    readonly JevCmd<Questions>[],
+  ],
+): readonly [ExpenseState, readonly JevCmd<Questions>[]] {
+  const verdict = verdictOf(resilience.calls[key]);
+  const verdicts =
+    verdict === undefined ? s.verdicts : { ...s.verdicts, [key]: verdict };
+  return [{ resilience, verdicts }, cmds];
+}
+
+/** The machine. Every cell is yours; each one calls a plain function of the knob. */
 export function expenseMachine(ask: Ask) {
-  const mounted = mountAsk(ask);
   return defineMachine({
     types: {
       model: {} as ExpenseState,
       msg: {} as ExpenseMsg,
-      cmd: {} as JevCmd<Questions>,
-      sub: {} as JevSub,
       ctx: undefined,
     },
+    // The knob's run Cmd: the engine turns its handler's outcome into
+    // `resilient_run_ok` / `resilient_run_err`.
+    cmds: [ask.run],
     init: (loaded) =>
       loaded !== null
         ? [loaded, []]
-        : [{ ...mounted.init(), verdicts: {} }, []],
-    update: { ...mounted.update },
-    subscriptions: mounted.subscriptions,
-    subscribe: mounted.subscribe,
-    interpret: mounted.interpret,
+        : [{ resilience: ask.init(), verdicts: {} }, []],
+    update: {
+      classify: (s, m) =>
+        settle(s, m.key, ask.attempt(s.resilience, m.key, m.memo, m.at)),
+      resilient_run_ok: (s, m) =>
+        settle(s, m.cmd.key, ask.succeed(s.resilience, m)),
+      resilient_run_err: (s, m) =>
+        settle(s, m.cmd.key, ask.fail(s.resilience, m)),
+      // A retry fires, or a deadline settles a call `failed` in the slice.
+      deadline_exceeded: (s, m) => {
+        const [resilience, cmds] = ask.onTimer(s.resilience, m);
+        const verdicts = { ...s.verdicts };
+        for (const key of Object.keys(resilience.calls)) {
+          const verdict = verdictOf(resilience.calls[key]);
+          if (verdict !== undefined) verdicts[key] = verdict;
+        }
+        return [{ resilience, verdicts }, cmds];
+      },
+    },
+    // The retry timer. `timer` is built into the engine.
+    subs: [
+      { type: "timer", deps: (s: ExpenseState) => ask.timer(s.resilience) },
+    ],
   });
 }
 ```
 
-The three rules this page used to ask you to remember are now shapes you cannot
-get wrong: `onOk` never sees the pre-settle slice, `interpret` is the door's
-returning handler rather than one you re-declare, and `subscribe` rides on the
-fragments, so a backed-off retry is armed by construction.
-
-Three folds, not two. A call that runs out of its deadline settles `failed`
-inside the slice with no settle Msg to carry it, so `onErr` never sees that
-failure class — `onDeadline` is where it lands. Omit it and the slice still
-advances; nothing downstream of it runs.
-
-What the mount does *not* take away is the state
+The state stays yours
 ([ADR 0015](../../.decisions/0015-hide-the-wiring-never-the-state.md)):
-`resilience` stays a plain field you read, `replay` sees and the journal prints,
-and `ask.succeed` / `ask.fail` / `ask.onTimer` / `liftJevAsk` stay exported — a
-settle cell the fold cannot express is yours to write by hand and spread beside
-the rest.
+`resilience` is a plain field you read, `replay` sees and the journal prints.
 
-`types` is still yours to write, and `JevCmd<Questions>` / `JevSub` are the
-door's own names for the Cmd it emits and the Sub it asks for; every `update`
-cell is inferred from that block.
+## 3. Write the handler — or don't call Jev at all
 
-## 3. Give it a port — or don't
-
-`port` is the injected HTTP caller. The door holds no API key and reads no
-environment variable: whoever writes the adapter owns the `Authorization`
-header, and that is exactly what lets a test satisfy the same type with a
-function.
+The HTTP call is the one handler you write. The door holds no API key and reads
+no environment variable: your handler owns the `Authorization` header. It hands
+Jev's reply to `ask.decode`, which returns the outcome, and `ask.rejected` when
+the call itself threw. That split is what lets a test swap the network for a
+function of the same type.
 
 ```ts
-import type { JevPort } from "@demlik/tea/jev";
+import type { Interpret } from "@demlik/tea";
+import type { JevHttpReply } from "@demlik/tea/jev";
+
+/** One HTTP call to Jev, as the handler sees it: a request in, a reply out. */
+export type CallJev = (request: JevRequest<Questions>) => Promise<JevHttpReply>;
 
 /**
- * Jev, scripted. The same `JevPort` type the `fetch` adapter satisfies, so the
+ * The one handler the machine needs. It calls Jev and hands the reply to
+ * `ask.decode`, which returns the outcome. With no `callJev` — no key — it
+ * answers from the fallback instead.
+ */
+export function jevHandler(
+  ask: Ask,
+  callJev?: CallJev,
+): Interpret<ExpenseMsg, JevCmd<Questions>, unknown> {
+  return {
+    resilient_run: async (cmd) => {
+      if (callJev === undefined) return ask.offline(cmd.input);
+      try {
+        return ask.decode(cmd.input, await callJev(cmd.input));
+      } catch (cause) {
+        return ask.rejected(cause);
+      }
+    },
+  };
+}
+
+/**
+ * Jev, scripted. The same `CallJev` a `fetch` adapter satisfies, so the
  * machine under test is the machine that ships — and no key, clock or socket
  * is anywhere on the path, which is what keeps the run replayable.
  */
 export function fakeJev(
   script: readonly (readonly [Category, number])[],
-): JevPort<Questions> {
+): CallJev {
   const queue = [...script];
   return async () => {
     const next = queue.shift();
@@ -236,70 +263,68 @@ export function fakeJev(
 }
 ```
 
-Configure `fallback` instead of `port` — or as well as — and the knob answers
-from a pure decider on the two paths where the network cannot: no port at all,
-or the retry budget spent. It must be pure, because the exhaustion path runs it
-inside a reducer verb.
+Configure `fallback` on the knob, and a handler with no key answers from it
+with `ask.offline`. The knob also asks it when the retry budget is spent. It
+must be pure, because that path runs it inside the `fail` verb.
 
 ## 4. Drive it in a test
 
 `drive` from [`@demlik/tea/testing`](../reference/testing.md) runs the machine
-the way the runtime does — fold the Msg, hand every emitted Cmd to the real
-interpret handler, feed each settle Msg back, stop when the machine is quiet —
-with no runtime, no clock and no socket anywhere on the path. It returns the
-settled `state` **and** the `trace`: every Cmd dispatched and every Msg folded,
-in order.
+the way the runtime does. It folds the Msg, hands every emitted Cmd to the real
+handler, turns each outcome into its settle Msg, feeds it back, and stops when
+the machine is quiet. There is no runtime, no clock and no socket anywhere on
+the path. It returns the settled `state` **and** the `trace`: every Cmd
+dispatched and every Msg folded, in order.
 
 ```ts
-import { type DriveResult, drive } from "@demlik/tea/testing";
-
-/** What one driven classification hands back: the settled state and the history. */
-export type Classified = DriveResult<
-  ExpenseState,
-  ExpenseMsg,
-  JevCmd<Questions>
->;
+import { drive } from "@demlik/tea/testing";
 
 /**
  * Feed one `classify` and let `drive` do what the runtime does: run the real
- * interpret handlers over every Cmd, feed each settle Msg back, and stop when
- * the machine is quiet. It returns the settled state AND the `trace` — every
- * Cmd dispatched and every Msg folded, in order.
+ * handler over every Cmd, turn each outcome into its settle Msg and feed it
+ * back, and stop when the machine is quiet. It returns the settled state AND
+ * the `trace` — every Cmd dispatched and every Msg folded, in order.
  */
 export function classifyOne(
   ask: Ask,
+  callJev: CallJev | undefined,
   key: string,
   memo: string,
-): Promise<Classified> {
+) {
   return drive(
     expenseMachine(ask),
     { resilience: ask.init(), verdicts: {} },
     { type: "classify", key, memo, at: 0 },
-    ask.handlers(),
+    jevHandler(ask, callJev),
   );
 }
 ```
 
-`ask.handlers()` is the same record the machine declares as its `interpret`, so
-the test drives the **real** interpreter and mocks only the port beneath it. A
-machine that never settles is a throw (`DriveRoundsExceededError`, carrying the
-partial trace), never a half-driven state handed back as if it were done.
+The handler is the same table a host hands `run`, so the test drives the
+**real** handler and fakes only the HTTP call beneath it. A machine that never
+settles is a throw (`DriveRoundsExceededError`, carrying the partial trace),
+never a half-driven state handed back as if it were done.
 
-Then the assertions are plain data — and the `trace` answers questions the
+Then the assertions are plain data, and the `trace` answers questions the
 settled state cannot:
 
 ```ts
-const ask = createJevAsk({ questions, port: fakeJev([["dining", 0.93]]) });
-const { state, trace } = await classifyOne(ask, "tx-1", "PIZZA NAPOLI 24.10 EUR");
+const ask = createJevAsk({ questions });
+const { state, trace } = await classifyOne(
+  ask,
+  fakeJev([["dining", 0.93]]),
+  "tx-1",
+  "PIZZA NAPOLI 24.10 EUR",
+);
 expect(state.verdicts["tx-1"]).toEqual({ kind: "booked", category: "dining" });
-// The door was asked EXACTLY once, so this is a first-attempt answer and not
-// the end of a retry ladder.
+// Jev was asked EXACTLY once, so this is a first-attempt answer and not the
+// end of a retry ladder.
 expect(trace.filter((entry) => entry.kind === "cmd")).toHaveLength(1);
 ```
 
 Swap `0.93` for `0.41` and the same machine returns
-`{ kind: "triage", why: "confidence 0.41" }` — the threshold branch, exercised
-without a single mock of the door itself.
+`{ kind: "triage", why: "confidence 0.41" }`. That is the threshold branch,
+exercised without a single mock of the door itself.
 
 ## Classifying many items at once
 

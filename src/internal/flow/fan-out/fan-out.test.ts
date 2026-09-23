@@ -6,8 +6,8 @@ import {
   defineMachine,
   definePort,
   type Runtime,
-  run,
 } from "../../../index";
+import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import {
   createFanOut,
@@ -192,12 +192,12 @@ describe("itemOk / itemErr — record + backfill", () => {
   });
 });
 
-describe("handlers — out-of-band completion Port", () => {
+describe("completion — out-of-band completion Port", () => {
   it("emits gathered results onto the Port iff the batch just completed", () => {
     __resetPortRegistry();
     const complete = definePort<readonly Result[]>("fan-out.test.complete");
     const fan = createFanOut(baseConfig);
-    const h = fan.handlers({ complete });
+    const h = fan.completion({ complete });
 
     const emitted: (readonly Result[])[] = [];
     const emit = <T>(_port: unknown, value: T) => {
@@ -262,13 +262,6 @@ const machine = defineMachine({
       return [{ ...s, fanOut }, cmds];
     },
     report_done: (s, m) => [{ ...s, phase: "done", report: m.results }, []],
-  },
-  interpret: {
-    // The per-item effect + the join Cmd are performed by the consumer; here
-    // they are inert (replay never runs interpret). Declared to satisfy the
-    // Cmd union's exhaustive interpret map.
-    crawl: async () => {},
-    report_done: async () => {},
   },
 });
 
@@ -663,6 +656,10 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
           [],
         ],
       },
+    });
+
+    const runtime = await run(machine, {
+      ctx,
       interpret: {
         // The per-item effect: RE-ENTER the machine with the result, the way a
         // real consumer's interpret routes a resolved effect back to itemOk.
@@ -683,9 +680,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
           results: cmd.results,
         }),
       },
-    });
-
-    const runtime = await run(machine, { ctx }).ready;
+    }).ready;
     ctx.runtime = runtime;
     return runtime;
   }

@@ -1,10 +1,11 @@
 import {
   type Cmd,
   defineMachine,
+  type Interpret,
   type Runtime,
-  run,
   tryInterpret,
 } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { createSaga, type SagaState } from "@demlik/tea/flow";
 
 type DoCmd =
@@ -102,60 +103,56 @@ export const checkout = defineMachine({
       ];
     },
   },
-
-  interpret: {
-    reserve_stock: tryInterpret<
-      DoCmd & { type: "reserve_stock" },
-      string,
-      Msg,
-      Ctx
-    >(
-      (cmd, ctx) => ctx.warehouse.reserve(cmd.sku, cmd.qty),
-      (ref) => ({ type: "step_ok", ref }),
-      (err) => ({ type: "step_err", error: String(err) }),
-    ),
-    charge_card: tryInterpret<
-      DoCmd & { type: "charge_card" },
-      string,
-      Msg,
-      Ctx
-    >(
-      (cmd, ctx) => ctx.gateway.charge(cmd.cents),
-      (ref) => ({ type: "step_ok", ref }),
-      (err) => ({ type: "step_err", error: String(err) }),
-    ),
-    ship: tryInterpret<DoCmd & { type: "ship" }, string, Msg, Ctx>(
-      (cmd, ctx) => ctx.carrier.ship(cmd.sku, cmd.address),
-      (ref) => ({ type: "step_ok", ref }),
-      (err) => ({ type: "step_err", error: String(err) }),
-    ),
-    release_stock: tryInterpret<
-      UndoCmd & { type: "release_stock" },
-      string,
-      Msg,
-      Ctx
-    >(
-      (cmd, ctx) => ctx.refunds.release(cmd.sku, cmd.qty),
-      (ref) => ({ type: "undo_ok", ref }),
-      (err) => ({ type: "undo_err", error: String(err) }),
-    ),
-    refund_card: tryInterpret<
-      UndoCmd & { type: "refund_card" },
-      string,
-      Msg,
-      Ctx
-    >(
-      (cmd) => Promise.resolve(`refund:${cmd.cents}`),
-      (ref) => ({ type: "undo_ok", ref }),
-      (err) => ({ type: "undo_err", error: String(err) }),
-    ),
-    unship: tryInterpret<UndoCmd & { type: "unship" }, string, Msg, Ctx>(
-      (cmd) => Promise.resolve(`unship:${cmd.sku}`),
-      (ref) => ({ type: "undo_ok", ref }),
-      (err) => ({ type: "undo_err", error: String(err) }),
-    ),
-  },
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+export const checkoutInterpret: Interpret<Msg, StepCmd, Ctx> = {
+  reserve_stock: tryInterpret<
+    DoCmd & { type: "reserve_stock" },
+    string,
+    Msg,
+    Ctx
+  >(
+    (cmd, ctx) => ctx.warehouse.reserve(cmd.sku, cmd.qty),
+    (ref) => ({ type: "step_ok", ref }),
+    (err) => ({ type: "step_err", error: String(err) }),
+  ),
+  charge_card: tryInterpret<DoCmd & { type: "charge_card" }, string, Msg, Ctx>(
+    (cmd, ctx) => ctx.gateway.charge(cmd.cents),
+    (ref) => ({ type: "step_ok", ref }),
+    (err) => ({ type: "step_err", error: String(err) }),
+  ),
+  ship: tryInterpret<DoCmd & { type: "ship" }, string, Msg, Ctx>(
+    (cmd, ctx) => ctx.carrier.ship(cmd.sku, cmd.address),
+    (ref) => ({ type: "step_ok", ref }),
+    (err) => ({ type: "step_err", error: String(err) }),
+  ),
+  release_stock: tryInterpret<
+    UndoCmd & { type: "release_stock" },
+    string,
+    Msg,
+    Ctx
+  >(
+    (cmd, ctx) => ctx.refunds.release(cmd.sku, cmd.qty),
+    (ref) => ({ type: "undo_ok", ref }),
+    (err) => ({ type: "undo_err", error: String(err) }),
+  ),
+  refund_card: tryInterpret<
+    UndoCmd & { type: "refund_card" },
+    string,
+    Msg,
+    Ctx
+  >(
+    (cmd) => Promise.resolve(`refund:${cmd.cents}`),
+    (ref) => ({ type: "undo_ok", ref }),
+    (err) => ({ type: "undo_err", error: String(err) }),
+  ),
+  unship: tryInterpret<UndoCmd & { type: "unship" }, string, Msg, Ctx>(
+    (cmd) => Promise.resolve(`unship:${cmd.sku}`),
+    (ref) => ({ type: "undo_ok", ref }),
+    (err) => ({ type: "undo_err", error: String(err) }),
+  ),
+};
 
 function makeCtx(cardWorks: boolean): Ctx {
   return {
@@ -188,7 +185,10 @@ function settled(runtime: Runtime<State, Msg>): Promise<void> {
 
 async function drive(title: string, cardWorks: boolean): Promise<void> {
   console.log(`\n=== ${title} ===`);
-  const runtime = await run(checkout, { ctx: makeCtx(cardWorks) }).ready;
+  const runtime = await run(checkout, {
+    interpret: checkoutInterpret,
+    ctx: makeCtx(cardWorks),
+  }).ready;
   const done = settled(runtime);
   await runtime.dispatch({ type: "begin" });
   await done;

@@ -31,8 +31,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { subIdOf } from "../../../index";
 import {
   type DeadlineExceeded,
+  type DeadlineSub,
+  type DeadlinesSub,
   deadlineExceeded,
   deadlineSub,
   subscribeDeadline,
@@ -49,6 +52,11 @@ afterEach(() => {
 // matching `index.test.ts`.
 const BASE = 1_000_000;
 
+// The running `deadline` Sub the engine hands the runner for `list`.
+function running(...list: DeadlineSub[]): DeadlinesSub {
+  return { id: subIdOf("deadline", list), type: "deadline", deps: list };
+}
+
 describe("cockatiel timeout vectors → tea deadline", () => {
   // ───────────────────────────────────────────────────────────────────────
   // T1 — no timeout: the guarded work finishes before the deadline.
@@ -58,7 +66,7 @@ describe("cockatiel timeout vectors → tea deadline", () => {
   //   expect(await policy.execute(() => 42)).to.equal(42);  // fast fn, no fire
   //
   // tea replay: the "work finished" signal is the consumer DROPPING the Sub
-  // from `subscriptions(state)`, which makes the reconcile pass run the
+  // from its `deadline` Sub's list, which makes the reconcile pass run the
   // cleanup — clearing the pending timer before `atMs`. We model that here by
   // invoking the cleanup the subscribe cell returns, then advancing the clock
   // well past `atMs`. Assert `deadline_exceeded` is NEVER dispatched.
@@ -70,7 +78,7 @@ describe("cockatiel timeout vectors → tea deadline", () => {
       // timeout(1000) ⇒ atMs = subscribeTime + 1000.
       const sub = deadlineSub("t", BASE + 1000);
 
-      const cleanup = subscribeDeadline(sub, undefined, (m) =>
+      const cleanup = subscribeDeadline(running(sub), undefined, (m) =>
         dispatched.push(m),
       );
 
@@ -80,7 +88,7 @@ describe("cockatiel timeout vectors → tea deadline", () => {
       vi.advanceTimersByTime(999);
       expect(dispatched).toEqual([]);
 
-      cleanup(); // the Sub left subscriptions(state) — timer is cleared.
+      cleanup(); // the deadline left the list — timer is cleared.
 
       // Push the clock far past the original atMs: still no fire.
       vi.advanceTimersByTime(10_000);
@@ -112,7 +120,7 @@ describe("cockatiel timeout vectors → tea deadline", () => {
       // slower than the deadline, so the deadline must win the race.
       const sub = deadlineSub("t", BASE + 2);
 
-      subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+      subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
       // Just before: the race is still open, nothing fired.
       vi.advanceTimersByTime(1);
@@ -158,7 +166,7 @@ describe("cockatiel timeout vectors → tea deadline", () => {
       // setTimeout; tea clamps remainingMs to 0.
       const sub = deadlineSub("t", BASE - 5000);
 
-      subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+      subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
       // The substrate must finish wiring all subs before any Msg lands: the
       // dispatch is NOT synchronous, even though the deadline is already past.
@@ -194,7 +202,7 @@ describe("cockatiel timeout vectors → tea deadline", () => {
       const dispatched: DeadlineExceeded[] = [];
       const sub = deadlineSub("guard", atMs);
 
-      subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+      subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
       // A naive RELATIVE re-arm (cockatiel's failure mode) would fire only
       // after the ORIGINAL full span from NOW — i.e. at BASE + 3000 + 5000.

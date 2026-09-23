@@ -1,9 +1,10 @@
-import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
-import { Result } from "better-result";
+import { type Cmd, defineMachine, type Interpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { createPoller, type PollerState } from "@demlik/tea/flow";
 import {
   type DeadlineExceeded,
-  type DeadlineSub,
+  type DeadlinesSub,
+  deadlinesSub,
   subscribeDeadline,
 } from "@demlik/tea/resilience";
 
@@ -43,19 +44,12 @@ function readStatusCmds(cmds: readonly Cmd[]): readonly ReadStatus[] {
   return cmds.filter((c): c is ReadStatus => c.type === "read_status");
 }
 
-// `poll.subs` is typed to the base `Sub` — the poller does not leak its own Sub
-// shape — so the machine narrows to the one variant its `subscribe` table
-// handles, the same way `readStatusCmds` narrows the Cmd side.
-function isDeadlineSub(sub: Sub): sub is DeadlineSub {
-  return sub.type === "deadline";
-}
-
 export const statusPoller = defineMachine({
   types: {
     model: {} as State,
     msg: {} as Msg,
     cmd: {} as ReadStatus,
-    sub: {} as DeadlineSub,
+    sub: {} as DeadlinesSub,
     ctx: {} as Ctx,
   },
   init: (loaded) =>
@@ -85,27 +79,21 @@ export const statusPoller = defineMachine({
     },
   },
 
-  subscriptions: (s) => poll.subs(s.poll).filter(isDeadlineSub),
-  subscribe: { deadline: subscribeDeadline },
-
-  interpret: {
-    read_status: async (cmd, ctx): Promise<Msg> => {
-      const observed = await Result.tryPromise({
-        try: () => ctx.readStatus(cmd.jobId),
-        catch: (error: unknown): unknown => error,
-      });
-      const at = ctx.clock();
-      return observed.match({
-        ok: (result): Msg => ({ type: "poll_result", result, at }),
-        err: (error): Msg => ({
-          type: "poll_failed",
-          error: String(error),
-          at,
-        }),
-      });
-    },
-  },
+  // The poller lists its tick deadline; one `deadline` Sub arms it.
+  subs: [deadlinesSub((s: State) => poll.subs(s.poll))],
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+export const statusPollerInterpret: Interpret<Msg, ReadStatus, Ctx> = {
+  read_status: async (cmd, ctx): Promise<Msg> => {
+    try {
+      const result = await ctx.readStatus(cmd.jobId);
+      return { type: "poll_result", result, at: ctx.clock() };
+    } catch (error) {
+      return { type: "poll_failed", error: String(error), at: ctx.clock() };
+    }
+  },
+};
 
 function fakeSource(): (jobId: string) => Promise<JobStatus> {
   const script: readonly [JobStatus, ...JobStatus[]] = [
@@ -126,6 +114,8 @@ async function main() {
   const clock = () => now;
 
   const runtime = await run(statusPoller, {
+    interpret: statusPollerInterpret,
+    subscribe: { deadline: subscribeDeadline },
     ctx: { readStatus: fakeSource(), clock },
   }).ready;
 

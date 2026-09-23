@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { defineMachine, type Reducer, type Runtime, run } from "../index";
+import { defineMachine, type Reducer, type Runtime } from "../index";
+import { run } from "../promise";
 import {
   bridgeClient,
   bridgeRuntime,

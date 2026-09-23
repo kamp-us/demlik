@@ -2,22 +2,44 @@
  * How the @demlik/tea behavior modules compose INSIDE a machine.
  *
  * A resilient fetch: serve-from-cache → circuit-breaker gate → rate-limit gate
- * → fetch → on failure, exponential-backoff retry scheduled by a deadline Sub.
+ * → fetch → on failure, exponential-backoff retry scheduled by a timer Sub.
  *
  * The whole point of this file: each module shape has ONE home in a machine.
  *
  *   • Pure state+ops (circuit-breaker, rate-limit, retry-backoff, cache) live
  *     as FIELDS in the Model. You call their pure ops inside `update` to decide
  *     which Cmds to emit. They never run effects; they just transform state.
- *   • Sub factories (deadline) are declared by `subscriptions(state)` and run by
- *     `subscribe`. Reconcile-by-id starts/cancels them as state changes.
+ *   • Subs (the retry timer) are data in `subs`: a type plus the state slice
+ *     they depend on. `timer` is built into the engine, so `run` needs no
+ *     runner for it; the engine starts/stops it as that slice changes.
  *   • The real effect (the HTTP call) lives in `interpret`, via `tryInterpret`.
  *   • Time is DATA: every Msg that drives a time-dependent op carries `at`.
  *     The reducer never reads the clock — `interpret` stamps `Date.now()` when
  *     it turns a result back into a Msg. Reducers stay pure (invariant 2).
  */
 
-import { type Cmd, defineMachine, run, tryInterpret } from "@demlik/tea";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  tryInterpret,
+} from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
+import {
+  type CircuitState,
+  get as cacheGet,
+  set as cacheSet,
+  canPass,
+  defaultCircuitPolicy,
+  initBucket,
+  initCache,
+  initCircuit,
+  onFailure,
+  onSuccess,
+  type TokenBucket,
+  type TtlCache,
+  tryConsume,
+} from "@demlik/tea/resilience";
 import {
   defaultRetryPolicy,
   initRetry,
@@ -26,25 +48,6 @@ import {
   recordFailure,
   shouldRetry,
 } from "@demlik/tea/retry-backoff";
-import {
-  get as cacheGet,
-  set as cacheSet,
-  canPass,
-  type CircuitState,
-  type DeadlineExceeded,
-  type DeadlineSub,
-  deadlineSub,
-  defaultCircuitPolicy,
-  initBucket,
-  initCache,
-  initCircuit,
-  onFailure,
-  onSuccess,
-  subscribeDeadline,
-  type TokenBucket,
-  tryConsume,
-  type TtlCache,
-} from "@demlik/tea/resilience";
 
 // === Model: reliability modules composed as plain fields ===
 type Phase =
@@ -60,7 +63,9 @@ interface State {
   url: string | null;
   body: string | null;
   error: string | null;
+  /** When the armed retry is due, and how long the wait is from arming it. */
   retryAtMs: number;
+  retryInMs: number;
   // Each behavior module's state is just a field. update() folds their pure ops.
   circuit: CircuitState;
   bucket: TokenBucket;
@@ -73,13 +78,12 @@ type Msg =
   | { type: "fetch"; url: string; at: number }
   | { type: "fetch_ok"; url: string; body: string; at: number }
   | { type: "fetch_err"; url: string; error: string; at: number }
-  | DeadlineExceeded; // { type: "deadline_exceeded"; id; atMs } — the retry timer fired
+  | { type: "retry_due"; atMs: number }; // the retry timer fired
 
 // === Cmd: the one effect, as data ===
 type DoFetch = Cmd<"do_fetch"> & { url: string };
 
-// === Sub + Ctx ===
-type Sub = DeadlineSub;
+// === Ctx ===
 interface Ctx {
   http: (url: string) => Promise<string>;
 }
@@ -87,7 +91,7 @@ interface Ctx {
 const CACHE_TTL_MS = 60_000;
 
 // Shared "try to fetch now" decision — used by the initial `fetch` Msg AND by
-// the retry timer (`deadline_exceeded`). This is where four modules compose in
+// the retry timer (`retry_due`). This is where four modules compose in
 // one pure function: cache read → circuit gate → rate-limit gate → emit effect.
 function attempt(
   state: State,
@@ -128,6 +132,7 @@ function attempt(
         [],
       ];
     }
+    const retryInMs = nextDelayMs(retry, defaultRetryPolicy);
     return [
       {
         ...state,
@@ -136,7 +141,8 @@ function attempt(
         retry,
         phase: "waiting_retry",
         url,
-        retryAtMs: at + nextDelayMs(retry, defaultRetryPolicy),
+        retryAtMs: at + retryInMs,
+        retryInMs,
       },
       [],
     ];
@@ -154,7 +160,6 @@ export const resilientFetch = defineMachine({
     model: {} as State,
     msg: {} as Msg,
     cmd: {} as DoFetch,
-    sub: {} as Sub,
     ctx: {} as Ctx,
   },
   init: (loaded) =>
@@ -167,6 +172,7 @@ export const resilientFetch = defineMachine({
             body: null,
             error: null,
             retryAtMs: 0,
+            retryInMs: 0,
             circuit: initCircuit(),
             bucket: initBucket(10, 5, 0), // 10 tokens, refill 5/sec
             retry: initRetry(),
@@ -197,51 +203,64 @@ export const resilientFetch = defineMachine({
       if (!shouldRetry(retry, defaultRetryPolicy)) {
         return [{ ...s, circuit, retry, phase: "failed", error: m.error }, []];
       }
-      // Schedule a retry: the deadline Sub (declared below) fires at retryAtMs.
+      // Schedule a retry: the timer Sub (declared below) fires after retryInMs.
+      const retryInMs = nextDelayMs(retry, defaultRetryPolicy);
       return [
         {
           ...s,
           circuit,
           retry,
           phase: "waiting_retry",
-          retryAtMs: m.at + nextDelayMs(retry, defaultRetryPolicy),
+          retryAtMs: m.at + retryInMs,
+          retryInMs,
         },
         [],
       ];
     },
 
     // The retry timer fired — re-attempt (re-gates the circuit + bucket at this time).
-    deadline_exceeded: (s, m) =>
+    retry_due: (s, m) =>
       s.phase === "waiting_retry" && s.url !== null
         ? attempt(s, s.url, m.atMs)
         : [s, []],
   },
 
-  // A Sub is active ONLY while we're waiting to retry. When the phase changes,
-  // reconcile-by-id cancels the timer automatically — no manual clearTimeout.
-  subscriptions: (s) =>
-    s.phase === "waiting_retry" ? [deadlineSub("retry", s.retryAtMs)] : [],
-  subscribe: { deadline: subscribeDeadline },
-
-  // The effect. tryInterpret routes Ok/Err to two Msgs — and stamps the time:
-  // this is the ONE place a clock read is allowed (interpret is impure).
-  interpret: {
-    do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
-      (cmd, ctx) => ctx.http(cmd.url),
-      (body, cmd) => ({ type: "fetch_ok", url: cmd.url, body, at: Date.now() }),
-      (err, cmd) => ({
-        type: "fetch_err",
-        url: cmd.url,
-        error: String(err),
-        at: Date.now(),
-      }),
-    ),
-  },
+  // The built-in `timer` is on ONLY while we're waiting to retry. When the
+  // phase changes, the engine stops it automatically — no manual clearTimeout.
+  subs: [
+    {
+      type: "timer",
+      deps: (s: State) =>
+        s.phase === "waiting_retry"
+          ? {
+              ms: s.retryInMs,
+              msg: { type: "retry_due", atMs: s.retryAtMs } as const,
+            }
+          : null,
+    },
+  ],
 });
+
+// The handlers ride beside the machine, never on it: `run` takes them.
+// The effect. tryInterpret routes Ok/Err to two Msgs — and stamps the time:
+// this is the ONE place a clock read is allowed (interpret is impure).
+export const resilientFetchInterpret: Interpret<Msg, DoFetch, Ctx> = {
+  do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
+    (cmd, ctx) => ctx.http(cmd.url),
+    (body, cmd) => ({ type: "fetch_ok", url: cmd.url, body, at: Date.now() }),
+    (err, cmd) => ({
+      type: "fetch_err",
+      url: cmd.url,
+      error: String(err),
+      at: Date.now(),
+    }),
+  ),
+};
 
 // === Wiring it up — the layers OUTSIDE the machine ===
 export function startResilientFetch() {
   const runtime = run(resilientFetch, {
+    interpret: resilientFetchInterpret,
     ctx: { http: (url) => fetch(url).then((r) => r.text()) },
   });
 

@@ -24,7 +24,7 @@
  *     wire if they want memory reclaim (this knob's correctness needs only TTL
  *     reads).
  *   - `../deadline` — COMPOSED directly. The settle timer IS a `../deadline`
- *     Sub: `subsFor` builds it via `deadlineSub`, and the subscribe cell +
+ *     deadline: `subsFor` builds it via `deadlineSub`, and the runner +
  *     Msg constructor are RE-EXPORTS of `../deadline`'s own (`subscribeDeadline`
  *     → `subscribeThrottledInput`, `deadlineExceeded` → `throttledInputSettled`).
  *     The timer lifecycle stays owned by `../deadline`; this knob redraws none
@@ -36,7 +36,7 @@
  *     the RATE-cap semantic ("at most once per `ms`", leading-edge) and the
  *     SETTLE semantic ("wait until quiet", trailing-edge) are REIMPLEMENTED as
  *     pure Model state: `lastAt` is the durable rate cursor (half-open cutoff
- *     `at - lastAt >= throttleMs`), and `pending` + the `../deadline` Sub realize
+ *     `at - lastAt >= throttleMs`), and `pending` + the `../deadline` timer realize
  *     the debounce window inside `update`. The `throttle` / `debounce`
  *     transformers themselves are RE-EXPORTED (the only reuse of their actual
  *     code) so a consumer can pre-throttle / pre-coalesce a genuinely bursty
@@ -72,21 +72,22 @@
  *   // update cells:
  *   //   QueryTyped:   (s, m) => mapInput(s, search.input(s.search, m.value, m.at))
  *   //   SettleFired:  (s, m) => mapInput(s, search.onFlush(s.search, m.atMs))
- *   // subscriptions: (s) => search.subs(s.search)
- *   // subscribe:     { ...search.handlers() }
+ *   // types.sub:    {} as DeadlinesSub
+ *   // subs:         [deadlinesSub((s: Model) => search.subs(s.search))]
+ *   // at run:       run(machine, { interpret, subscribe: { deadline: subscribeThrottledInput } })
  *
  * where `mapInput(s, [slice, cmds]) => [{ ...s, search: slice }, cmds]` lifts the
  * slice transition into the consumer's Model. The `RunSearch` Cmd's interpret
  * handler is the consumer's — it is where the settled input meets I/O.
  *
  * NOT a substrate primitive: it depends only on sibling subpaths (`../throttle`,
- * `../debounce`, `../cache`, `../deadline`) and the core `Cmd` / `Sub` types.
+ * `../debounce`, `../cache`, `../deadline`) and the core `Cmd` type.
  * Internal since #47 — reached from inside the package as
  * `internal/timing/throttled-input`; the L1 escape hatch is those siblings
  * threaded by hand. Same one-shape-per-package rule as `batch-window` and `poller`.
  */
 
-import type { Cmd, Sub } from "../../../index";
+import type { Cmd } from "../../../index";
 import {
   get as cacheGet,
   set as cacheSet,
@@ -243,15 +244,15 @@ export interface PendingInput<V> {
 }
 
 /**
- * The Sub variant a throttled input's settle timer produces — a `../deadline`
- * Sub (so the window fires at the correct ABSOLUTE moment even after a late
+ * The deadline a throttled input's settle timer lists — a `../deadline` entry
+ * (so the window fires at the correct ABSOLUTE moment even after a late
  * subscribe / rehydrate, and so a consumer running several gates routes each by
  * `id`). `atMs` is the absolute settle-by instant (`pendingAt + debounceMs`).
  */
 export type ThrottledInputSub = DeadlineSub;
 
 /**
- * The stable Sub id the gate arms its settle deadline under. A single gate arms
+ * The stable id the gate arms its settle deadline under. A single gate arms
  * exactly one settle timer at a time, so one id suffices; a consumer running
  * several gates on one machine namespaces them by composing the knob under
  * distinct slices with distinct ids (the `subs(state, id)` parameter).
@@ -485,9 +486,9 @@ export function onFlush<V, C extends Cmd>(
 }
 
 /**
- * The settle timer Sub, derived from the slice. PURE.
+ * The settle timer deadline, derived from the slice. PURE.
  *
- * Returns the single `../deadline` Sub while a value is held AND a settle window
+ * Returns the single `../deadline` entry while a value is held AND a settle window
  * is configured, or `[]` otherwise. The deadline target is the LATER of two
  * constraints (so the timer never fires before BOTH are satisfied):
  *
@@ -505,8 +506,9 @@ export function onFlush<V, C extends Cmd>(
  * anyway and re-holds if an early/stale timer slips through, so the cap holds
  * even if a timer fires ahead of this target.)
  *
- * The substrate's reconcile pass arms the timer when the array gains the Sub and
- * disarms it (clearing the pending `setTimeout`) when the array loses it — so an
+ * Fed through `deadlinesSub`, the engine arms the timer when the list gains the
+ * deadline and disarms it (clearing the pending `setTimeout`) when the list
+ * loses it — so an
  * `onFlush` (or a dedupe hit) that clears `pending` auto-cancels the now-stale
  * settle timer on the next transition, and a sliding input that re-stamps
  * `pending.at` re-arms a fresh absolute target.
@@ -544,10 +546,10 @@ export function subsFor<V, C extends Cmd>(
  * emit (one `emit` Cmd when a value passes, none while held / dropped / deduped).
  *
  * Pure-ops + subs module: there is no `handlers(ports)` cell. The settle timer's
- * subscribe cell IS `../deadline`'s `subscribeDeadline` (re-exported below) —
- * the consumer wires it into `subscribe` directly; the knob redraws no timer
+ * runner IS `../deadline`'s `subscribeDeadline` (re-exported below) — the
+ * consumer passes it to `run` as `subscribe.deadline`; the knob redraws no timer
  * lifecycle of its own. (Compare `poller`, identical: it too reuses
- * `../deadline`'s cell and ships no `handlers`.)
+ * `../deadline`'s runner and ships no `handlers`.)
  */
 export interface ThrottledInputKnob<V, C extends Cmd> {
   /** Seed the Model slice (with a cache iff `cacheTtlMs` is configured). */
@@ -568,10 +570,11 @@ export interface ThrottledInputKnob<V, C extends Cmd> {
     at: number,
   ): readonly [ThrottledInput<V>, readonly C[]];
   /**
-   * The settle timer Sub, armed only while a value is held. See `subsFor`.
-   * `id` keys the deadline so several gates on one machine route distinctly.
+   * The settle timer deadline, listed only while a value is held. See
+   * `subsFor`. `id` keys the deadline so several gates on one machine route
+   * distinctly.
    */
-  subs(state: ThrottledInput<V>, id?: string): readonly Sub[];
+  subs(state: ThrottledInput<V>, id?: string): readonly ThrottledInputSub[];
 }
 
 /**
@@ -614,13 +617,14 @@ export function createThrottledInput<V, C extends Cmd>(
  * timer lifecycle stays owned there. Consolidated into one `export ... from`:
  *
  *   - `subscribeThrottledInput` (= `../deadline`'s `subscribeDeadline`) — the
- *     `subscribe["deadline"]` cell. Arms a one-shot timer for `max(0, atMs -
- *     now)`, dispatches the deadline Msg, returns a cleanup that clears it. The
- *     consumer assigns it: `subscribe: { deadline: subscribeThrottledInput }`.
+ *     `deadline` runner. Arms a one-shot timer per listed deadline for
+ *     `max(0, atMs - now)`, dispatches the deadline Msg, returns a cleanup that
+ *     clears them. The consumer passes it to `run`:
+ *     `subscribe: { deadline: subscribeThrottledInput }`.
  *   - `throttledInputSettled` (= `../deadline`'s `deadlineExceeded`) +
  *     `ThrottledInputSettled` (= `DeadlineExceeded`) — the settle-timer Msg
  *     constructor and type the consumer handles via `onFlush`. Sharing one
- *     constructor with the subscribe cell keeps the two from drifting; the
+ *     constructor with the runner keeps the two from drifting; the
  *     reducer reads `msg.atMs` as the `at` it threads into `onFlush`.
  */
 export {

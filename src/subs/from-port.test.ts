@@ -6,15 +6,14 @@ import {
   type Port,
   type Reducer,
   type Runtime,
-  run,
   type Sub,
-  subId,
 } from "../index";
+import { run } from "../promise";
 import { fromPort } from "./from-port";
 
 // Lifecycle contract under a real runtime (issue #286) — the cross-runtime
 // case: a publisher runtime emits to a typed Port, a consumer machine's Sub
-// attaches to it via `fromPort` when the Sub enters `subscriptions(state)`,
+// attaches to it via `fromPort` when the Sub's `deps` turns non-null,
 // emitted values fold into the consumer's State (null-dropped per msgFn),
 // and reconciling the Sub out unsubscribes from the Port.
 
@@ -32,7 +31,7 @@ function publisherMachine() {
 }
 
 type Ctx = { readonly pub: Runtime<PubState, PubMsg> };
-type LevelSub = Sub<"level">;
+type LevelSub = Sub<"level", Readonly<Record<string, never>>>;
 type State = { readonly armed: boolean; readonly levels: readonly number[] };
 type Msg =
   | { readonly type: "level"; readonly value: number }
@@ -43,33 +42,36 @@ const update: Reducer<State, Msg, never> = {
   disarm: (s) => [{ ...s, armed: false }, []],
 };
 
-function consumerMachine(port: Port<number>) {
-  return defineMachine({
-    types: {
-      model: {} as State,
-      msg: {} as Msg,
-      sub: {} as LevelSub,
-      ctx: {} as Ctx,
-    },
-    init: () => [{ armed: true, levels: [] }, []],
-    update,
-    subscriptions: (s) =>
-      s.armed ? [{ id: subId("level"), type: "level" }] : [],
-    subscribe: {
-      level: fromPort<LevelSub, Msg, Ctx, number, PubState, PubMsg>(
-        (ctx) => ctx.pub,
-        port,
-        (value) => (value < 0 ? null : { type: "level", value }),
-      ),
-    },
-  });
+const consumerMachine = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    sub: {} as LevelSub,
+    ctx: {} as Ctx,
+  },
+  init: () => [{ armed: true, levels: [] }, []],
+  update,
+  subs: [{ type: "level", deps: (s) => (s.armed ? {} : null) }],
+});
+
+function consumerRunners(port: Port<number>) {
+  return {
+    level: fromPort<LevelSub, Msg, Ctx, number, PubState, PubMsg>(
+      (ctx) => ctx.pub,
+      port,
+      (value) => (value < 0 ? null : { type: "level", value }),
+    ),
+  };
 }
 
 describe("fromPort — subscribe → deliver → cleanup across two real runtimes", () => {
   it("attaches to the publisher's Port at boot and folds emitted values into State", async () => {
     const port = definePort<number>("subs-test:level:deliver");
     const pub = await run(publisherMachine(), {}).ready;
-    const consumer = await run(consumerMachine(port), { ctx: { pub } }).ready;
+    const consumer = await run(consumerMachine, {
+      subscribe: consumerRunners(port),
+      ctx: { pub },
+    }).ready;
 
     pub.emitPort(port, 7);
     pub.emitPort(port, 42);
@@ -83,7 +85,10 @@ describe("fromPort — subscribe → deliver → cleanup across two real runtime
   it("msgFn → null drops the emission but keeps the Port subscription live", async () => {
     const port = definePort<number>("subs-test:level:null-drop");
     const pub = await run(publisherMachine(), {}).ready;
-    const consumer = await run(consumerMachine(port), { ctx: { pub } }).ready;
+    const consumer = await run(consumerMachine, {
+      subscribe: consumerRunners(port),
+      ctx: { pub },
+    }).ready;
 
     pub.emitPort(port, -1);
     await consumer.idle();
@@ -100,7 +105,10 @@ describe("fromPort — subscribe → deliver → cleanup across two real runtime
   it("reconciling the Sub out unsubscribes — later emissions never reach the consumer", async () => {
     const port = definePort<number>("subs-test:level:cleanup");
     const pub = await run(publisherMachine(), {}).ready;
-    const consumer = await run(consumerMachine(port), { ctx: { pub } }).ready;
+    const consumer = await run(consumerMachine, {
+      subscribe: consumerRunners(port),
+      ctx: { pub },
+    }).ready;
 
     pub.emitPort(port, 1);
     await consumer.idle();

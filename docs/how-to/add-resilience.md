@@ -32,7 +32,7 @@ The attempt does not perform the call; it emits it as data and lets `interpret`
 run it:
 
 ```ts
-import { type Cmd, defineMachine, tryInterpret } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret, tryInterpret } from "@demlik/tea";
 
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
 
@@ -78,16 +78,19 @@ fetch_err: (s, m) => {
 ## 4. Run the effect through `tryInterpret`
 
 `tryInterpret` routes success and failure to two Msgs and never rejects, so a
-thrown request becomes a `fetch_err` your reducer already handles:
+thrown request becomes a `fetch_err` your reducer already handles. The handler
+sits beside the machine, not on it — hand it to `run`:
 
 ```ts
-interpret: {
+const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
     (body) => ({ type: "fetch_ok", body }),
     (err) => ({ type: "fetch_err", error: String(err), at: Date.now() }),
   ),
-},
+};
+
+const runtime = run(resilientFetch, { ctx, interpret });
 ```
 
 ## 5. Bound the retrying by outage duration, not attempt count
@@ -138,8 +141,11 @@ does not type-check.
 That is the whole recipe: a transient failure moves the machine to
 `waiting_retry` with `retryAtMs` set to a backed-off future time, and a success
 resets the slice with `initRetry()`. To fire the scheduled retry automatically,
-declare a `deadlineSub` at `retryAtMs` — see the `resilient-fetch` example for
-the timer wiring.
+declare the engine's built-in `timer` in `subs`, on only while you wait: store
+the delay beside `retryAtMs` and hand it over as
+`{ type: "timer", deps: (s) => s.phase === "waiting_retry" ? { ms, msg } : null }`.
+`run` needs no runner for it. The `resilient-fetch` example has the whole
+wiring.
 
 ## 6. Retry a `defineAgent`'s brain call
 

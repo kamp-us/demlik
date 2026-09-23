@@ -7,19 +7,16 @@ import {
   type Interpret,
   type Machine,
   replay,
-  run,
   type Transitions,
 } from "./index";
-import { withDeadline } from "./internal/resilience/with-deadline";
-import { withResilience } from "./internal/resilience/with-resilience";
-import { withTelemetry } from "./internal/resilience/with-telemetry";
 import { toMermaid } from "./machine-viz";
 import { foldEvents, msgTypeKeys } from "./pbt";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Vertical tracer (#275): ONE machine, the exact shape `__form` disambiguates,
 // stepped/classified by EVERY dispatch consumer — production `run`, the pure
-// folds, the PBT fold runner, machine-viz, msg-keys, and the withX wrappers —
+// folds, the PBT fold runner, machine-viz and msg-keys —
 // asserting they all agree. Pre-#275 the verification tools re-derived the
 // update form with a local structural heuristic frozen at the pre-`__form`
 // snapshot, so they could disagree with production on this machine; every
@@ -30,6 +27,12 @@ import { foldEvents, msgTypeKeys } from "./pbt";
 type LState = { readonly type: "red" } | { readonly type: "green" };
 type LMsg = { readonly type: "go" } | { readonly type: "stop" };
 type LCmd = { readonly type: "ping" };
+
+// A real `ping` handler key, so `run` has a cell for every Cmd variant.
+// Never invoked — no cell emits `ping`.
+const interpret: Interpret<LMsg, LCmd, undefined> = {
+  ping: async () => undefined,
+} as unknown as Interpret<LMsg, LCmd, undefined>;
 
 // The __form-disambiguated shape: a Transitions table whose FIRST inner record
 // is a callable object — a function carrying the msg cells as own-enumerable
@@ -60,13 +63,6 @@ function disambiguatedMachine(): Machine<LState, LMsg, LCmd, never, undefined> {
   const def: Machine<LState, LMsg, LCmd, never, undefined> = {
     init: () => [{ type: "red" }, []],
     update,
-    // A real `ping` handler key: withResilience refuses a target Cmd with no
-    // base interpret handler (#112). Never invoked — no cell emits `ping`.
-    interpret: { ping: async () => undefined } as unknown as Interpret<
-      LMsg,
-      LCmd,
-      undefined
-    >,
   };
   // Stamp the correct form the way the typed construction boundary would.
   // Hand-stamped here because `defineMachine`'s runtime fallback IS the
@@ -90,7 +86,8 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
   });
 
   it("production run steps red --go--> green", async () => {
-    const rt = await run(disambiguatedMachine(), { ctx: undefined }).ready;
+    const rt = await run(disambiguatedMachine(), { ctx: undefined, interpret })
+      .ready;
     await rt.dispatch(GO);
     expect(rt.getState()).toEqual({ type: "green" });
   });
@@ -120,29 +117,5 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
       "go",
       "stop",
     ]);
-  });
-
-  it("withTelemetry steps the base identically", () => {
-    const wrapped = withTelemetry(disambiguatedMachine());
-    const { state } = replay(wrapped, {
-      msgs: [GO],
-      ctx: undefined as never,
-    });
-    expect(state.base).toEqual({ type: "green" });
-  });
-
-  it("withDeadline steps the base identically", () => {
-    const wrapped = withDeadline(disambiguatedMachine(), { ms: 1000 });
-    const { state } = replay(wrapped, { msgs: [GO], ctx: undefined });
-    expect(state.base).toEqual({ type: "green" });
-  });
-
-  it("withResilience steps the base identically", () => {
-    const wrapped = withResilience(disambiguatedMachine(), { target: "ping" });
-    const { state } = replay(wrapped, {
-      msgs: [GO],
-      ctx: undefined as never,
-    });
-    expect(state.base).toEqual({ type: "green" });
   });
 });
