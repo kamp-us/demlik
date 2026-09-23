@@ -17,7 +17,14 @@
 //   5. `description` is required on the spec and read back off the def (#91).
 
 import { z } from "zod";
-import { absurd, type PortEmitter, type Settled } from "../index";
+import {
+  absurd,
+  type ErrOf,
+  type OkOf,
+  type OutcomeHelpers,
+  type PortEmitter,
+  type Settled,
+} from "../index";
 import { run } from "../promise";
 import type { MsgTypeValue } from "../protocol";
 import {
@@ -176,10 +183,13 @@ const settledOnM: Parameters<typeof machine.update.search_ok>[1] = search.ok(
 );
 void settledOnM;
 
-// The router's cells are plain `Interpret` cells over the tool Cmd.
+// The router's cells are `Interpret` cells over the tool Cmd: a
+// `Cmd.define`d Cmd's cell, so its ctx carries the outcome builders (ADR 0021).
 const cell: (
   cmd: ReturnType<typeof search>,
-  ctx: KbCtx & PortEmitter,
+  ctx: KbCtx &
+    PortEmitter &
+    OutcomeHelpers<OkOf<typeof search>, ErrOf<typeof search>>,
 ) => Promise<unknown> = tools.interpret.search;
 void cell;
 

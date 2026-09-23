@@ -68,7 +68,6 @@
  * subpath; reached from inside the package as `internal/flow/workflow`.
  */
 
-import { z } from "zod";
 import {
   type DeliveryId,
   type EffectConfirmed,
@@ -81,6 +80,7 @@ import {
   survivingEffects,
 } from "../../../do/durable-effects";
 import { Cmd, type CmdOf } from "../../../index";
+import { unchecked, undefinedOnly } from "../../schema";
 import { routeWorkflowMsg } from "./route";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ export const WORKFLOW_STATUSES: ReadonlySet<string> = new Set(
 // — the same shape `idempotent-intake`'s `intakeProcessDef<P>()` takes. The
 // consumer's interpret cell performs the dispatch and answers through this
 // module's OWN result Msgs (`activity_ok` / `compensation_err` … carrying the
-// delivery id), never through the minted `_ok` / `_err`, hence `ok: z.void()`
+// delivery id), never through the minted `_ok` / `_err`, hence `ok: undefinedOnly`
 // and an empty `err` list.
 
 /**
@@ -394,7 +394,7 @@ export const WORKFLOW_STATUSES: ReadonlySet<string> = new Set(
  */
 export function workflowActivityDef<A>() {
   return Cmd.define("workflow_activity", {
-    input: z.custom<{
+    input: unchecked<{
       /** The 0-based step index this activity belongs to. */
       readonly index: number;
       /** The #67 delivery id the result Msg must echo (the dedup key). */
@@ -402,7 +402,7 @@ export function workflowActivityDef<A>() {
       /** The opaque activity to perform. */
       readonly activity: A;
     }>(),
-    ok: z.void(),
+    ok: undefinedOnly,
     err: [],
   });
 }
@@ -419,7 +419,7 @@ export type ActivityCmd<A> = CmdOf<ReturnType<typeof workflowActivityDef<A>>>;
  */
 export function workflowCompensationDef<A>() {
   return Cmd.define("workflow_compensation", {
-    input: z.custom<{
+    input: unchecked<{
       /** The 0-based step index whose compensation this is. */
       readonly index: number;
       /** The #67 delivery id the result Msg must echo (the dedup key). */
@@ -427,7 +427,7 @@ export function workflowCompensationDef<A>() {
       /** The opaque compensating (inverse) activity to perform. */
       readonly compensation: A;
     }>(),
-    ok: z.void(),
+    ok: undefinedOnly,
     err: [],
   });
 }

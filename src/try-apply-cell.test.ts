@@ -1,4 +1,3 @@
-import { Result } from "better-result";
 import { describe, expect, it } from "vitest";
 import {
   applyCell,
@@ -24,7 +23,7 @@ import {
 // bug thrown from inside a cell.
 //
 // Two invariants matter beyond the happy path:
-//   - the throwing and Result paths select the SAME cell (they share
+//   - the throwing and Outcome paths select the SAME cell (they share
 //     `lookupCell`), so they can never disagree about what a machine accepts;
 //   - a cell that throws from its own body is a BUG and still propagates —
 //     only the ABSENCE of a cell is data.
@@ -69,8 +68,8 @@ describe("tryApplyCell", () => {
       { count: 4 },
       { type: "bump" },
     );
-    expect(Result.isOk(r)).toBe(true);
-    if (!Result.isOk(r)) return;
+    expect(r._tag).toBe("Ok");
+    if (r._tag !== "Ok") return;
     expect(r.value).toEqual([{ count: 5 }, []]);
   });
 
@@ -84,8 +83,8 @@ describe("tryApplyCell", () => {
       state,
       wire,
     );
-    expect(Result.isError(r)).toBe(true);
-    if (!Result.isError(r)) return;
+    expect(r._tag).toBe("Err");
+    if (r._tag !== "Err") return;
     expect(r.error).toBeInstanceOf(NoCellError);
     expect(r.error.msgType).toBe("unknown_wire");
 
@@ -110,22 +109,20 @@ describe("tryApplyCell", () => {
   it("refuses per STATE in transitions form, and names the state", () => {
     const m = lightMachine();
     expect(
-      Result.isOk(
-        tryApplyCell<LightState, LightMsg, never>(
-          m,
-          { type: "red" },
-          { type: "go" },
-        ),
-      ),
-    ).toBe(true);
+      tryApplyCell<LightState, LightMsg, never>(
+        m,
+        { type: "red" },
+        { type: "go" },
+      )._tag,
+    ).toBe("Ok");
 
     const r = tryApplyCell<LightState, LightMsg, never>(
       m,
       { type: "green" },
       { type: "go" },
     );
-    expect(Result.isError(r)).toBe(true);
-    if (!Result.isError(r)) return;
+    expect(r._tag).toBe("Err");
+    if (r._tag !== "Err") return;
     expect(r.error.stateName).toBe("green");
     expect(r.error.msgType).toBe("go");
   });
@@ -136,7 +133,7 @@ describe("tryApplyCell", () => {
     const msgs: LightMsg[] = [{ type: "go" }, { type: "stop" }];
     for (const state of states) {
       for (const msg of msgs) {
-        const viaResult = tryApplyCell<LightState, LightMsg, never>(
+        const viaOutcome = tryApplyCell<LightState, LightMsg, never>(
           m,
           state,
           msg,
@@ -147,7 +144,7 @@ describe("tryApplyCell", () => {
         } catch {
           threw = true;
         }
-        expect(Result.isError(viaResult)).toBe(threw);
+        expect(viaOutcome._tag === "Err").toBe(threw);
       }
     }
   });
@@ -192,8 +189,8 @@ describe("tryFoldMsgs", () => {
       { count: 0 },
       msgs,
     );
-    expect(Result.isOk(r)).toBe(true);
-    if (!Result.isOk(r)) return;
+    expect(r._tag).toBe("Ok");
+    if (r._tag !== "Ok") return;
     expect(r.value).toEqual({ count: 1 });
     expect(r.value).toEqual(foldMsgs(m, { count: 0 }, msgs));
   });
@@ -205,7 +202,7 @@ describe("tryFoldMsgs", () => {
       base,
       [],
     );
-    expect(Result.isOk(r) && r.value).toEqual(base);
+    expect(r._tag === "Ok" && r.value).toEqual(base);
   });
 
   it("names WHICH message failed — index, the msg itself, and the error", () => {
@@ -225,8 +222,8 @@ describe("tryFoldMsgs", () => {
       { count: 0 },
       msgs,
     );
-    expect(Result.isError(r)).toBe(true);
-    if (!Result.isError(r)) return;
+    expect(r._tag).toBe("Err");
+    if (r._tag !== "Err") return;
     expect(r.error.index).toBe(2);
     expect(r.error.msg).toBe(bad);
     expect(r.error.error).toBeInstanceOf(NoCellError);
@@ -241,7 +238,7 @@ describe("tryFoldMsgs", () => {
       { type: "bump" },
       bad,
     ]);
-    expect(Result.isError(r) && r.error.index).toBe(0);
+    expect(r._tag === "Err" && r.error.index).toBe(0);
   });
 
   it("reports the state-sensitive refusal a transitions log hits mid-replay", () => {
@@ -255,15 +252,15 @@ describe("tryFoldMsgs", () => {
       { type: "red" },
       msgs,
     );
-    expect(Result.isError(r)).toBe(true);
-    if (!Result.isError(r)) return;
+    expect(r._tag).toBe("Err");
+    if (r._tag !== "Err") return;
     expect(r.error.index).toBe(1);
     expect(r.error.error.stateName).toBe("green");
   });
 
   it("keeps foldMsgs' dev-mode purity discipline — a mutating cell trips", () => {
     // `foldMsgs` deep-freezes the input state in DEV so an in-place mutation
-    // fails loudly. The Result twin must not quietly relax that.
+    // fails loudly. The Outcome twin must not quietly relax that.
     const machine = defineMachine({
       types: {
         model: {} as CounterState,

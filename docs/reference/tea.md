@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (133)
+## Exports (141)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -16,10 +16,11 @@ import { … } from "@demlik/tea";
 | `ack` | Function | Construct an `Ack` for a last-applied sequence number. |
 | `Ack` | Interface | The authoritative side's acknowledgement: the highest `seq` it has applied. |
 | `AckPartition` | Interface | The result of splitting a seq-tagged buffer against an ack. |
-| `AnyCmdDef` | Type | The declaration-erased view the runtime reads: which `type` a def builds, which two Msg types it settles with, and the `ok` schema the edge parses against. |
+| `AnyCmdDef` | Type | The declaration-erased view the runtime reads: which `type` a def builds, which two Msg types it settles with, the `ok` schema the edge parses against and the tags an `Err` may carry. |
 | `applyCell` | Function |  |
 | `applyCellChecked` | Function |  |
 | `asReducer` | Function |  |
+| `AsyncSchemaError` | Class | A schema whose `validate` returned a Promise where the kernel needs an answer now — the `ok` check at the interpret edge, the `args` check in a reducer. |
 | `BootingRuntime` | Interface |  |
 | `Branded` | Type |  |
 | `CancelTimer` | Type | Cancels a scheduled reconnect timer (the inverse of `schedule`). |
@@ -32,6 +33,7 @@ import { … } from "@demlik/tea";
 | `CombinedManagedResources` | Interface | What `combineManagedResources` returns: the single managed-resource `subscribe` handler for the machine's `subscribe` record, and a `subs(state)` builder for `subscriptions(state)`. |
 | `combineManagedResources` | Function |  |
 | `CtxArg` | Type |  |
+| `DeclaredErrorsOf` | Type | The failures a `Cmd.define`d Cmd's handler may return: its declared tags. |
 | `defineListener` | Function | Build a listener-backed Sub factory whose cleanup is mandatory and derived. |
 | `defineMachine` | Function |  |
 | `defineManagedResource` | Function | Build the battery. |
@@ -73,6 +75,7 @@ import { … } from "@demlik/tea";
 | `IdentityDropNotice` | Class | Reported to the `OnError` sink under `phase: "identity-drop"` when the `Identity` filter drops a message addressed to a different instance. |
 | `initAck` | Function | The `Ack` for a server that has applied nothing yet — `ack(NO_ACK)`. |
 | `Interpret` | Type |  |
+| `InterpretCell` | Type | One cell of Interpret: the outcome-returning form for a `Cmd.define`d Cmd, the Msg-returning form for a hand-written one. |
 | `InterpretDetached` | Type |  |
 | `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
 | `liftSlice` | Function | Lift a battery verb's result into the host state that carries its slice. |
@@ -80,7 +83,7 @@ import { … } from "@demlik/tea";
 | `Machine` | Type |  |
 | `MachineShape` | Type |  |
 | `MachineTypes` | Type | The `types` option: the slots of a machine's shape that no value in the object can imply, declared once as phantom values (`{} as Model`). |
-| `MalformedResult` | Type | The kernel-minted failure: a handler returned a `_ok` value the Cmd's `ok` schema rejects. |
+| `MalformedResult` | Type | The kernel-minted failure: a handler returned an `Ok` value the Cmd's `ok` schema rejects. |
 | `ManagedResourceBattery` | Interface | What the battery returns: a `.sub(key)` builder for `subscriptions`, the `.subscribe` handler for the machine's `subscribe` record, a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held, and a `.subIdFor(key)` for tests. |
 | `ManagedResourceSub` | Interface | The Sub the battery builds. |
 | `msgKeysOf` | Function |  |
@@ -90,7 +93,12 @@ import { … } from "@demlik/tea";
 | `NoCtx` | Type |  |
 | `noop` | Function |  |
 | `OkOf` | Type | The `Ok` a def's handler must produce. |
+| `OkOfCmd` | Type | The value a Cmd settles with; `unknown` for a hand-written Cmd. |
 | `OnError` | Type | Sink for runtime failures that have no caller to reject at. |
+| `Outcome` | Type | The result a `Cmd.define`d handler returns: its value, or a declared failure. |
+| `Outcome` | Variable | Build an Outcome outside a handler's helpers — in a test that calls a handler directly, or in an adapter converting another result type. |
+| `OutcomeContractError` | Class | A `Cmd.define`d handler returned something the engine cannot settle: its own `<name>_ok` / `<name>_err` Msg (the engine mints those, never the handler — ADR 0021), or a value that is neither an Outcome, a Msg, nor nothing. |
+| `OutcomeHelpers` | Interface | The two builders the Promise engine hands a `Cmd.define`d handler on its ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared tags. |
 | `partitionByAck` | Function | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
 | `Port` | Interface |  |
 | `PortEmitter` | Interface | Augmentation injected onto `ctx` inside Cmd handlers. |
@@ -112,7 +120,6 @@ import { … } from "@demlik/tea";
 | `schemaMigrate` | Function | Build a `Store.migrate` from a schema (job 1) and an optional thin `upcast` (job 2). |
 | `Seq` | Type | A monotonic, non-negative sequence number tagging one client-predicted command. |
 | `SeqTagged` | Interface | A command (or `Msg`) tagged with the `seq` the client assigned it. |
-| `settle` | Function |  |
 | `Settled` | Type | The settled-Msg union a def (or a union of defs) mints: `<name>_ok` carrying `value`, `<name>_err` carrying `error`. |
 | `SettledErr` | Type |  |
 | `SettledOk` | Type |  |
@@ -139,6 +146,7 @@ import { … } from "@demlik/tea";
 | `tryApplyCell` | Function | `applyCell`, with "no handler for this Msg" moved into the return type instead of a throw. |
 | `tryFoldMsgs` | Function | `foldMsgs`, with the "no handler for this Msg" case in the return type, INCLUDING which message failed. |
 | `tryInterpret` | Function |  |
+| `UndeclaredFailureError` | Class | A `Cmd.define`d handler failed outside its declared channel: its `Err` carried no `_tag`, or a tag the def does not declare. |
 | `UpdateForm` | Type |  |
 | `WebSocketFactoryOpts` | Interface |  |
 | `WebSocketSubData` | Type |  |

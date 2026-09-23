@@ -3,7 +3,7 @@
  * `typed-cmd-channels.test.ts`; this file wraps the SAME `cmds` machine in
  * each of the three batteries and asserts the guarantee still holds:
  *
- *   - a handler's `_ok` value that fails the `ok` schema becomes the minted
+ *   - a handler's `Ok` value that fails the `ok` schema becomes the minted
  *     `_err` carrying `malformed_result`, and the wrapped Model's `base` slice
  *     never sees the corrupt value;
  *   - a settled `_ok` / `_err` carries `at` from `run`'s clock.
@@ -70,9 +70,9 @@ function machineOver(answer: () => Promise<unknown>) {
     init: () => [initial, []],
     update,
     interpret: {
-      fetch: async (cmd) =>
+      fetch: async (_cmd, { ok }) =>
         // Deliberately unparsed — the edge decides `_ok` vs `malformed_result`.
-        fetch.ok(cmd, (await answer()) as { body: string }),
+        ok((await answer()) as { body: string }),
     },
   });
 }

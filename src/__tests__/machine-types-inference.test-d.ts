@@ -10,9 +10,8 @@
 // under `types.ctx` (ADR 0020: a Cmd carries no requirements). No call site
 // writes a type argument, a `Settled<…>` union, or a `Reducer<…>` annotation.
 
-import { Result } from "better-result";
 import { z } from "zod";
-import { Cmd, defineMachine, type NoCtx, type Reducer, settle } from "../index";
+import { Cmd, defineMachine, type NoCtx, type Reducer } from "../index";
 import { run } from "../promise";
 
 type Http = { readonly get: (url: string) => Promise<string> };
@@ -54,13 +53,11 @@ const machine = defineMachine({
   },
   interpret: {
     // `ctx` is typed from `types.ctx`.
-    lookup: settle(lookup, async (cmd, ctx) =>
-      Result.ok({ name: await ctx.http.get(cmd.id) }),
-    ),
-    audit: settle(audit, async (cmd, ctx) => {
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
+    audit: async (cmd, ctx) => {
       await ctx.audit.write(cmd.line);
-      return Result.ok({ written: true });
-    }),
+      return ctx.ok({ written: true });
+    },
   },
 });
 
@@ -80,9 +77,7 @@ defineMachine({
     lookup_err: (m) => [m, []],
   },
   interpret: {
-    lookup: settle(lookup, async (cmd, ctx) =>
-      Result.ok({ name: await ctx.http.get(cmd.id) }),
-    ),
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
   },
 });
 
@@ -144,9 +139,7 @@ const table = defineMachine({
     },
   },
   interpret: {
-    lookup: settle(lookup, async (cmd, ctx) =>
-      Result.ok({ name: await ctx.http.get(cmd.id) }),
-    ),
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
   },
 });
 

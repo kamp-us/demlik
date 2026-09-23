@@ -7,19 +7,20 @@
  * `Reducer`, `Transitions`, `Cmd`, `Sub`, `Port`, …).
  *
  * **Dependency direction (the actual decoupling):** this module imports
- * NOTHING from the runtime — no `better-result`, no `run`/host/`Store`. The
+ * NOTHING from the runtime — no `run`/host/`Store`. The
  * runtime (`run`, the host, interpret, `Store`, subscribe — all in
  * `../index.ts`) imports *from* here; never the reverse. The root door
  * re-exports this surface through `./index.ts`, and
  * `pure/import-graph.test.ts` is the regression fence asserting the pure
  * entrypoint's import graph never reaches `run`.
  *
- * The one external name it reaches for is zod's TYPE surface (`import type`),
- * erased at compile time — `Cmd.define` accepts zod schemas, and the parse
- * against them happens at the interpret edge in `../promise/run.ts`, never here.
+ * The one external name it reaches for is the Standard Schema TYPE surface
+ * (`import type` from `@standard-schema/spec`), erased at compile time —
+ * `Cmd.define` accepts any Standard Schema (zod, Effect Schema through
+ * `Schema.toStandardSchemaV1`, …), and it imports no schema library.
  */
 
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 // === Dev-mode invariant enforcement ===
 //
@@ -155,7 +156,46 @@ export type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
 /** The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. */
 export type ErrorsOf<C> = C extends { readonly __e?: infer E } ? E : unknown;
 
-// === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1) ===
+// === Outcome: what a `Cmd.define`d handler returns (ADR 0021) ===
+//
+// A handler reports whether the work succeeded and with what; the ENGINE turns
+// that into the Cmd's `<name>_ok` / `<name>_err` Msg. The record is plain and
+// tagged, so the core names no `Result` library and each engine converts its own
+// native result into it at its edge.
+
+/** The result a `Cmd.define`d handler returns: its value, or a declared failure. */
+export type Outcome<Ok, E> =
+  | { readonly _tag: "Ok"; readonly value: Ok }
+  | { readonly _tag: "Err"; readonly error: E };
+
+/**
+ * The two builders the Promise engine hands a `Cmd.define`d handler on its
+ * ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared
+ * tags.
+ */
+export interface OutcomeHelpers<Ok, E> {
+  readonly ok: (value: Ok) => Outcome<Ok, never>;
+  readonly err: (error: E) => Outcome<never, E>;
+}
+
+/**
+ * Build an {@link Outcome} outside a handler's helpers — in a test that calls a
+ * handler directly, or in an adapter converting another result type.
+ */
+export const Outcome = {
+  ok: <Ok>(value: Ok): Outcome<Ok, never> => ({ _tag: "Ok", value }),
+  err: <E>(error: E): Outcome<never, E> => ({ _tag: "Err", error }),
+} as const;
+
+function isOutcome(value: unknown): value is Outcome<unknown, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const tag = (value as { _tag?: unknown })._tag;
+  return (
+    (tag === "Ok" && "value" in value) || (tag === "Err" && "error" in value)
+  );
+}
+
+// === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1, 0021) ===
 //
 // "Types on the constructor, data in the record." A Cmd built by hand carries
 // no `Ok` and no `E`; one built by `Cmd.define` carries both, and the minted
@@ -164,12 +204,13 @@ export type ErrorsOf<C> = C extends { readonly __e?: infer E } ? E : unknown;
 // read ONE source for what this effect can produce.
 //
 // Everything a constructor names is a TYPE or a SCHEMA; the value it returns is
-// still the dead record `{ type, ...input }`. `input` and `ok` are zod schemas
-// (zod is the one runtime dependency this adds); `err` is the `_tag` list a
-// handler may settle with.
+// still the dead record `{ type, ...input }`. `input` and `ok` are Standard
+// Schemas (https://standardschema.dev) — zod passes straight in, Effect Schema
+// through `Schema.toStandardSchemaV1` — and `err` is the `_tag` list a handler
+// may fail with.
 //
 // The failure union always carries one kernel tag beside the declared ones:
-// `MalformedResult`, minted at the interpret edge when a handler's `_ok` value
+// `MalformedResult`, minted at the interpret edge when a handler's `Ok` value
 // fails the `ok` schema. Invariant 8 (the boundary parses, the core trusts): a
 // corrupt result becomes a typed `_err` the reducer already has a cell for, and
 // never reaches Model.
@@ -187,9 +228,9 @@ export type TaggedError<Tag extends string> = Tag extends string
   : never;
 
 /**
- * The kernel-minted failure: a handler returned a `_ok` value the Cmd's `ok`
+ * The kernel-minted failure: a handler returned an `Ok` value the Cmd's `ok`
  * schema rejects. Plain data, so it folds into Model like any settled error;
- * `issues` is zod's issue list flattened to `path` + `message` strings.
+ * `issues` is the schema's issue list flattened to `path` + `message` strings.
  */
 export type MalformedResult = {
   readonly _tag: "malformed_result";
@@ -199,20 +240,111 @@ export type MalformedResult = {
   }>;
 };
 
-/** Render zod's issue list into the JSON-plain `MalformedResult`. */
+/** Render a Standard Schema issue list into the JSON-plain `MalformedResult`. */
 export function malformedResult(
-  issues: ReadonlyArray<{
-    readonly path: ReadonlyArray<PropertyKey>;
-    readonly message: string;
-  }>,
+  issues: ReadonlyArray<StandardSchemaV1.Issue>,
 ): MalformedResult {
   return {
     _tag: "malformed_result",
     issues: issues.map((issue) => ({
-      path: issue.path.map(String).join("."),
+      path: (issue.path ?? [])
+        .map((segment) =>
+          String(typeof segment === "object" ? segment.key : segment),
+        )
+        .join("."),
       message: issue.message,
     })),
   };
+}
+
+/**
+ * A schema whose `validate` returned a Promise where the kernel needs an answer
+ * now — the `ok` check at the interpret edge, the `args` check in a reducer.
+ * A contract breach (ADR 0021 §5): it goes to the error sink.
+ */
+export class AsyncSchemaError extends Error {
+  override readonly name = "AsyncSchemaError";
+  readonly _tag = "AsyncSchemaError" as const;
+  constructor(
+    /** What the schema was checking, e.g. `the "fetch" Cmd's ok schema`. */
+    public readonly where: string,
+  ) {
+    super(
+      `@demlik/tea: ${where} validated asynchronously. tea checks schemas ` +
+        `synchronously, so a schema whose \`~standard.validate\` returns a ` +
+        `Promise cannot be used here.`,
+    );
+  }
+}
+
+/**
+ * Run a Standard Schema synchronously. Throws {@link AsyncSchemaError} when the
+ * schema answers with a Promise; `where` names the check for that message.
+ */
+export function validateSync<T>(
+  schema: StandardSchemaV1<unknown, T>,
+  value: unknown,
+  where: string,
+): StandardSchemaV1.Result<T> {
+  const result = schema["~standard"].validate(value);
+  if (result instanceof Promise) {
+    // Nobody awaits it; keep a late rejection from surfacing as unhandled.
+    result.catch(() => {});
+    throw new AsyncSchemaError(where);
+  }
+  return result;
+}
+
+/**
+ * A `Cmd.define`d handler failed outside its declared channel: its `Err` carried
+ * no `_tag`, or a tag the def does not declare. A contract breach (ADR 0011,
+ * 0021 §4): it goes to the error sink, never to `<name>_err`.
+ */
+export class UndeclaredFailureError extends Error {
+  override readonly name = "UndeclaredFailureError";
+  readonly _tag = "UndeclaredFailureError" as const;
+  constructor(
+    public readonly cmdType: string,
+    /** The `error` the handler's `Err` carried, verbatim. */
+    public readonly failure: unknown,
+    /** The tags the def declares. */
+    public readonly declared: readonly string[],
+  ) {
+    super(
+      `@demlik/tea: the "${cmdType}" handler failed with ${describeTag(failure)}, ` +
+        `which its Cmd.define does not declare (declared: ` +
+        `${declared.length === 0 ? "none" : declared.map((t) => `"${t}"`).join(", ")}). ` +
+        `An undeclared failure goes to the error sink, never to "${cmdType}_err".`,
+    );
+  }
+}
+
+function describeTag(failure: unknown): string {
+  const tag =
+    typeof failure === "object" && failure !== null
+      ? (failure as { _tag?: unknown })._tag
+      : undefined;
+  return typeof tag === "string" ? `_tag "${tag}"` : "a value with no _tag";
+}
+
+/**
+ * A `Cmd.define`d handler returned something the engine cannot settle: its own
+ * `<name>_ok` / `<name>_err` Msg (the engine mints those, never the handler —
+ * ADR 0021), or a value that is neither an {@link Outcome}, a Msg, nor nothing.
+ */
+export class OutcomeContractError extends Error {
+  override readonly name = "OutcomeContractError";
+  readonly _tag = "OutcomeContractError" as const;
+  constructor(
+    public readonly cmdType: string,
+    detail: string,
+  ) {
+    super(
+      `@demlik/tea: the "${cmdType}" handler ${detail}. A Cmd.define'd ` +
+        `handler returns an outcome — \`ok(value)\` or \`err({ _tag })\` — and ` +
+        `the engine mints "${cmdType}_ok" / "${cmdType}_err" from it.`,
+    );
+  }
 }
 
 /**
@@ -250,9 +382,9 @@ export type SettledErr<Name extends string, C, E extends Tagged> = {
  * the minted Msg builders and the declaration hung on it. `E` here is the
  * DECLARED tag union; the settled `_err` arm widens it by `MalformedResult`.
  *
- * `ok` / `err` take an optional `at` for minting OUTSIDE the runtime (a
- * `replay` log, a unit test); inside `run` the interpret edge stamps it from
- * the clock, so a handler never reads `Date.now()` itself.
+ * `ok` / `err` mint a settled Msg OUTSIDE the runtime (a `replay` log, a unit
+ * test) and take an optional `at`. A handler never calls them: it returns an
+ * {@link Outcome}, and inside `run` the interpret edge mints and stamps.
  */
 export interface CmdDef<
   Name extends string,
@@ -276,8 +408,8 @@ export interface CmdDef<
     at?: number,
   ) => SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>;
   readonly schema: {
-    readonly input: z.ZodType<Input>;
-    readonly ok: z.ZodType<Ok>;
+    readonly input: StandardSchemaV1<unknown, Input>;
+    readonly ok: StandardSchemaV1<unknown, Ok>;
   };
   /** The declared `_tag` list, verbatim. */
   readonly errTags: ReadonlyArray<E["_tag"]>;
@@ -285,14 +417,16 @@ export interface CmdDef<
 
 /**
  * The declaration-erased view the runtime reads: which `type` a def builds,
- * which two Msg types it settles with, and the `ok` schema the edge parses
- * against. Every `CmdDef<…>` is one of these structurally.
+ * which two Msg types it settles with, the `ok` schema the edge parses against
+ * and the tags an `Err` may carry. Every `CmdDef<…>` is one of these
+ * structurally.
  */
 export type AnyCmdDef = {
   readonly cmdType: string;
   readonly okType: string;
   readonly errType: string;
-  readonly schema: { readonly ok: z.ZodType };
+  readonly schema: { readonly ok: StandardSchemaV1 };
+  readonly errTags: ReadonlyArray<string>;
 };
 
 // === The interpret edge — the boundary a `Cmd.define`d result crosses ===
@@ -300,30 +434,44 @@ export type AnyCmdDef = {
 // `run` builds ONE edge over `machine.cmds` and its clock, applies it to every
 // interpret handler's return, and hands the same edge to the handlers under
 // `cmdEdge` on ctx (beside `emit`). The hand-off is for a wrapper that invokes
-// a base handler INSIDE its own — `withResilience`'s `$resilience:run` carrier
-// — where `run`'s edge sees the carrier's `type`, never the def's, so the
-// base result would cross unparsed (#66). Settling through `cmdEdgeOf(ctx)`
-// at the site the def's handler is actually invoked keeps one parse and one
-// clock for the bare and the wrapped machine alike.
+// a base handler INSIDE its own — `withResilience`'s `$resilience:run` carrier,
+// the agent's fanned tool cells — where `run`'s edge sees the carrier's `type`,
+// never the def's, so the base outcome would cross unminted (#66). Settling
+// through `cmdEdgeOf(ctx)` at the site the def's handler is actually invoked
+// keeps one mint, one parse and one clock for the bare and the wrapped machine
+// alike.
 
-/** Settle one handler's follow-up: parse an `_ok`, stamp `at`, or pass through. */
+/**
+ * Settle one handler's return: mint a def's outcome into its `_ok` / `_err`
+ * Msg, or pass anything else through. Throws on a contract breach.
+ */
 export type CmdEdge = (
   cmd: { readonly type: string },
-  follow: unknown,
+  returned: unknown,
 ) => unknown;
 
 /** The ctx key `run` hands its edge under. A symbol, so no Ctx port can collide. */
 export const cmdEdge: unique symbol = Symbol("tea.cmdEdge");
 
 /**
- * The edge over a def list (invariant 8: the boundary parses, the core trusts).
- * For a follow-up that is a def's own settled Msg: an `_ok` whose `value` fails
- * the `ok` schema becomes the minted `_err` carrying `malformed_result`, so a
- * corrupt result never reaches a reducer cell that would fold it into Model; an
- * `_ok` that passes carries the PARSED value (zod's strip/transform applied);
- * either arm gets `at` from the clock unless the builder was handed one.
- * Anything else — a hand-written Cmd's follow-up, a Msg outside the settled
- * pair — passes through untouched.
+ * The edge over a def list (ADR 0021; invariant 8: the boundary parses, the
+ * core trusts). For a Cmd one of `defs` builds, the handler's return is:
+ *
+ *   - `Ok` — parsed against the `ok` schema: a pass mints `<name>_ok` carrying
+ *     the PARSED value (the schema's strip / transform applied), a fail mints
+ *     `<name>_err` carrying `malformed_result`, so a corrupt result never
+ *     reaches a reducer cell that would fold it into Model;
+ *   - `Err` — minted into `<name>_err` when its `_tag` is declared, and thrown
+ *     as {@link UndeclaredFailureError} when it is not;
+ *   - nothing — nothing is dispatched;
+ *   - its own `_ok` / `_err` Msg, or a non-Msg value — thrown as
+ *     {@link OutcomeContractError};
+ *   - any other Msg — passed through as a follow-up. That arm is the L2
+ *     helpers' `handlers(ports)`, which answer in their own Msg vocabulary
+ *     until they ship run Cmds instead (#282).
+ *
+ * Minted Msgs are stamped with `at` from the clock. A Cmd no def builds — a
+ * hand-written Cmd's follow-up — passes through untouched.
  */
 export function cmdEdgeOver(
   defs: Iterable<AnyCmdDef>,
@@ -331,25 +479,64 @@ export function cmdEdgeOver(
 ): CmdEdge {
   const byType = new Map<string, AnyCmdDef>();
   for (const def of defs) byType.set(def.cmdType, def);
-  return (cmd, follow) => {
+  return (cmd, returned) => {
     const def = byType.get(cmd.type);
-    if (def === undefined || !isSettledShape(follow)) return follow;
-    const at = follow.at ?? clock();
-    if (follow.type === def.okType) {
-      const parsed = def.schema.ok.safeParse(follow.value);
-      if (!parsed.success) {
-        return {
-          type: def.errType,
-          cmd: follow.cmd,
-          error: malformedResult(parsed.error.issues),
-          at,
-        };
-      }
-      return { ...follow, value: parsed.data, at };
+    if (def === undefined) return returned;
+    if (returned === undefined || returned === null) return undefined;
+    if (isOutcome(returned)) return mint(def, cmd, returned, clock());
+    const type =
+      typeof returned === "object"
+        ? (returned as { type?: unknown }).type
+        : undefined;
+    if (typeof type !== "string") {
+      throw new OutcomeContractError(
+        def.cmdType,
+        "returned a value that is neither an outcome nor a Msg",
+      );
     }
-    if (follow.type === def.errType) return { ...follow, at };
-    return follow;
+    if (type === def.okType || type === def.errType) {
+      throw new OutcomeContractError(
+        def.cmdType,
+        `returned its own "${type}" Msg`,
+      );
+    }
+    return returned;
   };
+}
+
+function mint(
+  def: AnyCmdDef,
+  cmd: unknown,
+  outcome: Outcome<unknown, unknown>,
+  at: number,
+): { readonly type: string; readonly cmd: unknown; readonly at: number } & (
+  | { readonly value: unknown }
+  | { readonly error: unknown }
+) {
+  if (outcome._tag === "Err") {
+    const tag =
+      typeof outcome.error === "object" && outcome.error !== null
+        ? (outcome.error as { _tag?: unknown })._tag
+        : undefined;
+    if (typeof tag !== "string" || !def.errTags.includes(tag)) {
+      throw new UndeclaredFailureError(def.cmdType, outcome.error, def.errTags);
+    }
+    return { type: def.errType, cmd, error: outcome.error, at };
+  }
+  const parsed = validateSync(
+    def.schema.ok,
+    outcome.value,
+    `the "${def.cmdType}" Cmd's ok schema`,
+  );
+  if (parsed.issues !== undefined) {
+    return {
+      type: def.errType,
+      cmd,
+      error: malformedResult(parsed.issues),
+      at,
+    };
+  }
+  return { type: def.okType, cmd, value: parsed.value, at };
 }
 
 /**
@@ -361,7 +548,7 @@ export function cmdEdgeOf(ctx: unknown): CmdEdge {
     typeof ctx === "object" && ctx !== null
       ? (ctx as { [cmdEdge]?: CmdEdge })[cmdEdge]
       : undefined;
-  return edge ?? ((_, follow) => follow);
+  return edge ?? ((_, returned) => returned);
 }
 
 // === The detached-work edge — work a handler outlives ===
@@ -391,19 +578,6 @@ export function detachWorkOf(ctx: unknown): DetachWork {
       ? (ctx as { [detachWork]?: DetachWork })[detachWork]
       : undefined;
   return detach ?? (() => undefined);
-}
-
-function isSettledShape(follow: unknown): follow is {
-  readonly type: string;
-  readonly cmd: unknown;
-  readonly value?: unknown;
-  readonly at?: number;
-} {
-  return (
-    typeof follow === "object" &&
-    follow !== null &&
-    typeof (follow as { type?: unknown }).type === "string"
-  );
 }
 
 /** The Cmd value a def (or a union of defs) builds. */
@@ -447,8 +621,8 @@ function defineCmd<
 >(
   name: Name,
   spec: {
-    readonly input: z.ZodType<Input>;
-    readonly ok: z.ZodType<Ok>;
+    readonly input: StandardSchemaV1<unknown, Input>;
+    readonly ok: StandardSchemaV1<unknown, Ok>;
     readonly err: Tags;
   },
 ): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>> {
@@ -764,9 +938,8 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
 // sites that want them. A missing cell throws `NoCellError` (#276), never a
 // bare TypeError.
 //
-// The `Result`-returning twin is `tryApplyCell` (`@demlik/tea` root; it needs
-// `better-result`, which this pure leaf must not import). Both read the SAME
-// `lookupCell`, so "which cell" is decided once.
+// The `Outcome`-returning twin is `tryApplyCell` (in `../runtime-types`).
+// Both read the SAME `lookupCell`, so "which cell" is decided once.
 export function applyCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
@@ -1067,12 +1240,12 @@ export type ExhaustiveTransitions<
 // every Transitions cell). The namespace pins that intent at the call site.
 export const Cmd = {
   /**
-   * Declare a typed Cmd constructor (ADR 0014). Returns the builder —
+   * Declare a typed Cmd constructor (ADR 0014, 0021). Returns the builder —
    * `fetch({ url })` yields `{ type: "fetch", url }` — carrying the minted Msg
-   * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` and the
-   * declaration the runtime edge parses against. `Settled<typeof fetch>` is
-   * the two-arm Msg union it settles with; `defineMachine({ cmds: [fetch] })`
-   * folds that union into the machine's `M`.
+   * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` (for replay
+   * logs and tests) and the declaration the runtime edge parses against.
+   * `Settled<typeof fetch>` is the two-arm Msg union it settles with;
+   * `defineMachine({ cmds: [fetch] })` folds that union into the machine's `M`.
    *
    *   const fetch = Cmd.define("fetch", {
    *     input: z.object({ url: z.string() }),
@@ -1080,9 +1253,19 @@ export const Cmd = {
    *     err: ["not_found", "timeout"],
    *   });
    *
-   * `err` is the `_tag` list the handler may settle with; the runtime adds
-   * `malformed_result` for an `_ok` value the `ok` schema rejects. The handler
-   * reads its services off the plain `ctx` handed to `run` (ADR 0020).
+   * `input` and `ok` take any Standard Schema whose `validate` is synchronous:
+   * zod directly, Effect Schema through `Schema.toStandardSchemaV1(...)`. `err`
+   * is the `_tag` list the handler may fail with; the runtime adds
+   * `malformed_result` for an `Ok` value the `ok` schema rejects.
+   *
+   * The handler returns an outcome and the engine mints the Msg:
+   *
+   *   fetch: async (cmd, { ok, err }) =>
+   *     res.status === 404 ? err({ _tag: "not_found" }) : ok(await res.json()),
+   *
+   * A throw or an undeclared tag goes to the error sink, never to `fetch_err`.
+   * The handler reads its services off the plain `ctx` handed to `run` (ADR
+   * 0020).
    *
    * A Cmd must not wait; see `DepKeyedSub` for anything that watches.
    */
@@ -1525,14 +1708,46 @@ export type NoCtx = Readonly<Record<never, never>>;
 // Strengthens invariant 2 (the record form has no fall-through default to
 // hide impurity behind) and invariant 7 (identity is explicit — the Cmd
 // variant set is load-bearing at the type level).
+//
+// **A `Cmd.define`d Cmd's cell returns an `Outcome` (ADR 0021).** Its ctx also
+// carries the `ok` / `err` builders (`OutcomeHelpers`), `err` typed to the
+// def's declared tags, and the engine mints `<name>_ok` / `<name>_err` from
+// what it returns. Such a cell may still resolve to another Msg or nothing:
+// the L2 helpers' `handlers(ports)` answer in their own Msg vocabulary until
+// they ship run Cmds instead (#282). A hand-written Cmd's cell is unchanged.
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
-  [K in C["type"]]: (
-    cmd: Extract<C, { type: K }>,
-    ctx: Ctx & PortEmitter,
-    dispatch?: (msg: M) => void,
-    // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
-  ) => Promise<M | void>;
+  [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
 };
+
+/**
+ * One cell of {@link Interpret}: the outcome-returning form for a
+ * `Cmd.define`d Cmd, the Msg-returning form for a hand-written one. A Cmd is
+ * `Cmd.define`d exactly when its `E` phantom is declared (not `unknown`).
+ */
+export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
+  unknown extends ErrorsOf<C>
+    ? (
+        cmd: C,
+        ctx: Ctx & PortEmitter,
+        dispatch?: (msg: M) => void,
+        // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
+      ) => Promise<M | void>
+    : (
+        cmd: C,
+        ctx: Ctx &
+          PortEmitter &
+          OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
+        dispatch?: (msg: M) => void,
+      ) => Promise<
+        // biome-ignore lint/suspicious/noConfusingVoidType: as above — a no-return body is legal
+        Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | M | void
+      >;
+
+/** The value a Cmd settles with; `unknown` for a hand-written Cmd. */
+export type OkOfCmd<C> = C extends { readonly __ok?: infer Ok } ? Ok : unknown;
+
+/** The failures a `Cmd.define`d Cmd's handler may return: its declared tags. */
+export type DeclaredErrorsOf<C> = Exclude<ErrorsOf<C>, MalformedResult>;
 
 // === InterpretDetached<C, Allowed, Ctx>: a detached interpret handler ===
 //

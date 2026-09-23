@@ -74,9 +74,9 @@
  * leaf utility internal to the package (`src/internal/resilience/`, #46).
  */
 
-import { z } from "zod";
 import { Cmd, type CmdOf, type Interpret, tryInterpret } from "../../../index";
 import { MsgType } from "../../../protocol";
+import { unchecked } from "../../schema";
 
 /**
  * A minted credential: the opaque `value` to send on the wire, and the absolute
@@ -157,8 +157,8 @@ export function initTokenRefresh(): TokenState {
  * `handlers` interpret it.
  */
 export const refreshToken = Cmd.define("refresh_token", {
-  input: z.object({}),
-  ok: z.custom<Token>(),
+  input: unchecked<Record<string, never>>(),
+  ok: unchecked<Token>(),
   err: ["token_refresh_failed"],
 });
 export type RefreshTokenCmd = CmdOf<typeof refreshToken>;

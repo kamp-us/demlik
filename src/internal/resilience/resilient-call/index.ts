@@ -150,7 +150,6 @@
  * into four distinct cells.
  */
 
-import { z } from "zod";
 import { liftSlice } from "../../../compose";
 import { Cmd, type CmdOf, type NoCtx, tryInterpret } from "../../../index";
 import type { MsgType } from "../../../protocol";
@@ -164,6 +163,7 @@ import {
   recordFailure,
   shouldRetry,
 } from "../../../retry-backoff";
+import { unchecked } from "../../schema";
 import {
   get as cacheGet,
   set as cacheSet,
@@ -415,8 +415,8 @@ export function runCmdDef<I, R, N extends string = DefaultResilientName>(
   name: N = DEFAULT_RESILIENT_NAME as N,
 ) {
   return Cmd.define(`${name}_run` as ResilientRunType<N>, {
-    input: z.custom<{ readonly key: string; readonly input: I }>(),
-    ok: z.custom<R>(),
+    input: unchecked<{ readonly key: string; readonly input: I }>(),
+    ok: unchecked<R>(),
     err: ["port_rejected", "deadline_exceeded"],
   });
 }

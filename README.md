@@ -8,7 +8,10 @@ A TEA / Elm-Architecture TypeScript library for durable, replayable state machin
 pnpm add @demlik/tea
 ```
 
-`better-result` is a runtime dependency and is installed for you. The host and
+The one runtime dependency is `@standard-schema/spec`, a types-only package
+installed for you. `Cmd.define` takes any Standard Schema, so bring the schema
+library you already use (zod, or Effect Schema through
+`Schema.toStandardSchemaV1`). The host and
 testing adapters ride on optional peers you add only for the surface you use:
 `react` / `react-dom` (the `./react` hooks), `ws` (Node WebSocket subs),
 `fast-check` (the `./pbt` property-testing helpers), and `vitest` (the testing

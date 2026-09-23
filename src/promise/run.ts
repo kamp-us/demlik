@@ -19,6 +19,7 @@ import {
   cmdEdgeOver,
   depsInactive,
   detachWork,
+  Outcome,
   structuralHash,
 } from "../pure/core";
 import type {
@@ -324,13 +325,25 @@ export function run<
   // `runInterpret`, and handed to the handlers on ctx so a wrapper that
   // composes a base handler inside its own settles through the same edge.
   const settleAtEdge = cmdEdgeOver(machine.cmds ?? [], clock);
+  // The Cmd types a `Cmd.define` on `machine.cmds` builds. A failure of one of
+  // their handlers outside the declared channel is a contract breach (ADR 0021
+  // §4) and goes to the sink; a hand-written Cmd's handler throw keeps
+  // rejecting the dispatch, as it always has.
+  const definedTypes = new Set((machine.cmds ?? []).map((d) => d.cmdType));
 
   // Copied into a fresh object so handlers get a Ctx & PortEmitter without
   // mutating the caller's ctx (which may be shared across runtimes / tests).
   // `Object.assign`, not a spread: tsc cannot prove a generic `Ctx` is an
   // object type, and a spread refuses it.
+  //
+  // `ok` / `err` are the outcome builders a `Cmd.define`d handler returns
+  // through (ADR 0021). They build the same record for every def, so one pair
+  // rides on the shared ctx, and a wrapper handing its ctx to a base handler
+  // hands them along.
   const augmentedCtx: Ctx & PortEmitter = Object.assign({}, ctx, {
     emit: portEmit,
+    ok: Outcome.ok,
+    err: Outcome.err,
     [cmdEdge]: settleAtEdge,
     [detachWork]: detachInFlight,
   });
@@ -657,16 +670,21 @@ export function run<
    */
   async function runInterpret(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
-      const handler = interpretMap[cmd.type as C["type"]];
+      const handler = interpretMap[cmd.type as C["type"]] as
+        | ((cmd: C, ctx: unknown, dispatch: (msg: M) => void) => unknown)
+        | undefined;
       if (!handler) continue;
-      const returned = await trackInFlight(
-        handler(
-          cmd as Extract<C, { type: C["type"] }>,
-          augmentedCtx,
-          dispatchUnawaited,
-        ),
-      );
-      const follow = settleAtEdge(cmd, returned);
+      let follow: unknown;
+      try {
+        const returned = await trackInFlight(
+          handler(cmd, augmentedCtx, dispatchUnawaited),
+        );
+        follow = settleAtEdge(cmd, returned);
+      } catch (err) {
+        if (!definedTypes.has(cmd.type)) throw err;
+        reportError(err, { phase: "interpret" });
+        continue;
+      }
       if (follow !== undefined && follow !== null) {
         // The follow-up's rejection has no caller (the original dispatcher
         // resolved), so route it to the sink (invariant 6); name a failure Msg

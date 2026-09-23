@@ -11,7 +11,6 @@
 // to say what it does. `ExhaustiveTransitions` buys the old floor back per
 // machine.
 
-import { Result } from "better-result";
 import { z } from "zod";
 import {
   Cmd,
@@ -20,7 +19,6 @@ import {
   type ExhaustiveTransitions,
   type Reducer,
   type Settled,
-  settle,
   type Transitions,
 } from "../index";
 
@@ -126,7 +124,7 @@ defineMachine({
   init: (loaded: State | null) => [loaded ?? { type: "idle" as const }, []],
   update: withCmds,
   interpret: {
-    grind: settle(grind, async (c) => Result.ok({ grams: c.beans * 2 })),
+    grind: async (c, ctx) => ctx.ok({ grams: c.beans * 2 }),
   },
 });
 

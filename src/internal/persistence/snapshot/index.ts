@@ -69,8 +69,8 @@
  *   interpret: { ...snap.handlers({ store: r2Adapter }) },
  */
 
-import { z } from "zod";
 import { Cmd, type CmdOf, type Interpret, tryInterpret } from "../../../index";
+import { unchecked, undefinedOnly } from "../../schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config — the knob.
@@ -191,17 +191,17 @@ export interface SnapshotPorts<V> {
  * `workflowActivityDef<A>()` is, since the payload type is the knob's own
  * parameter. The handler answers through this module's OWN Msgs
  * (`snapshot_saved` / `snapshot_failed`), never the minted `_ok` / `_err`,
- * hence `ok: z.void()` and an empty `err` list.
+ * hence `ok: undefinedOnly` and an empty `err` list.
  */
 export function snapshotWriteDef<V>() {
   return Cmd.define("snapshot_write", {
-    input: z.custom<{
+    input: unchecked<{
       readonly key: string;
       readonly seq: number;
       readonly at: number;
       readonly payload: V;
     }>(),
-    ok: z.void(),
+    ok: undefinedOnly,
     err: [],
   });
 }
@@ -244,8 +244,8 @@ export type SnapshotFailedMsg = {
  * invariant 2), folds the recovered payload into its run slice, then continues.
  */
 export const snapshotLoad = Cmd.define("snapshot_load", {
-  input: z.object({ key: z.string() }),
-  ok: z.void(),
+  input: unchecked<{ readonly key: string }>(),
+  ok: undefinedOnly,
   err: [],
 });
 export type SnapshotLoadCmd = CmdOf<typeof snapshotLoad>;

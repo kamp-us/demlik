@@ -44,6 +44,7 @@ export type {
   CmdInput,
   CmdOf,
   CmdValue,
+  DeclaredErrorsOf,
   DepKeyedSub,
   Dispose,
   ErrOf,
@@ -51,12 +52,15 @@ export type {
   ExhaustiveTransitions,
   Identity,
   Interpret,
+  InterpretCell,
   InterpretDetached,
   Machine,
   MachineShape,
   MalformedResult,
   NoCtx,
   OkOf,
+  OkOfCmd,
+  OutcomeHelpers,
   Port,
   PortEmitter,
   Reducer,
@@ -77,6 +81,7 @@ export type {
 // the identity comparison are both derived from it, and a client-safe consumer
 // that folds a machine needs the same key rendering the kernel uses.
 export {
+  AsyncSchemaError,
   // `acceptedTypes` answers about the state VALUE a caller holds, where
   // `acceptsOf` answers about a `state.type` a tool already named. It is the
   // same reading the refusal carries — `lookupCell`'s miss arm calls it.
@@ -88,6 +93,9 @@ export {
   foldMsgs,
   formOf,
   NoCellError,
+  Outcome,
+  OutcomeContractError,
   structuralHash,
   subId,
+  UndeclaredFailureError,
 } from "./core";

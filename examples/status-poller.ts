@@ -1,6 +1,5 @@
 import { type Cmd, defineMachine, type Sub } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
-import { Result } from "better-result";
 import { createPoller, type PollerState } from "@demlik/tea/flow";
 import {
   type DeadlineExceeded,
@@ -91,19 +90,12 @@ export const statusPoller = defineMachine({
 
   interpret: {
     read_status: async (cmd, ctx): Promise<Msg> => {
-      const observed = await Result.tryPromise({
-        try: () => ctx.readStatus(cmd.jobId),
-        catch: (error: unknown): unknown => error,
-      });
-      const at = ctx.clock();
-      return observed.match({
-        ok: (result): Msg => ({ type: "poll_result", result, at }),
-        err: (error): Msg => ({
-          type: "poll_failed",
-          error: String(error),
-          at,
-        }),
-      });
+      try {
+        const result = await ctx.readStatus(cmd.jobId);
+        return { type: "poll_result", result, at: ctx.clock() };
+      } catch (error) {
+        return { type: "poll_failed", error: String(error), at: ctx.clock() };
+      }
     },
   },
 });

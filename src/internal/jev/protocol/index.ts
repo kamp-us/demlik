@@ -46,19 +46,19 @@
  * network actually produced. Every `unknown` reaches a `JevErr`; nothing
  * reaches a `throw`.
  *
- * The check itself is a `zod` schema DERIVED from the questions map, so the
- * typed value is what `safeParse` returns rather than something asserted after
- * a hand-walk. Both halves of a choice question's claim are structural in that
- * schema: `choice` is a `z.enum` over the criteria keys, and `probabilities`
- * is a strict `z.object` whose shape IS those keys — so a distribution missing
- * one or carrying an extra fails the schema rather than a separate arm a later
- * reader has to remember. A partial distribution typed `Record<K, number>` is
+ * The check itself is a walk DERIVED from the questions map, one step per
+ * field, and the typed value is the fresh object it builds. Both halves of a
+ * choice question's claim are structural in that walk: `choice` must be one of
+ * the criteria keys, and `probabilities` must carry exactly those keys — so a
+ * distribution missing one or carrying an extra fails the check rather than a
+ * separate arm a later reader has to remember. A partial distribution typed `Record<K, number>` is
  * the representable-invalid state this module exists to refuse, and it arrives
  * through this gate or not at all. The envelope is checked by the same schema:
  * `model` is a string and `usage` carries two finite numbers.
  *
- * `safeParse`, never `parse`: a zod failure is turned into a `JevErr` value by
- * mapping its first issue's path onto the arm that names it.
+ * The walk stops at the first field that fails, and that field's path is
+ * mapped onto the `JevErr` arm that names it. It is hand-written rather than a
+ * schema library's so the published package depends on none (ADR 0021 §5).
  *
  * ## Why status classification lives here and not in `ask`
  *
@@ -77,8 +77,6 @@
  * `422`, at the price of unreadable diagnostics on every ordinary Score. They
  * are the API's `422`, which `classifyStatus` already calls terminal.
  */
-
-import { z } from "zod";
 
 // ── the shared instruction / description slot ──────────────────────────────
 
@@ -368,100 +366,208 @@ const err = (
   error,
 });
 
-// ── the schema the questions derive ────────────────────────────────
-
-/** A finite number: the wire carries no `NaN` and no infinity. */
-const finite = z.number().finite();
+// ── the check the questions derive ─────────────────────────────────
 
 /**
- * The schema of one answer, built from the question that asked for it.
+ * Where a body first disagrees with the questions: the path to the offending
+ * value, `[]` for the body itself. The check stops at the first one.
+ */
+type Issue = { readonly path: readonly (string | number)[] };
+
+/** A step of the walk: the parsed value, or the first issue under `path`. */
+type Step<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly issue: Issue };
+
+const pass = <T>(value: T): Step<T> => ({ ok: true, value });
+const fail = (path: readonly (string | number)[]): Step<never> => ({
+  ok: false,
+  issue: { path },
+});
+
+/** A finite number: the wire carries no `NaN` and no infinity. */
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+
+/**
+ * Check `value` field by field, in the order `fields` lists them, and build a
+ * fresh object holding exactly those fields. Keys the list does not name are
+ * dropped, never read.
+ */
+const object = (
+  value: unknown,
+  path: readonly (string | number)[],
+  fields: ReadonlyArray<
+    readonly [
+      string,
+      (v: unknown, p: readonly (string | number)[]) => Step<unknown>,
+    ]
+  >,
+): Step<Obj> => {
+  if (!isObj(value)) return fail(path);
+  const out: Record<string, unknown> = {};
+  for (const [key, check] of fields) {
+    const step = check(value[key], [...path, key]);
+    if (!step.ok) return step;
+    out[key] = step.value;
+  }
+  return pass(out);
+};
+
+/** A map whose every value passes `isValue`, copied. */
+const record =
+  (isValue: (v: unknown) => boolean) =>
+  (value: unknown, path: readonly (string | number)[]): Step<Obj> => {
+    if (!isObj(value)) return fail(path);
+    for (const [key, v] of Object.entries(value)) {
+      if (!isValue(v)) return fail([...path, key]);
+    }
+    return pass({ ...value });
+  };
+
+const literal =
+  (expected: string) =>
+  (value: unknown, path: readonly (string | number)[]): Step<string> =>
+    value === expected ? pass(expected) : fail(path);
+
+const finite = (
+  value: unknown,
+  path: readonly (string | number)[],
+): Step<number> => (isFiniteNumber(value) ? pass(value) : fail(path));
+
+const string = (
+  value: unknown,
+  path: readonly (string | number)[],
+): Step<string> => (typeof value === "string" ? pass(value) : fail(path));
+
+/**
+ * A choice's `probabilities`: TOTAL over the criteria keys and nothing else,
+ * which is what `JevChoiceAnswer<K>` types it as. A key the body lacks fails
+ * at that key (its value is not a number); a key the criteria do not name
+ * fails at the map itself, after every named key has passed.
+ */
+const exactProbabilities =
+  (options: readonly string[]) =>
+  (value: unknown, path: readonly (string | number)[]): Step<Obj> => {
+    const named = object(
+      value,
+      path,
+      options.map((k) => [k, finite] as const),
+    );
+    if (!named.ok || !isObj(value)) return named;
+    return Object.keys(value).every((k) => options.includes(k))
+      ? named
+      : fail(path);
+  };
+
+/**
+ * Check one answer against the question that asked for it.
  *
- * Key order is load-bearing — zod reports issues in shape order and
- * {@link toJevErr} maps the FIRST one, so this order is the precedence between
- * two arms that could both fire on one answer.
+ * Field order is load-bearing — the walk stops at the FIRST failing field and
+ * {@link toJevErr} maps that one, so this order is the precedence between two
+ * arms that could both fire on one answer.
  *
- * That precedence is a DELIBERATE CHANGE from the hand-walk this replaced, not
- * a reproduction of it. The old walk read `confidence`, then `probabilities`,
- * then `choice`, then off-criteria membership, then totality — so a choice
- * answer that was wrong in two places reported the scalar fault. The order
- * here reads the answer's own subject first: `choice`, the thing the question
- * asked for, then `confidence`, then the `probabilities` distribution over it.
- * A multi-fault body therefore names the semantically interesting arm — an
- * `off_criteria_choice` rather than a bad `confidence` — which is the better
- * report for a caller deciding whether to re-ask the model.
- *
- * Exact restoration is not reachable by key order at all: the old walk tested
- * `choice` membership BEFORE `probabilities` totality, while the strict object
- * folds membership and totality into one shape whose internal order is zod's.
+ * That precedence reads the answer's own subject first: `choice`, the thing
+ * the question asked for, then `confidence`, then the `probabilities`
+ * distribution over it. A multi-fault body therefore names the semantically
+ * interesting arm — an `off_criteria_choice` rather than a bad `confidence` —
+ * which is the better report for a caller deciding whether to re-ask the
+ * model. Inside `probabilities`, a bad or missing named key is found before an
+ * extra one.
  *
  * The precedence is pinned by the "multi-fault precedence" cases in
  * `protocol.test.ts`, so a later reorder fails a test rather than this comment.
  */
-const answerSchema = (question: JevQuestion): z.ZodType => {
+const checkAnswer = (
+  question: JevQuestion,
+  value: unknown,
+  path: readonly (string | number)[],
+): Step<Obj> => {
   switch (question.type) {
     case "noul":
-      return z.object({ type: z.literal("noul"), noul: finite });
+      return object(value, path, [
+        ["type", literal("noul")],
+        ["noul", finite],
+      ]);
     case "score":
-      return z.object({
-        type: z.literal("score"),
-        confidence: finite,
-        score: finite,
-        legend: z.record(z.string(), z.string()),
-        probabilities: z.record(z.string(), finite),
-      });
+      return object(value, path, [
+        ["type", literal("score")],
+        ["confidence", finite],
+        ["score", finite],
+        ["legend", record((v) => typeof v === "string")],
+        ["probabilities", record(isFiniteNumber)],
+      ]);
     case "choice": {
       const options = Object.keys(question.criteria);
-      return z.object({
-        type: z.literal("choice"),
-        choice: z.enum(options),
-        confidence: finite,
-        // `JevChoiceAnswer<K>` types `probabilities` as TOTAL over the criteria
-        // keys. A strict object whose shape is those keys IS that claim: a
-        // missing key fails the shape, an extra one is unrecognized.
-        probabilities: z.strictObject(
-          Object.fromEntries(options.map((k) => [k, finite])),
-        ),
-      });
+      return object(value, path, [
+        ["type", literal("choice")],
+        [
+          "choice",
+          (v, p) =>
+            typeof v === "string" && options.includes(v) ? pass(v) : fail(p),
+        ],
+        ["confidence", finite],
+        ["probabilities", exactProbabilities(options)],
+      ]);
     }
   }
 };
 
 /**
- * The answers map's schema, keyed by the ids the request asked about.
+ * Check the whole response body: the envelope, then the answers map keyed by
+ * the ids the request asked about.
  *
- * Unknown ids are dropped rather than refused — `z.object` strips them — which
- * is the question-driven reading: the questions are the contract, and a wider
- * response still satisfies it. Dropped means dropped: what comes back is a
- * fresh parsed object, not an alias of the body's own `answers`, so a caller
- * reaching past the type for an id it never asked about no longer finds one.
- *
- * The one assertion in this module lives here, and it is about the SHAPE, not
- * about a body: `Object.entries` loses the literal key types, so the object
- * built id-for-id out of `questions` types as `Record<string, unknown>`. Every
- * per-id obligation `JevAnswers<Q>` states is the schema this line names, and
- * `parseAnswers` needs no assertion of its own because of it.
+ * Unknown ids are dropped rather than refused — the question-driven reading:
+ * the questions are the contract, and a wider response still satisfies it.
+ * Dropped means dropped: what comes back is a fresh object, not an alias of
+ * the body's own `answers`, so a caller reaching past the type for an id it
+ * never asked about no longer finds one.
  */
-const jevAnswersSchema = <Q extends JevQuestionMap>(
-  questions: Q,
-): z.ZodType<JevAnswers<Q>> =>
-  z.object(
-    Object.fromEntries(
-      Object.entries(questions).map(([id, question]) => [
-        id,
-        answerSchema(question),
-      ]),
-    ),
-  ) as unknown as z.ZodType<JevAnswers<Q>>;
+const checkResponse = (
+  questions: JevQuestionMap,
+  body: unknown,
+): Step<{
+  readonly model: string;
+  readonly usage: JevUsage;
+  readonly answers: Obj;
+}> => {
+  const envelope = object(
+    body,
+    [],
+    [
+      ["model", string],
+      [
+        "usage",
+        (v, p) =>
+          object(v, p, [
+            ["input_tokens", finite],
+            ["output_tokens", finite],
+          ]),
+      ],
+      [
+        "answers",
+        (v, p) =>
+          object(
+            v,
+            p,
+            Object.entries(questions).map(
+              ([id, question]) =>
+                [id, (a, ap) => checkAnswer(question, a, ap)] as const,
+            ),
+          ),
+      ],
+    ],
+  );
+  if (!envelope.ok) return envelope;
+  const { model, usage, answers } = envelope.value as {
+    readonly model: string;
+    readonly usage: JevUsage;
+    readonly answers: Obj;
+  };
+  return pass({ model, usage, answers });
+};
 
-/** The whole response body: the envelope, with the answers map inside it. */
-const responseSchema = <Q extends JevQuestionMap>(questions: Q) =>
-  z.object({
-    model: z.string(),
-    usage: z.object({ input_tokens: finite, output_tokens: finite }),
-    answers: jevAnswersSchema(questions),
-  });
-
-// ── the failure the schema produces, as data ───────────────────────
+// ── the failure the check produces, as data ────────────────────────
 
 /** What a failed field of an answer says, where the path alone names it. */
 const ANSWER_FIELD_REASON: Readonly<Record<string, string>> = {
@@ -474,19 +580,19 @@ const ANSWER_FIELD_REASON: Readonly<Record<string, string>> = {
 };
 
 /**
- * Map one zod issue onto the `JevErr` arm that names it.
+ * Map the first issue onto the `JevErr` arm that names it.
  *
  * The issue's path says where, and `body` says what was actually there — which
  * is the difference between "this answer picked an option nobody offered" and
- * "this answer's `choice` is not even a string", two arms one failed `z.enum`
- * covers.
+ * "this answer's `choice` is not even a string", two arms one failed `choice`
+ * check covers.
  */
 const toJevErr = (
   questions: JevQuestionMap,
   body: unknown,
-  issue: z.core.$ZodIssue | undefined,
+  issue: Issue,
 ): JevErr => {
-  const [head, id, field] = issue?.path ?? [];
+  const [head, id, field] = issue.path;
 
   if (head === "model") {
     return { _tag: "malformed_body", reason: "`model` is not a string" };
@@ -534,7 +640,7 @@ const toJevErr = (
       const probabilities = at(answer, "probabilities");
       // A key the shape names and the body carries is a BAD VALUE; one the body
       // does not carry, or one the criteria do not name, is a totality failure.
-      const key = issue?.path[3];
+      const key = issue.path[3];
       const badValue =
         isObj(probabilities) &&
         typeof key === "string" &&
@@ -556,7 +662,7 @@ const toJevErr = (
   return {
     _tag: "malformed_answer",
     id,
-    reason: named ?? issue?.message ?? "answer is malformed",
+    reason: named ?? "answer is malformed",
   };
 };
 
@@ -576,12 +682,13 @@ export const parseAnswers = <Q extends JevQuestionMap>(
   questions: Q,
   body: unknown,
 ): JevParse<Q> => {
-  const parsed = responseSchema(questions).safeParse(body);
-  if (!parsed.success) {
-    return err(toJevErr(questions, body, parsed.error.issues[0]));
-  }
-  const { answers, model, usage } = parsed.data;
-  return { ok: true, answers, model, usage };
+  const parsed = checkResponse(questions, body);
+  if (!parsed.ok) return err(toJevErr(questions, body, parsed.issue));
+  const { answers, model, usage } = parsed.value;
+  // The walk built `answers` id for id out of `questions`, each answer checked
+  // against its own question; `Object.entries` lost the literal key types on
+  // the way, and this names them back.
+  return { ok: true, answers: answers as JevAnswers<Q>, model, usage };
 };
 
 // ── status classification ──────────────────────────────────────────────────

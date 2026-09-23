@@ -7,14 +7,11 @@
  * `replay` (compose without running) and `tryInterpret` (Railway).
  */
 
-import { Result } from "better-result";
 import type {
   AnyCmdDef,
   CmdOf,
-  ErrOf,
   InterpretDetached,
   Machine,
-  OkOf,
   Port,
   PortEmitter,
   Reducer,
@@ -32,6 +29,7 @@ import {
   foldUpdates,
   lookupCell,
   NoCellError,
+  Outcome,
   structuralHash,
   type UpdateForm,
 } from "./pure/core";
@@ -139,6 +137,11 @@ export function __resetPortRegistry(): void {
  *   re-dispatched (the original dispatcher already resolved, so no caller).
  *   A rejection caused by `stop()`'s own teardown is NOT this phase — see
  *   `"discard"`.
+ * - `"interpret"` — a `Cmd.define`d handler failed outside its declared
+ *   channel (ADR 0021): it threw, returned an `Err` whose tag it does not
+ *   declare (`UndeclaredFailureError`), or returned something the engine cannot
+ *   mint (`OutcomeContractError`, `AsyncSchemaError`). No `_err` Msg is
+ *   dispatched, and the dispatch that emitted the Cmd still resolves.
  * - `"stop-save"` — the final `store.save(state)` inside `stop()` threw
  *   (`stop()` resolves regardless, so without the sink this was silent loss).
  * - `"reduce"` — the pure `update` (reducer) threw synchronously; the configured
@@ -171,6 +174,7 @@ export function __resetPortRegistry(): void {
  */
 export type RuntimeErrorPhase =
   | "follow-up"
+  | "interpret"
   | "stop-save"
   | "reduce"
   | "listener"
@@ -1196,16 +1200,14 @@ export function wrapDetached<
 // around every step — control flow through the exception channel, and a `catch`
 // wide enough to swallow a genuine bug thrown from inside a cell.
 //
-// So: the same operations with the refusal in the return type. The idiom is
-// `better-result`, exactly as `tryInterpret` below uses it — the package's one
-// runtime dependency, already the house Railway spelling.
+// So: the same operations with the refusal in the return type — the core's own
+// `Outcome` record (ADR 0021), the same one a `Cmd.define`d handler returns.
 //
-// PLACEMENT: these live here and not in `pure/core` because `pure/core` is the
-// runtime-free leaf and must import NOTHING — `better-result` included (see its
-// header). The pure half of the work is the shared `lookupCell` primitive,
-// which DOES live there; these are the `Result` skins over it. `applyCell` and
-// `tryApplyCell` therefore select the same cell by construction, not by two
-// copies of the form-branching agreeing by luck.
+// PLACEMENT: these live here and not in `pure/core` because they are the
+// caller-facing skins; the pure half of the work is the shared `lookupCell`
+// primitive, which DOES live there. `applyCell` and `tryApplyCell` therefore
+// select the same cell by construction, not by two copies of the
+// form-branching agreeing by luck.
 //
 // NOT a general try/catch: a cell that THROWS from inside its own body is a bug
 // in the machine, and it propagates. Only the ABSENCE of a cell is data here.
@@ -1224,20 +1226,20 @@ export function tryApplyCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
-): Result<readonly [S, readonly C[]], NoCellError> {
+): Outcome<readonly [S, readonly C[]], NoCellError> {
   const found = lookupCell<S, M, C>(machine, state, msg);
   if (found.cell === undefined) {
-    return Result.err(
+    return Outcome.err(
       new NoCellError(msg.type, found.stateName, found.acceptedTypes),
     );
   }
-  return Result.ok(found.cell(state, msg));
+  return Outcome.ok(found.cell(state, msg));
 }
 
 /**
  * The refusal `tryFoldMsgs` reports: WHICH msg in the log had no handler, where.
  *
- * A plain record, not a new `Error` subclass — it is a `Result` payload, never
+ * A plain record, not a new `Error` subclass — it is an `Outcome` payload, never
  * thrown, and the actual error is the existing `NoCellError` it carries. The
  * package's thrown-error idiom (`class extends Error` + `_tag`, pinned by
  * `error-idiom.test.ts`) applies to errors raised at the runtime edge; this one
@@ -1257,7 +1259,7 @@ export interface FoldRefusal<M> {
  * INCLUDING which message failed.
  *
  * The motivating use is "this persisted log does not replay — tell the user
- * where". A bare `Result<S, NoCellError>` cannot: the error names the msg.type
+ * where". A bare `Outcome<S, NoCellError>` cannot: the error names the msg.type
  * and the state, but a log usually contains that type many times, so the
  * INDEX is the load-bearing fact. The fold stops at the first refusal (state
  * past that point is not defined) and returns it.
@@ -1269,79 +1271,40 @@ export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   base: S,
   msgs: readonly M[],
-): Result<S, FoldRefusal<M>> {
+): Outcome<S, FoldRefusal<M>> {
   let state = base;
   for (const [index, msg] of msgs.entries()) {
     if (__DEV__) deepFreeze(state);
     const stepped = tryApplyCell<S, M, C>(machine, state, msg);
-    if (Result.isError(stepped)) {
-      return Result.err({ index, msg, error: stepped.error });
+    if (stepped._tag === "Err") {
+      return Outcome.err({ index, msg, error: stepped.error });
     }
     if (__DEV__) assertPureResult(stepped.value, msg.type);
     state = stepped.value[0];
   }
-  return Result.ok(state);
+  return Outcome.ok(state);
 }
 
-// === settle: the typed interpret cell for a `Cmd.define`d effect ===
-//
-// `tryInterpret`'s successor for a typed Cmd (ADR 0014 §2). The handler body
-// returns `Result<Ok, E>` with BOTH channels inferred from the def — `Ok` is
-// what the `ok` schema parses, `E` is the declared `_tag` union — and this
-// maps the two arms onto the minted Msgs: `Ok` → `def.ok(cmd, value)`, `Err` →
-// `def.err(cmd, error)`. The `Result` lives here, in the helper, and never
-// enters the kernel contract: the cell still resolves to a plain Msg
-// (`Interpret` keeps returning `Promise<M | void>`), and `run`'s interpret edge
-// then parses the `_ok` value against the schema and stamps `at`.
-//
-// NOT a try/catch: a `work` that THROWS is a bug in the handler, and it
-// propagates to the error sink like any other interpret throw. A failure the
-// caller has a next move for is an `Err` with one of the declared tags —
-// that is the whole point of naming them (0011).
-export function settle<D extends AnyCmdDef, Ctx>(
-  def: D,
-  work: (
-    cmd: CmdOf<D>,
-    ctx: Ctx & PortEmitter,
-  ) => Promise<Result<OkOf<D>, ErrOf<D>>>,
-): (cmd: CmdOf<D>, ctx: Ctx & PortEmitter) => Promise<Settled<D>> {
-  // `AnyCmdDef` is the declaration-erased view the runtime reads; the two
-  // builders live on the full `CmdDef`, which every `D` structurally is.
-  const builders = def as unknown as {
-    readonly ok: (cmd: CmdOf<D>, value: OkOf<D>) => Settled<D>;
-    readonly err: (cmd: CmdOf<D>, error: ErrOf<D>) => Settled<D>;
-  };
-  return async (cmd, ctx) => {
-    const result = await work(cmd, ctx);
-    return result.match({
-      ok: (value) => builders.ok(cmd, value),
-      err: (error) => builders.err(cmd, error),
-    });
-  };
-}
-
-// === tryInterpret: Railway sugar over `Result.tryPromise` ===
+// === tryInterpret: Railway sugar for a hand-written Cmd's handler ===
 //
 // Wraps a fallible `(cmd, ctx) => Promise<Ok>` into a handler for
-// `interpret[type]`: on success resolves `onOk(value, cmd)`, on rejection
-// `onErr(error, cmd)`. It NEVER rejects (assuming `onOk`/`onErr` are total).
-//
-// We use the `{try, catch: (e) => e}` form (not the one-arg thunk) so the
-// original error passes through untouched — the one-arg form wraps errors in
-// `UnhandledException`, which would break `instanceof` checks inside `onErr`.
+// `interpret[type]`: on success resolves `onOk(value, cmd)`, on rejection (or a
+// synchronous throw) `onErr(error, cmd)`, with the original error untouched so
+// `instanceof` checks inside `onErr` hold. It NEVER rejects (assuming
+// `onOk`/`onErr` are total). A `Cmd.define`d Cmd needs none of this: its
+// handler returns an `Outcome` and the engine mints the Msg (ADR 0021).
 export function tryInterpret<C extends Cmd, Ok, M, Ctx>(
   work: (cmd: C, ctx: Ctx) => Promise<Ok>,
   onOk: (value: Ok, cmd: C) => M,
   onErr: (error: unknown, cmd: C) => M,
 ): (cmd: C, ctx: Ctx) => Promise<M> {
   return async (cmd, ctx) => {
-    const result = await Result.tryPromise({
-      try: () => work(cmd, ctx),
-      catch: (error: unknown): unknown => error,
-    });
-    return result.match({
-      ok: (value) => onOk(value, cmd),
-      err: (error) => onErr(error, cmd),
-    });
+    let value: Ok;
+    try {
+      value = await work(cmd, ctx);
+    } catch (error) {
+      return onErr(error, cmd);
+    }
+    return onOk(value, cmd);
   };
 }

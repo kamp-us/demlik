@@ -1563,7 +1563,13 @@ export function createAgent<
       update: update as Reducer<State, M, ACmd>,
       subscriptions: (s) => subs(s),
       subscribe: { deadline: subscribeDeadline },
-      interpret,
+      // `interpret` is already checked as `Interpret<M, ACmd, Ctx>` where it is
+      // built. `Machine`'s field is conditional on `[ACmd] extends
+      // [Cmd<never>]` and each cell on whether its Cmd is `Cmd.define`d (ADR
+      // 0021); over the generic `TC` TS defers both and cannot relate the two
+      // mapped types, so the checked table is handed over unrelated here. The
+      // field leaves `Machine` in #278.
+      interpret: interpret as never,
       ...(tools !== undefined ? { cmds: tools.defs } : {}),
     };
     return defineMachine(machine);

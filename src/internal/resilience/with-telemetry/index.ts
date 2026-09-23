@@ -50,9 +50,9 @@
  *   });
  */
 
-import { z } from "zod";
 import type { CmdOf, Interpret, Machine, Reducer, Sub } from "../../../index";
 import { applyCell, Cmd, msgKeysOf } from "../../../index";
+import { unchecked, undefinedOnly } from "../../schema";
 
 // ===========================================================================
 // The event + the slice + the ports — the telemetry vocabulary.
@@ -106,8 +106,8 @@ export interface TelemetryModel<S> {
  * NOTHING back, so there is no feedback loop.
  */
 export const telemetryEmit = Cmd.define("$telemetry:emit", {
-  input: z.object({ event: z.custom<TelemetryEvent>() }),
-  ok: z.void(),
+  input: unchecked<{ readonly event: TelemetryEvent }>(),
+  ok: undefinedOnly,
   err: [],
 });
 export type TelemetryEmitCmd = CmdOf<typeof telemetryEmit>;

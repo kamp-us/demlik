@@ -15,7 +15,7 @@ import type { DeadlineSub, EndedRun } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
-import type { Interpret } from "../pure/core";
+import { cmdEdgeOf, type Interpret } from "../pure/core";
 import type { RetryPolicy } from "../retry-backoff";
 import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
 import {
@@ -482,9 +482,10 @@ export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
  * `defineAgent` built.
  *
  * The wrapper's signature is the cell's, so calling `next(cmd, ctx, dispatch)`
- * is how the wrapped work happens — that is the typed Cmd→Msg edge
- * (`Cmd.define`'s `_ok` / `_err` Msgs), and returning its Msg is what keeps the
- * fold, and therefore a replay, identical to the unwrapped run's.
+ * is how the wrapped work happens. A tool cell returns its outcome and the
+ * engine mints `<name>_ok` / `<name>_err` from it (ADR 0021), so returning
+ * what `next` returned is what keeps the fold, and therefore a replay,
+ * identical to the unwrapped run's.
  */
 export type InterpretOverlay<T extends AnyToolDef> = CellWrappers<
   DefinedAgentInterpret<T>
@@ -1124,10 +1125,11 @@ function forwardLadderErrors<T extends AnyToolDef>(
  *
  * The interpret boundary is where the hook belongs, and the two timing clauses
  * on `onToolError` are properties of that seam rather than bookkeeping this
- * function does: a handler's settled Msg is read back through the router's own
- * `outcomeOf` (so the hook and the conversation see ONE rendering of the
- * failure) and the Msg is returned only after the hook resolves, which is
- * "before the fold"; and interpret runs only for the effects THIS process
+ * function does: a handler's outcome is minted through the edge `run` hands
+ * on ctx and read back through the router's own `outcomeOf` (so the hook and
+ * the conversation see ONE rendering of the failure), and the outcome is
+ * returned — for the engine to mint again — only after the hook resolves,
+ * which is "before the fold"; and interpret runs only for the effects THIS process
  * launches, which is "not again on resume". Nothing is folded, counted or
  * remembered here.
  *
@@ -1147,18 +1149,21 @@ function withToolErrorHook<T extends AnyToolDef>(
   type Handler = (
     cmd: { readonly type: string },
     ctx: unknown,
-  ) => Promise<{ readonly type: string } | void>;
+  ) => Promise<unknown>;
   const handlers = router.interpret as unknown as Record<string, Handler>;
   const wrapped: Record<string, Handler> = {};
   for (const [type, handler] of Object.entries(handlers)) {
     wrapped[type] = async (cmd, ctx) => {
-      const msg = await handler(cmd, ctx);
-      if (msg === undefined) return msg;
-      const settled = router.outcomeOf(msg);
-      if (settled === null || settled.outcome.kind === "ok") return msg;
+      const returned = await handler(cmd, ctx);
+      // The cell returns an outcome (ADR 0021); minting it here only READS
+      // it. The engine mints the returned outcome itself, once, for the fold.
+      const msg = cmdEdgeOf(ctx)(cmd, returned);
+      if (typeof msg !== "object" || msg === null) return returned;
+      const settled = router.outcomeOf(msg as { readonly type: string });
+      if (settled === null || settled.outcome.kind === "ok") return returned;
       // A laddered call is announced off its fold, once, by
       // `forwardLadderErrors` — never per attempt from here.
-      if (ownedByLadder(router, cmd, settled.callId)) return msg;
+      if (ownedByLadder(router, cmd, settled.callId)) return returned;
       try {
         await onToolError(settled.outcome as ToolFailureOf<T>, {
           callId: settled.callId,
@@ -1167,7 +1172,7 @@ function withToolErrorHook<T extends AnyToolDef>(
       } catch (err) {
         console.warn("@demlik/tea: a run's onToolError hook threw", err);
       }
-      return msg;
+      return returned;
     };
   }
   return {
