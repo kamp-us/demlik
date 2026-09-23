@@ -1,7 +1,7 @@
 ---
 id: 0010
 title: Export-map tiers: kernel/battery/experimental, showcases off the map
-status: amended-in-part by [0016](0016-removal-lands-in-a-minor-at-0x.md)
+status: amended-in-part by [0016](0016-removal-lands-in-a-minor-at-0x.md), [0022](0022-no-battery-layer-plain-functions.md)
 date: 2026-07-17
 tags: []
 ---

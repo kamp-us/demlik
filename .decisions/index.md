@@ -4,7 +4,7 @@ One row per ADR, repo-wide. Read the file for the why.
 
 | # | Title | Status | Date |
 |---|-------|--------|------|
-| [0001](./0001-no-offtheshelf-resilience.md) | Resilience is built in-house, not installed | Accepted | 2026-06-09 |
+| [0001](./0001-no-offtheshelf-resilience.md) | Resilience is built in-house, not installed | Amended-in-part by [0022](./0022-no-battery-layer-plain-functions.md) | 2026-06-09 |
 | [0002](./0002-do-host-layer.md) | A Durable-Object host layer, not a DO framework | Accepted | 2026-06-22 |
 | [0003](./0003-do-targets-event-sourced-virtual-actors.md) | The DO host targets event-sourced virtual actors | Accepted | 2026-06-23 |
 | [0004](./0004-agent-context-compaction.md) | An opt-in context-compaction seam on `createAgent` | Accepted | 2026-06-23 |
@@ -12,7 +12,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0006](./0006-client-prediction-fold-seam-and-pure-boundary.md) | Client-prediction fold seam + runtime-free import boundary | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md) | 2026-06-27 |
 | [0007](./0007-source-generated-diataxis-docs-factory.md) | Docs are a source-generated, drift-gated Diátaxis factory | Accepted | 2026-07-17 |
 | [0008](./0008-reference-drift-gate-fails-with-the-patch.md) | The reference drift gate fails with the patch, single-sourced | Accepted | 2026-07-17 |
-| [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental, showcases off the map | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md) | 2026-07-17 |
+| [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental, showcases off the map | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md), [0022](./0022-no-battery-layer-plain-functions.md) | 2026-07-17 |
 | [0011](./0011-errors-as-data.md) | Errors are data; a throw is reserved for a contract breach | Accepted | 2026-07-17 |
 | [0013](./0013-fabrika-is-the-work-pipeline.md) | fabrika is this repo's work pipeline | Accepted | 2026-08-16 |
 | [0014](./0014-typed-effect-channels-on-cmd-constructors.md) | Effect's E and R channels are types on Cmd constructors, never Effect values at the core | Amended-in-part by [0020](./0020-tea-owns-no-dependency-injection.md), [0021](./0021-handler-outcome-becomes-the-msg.md) | 2026-09-04 |
@@ -23,6 +23,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0019](./0019-a-host-side-provider-graph-satisfies-r.md) | A host-side provider graph satisfies R, copying Effect's Layer + Scope | Superseded by [0020](./0020-tea-owns-no-dependency-injection.md) | 2026-09-09 |
 | [0020](./0020-tea-owns-no-dependency-injection.md) | Dependencies belong to the handler, never to tea's core or its Cmds | Accepted | 2026-09-22 |
 | [0021](./0021-handler-outcome-becomes-the-msg.md) | A Cmd handler returns its outcome and the engine mints the Msg, never the handler | Accepted | 2026-09-23 |
+| [0022](./0022-no-battery-layer-plain-functions.md) | Reusable logic ships as plain functions and Cmds called from update, never a battery layer | Accepted | 2026-09-23 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
