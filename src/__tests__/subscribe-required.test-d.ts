@@ -97,9 +97,9 @@ export const oneRunner = run(twoTypes, {
 
 // `useMachine` takes the same handlers, so the same requiredness holds there.
 export function Hosted(): null {
-  useMachine(ticking, { ctx: {}, subscribe });
+  useMachine(ticking, { run, ctx: {}, subscribe });
   // @ts-expect-error — `types.sub` names `tick`, so `subscribe` is required
-  useMachine(ticking, { ctx: {} });
+  useMachine(ticking, { run, ctx: {} });
   return null;
 }
 

@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (148)
+## Exports (152)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -21,7 +21,8 @@ import { … } from "@demlik/tea";
 | `applyCellChecked` | Function |  |
 | `asReducer` | Function |  |
 | `AsyncSchemaError` | Class | A schema whose `validate` returned a Promise where the kernel needs an answer now — the `ok` check at the interpret edge, the `args` check in a reducer. |
-| `BootingRuntime` | Interface |  |
+| `BootedRunHandle` | Interface | A RunHandle whose boot has completed, so its State exists. |
+| `BootingRuntime` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
 | `Branded` | Type |  |
 | `BuiltinSub` | Type | The built-in Subs a machine over `M` may declare without declaring them. |
 | `BuiltinSubType` | Type | The Sub types every engine ships a runner for. |
@@ -48,6 +49,7 @@ import { … } from "@demlik/tea";
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
 | `DriveStalledError` | Class | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub, no in-flight Cmd. |
+| `EngineRun` | Type | An engine's `run`, seen from a host adapter: a machine and its RunOptions in, a RunHandle out. |
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |
@@ -110,8 +112,10 @@ import { … } from "@demlik/tea";
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |
 | `replay` | Function |  |
+| `RunHandle` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
 | `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers and the SubscribeArg sub runners. |
-| `Runtime` | Interface |  |
+| `RunOptions` | Type | The options every engine's `run` accepts: the `ctx`, the handlers the machine runs under, an optional `store`, and the `events` projector that feeds `on`. |
+| `Runtime` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |
 | `RuntimeErrorContext` | Interface | Context handed to an `OnError` sink alongside the error itself. |

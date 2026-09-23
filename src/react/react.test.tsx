@@ -94,6 +94,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
 
     function Label() {
       const [state, d] = useMachine(machine, {
+        run,
         ctx: undefined,
         interpret: {
           read_label: async () => ({ type: "loaded", label: "done" }),
@@ -119,6 +120,7 @@ describe("useMachine — handlers at the hook (#278)", () => {
 
     function Label({ suffix }: { readonly suffix: string }) {
       const [state, d] = useMachine(machine, {
+        run,
         ctx: undefined,
         // A fresh table every render, closing over the prop.
         interpret: {
@@ -152,7 +154,7 @@ describe("useMachine", () => {
     const machine = counterMachine();
 
     function Counter() {
-      const [state, d] = useMachine(machine, { ctx: undefined });
+      const [state, d] = useMachine(machine, { run, ctx: undefined });
       dispatch = d;
       return <span data-testid="n">{state.n}</span>;
     }
@@ -183,7 +185,7 @@ describe("useMachine", () => {
     const machine = counterMachine();
 
     function Counter() {
-      const [state] = useMachine(machine, { ctx: undefined, store });
+      const [state] = useMachine(machine, { run, ctx: undefined, store });
       return <span>{state.n}</span>;
     }
 
@@ -230,7 +232,7 @@ describe("useMachine", () => {
     });
 
     function Host() {
-      useMachine(machine, { ctx: undefined, subscribe });
+      useMachine(machine, { run, ctx: undefined, subscribe });
       return null;
     }
 
@@ -255,7 +257,7 @@ describe("useMachine", () => {
     let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
 
     function Counter() {
-      const [state, d] = useMachine(machine, { ctx: undefined, store });
+      const [state, d] = useMachine(machine, { run, ctx: undefined, store });
       dispatch = d;
       return <span>{state.n}</span>;
     }
@@ -341,7 +343,7 @@ describe("useMachine — loud on discard", () => {
       // across renders and mints exactly one fresh identity when `userId`
       // changes, which is the moment the runtime is replaced.
       const ctx = useMemo<WizardCtx>(() => ({ userId }), [userId]);
-      const [state, d] = useMachine(machine, { ctx, interpret });
+      const [state, d] = useMachine(machine, { run, ctx, interpret });
       dispatch = d;
       return <span>{state.step}</span>;
     }
@@ -408,6 +410,31 @@ describe("useMachine — loud on discard", () => {
 
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("useMachine — the engine is an input (#281)", () => {
+  it("boots through the `run` it is handed, once per mount", async () => {
+    const engine = vi.fn(run) as typeof run;
+    const machine = counterMachine();
+    let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
+
+    function Counter() {
+      const [state, d] = useMachine(machine, { run: engine, ctx: undefined });
+      dispatch = d;
+      return <span>{state.n}</span>;
+    }
+
+    await act(async () => {
+      root.render(<Counter />);
+    });
+    await act(async () => {
+      await dispatch?.({ type: "inc" });
+    });
+
+    expect(container.textContent).toBe("1");
+    expect(engine).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(engine).mock.calls[0]?.[0]).toBe(machine);
   });
 });
 

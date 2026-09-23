@@ -135,7 +135,7 @@ const machine = defineMachine({
 
 // in a React component
 function Counter() {
-  const [count, dispatch] = useMachine(machine, { ctx: {} });
+  const [count, dispatch] = useMachine(machine, { run, ctx: {} });
   return (
     <>
       <button onClick={() => dispatch("dec")}>-</button>
@@ -830,11 +830,12 @@ Direct analogue to `Browser.element`. The three rules
    `useSyncExternalStore`, not the older `useState`-+-`useEffect` pattern.
 
 ```ts
+import { run } from "@demlik/tea/promise";
 import { useMachine } from "@demlik/tea/react";
 
 function CounterPage() {
   const ctx = useMemo(() => ({ random: cryptoRandom }), []);
-  const [state, dispatch] = useMachine(counterMachine, { ctx });
+  const [state, dispatch] = useMachine(counterMachine, { run, ctx });
   return <button onClick={() => dispatch({ type: "inc" })}>{state.count}</button>;
 }
 ```

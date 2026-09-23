@@ -26,6 +26,7 @@ import {
   type ToolCall,
 } from "../agent/index";
 import type { Interpret, Store } from "../index";
+import { run } from "../promise";
 import { createAgentHost } from "./agent-host";
 
 type Stage = "plan" | "act";
@@ -114,6 +115,7 @@ function makeHost() {
 
   let builds = 0;
   const host = createAgentHost<Stage, Purpose, Outputs, string, null>({
+    run,
     buildMachine: () => {
       builds += 1;
       return agent.toMachine<object>({ toolInterpret });

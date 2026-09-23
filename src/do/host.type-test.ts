@@ -12,6 +12,7 @@
 import type { AgentMachineMsg, AgentState, AgentTurn } from "../agent/index";
 import type { Cmd, Interpret, Machine, Store, Subscribe } from "../index";
 import type { DeadlinesSub } from "../internal/resilience/deadline";
+import { run } from "../promise";
 import { type AgentHost, type AgentHostConfig, createAgentHost } from "./host";
 
 type Stage = "scan" | "done";
@@ -49,6 +50,7 @@ const wellTyped: AgentHostConfig<
   MySub,
   MyCtx
 > = {
+  run,
   buildMachine: () => ({ machine, interpret, subscribe }),
   store,
   ctx: { db: "d1" },
@@ -68,6 +70,7 @@ const badCtx: AgentHostConfig<
   MySub,
   MyCtx
 > = {
+  run,
   buildMachine: () => ({ machine, interpret, subscribe }),
   store,
   // @ts-expect-error — ctx must be MyCtx, not an arbitrary bag
@@ -88,6 +91,7 @@ const badMachine: AgentHostConfig<
   MySub,
   MyCtx
 > = {
+  run,
   buildMachine: () => ({
     // @ts-expect-error — Machine<…, OtherCtx> is not Machine<…, MyCtx>
     machine: otherCtxMachine,
@@ -103,6 +107,7 @@ void badMachine;
 // ── Inference end-to-end: no explicit type args, C/U/Ctx flow from the
 //    machine, and a mismatched ctx still fails inside createAgentHost. ────────
 const host = createAgentHost({
+  run,
   buildMachine: () => ({ machine, interpret, subscribe }),
   store,
   ctx: { db: "d1" } as MyCtx,
@@ -112,3 +117,23 @@ const host = createAgentHost({
 // the host surface keeps the agent-slice params (Frame included):
 const _host: AgentHost<Stage, Purpose, Outputs, ToolResult, Frame> = host;
 void _host;
+
+// ── The engine is an input (#281): the host imports none, so a `run` that is
+//    not the Promise engine's boots it just the same. ───────────────────────
+declare const otherRun: AgentHostConfig<
+  Stage,
+  Purpose,
+  Outputs,
+  ToolResult,
+  Frame,
+  MyCmd,
+  MySub,
+  MyCtx
+>["run"];
+export const onOtherEngine = createAgentHost({
+  run: otherRun,
+  buildMachine: () => ({ machine, interpret, subscribe }),
+  store,
+  ctx: { db: "d1" } as MyCtx,
+  toSseFrame: (): Frame | null => null,
+});
