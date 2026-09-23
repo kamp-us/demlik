@@ -47,8 +47,10 @@ import { run } from "../promise";
  * Options passed to `useMachine`. The shape is intentionally minimal — `ctx`
  * is required (every machine has one), `store` is optional (omit it for
  * volatile-state machines), and the handlers are the ones `run` takes beside
- * the machine: `interpret` (required once the machine emits a Cmd) and optional
- * `subscribe` runners (see {@link RunHandlers}).
+ * the machine: `interpret` (required once the machine emits a Cmd) and the
+ * `subscribe` runners (required once the machine declares a Sub type other
+ * than the built-in `timer`) — see {@link RunHandlers}. Same requiredness as
+ * `run`, because it is the same type.
  *
  * **The handlers are read fresh, never memoized on.** A handler table written
  * inline in the component is a new object every render; keying the runtime on

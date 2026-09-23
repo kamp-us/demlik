@@ -12,29 +12,33 @@
  *      Use for resumable scripts / local repro of prod machines. Ephemeral
  *      CLIs can skip persistence with `memoryStore` from `@demlik/tea/mem`.
  *
- *   2. `nodeSubscribe<M, Ctx>()` — handler registry for the three node-native
- *      Sub types this package owns:
- *        - `node_ws`     — opens a `ws` WebSocket; routes open/message/close/
- *                          error into Msgs. Registers the live socket in
- *                          `ctx.wsRegistry` so a Cmd handler can write to it
- *                          (see `sendToWebSocket`). Cleanup closes the socket
- *                          for ANY non-CLOSED state.
- *        - `node_timer`  — setTimeout / setInterval; cleanup clears it.
- *        - `node_signal` — a process signal (SIGINT/SIGTERM/…) → Msg; cleanup
- *                          detaches the listener.
+ *   2. `nodeSubscribe<M, Ctx>({ ws })` — the runners for the three node-native
+ *      Sub types this package owns, handed to `run` as its `subscribe`:
+ *        - `node_ws`     — deps `{ key, url }`. Opens a `ws` WebSocket; routes
+ *                          open/message/close/error into Msgs through the `ws`
+ *                          handlers. Registers the live socket in
+ *                          `ctx.wsRegistry` under `key` so a Cmd handler can
+ *                          write to it (see `sendToWebSocket`). Cleanup closes
+ *                          the socket for ANY non-CLOSED state.
+ *        - `node_timer`  — deps `{ delayMs, msg, repeat? }`. setTimeout /
+ *                          setInterval; cleanup clears it.
+ *        - `node_signal` — deps `{ signal, msg }`. A process signal
+ *                          (SIGINT/SIGTERM/…) → Msg; cleanup detaches the
+ *                          listener.
  *
  * Unlike tea-do — whose `alarm()` / `webSocketMessage()` are DO lifecycle
  * methods the handler can't observe from the outside, hence its registries —
- * a node process is continuously alive: each handler holds its resource in
- * closure and the returned cleanup closes it. The substrate's subscription
- * reconciler runs that cleanup the instant `subscriptions(state)` stops listing
- * the Sub — end-then-start choreography for free (Rule 9, [invariant 4]).
- * A lifecycle-bound resource (a socket, a timer) becomes impossible to leak
- * from a reducer cell, because no reducer cell owns its teardown.
+ * a node process is continuously alive: each runner holds its resource in
+ * closure and the returned cleanup closes it. The engine runs that cleanup the
+ * instant the Sub's `deps` go null, and a changed `deps` value stops the old
+ * runner before starting the new one — end-then-start choreography for free
+ * (Rule 9, [invariant 4]). A lifecycle-bound resource (a socket, a timer)
+ * becomes impossible to leak from a reducer cell, because no reducer cell owns
+ * its teardown.
  *
- * `ctx.wsRegistry` is the one shared surface: `node_ws` populates it; a Cmd
- * interpreter reads it to write to the open socket. Same shape as tea-do's
- * `wsRegistry`.
+ * `ctx.wsRegistry` is the one shared surface: `node_ws` populates it, keyed by
+ * the Sub's `deps.key`; a Cmd interpreter reads it to write to the open
+ * socket. Same shape as tea-do's `wsRegistry`.
  */
 
 import {
@@ -49,7 +53,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
-import type { FencedStore, Store, Sub, SubId } from "../index";
+import type { Dispose, FencedStore, Store, Sub } from "../index";
 import { StoreConflictError } from "../index";
 import {
   type Journal,
@@ -361,62 +365,63 @@ function isProcessAlive(pid: number): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A node WebSocket sub. The substrate diffs subs by `id`; the same `id` across
- * transitions = the same socket (kept open). Emit a DIFFERENT `id` to force a
- * reconnect.
+ * The `deps` of a `node_ws` Sub: which socket (`key`) and where it connects
+ * (`url`). Both are plain data, so the engine derives the Sub's id from them —
+ * the same `{ key, url }` across transitions is the same socket (kept open),
+ * and a changed one closes it and opens a fresh one.
  *
- * Only `onMessage` returns `M | null` (null drops the frame) because inbound
- * frames are the boundary that needs a parse-and-maybe-discard seam. `onOpen`/
- * `onClose`/`onError` always dispatch — a spurious one is dropped in the reducer
- * (the cell ignores it), not here.
+ * `key` is the author's name for the socket: the Cmd side addresses it through
+ * {@link sendToWebSocket} by that key, since the derived Sub id is not
+ * something a Cmd handler can know. It must be unique among the machine's live
+ * `node_ws` Subs.
  */
-export type NodeWsSub<M> = {
-  id: SubId;
-  type: "node_ws";
-  url: string;
-  onMessage: (data: string) => M | null;
-  onOpen?: () => M;
-  onClose?: (code: number, reason: string) => M;
-  onError?: (message: string) => M;
+export type NodeWsDeps = { readonly key: string; readonly url: string };
+
+/**
+ * A node WebSocket sub. Its callbacks are not data, so they live on the runner
+ * side — {@link NodeWsHandlers}, handed to {@link nodeSubscribe}.
+ */
+export type NodeWsSub = Sub<"node_ws", NodeWsDeps>;
+
+/**
+ * The `deps` of a `node_timer` Sub. One-shot `setTimeout` by default;
+ * `repeat: true` → `setInterval`.
+ */
+export type NodeTimerDeps<M> = {
+  readonly delayMs: number;
+  readonly msg: M;
+  readonly repeat?: boolean;
 };
 
 /**
- * A node timer sub. One-shot `setTimeout` by default; `repeat: true` →
- * `setInterval`. Cleanup clears the timer — a timer keyed to a phase is
- * cancelled the moment the machine leaves that phase.
+ * A node timer sub. Cleanup clears the timer — a timer keyed to a phase is
+ * cancelled the moment the machine leaves that phase, and a changed
+ * `delayMs` / `msg` / `repeat` is a new id, so the timer restarts. For a plain
+ * one-shot, the engine's built-in `timer` Sub needs no runner at all.
  */
-export type NodeTimerSub<M> = {
-  id: SubId;
-  type: "node_timer";
-  delayMs: number;
-  msg: M;
-  repeat?: boolean;
+export type NodeTimerSub<M> = Sub<"node_timer", NodeTimerDeps<M>>;
+
+/** The `deps` of a `node_signal` Sub: `signal` (SIGINT/SIGTERM/…) → `msg`. */
+export type NodeSignalDeps<M> = {
+  readonly signal: NodeJS.Signals;
+  readonly msg: M;
 };
 
 /**
- * A process-signal sub: `signal` (SIGINT/SIGTERM/…) → `msg`. Cleanup detaches
- * the listener. Lets graceful shutdown be a real machine transition rather than
- * an out-of-band `process.on` that the reducer can't see.
+ * A process-signal sub. Cleanup detaches the listener. Lets graceful shutdown
+ * be a real machine transition rather than an out-of-band `process.on` that the
+ * reducer can't see.
  */
-export type NodeSignalSub<M> = {
-  id: SubId;
-  type: "node_signal";
-  signal: NodeJS.Signals;
-  msg: M;
-};
+export type NodeSignalSub<M> = Sub<"node_signal", NodeSignalDeps<M>>;
 
-export type NodeSub<M> = NodeWsSub<M> | NodeTimerSub<M> | NodeSignalSub<M>;
-
-// Compile-time guarantee: `NodeSub<M>` is structurally a `Sub` (has `id`+`type`).
-// Erased at runtime — the `extends Sub` constraint on the alias's type
-// parameter fails to compile if `NodeSub` ever drifts off the `Sub` shape.
-export type AssertNodeSubIsSub<T extends Sub = NodeSub<unknown>> = T;
+export type NodeSub<M> = NodeWsSub | NodeTimerSub<M> | NodeSignalSub<M>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ctx — what the node Subs read / populate.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type NodeWsRegistry = Map<SubId, WebSocket>;
+/** The live `node_ws` sockets, keyed by each Sub's `deps.key`. */
+export type NodeWsRegistry = Map<string, WebSocket>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ws — loaded on first use, never at module load.
@@ -432,10 +437,9 @@ export type NodeWsRegistry = Map<SubId, WebSocket>;
  * opened — so the cost of an optional peer is paid by the feature that needs
  * it, not by the door it happens to share.
  *
- * `createRequire` rather than `await import("ws")` because `subscribe`'s
- * contract is synchronous — the handler must return its cleanup on the same
- * tick the substrate installs it, and a deferred socket would give cleanup
- * nothing to close.
+ * `createRequire` rather than `await import("ws")` because a runner's
+ * contract is synchronous — it must return its cleanup on the same tick the
+ * engine starts it, and a deferred socket would give cleanup nothing to close.
  */
 type NodeWsConstructor = new (url: string) => WebSocket;
 
@@ -469,22 +473,24 @@ const WS_OPEN = 1;
 const WS_CLOSED = 3;
 
 /**
- * The Ctx fields the node Subs depend on. A consumer's Ctx must extend this so
- * `node_ws` can register the live socket and Cmd handlers can reach it.
+ * The Ctx fields the `node_ws` runner depends on. A consumer's Ctx must extend
+ * this so the runner can register the live socket and Cmd handlers can reach
+ * it.
  *
  * Deliberately NOT parameterized by Msg: the registry holds raw `WebSocket`s,
- * and each Sub variant carries its own Msg-typed callbacks. Trip-wire: if a
- * future node Sub holds a Msg-typed callback on ctx, this becomes
- * `NodeSubscribeCtx<M>`.
+ * and the Msg-typed callbacks live in the {@link NodeWsHandlers} handed to
+ * `nodeSubscribe`. Trip-wire: if a future node Sub holds a Msg-typed callback
+ * on ctx, this becomes `NodeSubscribeCtx<M>`.
  */
 export interface NodeSubscribeCtx {
   wsRegistry: NodeWsRegistry;
 }
 
 /**
- * Write a frame to a registered `node_ws` socket. No-op (returns `false`) when
- * the socket is absent, not OPEN, or `send()` throws. The Cmd-side companion to
- * the `node_ws` Sub: the Sub owns the socket's lifetime; this writes to it.
+ * Write a frame to the `node_ws` socket whose `deps.key` is `key`. No-op
+ * (returns `false`) when the socket is absent, not OPEN, or `send()` throws.
+ * The Cmd-side companion to the `node_ws` Sub: the Sub owns the socket's
+ * lifetime; this writes to it.
  *
  * The contract is a boolean no-op, never a throw: the socket can transition out
  * of OPEN between the `readyState` check and `send()` (or `ws` can throw on an
@@ -492,10 +498,10 @@ export interface NodeSubscribeCtx {
  */
 export function sendToWebSocket(
   ctx: NodeSubscribeCtx,
-  id: SubId,
+  key: string,
   data: string,
 ): boolean {
-  const socket = ctx.wsRegistry.get(id);
+  const socket = ctx.wsRegistry.get(key);
   if (!socket || socket.readyState !== WS_OPEN) return false;
   try {
     socket.send(data);
@@ -506,91 +512,147 @@ export function sendToWebSocket(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// nodeSubscribe — the handler registry.
+// nodeSubscribe — the runner table.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build the `subscribe` handlers for `node_ws`, `node_timer`, and
- * `node_signal`. Matches `Machine#subscribe`'s
- * `[K in U["type"]]: (sub, ctx, dispatch) => () => void` contract for the
- * `NodeSub<M>` variants. Generic `Ctx` must extend `NodeSubscribeCtx` so the
- * `node_ws` handler can register its socket.
+ * What a `node_ws` socket's events become. Functions cannot be `deps`, so they
+ * live here, on the runner side; each receives the running Sub so one handler
+ * table can branch on `sub.deps` (its `key` or `url`) when a machine runs more
+ * than one socket.
+ *
+ * Only `onMessage` returns `M | null` (null drops the frame) because inbound
+ * frames are the boundary that needs a parse-and-maybe-discard seam. `onOpen`/
+ * `onClose`/`onError` always dispatch — a spurious one is dropped in the reducer
+ * (the cell ignores it), not here. An omitted one dispatches nothing.
  */
-export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(): {
-  node_ws: (
-    sub: NodeWsSub<M>,
-    ctx: Ctx,
-    dispatch: (msg: M) => void,
-  ) => () => void;
+export interface NodeWsHandlers<M> {
+  onMessage(data: string, sub: NodeWsSub): M | null;
+  onOpen?(sub: NodeWsSub): M;
+  onClose?(code: number, reason: string, sub: NodeWsSub): M;
+  onError?(message: string, sub: NodeWsSub): M;
+}
+
+/** The options of {@link nodeSubscribe}: the `node_ws` handlers, when used. */
+export interface NodeSubscribeOpts<M> {
+  readonly ws: NodeWsHandlers<M>;
+}
+
+/** The `node_timer` + `node_signal` runners — what every `nodeSubscribe` returns. */
+export interface NodeSubscribeBase<M> {
   node_timer: (
     sub: NodeTimerSub<M>,
-    ctx: Ctx,
+    ctx: unknown,
     dispatch: (msg: M) => void,
-  ) => () => void;
+  ) => Dispose;
   node_signal: (
     sub: NodeSignalSub<M>,
-    ctx: Ctx,
+    ctx: unknown,
     dispatch: (msg: M) => void,
-  ) => () => void;
-} {
-  return {
-    node_ws: (sub, ctx, dispatch) => {
-      const socket = new (loadWebSocket())(sub.url);
-      ctx.wsRegistry.set(sub.id, socket);
+  ) => Dispose;
+}
 
-      socket.on("open", () => {
-        if (sub.onOpen) dispatch(sub.onOpen());
-      });
-      socket.on("message", (data: RawData) => {
-        dispatchIfPresent(dispatch, sub.onMessage(data.toString()));
-      });
-      socket.on("close", (code: number, reason: Buffer) => {
-        if (sub.onClose) dispatch(sub.onClose(code, reason.toString()));
-      });
-      socket.on("error", (err: Error) => {
-        if (sub.onError) dispatch(sub.onError(err.message));
-      });
+/** The full runner table, with `node_ws` — `nodeSubscribe({ ws })`. */
+export interface NodeSubscribeWithWs<M, Ctx extends NodeSubscribeCtx>
+  extends NodeSubscribeBase<M> {
+  node_ws: (sub: NodeWsSub, ctx: Ctx, dispatch: (msg: M) => void) => Dispose;
+}
 
-      return () => {
-        ctx.wsRegistry.delete(sub.id);
-        socket.removeAllListeners();
-        // Swallow teardown-induced errors: terminate()-ing a CONNECTING socket
-        // emits an 'error' ("closed before the connection was established"),
-        // and with our listeners gone that would be an unhandled 'error' that
-        // crashes the process. A no-op listener absorbs it.
-        socket.on("error", () => {});
-        // Close for ANY non-closed state: a graceful 1000 when OPEN, a hard
-        // terminate() otherwise (CONNECTING/CLOSING) so a socket caught mid-
-        // handshake can't dangle. This is the teardown the hand-driven Cmd-pair
-        // approach (`cleanup_browser` closing the ws only `if OPEN`) could not
-        // guarantee.
-        if (socket.readyState === WS_OPEN) {
-          socket.close(1000, "tea-node sub cleanup");
-        } else if (socket.readyState !== WS_CLOSED) {
-          socket.terminate();
-        }
-      };
-    },
-
+/**
+ * Build the `subscribe` runners for the node Sub types, to hand to `run`:
+ * `run(machine, { subscribe: nodeSubscribe<M, Ctx>({ ws: { onMessage } }), ctx })`.
+ *
+ * `node_timer` and `node_signal` read everything off `sub.deps`, so they need
+ * no options. `node_ws` needs its {@link NodeWsHandlers}; called without them,
+ * the table has no `node_ws` runner, so a machine that declares `NodeWsSub`
+ * fails to typecheck at `run` rather than opening a socket nobody listens to.
+ * `Ctx` must extend {@link NodeSubscribeCtx} so the `node_ws` runner can
+ * register its socket.
+ */
+export function nodeSubscribe<M>(): NodeSubscribeBase<M>;
+export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(
+  opts: NodeSubscribeOpts<M>,
+): NodeSubscribeWithWs<M, Ctx>;
+export function nodeSubscribe<M, Ctx extends NodeSubscribeCtx>(
+  opts?: NodeSubscribeOpts<M>,
+): NodeSubscribeBase<M> | NodeSubscribeWithWs<M, Ctx> {
+  const base: NodeSubscribeBase<M> = {
     node_timer: (sub, _ctx, dispatch) => {
-      // Two reconcile lifecycles under one variant: a one-shot (`setTimeout`)
-      // that `subscriptions(state)` should drop on the render after it fires,
-      // vs a repeating (`setInterval`) one the state keeps listing across
-      // renders. Same Sub.type; the `repeat` flag picks the install + cleanup.
-      if (sub.repeat) {
-        const handle = setInterval(() => dispatch(sub.msg), sub.delayMs);
+      // Two reconcile lifecycles under one type: a one-shot (`setTimeout`)
+      // whose `deps` should go null on the state after it fires, vs a
+      // repeating (`setInterval`) one the state keeps on. The `repeat` flag
+      // picks the install + cleanup.
+      const { delayMs, msg, repeat } = sub.deps;
+      if (repeat) {
+        const handle = setInterval(() => dispatch(msg), delayMs);
         return () => clearInterval(handle);
       }
-      const handle = setTimeout(() => dispatch(sub.msg), sub.delayMs);
+      const handle = setTimeout(() => dispatch(msg), delayMs);
       return () => clearTimeout(handle);
     },
 
     node_signal: (sub, _ctx, dispatch) => {
-      const handler = () => dispatch(sub.msg);
-      process.on(sub.signal, handler);
+      const { signal, msg } = sub.deps;
+      const handler = () => dispatch(msg);
+      process.on(signal, handler);
       return () => {
-        process.off(sub.signal, handler);
+        process.off(signal, handler);
       };
     },
+  };
+  if (opts === undefined) return base;
+  return { ...base, node_ws: nodeWsRunner<M, Ctx>(opts.ws) };
+}
+
+function nodeWsRunner<M, Ctx extends NodeSubscribeCtx>(
+  handlers: NodeWsHandlers<M>,
+): NodeSubscribeWithWs<M, Ctx>["node_ws"] {
+  return (sub, ctx, dispatch) => {
+    const { key, url } = sub.deps;
+    // Two live sockets under one key would make `sendToWebSocket` ambiguous,
+    // and the first one's cleanup would unregister the second. The engine
+    // stops a Sub before it starts its replacement, so a key still held here
+    // is two concurrent Subs sharing it — an authoring bug, refused loudly.
+    if (ctx.wsRegistry.has(key)) {
+      throw new Error(
+        `node_ws: a live socket is already registered under key "${key}" — each running node_ws Sub needs its own \`deps.key\`.`,
+      );
+    }
+    const socket = new (loadWebSocket())(url);
+    ctx.wsRegistry.set(key, socket);
+
+    socket.on("open", () => {
+      if (handlers.onOpen) dispatch(handlers.onOpen(sub));
+    });
+    socket.on("message", (data: RawData) => {
+      dispatchIfPresent(dispatch, handlers.onMessage(data.toString(), sub));
+    });
+    socket.on("close", (code: number, reason: Buffer) => {
+      if (handlers.onClose)
+        dispatch(handlers.onClose(code, reason.toString(), sub));
+    });
+    socket.on("error", (err: Error) => {
+      if (handlers.onError) dispatch(handlers.onError(err.message, sub));
+    });
+
+    return () => {
+      ctx.wsRegistry.delete(key);
+      socket.removeAllListeners();
+      // Swallow teardown-induced errors: terminate()-ing a CONNECTING socket
+      // emits an 'error' ("closed before the connection was established"),
+      // and with our listeners gone that would be an unhandled 'error' that
+      // crashes the process. A no-op listener absorbs it.
+      socket.on("error", () => {});
+      // Close for ANY non-closed state: a graceful 1000 when OPEN, a hard
+      // terminate() otherwise (CONNECTING/CLOSING) so a socket caught mid-
+      // handshake can't dangle. This is the teardown the hand-driven Cmd-pair
+      // approach (`cleanup_browser` closing the ws only `if OPEN`) could not
+      // guarantee.
+      if (socket.readyState === WS_OPEN) {
+        socket.close(1000, "tea-node sub cleanup");
+      } else if (socket.readyState !== WS_CLOSED) {
+        socket.terminate();
+      }
+    };
   };
 }

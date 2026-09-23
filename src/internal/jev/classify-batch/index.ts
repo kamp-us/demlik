@@ -54,15 +54,17 @@
  *     resilient_err: (s, m) => lift(s, classify.onBatchErr(s.classify, m)),
  *     cache_evict: (s, m) => lift(s, classify.onEvict(s.classify, nowFromMsg)),
  *   },
- *   subscriptions: (s) => classify.subs(s.classify),
- *   subscribe: classify.subscribers(),
+ *   subs: classify.subEntries((s: Model) => s.classify),
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: classify.handlers() });
+ *   run(machine, {
+ *     interpret: classify.handlers(),
+ *     subscribe: classify.subscribers(),
+ *   });
  */
 
 import { liftSlice, type ReadStep, readInOrder } from "../../../compose";
-import type { Cmd } from "../../../index";
+import type { Cmd, DepKeyedSub } from "../../../index";
 import {
   type BatchWindow,
   type BatchWindowSub,
@@ -81,6 +83,7 @@ import {
   initCache,
   type TtlCache,
 } from "../../resilience/cache";
+import { type DeadlinesSub, deadlinesSub } from "../../resilience/deadline";
 import {
   createJevAsk,
   DEFAULT_JEV_MODEL,
@@ -507,19 +510,31 @@ export function createClassifyBatch<I, C extends string>(
   }
 
   /**
-   * The Subs — the window's flush timer, plus the cache's eviction tick when
-   * `evictEveryMs` is configured. Fan-out declares none (it runs no timers).
+   * The window's flush deadline while a window is open. Fan-out lists none (it
+   * runs no timers). PURE.
    */
   function subs(
     state: State,
     id = "jev-classify-batch",
-  ): readonly (BatchWindowSub | CacheEvictionSub)[] {
-    const windowSubs = window.subs(state.window, id);
-    if (config.evictEveryMs === undefined) return windowSubs;
-    return [...windowSubs, cacheEvictionSub(id, config.evictEveryMs)];
+  ): readonly BatchWindowSub[] {
+    return window.subs(state.window, id);
   }
 
-  /** The `subscribe` cells the Subs above need. */
+  /**
+   * The machine's `subs` entries, over a host Model that holds the slice where
+   * `select` reads it: the window's `deadline` Sub, plus the cache's eviction
+   * tick when `evictEveryMs` is configured.
+   */
+  function subEntries<Model>(
+    select: (model: Model) => State,
+    id = "jev-classify-batch",
+  ): readonly DepKeyedSub<Model, DeadlinesSub | CacheEvictionSub>[] {
+    const flush = deadlinesSub((model: Model) => subs(select(model), id));
+    if (config.evictEveryMs === undefined) return [flush];
+    return [flush, cacheEvictionSub(id, config.evictEveryMs)];
+  }
+
+  /** The runners the `subEntries` Subs need, handed to `run` as `subscribe`. */
   function subscribers() {
     return { deadline: subscribeBatchWindow, cache: cacheEvictionSubscribe };
   }
@@ -562,6 +577,7 @@ export function createClassifyBatch<I, C extends string>(
     onEvict,
     answerFor,
     subs,
+    subEntries,
     subscribers,
     handlers,
   };

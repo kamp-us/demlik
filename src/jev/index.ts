@@ -22,8 +22,8 @@
  * No name is declared twice behind this door, so every module is starred and
  * nothing is enumerated by hand — unlike `../resilience/index.ts`, which has to
  * name a winner for its two `DeadlineConfig` declarations. `ask` also forwards
- * the deadline Sub trio and `ResilientState` from resilient-call, which is the
- * one declaration of each behind this door.
+ * the deadline primitives and `ResilientState` from resilient-call, which is
+ * the one declaration of each behind this door.
  *
  * `battery` tier (MAINTAINING.md): a published named pattern over the kernel,
  * which may break in a minor provided the changelog for that minor says so.

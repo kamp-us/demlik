@@ -8,11 +8,11 @@
 // another participant on the same channel name posts a message; the
 // `close()` method releases the OS resource.
 //
-// The factory carries `channelName` on the Sub itself (not in the
-// closure) so the same factory instance handles every BroadcastChannel
-// Sub in a machine — one Sub per channel, named by id, sharing the
-// factory's lifecycle code. Renaming a channel requires a new Sub.id
-// (the reconcile pass otherwise leaves the existing channel open).
+// The factory reads `channelName` off the Sub's `deps` (not the closure)
+// so the same factory instance handles every BroadcastChannel Sub in a
+// machine — one Sub per channel, sharing the factory's lifecycle code.
+// A renamed channel is a changed deps value, so a new id: the engine
+// closes the old channel and opens the new one.
 //
 // `msgFn` returns `M | null` — same drop-on-null pattern as
 // `fromEventTarget`. The MessageEvent's `data` is `unknown` from the
@@ -32,15 +32,18 @@ import type {
 } from "./platform";
 import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
-type BroadcastSubData = { channelName: string };
+type BroadcastSubData = { readonly channelName: string };
 
 declare const BroadcastChannel: MinimalBroadcastChannelCtor;
 
-export function fromBroadcastChannel<S extends Sub & BroadcastSubData, M>(
+export function fromBroadcastChannel<
+  S extends Sub<string, BroadcastSubData>,
+  M,
+>(
   msgFn: (event: MinimalMessageEvent, sub: S) => M | null,
 ): SubscribeHandler<S, M, unknown> {
   return (sub, _ctx, dispatch) => {
-    const channel = new BroadcastChannel(sub.channelName);
+    const channel = new BroadcastChannel(sub.deps.channelName);
     const listener = (event: MinimalMessageEvent): void => {
       dispatchIfPresent(dispatch, msgFn(event, sub));
     };

@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
 // #region knob
 import {
   createResilientCall,
-  type DeadlineSub,
+  type DeadlinesSub,
   type FailMsg,
   type ResilientState,
   type ResilientTimerMsg,
@@ -69,7 +69,7 @@ export interface Load {
 
 export type UserMsg = Load | SucceedMsg<User> | FailMsg | ResilientTimerMsg;
 export type UserCmd = RunCmd<string>;
-export type UserSub = DeadlineSub;
+export type UserSub = DeadlinesSub;
 // #endregion model
 
 // #region on-settle
@@ -96,7 +96,7 @@ function onSettle(
 
 // #region machine
 import { defineMachine } from "@demlik/tea";
-import { subscribeDeadline } from "@demlik/tea/resilience";
+import { deadlinesSub, subscribeDeadline } from "@demlik/tea/resilience";
 
 export function userMachine(fetchUser: (id: string) => Promise<User>) {
   const machine = defineMachine({
@@ -127,13 +127,14 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
       },
     },
     // 4. Arm a timer for every call that is waiting to retry.
-    subscriptions: (s) => rc.subs(s.call),
-    subscribe: { deadline: subscribeDeadline },
+    subs: [deadlinesSub((s: UserState) => rc.subs(s.call))],
   });
   // 5. Run the port. The handler returns the settle Msg; it never dispatches.
-  //    Hand it to `run` beside the machine: `run(machine, { interpret })`.
   const interpret = rc.handlers({ run: (id) => fetchUser(id) });
-  return { machine, interpret };
+  // 6. `subscribeDeadline` arms the timers step 4 asks for. Hand both to `run`
+  //    beside the machine: `run(machine, { interpret, subscribe })`.
+  const subscribe = { deadline: subscribeDeadline };
+  return { machine, interpret, subscribe };
 }
 // #endregion machine
 
@@ -178,9 +179,10 @@ describe("docs/how-to/hand-wire-a-resilient-call.md (#271) — it runs", () => {
     const first = await driveUser(user, initial, load);
     expect(first.state.user).toBeNull();
     expect(first.state.call.calls.u1?.phase).toBe("waiting_retry");
-    expect(
-      user.machine.subscriptions(first.state).map((sub) => sub.id),
-    ).toEqual(["resilient:retry:u1"]);
+    const [timers] = user.machine.subs ?? [];
+    expect(timers?.deps(first.state)).toEqual([
+      expect.objectContaining({ id: "resilient:retry:u1" }),
+    ]);
 
     const second = await driveUser(user, first.state, retryFires);
     expect(second.state.user).toEqual(ada);

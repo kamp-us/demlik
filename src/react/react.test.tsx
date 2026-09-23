@@ -207,7 +207,7 @@ describe("useMachine", () => {
   it("unmount stops the runtime: active sub cleanups run", async () => {
     type Phase = { readonly phase: "armed" };
     type M = { readonly type: "noop" };
-    type ProbeSub = { id: string; type: "probe" } & Sub;
+    type ProbeSub = Sub<"probe", { readonly name: string }>;
     const log: string[] = [];
     const subscribe: Subscribe<M, ProbeSub, undefined> = {
       probe: () => {
@@ -226,12 +226,11 @@ describe("useMachine", () => {
       },
       init: () => [{ phase: "armed" }, []],
       update: { noop: (s) => [s, []] },
-      subscriptions: () => [{ id: "p1", type: "probe" }],
-      subscribe,
+      subs: [{ type: "probe", deps: () => ({ name: "p1" }) }],
     });
 
     function Host() {
-      useMachine(machine, { ctx: undefined });
+      useMachine(machine, { ctx: undefined, subscribe });
       return null;
     }
 

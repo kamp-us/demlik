@@ -38,7 +38,7 @@
 //     remove: (l) => chrome.alarms.onAlarm.removeListener(l),
 //   });
 //
-//   // ...then at the subscribe cell, supply the Msg projection:
+//   // ...then in the `subscribe` table handed to `run`, supply the Msg projection:
 //   subscribe: { tick: fromChromeAlarm<M>((sub, alarm) => ({ type: "tick", ... })) }
 //
 //   - `add`/`remove` receive `(listener, sub, ctx)`. The `listener` is the
@@ -105,15 +105,16 @@ export interface ListenerTarget<
  * `Args`, `S`, `Ctx` are fixed when the target is defined — they describe the
  * one listener topology this factory owns (the platform arg tuple, which Sub
  * shape it filters on, what context resolves it). `M` is supplied at the
- * subscribe cell because the same listener feeds different Msgs in different
+ * runner because the same listener feeds different Msgs in different
  * machines. Pinning `S` here (rather than at the `msgFn` step) lets
- * `add`/`remove` read the concrete Sub's fields — `sub.alarmName`,
- * `sub.channel` — with NO cast at the substrate edge: the narrowing happens in
- * author-land where the Sub shape is in scope.
+ * `add`/`remove` read the concrete Sub's deps — `sub.deps.alarmName`,
+ * `sub.deps.channel` — with NO cast at the substrate edge: the narrowing
+ * happens in author-land where the Sub shape is in scope.
  *
  * The returned function is a `SubscribeHandler` factory in the exact shape of
  * every other Sub factory in `src/subs/`: supply the `msgFn` projection, get a
- * `(sub, ctx, dispatch) => cleanup` handler assignable to `machine.subscribe`.
+ * `(sub, ctx, dispatch) => cleanup` runner for the `subscribe` table `run`
+ * takes.
  * The cleanup the author NEVER writes is `() => remove(listener, sub, ctx)`,
  * with `listener` the identical reference passed to `add`.
  */

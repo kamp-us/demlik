@@ -294,7 +294,6 @@ describe("composition — the marker lives in the Store alongside State", () => 
         },
         init: (loaded) => [loaded ?? { applied: emptyApplied() }, []],
         update,
-        subscribe: {},
       });
 
     const { storage } = fakeStorage();

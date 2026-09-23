@@ -1,11 +1,13 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Reducer } from "../../../index";
+import { defineMachine, type Reducer, subIdOf } from "../../../index";
 import { bindMachine } from "../../../testing";
 import { type SnapshotStore, snapshotSaved } from "../../persistence/snapshot";
 import {
   createMonitoredRun,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type MonitoredRunState,
   type MonitoredRunTimerMsg,
   type SnapshotSavedMsg,
@@ -606,14 +608,13 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof run.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ run: run.init() }, []],
     update,
-    subscriptions: (s) => run.subs(s.run),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => run.subs(s.run))],
   });
   return { run, machine, interpret: run.handlers({ store: fakeStore }) };
 }
@@ -646,7 +647,13 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
           { type: "step", result: { kind: "ok" }, at: 100 },
         ],
       },
-      [deadlineSub("monitored:safety:r:1", 1100)],
+      [
+        {
+          id: subIdOf("deadline", [deadlineSub("monitored:safety:r:1", 1100)]),
+          type: "deadline",
+          deps: [deadlineSub("monitored:safety:r:1", 1100)],
+        },
+      ],
     );
   });
 
@@ -697,7 +704,7 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
   // (loaded: null, NO `begin` Msg), read the watchdog the machine actually
   // desires off the booted slice, then dispatch the exact alarm that watchdog
   // would fire back THROUGH the bound machine — the same path the live runtime
-  // takes when the subscribe cell's `setTimeout(fn, 0)` lands. We assert the
+  // takes when the deadline runner's `setTimeout(fn, 0)` lands. We assert the
   // END STATE, not the hand-fed Msg. Pre-fix: subs arms the born-live deadline
   // and the run lands `failed`. Post-fix: the unstarted slice arms nothing and
   // a stray alarm cannot un-start the run.
@@ -724,10 +731,12 @@ describe("createMonitoredRun — wired in a machine (replay)", () => {
       //    tick. We synthesize that alarm from whatever the machine ACTUALLY
       //    desired (not a hard-coded id) so this test tracks the real wiring.
       const booted = bound.replay({ msgs: [] });
-      const armed = booted.subs[0]; // pre-fix: born-live deadline; post-fix: undefined
+      const first = booted.subs[0];
+      // pre-fix: born-live deadline; post-fix: undefined
+      const armed = first?.type === "deadline" ? first.deps[0] : undefined;
 
       // 2. Build the alarm Msg the armed watchdog would dispatch and RE-ENTER
-      //    it through the bound machine, the same dispatch the subscribe cell
+      //    it through the bound machine, the same dispatch the deadline runner
       //    performs. If nothing was armed there is no alarm to fire — synthesize
       //    the worst-case stray fire against the empty-runId/seq-0 slice to
       //    prove even a rogue alarm cannot un-start the run.

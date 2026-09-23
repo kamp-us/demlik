@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/jev";
 ```
 
-## Exports (64)
+## Exports (66)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -22,8 +22,10 @@ import { … } from "@demlik/tea/jev";
 | `createClassifyBatch` | Function | Build a classify-batch knob from `config`. |
 | `createJevAsk` | Function | Build a jev-ask knob from `config`. |
 | `DeadlineExceeded` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
-| `DeadlineSub` | Type | The Sub variant a deadline produces. |
+| `deadlinesSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
+| `deadlineSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `DEFAULT_CLASSIFY_MAX_ITEMS` | Variable | The default page size — the one the grill settled on for Jev. |
 | `DEFAULT_JEV_MODEL` | Variable | The model the door asks for when config names none. |
 | `isJevErr` | Function | Is `value` a JevErr? |
@@ -63,7 +65,7 @@ import { … } from "@demlik/tea/jev";
 | `JevScoreCriteria` | Type | A score question's rubric: an ORDERED list of level descriptions, at least two of them. |
 | `JevScoreQuestion` | Interface | Rate the state along an ordered rubric. |
 | `JevState` | Type | The content to evaluate: text, or structured data. |
-| `JevSub` | Type | The Sub type a host machine declares in `types.sub` — the deadline Sub `subs` emits, inherited from resilient-call. |
+| `JevSub` | Type | The Sub type a host machine declares in `types.sub` — the `deadline` Sub that arms the list `subs` returns, inherited from resilient-call. |
 | `JevSucceedMsg` | Type | The success settle Msg — resilient-call's, with `result` narrowed to JevOk. |
 | `JevText` | Type | What every `instructions` and every criterion description accepts. |
 | `JevTimerMsg` | Type | The retry / deadline timer Msg — `DeadlineExceeded`, inherited. |
@@ -73,4 +75,4 @@ import { … } from "@demlik/tea/jev";
 | `mountResilientCall` | Function | Pre-assemble a resilient-call knob into the fragments a machine definition spreads, so mounting one is a spread instead of eight hand-spliced points. |
 | `parseAnswers` | Function | Turn an `unknown` response body into the typed answers for `questions`, or into one `JevErr`. |
 | `ResilientState` | Interface | The slice. |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
+| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |

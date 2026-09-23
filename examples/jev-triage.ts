@@ -10,6 +10,7 @@ import { defineMachine, type Reducer } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import {
   createJevAsk,
+  deadlinesSub,
   type JevCmd,
   type JevFailMsg,
   type JevOk,
@@ -137,8 +138,7 @@ function expenseMachine(ask: Ask) {
         ? [loaded, []]
         : [{ resilience: ask.init(), verdicts: {} }, []],
     update: update(ask),
-    subscriptions: (s) => ask.subs(s.resilience),
-    subscribe: { deadline: subscribeDeadline },
+    subs: [deadlinesSub((s: State) => ask.subs(s.resilience))],
   });
 }
 
@@ -227,6 +227,7 @@ async function main() {
   const runtime = await run(expenseMachine(ask), {
     ctx: undefined,
     interpret: ask.handlers(),
+    subscribe: { deadline: subscribeDeadline },
   }).ready;
 
   for (const expense of EXPENSES) {

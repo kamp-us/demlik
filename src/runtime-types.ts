@@ -9,6 +9,7 @@
 
 import type {
   AnyCmdDef,
+  BuiltinSub,
   CmdOf,
   InterpretDetached,
   Machine,
@@ -24,13 +25,13 @@ import {
   assertPureResult,
   type Cmd,
   deepFreeze,
-  depsInactive,
+  desiredSub,
   detectUpdateForm,
   foldUpdates,
   lookupCell,
   NoCellError,
   Outcome,
-  structuralHash,
+  subEntriesOf,
   type UpdateForm,
 } from "./pure/core";
 
@@ -82,9 +83,8 @@ const definedPortNames = new Set<string>();
 
 /**
  * Thrown by `definePort` when a name has already been registered in the current
- * process. Symmetric with `SubIdCollisionError` (thrown by `reconcileSubs`) —
- * both mechanize invariant 7 (identity is explicit) at the runtime layer the
- * type system cannot reach (string names compared at runtime).
+ * process. It mechanizes invariant 7 (identity is explicit) at the runtime
+ * layer the type system cannot reach (string names compared at runtime).
  */
 export class PortNameCollisionError extends Error {
   override readonly name = "PortNameCollisionError";
@@ -94,25 +94,6 @@ export class PortNameCollisionError extends Error {
       `definePort: a port named "${portName}" was already defined. ` +
         `Each definePort call must use a unique name. ` +
         `If two modules need the same port, export it from one module and import it.`,
-    );
-  }
-}
-
-/**
- * Thrown by `reconcileSubs` when, within ONE desired subscription set, two subs
- * share an `id` but declare different `type`s — a silent bug class the type
- * system cannot reach (ids are strings compared at runtime). The symmetric twin
- * of `PortNameCollisionError`: both mechanize invariant 7 (identity is explicit)
- * at the runtime layer. Same id across transitions is the no-churn case and does
- * NOT throw; only a within-set type conflict does.
- */
-export class SubIdCollisionError extends Error {
-  override readonly name = "SubIdCollisionError";
-  readonly _tag = "SubIdCollisionError" as const;
-  constructor(id: string, declaredType: string, conflictingType: string) {
-    super(
-      `@demlik/tea: Sub.id collision: id="${id}" declared as ` +
-        `type="${declaredType}" and type="${conflictingType}"`,
     );
   }
 }
@@ -287,7 +268,7 @@ export class DriveFailedError<S> extends Error {
 /**
  * Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State
  * that is neither terminal nor `failed` AND nothing in the runtime can still
- * transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. Waiting
+ * transition it — no live Sub, no in-flight Cmd. Waiting
  * past that point is not the Sub-driven contract, it is a leak: no transition is
  * coming, so the drive would hang with the runtime alive and `stop()` never
  * reached. The rejection carries the stalled State on `error.state`, sibling to
@@ -882,8 +863,9 @@ export interface Runtime<
  *
  * `model` and `msg` are always named. `cmd` is named only by a machine whose
  * Cmds are hand-written records rather than `Cmd.define` constructors listed
- * under `cmds`; `sub` only by one whose Sub union `subscriptions` does not
- * imply; `ctx` only by one whose handlers read a `Ctx`.
+ * under `cmds`; `sub` only by one that declares Subs other than the built-in
+ * `timer` (its union of `Sub<type, deps>`); `ctx` only by one whose `init`
+ * reads a `Ctx` or whose handlers are typed against one.
  */
 export type MachineTypes<
   S,
@@ -1048,17 +1030,14 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
 //
 // Composes `init(loaded ?? null, ctx)` then `update(state, msg)` for each msg.
 // Returns the final state plus the cmds that *would* have been emitted and the
-// subs that *would* have been desired at the final state. It does NOT call any
+// Subs that *would* be running at the final state. It does NOT call any
 // `interpret[type]` handler, does NOT touch `Store`, and does NOT start any
-// subscription. `subscriptions` IS called to derive `subs` — that lets tests
-// assert what would be wired up without actually wiring it.
+// subscription.
 //
-// Dep-keyed Subs are reported in `depSubs`: for each `machine.subs` entry
-// active at the FINAL state (its `deps` non-null), the entry's `index` and the
-// derived `id` (`structuralHash(deps)`) — so a test can assert "the deadline +
-// checkpoint + bridge dep-subs are armed in `running`" without wiring any
-// source. Same intent as `subs` for the manual path: assert the desired set
-// purely. `source` is NEVER called (replay starts no subscription).
+// `subs` is each `machine.subs` entry that is on at the final state, as its
+// runner would see it — `{ id, type, deps }`, the id derived exactly as the
+// engine derives it — deduplicated by id the way the engine runs them. So a
+// test asserts "the retry timer is armed in `waiting`" without wiring a runner.
 export function replay<
   S,
   M extends { type: string },
@@ -1071,8 +1050,7 @@ export function replay<
 ): {
   state: S;
   cmds: C[];
-  subs: U[];
-  depSubs: { index: number; id: string }[];
+  subs: (U | BuiltinSub<M>)[];
 } {
   // Coerce undefined → null so `replay` with `loaded: undefined` calls
   // `init(null, ctx)`.
@@ -1103,23 +1081,17 @@ export function replay<
   );
   const cmds: C[] = [...initCmds, ...foldedCmds];
 
-  const subs: U[] = machine.subscriptions
-    ? [...machine.subscriptions(state)]
-    : [];
-
-  // The dep-keyed desired set at the final state — `deps` only, never `source`.
-  const depSubs: { index: number; id: string }[] = [];
-  if (machine.subs) {
-    for (const [index, entry] of machine.subs.entries()) {
-      const deps = entry.deps(state);
-      // Same gate the runtime reconciles on (`depsInactive`), not a second
-      // spelling of it — a `deps` returning `undefined` means inactive here too.
-      if (!depsInactive(deps))
-        depSubs.push({ index, id: structuralHash(deps) });
+  // The desired set at the final state, through the one derivation the
+  // engines reconcile with (`desiredSub`) — never a runner.
+  const byId = new Map<string, U | BuiltinSub<M>>();
+  for (const entry of subEntriesOf<S>(machine)) {
+    const sub = desiredSub(entry, state);
+    if (sub !== null && !byId.has(sub.id)) {
+      byId.set(sub.id, sub as U | BuiltinSub<M>);
     }
   }
 
-  return { state, cmds, subs, depSubs };
+  return { state, cmds, subs: [...byId.values()] };
 }
 
 // === wrapDetached: the typed Cmd→Msg edge for a detached interpret handler ===

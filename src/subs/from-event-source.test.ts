@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  defineMachine,
-  type NoCtx,
-  type Reducer,
-  type Sub,
-  subId,
-} from "../index";
+import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
 import { run } from "../promise";
 import { fromEventSource } from "./from-event-source";
 import type {
@@ -15,7 +9,7 @@ import type {
 } from "./platform";
 
 // Lifecycle contract under a real runtime (issue #286): the SSE connection
-// opens (url read off the Sub) when the Sub enters `subscriptions(state)`,
+// opens (url read off the Sub's deps) when its `deps` turns non-null,
 // message/error/open events route through their three callbacks into State,
 // and reconciling the Sub out detaches every listener and closes the source.
 //
@@ -59,7 +53,7 @@ class FakeEventSource implements MinimalEventSource {
   }
 }
 
-type StreamSub = Sub<"stream"> & { url: string };
+type StreamSub = Sub<"stream", { readonly url: string }>;
 type State = {
   readonly armed: boolean;
   readonly frames: readonly string[];
@@ -89,20 +83,22 @@ function streamMachine() {
     },
     init: () => [{ armed: true, frames: [], errors: 0, opens: 0 }, []],
     update,
-    subscriptions: (s) =>
-      s.armed
-        ? [{ id: subId("stream"), type: "stream", url: "https://x/sse" }]
-        : [],
-    subscribe: {
-      stream: fromEventSource<StreamSub, Msg>({
-        onMessage: (data) =>
-          data === "drop-me" ? null : { type: "frame", data },
-        onError: () => ({ type: "stream_error" }),
-        onOpen: () => ({ type: "stream_open" }),
-      }),
-    },
+    subs: [
+      {
+        type: "stream",
+        deps: (s) => (s.armed ? { url: "https://x/sse" } : null),
+      },
+    ],
   });
 }
+
+const subscribe = {
+  stream: fromEventSource<StreamSub, Msg>({
+    onMessage: (data) => (data === "drop-me" ? null : { type: "frame", data }),
+    onError: () => ({ type: "stream_error" }),
+    onOpen: () => ({ type: "stream_open" }),
+  }),
+};
 
 describe("fromEventSource — subscribe → deliver → cleanup against a real runtime", () => {
   afterEach(() => {
@@ -112,7 +108,7 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
 
   it("opens the connection at boot (url off the Sub) and routes all three event kinds", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
-    const rt = await run(streamMachine(), {}).ready;
+    const rt = await run(streamMachine(), { subscribe }).ready;
 
     expect(FakeEventSource.instances).toHaveLength(1);
     const source = FakeEventSource.instances[0];
@@ -134,7 +130,7 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
 
   it("onMessage → null drops the frame but keeps the stream attached", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
-    const rt = await run(streamMachine(), {}).ready;
+    const rt = await run(streamMachine(), { subscribe }).ready;
     const source = FakeEventSource.instances[0];
 
     source.fireMessage("drop-me");
@@ -150,26 +146,13 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
 
   it("omitted optional callbacks attach no error/open listeners at all", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
-    const machine = defineMachine({
-      types: {
-        model: {} as State,
-        msg: {} as Msg,
-        sub: {} as StreamSub,
-        ctx: {} as NoCtx,
-      },
-      init: () => [{ armed: true, frames: [], errors: 0, opens: 0 }, []],
-      update,
-      subscriptions: (s) =>
-        s.armed
-          ? [{ id: subId("stream"), type: "stream", url: "https://x/sse" }]
-          : [],
+    const rt = await run(streamMachine(), {
       subscribe: {
         stream: fromEventSource<StreamSub, Msg>({
           onMessage: (data) => ({ type: "frame", data }),
         }),
       },
-    });
-    const rt = await run(machine, {}).ready;
+    }).ready;
     const source = FakeEventSource.instances[0];
 
     expect(source.listenerCount("message")).toBe(1);
@@ -186,7 +169,7 @@ describe("fromEventSource — subscribe → deliver → cleanup against a real r
 
   it("reconciling the Sub out detaches every listener and closes the source", async () => {
     vi.stubGlobal("EventSource", FakeEventSource);
-    const rt = await run(streamMachine(), {}).ready;
+    const rt = await run(streamMachine(), { subscribe }).ready;
     const source = FakeEventSource.instances[0];
 
     await rt.dispatch({ type: "disarm" });

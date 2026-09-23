@@ -120,55 +120,64 @@ From `elm/core/src/Platform/Sub.elm`:
 Key: `subscriptions` is a **function of Model**. Subs can change based on state.
 The runtime diffs the sub list on every state change and starts/stops accordingly.
 
-### In TypeScript
+### In TypeScript (`@demlik/tea`)
 
-Subs need an identity so the runtime can diff them across transitions.
+The machine declares each Sub as data: its `type`, and the slice of state it
+depends on (`deps`). The runtime derives the rest — the id is
+`structuralHash({ type, deps })`, and `deps` returning `null` means "off".
 
 ```typescript
-type Sub =
-  | { type: "every_second"; id: string }
-  | { type: "listen_websocket"; id: string; url: string }
+type Subs =
+  | Sub<"every_second", { readonly clock: "main" }>
+  | Sub<"listen_websocket", { readonly url: string }>
 
-function subscriptions(state: Model): Sub[] {
-  const subs: Sub[] = []
-
-  // Always tick
-  subs.push({ type: "every_second", id: "clock" })
-
-  // Only listen to WS when connected
-  if (state.phase === "connected") {
-    subs.push({
+const machine = defineMachine({
+  types: { model: {} as Model, msg: {} as Msg, sub: {} as Subs },
+  init,
+  update,
+  subs: [
+    // Always tick: a constant `deps` runs for the machine's life
+    { type: "every_second", deps: () => ({ clock: "main" }) },
+    // Only listen to WS when connected; a new url restarts it
+    {
       type: "listen_websocket",
-      id: `ws-${state.url}`,
-      url: state.url,
-    })
-  }
+      deps: (state) =>
+        state.phase === "connected" ? { url: state.url } : null,
+    },
+  ],
+})
 
-  return subs
-}
-
-// Each Sub type maps to a start function that returns a cleanup function
-const subscribe = {
-  every_second: (sub, dispatch) => {
+// Each Sub type maps to a runner that returns a cleanup function. Runners are
+// code, so they sit beside the machine and are handed to `run`.
+const subscribe: Subscribe<Msg, Subs, Ctx> = {
+  every_second: (_sub, _ctx, dispatch) => {
     const id = setInterval(() => dispatch({ type: "Tick", time: Date.now() }), 1000)
     return () => clearInterval(id)
   },
-  listen_websocket: (sub, dispatch) => {
-    const ws = new WebSocket(sub.url)
+  listen_websocket: (sub, _ctx, dispatch) => {
+    const ws = new WebSocket(sub.deps.url)
     ws.onmessage = (e) => dispatch({ type: "WsMessage", data: e.data })
     return () => ws.close()
   },
 }
+
+run(machine, { ctx, interpret, subscribe })
 ```
 
-The runtime manages lifecycle:
+A one-shot countdown needs no Sub type and no runner: the built-in `timer`
+(`{ type: "timer", deps: (s) => cond ? { ms, msg } : null }`) dispatches `msg`
+once, `ms` after it starts.
+
+The runtime manages lifecycle, keyed on the derived id:
 - Same id present in old + new → leave running
-- Id removed → call cleanup
-- New id → call subscribe handler, store cleanup function
+- Id gone (`deps` null) → call cleanup
+- Id changed (`deps` changed) → cleanup the old one, start the new one
+- New id → call the runner, store its cleanup function
 
 ## The contract
 
 1. Reducers describe effects as data → never perform I/O
 2. Interpreters execute effects → return a Msg (or void for fire-and-forget)
-3. Subscribers manage lifecycles → return a cleanup function
+3. Sub runners open what a Sub watches → return a cleanup function; the
+   runtime decides when to start and stop them
 4. The runtime owns the loop: update → interpret/subscribe → dispatch → update

@@ -33,7 +33,7 @@ import {
   type AgentState,
   type AgentTurn,
   createAgent,
-  type DeadlineSub,
+  type DeadlinesSub,
   type Schema,
   type ToolCall,
 } from "@demlik/tea/agent";
@@ -149,10 +149,7 @@ async function act1Reliability() {
   );
   const guarded = withDeadline(resilient, { ms: 10_000 });
 
-  const runtime = await run(guarded.machine, {
-    ctx,
-    interpret: guarded.interpret,
-  }).ready;
+  const runtime = await run(guarded.machine, { ...guarded, ctx }).ready;
 
   say("the agent dispatched ONE tool call: weather('Istanbul')");
   await runtime.dispatch({ type: "call", city: "Istanbul", at: Date.now() });
@@ -290,7 +287,7 @@ type ResearchMachine = Machine<
   ResearchState,
   AgentMsg,
   ResearchCmd,
-  DeadlineSub,
+  DeadlinesSub,
   object
 >;
 
@@ -399,7 +396,7 @@ async function act2Durability() {
   const agentB = makeAgent({ i: 1 });
   const wiredB = agentB.toMachine<object>({ toolInterpret: toolInterpret() });
   const runtimeB = await run(wiredB.machine, {
-    interpret: wiredB.interpret,
+    ...wiredB,
     ctx: {} as object,
     store: snapshotStore(snapshot),
   }).ready;
@@ -445,7 +442,7 @@ async function act3Replay() {
   const agent = makeAgent(cursor);
   const wired = agent.toMachine<object>({ toolInterpret: toolInterpret() });
   const runtime = await run(wired.machine, {
-    interpret: wired.interpret,
+    ...wired,
     ctx: {} as object,
   }).ready;
   const rec = recorder<ResearchState, AgentMsg>(runtime);
@@ -531,12 +528,11 @@ function buildBuggyMachine(): ResearchMachine {
       model: {} as ResearchState,
       msg: {} as AgentMsg,
       cmd: {} as ResearchCmd,
-      sub: {} as DeadlineSub,
+      sub: {} as DeadlinesSub,
     },
     init: good.init,
     update: buggyUpdate,
-    subscriptions: good.subscriptions,
-    subscribe: good.subscribe,
+    subs: good.subs,
   });
 }
 

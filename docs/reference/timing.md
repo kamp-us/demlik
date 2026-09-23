@@ -17,8 +17,8 @@ import { … } from "@demlik/tea/timing";
 | `input` | Function | Feed a new input `value` arriving at clock `at` through the gates. |
 | `onFlush` | Function | Emit the pending value because the settle (debounce) window closed. |
 | `PendingInput` | Interface | A value held for the settle window: the `value` itself and the `at` it was held (the anchor the debounce deadline targets, `at + debounceMs`). |
-| `subscribeThrottledInput` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
-| `subsFor` | Function | The settle timer Sub, derived from the slice. |
+| `subscribeThrottledInput` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
+| `subsFor` | Function | The settle timer deadline, derived from the slice. |
 | `throttle` | Function | Wrap `fn` so it runs AT MOST once per `ms` window, no matter how often it is called. |
 | `Throttled` | Interface | A throttled wrapper around `fn`. |
 | `ThrottledInput` | Interface | The Model slice a throttled input owns — its visible slice (the knob principle: managed state lives in the Model, never a closure, so it is durable and replayable). |
@@ -27,5 +27,5 @@ import { … } from "@demlik/tea/timing";
 | `ThrottledInputNoCache` | Interface | The no-dedupe config variant: gates only, no cache. |
 | `throttledInputSettled` | Function | Construct the Msg the deadline dispatches. |
 | `ThrottledInputSettled` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
-| `ThrottledInputSub` | Type | The Sub variant a throttled input's settle timer produces — a `../deadline` Sub (so the window fires at the correct ABSOLUTE moment even after a late subscribe / rehydrate, and so a consumer running several gates routes each by `id`). |
+| `ThrottledInputSub` | Type | The deadline a throttled input's settle timer lists — a `../deadline` entry (so the window fires at the correct ABSOLUTE moment even after a late subscribe / rehydrate, and so a consumer running several gates routes each by `id`). |
 | `ThrottledInputWithCache` | Interface | The dedupe config variant: a per-entry TTL plus a REQUIRED `cacheKey`. |

@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (143)
+## Exports (146)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -23,6 +23,8 @@ import { … } from "@demlik/tea";
 | `AsyncSchemaError` | Class | A schema whose `validate` returned a Promise where the kernel needs an answer now — the `ok` check at the interpret edge, the `args` check in a reducer. |
 | `BootingRuntime` | Interface |  |
 | `Branded` | Type |  |
+| `BuiltinSub` | Type | The built-in Subs a machine over `M` may declare without declaring them. |
+| `BuiltinSubType` | Type | The Sub types every engine ships a runner for. |
 | `CancelTimer` | Type | Cancels a scheduled reconnect timer (the inverse of `schedule`). |
 | `Cmd` | Type | A tagged-union, one-shot effect — JSON-plain, hashable, replayable. |
 | `Cmd` | Variable |  |
@@ -30,8 +32,6 @@ import { … } from "@demlik/tea";
 | `CmdInput` | Type | The payload a constructor accepts: a plain record spread beside `type`. |
 | `CmdOf` | Type | The Cmd value a def (or a union of defs) builds. |
 | `CmdValue` | Type | The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. |
-| `CombinedManagedResources` | Interface | What `combineManagedResources` returns: the single managed-resource `subscribe` handler for the machine's `subscribe` record, and a `subs(state)` builder for `subscriptions(state)`. |
-| `combineManagedResources` | Function |  |
 | `CtxArg` | Type |  |
 | `DeclaredErrorsOf` | Type | The failures a `Cmd.define`d Cmd's handler may return: its declared tags. |
 | `defineListener` | Function | Build a listener-backed Sub factory whose cleanup is mandatory and derived. |
@@ -39,7 +39,7 @@ import { … } from "@demlik/tea";
 | `defineManagedResource` | Function | Build the battery. |
 | `DefineManagedResourceOpts` | Interface |  |
 | `definePort` | Function | Define a typed port. |
-| `DepKeyedSub` | Interface |  |
+| `DepKeyedSub` | Type |  |
 | `describeMachine` | Function |  |
 | `detectUpdateForm` | Function |  |
 | `DispatchDiscardedError` | Class | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
@@ -47,7 +47,7 @@ import { … } from "@demlik/tea";
 | `Dispose` | Type |  |
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
-| `DriveStalledError` | Class | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. |
+| `DriveStalledError` | Class | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub, no in-flight Cmd. |
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |
@@ -68,7 +68,6 @@ import { … } from "@demlik/tea";
 | `fromTransport` | Function | Build the battery. |
 | `FromTransportOpts` | Interface |  |
 | `fromWebSocket` | Function |  |
-| `GatedManagedResource` | Interface | A battery paired with a state-gate. |
 | `historyTracker` | Function | Create a bounded history tracker over a Runtime. |
 | `HistoryTracker` | Interface |  |
 | `Identity` | Interface |  |
@@ -85,8 +84,8 @@ import { … } from "@demlik/tea";
 | `MachineShape` | Type |  |
 | `MachineTypes` | Type | The `types` option: the slots of a machine's shape that no value in the object can imply, declared once as phantom values (`{} as Model`). |
 | `MalformedResult` | Type | The kernel-minted failure: a handler returned an `Ok` value the Cmd's `ok` schema rejects. |
-| `ManagedResourceBattery` | Interface | What the battery returns: a `.sub(key)` builder for `subscriptions`, the `.subscribe` handler for the machine's `subscribe` record, a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held, and a `.subIdFor(key)` for tests. |
-| `ManagedResourceSub` | Interface | The Sub the battery builds. |
+| `ManagedResourceBattery` | Interface | What the battery returns: a `.depKeyed(when)` entry for the machine's `subs`, the `.subscribe` runner for the `subscribe` table handed to `run`, and a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held. |
+| `ManagedResourceSub` | Type | The running Sub of a managed resource named `N`: its `deps` is the lifetime key. |
 | `msgKeysOf` | Function |  |
 | `nextSeq` | Function | The next sequence number to assign: one past the highest `seq` in the buffer, or `0` for an empty buffer. |
 | `NO_ACK` | Variable | The "nothing applied yet" cursor — the ack value for a server that has applied no client input at all. |
@@ -111,7 +110,7 @@ import { … } from "@demlik/tea";
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |
 | `replay` | Function |  |
-| `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers, plus optional `subscribe` runners. |
+| `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers and the SubscribeArg sub runners. |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |
@@ -131,8 +130,9 @@ import { … } from "@demlik/tea";
 | `Sub` | Type |  |
 | `subId` | Function | Construct a `SubId` from a string. |
 | `SubId` | Type |  |
-| `SubIdCollisionError` | Class | Thrown by `reconcileSubs` when, within ONE desired subscription set, two subs share an `id` but declare different `type`s — a silent bug class the type system cannot reach (ids are strings compared at runtime). |
+| `subIdOf` | Function | The one `id` of a Sub: a structural hash of its `type` and its `deps` value. |
 | `Subscribe` | Type |  |
+| `SubscribeArg` | Type | The `subscribe` option of an engine's `run`: one runner per Sub type the machine declares, except the built-ins (`timer`) the engine already ships. |
 | `SubscribeHandler` | Type |  |
 | `Supervision` | Type | Declared supervision policy for a reducer (`update`) throw, at `run(machine, { supervision })`. |
 | `SupervisionStrategy` | Type | The three declared reducer-throw supervision strategies. |
@@ -140,11 +140,13 @@ import { … } from "@demlik/tea";
 | `Tagged` | Type | The shape every settled failure has (ADR 0011): a plain `_tag` record. |
 | `TaggedError` | Type | One declared failure per tag. |
 | `tagSeq` | Function | Tag a command/`Msg` with its sequence number. |
+| `TimerDeps` | Type | The `deps` a `timer` Sub declares: fire `msg` once, `ms` after it starts. |
+| `TimerSub` | Type | The built-in `timer` Sub, as its runner sees it. |
 | `Transitions` | Type | The state × message table form of `update`. |
 | `Transport` | Interface | Duplex transport. |
-| `TransportBattery` | Interface | What the battery returns: a Sub builder (for `subscriptions`), the Sub's `subscribe` handler (for `subscribe.transport`), and a `send(key, outbound)` helper the consumer's Cmd handler calls. |
+| `TransportBattery` | Interface | What the battery returns: a `.depKeyed(when)` entry for the machine's `subs`, the `.subscribe` runner for the `subscribe` table handed to `run`, and a `send(key, outbound)` helper the consumer's Cmd handler calls. |
 | `TransportFactory` | Type | Factory the consumer wires to a platform-specific transport. |
-| `TransportSub` | Interface | The Sub the battery builds. |
+| `TransportSub` | Type | The running Sub of a seam named `N`: its `deps` is the seam key. |
 | `tryApplyCell` | Function | `applyCell`, with "no handler for this Msg" moved into the return type instead of a throw. |
 | `tryFoldMsgs` | Function | `foldMsgs`, with the "no handler for this Msg" case in the return type, INCLUDING which message failed. |
 | `tryInterpret` | Function |  |
@@ -152,4 +154,5 @@ import { … } from "@demlik/tea";
 | `UpdateForm` | Type |  |
 | `WebSocketFactoryOpts` | Interface |  |
 | `WebSocketSubData` | Type |  |
+| `Wired` | Type | A machine beside the handlers it runs under — what a wrapper, a battery's `toMachine` or an agent host hands around, and what an engine takes apart: `run(wired.machine, { ...wired, ctx })`. |
 | `wrapDetached` | Function |  |

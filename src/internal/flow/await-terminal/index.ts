@@ -147,11 +147,13 @@ export function awaitTerminal<
  *
  * The seed carries the machine's `ctx` (conditionally optional, exactly as
  * `run`'s `ctx` — a pure machine omits it), the handlers `run` takes beside the
- * machine (`interpret`, optional `subscribe`), and the `msgs` to dispatch once
- * booted. A `timeoutMs` in `opts` bounds the await identically to `awaitTerminal`.
+ * machine (`interpret`, and `subscribe` when its Subs need runners), and the
+ * `msgs` to dispatch once
+ * booted. A `timeoutMs` in `opts` bounds the await identically to
+ * `awaitTerminal`.
  *
  * @param machine    the machine to boot.
- * @param seed       `{ ctx?, interpret, msgs }` — the boot context, the
+ * @param seed       `{ ctx?, interpret, subscribe?, msgs }` — the boot context, the
  *                   handlers, and the seed messages.
  * @param isTerminal caller-supplied terminal predicate over the machine's state.
  * @param opts       optional bounded `timeoutMs` deadline (see {@link AwaitTerminalOptions}).

@@ -95,6 +95,15 @@ subscriptions model =
   else Time.every 1000 Tick
 ```
 
+In `@demlik/tea` the gate lives on the Sub's own entry: `deps` returning `null`
+is `Sub.none` for that one Sub, and a constant `deps` is always-on.
+```ts
+subs: [
+  { type: "ws", deps: () => ({ channel: "main" }) },                    // always-on
+  { type: "clock", deps: (s) => (s.paused ? null : { everyMs: 1000 }) }, // gated
+]
+```
+
 ## Decision 5: Msg arm vs log
 
 | Your error... | Handle in reducer (Msg arm) | Log and drop |

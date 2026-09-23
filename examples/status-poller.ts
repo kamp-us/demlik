@@ -1,9 +1,10 @@
-import { type Cmd, defineMachine, type Interpret, type Sub } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import { createPoller, type PollerState } from "@demlik/tea/flow";
 import {
   type DeadlineExceeded,
-  type DeadlineSub,
+  type DeadlinesSub,
+  deadlinesSub,
   subscribeDeadline,
 } from "@demlik/tea/resilience";
 
@@ -43,19 +44,12 @@ function readStatusCmds(cmds: readonly Cmd[]): readonly ReadStatus[] {
   return cmds.filter((c): c is ReadStatus => c.type === "read_status");
 }
 
-// `poll.subs` is typed to the base `Sub` — the poller does not leak its own Sub
-// shape — so the machine narrows to the one variant its `subscribe` table
-// handles, the same way `readStatusCmds` narrows the Cmd side.
-function isDeadlineSub(sub: Sub): sub is DeadlineSub {
-  return sub.type === "deadline";
-}
-
 export const statusPoller = defineMachine({
   types: {
     model: {} as State,
     msg: {} as Msg,
     cmd: {} as ReadStatus,
-    sub: {} as DeadlineSub,
+    sub: {} as DeadlinesSub,
     ctx: {} as Ctx,
   },
   init: (loaded) =>
@@ -85,8 +79,8 @@ export const statusPoller = defineMachine({
     },
   },
 
-  subscriptions: (s) => poll.subs(s.poll).filter(isDeadlineSub),
-  subscribe: { deadline: subscribeDeadline },
+  // The poller lists its tick deadline; one `deadline` Sub arms it.
+  subs: [deadlinesSub((s: State) => poll.subs(s.poll))],
 });
 
 // The Cmd handlers ride beside the machine, never on it: `run` takes them.
@@ -121,6 +115,7 @@ async function main() {
 
   const runtime = await run(statusPoller, {
     interpret: statusPollerInterpret,
+    subscribe: { deadline: subscribeDeadline },
     ctx: { readStatus: fakeSource(), clock },
   }).ready;
 

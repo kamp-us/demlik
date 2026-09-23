@@ -11,6 +11,7 @@ import { toMermaid } from "@demlik/tea/machine-viz";
 import { createIntake, type IntakeCmd } from "@demlik/tea/idempotency";
 import {
   createPaginatedWalk,
+  deadlinesSub as walkDeadlines,
   type PageErrMsg,
   type PageOkMsg,
   type PaginatedWalkState,
@@ -20,7 +21,8 @@ import {
 import { recorder, replayTrace } from "@demlik/tea/persistence";
 import {
   createResilientCall,
-  type DeadlineSub,
+  type DeadlinesSub,
+  deadlinesSub as auditDeadlines,
   type FailMsg,
   type ResilientState,
   type RunCmd,
@@ -239,7 +241,7 @@ const walkMachine = defineMachine({
     model: {} as WalkState,
     msg: {} as WalkMsg,
     cmd: {} as WalkCmd,
-    sub: {} as DeadlineSub,
+    sub: {} as DeadlinesSub,
     ctx: {} as WalkCtx,
   },
   init: (loaded) =>
@@ -262,11 +264,11 @@ const walkMachine = defineMachine({
       return [{ walk }, cmds];
     },
   },
-  subscriptions: (s) => crawler.subs(s.walk),
-  subscribe: { deadline: subscribeWalkDeadline },
+  subs: [walkDeadlines((s: WalkState) => crawler.subs(s.walk))],
 });
 
 // The machine is data; its handlers ride beside it into `run`.
+const walkSubscribe = { deadline: subscribeWalkDeadline };
 const walkInterpret: Interpret<WalkMsg, WalkCmd, WalkCtx> = {
   resilient_run: tryInterpret<WalkCmd, SitemapPage, WalkMsg, WalkCtx>(
     (cmd, ctx) => ctx.fetchPage(cmd.input),
@@ -301,7 +303,11 @@ async function runCrawlSubRun(): Promise<readonly string[]> {
     if (page === undefined) throw new Error(`no sitemap page ${cursor}`);
     return page;
   };
-  const runtime = await run(walkMachine, { ctx: { fetchPage }, interpret: walkInterpret }).ready;
+  const runtime = await run(walkMachine, {
+    ctx: { fetchPage },
+    interpret: walkInterpret,
+    subscribe: walkSubscribe,
+  }).ready;
   const discovered: string[] = [];
   runtime.observe((msg) => {
     if (msg !== null && msg.type === "resilient_ok") {
@@ -345,7 +351,7 @@ const auditMachine = defineMachine({
     model: {} as AuditCallState,
     msg: {} as AuditCallMsg,
     cmd: {} as AuditCallCmd,
-    sub: {} as DeadlineSub,
+    sub: {} as DeadlinesSub,
     ctx: {} as AuditCtx,
   },
   init: (loaded) =>
@@ -373,8 +379,7 @@ const auditMachine = defineMachine({
       return [{ resilience }, cmds];
     },
   },
-  subscriptions: (s) => auditCall.subs(s.resilience),
-  subscribe: { deadline: subscribeAuditDeadline },
+  subs: [auditDeadlines((s: AuditCallState) => auditCall.subs(s.resilience))],
 });
 
 // The machine is data; its handlers ride beside it into `run`.
@@ -427,6 +432,7 @@ async function runAuditSubRun(url: string): Promise<AuditFinding> {
   const runtime = await run(auditMachine, {
     ctx: { callAuditEngine },
     interpret: auditInterpret,
+    subscribe: { deadline: subscribeAuditDeadline },
   }).ready;
   auditClock += 1;
   await runtime.dispatch({ type: "audit_start", url, at: auditClock });
@@ -524,8 +530,8 @@ const toolInterpret: Interpret<Msg, ToolCmd, AgentCtx> = {
   },
 };
 
-const { machine: agentMachine, interpret: agentInterpret } =
-  agent.toMachine<AgentCtx>({ toolInterpret });
+const agentWired = agent.toMachine<AgentCtx>({ toolInterpret });
+const agentMachine = agentWired.machine;
 
 type ReportSink = {
   readonly shipReport: (report: string) => Promise<string>;
@@ -665,10 +671,7 @@ async function main() {
 
   line("the agent loop, narrated");
 
-  const runtime = await run(agentMachine, {
-    ctx,
-    interpret: agentInterpret,
-  }).ready;
+  const runtime = await run(agentMachine, { ...agentWired, ctx }).ready;
   const rec = recorder(runtime);
 
   let lastStage: Stage | undefined;
@@ -783,7 +786,7 @@ async function main() {
   };
 
   const uploaderRuntime = await run(optimusUploader.machine, {
-    interpret: optimusUploader.interpret,
+    ...optimusUploader,
     ctx: {
       shipReport,
       telemetrySink: (e) => {

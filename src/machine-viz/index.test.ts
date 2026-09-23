@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Cmd, defineMachine } from "../index";
+import { Cmd, defineMachine, type Sub } from "../index";
 import { toMermaid } from "./index";
 
 // ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ describe("toMermaid — subscriptions annotation", () => {
     types: {
       model: {} as SubState,
       msg: {} as { type: "start" } | { type: "stop" },
-      sub: {} as { type: "tick"; id: import("../index").SubId },
+      sub: {} as Sub<"tick", { readonly phase: "running" }>,
       ctx: {} as Record<string, never>,
     },
     init: (loaded) => [loaded ?? { type: "idle" }, Cmd.none],
@@ -151,16 +151,16 @@ describe("toMermaid — subscriptions annotation", () => {
         stop: () => [{ type: "idle" }, Cmd.none],
       },
     },
-    subscriptions: (state) =>
-      state.type === "running"
-        ? [{ type: "tick", id: "tick" as import("../index").SubId }]
-        : [],
-    subscribe: {
-      tick: (_sub, _ctx, _dispatch) => () => {},
-    },
+    subs: [
+      {
+        type: "tick",
+        deps: (state) =>
+          state.type === "running" ? { phase: "running" } : null,
+      },
+    ],
   });
 
-  it("annotates active subs per sampled state, calling subscriptions (not subscribe)", () => {
+  it("annotates active subs per sampled state, reading each entry's `deps` (never a runner)", () => {
     const out = toMermaid(withSubs, {
       samples: {
         states: { idle: { type: "idle" }, running: { type: "running" } },

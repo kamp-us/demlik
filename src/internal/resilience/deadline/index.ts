@@ -3,9 +3,16 @@
  * deadline is reached.
  *
  * Generalizes the recurring "auto-fail a machine at T+N" / "15-minute stale
- * guard" pattern: a Sub whose `subscriptions(state)` returns it only while the
- * deadline should be armed, and which dispatches a single `DeadlineExceeded`
- * Msg when the wall clock crosses `atMs`.
+ * guard" pattern: a deadline a battery lists only while it should be armed,
+ * which dispatches a single `DeadlineExceeded` Msg when the wall clock crosses
+ * `atMs`.
+ *
+ * A battery's `subs(slice)` returns its deadlines as a LIST (`DeadlineSub[]`,
+ * one per retry timer, say). A machine declares that list as ONE Sub of type
+ * `"deadline"` whose `deps` is the list (`deadlinesSub(select)`), and the
+ * `deadline` runner arms every deadline in it. A change to the list restarts
+ * the runner, which re-arms each deadline for its REMAINING time — `atMs` is
+ * absolute, so a restart never moves a deadline.
  *
  * Difference from `fromTimeout` (relative — "fire after N ms"): a deadline is
  * an ABSOLUTE target. The delay is computed at subscribe time as
@@ -18,10 +25,9 @@
  * reconcile pass — the substrate must finish wiring all subs before any Msg
  * lands).
  *
- * Composition over reinvention: the timer lifecycle is `fromTimeout`'s, not
- * redrawn here. `deadlineSub` produces the Sub literal carrying `atMs`; the
- * `subscribe` handler (`subscribeDeadline`) translates `atMs` → a relative delay
- * and delegates the `setTimeout` / `clearTimeout` to `fromTimeout`. The clock
+ * `deadlineSub` produces one deadline literal carrying `atMs`; the runner
+ * (`subscribeDeadline`) translates each `atMs` → a relative delay and arms a
+ * `setTimeout` / `clearTimeout` pair per deadline. The clock
  * read (`Date.now()`) lives only in the subscribe handler — never in a reducer
  * (invariant 2) — and is exercised in tests via vitest fake timers, matching
  * the no-injection convention of the `fromTimeout` / `fromInterval` exemplars.
@@ -47,25 +53,56 @@
  * reconcile pass leaves it running across transitions instead of churning it).
  */
 
-import { type Sub, type SubId, subId } from "../../../index";
-import { fromTimeout } from "../../../subs/from-timeout";
-import type { SubscribeHandler } from "../../../subs/types";
+import type { DepKeyedSub, Dispose, Sub, SubId } from "../../../index";
+import { subId } from "../../../index";
 
 /**
- * The Sub variant a deadline produces. `atMs` is the absolute target — epoch
+ * One deadline, as a battery lists it. `atMs` is the absolute target — epoch
  * milliseconds (the `Date.now()` / `Date.parse(...)` scale), NOT a relative
- * delay. It rides on the Sub so the reconcile pass keys identity by `id`
- * alone: the same `id` across transitions means the same armed timer, even if
- * a later `subscriptions(state)` recomputes the literal.
+ * delay. `id` names the deadline inside its list: it rides on the dispatched
+ * Msg so a reducer can tell WHICH deadline fired, and a registry-backed timer
+ * (a DO alarm slot) keys its entry on it.
  *
- * Lowercase `"deadline"` discriminant per the Sub naming convention (a source
- * noun that doubles as the SubId family); same shape family as the
- * `TimeoutSubData` the `fromTimeout` factory consumes.
+ * It is plain data — it becomes part of the `deadline` Sub's `deps`, which the
+ * engine hashes — and is not itself a running Sub.
  */
-export type DeadlineSub<N extends string | undefined = undefined> =
-  Sub<"deadline"> & {
-    readonly atMs: number;
-  } & DeadlineOpts<N>;
+export type DeadlineSub<N extends string | undefined = undefined> = {
+  readonly id: SubId;
+  readonly type: "deadline";
+  readonly atMs: number;
+} & DeadlineOpts<N>;
+
+/**
+ * The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines
+ * to arm. Name it in `types.sub` for a machine that arms deadlines.
+ */
+export type DeadlinesSub<N extends string | undefined = undefined> = Sub<
+  "deadline",
+  readonly DeadlineSub<N>[]
+>;
+
+/**
+ * The `deps` of a `deadline` Sub: the list, or `null` when it is empty — an
+ * empty list is a Sub with nothing to arm, and an off Sub is not a live one
+ * (`driveToDone` reads live Subs to tell a waiting machine from a stalled one).
+ */
+export function deadlines<N extends string | undefined = undefined>(
+  list: readonly DeadlineSub<N>[],
+): readonly DeadlineSub<N>[] | null {
+  return list.length === 0 ? null : list;
+}
+
+/**
+ * The `subs` entry that arms whatever deadlines `select` lists at a state:
+ *
+ *   subs: [deadlinesSub((s: State) => rc.subs(s.resilience))],
+ *   // run(machine, { subscribe: { deadline: subscribeDeadline } })
+ */
+export function deadlinesSub<S, N extends string | undefined = undefined>(
+  select: (state: S) => readonly DeadlineSub<N>[],
+): DepKeyedSub<S, DeadlinesSub<N>> {
+  return { type: "deadline", deps: (state) => deadlines(select(state)) };
+}
 
 /**
  * Additive options the `deadlineSub` factory folds onto the Sub literal. This
@@ -127,19 +164,17 @@ export type DeadlineMsgType<N extends string | undefined> = N extends string
   : "deadline_exceeded";
 
 /**
- * Build a deadline Sub literal. Pure data — no clock read, no timer; the timer
- * is armed later by the `subscribe` cell. `id` is branded via `subId(...)` so
+ * Build a deadline literal. Pure data — no clock read, no timer; the timer
+ * is armed later by the `deadline` runner. `id` is branded via `subId(...)` so
  * accidental raw-string drift fails at the type level (invariant 7).
  *
- * Return the result directly from `subscriptions(state)` while the deadline
- * should be armed; drop it (return `[]`, or stop returning this id) to disarm —
- * the reconcile pass calls the cleanup, clearing the pending timer before it
- * fires. That is the "cancel on state exit" lifecycle, identical to
- * `fromTimeout`'s.
+ * List it from a battery's `subs(slice)` while the deadline should be armed;
+ * drop it to disarm — the engine restarts the `deadline` Sub, whose cleanup
+ * clears the pending timer before it fires. That is the "cancel on state exit"
+ * lifecycle.
  *
- * @param id   Stable identity for this deadline. Same `id` across transitions =
- *             same armed timer (no churn). Use distinct ids for distinct
- *             deadlines on the same machine.
+ * @param id   Identity for this deadline, echoed on the Msg it fires. Use
+ *             distinct ids for distinct deadlines on the same machine.
  * @param atMs Absolute target in epoch milliseconds (e.g. `Date.now() + 900_000`
  *             for a 15-minute guard, or a persisted `expiresAt`).
  * @param opts Optional additive fields folded onto the Sub literal (see
@@ -162,10 +197,9 @@ export function deadlineSub<N extends string | undefined = undefined>(
  * (DO alarm registry, `setTimeout`, fake timer) and return a cleanup that
  * cancels the pending fire.
  *
- * `id` is the Sub's reconcile id — a registry-backed host (the DO alarm slot)
- * keys its entry on `id` so the cleanup deletes the EXACT entry the substrate
- * reconciled. A `setTimeout`-backed host ignores `id` (the closure holds the
- * handle).
+ * `id` is the deadline's own id — a registry-backed host (the DO alarm slot)
+ * keys its entry on `id` so the cleanup deletes the EXACT entry it armed. A
+ * `setTimeout`-backed host ignores `id` (the closure holds the handle).
  *
  * The host computes the gap itself: `atMs - Date.now()` is the REMAINING time.
  * On a host that just rehydrated after hibernation that gap is the shrunken
@@ -181,19 +215,22 @@ export type ArmTimer<M> = (
 ) => () => void;
 
 /**
- * Build the `subscribe["deadline"]` cell from a host-plugged `armTimer`. This
- * module owns the Sub shape, the anchor, and the Msg; the HOST owns what backs
- * the timer. The returned handler reads `id` + `atMs` off the Sub, builds the
- * `deadlineExceeded(...)` Msg, and hands all three to `armTimer`.
+ * Build the `deadline` runner from a host-plugged `armTimer`. This module owns
+ * the deadline shape, the anchor, and the Msg; the HOST owns what backs the
+ * timer. The runner arms every deadline in the Sub's `deps` list — reading
+ * `id` + `atMs`, building the `deadlineExceeded(...)` Msg and handing all three
+ * to `armTimer` — and its cleanup cancels them all.
  *
  * Use it when `setTimeout` is the wrong backing — most concretely a Durable
  * Object, which hibernates and must register a `do_alarm` instead:
  *
- *   subscribe: {
- *     deadline: subscribeWith((id, atMs, msg, dispatch) =>
- *       alarms.register(id, atMs, () => dispatch(msg)),
- *     ),
- *   }
+ *   run(machine, {
+ *     subscribe: {
+ *       deadline: subscribeWith((id, atMs, msg, dispatch) =>
+ *         alarms.register(id, atMs, () => dispatch(msg)),
+ *       ),
+ *     },
+ *   })
  *
  * For the `setTimeout` default, use {@link subscribeDeadline} — it is exactly
  * `subscribeWith(setTimeoutArmTimer())`, so there is one deadline surface and
@@ -201,14 +238,24 @@ export type ArmTimer<M> = (
  */
 export function subscribeWith<N extends string | undefined = undefined>(
   armTimer: ArmTimer<DeadlineExceeded<N>>,
-): SubscribeHandler<DeadlineSub<N>, DeadlineExceeded<N>, unknown> {
-  return (sub, _ctx, dispatch) =>
-    armTimer(
-      sub.id,
-      sub.atMs,
-      deadlineExceeded(sub.id, sub.atMs, sub.name),
-      dispatch,
+): (
+  sub: DeadlinesSub<N>,
+  ctx: unknown,
+  dispatch: (msg: DeadlineExceeded<N>) => void,
+) => Dispose {
+  return (sub, _ctx, dispatch) => {
+    const cancels = sub.deps.map((deadline) =>
+      armTimer(
+        deadline.id,
+        deadline.atMs,
+        deadlineExceeded(deadline.id, deadline.atMs, deadline.name),
+        dispatch,
+      ),
     );
+    return () => {
+      for (const cancel of cancels) cancel();
+    };
+  };
 }
 
 /**
@@ -216,62 +263,53 @@ export function subscribeWith<N extends string | undefined = undefined>(
  * a plain `setTimeout`. Arms for the REMAINING time (`max(0, atMs - Date.now())`,
  * floored at 0 so an already-past deadline fires on the NEXT tick rather than
  * synchronously inside the reconcile pass), so a deadline re-derived after a
- * rehydrate fires at the original instant, not a fresh full window.
- *
- * Composes on `fromTimeout` rather than redrawing `setTimeout` /
- * `clearTimeout`: this package has ONE timer lifecycle, and the arm-timer seam
- * plugs into it instead of forking it. A hibernating host does NOT use this —
- * it plugs its own `armTimer` (a `do_alarm` registration) into
- * {@link subscribeWith}.
+ * rehydrate — or re-armed by a restart — fires at the original instant, not a
+ * fresh full window. A hibernating host does NOT use this — it plugs its own
+ * `armTimer` (a `do_alarm` registration) into {@link subscribeWith}.
  */
 export function setTimeoutArmTimer<
   N extends string | undefined = undefined,
 >(): ArmTimer<DeadlineExceeded<N>> {
-  return (id, atMs, msg, dispatch) => {
-    // Recompute the remaining delay from the CURRENT clock so a late subscribe
-    // (post-rehydrate) still targets the correct absolute moment.
-    const delayMs = Math.max(0, atMs - Date.now());
-    return fromTimeout<
-      Sub<"deadline"> & { delayMs: number },
-      DeadlineExceeded<N>
-    >(() => msg)({ id, type: "deadline", delayMs }, undefined, dispatch);
+  return (_id, atMs, msg, dispatch) => {
+    // Recompute the remaining delay from the CURRENT clock so a late start
+    // (post-rehydrate, or a restart) still targets the same absolute moment.
+    const handle = setTimeout(
+      () => dispatch(msg),
+      Math.max(0, atMs - Date.now()),
+    );
+    return () => clearTimeout(handle);
   };
 }
 
 /**
- * The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. Arms a
- * one-shot timer for the remaining delay `max(0, atMs - Date.now())` and
- * dispatches `deadlineExceeded(...)` when it fires; returns a cleanup that
- * clears the pending timer.
+ * The `deadline` runner for the DEFAULT `setTimeout` backing. Arms a one-shot
+ * timer per listed deadline for its remaining delay `max(0, atMs - Date.now())`
+ * and dispatches `deadlineExceeded(...)` when each fires; the cleanup clears
+ * every pending timer.
  *
  * It is `subscribeWith(setTimeoutArmTimer())` — the default backing named, not
  * a separate implementation, so the host-plugged path and the default path can
  * never disagree about the anchor.
  *
- * Assign directly to a `Subscribe` handler:
+ *   run(machine, { subscribe: { deadline: subscribeDeadline } })
  *
- *   subscribe: {
- *     deadline: subscribeDeadline,
- *   }
- *
- * Generic in the deadline's name so ONE handler serves every knob in a machine:
- * the tag it dispatches is read off the Sub's own `name`, so a machine mounting
- * a named knob beside an unnamed one wires this same cell once and each Sub
- * still dispatches its own tag.
+ * Generic in the deadline's name so ONE runner serves every knob in a machine:
+ * the tag it dispatches is read off each deadline's own `name`, so a machine
+ * listing a named knob's deadlines beside an unnamed one's wires this once.
  */
 export const subscribeDeadline: <N extends string | undefined = undefined>(
-  sub: DeadlineSub<N>,
+  sub: DeadlinesSub<N>,
   ctx: unknown,
   dispatch: (msg: DeadlineExceeded<N>) => void,
-) => () => void = <N extends string | undefined>(
-  sub: DeadlineSub<N>,
+) => Dispose = <N extends string | undefined>(
+  sub: DeadlinesSub<N>,
   ctx: unknown,
   dispatch: (msg: DeadlineExceeded<N>) => void,
 ) => subscribeWith<N>(setTimeoutArmTimer<N>())(sub, ctx, dispatch);
 
 /**
  * Construct the Msg the deadline dispatches. Exported so consumers can build /
- * assert the same shape (and so the subscribe cell and tests share one
+ * assert the same shape (and so the runner and tests share one
  * constructor rather than two literals that can drift).
  */
 export function deadlineExceeded<N extends string | undefined = undefined>(

@@ -28,8 +28,9 @@
  * `battery` tier (MAINTAINING.md): a published named pattern over the kernel,
  * which may break in a minor provided the changelog for that minor says so.
  *
- * `monitored-run` and `reconciler` both re-export the deadline Sub trio
- * (`DeadlineSub`, `deadlineSub`, `subscribeDeadline`) from the one declaration
+ * `monitored-run` and `reconciler` both re-export the deadline primitives
+ * (`DeadlineSub`, `DeadlinesSub`, `deadlineSub`, `deadlinesSub`,
+ * `subscribeDeadline`) from the one declaration
  * in `internal/resilience/deadline`, so the repeat is one symbol seen twice,
  * not two symbols contending for a name. Nothing is dropped.
  */

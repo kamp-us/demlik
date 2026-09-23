@@ -73,8 +73,8 @@
  *   // `mountResilientCall` pre-assembles the wiring. The settle cells run the
  *   // inherited verb and hand the ALREADY-settled model to `onOk` / `onErr`,
  *   // so the fold-before-settle order that wedges the slice at `running` is
- *   // not something a mounted cell can express; `subscribe` and `interpret`
- *   // ride along, so neither can be forgotten.
+ *   // not something a mounted cell can express; `subs`, `subscribe` and
+ *   // `interpret` ride along, so none can be forgotten.
  *   const mounted = mountResilientCall(llm, {
  *     slice: "resilience",
  *     attempt: {
@@ -91,11 +91,10 @@
  *   // in the machine:
  *   init: () => [{ ...mounted.init(), output: null, failure: null }, []],
  *   update: { ...mounted.update },
- *   subscriptions: mounted.subscriptions,
- *   subscribe: mounted.subscribe,
+ *   subs: mounted.subs,
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: mounted.interpret });
+ *   run(machine, { interpret: mounted.interpret, subscribe: mounted.subscribe });
  *
  * The slice stays a plain readable field at `resilience`, and every verb above
  * is still exported: a consumer that wants a settle cell the mount cannot
@@ -111,7 +110,9 @@ import {
   createResilientCall,
   type DeadlineExceeded,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FailMsg,
   liftResilience,
   mountResilientCall,
@@ -530,7 +531,7 @@ export function createLlmCall<
     return rc.onTimer(s, msg);
   }
 
-  /** Pre-wired subs — resilient-call's retry-timer subscriptions. */
+  /** The call's deadlines — resilient-call's retry and deadline timers. */
   function subs(s: State): readonly DeadlineSub[] {
     return rc.subs(s);
   }
@@ -739,11 +740,12 @@ export function liftLlmCall<
 }
 
 /**
- * Re-export the deadline Sub primitives (inherited from resilient-call) so
- * consumers wire one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal `subs` emits. `mountResilientCall` rides
+ * Re-export the deadline primitives (inherited from resilient-call) so
+ * consumers wire one import: `subscribeDeadline` is the `deadline` runner,
+ * `deadlinesSub` the machine's `subs` entry, and `deadlineSub` builds the entry
+ * `subs` lists. `mountResilientCall` rides
  * the same import for the same reason — a knob from this module mounts with no
  * second package specifier.
  */
-export { subscribeDeadline, deadlineSub, mountResilientCall };
-export type { DeadlineSub, DeadlineExceeded, ResilientState };
+export { subscribeDeadline, deadlineSub, deadlinesSub, mountResilientCall };
+export type { DeadlineSub, DeadlinesSub, DeadlineExceeded, ResilientState };

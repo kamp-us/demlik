@@ -25,12 +25,15 @@
 //
 // What the author NEVER writes again:
 //
-//   - The `Sub` shape, the `subscribe` cell, the `cleanup` Promise dance.
+//   - The runner, the `cleanup` Promise dance.
 //   - The transport-close → `*_lost` Msg wiring.
 //   - The "find the live socket from inside an interpret handler" lookup.
 //   - The keepalive / heartbeat / sequence-number ceremony (none of those
 //     belong in the machine — that's Rule 9: lifetime-bound resources are
 //     Subs, not state-machine cells).
+//
+// The seam's `name` IS its Sub type, so two seams in one machine (`hands` +
+// `worker`) are two Sub types with two runners — they never collide.
 //
 // Host-pluggable: the battery takes a `TransportFactory`, not a concrete
 // WebSocket. A Durable Object passes a workerd `WebSocket` adapter; a worker
@@ -48,8 +51,8 @@
 // lifecycle, not hand-driven by the consumer's cells).
 // ---------------------------------------------------------------------------
 
-import type { DepKeyedSub, Sub, SubId } from "../index";
-import { structuralHash, subId } from "../index";
+import type { DepKeyedSub, Dispose, Sub } from "../index";
+import { structuralHash } from "../index";
 
 /**
  * Duplex transport. The host (DO, worker thread, in-process bus) constructs
@@ -61,8 +64,8 @@ export interface Transport {
   send(data: string): void;
   /**
    * Subscribe to inbound frames. Returns a cleanup that removes the listener.
-   * The battery wires this in its Sub's subscribe handler; cleanup runs when
-   * the phase exits (the substrate's reconcileSubs).
+   * The battery wires this in its runner; cleanup runs when the seam's key
+   * goes null or changes.
    */
   onMessage(listener: (data: string) => void): () => void;
   /**
@@ -76,28 +79,31 @@ export interface Transport {
 
 /**
  * Factory the consumer wires to a platform-specific transport. The battery
- * passes the runtime-derived key (`runId`, or whatever identity is on the
- * phase) so per-run transports can be addressed.
+ * passes the seam's key (`runId`, or whatever identity is on the phase) so
+ * per-run transports can be addressed.
  */
 export type TransportFactory<K> = (key: K) => Transport;
 
 /**
- * The Sub the battery builds. The consumer's `Sub` union includes
- * `TransportSub<TKey>` directly — no wrapping needed, the substrate
- * reconciles by `id` and `type` like any other Sub.
+ * The running Sub of a seam named `N`: its `deps` is the seam key. The
+ * consumer's Sub union (`types.sub`) includes it directly.
  */
-export interface TransportSub<TKey> extends Sub<"transport"> {
-  /** The phase / run identity. Stable for the lifetime of the seam. */
-  readonly key: TKey;
-}
+export type TransportSub<N extends string, TKey> = Sub<N, TKey>;
 
-export interface FromTransportOpts<TKey, Inbound, Outbound, M, Ctx> {
+export interface FromTransportOpts<
+  N extends string,
+  TKey,
+  Inbound,
+  Outbound,
+  M,
+  Ctx,
+> {
   /**
-   * A short, stable name for this seam. The Sub id is derived from
-   * `${name}:${stringify(key)}` so two seams in the same machine (e.g.
-   * `hands` + `worker`) never collide.
+   * A short, stable name for this seam — and its Sub `type`. The machine's
+   * `subscribe` table holds the seam's runner under it, so it must be unique
+   * among the machine's Sub types.
    */
-  readonly name: string;
+  readonly name: N;
 
   /**
    * Build the transport. The battery owns the lifetime; the factory is the
@@ -135,64 +141,52 @@ export interface FromTransportOpts<TKey, Inbound, Outbound, M, Ctx> {
 }
 
 /**
- * What the battery returns: a Sub builder (for `subscriptions`), the Sub's
- * `subscribe` handler (for `subscribe.transport`), and a `send(key, outbound)`
- * helper the consumer's Cmd handler calls. Plus a `subIdFor` factory the
- * consumer can use when keying related Subs (e.g. a deadline) to the same seam
- * identity.
+ * What the battery returns: a `.depKeyed(when)` entry for the machine's
+ * `subs`, the `.subscribe` runner for the `subscribe` table handed to `run`,
+ * and a `send(key, outbound)` helper the consumer's Cmd handler calls.
  */
-export interface TransportBattery<TKey, Outbound, M, Ctx> {
-  /**
-   * Build the Sub for `subscriptions(state)`. The consumer calls this from
-   * inside their `subscriptions` cell when the seam should be open.
-   */
-  readonly sub: (key: TKey) => TransportSub<TKey>;
+export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
+  /** The seam's Sub type — its `name`. */
+  readonly type: N;
 
   /**
-   * The `subscribe.transport` handler. Drop straight into the machine's
-   * `subscribe` record — the battery wires inbound + close in one shot.
-   */
-  readonly subscribe: (
-    sub: TransportSub<TKey>,
-    ctx: Ctx,
-    dispatch: (msg: M) => void,
-  ) => () => void;
-
-  /**
-   * Outbound send. The Cmd handler calls this; the battery's handle table
-   * (built when subscribe ran) routes to the live transport. If the seam
-   * is closed (no active sub), the send is dropped honestly (logged, not
-   * thrown — the reducer already moved past caring, same shape as Rule 2
-   * fire-and-forget Cmds).
-   */
-  readonly send: (key: TKey, outbound: Outbound) => void;
-
-  /** Pre-derived subId for `(key)` — handy for deadline Subs keyed to the same seam. */
-  readonly subIdFor: (key: TKey) => SubId;
-
-  /**
-   * Pair this seam with a state-gate, producing a dep-keyed Sub for the
-   * machine's `subs` array. `when(state)` returns the seam's KEY when it
-   * should be open, or `null` when it should be torn down. The kernel derives
-   * the id from `structuralHash(key)` and reconciles the seam's lifetime — so
-   * the author neither lists this Sub in a central `subscriptions(state)` nor
-   * writes its id. Replaces `subscriptions: (s) => active(s) ? [hands.sub(...)] : []`
-   * + `subscribe: { transport: hands.subscribe }` with one `subs` entry.
-   *
-   * The `source` closes over the battery's own `subscribe` (open inbound +
-   * close, wire the handle table) using the same `ctx` the kernel passes every
-   * Sub source.
+   * The `subs` entry. `when(state)` returns the seam's KEY when it should be
+   * open, or `null` when it should be torn down. The key is the Sub's `deps`,
+   * so the engine derives the id from it: an unchanged key leaves the seam
+   * open, a changed key closes it and opens a fresh one. Plain
+   * JSON-compatible data only — the id hash throws on anything else.
    */
   readonly depKeyed: <S>(
     when: (state: S) => TKey | null,
-  ) => DepKeyedSub<S, M, Ctx>;
+  ) => DepKeyedSub<S, TransportSub<N, TKey>>;
+
+  /**
+   * The runner for this seam's Sub type — hand it to `run` as
+   * `subscribe: { [seam.type]: seam.subscribe }`. Wires inbound + close in
+   * one shot and publishes the live transport to the outbound handle table.
+   */
+  readonly subscribe: (
+    sub: TransportSub<N, TKey>,
+    ctx: Ctx,
+    dispatch: (msg: M) => void,
+  ) => Dispose;
+
+  /**
+   * Outbound send, addressed by the seam's key (never the derived Sub id,
+   * which the caller cannot know). The Cmd handler calls this; the battery's
+   * handle table (built when the runner started) routes to the live
+   * transport. If the seam is closed (no running Sub), the send is dropped
+   * honestly (logged, not thrown — the reducer already moved past caring,
+   * same shape as Rule 2 fire-and-forget Cmds).
+   */
+  readonly send: (key: TKey, outbound: Outbound) => void;
 }
 
 /**
  * Build the battery. One call per seam at the machine's host file.
  *
  * @example
- *   const handsSeam = fromTransport<RunId, HandsInbound, HandsOutbound, Msg, Ctx>({
+ *   const handsSeam = fromTransport<"hands", RunId, HandsInbound, HandsOutbound, Msg, Ctx>({
  *     name: "hands",
  *     openTransport: (runId, ctx) => ctx.openHandsWs(runId),
  *     parseInbound: (raw) => parseHandsInbound(JSON.parse(raw)),
@@ -202,20 +196,35 @@ export interface TransportBattery<TKey, Outbound, M, Ctx> {
  *   });
  *
  *   // In the machine:
- *   subscriptions: (state) => state.type === "auditing" ? [handsSeam.sub(state.runId)] : [],
- *   subscribe: { transport: handsSeam.subscribe },
+ *   types: { …, sub: {} as TransportSub<"hands", RunId> },
+ *   subs: [
+ *     handsSeam.depKeyed((s: State) =>
+ *       s.type === "auditing" ? s.runId : null,
+ *     ),
+ *   ],
+ *
+ *   // At run:
+ *   run(machine, { interpret, subscribe: { hands: handsSeam.subscribe } });
  *
  *   // In interpret:
  *   send_hands: async (cmd) => { handsSeam.send(cmd.runId, cmd.outbound); },
  */
-export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
-  opts: FromTransportOpts<TKey, Inbound, Outbound, M, Ctx>,
-): TransportBattery<TKey, Outbound, M, Ctx> {
+export function fromTransport<
+  N extends string,
+  TKey,
+  Inbound,
+  Outbound,
+  M,
+  Ctx,
+>(
+  opts: FromTransportOpts<N, TKey, Inbound, Outbound, M, Ctx>,
+): TransportBattery<N, TKey, Outbound, M, Ctx> {
   // Handle table — one live transport per key. Lives in this closure for the
   // lifetime of the battery (i.e. the machine's lifetime). Interpret-local;
   // never crosses into reducer state. The same shape as a brain's
   // `pending: Map<callId, deferred>`: imperative handles in a Map keyed on
-  // run-identity, not on durable state.
+  // run-identity, not on durable state — and on the author's key, not the
+  // derived Sub id, because `send` is addressed by that key.
   const live = new Map<string, Transport>();
 
   // Single-sourced on the kernel's `structuralHash`: `"1"` (string) and `1`
@@ -223,23 +232,15 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
   // send or overwrite the wrong live transport; non-JSON keys throw loudly.
   const keyString = (k: TKey): string => structuralHash(k);
 
-  const subIdFor = (key: TKey): SubId =>
-    subId(`${opts.name}:${keyString(key)}`);
-
-  const sub = (key: TKey): TransportSub<TKey> => ({
-    id: subIdFor(key),
-    type: "transport",
-    key,
-  });
-
-  const subscribe: TransportBattery<TKey, Outbound, M, Ctx>["subscribe"] = (
-    s,
-    ctx,
-    dispatch,
-  ) => {
+  const subscribe = (
+    sub: TransportSub<N, TKey>,
+    ctx: Ctx,
+    dispatch: (msg: M) => void,
+  ): Dispose => {
+    const key = sub.deps;
     // Open the transport. The battery owns the lifetime.
-    const t = opts.openTransport(s.key, ctx);
-    const k = keyString(s.key);
+    const t = opts.openTransport(key, ctx);
+    const k = keyString(key);
 
     // ACQUIRE-AS-SUCCESS-VALUE: wire EVERYTHING first, publish to the handle
     // table last. An adapter over an already-CLOSING socket throws while
@@ -256,9 +257,9 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
     try {
       // Wire inbound. Parse boundary lives here per invariant 8.
       offMessage = t.onMessage((raw) => {
-        const parsed = opts.parseInbound(raw, s.key);
+        const parsed = opts.parseInbound(raw, key);
         if (parsed === null) return;
-        const msg = opts.onInbound(parsed, s.key);
+        const msg = opts.onInbound(parsed, key);
         if (msg === null) return;
         dispatch(msg);
       });
@@ -267,7 +268,7 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
       // numbers, no "is the peer still alive" derivation: the transport's
       // own close IS the liveness signal.
       offClose = t.onClose(() => {
-        dispatch(opts.lostMsg(s.key));
+        dispatch(opts.lostMsg(key));
       });
     } catch (err) {
       offMessage?.();
@@ -287,7 +288,7 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
 
     live.set(k, t);
 
-    // Cleanup runs when the substrate's reconcileSubs leaves the phase.
+    // Cleanup runs when the seam's key goes null or changes.
     return () => {
       offMessage?.();
       offClose?.();
@@ -303,7 +304,15 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
   };
 
   return {
-    sub,
+    type: opts.name,
+
+    depKeyed: <S>(
+      when: (state: S) => TKey | null,
+    ): DepKeyedSub<S, TransportSub<N, TKey>> => ({
+      type: opts.name,
+      deps: when,
+    }),
+
     subscribe,
 
     send: (key, outbound) => {
@@ -319,21 +328,5 @@ export function fromTransport<TKey, Inbound, Outbound, M, Ctx>(
       }
       t.send(opts.serializeOutbound(outbound));
     },
-
-    subIdFor,
-
-    // Dep-keyed entry: `when` is the gate (the deps slice → the seam key);
-    // `source` re-runs `when(state)` to recover the typed key and opens the seam
-    // via the battery's own `subscribe`. The kernel only calls `source` when
-    // `deps(state)` was non-null, so `when` is non-null here; the key type never
-    // escapes the entry (cast-free existential).
-    depKeyed: <S>(when: (state: S) => TKey | null): DepKeyedSub<S, M, Ctx> => ({
-      deps: when,
-      source: (state, dispatch, ctx) => {
-        const key = when(state);
-        if (key === null) return () => {};
-        return subscribe(sub(key), ctx, dispatch);
-      },
-    }),
   };
 }

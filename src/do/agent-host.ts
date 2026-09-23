@@ -18,11 +18,11 @@ import {
 import type {
   BootingRuntime,
   Cmd,
-  Interpret,
-  Machine,
+  CtxArg,
   Runtime,
   Store,
   Sub,
+  Wired,
 } from "../index";
 import { run } from "../promise";
 import { autoBoot } from "./resume";
@@ -76,22 +76,19 @@ export interface AgentHostConfig<
   Ctx = unknown,
 > {
   /**
-   * Build the wired agent machine and the `interpret` table it runs under (a
-   * machine carries no handlers — #278). Called once per host build (per
-   * activation), AFTER the previous runtime — if any — was torn down. The
-   * consumer wires its per-tool interpret here, and `agent.toMachine({
-   * toolInterpret })` already returns exactly this pair.
+   * Build the wired agent machine and the handlers it runs under — its
+   * `interpret` table and `subscribe` runners (a machine carries none — #278,
+   * #279). Called once per host build (per activation), AFTER the previous
+   * runtime — if any — was torn down. The consumer wires its per-tool interpret
+   * here, and `agent.toMachine({ toolInterpret })` already returns exactly this.
    */
-  readonly buildMachine: () => {
-    readonly machine: Machine<
-      AgentState<Stage, P, O, R>,
-      AgentMachineMsg<P, O, R>,
-      C,
-      U,
-      Ctx
-    >;
-    readonly interpret: Interpret<AgentMachineMsg<P, O, R>, C, Ctx>;
-  };
+  readonly buildMachine: () => Wired<
+    AgentState<Stage, P, O, R>,
+    AgentMachineMsg<P, O, R>,
+    C,
+    U,
+    Ctx
+  >;
   /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
   readonly store: Store<AgentState<Stage, P, O, R>>;
   /** The plain Ctx the machine threads to its interpret cells. */
@@ -231,10 +228,14 @@ export function createAgentHost<
     // SEMANTIC event projector (#47) so `runtime.on(...)` lights up, then drive
     // the SSE hub off that named stream (never the private-Msg firehose). The
     // `terminal` predicate makes `result()` / `done()` meaningful (#46).
-    const { machine, interpret } = config.buildMachine();
-    const booting: BootingRuntime<S, M, E> = run(machine, {
-      interpret,
-      ctx: config.ctx,
+    const wired = config.buildMachine();
+    // `ctx` goes in as its own `CtxArg<Ctx>`: over a generic `Ctx` that
+    // conditional stays deferred, and tsc relates it only to itself, not to an
+    // object that spreads the handlers beside it.
+    const ctxArg = { ctx: config.ctx } as CtxArg<Ctx>;
+    const booting: BootingRuntime<S, M, E> = run(wired.machine, {
+      ...wired,
+      ...ctxArg,
       store: config.store,
       events: agentEvents<Stage, P, O, R>(),
       terminal: isTerminal,

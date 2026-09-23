@@ -3,8 +3,8 @@
 //
 // The canonical cross-runtime coordination pattern in @demlik/tea: one
 // runtime emits to a typed Port; another runtime's machine declares an
-// `audit-idle`-shaped Sub whose subscribe handler attaches to the
-// publisher's Port. The recurring 4-line shape at every such cell:
+// `audit-idle`-shaped Sub whose runner attaches to the publisher's Port.
+// The recurring 4-line shape at every such runner:
 //
 //   "audit-idle": (_sub, ctx, dispatch) =>
 //     ctx.auditRuntime.subscribePort(auditIdlePort, (value) => {
@@ -33,7 +33,7 @@
 //      first param so the caller never re-asserts the payload shape.
 //
 // Strengthens invariant 9 (the cross-runtime Port topology is named at
-// one factory site instead of redrawn at every subscribe cell).
+// one factory site instead of redrawn at every runner).
 // ---------------------------------------------------------------------------
 
 import type { Port, Runtime, Sub } from "../index";

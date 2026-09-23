@@ -56,9 +56,9 @@ export * from "../internal/resilience/circuit-breaker";
 export * from "../internal/resilience/deadline";
 export * from "../internal/resilience/rate-limit";
 // `resilient-call`, enumerated rather than starred, so `DeadlineConfig` stays
-// `with-deadline`'s. The deadline Sub trio it also re-exports is omitted from
-// both blocks below only because `../internal/resilience/deadline` above is the
-// one declaration of each and already carries them through.
+// `with-deadline`'s. The deadline Sub primitives it also re-exports are
+// omitted from both blocks below only because `../internal/resilience/deadline`
+// above is the one declaration of each and already carries them through.
 export type {
   CacheConfig,
   CallBudget,

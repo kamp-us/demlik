@@ -141,8 +141,9 @@ does not type-check.
 That is the whole recipe: a transient failure moves the machine to
 `waiting_retry` with `retryAtMs` set to a backed-off future time, and a success
 resets the slice with `initRetry()`. To fire the scheduled retry automatically,
-declare a `deadlineSub` at `retryAtMs` — see the `resilient-fetch` example for
-the timer wiring.
+list a `deadlineSub` at `retryAtMs` in the machine's `subs` through
+`deadlinesSub`, and hand `run` the `subscribeDeadline` runner — see the
+`resilient-fetch` example for the timer wiring.
 
 ## 6. Retry a `defineAgent`'s brain call
 

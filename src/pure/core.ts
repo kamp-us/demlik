@@ -1029,7 +1029,7 @@ export function msgKeysOf(machine: {
 // This is a DERIVED READING over the table, deliberately NOT a property on the
 // machine. It has to be: every `withX` wrapper builds a fresh flat
 // `Record<string, Cell>`, casts it to `Reducer`, and returns a NEW object
-// literal carrying `init`/`update`/`subscriptions`/`subscribe` plus the
+// literal carrying `init`/`update`/`subs` plus the
 // base's `cmds` — the one property a wrapper forwards on purpose,
 // because `run`'s interpret edge reads it (#66). Any OTHER property hung on a
 // machine is destroyed by the first wrap, and the wrapped table is
@@ -1364,26 +1364,58 @@ export function subId(s: string): SubId {
   return s as SubId;
 }
 
-// === Sub: tagged-union, continuous source of msgs; stable id used for diff/reconcile ===
-export type Sub<T extends string = string> = {
+// === Sub: a running subscription, as its runner sees it ===
+//
+// A machine never builds one of these. It declares `{ type, deps(state) }` in
+// `subs` (see `DepKeyedSub`), and the engine derives the rest: `deps` is the
+// value `deps(state)` returned, and `id` is `structuralHash({ type, deps })`.
+// So a runner reads its data off `sub.deps`, and `id` changes exactly when the
+// type or the deps value does — which is when the engine restarts the runner.
+export type Sub<T extends string = string, D = unknown> = {
   readonly id: SubId;
   readonly type: T;
+  readonly deps: D;
 };
 
-// === Dispose: the cleanup a dep-keyed Sub's source returns ===
+// === Dispose: the cleanup a sub runner returns ===
 //
-// A `source` opens a resource and returns the function that closes it. The
-// substrate's reconcile calls it when the Sub's `deps` go null (torn down) or
-// change (re-armed: old `Dispose` then a fresh `source`). Same contract as the
-// `() => void` cleanup every `subscribe[type]` handler returns — named so a
-// dep-keyed Sub's `source` reads as "open → returns close".
+// A runner opens a resource and returns the function that closes it. The
+// engine calls it when the Sub's `deps` go null (torn down), change (restarted:
+// old `Dispose`, then a fresh runner) or when the runtime stops. A returned
+// Promise is awaited by `stop()` (bounded).
 export type Dispose = () => void | Promise<void>;
+
+// === Built-in sub runners: names every engine ships ===
+//
+// Each engine ships a runner for these Sub types, so a machine declares one
+// and passes no `subscribe` entry for it (#270 R1.1). A `subscribe` entry of
+// the same name handed to `run` replaces the built-in (#270 R2.1) — a test
+// swaps in a fake clock that way.
+//
+// `timer` dispatches `deps.msg` once, `deps.ms` after it starts. A changed
+// `ms` or `msg` is a changed `deps`, so the engine restarts the countdown.
+/** The `deps` a `timer` Sub declares: fire `msg` once, `ms` after it starts. */
+export type TimerDeps<M> = { readonly ms: number; readonly msg: M };
+/** The built-in `timer` Sub, as its runner sees it. */
+export type TimerSub<M> = Sub<"timer", TimerDeps<M>>;
+/** The Sub types every engine ships a runner for. */
+export type BuiltinSubType = "timer";
+/** The built-in Subs a machine over `M` may declare without declaring them. */
+export type BuiltinSub<M> = TimerSub<M>;
+
+/**
+ * The one `id` of a Sub: a structural hash of its `type` and its `deps`
+ * value. Same type and same deps → same id → the running Sub is left alone.
+ */
+export function subIdOf(type: string, deps: unknown): SubId {
+  return subId(structuralHash({ type, deps }));
+}
 
 // === depsInactive: the dep-keyed gate, defined ONCE ===
 //
-// "This Sub has no slice in this state" is one fact read by two places — the
-// runtime's `reconcileDepSubs` and `replay`'s desired-set projection — so it
-// gets one definition rather than a `deps === null` written twice.
+// "This Sub has no slice in this state" is one fact every engine's reconcile
+// and `replay`'s desired set read (all through `desiredSub`), so it gets one
+// definition rather than a `deps === null` written at each.
 //
 // It reads NULLISH, not `null`. `(s) => s.runId` over an optional field is the
 // natural projection an author writes, and it yields `undefined` on the states
@@ -1482,7 +1514,11 @@ function stableStringify(value: unknown): string {
       );
     }
     const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
+    // A key holding `undefined` is an absent key, as in JSON: `{ name:
+    // undefined }` and `{}` are one slice, so they are one id.
+    const keys = Object.keys(obj)
+      .filter((k) => obj[k] !== undefined)
+      .sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
   }
   // bigint / symbol — not JSON-representable; same class of error as function.
@@ -1492,60 +1528,70 @@ function stableStringify(value: unknown): string {
   );
 }
 
-// === DepKeyedSub<S, M, Ctx>: a Sub whose identity AND gate fall out of `deps` ===
+// === DepKeyedSub<S, U>: what a machine declares in `subs` ===
 //
-// The author declares the slice of state the Sub depends on (`deps`) and how
-// to open the resource for that slice (`source`). The substrate derives BOTH:
+// The machine names a Sub's `type` and the slice of state it depends on
+// (`deps`). That is all it says — a Sub is data (#251 R1.4, spike #252). The
+// engine derives the rest:
 //
-//   - the **id** = `structuralHash(deps(state))` — changes exactly when the
-//     slice changes (re-arm), stable otherwise (no churn). The author never
-//     writes `subId(...)` — the hand-written subId was the drift away from
-//     Elm's structural identity, which this restores.
-//   - the **gate** = `deps(state)` returning `null` ⇒ inactive in this state
-//     (dispose if running); non-null ⇒ active. The substrate folds every
-//     `DepKeyedSub` into its own active set, so the author deletes the central
-//     `subscriptions(state)` aggregate — there is no list to forget to edit
-//     when a new phase is added (a per-Sub gate travels with the Sub).
+//   - the **gate** = `deps(state)` nullish ⇒ off in this state (stopped if
+//     running); anything else ⇒ on.
+//   - the **id** = `structuralHash({ type, deps })` — changes exactly when the
+//     slice changes (restart), stable otherwise (left alone). A constant `deps`
+//     (`() => ({ name: "main" })`) is a Sub that runs for the machine's life.
+//   - the **runner** = `subscribe[type]` handed to `run`, or the engine's
+//     built-in of that name (`timer`). The runner gets `{ id, type, deps }`.
 //
-// This is the FoldKit `modelToDependencies` shape: a Sub names the state slice
-// it depends on, the kernel keys on that slice. The manual `subscriptions?:`
-// field stays as the documented escape hatch (see `Machine`).
+// This is the FoldKit `modelToDependencies` shape, and Elm's: a Sub names the
+// state slice it depends on, the kernel keys on that slice, and the code that
+// opens the resource lives with the host, never on the machine.
 //
-// `source` returns a `Dispose`. On a `deps` change the substrate runs the old
-// `Dispose` then re-runs `source` with the new deps (re-arm); on `deps` going
-// null it runs `Dispose` (teardown). The same reconcile machinery the manual
-// `Sub` path uses (`reconcileSubs` in `../promise/run.ts`) — no second loop.
+// `DepKeyedSub<S, U>` distributes over the Sub union `U`: each variant
+// `Sub<T, D>` becomes `{ type: T; deps: (state: S) => D | null | undefined }`,
+// so an entry's `deps` is checked against the data its runner will read.
 //
-// Strengthens invariant 4 (external lifecycle owned by the substrate — the
-// dep-keyed Sub is reconciled, never hand-driven) and invariant 7 (identity is
-// explicit — derived deterministically from `deps`, never an ad-hoc string).
-export interface DepKeyedSub<S, M, Ctx = unknown> {
-  /**
-   * The slice of state this Sub depends on. `null` OR `undefined` ⇒ the Sub is
-   * inactive in this state (the substrate disposes it if it was running) — see
-   * `depsInactive`, so `(s) => s.optionalRunId` gates correctly. Otherwise the
-   * Sub is active, keyed on `structuralHash(deps)`.
-   *
-   * Pure (invariant 2). Plain JSON-compatible data only (invariant 1) — the
-   * structural hash walks it deterministically and THROWS on a `Date`, `Map`,
-   * `Set`, `Error` or class instance rather than collapsing them all onto one
-   * id. Project such a value first (`startedAt.toISOString()`).
-   */
+// Strengthens invariant 4 (external lifecycle owned by the substrate) and
+// invariant 7 (identity derived, never hand-authored).
+export type DepKeyedSub<S, U extends Sub = Sub> =
+  U extends Sub<infer T, infer D>
+    ? {
+        readonly type: T;
+        /**
+         * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+         * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+         * correctly. Pure (invariant 2). Plain JSON-compatible data only
+         * (invariant 1): the structural hash THROWS on a `Date`, `Map`, `Set`,
+         * `Error` or class instance rather than collapsing them onto one id.
+         */
+        readonly deps: (state: S) => D | null | undefined;
+      }
+    : never;
+
+// === desiredSub: one entry's Sub at one state, derived ONCE ===
+//
+// The engines' reconcile and `replay`'s desired set both ask "what Sub does
+// this entry want in this state?", so the answer has one definition: `null`
+// when the entry is off, else `{ id, type, deps }` with the derived id. It may
+// throw — `deps` is user code, and `structuralHash` refuses non-plain data —
+// and each caller decides what a throw means for it.
+/** An entry of `Machine.subs`, read structurally (its `U` erased). */
+export type SubEntry<S> = {
+  readonly type: string;
   readonly deps: (state: S) => unknown;
-  /**
-   * Open the resource for the current `state` (whose `deps` the kernel just
-   * found non-null). Receives `dispatch` to fire follow-up Msgs (a timer's
-   * fire, an inbound frame) and the machine's `ctx` (the host's transport
-   * factory, storage handles). Returns the `Dispose` the substrate runs on
-   * teardown / re-arm. Same role as a `subscribe[type]` handler's returned
-   * cleanup.
-   *
-   * `source` takes `state` (not the deps slice) so the slice type `D` never
-   * escapes the entry — each battery's `.depKeyed` closes over its own typed
-   * deps internally (cast-free existential: the entry that produced the deps
-   * is the entry that consumes them).
-   */
-  readonly source: (state: S, dispatch: (msg: M) => void, ctx: Ctx) => Dispose;
+};
+
+/** The entries of `machine.subs`, read structurally. */
+export function subEntriesOf<S>(machine: {
+  readonly subs?: ReadonlyArray<unknown>;
+}): readonly SubEntry<S>[] {
+  return (machine.subs ?? []) as readonly SubEntry<S>[];
+}
+
+/** The Sub `entry` wants at `state`, or `null` when it is off there. */
+export function desiredSub<S>(entry: SubEntry<S>, state: S): Sub | null {
+  const deps = entry.deps(state);
+  if (depsInactive(deps)) return null;
+  return { id: subIdOf(entry.type, deps), type: entry.type, deps };
 }
 
 // === Identity<S, M>: declare the instance's identity once; the kernel drops
@@ -1775,23 +1821,21 @@ export type InterpretDetached<
   dispatch: (msg: Allowed) => void,
 ) => Promise<void>;
 
-// === Subscribe<M, U, Ctx>: record-of-handlers form of `subscribe` ===
+// === Subscribe<M, U, Ctx>: the sub runners an engine is handed at run ===
 //
-// Flat dispatch table keyed by `Sub.type`. Each cell receives the narrowed
-// Sub, the Ctx, and a `dispatch` to fire follow-up Msgs. Returns a cleanup
-// function the substrate calls when the Sub is reconciled out (state
-// transitioned away). The mapped type guarantees every Sub variant has a
-// handler at the type level; runtime dispatch is a single property lookup.
+// Flat table keyed by `Sub.type`. Each runner receives the running Sub
+// (`{ id, type, deps }`), the Ctx, and a `dispatch` to fire follow-up Msgs, and
+// returns the `Dispose` the engine calls when the Sub stops. The mapped type
+// guarantees every Sub variant has a runner at the type level.
 //
-// The cleanup shares `Dispose`'s shape: a returned Promise is AWAITED by
-// `stop()` (bounded), so an async teardown a host relies on before evicting the
-// isolate actually completes. Mid-run reconcile does not await it — the
-// reconcile pass is synchronous by construction (invariant 2) — but the promise
-// is tracked from the moment it exists, so `stop()` catches it either way.
+// A returned Promise from the `Dispose` is AWAITED by `stop()` (bounded), so an
+// async teardown a host relies on before evicting the isolate actually
+// completes. Mid-run reconcile does not await it — the reconcile pass is
+// synchronous by construction (invariant 2) — but the promise is tracked from
+// the moment it exists, so `stop()` catches it either way.
 //
-// Hoisted out of `Machine.subscribe` so consumers can type a free-standing
-// handler dictionary with `Subscribe<MyMsg, MySub, MyCtx>` instead of
-// re-declaring the mapped type at every subs module.
+// A runner's `dispatch` never runs a transition on the runner's own call
+// stack (spike #260): the engine queues the Msg behind the step in progress.
 //
 // Strengthens invariant 7 (identity is explicit — the Sub variant set is
 // load-bearing at the type level).
@@ -1825,19 +1869,54 @@ export type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [
   : { interpret: Interpret<M, C, Ctx> };
 
 /**
+ * The `subscribe` option of an engine's `run`: one runner per Sub type the
+ * machine declares, except the built-ins (`timer`) the engine already ships.
+ * Optional when every declared type is a built-in. An entry named after a
+ * built-in replaces it (#270 R2.1), which is how a test drives time.
+ */
+export type SubscribeArg<M extends { type: string }, U extends Sub, Ctx> = [
+  Exclude<U["type"], BuiltinSubType>,
+] extends [never]
+  ? {
+      readonly subscribe?: Partial<
+        // `Exclude` drops the subless marker `Sub<never>`, whose `never` type
+        // would otherwise match every key.
+        Subscribe<M, Exclude<U, Sub<never>> | BuiltinSub<M>, Ctx>
+      >;
+    }
+  : {
+      readonly subscribe: Subscribe<
+        M,
+        Exclude<U, { readonly type: BuiltinSubType }>,
+        Ctx
+      > &
+        Partial<Subscribe<M, BuiltinSub<M>, Ctx>>;
+    };
+
+/**
  * The handlers an engine is handed beside a machine: the {@link InterpretArg}
- * Cmd handlers, plus optional `subscribe` runners. A `subscribe` entry here
- * replaces the machine's own runner of the same Sub type, so a test can swap
- * one runner (a fake clock, a stub socket) without redefining the machine.
+ * Cmd handlers and the {@link SubscribeArg} sub runners. A machine carries
+ * neither — it is data, and one machine file runs under any engine.
  */
 export type RunHandlers<
   M extends { type: string },
   C extends Cmd,
   U extends Sub,
   Ctx,
-> = InterpretArg<M, C, Ctx> & {
-  readonly subscribe?: Partial<Subscribe<M, U, Ctx>>;
-};
+> = InterpretArg<M, C, Ctx> & SubscribeArg<M, U, Ctx>;
+
+/**
+ * A machine beside the handlers it runs under — what a wrapper, a battery's
+ * `toMachine` or an agent host hands around, and what an engine takes apart:
+ * `run(wired.machine, { ...wired, ctx })`.
+ */
+export type Wired<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = { readonly machine: Machine<S, M, C, U, Ctx> } & RunHandlers<M, C, U, Ctx>;
 
 // === Machine: pure data, host-agnostic ===
 //
@@ -1855,11 +1934,11 @@ export type RunHandlers<
 // `M` is constrained to `{ type: string }` because both record forms require
 // a string discriminant.
 //
-// A machine carries no Cmd handlers (#251 R1.1). `interpret` is code, and the
-// machine is data: the handlers arrive where the machine is run —
-// `run(machine, { interpret })`, `useMachine(machine, { interpret })` — so one
-// machine file runs unchanged under any engine. The conditional requiredness
-// the field used to carry lives on {@link InterpretArg} now.
+// A machine carries no handlers (#251 R1.1, R1.4). `interpret` and the sub
+// runners are code, and the machine is data: they arrive where the machine is
+// run — `run(machine, { interpret, subscribe })`, `useMachine(machine, { … })`
+// — so one machine file runs unchanged under any engine. Their conditional
+// requiredness lives on {@link RunHandlers}.
 export type Machine<
   S,
   M extends { type: string },
@@ -1902,24 +1981,27 @@ export type Machine<
     // member.
     | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
   /**
-   * Dep-keyed Subs. Each declares the state slice it depends on; the substrate
-   * derives the id (`structuralHash(deps)`) and the gate (`deps` non-null) and
-   * folds them into the SAME reconcile loop `subscriptions` feeds. The author
-   * never writes `subId(...)` and never lists Subs in a central
-   * `subscriptions(state)` aggregate — a per-Sub gate travels with the Sub, so
-   * a new phase can't silently forget to arm it.
+   * The machine's Subs, as data: each entry names a Sub `type` and the state
+   * slice it depends on (`deps`). The engine derives the id
+   * (`structuralHash({ type, deps })`) and the gate (`deps` non-null), starts
+   * the runner for `type` when an entry turns on, leaves it alone while the id
+   * holds, restarts it when the id changes, and stops it on `null` or `stop()`.
    *
-   * The deps slice type is erased to `unknown` per entry — each Sub's slice
-   * differs, but the slice type never crosses this field (the kernel only needs
-   * to hash it and pass `state` back to that same entry's `source`).
-   *
-   * Optional and independent of `subscriptions` / `subscribe`: a machine that
-   * omits `subs` reconciles exactly as before.
+   * `U` is the machine's own Sub union (`types.sub`); the built-in `timer`
+   * (`{ type: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
    *
    * Strengthens invariant 4 (lifecycle owned by the substrate) and invariant 7
    * (identity derived, not hand-authored).
    */
-  subs?: ReadonlyArray<DepKeyedSub<S, M, Ctx>>;
+  readonly subs?: ReadonlyArray<DepKeyedSub<S, U | BuiltinSub<M>>>;
+  /**
+   * Phantom — never assigned, never read. `subs` reaches `U` only through a
+   * conditional type, which is no inference site, so this is the slot a caller
+   * like `run(machine, …)` infers the Sub union from (and so what types its
+   * `subscribe` runners). Same device as `Cmd`'s `__ok`. Tuple-wrapped so an
+   * empty union (`never`) is still a candidate rather than `undefined`.
+   */
+  readonly __sub?: readonly [U];
   /**
    * Instance-identity filter. Declares THIS instance's identity once; the
    * substrate drops any message addressed to a DIFFERENT identity before it
@@ -1938,14 +2020,6 @@ export type Machine<
    */
   identity?: Identity<S, M>;
   /**
-   * Manual Sub aggregate — the documented escape hatch, KEPT alongside `subs`.
-   * The machine that needs cross-Sub logic the per-Sub `deps` fold can't
-   * express lists Subs here; the substrate reconciles them via `subscribe`.
-   * Both paths feed ONE reconcile pass.
-   */
-  subscriptions?: (state: S) => readonly U[];
-  subscribe?: Subscribe<M, U, Ctx>;
-  /**
    * The update form ("reducer" | "transitions"), stamped non-enumerably by
    * `defineMachine` at construction (see `UpdateForm` / `formOf`). Optional in
    * the type so the structural `Machine` annotation form keeps accepting plain
@@ -1953,18 +2027,7 @@ export type Machine<
    * `detectUpdateForm` when the tag is absent. Never written by hand.
    */
   readonly __form?: UpdateForm;
-  // `subscribe`/`subscriptions` are conditionally REQUIRED (#276): a machine
-  // declaring a real Sub union without a subscribe map compiled and silently
-  // wired no subs (`reconcileSubs` skips undefined handlers). The optional
-  // declarations above stay as U's inference sites (a conditional type is not
-  // an inference site); the intersection below only adds requiredness when U
-  // is a real union. The tuple-wrap disables distribution.
-} & ([U] extends [Sub<never>]
-  ? unknown
-  : {
-      subscriptions: (state: S) => readonly U[];
-      subscribe: Subscribe<M, U, Ctx>;
-    });
+};
 
 // === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
 //

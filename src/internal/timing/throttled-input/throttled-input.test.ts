@@ -1,8 +1,12 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine } from "../../../index";
+import { defineMachine, subIdOf } from "../../../index";
 import { bindMachine } from "../../../testing";
-import { deadlineSub } from "../../resilience/deadline";
+import {
+  type DeadlinesSub,
+  deadlineSub,
+  deadlinesSub,
+} from "../../resilience/deadline";
 import {
   createThrottledInput,
   initThrottledInput,
@@ -360,6 +364,13 @@ describe("throttledInputSettled — the settle Msg constructor", () => {
   });
 });
 
+// The running `deadline` Sub whose deps list one settle deadline — what the
+// runner receives, and what `replay` reports while a value is held.
+function settleSub(id: string, atMs: number): DeadlinesSub {
+  const deps = [deadlineSub(id, atMs)];
+  return { id: subIdOf("deadline", deps), type: "deadline", deps };
+}
+
 describe("subscribeThrottledInput — the settle timer fires", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -371,7 +382,7 @@ describe("subscribeThrottledInput — the settle timer fires", () => {
   it("dispatches the settle Msg once after (atMs - now), then never again", () => {
     vi.setSystemTime(BASE);
     const dispatched: ThrottledInputSettled[] = [];
-    const sub = deadlineSub("search", BASE + 200);
+    const sub = settleSub("search", BASE + 200);
 
     subscribeThrottledInput(sub, undefined, (m) => dispatched.push(m));
 
@@ -389,11 +400,11 @@ describe("subscribeThrottledInput — the settle timer fires", () => {
     vi.setSystemTime(BASE);
     const dispatched: ThrottledInputSettled[] = [];
     const cleanup = subscribeThrottledInput(
-      deadlineSub("search", BASE + 200),
+      settleSub("search", BASE + 200),
       undefined,
       (m) => dispatched.push(m),
     );
-    cleanup(); // the substrate calls this when subsFor drops the Sub after a flush
+    cleanup(); // the engine calls this when subsFor drops the deadline after a flush
     vi.advanceTimersByTime(10_000);
     expect(dispatched).toEqual([]);
   });
@@ -442,6 +453,7 @@ describe("createThrottledInput — wired into a machine", () => {
       model: {} as AppState,
       msg: {} as AppMsg,
       cmd: {} as EmitCmd,
+      sub: {} as DeadlinesSub,
       ctx: undefined,
     },
     init: (loaded) => [loaded ?? { search: gate.init() }, []],
@@ -455,7 +467,7 @@ describe("createThrottledInput — wired into a machine", () => {
         return [{ ...s, search: slice }, cmds];
       },
     },
-    subscriptions: (s) => gate.subs(s.search),
+    subs: [deadlinesSub((s: AppState) => gate.subs(s.search))],
   });
 
   const t = bindMachine(machine, undefined);
@@ -482,7 +494,7 @@ describe("createThrottledInput — wired into a machine", () => {
           { type: "typed", value: "he", at: BASE + 50 },
         ],
       },
-      [deadlineSub("throttled-input:settle", BASE + 250)], // anchored on last keystroke
+      [settleSub("throttled-input:settle", BASE + 250)], // anchored on last keystroke
     );
 
     t.expectActiveSubs(
@@ -512,7 +524,7 @@ describe("createThrottledInput — wired into a machine", () => {
   // -------------------------------------------------------------------------
   // WIRED end-to-end regression: the rate cap must hold across the
   // trailing-edge emit. This is the test class that was MISSING — it drives
-  // the real machine (init + update + subscriptions via `replay`) through the
+  // the real machine (init + update + subs via `replay`) through the
   // full "emit, then a rate-blocked input gets held, then its settle timer
   // fires too early" scenario and asserts the END STATE, not the intermediate
   // Msgs. Against the buggy code it FAILS (the early settle emits a second
@@ -560,7 +572,7 @@ describe("createThrottledInput — wired into a machine", () => {
       // otherwise the runtime arms the timer for an instant at which onFlush
       // would be forced to drop or re-hold the value.
       t.expectActiveSubs({ msgs: emitFirstThenHold }, [
-        deadlineSub("throttled-input:settle", BASE + 1_200),
+        settleSub("throttled-input:settle", BASE + 1_200),
       ]);
     });
 
@@ -572,7 +584,7 @@ describe("createThrottledInput — wired into a machine", () => {
         {
           msgs: [...emitFirstThenHold, { type: "settled", at: BASE + 500 }],
         },
-        [deadlineSub("throttled-input:settle", BASE + 1_200)],
+        [settleSub("throttled-input:settle", BASE + 1_200)],
       );
     });
   });

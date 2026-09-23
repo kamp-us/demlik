@@ -1,18 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  defineMachine,
-  type NoCtx,
-  type Reducer,
-  type Sub,
-  subId,
-} from "../index";
+import { defineMachine, type NoCtx, type Reducer, type Sub } from "../index";
 import { run } from "../promise";
 import { fromBroadcastChannel } from "./from-broadcast-channel";
 import type { MinimalBroadcastChannel, MinimalMessageEvent } from "./platform";
 
 // Lifecycle contract under a real runtime (issue #286): the channel opens
-// (with the name carried on the Sub) when the Sub enters
-// `subscriptions(state)`, delivered messages fold into State (null-dropped
+// (with the name read off the Sub's deps) when the Sub's `deps` turns
+// non-null, delivered messages fold into State (null-dropped
 // per msgFn), and reconciling the Sub out removes the listener AND closes
 // the channel — the paired cleanup the factory's docblock pins.
 //
@@ -51,7 +45,7 @@ class FakeChannel implements MinimalBroadcastChannel {
   }
 }
 
-type BusSub = Sub<"bus"> & { channelName: string };
+type BusSub = Sub<"bus", { readonly channelName: string }>;
 type State = { readonly armed: boolean; readonly seen: readonly string[] };
 type Msg =
   | { readonly type: "note"; readonly text: string }
@@ -72,17 +66,15 @@ function busMachine(channelName: string) {
     },
     init: () => [{ armed: true, seen: [] }, []],
     update,
-    subscriptions: (s) =>
-      s.armed ? [{ id: subId("bus"), type: "bus", channelName }] : [],
-    subscribe: {
-      bus: fromBroadcastChannel<BusSub, Msg>((event) =>
-        typeof event.data === "string"
-          ? { type: "note", text: event.data }
-          : null,
-      ),
-    },
+    subs: [{ type: "bus", deps: (s) => (s.armed ? { channelName } : null) }],
   });
 }
+
+const subscribe = {
+  bus: fromBroadcastChannel<BusSub, Msg>((event) =>
+    typeof event.data === "string" ? { type: "note", text: event.data } : null,
+  ),
+};
 
 describe("fromBroadcastChannel — subscribe → deliver → cleanup against a real runtime", () => {
   afterEach(() => {
@@ -92,11 +84,11 @@ describe("fromBroadcastChannel — subscribe → deliver → cleanup against a r
 
   it("opens a channel named by the Sub at boot and delivers posted messages as Msgs", async () => {
     vi.stubGlobal("BroadcastChannel", FakeChannel);
-    const rt = await run(busMachine("room-7"), {}).ready;
+    const rt = await run(busMachine("room-7"), { subscribe }).ready;
 
     expect(FakeChannel.instances).toHaveLength(1);
     const channel = FakeChannel.instances[0];
-    expect(channel.name).toBe("room-7"); // channelName read off the Sub
+    expect(channel.name).toBe("room-7"); // channelName read off the Sub's deps
 
     channel.deliver("hello");
     channel.deliver("again");
@@ -108,7 +100,7 @@ describe("fromBroadcastChannel — subscribe → deliver → cleanup against a r
 
   it("msgFn → null drops unrecognized payloads without detaching", async () => {
     vi.stubGlobal("BroadcastChannel", FakeChannel);
-    const rt = await run(busMachine("room-7"), {}).ready;
+    const rt = await run(busMachine("room-7"), { subscribe }).ready;
     const channel = FakeChannel.instances[0];
 
     channel.deliver({ not: "a string" });
@@ -124,7 +116,7 @@ describe("fromBroadcastChannel — subscribe → deliver → cleanup against a r
 
   it("reconciling the Sub out removes the listener AND closes the channel", async () => {
     vi.stubGlobal("BroadcastChannel", FakeChannel);
-    const rt = await run(busMachine("room-7"), {}).ready;
+    const rt = await run(busMachine("room-7"), { subscribe }).ready;
     const channel = FakeChannel.instances[0];
     expect(channel.listenerCount()).toBe(1);
     expect(channel.closed).toBe(false);

@@ -1,6 +1,11 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, replay } from "../../../index";
+import {
+  type DepKeyedSub,
+  defineMachine,
+  replay,
+  subIdOf,
+} from "../../../index";
 import { run } from "../../../promise";
 import type {
   DurationRetryPolicy,
@@ -8,7 +13,13 @@ import type {
   TimedRetryState,
 } from "../../../retry-backoff";
 import { bindMachine } from "../../../testing";
-import { deadlineExceeded, subscribeWith } from "../deadline";
+import {
+  type DeadlineSub,
+  type DeadlinesSub,
+  deadlineExceeded,
+  deadlinesSub,
+  subscribeWith,
+} from "../deadline";
 import {
   createResilientCall,
   type DeadlineExceededError,
@@ -38,6 +49,22 @@ type HostMsg =
   | FailMsg
   | ResilientTimerMsg;
 type HostCmd = RunCmd<string>;
+
+// The deadlines a machine's `subs` list at `model` — what its `deadline`
+// runner arms. A mount's `subs` is one `deadline` entry over the knob's list.
+function armed<Model, N extends string | undefined>(
+  subs: readonly DepKeyedSub<Model, DeadlinesSub<N>>[],
+  model: Model,
+): readonly DeadlineSub<N>[] {
+  return subs.flatMap((entry) => entry.deps(model) ?? []);
+}
+
+// The running `deadline` Sub the engine hands the runner for `list`.
+function runningSub<N extends string | undefined>(
+  ...list: DeadlineSub<N>[]
+): DeadlinesSub<N> {
+  return { id: subIdOf("deadline", list), type: "deadline", deps: list };
+}
 
 // rng pinned to 0 → "full" jitter collapses the backoff delay to exactly 0,
 // so retryAtMs == at: deterministic, observable timer targets in assertions.
@@ -90,7 +117,7 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof rc.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -113,8 +140,7 @@ function makeMachine(
         return [{ resilience: slice }, cmds];
       },
     },
-    subscriptions: (s) => rc.subs(s.resilience),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => rc.subs(s.resilience))],
   });
   return { rc, machine };
 }
@@ -671,18 +697,20 @@ describe("createResilientCall — wired in a machine (replay)", () => {
   });
 
   it("attempt → fail → leaves a retry timer desired at the final state", () => {
-    bound.expectActiveSubs(
-      {
-        msgs: [
-          { type: "attempt", key: "k", input: "in", at: 0 },
-          { type: "resilient_err", key: "k", error: "e", at: 0 },
-        ],
-      },
-      [
-        deadlineSub("resilient:retry:k", 0),
-        deadlineSub("resilient:deadline:k", 5_000),
+    const { subs } = bound.replay({
+      msgs: [
+        { type: "attempt", key: "k", input: "in", at: 0 },
+        { type: "resilient_err", key: "k", error: "e", at: 0 },
       ],
-    );
+    });
+    // One `deadline` Sub, arming both timers the failed call left.
+    expect(subs.map((sub) => sub.type)).toEqual(["deadline"]);
+    expect(
+      subs.flatMap((sub) => (sub.type === "deadline" ? sub.deps : [])),
+    ).toEqual([
+      deadlineSub("resilient:retry:k", 0),
+      deadlineSub("resilient:deadline:k", 5_000),
+    ]);
   });
 
   it("attempt → ok → settles succeeded with no further subs", () => {
@@ -1385,7 +1413,7 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
         model: {} as DState,
         msg: {} as DMsg,
         cmd: {} as RunCmd<string>,
-        sub: {} as ReturnType<typeof rc.subs>[number],
+        sub: {} as DeadlinesSub,
         ctx: {} as object,
       },
       init: (loaded) =>
@@ -1408,14 +1436,14 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
           return [{ resilience: slice }, cmds];
         },
       },
-      subscriptions: (s) => rc.subs(s.resilience),
-      // The REAL timer cell — the retry Sub actually arms a setTimeout against
-      // the (fake) wall clock, so the outage advances by itself.
-      subscribe: { deadline: subscribeDeadline },
+      subs: [deadlinesSub((s: DState) => rc.subs(s.resilience))],
     });
 
     const runtime = await run(machine, {
       ctx: {},
+      // The REAL deadline runner — the retry Sub actually arms a setTimeout
+      // against the (fake) wall clock, so the outage advances by itself.
+      subscribe: { deadline: subscribeDeadline },
       interpret: rc.handlers({
         run: async () => {
           callAt.push(Date.now());
@@ -1496,7 +1524,7 @@ describe("createResilientCall — two named knobs in one machine", () => {
       model: {} as TwoState,
       msg: {} as TwoMsg,
       cmd: {} as TwoCmd,
-      sub: {} as ReturnType<typeof jev.subs>[number],
+      sub: {} as DeadlinesSub<"jev" | "llm">,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -1541,8 +1569,9 @@ describe("createResilientCall — two named knobs in one machine", () => {
         return [{ jev: jevSlice, llm: llmSlice }, []];
       },
     },
-    subscriptions: (s) => [...jev.subs(s.jev), ...llm.subs(s.llm)],
-    subscribe: { deadline: () => () => {} },
+    subs: [
+      deadlinesSub((s: TwoState) => [...jev.subs(s.jev), ...llm.subs(s.llm)]),
+    ],
   });
 
   const two = bindMachine(twoMachine, ctx);
@@ -1599,7 +1628,9 @@ describe("createResilientCall — two named knobs in one machine", () => {
     // name has to lead the id or the two knobs would share one timer on `k`.
     // It leads the Msg too (#238): the Sub carries the name, so what it
     // dispatches is `jev_deadline`, not a `deadline_exceeded` both knobs claim.
-    expect(subs).toEqual([
+    expect(
+      subs.flatMap((sub) => (sub.type === "deadline" ? sub.deps : [])),
+    ).toEqual([
       deadlineSub("jev:retry:k", 0, { name: "jev" }),
       deadlineSub("jev:deadline:k", 5_000, { name: "jev" }),
     ]);
@@ -1642,7 +1673,7 @@ describe("createResilientCall — the unnamed default is unchanged", () => {
 });
 
 // ===========================================================================
-// mountResilientCall — the eight wiring points as fragments (#228).
+// mountResilientCall — the wiring points as fragments (#228).
 // ===========================================================================
 
 describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
@@ -1724,7 +1755,7 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
         model: {} as MState,
         msg: {} as MMsg,
         cmd: {} as RunCmd<string>,
-        sub: {} as ReturnType<typeof rc.subs>[number],
+        sub: {} as DeadlinesSub,
         ctx: {} as object,
       },
       init: (loaded) =>
@@ -1740,8 +1771,7 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
               [],
             ],
       update: { ...mounted.update },
-      subscriptions: mounted.subscriptions,
-      subscribe: mounted.subscribe,
+      subs: mounted.subs,
     });
     return { rc, mounted, machine, calls, deadlineFolds };
   }
@@ -1784,9 +1814,9 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
     expect(waiting.resilience.calls.k?.phase).toBe("waiting_retry");
     expect(waiting.failure).toEqual({ _tag: "backend_down" });
 
-    // `subscriptions` is the fragment's, so the retry timer is armed off the
-    // same slice the settle cell just wrote.
-    expect(mounted.subscriptions(waiting).map((s) => s.id)).toContain(
+    // `subs` is the fragment's, so the retry timer is armed off the same slice
+    // the settle cell just wrote.
+    expect(armed(mounted.subs, waiting).map((s) => s.id)).toContain(
       "resilient:retry:k",
     );
 
@@ -2236,7 +2266,7 @@ describe("mountResilientCall — the deadline cell is name-spaced too", () => {
       input: "in",
       at: 0,
     });
-    expect(jev.mounted.subscriptions(running)).toEqual([
+    expect(armed(jev.mounted.subs, running)).toEqual([
       deadlineSub("jev:deadline:ka", 5_000, { name: "jev" }),
     ]);
     // The name leads the Msg the Sub dispatches, not only the Sub id — the id
@@ -2246,7 +2276,7 @@ describe("mountResilientCall — the deadline cell is name-spaced too", () => {
         expect(msg.type).toBe("jev_deadline");
         return () => {};
       })(
-        deadlineSub("jev:deadline:ka", 5_000, { name: "jev" }),
+        runningSub(deadlineSub("jev:deadline:ka", 5_000, { name: "jev" })),
         undefined,
         () => {},
       ),
@@ -2307,7 +2337,7 @@ describe("mountResilientCall — the deadline cell is name-spaced too", () => {
       input: "in",
       at: 0,
     });
-    expect(mounted.subscriptions(running)).toEqual([
+    expect(armed(mounted.subs, running)).toEqual([
       deadlineSub("resilient:deadline:k", 5_000),
     ]);
 

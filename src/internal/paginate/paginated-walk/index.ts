@@ -86,11 +86,13 @@
  *     drained:  (s, m)  => lift(s, walk.drain(s.walk, m.n)),
  *     resume:   (s, m)  => lift(s, walk.resume(s.walk, m.at)),
  *   },
- *   subscriptions: (s) => walk.subs(s.walk),
- *   subscribe: { deadline: subscribeDeadline },
+ *   subs: [deadlinesSub((s) => walk.subs(s.walk))],
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }) });
+ *   run(machine, {
+ *     interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }),
+ *     subscribe: { deadline: subscribeDeadline },
+ *   });
  */
 
 import type { Cmd } from "../../../index";
@@ -101,7 +103,9 @@ import {
   createResilientCall,
   type DeadlineConfig,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FailMsg,
   type RateLimitConfig,
   type ResilientPorts,
@@ -597,11 +601,13 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
   // === Subs ================================================================
 
   /**
-   * Pre-wired subscriptions: exactly the resilient-call subs for the page
-   * fetch — a retry timer while the fetch is `waiting_retry`, and (with the
-   * `deadline` brick) a per-fetch deadline timer while it is active. Reconciled
-   * by id, so a phase change cancels the matching timer automatically. Wire
-   * `subscribe: { deadline: subscribeDeadline }` (re-exported below).
+   * The page fetch's deadlines — exactly resilient-call's: a retry timer while
+   * the fetch is `waiting_retry`, and (with the `deadline` brick) a per-fetch
+   * deadline timer while it is active. A phase change drops the matching
+   * deadline from the list, which cancels its timer. Declare
+   * `subs: [deadlinesSub((s) => walk.subs(s.walk))]` and pass
+   * `subscribe: { deadline: subscribeDeadline }` to `run` (both re-exported
+   * below).
    */
   function subs(s: PaginatedWalkState<Cursor, Page>): readonly DeadlineSub[] {
     return rc.subs(s.resilience);
@@ -660,9 +666,10 @@ export function liftWalk<
 }
 
 /**
- * Re-export the deadline Sub primitives (inherited from resilient-call) so
- * consumers wire one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal this knob's `subs` emits.
+ * Re-export the deadline primitives (inherited from resilient-call) so
+ * consumers wire one import: `subscribeDeadline` is the `deadline` runner,
+ * `deadlinesSub` the machine's `subs` entry, and `deadlineSub` builds the entry
+ * this knob's `subs` lists.
  */
-export { subscribeDeadline, deadlineSub };
-export type { DeadlineSub };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
+export type { DeadlineSub, DeadlinesSub };

@@ -12,17 +12,17 @@ import type {
   PortEmitter,
   RunHandlers,
   Sub,
-  Subscribe,
 } from "../pure/core";
 import {
   applyCellChecked,
   type Cmd,
   cmdEdge,
   cmdEdgeOver,
-  depsInactive,
+  desiredSub,
   detachWork,
   Outcome,
   structuralHash,
+  subEntriesOf,
 } from "../pure/core";
 import type {
   BootingRuntime,
@@ -46,8 +46,8 @@ import {
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
-  SubIdCollisionError,
 } from "../runtime-types";
+import { builtinRunners } from "./builtin-runners";
 
 // Default `onError` sink: re-throw on a fresh macrotask so the failure reaches
 // the host's global error handler instead of vanishing — surface, not swallow
@@ -106,7 +106,7 @@ const liveWork: unique symbol = Symbol("demlik-tea.liveWork");
 
 /** The runtime's own sources of a caller-less transition, counted. */
 interface LiveWork {
-  /** Live Subs — manual (`subscriptions`) plus dep-keyed (`subs`). */
+  /** Live Subs — the running `machine.subs` entries. */
   readonly subs: number;
   /** Interpret handlers currently awaiting. */
   readonly cmds: number;
@@ -291,17 +291,10 @@ export function run<
   // cannot be asked synchronously whether it has outstanding work.
   let inFlightCmds = 0;
 
-  const subRegistry = new Map<string, Dispose>();
-  // Dep-keyed Sub registry. One slot per `machine.subs[i]`, keyed by the entry's
-  // array index (its stable identity across reconciles — a dep-keyed Sub has no
-  // author-supplied id). `runningId` is the `structuralHash(deps)` of the live
-  // source; an absent slot means the entry is currently inactive (its `deps`
-  // returned null). The same dispose-on-change / dispose-on-null machinery the
-  // manual Sub path uses, with the id DERIVED instead of author-supplied.
-  const depSubRegistry = new Map<
-    number,
-    { runningId: string; dispose: Dispose }
-  >();
+  // The running Subs, keyed by their derived id (`structuralHash({ type, deps
+  // })`). An id present here is a runner that started and has not been
+  // disposed; reconcile diffs the desired ids against these keys.
+  const subRegistry = new Map<string, { type: string; dispose: Dispose }>();
   const listeners = new Set<() => void>();
   // Observers get (msg, state) for every APPLIED transition (boot goes via `onBoot`).
   const observers = new Set<(msg: M, state: S) => void>();
@@ -363,10 +356,10 @@ export function run<
   // by `reconcileSubs`'s removal pass and `stop()`.
   function stopSubs(ids: Iterable<string>): void {
     for (const id of ids) {
-      const cleanup = subRegistry.get(id);
-      if (cleanup === undefined) continue;
+      const running = subRegistry.get(id);
+      if (running === undefined) continue;
       try {
-        trackDisposal(cleanup());
+        trackDisposal(running.dispose());
       } catch (err) {
         reportError(err, { phase: "sub-cleanup" });
       }
@@ -430,150 +423,67 @@ export function run<
     }
   }
 
-  // Dispose each named dep-keyed slot: run its `Dispose` (throws isolated +
-  // routed to the sink under `"sub-cleanup"`, exactly as `stopSubs` does for the
-  // manual path), then drop the slot regardless of a throw. The single home for
-  // the dispose-and-delete discipline shared by `reconcileDepSubs`'s teardown /
-  // re-arm passes and `stop()`.
-  function disposeDepSubs(indices: Iterable<number>): void {
-    for (const index of indices) {
-      const running = depSubRegistry.get(index);
-      if (running === undefined) continue;
-      try {
-        trackDisposal(running.dispose());
-      } catch (err) {
-        reportError(err, { phase: "sub-cleanup" });
-      }
-      depSubRegistry.delete(index);
-    }
-  }
-
   /**
-   * Reconcile the dep-keyed Subs (`machine.subs`) against `state`. Runs as the
-   * first pass of `reconcileSubs`, sharing the dispose-on-change /
-   * dispose-on-null machinery with the manual Sub path. For each entry:
+   * Reconcile the running Subs against `state`, after every save. Each
+   * `machine.subs` entry yields the Sub it wants here (`desiredSub`): an id
+   * already running is left alone, a running id no longer wanted is stopped,
+   * and a wanted id not yet running is started through its runner. So a Sub
+   * starts when its `deps` turn non-null, restarts when they change (new id:
+   * old stopped, new started) and stops when they go null.
    *
-   *   - `deps(state)` is nullish (`depsInactive`) → the Sub is inactive in this
-   *     state; dispose it if it was running.
-   *   - otherwise → `id = structuralHash(deps)`; if no source is running for
-   *     this entry, or the running id differs (re-arm), dispose the old source
-   *     and run `source(state, dispatch, ctx)` to open a fresh one (the entry
-   *     re-derives its own typed slice from `state`).
-   *   - Unchanged id → leave the source running (the no-churn case).
-   *
-   * Throws are collected and returned rather than thrown here (same contract as
-   * the manual path) so one bad entry doesn't strand the others. That covers
-   * `deps` and the hash, not just `source`: `deps` is user code on exactly the
-   * same footing, and an unguarded throw there stranded every LATER entry AND
-   * the manual `subscriptions` aggregate, which is only reached after this loop.
-   * A machine that declares no `subs` returns immediately — the pass is inert.
-   */
-  function reconcileDepSubs(): unknown {
-    let firstError: unknown = null;
-    const subs = machine.subs;
-    if (!subs) return firstError;
-    for (const [i, entry] of subs.entries()) {
-      // `deps` + `structuralHash` in ONE guarded step: both are pure user-data
-      // reads whose failure means "this entry's slice is unknowable", and the
-      // recovery is identical — remember the error, leave the slot untouched,
-      // keep reconciling the siblings.
-      let deps: unknown;
-      let id: string;
-      try {
-        deps = entry.deps(state as S);
-        if (depsInactive(deps)) {
-          // Inactive in this state — tear down if running.
-          disposeDepSubs([i]);
-          continue;
-        }
-        id = structuralHash(deps);
-      } catch (err) {
-        if (firstError === null) firstError = err;
-        continue;
-      }
-
-      const running = depSubRegistry.get(i);
-      if (running !== undefined && running.runningId === id) {
-        // No-churn case: same deps → leave the source running.
-        continue;
-      }
-      // Re-arm (id changed) or first arm — dispose the stale source first.
-      disposeDepSubs([i]);
-      try {
-        // `dispatchUnawaited`, never the raw `enqueueDispatch`: a source's
-        // dispatch has no caller to reject at, and the gate rejects during
-        // teardown — handing it the raw promise-returning form turned every
-        // Sub that fired while `stop()` drained into an unhandled rejection
-        // that bypassed `onError` entirely.
-        const dispose = entry.source(state as S, dispatchUnawaited, ctx);
-        depSubRegistry.set(i, { runningId: id, dispose });
-      } catch (err) {
-        if (firstError === null) firstError = err;
-        // Do NOT register; continue so other dep-keyed sources still arm.
-      }
-    }
-    return firstError;
-  }
-
-  /**
-   * Reconcile subscriptions against `state`, after every save. Same id old+new →
-   * leave running; removed id → cleanup (throws isolated, routed to the sink);
-   * new id → start (throw remembered and re-thrown after the loop so all other
-   * new subs still register).
+   * Every failure is collected, never thrown mid-pass, so one bad entry cannot
+   * strand its siblings: a throwing `deps` (or a `deps` the hash refuses)
+   * leaves the running Subs of that type untouched, and a throwing runner is
+   * not registered. The first error is thrown after the pass. A Sub type with
+   * no runner is a failure too — nothing would ever start it.
    */
   function reconcileSubs(): void {
-    // Dep-keyed pass FIRST, then the manual aggregate — ONE reconcile pass over
-    // both paths. Its start error is remembered (it happened first) and thrown
-    // after the manual pass so a bad dep-keyed source never strands the manual
-    // subs, and vice versa.
-    const depError = reconcileDepSubs();
-    if (!machine.subscriptions) {
-      if (depError !== null) throw depError;
-      return;
-    }
-    const desired = machine.subscriptions(state as S);
-    const desiredIds = new Set<string>();
-
-    // Collision assert: within one desired set, two subs sharing an id but
-    // declaring different types is a silent bug class. (Same id across
-    // transitions is the no-churn case and MUST NOT throw.)
-    const desiredTypeById = new Map<string, string>();
-    for (const sub of desired) {
-      const existing = desiredTypeById.get(sub.id);
-      if (existing !== undefined && existing !== sub.type) {
-        throw new SubIdCollisionError(sub.id, existing, sub.type);
+    let firstError: unknown = null;
+    const remember = (err: unknown): void => {
+      if (firstError === null) firstError = err;
+    };
+    const desired = new Map<string, Sub>();
+    // Types whose entry could not be read this pass: keep what is running.
+    const unreadTypes = new Set<string>();
+    for (const entry of subEntriesOf<S>(machine)) {
+      try {
+        const sub = desiredSub(entry, state as S);
+        if (sub !== null) desired.set(sub.id, sub);
+      } catch (err) {
+        remember(err);
+        unreadTypes.add(entry.type);
       }
-      desiredTypeById.set(sub.id, sub.type);
     }
 
-    // Removals first — anything in the registry not in `desired` should stop.
-    for (const sub of desired) desiredIds.add(sub.id);
-    stopSubs([...subRegistry.keys()].filter((id) => !desiredIds.has(id)));
+    stopSubs(
+      [...subRegistry].flatMap(([id, running]) =>
+        desired.has(id) || unreadTypes.has(running.type) ? [] : [id],
+      ),
+    );
 
-    // Additions — anything in `desired` not in the registry should start.
-    let firstStartError: unknown = depError;
-    for (const sub of desired) {
-      if (subRegistry.has(sub.id)) continue;
-      const handler = subscribeFor(sub.type as U["type"]);
-      if (!handler) {
-        // No handler for this sub type — programmer error; skip.
+    for (const [id, sub] of desired) {
+      if (subRegistry.has(id)) continue;
+      const runner = runnerFor(sub.type);
+      if (runner === undefined) {
+        remember(
+          new Error(
+            `@demlik/tea: no subscribe runner for Sub type "${sub.type}". ` +
+              "Pass one to run in `subscribe`.",
+          ),
+        );
         continue;
       }
       try {
-        // Same reasoning as the dep-keyed source above: a subscribe handler's
-        // dispatch is unawaited by construction, so it gets the wrapped form.
-        const cleanup = handler(
-          sub as Extract<U, { type: U["type"] }>,
-          ctx,
-          dispatchUnawaited,
-        );
-        subRegistry.set(sub.id, cleanup);
+        // A runner's dispatch is unawaited by construction, so it gets the
+        // wrapped form, which also queues the transition behind this step —
+        // never on the runner's own stack (spike #260).
+        const dispose = runner(sub, ctx, dispatchUnawaited);
+        subRegistry.set(id, { type: sub.type, dispose });
       } catch (err) {
-        if (firstStartError === null) firstStartError = err;
-        // Do NOT register; continue to next sub so other starts still run.
+        remember(err);
       }
     }
-    if (firstStartError !== null) throw firstStartError;
+    if (firstError !== null) throw firstError;
   }
 
   // `interpret` is optional when `C extends Cmd<never>`; default a missing map to
@@ -583,22 +493,25 @@ export function run<
     (opts as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
 
-  // A `subscribe` runner handed to `run` replaces the machine's own runner of
-  // the same Sub type. Looked up per start rather than merged once, so a
-  // handler table that resolves its cells lazily (`/react` reads the latest
-  // render's) is honoured.
-  const subscribeOverrides = opts.subscribe as
-    | Partial<Subscribe<M, U, Ctx>>
+  // The runner for a Sub type: the one handed to `run` in `subscribe`, else
+  // the engine's built-in of that name (#270 — a user entry overrides a
+  // built-in). Looked up per start rather than merged once, so a handler table
+  // that resolves its cells lazily (`/react` reads the latest render's) is
+  // honoured.
+  type Runner = (sub: Sub, ctx: Ctx, dispatch: (msg: M) => void) => Dispose;
+  const subscribeTable = (opts as { subscribe?: unknown }).subscribe as
+    | Readonly<Record<string, Runner | undefined>>
     | undefined;
-  function subscribeFor<K extends U["type"]>(
-    type: K,
-  ): Subscribe<M, U, Ctx>[K] | undefined {
-    return subscribeOverrides?.[type] ?? machine.subscribe?.[type];
+  function runnerFor(type: string): Runner | undefined {
+    return (
+      subscribeTable?.[type] ??
+      (builtinRunners as Readonly<Record<string, Runner | undefined>>)[type]
+    );
   }
 
   // The ONE `(msg) => void` handed to every producer that cannot await its own
   // dispatch: a detached interpret handler's `ctx.waitUntil(...)` tail, a
-  // dep-keyed Sub's `source`, a `subscribe[type]` handler. Same serial-tail
+  // Sub runner. Same serial-tail
   // enqueue every other dispatch uses (`enqueueDispatch` chains on `tail`),
   // wrapped so the rejection — which has no caller, the original dispatcher
   // having already resolved — routes to the sink with the phase DERIVED from
@@ -989,7 +902,7 @@ export function run<
 
   const runtime: Runtime<S, M, E> & LiveWorkProbe = {
     [liveWork]: () => ({
-      subs: subRegistry.size + depSubRegistry.size,
+      subs: subRegistry.size,
       cmds: inFlightCmds,
     }),
     dispatch: dispatchToQuiescence,
@@ -1112,8 +1025,6 @@ export function run<
       gate = "closed";
       // Run every active sub cleanup; throws isolated and routed to the sink.
       stopSubs([...subRegistry.keys()]);
-      // Dispose every live dep-keyed source too (same throw-isolation).
-      disposeDepSubs([...depSubRegistry.keys()]);
       // …then WAIT for the teardown work that is still settling — the ones
       // above, plus any async cleanup a mid-run reconcile started. `stop()`
       // resolving has to mean "teardown is done", or a host doing
@@ -1227,7 +1138,7 @@ export type DriveToDoneOptions<
  *     no Cmd in flight — nothing inside it can deliver another transition, so
  *     waiting would be a hang with the runtime leaked. The stalled State rides
  *     on `error.state`. A machine that CAN still move is not stalled: a live Sub
- *     (manual or dep-keyed) that delivers the terminal Msg after the dispatch
+ *     that delivers the terminal Msg after the dispatch
  *     quiesces keeps the drive waiting, and it resolves on that State. What the
  *     runtime cannot see — a dispatch from outside it after quiescence — does
  *     not count as live; a machine that depends on one declares it as a Sub.

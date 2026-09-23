@@ -13,7 +13,7 @@ This page builds one machine that loads a user by id.
 ```ts
 import {
   createResilientCall,
-  type DeadlineSub,
+  type DeadlinesSub,
   type FailMsg,
   type ResilientState,
   type ResilientTimerMsg,
@@ -60,7 +60,7 @@ export interface Load {
 
 export type UserMsg = Load | SucceedMsg<User> | FailMsg | ResilientTimerMsg;
 export type UserCmd = RunCmd<string>;
-export type UserSub = DeadlineSub;
+export type UserSub = DeadlinesSub;
 ```
 
 The knob speaks three Msgs: `resilient_ok` and `resilient_err` when the port
@@ -106,7 +106,7 @@ branch.
 
 ```ts
 import { defineMachine } from "@demlik/tea";
-import { subscribeDeadline } from "@demlik/tea/resilience";
+import { deadlinesSub, subscribeDeadline } from "@demlik/tea/resilience";
 
 export function userMachine(fetchUser: (id: string) => Promise<User>) {
   const machine = defineMachine({
@@ -137,13 +137,14 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
       },
     },
     // 4. Arm a timer for every call that is waiting to retry.
-    subscriptions: (s) => rc.subs(s.call),
-    subscribe: { deadline: subscribeDeadline },
+    subs: [deadlinesSub((s: UserState) => rc.subs(s.call))],
   });
   // 5. Run the port. The handler returns the settle Msg; it never dispatches.
-  //    Hand it to `run` beside the machine: `run(machine, { interpret })`.
   const interpret = rc.handlers({ run: (id) => fetchUser(id) });
-  return { machine, interpret };
+  // 6. `subscribeDeadline` arms the timers step 4 asks for. Hand both to `run`
+  //    beside the machine: `run(machine, { interpret, subscribe })`.
+  const subscribe = { deadline: subscribeDeadline };
+  return { machine, interpret, subscribe };
 }
 ```
 
@@ -153,18 +154,11 @@ retry.
 
 Two things to know:
 
-- **Leave out `subscribe` and a retry never fires.** `subs` asks for a timer,
-  and `subscribeDeadline` is what arms it. Without it the call sits in
-  `waiting_retry` forever.
+- **`subscribe` is what arms the retry.** `subs` asks for a `deadline` Sub,
+  and `subscribeDeadline` is the runner that arms it. `run` does not type-check
+  without it, and a runtime missing it rejects the dispatch that asks for the
+  first retry timer.
 - **With a `deadline` brick, a call can also fail in the timer cell.** The
   deadline timer settles the call `failed` inside the slice and sends no settle
   Msg, so `onSettle` never sees it. Read `s.call.calls[key]` in the
   `deadline_exceeded` cell if you need to react to it.
-
-## When #273 lands
-
-[#273](https://github.com/kamp-us/demlik/issues/273) moves the handlers out of
-the machine. `interpret` has already moved: step 5 hands it to
-`run(machine, { interpret })`. `subscribe` has not yet — it moves to `run` next,
-along with a built-in timer, and step 4's `subscribe` line moves then. The
-`update` cells and `onSettle` stay as they are.

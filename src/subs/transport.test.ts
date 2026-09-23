@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type Reducer } from "../index";
+import { defineMachine, type Reducer, subIdOf } from "../index";
 import { run } from "../promise";
 import { fromTransport, type Transport, type TransportSub } from "./transport";
 
@@ -63,16 +63,20 @@ type State = {
 type Msg =
   | { readonly type: "heard"; readonly text: string }
   | { readonly type: "lost" }
-  | { readonly type: "close_seam" };
+  | { readonly type: "close_seam" }
+  | { readonly type: "rekey"; readonly runId: string };
 
 const update: Reducer<State, Msg, never> = {
   heard: (s, m) => [{ ...s, heard: [...s.heard, m.text] }, []],
   lost: (s) => [{ ...s, runId: null, heard: [...s.heard, "<lost>"] }, []],
   close_seam: (s) => [{ ...s, runId: null }, []],
+  rekey: (s, m) => [{ ...s, runId: m.runId }, []],
 };
 
+const lost = (): Msg => ({ type: "lost" });
+
 function seamBattery() {
-  return fromTransport<string, Inbound, Outbound, Msg, Ctx>({
+  return fromTransport<"hands", string, Inbound, Outbound, Msg, Ctx>({
     name: "hands",
     openTransport: (_runId, ctx) => ctx.transport,
     // `keepalive` is a transport-level frame the seam does not surface.
@@ -94,31 +98,44 @@ function seamBattery() {
     // (post-parse) drop-on-null seam.
     onInbound: (inbound) =>
       inbound.text === "" ? null : { type: "heard", text: inbound.text },
-    lostMsg: () => ({ type: "lost" }),
+    lostMsg: lost,
     serializeOutbound: (out) => JSON.stringify(out),
   });
 }
 
-function machineFor(seam: ReturnType<typeof seamBattery>, runId = "run-1") {
+type Seam = ReturnType<typeof seamBattery>;
+
+function machineFor(seam: Seam, runId = "run-1") {
   return defineMachine({
     types: {
       model: {} as State,
       msg: {} as Msg,
-      sub: {} as TransportSub<string>,
+      sub: {} as TransportSub<"hands", string>,
       ctx: {} as Ctx,
     },
     init: () => [{ runId, heard: [] }, []],
     update,
-    subscriptions: (s) => (s.runId === null ? [] : [seam.sub(s.runId)]),
-    subscribe: { transport: seam.subscribe },
+    subs: [seam.depKeyed((s: State) => s.runId)],
   });
 }
 
+function runSeam(seam: Seam, transport: Transport, runId = "run-1") {
+  return run(machineFor(seam, runId), {
+    subscribe: { hands: seam.subscribe },
+    ctx: { transport },
+  }).ready;
+}
+
+/** The running Sub the engine would hand the seam's runner for `runId`. */
+function handsSub(runId: string): TransportSub<"hands", string> {
+  return { id: subIdOf("hands", runId), type: "hands", deps: runId };
+}
+
 describe("fromTransport — inbound, close, and the outbound handle table", () => {
-  it("opens the transport when the seam Sub enters the desired set", async () => {
+  it("opens the transport when the seam's key turns non-null", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     expect(transport.listenerCount).toBe(2); // message + close
     await rt.stop();
@@ -127,7 +144,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
   it("folds parsed inbound frames into State", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     transport.deliver(JSON.stringify({ kind: "said", text: "hello" }));
     transport.deliver(JSON.stringify({ kind: "said", text: "again" }));
@@ -140,7 +157,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
   it("parseInbound → null drops the frame; the seam stays open", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     transport.deliver(JSON.stringify({ kind: "keepalive" }));
     await rt.idle();
@@ -156,7 +173,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
   it("onInbound → null drops the dispatch after a successful parse", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     transport.deliver(JSON.stringify({ kind: "said", text: "" }));
     await rt.idle();
@@ -168,7 +185,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
   it("a transport close dispatches exactly one lostMsg", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
     const observed = vi.fn();
     rt.observe(observed);
 
@@ -184,10 +201,10 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     await rt.stop();
   });
 
-  it("reconciling the seam out detaches both listeners and closes the channel", async () => {
+  it("a null key detaches both listeners and closes the channel", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     await rt.dispatch({ type: "close_seam" });
     expect(transport.closed).toBe(true);
@@ -201,10 +218,10 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     await rt.stop();
   });
 
-  it("send() routes to the live transport while the seam is open", async () => {
+  it("send() routes to the live transport by the seam's key", async () => {
     const seam = seamBattery();
     const transport = stubTransport();
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     seam.send("run-1", { say: "go" });
     expect(transport.sent).toEqual([JSON.stringify({ say: "go" })]);
@@ -216,7 +233,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     const seam = seamBattery();
     const transport = stubTransport();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     await rt.dispatch({ type: "close_seam" });
     expect(() => seam.send("run-1", { say: "too late" })).not.toThrow();
@@ -231,7 +248,7 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     const seam = seamBattery();
     const transport = stubTransport();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     seam.send("run-does-not-exist", { say: "nope" });
     expect(transport.sent).toEqual([]);
@@ -240,29 +257,109 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     await rt.stop();
   });
 
-  it("subIdFor keeps a string key and a numeric key distinct", () => {
-    const seam = fromTransport<string | number, Inbound, Outbound, Msg, Ctx>({
+  it("the handle table keeps a string key and a numeric key distinct", () => {
+    const seam = fromTransport<
+      "hands",
+      string | number,
+      Inbound,
+      Outbound,
+      Msg,
+      Ctx
+    >({
       name: "hands",
       openTransport: (_k, ctx) => ctx.transport,
       parseInbound: () => null,
       onInbound: () => null,
-      lostMsg: () => ({ type: "lost" }),
+      lostMsg: lost,
       serializeOutbound: (out) => JSON.stringify(out),
     });
-    expect(seam.subIdFor("1")).not.toBe(seam.subIdFor(1));
+    const transport = stubTransport();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const dispose = seam.subscribe(
+      { id: subIdOf("hands", "1"), type: "hands", deps: "1" },
+      { transport },
+      () => {},
+    );
+
+    seam.send(1, { say: "wrong key" });
+    expect(transport.sent).toEqual([]);
+    seam.send("1", { say: "right key" });
+    expect(transport.sent).toEqual([JSON.stringify({ say: "right key" })]);
+
+    warn.mockRestore();
+    void dispose();
   });
 
-  it("two batteries with different names never collide on Sub id", () => {
-    const a = seamBattery();
-    const b = fromTransport<string, Inbound, Outbound, Msg, Ctx>({
-      name: "worker",
-      openTransport: (_k, ctx) => ctx.transport,
+  it("a changed key closes the old seam and opens a fresh one", async () => {
+    const first = stubTransport();
+    const second = stubTransport();
+    const opened = [first, second];
+    const keyed = fromTransport<"hands", string, Inbound, Outbound, Msg, Ctx>({
+      name: "hands",
+      openTransport: () => {
+        const next = opened.shift();
+        if (next === undefined) throw new Error("no transport left");
+        return next;
+      },
       parseInbound: () => null,
       onInbound: () => null,
-      lostMsg: () => ({ type: "lost" }),
+      lostMsg: lost,
       serializeOutbound: (out) => JSON.stringify(out),
     });
-    expect(a.subIdFor("run-1")).not.toBe(b.subIdFor("run-1"));
+    const rt = await runSeam(keyed, stubTransport());
+
+    await rt.dispatch({ type: "rekey", runId: "run-2" });
+    expect(first.closed).toBe(true);
+    expect(second.closed).toBe(false);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    keyed.send("run-1", { say: "old" });
+    keyed.send("run-2", { say: "new" });
+    expect(first.sent).toEqual([]);
+    expect(second.sent).toEqual([JSON.stringify({ say: "new" })]);
+    warn.mockRestore();
+
+    await rt.stop();
+  });
+
+  it("two seams in one machine are two Sub types that never collide", async () => {
+    const hands = seamBattery();
+    const worker = fromTransport<"worker", string, Inbound, Outbound, Msg, Ctx>(
+      {
+        name: "worker",
+        openTransport: (_k, ctx) => ctx.transport,
+        parseInbound: () => null,
+        onInbound: () => null,
+        lostMsg: lost,
+        serializeOutbound: (out) => JSON.stringify(out),
+      },
+    );
+    const transport = stubTransport();
+    const machine = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        sub: {} as
+          | TransportSub<"hands", string>
+          | TransportSub<"worker", string>,
+        ctx: {} as Ctx,
+      },
+      init: () => [{ runId: "run-1", heard: [] }, []],
+      update,
+      // Same key on both seams: the Sub type is part of the id, so they run
+      // side by side instead of deduping onto one.
+      subs: [
+        hands.depKeyed((s: State) => s.runId),
+        worker.depKeyed((s: State) => s.runId),
+      ],
+    });
+    const rt = await run(machine, {
+      subscribe: { hands: hands.subscribe, worker: worker.subscribe },
+      ctx: { transport },
+    }).ready;
+
+    expect(transport.listenerCount).toBe(4); // two seams × (message + close)
+    await rt.stop();
   });
 
   it("a close that throws is swallowed at the boundary (Rule 2 fire-and-forget)", async () => {
@@ -272,80 +369,12 @@ describe("fromTransport — inbound, close, and the outbound handle table", () =
     transport.close = () => {
       throw new Error("socket already gone");
     };
-    const rt = await run(machineFor(seam), { ctx: { transport } }).ready;
+    const rt = await runSeam(seam, transport);
 
     await expect(rt.dispatch({ type: "close_seam" })).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
 
     warn.mockRestore();
-    await rt.stop();
-  });
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// `.depKeyed` — the same seam expressed as ONE `subs` entry instead of a
-// `subscriptions` line plus a `subscribe.transport` line. The gate travels
-// with the seam, and the kernel derives its id from the key, so there is no
-// central list to forget to edit and no hand-written SubId to typo.
-// ───────────────────────────────────────────────────────────────────────────
-describe("fromTransport.depKeyed — the seam as a dep-keyed Sub", () => {
-  function depKeyedMachineFor(
-    seam: ReturnType<typeof seamBattery>,
-    runId = "run-1",
-  ) {
-    return defineMachine({
-      types: { model: {} as State, msg: {} as Msg, ctx: {} as Ctx },
-      init: () => [{ runId, heard: [] }, []],
-      update,
-      subs: [seam.depKeyed((s: State) => s.runId)],
-    });
-  }
-
-  it("opens the transport with no `subscriptions` and no `subscribe` cell", async () => {
-    const seam = seamBattery();
-    const transport = stubTransport();
-    const rt = await run(depKeyedMachineFor(seam), { ctx: { transport } })
-      .ready;
-
-    expect(transport.listenerCount).toBe(2); // message + close
-    await rt.stop();
-  });
-
-  it("folds inbound frames through the same subscribe the manual path uses", async () => {
-    const seam = seamBattery();
-    const transport = stubTransport();
-    const rt = await run(depKeyedMachineFor(seam), { ctx: { transport } })
-      .ready;
-
-    transport.deliver(JSON.stringify({ kind: "said", text: "hello" }));
-    await rt.idle();
-    expect(rt.getState().heard).toEqual(["hello"]);
-
-    await rt.stop();
-  });
-
-  it("tears the seam down when the gate returns null", async () => {
-    const seam = seamBattery();
-    const transport = stubTransport();
-    const rt = await run(depKeyedMachineFor(seam), { ctx: { transport } })
-      .ready;
-
-    await rt.dispatch({ type: "close_seam" });
-    expect(transport.closed).toBe(true);
-    expect(transport.listenerCount).toBe(0);
-
-    await rt.stop();
-  });
-
-  it("keeps the outbound handle table reachable while the seam is open", async () => {
-    const seam = seamBattery();
-    const transport = stubTransport();
-    const rt = await run(depKeyedMachineFor(seam), { ctx: { transport } })
-      .ready;
-
-    seam.send("run-1", { say: "hi" });
-    expect(transport.sent).toEqual([JSON.stringify({ say: "hi" })]);
-
     await rt.stop();
   });
 });
@@ -387,7 +416,7 @@ describe("fromTransport — a transport that fails to wire leaks nothing", () =>
     const transport = unwireableTransport();
 
     expect(() =>
-      seam.subscribe(seam.sub("run-1"), { transport }, () => {}),
+      seam.subscribe(handsSub("run-1"), { transport }, () => {}),
     ).toThrow(/socket is CLOSING/);
     expect(transport.closed).toBe(true);
     // The inbound listener it DID wire is gone too — no dangling callback into
@@ -401,7 +430,7 @@ describe("fromTransport — a transport that fails to wire leaks nothing", () =>
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     expect(() =>
-      seam.subscribe(seam.sub("run-1"), { transport }, () => {}),
+      seam.subscribe(handsSub("run-1"), { transport }, () => {}),
     ).toThrow();
     seam.send("run-1", { say: "hi" });
 
@@ -418,7 +447,7 @@ describe("fromTransport — a transport that fails to wire leaks nothing", () =>
       const transport = unwireableTransport();
       opened.push(transport);
       expect(() =>
-        seam.subscribe(seam.sub("run-1"), { transport }, () => {}),
+        seam.subscribe(handsSub("run-1"), { transport }, () => {}),
       ).toThrow();
     }
     // Every failed attempt closed its own transport — an unbounded reconcile

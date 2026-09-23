@@ -3,11 +3,12 @@ import {
   DisposeTimeoutNotice,
   defineMachine,
   type NoCtx,
+  type OnError,
   type Reducer,
+  subIdOf,
 } from "../index";
 import { run } from "../promise";
 import {
-  combineManagedResources,
   defineManagedResource,
   type ManagedResourceSub,
 } from "./managed-resource";
@@ -47,32 +48,43 @@ const update: Reducer<State, Msg, never> = {
   finish: () => [{ runId: null }, []],
 };
 
-function machineFor(
-  battery: ReturnType<typeof defineManagedResource<string, Handle, NoCtx>>,
-) {
+type Battery = ReturnType<
+  typeof defineManagedResource<"checkpoint", string, Handle, NoCtx>
+>;
+
+function machineFor(battery: Battery) {
   return defineMachine({
     types: {
       model: {} as State,
       msg: {} as Msg,
-      sub: {} as ManagedResourceSub<string>,
+      sub: {} as ManagedResourceSub<"checkpoint", string>,
       ctx: {} as NoCtx,
     },
     init: (_loaded) => [{ runId: "run-1" }, []],
     update,
-    subscriptions: (s) => (s.runId === null ? [] : [battery.sub(s.runId)]),
-    subscribe: { managed_resource: battery.subscribe },
+    subs: [battery.depKeyed((s: State) => s.runId)],
+  });
+}
+
+function runFor(
+  battery: Battery,
+  opts: { readonly onError?: OnError; readonly disposeTimeoutMs?: number } = {},
+) {
+  return run(machineFor(battery), {
+    ...opts,
+    subscribe: { checkpoint: battery.subscribe },
   });
 }
 
 describe("defineManagedResource — acquire on appear, release on exit", () => {
-  it("acquires when the Sub enters the desired set", async () => {
+  it("acquires when the key turns non-null", async () => {
     const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => t.acquire(key),
       release: (h) => t.release(h),
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     expect(t.acquired).toEqual(["run-1"]);
     expect(t.released).toEqual([]);
@@ -82,12 +94,12 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("releases when the phase is left — the leak this battery kills", async () => {
     const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => t.acquire(key),
       release: (h) => t.release(h),
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     await rt.dispatch({ type: "finish" });
     expect(t.released).toHaveLength(1);
@@ -99,12 +111,12 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("a key change retires the old resource and acquires a fresh one", async () => {
     const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => t.acquire(key),
       release: (h) => t.release(h),
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     await rt.dispatch({ type: "switch", runId: "run-2" });
     expect(t.acquired).toEqual(["run-1", "run-2"]);
@@ -116,7 +128,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
   it("release receives the EXACT handle acquire returned", async () => {
     const handles: Handle[] = [];
     let releasedWith: Handle | null = null;
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => {
         const h = { key, released: false };
@@ -127,7 +139,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
         releasedWith = h;
       },
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     await rt.dispatch({ type: "finish" });
     expect(releasedWith).toBe(handles[0]);
@@ -137,12 +149,12 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("get() reads the live handle while held, undefined once torn down", async () => {
     const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => t.acquire(key),
       release: (h) => t.release(h),
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     expect(battery.get("run-1")?.key).toBe("run-1");
     expect(battery.get("never-acquired")).toBeUndefined();
@@ -155,7 +167,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("get() returns the SAME owner the reconciler holds, not a rebuild", async () => {
     const built: Handle[] = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => {
         const h = { key, released: false };
@@ -164,7 +176,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
       },
       release: () => {},
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     expect(battery.get("run-1")).toBe(built[0]);
     expect(built).toHaveLength(1);
@@ -174,7 +186,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("an acquire that throws never produces a handle, so release never runs", async () => {
     const released: Handle[] = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: () => {
         throw new Error("half-built");
@@ -186,7 +198,7 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
     // The throw surfaces out of the reconcile pass; what matters for the
     // discipline is that no dangling half-built resource exists afterwards.
-    await run(machineFor(battery), {}).ready.catch(() => undefined);
+    await runFor(battery).ready.catch(() => undefined);
 
     expect(released).toEqual([]);
     expect(battery.get("run-1")).toBeUndefined();
@@ -198,14 +210,14 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
   // under `phase: "sub-cleanup"`, the same place a Sub cleanup throw lands.
   it("a release that throws is routed to the sink, not surfaced as a Msg", async () => {
     const reports: Array<{ error: unknown; phase: string }> = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: () => {
         throw new Error("teardown failed");
       },
     });
-    const rt = await run(machineFor(battery), {
+    const rt = await runFor(battery, {
       onError: (error, context) =>
         reports.push({ error, phase: context.phase }),
     }).ready;
@@ -222,12 +234,12 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("a rejected async release is routed to the sink, not surfaced as a Msg", async () => {
     const reports: Array<{ error: unknown; phase: string }> = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: () => Promise.reject(new Error("async teardown failed")),
     });
-    const rt = await run(machineFor(battery), {
+    const rt = await runFor(battery, {
       onError: (error, context) =>
         reports.push({ error, phase: context.phase }),
     }).ready;
@@ -243,42 +255,55 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
 
   it("stop() releases a still-held resource", async () => {
     const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => t.acquire(key),
       release: (h) => t.release(h),
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     await rt.stop();
     expect(t.released.map((h) => h.key)).toEqual(["run-1"]);
   });
 
-  it("subIdFor encodes the battery name, so two batteries never collide", () => {
-    const a = defineManagedResource<string, Handle, NoCtx>({
+  it("the battery's name is its Sub type", () => {
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: () => {},
     });
-    const b = defineManagedResource<string, Handle, NoCtx>({
-      name: "bridge",
-      acquire: (key) => ({ key, released: false }),
-      release: () => {},
-    });
-    expect(a.subIdFor("run-1")).not.toBe(b.subIdFor("run-1"));
+    expect(battery.type).toBe("checkpoint");
+    expect(battery.depKeyed((s: State) => s.runId).type).toBe("checkpoint");
   });
 
   it("keeps a string key and a numeric key distinct in the handle table", () => {
-    const battery = defineManagedResource<string | number, Handle, NoCtx>({
+    const battery = defineManagedResource<
+      "checkpoint",
+      string | number,
+      Handle,
+      NoCtx
+    >({
       name: "checkpoint",
       acquire: (key) => ({ key: String(key), released: false }),
       release: () => {},
     });
-    expect(battery.subIdFor("1")).not.toBe(battery.subIdFor(1));
+    const dispose = battery.subscribe(
+      { id: subIdOf("checkpoint", "1"), type: "checkpoint", deps: "1" },
+      {},
+      () => {},
+    );
+    expect(battery.get("1")?.key).toBe("1");
+    expect(battery.get(1)).toBeUndefined();
+    void dispose();
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
+// Two managed resources in one machine: each battery's name is its own Sub
+// type with its own runner, and each gate travels with its resource — no
+// router, no combinator, and a phase one gate does not cover simply leaves
+// that resource off.
+// ───────────────────────────────────────────────────────────────────────────
 
 type MultiState = { readonly phase: "idle" | "running" | "reporting" };
 type MultiMsg = { readonly type: "goto"; readonly phase: MultiState["phase"] };
@@ -287,55 +312,59 @@ const multiUpdate: Reducer<MultiState, MultiMsg, never> = {
   goto: (_s, m) => [{ phase: m.phase }, []],
 };
 
-describe("combineManagedResources — one cell, derived list and routing", () => {
+describe("defineManagedResource — two resources, two Sub types", () => {
   function twoResources() {
     const t = tracker();
-    const checkpoint = defineManagedResource<string, Handle, NoCtx>({
+    const checkpoint = defineManagedResource<
+      "checkpoint",
+      string,
+      Handle,
+      NoCtx
+    >({
       name: "checkpoint",
       acquire: (key) => t.acquire(`checkpoint:${key}`),
       release: (h) => t.release(h),
     });
-    const bridge = defineManagedResource<string, Handle, NoCtx>({
+    const bridge = defineManagedResource<"bridge", string, Handle, NoCtx>({
       name: "bridge",
       acquire: (key) => t.acquire(`bridge:${key}`),
       release: (h) => t.release(h),
     });
-    const combined = combineManagedResources<MultiState, string, NoCtx>([
-      // Each gate travels with its own resource — a new phase the gate does
-      // not cover simply produces no sub.
-      checkpoint.gated((s) => (s.phase === "running" ? "run-1" : null)),
-      bridge.gated((s) =>
-        s.phase === "running" || s.phase === "reporting" ? "run-1" : null,
-      ),
-    ]);
-    return { t, checkpoint, bridge, combined };
-  }
-
-  function multiMachine(combined: ReturnType<typeof twoResources>["combined"]) {
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as MultiState,
         msg: {} as MultiMsg,
-        sub: {} as ManagedResourceSub<string>,
+        sub: {} as
+          | ManagedResourceSub<"checkpoint", string>
+          | ManagedResourceSub<"bridge", string>,
         ctx: {} as NoCtx,
       },
       init: (_loaded) => [{ phase: "idle" }, []],
       update: multiUpdate,
-      subscriptions: (s) => combined.subs(s),
-      subscribe: { managed_resource: combined.subscribe },
+      // Same key on both: the Sub type is part of the id, so the two run
+      // side by side instead of deduping onto one.
+      subs: [
+        checkpoint.depKeyed((s: MultiState) =>
+          s.phase === "running" ? "run-1" : null,
+        ),
+        bridge.depKeyed((s: MultiState) =>
+          s.phase === "running" || s.phase === "reporting" ? "run-1" : null,
+        ),
+      ],
     });
+    const start = () =>
+      run(machine, {
+        subscribe: {
+          checkpoint: checkpoint.subscribe,
+          bridge: bridge.subscribe,
+        },
+      }).ready;
+    return { t, checkpoint, bridge, start };
   }
 
-  it("derives the active-sub list from each entry's own gate", () => {
-    const { combined } = twoResources();
-    expect(combined.subs({ phase: "idle" })).toHaveLength(0);
-    expect(combined.subs({ phase: "running" })).toHaveLength(2);
-    expect(combined.subs({ phase: "reporting" })).toHaveLength(1);
-  });
-
-  it("routes each Sub to the battery that owns it", async () => {
-    const { t, combined } = twoResources();
-    const rt = await run(multiMachine(combined), {}).ready;
+  it("runs each resource through its own runner, gated by its own `deps`", async () => {
+    const { t, start } = twoResources();
+    const rt = await start();
 
     await rt.dispatch({ type: "goto", phase: "running" });
     expect(t.acquired.sort()).toEqual(["bridge:run-1", "checkpoint:run-1"]);
@@ -354,138 +383,13 @@ describe("combineManagedResources — one cell, derived list and routing", () =>
     await rt.stop();
   });
 
-  it("throws at construction on a duplicate battery name", () => {
-    const a = defineManagedResource<string, Handle, NoCtx>({
-      name: "checkpoint",
-      acquire: (key) => ({ key, released: false }),
-      release: () => {},
-    });
-    const b = defineManagedResource<string, Handle, NoCtx>({
-      name: "checkpoint",
-      acquire: (key) => ({ key, released: false }),
-      release: () => {},
-    });
-    expect(() =>
-      combineManagedResources<MultiState, string, NoCtx>([
-        a.gated(() => "run-1"),
-        b.gated(() => "run-1"),
-      ]),
-    ).toThrow(/duplicate managed-resource name "checkpoint"/);
-  });
+  it("keeps each battery's handle table to itself", async () => {
+    const { checkpoint, bridge, start } = twoResources();
+    const rt = await start();
 
-  it("throws loudly on an unrouted Sub id instead of installing a no-op", () => {
-    const { combined } = twoResources();
-    const stranger = defineManagedResource<string, Handle, NoCtx>({
-      name: "stranger",
-      acquire: (key) => ({ key, released: false }),
-      release: () => {},
-    });
-    expect(() =>
-      combined.subscribe(stranger.sub("run-1"), {}, () => {}),
-    ).toThrow(/no battery for sub id/);
-  });
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// `.depKeyed` — the same acquire/release lifecycle as ONE `subs` entry. The
-// simplification it unlocks: two managed resources used to collide on the
-// single `subscribe.managed_resource` key, which is why
-// `combineManagedResources` had to route by SubId. A dep-keyed Sub has its own
-// reconcile slot, so two resources coexist with no combinator and no router.
-// ───────────────────────────────────────────────────────────────────────────
-describe("defineManagedResource.depKeyed — one subs entry, no router", () => {
-  function depKeyedMachine(
-    ...batteries: ReturnType<
-      typeof defineManagedResource<string, Handle, NoCtx>
-    >[]
-  ) {
-    return defineMachine({
-      types: { model: {} as State, msg: {} as Msg, ctx: {} as NoCtx },
-      init: (_loaded) => [{ runId: "run-1" }, []],
-      update,
-      subs: batteries.map((b) => b.depKeyed((s: State) => s.runId)),
-    });
-  }
-
-  it("acquires on arm and releases on the gate going null", async () => {
-    const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
-      name: "checkpoint",
-      acquire: (key) => t.acquire(key),
-      release: (h) => t.release(h),
-    });
-    const rt = await run(depKeyedMachine(battery), {}).ready;
-    expect(t.acquired).toEqual(["run-1"]);
-
-    await rt.dispatch({ type: "finish" });
-    expect(t.released.map((h) => h.key)).toEqual(["run-1"]);
-
-    await rt.stop();
-  });
-
-  it("re-acquires on a key change, releasing the old handle first", async () => {
-    const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
-      name: "checkpoint",
-      acquire: (key) => t.acquire(key),
-      release: (h) => t.release(h),
-    });
-    const rt = await run(depKeyedMachine(battery), {}).ready;
-
-    await rt.dispatch({ type: "switch", runId: "run-2" });
-    expect(t.acquired).toEqual(["run-1", "run-2"]);
-    expect(t.released.map((h) => h.key)).toEqual(["run-1"]);
-
-    await rt.stop();
-  });
-
-  it("keeps `get` pointing at the live handle the reconciler holds", async () => {
-    const t = tracker();
-    const battery = defineManagedResource<string, Handle, NoCtx>({
-      name: "checkpoint",
-      acquire: (key) => t.acquire(key),
-      release: (h) => t.release(h),
-    });
-    const rt = await run(depKeyedMachine(battery), {}).ready;
-
-    const live = battery.get("run-1");
-    expect(live?.key).toBe("run-1");
-    expect(live?.released).toBe(false);
-
-    await rt.dispatch({ type: "finish" });
-    // Forgotten first, then released — and it is the SAME object `get` handed
-    // out, so a Cmd handler reading through `get` holds the reconciler's owner
-    // rather than a rebuild.
-    expect(battery.get("run-1")).toBeUndefined();
-    expect(t.released).toEqual([live]);
-    expect(live?.released).toBe(true);
-
-    await rt.stop();
-  });
-
-  it("two resources coexist with NO combinator — each owns its own slot", async () => {
-    const a = tracker();
-    const b = tracker();
-    const first = defineManagedResource<string, Handle, NoCtx>({
-      name: "checkpoint",
-      acquire: (key) => a.acquire(key),
-      release: (h) => a.release(h),
-    });
-    const second = defineManagedResource<string, Handle, NoCtx>({
-      name: "bridge",
-      acquire: (key) => b.acquire(key),
-      release: (h) => b.release(h),
-    });
-
-    const rt = await run(depKeyedMachine(first, second), {}).ready;
-    // Under the manual path both subs share `type: "managed_resource"`, so this
-    // needed `combineManagedResources` to route by SubId. Here: two slots.
-    expect(a.acquired).toEqual(["run-1"]);
-    expect(b.acquired).toEqual(["run-1"]);
-
-    await rt.dispatch({ type: "finish" });
-    expect(a.released.map((h) => h.key)).toEqual(["run-1"]);
-    expect(b.released.map((h) => h.key)).toEqual(["run-1"]);
+    await rt.dispatch({ type: "goto", phase: "running" });
+    expect(checkpoint.get("run-1")?.key).toBe("checkpoint:run-1");
+    expect(bridge.get("run-1")?.key).toBe("bridge:run-1");
 
     await rt.stop();
   });
@@ -504,7 +408,7 @@ describe("defineManagedResource — a non-plain key is refused, never collapsed"
   }
 
   function keyedBattery() {
-    return defineManagedResource<RunKey, Handle, NoCtx>({
+    return defineManagedResource<"checkpoint", RunKey, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key: key.value, released: false }),
       release: (h) => {
@@ -513,9 +417,10 @@ describe("defineManagedResource — a non-plain key is refused, never collapsed"
     });
   }
 
-  it("throws on `subIdFor` rather than deriving one id for every key", () => {
-    const battery = keyedBattery();
-    expect(() => battery.subIdFor(new RunKey("A"))).toThrow(/non-plain object/);
+  it("throws when the engine derives the id, rather than one id for every key", () => {
+    expect(() => subIdOf("checkpoint", new RunKey("A"))).toThrow(
+      /non-plain object/,
+    );
   });
 
   it("throws on `get` rather than returning the previous key's handle", () => {
@@ -525,6 +430,7 @@ describe("defineManagedResource — a non-plain key is refused, never collapsed"
 
   it("still keys happily on the plain projection of that identity", () => {
     const battery = defineManagedResource<
+      "checkpoint",
       { readonly runId: string },
       Handle,
       NoCtx
@@ -535,9 +441,17 @@ describe("defineManagedResource — a non-plain key is refused, never collapsed"
         h.released = true;
       },
     });
-    expect(battery.subIdFor({ runId: "A" })).not.toBe(
-      battery.subIdFor({ runId: "B" }),
-    );
+    const sub = (runId: string) => ({
+      id: subIdOf("checkpoint", { runId }),
+      type: "checkpoint" as const,
+      deps: { runId },
+    });
+    const disposeA = battery.subscribe(sub("A"), {}, () => {});
+    const disposeB = battery.subscribe(sub("B"), {}, () => {});
+    expect(battery.get({ runId: "A" })?.key).toBe("A");
+    expect(battery.get({ runId: "B" })?.key).toBe("B");
+    void disposeA();
+    void disposeB();
   });
 });
 
@@ -552,7 +466,7 @@ describe("defineManagedResource — a non-plain key is refused, never collapsed"
 describe("defineManagedResource — `stop()` awaits an async release", () => {
   it("does not resolve `stop()` before an async release has settled", async () => {
     let released = false;
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: async () => {
@@ -560,7 +474,7 @@ describe("defineManagedResource — `stop()` awaits an async release", () => {
         released = true;
       },
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     await rt.stop();
     expect(released).toBe(true);
@@ -568,7 +482,7 @@ describe("defineManagedResource — `stop()` awaits an async release", () => {
 
   it("awaits the release a re-key started, not only the one `stop()` starts", async () => {
     const settled: string[] = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: async (h) => {
@@ -576,7 +490,7 @@ describe("defineManagedResource — `stop()` awaits an async release", () => {
         settled.push(h.key);
       },
     });
-    const rt = await run(machineFor(battery), {}).ready;
+    const rt = await runFor(battery).ready;
 
     // Re-key: the old handle's release starts mid-run, outside `stop()`.
     await rt.dispatch({ type: "switch", runId: "run-2" });
@@ -586,14 +500,14 @@ describe("defineManagedResource — `stop()` awaits an async release", () => {
 
   it("reports a rejected release to the sink instead of the console", async () => {
     const reports: Array<{ error: unknown; phase: string }> = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: async () => {
         throw new Error("flush failed");
       },
     });
-    const rt = await run(machineFor(battery), {
+    const rt = await runFor(battery, {
       onError: (error, context) =>
         reports.push({ error, phase: context.phase }),
     }).ready;
@@ -606,12 +520,12 @@ describe("defineManagedResource — `stop()` awaits an async release", () => {
 
   it("cannot hang forever on a release that never settles", async () => {
     const reports: Array<{ error: unknown; phase: string }> = [];
-    const battery = defineManagedResource<string, Handle, NoCtx>({
+    const battery = defineManagedResource<"checkpoint", string, Handle, NoCtx>({
       name: "checkpoint",
       acquire: (key) => ({ key, released: false }),
       release: () => new Promise<void>(() => {}),
     });
-    const rt = await run(machineFor(battery), {
+    const rt = await runFor(battery, {
       disposeTimeoutMs: 10,
       onError: (error, context) =>
         reports.push({ error, phase: context.phase }),

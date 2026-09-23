@@ -17,7 +17,7 @@
  *
  *   2. `deferredGateway` + `createAgentHost` (from `./host`) — THE transport for
  *      a DO-hosted agent. A `createAgent().toMachine()` machine owns exactly one
- *      Sub type, `DeadlineSub` (the agent's own retry + watchdog timers); it has
+ *      Sub type, `DeadlinesSub` (the agent's own retry + watchdog timers); it has
  *      no DO-native Sub variant to compose, and it needs none. The gateway owns
  *      each deferred tool round-trip as a Promise the interpret cell awaits:
  *        - Inbound WebSocket frames are bridged straight into `gateway.settle(...)`
@@ -31,7 +31,7 @@
  *
  * (Historical note: this module previously also shipped `do_ws` / `do_alarm`
  * Subs + a `doSubscribe` registry. Because `toMachine` fixes the agent machine's
- * Sub type to `DeadlineSub`, those Subs could never union into an agent host's
+ * Sub type to `DeadlinesSub`, those Subs could never union into an agent host's
  * Sub set — they were structurally unusable by the flagship consumer and had no
  * callers. They were dropped in favor of the gateway as the single transport.)
  */

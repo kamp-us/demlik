@@ -55,8 +55,8 @@
  *   // `mountResilientCall` pre-assembles the wiring. The settle cells run the
  *   // inherited verb and hand the ALREADY-settled model to `onOk` / `onErr`,
  *   // so the fold-before-settle order that wedges the slice at `running` is
- *   // not something a mounted cell can express; `subscribe` and `interpret`
- *   // ride along, so neither can be forgotten.
+ *   // not something a mounted cell can express; `subs`, `subscribe` and
+ *   // `interpret` ride along, so none can be forgotten.
  *   const mounted = mountResilientCall(ask, {
  *     slice: "resilience",
  *     attempt: {
@@ -73,11 +73,10 @@
  *   // in the machine:
  *   init: () => [{ ...mounted.init(), answers: null, failure: null }, []],
  *   update: { ...mounted.update },
- *   subscriptions: mounted.subscriptions,
- *   subscribe: mounted.subscribe,
+ *   subs: mounted.subs,
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: mounted.interpret });
+ *   run(machine, { interpret: mounted.interpret, subscribe: mounted.subscribe });
  *
  * The slice stays a plain readable field at `resilience`, and every verb above
  * is still exported: a consumer that wants a settle cell the mount cannot
@@ -94,7 +93,9 @@ import {
   createResilientCall,
   type DeadlineExceeded,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FailMsg,
   mountResilientCall,
   type ResilientConfig,
@@ -451,7 +452,7 @@ export function createJevAsk<Q extends JevQuestionMap>(
     return rc.onTimer(s, msg);
   }
 
-  /** Pre-wired subs — resilient-call's retry-timer subscriptions. */
+  /** The call's deadlines — resilient-call's retry and deadline timers. */
   function subs(s: State): readonly DeadlineSub[] {
     return rc.subs(s);
   }
@@ -575,11 +576,12 @@ export function createJevAsk<Q extends JevQuestionMap>(
 export type JevCmd<Q extends JevQuestionMap> = JevAskCmd<Q>;
 
 /**
- * The Sub type a host machine declares in `types.sub` — the deadline Sub
- * `subs` emits, inherited from resilient-call. Named here for the same reason
- * as {@link JevCmd}: a host names the type, it does not re-derive it.
+ * The Sub type a host machine declares in `types.sub` — the `deadline` Sub
+ * that arms the list `subs` returns, inherited from resilient-call. Named here
+ * for the same reason as {@link JevCmd}: a host names the type, it does not
+ * re-derive it.
  */
-export type JevSub = DeadlineSub;
+export type JevSub = DeadlinesSub;
 
 /**
  * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
@@ -602,11 +604,11 @@ export function liftJevAsk<
 }
 
 /**
- * Re-export the deadline Sub primitives (inherited from resilient-call) so a
- * consumer wires one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal `subs` emits. `mountResilientCall` rides
- * the same import for the same reason — a knob from this door mounts with no
- * second package specifier.
+ * Re-export the deadline primitives (inherited from resilient-call) so a
+ * consumer wires one import: `subscribeDeadline` is the `deadline` runner,
+ * `deadlinesSub` the machine's `subs` entry, and `deadlineSub` builds the entry
+ * `subs` lists. `mountResilientCall` rides the same import for the same reason
+ * — a knob from this door mounts with no second package specifier.
  */
-export { subscribeDeadline, deadlineSub, mountResilientCall };
-export type { DeadlineSub, DeadlineExceeded, ResilientState };
+export { subscribeDeadline, deadlineSub, deadlinesSub, mountResilientCall };
+export type { DeadlineSub, DeadlinesSub, DeadlineExceeded, ResilientState };

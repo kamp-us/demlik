@@ -6,13 +6,15 @@
 import { … } from "@demlik/tea/paginate";
 ```
 
-## Exports (22)
+## Exports (24)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `createPaginatedWalk` | Function | Build a paginated-walk knob from `config`. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
-| `DeadlineSub` | Type | The Sub variant a deadline produces. |
+| `deadlinesSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
+| `deadlineSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `defaultPaginatorPolicy` | Variable | Sensible defaults: start from a numeric offset of `0`, pause after 1000 un-drained items. |
 | `drain` | Function | Acknowledge that the consumer finished processing `n` items, lowering the backpressure gauge. |
 | `FetchPageCmd` | Type | The page-fetch effect this knob emits: the inherited `resilient_run` Cmd from resilient-call, whose `input` is the `Cursor` to fetch and whose `key` is the fixed `PAGE_KEY`. |
@@ -31,4 +33,4 @@ import { … } from "@demlik/tea/paginate";
 | `recordPage` | Function | Record the result of the outstanding fetch and decide what comes next. |
 | `resume` | Function | Re-open the backpressure valve after a `drain`. |
 | `start` | Function | Arm the first fetch. |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
+| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |

@@ -1,5 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { subIdOf } from "../../../index";
+import { type DeadlinesSub, deadlineSub } from "../../resilience/deadline";
 import {
   addItem,
   type BatchWindow,
@@ -199,10 +201,17 @@ describe("subscribeBatchWindow — the window timer fires", () => {
 
   const BASE = 1_000_000;
 
+  // The running `deadline` Sub the engine hands the runner: its deps list the
+  // one window deadline.
+  const windowSub = (id: string, atMs: number): DeadlinesSub => {
+    const deps = [deadlineSub(id, atMs)];
+    return { id: subIdOf("deadline", deps), type: "deadline", deps };
+  };
+
   it("dispatches batchWindowExpired once after (atMs - now), then never again", () => {
     vi.setSystemTime(BASE);
     const dispatched: BatchWindowExpired[] = [];
-    const sub = { id: "logs", type: "deadline", atMs: BASE + 1000 } as const;
+    const sub = windowSub("logs", BASE + 1000);
 
     subscribeBatchWindow(sub, undefined, (m) => dispatched.push(m));
 
@@ -219,12 +228,12 @@ describe("subscribeBatchWindow — the window timer fires", () => {
   it("cleanup cancels the pending timer (disarm-on-flush path)", () => {
     vi.setSystemTime(BASE);
     const dispatched: BatchWindowExpired[] = [];
-    const sub = { id: "logs", type: "deadline", atMs: BASE + 1000 } as const;
+    const sub = windowSub("logs", BASE + 1000);
 
     const cleanup = subscribeBatchWindow(sub, undefined, (m) =>
       dispatched.push(m),
     );
-    cleanup(); // the substrate calls this when subsFor drops the Sub after a flush
+    cleanup(); // the engine calls this when subsFor drops the deadline after a flush
     vi.advanceTimersByTime(10_000);
     expect(dispatched).toEqual([]);
   });

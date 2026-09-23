@@ -1,6 +1,8 @@
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import { subIdOf } from "../../../index";
 import {
+  type CacheEvictionSub,
   cacheEvictionSub,
   cacheEvictionSubscribe,
   cacheEvictMsg,
@@ -122,12 +124,19 @@ describe("cacheEvictMsg", () => {
   });
 });
 
+// The running Sub the engine hands the `cache` runner for an eviction entry.
+function running(entry: ReturnType<typeof cacheEvictionSub>): CacheEvictionSub {
+  const deps = entry.deps(undefined);
+  if (deps == null) throw new Error("an eviction entry is always on");
+  return { id: subIdOf(entry.type, deps), type: entry.type, deps };
+}
+
 describe("eviction Sub", () => {
   it("dispatches cache_evict periodically while subscribed", () => {
     vi.useFakeTimers();
     try {
       const dispatch = vi.fn();
-      const sub = cacheEvictionSub("session", 1000);
+      const sub = running(cacheEvictionSub("session", 1000));
       const cleanup = cacheEvictionSubscribe(sub, undefined, dispatch);
 
       vi.advanceTimersByTime(999);
@@ -153,7 +162,7 @@ describe("eviction Sub", () => {
     try {
       const dispatch = vi.fn();
       const cleanup = cacheEvictionSubscribe(
-        cacheEvictionSub("c", 1000),
+        running(cacheEvictionSub("c", 1000)),
         undefined,
         dispatch,
       );
@@ -169,13 +178,15 @@ describe("eviction Sub", () => {
     }
   });
 
-  it("carries a stable id and type for reconcile-by-id (no churn)", () => {
-    const a = cacheEvictionSub("session", 1000);
-    const b = cacheEvictionSub("session", 1000);
-    // Same id + type across calls — the reconcile pass leaves it running.
+  it("keys on name and period: same entry, same id — a new period, a new id", () => {
+    const a = running(cacheEvictionSub("session", 1000));
+    const b = running(cacheEvictionSub("session", 1000));
+    // Same id across calls — the engine leaves the running interval alone.
     expect(a.id).toBe(b.id);
     expect(a.type).toBe("cache");
-    expect(a.intervalMs).toBe(1000);
+    expect(a.deps).toEqual({ name: "session", intervalMs: 1000 });
+    // A changed period restarts the interval at the new one.
+    expect(running(cacheEvictionSub("session", 2000)).id).not.toBe(a.id);
   });
 });
 

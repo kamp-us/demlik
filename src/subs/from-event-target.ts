@@ -10,8 +10,8 @@
 //     at module-load time — service workers run before any `document`
 //     exists; some targets are constructed lazily from `ctx`. Deferring
 //     the lookup to subscribe time also means a state-driven swap of the
-//     target requires only a new Sub.id; the factory pulls the current
-//     target on subscribe.
+//     target needs only a changed `deps` value (a restart); the factory
+//     pulls the current target on subscribe.
 //
 //   - `msgFn` may return `null` — that emission is *dropped*. The event
 //     fired, the factory called `msgFn`, but the caller decided "this

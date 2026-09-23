@@ -11,9 +11,9 @@
 // shutdown from the client side.
 //
 // Four callbacks because four observable events ARE four concerns the
-// caller routinely cares about. The Sub's `wsUrl` lives on the Sub itself
-// (`WebSocketSubData`) — same id + different `wsUrl` is silent under the
-// reconcile pass, identical to `fromEventSource`'s `url` contract.
+// caller routinely cares about. `wsUrl` lives in the Sub's `deps`
+// (`WebSocketSubData`) — a changed `wsUrl` is a new id, so the engine closes
+// the old socket and opens one to the new url, as with `fromEventSource`.
 //
 //   - `onMessage(data, sub)` — required. The platform delivers `data` as
 //     `string | Blob | ArrayBuffer` depending on `binaryType` and the
@@ -52,7 +52,7 @@ import type {
 } from "./platform";
 import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
-export type WebSocketSubData = { wsUrl: string };
+export type WebSocketSubData = { readonly wsUrl: string };
 
 declare const WebSocket: MinimalWebSocketCtor;
 
@@ -63,11 +63,11 @@ export interface WebSocketFactoryOpts<S, M> {
   onClose?: (code: number, reason: string, sub: S) => M | null;
 }
 
-export function fromWebSocket<S extends Sub & WebSocketSubData, M>(
+export function fromWebSocket<S extends Sub<string, WebSocketSubData>, M>(
   opts: WebSocketFactoryOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {
   return (sub, _ctx, dispatch) => {
-    const ws = new WebSocket(sub.wsUrl);
+    const ws = new WebSocket(sub.deps.wsUrl);
 
     ws.onmessage = (event: MinimalMessageEvent): void => {
       // The platform delivers `data` as `unknown` — the factory hands it

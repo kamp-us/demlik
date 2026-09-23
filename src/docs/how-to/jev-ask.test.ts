@@ -98,9 +98,10 @@ export const CONFIDENCE_FLOOR = 0.8;
 
 /**
  * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
- * ALREADY settled, so there is no cell to put in the wrong order, and
+ * ALREADY settled, so there is no cell to put in the wrong order, and `subs` /
  * `subscribe` / `interpret` ride along on the fragments rather than being
- * remembered — `subscribe` into the machine, `interpret` to `run` beside it.
+ * remembered — `subs` into the machine, `subscribe` and `interpret` to `run`
+ * beside it.
  * `answer.choice` is `Category` here, not `string`.
  */
 export function mountAsk(ask: Ask) {
@@ -148,10 +149,13 @@ export function expenseMachine(ask: Ask) {
         ? [loaded, []]
         : [{ ...mounted.init(), verdicts: {} }, []],
     update: { ...mounted.update },
-    subscriptions: mounted.subscriptions,
-    subscribe: mounted.subscribe,
+    subs: mounted.subs,
   });
-  return { machine, interpret: mounted.interpret };
+  return {
+    machine,
+    interpret: mounted.interpret,
+    subscribe: mounted.subscribe,
+  };
 }
 // #endregion machine
 

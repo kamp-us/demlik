@@ -19,7 +19,7 @@
  *
  * ## The transport model: ONE Sub type, gateway-bridged I/O
  *
- * `createAgent().toMachine()` fixes the machine's Sub type to `DeadlineSub` —
+ * `createAgent().toMachine()` fixes the machine's Sub type to `DeadlinesSub` —
  * the agent owns the retry + watchdog timers and nothing else. That is the
  * WHOLE Sub model for a DO-hosted agent, and it is coherent because the
  * transport deliberately does NOT live in the Sub system:
@@ -32,7 +32,7 @@
  *
  * The deferred-tool gateway owns each tool round-trip as a Promise the interpret
  * cell awaits; the transport bridges results into `dispatch` from outside the
- * Sub system. The agent's Sub type stays exactly `DeadlineSub` — there is no
+ * Sub system. The agent's Sub type stays exactly `DeadlinesSub` — there is no
  * competing DO-native Sub variant to union in, and the host needs none. This is
  * the single transport model for `@demlik/tea/do` (#52); see
  * `.patterns/tea/durable-actors.md` for the host-layer north star.

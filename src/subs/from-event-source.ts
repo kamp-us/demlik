@@ -29,10 +29,9 @@
 //     drops open events silently. NOT fired on auto-reconnect by every
 //     browser implementation — treat the event as best-effort.
 //
-// `url` lives on the Sub itself (`EventSourceSubData`). Same id +
-// different url = the substrate's reconcile pass leaves the existing
-// connection alone (the URL change is silent). Changing the URL
-// requires a new Sub.id.
+// `url` lives in the Sub's `deps` (`EventSourceSubData`). A changed url
+// is a changed deps value, so a new id: the engine closes the old
+// connection and opens one to the new url.
 //
 // Cleanup is `close()` + `removeEventListener` for all three —
 // belt-and-suspenders against EventSource implementations that
@@ -47,7 +46,7 @@ import type {
 } from "./platform";
 import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
-type EventSourceSubData = { url: string };
+type EventSourceSubData = { readonly url: string };
 
 declare const EventSource: MinimalEventSourceCtor;
 
@@ -57,11 +56,11 @@ export interface EventSourceFactoryOpts<S, M> {
   onOpen?: (sub: S) => M | null;
 }
 
-export function fromEventSource<S extends Sub & EventSourceSubData, M>(
+export function fromEventSource<S extends Sub<string, EventSourceSubData>, M>(
   opts: EventSourceFactoryOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {
   return (sub, _ctx, dispatch) => {
-    const source = new EventSource(sub.url);
+    const source = new EventSource(sub.deps.url);
 
     const messageListener = (event: MinimalMessageEvent): void => {
       // The SSE `data` payload is a string per the platform contract.

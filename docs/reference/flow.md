@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/flow";
 ```
 
-## Exports (108)
+## Exports (110)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ import { … } from "@demlik/tea/flow";
 | `batchWindowExpired` | Function | Construct the window-expired Msg for the window identified by `id`, flushing by `atMs`. |
 | `BatchWindowExpired` | Type | The Msg a closed-by-time window dispatches. |
 | `BatchWindowKnob` | Interface | The bound knob returned by `createBatchWindow`. |
-| `BatchWindowSub` | Type | The Sub a batch window's open timer produces: it IS `../deadline`'s `DeadlineSub`, not a re-tagged copy. |
+| `BatchWindowSub` | Type | The deadline a batch window's open timer lists: it IS `../deadline`'s `DeadlineSub`, not a re-tagged copy. |
 | `CompensatingWorkflow` | Interface | A workflow unwinding after a forward failure (#125): the compensations of the `completed` steps are being emitted in STRICT REVERSE order, one at a time, on the same #67 ledger. |
 | `CompensationCmd` | Type |  |
 | `CompensationErr` | Interface | A compensation itself failed (#125): the inverse activity bounced (a refund that won't go through). |
@@ -37,8 +37,10 @@ import { … } from "@demlik/tea/flow";
 | `createSaga` | Function | Build the saga knob from `config`. |
 | `createWorkflow` | Function | Build a workflow hook bag. |
 | `DeadlineExceeded` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
-| `DeadlineSub` | Type | The Sub variant a deadline produces. |
+| `deadlinesSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
+| `deadlineSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `debounce` | Function | Wrap `fn` so a BURST of calls collapses to a single invocation. |
 | `Debounced` | Interface | A debounced wrapper around `fn`. |
 | `DeliveryId` | Type | Monotonic, gap-free delivery id — the single correlation + dedup key. |
@@ -80,7 +82,7 @@ import { … } from "@demlik/tea/flow";
 | `PollerGaveUp` | Type |  |
 | `PollerPolling` | Type | The three arms, named — so a verb can DECLARE the phases it can actually reach instead of the whole union. |
 | `PollerState` | Type | The Model field the poller knob owns — its visible slice (the knob principle: managed state lives in the Model, never a closure, so it is durable and replayable). |
-| `PollerSub` | Type | The poller Sub type — a `../deadline` Sub under a fixed id family. |
+| `PollerSub` | Type | The deadline the poller lists — a `../deadline` entry under the `poller:tick:` id family (see `pollerSubId`). |
 | `ReconcilePhase` | Type | Reconcile lifecycle phase. |
 | `ReconcilerConfig` | Interface | The reconciler knob. |
 | `ReconcilerPorts` | Interface | Ports the consumer supplies to `handlers`. |
@@ -101,9 +103,9 @@ import { … } from "@demlik/tea/flow";
 | `SnapshotWriteCmd` | Type |  |
 | `StageResult` | Type | The outcome a consumer reports to `advance`: the current stage either succeeded (retire it, claim the next) or failed (terminate the run). |
 | `StepId` | Type | A step's stable identity. |
-| `subscribeBatchWindow` | Variable | The `subscribe["deadline"]` cell for a batch window's timer — the exact `../deadline` handler. |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
-| `subsFor` | Function | The window timer Sub, derived from the slice. |
+| `subscribeBatchWindow` | Variable | The `deadline` runner for a batch window's timer — the exact `../deadline` runner. |
+| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
+| `subsFor` | Function | The window timer deadline, derived from the slice. |
 | `TerminalTimeoutError` | Class | Raised when `awaitTerminal` / `runToTerminal` is wired with a `timeoutMs` and the deadline elapses before any terminal state is reached. |
 | `Workflow` | Interface | The hook bag returned by createWorkflow. |
 | `WORKFLOW_MSG_TYPES` | Variable | The runtime accept-set of every WorkflowMsgType — the single source of truth the boundary replay parse keys off (see `do.ts`). |

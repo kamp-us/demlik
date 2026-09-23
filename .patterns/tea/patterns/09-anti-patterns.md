@@ -156,22 +156,28 @@ case "LoadData":
 
 ## Anti-pattern 7: Non-deterministic Sub identity
 
+A Sub's id is derived from its `type` and its `deps` value, so identity is
+whatever `deps` returns. Put something in `deps` that changes on every
+transition and the Sub never holds still.
+
 ```typescript
-// WRONG — id uses random value
-subscriptions: (state) => [
-  { type: "timer", id: Math.random().toString() },
+// WRONG — deps carries a value that moves every step
+subs: [
+  {
+    type: "heartbeat",
+    deps: (state) => ({ everyMs: 30_000, seen: state.lastSeenAt }),
+  },
 ]
 ```
 
 **What you actually have:** A subscription that restarts on every state change
 because the runtime sees a new identity each time.
 
-**Fix:** Deterministic id:
+**Fix:** `deps` holds only what the runner needs, and the Sub restarts exactly
+when that changes:
 
 ```typescript
-subscriptions: (state) => [
-  { type: "timer", id: "heartbeat-timer" },
-]
+subs: [{ type: "heartbeat", deps: () => ({ everyMs: 30_000 }) }]
 ```
 
 ## Anti-pattern 8: Derived state in Model

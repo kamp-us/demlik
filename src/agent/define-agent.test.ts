@@ -195,9 +195,9 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
       tools: [search],
       instructions: INSTRUCTIONS,
     });
-    const { machine, interpret } = agent.machine(INPUT);
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
     const final = await driveToDone(
-      run(machine, { ctx: { kb }, interpret }),
+      run(machine, { ctx: { kb }, interpret, subscribe }),
       { type: "agent_start", runId: "r", at: 0 },
       (s) => s.run.phase === "done",
     );
@@ -492,11 +492,11 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
       tools: [search],
       instructions: INSTRUCTIONS,
     });
-    const { machine, interpret } = agent.machine(INPUT);
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
 
     // Record every applied Msg to a journal, the way a durable host would.
     const journal = memoryJournal<LidMsg>();
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     const off = runtime.observe((msg) => {
       void journal.append("run-1", msg);
@@ -546,7 +546,12 @@ describe("instructions live in the durable Model (ADR 0004)", () => {
     });
     const wired = again.machine(INPUT);
     const rehydrated = await driveToDone(
-      run(wired.machine, { ctx: { kb }, store, interpret: wired.interpret }),
+      run(wired.machine, {
+        ctx: { kb },
+        store,
+        interpret: wired.interpret,
+        subscribe: wired.subscribe,
+      }),
       { type: "agent_start", runId: "run-2", at: 0 },
       (s) => s.run.phase === "done",
     );
@@ -584,8 +589,8 @@ describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
       tools: [search],
       instructions: INSTRUCTIONS,
     });
-    const { machine, interpret } = agent.machine(INPUT);
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     let snapshot: DefinedAgentState<typeof search> | undefined;
     const off = runtime.observe((_msg, s) => {
@@ -617,6 +622,7 @@ describe("AgentTurn.provider — the opaque passthrough slot (#93)", () => {
         ctx: { kb },
         store: memoryStore(persisted),
         interpret: wired.interpret,
+        subscribe: wired.subscribe,
       }),
       agentBootMsg(0),
       (s) => s.run.phase === "done",
@@ -776,8 +782,8 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
       tools: [search],
       instructions: INSTRUCTIONS,
     });
-    const { machine, interpret } = agent.machine(INPUT);
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     let snapshot: DefinedAgentState<typeof search> | undefined;
     const off = runtime.observe((_msg, s) => {
@@ -985,9 +991,9 @@ describe("onChunk — the streaming model port (#123)", () => {
       tools: [search],
       instructions: INSTRUCTIONS,
     });
-    const { machine, interpret } = agent.machine(INPUT);
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
     const journal = memoryJournal<LidMsg>();
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     const off = runtime.observe((msg) => {
       void journal.append("run-1", msg);
@@ -1018,8 +1024,8 @@ describe("onChunk — the streaming model port (#123)", () => {
       tools: [search],
       instructions: INSTRUCTIONS,
     });
-    const { machine, interpret } = agent.machine(INPUT);
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     let snapshot: DefinedAgentState<typeof search> | undefined;
     const off = runtime.observe((_msg, s) => {
@@ -1146,8 +1152,8 @@ async function lastConversationState(turns: readonly AgentTurn[]) {
     tools: [search],
     instructions: INSTRUCTIONS,
   });
-  const { machine, interpret } = agent.machine(INPUT);
-  const handle = run(machine, { ctx: { kb }, interpret });
+  const { machine, interpret, subscribe } = agent.machine(INPUT);
+  const handle = run(machine, { ctx: { kb }, interpret, subscribe });
   const runtime = await handle.ready;
   let held: DefinedAgentState<typeof search> | undefined;
   const off = runtime.observe((_msg, s) => {
@@ -1313,12 +1319,12 @@ describe("onToolError — the lid's typed failure seam (#115)", () => {
   it("a resumed run does not re-fire it for an outcome already folded", async () => {
     // Run 1 dies with both failures folded and the next brain call outstanding.
     const first = scripted([ASK_BADLY, ANSWER]);
-    const { machine, interpret } = defineAgent({
+    const { machine, interpret, subscribe } = defineAgent({
       model: first.model,
       tools: [search],
       instructions: INSTRUCTIONS,
     }).machine(INPUT);
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     let snapshot: DefinedAgentState<typeof search> | undefined;
     const off = runtime.observe((_msg, s) => {
@@ -1412,9 +1418,9 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
       instructions: INSTRUCTIONS,
     }).with({ interpret: { search: tracing(trace, "search") } });
 
-    const { machine, interpret } = agent.machine(INPUT);
+    const { machine, interpret, subscribe } = agent.machine(INPUT);
     const journal = memoryJournal<LidMsg>();
-    const handle = run(machine, { ctx: { kb }, interpret });
+    const handle = run(machine, { ctx: { kb }, interpret, subscribe });
     const runtime = await handle.ready;
     const off = runtime.observe((msg) => {
       void journal.append("run-1", msg);
@@ -1768,11 +1774,11 @@ async function twoSlowCalls(
     instructions: INSTRUCTIONS,
     ...(concurrency === undefined ? {} : { toolConcurrency: concurrency }),
   });
-  const { machine, interpret } = agent.machine(INPUT);
+  const { machine, interpret, subscribe } = agent.machine(INPUT);
   const ctx = { log, ...(delayMs === undefined ? {} : { delayMs }) };
   let maxRunning = 0;
   let everPending = false;
-  const runtime = await run(machine, { ctx, interpret }).ready;
+  const runtime = await run(machine, { ctx, interpret, subscribe }).ready;
   const off = runtime.observe((m, s) => {
     msgs.push(m);
     maxRunning = Math.max(maxRunning, s.tools.running.length);

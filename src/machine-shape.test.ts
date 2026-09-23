@@ -135,7 +135,7 @@ describe("why a derived reading and not a property on the machine", () => {
       __marker?: string;
       __form?: string;
     };
-    // Gone. The wrapper builds `{ init, update, subscriptions, subscribe }`
+    // Gone. The wrapper builds `{ init, update, subs }`
     // from scratch; nothing else crosses the boundary. Note the
     // `__form` tag stamped by `defineMachine` is lost for the same reason.
     expect(wrapped.__marker).toBeUndefined();

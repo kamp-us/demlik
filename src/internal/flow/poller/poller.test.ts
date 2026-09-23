@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Cmd, defineMachine } from "../../../index";
+import { type Cmd, defineMachine, subIdOf } from "../../../index";
 import { run } from "../../../promise";
 import {
   type DurationRetryPolicy,
@@ -10,8 +10,9 @@ import {
 } from "../../../retry-backoff";
 import { bindMachine } from "../../../testing";
 import {
-  type DeadlineExceeded,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   subscribeDeadline,
 } from "../../resilience/deadline";
 import { createPoller, type PollerState } from "./index";
@@ -39,6 +40,11 @@ const rngZero = () => 0; // pins jitter when a policy has any.
 // target so each cadence/backoff re-arm is a distinct identity the substrate's
 // reconcile pass retires + re-arms). Tests assert against this exact shape.
 const tickSub = (atMs: number) => deadlineSub(`poller:tick:${atMs}`, atMs);
+// The running `deadline` Sub `replay` reports while one tick is armed.
+const tickDeadlines = (atMs: number): DeadlinesSub => {
+  const deps = [tickSub(atMs)];
+  return { id: subIdOf("deadline", deps), type: "deadline", deps };
+};
 
 // A poller keyed on the result status. `until` holds once we observe "ready".
 // `rng` is injected at the factory (pinned to zero) so backoff is deterministic
@@ -372,7 +378,7 @@ function pollerMachine() {
       model: {} as AppState,
       msg: {} as AppMsg,
       cmd: {} as Cmd<"fetch_status">,
-      sub: {} as DeadlineExceeded,
+      sub: {} as DeadlinesSub,
       ctx: undefined,
     },
     init: (loaded) => [loaded ?? { poll: poll.init() }, []],
@@ -408,8 +414,7 @@ function pollerMachine() {
         return [{ ...s, poll: slice }, cmds];
       },
     },
-    subscriptions: (s) => poll.subs(s.poll),
-    subscribe: { deadline: subscribeDeadline },
+    subs: [deadlinesSub((s: AppState) => poll.subs(s.poll))],
   });
 }
 
@@ -472,7 +477,7 @@ describe("createPoller — wired into a machine (pure fold)", () => {
           { type: "tick_ok", result: { status: "pending" }, at: BASE + 5_000 },
         ],
       },
-      [tickSub(BASE + 10_000)],
+      [tickDeadlines(BASE + 10_000)],
     );
 
     t.expectActiveSubs(
@@ -512,7 +517,7 @@ describe("createPoller — wired into a machine (pure fold)", () => {
 describe("createPoller — wired into a REAL runtime (timer-driven cadence)", () => {
   beforeEach(() => {
     // useFakeTimers mocks setTimeout/clearTimeout AND Date.now(), so the
-    // deadline subscribe cell's `Date.now()` reads the same clock the test
+    // deadline runner's `Date.now()` reads the same clock the test
     // advances. setSystemTime anchors `now` at BASE so absolute targets line up.
     vi.useFakeTimers();
     vi.setSystemTime(BASE);
@@ -550,7 +555,7 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
         model: {} as AppState,
         msg: {} as AppMsg,
         cmd: {} as Cmd<"fetch_status">,
-        sub: {} as DeadlineExceeded,
+        sub: {} as DeadlinesSub,
         ctx: undefined,
       },
       init: () => [{ poll: poll.init() }, []],
@@ -582,12 +587,12 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
           return [{ ...s, poll: slice }, cmds];
         },
       },
-      subscriptions: (s) => poll.subs(s.poll),
-      subscribe: { deadline: subscribeDeadline },
+      subs: [deadlinesSub((s: AppState) => poll.subs(s.poll))],
     });
 
     const runtime = await run(machine, {
       ctx: undefined,
+      subscribe: { deadline: subscribeDeadline },
       interpret: {
         // Perform the observation and re-enter the machine with the result Msg
         // the substrate dispatches onto its tail (the runtime's dispatch).
@@ -930,7 +935,7 @@ describe("createPoller — wired into a REAL runtime (duration-bounded outage)",
         model: {} as AppState,
         msg: {} as AppMsg,
         cmd: {} as Cmd<"fetch_status">,
-        sub: {} as DeadlineExceeded,
+        sub: {} as DeadlinesSub,
         ctx: undefined,
       },
       init: () => [{ poll: durationPoll.init() }, []],
@@ -957,12 +962,12 @@ describe("createPoller — wired into a REAL runtime (duration-bounded outage)",
           return [{ ...s, poll: slice }, cmds];
         },
       },
-      subscriptions: (s) => durationPoll.subs(s.poll),
-      subscribe: { deadline: subscribeDeadline },
+      subs: [deadlinesSub((s: AppState) => durationPoll.subs(s.poll))],
     });
 
     const runtime = await run(machine, {
       ctx: undefined,
+      subscribe: { deadline: subscribeDeadline },
       interpret: {
         // The source is DOWN for the entire run — every observation fails.
         fetch_status: async (): Promise<AppMsg> => {

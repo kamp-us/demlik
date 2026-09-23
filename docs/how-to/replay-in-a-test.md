@@ -10,7 +10,8 @@ so a replay test is pure, synchronous, and deterministic.
 
 Hand `replay` the machine, the message list, and the `ctx` your `init` expects.
 It returns the final `state`, the `cmds` that would have been emitted, and the
-`subs` that would be desired at the end:
+`subs` that would be running at the end, each as its runner would see it
+(`{ id, type, deps }`):
 
 ```ts
 import { replay } from "@demlik/tea";

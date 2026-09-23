@@ -13,7 +13,9 @@ import {
 import {
   type AuthedState,
   createAuthedCall,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FailMsg,
   type ResilientTimerMsg,
   type RunCmd,
@@ -76,7 +78,7 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof ac.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -110,8 +112,7 @@ function makeMachine(
         return [{ authed: slice }, cmds];
       },
     },
-    subscriptions: (s) => ac.subs(s.authed),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => ac.subs(s.authed))],
   });
   return { ac, machine };
 }
