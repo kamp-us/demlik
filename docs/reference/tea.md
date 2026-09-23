@@ -22,7 +22,7 @@ import { … } from "@demlik/tea";
 | `asReducer` | Function |  |
 | `AsyncSchemaError` | Class | A schema whose `validate` returned a Promise where the kernel needs an answer now — the `ok` check at the interpret edge, the `args` check in a reducer. |
 | `BootedRunHandle` | Interface | A RunHandle whose boot has completed, so its State exists. |
-| `BootingRuntime` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
+| `BootingRuntime` | Interface | What the Promise engine's `run` returns, the instant it is called, while boot is still in flight: its RunHandle, widened with Ports and `dispatchOnce`. |
 | `Branded` | Type |  |
 | `BuiltinSub` | Type | The built-in Subs a machine over `M` may declare without declaring them. |
 | `BuiltinSubType` | Type | The Sub types every engine ships a runner for. |
@@ -115,7 +115,7 @@ import { … } from "@demlik/tea";
 | `RunHandle` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
 | `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers and the SubscribeArg sub runners. |
 | `RunOptions` | Type | The options every engine's `run` accepts: the `ctx`, the handlers the machine runs under, an optional `store`, and the `events` projector that feeds `on`. |
-| `Runtime` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
+| `Runtime` | Interface | The Promise engine's booted handle — what BootingRuntime's `ready` resolves to once boot completes. |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |
 | `RuntimeErrorContext` | Interface | Context handed to an `OnError` sink alongside the error itself. |

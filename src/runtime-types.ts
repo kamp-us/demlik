@@ -765,23 +765,24 @@ export type EngineRun<
 ) => RunHandle<S, M, E>;
 
 // === BootingRuntime: handle returned SYNCHRONOUSLY from run() ===
-//
-// `run()` returns a `BootingRuntime<S, M>` the instant it is called, while boot
-// is still in flight. It exposes exactly the surface TOTAL before boot: queue a
-// dispatch, subscribe, observe, wire a Port, stop. What you may NOT do is read
-// State (`getState`) or wait for quiescence (`idle`) — those need the initial
-// State to exist, and are the difference between a BootingRuntime and a
-// `Runtime`, enforced at the type level so "read State before boot" is a COMPILE
-// error, not a runtime throw.
-//
-// `subscribe` is the React-shaped change notifier (zero-arg, paired with
-// `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
-// for every APPLIED transition; boot is delivered via `onBoot` instead, so
-// `observe`'s `msg` is total (never `null`). `on(type, handler)` is the SEMANTIC
-// event channel: only the public, `type`-narrowed events a machine projects,
-// never its PRIVATE Msg vocabulary. `E` defaults to `never` (no projector → `on`
-// uncallable). It is the Promise engine's `RunHandle`, widened with what only
-// this engine offers (Ports, `dispatchOnce`, `idle`, `result`, `done`).
+
+/**
+ * What the Promise engine's `run` returns, the instant it is called, while boot
+ * is still in flight: its {@link RunHandle}, widened with Ports and
+ * `dispatchOnce`. It exposes exactly the surface total before boot — queue a
+ * dispatch, subscribe, observe, wire a Port, stop. Reading State (`getState`)
+ * and waiting for quiescence (`idle`) need the initial State to exist, so they
+ * live on the {@link Runtime} that `ready` resolves to; "read State before boot"
+ * is a compile error, not a runtime throw.
+ *
+ * `subscribe` is the React-shaped change notifier (zero-arg, paired with
+ * `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
+ * for every applied transition; boot is delivered via `onBoot` instead, so
+ * `observe`'s `msg` is total (never `null`). `on(type, handler)` is the semantic
+ * event channel: only the public, `type`-narrowed events a machine projects,
+ * never its private Msg vocabulary. `E` defaults to `never` (no projector → `on`
+ * uncallable).
+ */
 export interface BootingRuntime<
   S,
   M extends { type: string },
@@ -857,12 +858,16 @@ export interface BootingRuntime<
 }
 
 // === Runtime: the BOOTED handle `ready` resolves to ===
-//
-// A `BootingRuntime<S, M>` whose boot has completed. It adds the two members
-// only meaningful once the initial State exists — `getState()` (total) and
-// `idle()` (quiescence) — and narrows `ready` to resolve to itself. You never
-// construct one directly; you obtain it via `await bootingRuntime.ready`, which
-// makes "read State before boot" unrepresentable rather than merely discouraged.
+
+/**
+ * The Promise engine's booted handle — what {@link BootingRuntime}'s `ready`
+ * resolves to once boot completes. It adds the members only meaningful once the
+ * initial State exists — `getState()` (total), `idle()` (quiescence), and the
+ * `result()` / `done()` reads of the terminal State — and narrows `ready` to
+ * resolve to itself. You never construct one directly; you obtain it via
+ * `await bootingRuntime.ready`, which makes "read State before boot"
+ * unrepresentable rather than merely discouraged.
+ */
 export interface Runtime<
   S,
   M extends { type: string },

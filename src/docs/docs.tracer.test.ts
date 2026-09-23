@@ -307,8 +307,8 @@ describe("how-to — drive a machine from React", () => {
   });
 
   it("advances state on dispatch through the run-loop useMachine wraps", async () => {
-    // `useMachine(machine, { ctx })` internally does `run(machine, { ctx })`
-    // and returns `[state, dispatch]`. We drive that engine directly.
+    // `useMachine(machine, { ctx, run })` calls the `run` it is handed and
+    // returns `[state, dispatch]`. We drive the Promise engine's `run` directly.
     const runtime = await run(counter, { ctx: undefined }).ready;
     expect(runtime.getState().count).toBe(0); // initial
     await runtime.dispatch({ type: "inc" });
