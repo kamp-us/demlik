@@ -1,24 +1,24 @@
 /**
  * tea's built-ins, each one an {@link Extension} of the core loop (`./loop`,
- * #280). None is a public plugin API (#268): `run` builds them from its options
- * and fixes their order.
+ * #280). None is a public plugin API (#268): each engine's `run` builds them
+ * from its options through {@link builtinExtensions}, which fixes their order.
  */
 
-import type { AnyCmdDef, Identity, Port } from "../pure/core";
+import type { AnyCmdDef, Identity, Port } from "../../pure/core";
 import {
   checkedStep,
   cmdEdge,
   cmdEdgeOver,
   Outcome,
   structuralHash,
-} from "../pure/core";
+} from "../../pure/core";
 import type {
   Store,
   Supervision,
   TelemetryEvent,
   TelemetrySink,
-} from "../runtime-types";
-import { IdentityDropNotice, isFencedStore } from "../runtime-types";
+} from "../../runtime-types";
+import { IdentityDropNotice, isFencedStore } from "../../runtime-types";
 import type { Extension, ExtensionFactory, LoopServices } from "./loop";
 
 type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
@@ -372,4 +372,56 @@ export function telemetry<S, M extends { type: string }, C>(
       },
     };
   };
+}
+
+// === assembly: the one order both engines run the built-ins in ===
+
+/** The `run` options the built-ins read. Every engine's `run` accepts them. */
+export interface BuiltinOptions<
+  S,
+  M extends { type: string },
+  E extends { type: string },
+> {
+  readonly clock?: () => number;
+  readonly events?: (msg: M, state: S) => readonly E[];
+  readonly supervision?: Supervision<S, M>;
+  readonly terminal?: (state: S) => boolean;
+  readonly telemetry?: TelemetrySink;
+}
+
+/**
+ * The built-ins, in the one order that gives them their meaning. Every engine
+ * builds its loop from this list, so a machine means the same thing on each.
+ *
+ * Update middleware nests first-outermost: supervision wraps the identity
+ * filter (a throwing `ofMsg` is supervised like a reducer throw — spike #264
+ * run 3), which wraps the dev checks around the reducer itself. Commit
+ * callbacks run in order: change listeners, then `observe` / `onBoot`, then
+ * semantic events, then `done()` waiters, then telemetry.
+ */
+export function builtinExtensions<
+  S,
+  M extends { type: string },
+  C,
+  E extends { type: string },
+>(
+  machine: {
+    readonly identity?: Identity<S, M>;
+    readonly cmds?: readonly AnyCmdDef[];
+  },
+  opts: BuiltinOptions<S, M, E>,
+): readonly ExtensionFactory<S, M, C>[] {
+  const clock = opts.clock ?? Date.now;
+  return [
+    supervision(opts.supervision),
+    identityFilter(machine.identity),
+    devChecks(),
+    cmdDefinitions(machine.cmds ?? [], clock),
+    fencing(),
+    ports(),
+    observation(),
+    semanticEvents(opts.events),
+    terminality(opts.terminal),
+    telemetry(opts.telemetry, clock),
+  ];
 }

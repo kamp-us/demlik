@@ -2,11 +2,20 @@
  * @demlik/tea runtime — `run`: boot a machine and drive its serial dispatch loop
  * on Promises; `driveToDone`: run one to its terminal State.
  *
- * `run` is assembly. The loop itself is `./loop` — a small core with no special
- * case for any built-in — and every built-in is an extension of it
- * (`./builtins`), built here from `run`'s options in a fixed order.
+ * `run` is assembly. The loop itself is `src/internal/engine/loop.ts` — a small
+ * core with no special case for any built-in, shared with the Effect engine —
+ * and every built-in is an extension of it (`src/internal/engine/builtins.ts`),
+ * built from `run`'s options in the order both engines share.
  */
 
+import { builtinExtensions } from "../internal/engine/builtins";
+import {
+  type LiveWorkProbe,
+  type LoopHandler,
+  type LoopRunner,
+  liveWork,
+  startLoop,
+} from "../internal/engine/loop";
 import type { Interpret, Machine, RunHandlers, Sub } from "../pure/core";
 import { applyCell, type Cmd, subEntriesOf } from "../pure/core";
 import type {
@@ -19,26 +28,6 @@ import type {
 } from "../runtime-types";
 import { DriveFailedError, DriveStalledError } from "../runtime-types";
 import { builtinRunners } from "./builtin-runners";
-import {
-  cmdDefinitions,
-  devChecks,
-  fencing,
-  identityFilter,
-  observation,
-  ports,
-  semanticEvents,
-  supervision,
-  telemetry,
-  terminality,
-} from "./builtins";
-import {
-  type ExtensionFactory,
-  type LiveWorkProbe,
-  type LoopHandler,
-  type LoopRunner,
-  liveWork,
-  startLoop,
-} from "./loop";
 
 // === run ===
 //
@@ -123,27 +112,6 @@ export function run<
       __idleCap?: number;
     },
 ): BootingRuntime<S, M, E> {
-  const clock = opts.clock ?? Date.now;
-
-  // The built-ins, in the one order that gives them their meaning. Update
-  // middleware nests first-outermost: supervision wraps the identity filter
-  // (a throwing `ofMsg` is supervised like a reducer throw — spike #264 run 3),
-  // which wraps the dev checks around the reducer itself. Commit callbacks run
-  // in order: change listeners, then `observe` / `onBoot`, then semantic
-  // events, then `done()` waiters, then telemetry.
-  const extensions: readonly ExtensionFactory<S, M, C>[] = [
-    supervision(opts.supervision),
-    identityFilter(machine.identity),
-    devChecks(),
-    cmdDefinitions(machine.cmds ?? [], clock),
-    fencing(),
-    ports(),
-    observation(),
-    semanticEvents(opts.events),
-    terminality(opts.terminal),
-    telemetry(opts.telemetry, clock),
-  ];
-
   // `interpret` is optional when `C extends Cmd<never>`; default a missing map
   // to `{}` — a Cmd with no handler is skipped, invariant 6's forward progress
   // for a miswired consumer.
@@ -175,7 +143,7 @@ export function run<
     onError: opts.onError,
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,
     idleCap: opts.__idleCap ?? 100_000,
-    extensions,
+    extensions: builtinExtensions<S, M, C, E>(machine, opts),
   });
   return handle as unknown as BootingRuntime<S, M, E> & LiveWorkProbe;
 }

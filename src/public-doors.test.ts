@@ -38,8 +38,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * `./devtools/styles.css` (the asset stays with its door).
  *
  * `./promise` and `./effect` are the two engines beside the neutral core at
- * `.` (#274 R2.1). `./effect` opens empty so the import-graph guard covers it
- * before the Effect engine lands in it.
+ * `.` (#274 R2.1).
  *
  * `./devtools`, `./machine-viz` and `./parity` are here rather than folded
  * because each has a live external callsite (ADR 0016 as amended by #83): a
