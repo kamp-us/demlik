@@ -861,7 +861,7 @@ function dropChunk(): void {}
  * runtime's own fanout is throw-isolated but routes to `OnError`, whose default
  * re-throws on a fresh macrotask; for `onChunk` there is no fanout at all — the
  * sink is called straight from the adapter, so an escaping throw would reject
- * the model call and settle a `resilient_err` for a defect in a progress bar.
+ * the model call and settle a `resilient_run_err` for a defect in a progress bar.
  */
 function contained<E>(what: string, listener: (event: E) => void) {
   return (event: E): void => {

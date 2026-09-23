@@ -50,8 +50,8 @@ import type {
 // ===========================================================================
 
 /**
- * The prefix a protocol discriminant was minted from: `resilient_ok` →
- * `resilient`, `compact_run` → `compact`. A tool named by that prefix would
+ * The prefix a protocol discriminant was minted from: `resilient_run_ok` →
+ * `resilient_run`, `compact_run` → `compact`. A tool named by that prefix would
  * mint the same `<name>_ok` / `<name>_err` the agent's reducer already owns.
  */
 type SettlePrefixOf<T extends string> = T extends

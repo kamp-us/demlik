@@ -928,14 +928,14 @@ export function createAgent<
    *   1. The RETRY layer: `llm.succeed` closes the breaker and DROPS this key's
    *      retry counter. This is the half the old detached wiring skipped — the
    *      detached handler dispatched the parsed turn directly and never
-   *      re-entered `resilient_ok`, so `succeed` never ran, the resilient slice
+   *      settled the brain call, so `succeed` never ran, the resilient slice
    *      stayed stuck `running`, the breaker never closed, and the retry counter
    *      ACCUMULATED across the run (a later transient failure would trip
    *      `maxAttempts` prematurely). Running it here resets the retry slice every
    *      turn — a clean retry slice across the whole run.
    *   2. The LOOP: fold the parsed `AgentTurn` (`msg.value.output`) through
    *      `turn`, which scatters this turn's tools (or advances the pipeline on an
-   *      empty turn). One re-entered settle Msg now advances BOTH the resilient
+   *      empty turn). One engine-minted settle Msg now advances BOTH the resilient
    *      slice AND the conversation, so the loop actually progresses to a
    *      terminal `done`.
    *
@@ -1290,7 +1290,7 @@ export function createAgent<
    * It assembles messages, binds the purpose schema, invokes, and RETURNS the
    * outcome `llm.decode` builds: the brain Cmd is `Cmd.define`d, so the engine
    * mints `resilient_run_ok` / `resilient_run_err` from it (ADR 0021), and
-   * those Msgs RE-ENTER the reducer's `succeed` / `fail` arms — which advance
+   * dispatches them to the reducer's `succeed` / `fail` arms — which advance
    * the inherited retry loop AND fold the parsed turn into the conversation.
    */
   function brainHandlers<Ctx>(): Interpret<
@@ -1308,14 +1308,15 @@ export function createAgent<
    * one `deadline` Sub over every brick's deadlines, `subscribe` carries its
    * runner, and `interpret` is the FIXED brain-call handler.
    *
-   * The brain call uses the FIXED no-arg `../llm-call` handler (`brainHandlers`):
-   * its returned `resilient_ok` / `resilient_err` settle Msg RE-ENTERS the
-   * reducer, where the `resilient_ok` arm runs `succeed` (reset retry + close
-   * breaker + fold the parsed turn) and the `resilient_err` arm runs `fail`
-   * (back off via retry, re-arm the timer). This is what drives the loop to a
-   * clean terminal `done` with a reset retry slice — fixing the L3 break where
-   * the old detached handler dispatched the turn directly, never re-entered the
-   * settle Msg, and so `succeed` never ran (stuck `running`, accumulating retry).
+   * The brain call uses the FIXED no-arg handler (`brainHandlers`): it returns
+   * the call's outcome, and the engine mints `resilient_run_ok` /
+   * `resilient_run_err` from it (ADR 0021). The `resilient_run_ok` arm runs
+   * `succeed` (reset retry + close breaker + fold the parsed turn) and the
+   * `resilient_run_err` arm runs `fail` (back off via retry, re-arm the timer).
+   * This is what drives the loop to a clean terminal `done` with a reset retry
+   * slice — fixing the L3 break where the old detached handler dispatched the
+   * turn directly, never settled the brain call, and so `succeed` never ran
+   * (stuck `running`, accumulating retry).
    *
    * The consumer supplies only the per-tool interpret (the agent owns the brain
    * interpret now; no `ports` to supply — the parsed turn is folded by `succeed`,
@@ -1401,9 +1402,9 @@ export function createAgent<
     // IN (policy) or OUT (`{ compact_run?: never }`) of the obligation (#55 reuse).
     type NonBrainCmd = TC | MonitoredRunCmd<unknown> | AgentCompactRunCmd;
     type ACmd = AgentLlmRunCmd<P> | NonBrainCmd;
-    // The FIXED brain handler returns the settle Msg for re-entry; the substrate
-    // enqueues it as a follow-up dispatched back into `update` (the `resilient_*`
-    // arms below). It is PRECISELY an `Interpret` over the brain Cmd
+    // The FIXED brain handler returns an outcome; the engine mints the
+    // `resilient_run_ok` / `resilient_run_err` Msg from it and dispatches that
+    // into `update` (the `resilient_run_*` arms below). It is PRECISELY an `Interpret` over the brain Cmd
     // (`AgentLlmRunCmd<P>`); the consumer's `toolInterpret` is PRECISELY an
     // `Interpret` over the rest of the config-derived union (`TC`, and
     // `snapshot_write` only when snapshotting). `mergeInterpret` joins the two
@@ -1494,8 +1495,8 @@ export function createAgent<
       // shape is a bare `reason` string — a consumer routing their own interpret
       // through it never declared a tag, so the failure it mints carries none.
       [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
-      // The re-entered brain-call settle Msgs (from `brainHandlers`): success
-      // runs `succeed` (reset retry + fold the turn), failure runs `fail`.
+      // The engine-minted brain-call settle Msgs (from `brainHandlers`' outcome):
+      // success runs `succeed` (reset retry + fold the turn), failure runs `fail`.
       [MsgType.ResilientOk]: (s, m) => succeed(s, m, m.at),
       [MsgType.ResilientErr]: (s, m) => fail(s, m, m.at),
       // The re-entered compaction settle Msgs (from the consumer's `compact_run`

@@ -267,12 +267,13 @@ export type ResilientErrType<N extends string> = `${N}_run_err`;
  */
 export interface ResilientConfig<N extends string = DefaultResilientName> {
   /**
-   * What this knob's Cmd and settle Msgs are called: `<name>_run`, `<name>_ok`,
-   * `<name>_err`. Omit it and the family is `resilient` — `resilient_run` /
-   * `resilient_ok` / `resilient_err`, exactly as before this parameter existed.
+   * What this knob's Cmd and settle Msgs are called: `<name>_run`, and the
+   * `<name>_run_ok` / `<name>_run_err` the engine mints from the run handler's
+   * outcome. Omit it and the family is `resilient` — `resilient_run` /
+   * `resilient_run_ok` / `resilient_run_err`.
    *
-   * Name a knob when a machine mounts more than one of the resilient family.
-   * Two unnamed knobs meet in ONE `resilient_ok` cell whose payload is the union
+   * Name a knob when a machine holds more than one of the resilient family.
+   * Two unnamed knobs meet in ONE `resilient_run_ok` cell whose payload is the union
    * of both results, and the consumer discriminates by hand on `key` — which the
    * type checker cannot see. Under distinct names each knob settles into its own
    * cell, already narrowed to its own payload.

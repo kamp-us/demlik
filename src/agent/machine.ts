@@ -281,8 +281,8 @@ export type AgentLlmOkMsg<
   O extends Record<P, unknown>,
 > = LlmSucceedMsg<P, O>;
 /**
- * The brain-call FAILURE settle Msg, inherited from `../llm-call` — it re-enters
- * the agent's `fail` verb, which backs off via the retry ladder rather than
+ * The brain-call FAILURE settle Msg, inherited from `../llm-call` — the engine
+ * mints it from the brain handler's outcome and it drives the agent's `fail` verb, which backs off via the retry ladder rather than
  * ending the run.
  */
 export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
@@ -355,16 +355,16 @@ export function agentCancelMsg(at: number): AgentCancelMsg {
  * The agent machine's Msg union — one variant per reducer entry point. A
  * consumer using `toMachine` dispatches `agent_start` to begin and `agent_tool_ok`
  * / `agent_tool_err` to route settled tools back; the brain-call settle Msgs
- * (`resilient_ok` / `resilient_err`) RE-ENTER from the FIXED `brainHandlers`
- * (the substrate enqueues an interpret handler's returned Msg as a follow-up),
- * driving `succeed` / `fail`. Time enters via `at` on every variant — the
+ * (`resilient_run_ok` / `resilient_run_err`) are minted by the engine from the
+ * outcome the FIXED `brainHandlers` returns (ADR 0021), driving `succeed` /
+ * `fail`. Time enters via `at` on every variant — the
  * reducer never reads the clock.
  *
  * There is deliberately NO `agent_turn` variant here. The wired loop folds a
- * model turn INSIDE `succeed` from the re-entered `resilient_ok` — a single
+ * model turn INSIDE `succeed` from the minted `resilient_run_ok` — a single
  * settle Msg advances both the retry slice and the conversation (the L3 fix).
  * Exposing `agent_turn` as a dispatchable Msg re-opened the stuck-`running` bug:
- * a hand-fed turn folds the conversation without ever re-entering `resilient_ok`,
+ * a hand-fed turn folds the conversation without ever settling `resilient_run_ok`,
  * so `succeed` never runs and the resilient slice stays `running`. The
  * `turn` verb remains on the handle for the consumer that wires the verbs by hand
  * (manual wiring), but it is not part of the one wired machine's Msg surface.
@@ -387,10 +387,10 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
       readonly reason: string;
       readonly at: number;
     }
-  // The brain-call settle Msgs RE-ENTER straight from `brainHandlers` (no
-  // wrapping) — `resilient_ok` runs `succeed` (reset retry + fold the turn),
-  // `resilient_err` runs `fail` (back off via retry). This is the inherited
-  // llm-call settle shape, dispatched verbatim by the substrate's re-entry.
+  // The brain-call settle Msgs the engine mints from `brainHandlers`' outcome
+  // (ADR 0021) — `resilient_run_ok` runs `succeed` (reset retry + fold the
+  // turn), `resilient_run_err` runs `fail` (back off via retry). This is the
+  // inherited llm-call settle shape.
   | AgentLlmOkMsg<P, O>
   | AgentLlmErrMsg<P>
   // The compaction settle Msgs RE-ENTER from the compaction interpret handler
@@ -427,7 +427,7 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  * the retry plumbing is renamed.
  *
  *   - `TurnSettled` — a brain turn settled (the model produced an `AgentTurn`).
- *     Projected off the private `resilient_ok` settle Msg; carries the parsed
+ *     Projected off the private `resilient_run_ok` settle Msg; carries the parsed
  *     `turn` (the narration + tool calls the model asked for).
  *   - `ToolSettled` — a tool call settled OK. Projected off the private
  *     `agent_tool_ok` Msg; carries the `callId` and the tool `result`.
@@ -451,7 +451,7 @@ export type AgentEvent<R> =
  * `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`.
  *
  * This is the ONE place the agent's PRIVATE Msg names are read: it maps
- * `resilient_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
+ * `resilient_run_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
  * the post-transition `run.phase` for `RunDone`. The mapping is total over the
  * Msg union (a `default`-free switch on the discriminant) and returns `[]` for
  * the transitions that carry no public event (start / boot / timer / the error
@@ -459,7 +459,7 @@ export type AgentEvent<R> =
  *
  * A single transition may emit more than one event: the brain turn that retires
  * the final stage settles a turn (`TurnSettled`) AND finishes the run
- * (`RunDone`) — both are projected from that one `resilient_ok` transition.
+ * (`RunDone`) — both are projected from that one `resilient_run_ok` transition.
  * `RunDone` is gated on `run.phase === "done"`, which the wired loop reaches
  * exactly once (the agent is terminal there and dispatches no further
  * transition), so the event fires once per run.

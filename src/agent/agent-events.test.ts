@@ -16,10 +16,10 @@ import {
 //
 // These tests pin the seam that decouples observability from the agent's
 // PRIVATE retry/loop Msg vocabulary: a consumer folds `TurnSettled` /
-// `ToolSettled` / `RunDone` via `runtime.on`, never `resilient_ok` /
+// `ToolSettled` / `RunDone` via `runtime.on`, never `resilient_run_ok` /
 // `agent_tool_ok` off the raw `observe` firehose. The fixtures mirror the WIRED
-// machine test in `agent.test.ts`: a two-stage agent driven end-to-end through
-// re-entry by a real `run(...)` runtime, with `events: agentEvents()` wired so
+// machine test in `agent.test.ts`: a two-stage agent driven end-to-end by a
+// real `run(...)` runtime, with `events: agentEvents()` wired so
 // `on` lights up.
 // ---------------------------------------------------------------------------
 
@@ -192,8 +192,8 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
       // @ts-expect-error — `callId` is on ToolSettled, NOT the narrowed TurnSettled.
       void e.callId;
     });
-    // @ts-expect-error — `resilient_ok` is a PRIVATE Msg name, not an AgentEvent type.
-    runtime.on("resilient_ok", () => {});
+    // @ts-expect-error — `resilient_run_ok` is a PRIVATE Msg name, not an AgentEvent type.
+    runtime.on("resilient_run_ok", () => {});
 
     await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
     await runtime.done();
@@ -295,13 +295,13 @@ describe("#47 — observe drops the boot null arm; onBoot carries it", () => {
 });
 
 describe("#47 — an `on`-based consumer references no private Msg name", () => {
-  it("folds the run into a public summary without naming resilient_ok / agent_tool_ok", async () => {
+  it("folds the run into a public summary without naming resilient_run_ok / agent_tool_ok", async () => {
     const runtime = await wiredRuntime();
 
     // A consumer built ENTIRELY on the semantic channel. The only strings it
     // ever matches are public AgentEvent types — the private Msg names appear
     // nowhere in this closure (the type system also forbids them: `on`'s key is
-    // `AgentEvent["type"]`, which does not include `resilient_ok`).
+    // `AgentEvent["type"]`, which does not include `resilient_run_ok`).
     const summary: string[] = [];
     const fold = (e: AgentEvent<string>): void => {
       switch (e.type) {
@@ -339,7 +339,7 @@ describe("#47 — an `on`-based consumer references no private Msg name", () => 
     // describe title / this assertion's own strings are the only mentions, and
     // they are not `on(...)` keys.)
     const consumerVocab = fold.toString();
-    expect(consumerVocab).not.toContain("resilient_ok");
+    expect(consumerVocab).not.toContain("resilient_run_ok");
     expect(consumerVocab).not.toContain("agent_tool_ok");
   });
 });

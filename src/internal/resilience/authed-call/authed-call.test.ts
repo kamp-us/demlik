@@ -671,13 +671,13 @@ describe("createAuthedCall — properties", () => {
 // END STATE of the SHARED circuit breaker after a 401.
 //
 // Here we build an actual `run()` Runtime from the knob's verbs + handlers. The
-// `run` port and the `refresh` port are both wired into `interpret`, so a
-// backend outcome RE-ENTERS the machine exactly as production does:
+// `run` port and the `refresh` port are both wired into `interpret` as outcome
+// handlers, so the engine mints each settle Msg exactly as production does:
 //
-//   attempt → (Cmd) resilient_run → run port → (follow-up Msg) resilient_ok
-//                                              / unauthorized→on401
-//   on401   → (Cmd) refresh_token  → refresh port → (follow-up Msg)
-//                                                    token_refreshed → re-issue
+//   attempt → (Cmd) resilient_run → run port → (minted Msg) resilient_run_ok
+//                                              / 401 sentinel→on401
+//   on401   → (Cmd) refresh_token  → refresh port → (minted Msg)
+//                                                    refresh_token_ok → re-issue
 //
 // We drive a two-key scenario over ONE shared breaker (threshold 1) and assert
 // the breaker is still CLOSED after key "a" exhausts its 401 budget and settles
@@ -700,9 +700,9 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
   interface WState {
     readonly authed: AuthedState<string, string>;
   }
-  // The 401 trigger the run port emits when the backend rejects a credential. It
-  // re-enters as a follow-up Msg and is folded by on401 — exactly the production
-  // path (the run port distinguishes a 401 from a generic 5xx).
+  // The 401 trigger a host can dispatch when the backend rejects a credential;
+  // it is folded by on401 — exactly the production path (the run port
+  // distinguishes a 401 from a generic 5xx).
   type WMsg =
     | { type: "attempt"; key: string; input: string; at: number }
     | { type: "unauthorized"; key: string; at: number }
@@ -721,10 +721,10 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
   }
 
   // A run port that distinguishes a 401 from a generic failure. On "401" it
-  // returns a sentinel result the reducer turns into an `unauthorized` Msg —
-  // modelling a guard that inspects the HTTP status. Throwing on "401" would
-  // route to resilient_err (a generic failure), which is exactly NOT the 401
-  // path; instead we surface it as a tagged OK value and let the host fork.
+  // returns a sentinel result the `resilient_run_ok` cell forks to on401 —
+  // modelling a guard that inspects the HTTP status. Returning an `err` on "401"
+  // would mint resilient_run_err (a generic failure), which is exactly NOT the
+  // 401 path; instead we surface it as a sentinel OK value and let the host fork.
   const RUN_401 = "__401__";
 
   function wiredMachine(ctx: WCtx, breakerThreshold = 1) {

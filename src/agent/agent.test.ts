@@ -364,15 +364,15 @@ describe("createAgent — tool settle (serial drain → fold → next brain call
 
 describe("createAgent — full loop through the wired machine (replay)", () => {
   const agent = makeAgent();
-  // The FIXED machine — no `ports`. The brain call is the no-arg llm-call
-  // handler; its returned settle Msg re-enters the `resilient_ok` / `resilient_err`
-  // arms. These replay tests hand-feed the re-entered settle Msg directly to
-  // exercise the reducer arms; the true end-to-end re-entry is the WIRED test
-  // below, which runs the real runtime so the handler return drives the loop.
+  // The FIXED machine — no `ports`. The brain handler returns an outcome and
+  // the engine mints it into the `resilient_run_ok` / `resilient_run_err` arms.
+  // These replay tests hand-feed the minted settle Msg directly to exercise the
+  // reducer arms; the true end-to-end path is the WIRED test below, which runs
+  // the real runtime so the handler's outcome drives the loop.
   const { machine } = agent.toMachine<object>();
   const bound = bindMachine(machine, {} as object);
 
-  // The re-entered brain-call success settle Msg (what `brainHandlers` returns).
+  // The brain-call success settle Msg the engine mints from `brainHandlers`' outcome.
   const ok = (
     purpose: Purpose,
     output: AgentTurn,
@@ -394,7 +394,7 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
     const { state, cmds } = bound.replay({
       msgs: [
         { type: "agent_start", runId: "r", at: 0 },
-        // The brain-call success re-enters — `succeed` resets retry AND folds the
+        // The minted brain-call success — `succeed` resets retry AND folds the
         // parsed turn (one tool) in ONE Msg.
         ok("plan_turn", turnWith(tool("c1"))),
         // The tool resolves.
@@ -418,7 +418,7 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
     const { state } = bound.replay({
       msgs: [
         { type: "agent_start", runId: "r", at: 0 },
-        ok("plan_turn", turnWith()), // plan done → act (re-entered settle)
+        ok("plan_turn", turnWith()), // plan done → act (minted settle)
         ok("act_turn", turnWith()), // act done → done
       ],
     });
@@ -429,14 +429,14 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
 
 // ---------------------------------------------------------------------------
 // THE WIRED MACHINE — a real `run(...)` runtime driving the full multi-turn
-// loop end to end through RE-ENTRY (the missing test class). The brain handler's
-// returned settle Msg re-enters the reducer; the consumer's tool interpret
+// loop end to end (the missing test class). The brain handler returns an
+// outcome and the engine mints the settle Msg into the reducer; the consumer's tool interpret
 // dispatches `agent_tool_ok` back. No intermediate Msg is hand-fed past the
 // initial `agent_start` — the runtime drives llm -> tool -> fold -> llm -> done
 // itself. We assert the END STATE, not the intermediate Msgs.
 //
 // This fails against the pre-fix code: the old detached handler dispatched
-// `agent_turn` (never re-entering `resilient_ok`), so `succeed` never ran — the
+// `agent_turn` (never settling the brain call), so `succeed` never ran — the
 // resilient slice stayed stuck `running`, the retry counter never reset, and a
 // duplicate `callId` double-executed the tool.
 // ---------------------------------------------------------------------------

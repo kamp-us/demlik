@@ -1107,7 +1107,7 @@ describe("onChunk — the streaming model port (#123)", () => {
         },
       });
 
-      // The model call did not reject, so no `resilient_err` was settled for a
+      // The model call did not reject, so no `resilient_run_err` was settled for a
       // defect in the listener — the run reached its terminal Model.
       expect(final.run.phase).toBe("done");
       expect(final.output).toEqual(ANSWER);

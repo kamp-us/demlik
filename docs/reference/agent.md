@@ -38,7 +38,7 @@ These are the ones to read first:
 | `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
 | `AgentFailure` | Type | Why a run terminated as `failed`, beyond monitored-run's own reasons. |
 | `AgentKnob` | Interface | The agent handle `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and `brainInterpret`, the brain call's handler for a consumer wiring the verbs by hand. |
-| `AgentLlmErrMsg` | Type | The brain-call FAILURE settle Msg, inherited from `../llm-call` — it re-enters the agent's `fail` verb, which backs off via the retry ladder rather than ending the run. |
+| `AgentLlmErrMsg` | Type | The brain-call FAILURE settle Msg, inherited from `../llm-call` — the engine mints it from the brain handler's outcome and it drives the agent's `fail` verb, which backs off via the retry ladder rather than ending the run. |
 | `AgentLlmOkMsg` | Type | The brain-call SUCCESS settle Msg, inherited from `../llm-call`. |
 | `AgentLlmRunCmd` | Type | The brain-call effect Cmd, inherited from `../llm-call`. |
 | `AgentMachineMsg` | Type | The agent machine's Msg union — one variant per reducer entry point. |

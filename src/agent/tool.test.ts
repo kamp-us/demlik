@@ -484,7 +484,7 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
   });
 
   // #72 — the regression the last-wins spread would hide: with a router wired,
-  // the agent's own `agent_tool_ok` / `resilient_ok` / `compact_ok` cells are
+  // the agent's own `agent_tool_ok` / `resilient_run_ok` / `compact_ok` cells are
   // still the agent's verbs, not the router's fold (which returns `[s, []]`
   // for any Msg outside its own `<name>_ok` / `<name>_err`).
   it("the agent's own settle cells survive the router merge", () => {

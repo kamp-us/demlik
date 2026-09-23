@@ -252,7 +252,7 @@ describe("warm cache — a cached key never enters a batch", () => {
 });
 
 describe("failure — marked in the slice, never written to the cache", () => {
-  it("marks every key of a resilient_err batch failed and leaves the cache clean", () => {
+  it("marks every key of a resilient_run_err batch failed and leaves the cache clean", () => {
     const k = knob({ maxItems: 3 });
     const items = txns(3);
     const [s1, cmds] = addAll(k, k.init(), items, 0);

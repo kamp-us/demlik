@@ -1095,9 +1095,10 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
 // and asserted the END STATE of the shared breaker.
 //
 // Here we build an actual `run()` Runtime from the knob's verbs + handlers and
-// wire the `run` port into `interpret` so a settle Msg RE-ENTERS the machine
-// exactly as production does: attempt → (Cmd) resilient_run → port → (follow-up
-// Msg) resilient_ok / resilient_err → succeed / fail. We then drive the precise
+// wire the `run` port into `interpret` as an outcome handler, so the engine mints
+// the settle Msg exactly as production does: attempt → (Cmd) resilient_run →
+// port → (outcome) → (minted Msg) resilient_run_ok / resilient_run_err →
+// succeed / fail. We then drive the precise
 // half-open + rate-limit-reject scenario and assert the breaker RECOVERS.
 //
 // Pre-fix (circuit probe consumed BEFORE the rate-limit gate): a rate-limited
@@ -1172,7 +1173,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     });
     // A hand-written outcome handler (ADR 0021): the engine mints
     // resilient_run_ok / resilient_run_err from what it returns, because the
-    // machine lists the run Cmd's def — the settle Msg RE-ENTERS the machine.
+    // machine lists the run Cmd's def, and dispatches the minted Msg back in.
     const interpret = {
       resilient_run: async (
         _cmd: WCmd,
@@ -1196,7 +1197,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
   }
 
   // Drain the re-entrant follow-up chain: each `await dispatch` settles only its
-  // own transition; the settle Msg interpret returns is enqueued on the tail.
+  // own transition; the settle Msg the engine mints is enqueued on the tail.
   // Pump `nop` until the backend-call ledger stops moving — same pattern the
   // idempotent-intake wired test uses.
   async function drain(
@@ -1534,8 +1535,8 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
 });
 
 // ---------------------------------------------------------------------------
-// Two knobs, one machine (#229). Unnamed, both settle through `resilient_ok` /
-// `resilient_err`: one cell per name, carrying the UNION of both payloads, and
+// Two knobs, one machine (#229). Unnamed, both settle through `resilient_run_ok` /
+// `resilient_run_err`: one cell per name, carrying the UNION of both payloads, and
 // the consumer discriminates by hand on `key` — a switch the type checker
 // cannot grade. Named apart, each knob owns a cell already narrowed to its own
 // payload, which is what these tests pin.

@@ -608,9 +608,8 @@ describe("createPaginatedWalk — wired in a machine (replay)", () => {
 
 // ---------------------------------------------------------------------------
 // WIRED end-to-end machine tests. These build a REAL runtime via `run`, with a
-// real fetch port whose resolution re-enters the machine through `interpret`'s
-// follow-up Msg (enqueued on the dispatch tail — genuine re-entry, not a
-// hand-fed Msg). The scenario is driven to its END STATE, and the END STATE is
+// real fetch port whose outcome the engine mints into a settle Msg (enqueued
+// on the dispatch tail — genuine re-entry, not a hand-fed Msg). The scenario is driven to its END STATE, and the END STATE is
 // asserted — not the intermediate Msgs. This is the test class that was MISSING
 // (the bugs below shipped green because every prior test hand-fed the settle
 // Msgs and never let a stray one race a settled walk through the real loop).

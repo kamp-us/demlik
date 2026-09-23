@@ -225,7 +225,7 @@ export interface ClassifyBatchState<I, C extends string> {
   readonly fanOut: FanOutState<Batch<I>, JevOk<ItemQuestions<C>>>;
   /** The answers, keyed by `keyOf` — `../../resilience/cache`'s slice. */
   readonly cache: TtlCache<ItemAnswer<C>>;
-  /** Keys whose batch settled `resilient_err`, with the error that settled it. */
+  /** Keys whose batch settled `resilient_run_err`, with the error that settled it. */
   readonly failed: Readonly<Record<string, JevAskErr>>;
 }
 
@@ -233,7 +233,7 @@ export interface ClassifyBatchState<I, C extends string> {
 export type KeyAnswer<C extends string> =
   /** Answered and unexpired: the host applies its own confidence rule to this. */
   | { readonly status: "answered"; readonly answer: ItemAnswer<C> }
-  /** The batch carrying this key settled `resilient_err`. Nothing was cached. */
+  /** The batch carrying this key settled `resilient_run_err`. Nothing was cached. */
   | { readonly status: "failed"; readonly error: JevAskErr }
   /** Buffered in the open window, or in a batch that has not settled. */
   | { readonly status: "pending" }
