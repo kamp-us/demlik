@@ -11,7 +11,7 @@ import {
   agentBootMsg,
   status,
 } from "../agent/index";
-import type { BootingRuntime } from "../index";
+import type { RunHandle } from "../index";
 import type { DurableCommandCarrier } from "./deferred-gateway";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,15 +55,15 @@ export interface ResumePort<S, M extends { type: string }> {
  * every DO-hosted machine otherwise re-derives.
  *
  * `await ready` is the single boot gate (issue #45): `getState()` is total only
- * on the booted `Runtime`, so state cannot be inspected before boot populates
- * it. `now` is injected (the sole boot clock read) so a test can pin it.
+ * on the booted handle, so state cannot be inspected before boot populates
+ * it. Takes any engine's {@link RunHandle}. `now` is injected (the sole boot clock read) so a test can pin it.
  */
 export async function bootResume<
   S,
   M extends { type: string },
   E extends { type: string } = never,
 >(
-  booting: BootingRuntime<S, M, E>,
+  booting: RunHandle<S, M, E>,
   port: ResumePort<S, M>,
   now: () => number = Date.now,
 ): Promise<void> {
@@ -109,11 +109,7 @@ export async function autoBoot<
   R,
   E extends { type: string } = never,
 >(
-  booting: BootingRuntime<
-    AgentState<Stage, P, O, R>,
-    AgentMachineMsg<P, O, R>,
-    E
-  >,
+  booting: RunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, E>,
   now: () => number = Date.now,
 ): Promise<void> {
   await bootResume(

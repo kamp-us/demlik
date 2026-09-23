@@ -16,15 +16,15 @@ import {
   status,
 } from "../agent/index";
 import type {
-  BootingRuntime,
+  BootedRunHandle,
   Cmd,
   CtxArg,
-  Runtime,
+  EngineRun,
+  RunHandle,
   Store,
   Sub,
   Wired,
 } from "../index";
-import { run } from "../promise";
 import { autoBoot } from "./resume";
 import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 
@@ -51,8 +51,8 @@ import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 //     the test seam), and
 //   - the framework test/lifecycle seam ONCE: `status()`, `result()`, `reset()`.
 //
-// The consumer supplies ONLY its mappings: how to build the machine, the Store,
-// the Ctx, the terminal predicate, and the `AgentEvent → SSE frame` projection.
+// The consumer supplies ONLY its mappings: the engine's `run`, how to build the
+// machine, the Store, the Ctx, the terminal predicate, and the `AgentEvent → SSE frame` projection.
 // Its `getRuntime()` collapses to `host.runtime()`; its `isSuspended` /
 // `runPhase` / `verdict` collapse to reads off `host.status()` / `host.result()`.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +75,18 @@ export interface AgentHostConfig<
   U extends Sub = Sub,
   Ctx = unknown,
 > {
+  /**
+   * The engine's `run` — `run` from `@demlik/tea/promise`, or any engine's. The
+   * host imports no engine; it boots the machine through this.
+   */
+  readonly run: EngineRun<
+    AgentState<Stage, P, O, R>,
+    AgentMachineMsg<P, O, R>,
+    C,
+    U,
+    Ctx,
+    AgentEvent<R>
+  >;
   /**
    * Build the wired agent machine and the handlers it runs under — its
    * `interpret` table and `subscribe` runners (a machine carries none — #278,
@@ -130,11 +142,15 @@ export interface AgentHost<
    * Get (or build) the booted runtime. Build-once-boot-once: the first call
    * builds the machine, wires SSE off the semantic event stream, awaits the boot
    * gate, runs the `autoBoot` re-fire for a rehydrated suspended run, and caches
-   * the booted `Runtime`; subsequent calls return the cached handle. The single
+   * the booted handle; subsequent calls return the cached handle. The single
    * assembly every consumer used to hand-roll in `getRuntime()`.
    */
   runtime(): Promise<
-    Runtime<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, AgentEvent<R>>
+    BootedRunHandle<
+      AgentState<Stage, P, O, R>,
+      AgentMachineMsg<P, O, R>,
+      AgentEvent<R>
+    >
   >;
   /**
    * The agent's lifecycle status (#49) — the ONE typed channel a consumer reads
@@ -172,6 +188,7 @@ export interface AgentHost<
  *
  * @example
  *   const host = createAgentHost<Stage, Purpose, Outputs, ClientResult, SseEvent>({
+ *     run, // from `@demlik/tea/promise`
  *     buildMachine: () => agent.toMachine<Ctx>({ toolInterpret }),
  *     store: doStore(storage, parse),
  *     ctx,
@@ -221,24 +238,22 @@ export function createAgentHost<
   // against the same storage: a double boot with duplicate SSE wiring, not the
   // build-once-boot-once this host promises. Assigning the promise synchronously,
   // before the first await, means the second caller shares the one build.
-  let cached: Promise<Runtime<S, M, E>> | null = null;
+  let cached: Promise<BootedRunHandle<S, M, E>> | null = null;
 
-  async function build(): Promise<Runtime<S, M, E>> {
-    // `run()` hands back a `BootingRuntime` synchronously (#45). Wire the
-    // SEMANTIC event projector (#47) so `runtime.on(...)` lights up, then drive
-    // the SSE hub off that named stream (never the private-Msg firehose). The
-    // `terminal` predicate makes `result()` / `done()` meaningful (#46).
+  async function build(): Promise<BootedRunHandle<S, M, E>> {
+    // `run()` hands back a `RunHandle` synchronously (#45). Wire the SEMANTIC
+    // event projector (#47) so `runtime.on(...)` lights up, then drive the SSE
+    // hub off that named stream (never the private-Msg firehose).
     const wired = config.buildMachine();
     // `ctx` goes in as its own `CtxArg<Ctx>`: over a generic `Ctx` that
     // conditional stays deferred, and tsc relates it only to itself, not to an
     // object that spreads the handlers beside it.
     const ctxArg = { ctx: config.ctx } as CtxArg<Ctx>;
-    const booting: BootingRuntime<S, M, E> = run(wired.machine, {
+    const booting: RunHandle<S, M, E> = config.run(wired.machine, {
       ...wired,
       ...ctxArg,
       store: config.store,
       events: agentEvents<Stage, P, O, R>(),
-      terminal: isTerminal,
     });
 
     // SSE off the semantic stream. Subscriptions attach on the booting handle
@@ -253,7 +268,7 @@ export function createAgentHost<
     return booting.ready;
   }
 
-  function runtime(): Promise<Runtime<S, M, E>> {
+  function runtime(): Promise<BootedRunHandle<S, M, E>> {
     if (cached !== null) return cached;
     const building = build();
     cached = building;
@@ -272,7 +287,10 @@ export function createAgentHost<
       return status((await runtime()).getState());
     },
     async result(): Promise<S | undefined> {
-      return (await runtime()).result();
+      // The terminal read, off the host's own predicate rather than an engine's
+      // `result()` — the handle every engine returns does not carry one.
+      const state = (await runtime()).getState();
+      return isTerminal(state) ? state : undefined;
     },
     sse,
     async reset(): Promise<void> {

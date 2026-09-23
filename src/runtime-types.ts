@@ -2,7 +2,9 @@
  * @demlik/tea runtime interface surface + pure helpers — the public types,
  * interfaces, and construction/composition helpers the runtime (`./run`)
  * implements against: `Store`, the error-sink and supervision contracts, the
- * `RuntimeRef` / `BootingRuntime` / `Runtime` handle hierarchy, `definePort`, the
+ * engine-neutral `RunHandle` / `BootedRunHandle` every engine's `run` returns,
+ * the Promise engine's `RuntimeRef` / `BootingRuntime` / `Runtime` handle
+ * hierarchy that widens it, `definePort`, the
  * identity-typed constructors `defineMachine` / `asReducer`, and the pure tools
  * `replay` (compose without running) and `tryInterpret` (Railway).
  */
@@ -16,6 +18,7 @@ import type {
   Port,
   PortEmitter,
   Reducer,
+  RunHandlers,
   Settled,
   Sub,
   Transitions,
@@ -675,28 +678,117 @@ export interface RuntimeRef<M extends { type: string }> {
   dispatchOnce(msg: M): Promise<void>;
 }
 
+// === RunHandle: the handle every engine's `run` returns (#281, #250) ===
+//
+// The engine-neutral part of a running machine: what a host adapter needs and
+// nothing an engine has to invent. Both engines' `run` return a `RunHandle`, so
+// `/react` and `/do` are typed against it and never against one engine's
+// runtime. It splits the same way the Promise engine's handle does: before boot
+// there is no State to read, so `getState` lives only on the
+// `BootedRunHandle` that `ready` resolves to.
+
+/**
+ * What an engine's `run` returns: queue a Msg, listen, wait for boot, stop.
+ * `getState` is not here — there is no State until boot runs, so it lives on
+ * the {@link BootedRunHandle} that `ready` resolves to. `E` is the machine's
+ * semantic event union (see `on`); `never` when the run projects none.
+ */
+export interface RunHandle<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> {
+  /** Put a Msg in the inbox; resolves once the engine has processed it. */
+  dispatch(msg: M): Promise<void>;
+  /** A zero-arg change notifier, fired after each applied transition. */
+  subscribe(listener: () => void): () => void;
+  /** A `(msg, state)` hook, fired after each applied transition. */
+  observe(observer: (msg: M, state: S) => void): () => void;
+  /** Fires once with the initial State — at once if boot already ran. */
+  onBoot(handler: (state: S) => void): () => void;
+  /** Subscribe to the semantic event of `type` the run's `events` projects. */
+  on<K extends E["type"]>(
+    type: K,
+    handler: (event: Extract<E, { type: K }>) => void,
+  ): () => void;
+  /** Resolves to the booted handle once boot completes. */
+  readonly ready: Promise<BootedRunHandle<S, M, E>>;
+  /** Stop the run; resolves once the engine has torn it down. */
+  stop(): Promise<void>;
+}
+
+/** A {@link RunHandle} whose boot has completed, so its State exists. */
+export interface BootedRunHandle<
+  S,
+  M extends { type: string },
+  E extends { type: string } = never,
+> extends RunHandle<S, M, E> {
+  /** The current State. Total. */
+  getState(): S;
+  readonly ready: Promise<BootedRunHandle<S, M, E>>;
+}
+
+/**
+ * The options every engine's `run` accepts: the `ctx`, the handlers the
+ * machine runs under, an optional `store`, and the `events` projector that
+ * feeds `on`. An engine may take more; a host adapter hands only these.
+ */
+export type RunOptions<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+  E extends { type: string } = never,
+> = CtxArg<Ctx> &
+  RunHandlers<M, C, U, Ctx> & {
+    readonly store?: Store<S>;
+    readonly events?: (msg: M, state: S) => readonly E[];
+  };
+
+/**
+ * An engine's `run`, seen from a host adapter: a machine and its
+ * {@link RunOptions} in, a {@link RunHandle} out. `useMachine` and
+ * `createAgentHost` take one, so they run on whichever engine the caller
+ * imported — `run` from `@demlik/tea/promise` fits it as it is.
+ */
+export type EngineRun<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+  E extends { type: string } = never,
+> = (
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: RunOptions<S, M, C, U, Ctx, E>,
+) => RunHandle<S, M, E>;
+
 // === BootingRuntime: handle returned SYNCHRONOUSLY from run() ===
-//
-// `run()` returns a `BootingRuntime<S, M>` the instant it is called, while boot
-// is still in flight. It exposes exactly the surface TOTAL before boot: queue a
-// dispatch, subscribe, observe, wire a Port, stop. What you may NOT do is read
-// State (`getState`) or wait for quiescence (`idle`) — those need the initial
-// State to exist, and are the difference between a BootingRuntime and a
-// `Runtime`, enforced at the type level so "read State before boot" is a COMPILE
-// error, not a runtime throw.
-//
-// `subscribe` is the React-shaped change notifier (zero-arg, paired with
-// `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
-// for every APPLIED transition; boot is delivered via `onBoot` instead, so
-// `observe`'s `msg` is total (never `null`). `on(type, handler)` is the SEMANTIC
-// event channel: only the public, `type`-narrowed events a machine projects,
-// never its PRIVATE Msg vocabulary. `E` defaults to `never` (no projector → `on`
-// uncallable).
+
+/**
+ * What the Promise engine's `run` returns, the instant it is called, while boot
+ * is still in flight: its {@link RunHandle}, widened with Ports and
+ * `dispatchOnce`. It exposes exactly the surface total before boot — queue a
+ * dispatch, subscribe, observe, wire a Port, stop. Reading State (`getState`)
+ * and waiting for quiescence (`idle`) need the initial State to exist, so they
+ * live on the {@link Runtime} that `ready` resolves to; "read State before boot"
+ * is a compile error, not a runtime throw.
+ *
+ * `subscribe` is the React-shaped change notifier (zero-arg, paired with
+ * `getState()`). `observe` is the devtools-shaped trace hook — `(msg, state)`
+ * for every applied transition; boot is delivered via `onBoot` instead, so
+ * `observe`'s `msg` is total (never `null`). `on(type, handler)` is the semantic
+ * event channel: only the public, `type`-narrowed events a machine projects,
+ * never its private Msg vocabulary. `E` defaults to `never` (no projector → `on`
+ * uncallable).
+ */
 export interface BootingRuntime<
   S,
   M extends { type: string },
   E extends { type: string } = never,
-> extends RuntimeRef<M> {
+> extends RuntimeRef<M>,
+    RunHandle<S, M, E> {
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
   dispatchOnce(msg: M): Promise<void>;
   /**
@@ -766,12 +858,16 @@ export interface BootingRuntime<
 }
 
 // === Runtime: the BOOTED handle `ready` resolves to ===
-//
-// A `BootingRuntime<S, M>` whose boot has completed. It adds the two members
-// only meaningful once the initial State exists — `getState()` (total) and
-// `idle()` (quiescence) — and narrows `ready` to resolve to itself. You never
-// construct one directly; you obtain it via `await bootingRuntime.ready`, which
-// makes "read State before boot" unrepresentable rather than merely discouraged.
+
+/**
+ * The Promise engine's booted handle — what {@link BootingRuntime}'s `ready`
+ * resolves to once boot completes. It adds the members only meaningful once the
+ * initial State exists — `getState()` (total), `idle()` (quiescence), and the
+ * `result()` / `done()` reads of the terminal State — and narrows `ready` to
+ * resolve to itself. You never construct one directly; you obtain it via
+ * `await bootingRuntime.ready`, which makes "read State before boot"
+ * unrepresentable rather than merely discouraged.
+ */
 export interface Runtime<
   S,
   M extends { type: string },
