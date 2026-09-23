@@ -103,7 +103,6 @@
  * because the cold attempt is not a failure observation.
  */
 
-import { z } from "zod";
 import type {
   CmdOf,
   Interpret,
@@ -122,6 +121,7 @@ import {
 } from "../../../index";
 import { MsgType } from "../../../protocol";
 import { cmdEdgeOf } from "../../../pure/core";
+import { unchecked } from "../../schema";
 import { type DeadlineSub, subscribeDeadline } from "../deadline";
 import {
   createResilientCall,
@@ -209,14 +209,14 @@ export interface ResilienceModel<S, TC extends Cmd> {
  */
 export function resilienceRunCmdDef<TC extends Cmd, TM>() {
   return Cmd.define("$resilience:run", {
-    input: z.custom<{
+    input: unchecked<{
       readonly key: string;
       /** The ORIGINAL base Cmd, retagged — never swallowed. */
       readonly input: TC;
     }>(),
     // The carried result is the base interpret handler's resolution (`M | void`).
     // biome-ignore lint/suspicious/noConfusingVoidType: mirrors `Interpret`'s own `Promise<M | void>`
-    ok: z.custom<TM | void>(),
+    ok: unchecked<TM | void>(),
     err: ["base_rejected", "deadline_exceeded"],
   });
 }

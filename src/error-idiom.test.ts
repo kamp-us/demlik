@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  AsyncSchemaError,
   DriveFailedError,
   DriveStalledError,
   NoCellError,
+  OutcomeContractError,
   PortNameCollisionError,
   QuiescenceTimeoutError,
   SubIdCollisionError,
+  UndeclaredFailureError,
 } from "./index";
 import { TerminalTimeoutError } from "./internal/flow/await-terminal";
 import type { UnauthorizedError } from "./internal/resilience/authed-call";
@@ -95,6 +98,24 @@ const thrownCases: readonly ThrownCase[] = [
     make: () => new DriveStalledError({ phase: "waiting" }),
     ctor: DriveStalledError,
     tag: "DriveStalledError",
+  },
+  {
+    name: "UndeclaredFailureError",
+    make: () => new UndeclaredFailureError("fetch", { _tag: "x" }, ["y"]),
+    ctor: UndeclaredFailureError,
+    tag: "UndeclaredFailureError",
+  },
+  {
+    name: "OutcomeContractError",
+    make: () => new OutcomeContractError("fetch", "returned 42"),
+    ctor: OutcomeContractError,
+    tag: "OutcomeContractError",
+  },
+  {
+    name: "AsyncSchemaError",
+    make: () => new AsyncSchemaError("the ok schema"),
+    ctor: AsyncSchemaError,
+    tag: "AsyncSchemaError",
   },
 ];
 

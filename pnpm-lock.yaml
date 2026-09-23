@@ -8,15 +8,9 @@ importers:
 
   .:
     dependencies:
-      better-result:
-        specifier: ^2.5.2
-        version: 2.10.0
-      effect:
-        specifier: ^4.0.0-rc.0
-        version: 4.0.0-rc.112
-      zod:
-        specifier: ^4.5.4
-        version: 4.5.4
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
     devDependencies:
       '@anthropic-ai/sdk':
         specifier: 0.124.0
@@ -51,6 +45,9 @@ importers:
       ai:
         specifier: ^7.0.93
         version: 7.0.93(zod@4.5.4)
+      effect:
+        specifier: 4.0.0-rc.117
+        version: 4.0.0-rc.117
       fast-check:
         specifier: ^3.23.0
         version: 3.23.2
@@ -81,6 +78,9 @@ importers:
       ws:
         specifier: 8.18.1
         version: 8.18.1
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
 
 packages:
 
@@ -1158,6 +1158,9 @@ packages:
 
   effect@4.0.0-rc.112:
     resolution: {integrity: sha512-wXxwuh1Ywnv4cPRM3Wfa0vDwuOHnZ1TsTgHJkG9XgzND6inhBH9n1vBxhg3iIXOia/OrpmvVmd3lrD4vq6bF3A==}
+
+  effect@4.0.0-rc.117:
+    resolution: {integrity: sha512-UUyi9QiOW4nySFIBM3KnYbNMd9EZliOdKfBcyLD0mPMPheO2fkuXS5y0opjWc9oqzlJxPQICEGm8gGw3kh9j/w==}
 
   enquirer@2.4.1:
     resolution: {integrity: sha512-rRqJg/6gd538VHvR3PSrdRBb/1Vy2YfzHqzvbhGIQpDRKIa4FgV/54b5Q1xYSxOOwKvjXweS26E0Q+nAMwp2pQ==}
@@ -2864,6 +2867,8 @@ snapshots:
     dependencies:
       fast-check: 4.9.0
       msgpackr: 2.0.5
+
+  effect@4.0.0-rc.117: {}
 
   enquirer@2.4.1:
     dependencies:

@@ -140,8 +140,7 @@
     "release": "changeset"
   },
   "dependencies": {
-    "better-result": "^2.5.2",
-    "zod": "^4.5.4"
+    "@standard-schema/spec": "^1.1.0"
   },
   "peerDependencies": {
     "effect": "^4.0.0-rc.0",
@@ -183,6 +182,7 @@
     "@types/react-dom": "19.0.3",
     "@types/ws": "8.5.14",
     "ai": "^7.0.93",
+    "effect": "4.0.0-rc.117",
     "fast-check": "^3.23.0",
     "happy-dom": "^20.9.0",
     "react": "19.0.0",
@@ -192,7 +192,8 @@
     "typescript": "5.7.3",
     "vite": "^8.2.1",
     "vitest": "~3.0.7",
-    "ws": "8.18.1"
+    "ws": "8.18.1",
+    "zod": "^4.5.4"
   },
   "publishConfig": {
     "access": "public"

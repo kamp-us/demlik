@@ -27,6 +27,7 @@ export type {
   CmdInput,
   CmdOf,
   CmdValue,
+  DeclaredErrorsOf,
   DepKeyedSub,
   Dispose,
   ErrOf,
@@ -34,12 +35,15 @@ export type {
   ExhaustiveTransitions,
   Identity,
   Interpret,
+  InterpretCell,
   InterpretDetached,
   Machine,
   MachineShape,
   MalformedResult,
   NoCtx,
   OkOf,
+  OkOfCmd,
+  OutcomeHelpers,
   Port,
   PortEmitter,
   Reducer,
@@ -58,6 +62,7 @@ export type {
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives in `src/pure/`).
 export {
+  AsyncSchemaError,
   // `acceptedTypes` answers about the state VALUE a caller holds, where
   // `acceptsOf` answers about a `state.type` a tool already named. It is the
   // same reading a refusal carries — `lookupCell`'s miss arm calls it — so
@@ -81,8 +86,11 @@ export {
   formOf,
   msgKeysOf,
   NoCellError,
+  Outcome,
+  OutcomeContractError,
   structuralHash,
   subId,
+  UndeclaredFailureError,
 } from "./pure/core";
 export * from "./runtime-types";
 export * from "./subs";

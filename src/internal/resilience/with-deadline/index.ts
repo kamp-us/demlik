@@ -54,7 +54,6 @@
  *   const runtime = run(guarded, { ctx: baseCtx });
  */
 
-import { z } from "zod";
 import {
   applyCell,
   Cmd,
@@ -68,6 +67,7 @@ import {
   subId,
 } from "../../../index";
 import { fromTimeout } from "../../../subs/from-timeout";
+import { unchecked, undefinedOnly } from "../../schema";
 
 // ===========================================================================
 // The slice + the Sub + the Msg + the Cmds — the deadline vocabulary.
@@ -149,12 +149,12 @@ export function deadlineExceededMsg(seq: number): DeadlineExceededMsg {
  * not a side effect).
  */
 export const deadlineDecision = Cmd.define("$deadline:decision", {
-  input: z.object({
-    decision: z.enum(["rearm", "expire", "idle"]),
+  input: unchecked<{
+    readonly decision: "rearm" | "expire" | "idle";
     /** The slice `seq` AFTER this transition (the re-arm generation now armed). */
-    seq: z.number(),
-  }),
-  ok: z.void(),
+    readonly seq: number;
+  }>(),
+  ok: undefinedOnly,
   err: [],
 });
 export type DeadlineDecisionCmd = CmdOf<typeof deadlineDecision>;

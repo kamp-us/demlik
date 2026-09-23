@@ -16,7 +16,6 @@
 //   4. `defineMachine({ cmds })` derives `<name>_ok` / `<name>_err` into `M`
 //      — the reducer must carry both cells without the user naming them.
 
-import { Result } from "better-result";
 import { z } from "zod";
 import {
   absurd,
@@ -27,7 +26,6 @@ import {
   type NoCtx,
   type Reducer,
   type Settled,
-  settle,
 } from "../index";
 import { run } from "../promise";
 
@@ -162,10 +160,10 @@ const machine = defineMachine({
   update: exhaustive,
   interpret: {
     // The handler reads the machine's plain ctx: `ctx.http` is typed.
-    fetch: settle(fetch, async (c, ctx) => {
+    fetch: async (c, ctx) => {
       const body = await ctx.http.get(c.url);
-      return Result.ok({ body });
-    }),
+      return ctx.ok({ body });
+    },
   },
 });
 

@@ -12,8 +12,7 @@
  * those settles into the conversation, so a consumer names nothing twice.
  */
 
-import { Result } from "better-result";
-import { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { describeError } from "../describe-error";
 import {
   type AnyCmdDef,
@@ -25,13 +24,20 @@ import {
   type Interpret,
   type MalformedResult,
   type OkOf,
+  Outcome,
   type PortEmitter,
   type Settled,
   type Tagged,
   type TaggedError,
 } from "../index";
+import { rejectAll, unchecked } from "../internal/schema";
 import { MsgType, type MsgTypeValue } from "../protocol";
-import { cmdEdgeOf, detachWorkOf, malformedResult } from "../pure/core";
+import {
+  cmdEdgeOf,
+  detachWorkOf,
+  malformedResult,
+  validateSync,
+} from "../pure/core";
 import type {
   TaggedFailure,
   ToolCall,
@@ -130,7 +136,7 @@ export type ToolThrown = { readonly _tag: "thrown"; readonly message: string };
  * fixed to what the `ok` schema parses, so a value of the wrong shape is
  * refused where it is written.
  */
-export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Result<Ok, E>;
+export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Outcome<Ok, E>;
 
 /**
  * The typed failure constructor a handler receives: `fail({ _tag })` with `E`
@@ -138,13 +144,12 @@ export type ToolOk<Ok, E extends Tagged> = (value: Ok) => Result<Ok, E>;
  * is written. (A bare `{ _tag: "x" }` built elsewhere infers `_tag: string`
  * and cannot be — the parameter type is what keeps it literal.)
  */
-export type ToolFail<Ok, E extends Tagged> = (error: E) => Result<Ok, E>;
+export type ToolFail<Ok, E extends Tagged> = (error: E) => Outcome<Ok, E>;
 
 /**
  * The two constructors a handler is handed, one per channel — `ok` for the
- * value the `ok` schema parses, `fail` for a declared `{ _tag }`. Both are
- * tea's, so a handler settles either arm without naming the result library
- * underneath.
+ * value the `ok` schema parses, `fail` for a declared `{ _tag }`. Both build
+ * the core's `Outcome` record (ADR 0021).
  */
 export type ToolConstructors<Ok, E extends Tagged> = {
   readonly ok: ToolOk<Ok, E>;
@@ -153,7 +158,7 @@ export type ToolConstructors<Ok, E extends Tagged> = {
 
 /**
  * A tool's handler: the parsed `args`, the plain `ctx` the host handed `run`,
- * and the typed `{ ok, fail }`, to a result over the declared channels — `Ok`
+ * and the typed `{ ok, fail }`, to an outcome over the declared channels — `Ok`
  * is what the `ok` schema parses, `E` the declared `_tag` union. An undeclared
  * tag does not compile. `Ctx` is whatever the handler annotates its `ctx`
  * parameter with; tea does no dependency injection (ADR 0020).
@@ -162,7 +167,7 @@ export type ToolHandler<Args, Ok, E extends Tagged, Ctx> = (
   args: Args,
   ctx: Ctx & PortEmitter,
   settle: ToolConstructors<Ok, E>,
-) => Promise<Result<Ok, E>>;
+) => Promise<Outcome<Ok, E>>;
 
 /**
  * What `tool()` returns: the `Cmd.define`d constructor (so `Settled<typeof t>`
@@ -181,16 +186,20 @@ export type ToolDef<
   Ctx,
 > = CmdDef<Name, ToolInput<Args>, Ok, E> & {
   readonly description: string;
-  readonly args: z.ZodType<Args>;
+  readonly args: StandardSchemaV1<unknown, Args>;
   /**
    * The timeout / retry knob this tool declared, or `null` when it declared
    * neither. `toolRouter` serves it to the agent as `resilienceOf`.
    */
   readonly resilience: ToolResilience | null;
+  /**
+   * The colocated handler, as an interpret cell: it returns the tool's
+   * outcome, and the engine mints `<name>_ok` / `<name>_err` from it.
+   */
   readonly interpret: (
     cmd: CmdValue<Name, ToolInput<Args>, Ok, E>,
     ctx: Ctx & PortEmitter,
-  ) => Promise<Settled<CmdDef<Name, ToolInput<Args>, Ok, E>>>;
+  ) => Promise<Outcome<Ok, E>>;
   /** Phantom — the ctx the handler reads. Never assigned. */
   readonly __ctx?: Ctx;
 };
@@ -198,7 +207,7 @@ export type ToolDef<
 /** The declaration-erased view the router reads. */
 export type AnyToolDef = AnyCmdDef & {
   readonly description: string;
-  readonly args: z.ZodType;
+  readonly args: StandardSchemaV1;
   readonly resilience: ToolResilience | null;
   readonly interpret: (cmd: never, ctx: never) => Promise<unknown>;
 };
@@ -241,8 +250,8 @@ export function tool<
   name: Name & NotReserved<Name>,
   spec: {
     readonly description: string;
-    readonly input: z.ZodType<Args>;
-    readonly ok: z.ZodType<Ok>;
+    readonly input: StandardSchemaV1<unknown, Args>;
+    readonly ok: StandardSchemaV1<unknown, Ok>;
     readonly err: Tags;
     /**
      * The budget one call of this tool gets, in ms — the overall cap, measured
@@ -274,49 +283,33 @@ export function tool<
   type E = TaggedError<Tags[number] | "thrown">;
   type Def = CmdDef<Name, ToolInput<Args>, Ok, E>;
   const def: Def = Cmd.define(name as Name, {
-    input: z.object({
-      callId: z.string(),
-      args: spec.input,
-    }) as z.ZodType<ToolInput<Args>>,
+    // The router parses `args` against `spec.input` before it builds the Cmd,
+    // so the Cmd's own input schema only names the type.
+    input: unchecked<ToolInput<Args>>(),
     ok: spec.ok,
     err: [...spec.err, "thrown"] as readonly (Tags[number] | "thrown")[],
   });
   type C = CmdValue<Name, ToolInput<Args>, Ok, E>;
   const declared = new Set<string>(spec.err);
   const settle: ToolConstructors<Ok, TaggedError<Tags[number]>> = {
-    ok: (value) => Result.ok(value),
-    fail: (error) => Result.err(error),
+    ok: Outcome.ok,
+    fail: Outcome.err,
   };
   const asDeclared = (thrown: unknown): E => {
     if (isTagged(thrown) && declared.has(thrown._tag)) return thrown as E;
     return { _tag: "thrown", message: describeError(thrown) };
   };
+  // A throw is data here, not a contract breach: `thrown` is one of the tool's
+  // declared tags, so the engine mints it into `<name>_err` like any other.
   const interpret = async (
     cmd: C,
     ctx: Ctx & PortEmitter,
-  ): Promise<Settled<Def>> => {
-    let result: Result<Ok, TaggedError<Tags[number]>>;
+  ): Promise<Outcome<Ok, E>> => {
     try {
-      result = await handler(cmd.args, ctx, settle);
+      return await handler(cmd.args, ctx, settle);
     } catch (thrown) {
-      return def.err(cmd, asDeclared(thrown));
+      return Outcome.err(asDeclared(thrown));
     }
-    return result.match({
-      ok: (value): Settled<Def> => {
-        // The same parse `run`'s edge applies when the def is on
-        // `Machine.cmds` — done here too so the handler is honest on its own.
-        // `at` is the runtime's to stamp, exactly as the def's builders leave it.
-        const parsed = spec.ok.safeParse(value);
-        return parsed.success
-          ? def.ok(cmd, parsed.data)
-          : ({
-              type: def.errType,
-              cmd,
-              error: malformedResult(parsed.error.issues),
-            } as Settled<Def>);
-      },
-      err: (error) => def.err(cmd, error),
-    });
   };
   return Object.assign(def, {
     description: spec.description,
@@ -373,10 +366,11 @@ export type ToolRejection =
     };
 
 const rejected = Cmd.define(REJECTED_TYPE, {
-  input: z.custom<{ readonly callId: string; readonly error: ToolRejection }>(
-    () => true,
-  ),
-  ok: z.never(),
+  input: unchecked<{
+    readonly callId: string;
+    readonly error: ToolRejection;
+  }>(),
+  ok: rejectAll,
   err: ["unknown_tool", "malformed_args"],
 });
 
@@ -528,26 +522,29 @@ export function toolRouter<T extends AnyToolDef>(
         error: { _tag: "unknown_tool", name: call.name },
       });
     }
-    const parsed = t.args.safeParse(call.args);
-    if (!parsed.success) {
+    const parsed = validateSync(
+      t.args,
+      call.args,
+      `the "${call.name}" tool's input schema`,
+    );
+    if (parsed.issues !== undefined) {
       return rejected({
         callId: call.callId,
         error: {
           _tag: "malformed_args",
           name: call.name,
-          issues: malformedResult(parsed.error.issues).issues,
+          issues: malformedResult(parsed.issues).issues,
         },
       });
     }
     // `t` is the def the name resolved to, so its constructor builds exactly
     // the `CmdOf<T>` arm for that name; `AnyToolDef` erases the call signature.
     const build = t as unknown as (input: ToolInput<unknown>) => CmdOf<T>;
-    return build({ callId: call.callId, args: parsed.data });
+    return build({ callId: call.callId, args: parsed.value });
   };
 
   const handlers: Record<string, unknown> = {
-    [rejected.cmdType]: async (cmd: ToolRejectedCmd) =>
-      rejected.err(cmd, cmd.error),
+    [rejected.cmdType]: async (cmd: ToolRejectedCmd) => Outcome.err(cmd.error),
   };
   for (const t of tools) handlers[t.cmdType] = t.interpret;
   // Each handler is the def's own typed `interpret`, keyed by the `type` it

@@ -248,7 +248,7 @@ export type Cmd<T extends string = string> = { type: T };
 
 // concrete:
 type AppCmd =
-  | { type: "http_get"; url: string; into: (result: Result<HttpError, string>) => Msg }
+  | { type: "http_get"; url: string; into: (result: Outcome<string, HttpError>) => Msg }
   | { type: "log"; line: string };
 ```
 
@@ -262,8 +262,8 @@ A handler in `interpret` runs the actual work:
 interpret: {
   http_get: tryInterpret(
     async (cmd, ctx) => fetch(cmd.url).then(r => r.text()),
-    (text, cmd) => cmd.into(Result.ok(text)),
-    (err, cmd) => cmd.into(Result.err(toHttpError(err))),
+    (text, cmd) => cmd.into(Outcome.ok(text)),
+    (err, cmd) => cmd.into(Outcome.err(toHttpError(err))),
   ),
   log: async (cmd, _ctx) => {
     console.log(cmd.line);
@@ -272,10 +272,11 @@ interpret: {
 }
 ```
 
-`tryInterpret` is our Railway-style sugar (see Section 4.6) over
-`Result.tryPromise` from `better-result`. It guarantees the handler never
-rejects — the success or failure both become a Msg the update function can
-case on.
+`tryInterpret` is our Railway-style sugar (see Section 4.6) over a
+`try` / `catch`. It guarantees the handler never rejects — the success or
+failure both become a Msg the update function can case on. A `Cmd.define`d
+Cmd needs no sugar: its handler returns an `Outcome` and the engine mints the
+Msg ([ADR 0021](../../.decisions/0021-handler-outcome-becomes-the-msg.md)).
 
 ### 2.5 `Sub` — continuous sources of Msgs
 
@@ -336,19 +337,19 @@ The Result type Elm uses for HTTP:
 GotText (Result Http.Error String)
 ```
 
-We use `better-result`:
+We use the core's plain `Outcome` record (ADR 0021), so tea names no
+`Result` library:
 
 ```ts
-import { Result } from "better-result";
+import type { Outcome } from "@demlik/tea";
 
-type Msg = { tag: "got_text"; result: Result<HttpError, string> };
+type Msg = { tag: "got_text"; result: Outcome<string, HttpError> };
 
 update: (state, msg) => {
   if (msg.tag !== "got_text") return [state, []];
-  return msg.result.match({
-    ok: (text) => [{ phase: "success", text }, []],
-    err: (_) => [{ phase: "failure" }, []],
-  });
+  return msg.result._tag === "Ok"
+    ? [{ phase: "success", text: msg.result.value }, []]
+    : [{ phase: "failure" }, []];
 }
 ```
 
@@ -374,8 +375,8 @@ Http.expectJson GotQuote quoteDecoder
 ```
 
 Our equivalent: a zod schema at the boundary. The decoder turns unknown
-bytes into a parsed domain type or a parse error — same shape as
-`Result.tryPromise`:
+bytes into a parsed domain type or a parse error, and `tryInterpret` turns
+either into an `Outcome`:
 
 ```ts
 import { z } from "zod";
@@ -391,8 +392,8 @@ type Quote = z.infer<typeof Quote>;
 interpret: {
   http_get_quote: tryInterpret(
     async (cmd, ctx) => Quote.parse(await fetch(cmd.url).then(r => r.json())),
-    (quote, cmd) => cmd.into(Result.ok(quote)),
-    (err, cmd) => cmd.into(Result.err(toHttpError(err))),
+    (quote, cmd) => cmd.into(Outcome.ok(quote)),
+    (err, cmd) => cmd.into(Outcome.err(toHttpError(err))),
   ),
 }
 ```
@@ -678,29 +679,23 @@ Elm guide: `error_handling/result.md`.
 `Result error value = Ok value | Err error`. Used wherever something can
 fail with a *reason* (HTTP, JSON parse, file read).
 
-Direct port — `better-result`'s `Result<E, T>` is structurally identical:
+Direct port — the core's `Outcome<Ok, E>` is the same two-arm record
+([ADR 0021](../../.decisions/0021-handler-outcome-becomes-the-msg.md)):
 
 ```ts
-import { Result } from "better-result";
+import { Outcome } from "@demlik/tea";
 
 // constructors
-Result.ok(42)            // Ok 42
-Result.err("nope")       // Err "nope"
+Outcome.ok(42)           // Ok 42
+Outcome.err("nope")      // Err "nope"
 
 // pattern match
-result.match({
-  ok: (value) => ...,
-  err: (error) => ...,
-})
-
-// async lift (try/catch as data, not control flow)
-const r = await Result.tryPromise({
-  try:   () => fetch(url).then(r => r.json()),
-  catch: (e) => toAppError(e),
-});
+result._tag === "Ok" ? result.value : result.error
 ```
 
-Our `tryInterpret` (Section 4.6) is sugar over this. It's the Railway
+A `Cmd.define`d handler returns one and the engine mints `<name>_ok` /
+`<name>_err`. Our `tryInterpret` (Section 4.6) is the same idea for a
+hand-written Cmd. It's the Railway
 pattern at the boundary: every Cmd handler is "fallible work, two named
 outcomes." See `docs/design-patterns.md` "Railway."
 
@@ -763,7 +758,7 @@ Direct map:
 | `type alias Model = { count : Int }` | `type Model = { count: number }` (or `interface Model {...}`) |
 | `case msg of Inc -> ... ; Dec -> ...` | `switch (msg.tag) { case "inc": ... }` or chained `if (msg.tag === "...")` |
 | `Maybe a` | `T \| null` (see 2.15) |
-| `Result e a` | `Result<E, T>` from `better-result` |
+| `Result e a` | `Outcome<T, E>` from `@demlik/tea` |
 
 The `tag` discriminant is convention — pick a name, use it everywhere in a
 codebase. Our codebase uses `type`. (`{ type: "..." }` rather than `{ tag:
@@ -979,7 +974,7 @@ interpret: {
 }
 ```
 
-Wraps `Result.tryPromise`. Guarantees the handler resolves with an Ok-Msg
+Wraps a `try` / `catch`. Guarantees the handler resolves with an Ok-Msg
 or an Err-Msg, never rejects. This is the boundary where Elm's `Result e
 a` lives and our type system catches up.
 

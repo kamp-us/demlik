@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { PortEmitter } from "../index";
+import { Outcome, type PortEmitter } from "../index";
 import { run } from "../promise";
 import { MsgType } from "../protocol";
+import { cmdEdgeOver } from "../pure/core";
 import { bindMachine } from "../testing";
 import {
   type AgentEvent,
@@ -22,8 +23,9 @@ import {
 
 // ---------------------------------------------------------------------------
 // #56 — `tool()` + `toolRouter()`: one declaration yields the `toolOf` entry
-// and the interpret cell; the cells settle through the minted `<name>_ok` /
-// `<name>_err`, and `toMachine({ tools })` folds those into the conversation.
+// and the interpret cell; the cells return outcomes the engine mints into
+// `<name>_ok` / `<name>_err`, and `toMachine({ tools })` folds those into the
+// conversation.
 // ---------------------------------------------------------------------------
 
 type Kb = { readonly lookup: (q: string) => string | undefined };
@@ -65,7 +67,15 @@ const tools = toolRouter([search, count]);
 const kb: Kb = {
   lookup: (q) => ({ tea: "TEA folds the loop in one reducer." })[q],
 };
-const ctx = { kb, emit: () => {} } as KbCtx & PortEmitter;
+const ctx = {
+  kb,
+  emit: () => {},
+  ok: Outcome.ok,
+  err: Outcome.err,
+} as KbCtx & PortEmitter & typeof Outcome;
+
+/** The edge `run` mints through, over the router's defs, on a fixed clock. */
+const edge = cmdEdgeOver(tools.defs, () => 7);
 
 const call = (
   callId: string,
@@ -73,48 +83,56 @@ const call = (
   args: Record<string, unknown>,
 ): ToolCall => ({ callId, name, args });
 
-describe("tool() — the interpret cell settles through the minted Msgs", () => {
-  it("ok: the handler's value is parsed against `ok` (stripped) and rides `<name>_ok`", async () => {
+describe("tool() — the interpret cell returns an outcome the engine mints", () => {
+  it("ok: the handler's value rides `Ok`; the edge parses it (stripped) into `<name>_ok`", async () => {
     const cmd = search({ callId: "c1", args: { q: "tea" } });
-    const settled = await search.interpret(cmd, ctx);
-    expect(settled).toEqual({
+    const outcome = await search.interpret(cmd, ctx);
+    expect(outcome).toEqual({
+      _tag: "Ok",
+      value: {
+        snippet: "TEA folds the loop in one reducer.",
+        extra: "stripped by the ok schema",
+      },
+    });
+    expect(edge(cmd, outcome)).toEqual({
       type: "search_ok",
       cmd,
       value: { snippet: "TEA folds the loop in one reducer." },
+      at: 7,
     });
   });
 
   it("err: a declared `fail` rides `<name>_err` with its `_tag` and detail", async () => {
     const cmd = search({ callId: "c2", args: { q: "nope" } });
-    const settled = await search.interpret(cmd, ctx);
-    expect(settled).toEqual({
+    expect(edge(cmd, await search.interpret(cmd, ctx))).toEqual({
       type: "search_err",
       cmd,
       error: { _tag: "not_found", q: "nope" },
+      at: 7,
     });
   });
 
   it("a thrown handler settles `<name>_err` as `{ _tag: 'thrown', message }` — never a rejection", async () => {
     const cmd = search({ callId: "c3", args: { q: "boom" } });
-    const settled = await search.interpret(cmd, ctx);
-    expect(settled).toEqual({
+    expect(edge(cmd, await search.interpret(cmd, ctx))).toEqual({
       type: "search_err",
       cmd,
       error: { _tag: "thrown", message: "kb offline" },
+      at: 7,
     });
   });
 
   it("a thrown value carrying a DECLARED `_tag` settles as that tag", async () => {
     const cmd = search({ callId: "c4", args: { q: "boom-tagged" } });
-    const settled = await search.interpret(cmd, ctx);
-    expect(settled).toEqual({
+    expect(edge(cmd, await search.interpret(cmd, ctx))).toEqual({
       type: "search_err",
       cmd,
       error: { _tag: "not_found", via: "throw" },
+      at: 7,
     });
   });
 
-  it("an `_ok` value the schema rejects becomes the kernel's `malformed_result`", async () => {
+  it("an `Ok` value the schema rejects becomes the kernel's `malformed_result`", async () => {
     const lying = tool(
       "lying",
       {
@@ -128,11 +146,14 @@ describe("tool() — the interpret cell settles through the minted Msgs", () => 
         ok({ n: "one" } as unknown as { n: number }),
     );
     const cmd = lying({ callId: "c5", args: {} });
-    const settled = await lying.interpret(cmd, {} as PortEmitter);
-    expect(settled.type).toBe("lying_err");
-    if (settled.type === "lying_err") {
-      expect(settled.error._tag).toBe("malformed_result");
-    }
+    const settled = cmdEdgeOver([lying], () => 7)(
+      cmd,
+      await lying.interpret(cmd, {} as PortEmitter),
+    );
+    expect(settled).toMatchObject({
+      type: "lying_err",
+      error: { _tag: "malformed_result" },
+    });
   });
 
   it("the def reads like any Cmd.define — `errTags` carries the declared tags plus `thrown`", () => {
@@ -230,11 +251,12 @@ describe("toolRouter() — toolOf is total and parses args at the edge", () => {
   it("the `tool_rejected` cell settles the carried refusal as `tool_rejected_err`", async () => {
     const cmd = tools.toolOf(call("c9", "teleport", {}));
     if (cmd.type !== "tool_rejected") throw new Error("expected a rejection");
-    const settled = await tools.interpret.tool_rejected(cmd, ctx);
+    const settled = edge(cmd, await tools.interpret.tool_rejected(cmd, ctx));
     expect(settled).toEqual({
       type: "tool_rejected_err",
       cmd,
       error: { _tag: "unknown_tool", name: "teleport" },
+      at: 7,
     });
   });
 
