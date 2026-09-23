@@ -116,7 +116,7 @@ type BackgroundCmd =
   // With `into` — the Cmd promises a Msg back. Use when the result branches
   // (success → Msg A, failure → Msg B).
   | { type: "CreateAuditWindow"; url: string;
-      into: (r: Result<WindowError, WindowOk>) => BackgroundMsg }
+      into: (r: Outcome<WindowOk, WindowError>) => BackgroundMsg }
 
   // Without `into` — fire-and-forget. The handler returns void; the reducer
   // observes nothing about this Cmd's outcome.

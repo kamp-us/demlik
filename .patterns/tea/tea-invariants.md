@@ -345,8 +345,8 @@ function update(state: State, msg: Msg) {
 interpret: {
   http_get_quote: tryInterpret(
     async (cmd, ctx) => fetch(cmd.url).then((r) => r.json()),
-    (raw, cmd)  => cmd.into(Result.ok(Quote.parse(raw))),   // parse at boundary
-    (err, cmd)  => cmd.into(Result.err(toHttpError(err))),
+    (raw, cmd)  => cmd.into(Outcome.ok(Quote.parse(raw))),   // parse at boundary
+    (err, cmd)  => cmd.into(Outcome.err(toHttpError(err))),
   ),
 }
 ```

@@ -248,7 +248,7 @@ export type Cmd<T extends string = string> = { type: T };
 
 // concrete:
 type AppCmd =
-  | { type: "http_get"; url: string; into: (result: Result<HttpError, string>) => Msg }
+  | { type: "http_get"; url: string; into: (result: Outcome<string, HttpError>) => Msg }
   | { type: "log"; line: string };
 ```
 
@@ -262,8 +262,8 @@ A handler in `interpret` runs the actual work:
 interpret: {
   http_get: tryInterpret(
     async (cmd, ctx) => fetch(cmd.url).then(r => r.text()),
-    (text, cmd) => cmd.into(Result.ok(text)),
-    (err, cmd) => cmd.into(Result.err(toHttpError(err))),
+    (text, cmd) => cmd.into(Outcome.ok(text)),
+    (err, cmd) => cmd.into(Outcome.err(toHttpError(err))),
   ),
   log: async (cmd, _ctx) => {
     console.log(cmd.line);
@@ -375,8 +375,8 @@ Http.expectJson GotQuote quoteDecoder
 ```
 
 Our equivalent: a zod schema at the boundary. The decoder turns unknown
-bytes into a parsed domain type or a parse error — same shape as
-`Result.tryPromise`:
+bytes into a parsed domain type or a parse error, and `tryInterpret` turns
+either into an `Outcome`:
 
 ```ts
 import { z } from "zod";
@@ -392,8 +392,8 @@ type Quote = z.infer<typeof Quote>;
 interpret: {
   http_get_quote: tryInterpret(
     async (cmd, ctx) => Quote.parse(await fetch(cmd.url).then(r => r.json())),
-    (quote, cmd) => cmd.into(Result.ok(quote)),
-    (err, cmd) => cmd.into(Result.err(toHttpError(err))),
+    (quote, cmd) => cmd.into(Outcome.ok(quote)),
+    (err, cmd) => cmd.into(Outcome.err(toHttpError(err))),
   ),
 }
 ```
