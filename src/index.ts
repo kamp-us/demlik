@@ -2,12 +2,10 @@
  * @packageDocumentation
  * @demlik/tea — TEA-faithful state machine substrate.
  *
- * Root barrel. The runtime surface is split across three concern modules —
- * `./runtime-types` (the interface surface + the pure construction/composition
- * helpers: `defineMachine`, `asReducer`, `replay`, `tryInterpret`), `./run`
- * (`run` + boot + the serial dispatch loop), and `./observability`
- * (`historyTracker`) — and re-exported here so the public `@demlik/tea` entry is
- * unchanged.
+ * Root barrel — the neutral core. It carries `defineMachine`, `Cmd`, `replay`
+ * and the pure types, and it imports no engine: `run` lives on
+ * `@demlik/tea/promise`, and the Effect engine on `@demlik/tea/effect`.
+ * `src/entry-points.import-graph.test.ts` fails the build if that changes.
  */
 
 // The composition seam — `liftSlice` / `readInOrder`, the layer between a
@@ -17,7 +15,7 @@
 export * from "./compose";
 export * from "./observability";
 // The host-side provider graph — `provide` / `layer` / `value` — lands on the
-// ROOT door beside `run`, not on a subpath of its own. It has no host-specific
+// ROOT door, not on a subpath of its own. It has no host-specific
 // half: `/node`, `/do` and `/mem` are `Store` adapters, and this satisfies a
 // Cmd's `R` at `run`'s `ctx` seam, which every one of them shares.
 export * from "./provide";
@@ -94,6 +92,5 @@ export {
   structuralHash,
   subId,
 } from "./pure/core";
-export * from "./run";
 export * from "./runtime-types";
 export * from "./subs";

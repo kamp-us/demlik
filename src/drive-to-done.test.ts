@@ -4,17 +4,16 @@ import {
   DriveFailedError,
   DriveStalledError,
   defineMachine,
-  driveToDone,
   type Interpret,
   QuiescenceTimeoutError,
   type Reducer,
   type Runtime,
-  run,
   type Store,
   type SubId,
   subId,
 } from "./index";
 import { memoryStore } from "./mem";
+import { driveToDone, run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `driveToDone` (#57): one call from `start` to the terminal State, with the

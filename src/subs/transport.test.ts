@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { defineMachine, type Reducer, run } from "../index";
+import { defineMachine, type Reducer } from "../index";
+import { run } from "../promise";
 import { fromTransport, type Transport, type TransportSub } from "./transport";
 
 // The seam battery owns three things at once: the inbound stream, the

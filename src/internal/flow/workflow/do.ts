@@ -67,9 +67,9 @@ import {
   defineMachine,
   type Machine,
   type Runtime,
-  run,
   type Store,
 } from "../../../index";
+import { run } from "../../../promise";
 import {
   type ActivityErr,
   type ActivityOk,

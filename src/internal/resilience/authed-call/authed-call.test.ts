@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, replay, run } from "../../../index";
+import { defineMachine, replay } from "../../../index";
+import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import {
   type RefreshTokenCmd,

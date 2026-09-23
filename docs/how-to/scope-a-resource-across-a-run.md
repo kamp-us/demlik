@@ -46,7 +46,7 @@ a dep name is computed rather than written.
 ## 2. Hand the graph to `run` in place of `ctx`
 
 ```ts
-import { driveToDone, run } from "@demlik/tea";
+import { driveToDone, run } from "@demlik/tea/promise";
 
 const outcome = await driveToDone(
   run(machine, { ctx: scoped, store }),
@@ -79,7 +79,8 @@ provider — and by the time it does, every provider acquired before it has alre
 been released, in reverse.
 
 ```ts
-import { ProvideFailedError, run } from "@demlik/tea";
+import { ProvideFailedError } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 
 const handle = run(machine, { ctx: scoped, store });
 try {

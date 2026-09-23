@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defineMachine, run } from "../../index";
+import { defineMachine } from "../../index";
+import { run } from "../../promise";
 import { bindMachine } from "../../testing";
 import {
   createLlmCall,

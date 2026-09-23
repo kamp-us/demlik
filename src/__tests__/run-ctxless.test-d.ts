@@ -11,7 +11,8 @@
 // with `ctx` OMITTED; a machine whose `Ctx` carries a field a handler reads
 // keeps `ctx` REQUIRED.
 
-import { defineMachine, type NoCtx, type Reducer, run } from "../index";
+import { defineMachine, type NoCtx, type Reducer } from "../index";
+import { run } from "../promise";
 
 type State = { readonly count: number };
 type Msg = { readonly type: "bump" };

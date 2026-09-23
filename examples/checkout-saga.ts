@@ -1,10 +1,5 @@
-import {
-  type Cmd,
-  defineMachine,
-  type Runtime,
-  run,
-  tryInterpret,
-} from "@demlik/tea";
+import { type Cmd, defineMachine, type Runtime, tryInterpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { createSaga, type SagaState } from "@demlik/tea/flow";
 
 type DoCmd =

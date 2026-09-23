@@ -3,11 +3,11 @@ import {
   defineMachine,
   type Interpret,
   type Reducer,
-  run,
   type Schema,
   type Store,
   schemaMigrate,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `schemaMigrate` splits `Store.migrate` into its two real jobs: structural

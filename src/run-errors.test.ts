@@ -6,9 +6,9 @@ import {
   QuiescenceTimeoutError,
   type Reducer,
   type RuntimeErrorContext,
-  run,
   type Store,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Errors-are-data: the runtime must surface its own failures, never swallow

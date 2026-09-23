@@ -3,10 +3,10 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { fromInterval } from "./from-interval";
 
 // Lifecycle contract under a real runtime (issue #286): the reconcile pass

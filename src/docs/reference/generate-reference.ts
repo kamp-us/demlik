@@ -89,6 +89,13 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Core",
   },
   {
+    subpath: "./promise",
+    importPath: "@demlik/tea/promise",
+    file: "promise.md",
+    typedocName: "promise",
+    group: "Core",
+  },
+  {
     subpath: "./react",
     importPath: "@demlik/tea/react",
     file: "react.md",

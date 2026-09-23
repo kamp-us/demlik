@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { defineMachine, type Reducer, run } from "../index";
+import { defineMachine, type Reducer } from "../index";
+import { run } from "../promise";
 import {
   fileStore,
   type NodeSub,

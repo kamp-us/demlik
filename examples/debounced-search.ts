@@ -1,4 +1,5 @@
-import { type Cmd, defineMachine, run } from "@demlik/tea";
+import { type Cmd, defineMachine } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { debounce } from "@demlik/tea/timing";
 
 type Phase = "idle" | "typing" | "searching" | "results";

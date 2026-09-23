@@ -1,13 +1,5 @@
-import {
-  type Cmd,
-  defineMachine,
-  type Interpret,
-  type Machine,
-  type Reducer,
-  run,
-  type Sub,
-  tryInterpret,
-} from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret, type Machine, type Reducer, type Sub, tryInterpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   type AgentMachineMsg,
   type AgentTurn,

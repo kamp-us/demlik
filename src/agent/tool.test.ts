@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Cmd, type PortEmitter, run } from "../index";
+import { Cmd, type PortEmitter } from "../index";
+import { run } from "../promise";
 import { MsgType } from "../protocol";
 import { bindMachine } from "../testing";
 import {

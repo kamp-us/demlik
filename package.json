@@ -31,6 +31,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./promise": {
+      "types": "./dist/promise/index.d.ts",
+      "import": "./dist/promise/index.js"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "import": "./dist/effect/index.js"
+    },
     "./do": {
       "types": "./dist/do/index.d.ts",
       "import": "./dist/do/index.js"
@@ -136,6 +144,7 @@
     "zod": "^4.5.4"
   },
   "peerDependencies": {
+    "effect": "^4.0.0-rc.0",
     "fast-check": "^3 || ^4",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19",
@@ -143,6 +152,9 @@
     "ws": "^8"
   },
   "peerDependenciesMeta": {
+    "effect": {
+      "optional": true
+    },
     "fast-check": {
       "optional": true
     },

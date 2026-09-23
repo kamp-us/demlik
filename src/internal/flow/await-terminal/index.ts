@@ -30,14 +30,8 @@
  * resolving.
  */
 
-import {
-  type Cmd,
-  type CtxArg,
-  type Machine,
-  type Runtime,
-  run,
-  type Sub,
-} from "../../../index";
+import type { Cmd, CtxArg, Machine, Runtime, Sub } from "../../../index";
+import { run } from "../../../promise";
 
 /**
  * Raised when `awaitTerminal` / `runToTerminal` is wired with a `timeoutMs` and

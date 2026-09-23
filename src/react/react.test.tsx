@@ -7,12 +7,12 @@ import {
   type Interpret,
   type Reducer,
   RuntimeDiscardedError,
-  run,
   type Store,
   type Sub,
   type Subscribe,
 } from "../index";
 import { memoryStore } from "../mem";
+import { run } from "../promise";
 import { useMachine, useRuntime } from "./index";
 
 // ───────────────────────────────────────────────────────────────────────────

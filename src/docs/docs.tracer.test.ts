@@ -26,10 +26,10 @@ import {
   type Cmd,
   defineMachine,
   replay,
-  run,
   type Store,
   tryInterpret,
 } from "../index";
+import { run } from "../promise";
 import { useMachine } from "../react/index";
 import {
   defaultRetryPolicy,

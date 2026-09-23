@@ -5,9 +5,9 @@ import {
   type Interpret,
   type InterpretDetached,
   type Reducer,
-  run,
   wrapDetached,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `wrapDetached` — the typed Cmd→Msg edge for a handler that CANNOT return its

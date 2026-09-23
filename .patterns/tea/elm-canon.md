@@ -83,7 +83,8 @@ state is reachable, every transition is observable.
 In `@demlik/tea` the same loop is expressed as:
 
 ```ts
-import { defineMachine, run } from "@demlik/tea";
+import { defineMachine } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 
 const machine = defineMachine({
   types: { model: {} as Model, msg: {} as Msg, cmd: {} as Cmd, sub: {} as Sub, ctx: {} as Ctx },

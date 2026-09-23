@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type Interpret, run } from "../index";
+import type { Interpret } from "../index";
+import { run } from "../promise";
 import {
   type AgentEvent,
   type AgentMachineMsg,

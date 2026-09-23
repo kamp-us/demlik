@@ -30,16 +30,16 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import {
-  type BootingRuntime,
-  type Cmd,
-  type Machine,
-  type RequiredCtx,
-  type Runtime,
-  run,
-  type Store,
-  type Sub,
+import type {
+  BootingRuntime,
+  Cmd,
+  Machine,
+  RequiredCtx,
+  Runtime,
+  Store,
+  Sub,
 } from "../index";
+import { run } from "../promise";
 
 /**
  * Options passed to `useMachine`. The shape is intentionally minimal — `ctx`

@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Cmd, defineMachine, replay, run } from "../../../index";
+import { type Cmd, defineMachine, replay } from "../../../index";
+import { run } from "../../../promise";
 import { assertWrapperFaithful } from "../../../testing";
 import { type DeadlineModel, deadlineExceededMsg, withDeadline } from "./index";
 

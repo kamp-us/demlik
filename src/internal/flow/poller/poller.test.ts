@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Cmd, defineMachine, run } from "../../../index";
+import { type Cmd, defineMachine } from "../../../index";
+import { run } from "../../../promise";
 import {
   type DurationRetryPolicy,
   defaultRetryPolicy,

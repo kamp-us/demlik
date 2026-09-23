@@ -3,10 +3,10 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { fromTimeout } from "./from-timeout";
 
 // Lifecycle contract under a real runtime (issue #286): the timer arms when

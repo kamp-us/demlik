@@ -6,10 +6,10 @@ import {
   type Interpret,
   type Reducer,
   replay,
-  run,
   type Sub,
   subId,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Dep-keyed Subs: the author declares the state slice a Sub depends on, and

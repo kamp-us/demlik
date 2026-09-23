@@ -9,12 +9,12 @@ import {
   type FencedStore,
   isFencedStore,
   type Reducer,
-  run,
   type Store,
   StoreConflictError,
 } from "./index";
 import { memoryStore } from "./mem";
 import { fileStore } from "./node";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // FencedStore (#143) — the second live writer is refused.

@@ -6,7 +6,8 @@
 // `tsconfig.consumers.json` resolves these specifiers against `dist`, not
 // `src`, so an export map that resolves internally and not from outside fails
 // here rather than in someone's project.
-import { defineMachine, type Reducer, run } from "@demlik/tea";
+import { defineMachine, type Reducer } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   createJevAsk,
   type JevCmd,

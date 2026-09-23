@@ -22,7 +22,8 @@ when it has effects — an `interpret` map. `run` drives it; `dispatch` folds a
 once, under `types`; everything else is inferred from the machine itself.
 
 ```ts
-import { defineMachine, run } from "@demlik/tea";
+import { defineMachine } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 
 type State = { readonly count: number };
 type Msg = { readonly type: "increment" } | { readonly type: "reset" };

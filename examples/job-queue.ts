@@ -1,10 +1,5 @@
-import {
-  type Cmd,
-  defineMachine,
-  run,
-  type Store,
-  tryInterpret,
-} from "@demlik/tea";
+import { type Cmd, defineMachine, type Store, tryInterpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { createQueue, type QueueItem } from "@demlik/tea/work-queue";
 
 interface Job {

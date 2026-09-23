@@ -12,7 +12,7 @@
 // The author writes three things — `{ name, acquire, release }` — and gets
 // back a `.sub(key)` to drop into `subscriptions(state)` plus a `.subscribe`
 // handler to drop into the machine's `subscribe` record. The substrate's
-// existing `reconcileSubs` (packages/tea/src/run.ts) does the rest:
+// existing `reconcileSubs` (`src/promise/run.ts`) does the rest:
 //   - sub APPEARS in the desired set     → handler runs → `acquire(key, ctx)`.
 //   - sub DISAPPEARS (phase left)        → cleanup runs → `release(handle)`.
 //   - sub KEY changes (id changes)       → old cleanup (release) + new acquire.

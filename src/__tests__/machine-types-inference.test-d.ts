@@ -11,14 +11,8 @@
 
 import { Result } from "better-result";
 import { z } from "zod";
-import {
-  Cmd,
-  defineMachine,
-  type NoCtx,
-  type Reducer,
-  run,
-  settle,
-} from "../index";
+import { Cmd, defineMachine, type NoCtx, type Reducer, settle } from "../index";
+import { run } from "../promise";
 
 type Http = { readonly get: (url: string) => Promise<string> };
 type HttpCtx = { readonly http: Http };

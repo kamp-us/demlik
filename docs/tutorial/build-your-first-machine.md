@@ -9,7 +9,8 @@ watched determinism fall out for free.
 You need only the root package:
 
 ```ts
-import { defineMachine, replay, run } from "@demlik/tea";
+import { defineMachine, replay } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 ```
 
 ## Describe the world with a Model

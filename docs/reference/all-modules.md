@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 22 public subpaths. Curated
+The complete export catalog — all 24 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -11,6 +11,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./devtools`](./devtools.md) | presentational inspector for any tea machine. |
 | `./devtools/styles.css` |  |
 | [`./do`](./do.md) | Durable Object adapter for `@demlik/tea`. |
+| `./effect` | the Effect engine's entry point, empty until the engine lands. |
 | [`./extension`](./extension.md) | Chrome service-worker host adapter for @demlik/tea. |
 | [`./flow`](./flow.md) | the multi-step control-flow batteries: fan a batch out, run steps in order and compensate on failure, poll until a predicate holds, reconcile desired against actual. |
 | [`./idempotency`](./idempotency.md) | do-it-once: dedupe by key, cache the result, and replay that result to every duplicate arrival. |
@@ -22,6 +23,7 @@ discoverable here with a one-line gloss from their source barrel.
 | `./parity` | the record → replay → normalized-diff go/no-go gate. |
 | [`./pbt`](./pbt.md) | Property-based testing primitives for `@demlik/tea` machines. |
 | [`./persistence`](./persistence.md) | the durability batteries: record a run to a trace, replay that trace back, and checkpoint a long-running machine to a host store between evictions. |
+| [`./promise`](./promise.md) | the Promise engine: `run` boots a machine and drives its serial dispatch loop on Promises, and `driveToDone` runs one to its terminal state. |
 | [`./react`](./react.md) | React host adapter for `@demlik/tea`. |
 | [`./resilience`](./resilience.md) | the call-hardening batteries: deadlines, retries, circuit breakers, rate limits, TTL caches, credential refresh, and the wrappers that bolt them onto a machine you already have. |
 | [`./retry-backoff`](./retry-backoff.md) | exponential backoff with jitter + cap, and the retry-attempt state every fallible `interpret` handler folds over. |
