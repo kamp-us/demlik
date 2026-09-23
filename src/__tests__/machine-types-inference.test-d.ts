@@ -5,10 +5,12 @@
 // directive becomes "unused" and `tsc` fails the package.
 //
 // The contract: Model and Msg are named ONCE, as values, under `types`.
-// Everything else is derived — `C` and the settled half of `M` from `cmds`, `U`
-// from `subscriptions`. `Ctx` is the plain object the handlers read, named
-// under `types.ctx` (ADR 0020: a Cmd carries no requirements). No call site
-// writes a type argument, a `Settled<…>` union, or a `Reducer<…>` annotation.
+// Everything else is derived — `C` and the settled half of `M` from `cmds`; a
+// hand-written Cmd or Sub union is a value under `types.cmd` / `types.sub`,
+// and the built-in `timer` needs no naming at all. `Ctx` is the plain object
+// the handlers read, named under `types.ctx` (ADR 0020: a Cmd carries no
+// requirements). No call site writes a type argument, a `Settled<…>` union,
+// or a `Reducer<…>` annotation.
 
 import { z } from "zod";
 import {
@@ -18,6 +20,7 @@ import {
   type Machine,
   type NoCtx,
   type Reducer,
+  type Sub,
 } from "../index";
 import { run } from "../promise";
 
@@ -199,6 +202,36 @@ void run(handWritten, {
     persist: async (cmd, ctx) => {
       await ctx.db.put(cmd.n);
       return { type: "saved" } as Count;
+    },
+  },
+});
+
+// A Sub union is named the same way, and it types both the `subs` entries on
+// the machine and the runner `run` is handed for each type.
+type Poll = Sub<"poll", { readonly every: number }>;
+
+const polling = defineMachine({
+  types: {
+    model: {} as { readonly n: number },
+    msg: {} as Count,
+    sub: {} as Poll,
+  },
+  init: () => [{ n: 0 }, []],
+  update: {
+    bump: (m) => [{ n: m.n + 1 }, []],
+    saved: (m) => [m, []],
+  },
+  subs: [{ type: "poll", deps: (m) => ({ every: 1_000 * (m.n + 1) }) }],
+});
+
+void run(polling, {
+  subscribe: {
+    poll: (sub, _ctx, dispatch) => {
+      const timer = setInterval(
+        () => dispatch({ type: "bump" }),
+        sub.deps.every,
+      );
+      return () => clearInterval(timer);
     },
   },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Sub, subId } from "../index";
+import { type Sub, subIdOf } from "../index";
 import {
   fromReconnectingWebSocket,
   type ReconnectingWebSocketFactoryOpts,
@@ -67,7 +67,7 @@ function fakeClock() {
   return { pending, schedule, flushNext };
 }
 
-type WsSub = Sub<"ws"> & WebSocketSubData;
+type WsSub = Sub<"ws", WebSocketSubData>;
 type Msg =
   | { type: "open" }
   | { type: "message"; data: unknown }
@@ -75,7 +75,13 @@ type Msg =
   | { type: "close"; code: number }
   | { type: "reconnect"; attempt: number };
 
-const SUB: WsSub = { id: subId("ws"), type: "ws", wsUrl: "ws://x/ws" };
+const wsSub = (wsUrl: string): WsSub => ({
+  id: subIdOf("ws", { wsUrl }),
+  type: "ws",
+  deps: { wsUrl },
+});
+
+const SUB = wsSub("ws://x/ws");
 
 // Wire the factory to a fresh socket-factory + clock, subscribe it, and expose
 // the created sockets, dispatched Msgs, and the cleanup fn.
@@ -206,13 +212,8 @@ describe("fromReconnectingWebSocket — transparent reconnection (#188)", () => 
     expect(delays).toEqual([250, 500, 1000, 2000, 4000, 5000]);
   });
 
-  it("reads sub.wsUrl afresh on every reconnect (a re-subscribe to a new url reconnects there)", () => {
-    const sub: WsSub = {
-      id: subId("ws"),
-      type: "ws",
-      wsUrl: "ws://x/ws?player=abc",
-    };
-    const h = harness({}, sub);
+  it("reconnects to the url in the Sub's deps", () => {
+    const h = harness({}, wsSub("ws://x/ws?player=abc"));
     h.sockets[0].fireOpen();
     h.sockets[0].fireClose();
     h.clock.flushNext();

@@ -185,11 +185,12 @@ Elm listens to with `Html.Events.on` and a JSON decoder.
 |---------------|---------------|
 | Flags | Constructor argument to runtime / `init(loaded)` |
 | Cmd port | Interpret handler (Cmd → real-world I/O → Msg back) |
-| Sub port | Subscribe handler (external event → dispatch Msg) |
+| Sub port | Subscribe runner (external event → dispatch Msg) |
 | Custom Element | Same (Web Components work in any framework) |
 
 The `interpret` record IS the Cmd port layer. The `subscribe` record IS the
-Sub port layer. The shapes are isomorphic:
+Sub port layer. Both are handed to `run` beside the machine, never kept on
+it. The shapes are isomorphic:
 
 ```typescript
 // Elm: port setStorage : E.Value -> Cmd msg
@@ -202,10 +203,17 @@ interpret: {
 }
 
 // Elm: port messageReceiver : (String -> msg) -> Sub msg
-// TS:  subscribe handler that listens to WebSocket
+// TS:  a `subs` entry on the machine…
+subs: [
+  {
+    type: "listen_websocket",
+    deps: (state) => (state.online ? { url: state.url } : null),
+  },
+]
+// …and the subscribe runner that listens to the WebSocket
 subscribe: {
   listen_websocket: (sub, ctx, dispatch) => {
-    const ws = new WebSocket(sub.url)
+    const ws = new WebSocket(sub.deps.url)
     ws.onmessage = (e) => dispatch({ type: "Recv", data: e.data })
     return () => ws.close()
   },
@@ -218,6 +226,6 @@ subscribe: {
 |-------------|-----------|--------|-----|
 | Config/cached state at startup | JS → App | Once, synchronous | **Flags** (init argument) |
 | User triggers JS side effect | App → JS | On demand | **Cmd** (interpret handler) |
-| External events arrive unpredictably | JS → App | Continuous | **Sub** (subscribe handler) |
+| External events arrive unpredictably | JS → App | Continuous | **Sub** (`subs` entry + subscribe runner) |
 | JS does synchronous, stateless rendering | App → JS | On render | **Custom Element** (attributes) |
 | JS widget sends data back | JS → App | On interaction | **Custom Element + DOM event** |

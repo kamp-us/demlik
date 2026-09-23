@@ -9,8 +9,7 @@ import {
   type Reducer,
   type Runtime,
   type Store,
-  type SubId,
-  subId,
+  type Sub,
 } from "./index";
 import { memoryStore } from "./mem";
 import { driveToDone, run } from "./promise";
@@ -272,7 +271,8 @@ describe("driveToDone — typed rejections (#57)", () => {
 
 // A Sub-driven machine is NOT stalled: the start dispatch quiesces on `waiting`,
 // and the terminal Msg arrives later from the Sub the machine armed there. The
-// stall gate (#68) must keep waiting for exactly this shape, on both Sub paths.
+// stall gate (#68) must keep waiting for exactly this shape, both with a user
+// runner and with the built-in timer.
 describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", () => {
   type S4 = { readonly phase: "idle" | "waiting" | "done" };
   type M4 = { readonly type: "start" } | { readonly type: "finish" };
@@ -288,19 +288,25 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
     return () => clearTimeout(timer);
   };
 
-  it("dep-keyed Sub (`machine.subs`): resolves with the State the Sub delivered", async () => {
+  it("a Sub with a user runner (`subscribe` at run): resolves with the State the Sub delivered", async () => {
+    type U4 = Sub<"finish", { readonly armed: true }>;
     const machine = defineMachine({
-      types: { model: {} as S4, msg: {} as M4, ctx: undefined },
+      types: { model: {} as S4, msg: {} as M4, sub: {} as U4, ctx: undefined },
       init: (_loaded) => [{ phase: "idle" }, []],
       update,
       subs: [
         {
+          type: "finish",
           deps: (s) => (s.phase === "waiting" ? { armed: true } : null),
-          source: (_s, dispatch) => finishLater(dispatch),
         },
       ],
     });
-    const probe = instrument(run(machine, { ctx: undefined }));
+    const probe = instrument(
+      run(machine, {
+        ctx: undefined,
+        subscribe: { finish: (_sub, _ctx, dispatch) => finishLater(dispatch) },
+      }),
+    );
 
     const final = await driveToDone(probe.handle, { type: "start" }, isDone4);
 
@@ -309,17 +315,20 @@ describe("driveToDone — terminal arrives via a Sub after quiescence (#68)", ()
     expect(probe.stopped).toBe(true);
   });
 
-  it("manual Sub (`subscriptions` + `subscribe`): resolves with the State the Sub delivered", async () => {
-    type U4 = { readonly type: "timer"; readonly id: SubId };
+  it("the built-in `timer` Sub: resolves with the State the timer delivered", async () => {
     const machine = defineMachine({
-      types: { model: {} as S4, msg: {} as M4, sub: {} as U4, ctx: undefined },
+      types: { model: {} as S4, msg: {} as M4, ctx: undefined },
       init: (_loaded) => [{ phase: "idle" }, []],
       update,
-      subscriptions: (s) =>
-        s.phase === "waiting" ? [{ type: "timer", id: subId("finish") }] : [],
-      subscribe: {
-        timer: (_sub, _ctx, dispatch) => finishLater(dispatch),
-      },
+      subs: [
+        {
+          type: "timer",
+          deps: (s) =>
+            s.phase === "waiting"
+              ? { ms: 5, msg: { type: "finish" } as const }
+              : null,
+        },
+      ],
     });
     const probe = instrument(run(machine, { ctx: undefined }));
 

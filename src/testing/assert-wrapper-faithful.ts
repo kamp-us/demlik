@@ -136,10 +136,11 @@ export interface InterceptingOpt {
  *
  * @param base       the bare base `Machine`.
  * @param makeWrapped a thunk that wraps `base` and returns the composed machine
- *   (e.g. `() => withTelemetry(base, cfg)`). A thunk — not the wrapped value —
- *   so a wrapper that registers process-scoped ports (`definePort`) is
- *   constructed inside the assertion's control, and so the same betrayal-
- *   detector reads as `assertWrapperFaithful(base, () => withX(base, cfg), ...)`
+ *   (e.g. `() => withTelemetry(wired, cfg).machine`, where `wired.machine` is
+ *   `base`). A thunk — not the wrapped value — so a wrapper that registers
+ *   process-scoped ports (`definePort`) is constructed inside the assertion's
+ *   control, and so the same betrayal-detector reads as
+ *   `assertWrapperFaithful(wired.machine, () => withX(wired, cfg).machine, ...)`
  *   at every wrapper's test site.
  * @param opts       the conformance replay options.
  */

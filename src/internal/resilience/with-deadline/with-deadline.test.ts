@@ -5,6 +5,8 @@ import {
   defineMachine,
   type Interpret,
   replay,
+  type Sub,
+  subIdOf,
 } from "../../../index";
 import { run } from "../../../promise";
 import { assertWrapperFaithful } from "../../../testing";
@@ -298,24 +300,28 @@ describe("withDeadline — slice mechanics", () => {
 });
 
 // ===========================================================================
-// Subscriptions — the timeout Sub is armed while armed, keyed on seq so a
-// re-arm churns the timer id; gone once exceeded. (replay derives the desired
-// sub set at the final state.)
+// Subs — the built-in `timer` is on while armed, its deps carrying the Msg for
+// the current seq so a re-arm restarts it; off once exceeded. (replay derives
+// the running sub set at the final state.)
 // ===========================================================================
 
-describe("withDeadline — subscriptions reconcile by id", () => {
-  it("arms a $deadline:timeout sub keyed on seq while armed", () => {
+// The running `timer` Sub the wrapper declares for generation `seq`.
+function timerFor(seq: number) {
+  const deps = { ms: 5000, msg: deadlineExceededMsg(seq) };
+  return { id: subIdOf("timer", deps), type: "timer", deps };
+}
+
+describe("withDeadline — subs", () => {
+  it("arms a built-in timer for the current seq while armed", () => {
     const base = makeBase();
     const { subs } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [{ type: "inc", by: 1 }],
       ctx: makeCtx(),
     });
-    expect(subs).toEqual([
-      { id: "$deadline:timeout:1", type: "$deadline:timeout", delayMs: 5000 },
-    ]);
+    expect(subs).toEqual([timerFor(1)]);
   });
 
-  it("a progress bump CHANGES the sub id (re-arm = id change, reconciled away)", () => {
+  it("a progress bump CHANGES the timer's deps, so the engine restarts it", () => {
     const base = makeBase();
     const wrapped = withDeadline(base, { ms: 5000 }).machine;
     const a = replay(wrapped, {
@@ -329,23 +335,23 @@ describe("withDeadline — subscriptions reconcile by id", () => {
       ],
       ctx: makeCtx(),
     });
-    expect(a.subs[0]?.id).toBe("$deadline:timeout:1");
-    expect(b.subs[0]?.id).toBe("$deadline:timeout:2");
+    expect(a.subs).toEqual([timerFor(1)]);
+    expect(b.subs).toEqual([timerFor(2)]);
     expect(a.subs[0]?.id).not.toBe(b.subs[0]?.id);
   });
 
-  it("returns NO deadline sub once exceeded", () => {
+  it("returns NO timer once exceeded", () => {
     const base = makeBase();
     const { subs } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [{ type: "inc", by: 1 }, deadlineExceededMsg(1)],
       ctx: makeCtx(),
     });
-    expect(subs.filter((s) => s.type === "$deadline:timeout")).toEqual([]);
+    expect(subs).toEqual([]);
   });
 
-  it("merges base subs WITH the deadline sub (base sub preserved)", () => {
-    // A base that arms its own sub proves the merge keeps both.
-    type Tick = { id: string; type: "tick" };
+  it("merges base subs WITH the timer, and passes the base's runners through", () => {
+    // A base that declares its own sub proves the merge keeps both.
+    type Tick = Sub<"tick", { readonly count: number }>;
     const ticking = defineMachine({
       types: {
         model: {} as CounterState,
@@ -360,21 +366,27 @@ describe("withDeadline — subscriptions reconcile by id", () => {
         reset: () => [{ count: 0 }, []],
         heartbeat: (s) => [s, []],
       },
-      subscriptions: () => [{ id: "tick", type: "tick" }],
-      subscribe: { tick: () => () => {} },
+      subs: [{ type: "tick", deps: (s) => ({ count: s.count }) }],
     });
+    const tick = () => () => {};
     const wrapped = withDeadline(
-      { machine: ticking, interpret: { persist: async () => {} } },
+      {
+        machine: ticking,
+        interpret: { persist: async () => {} },
+        subscribe: { tick },
+      },
       { ms: 5000 },
     );
     const { subs } = replay(wrapped.machine, {
       msgs: [{ type: "inc", by: 1 }],
       ctx: makeCtx(),
     });
+    // The base entry reads its slice off `state.base`.
     expect(subs).toEqual([
-      { id: "tick", type: "tick" },
-      { id: "$deadline:timeout:1", type: "$deadline:timeout", delayMs: 5000 },
+      { id: subIdOf("tick", { count: 1 }), type: "tick", deps: { count: 1 } },
+      timerFor(1),
     ]);
+    expect(wrapped.subscribe.tick).toBe(tick);
   });
 });
 
@@ -512,32 +524,44 @@ describe("withDeadline — reserved-namespace guards", () => {
       ),
     ).toThrow(/reserved "\$deadline:decision" interpret handler/);
   });
+});
 
-  it("throws if the base squats on the $deadline:timeout subscribe handler", () => {
-    type SquatSub = { id: string; type: "$deadline:timeout" };
-    const squatting = defineMachine({
-      types: {
-        model: {} as CounterState,
-        msg: {} as CounterMsg,
-        cmd: {} as PersistCmd,
-        sub: {} as SquatSub,
-        ctx: {} as CounterCtx,
-      },
-      init: (loaded) => [loaded ?? { count: 0 }, []],
-      update: {
-        inc: (s, m) => [{ count: s.count + m.by }, []],
-        reset: () => [{ count: 0 }, []],
-        heartbeat: (s) => [s, []],
-      },
-      subscriptions: () => [],
-      subscribe: { "$deadline:timeout": () => () => {} },
-    });
-    expect(() =>
-      withDeadline(
-        { machine: squatting, interpret: { persist: async () => {} } },
-        { ms: 5000 },
-      ),
-    ).toThrow(/reserved "\$deadline:timeout" subscribe handler/);
+// ===========================================================================
+// The wrapper's countdown is the built-in `timer`, so a base that hands `run`
+// its own `subscribe.timer` (a test clock) drives the deadline with it.
+// ===========================================================================
+
+describe("withDeadline — a base `subscribe.timer` drives the deadline", () => {
+  it("fires `$deadline:exceeded` off the base's timer, never a real one", async () => {
+    vi.useFakeTimers();
+    try {
+      let fire: (() => void) | undefined;
+      const base = makeBase();
+      const wrapped = withDeadline(base, { ms: 5000 });
+      const runtime = await run(wrapped.machine, {
+        ...wrapped,
+        ctx: makeCtx(),
+        subscribe: {
+          timer: (sub, _ctx, dispatch) => {
+            fire = () => dispatch(sub.deps.msg);
+            return () => {
+              fire = undefined;
+            };
+          },
+        },
+      }).ready;
+
+      expect(vi.getTimerCount()).toBe(0);
+      fire?.();
+      await runtime.idle();
+      expect(runtime.getState().$deadline).toEqual({
+        phase: "exceeded",
+        seq: 0,
+      });
+      await runtime.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

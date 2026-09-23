@@ -79,11 +79,13 @@
  *     token_refreshed: (s, m) => ac.onRefreshed(ac.installToken(s, m.token), m.at),
  *     retry_due: (s, m) => ac.onTimer(s, m),
  *   },
- *   subscriptions: (s) => ac.subs(s),
- *   subscribe: { deadline: subscribeDeadline },
+ *   subs: [deadlinesSub((s: AuthedState<string, Resp>) => ac.subs(s))],
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() }) });
+ *   run(machine, {
+ *     interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() }),
+ *     subscribe: { deadline: subscribeDeadline },
+ *   });
  */
 
 import type { Cmd } from "../../../index";
@@ -93,7 +95,9 @@ import {
   createResilientCall,
   type DeadlineExceeded,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FailMsg,
   type ResilientConfig,
   type ResilientPorts,
@@ -481,11 +485,11 @@ export function createAuthedCall<I, R>(
   // === Subs ================================================================
 
   /**
-   * Pre-wired subscriptions — exactly resilient-call's (retry + deadline timers
+   * The deadlines to arm — exactly resilient-call's (retry + deadline timers
    * keyed per call). The auth dimension arms NO timers: a refresh is a one-shot
    * Cmd, not a recurring sub, and the parked-call re-issue is driven by the
-   * `token_refreshed` Msg, not a timer. Wire `subscribe: { deadline:
-   * subscribeDeadline }`.
+   * `token_refreshed` Msg, not a timer. Declare the list with `deadlinesSub`
+   * and wire `subscribe: { deadline: subscribeDeadline }` at `run`.
    */
   function subs(s: AuthedState<I, R>): readonly DeadlineSub[] {
     return rc.subs(s.resilience);
@@ -549,14 +553,15 @@ export function liftAuthed<
 }
 
 /**
- * Re-export the deadline Sub primitives (this knob's `subs` emits `DeadlineSub`s,
+ * Re-export the deadline Sub primitives (this knob's `subs` lists `DeadlineSub`s,
  * inherited from resilient-call) and the token-refresh Msg constructors a
  * consumer wires into their reducer, so the whole composition imports from one
  * subpath.
  */
-export { subscribeDeadline, deadlineSub };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
 export type {
   DeadlineSub,
+  DeadlinesSub,
   DeadlineExceeded,
   ResilientState,
   TokenState,

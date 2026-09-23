@@ -26,7 +26,11 @@ function replay(program, msgs) {
     allCmds.push(...newCmds)
   }
 
-  const subs = program.subscriptions?.(state) ?? []
+  // Each `subs` entry that is on at the final state, as its runner would see it
+  const subs = (program.subs ?? []).flatMap(({ type, deps }) => {
+    const d = deps(state)
+    return d == null ? [] : [{ id: subIdOf(type, d), type, deps: d }]
+  })
   return { state, cmds: allCmds, subs }
 }
 ```
@@ -79,8 +83,9 @@ const result = replay(program, [
 ])
 
 expect(result.subs).toContainEqual({
+  id: subIdOf("every_second", { clock: "heartbeat" }),
   type: "every_second",
-  id: "heartbeat",
+  deps: { clock: "heartbeat" },
 })
 ```
 
@@ -181,7 +186,7 @@ can assert on directly.
 |------------------------|----------------|
 | State transition | Call `update(msg, state)`, assert on first element |
 | Effect emission | Call `update(msg, state)`, assert on second element |
-| Active subscriptions | Call `subscriptions(state)`, assert on result |
+| Active subscriptions | `replay(...)`, assert on `subs` (`{ id, type, deps }` per Sub on at the end) |
 | Multi-step scenario | `replay(program, [msg1, msg2, ...])`, assert on final state + cumulative cmds |
 | Interpreter correctness | Integration test — boot a real runtime, dispatch, observe results |
 | Error handling | Pass error Msg (e.g. `GotText(Err NetworkError)`), assert on state transition |

@@ -9,8 +9,9 @@ import {
 } from "../protocol";
 import {
   createJevAsk,
-  type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type JevAskCmd,
   type JevAskErr,
   type JevFailMsg,
@@ -115,19 +116,18 @@ function hostUpdate(ask: Ask): Reducer<HostState, HostMsg, HostCmd> {
 }
 
 function hostMachine(ask: Ask) {
-  return defineMachine<HostState, HostMsg, HostCmd, DeadlineSub, undefined>({
+  return defineMachine<HostState, HostMsg, HostCmd, DeadlinesSub, undefined>({
     types: {
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as DeadlineSub,
+      sub: {} as DeadlinesSub,
       ctx: undefined,
     },
     init: (loaded) =>
       loaded !== null ? [loaded, []] : [{ resilience: ask.init() }, []],
     update: hostUpdate(ask),
-    subscriptions: (s) => ask.subs(s.resilience),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => ask.subs(s.resilience))],
   });
 }
 

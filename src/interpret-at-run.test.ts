@@ -5,14 +5,15 @@ import {
   type Interpret,
   type Reducer,
   type Sub,
-  subId,
+  type Subscribe,
 } from "./index";
 import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
-// Handlers at run (#278, #251 R1.1). A machine is data: the Cmd handlers are
-// handed to `run` beside it, so one machine file runs under whatever handlers
-// the host supplies — a real backend in production, a stub in a test.
+// Handlers at run (#278, #279, #251 R1.1, R1.4). A machine is data: the Cmd
+// handlers and the sub runners are handed to `run` beside it, so one machine
+// file runs under whatever handlers the host supplies — a real backend in
+// production, a stub in a test.
 // ───────────────────────────────────────────────────────────────────────────
 
 type State = { readonly saved: readonly number[]; readonly ticks: number };
@@ -21,7 +22,7 @@ type Msg =
   | { readonly type: "saved"; readonly n: number }
   | { readonly type: "tick" };
 type SaveCmd = Cmd<"persist"> & { readonly n: number };
-type TickSub = Sub<"tick">;
+type TickSub = Sub<"tick", { readonly name: string }>;
 
 const update: Reducer<State, Msg, SaveCmd> = {
   save: (s, m) => [s, [{ type: "persist", n: m.n }]],
@@ -38,12 +39,11 @@ const machine = defineMachine({
   },
   init: () => [{ saved: [], ticks: 0 }, []],
   update,
-  subscriptions: (): readonly TickSub[] => [
-    { id: subId("tick"), type: "tick" },
-  ],
-  // The machine's own runner never fires: it arms nothing.
-  subscribe: { tick: () => () => {} },
+  subs: [{ type: "tick", deps: () => ({ name: "clock" }) }],
 });
+
+// A runner that arms nothing, for the tests that exercise Cmds only.
+const quiet: Subscribe<Msg, TickSub, unknown> = { tick: () => () => {} };
 
 describe("run(machine, { interpret })", () => {
   it("performs each Cmd through the handlers handed to run", async () => {
@@ -54,7 +54,7 @@ describe("run(machine, { interpret })", () => {
         return { type: "saved", n: cmd.n };
       },
     };
-    const rt = await run(machine, { interpret }).ready;
+    const rt = await run(machine, { interpret, subscribe: quiet }).ready;
 
     await rt.dispatch({ type: "save", n: 7 });
 
@@ -66,9 +66,11 @@ describe("run(machine, { interpret })", () => {
   it("runs one machine under two different handler tables", async () => {
     const real = await run(machine, {
       interpret: { persist: async (c) => ({ type: "saved", n: c.n }) },
+      subscribe: quiet,
     }).ready;
     const doubled = await run(machine, {
       interpret: { persist: async (c) => ({ type: "saved", n: c.n * 2 }) },
+      subscribe: quiet,
     }).ready;
 
     await real.dispatch({ type: "save", n: 3 });
@@ -82,7 +84,7 @@ describe("run(machine, { interpret })", () => {
 });
 
 describe("run(machine, { subscribe })", () => {
-  it("replaces the machine's runner of the same Sub type", async () => {
+  it("runs each Sub through the runner handed to run", async () => {
     let fire: (() => void) | undefined;
     const rt = await run(machine, {
       interpret: { persist: async () => undefined },
@@ -105,12 +107,25 @@ describe("run(machine, { subscribe })", () => {
     expect(fire).toBeUndefined();
   });
 
-  it("keeps the machine's own runner when run names none", async () => {
-    const rt = await run(machine, {
+  it("runs one machine under two different runner tables", async () => {
+    const started: string[] = [];
+    const runner =
+      (label: string): Subscribe<Msg, TickSub, unknown>["tick"] =>
+      (sub) => {
+        started.push(`${label}:${sub.deps.name}`);
+        return () => {};
+      };
+    const a = await run(machine, {
       interpret: { persist: async () => undefined },
+      subscribe: { tick: runner("a") },
     }).ready;
-    await rt.idle();
-    expect(rt.getState().ticks).toBe(0);
-    await rt.stop();
+    const b = await run(machine, {
+      interpret: { persist: async () => undefined },
+      subscribe: { tick: runner("b") },
+    }).ready;
+
+    expect(started).toEqual(["a:clock", "b:clock"]);
+    await a.stop();
+    await b.stop();
   });
 });

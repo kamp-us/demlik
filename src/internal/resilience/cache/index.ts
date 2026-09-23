@@ -41,7 +41,7 @@
  * and `rate-limit`.
  */
 
-import type { Sub } from "../../../index";
+import type { DepKeyedSub, Sub } from "../../../index";
 import { fromInterval } from "../../../subs";
 import type { SubscribeHandler } from "../../../subs/types";
 
@@ -166,10 +166,10 @@ export function evictExpired<V>(
 //
 // A periodic timer Sub that dispatches `cache_evict` so the consumer's reducer
 // can call `evictExpired`. It is `fromInterval` specialized to a fixed Msg
-// shape — the factory carries the interval ON the Sub (per the substrate's
-// reconcile-by-id contract) and dispatches a `cache_evict` Msg tagged with the
-// Sub's own `id`, so a consumer running several caches can route each tick to
-// the right cache by `msg.id`.
+// shape — the interval rides in the Sub's `deps` (which the engine keys the
+// Sub on) and the runner dispatches a `cache_evict` Msg tagged with the cache's
+// name, so a consumer running several caches can route each tick to the right
+// cache by `msg.id`.
 //
 // Mirrors `fromInterval` exactly (factory + SubscribeHandler cell + exported
 // Msg constructor); it does NOT reimplement the timer lifecycle — it composes
@@ -177,12 +177,12 @@ export function evictExpired<V>(
 // keeps the timer-handle bookkeeping (and its cleanup) in one place and this
 // module purely declarative.
 //
-// Strengthens invariant 4 (external time is a Sub, reconciled by id) and
+// Strengthens invariant 4 (external time is a Sub the engine reconciles) and
 // invariant 9 (named, small Sub surface composed on the shared factory).
 // ---------------------------------------------------------------------------
 
 /**
- * The Msg the eviction Sub dispatches each tick. `id` is the Sub's own id so a
+ * The Msg the eviction Sub dispatches each tick. `id` is the cache's name so a
  * consumer with multiple caches can route the tick to the matching cache. The
  * reducer reads `Date.now()`-free time by stamping `nowMs` itself at the Sub
  * boundary if needed; the canonical reducer cell is
@@ -199,49 +199,52 @@ export function cacheEvictMsg(id: string): CacheEvictMsg {
 }
 
 /**
- * The Sub shape the eviction factory installs: a `setInterval`-shaped Sub
- * carrying its tick period (`intervalMs`) per the substrate's
- * reconcile-by-id-with-data-on-the-Sub contract. `type: "cache"` is the
- * lowercase source-noun Sub convention (canon §2.5 / naming-style).
+ * The `deps` of an eviction Sub: which cache it ticks for (`name`, echoed as
+ * the Msg's `id`) and the tick period (`intervalMs`, which `fromInterval`
+ * reads).
  */
-export type CacheEvictionSub = Sub<"cache"> & { readonly intervalMs: number };
+export type CacheEvictionDeps = {
+  readonly name: string;
+  readonly intervalMs: number;
+};
 
 /**
- * Declare an eviction Sub for the cache identified by `id`, ticking every
- * `everyMs`. Drop the result into `subscriptions(state)`:
+ * The running eviction Sub: a `setInterval`-shaped Sub whose `deps` carry the
+ * cache's name and tick period. `type: "cache"` is the lowercase source-noun
+ * Sub convention (canon §2.5 / naming-style).
+ */
+export type CacheEvictionSub = Sub<"cache", CacheEvictionDeps>;
+
+/**
+ * The `subs` entry for an eviction tick on the cache named `name`, every
+ * `everyMs`. It is on for the machine's life:
  *
- *   subscriptions: (s) => [cacheEvictionSub("session-cache", 30_000)]
+ *   subs: [cacheEvictionSub("session-cache", 30_000)],
+ *   // run(machine, { subscribe: { cache: cacheEvictionSubscribe } })
  *
- * Same id ⇒ same running interval across transitions (no reconcile churn);
- * changing `everyMs` alone will NOT re-arm the timer (the substrate leaves a
- * same-id Sub running) — change the `id` too if the period must change. This
- * mirrors `fromInterval`'s data-on-the-Sub tradeoff exactly.
+ * The engine keys the Sub on its `deps`, so a machine that declares the same
+ * name and period keeps one running interval, and a changed period restarts
+ * it at the new one.
  */
 export function cacheEvictionSub(
-  id: string,
+  name: string,
   everyMs: number,
-): CacheEvictionSub {
-  return {
-    id: id as CacheEvictionSub["id"],
-    type: "cache",
-    intervalMs: everyMs,
-  };
+): DepKeyedSub<unknown, CacheEvictionSub> {
+  return { type: "cache", deps: () => ({ name, intervalMs: everyMs }) };
 }
 
 /**
- * The `subscribe` cell for the eviction Sub. Assign it to
- * `machine.subscribe.cache`:
+ * The `cache` runner for the eviction Sub. Hand it to `run`:
  *
- *   subscribe: { cache: cacheEvictionSubscribe }
+ *   run(machine, { subscribe: { cache: cacheEvictionSubscribe } })
  *
  * Composed directly on `fromInterval` — it owns the `setInterval` /
- * `clearInterval` lifecycle; this cell only pins the Msg the tick dispatches
- * (`cacheEvictMsg(sub.id)`). The cleanup `fromInterval` returns stops the
- * interval when the Sub is reconciled out (the cache's state exits the phase
- * that declared it).
+ * `clearInterval` lifecycle; this runner only pins the Msg the tick dispatches
+ * (`cacheEvictMsg(sub.deps.name)`). The cleanup `fromInterval` returns stops
+ * the interval when the Sub stops.
  */
 export const cacheEvictionSubscribe: SubscribeHandler<
   CacheEvictionSub,
   CacheEvictMsg,
   unknown
-> = fromInterval((sub) => cacheEvictMsg(sub.id));
+> = fromInterval((sub) => cacheEvictMsg(sub.deps.name));

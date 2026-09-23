@@ -85,11 +85,13 @@
  *     change_done: (s, m) => lift(s, rec.applied(s.rec, m.change, m.at)),
  *     retry_due:   (s, m) => lift(s, rec.onTimer(s.rec, m)),
  *   },
- *   subscriptions: (s) => rec.subs(s.rec),
- *   subscribe: { deadline: subscribeDeadline },
+ *   subs: [deadlinesSub((s) => rec.subs(s.rec))],
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }) });
+ *   run(machine, {
+ *     interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }),
+ *     subscribe: { deadline: subscribeDeadline },
+ *   });
  */
 
 import type { Cmd } from "../../../index";
@@ -97,7 +99,9 @@ import type { RetryPolicy } from "../../../retry-backoff";
 import {
   createPaginatedWalk,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FetchPageCmd,
   PAGE_KEY,
   type PageErrMsg,
@@ -627,12 +631,13 @@ export function createReconciler<
   // === Subs ================================================================
 
   /**
-   * Pre-wired subscriptions: exactly the scan's paginated-walk subs — a retry
-   * timer while a scan page is `waiting_retry`, and (with the `deadline` brick) a
-   * per-page deadline timer while a scan fetch is active. The apply loop emits no
-   * timers (each apply settles via the consumer's own Msg), so once the scan
-   * finishes the desired sub set empties. Reconciled by id; wire `subscribe: {
-   * deadline: subscribeDeadline }` (re-exported below).
+   * The scan's deadlines — exactly paginated-walk's: a retry timer while a scan
+   * page is `waiting_retry`, and (with the `deadline` brick) a per-page deadline
+   * timer while a scan fetch is active. The apply loop emits no timers (each
+   * apply settles via the consumer's own Msg), so once the scan finishes the
+   * list empties. Declare `subs: [deadlinesSub((s) => rec.subs(s.rec))]` and
+   * pass `subscribe: { deadline: subscribeDeadline }` to `run` (both
+   * re-exported below).
    */
   function subs(s: State): readonly DeadlineSub[] {
     return walk.subs(s.walk);
@@ -696,9 +701,10 @@ export function liftReconciler<
 }
 
 /**
- * Re-export the deadline Sub primitives (inherited from paginated-walk) so
- * consumers wire one import: `subscribeDeadline` is the `subscribe` cell,
- * `deadlineSub` builds the Sub literal this knob's `subs` emits.
+ * Re-export the deadline primitives (inherited from paginated-walk) so
+ * consumers wire one import: `subscribeDeadline` is the `deadline` runner,
+ * `deadlinesSub` the machine's `subs` entry, and `deadlineSub` builds the entry
+ * this knob's `subs` lists.
  */
-export { subscribeDeadline, deadlineSub };
-export type { DeadlineSub };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
+export type { DeadlineSub, DeadlinesSub };

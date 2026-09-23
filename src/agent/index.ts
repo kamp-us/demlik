@@ -96,8 +96,8 @@
  *   });
  *   // The consumer supplies the per-tool (+ snapshot) interpret; the agent owns
  *   // the brain interpret and merges them in `toMachine`.
- *   const machine = agent.toMachine({ toolInterpret });
- *   const runtime = run(machine, { ctx, store });
+ *   const wired = agent.toMachine({ toolInterpret });
+ *   const runtime = run(wired.machine, { ...wired, ctx, store });
  */
 
 import {
@@ -106,11 +106,14 @@ import {
   type Interpret,
   type Machine,
   type Reducer,
+  type Subscribe,
 } from "../index";
 import { createFanOut, initFanOut } from "../internal/flow/fan-out";
 import {
   createMonitoredRun,
   type DeadlineSub,
+  type DeadlinesSub,
+  deadlinesSub,
   type MonitoredRunCmd,
 } from "../internal/flow/monitored-run";
 import {
@@ -1261,13 +1264,13 @@ export function createAgent<
   // === Subs ================================================================
 
   /**
-   * The merged subscription set — the brain-call retry timers (`../llm-call`),
+   * The merged deadline list — the brain-call retry timers (`../llm-call`),
    * the COMPACTION retry timers (the dedicated `$compact` slice, #85), the
    * PER-TOOL retry + timeout timers (the `$tool:`-keyed ladders, #117), and the
    * no-progress safety deadline (`../monitored-run`). All are `DeadlineSub`s
-   * reconciled by id (the compaction timers are keyed `resilient:*:$compact`,
-   * distinct from every brain timer), wired with one `subscribe: { deadline:
-   * subscribeDeadline }` cell. PURE.
+   * told apart by id (the compaction timers are keyed `resilient:*:$compact`,
+   * distinct from every brain timer), armed by ONE `deadline` Sub
+   * (`deadlinesSub`) and its `subscribeDeadline` runner. PURE.
    */
   function subs(s: State): readonly DeadlineSub[] {
     return [
@@ -1342,10 +1345,11 @@ export function createAgent<
   }
 
   /**
-   * Wire the agent into a single runnable `defineMachine`. The host Msg union is
-   * the closed set of verb entry points; `update` routes each to the matching
-   * verb, `subscriptions` merges the two bricks' subs, `subscribe` wires the one
-   * deadline cell, and `interpret` is the FIXED brain-call handler.
+   * Wire the agent into a single runnable `defineMachine`, returned as a
+   * `Wired` beside its handlers. The host Msg union is the closed set of verb
+   * entry points; `update` routes each to the matching verb, `subs` declares
+   * one `deadline` Sub over every brick's deadlines, `subscribe` carries its
+   * runner, and `interpret` is the FIXED brain-call handler.
    *
    * The brain call uses the FIXED no-arg `../llm-call` handler (`brainHandlers`):
    * its returned `resilient_ok` / `resilient_err` settle Msg RE-ENTERS the
@@ -1407,12 +1411,17 @@ export function createAgent<
       State,
       AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
       AgentCmd<P, TC, boolean, boolean>,
-      DeadlineSub,
+      DeadlinesSub,
       Ctx & ToolsCtx<T>
     >;
     readonly interpret: Interpret<
       AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
       AgentCmd<P, TC, boolean, boolean>,
+      Ctx & ToolsCtx<T>
+    >;
+    readonly subscribe: Subscribe<
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      DeadlinesSub,
       Ctx & ToolsCtx<T>
     >;
   } {
@@ -1565,20 +1574,24 @@ export function createAgent<
     // drops, so the reducer's emitted arrays provably stay within `ACmd[]`. This
     // is the same shape as `mergeInterpret`'s one sound mapped-type identity: the
     // soundness lives in a documented seam, not smuggled at every verb.
-    const machine: Machine<State, M, ACmd, DeadlineSub, Ctx> = {
+    const machine: Machine<State, M, ACmd, DeadlinesSub, Ctx> = {
       init: (loaded) => (loaded !== null ? [loaded, []] : [init(), []]),
       update: update as Reducer<State, M, ACmd>,
-      subscriptions: (s) => subs(s),
-      subscribe: { deadline: subscribeDeadline },
+      subs: [deadlinesSub(subs)],
       ...(tools !== undefined ? { cmds: tools.defs } : {}),
     };
-    // The machine carries no handlers (#278): `interpret` rides beside it, for
-    // the caller to hand `run`. It is already checked as `Interpret<M, ACmd,
-    // Ctx>` where it is built; each cell's form is conditional on whether its
-    // Cmd is `Cmd.define`d (ADR 0021), and over the generic `TC` TS defers that
-    // and cannot relate the two mapped types, so the checked table is handed
-    // over unrelated here.
-    return { machine: defineMachine(machine), interpret: interpret as never };
+    // The machine carries no handlers (#278, #279): `interpret` and the
+    // `deadline` runner ride beside it, for the caller to hand `run`.
+    // `interpret` is already checked as `Interpret<M, ACmd, Ctx>` where it is
+    // built; each cell's form is conditional on whether its Cmd is
+    // `Cmd.define`d (ADR 0021), and over the generic `TC` TS defers that and
+    // cannot relate the two mapped types, so the checked table is handed over
+    // unrelated here.
+    return {
+      machine: defineMachine(machine),
+      interpret: interpret as never,
+      subscribe: { deadline: subscribeDeadline },
+    };
   }
 
   return {
@@ -1606,13 +1619,15 @@ export function createAgent<
 }
 
 /**
- * Re-export the deadline Sub primitives so consumers (and tests) wire one
- * import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds
- * the Sub literal both composed wrappers' `subs` emit.
+ * Re-export the deadline primitives so consumers (and tests) wire one import:
+ * `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's
+ * `subs` entry, and `deadlineSub` builds the entry both composed wrappers'
+ * `subs` list.
  */
-export { subscribeDeadline, deadlineSub };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
 export type {
   DeadlineSub,
+  DeadlinesSub,
   EndedRun,
   MonitoredRunCmd,
   RunFailure,

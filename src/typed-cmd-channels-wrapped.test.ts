@@ -92,12 +92,12 @@ function expectMalformed(error: FetchErr["error"] | null): void {
 
 describe("withDeadline — the edge still parses and stamps behind the wrap", () => {
   it("a malformed `_ok` becomes `fetch_err` (malformed_result); `base` is unchanged", async () => {
-    const { machine, interpret } = withDeadline(machineOver(malformed), {
+    const wired = withDeadline(machineOver(malformed), {
       ms: 60_000,
     });
-    const rt = await run(machine, {
+    const rt = await run(wired.machine, {
+      ...wired,
       ctx: {},
-      interpret,
       clock: fixedClock(7),
     }).ready;
     const seen: string[] = [];
@@ -116,12 +116,12 @@ describe("withDeadline — the edge still parses and stamps behind the wrap", ()
   });
 
   it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const { machine, interpret } = withDeadline(machineOver(wellFormed), {
+    const wired = withDeadline(machineOver(wellFormed), {
       ms: 60_000,
     });
-    const rt = await run(machine, {
+    const rt = await run(wired.machine, {
+      ...wired,
       ctx: {},
-      interpret,
       clock: fixedClock(1_000),
     }).ready;
 
@@ -137,9 +137,9 @@ describe("withTelemetry — the edge still parses and stamps behind the wrap", (
   const ctx = { telemetrySink: () => {} };
 
   it("a malformed `_ok` becomes `fetch_err` (malformed_result); `base` is unchanged", async () => {
-    const { machine, interpret } = withTelemetry(machineOver(malformed));
-    const rt = await run(machine, {
-      interpret,
+    const wired = withTelemetry(machineOver(malformed));
+    const rt = await run(wired.machine, {
+      ...wired,
       ctx,
       clock: fixedClock(7),
     }).ready;
@@ -158,9 +158,9 @@ describe("withTelemetry — the edge still parses and stamps behind the wrap", (
   });
 
   it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const { machine, interpret } = withTelemetry(machineOver(wellFormed));
-    const rt = await run(machine, {
-      interpret,
+    const wired = withTelemetry(machineOver(wellFormed));
+    const rt = await run(wired.machine, {
+      ...wired,
       ctx,
       clock: fixedClock(1_000),
     }).ready;
@@ -178,12 +178,9 @@ describe("withResilience — the carrier settles the target through the same edg
   const config = { target: "fetch" as const };
 
   it("a malformed `_ok` reaches the base as `fetch_err` (malformed_result); `body` is unchanged", async () => {
-    const { machine, interpret } = withResilience(
-      machineOver(malformed),
-      config,
-    );
-    const rt = await run(machine, {
-      interpret,
+    const wired = withResilience(machineOver(malformed), config);
+    const rt = await run(wired.machine, {
+      ...wired,
       ctx: {},
       clock: fixedClock(7),
     }).ready;
@@ -203,12 +200,9 @@ describe("withResilience — the carrier settles the target through the same edg
   });
 
   it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const { machine, interpret } = withResilience(
-      machineOver(wellFormed),
-      config,
-    );
-    const rt = await run(machine, {
-      interpret,
+    const wired = withResilience(machineOver(wellFormed), config);
+    const rt = await run(wired.machine, {
+      ...wired,
       ctx: {},
       clock: fixedClock(1_000),
     }).ready;

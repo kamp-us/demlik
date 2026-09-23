@@ -365,12 +365,13 @@ async function drive(turns: Turns) {
     toolConcurrency: 8,
     rng: () => 0,
   });
-  const { machine, interpret } = agent.toMachine({ tools });
+  const { machine, interpret, subscribe } = agent.toMachine({ tools });
   const events: AgentEvent<{ snippet: string } | number>[] = [];
   let clock = 100;
   const runtime = await run(machine, {
     ctx: { kb },
     interpret,
+    subscribe,
     clock: () => {
       clock += 1;
       return clock;

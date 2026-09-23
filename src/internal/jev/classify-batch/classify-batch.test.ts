@@ -35,6 +35,7 @@ function make(
     maxMs: number;
     concurrency: number;
     ttlMs: number;
+    evictEveryMs: number;
     port: JevPort<ItemQuestions<Line>>;
   }> = {},
 ) {
@@ -45,6 +46,9 @@ function make(
     maxMs: over.maxMs ?? 2_000,
     concurrency: over.concurrency ?? 8,
     ttlMs: over.ttlMs ?? 60_000,
+    ...(over.evictEveryMs === undefined
+      ? {}
+      : { evictEveryMs: over.evictEveryMs }),
     ...(over.port === undefined ? {} : { port: over.port }),
   });
 }
@@ -338,6 +342,18 @@ describe("eviction is a Msg", () => {
     expect(k.subs(s1)).toEqual([
       { id: "jev-classify-batch", type: "deadline", atMs: 1_500 },
     ]);
+  });
+
+  it("mounts the window deadline, plus the eviction tick when a period is set", () => {
+    const k = knob({ maxItems: 10, maxMs: 500, evictEveryMs: 60_000 });
+    const [s1] = addAll(k, k.init(), txns(1), 1_000);
+    const model = { classify: s1 };
+    const entries = k.subEntries((m: typeof model) => m.classify);
+    expect(entries.map((e) => [e.type, e.deps(model)])).toEqual([
+      ["deadline", k.subs(s1)],
+      ["cache", { name: "jev-classify-batch", intervalMs: 60_000 }],
+    ]);
+    expect(knob().subEntries((m: typeof model) => m.classify)).toHaveLength(1);
   });
 });
 

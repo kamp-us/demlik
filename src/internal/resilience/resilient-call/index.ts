@@ -115,11 +115,13 @@
  *     resilient_err: (s, m) => onSettle(s, rc.settle(s.resilience, m)),
  *     deadline_exceeded: (s, m) => liftResilience(s, rc.onTimer(s.resilience, m)),
  *   },
- *   subscriptions: (s) => rc.subs(s.resilience),
- *   subscribe: { deadline: subscribeDeadline },
+ *   subs: [deadlinesSub((s: Model) => rc.subs(s.resilience))],
  *
  *   // and where it runs — handlers ride beside the machine, not on it:
- *   run(machine, { interpret: rc.handlers({ run: ctx.call }) });
+ *   run(machine, {
+ *     interpret: rc.handlers({ run: ctx.call }),
+ *     subscribe: { deadline: subscribeDeadline },
+ *   });
  *
  * `docs/how-to/hand-wire-a-resilient-call.md` walks the whole machine.
  *
@@ -139,8 +141,9 @@
  *     llm_ok: (s, m) => …,   // m.result is LlmOk
  *   }
  *
- * The name leads the retry / deadline Sub ids too (`jev:retry:<key>`), because
- * Subs reconcile by id and two knobs would otherwise share one timer per key.
+ * The name leads the retry / deadline ids too (`jev:retry:<key>`), because a
+ * fired timer is routed by its id and two knobs would otherwise answer each
+ * other's timer on a shared key.
  * `N` is not inferable from `I` / `R`, so an opted-in knob spells all three
  * type arguments; `config.name` is typed at `N`, so value and type cannot
  * drift. Omit `name` and every one of those strings is `resilient*` exactly as
@@ -153,7 +156,13 @@
  */
 
 import { liftSlice } from "../../../compose";
-import { Cmd, type CmdOf, type NoCtx, tryInterpret } from "../../../index";
+import {
+  Cmd,
+  type CmdOf,
+  type DepKeyedSub,
+  type NoCtx,
+  tryInterpret,
+} from "../../../index";
 import type { MsgType } from "../../../protocol";
 import { without } from "../../../pure/core";
 import {
@@ -182,8 +191,10 @@ import {
 import {
   type DeadlineExceeded,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineMsgType,
   deadlineSub,
+  deadlinesSub,
   subscribeDeadline,
 } from "../deadline";
 import { initBucket, type TokenBucket, tryConsume } from "../rate-limit";
@@ -568,10 +579,11 @@ function charge(budget: CallBudget, at: number): CallBudget {
   return { remainingMs: budget.remainingMs - elapsed, chargingSinceMs: at };
 }
 
-// Sub-id families. Each call's retry timer is a deadline keyed by `key`, so a
-// machine running many concurrent calls reconciles each independently. The
-// knob's `name` leads the id for the same reason it leads the Msg types: Subs
-// reconcile by id, so two knobs sharing a key would otherwise share one timer.
+// Deadline-id families. Each call's retry timer is a deadline keyed by `key`, so
+// a machine running many concurrent calls arms and routes each independently.
+// The knob's `name` leads the id for the same reason it leads the Msg types: a
+// fired timer is routed by its id, so two knobs sharing a key would otherwise
+// answer each other's timer.
 // The default `resilient` name reproduces the ids exactly as they have always
 // read.
 function retryTimerId(name: string, key: string): string {
@@ -1098,11 +1110,12 @@ export function createResilientCall<
   // === Subs ================================================================
 
   /**
-   * Pre-wired subscriptions: a retry timer for every `waiting_retry` call, and
+   * The deadlines to arm: a retry timer for every `waiting_retry` call, and
    * (when the `deadline` brick is configured) an overall deadline timer for
-   * every still-active call. Both are `DeadlineSub`s reconciled by id, so a
-   * phase change cancels the matching timer automatically — no manual
-   * `clearTimeout`. Wire `subscribe: { deadline: subscribeDeadline }`.
+   * every still-active call. Declare the list with `deadlinesSub`; a phase
+   * change drops the matching deadline and the runner's restart cancels its
+   * timer — no manual `clearTimeout`. Wire
+   * `subscribe: { deadline: subscribeDeadline }` at `run`.
    */
   function subs(
     s: ResilientState<I, R>,
@@ -1362,10 +1375,11 @@ export interface DeadlineSettled<N extends string = DefaultResilientName> {
 }
 
 /**
- * The four fragments a consumer spreads into `defineMachine`. Together with
- * `init` they are the eight wiring points; none of them is optional at the type
- * level, so a consumer that mounts cannot omit `subscribe` (a backed-off retry
- * that never fires) or re-implement `interpret` as a dispatching handler.
+ * The fragments a consumer wires: `init`, `update` and `subs` go into
+ * `defineMachine`, and `interpret` and `subscribe` go to `run`. None of them is
+ * optional at the type level, so a consumer that mounts cannot omit `subscribe`
+ * (a backed-off retry that never fires) or re-implement `interpret` as a
+ * dispatching handler.
  */
 export interface MountedResilientCall<
   Model,
@@ -1414,7 +1428,9 @@ export interface MountedResilientCall<
       C
     >;
   };
-  subscriptions(model: Model): readonly DeadlineSub<DeadlineNameOf<N>>[];
+  /** The machine's `subs` entries: one `deadline` Sub over the knob's list. */
+  readonly subs: readonly DepKeyedSub<Model, DeadlinesSub<DeadlineNameOf<N>>>[];
+  /** The runner for those `subs`, handed to `run` beside `interpret`. */
   readonly subscribe: { readonly deadline: typeof subscribeDeadline };
   readonly interpret: Handlers;
 }
@@ -1577,7 +1593,7 @@ export function mountResilientCall<
         readonly [K in Slice]: ResilientState<I, R>;
       },
     update,
-    subscriptions: (model) => knob.subs(model[slice]),
+    subs: [deadlinesSub((model: Model) => knob.subs(model[slice]))],
     subscribe: { deadline: subscribeDeadline },
     interpret: knob.handlers(),
   };
@@ -1585,8 +1601,9 @@ export function mountResilientCall<
 
 /**
  * Re-export the deadline Sub primitives so consumers (and tests) wire one
- * import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the
- * Sub literal this knob's `subs` emits.
+ * import: `subscribeDeadline` is the `deadline` runner, `deadlineSub` builds one
+ * deadline this knob's `subs` lists, and `deadlinesSub` declares that list as
+ * the machine's `deadline` Sub.
  */
-export { subscribeDeadline, deadlineSub };
-export type { DeadlineSub, DeadlineExceeded };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
+export type { DeadlineSub, DeadlinesSub, DeadlineExceeded };

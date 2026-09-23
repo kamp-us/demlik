@@ -6,7 +6,7 @@
  *
  *   - `../deadline` — REAL delegation (the only one). The window timer IS a
  *     `deadline` Sub: `subsFor` returns `deadlineSub` keyed on the window's
- *     identity, the subscribe cell is `subscribeDeadline` verbatim, and the
+ *     identity, the runner is `subscribeDeadline` verbatim, and the
  *     expiry Msg is `deadlineExceeded`. Nothing about the timer is redrawn here.
  *     "Fire at an absolute instant, even across a rehydrate" is exactly
  *     `deadline`'s absolute-target lifecycle: a late subscribe (post-`Store`
@@ -46,8 +46,9 @@
  *   // update cells:
  *   //   LogArrived:   (s, m) => mapBatch(s, bw.add(s.batch, m.line, m.at))
  *   //   WindowFired:  (s, m) => mapBatch(s, bw.onWindow(s.batch, m.atMs))
- *   // subscriptions: (s) => bw.subs(s.batch)
- *   // subscribe:     { ...bw.handlers() }
+ *   // types.sub:    {} as DeadlinesSub
+ *   // subs:         [deadlinesSub((s: Model) => bw.subs(s.batch))]
+ *   // at run:       run(machine, { interpret, subscribe: { ...bw.handlers() } })
  *
  * where `mapBatch(s, [batch, cmds]) => [{ ...s, batch }, cmds]` lifts the slice
  * transition into the consumer's Model. The `FlushBatch` Cmd's interpret handler
@@ -59,7 +60,7 @@
  * `work-queue`.
  */
 
-import type { Cmd } from "../../../index";
+import type { Cmd, Subscribe } from "../../../index";
 
 // `../debounce` re-export (value + type) for one-import ergonomics — see file
 // header. This module does NOT call debounce; a consumer that wants to debounce
@@ -67,10 +68,10 @@ import type { Cmd } from "../../../index";
 // as the batch window.
 export { type Debounced, debounce } from "../../timing/debounce";
 
-import type { SubscribeHandler } from "../../../subs/types";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineExceeded,
   deadlineSub,
   subscribeDeadline,
@@ -142,12 +143,12 @@ export function initBatchWindow<I>(): BatchWindow<I> {
 }
 
 /**
- * The Sub a batch window's open timer produces: it IS `../deadline`'s
+ * The deadline a batch window's open timer lists: it IS `../deadline`'s
  * `DeadlineSub`, not a re-tagged copy. `atMs` is the absolute flush-by instant
  * (`openedAt + maxMs`). Aliasing the deadline type (rather than redeclaring an
  * identical shape) is what lets `subsFor` return `deadlineSub(...)` with no
  * cast — the value's static type already satisfies this name. Consumers running
- * several windows route each one by the Sub's `id`, not by a distinct type.
+ * several windows route each one by the deadline's `id`, not by a distinct type.
  */
 export type BatchWindowSub = DeadlineSub;
 
@@ -156,7 +157,7 @@ export type BatchWindowExpired = DeadlineExceeded;
 
 /**
  * Construct the window-expired Msg for the window identified by `id`, flushing
- * by `atMs`. Re-exported alias of `deadlineExceeded` so the subscribe cell and
+ * by `atMs`. Re-exported alias of `deadlineExceeded` so the runner and
  * the consumer's reducer share one constructor rather than two literals that
  * can drift. The consumer handles it in a reducer cell by calling `onWindow`.
  */
@@ -193,18 +194,16 @@ export interface BatchWindowKnob<I, C extends Cmd> {
     at: number,
   ): readonly [BatchWindow<I>, readonly C[]];
   /**
-   * The window timer Sub, armed only while a window is open. See `subsFor`.
+   * The window timer deadline, listed only while a window is open. See `subsFor`.
    * `id` keys the deadline so several windows on one machine route distinctly.
    */
   subs(state: BatchWindow<I>, id?: string): readonly BatchWindowSub[];
   /**
-   * The `subscribe` cells this knob splices into `machine.subscribe`. One cell,
-   * keyed `"deadline"`, delegating to `../deadline`'s subscribe handler. Spread
-   * into the consumer's subscribe map: `subscribe: { ...bw.handlers() }`.
+   * The runners this knob needs at `run`. One, keyed `"deadline"`, delegating
+   * to `../deadline`'s runner. Spread into the consumer's subscribe map:
+   * `run(machine, { subscribe: { ...bw.handlers() } })`.
    */
-  handlers(): {
-    deadline: SubscribeHandler<BatchWindowSub, BatchWindowExpired, unknown>;
-  };
+  handlers(): Subscribe<BatchWindowExpired, DeadlinesSub, unknown>;
 }
 
 /**
@@ -284,18 +283,18 @@ export function onWindow<I, C extends Cmd>(
 }
 
 /**
- * The window timer Sub, derived from the slice. PURE.
+ * The window timer deadline, derived from the slice. PURE.
  *
- * Returns the single `deadline` Sub targeting `openedAt + maxMs` while a window
- * is open (buffer non-empty), or `[]` while it is closed. The substrate's
- * reconcile pass arms the timer when the array gains the Sub and disarms it
- * (clearing the pending `setTimeout`) when the array loses it — so a size-flush
- * that empties the buffer auto-cancels the now-irrelevant time trigger on the
- * next transition.
+ * Returns the single deadline targeting `openedAt + maxMs` while a window is
+ * open (buffer non-empty), or `[]` while it is closed. Fed through
+ * `deadlinesSub`, the engine arms the timer when the list gains the deadline
+ * and disarms it (clearing the pending `setTimeout`) when the list loses it —
+ * so a size-flush that empties the buffer auto-cancels the now-irrelevant time
+ * trigger on the next transition.
  *
  * `id` defaults to `"batch-window"`; pass a distinct id per window when a
- * machine runs several so the dispatched `BatchWindowExpired` Msg (and its
- * reconcile identity) routes to the right one.
+ * machine runs several so the dispatched `BatchWindowExpired` Msg routes to the
+ * right one.
  *
  * @param config the knob (maxMs)
  * @param state  the current slice
@@ -316,16 +315,16 @@ export function subsFor<I, C extends Cmd>(
 }
 
 /**
- * The `subscribe["deadline"]` cell for a batch window's timer — the exact
- * `../deadline` handler. Arms a one-shot timer for `max(0, atMs - now)` and
- * dispatches `batchWindowExpired(...)`; returns a cleanup that clears it. The
- * consumer assigns it via the knob's `handlers()`.
+ * The `deadline` runner for a batch window's timer — the exact `../deadline`
+ * runner. Arms a one-shot timer per listed deadline for `max(0, atMs - now)`
+ * and dispatches `batchWindowExpired(...)`; returns a cleanup that clears them.
+ * The consumer assigns it via the knob's `handlers()`.
  */
-export const subscribeBatchWindow: SubscribeHandler<
-  BatchWindowSub,
+export const subscribeBatchWindow: Subscribe<
   BatchWindowExpired,
+  DeadlinesSub,
   unknown
-> = subscribeDeadline;
+>["deadline"] = subscribeDeadline;
 
 /**
  * Build a batch window knob from a config. Combinator form (the default L2

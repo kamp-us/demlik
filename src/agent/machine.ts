@@ -8,9 +8,10 @@
  * `createAgent` factory that implements this surface) lives in `./index`.
  */
 
-import type { Cmd, Interpret, Machine } from "../index";
+import type { Cmd, Interpret, Machine, Subscribe } from "../index";
 import type {
   DeadlineSub,
+  DeadlinesSub,
   MonitoredRunCmd,
 } from "../internal/flow/monitored-run";
 import type {
@@ -102,10 +103,10 @@ export type SnapshotInterpret<
   : { readonly snapshot_write?: never };
 
 /**
- * The `toMachine` signature. It returns the wired machine and, beside it, the
- * merged `interpret` table to hand `run` — a machine carries no handlers
- * (#278), so the pair is run as `run(wired.machine, { interpret:
- * wired.interpret, ctx })`. Parametrized on the `Snap` + `Compact` discriminants
+ * The `toMachine` signature. It returns a `Wired`: the machine and, beside it,
+ * the merged `interpret` table and the `deadline` runner its one Sub needs — a
+ * machine carries no handlers (#278, #279), so it is run as
+ * `run(wired.machine, { ...wired, ctx })`. Parametrized on the `Snap` + `Compact` discriminants
  * so the snapshotting / compaction overloads of `createAgent` hand back the right
  * obligations. The `toolInterpret` requires (ON) or forbids (OFF) the
  * `snapshot_write` handler via {@link SnapshotInterpret} and the `compact_run` handler
@@ -140,12 +141,17 @@ export type AgentToMachine<
     AgentState<Stage, P, O, R>,
     AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
     AgentCmd<P, TC, Snap, Compact>,
-    DeadlineSub,
+    DeadlinesSub,
     Ctx & ToolsCtx<T>
   >;
   readonly interpret: Interpret<
     AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
     AgentCmd<P, TC, Snap, Compact>,
+    Ctx & ToolsCtx<T>
+  >;
+  readonly subscribe: Subscribe<
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    DeadlinesSub,
     Ctx & ToolsCtx<T>
   >;
 };
@@ -273,8 +279,9 @@ export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
  * The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared
  * shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg`
  * are both `DeadlineExceeded`). One Msg variant covers both timers; `onTimer`
- * disambiguates by Sub id. This is also the machine Msg the `subscribeDeadline`
- * handler dispatches directly (no wrapping), matching the sibling gold standard.
+ * disambiguates by deadline id. This is also the machine Msg the
+ * `subscribeDeadline` runner dispatches directly (no wrapping), matching the
+ * sibling gold standard.
  */
 export type AgentTimerMsg = LlmTimerMsg;
 
@@ -417,7 +424,7 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
   | AgentCompactOkMsg
   | AgentCompactErrMsg
   // The timer Msg is `DeadlineExceeded` itself (not wrapped) so the
-  // `subscribeDeadline` handler dispatches it straight into `update`, exactly as
+  // `subscribeDeadline` runner dispatches it straight into `update`, exactly as
   // the resilient-call / llm-call / monitored-run gold standards wire it.
   | AgentTimerMsg
   | AgentBootMsg

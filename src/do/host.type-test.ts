@@ -10,7 +10,8 @@
  * was unused — the erasure accepted anything — and this file failed to compile.
  */
 import type { AgentMachineMsg, AgentState, AgentTurn } from "../agent/index";
-import type { Cmd, Interpret, Machine, Store, Sub } from "../index";
+import type { Cmd, Interpret, Machine, Store, Subscribe } from "../index";
+import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { type AgentHost, type AgentHostConfig, createAgentHost } from "./host";
 
 type Stage = "scan" | "done";
@@ -25,12 +26,13 @@ type S = AgentState<Stage, Purpose, Outputs, ToolResult>;
 type M = AgentMachineMsg<Purpose, Outputs, ToolResult>;
 
 type MyCmd = Cmd<"tool_run"> & { readonly arg: string };
-type MySub = Sub<"deadline">;
+type MySub = DeadlinesSub;
 type MyCtx = { readonly db: string };
 type OtherCtx = { readonly queue: number };
 
 declare const machine: Machine<S, M, MyCmd, MySub, MyCtx>;
 declare const interpret: Interpret<M, MyCmd, MyCtx>;
+declare const subscribe: Subscribe<M, MySub, MyCtx>;
 declare const otherCtxMachine: Machine<S, M, MyCmd, MySub, OtherCtx>;
 declare const store: Store<S>;
 declare const toSseFrame: (event: unknown) => Frame | null;
@@ -47,7 +49,7 @@ const wellTyped: AgentHostConfig<
   MySub,
   MyCtx
 > = {
-  buildMachine: () => ({ machine, interpret }),
+  buildMachine: () => ({ machine, interpret, subscribe }),
   store,
   ctx: { db: "d1" },
   toSseFrame,
@@ -66,7 +68,7 @@ const badCtx: AgentHostConfig<
   MySub,
   MyCtx
 > = {
-  buildMachine: () => ({ machine, interpret }),
+  buildMachine: () => ({ machine, interpret, subscribe }),
   store,
   // @ts-expect-error — ctx must be MyCtx, not an arbitrary bag
   ctx: { wrong: true },
@@ -90,6 +92,7 @@ const badMachine: AgentHostConfig<
     // @ts-expect-error — Machine<…, OtherCtx> is not Machine<…, MyCtx>
     machine: otherCtxMachine,
     interpret,
+    subscribe,
   }),
   store,
   ctx: { db: "d1" },
@@ -100,7 +103,7 @@ void badMachine;
 // ── Inference end-to-end: no explicit type args, C/U/Ctx flow from the
 //    machine, and a mismatched ctx still fails inside createAgentHost. ────────
 const host = createAgentHost({
-  buildMachine: () => ({ machine, interpret }),
+  buildMachine: () => ({ machine, interpret, subscribe }),
   store,
   ctx: { db: "d1" } as MyCtx,
   toSseFrame: (e): Frame | null =>

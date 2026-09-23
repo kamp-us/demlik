@@ -10,8 +10,8 @@
  * raw kernel `run`. Each hidden thing is a named helper below.
  */
 
-import type { Machine } from "../index";
-import type { DeadlineSub, EndedRun } from "../internal/flow/monitored-run";
+import type { Machine, Subscribe } from "../index";
+import type { DeadlinesSub, EndedRun } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
@@ -174,18 +174,24 @@ export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
   DefinedAgentState<T>,
   DefinedAgentMsg<T>,
   DefinedAgentCmd<T>,
-  DeadlineSub,
+  DeadlinesSub,
   DefinedAgentCtx<T>
 >;
 
 /**
- * The machine `defineAgent` builds per `input` beside the interpret table it
- * runs under — a machine carries no handlers (#278). Feed both to the raw
- * `run`: `run(wired.machine, { interpret: wired.interpret, ctx })`.
+ * The machine `defineAgent` builds per `input` beside the handlers it runs
+ * under — the interpret table and the `deadline` runner (a machine carries
+ * none — #278, #279). It is a `Wired`; feed it to the raw `run`:
+ * `run(wired.machine, { ...wired, ctx })`.
  */
 export type DefinedAgentWired<T extends AnyToolDef> = {
   readonly machine: DefinedAgentMachine<T>;
   readonly interpret: DefinedAgentInterpret<T>;
+  readonly subscribe: Subscribe<
+    DefinedAgentMsg<T>,
+    DeadlinesSub,
+    DefinedAgentCtx<T>
+  >;
 };
 
 /** `run`'s options for a defined agent's machine. */
@@ -194,7 +200,7 @@ type RunOptionsOf<T extends AnyToolDef> = Parameters<
     DefinedAgentState<T>,
     DefinedAgentMsg<T>,
     DefinedAgentCmd<T>,
-    DeadlineSub,
+    DeadlinesSub,
     DefinedAgentCtx<T>,
     AgentEvent<ToolResult<T>>
   >
@@ -727,6 +733,7 @@ function definedAgent<T extends AnyToolDef>(
     const handle = run(wired.machine, {
       ...opts,
       interpret: wired.interpret,
+      subscribe: wired.subscribe,
       terminal: isEnded,
       events:
         onEvent === undefined
@@ -779,8 +786,9 @@ function definedAgent<T extends AnyToolDef>(
  * cells untouched" means literally: the wrapped table holds the same functions
  * for every other key. Only the interpret table is rebuilt — as a new object
  * rather than mutated, because the same `defineAgent` config builds a fresh
- * pair per `input` and per overlay stack. The machine itself carries no
- * handlers (#278), so an overlay never touches it.
+ * `Wired` per `input` and per overlay stack. The machine itself carries no
+ * handlers (#278), so an overlay never touches it, nor the `subscribe` runner
+ * beside it.
  *
  * An unknown key throws HERE rather than at `with`: the table to check a name
  * against is the machine's, and the machine exists only per `input`.
@@ -806,10 +814,7 @@ function overlaid<T extends AnyToolDef>(
       cells[type] = wrap(cell);
     }
   }
-  return {
-    machine: wired.machine,
-    interpret: cells as DefinedAgentInterpret<T>,
-  };
+  return { ...wired, interpret: cells as DefinedAgentInterpret<T> };
 }
 
 // ===========================================================================

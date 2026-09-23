@@ -75,12 +75,14 @@
  *     run_deadline: (s, m) => lift(s, run.onDeadline(s.run, m)),
  *     boot:     (s, m) => lift(s, run.boot(s.run, m.at)),
  *   },
- *   subscriptions: (s) => run.subs(s.run),
- *   subscribe: { deadline: subscribeDeadline },
+ *   subs: [deadlinesSub((s) => run.subs(s.run))],
  *
  *   // and where it runs — handlers ride beside the machine, not on it (the
  *   // engine's `run` imported under another name, since `run` is the knob):
- *   runMachine(machine, { interpret: run.handlers({ store: r2 }) });
+ *   runMachine(machine, {
+ *     interpret: run.handlers({ store: r2 }),
+ *     subscribe: { deadline: subscribeDeadline },
+ *   });
  */
 
 import type { Cmd, Interpret } from "../../../index";
@@ -98,7 +100,9 @@ import {
 import {
   type DeadlineExceeded,
   type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   subscribeDeadline,
 } from "../../resilience/deadline";
 import type { QueueItem } from "../../work-queue";
@@ -312,7 +316,7 @@ export interface MonitoredRunPorts<V> {
 }
 
 // ===========================================================================
-// Sub-id family. The safety alarm is keyed on `progressSeq` so a progress
+// Deadline-id family. The safety alarm is keyed on `progressSeq` so a progress
 // event retires the old alarm and arms a new one (single-shot, re-armed by id
 // bump — the audit subs discipline).
 // ===========================================================================
@@ -436,7 +440,7 @@ export function createMonitoredRun<Stage, V = unknown>(
 
   /**
    * Bump the watchdog clock: set `lastProgressAt`/`progressSeq` so the safety
-   * alarm Sub id changes and the substrate re-arms a fresh deadline. Shared by
+   * alarm's id changes and the engine re-arms a fresh deadline. Shared by
    * `progress` and `advance`. PURE.
    */
   function bumpProgress(s: LiveRun<Stage>, at: number): LiveRun<Stage> {
@@ -640,12 +644,12 @@ export function createMonitoredRun<Stage, V = unknown>(
   // === Verb: onDeadline ====================================================
 
   /**
-   * The safety alarm fired. Two outcomes by Sub-id match:
+   * The safety alarm fired. Two outcomes by deadline-id match:
    *
    *   - the alarm matches the CURRENT `progressSeq` (no progress since it was
    *     armed) → the run is wedged → terminate `failed { reason: "deadline" }`.
    *   - the alarm matches an OLDER seq → a stale fire racing a progress event
-   *     that already re-armed the alarm → no-op (the substrate retired this id;
+   *     that already re-armed the alarm → no-op (the engine retired this id;
    *     tolerate a fire still in flight defensively).
    *
    * A no-op on a settled run (its alarm was reconciled away; tolerate a stale
@@ -719,12 +723,13 @@ export function createMonitoredRun<Stage, V = unknown>(
   // === Subs ================================================================
 
   /**
-   * Pre-wired subscriptions: the no-progress safety deadline, armed only while
-   * the run is live (`running` / `stale`) AND a `deadlineMs` is configured. The
-   * Sub id is keyed on `progressSeq`, so every progress event retires the old
-   * alarm and the substrate arms a fresh one at the new `lastProgressAt +
-   * deadlineMs` — a self-rearming watchdog with no manual `clearTimeout`. A
-   * settled run desires no subs. Wire `subscribe: { deadline: subscribeDeadline }`.
+   * The no-progress safety deadline, listed only while the run is live
+   * (`running` / `stale`) AND a `deadlineMs` is configured. Its id is keyed on
+   * `progressSeq`, so every progress event retires the old alarm and the engine
+   * arms a fresh one at the new `lastProgressAt + deadlineMs` — a self-rearming
+   * watchdog with no manual `clearTimeout`. A settled run lists none. Declare
+   * `subs: [deadlinesSub((s) => run.subs(s.run))]` and pass
+   * `subscribe: { deadline: subscribeDeadline }` to the engine's `run`.
    *
    * A NEVER-STARTED slice (`init()`) is its OWN `idle` phase, not a `running` run
    * with an empty `runId`. The `phase !== "running" && phase !== "stale"` narrow
@@ -822,13 +827,14 @@ export function liftRun<
 }
 
 /**
- * Re-export the deadline Sub primitives so consumers (and tests) wire one
- * import: `subscribeDeadline` is the `subscribe` cell, `deadlineSub` builds the
- * Sub literal this knob's `subs` emits.
+ * Re-export the deadline primitives so consumers (and tests) wire one import:
+ * `subscribeDeadline` is the `deadline` runner, `deadlinesSub` the machine's
+ * `subs` entry, and `deadlineSub` builds the entry this knob's `subs` lists.
  */
-export { subscribeDeadline, deadlineSub };
+export { subscribeDeadline, deadlineSub, deadlinesSub };
 export type {
   DeadlineSub,
+  DeadlinesSub,
   DeadlineExceeded,
   SnapshotSavedMsg,
   SnapshotWriteCmd,

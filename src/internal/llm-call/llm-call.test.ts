@@ -5,7 +5,9 @@ import { run } from "../../promise";
 import { bindMachine } from "../../testing";
 import {
   createLlmCall,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   isPlainModel,
   type LlmCall,
   type LlmErr,
@@ -554,7 +556,7 @@ describe("createLlmCall — wired in a machine (replay)", () => {
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof llm.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -577,8 +579,7 @@ describe("createLlmCall — wired in a machine (replay)", () => {
         return [{ resilience: slice }, cmds];
       },
     },
-    subscriptions: (s) => llm.subs(s.resilience),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => llm.subs(s.resilience))],
   });
   const bound = bindMachine(machine, {} as object);
 
@@ -623,25 +624,24 @@ describe("createLlmCall — wired in a machine (replay)", () => {
       model: null,
       payload: "r",
     };
-    bound.expectActiveSubs(
-      {
-        msgs: [
-          { type: "call_llm", input, at: 0 },
-          {
-            type: "resilient_err",
+    const { subs } = bound.replay({
+      msgs: [
+        { type: "call_llm", input, at: 0 },
+        {
+          type: "resilient_err",
+          key: "report",
+          error: {
             key: "report",
-            error: {
-              key: "report",
-              purpose: "report",
-              reason: "e",
-              error: "e",
-            },
-            at: 0,
+            purpose: "report",
+            reason: "e",
+            error: "e",
           },
-        ],
-      },
-      [deadlineSub("resilient:retry:report", 0)],
-    );
+          at: 0,
+        },
+      ],
+    });
+    expect(subs.map((sub) => sub.type)).toEqual(["deadline"]);
+    expect(subs[0]?.deps).toEqual([deadlineSub("resilient:retry:report", 0)]);
   });
 });
 
@@ -722,7 +722,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
         model: {} as WState,
         msg: {} as WMsg,
         cmd: {} as WCmd,
-        sub: {} as ReturnType<typeof llm.subs>[number],
+        sub: {} as DeadlinesSub,
         ctx: {} as WCtx,
       },
       init: (loaded) =>
@@ -746,24 +746,27 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
         },
         nop: (s) => [s, []],
       },
-      subscriptions: (s) => llm.subs(s.resilience),
-      // Subs are reconciled but their firing is hand-driven by `drain` below.
-      // Driving the retry timer by hand (rather than from the Sub fanout) keeps
-      // the loop deterministic under rngZero, where every retry re-arms the SAME
-      // sub id at the SAME atMs (0) — the substrate sees no churn, so a
-      // Sub-fanout would fire only once. The verbs + handler re-entry under test
-      // are unchanged; only the wall-clock that fires the timer is faked.
-      subscribe: { deadline: () => () => {} },
+      subs: [deadlinesSub((s: WState) => llm.subs(s.resilience))],
     });
     // The REAL handler — returns the enriched settle Msg, which the runtime
     // enqueues as a follow-up Msg (re-entry) into the reducer.
     return { machine, interpret: llm.handlers() };
   }
 
-  // Build the wired machine for `ctx` and run it under its real handler.
+  // Build the wired machine for `ctx` and run it under its real handler. The
+  // deadline Sub is reconciled but its firing is hand-driven by `drain` below.
+  // Driving the retry timer by hand (rather than from the runner) keeps the
+  // loop deterministic under rngZero, where every retry re-arms the SAME
+  // deadline at the SAME atMs (0) — the engine sees no churn, so a runner would
+  // fire only once. The verbs + handler re-entry under test are unchanged; only
+  // the wall-clock that fires the timer is faked.
   function runWired(ctx: WCtx) {
     const { machine, interpret } = wiredMachine(ctx);
-    return run(machine, { ctx, interpret });
+    return run(machine, {
+      ctx,
+      interpret,
+      subscribe: { deadline: () => () => {} },
+    });
   }
 
   // Drive the full lifecycle to a fixed point. Each `dispatch` settles only its
@@ -1173,7 +1176,7 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
         model: {} as MState,
         msg: {} as MMsg,
         cmd: {} as LlmRunCmd<Purpose>,
-        sub: {} as ReturnType<typeof llm.subs>[number],
+        sub: {} as DeadlinesSub,
         ctx: undefined,
       },
       init: (loaded) =>
@@ -1181,8 +1184,7 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
           ? [loaded, []]
           : [{ ...knob.init(), output: null, failure: null }, []],
       update: { ...knob.update },
-      subscriptions: knob.subscriptions,
-      subscribe: knob.subscribe,
+      subs: knob.subs,
     });
     return { llm, knob, machine };
   }
@@ -1218,10 +1220,9 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
     expect(waiting.resilience.calls.plan?.phase).toBe("waiting_retry");
     expect(waiting.failure?.purpose).toBe("plan");
 
-    // The retry timer the mounted `subscriptions` arms re-issues the call.
-    expect(knob.subscriptions(waiting).map((s) => s.id)).toContain(
-      "resilient:retry:plan",
-    );
+    // The retry timer the mounted `subs` arms re-issues the call.
+    const armed = knob.subs.flatMap((entry) => entry.deps(waiting) ?? []);
+    expect(armed.map((d) => d.id)).toContain("resilient:retry:plan");
     const [retried, retryCmds] = bound.step(waiting, {
       type: "deadline_exceeded",
       id: "resilient:retry:plan",

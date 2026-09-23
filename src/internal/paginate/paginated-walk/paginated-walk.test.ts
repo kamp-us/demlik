@@ -5,7 +5,9 @@ import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import {
   createPaginatedWalk,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type FetchPageCmd,
   PAGE_KEY,
   type PageErrMsg,
@@ -83,7 +85,7 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof walk.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -106,8 +108,7 @@ function makeMachine(
         return [{ walk: slice }, cmds];
       },
     },
-    subscriptions: (s) => walk.subs(s.walk),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => walk.subs(s.walk))],
   });
   return { walk, machine };
 }
@@ -133,6 +134,13 @@ const fetchCmd = (offset: number): FetchPageCmd<number> => ({
   key: PAGE_KEY,
   input: offset,
 });
+
+// The deadlines armed at a replayed state: the `deps` of its `deadline` Sub.
+function armedDeadlines(
+  subs: readonly (DeadlinesSub | { readonly type: "timer" })[],
+): DeadlinesSub["deps"] {
+  return subs.flatMap((sub) => (sub.type === "deadline" ? sub.deps : []));
+}
 
 describe("createPaginatedWalk — init", () => {
   it("starts idle, with a fresh resilient-call slice and no pages seen", () => {
@@ -603,13 +611,13 @@ describe("createPaginatedWalk — wired in a machine (replay)", () => {
   });
 
   it("start → page_err leaves a retry + deadline timer desired", () => {
-    bound.expectActiveSubs(
-      { msgs: [{ type: "start", at: 0 }, errMsg("e", 0)] },
-      [
-        deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
-        deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
-      ],
-    );
+    const { subs } = bound.replay({
+      msgs: [{ type: "start", at: 0 }, errMsg("e", 0)],
+    });
+    expect(armedDeadlines(subs)).toEqual([
+      deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
+      deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
+    ]);
   });
 });
 
@@ -636,7 +644,7 @@ function wiredMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof walk.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -659,10 +667,14 @@ function wiredMachine(
         return [{ walk: slice }, cmds];
       },
     },
-    subscriptions: (s) => walk.subs(s.walk),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => walk.subs(s.walk))],
   });
-  return { walk, machine, interpret: walk.handlers({ run: run_ }) };
+  return {
+    walk,
+    machine,
+    interpret: walk.handlers({ run: run_ }),
+    subscribe: { deadline: () => () => {} },
+  };
 }
 
 // Spin the microtask queue until `predicate(getState())` holds (the runtime
@@ -692,10 +704,11 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
   it("DEFECT 1: a stray page_err after the walk settles done is a pure no-op — the succeeded page-fetch slot and the SHARED breaker survive", async () => {
     // The port always resolves page 0 as the LAST page → the walk finishes done
     // with PAGE_KEY settled `succeeded` and the breaker untouched.
-    const { machine, interpret } = wiredMachine(oneShotConfig, async () =>
-      page(0, true),
+    const { machine, interpret, subscribe } = wiredMachine(
+      oneShotConfig,
+      async () => page(0, true),
     );
-    const rt = await run(machine, { ctx, interpret }).ready;
+    const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
     // Drive: start → fetch(0) → port resolves → resilient_ok re-enters → done.
     await rt.dispatch({ type: "start", at: 0 });
@@ -735,11 +748,11 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
 
   it("DEFECT 2: backpressure is a real valve — drain + resume re-open a paused walk and fetch the parked cursor end-to-end", async () => {
     // hwm 1, pageSize 1 → the first page pauses the walk on cursor 1.
-    const { walk, machine, interpret } = wiredMachine(
+    const { walk, machine, interpret, subscribe } = wiredMachine(
       { ...baseConfig, rateLimit: undefined, highWaterMark: 1 },
       async (cursor) => page(cursor, cursor >= 2),
     );
-    const rt = await run(machine, { ctx, interpret }).ready;
+    const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     await settleUntil(
@@ -771,13 +784,13 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
   it("DEFECT 3: a terminal page failure makes the walk OBSERVABLY stuck — isStuck() / failure() surface a dead walk", async () => {
     // No retry → the first failure is terminal; the port always throws.
     const boom = { _tag: "upstream_down" as const };
-    const { walk, machine, interpret } = wiredMachine(
+    const { walk, machine, interpret, subscribe } = wiredMachine(
       { ...baseConfig, rateLimit: undefined, retry: undefined },
       async () => {
         throw boom;
       },
     );
-    const rt = await run(machine, { ctx, interpret }).ready;
+    const rt = await run(machine, { ctx, interpret, subscribe }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     // Drive until the fetch slot terminally fails (re-entered via interpret's

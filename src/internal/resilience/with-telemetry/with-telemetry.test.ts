@@ -5,6 +5,8 @@ import {
   defineMachine,
   type Interpret,
   replay,
+  type Sub,
+  subIdOf,
 } from "../../../index";
 import { run } from "../../../promise";
 import { assertWrapperFaithful } from "../../../testing";
@@ -208,6 +210,41 @@ describe("withTelemetry — observe-only composition", () => {
 // The sink Port receives events via a REAL run() runtime — proving the interpret
 // boundary actually fires the side effect (replay never calls interpret).
 // ===========================================================================
+
+describe("withTelemetry — subs", () => {
+  it("lifts the base's subs onto `state.base` and passes its runners through", () => {
+    type Tick = Sub<"tick", { readonly count: number }>;
+    const ticking = defineMachine({
+      types: {
+        model: {} as CounterState,
+        msg: {} as CounterMsg,
+        cmd: {} as PersistCmd,
+        sub: {} as Tick,
+        ctx: {} as CounterCtx,
+      },
+      init: (loaded) => [loaded ?? { count: 0 }, []],
+      update: {
+        inc: (s, m) => [{ count: s.count + m.by }, []],
+        reset: () => [{ count: 0 }, []],
+      },
+      subs: [{ type: "tick", deps: (s) => ({ count: s.count }) }],
+    });
+    const tick = () => () => {};
+    const wrapped = withTelemetry({
+      machine: ticking,
+      interpret: { persist: async () => {} },
+      subscribe: { tick },
+    });
+    const { subs } = replay(wrapped.machine, {
+      msgs: [{ type: "inc", by: 2 }],
+      ctx: makeCtx().ctx,
+    });
+    expect(subs).toEqual([
+      { id: subIdOf("tick", { count: 2 }), type: "tick", deps: { count: 2 } },
+    ]);
+    expect(wrapped.subscribe.tick).toBe(tick);
+  });
+});
 
 describe("withTelemetry — real runtime drives the sink", () => {
   it("delivers a projected, clock-stamped event to the sink per dispatch", async () => {

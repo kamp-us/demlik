@@ -4,9 +4,9 @@
  * internal/resilience/with-resilience — the INTERCEPTING wrapper of the wrapper tier.
  *
  * `withResilience(base, config)` is a **pure function over machine data**: it
- * takes any `Machine<S, M, C, U, Ctx>`, a chosen TARGET base Cmd type, and a
- * resilience knob, and returns a NEW `Machine` over the composed Model
- * `{ base, $resilience }`. You `run()` / `replay()` the result exactly like any
+ * takes any `Machine<S, M, C, U, Ctx>` beside its handlers (a `Wired`), a
+ * chosen TARGET base Cmd type, and a resilience knob, and returns a NEW `Wired`
+ * over the composed Model `{ base, $resilience }`. You `run()` / `replay()` the result exactly like any
  * other machine — there is no new runtime, no privileged interception path.
  *
  * This is the HARDEST wrapper. `withTelemetry` only OBSERVES; this one
@@ -78,12 +78,14 @@
  *      `$resilience:*` divergence Cmd in the same transition.
  *   3. **Every decision is a Msg/Cmd.** Gate / retry-schedule / fast-fail /
  *      settle are all `$resilience:*` Cmds and Msgs through the merged `update`.
- *   4. **Subs merge by id.** Base subs ⧺ resilient-call retry/deadline timers,
- *      re-keyed `$resilience:retry:{key}` / `$resilience:deadline:{key}`.
+ *   4. **Subs merge.** Base subs ⧺ one `$resilience:timer` Sub over the
+ *      resilient-call retry/deadline timers, re-keyed
+ *      `$resilience:retry:{key}` / `$resilience:deadline:{key}`. The wrapper
+ *      hands `run` that Sub's runner beside the base's.
  *   5. **Clock out of update.** Backoff jitter RNG is injected at construction;
  *      the only clock read is `Date.now()` at the interpret boundary (the
  *      `$resilience:run` handler stamps the ok/err Msg `at`) and in the timer
- *      Sub. The merged `update` is PURE — `at` arrives as Msg data.
+ *      runner. The merged `update` is PURE — `at` arrives as Msg data.
  *
  * ## The retry bound may be a DURATION, not only a count
  *
@@ -105,25 +107,30 @@
 
 import type {
   CmdOf,
+  DepKeyedSub,
   Interpret,
-  InterpretArg,
   Machine,
   Reducer,
   Sub,
   UpdateForm,
+  Wired,
 } from "../../../index";
 import {
   applyCell,
   Cmd,
   formOf,
   msgKeysOf,
-  subId,
   tryInterpret,
 } from "../../../index";
 import { MsgType } from "../../../protocol";
-import { cmdEdgeOf } from "../../../pure/core";
+import { cmdEdgeOf, subEntriesOf } from "../../../pure/core";
 import { unchecked } from "../../schema";
-import { type DeadlineSub, subscribeDeadline } from "../deadline";
+import {
+  type DeadlineSub,
+  deadlineSub,
+  deadlines,
+  subscribeDeadline,
+} from "../deadline";
 import {
   createResilientCall,
   type ResilientConfig,
@@ -252,9 +259,9 @@ export type ResilienceErrMsg = {
 
 /**
  * The retry / deadline timer Msg the `$resilience:timer` Sub dispatches when
- * the wall clock crosses the armed instant. Routes to `onTimer`. `id` is the
+ * the wall clock crosses an armed instant. Routes to `onTimer`. `id` is the
  * `$resilience:`-namespaced timer id; `atMs` is the fire instant (Msg data, the
- * clock that drove it lives in the Sub).
+ * clock that drove it lives in the runner).
  */
 export type ResilienceTimerMsg = {
   readonly type: "$resilience:timer";
@@ -271,10 +278,15 @@ export type ResilienceMsg =
 /** Every Cmd the wrapper adds to the base's Cmd union. */
 export type ResilienceCmd<TC extends Cmd> = ResilienceRunCmd<TC>;
 
-/** The Sub the wrapper adds — a deadline-style timer in the `$resilience` family. */
-export type ResilienceTimerSub = Sub<"$resilience:timer"> & {
-  readonly atMs: number;
-};
+/**
+ * The Sub the wrapper adds: every armed `$resilience` timer, as one Sub whose
+ * `deps` is the list of deadlines (ids re-keyed into `$resilience:`). Its runner
+ * arms each for its remaining time, like the `deadline` runner.
+ */
+export type ResilienceTimerSub = Sub<
+  "$resilience:timer",
+  readonly DeadlineSub[]
+>;
 
 // ===========================================================================
 // Boundary re-keying — the resilient-call namespace ↔ the `$resilience` one.
@@ -355,13 +367,14 @@ function updateDeclaresMsgKey(
  * Wrap `base` so its `config.target` Cmd is run through the resilient-call
  * concern (cache → circuit → rate-limit → retry, deadline-capped). Takes the
  * base machine together with the handlers it runs under (a machine carries
- * none — #278) and returns a NEW `Machine` over the composed Model
- * `{ base, $resilience }` beside the composed `interpret`, with the base's
- * Msgs/Cmds/Subs/Ctx extended by the wrapper's own. Run it as
- * `run(wrapped.machine, { interpret: wrapped.interpret, ctx })`.
+ * none — #278) and returns a NEW `Wired` over the composed Model
+ * `{ base, $resilience }`, with the base's Msgs/Cmds/Subs/Ctx extended by the
+ * wrapper's own and the `$resilience:timer` runner beside the base's. Run it as
+ * `run(wrapped.machine, { ...wrapped, ctx })`.
  *
  * @param wired  any `Machine<S, M, C, U, Ctx>` as `machine`, beside its
- *               `interpret` handlers — the target's handler among them.
+ *               `interpret` handlers — the target's handler among them — and
+ *               its `subscribe` runners.
  * @param config the resilience knob: `target`, the optional bricks, `keyOf`.
  * @param rng    injected backoff jitter source. Pass a fixed `() => 0.5` in
  *               tests to pin retry delays; defaults to `Math.random` (read only
@@ -374,23 +387,16 @@ export function withResilience<
   U extends Sub,
   Ctx,
 >(
-  wired: { readonly machine: Machine<S, M, C, U, Ctx> } & InterpretArg<
-    M,
-    C,
-    Ctx
-  >,
+  wired: Wired<S, M, C, U, Ctx>,
   config: ResilienceConfig<C, M>,
   rng: () => number = Math.random,
-): {
-  readonly machine: Machine<
-    ResilienceModel<S, C>,
-    M | ResilienceMsg,
-    C | ResilienceCmd<C>,
-    U | ResilienceTimerSub,
-    Ctx
-  >;
-  readonly interpret: Interpret<M | ResilienceMsg, C | ResilienceCmd<C>, Ctx>;
-} {
+): Wired<
+  ResilienceModel<S, C>,
+  M | ResilienceMsg,
+  C | ResilienceCmd<C>,
+  U | ResilienceTimerSub,
+  Ctx
+> {
   const base = wired.machine;
   type WM = ResilienceModel<S, C>;
   type WMsg = M | ResilienceMsg;
@@ -599,27 +605,30 @@ export function withResilience<
   }
 
   // -------------------------------------------------------------------------
-  // Subs — base subs ⧺ resilient-call timers, re-keyed into `$resilience:`.
+  // Subs — base entries (reading `state.base`) ⧺ one `$resilience:timer` Sub
+  // over the resilient-call timers, re-keyed into `$resilience:`.
   // -------------------------------------------------------------------------
 
-  const baseSubscriptions = base.subscriptions;
-  const baseSubscribe = (base as { subscribe?: unknown }).subscribe;
+  const baseEntries = subEntriesOf<S>(base);
+  const baseSubscribe = (wired as { subscribe?: unknown }).subscribe;
 
-  function subscriptions(state: WM): readonly (U | ResilienceTimerSub)[] {
-    const baseSubs = baseSubscriptions
-      ? baseSubscriptions(state.base)
-      : ([] as readonly U[]);
-    // rc.subs returns DeadlineSubs keyed `resilient:retry:{k}` /
-    // `resilient:deadline:{k}`. Re-key each into the `$resilience:` namespace
-    // and re-type to the wrapper's `$resilience:timer` Sub family (rule 4).
-    const rcSubs: readonly DeadlineSub[] = rc.subs(state.$resilience);
-    const timerSubs: ResilienceTimerSub[] = rcSubs.map((s) => ({
-      id: subId(toWrapperTimerId(s.id)),
-      type: "$resilience:timer",
-      atMs: s.atMs,
-    }));
-    return [...baseSubs, ...timerSubs];
-  }
+  const baseSubs = baseEntries.map((entry) => ({
+    type: entry.type,
+    deps: (state: WM) => entry.deps(state.base),
+  }));
+  // rc.subs lists deadlines keyed `resilient:retry:{k}` /
+  // `resilient:deadline:{k}`. Re-key each into the `$resilience:` namespace
+  // (rule 4); an empty list is off, not a live Sub with nothing to arm.
+  const timers: DepKeyedSub<WM, ResilienceTimerSub> = {
+    type: "$resilience:timer",
+    deps: (state) =>
+      deadlines(
+        rc
+          .subs(state.$resilience)
+          .map((s) => deadlineSub(toWrapperTimerId(s.id), s.atMs)),
+      ),
+  };
+  const subs = [...baseSubs, timers];
 
   // -------------------------------------------------------------------------
   // Interpret — base.interpret for non-target + the `$resilience:run` handler
@@ -631,14 +640,16 @@ export function withResilience<
     ({} as Interpret<M, C, Ctx>);
 
   // Reserved-namespace guard (mirrors withTelemetry + the substrate's
-  // definePort / SubId collision asserts). The wrapper OWNS four reserved keys:
-  // the `$resilience:run` carrier Cmd, the `$resilience:ok` / `$resilience:err`
-  // result Msgs, and the `$resilience:timer` Sub Msg. The merges below spread
-  // the wrapper's cells over the base's update / interpret / subscribe maps; if
-  // the base already declares ANY reserved key on ANY of those three surfaces,
-  // the spread would SILENTLY clobber it (or the base's own key would shadow the
-  // wrapper's). The `$resilience:` namespace is the wrapper's — refuse to wrap a
-  // base that squats on any of the four across any surface.
+  // definePort asserts). The wrapper OWNS four reserved keys: the
+  // `$resilience:run` carrier Cmd, the `$resilience:ok` / `$resilience:err`
+  // result Msgs, and the `$resilience:timer` Sub type and Msg. The merges below
+  // spread the wrapper's cells over the base's update / interpret / subscribe
+  // maps and append its Sub to the base's `subs`; if the base already declares
+  // ANY reserved key on ANY of those surfaces, the spread would SILENTLY clobber
+  // it (or the base's own key would shadow the wrapper's, or two Subs of one
+  // type would share one runner). The `$resilience:` namespace is the
+  // wrapper's — refuse to wrap a base that squats on any of the four across any
+  // surface.
   //
   // Ordered BEFORE the target-handler guard below: squatting a reserved key is a
   // target-INDEPENDENT structural defect of the base, so it is the more
@@ -655,7 +666,8 @@ export function withResilience<
   // top-level `Object.hasOwn` would MISS a reserved msg-type squatting inside an
   // inner table (e.g. an inner `$resilience:ok` cell) and let the merged update
   // silently clobber it. `interpret` and `subscribe` are always flat keyed-by
-  // -type maps, so the direct `Object.hasOwn` is correct there.
+  // -type maps, so the direct `Object.hasOwn` is correct there; `subs` is a
+  // list of entries, checked by `type`.
   const RESERVED = [
     "$resilience:run",
     "$resilience:ok",
@@ -679,6 +691,11 @@ export function withResilience<
       declares: (reserved) =>
         Object.hasOwn((baseSubscribe as object | undefined) ?? {}, reserved),
     },
+    {
+      name: "subs",
+      declares: (reserved) =>
+        baseEntries.some((entry) => entry.type === reserved),
+    },
   ];
   for (const reserved of RESERVED) {
     for (const surface of surfaces) {
@@ -687,7 +704,7 @@ export function withResilience<
           `withResilience: the base machine declares a reserved "${reserved}" ` +
             `${surface.name} key — the wrapper owns the "$resilience:" ` +
             `namespace ($resilience:run / :ok / :err / :timer across update, ` +
-            `interpret, and subscribe). Rename the base key.`,
+            `interpret, subscribe, and subs). Rename the base key.`,
         );
       }
     }
@@ -784,27 +801,24 @@ export function withResilience<
   } as Interpret<WMsg, WCmd, Ctx>;
 
   // -------------------------------------------------------------------------
-  // The `subscribe` map — base cells ⧺ the `$resilience:timer` cell, which
-  // delegates the timer lifecycle to the deadline Sub primitive (re-keying the
+  // The `subscribe` map — base runners ⧺ the `$resilience:timer` runner, which
+  // delegates the timer lifecycle to the deadline runner (re-keying the
   // dispatched Msg into the `$resilience:timer` shape). Clock lives here.
   // -------------------------------------------------------------------------
 
-  const subscribeMap = {
+  const subscribe = {
     ...((baseSubscribe as Record<string, unknown> | undefined) ?? {}),
     "$resilience:timer": (
       sub: ResilienceTimerSub,
       ctx: Ctx,
       dispatch: (msg: WMsg) => void,
     ): (() => void) =>
-      // Reuse the deadline subscribe cell wholesale: it arms a one-shot timer
-      // for `max(0, atMs - Date.now())` and fires when the wall clock crosses
-      // `atMs`. We hand it a `DeadlineSub` shape and translate its
-      // `deadline_exceeded` Msg into the wrapper's `$resilience:timer` Msg.
-      subscribeDeadline(
-        { id: sub.id as DeadlineSub["id"], type: "deadline", atMs: sub.atMs },
-        ctx,
-        (dl) =>
-          dispatch({ type: "$resilience:timer", id: dl.id, atMs: dl.atMs }),
+      // Reuse the deadline runner wholesale: it arms a one-shot timer per
+      // deadline for `max(0, atMs - Date.now())` and fires when the wall clock
+      // crosses `atMs`. We hand it the same list as a `deadline` Sub and
+      // translate its `deadline_exceeded` Msg into `$resilience:timer`.
+      subscribeDeadline({ ...sub, type: "deadline" }, ctx, (dl) =>
+        dispatch({ type: "$resilience:timer", id: dl.id, atMs: dl.atMs }),
       ),
   };
 
@@ -844,7 +858,7 @@ export function withResilience<
         // empty, so the gate ADMITS unambiguously and the `0` is never compared
         // against a real instant. The DEADLINE brick is the exception: it anchors
         // the cap at `at + deadline.ms = 0 + ms`, so its `$resilience:deadline`
-        // Sub arms at `atMs = ms` and `subscribeDeadline` fires after
+        // timer arms at `atMs = ms` and `subscribeDeadline` fires after
         // `max(0, atMs - Date.now()) === 0` ms — i.e. IMMEDIATELY at boot,
         // settling the boot call failed before it can run. A `0`-anchored boot
         // deadline is never the author's intent; it is the same trap the
@@ -876,18 +890,18 @@ export function withResilience<
       return [model, initCmds];
     },
     update: update as unknown as Reducer<WM, WMsg, WCmd>,
-    subscriptions,
-    subscribe: subscribeMap as unknown as Machine<
-      WM,
-      WMsg,
-      WCmd,
-      U | ResilienceTimerSub,
-      Ctx
-    >["subscribe"],
+    subs,
     // The base's `Cmd.define` list rides through so `run`'s interpret edge
     // still parses / stamps the base's NON-target settled Msgs behind the
     // wrap; the target's settle through the carrier above (#66).
     ...(base.cmds ? { cmds: base.cmds } : {}),
   } as Machine<WM, WMsg, WCmd, U | ResilienceTimerSub, Ctx>;
-  return { machine, interpret };
+  // The handlers are erased maps here, re-read under the composed types.
+  return { machine, interpret, subscribe } as unknown as Wired<
+    WM,
+    WMsg,
+    WCmd,
+    U | ResilienceTimerSub,
+    Ctx
+  >;
 }

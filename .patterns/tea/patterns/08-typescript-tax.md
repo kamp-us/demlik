@@ -84,8 +84,10 @@ Before shipping a new TEA machine in TypeScript, verify:
 
 - [ ] Every Msg variant handled in update (exhaustive match or mapped record)
 - [ ] Every Cmd type has an interpret handler
-- [ ] Every Sub type has a subscribe handler with cleanup function
-- [ ] Every Sub id is deterministic and unique
+- [ ] Every Sub type (bar the built-in `timer`) has a runner in the
+      `subscribe` handed to `run`, and every runner returns its cleanup
+- [ ] Every `subs` entry's `deps` returns plain JSON data (or null when off)
+      — the Sub id is derived from it, never hand-written
 - [ ] State is not mutated — spread creates new objects
 - [ ] No `await` / `Promise` / `setTimeout` inside update
 - [ ] Effects are data objects, not closures or class instances

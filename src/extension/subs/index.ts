@@ -7,7 +7,7 @@
 // factories here depend on `chrome.*` globals: alarms, tabs, storage,
 // runtime messaging. They absorb the recurring
 // `(sub, ctx, dispatch) => cleanup` shape of every Sub that wraps a chrome
-// surface, so call sites in `machine.subscribe[type]` keep the intent
+// surface, so the `subscribe[type]` runners handed to `run` keep the intent
 // (which Msg, which alarm/event/area/filter) while the factory owns the
 // lifecycle (subscribe + cleanup, plus the standard filters chrome
 // requires).

@@ -5,7 +5,7 @@ import {
   defineMachine,
   type Interpret,
   replay,
-  type subId,
+  type Sub,
 } from "../../../index";
 import { run } from "../../../promise";
 import type { DurationRetryPolicy } from "../../../retry-backoff";
@@ -244,9 +244,9 @@ describe("withResilience — reserved namespace guard", () => {
   });
 
   // The guard covers ALL FOUR reserved keys ($resilience:run / :ok / :err /
-  // :timer) across ALL THREE base surfaces (update / handlers / subscribe), not
-  // just `$resilience:run` on the handler table. A base that squats on any of the
-  // twelve (key × surface) combinations is refused — the spread would otherwise
+  // :timer) across ALL FOUR base surfaces (update / handlers / subscribe /
+  // subs), not just `$resilience:run` on the handler table. A base that squats
+  // on any (key × surface) combination is refused — the spread would otherwise
   // silently clobber the wrapper's cell (or the base's would shadow it).
 
   it("throws if the base declares a reserved $resilience:ok UPDATE key", () => {
@@ -370,9 +370,10 @@ describe("withResilience — reserved namespace guard", () => {
     ).toThrow(/reserved "\$resilience:ok" update key/);
   });
 
-  it("throws if the base declares a reserved $resilience:timer SUBSCRIBE key", () => {
-    type TimerSub = { id: ReturnType<typeof subId>; type: "$resilience:timer" };
-    const squatting = defineMachine({
+  // A base whose `subs` declare the reserved `$resilience:timer` type.
+  function timerSquatter() {
+    type TimerSub = Sub<"$resilience:timer", null>;
+    return defineMachine({
       types: {
         model: {} as FetchState,
         msg: {} as FetchMsg,
@@ -386,18 +387,31 @@ describe("withResilience — reserved namespace guard", () => {
         loaded: (s) => [s, []],
         note: (s) => [s, []],
       },
-      subscriptions: () => [],
-      subscribe: {
-        "$resilience:timer": () => () => {},
-      },
+      subs: [{ type: "$resilience:timer", deps: () => null }],
     });
+  }
+
+  it("throws if the base declares a reserved $resilience:timer SUBSCRIBE key", () => {
     const wired = {
-      machine: squatting,
+      machine: timerSquatter(),
       interpret: { do_fetch: async () => ({ type: "note" }) as FetchMsg },
+      subscribe: { "$resilience:timer": () => () => {} },
     };
     expect(() =>
       withResilience(wired as never, { target: "do_fetch" }),
     ).toThrow(/reserved "\$resilience:timer" subscribe key/);
+  });
+
+  it("throws if the base declares a reserved $resilience:timer SUBS entry", () => {
+    // No runner of that name at all: the Sub type alone would share the
+    // wrapper's runner, so it is refused on its own.
+    const wired = {
+      machine: timerSquatter(),
+      interpret: { do_fetch: async () => ({ type: "note" }) as FetchMsg },
+    };
+    expect(() =>
+      withResilience(wired as never, { target: "do_fetch" }),
+    ).toThrow(/reserved "\$resilience:timer" subs key/);
   });
 });
 
@@ -571,6 +585,7 @@ describe("withResilience — real runtime: fail, retry-timer, succeed", () => {
     const runtime = await run(wrapped.machine, {
       ctx,
       interpret: wrapped.interpret,
+      subscribe: wrapped.subscribe,
     }).ready;
 
     // Drive the first attempt. The base emits `log` (fires immediately) + the
@@ -640,6 +655,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
     const runtime = await run(wrapped.machine, {
       ctx,
       interpret: wrapped.interpret,
+      subscribe: wrapped.subscribe,
     }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
@@ -671,6 +687,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
     const runtime = await run(wrapped.machine, {
       ctx,
       interpret: wrapped.interpret,
+      subscribe: wrapped.subscribe,
     }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
@@ -719,6 +736,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
     const runtime = await run(wrapped.machine, {
       ctx,
       interpret: wrapped.interpret,
+      subscribe: wrapped.subscribe,
     }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
@@ -831,6 +849,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
     const runtime = await run(wrapped.machine, {
       ctx,
       interpret: wrapped.interpret,
+      subscribe: wrapped.subscribe,
     }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
@@ -1292,7 +1311,7 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
     ).machine;
     // init does not throw, boots cleanly.
     expect(() => wrapped.init(null, ctx)).not.toThrow();
-    const { cmds, state } = replay(wrapped, { msgs: [], ctx });
+    const { cmds, state, subs } = replay(wrapped, { msgs: [], ctx });
     // No raw target at boot; it is retagged into the carrier (admitted).
     expect(cmds.find((c) => c.type === "do_fetch")).toBeUndefined();
     const run = cmds.find((c) => c.type === "$resilience:run") as
@@ -1303,9 +1322,7 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
     // settled-failed by an insta-fired deadline.
     expect(state.$resilience.calls.do_fetch?.phase).toBe("running");
     // No deadline Sub is armed for this boot call (no deadline brick).
-    expect(
-      wrapped.subscriptions(state).some((s) => s.type === "$resilience:timer"),
-    ).toBe(false);
+    expect(subs.some((s) => s.type === "$resilience:timer")).toBe(false);
   });
 });
 
@@ -1486,13 +1503,13 @@ describe("withResilience — real runtime: duration-bounded outage", () => {
     // No `at` in the config: retry alone is not a time-sensitive brick, and the
     // streak clock comes off `$resilience:err` / `$resilience:timer`, not the
     // cold gate.
-    const { machine, interpret } = withResilience(
+    const { machine, interpret, subscribe } = withResilience(
       base,
       { target: "do_fetch", retry },
       () => 0,
     );
 
-    const runtime = await run(machine, { ctx, interpret }).ready;
+    const runtime = await run(machine, { ctx, interpret, subscribe }).ready;
     await runtime.dispatch({ type: "load", url: "/x", at: 0 });
     await flush();
 
@@ -1503,7 +1520,10 @@ describe("withResilience — real runtime: duration-bounded outage", () => {
 
     // Terminal, and nothing left armed.
     expect(runtime.getState().$resilience.calls.do_fetch?.phase).toBe("failed");
-    expect(machine.subscriptions?.(runtime.getState())).toEqual([]);
+    const live = (machine.subs ?? [])
+      .map((entry) => entry.deps(runtime.getState()))
+      .filter((deps) => deps != null);
+    expect(live).toEqual([]);
 
     // Settled: no further port hit however long we wait.
     const settled = hitAt.length;

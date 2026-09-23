@@ -9,7 +9,9 @@ import {
 } from "../../paginate/paginated-walk";
 import {
   createReconciler,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   type ReconcilerState,
   type ReconcilerTimerMsg,
   type ScanPageCmd,
@@ -537,6 +539,13 @@ type HostMsg =
   | ReconcilerTimerMsg;
 type HostCmd = ScanPageCmd<number> | ApplyCmd;
 
+// The deadlines armed at a replayed state: the `deps` of its `deadline` Sub.
+function armedDeadlines(
+  subs: readonly (DeadlinesSub | { readonly type: "timer" })[],
+): DeadlinesSub["deps"] {
+  return subs.flatMap((sub) => (sub.type === "deadline" ? sub.deps : []));
+}
+
 function makeMachine(
   config: Parameters<
     typeof createReconciler<Node, Desired, Page, Change, ApplyCmd, number>
@@ -548,7 +557,7 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof rec.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -575,8 +584,7 @@ function makeMachine(
         return [{ rec: slice }, cmds];
       },
     },
-    subscriptions: (s) => rec.subs(s.rec),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => rec.subs(s.rec))],
   });
   return { rec, machine };
 }
@@ -626,13 +634,13 @@ describe("createReconciler — wired in a machine (replay)", () => {
   });
 
   it("reconcile → scan err leaves a retry + deadline timer desired", () => {
-    bound.expectActiveSubs(
-      { msgs: [{ type: "reconcile", at: 0 }, errMsg("e", 0)] },
-      [
-        deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
-        deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
-      ],
-    );
+    const { subs } = bound.replay({
+      msgs: [{ type: "reconcile", at: 0 }, errMsg("e", 0)],
+    });
+    expect(armedDeadlines(subs)).toEqual([
+      deadlineSub(`resilient:retry:${PAGE_KEY}`, 0),
+      deadlineSub(`resilient:deadline:${PAGE_KEY}`, 5_000),
+    ]);
   });
 });
 
@@ -678,7 +686,7 @@ function makeRePlanMachine() {
       model: {} as HostState,
       msg: {} as RePlanHostMsg,
       cmd: {} as HostCmd,
-      sub: {} as ReturnType<typeof rec.subs>[number],
+      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -709,8 +717,7 @@ function makeRePlanMachine() {
         return [{ rec: slice }, cmds];
       },
     },
-    subscriptions: (s) => rec.subs(s.rec),
-    subscribe: { deadline: () => () => {} },
+    subs: [deadlinesSub((s: HostState) => rec.subs(s.rec))],
   });
   return { rec, machine };
 }

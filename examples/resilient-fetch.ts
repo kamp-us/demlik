@@ -9,8 +9,9 @@
  *   • Pure state+ops (circuit-breaker, rate-limit, retry-backoff, cache) live
  *     as FIELDS in the Model. You call their pure ops inside `update` to decide
  *     which Cmds to emit. They never run effects; they just transform state.
- *   • Sub factories (deadline) are declared by `subscriptions(state)` and run by
- *     `subscribe`. Reconcile-by-id starts/cancels them as state changes.
+ *   • Subs (the deadline timer) are data in `subs`: a type plus the state slice
+ *     they depend on. The runner that arms them (`subscribeDeadline`) is handed
+ *     to `run`, and the engine starts/stops it as that slice changes.
  *   • The real effect (the HTTP call) lives in `interpret`, via `tryInterpret`.
  *   • Time is DATA: every Msg that drives a time-dependent op carries `at`.
  *     The reducer never reads the clock — `interpret` stamps `Date.now()` when
@@ -25,21 +26,14 @@ import {
 } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import {
-  defaultRetryPolicy,
-  initRetry,
-  nextDelayMs,
-  type RetryState,
-  recordFailure,
-  shouldRetry,
-} from "@demlik/tea/retry-backoff";
-import {
+  type CircuitState,
   get as cacheGet,
   set as cacheSet,
   canPass,
-  type CircuitState,
   type DeadlineExceeded,
-  type DeadlineSub,
+  type DeadlinesSub,
   deadlineSub,
+  deadlinesSub,
   defaultCircuitPolicy,
   initBucket,
   initCache,
@@ -48,9 +42,17 @@ import {
   onSuccess,
   subscribeDeadline,
   type TokenBucket,
-  tryConsume,
   type TtlCache,
+  tryConsume,
 } from "@demlik/tea/resilience";
+import {
+  defaultRetryPolicy,
+  initRetry,
+  nextDelayMs,
+  type RetryState,
+  recordFailure,
+  shouldRetry,
+} from "@demlik/tea/retry-backoff";
 
 // === Model: reliability modules composed as plain fields ===
 type Phase =
@@ -85,7 +87,7 @@ type Msg =
 type DoFetch = Cmd<"do_fetch"> & { url: string };
 
 // === Sub + Ctx ===
-type Sub = DeadlineSub;
+type Sub = DeadlinesSub;
 interface Ctx {
   http: (url: string) => Promise<string>;
 }
@@ -223,14 +225,16 @@ export const resilientFetch = defineMachine({
         : [s, []],
   },
 
-  // A Sub is active ONLY while we're waiting to retry. When the phase changes,
-  // reconcile-by-id cancels the timer automatically — no manual clearTimeout.
-  subscriptions: (s) =>
-    s.phase === "waiting_retry" ? [deadlineSub("retry", s.retryAtMs)] : [],
-  subscribe: { deadline: subscribeDeadline },
+  // A deadline is listed ONLY while we're waiting to retry. When the phase
+  // changes, the engine stops the timer automatically — no manual clearTimeout.
+  subs: [
+    deadlinesSub((s: State) =>
+      s.phase === "waiting_retry" ? [deadlineSub("retry", s.retryAtMs)] : [],
+    ),
+  ],
 });
 
-// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+// The handlers ride beside the machine, never on it: `run` takes them.
 // The effect. tryInterpret routes Ok/Err to two Msgs — and stamps the time:
 // this is the ONE place a clock read is allowed (interpret is impure).
 export const resilientFetchInterpret: Interpret<Msg, DoFetch, Ctx> = {
@@ -250,6 +254,7 @@ export const resilientFetchInterpret: Interpret<Msg, DoFetch, Ctx> = {
 export function startResilientFetch() {
   const runtime = run(resilientFetch, {
     interpret: resilientFetchInterpret,
+    subscribe: { deadline: subscribeDeadline },
     ctx: { http: (url) => fetch(url).then((r) => r.text()) },
   });
 

@@ -23,6 +23,8 @@ export * from "./observability";
 export * from "./pure";
 export type {
   AnyCmdDef,
+  BuiltinSub,
+  BuiltinSubType,
   CmdDef,
   CmdInput,
   CmdOf,
@@ -55,11 +57,15 @@ export type {
   Sub,
   SubId,
   Subscribe,
+  SubscribeArg,
   SyncReturn,
   Tagged,
   TaggedError,
+  TimerDeps,
+  TimerSub,
   Transitions,
   UpdateForm,
+  Wired,
 } from "./pure/core";
 // Re-export the pure-core surface so the root `@demlik/tea` entry is unchanged
 // (additive; the runtime-free guarantee lives in `src/pure/`).
@@ -92,6 +98,7 @@ export {
   OutcomeContractError,
   structuralHash,
   subId,
+  subIdOf,
   UndeclaredFailureError,
 } from "./pure/core";
 export * from "./runtime-types";

@@ -492,8 +492,14 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
       snapshot_write: async () => {},
     };
 
-    const { machine, interpret } = agent.toMachine<object>({ toolInterpret });
-    const runtime = await run(machine, { ctx: {} as object, interpret }).ready;
+    const { machine, interpret, subscribe } = agent.toMachine<object>({
+      toolInterpret,
+    });
+    const runtime = await run(machine, {
+      ctx: {} as object,
+      interpret,
+      subscribe,
+    }).ready;
 
     // Stop driving once the run is terminal.
     const off = runtime.observe((_msg, state) => {
@@ -575,8 +581,14 @@ describe("createAgent — plain-function model drives the wired machine", () => 
     const reachedDone = new Promise<void>((res) => {
       resolveDone = res;
     });
-    const { machine, interpret } = agent.toMachine<object>({ toolInterpret });
-    const runtime = await run(machine, { ctx: {} as object, interpret }).ready;
+    const { machine, interpret, subscribe } = agent.toMachine<object>({
+      toolInterpret,
+    });
+    const runtime = await run(machine, {
+      ctx: {} as object,
+      interpret,
+      subscribe,
+    }).ready;
     const off = runtime.observe((_msg, state) => {
       if (agent.isSettled(state)) resolveDone();
     });

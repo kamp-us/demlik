@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { subId } from "../../../index";
+import { defineMachine, replay, subId, subIdOf } from "../../../index";
 import {
   type ArmTimer,
   type DeadlineExceeded,
+  type DeadlineSub,
+  type DeadlinesSub,
   deadlineExceeded,
   deadlineSub,
+  deadlines,
+  deadlinesSub,
   setTimeoutArmTimer,
   subscribeDeadline,
   subscribeWith,
@@ -24,6 +28,11 @@ afterEach(() => {
 
 // A base wall-clock instant so `atMs` targets are readable epoch numbers.
 const BASE = 1_000_000;
+
+// The running `deadline` Sub the engine hands the runner for `list`.
+function running(...list: DeadlineSub[]): DeadlinesSub {
+  return { id: subIdOf("deadline", list), type: "deadline", deps: list };
+}
 
 describe("deadlineSub", () => {
   it("builds a stable, identity-branded Sub carrying the absolute target", () => {
@@ -52,7 +61,7 @@ describe("subscribeDeadline", () => {
     const dispatched: DeadlineExceeded[] = [];
     const sub = deadlineSub("guard", BASE + 5000); // 5s from now
 
-    subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+    subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
     // Just before the deadline: nothing yet.
     vi.advanceTimersByTime(4999);
@@ -72,7 +81,7 @@ describe("subscribeDeadline", () => {
     const dispatched: DeadlineExceeded[] = [];
     const sub = deadlineSub("guard", BASE + 1000);
 
-    subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+    subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
     vi.advanceTimersByTime(999);
     expect(dispatched).toEqual([]);
@@ -83,7 +92,7 @@ describe("subscribeDeadline", () => {
     const dispatched: DeadlineExceeded[] = [];
     const sub = deadlineSub("guard", BASE + 5000);
 
-    const cleanup = subscribeDeadline(sub, undefined, (m) =>
+    const cleanup = subscribeDeadline(running(sub), undefined, (m) =>
       dispatched.push(m),
     );
     // Disarm before the timer fires (the "cancel on state exit" path).
@@ -100,7 +109,7 @@ describe("subscribeDeadline", () => {
     // after a rehydrate.
     const sub = deadlineSub("guard", BASE - 1000);
 
-    subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+    subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
     // Synchronous: the reconcile pass must finish before any Msg lands.
     expect(dispatched).toEqual([]);
@@ -118,7 +127,7 @@ describe("subscribeDeadline", () => {
     const dispatched: DeadlineExceeded[] = [];
     const sub = deadlineSub("guard", atMs);
 
-    subscribeDeadline(sub, undefined, (m) => dispatched.push(m));
+    subscribeDeadline(running(sub), undefined, (m) => dispatched.push(m));
 
     vi.advanceTimersByTime(1999);
     expect(dispatched).toEqual([]);
@@ -133,6 +142,49 @@ describe("subscribeDeadline", () => {
 // `do_alarm` instead. `subscribeWith(armTimer)` is the one seam that swap goes
 // through; `subscribeDeadline` IS the default plugged into it.
 // ───────────────────────────────────────────────────────────────────────────
+describe("the deadline list — one Sub arms many", () => {
+  it("arms every listed deadline and the cleanup clears them all", () => {
+    vi.setSystemTime(BASE);
+    const dispatched: DeadlineExceeded[] = [];
+    const cleanup = subscribeDeadline(
+      running(deadlineSub("a", BASE + 1000), deadlineSub("b", BASE + 3000)),
+      undefined,
+      (m) => dispatched.push(m),
+    );
+
+    vi.advanceTimersByTime(1000);
+    expect(dispatched).toEqual([deadlineExceeded("a", BASE + 1000)]);
+
+    cleanup();
+    vi.advanceTimersByTime(10_000);
+    expect(dispatched).toHaveLength(1);
+  });
+
+  it("`deadlines([])` is off, never a live Sub with nothing to arm", () => {
+    expect(deadlines([])).toBeNull();
+    const list = [deadlineSub("a", BASE)];
+    expect(deadlines(list)).toBe(list);
+  });
+
+  it("`deadlinesSub` declares the list as one `deadline` Sub", () => {
+    type S = { readonly at: number | null };
+    type M = { readonly type: "arm"; readonly at: number };
+    const machine = defineMachine({
+      types: { model: {} as S, msg: {} as M, sub: {} as DeadlinesSub },
+      init: () => [{ at: null }, []],
+      update: { arm: (_s, m) => [{ at: m.at }, []] },
+      subs: [
+        deadlinesSub((s: S) => (s.at === null ? [] : [deadlineSub("g", s.at)])),
+      ],
+    });
+
+    expect(replay(machine, { msgs: [], ctx: undefined }).subs).toEqual([]);
+    const arm: M = { type: "arm", at: BASE };
+    const armed = replay(machine, { msgs: [arm], ctx: undefined });
+    expect(armed.subs).toEqual([running(deadlineSub("g", BASE))]);
+  });
+});
+
 describe("subscribeWith — the host-plugged timer backing", () => {
   it("hands the host the Sub's id, the ABSOLUTE atMs, and the Msg to fire", () => {
     vi.setSystemTime(BASE);
@@ -144,7 +196,7 @@ describe("subscribeWith — the host-plugged timer backing", () => {
     };
 
     const sub = deadlineSub("guard", BASE + 5000);
-    subscribeWith(recordingArmTimer)(sub, undefined, () => {});
+    subscribeWith(recordingArmTimer)(running(sub), undefined, () => {});
 
     // The host receives the absolute target, NOT a relative delay — computing
     // the gap is the host's job, which is what lets a hibernating host arm for
@@ -177,7 +229,7 @@ describe("subscribeWith — the host-plugged timer backing", () => {
     };
 
     const cleanup = subscribeWith(registryArmTimer)(
-      deadlineSub("guard", BASE + 5000),
+      running(deadlineSub("guard", BASE + 5000)),
       undefined,
       (m) => dispatched.push(m),
     );
@@ -197,7 +249,7 @@ describe("subscribeWith — the host-plugged timer backing", () => {
     const inertArmTimer: ArmTimer<DeadlineExceeded> = () => () => {};
 
     subscribeWith(inertArmTimer)(
-      deadlineSub("guard", BASE + 5000),
+      running(deadlineSub("guard", BASE + 5000)),
       undefined,
       (m) => dispatched.push(m),
     );
@@ -237,8 +289,10 @@ describe("setTimeoutArmTimer — the default backing", () => {
     const viaSeam: DeadlineExceeded[] = [];
     const sub = deadlineSub("guard", BASE + 2000);
 
-    subscribeDeadline(sub, undefined, (m) => viaDefault.push(m));
-    subscribeWith(setTimeoutArmTimer())(sub, undefined, (m) => viaSeam.push(m));
+    subscribeDeadline(running(sub), undefined, (m) => viaDefault.push(m));
+    subscribeWith(setTimeoutArmTimer())(running(sub), undefined, (m) =>
+      viaSeam.push(m),
+    );
 
     vi.advanceTimersByTime(1999);
     expect(viaDefault).toEqual([]);

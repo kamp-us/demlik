@@ -40,6 +40,8 @@ export {
 } from "../internal/prediction";
 export type {
   AnyCmdDef,
+  BuiltinSub,
+  BuiltinSubType,
   CmdDef,
   CmdInput,
   CmdOf,
@@ -72,11 +74,15 @@ export type {
   Sub,
   SubId,
   Subscribe,
+  SubscribeArg,
   SyncReturn,
   Tagged,
   TaggedError,
+  TimerDeps,
+  TimerSub,
   Transitions,
   UpdateForm,
+  Wired,
 } from "./core";
 // The client-prediction fold seam + the pure type vocabulary (ADR 0006).
 // `structuralHash` rides along because it IS pure — the dep-keyed Sub id and
@@ -99,5 +105,6 @@ export {
   OutcomeContractError,
   structuralHash,
   subId,
+  subIdOf,
   UndeclaredFailureError,
 } from "./core";

@@ -182,9 +182,12 @@ function update(state: State, msg: Msg): [State, Cmd[]] {
 ## Invariant 4 — External time and events are subscriptions
 
 `setInterval`, websockets, Durable Object alarms, `document` events,
-chrome runtime messages: all live as `Sub` variants. The runtime
-reconciles the desired set by `id` every transition. Reducers, init, and
-interpret handlers never call `setInterval` or `addEventListener` directly.
+chrome runtime messages: all live as `Sub` variants. A machine declares
+them as data — `subs: [{ type, deps(state) }]` — and the runtime
+reconciles the desired set by the derived id every transition. The code
+that opens each one is its runner, handed to `run` in `subscribe` (the
+built-in `timer` ships with every engine). Reducers, init, and interpret
+handlers never call `setInterval` or `addEventListener` directly.
 
 **Forbids**
 
@@ -198,19 +201,23 @@ init: (loaded, ctx) => {
 **Permits**
 
 ```ts
-subscriptions: (state) =>
-  state.phase === "running"
-    ? [{ id: subId("main-tick"), type: "tick", every: 1000, into: (now) => ({ type: "tick", now }) }]
-    : [];
+subs: [
+  {
+    type: "tick",
+    deps: (state) => (state.phase === "running" ? { everyMs: 1000 } : null),
+  },
+],
+// and at run: subscribe: { tick: (sub, ctx, dispatch) => … sub.deps.everyMs … }
 ```
 
 **Enforcement today**
 
 - Substrate: `reconcileSubs` owns the lifecycle; only `subscribe[type]`
-  handlers may install listeners, only their returned cleanup may remove
+  runners may install listeners, only their returned cleanup may remove
   them.
-- Phase 1.3: `SubId` branded type catches ad-hoc id strings at the type
-  level + runtime collision assert.
+- Type level: `subscribe` is required on `run` once `types.sub` names a
+  type other than `timer`, one runner per type; a missing runner at
+  runtime rejects the dispatch instead of silently starting nothing.
 
 ---
 
@@ -286,34 +293,37 @@ runtime.subscribePort(cursorPort, (announcement) => liveRegion.textContent = ann
 
 ## Invariant 7 — Identity is explicit
 
-Variant tags (`type: "tick"`), sub ids (`subId("main-tick")`), port
-brands (`Port<T>`). Identity is never positional, never inferred from
+Variant tags (`type: "tick"`), sub ids (derived — `structuralHash({ type,
+deps })`, never hand-written), port brands (`Port<T>`). Identity is never positional, never inferred from
 string equality alone, never reflective. The type system or a runtime
 assert catches collisions; nothing is silent.
 
 **Forbids**
 
 ```ts
-type Msg = string;                                       // identity by raw string
-const subs = [{ id: "tick", ... }, { id: "tick", ... }]; // silent collision
+type Msg = string;                                   // identity by raw string
+subs: [{ type: "poll", deps: (s) => s.startedAt }], // a Date: no stable identity
 ```
 
 **Permits**
 
 ```ts
 type Msg = { type: "tick"; now: number } | { type: "reset" };
-const subs = [
-  { id: subId("main-tick"), type: "tick", every: 1000, into: ... },
-  // SubId brand makes typos compile-fail; reconcileSubs asserts no
-  // (same id, different type) within the desired set.
-];
+subs: [
+  { type: "tick", deps: (s) => (s.running ? { everyMs: 1000 } : null) },
+  // The id is derived from `{ type, deps }`, so two entries can never
+  // collide across types, and one that yields the same id runs once. The
+  // hash refuses non-plain `deps` (Date, Map, class instances) rather than
+  // collapsing them onto one id.
+],
 ```
 
 **Enforcement today**
 
 - Substrate: discriminated unions for Msg / Cmd / Sub. `Port<T>` is a
   branded object — identity by reference, not by name.
-- Phase 1.3: `SubId` branded type + runtime collision assert.
+- Sub ids are derived (`subIdOf(type, deps)`), never authored; the
+  `SubId` brand keeps an ad-hoc string from passing for one.
 - Phase 1.1: `Reducer<S, M, C>` and `Transitions<S, M, C>` mapped types
   make the variant set load-bearing — adding a Msg without a handler
   fails to compile.
@@ -354,7 +364,7 @@ interpret: {
 **Enforcement today**
 
 - Substrate: `tryInterpret` Railway sugar at every Cmd boundary.
-- Review: no `as` casts or `as any` inside `update` or `subscriptions`.
+- Review: no `as` casts or `as any` inside `update` or a `subs` entry's `deps`.
 - Substrate: `Store<S>.load()` returns `unknown`; required `migrate(raw)`
   parses at the boundary — same shape as `tryInterpret` for Cmd
   boundaries. Adapters that cross real serialization boundaries
@@ -370,7 +380,7 @@ interpret: {
 ## Citation gate — how PRs use this doc
 
 **Every PR touching the substrate, a reducer, an interpret handler, or
-a subscribe handler MUST:**
+a subscribe runner MUST:**
 
 1. Cite the invariant(s) strengthened or preserved in the commit
    message, e.g. `[invariant 2, 7]`.

@@ -90,14 +90,15 @@ const machine = defineMachine({
   types: { model: {} as Model, msg: {} as Msg, cmd: {} as Cmd, sub: {} as Sub, ctx: {} as Ctx },
   init: (loaded, ctx) => [initialModel, []],          // (Model, [Cmd])
   update: (state, msg) => [nextModel, [cmd]],         // pure
-  subscriptions: (state) => [sub],                    // pure list of Sub
-  subscribe: { subType: (sub, ctx, dispatch) => () => cleanup },
+  subs: [{ type: "subType", deps: (state) => slice }], // pure; null = off
 });
 
-// host: turns Cmd → Msg. Handed to `run` beside the machine, never on it.
+// host: turns Cmd → Msg and runs each Sub. Handed to `run` beside the
+// machine, never on it.
 const interpret = { cmdType: async (cmd, ctx) => msg };
+const subscribe = { subType: (sub, ctx, dispatch) => () => cleanup };
 
-const runtime = run(machine, { ctx, store, interpret });
+const runtime = run(machine, { ctx, store, interpret, subscribe });
 ```
 
 The shape is the same. The difference is that Elm has a single, opinionated
@@ -176,21 +177,25 @@ The whole-program shape is what `@demlik/tea` calls a `Machine`:
 
 ```ts
 // packages/tea/src/index.ts
-export interface Machine<S, M, C extends Cmd, U extends Sub, Ctx> {
+export type Machine<S, M, C extends Cmd, U extends Sub, Ctx> = {
   init: (loaded: S | null, ctx: Ctx) => [S, readonly C[]];
   update: (state: S, msg: M) => [S, readonly C[]];
-  subscriptions?: (state: S) => readonly U[];
-  subscribe?: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx: Ctx, dispatch: (msg: M) => Promise<void>) => () => void };
-}
+  // one entry per Sub: its type, and the state slice it depends on
+  subs?: ReadonlyArray<{ type: U["type"]; deps: (state: S) => U["deps"] | null }>;
+};
 
-// …and the Cmd handlers, handed to `run` beside it:
-run(machine, { ctx, interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | void> } });
+// …and the handlers, handed to `run` beside it:
+run(machine, {
+  ctx,
+  interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | void> },
+  subscribe: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx, dispatch) => Dispose },
+});
 ```
 
 Key difference: Elm's runtime owns `interpret` (the implementation of every
 Cmd type) and `subscribe` (the runtime side of every Sub type). We hand
-`interpret` to `run`, keyed by tag, so the host supplies it; `subscribe`
-still rides on the Machine for now (#279 moves it to `run` too).
+both to `run`, keyed by tag, so the host supplies them — except the built-in
+`timer`, which every engine ships (Elm's `Time.every` analogue, one-shot).
 That's how the same `Machine` can run inside React, a Durable Object, a
 service worker, or a Node test process without the pure code changing.
 
@@ -299,25 +304,42 @@ function is *called every transition*, and the difference between the new
 returned list and the previously-active set drives the actual `addEventListener` /
 `setInterval` / `setTimeout` plumbing.
 
-Ours uses the identical rule. The `Sub.id` field is the diff key:
+Ours uses the identical rule. The difference is who writes the id: in Elm
+the Sub value's structure is its identity, and ours derives the id the same
+way — `structuralHash({ type, deps })`. The machine declares each Sub as
+data; the runner that does the plumbing is handed to `run`:
 
 ```ts
-// packages/tea/src/index.ts
-export type Sub<T extends string = string> = { id: string; type: T };
+// src/pure/core.ts
+export type Sub<T extends string = string, D = unknown> = {
+  readonly id: SubId; readonly type: T; readonly deps: D;
+};
 
-// subscriptions returns the desired set; runtime diffs against current registry
-type AppSub =
-  | { id: string; type: "tick"; every: number; into: (now: number) => Msg }
-  | { id: string; type: "ws"; socketId: string; msg: (data: string) => Msg };
+type AppSub = Sub<"ws", { readonly socketId: string }>;
 
-subscriptions: (state) => state.phase === "running" ? [
-  { id: "main-tick", type: "tick", every: 1000, into: (now) => ({ tag: "tick", now }) },
-] : []
+// the machine: each entry names a type and the state slice it depends on
+subs: [
+  // built-in: Elm's `Time.every`, one-shot — dispatch `msg` after `ms`
+  {
+    type: "timer",
+    deps: (state) =>
+      state.phase === "running" ? { ms: 1000, msg: { type: "tick" } } : null,
+  },
+  {
+    type: "ws",
+    deps: (state) =>
+      state.phase === "running" ? { socketId: state.socketId } : null,
+  },
+],
+
+// at run: the runner for each non-built-in type
+run(machine, { subscribe: { ws: (sub, ctx, dispatch) => open(sub.deps.socketId, dispatch) } });
 ```
 
-Reconcile logic: `packages/tea/src/index.ts:reconcileSubs`. Same id across
-transitions = same subscription, no churn. To *force* a restart, emit a
-different id (`main-tick-v2`).
+Reconcile logic: `src/promise/run.ts:reconcileSubs`. Same id across
+transitions = same subscription, no churn. A Sub restarts exactly when its
+`deps` value changes; to *force* a restart, put the thing that should
+restart it into `deps`.
 
 ### 2.6 Effects: HTTP
 
@@ -651,7 +673,7 @@ We do *not* have the language enforcing this — TypeScript lets you
   haven't named yet.
 - `init` is pure modulo the `ctx` arg. Same rule.
 - The only place side-effects belong is `interpret` handlers and
-  `subscribe` handlers. Those *are* the runtime.
+  `subscribe` runners. Those *are* the runtime.
 
 Biome lint enforces purity on files matching reducer / phase globs (the
 `Date`, `fetch`, `crypto`, `uuid` ban). For surfaces not yet covered by
@@ -1105,8 +1127,8 @@ When reviewing TEA code in this repo, this is the checklist.
 | `observe` consumer filtering for one Msg variant | Wrong channel | `Port<T>` |
 | Parent reaches into child's Model | Composition leak | Lift state up; child takes props + onChange |
 | `Cmd` handler returns nothing on failure | Silent failure | `tryInterpret` with two Msg outcomes |
-| Same `Sub.id` across reconciliation, different behavior | Identity drift | Emit a new id when behavior changes |
-| `subscribe` handler with side-effectful setup but no cleanup | Leaked subscription | Return cleanup function from `subscribe[type]` |
+| A runner reading something outside `sub.deps` that changes | Identity drift — the id holds, the behavior moved | Put it in `deps`, so a change restarts the Sub |
+| `subscribe` runner with side-effectful setup but no cleanup | Leaked subscription | Return cleanup function from `subscribe[type]` |
 
 ---
 
@@ -1119,7 +1141,7 @@ When reviewing TEA code in this repo, this is the checklist.
 | Update | `update : Msg -> Model -> (Model, Cmd Msg)` | `update: (state: S, msg: M) => [S, readonly C[]]` |
 | View | `view : Model -> Html Msg` | A React component reading state via `useMachine` |
 | Cmd | `Cmd msg` value | `{ type: "..." }` tagged variant; handler in `interpret` |
-| Sub | `Sub msg` value | `{ id: "...", type: "..." }`; handler in `subscribe` |
+| Sub | `Sub msg` value | `subs: [{ type, deps(state) }]` entry; runner in `subscribe` at `run` |
 | Port (outgoing) | `port sendFoo : Foo -> Cmd msg` | `Port<Foo>` + `ctx.emit(port, value)` |
 | Port (incoming) | `port onFoo : (Foo -> msg) -> Sub msg` | `Sub` variant that dispatches `Foo` |
 | Flag | `Browser.element { init = init }` arg | `ctx` arg to `init(loaded, ctx)` |

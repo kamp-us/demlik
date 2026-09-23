@@ -30,10 +30,10 @@ function Downloader() {
 ```
 
 Each `dispatch` folds a Msg through `update` and re-renders with the next state.
-Under the hood `useMachine` calls `run(machine, { ctx, interpret })`, subscribes via
-`useSyncExternalStore` (so it is tearing-free under React 18's concurrent
-rendering), and calls `runtime.stop()` on unmount to drain the queue and clean up
-every active subscription.
+Under the hood `useMachine` calls `run(machine, { ctx, interpret, subscribe })`,
+subscribes via `useSyncExternalStore` (so it is tearing-free under React 18's
+concurrent rendering), and calls `runtime.stop()` on unmount to drain the queue
+and stop every running Sub.
 
 ## 2. Hand it the handlers, and a `ctx` when they need one
 
@@ -51,9 +51,29 @@ const [state, dispatch] = useMachine(resilientFetch, {
 });
 ```
 
-`interpret` is the exception to that identity rule. The hook reads each handler
-from the latest render when a Cmd runs, so a handler table written inline — one
-that closes over props or state — never rebuilds the runtime.
+A machine that declares Subs of its own (anything past the built-in `timer`)
+needs their runners too. Pass them as `subscribe`, again the same map `run`
+takes — the hook requires it exactly when `run` would:
+
+```tsx
+const [state, dispatch] = useMachine(jobWatcher, {
+  ctx,
+  subscribe: {
+    job_poll: (sub, _ctx, dispatch) => {
+      const timer = setInterval(
+        () => dispatch({ type: "poll_due", jobId: sub.deps.jobId }),
+        2_000,
+      );
+      return () => clearInterval(timer);
+    },
+  },
+});
+```
+
+`interpret` and `subscribe` are the exception to that identity rule. The hook
+reads each handler from the latest render when a Cmd runs or a Sub starts, so a
+handler table written inline — one that closes over props or state — never
+rebuilds the runtime.
 
 ## 3. Persist across mounts with a `store`
 

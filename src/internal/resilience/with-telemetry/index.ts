@@ -2,8 +2,8 @@
  * internal/resilience/with-telemetry — the pattern-setting wrapper of the wrapper tier.
  *
  * `withTelemetry(base, config)` is a **pure function over machine data**: it
- * takes any `Machine<S, M, C, U, Ctx>` and returns a NEW `Machine` over the
- * composed Model `{ base, $telemetry }`. You `run()` / `replay()` the result
+ * takes any `Machine<S, M, C, U, Ctx>` beside its handlers (a `Wired`) and
+ * returns a NEW `Wired` over the composed Model `{ base, $telemetry }`. You `run()` / `replay()` the result
  * exactly like any other machine — there is no new runtime, no privileged
  * interception path.
  *
@@ -26,8 +26,9 @@
  *   3. **Every decision is a Msg/Cmd.** Each telemetry emission is a
  *      `$telemetry:emit` Cmd through the merged `update`, so "why did this fire"
  *      is answerable from reducer + log alone, and `runtime.observe` sees it.
- *   4. **Subs merge by id.** Telemetry has no timers — merged subs/subscribe are
- *      the base's, verbatim.
+ *   4. **Subs merge.** Telemetry has no timers — the merged `subs` are the
+ *      base's entries reading `state.base`, and `subscribe` is the base's,
+ *      verbatim.
  *   5. **Clock out of update.** The default event carries no wall-clock read.
  *      The optional `at` is stamped at the interpret boundary (the `clock`
  *      port), never inside the merged `update`.
@@ -42,10 +43,11 @@
  *
  * ## Typical wiring
  *
- *   const observed = withTelemetry(baseMachine, {
+ *   const observed = withTelemetry({ machine: baseMachine, interpret }, {
  *     event: (msg, _prev, next) => ({ seq: next.$telemetry.seq, msgType: msg.type }),
  *   });
- *   const runtime = run(observed, {
+ *   const runtime = run(observed.machine, {
+ *     ...observed,
  *     ctx: { ...baseCtx, telemetrySink: (e) => posthog.capture(e), clock: Date.now },
  *   });
  */
@@ -53,12 +55,13 @@
 import type {
   CmdOf,
   Interpret,
-  InterpretArg,
   Machine,
   Reducer,
   Sub,
+  Wired,
 } from "../../../index";
 import { applyCell, Cmd, msgKeysOf } from "../../../index";
+import { subEntriesOf } from "../../../pure/core";
 import { unchecked, undefinedOnly } from "../../schema";
 
 // ===========================================================================
@@ -155,9 +158,9 @@ export interface TelemetryConfig<S, M extends { type: string }> {
 /**
  * Wrap `base` with observe-only telemetry. Takes the base machine together with
  * the handlers it runs under (a machine carries none — #278) and returns a NEW
- * `Machine` over the composed Model `{ base, $telemetry }` beside the composed
- * `interpret`, with the base's Msgs/Cmds/Subs/Ctx extended by the wrapper's own.
- * Run it as `run(wrapped.machine, { interpret: wrapped.interpret, ctx })`.
+ * `Wired` over the composed Model `{ base, $telemetry }`, with the base's
+ * Msgs/Cmds/Subs/Ctx extended by the wrapper's own. Run it as
+ * `run(wrapped.machine, { ...wrapped, ctx })`.
  *
  * The composed machine:
  *   - `init` rehydrates the base (honoring the `[loaded, []]` contract) and
@@ -166,11 +169,12 @@ export interface TelemetryConfig<S, M extends { type: string }> {
  *     reducer, increments `seq`, and appends a `$telemetry:emit` Cmd carrying
  *     the projected event. Base Cmds pass through UNCHANGED — the observe-only
  *     property.
- *   - `subscriptions` / `subscribe` are the base's, verbatim (no timers).
+ *   - `subs` are the base's entries, each reading `state.base`; `subscribe` is
+ *     the base's, verbatim (no timers).
  *   - `interpret` is `{ ...wired.interpret, "$telemetry:emit": sink-handler }`.
  *
  * @param wired  any `Machine<S, M, C, U, Ctx>` as `machine`, beside its
- *               `interpret` handlers.
+ *               `interpret` and `subscribe` handlers.
  * @param config the telemetry knob (optional `event` projector).
  */
 export function withTelemetry<
@@ -180,22 +184,9 @@ export function withTelemetry<
   U extends Sub,
   Ctx,
 >(
-  wired: { readonly machine: Machine<S, M, C, U, Ctx> } & InterpretArg<
-    M,
-    C,
-    Ctx
-  >,
+  wired: Wired<S, M, C, U, Ctx>,
   config: TelemetryConfig<S, M> = {},
-): {
-  readonly machine: Machine<
-    TelemetryModel<S>,
-    M,
-    C | TelemetryEmitCmd,
-    U,
-    Ctx & TelemetryPorts
-  >;
-  readonly interpret: Interpret<M, C | TelemetryEmitCmd, Ctx & TelemetryPorts>;
-} {
+): Wired<TelemetryModel<S>, M, C | TelemetryEmitCmd, U, Ctx & TelemetryPorts> {
   const base = wired.machine;
   const project = config.event;
 
@@ -238,8 +229,7 @@ export function withTelemetry<
   const baseInterpret =
     (wired as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
-  // Namespace guard (mirrors the substrate's SubId / definePort collision
-  // asserts). The spread below merges `$telemetry:emit` into the base's
+  // Namespace guard (mirrors the substrate's definePort collision asserts). The spread below merges `$telemetry:emit` into the base's
   // interpret map; if the base already declares that key, the spread would
   // SILENTLY clobber the base handler. The `$telemetry:` Cmd namespace is the
   // wrapper's — refuse to wrap a base that squats on it instead of stealing it.
@@ -283,9 +273,11 @@ export function withTelemetry<
     },
   } as Interpret<M, C | TelemetryEmitCmd, Ctx & TelemetryPorts>;
 
-  // Capture once so the narrowing survives into the spread (no non-null assert).
-  const baseSubscriptions = base.subscriptions;
-  const baseSubscribe = (base as { subscribe?: unknown }).subscribe;
+  // The base's entries, each reading its slice off `state.base`.
+  const subs = subEntriesOf<S>(base).map((entry) => ({
+    type: entry.type,
+    deps: (state: TelemetryModel<S>) => entry.deps(state.base),
+  }));
 
   const machine = {
     init: (loaded: TelemetryModel<S> | null, ctx: Ctx & TelemetryPorts) => {
@@ -307,15 +299,9 @@ export function withTelemetry<
       M,
       C | TelemetryEmitCmd
     >,
-    // Subs merge to the base's, verbatim — telemetry owns no timers. The base
-    // subscribes against its own nested slice.
-    ...(baseSubscriptions
-      ? {
-          subscriptions: (state: TelemetryModel<S>) =>
-            baseSubscriptions(state.base),
-        }
-      : {}),
-    ...(baseSubscribe ? { subscribe: baseSubscribe } : {}),
+    // Subs merge to the base's — telemetry owns no timers. The base's
+    // entries read its own nested slice.
+    subs,
     // The base's `Cmd.define` list rides through so `run`'s interpret edge
     // still parses / stamps the base's settled Msgs behind the wrap (#66).
     ...(base.cmds ? { cmds: base.cmds } : {}),
@@ -326,5 +312,13 @@ export function withTelemetry<
     U,
     Ctx & TelemetryPorts
   >;
-  return { machine, interpret };
+  // The base's runners pass through verbatim. The cast re-reads the base's
+  // `SubscribeArg` (conditional on `U`, unchanged) under the widened Ctx.
+  return { ...wired, machine, interpret } as unknown as Wired<
+    TelemetryModel<S>,
+    M,
+    C | TelemetryEmitCmd,
+    U,
+    Ctx & TelemetryPorts
+  >;
 }

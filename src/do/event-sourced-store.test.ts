@@ -52,7 +52,6 @@ function counter() {
     },
     init: (loaded) => [loaded ?? { type: "counting", count: 0, log: [] }, []],
     update,
-    subscribe: {},
   });
 }
 

@@ -176,9 +176,11 @@ A `Sub` variant is a noun describing a stream. Completes
 ws | recorder | heartbeat
 ```
 
-Sub names are also identities (canon Invariant 7, branded `SubId`). Keep
-**lowercase short names** — they match the substrate's `Sub<"ws">`
-declaration and read naturally in topology tables like `subscriptions(state)`.
+Sub names are also identities (canon Invariant 7 — the type is half of
+every derived `SubId`), and each one keys its runner in `subscribe`. Keep
+**lowercase short names** — they match the substrate's `Sub<"ws", Deps>`
+declaration and read naturally in a machine's `subs: [{ type: "ws", … }]`.
+`timer` is taken: it names the built-in countdown.
 
 | Anti-name              | Why                                  |
 | ---------------------- | ------------------------------------ |

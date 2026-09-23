@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (131)
+## Exports (134)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -18,9 +18,10 @@ import { … } from "@demlik/tea/resilience";
 | `AuthedState` | Interface | The composed slice. |
 | `CacheConfig` | Interface | Per-entry TTL cache knob. |
 | `CacheEntry` | Interface | A cached entry: the `value` and the absolute clock reading `expiresAtMs` it expires at. |
-| `cacheEvictionSub` | Function | Declare an eviction Sub for the cache identified by `id`, ticking every `everyMs`. |
-| `CacheEvictionSub` | Type | The Sub shape the eviction factory installs: a `setInterval`-shaped Sub carrying its tick period (`intervalMs`) per the substrate's reconcile-by-id-with-data-on-the-Sub contract. |
-| `cacheEvictionSubscribe` | Variable | The `subscribe` cell for the eviction Sub. |
+| `CacheEvictionDeps` | Type | The `deps` of an eviction Sub: which cache it ticks for (`name`, echoed as the Msg's `id`) and the tick period (`intervalMs`, which `fromInterval` reads). |
+| `cacheEvictionSub` | Function | The `subs` entry for an eviction tick on the cache named `name`, every `everyMs`. |
+| `CacheEvictionSub` | Type | The running eviction Sub: a `setInterval`-shaped Sub whose `deps` carry the cache's name and tick period. |
+| `cacheEvictionSubscribe` | Variable | The `cache` runner for the eviction Sub. |
 | `cacheEvictMsg` | Function | Construct a `cache_evict` Msg for the cache identified by `id`. |
 | `CacheEvictMsg` | Interface | The Msg the eviction Sub dispatches each tick. |
 | `CallBudget` | Interface | What is left of one call's deadline budget, and where the currently open charging segment starts. |
@@ -39,17 +40,19 @@ import { … } from "@demlik/tea/resilience";
 | `DeadlineExceeded` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
 | `DeadlineExceededError` | Type | The plain-data error a deadline-failed call settles with. |
 | `deadlineExceededMsg` | Function | Construct the deadline-exceeded Msg. |
-| `DeadlineExceededMsg` | Interface | The Msg the timeout Sub dispatches when `config.ms` elapses with no accepted progress. |
+| `DeadlineExceededMsg` | Interface | The Msg the timer dispatches when `config.ms` elapses with no accepted progress. |
 | `DeadlineModel` | Interface | The composed Model. |
 | `deadlineMsgType` | Function | The one place the named tag is spelled. |
 | `DeadlineMsgType` | Type | The dispatched Msg's tag, derived from the deadline's optional name. |
 | `DeadlineNameOf` | Type | The name the deadline Sub carries for the `N` family — `undefined` for the default family (no name at all, so the bare literal is dispatched), the name itself otherwise. |
 | `DeadlineOpts` | Type | Additive options the `deadlineSub` factory folds onto the Sub literal. |
+| `deadlines` | Function | The `deps` of a `deadline` Sub: the list, or `null` when it is empty — an empty list is a Sub with nothing to arm, and an off Sub is not a live one (`driveToDone` reads live Subs to tell a waiting machine from a stalled one). |
 | `DeadlineSettled` | Interface | What MountConfig.onDeadline is handed: the one call the timer cell just settled `failed`, named by its `key`, carrying the error the slice settled with and the timer Msg that produced it. |
 | `DeadlineSlice` | Interface | The wrapper's Model slice. |
-| `deadlineSub` | Function | Re-export the deadline Sub primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `subscribe` handler, `deadlineSub` builds the Sub literal both composed wrappers' `subs` emit. |
-| `DeadlineSub` | Type | The Sub variant a deadline produces. |
-| `DeadlineTimeoutSub` | Type | The relative-timeout Sub the wrapper arms while `phase === "armed"`. |
+| `deadlinesSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
+| `deadlineSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
+| `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `DEFAULT_RESILIENT_NAME` | Variable | The family every unnamed knob speaks: `resilient_run` / `resilient_ok` / `resilient_err`. |
 | `defaultCircuitPolicy` | Variable | Sensible defaults: trip after 5 consecutive failures, cool down for 30s, admit a single probe before deciding. |
 | `DefaultResilientName` | Type |  |
@@ -67,7 +70,7 @@ import { … } from "@demlik/tea/resilience";
 | `MountableKnob` | Interface | The part of a resilient-call knob mountResilientCall needs: the two-verb `succeed` / `fail` shape `internal/jev/ask` and `internal/llm-call` expose. |
 | `MountConfig` | Interface | What to mount, and where. |
 | `MountedCell` | Type | One cell of the update fragment mountResilientCall returns. |
-| `MountedResilientCall` | Interface | The four fragments a consumer spreads into `defineMachine`. |
+| `MountedResilientCall` | Interface | The fragments a consumer wires: `init`, `update` and `subs` go into `defineMachine`, and `interpret` and `subscribe` go to `run`. |
 | `mountResilientCall` | Function | Pre-assemble a resilient-call knob into the fragments a machine definition spreads, so mounting one is a spread instead of eight hand-spliced points. |
 | `onFailure` | Function | Record a failed guarded call. |
 | `onSuccess` | Function | Record a successful guarded call. |
@@ -88,8 +91,8 @@ import { … } from "@demlik/tea/resilience";
 | `ResilienceOkMsg` | Type | The success Msg the `$resilience:run` handler dispatches back when the base interpret resolved OK. |
 | `ResilienceRunCmd` | Type |  |
 | `resilienceRunCmdDef` | Function | The carrier Cmd the wrapper emits when the gate ADMITS a target base Cmd. |
-| `ResilienceTimerMsg` | Type | The retry / deadline timer Msg the `$resilience:timer` Sub dispatches when the wall clock crosses the armed instant. |
-| `ResilienceTimerSub` | Type | The Sub the wrapper adds — a deadline-style timer in the `$resilience` family. |
+| `ResilienceTimerMsg` | Type | The retry / deadline timer Msg the `$resilience:timer` Sub dispatches when the wall clock crosses an armed instant. |
+| `ResilienceTimerSub` | Type | The Sub the wrapper adds: every armed `$resilience` timer, as one Sub whose `deps` is the list of deadlines (ids re-keyed into `$resilience:`). |
 | `ResilientCallDeadlineConfig` | Interface | Overall deadline knob — a budget of IN-PROCESS time per in-flight call. |
 | `ResilientConfig` | Interface | The resilience knob. |
 | `ResilientDeadlineType` | Type | The deadline Msg tag this knob's timers dispatch, derived from its name the same way `<name>_ok` / `<name>_err` are. |
@@ -113,8 +116,8 @@ import { … } from "@demlik/tea/resilience";
 | `SettleOutcome` | Type | How a settled call ended — the third thing `settle` hands back, and the only place the port's value can be read from. |
 | `SettleResult` | Interface | What `settle` returns: the settled slice, the Cmds it emitted, and the SettleOutcome. |
 | `SlidingWindow` | Interface | A sliding-window log: the timestamps of every hit still inside the trailing `windowMs`, capped at `limit` events per window. |
-| `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
-| `subscribeWith` | Function | Build the `subscribe["deadline"]` cell from a host-plugged `armTimer`. |
+| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
+| `subscribeWith` | Function | Build the `deadline` runner from a host-plugged `armTimer`. |
 | `SucceedMsg` | Type | Settle Msgs the `handlers` port dispatches back. |
 | `TelemetryConfig` | Interface | The telemetry knob. |
 | `telemetryEmit` | Variable | The fire-and-forget Cmd the merged `update` appends after every base transition. |
