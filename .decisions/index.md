@@ -15,13 +15,14 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0010](./0010-export-map-tiers.md) | Export-map tiers: kernel/battery/experimental, showcases off the map | Amended-in-part by [0016](./0016-removal-lands-in-a-minor-at-0x.md) | 2026-07-17 |
 | [0011](./0011-errors-as-data.md) | Errors are data; a throw is reserved for a contract breach | Accepted | 2026-07-17 |
 | [0013](./0013-fabrika-is-the-work-pipeline.md) | fabrika is this repo's work pipeline | Accepted | 2026-08-16 |
-| [0014](./0014-typed-effect-channels-on-cmd-constructors.md) | Effect's E and R channels are types on Cmd constructors, never Effect values at the core | Amended-in-part by [0020](./0020-tea-owns-no-dependency-injection.md) | 2026-09-04 |
+| [0014](./0014-typed-effect-channels-on-cmd-constructors.md) | Effect's E and R channels are types on Cmd constructors, never Effect values at the core | Amended-in-part by [0020](./0020-tea-owns-no-dependency-injection.md), [0021](./0021-handler-outcome-becomes-the-msg.md) | 2026-09-04 |
 | [0015](./0015-hide-the-wiring-never-the-state.md) | A convenience layer hides the wiring, never the state | Accepted | 2026-09-04 |
 | [0016](./0016-removal-lands-in-a-minor-at-0x.md) | While 0.x, a removal lands in one minor with a changeset callout, never a deprecation lag | Accepted | 2026-09-04 |
 | [0017](./0017-fencing-is-an-optional-store-widening.md) | Fencing is an optional `Store` widening, and a store conflict is a throw | Accepted | 2026-09-09 |
 | [0018](./0018-tool-overlap-inside-the-cmd-handler.md) | `runInterpret` stays serial; tool overlap lives inside the tool Cmd handler | Accepted | 2026-09-09 |
 | [0019](./0019-a-host-side-provider-graph-satisfies-r.md) | A host-side provider graph satisfies R, copying Effect's Layer + Scope | Superseded by [0020](./0020-tea-owns-no-dependency-injection.md) | 2026-09-09 |
 | [0020](./0020-tea-owns-no-dependency-injection.md) | Dependencies belong to the handler, never to tea's core or its Cmds | Accepted | 2026-09-22 |
+| [0021](./0021-handler-outcome-becomes-the-msg.md) | A Cmd handler returns its outcome and the engine mints the Msg, never the handler | Accepted | 2026-09-23 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
