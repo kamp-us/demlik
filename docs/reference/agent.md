@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (131)
+## Exports (132)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -72,7 +72,7 @@ These are the ones to read first:
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the four optional guards that stop a run — `maxTurns`, `deadlineMs`, `maxElapsedMs` and `stopWhen` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |
-| `DefinedAgentCtx` | Type | The ctx the tools' `needs` demand, intersected — what `run` asks for. |
+| `DefinedAgentCtx` | Type | The ctx the tools' handlers read, intersected — what `run` asks for. |
 | `DefinedAgentEvent` | Type | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
 | `DefinedAgentInterpret` | Type | The interpret table of the machine `defineAgent` wired: one cell per DefinedAgentCmd, keyed by its `type` — a tool's own Cmd type, the router's `tool_rejected`, and the agent-owned brain call. |
 | `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
@@ -115,7 +115,7 @@ These are the ones to read first:
 | `StreamingModel` | Type | The streaming model port — `(messages, { onChunk }) => Promise<AgentTurn>`. |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `TaggedFailure` | Type | The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and an unhandled tag is a compile error. |
-| `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a `Cmd<T, E, R>` definition, whose `T` is what `ok` parses and whose `E` is the `err` tag union, that you pass to `toolRouter` or `defineAgent`. |
+| `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a `Cmd<T, Ok, E>` definition, whose `Ok` is what `ok` parses and whose `E` is the `err` tag union, that you pass to `toolRouter` or `defineAgent`. |
 | `TOOL_RETRY_EXHAUSTED_TAG` | Variable | The reason-tag a tool call that spent its retry budget settles under. |
 | `TOOL_TIMEOUT_TAG` | Variable | The reason-tag a timed-out tool call settles under. |
 | `ToolCall` | Interface | One tool the model asked to call this turn. |
@@ -128,7 +128,7 @@ These are the ones to read first:
 | `ToolFail` | Type | The typed failure constructor a handler receives: `fail({ _tag })` with `E` fixed to the declared tags, so the literal is checked against them where it is written. |
 | `ToolFailure` | Interface | A settled tool failure as the conversation keeps it: the `{ _tag, …payload }` the tool failed with, spread beside the `reason` string the model reads. |
 | `ToolFailureOf` | Type | The error outcome a router over `T` produces: `{ kind: "error", _tag, …payload, reason }`, discriminable on `_tag` over ToolError. |
-| `ToolHandler` | Type | A tool's handler: the parsed `args`, the ctx slice `requirements` named, and the typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
+| `ToolHandler` | Type | A tool's handler: the parsed `args`, the plain `ctx` the host handed `run`, and the typed `{ ok, fail }`, to a result over the declared channels — `Ok` is what the `ok` schema parses, `E` the declared `_tag` union. |
 | `ToolInput` | Type | The input a tool Cmd carries: the model's `callId` (the fan-out identity the settle folds back on) and the `args` already parsed against the tool's `input` schema — the boundary parses, the handler trusts. |
 | `ToolMsg` | Type | The settled Msg union a router's handlers return — folded by `toMachine`. |
 | `ToolOk` | Type | The typed success constructor a handler receives: `ok(value)` with `Ok` fixed to what the `ok` schema parses, so a value of the wrong shape is refused where it is written. |
@@ -142,6 +142,7 @@ These are the ones to read first:
 | `ToolRetryExhausted` | Interface | A call that spent its retry budget — ToolResilience.retry. |
 | `toolRouter` | Function | Fold a set of `tool()`s into one router — pass it the tools, get back the lookup `createAgent` needs, the handlers `toMachine` merges, and a reader that turns a settled message back into a plain outcome. |
 | `ToolRouter` | Interface | What `toolRouter()` returns: the derived `toolOf` for `createAgent`'s config, the interpret table `toMachine({ tools })` merges, the defs it puts on `Machine.cmds`, and the one reader that turns a settled Msg back into the conversation's `ToolOutcome`. |
+| `ToolsCtx` | Type | The ctx a tool set's handlers read, intersected — what `run` asks the host for once the tools are wired into a machine. |
 | `ToolSettlement` | Type | One settled tool, read back off a `ToolMsg` by `outcomeOf`. |
 | `ToolThrown` | Type | The router-minted failure beside a tool's declared tags: the handler threw (or rejected) with something that is not a declared `{ _tag }`. |
 | `ToolTimedOut` | Interface | A call that spent its `timeoutMs` budget — ToolResilience.timeoutMs. |

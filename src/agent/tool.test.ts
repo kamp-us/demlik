@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Cmd, type PortEmitter } from "../index";
+import type { PortEmitter } from "../index";
 import { run } from "../promise";
 import { MsgType } from "../protocol";
 import { bindMachine } from "../testing";
@@ -36,9 +36,8 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found"],
-    requirements: Cmd.requirements<KbCtx>(),
   },
-  async ({ q }, ctx, { ok, fail }) => {
+  async ({ q }, ctx: KbCtx, { ok, fail }) => {
     if (q === "boom") throw new Error("kb offline");
     if (q === "boom-tagged") throw { _tag: "not_found", via: "throw" };
     const snippet = ctx.kb.lookup(q);

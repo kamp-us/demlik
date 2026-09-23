@@ -32,7 +32,7 @@ export is not done until it has a row here. The list itself is pinned by
 
 | Subpath | Tier stamp | Notes |
 |---|---|---|
-| `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, the `provide` graph that satisfies a Cmd's `R`, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine |
+| `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine |
 | `./promise` | stable | the Promise engine: `run` and `driveToDone`, moved off `.` |
 | `./effect` | experimental | the Effect engine, empty until it lands; `effect` is an optional peer, and only this entry may import it |
 | `./testing` | stable | testing infra is kernel |

@@ -6,7 +6,8 @@
 //
 // The contract: Model and Msg are named ONCE, as values, under `types`.
 // Everything else is derived — `C` and the settled half of `M` from `cmds`, `U`
-// from `subscriptions`, `Ctx` from each Cmd's own requirements. No call site
+// from `subscriptions`. `Ctx` is the plain object the handlers read, named
+// under `types.ctx` (ADR 0020: a Cmd carries no requirements). No call site
 // writes a type argument, a `Settled<…>` union, or a `Reducer<…>` annotation.
 
 import { Result } from "better-result";
@@ -23,14 +24,12 @@ const lookup = Cmd.define("lookup", {
   input: z.object({ id: z.string() }),
   ok: z.object({ name: z.string() }),
   err: ["not_found"],
-  requirements: Cmd.requirements<HttpCtx>(),
 });
 
 const audit = Cmd.define("audit", {
   input: z.object({ line: z.string() }),
   ok: z.object({ written: z.boolean() }),
   err: ["io"],
-  requirements: Cmd.requirements<AuditCtx>(),
 });
 
 type Model = { readonly name: string | null; readonly note: string };
@@ -39,7 +38,7 @@ type Msg = { readonly type: "go"; readonly id: string };
 // ── 1. the playground shape: zero type arguments, zero annotations ──────────
 
 const machine = defineMachine({
-  types: { model: {} as Model, msg: {} as Msg },
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx & AuditCtx },
   cmds: [lookup, audit],
   init: (loaded) => [loaded ?? { name: null, note: "" }, []],
   update: {
@@ -54,7 +53,7 @@ const machine = defineMachine({
     audit_err: (m) => [m, []],
   },
   interpret: {
-    // `ctx` is typed from the Cmd's own requirements — no `types.ctx`.
+    // `ctx` is typed from `types.ctx`.
     lookup: settle(lookup, async (cmd, ctx) =>
       Result.ok({ name: await ctx.http.get(cmd.id) }),
     ),
@@ -68,7 +67,7 @@ const machine = defineMachine({
 // ── 2. inside `update`, a settled cell's `msg` is the settled Msg ───────────
 
 defineMachine({
-  types: { model: {} as Model, msg: {} as Msg },
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
   cmds: [lookup],
   init: () => [{ name: null, note: "" }, []],
   update: {
@@ -102,14 +101,14 @@ const onlyUserCells: Reducer<Model, Msg, ReturnType<typeof lookup>> = {
 const notEnough: typeof machine.update = onlyUserCells;
 void notEnough;
 
-// ── 3. `run` demands the same ctx as before (RequiredCtx unchanged) ─────────
+// ── 3. `run` demands the machine's plain ctx ────────────────────────────────
 
 declare const http: Http;
 declare const auditor: Audit;
 
 void run(machine, { ctx: { http, audit: auditor } });
 
-// @ts-expect-error — `audit` missing from ctx; `RequiredCtx` still binds.
+// @ts-expect-error — `audit` missing from ctx; `types.ctx` binds.
 void run(machine, { ctx: { http } });
 
 // ── 4. the Transitions (2-D table) form works through `types` the same way ──
@@ -122,7 +121,7 @@ type PhaseMsg = { readonly type: "start"; readonly id: string };
 const idle: Phase = { type: "idle" };
 
 const table = defineMachine({
-  types: { model: {} as Phase, msg: {} as PhaseMsg },
+  types: { model: {} as Phase, msg: {} as PhaseMsg, ctx: {} as HttpCtx },
   cmds: [lookup],
   init: (loaded) => [loaded ?? { type: "idle" }, []],
   update: {

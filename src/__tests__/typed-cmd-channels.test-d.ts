@@ -6,12 +6,13 @@
 // positive case that must compile.
 //
 // The four contracts:
-//   1. `Cmd<T, E, R>` is additive — an untyped `Cmd<A>` and a battery-style
+//   1. `Cmd<T, Ok, E>` is additive — an untyped `Cmd<A>` and a battery-style
 //      local Cmd union compile exactly as before, and a typed Cmd flows into
-//      an untyped slot.
+//      an untyped slot. It carries no requirements parameter (ADR 0020).
 //   2. A reducer `_err` cell must handle EVERY `_tag` of the Cmd's `E`
 //      (declared tags + the kernel's `malformed_result`).
-//   3. `run` refuses a `ctx` lacking a key any Cmd's `R` names.
+//   3. `run` takes the machine's plain `ctx` and refuses one lacking a key
+//      `types.ctx` names.
 //   4. `defineMachine({ cmds })` derives `<name>_ok` / `<name>_err` into `M`
 //      — the reducer must carry both cells without the user naming them.
 
@@ -22,9 +23,9 @@ import {
   Cmd,
   defineMachine,
   type Interpret,
+  type MalformedResult,
   type NoCtx,
   type Reducer,
-  type RequiredCtx,
   type Settled,
   settle,
 } from "../index";
@@ -38,6 +39,11 @@ const legacyAsCmd: Cmd = legacy;
 const legacyNarrow: Cmd<"ping"> = { type: "ping" };
 void legacyAsCmd;
 void legacyNarrow;
+
+// `Cmd` has three parameters — tag, `Ok`, `E` — and no requirements slot.
+// @ts-expect-error a fourth (requirements) parameter does not exist
+const noRequirementsSlot: Cmd<"a", unknown, unknown, unknown> = { type: "a" };
+void noRequirementsSlot;
 
 // `Cmd<never>` is still the cmdless marker — a real Cmd never satisfies it.
 type IsNever<T> = [T] extends [never] ? true : false;
@@ -53,8 +59,26 @@ const fetch = Cmd.define("fetch", {
   input: z.object({ url: z.string() }),
   ok: z.object({ body: z.string() }),
   err: ["not_found", "timeout"],
-  requirements: Cmd.requirements<HttpCtx>(),
 });
+
+// `Cmd.define` takes no `requirements` field.
+Cmd.define("needy", {
+  input: z.object({}),
+  ok: z.void(),
+  err: [],
+  // @ts-expect-error `requirements` is not a `Cmd.define` field
+  requirements: {},
+});
+
+// The constructor's value carries its `Ok` and `E` on the phantom channels.
+const fetchIsTyped: Cmd<
+  "fetch",
+  { body: string },
+  | { readonly _tag: "not_found"; readonly [detail: string]: unknown }
+  | { readonly _tag: "timeout"; readonly [detail: string]: unknown }
+  | MalformedResult
+> = fetch({ url: "/" });
+void fetchIsTyped;
 
 // A typed Cmd is assignable to the untyped `Cmd` slot (phantoms are optional).
 const typedIntoUntyped: Cmd<"fetch"> = fetch({ url: "/" });
@@ -132,12 +156,12 @@ fetch.err(cmd, { _tag: "malformed_result", issues: [] });
 // ── 4. `defineMachine({ cmds })` derives the settled half of `M` ────────────
 
 const machine = defineMachine({
-  types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
   cmds: [fetch],
   init: () => [{ body: null, lastTag: null }, []],
   update: exhaustive,
   interpret: {
-    // The `R` channel lands on the handler's ctx: `ctx.http` is typed.
+    // The handler reads the machine's plain ctx: `ctx.http` is typed.
     fetch: settle(fetch, async (c, ctx) => {
       const body = await ctx.http.get(c.url);
       return Result.ok({ body });
@@ -163,41 +187,23 @@ defineMachine({
 
 // A hand-written handler for a typed Cmd is still a plain `Interpret` cell —
 // it may return the minted Msg directly.
-const direct: Interpret<Msg | FetchSettled, FetchCmd, NoCtx> = {
+const direct: Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> = {
   fetch: async (c, ctx) => fetch.ok(c, { body: await ctx.http.get(c.url) }),
 };
 void direct;
 
-// ── 3. `run` demands every Cmd's `R` on `ctx` ───────────────────────────────
+// ── 3. `run` takes the machine's plain ctx ──────────────────────────────────
 
 const http: Http = { get: async () => "" };
 
-// POSITIVE: the required slice supplied.
+// POSITIVE: the machine's ctx supplied.
 run(machine, { ctx: { http } });
 
-// NEGATIVE: the machine's own Ctx is satisfied by `{}`, but `fetch` needs `http`.
+// NEGATIVE: `types.ctx` names `http`.
 // @ts-expect-error ctx lacks `http`
 run(machine, { ctx: {} });
-// @ts-expect-error ctx cannot be omitted while a Cmd names a requirement
+// @ts-expect-error ctx cannot be omitted while the machine's ctx names a key
 run(machine, {});
-
-// A Cmd that needs NOTHING beside one that does — hand-written, or `Cmd.define`d
-// without `needs` — leaves the sibling's demand intact: `unknown` is dropped
-// from the union before the intersection, not absorbed into it (#56).
-const log = Cmd.define("log", {
-  input: z.object({ line: z.string() }),
-  ok: z.void(),
-  err: [],
-});
-type Mixed = FetchCmd | ReturnType<typeof log> | Legacy;
-const mixedNeeds: RequiredCtx<Mixed> = { http };
-void mixedNeeds;
-// @ts-expect-error `http` is still demanded when siblings need nothing
-const mixedMissing: RequiredCtx<Mixed> = {};
-void mixedMissing;
-// Only need-nothing Cmds → the identity of `&`, exactly as before.
-const nothing: RequiredCtx<Legacy | ReturnType<typeof log>> = undefined;
-void nothing;
 
 // A machine with NO typed Cmds still runs ctx-less (the #182 win is untouched).
 type PureMsg = { readonly type: "bump" };

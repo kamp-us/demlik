@@ -31,6 +31,7 @@ import type {
 import type {
   AnyToolDef,
   ToolRouter,
+  ToolsCtx,
   WiredToolCmd,
   WiredToolMsg,
 } from "./tool";
@@ -136,7 +137,7 @@ export type AgentToMachine<
   AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
   AgentCmd<P, TC, Snap, Compact>,
   DeadlineSub,
-  Ctx
+  Ctx & ToolsCtx<T>
 >;
 
 /**

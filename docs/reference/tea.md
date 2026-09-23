@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (152)
+## Exports (133)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -37,10 +37,7 @@ import { … } from "@demlik/tea";
 | `defineManagedResource` | Function | Build the battery. |
 | `DefineManagedResourceOpts` | Interface |  |
 | `definePort` | Function | Define a typed port. |
-| `dep` | Function | Mint a typed dependency token: `dep<Config>()("config")`. |
 | `DepKeyedSub` | Interface |  |
-| `DepsOf` | Type | The `acquire` parameter a tuple of DepTokens describes: one property per token, named by the token and typed with what it carries. |
-| `DepToken` | Interface | A typed dependency name — Effect's `Context.Tag`. |
 | `describeMachine` | Function |  |
 | `detectUpdateForm` | Function |  |
 | `DispatchDiscardedError` | Class | The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub that is still live because subs are torn down only after the drain. |
@@ -78,8 +75,6 @@ import { … } from "@demlik/tea";
 | `Interpret` | Type |  |
 | `InterpretDetached` | Type |  |
 | `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
-| `isProvided` | Function | Is this `ctx` argument an unopened provider graph rather than a plain `ctx`? |
-| `layer` | Function | Declare a provider with no dependencies: an `acquire` and an optional `release`. |
 | `liftSlice` | Function | Lift a battery verb's result into the host state that carries its slice. |
 | `ListenerTarget` | Interface | The imperative listener target, expressed as the `add`/`remove` pair the substrate pairs into a reconciled resource. |
 | `Machine` | Type |  |
@@ -96,17 +91,10 @@ import { … } from "@demlik/tea";
 | `noop` | Function |  |
 | `OkOf` | Type | The `Ok` a def's handler must produce. |
 | `OnError` | Type | Sink for runtime failures that have no caller to reject at. |
-| `OnReleaseError` | Type | Sink for a `release` that threw. |
 | `partitionByAck` | Function | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
 | `Port` | Interface |  |
 | `PortEmitter` | Interface | Augmentation injected onto `ctx` inside Cmd handlers. |
 | `PortNameCollisionError` | Class | Thrown by `definePort` when a name has already been registered in the current process. |
-| `provide` | Function | Build an unopened provider graph from a map of providers. |
-| `Provided` | Interface | An unopened provider graph. |
-| `ProvidedCtx` | Type | The `ctx` a provider map produces: each key mapped to its provider's value. |
-| `ProvideFailedError` | Class | An `acquire` failed. |
-| `Provider` | Interface | One node of the graph: an `acquire`, an optional `release`, and the names of the sibling providers `acquire` reads. |
-| `ProviderCycleError` | Class | The dependency graph has a cycle, so no acquisition order exists. |
 | `QuiescenceTimeoutError` | Class | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
 | `readInOrder` | Function | Run a composed read through `order` and return the first answer any step gives, or `absent` when every one defers. |
 | `ReadStep` | Interface | One step of a composed read: the slice it consults, under the name that slice goes by. |
@@ -114,9 +102,6 @@ import { … } from "@demlik/tea";
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |
 | `replay` | Function |  |
-| `RequiredCtx` | Type | The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected. |
-| `Requirements` | Type | Phantom carrier for a Cmd's `R`. |
-| `RequirementsOf` | Type |  |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |
@@ -125,8 +110,6 @@ import { … } from "@demlik/tea";
 | `RuntimeRef` | Interface |  |
 | `Schema` | Interface |  |
 | `schemaMigrate` | Function | Build a `Store.migrate` from a schema (job 1) and an optional thin `upcast` (job 2). |
-| `Scope` | Interface | A live scope — the `ctx` its graph produced, plus the one call that tears it down. |
-| `ScopedCtxArg` | Type | `run`'s `ctx` field: the `Ctx` object, or a `provide` graph that builds one. |
 | `Seq` | Type | A monotonic, non-negative sequence number tagging one client-predicted command. |
 | `SeqTagged` | Interface | A command (or `Msg`) tagged with the `seq` the client assigned it. |
 | `settle` | Function |  |
@@ -156,9 +139,7 @@ import { … } from "@demlik/tea";
 | `tryApplyCell` | Function | `applyCell`, with "no handler for this Msg" moved into the return type instead of a throw. |
 | `tryFoldMsgs` | Function | `foldMsgs`, with the "no handler for this Msg" case in the return type, INCLUDING which message failed. |
 | `tryInterpret` | Function |  |
-| `UnknownProviderError` | Class | A provider named a dependency the map has no key for. |
 | `UpdateForm` | Type |  |
-| `value` | Function | Lift an already-built value into the graph — a provider with no `acquire` work and no lifetime. |
 | `WebSocketFactoryOpts` | Interface |  |
 | `WebSocketSubData` | Type |  |
 | `wrapDetached` | Function |  |
