@@ -1,7 +1,7 @@
 ---
 id: 0001
 title: Resilience is built in-house, not installed
-status: accepted
+status: amended-in-part by [0022](0022-no-battery-layer-plain-functions.md)
 date: 2026-06-09
 tags: []
 ---
