@@ -65,8 +65,8 @@
  *   // when the refresh port resolves:
  *   token_refreshed: (s, msg) => [{ ...s, auth: tr.refreshed(s.auth, msg.token) }, []],
  *
- *   // splice the I/O:
- *   interpret: { ...tr.handlers({ refresh: () => mySdk.mintToken() }) },
+ *   // splice the I/O where the machine runs; handlers ride beside it:
+ *   run(machine, { interpret: { ...tr.handlers({ refresh: () => mySdk.mintToken() }) } });
  *
  * NOT a substrate primitive: from `../index` it reuses only the `Cmd` /
  * `Interpret` types and the `tryInterpret` Railway helper (a runtime function,
@@ -331,10 +331,10 @@ export function createTokenRefresh(config: TokenRefreshConfig = {}) {
   /**
    * The interpret splice: wraps the injected `refresh` port and routes its
    * Ok/Err to `token_refreshed` / `token_refresh_failed` Msgs via the core's
-   * `tryInterpret` Railway helper. Spread the result into a consumer's
-   * `interpret` map:
+   * `tryInterpret` Railway helper. Spread the result into the
+   * `interpret` table handed to `run`:
    *
-   *   interpret: { ...other, ...tr.handlers({ refresh: () => sdk.mintToken() }) }
+   *   run(machine, { interpret: { ...other, ...tr.handlers({ refresh: () => sdk.mintToken() }) } })
    *
    * The port is the ONLY place the network (and any clock the issuer reads) is
    * touched — every verb above stays pure. `tryInterpret` guarantees the

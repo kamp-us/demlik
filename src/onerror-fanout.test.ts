@@ -67,7 +67,6 @@ function fanoutMachine(opts?: {
     },
     init: () => [{ n: 0, subOn: opts?.subOn ?? false }, []],
     update,
-    interpret,
     subscribe,
     subscriptions: (s) =>
       s.subOn ? [{ id: subId("fanout.tick"), type: "tick" }] : [],
@@ -78,7 +77,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
   it("a throwing observer reaches the sink with phase 'observer'", async () => {
     const { seen, onError } = collector();
     const boom = new Error("observer blew up");
-    const runtime = await run(fanoutMachine(), { onError }).ready;
+    const runtime = await run(fanoutMachine(), { interpret, onError }).ready;
     runtime.observe(() => {
       throw boom;
     });
@@ -90,7 +89,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
   it("a throwing subscribe-listener reaches the sink with phase 'listener'", async () => {
     const { seen, onError } = collector();
     const boom = new Error("listener blew up");
-    const runtime = await run(fanoutMachine(), { onError }).ready;
+    const runtime = await run(fanoutMachine(), { interpret, onError }).ready;
     runtime.subscribe(() => {
       throw boom;
     });
@@ -102,7 +101,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
   it("a throwing port listener reaches the sink with phase 'port-emit'", async () => {
     const { seen, onError } = collector();
     const boom = new Error("port listener blew up");
-    const runtime = await run(fanoutMachine(), { onError }).ready;
+    const runtime = await run(fanoutMachine(), { interpret, onError }).ready;
     runtime.subscribePort(pingPort, () => {
       throw boom;
     });
@@ -116,6 +115,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     const { seen, onError } = collector();
     const boom = new Error("event handler blew up");
     const runtime = await run(fanoutMachine(), {
+      interpret,
       onError,
       events: (msg): readonly BumpEvent[] =>
         msg.type === "inc" ? [{ type: "bumped" }] : [],
@@ -132,6 +132,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     const { seen, onError } = collector();
     const boom = new Error("projector blew up");
     const runtime = await run(fanoutMachine(), {
+      interpret,
       onError,
       events: (): readonly BumpEvent[] => {
         throw boom;
@@ -147,7 +148,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
   it("a throwing boot handler (registered pre-boot) reaches the sink with phase 'boot'", async () => {
     const { seen, onError } = collector();
     const boom = new Error("boot handler blew up");
-    const handle = run(fanoutMachine(), { onError });
+    const handle = run(fanoutMachine(), { interpret, onError });
     handle.onBoot(() => {
       throw boom;
     });
@@ -159,7 +160,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
   it("a throwing late onBoot handler (immediate fire, post-boot) reaches the sink with phase 'boot'", async () => {
     const { seen, onError } = collector();
     const boom = new Error("late boot handler blew up");
-    const runtime = await run(fanoutMachine(), { onError }).ready;
+    const runtime = await run(fanoutMachine(), { interpret, onError }).ready;
     runtime.onBoot(() => {
       throw boom;
     });
@@ -176,7 +177,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
         throw boom;
       },
     });
-    const runtime = await run(machine, { onError }).ready;
+    const runtime = await run(machine, { interpret, onError }).ready;
     // `sub_off` transitions the state so the reconcile pass removes the sub
     // and calls its (throwing) cleanup.
     await runtime.dispatch({ type: "sub_off" });
@@ -193,7 +194,7 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
         throw boom;
       },
     });
-    const runtime = await run(machine, { onError }).ready;
+    const runtime = await run(machine, { interpret, onError }).ready;
     await runtime.stop();
     expect(seen).toEqual([{ error: boom, context: { phase: "sub-cleanup" } }]);
   });
@@ -205,7 +206,7 @@ describe("vertical tracer: onError wired to a collector, console stays silent", 
     try {
       const { seen, onError } = collector();
       const boom = new Error("traced observer failure");
-      const runtime = await run(fanoutMachine(), { onError }).ready;
+      const runtime = await run(fanoutMachine(), { interpret, onError }).ready;
       runtime.observe(() => {
         throw boom;
       });

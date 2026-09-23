@@ -50,7 +50,14 @@
  *   });
  */
 
-import type { CmdOf, Interpret, Machine, Reducer, Sub } from "../../../index";
+import type {
+  CmdOf,
+  Interpret,
+  InterpretArg,
+  Machine,
+  Reducer,
+  Sub,
+} from "../../../index";
 import { applyCell, Cmd, msgKeysOf } from "../../../index";
 import { unchecked, undefinedOnly } from "../../schema";
 
@@ -146,9 +153,11 @@ export interface TelemetryConfig<S, M extends { type: string }> {
 // ===========================================================================
 
 /**
- * Wrap `base` with observe-only telemetry. Returns a NEW `Machine` over the
- * composed Model `{ base, $telemetry }`, with the base's Msgs/Cmds/Subs/Ctx
- * extended by the wrapper's own.
+ * Wrap `base` with observe-only telemetry. Takes the base machine together with
+ * the handlers it runs under (a machine carries none — #278) and returns a NEW
+ * `Machine` over the composed Model `{ base, $telemetry }` beside the composed
+ * `interpret`, with the base's Msgs/Cmds/Subs/Ctx extended by the wrapper's own.
+ * Run it as `run(wrapped.machine, { interpret: wrapped.interpret, ctx })`.
  *
  * The composed machine:
  *   - `init` rehydrates the base (honoring the `[loaded, []]` contract) and
@@ -158,9 +167,10 @@ export interface TelemetryConfig<S, M extends { type: string }> {
  *     the projected event. Base Cmds pass through UNCHANGED — the observe-only
  *     property.
  *   - `subscriptions` / `subscribe` are the base's, verbatim (no timers).
- *   - `interpret` is `{ ...base.interpret, "$telemetry:emit": sink-handler }`.
+ *   - `interpret` is `{ ...wired.interpret, "$telemetry:emit": sink-handler }`.
  *
- * @param base   any `Machine<S, M, C, U, Ctx>`.
+ * @param wired  any `Machine<S, M, C, U, Ctx>` as `machine`, beside its
+ *               `interpret` handlers.
  * @param config the telemetry knob (optional `event` projector).
  */
 export function withTelemetry<
@@ -170,15 +180,23 @@ export function withTelemetry<
   U extends Sub,
   Ctx,
 >(
-  base: Machine<S, M, C, U, Ctx>,
+  wired: { readonly machine: Machine<S, M, C, U, Ctx> } & InterpretArg<
+    M,
+    C,
+    Ctx
+  >,
   config: TelemetryConfig<S, M> = {},
-): Machine<
-  TelemetryModel<S>,
-  M,
-  C | TelemetryEmitCmd,
-  U,
-  Ctx & TelemetryPorts
-> {
+): {
+  readonly machine: Machine<
+    TelemetryModel<S>,
+    M,
+    C | TelemetryEmitCmd,
+    U,
+    Ctx & TelemetryPorts
+  >;
+  readonly interpret: Interpret<M, C | TelemetryEmitCmd, Ctx & TelemetryPorts>;
+} {
+  const base = wired.machine;
   const project = config.event;
 
   // The merged update is a flat Reducer over the composed Model. The composed
@@ -218,7 +236,7 @@ export function withTelemetry<
   // back (no feedback loop) AND it does NOT await the sink (no backpressure /
   // crash from a slow or failing sink). See the fire-and-forget note below.
   const baseInterpret =
-    (base as { interpret?: Interpret<M, C, Ctx> }).interpret ??
+    (wired as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
   // Namespace guard (mirrors the substrate's SubId / definePort collision
   // asserts). The spread below merges `$telemetry:emit` into the base's
@@ -269,8 +287,8 @@ export function withTelemetry<
   const baseSubscriptions = base.subscriptions;
   const baseSubscribe = (base as { subscribe?: unknown }).subscribe;
 
-  return {
-    init: (loaded, ctx) => {
+  const machine = {
+    init: (loaded: TelemetryModel<S> | null, ctx: Ctx & TelemetryPorts) => {
       // Rehydrate path: `loaded !== null` MUST return `[loaded, []]` (no Cmds) —
       // the substrate's replay enforces this. We split the composed loaded Model
       // into its base slice and feed the base its own loaded snapshot, so the
@@ -298,7 +316,6 @@ export function withTelemetry<
         }
       : {}),
     ...(baseSubscribe ? { subscribe: baseSubscribe } : {}),
-    interpret,
     // The base's `Cmd.define` list rides through so `run`'s interpret edge
     // still parses / stamps the base's settled Msgs behind the wrap (#66).
     ...(base.cmds ? { cmds: base.cmds } : {}),
@@ -309,4 +326,5 @@ export function withTelemetry<
     U,
     Ctx & TelemetryPorts
   >;
+  return { machine, interpret };
 }

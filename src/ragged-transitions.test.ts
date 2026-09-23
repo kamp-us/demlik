@@ -49,7 +49,6 @@ const machine = defineMachine<State, Msg, never, never, unknown>({
       collect: () => [{ type: "idle" }, []],
     },
   },
-  interpret: {},
 });
 
 describe("ragged transitions table (#203)", () => {

@@ -30,7 +30,14 @@
  * resolving.
  */
 
-import type { Cmd, CtxArg, Machine, Runtime, Sub } from "../../../index";
+import type {
+  Cmd,
+  CtxArg,
+  Machine,
+  RunHandlers,
+  Runtime,
+  Sub,
+} from "../../../index";
 import { run } from "../../../promise";
 
 /**
@@ -139,11 +146,13 @@ export function awaitTerminal<
  * on BOTH the resolve and reject paths. Wraps {@link awaitTerminal}.
  *
  * The seed carries the machine's `ctx` (conditionally optional, exactly as
- * `run`'s `ctx` — a pure machine omits it) and the `msgs` to dispatch once
+ * `run`'s `ctx` — a pure machine omits it), the handlers `run` takes beside the
+ * machine (`interpret`, optional `subscribe`), and the `msgs` to dispatch once
  * booted. A `timeoutMs` in `opts` bounds the await identically to `awaitTerminal`.
  *
  * @param machine    the machine to boot.
- * @param seed       `{ ctx?, msgs }` — the boot context and the seed messages.
+ * @param seed       `{ ctx?, interpret, msgs }` — the boot context, the
+ *                   handlers, and the seed messages.
  * @param isTerminal caller-supplied terminal predicate over the machine's state.
  * @param opts       optional bounded `timeoutMs` deadline (see {@link AwaitTerminalOptions}).
  */
@@ -155,19 +164,20 @@ export async function runToTerminal<
   Ctx,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  seed: CtxArg<Ctx> & { readonly msgs: readonly M[] },
+  seed: CtxArg<Ctx> &
+    NoInfer<RunHandlers<M, C, U, Ctx>> & { readonly msgs: readonly M[] },
   isTerminal: (state: S) => boolean,
   opts: AwaitTerminalOptions = {},
 ): Promise<S> {
-  // Split the seed messages out from the boot context: `run`'s opts don't carry
-  // `msgs`, so what remains is exactly the conditionally-optional `ctx` arg. The
-  // cast is because `CtxArg<Ctx>` is a deferred generic conditional TS won't
-  // verify against `run`'s all-optional opts (its weak-type check) — the value
-  // is structurally valid; `run` defaults an absent `ctx` to `{}`.
-  const { msgs, ...ctxArg } = seed;
+  // Split the seed messages out from the boot options: `run`'s opts don't carry
+  // `msgs`, so what remains is exactly the conditionally-optional `ctx` plus the
+  // handlers. The cast is because `CtxArg<Ctx>` / `InterpretArg` are deferred
+  // generic conditionals TS won't relate across the rest-spread — the value is
+  // structurally valid; `run` defaults an absent `ctx` to `{}`.
+  const { msgs, ...runOpts } = seed;
   const runtime = await run<S, M, C, U, Ctx>(
     machine,
-    ctxArg as Parameters<typeof run<S, M, C, U, Ctx>>[1],
+    runOpts as unknown as Parameters<typeof run<S, M, C, U, Ctx>>[1],
   ).ready;
   try {
     // Attach the terminal await BEFORE dispatching so a terminal transition that

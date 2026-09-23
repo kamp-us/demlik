@@ -3,7 +3,6 @@ import {
   defineMachine,
   detectUpdateForm,
   formOf,
-  type Interpret,
   type Reducer,
   replay,
   type Transitions,
@@ -31,7 +30,6 @@ function reducerMachine() {
     types: { model: {} as CounterState, msg: {} as CounterMsg, ctx: undefined },
     init: () => [{ count: 0 }, []],
     update,
-    interpret: {} as Interpret<CounterMsg, never, undefined>,
   });
 }
 
@@ -53,7 +51,6 @@ function transitionsMachine() {
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: () => [{ type: "red" }, []],
     update,
-    interpret: {} as Interpret<LightMsg, never, undefined>,
   });
 }
 
@@ -107,7 +104,6 @@ describe("__form is authoritative over the structural heuristic (#57)", () => {
       types: { model: {} as CState, msg: {} as CMsg, ctx: undefined },
       init: () => [{ n: 0 }, []],
       update,
-      interpret: {} as Interpret<CMsg, never, undefined>,
     });
     expect(m.__form).toBe("reducer");
     expect(formOf(m)).toBe("reducer");
@@ -118,7 +114,6 @@ describe("__form is authoritative over the structural heuristic (#57)", () => {
     const raw = {
       init: () => [{ n: 0 }, []] as const,
       update: { tick: (s: CState) => [{ n: s.n + 1 }, []] as const },
-      interpret: {},
     };
     expect((raw as { __form?: string }).__form).toBeUndefined();
     expect(formOf(raw as { update: object })).toBe("reducer");

@@ -10,7 +10,7 @@
  * raw kernel `run`. Each hidden thing is a named helper below.
  */
 
-import { defineMachine, type Machine } from "../index";
+import type { Machine } from "../index";
 import type { DeadlineSub, EndedRun } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { driveToDone, run } from "../promise";
@@ -169,7 +169,7 @@ export type DefinedAgentInterpret<T extends AnyToolDef> = Interpret<
   DefinedAgentCtx<T>
 >;
 
-/** The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. */
+/** The wired machine `defineAgent` builds per `input`. */
 export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
   DefinedAgentState<T>,
   DefinedAgentMsg<T>,
@@ -177,6 +177,28 @@ export type DefinedAgentMachine<T extends AnyToolDef> = Machine<
   DeadlineSub,
   DefinedAgentCtx<T>
 >;
+
+/**
+ * The machine `defineAgent` builds per `input` beside the interpret table it
+ * runs under — a machine carries no handlers (#278). Feed both to the raw
+ * `run`: `run(wired.machine, { interpret: wired.interpret, ctx })`.
+ */
+export type DefinedAgentWired<T extends AnyToolDef> = {
+  readonly machine: DefinedAgentMachine<T>;
+  readonly interpret: DefinedAgentInterpret<T>;
+};
+
+/** `run`'s options for a defined agent's machine. */
+type RunOptionsOf<T extends AnyToolDef> = Parameters<
+  typeof run<
+    DefinedAgentState<T>,
+    DefinedAgentMsg<T>,
+    DefinedAgentCmd<T>,
+    DeadlineSub,
+    DefinedAgentCtx<T>,
+    AgentEvent<ToolResult<T>>
+  >
+>[1];
 
 /**
  * The brain a defined agent runs, in either of its two shapes:
@@ -530,8 +552,11 @@ export interface DefinedAgent<T extends AnyToolDef> {
       ? [opts?: DefinedAgentRunOptions<T>]
       : [opts: DefinedAgentRunOptions<T>]
   ) => Promise<DefinedAgentResolvedState<T>>;
-  /** The machine `run` drives for `input` — the door down to the raw kernel. */
-  readonly machine: (input: string) => DefinedAgentMachine<T>;
+  /**
+   * The machine `run` drives for `input` and the interpret table it runs under
+   * — the door down to the raw kernel.
+   */
+  readonly machine: (input: string) => DefinedAgentWired<T>;
   /**
    * The ramp between the lid and `createAgent`: wrap ONE interpret cell of the
    * machine this agent builds and get back a NEW defined agent that runs the
@@ -622,7 +647,7 @@ function definedAgent<T extends AnyToolDef>(
   const machineWith = (
     input: string,
     onChunk: ((chunk: TurnChunk) => void) | undefined,
-  ): DefinedAgentMachine<T> => {
+  ): DefinedAgentWired<T> => {
     const brain = brainOf(config.model, onChunk);
     // The half of the core config that does not depend on whether compaction is
     // configured. Spread into BOTH arms below rather than mutated into one, so
@@ -664,14 +689,16 @@ function definedAgent<T extends AnyToolDef>(
     // widen the config to a bare optional, which is the very type lie the
     // discriminant exists to refuse.
     const compaction = config.compaction;
-    const agent: DefinedAgentMachine<T> =
+    const agent: DefinedAgentWired<T> =
       compaction === undefined
-        ? // The one assertion in the pair, and it widens the Cmd union rather
-          // than the interpret obligation: this machine's `AgentCmd` fixes
-          // compaction OFF, `DefinedAgentMachine` names the ON superset, and the
-          // gap is the `compact_run` Cmd a policy-less reducer provably never
-          // emits. Widening a union nothing can produce is sound; the reverse —
-          // claiming a cell that is not wired — is what the discriminant refuses.
+        ? // The one assertion in the pair, and it widens the Cmd union: this
+          // machine's `AgentCmd` fixes compaction OFF, `DefinedAgentMachine`
+          // names the ON superset, and the gap is the `compact_run` Cmd a
+          // policy-less reducer provably never emits. Widening a union nothing
+          // can produce is sound. The table beside it is read at that same
+          // superset type, and it holds no `compact_run` cell — the Cmd it would
+          // serve never fires, and `overlaid` reads the table's own keys, so an
+          // overlay naming that cell still gets the "has none" throw.
           (createAgent<
             string,
             LidPurpose,
@@ -681,20 +708,25 @@ function definedAgent<T extends AnyToolDef>(
             AgentMessage
           >(core).toMachine<DefinedAgentCtx<T>, T>({
             tools,
-          }) as DefinedAgentMachine<T>)
+          }) as unknown as DefinedAgentWired<T>)
         : compactingMachine(core, compaction, brain, tools);
     return overlaid(agent, overlays);
   };
   // The public door down carries no chunk sink: `machine(input)` is handed to
   // the raw kernel by a caller who has no run options to read one from.
-  const machine = (input: string): DefinedAgentMachine<T> =>
+  const machine = (input: string): DefinedAgentWired<T> =>
     machineWith(input, undefined);
   const drive: DefinedAgent<T>["run"] = (input, ...[opts = noHost<T>()]) => {
     const { onEvent, onChunk } = opts;
     // No listener → no projector, so an omitted `onEvent` leaves the run the
     // kernel wiring it always had.
-    const handle = run(machineWith(input, onChunk), {
+    const wired = machineWith(input, onChunk);
+    // The `interpret` table is checked where it is built; over the generic `T`
+    // TS defers `run`'s conditional `InterpretArg` and cannot relate the two, so
+    // the options are read at `run`'s own parameter type.
+    const handle = run(wired.machine, {
       ...opts,
+      interpret: wired.interpret,
       terminal: isEnded,
       events:
         onEvent === undefined
@@ -702,7 +734,7 @@ function definedAgent<T extends AnyToolDef>(
           : agentEvents<string, LidPurpose, LidOutputs, ToolResult<T>, T>({
               tools,
             }),
-    });
+    } as unknown as RunOptionsOf<T>);
     if (onEvent !== undefined) forwardEvents(handle, onEvent);
     if (onToolError !== undefined) {
       forwardLadderErrors(handle, router, onToolError);
@@ -745,21 +777,21 @@ function definedAgent<T extends AnyToolDef>(
  *
  * A cell nobody names is carried over by REFERENCE, which is what "unnamed
  * cells untouched" means literally: the wrapped table holds the same functions
- * for every other key. The machine is rebuilt as a new object rather than
- * mutated, because the same `defineAgent` config builds a fresh machine per
- * `input` and per overlay stack, and it goes back through `defineMachine` so
- * the `__form` tag a spread drops is stamped again.
+ * for every other key. Only the interpret table is rebuilt — as a new object
+ * rather than mutated, because the same `defineAgent` config builds a fresh
+ * pair per `input` and per overlay stack. The machine itself carries no
+ * handlers (#278), so an overlay never touches it.
  *
  * An unknown key throws HERE rather than at `with`: the table to check a name
  * against is the machine's, and the machine exists only per `input`.
  */
 function overlaid<T extends AnyToolDef>(
-  machine: DefinedAgentMachine<T>,
+  wired: DefinedAgentWired<T>,
   overlays: readonly InterpretOverlay<T>[],
-): DefinedAgentMachine<T> {
-  if (overlays.length === 0) return machine;
+): DefinedAgentWired<T> {
+  if (overlays.length === 0) return wired;
   type Cell = (...args: never[]) => Promise<unknown>;
-  const cells = { ...(machine.interpret as Record<string, Cell>) };
+  const cells = { ...(wired.interpret as Record<string, Cell>) };
   for (const overlay of overlays) {
     const wrappers = overlay as unknown as Record<string, (next: Cell) => Cell>;
     for (const [type, wrap] of Object.entries(wrappers)) {
@@ -774,10 +806,10 @@ function overlaid<T extends AnyToolDef>(
       cells[type] = wrap(cell);
     }
   }
-  return defineMachine({
-    ...machine,
+  return {
+    machine: wired.machine,
     interpret: cells as DefinedAgentInterpret<T>,
-  } as DefinedAgentMachine<T>);
+  };
 }
 
 // ===========================================================================
@@ -866,7 +898,7 @@ function compactingMachine<T extends AnyToolDef>(
   knob: DefineAgentCompaction,
   brain: PlainModel<AgentMessage, AgentTurn>,
   tools: ToolRouter<T>,
-): DefinedAgentMachine<T> {
+): DefinedAgentWired<T> {
   const agent = createAgent<
     string,
     LidPurpose,
@@ -879,7 +911,9 @@ function compactingMachine<T extends AnyToolDef>(
     tools,
     toolInterpret: { compact_run: summarizeWith(brain) },
   } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
-  return agent.toMachine<DefinedAgentCtx<T>, T>(wiring);
+  return agent.toMachine<DefinedAgentCtx<T>, T>(
+    wiring,
+  ) as unknown as DefinedAgentWired<T>;
 }
 
 /**

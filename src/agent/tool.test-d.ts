@@ -168,7 +168,7 @@ const agent = createAgent<Stage, Purpose, Outputs, R, ToolCmd<Tool>, unknown>({
 
 // With the router wired, `toolInterpret` owes nothing: every tool cell is the
 // router's, snapshotting and compaction are off.
-const machine = agent.toMachine({ tools });
+const { machine, interpret } = agent.toMachine({ tools });
 
 // Without the router, the consumer still owes a cell per tool Cmd — the
 // pre-#56 contract is unchanged.
@@ -198,13 +198,13 @@ void cell;
 const kb: Kb = { lookup: () => undefined };
 
 // POSITIVE: the slice `search` needs is supplied.
-run(machine, { ctx: { kb } });
+run(machine, { ctx: { kb }, interpret });
 
 // NEGATIVE: `search`'s handler reads `kb`; a ctx without it does not compile.
 // @ts-expect-error ctx lacks `kb`
-run(machine, { ctx: {} });
+run(machine, { ctx: {}, interpret });
 // @ts-expect-error ctx cannot be omitted while a tool's handler reads a key
-run(machine, {});
+run(machine, { interpret });
 
 // ── 4. a reserved name does not compile (#72) ───────────────────────────────
 

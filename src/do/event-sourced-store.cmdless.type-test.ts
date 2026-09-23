@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 /**
  * Compile-time regression test for #195 — `doEventSourcedStore` must accept a
- * CMDLESS grain (`Cmd = never`) WITHOUT a cast and WITHOUT a no-op `interpret`.
+ * CMDLESS grain (`Cmd = never`) WITHOUT a cast.
  *
  * This is a *type-level* test: it has no runtime assertions and is never
  * executed. It is intentionally NOT a `*.test.ts` (so vitest skips it) and NOT a
@@ -12,11 +12,12 @@
  * surface, so the build fails if the relaxation ever regresses.
  *
  * Before #195 — when `doEventSourcedStore` pinned its machine param to the base
- * `Cmd`/`Sub`, forcing `interpret` structurally required — the cmdless call
+ * `Cmd`/`Sub`, which then made a machine's `interpret` required — the cmdless call
  * below FAILED TO COMPILE (the exact friction vortex documented with a cast in
  * `services/vortex/src/arena/room.ts`). It now compiles cleanly.
  */
 import { defineMachine } from "../index";
+import { run } from "../promise";
 import { doEventSourcedStore } from "./event-sourced-store";
 
 interface CmdlessState {
@@ -26,9 +27,8 @@ interface CmdlessState {
 type CmdlessMsg = { readonly type: "inc" };
 type CmdlessCtx = Record<string, never>;
 
-// A cmdless grain: `Cmd = never`, so the `Machine` conditional relaxes
-// `interpret` to optional and this machine legitimately declares none — exactly
-// the shape of vortex's `ArenaCmd = never` arena grain.
+// A cmdless grain: `Cmd = never` — exactly the shape of vortex's
+// `ArenaCmd = never` arena grain.
 const cmdlessMachine = defineMachine({
   types: {
     model: {} as CmdlessState,
@@ -44,9 +44,9 @@ const cmdlessMachine = defineMachine({
 declare const storage: DurableObjectStorage;
 declare const ctx: CmdlessCtx;
 
-// THE REGRESSION ASSERTION — no cast, no explicit type args, no `interpret`.
-// On the pre-#195 types this line did not compile (the base-`Cmd` machine param
-// made `interpret` structurally required). `C` now infers to `never`.
+// THE REGRESSION ASSERTION — no cast, no explicit type args. On the pre-#195
+// types this line did not compile (the base-`Cmd` machine param made
+// `interpret` required). `C` now infers to `never`.
 export const cmdlessStore = doEventSourcedStore(storage, cmdlessMachine, ctx, {
   snapshotEvery: 10,
 });
@@ -61,9 +61,9 @@ type _AssertHandle = typeof cmdlessStore extends {
   : never;
 export const _assertHandle: _AssertHandle = true;
 
-// Positive control: a COMMANDFUL grain still type-checks when it provides the
-// `interpret` the conditional requires — proving the change is a relaxation
-// scoped to `Cmd = never`, not a loosening of the guard for real commands.
+// Positive control: a COMMANDFUL grain still type-checks. The store takes no
+// handlers; they go to `run`, which still demands them for real commands —
+// the relaxation is scoped to `Cmd = never`, not a loosening of that guard.
 type CmdfulCmd = { readonly type: "persist"; readonly payload: string };
 const cmdfulMachine = defineMachine({
   types: {
@@ -79,9 +79,15 @@ const cmdfulMachine = defineMachine({
       [{ type: "persist", payload: "x" }],
     ],
   },
-  interpret: {
-    persist: async () => {},
-  },
 });
 
 export const cmdfulStore = doEventSourcedStore(storage, cmdfulMachine, ctx);
+
+export const cmdfulRun = run(cmdfulMachine, {
+  ctx,
+  interpret: { persist: async () => {} },
+});
+// @ts-expect-error — a commandful grain run without handlers is refused.
+export const unwiredRun = run(cmdfulMachine, { ctx });
+// A cmdless grain runs with none.
+export const cmdlessRun = run(cmdlessMachine, { ctx });

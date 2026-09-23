@@ -11,7 +11,14 @@
 // writes a type argument, a `Settled<…>` union, or a `Reducer<…>` annotation.
 
 import { z } from "zod";
-import { Cmd, defineMachine, type NoCtx, type Reducer } from "../index";
+import {
+  Cmd,
+  defineMachine,
+  type Interpret,
+  type Machine,
+  type NoCtx,
+  type Reducer,
+} from "../index";
 import { run } from "../promise";
 
 type Http = { readonly get: (url: string) => Promise<string> };
@@ -51,19 +58,11 @@ const machine = defineMachine({
     audit_ok: (m) => [m, []],
     audit_err: (m) => [m, []],
   },
-  interpret: {
-    // `ctx` is typed from `types.ctx`.
-    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
-    audit: async (cmd, ctx) => {
-      await ctx.audit.write(cmd.line);
-      return ctx.ok({ written: true });
-    },
-  },
 });
 
 // ── 2. inside `update`, a settled cell's `msg` is the settled Msg ───────────
 
-defineMachine({
+const settled = defineMachine({
   types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
   cmds: [lookup],
   init: () => [{ name: null, note: "" }, []],
@@ -75,9 +74,6 @@ defineMachine({
       return [m, []];
     },
     lookup_err: (m) => [m, []],
-  },
-  interpret: {
-    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
   },
 });
 
@@ -96,15 +92,40 @@ const onlyUserCells: Reducer<Model, Msg, ReturnType<typeof lookup>> = {
 const notEnough: typeof machine.update = onlyUserCells;
 void notEnough;
 
-// ── 3. `run` demands the machine's plain ctx ────────────────────────────────
+// ── 3. `run` demands the machine's plain ctx and types its handlers ─────────
 
 declare const http: Http;
 declare const auditor: Audit;
 
-void run(machine, { ctx: { http, audit: auditor } });
+void run(machine, {
+  ctx: { http, audit: auditor },
+  interpret: {
+    // `cmd` and `ctx` are typed from the machine: `cmds` and `types.ctx`.
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
+    audit: async (cmd, ctx) => {
+      await ctx.audit.write(cmd.line);
+      return ctx.ok({ written: true });
+    },
+  },
+});
+
+void run(settled, {
+  ctx: { http },
+  interpret: {
+    lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
+  },
+});
+
+// The machine's own handler table, read off its type, so the case below fails
+// on `ctx` alone.
+type MachineInterpret =
+  typeof machine extends Machine<infer _S, infer M, infer C, infer _U, infer X>
+    ? Interpret<M, C, X>
+    : never;
+declare const machineInterpret: MachineInterpret;
 
 // @ts-expect-error — `audit` missing from ctx; `types.ctx` binds.
-void run(machine, { ctx: { http } });
+void run(machine, { ctx: { http }, interpret: machineInterpret });
 
 // ── 4. the Transitions (2-D table) form works through `types` the same way ──
 
@@ -138,12 +159,14 @@ const table = defineMachine({
       lookup_err: (s) => [s, []],
     },
   },
+});
+
+void run(table, {
+  ctx: { http },
   interpret: {
     lookup: async (cmd, ctx) => ctx.ok({ name: await ctx.http.get(cmd.id) }),
   },
 });
-
-void run(table, { ctx: { http } });
 
 // ── 5. hand-written Cmd / Sub unions ride `types.cmd` / `types.sub` ─────────
 //
@@ -167,6 +190,11 @@ const handWritten = defineMachine({
     bump: (m) => [{ n: m.n + 1 }, [{ type: "persist", n: m.n + 1 }]],
     saved: (m) => [m, []],
   },
+});
+
+declare const db: DbCtx["db"];
+void run(handWritten, {
+  ctx: { db },
   interpret: {
     persist: async (cmd, ctx) => {
       await ctx.db.put(cmd.n);
@@ -175,10 +203,7 @@ const handWritten = defineMachine({
   },
 });
 
-declare const db: DbCtx["db"];
-void run(handWritten, { ctx: { db } });
-
-// ── 6. a pure machine: no cmds, no ctx, `interpret` stays optional ──────────
+// ── 6. a pure machine: no cmds, no ctx, `run` needs no `interpret` ──────────
 
 const pure = defineMachine({
   types: { model: {} as { readonly n: number }, msg: {} as { type: "tick" } },

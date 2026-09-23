@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   applyCell,
   defineMachine,
-  type Interpret,
   msgKeysOf,
   NoCellError,
   type Reducer,
@@ -60,7 +59,6 @@ function raggedMachine() {
     types: { model: {} as DynState, msg: {} as DynMsg, ctx: undefined },
     init: (_loaded) => [{ type: "idle" }, []],
     update: raggedTable() as unknown as Transitions<DynState, DynMsg, never>,
-    interpret: {} as Interpret<DynMsg, never, undefined>,
   });
 }
 
@@ -129,7 +127,6 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
       types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
       init: (_loaded) => [{ type: "red" }, []],
       update,
-      interpret: {} as Interpret<LightMsg, never, undefined>,
     });
     // The union and the old first-row reading agree — that is what "total"
     // means, and it is why the widening cannot change any existing machine.
@@ -155,7 +152,7 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
 
 describe("the wrappers stop losing cells for a ragged base", () => {
   it("withTelemetry builds a cell for a Msg that lives only in a later row", () => {
-    const wrapped = withTelemetry(raggedMachine());
+    const wrapped = withTelemetry({ machine: raggedMachine() }).machine;
     // The under-enumeration bug surfaced HERE: no cell for "late" in the
     // wrapped flat record → NoCellError at dispatch for a Msg the base
     // handles. Stepping the wrapped machine must now succeed.
@@ -191,8 +188,9 @@ describe("the wrappers stop losing cells for a ragged base", () => {
         // the wrapper used to accept the base and then silently clobber it.
         busy: { "$deadline:exceeded": (s: DynState) => [s, []] },
       } as unknown as Transitions<DynState, DynMsg, never>,
-      interpret: {} as Interpret<DynMsg, never, undefined>,
     });
-    expect(() => withDeadline(squatter, { ms: 10 })).toThrow(/\$deadline:/);
+    expect(() => withDeadline({ machine: squatter }, { ms: 10 })).toThrow(
+      /\$deadline:/,
+    );
   });
 });

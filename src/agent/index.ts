@@ -1402,13 +1402,20 @@ export function createAgent<
         boolean,
         Ctx
       >;
-  }): Machine<
-    State,
-    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
-    AgentCmd<P, TC, boolean, boolean>,
-    DeadlineSub,
-    Ctx & ToolsCtx<T>
-  > {
+  }): {
+    readonly machine: Machine<
+      State,
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      AgentCmd<P, TC, boolean, boolean>,
+      DeadlineSub,
+      Ctx & ToolsCtx<T>
+    >;
+    readonly interpret: Interpret<
+      AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+      AgentCmd<P, TC, boolean, boolean>,
+      Ctx & ToolsCtx<T>
+    >;
+  } {
     type M = AgentMachineMsg<P, O, R> | WiredToolMsg<T>;
     const tools = opts?.tools;
     // The implementation is typed at `Snap = boolean` — the SUPERSET that
@@ -1546,10 +1553,10 @@ export function createAgent<
     >;
 
     // Build the machine as a fully-typed `Machine<...>` const, then pass it
-    // through `defineMachine`'s identity. Annotating the const resolves the
-    // `Machine` type's conditional `interpret` requirement against the concrete
+    // through `defineMachine`'s identity. Annotating the const pins the concrete
     // type params here; calling `defineMachine` with explicit type args instead
-    // would defer that conditional over the generic `TC` and fail the overload.
+    // would defer the `Machine` type's conditionals over the generic `TC` and
+    // fail the overload.
     //
     // The machine's Cmd type is the config-derived `ACmd`. `update` is the
     // `AgentCmd<P, TC>` superset reducer; narrowing it to `Reducer<State, M,
@@ -1563,16 +1570,15 @@ export function createAgent<
       update: update as Reducer<State, M, ACmd>,
       subscriptions: (s) => subs(s),
       subscribe: { deadline: subscribeDeadline },
-      // `interpret` is already checked as `Interpret<M, ACmd, Ctx>` where it is
-      // built. `Machine`'s field is conditional on `[ACmd] extends
-      // [Cmd<never>]` and each cell on whether its Cmd is `Cmd.define`d (ADR
-      // 0021); over the generic `TC` TS defers both and cannot relate the two
-      // mapped types, so the checked table is handed over unrelated here. The
-      // field leaves `Machine` in #278.
-      interpret: interpret as never,
       ...(tools !== undefined ? { cmds: tools.defs } : {}),
     };
-    return defineMachine(machine);
+    // The machine carries no handlers (#278): `interpret` rides beside it, for
+    // the caller to hand `run`. It is already checked as `Interpret<M, ACmd,
+    // Ctx>` where it is built; each cell's form is conditional on whether its
+    // Cmd is `Cmd.define`d (ADR 0021), and over the generic `TC` TS defers that
+    // and cannot relate the two mapped types, so the checked table is handed
+    // over unrelated here.
+    return { machine: defineMachine(machine), interpret: interpret as never };
   }
 
   return {

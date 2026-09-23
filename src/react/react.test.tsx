@@ -64,6 +64,88 @@ afterEach(async () => {
   container.remove();
 });
 
+type LabelState = { readonly label: string };
+type LabelMsg =
+  | { readonly type: "load" }
+  | { readonly type: "loaded"; readonly label: string };
+type LabelCmd = { readonly type: "read_label" };
+
+function labelMachine() {
+  const update: Reducer<LabelState, LabelMsg, LabelCmd> = {
+    load: (s) => [s, [{ type: "read_label" }]],
+    loaded: (_s, m) => [{ label: m.label }, []],
+  };
+  return defineMachine({
+    types: {
+      model: {} as LabelState,
+      msg: {} as LabelMsg,
+      cmd: {} as LabelCmd,
+      ctx: undefined,
+    },
+    init: () => [{ label: "none" }, []],
+    update,
+  });
+}
+
+describe("useMachine — handlers at the hook (#278)", () => {
+  it("runs the machine's Cmds through the `interpret` handed to the hook", async () => {
+    let dispatch: ((msg: LabelMsg) => Promise<void>) | null = null;
+    const machine = labelMachine();
+
+    function Label() {
+      const [state, d] = useMachine(machine, {
+        ctx: undefined,
+        interpret: {
+          read_label: async () => ({ type: "loaded", label: "done" }),
+        },
+      });
+      dispatch = d;
+      return <span>{state.label}</span>;
+    }
+
+    await act(async () => {
+      root.render(<Label />);
+    });
+    await act(async () => {
+      await dispatch?.({ type: "load" });
+    });
+    expect(container.textContent).toBe("done");
+  });
+
+  it("reads the latest render's handler without rebooting the runtime", async () => {
+    let dispatch: ((msg: LabelMsg) => Promise<void>) | null = null;
+    const machine = labelMachine();
+    const runtimes = new Set<unknown>();
+
+    function Label({ suffix }: { readonly suffix: string }) {
+      const [state, d] = useMachine(machine, {
+        ctx: undefined,
+        // A fresh table every render, closing over the prop.
+        interpret: {
+          read_label: async () => ({ type: "loaded", label: `v-${suffix}` }),
+        },
+      });
+      dispatch = d;
+      runtimes.add(d);
+      return <span>{state.label}</span>;
+    }
+
+    await act(async () => {
+      root.render(<Label suffix="1" />);
+    });
+    await act(async () => {
+      root.render(<Label suffix="2" />);
+    });
+    await act(async () => {
+      await dispatch?.({ type: "load" });
+    });
+
+    expect(container.textContent).toBe("v-2");
+    // One runtime across both renders: the inline table never re-keyed it.
+    expect(runtimes.size).toBe(1);
+  });
+});
+
 describe("useMachine", () => {
   it("renders the machine's state and re-renders on dispatch", async () => {
     let dispatch: ((msg: CounterMsg) => Promise<void>) | null = null;
@@ -236,7 +318,7 @@ describe("useMachine — loud on discard", () => {
         await park;
       },
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as WizardState,
         msg: {} as WizardMsg,
@@ -245,11 +327,14 @@ describe("useMachine — loud on discard", () => {
       },
       init: () => [{ step: 0 }, []],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
-  function mountWizard(machine: ReturnType<typeof wizardMachine>) {
+  function mountWizard({
+    machine,
+    interpret,
+  }: ReturnType<typeof wizardMachine>) {
     let dispatch: ((msg: WizardMsg) => Promise<void>) | null = null;
     function Wizard({ userId }: { userId: string }) {
       // The defect's exact shape: the ctx is DERIVED from a value the flow
@@ -257,7 +342,7 @@ describe("useMachine — loud on discard", () => {
       // across renders and mints exactly one fresh identity when `userId`
       // changes, which is the moment the runtime is replaced.
       const ctx = useMemo<WizardCtx>(() => ({ userId }), [userId]);
-      const [state, d] = useMachine(machine, { ctx });
+      const [state, d] = useMachine(machine, { ctx, interpret });
       dispatch = d;
       return <span>{state.step}</span>;
     }

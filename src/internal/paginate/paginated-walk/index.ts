@@ -88,7 +88,9 @@
  *   },
  *   subscriptions: (s) => walk.subs(s.walk),
  *   subscribe: { deadline: subscribeDeadline },
- *   interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }),
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }) });
  */
 
 import type { Cmd } from "../../../index";
@@ -614,7 +616,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
    * `pageOk`), failure → `resilient_err` (handled by `pageErr`), each stamped
    * with `Date.now()` at the effect boundary (the ONE permitted clock read).
    *
-   *   interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) })
+   *   run(machine, { interpret: walk.handlers({ run: (cursor) => api.fetchPage(cursor) }) })
    *
    * The consumer maps the inherited Msg types to their `pageOk` / `pageErr`
    * reducer cells (the wire shape is `resilient_ok` / `resilient_err`).

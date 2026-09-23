@@ -1,9 +1,6 @@
-import { type Cmd, defineMachine } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
-import {
-  createIntake,
-  type IntakeState,
-} from "@demlik/tea/idempotency";
+import { createIntake, type IntakeState } from "@demlik/tea/idempotency";
 
 interface PaymentEvent {
   readonly id: string;
@@ -133,22 +130,23 @@ export const webhookIntake = defineMachine({
       ];
     },
   },
-
-  interpret: {
-    run_charge: async (cmd, ctx): Promise<Msg> => {
-      const receipt = ctx.charge(cmd.event);
-      console.log(
-        `  enqueue+process  ${cmd.event.id}  →  ${receipt.ledgerEntry} ($${(receipt.amountCents / 100).toFixed(2)} for ${receipt.customer})`,
-      );
-      return { type: "worker_done", key: cmd.key, receipt, at: cmd.at };
-    },
-    serve_cached: async (cmd) => {
-      console.log(
-        `  replay-cached    ${cmd.key}  →  ${cmd.receipt.ledgerEntry} (no re-charge, original result served)`,
-      );
-    },
-  },
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+export const webhookIntakeInterpret: Interpret<Msg, AppCmd, Ctx> = {
+  run_charge: async (cmd, ctx): Promise<Msg> => {
+    const receipt = ctx.charge(cmd.event);
+    console.log(
+      `  enqueue+process  ${cmd.event.id}  →  ${receipt.ledgerEntry} ($${(receipt.amountCents / 100).toFixed(2)} for ${receipt.customer})`,
+    );
+    return { type: "worker_done", key: cmd.key, receipt, at: cmd.at };
+  },
+  serve_cached: async (cmd) => {
+    console.log(
+      `  replay-cached    ${cmd.key}  →  ${cmd.receipt.ledgerEntry} (no re-charge, original result served)`,
+    );
+  },
+};
 
 async function main() {
   let serial = 0;
@@ -161,7 +159,10 @@ async function main() {
     };
   };
 
-  const runtime = await run(webhookIntake, { ctx: { charge } }).ready;
+  const runtime = await run(webhookIntake, {
+    interpret: webhookIntakeInterpret,
+    ctx: { charge },
+  }).ready;
 
   const inbox: readonly { event: PaymentEvent; at: number }[] = [
     {

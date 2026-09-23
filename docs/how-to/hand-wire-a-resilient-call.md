@@ -109,7 +109,7 @@ import { defineMachine } from "@demlik/tea";
 import { subscribeDeadline } from "@demlik/tea/resilience";
 
 export function userMachine(fetchUser: (id: string) => Promise<User>) {
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as UserState,
       msg: {} as UserMsg,
@@ -139,9 +139,11 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
     // 4. Arm a timer for every call that is waiting to retry.
     subscriptions: (s) => rc.subs(s.call),
     subscribe: { deadline: subscribeDeadline },
-    // 5. Run the port. The handler returns the settle Msg; it never dispatches.
-    interpret: rc.handlers({ run: (id) => fetchUser(id) }),
   });
+  // 5. Run the port. The handler returns the settle Msg; it never dispatches.
+  //    Hand it to `run` beside the machine: `run(machine, { interpret })`.
+  const interpret = rc.handlers({ run: (id) => fetchUser(id) });
+  return { machine, interpret };
 }
 ```
 
@@ -161,7 +163,8 @@ Two things to know:
 
 ## When #273 lands
 
-[#273](https://github.com/kamp-us/demlik/issues/273) moves `interpret` and
-`subscribe` out of the machine and into `run(machine, { interpret, subscribe })`,
-and ships the timer built in. Step 4's `subscribe` and `interpret` lines move
-then. The `update` cells and `onSettle` stay as they are.
+[#273](https://github.com/kamp-us/demlik/issues/273) moves the handlers out of
+the machine. `interpret` has already moved: step 5 hands it to
+`run(machine, { interpret })`. `subscribe` has not yet — it moves to `run` next,
+along with a built-in timer, and step 4's `subscribe` line moves then. The
+`update` cells and `onSettle` stay as they are.

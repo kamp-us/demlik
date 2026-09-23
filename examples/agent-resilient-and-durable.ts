@@ -103,14 +103,16 @@ const toolStep = defineMachine({
     // The follow-up the base interpret returns on success — records the result.
     tool_ok: (_s, m) => [{ status: "done", result: m.result }, []],
   },
-  interpret: {
-    // The TARGET's base handler — the actual fallible work the wrapper wraps.
-    call_tool: async (cmd, ctx): Promise<ToolMsg> => {
-      const result = await ctx.weather(cmd.city);
-      return { type: "tool_ok", result };
-    },
-  },
 });
+
+// The machine is data; its handlers ride beside it, and `run` takes them.
+const toolStepInterpret: Interpret<ToolMsg, CallTool, ToolCtx> = {
+  // The TARGET's base handler — the actual fallible work the wrapper wraps.
+  call_tool: async (cmd, ctx): Promise<ToolMsg> => {
+    const result = await ctx.weather(cmd.city);
+    return { type: "tool_ok", result };
+  },
+};
 
 async function act1Reliability() {
   line("ACT 1 — RELIABILITY: the retry you do not write");
@@ -129,7 +131,7 @@ async function act1Reliability() {
 
   // ONE line of wrapping. The base `toolStep` knows nothing about any of it.
   const resilient = withResilience(
-    toolStep,
+    { machine: toolStep, interpret: toolStepInterpret },
     {
       target: "call_tool", // harden THIS Cmd; everything else passes through
       at: (m) => (m.type === "call" ? m.at : 0), // cold-gate wall time, as data
@@ -147,7 +149,10 @@ async function act1Reliability() {
   );
   const guarded = withDeadline(resilient, { ms: 10_000 });
 
-  const runtime = await run(guarded, { ctx }).ready;
+  const runtime = await run(guarded.machine, {
+    ctx,
+    interpret: guarded.interpret,
+  }).ready;
 
   say("the agent dispatched ONE tool call: weather('Istanbul')");
   await runtime.dispatch({ type: "call", city: "Istanbul", at: Date.now() });
@@ -392,8 +397,9 @@ async function act2Durability() {
   //     model's script continues at turn #1 (the empty turn that finishes
   //     research); in production the prompt is rebuilt from the durable turns. ---
   const agentB = makeAgent({ i: 1 });
-  const machineB = agentB.toMachine<object>({ toolInterpret: toolInterpret() });
-  const runtimeB = await run(machineB, {
+  const wiredB = agentB.toMachine<object>({ toolInterpret: toolInterpret() });
+  const runtimeB = await run(wiredB.machine, {
+    interpret: wiredB.interpret,
     ctx: {} as object,
     store: snapshotStore(snapshot),
   }).ready;
@@ -437,8 +443,11 @@ async function act3Replay() {
   // --- IN PROD: run the agent end to end, recording every Msg. ---
   const cursor = { i: 0 };
   const agent = makeAgent(cursor);
-  const machine = agent.toMachine<object>({ toolInterpret: toolInterpret() });
-  const runtime = await run(machine, { ctx: {} as object }).ready;
+  const wired = agent.toMachine<object>({ toolInterpret: toolInterpret() });
+  const runtime = await run(wired.machine, {
+    interpret: wired.interpret,
+    ctx: {} as object,
+  }).ready;
   const rec = recorder<ResearchState, AgentMsg>(runtime);
 
   say("prod: recording the Msg trace of a full agent run...");
@@ -458,7 +467,7 @@ async function act3Replay() {
   // never `interpret`, so the fake model + tools are NEVER called again.
   const sameMachine = makeAgent({ i: 0 }).toMachine<object>({
     toolInterpret: toolInterpret(),
-  });
+  }).machine;
   const onSame = replayTrace(sameMachine, trace, {} as object);
   say(`\nreplayTrace(same reducer)   matches: ${onSame.matches}`);
   say(
@@ -492,7 +501,9 @@ async function act3Replay() {
  */
 function buildBuggyMachine(): ResearchMachine {
   const agent = makeAgent({ i: 0 });
-  const good = agent.toMachine<object>({ toolInterpret: toolInterpret() });
+  const good = agent.toMachine<object>({
+    toolInterpret: toolInterpret(),
+  }).machine;
 
   // The agent's `update` is a flat `Reducer` (one cell per Msg.type). Spread it,
   // then override the `resilient_ok` cell to plant the leak.
@@ -526,7 +537,6 @@ function buildBuggyMachine(): ResearchMachine {
     update: buggyUpdate,
     subscriptions: good.subscriptions,
     subscribe: good.subscribe,
-    interpret: good.interpret,
   });
 }
 

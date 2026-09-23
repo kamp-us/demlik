@@ -657,7 +657,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
       },
       snapshot_load_failed: (s) => [s, []],
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as RecState,
         msg: {} as RecMsg,
@@ -670,14 +670,20 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
           ? [loaded, []]
           : [{ run: { step: 0 }, snap: recKnob.init() }, []],
       update,
-      interpret: { ...recKnob.handlers({ store }) },
     });
+    return { machine, interpret: { ...recKnob.handlers({ store }) } };
+  }
+
+  // Run the recovery machine under the snapshot handlers bound to `store`.
+  function runRecovery(store: SnapshotStore<RunState>) {
+    const { machine, interpret } = recoveryMachine(store);
+    return run(machine, { ctx: undefined, interpret });
   }
 
   it("recovers the checkpointed run state: a fresh boot + dispatch(boot) restores step from the store", async () => {
     // The store already holds a checkpoint from a previous (crashed) run.
     const store = makeStore({ key: "run/cp", value: { step: 17 } });
-    const runtime = await run(recoveryMachine(store), { ctx: undefined }).ready;
+    const runtime = await runRecovery(store).ready;
 
     // Fresh init started at step 0 — prove the precondition.
     expect(runtime.getState().run.step).toBe(0);
@@ -695,7 +701,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
 
   it("keeps the fresh-init state when the store has no checkpoint (null payload)", async () => {
     const store = makeStore(); // empty — no prior checkpoint
-    const runtime = await run(recoveryMachine(store), { ctx: undefined }).ready;
+    const runtime = await runRecovery(store).ready;
 
     await runtime.dispatch({ type: "boot" });
     await runtime.stop();
@@ -708,15 +714,14 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
     const store = makeStore();
 
     // Phase 1: a run that checkpoints. every:2 → the 2nd progress writes step 2.
-    const writer = await run(recoveryMachine(store), { ctx: undefined }).ready;
+    const writer = await runRecovery(store).ready;
     await writer.dispatch({ type: "progress", at: 1 });
     await writer.dispatch({ type: "progress", at: 2 }); // emits snapshot_write(step 2)
     await writer.stop(); // drains the write → store now holds { step: 2 }
 
     // Phase 2: a brand-new runtime (simulating a restart) recovers from the
     // durable checkpoint the first run left behind.
-    const restarted = await run(recoveryMachine(store), { ctx: undefined })
-      .ready;
+    const restarted = await runRecovery(store).ready;
     expect(restarted.getState().run.step).toBe(0); // fresh before recovery
     await restarted.dispatch({ type: "boot" });
     await restarted.stop();

@@ -59,30 +59,31 @@ describe("Cmd.define parses `Ok` through any Standard Schema (runtime)", () => {
     readonly malformed: readonly string[];
   };
 
-  const machine = (answer: (id: string) => unknown) =>
-    defineMachine({
-      types: {
-        model: {} as Model,
-        msg: {} as { readonly type: "go"; readonly id: string },
-      },
-      cmds: [viaZod, viaEffect],
-      init: () => [{ zod: null, effect: null, malformed: [] }, []],
-      update: {
-        go: (m, msg) => [
-          m,
-          [viaZod({ id: msg.id }), viaEffect({ id: msg.id })],
-        ],
-        load_zod_ok: (m, msg) => [{ ...m, zod: msg.value.name }, []],
-        load_zod_err: (m, msg) => [
-          { ...m, malformed: [...m.malformed, `zod:${msg.error._tag}`] },
-          [],
-        ],
-        load_effect_ok: (m, msg) => [{ ...m, effect: msg.value.name }, []],
-        load_effect_err: (m, msg) => [
-          { ...m, malformed: [...m.malformed, `effect:${msg.error._tag}`] },
-          [],
-        ],
-      },
+  const machine = defineMachine({
+    types: {
+      model: {} as Model,
+      msg: {} as { readonly type: "go"; readonly id: string },
+    },
+    cmds: [viaZod, viaEffect],
+    init: () => [{ zod: null, effect: null, malformed: [] }, []],
+    update: {
+      go: (m, msg) => [m, [viaZod({ id: msg.id }), viaEffect({ id: msg.id })]],
+      load_zod_ok: (m, msg) => [{ ...m, zod: msg.value.name }, []],
+      load_zod_err: (m, msg) => [
+        { ...m, malformed: [...m.malformed, `zod:${msg.error._tag}`] },
+        [],
+      ],
+      load_effect_ok: (m, msg) => [{ ...m, effect: msg.value.name }, []],
+      load_effect_err: (m, msg) => [
+        { ...m, malformed: [...m.malformed, `effect:${msg.error._tag}`] },
+        [],
+      ],
+    },
+  });
+
+  // Both handlers answer the same raw value; each schema then judges it.
+  const start = (answer: (id: string) => unknown) =>
+    run(machine, {
       interpret: {
         load_zod: async (cmd, { ok }) => ok(answer(cmd.id) as { name: string }),
         load_effect: async (cmd, { ok }) =>
@@ -91,10 +92,7 @@ describe("Cmd.define parses `Ok` through any Standard Schema (runtime)", () => {
     });
 
   it("a value both schemas accept lands on both `_ok` cells", async () => {
-    const rt = await run(
-      machine((id) => ({ name: `user ${id}` })),
-      {},
-    ).ready;
+    const rt = await start((id) => ({ name: `user ${id}` })).ready;
     await rt.dispatch({ type: "go", id: "7" });
     expect(rt.getState()).toEqual({
       zod: "user 7",
@@ -104,10 +102,7 @@ describe("Cmd.define parses `Ok` through any Standard Schema (runtime)", () => {
   });
 
   it("a value both schemas reject becomes `malformed_result` on both `_err` cells", async () => {
-    const rt = await run(
-      machine(() => ({ name: 42 })),
-      {},
-    ).ready;
+    const rt = await start(() => ({ name: 42 })).ready;
     await rt.dispatch({ type: "go", id: "7" });
     expect(rt.getState()).toEqual({
       zod: null,

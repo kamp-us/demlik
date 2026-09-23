@@ -25,6 +25,7 @@ import {
   AsyncSchemaError,
   Cmd,
   defineMachine,
+  type Interpret,
   type MalformedResult,
   type NoCtx,
   Outcome,
@@ -78,24 +79,27 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
 };
 
 /**
- * One machine, parameterised on what the http "server" answers, so each test
- * picks the boundary case it is about. The handler forwards whatever `http`
- * returns as the `Ok` value — the interpret EDGE is what decides whether that
- * value is an `_ok` or a `malformed_result`.
+ * One machine; its handlers are parameterised on what the http "server"
+ * answers, so each test picks the boundary case it is about. The handler
+ * forwards whatever `http` returns as the `Ok` value — the interpret EDGE is
+ * what decides whether that value is an `_ok` or a `malformed_result`.
  */
-function machineOver(work: (cmd: FetchCmd, http: Http) => Promise<unknown>) {
-  return defineMachine({
-    types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
-    cmds: [fetch],
-    init: (_loaded) => [initial, []],
-    update,
-    interpret: {
-      fetch: async (cmd, { http, ok }) =>
-        // Deliberately unparsed: `work` may answer with a shape the schema
-        // rejects, and that reaching the reducer is the corruption under test.
-        ok((await work(cmd, http)) as { body: string }),
-    },
-  });
+const machine = defineMachine({
+  types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
+  cmds: [fetch],
+  init: (_loaded) => [initial, []],
+  update,
+});
+
+function interpretOver(
+  work: (cmd: FetchCmd, http: Http) => Promise<unknown>,
+): Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> {
+  return {
+    fetch: async (cmd, { http, ok }) =>
+      // Deliberately unparsed: `work` may answer with a shape the schema
+      // rejects, and that reaching the reducer is the corruption under test.
+      ok((await work(cmd, http)) as { body: string }),
+  };
 }
 
 const fixedClock = (at: number) => () => at;
@@ -134,13 +138,11 @@ describe("Cmd.define — the emitted Cmd is still a plain record", () => {
 
 describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () => {
   it("a value that passes the `ok` schema folds into Model, stamped with `at`", async () => {
-    const rt = await run(
-      machineOver(async () => ({ body: "hello" })),
-      {
-        ctx: { http: { get: async () => "unused" } },
-        clock: fixedClock(1_000),
-      },
-    ).ready;
+    const rt = await run(machine, {
+      interpret: interpretOver(async () => ({ body: "hello" })),
+      ctx: { http: { get: async () => "unused" } },
+      clock: fixedClock(1_000),
+    }).ready;
     const seen: string[] = [];
     rt.observe((msg) => {
       seen.push(msg.type);
@@ -157,8 +159,12 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
   it("a value that FAILS the schema becomes the minted `_err` with a `_tag`; Model is unchanged", async () => {
     const rt = await run(
       // The "server" answers a number where the schema wants `{ body }`.
-      machineOver(async () => ({ body: 42 })),
-      { ctx: { http: { get: async () => "unused" } }, clock: fixedClock(7) },
+      machine,
+      {
+        interpret: interpretOver(async () => ({ body: 42 })),
+        ctx: { http: { get: async () => "unused" } },
+        clock: fixedClock(7),
+      },
     ).ready;
     const seen: (Msg | FetchSettled)[] = [];
     rt.observe((msg) => {
@@ -186,10 +192,13 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
   });
 
   it("the parsed value is what lands (zod strips a key the schema does not name)", async () => {
-    const rt = await run(
-      machineOver(async () => ({ body: "kept", extra: "dropped" })),
-      { ctx: { http: { get: async () => "unused" } } },
-    ).ready;
+    const rt = await run(machine, {
+      interpret: interpretOver(async () => ({
+        body: "kept",
+        extra: "dropped",
+      })),
+      ctx: { http: { get: async () => "unused" } },
+    }).ready;
     const seen: (Msg | FetchSettled)[] = [];
     rt.observe((msg) => {
       seen.push(msg);
@@ -203,12 +212,10 @@ describe("the interpret edge parses a handler's `_ok` value (invariant 8)", () =
 
   it("defaults the clock to Date.now", async () => {
     const before = Date.now();
-    const rt = await run(
-      machineOver(async () => ({ body: "t" })),
-      {
-        ctx: { http: { get: async () => "unused" } },
-      },
-    ).ready;
+    const rt = await run(machine, {
+      interpret: interpretOver(async () => ({ body: "t" })),
+      ctx: { http: { get: async () => "unused" } },
+    }).ready;
     await rt.dispatch({ type: "go", url: "/" });
     const [at] = rt.getState().ats;
     expect(at).toBeGreaterThanOrEqual(before);
@@ -238,13 +245,13 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
       cmds: [fetch],
       init: (_loaded) => [initial, []],
       update,
+    });
+    const rt = await run(m, {
       interpret: {
         // The cast lets a test return what the contract forbids; the edge is
         // what must refuse it.
         fetch: handler as never,
       },
-    });
-    const rt = await run(m, {
       ctx: { http: { get: async (url) => `body of ${url}` } },
       clock,
       onError: (error, context) => {
@@ -346,14 +353,14 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
         ...update,
         go: (m, msg) => [m, [fetch({ url: "/boom" }), fetch({ url: msg.url })]],
       },
+    });
+    const rt = await run(m, {
       interpret: {
         fetch: async (cmd, { ok }) => {
           if (cmd.url === "/boom") throw new Error("boom");
           return ok({ body: cmd.url });
         },
       },
-    });
-    const rt = await run(m, {
       ctx: { http: { get: async () => "unused" } },
       onError: (error) => {
         reports.push(error);
@@ -401,14 +408,15 @@ describe("`Cmd.define` takes any Standard Schema", () => {
           [],
         ],
       },
+    });
+    const rt = await run(m, {
       interpret: {
         // `ok` is typed to what the schema outputs; the raw input goes in
         // unchecked on purpose so the schema is what transforms it.
         shout: async (cmd, { ok }) =>
           ok((cmd.text === "42" ? 42 : cmd.text) as never),
       },
-    });
-    const rt = await run(m, {}).ready;
+    }).ready;
     await rt.dispatch({ type: "say", text: "hi" });
     expect(rt.getState().got).toBe("HI");
     await rt.dispatch({ type: "say", text: "42" });
@@ -431,9 +439,9 @@ describe("`Cmd.define` takes any Standard Schema", () => {
         later_ok: (s) => [{ n: s.n + 1 }, []],
         later_err: (s) => [{ n: s.n - 1 }, []],
       },
-      interpret: { later: async (_cmd, { ok }) => ok("x") },
     });
     const rt = await run(m, {
+      interpret: { later: async (_cmd, { ok }) => ok("x") },
       onError: (error) => {
         reports.push(error);
       },
@@ -456,10 +464,11 @@ describe("a machine of hand-written Cmds is untouched", () => {
         bump: (s) => [s, [{ type: "later" }]],
         bumped: (s) => [{ n: s.n + 1 }, []],
       },
-      interpret: { later: async (_cmd) => ({ type: "bumped" }) },
     });
     const seen: M[] = [];
-    const rt = await run(m, {}).ready;
+    const rt = await run(m, {
+      interpret: { later: async (_cmd) => ({ type: "bumped" }) },
+    }).ready;
     rt.observe((msg) => {
       seen.push(msg);
     });

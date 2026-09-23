@@ -318,8 +318,8 @@ async function main() {
     },
   };
 
-  const machine = agent.toMachine<Ctx>({ toolInterpret });
-  const runtime = await run(machine, { ctx }).ready;
+  const { machine, interpret } = agent.toMachine<Ctx>({ toolInterpret });
+  const runtime = await run(machine, { ctx, interpret }).ready;
 
   line("the agent loop, narrated");
   console.log(

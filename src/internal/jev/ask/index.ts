@@ -75,7 +75,9 @@
  *   update: { ...mounted.update },
  *   subscriptions: mounted.subscriptions,
  *   subscribe: mounted.subscribe,
- *   interpret: mounted.interpret,
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: mounted.interpret });
  *
  * The slice stays a plain readable field at `resilience`, and every verb above
  * is still exported: a consumer that wants a settle cell the mount cannot

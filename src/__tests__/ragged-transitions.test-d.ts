@@ -21,6 +21,7 @@ import {
   type Settled,
   type Transitions,
 } from "../index";
+import { run } from "../promise";
 
 type State =
   | { readonly type: "idle" }
@@ -57,7 +58,6 @@ const ragged: Transitions<State, Msg, never> = {
 defineMachine<State, Msg, never, never, unknown>({
   init: (loaded) => [loaded ?? { type: "idle" }, []],
   update: ragged,
-  interpret: {},
 });
 
 // ── 2. an EMPTY row is how a state that accepts nothing is declared ─────────
@@ -118,11 +118,13 @@ const withCmds: Transitions<State, Msg | GrindSettled, GrindCmd> = {
   done: {},
 };
 
-defineMachine({
+const grinder = defineMachine({
   types: { model: {} as State, msg: {} as Msg },
   cmds: [grind],
   init: (loaded: State | null) => [loaded ?? { type: "idle" as const }, []],
   update: withCmds,
+});
+void run(grinder, {
   interpret: {
     grind: async (c, ctx) => ctx.ok({ grams: c.beans * 2 }),
   },
@@ -156,7 +158,6 @@ const full: ExhaustiveTransitions<State, Msg, never> = {
 defineMachine<State, Msg, never, never, unknown>({
   init: (loaded) => [loaded ?? { type: "idle" }, []],
   update: full,
-  interpret: {},
 });
 
 const holed: ExhaustiveTransitions<State, Msg, never> = {
@@ -201,7 +202,6 @@ const reducer: Reducer<Flat, FlatMsg, never> = {
 defineMachine<Flat, FlatMsg, never, never, unknown>({
   init: (loaded) => [loaded ?? { type: "counting", n: 0 }, []],
   update: reducer,
-  interpret: {},
 });
 
 // @ts-expect-error — `reset` is missing; the reducer form is still total.

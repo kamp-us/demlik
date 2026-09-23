@@ -410,11 +410,6 @@ function pollerMachine() {
     },
     subscriptions: (s) => poll.subs(s.poll),
     subscribe: { deadline: subscribeDeadline },
-    interpret: {
-      // Default interpret is a no-op for the pure-fold (bindMachine) tests; the
-      // real-runtime test below overrides it to perform the source read.
-      fetch_status: async () => undefined,
-    },
   });
 }
 
@@ -589,6 +584,10 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
       },
       subscriptions: (s) => poll.subs(s.poll),
       subscribe: { deadline: subscribeDeadline },
+    });
+
+    const runtime = await run(machine, {
+      ctx: undefined,
       interpret: {
         // Perform the observation and re-enter the machine with the result Msg
         // the substrate dispatches onto its tail (the runtime's dispatch).
@@ -598,9 +597,7 @@ describe("createPoller — wired into a REAL runtime (timer-driven cadence)", ()
           at: Date.now(),
         }),
       },
-    });
-
-    const runtime = await run(machine, { ctx: undefined }).ready;
+    }).ready;
 
     // Kick the poller off. `start` arms the first deadline at BASE + 5_000 and
     // emits NOTHING — so no read has happened yet.
@@ -962,6 +959,10 @@ describe("createPoller — wired into a REAL runtime (duration-bounded outage)",
       },
       subscriptions: (s) => durationPoll.subs(s.poll),
       subscribe: { deadline: subscribeDeadline },
+    });
+
+    const runtime = await run(machine, {
+      ctx: undefined,
       interpret: {
         // The source is DOWN for the entire run — every observation fails.
         fetch_status: async (): Promise<AppMsg> => {
@@ -973,9 +974,7 @@ describe("createPoller — wired into a REAL runtime (duration-bounded outage)",
           };
         },
       },
-    });
-
-    const runtime = await run(machine, { ctx: undefined }).ready;
+    }).ready;
     await runtime.dispatch({ type: "begin", at: Date.now() });
     await flush();
     expect(readAt).toEqual([]); // the timer is the only next-tick mechanism

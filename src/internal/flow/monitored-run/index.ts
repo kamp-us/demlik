@@ -77,7 +77,10 @@
  *   },
  *   subscriptions: (s) => run.subs(s.run),
  *   subscribe: { deadline: subscribeDeadline },
- *   interpret: run.handlers({ store: r2 }),
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it (the
+ *   // engine's `run` imported under another name, since `run` is the knob):
+ *   runMachine(machine, { interpret: run.handlers({ store: r2 }) });
  */
 
 import type { Cmd, Interpret } from "../../../index";

@@ -110,11 +110,12 @@ async function wiredRuntime() {
     }),
   };
 
-  const machine = agent.toMachine<object>({ toolInterpret });
+  const { machine, interpret } = agent.toMachine<object>({ toolInterpret });
   // `events: agentEvents()` is the wiring that makes `runtime.on(...)` deliver
   // the semantic AgentEvent stream (#47).
   const runtime = await run(machine, {
     ctx: {} as object,
+    interpret,
     terminal: (s) => s.run.phase === "done" || s.run.phase === "failed",
     events: agentEvents<Stage, Purpose, Outputs, string>(),
   }).ready;
@@ -268,12 +269,13 @@ describe("#47 — observe drops the boot null arm; onBoot carries it", () => {
         at: 0,
       }),
     };
-    const machine = agent.toMachine<object>({
+    const { machine, interpret } = agent.toMachine<object>({
       toolInterpret: bootToolInterpret,
     });
 
     const booting = run(machine, {
       ctx: {} as object,
+      interpret,
       events: agentEvents<Stage, Purpose, Outputs, string>(),
     });
     let bootCount = 0;

@@ -22,13 +22,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  type Cmd,
-  defineMachine,
-  replay,
-  type Store,
-  tryInterpret,
-} from "../index";
+import { type Cmd, defineMachine, replay, type Store } from "../index";
 import { run } from "../promise";
 import { useMachine } from "../react/index";
 import {
@@ -181,13 +175,6 @@ const resilientFetch = defineMachine({
         [],
       ];
     },
-  },
-  interpret: {
-    do_fetch: tryInterpret<DoFetch, string, RfMsg, RfCtx>(
-      (cmd, ctx) => ctx.http(cmd.url),
-      (body) => ({ type: "fetch_ok", body }),
-      (err) => ({ type: "fetch_err", error: String(err), at: Date.now() }),
-    ),
   },
 });
 

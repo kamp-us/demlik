@@ -198,7 +198,7 @@ interface WorkflowRef<A, R, F> {
  * — rebuilding the recorder from the snapshot's ledger tail so delivery ids
  * resume gap-free. Each `update` cell routes the activity-result Msg into the
  * matching `createWorkflow` verb, accumulating BOTH the next `WorkflowState` and
- * the verb's `ledger` events. `interpret` is EMPTY by design: the grain performs
+ * the verb's `ledger` events. Its handlers are EMPTY by design: the grain performs
  * the activity post-persist, so the reducer never names the performer and the
  * persist-before-deliver ordering lives entirely in the host.
  *
@@ -252,15 +252,17 @@ function workflowMachine<A, R, F>(
       compensation_err: (s, m) =>
         stepState(s, routeWorkflowMsg(ref.current, s.workflow, m)),
     },
-    // No Cmds are interpreted in-runtime: the grain performs the activity OR
-    // compensation post-persist. The empty cells keep the dispatch Cmds pure
-    // data intents (one per WorkflowCmd member, #125 widened the union).
-    interpret: {
-      workflow_activity: async () => {},
-      workflow_compensation: async () => {},
-    },
   });
 }
+
+// No Cmds are interpreted in-runtime: the grain performs the activity OR
+// compensation post-persist. The empty cells keep the dispatch Cmds pure data
+// intents (one per WorkflowCmd member, #125 widened the union). Handed to `run`
+// beside the machine, which carries no handlers of its own (#278).
+const grainInterpret = {
+  workflow_activity: async () => {},
+  workflow_compensation: async () => {},
+};
 
 /**
  * Fold one verb result into the grain's carried state: advance the
@@ -407,7 +409,7 @@ export async function workflowGrain<A, R, F>(
   const runtime: Runtime<
     WorkflowGrainState<A, R, F>,
     WorkflowMsg<R, F>
-  > = await run(machine, { ctx, store }).ready;
+  > = await run(machine, { ctx, store, interpret: grainInterpret }).ready;
 
   // Track in-flight appends so `deliver` can persist-before-deliver. `observe`
   // is synchronous (it cannot await us), so we capture the append Promise per

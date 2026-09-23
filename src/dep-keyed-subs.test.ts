@@ -3,7 +3,6 @@ import {
   type DepKeyedSub,
   DispatchDiscardedError,
   defineMachine,
-  type Interpret,
   type Reducer,
   replay,
   type Sub,
@@ -56,7 +55,6 @@ function machineWith(
     init: () => [{ runId: null, phase: "idle" }, []],
     update,
     subs,
-    interpret: {} as Interpret<Msg, never, undefined>,
   });
 }
 
@@ -210,7 +208,6 @@ describe("dep-keyed Subs — additivity", () => {
       types: { model: {} as State, msg: {} as Msg, ctx: undefined },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
     const rt = await run(noSubs, { ctx: undefined }).ready;
     await rt.dispatch({ type: "start", runId: "r1" });
@@ -239,7 +236,6 @@ describe("dep-keyed Subs — additivity", () => {
           return () => log.push("dispose:manual");
         },
       },
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
 
     const rt = await run(both, { ctx: undefined }).ready;
@@ -286,7 +282,6 @@ describe("dep-keyed Subs — additivity", () => {
           return () => log.push("dispose:manual");
         },
       },
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
 
     const rt = await run(both, { ctx: undefined }).ready;
@@ -323,7 +318,6 @@ describe("dep-keyed Subs — `undefined` deps mean inactive, exactly like null",
         clear: () => [{}, []],
       },
       subs: [entry],
-      interpret: {} as Interpret<OptMsg, never, undefined>,
     });
   }
 
@@ -413,7 +407,6 @@ describe("dep-keyed Subs — a throwing `deps` is isolated like a throwing `sour
           return () => log.push("dispose:manual");
         },
       },
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
 
     const rt = await run(both, { ctx: undefined }).ready;
@@ -450,7 +443,6 @@ describe("dep-keyed Subs — a non-plain deps slice fails loudly, never silently
           },
         },
       ],
-      interpret: {} as Interpret<ClockMsg, never, undefined>,
     });
 
     const rt = await run(clock, { ctx: undefined }).ready;
@@ -519,7 +511,6 @@ describe("dep-keyed Subs — a dispatch during teardown reaches the sink, not th
           return () => {};
         },
       },
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
     const rt = await run(manual, {
       ctx: undefined,
@@ -565,7 +556,6 @@ describe("replay — the dep-keyed desired set, without wiring anything", () => 
       types: { model: {} as State, msg: {} as Msg, ctx: undefined },
       init: () => [{ runId: null, phase: "idle" }, []],
       update,
-      interpret: {} as Interpret<Msg, never, undefined>,
     });
     expect(replay(noSubs, { msgs: [], ctx: undefined }).depSubs).toEqual([]);
   });

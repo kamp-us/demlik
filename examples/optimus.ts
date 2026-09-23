@@ -264,24 +264,26 @@ const walkMachine = defineMachine({
   },
   subscriptions: (s) => crawler.subs(s.walk),
   subscribe: { deadline: subscribeWalkDeadline },
-  interpret: {
-    resilient_run: tryInterpret<WalkCmd, SitemapPage, WalkMsg, WalkCtx>(
-      (cmd, ctx) => ctx.fetchPage(cmd.input),
-      (result, cmd): PageOkMsg<SitemapPage> => ({
-        type: "resilient_ok",
-        key: cmd.key,
-        result,
-        at: Date.now(),
-      }),
-      (error, cmd): PageErrMsg => ({
-        type: "resilient_err",
-        key: cmd.key,
-        error,
-        at: Date.now(),
-      }),
-    ),
-  },
 });
+
+// The machine is data; its handlers ride beside it into `run`.
+const walkInterpret: Interpret<WalkMsg, WalkCmd, WalkCtx> = {
+  resilient_run: tryInterpret<WalkCmd, SitemapPage, WalkMsg, WalkCtx>(
+    (cmd, ctx) => ctx.fetchPage(cmd.input),
+    (result, cmd): PageOkMsg<SitemapPage> => ({
+      type: "resilient_ok",
+      key: cmd.key,
+      result,
+      at: Date.now(),
+    }),
+    (error, cmd): PageErrMsg => ({
+      type: "resilient_err",
+      key: cmd.key,
+      error,
+      at: Date.now(),
+    }),
+  ),
+};
 
 let walkFetches = 0;
 let walkRetries = 0;
@@ -299,7 +301,7 @@ async function runCrawlSubRun(): Promise<readonly string[]> {
     if (page === undefined) throw new Error(`no sitemap page ${cursor}`);
     return page;
   };
-  const runtime = await run(walkMachine, { ctx: { fetchPage } }).ready;
+  const runtime = await run(walkMachine, { ctx: { fetchPage }, interpret: walkInterpret }).ready;
   const discovered: string[] = [];
   runtime.observe((msg) => {
     if (msg !== null && msg.type === "resilient_ok") {
@@ -373,29 +375,31 @@ const auditMachine = defineMachine({
   },
   subscriptions: (s) => auditCall.subs(s.resilience),
   subscribe: { deadline: subscribeAuditDeadline },
-  interpret: {
-    resilient_run: tryInterpret<
-      AuditCallCmd,
-      AuditFinding,
-      AuditCallMsg,
-      AuditCtx
-    >(
-      (cmd, ctx) => ctx.callAuditEngine(cmd.input),
-      (result, cmd): SucceedMsg<AuditFinding> => ({
-        type: "resilient_ok",
-        key: cmd.key,
-        result,
-        at: Date.now(),
-      }),
-      (error, cmd): FailMsg => ({
-        type: "resilient_err",
-        key: cmd.key,
-        error,
-        at: Date.now(),
-      }),
-    ),
-  },
 });
+
+// The machine is data; its handlers ride beside it into `run`.
+const auditInterpret: Interpret<AuditCallMsg, AuditCallCmd, AuditCtx> = {
+  resilient_run: tryInterpret<
+    AuditCallCmd,
+    AuditFinding,
+    AuditCallMsg,
+    AuditCtx
+  >(
+    (cmd, ctx) => ctx.callAuditEngine(cmd.input),
+    (result, cmd): SucceedMsg<AuditFinding> => ({
+      type: "resilient_ok",
+      key: cmd.key,
+      result,
+      at: Date.now(),
+    }),
+    (error, cmd): FailMsg => ({
+      type: "resilient_err",
+      key: cmd.key,
+      error,
+      at: Date.now(),
+    }),
+  ),
+};
 
 let flakyArmed = true;
 let flakyHits = 0;
@@ -420,7 +424,10 @@ async function runAuditSubRun(url: string): Promise<AuditFinding> {
       }
     );
   };
-  const runtime = await run(auditMachine, { ctx: { callAuditEngine } }).ready;
+  const runtime = await run(auditMachine, {
+    ctx: { callAuditEngine },
+    interpret: auditInterpret,
+  }).ready;
   auditClock += 1;
   await runtime.dispatch({ type: "audit_start", url, at: auditClock });
   await until(() => {
@@ -517,7 +524,8 @@ const toolInterpret: Interpret<Msg, ToolCmd, AgentCtx> = {
   },
 };
 
-const agentMachine = agent.toMachine<AgentCtx>({ toolInterpret });
+const { machine: agentMachine, interpret: agentInterpret } =
+  agent.toMachine<AgentCtx>({ toolInterpret });
 
 type ReportSink = {
   readonly shipReport: (report: string) => Promise<string>;
@@ -548,17 +556,19 @@ const uploaderMachineDef: Machine<
 > = {
   init: (loaded) => (loaded !== null ? [loaded, []] : [{ phase: "idle" }, []]),
   update: uploaderUpdate,
-  interpret: {
-    publish_report: async (cmd, ctx): Promise<void> => {
-      await ctx.shipReport(cmd.report);
-    },
-  },
 };
 
 const uploaderMachine = defineMachine(uploaderMachineDef);
 
+const uploaderInterpret: Interpret<UploaderMsg, PublishReportCmd, ReportSink> =
+  {
+    publish_report: async (cmd, ctx): Promise<void> => {
+      await ctx.shipReport(cmd.report);
+    },
+  };
+
 const resilientUploader = withResilience(
-  uploaderMachine,
+  { machine: uploaderMachine, interpret: uploaderInterpret },
   {
     target: "publish_report",
     keyOf: () => "report-sink",
@@ -582,7 +592,7 @@ const optimusUploader = withTelemetry(deadlinedUploader, {
   }),
 });
 
-type UploaderOuterState = ReturnType<typeof optimusUploader.init>[0];
+type UploaderOuterState = ReturnType<typeof optimusUploader.machine.init>[0];
 
 let sinkArmed = true;
 let sinkThrows = 0;
@@ -655,7 +665,10 @@ async function main() {
 
   line("the agent loop, narrated");
 
-  const runtime = await run(agentMachine, { ctx }).ready;
+  const runtime = await run(agentMachine, {
+    ctx,
+    interpret: agentInterpret,
+  }).ready;
   const rec = recorder(runtime);
 
   let lastStage: Stage | undefined;
@@ -769,7 +782,8 @@ async function main() {
     return `receipt:${report.length}`;
   };
 
-  const uploaderRuntime = await run(optimusUploader, {
+  const uploaderRuntime = await run(optimusUploader.machine, {
+    interpret: optimusUploader.interpret,
     ctx: {
       shipReport,
       telemetrySink: (e) => {

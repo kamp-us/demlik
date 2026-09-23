@@ -10,7 +10,7 @@
 // WITHOUT `subscribe`/`subscriptions` (nothing to wire); a machine declaring a
 // real Sub union MUST provide both — omitting `subscribe` used to compile and
 // silently wire no subs (`reconcileSubs` skips undefined handlers), the exact
-// silent-failure class the `interpret` conditional already prevents.
+// silent-failure class the `interpret` conditional on `run` already prevents.
 
 import {
   defineMachine,

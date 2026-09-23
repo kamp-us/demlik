@@ -32,7 +32,7 @@ The attempt does not perform the call; it emits it as data and lets `interpret`
 run it:
 
 ```ts
-import { type Cmd, defineMachine, tryInterpret } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret, tryInterpret } from "@demlik/tea";
 
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
 
@@ -78,16 +78,19 @@ fetch_err: (s, m) => {
 ## 4. Run the effect through `tryInterpret`
 
 `tryInterpret` routes success and failure to two Msgs and never rejects, so a
-thrown request becomes a `fetch_err` your reducer already handles:
+thrown request becomes a `fetch_err` your reducer already handles. The handler
+sits beside the machine, not on it — hand it to `run`:
 
 ```ts
-interpret: {
+const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
     (body) => ({ type: "fetch_ok", body }),
     (err) => ({ type: "fetch_err", error: String(err), at: Date.now() }),
   ),
-},
+};
+
+const runtime = run(resilientFetch, { ctx, interpret });
 ```
 
 ## 5. Bound the retrying by outage duration, not attempt count

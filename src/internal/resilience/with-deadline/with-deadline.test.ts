@@ -1,6 +1,11 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Cmd, defineMachine, replay } from "../../../index";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  replay,
+} from "../../../index";
 import { run } from "../../../promise";
 import { assertWrapperFaithful } from "../../../testing";
 import { type DeadlineModel, deadlineExceededMsg, withDeadline } from "./index";
@@ -28,7 +33,7 @@ interface CounterCtx {
 }
 
 function makeBase() {
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as CounterState,
       msg: {} as CounterMsg,
@@ -46,12 +51,13 @@ function makeBase() {
       // non-progress Msg does NOT re-arm the deadline.
       heartbeat: (s) => [s, []],
     },
-    interpret: {
-      persist: async (cmd, ctx) => {
-        await ctx.persist(cmd.count);
-      },
-    },
   });
+  const interpret: Interpret<CounterMsg, PersistCmd, CounterCtx> = {
+    persist: async (cmd, ctx) => {
+      await ctx.persist(cmd.count);
+    },
+  };
+  return { machine, interpret };
 }
 
 const MSGS: readonly CounterMsg[] = [
@@ -80,21 +86,25 @@ function makeCtx(): CounterCtx & { readonly persisted: number[] } {
 describe("withDeadline — conformance gate", () => {
   it("is faithful with the default progress predicate (every Msg re-arms)", () => {
     const base = makeBase();
-    assertWrapperFaithful(base, () => withDeadline(base, { ms: 5000 }), {
-      msgs: MSGS,
-      ctx: makeCtx(),
-    });
+    assertWrapperFaithful(
+      base.machine,
+      () => withDeadline(base, { ms: 5000 }).machine,
+      {
+        msgs: MSGS,
+        ctx: makeCtx(),
+      },
+    );
   });
 
   it("is faithful with a custom progress predicate (heartbeats excluded)", () => {
     const base = makeBase();
     assertWrapperFaithful(
-      base,
+      base.machine,
       () =>
         withDeadline(base, {
           ms: 5000,
           progress: (msg) => msg.type !== "heartbeat",
-        }),
+        }).machine,
       { msgs: MSGS, ctx: makeCtx() },
     );
   });
@@ -108,12 +118,16 @@ describe("withDeadline — conformance gate", () => {
       base: { count: 10 },
       $deadline: { phase: "armed", seq: 3 },
     };
-    assertWrapperFaithful(base, () => withDeadline(base, { ms: 5000 }), {
-      msgs: MSGS,
-      ctx: makeCtx(),
-      loaded,
-      baseLoaded: loaded.base,
-    });
+    assertWrapperFaithful(
+      base.machine,
+      () => withDeadline(base, { ms: 5000 }).machine,
+      {
+        msgs: MSGS,
+        ctx: makeCtx(),
+        loaded,
+        baseLoaded: loaded.base,
+      },
+    );
   });
 });
 
@@ -125,8 +139,8 @@ describe("withDeadline — observe-only", () => {
   it("does NOT transform base Cmds — they pass through byte-identical", () => {
     const base = makeBase();
     const ctx = makeCtx();
-    const bare = replay(base, { msgs: MSGS, ctx });
-    const composed = replay(withDeadline(base, { ms: 5000 }), {
+    const bare = replay(base.machine, { msgs: MSGS, ctx });
+    const composed = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: MSGS,
       ctx,
     });
@@ -143,8 +157,8 @@ describe("withDeadline — observe-only", () => {
   it("does NOT gate base Msgs — base state is byte-identical to the bare run", () => {
     const base = makeBase();
     const ctx = makeCtx();
-    const bare = replay(base, { msgs: MSGS, ctx });
-    const composed = replay(withDeadline(base, { ms: 5000 }), {
+    const bare = replay(base.machine, { msgs: MSGS, ctx });
+    const composed = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: MSGS,
       ctx,
     });
@@ -154,7 +168,7 @@ describe("withDeadline — observe-only", () => {
   it("appends the decision Cmd AFTER base Cmds (observe, not intercept)", () => {
     const base = makeBase();
     const ctx = makeCtx();
-    const { cmds } = replay(withDeadline(base, { ms: 5000 }), {
+    const { cmds } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [{ type: "inc", by: 3 }],
       ctx,
     });
@@ -173,7 +187,7 @@ describe("withDeadline — observe-only", () => {
 describe("withDeadline — slice mechanics", () => {
   it("init seeds { phase: armed, seq: 0 } and passes base init Cmds through", () => {
     const base = makeBase();
-    const { state, cmds } = replay(withDeadline(base, { ms: 5000 }), {
+    const { state, cmds } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [],
       ctx: makeCtx(),
     });
@@ -192,7 +206,7 @@ describe("withDeadline — slice mechanics", () => {
     };
     // replay throws if init returns Cmds on a non-null loaded — passing means
     // the rehydrate branch is a pure passthrough (no re-arm Cmd on boot).
-    const { state, cmds } = replay(withDeadline(base, { ms: 5000 }), {
+    const { state, cmds } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [],
       ctx: makeCtx(),
       loaded,
@@ -203,7 +217,7 @@ describe("withDeadline — slice mechanics", () => {
 
   it("bumps seq on every progress Msg (default predicate re-arms each time)", () => {
     const base = makeBase();
-    const { state } = replay(withDeadline(base, { ms: 5000 }), {
+    const { state } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: MSGS,
       ctx: makeCtx(),
     });
@@ -216,7 +230,7 @@ describe("withDeadline — slice mechanics", () => {
     const wrapped = withDeadline(base, {
       ms: 5000,
       progress: (msg) => msg.type !== "heartbeat",
-    });
+    }).machine;
     const { state, cmds } = replay(wrapped, {
       msgs: [
         { type: "inc", by: 1 },
@@ -237,7 +251,7 @@ describe("withDeadline — slice mechanics", () => {
 
   it("the delivered $deadline:exceeded Msg flips phase armed → exceeded", () => {
     const base = makeBase();
-    const wrapped = withDeadline(base, { ms: 5000 });
+    const wrapped = withDeadline(base, { ms: 5000 }).machine;
     // One progress Msg (seq → 1), then the timer for generation 1 fires.
     const { state, cmds } = replay(wrapped, {
       msgs: [{ type: "inc", by: 1 }, deadlineExceededMsg(1)],
@@ -252,7 +266,7 @@ describe("withDeadline — slice mechanics", () => {
 
   it("a stale exceeded Msg (wrong seq) is a no-op — the re-arm already retired it", () => {
     const base = makeBase();
-    const wrapped = withDeadline(base, { ms: 5000 });
+    const wrapped = withDeadline(base, { ms: 5000 }).machine;
     // seq → 1 → 2 via two progress Msgs; a timer from generation 1 then fires
     // LATE. Its seq (1) no longer matches the current seq (2) → no expiry.
     const { state } = replay(wrapped, {
@@ -268,7 +282,7 @@ describe("withDeadline — slice mechanics", () => {
 
   it("once exceeded, further base Msgs do NOT re-arm (the machine auto-failed)", () => {
     const base = makeBase();
-    const wrapped = withDeadline(base, { ms: 5000 });
+    const wrapped = withDeadline(base, { ms: 5000 }).machine;
     const { state } = replay(wrapped, {
       msgs: [
         { type: "inc", by: 1 },
@@ -292,7 +306,7 @@ describe("withDeadline — slice mechanics", () => {
 describe("withDeadline — subscriptions reconcile by id", () => {
   it("arms a $deadline:timeout sub keyed on seq while armed", () => {
     const base = makeBase();
-    const { subs } = replay(withDeadline(base, { ms: 5000 }), {
+    const { subs } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [{ type: "inc", by: 1 }],
       ctx: makeCtx(),
     });
@@ -303,7 +317,7 @@ describe("withDeadline — subscriptions reconcile by id", () => {
 
   it("a progress bump CHANGES the sub id (re-arm = id change, reconciled away)", () => {
     const base = makeBase();
-    const wrapped = withDeadline(base, { ms: 5000 });
+    const wrapped = withDeadline(base, { ms: 5000 }).machine;
     const a = replay(wrapped, {
       msgs: [{ type: "inc", by: 1 }],
       ctx: makeCtx(),
@@ -322,7 +336,7 @@ describe("withDeadline — subscriptions reconcile by id", () => {
 
   it("returns NO deadline sub once exceeded", () => {
     const base = makeBase();
-    const { subs } = replay(withDeadline(base, { ms: 5000 }), {
+    const { subs } = replay(withDeadline(base, { ms: 5000 }).machine, {
       msgs: [{ type: "inc", by: 1 }, deadlineExceededMsg(1)],
       ctx: makeCtx(),
     });
@@ -348,9 +362,12 @@ describe("withDeadline — subscriptions reconcile by id", () => {
       },
       subscriptions: () => [{ id: "tick", type: "tick" }],
       subscribe: { tick: () => () => {} },
-      interpret: { persist: async () => {} },
     });
-    const { subs } = replay(withDeadline(ticking, { ms: 5000 }), {
+    const wrapped = withDeadline(
+      { machine: ticking, interpret: { persist: async () => {} } },
+      { ms: 5000 },
+    );
+    const { subs } = replay(wrapped.machine, {
       msgs: [{ type: "inc", by: 1 }],
       ctx: makeCtx(),
     });
@@ -377,8 +394,10 @@ describe("withDeadline — real run() with fake timers", () => {
 
   it("auto-fails after `ms` of inactivity (armed → exceeded)", async () => {
     const base = makeBase();
-    const runtime = await run(withDeadline(base, { ms: 5000 }), {
+    const { machine, interpret } = withDeadline(base, { ms: 5000 });
+    const runtime = await run(machine, {
       ctx: makeCtx(),
+      interpret,
     }).ready;
 
     // Armed on boot.
@@ -397,8 +416,10 @@ describe("withDeadline — real run() with fake timers", () => {
 
   it("re-arms on progress — the timer RESTARTS so the old window never fires", async () => {
     const base = makeBase();
-    const runtime = await run(withDeadline(base, { ms: 5000 }), {
+    const { machine, interpret } = withDeadline(base, { ms: 5000 });
+    const runtime = await run(machine, {
       ctx: makeCtx(),
+      interpret,
     }).ready;
 
     // 3s in: a progress Msg re-arms (seq 0 → 1). The generation-0 timer is
@@ -421,8 +442,10 @@ describe("withDeadline — real run() with fake timers", () => {
 
   it("repeated progress keeps the machine alive indefinitely", async () => {
     const base = makeBase();
-    const runtime = await run(withDeadline(base, { ms: 5000 }), {
+    const { machine, interpret } = withDeadline(base, { ms: 5000 });
+    const runtime = await run(machine, {
       ctx: makeCtx(),
+      interpret,
     }).ready;
 
     // Tick progress every 4s for 5 rounds (20s total, well past one 5s window).
@@ -443,7 +466,8 @@ describe("withDeadline — real run() with fake timers", () => {
   it("base effects still run while the deadline observes (no interception)", async () => {
     const base = makeBase();
     const ctx = makeCtx();
-    const runtime = await run(withDeadline(base, { ms: 5000 }), { ctx }).ready;
+    const { machine, interpret } = withDeadline(base, { ms: 5000 });
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     await runtime.dispatch({ type: "inc", by: 4 });
     await runtime.dispatch({ type: "inc", by: 3 });
@@ -477,13 +501,16 @@ describe("withDeadline — reserved-namespace guards", () => {
         reset: () => [{ count: 0 }, []],
         heartbeat: (s) => [s, []],
       },
-      interpret: {
-        "$deadline:decision": async () => {},
-      },
     });
-    expect(() => withDeadline(squatting, { ms: 5000 })).toThrow(
-      /reserved "\$deadline:decision" interpret handler/,
-    );
+    expect(() =>
+      withDeadline(
+        {
+          machine: squatting,
+          interpret: { "$deadline:decision": async () => {} },
+        },
+        { ms: 5000 },
+      ),
+    ).toThrow(/reserved "\$deadline:decision" interpret handler/);
   });
 
   it("throws if the base squats on the $deadline:timeout subscribe handler", () => {
@@ -504,11 +531,13 @@ describe("withDeadline — reserved-namespace guards", () => {
       },
       subscriptions: () => [],
       subscribe: { "$deadline:timeout": () => () => {} },
-      interpret: { persist: async () => {} },
     });
-    expect(() => withDeadline(squatting, { ms: 5000 })).toThrow(
-      /reserved "\$deadline:timeout" subscribe handler/,
-    );
+    expect(() =>
+      withDeadline(
+        { machine: squatting, interpret: { persist: async () => {} } },
+        { ms: 5000 },
+      ),
+    ).toThrow(/reserved "\$deadline:timeout" subscribe handler/);
   });
 });
 
@@ -536,7 +565,7 @@ describe("withDeadline — properties", () => {
         const wrapped = withDeadline(base, {
           ms: 5000,
           progress: (m) => m.type !== "heartbeat",
-        });
+        }).machine;
         const expected = msgs.filter((m) => m.type !== "heartbeat").length;
         const { state } = replay(wrapped, { msgs, ctx: makeCtx() });
         expect(state.$deadline).toEqual({ phase: "armed", seq: expected });
@@ -559,7 +588,7 @@ describe("withDeadline — properties", () => {
     const base = makeBase();
     fc.assert(
       fc.property(arbMsgs, (msgs) => {
-        const wrapped = withDeadline(base, { ms: 5000 });
+        const wrapped = withDeadline(base, { ms: 5000 }).machine;
         const a = replay(wrapped, { msgs, ctx: makeCtx() });
         const b = replay(wrapped, { msgs, ctx: makeCtx() });
         expect(b.state).toEqual(a.state);
@@ -567,7 +596,7 @@ describe("withDeadline — properties", () => {
           a.state.$deadline,
         );
         // Base slice matches the bare base run for every log (byte-identical).
-        const bare = replay(base, { msgs, ctx: makeCtx() });
+        const bare = replay(base.machine, { msgs, ctx: makeCtx() });
         expect(a.state.base).toEqual(bare.state);
       }),
     );
@@ -577,7 +606,7 @@ describe("withDeadline — properties", () => {
     const base = makeBase();
     fc.assert(
       fc.property(arbMsgs, (msgs) => {
-        const { state } = replay(withDeadline(base, { ms: 5000 }), {
+        const { state } = replay(withDeadline(base, { ms: 5000 }).machine, {
           msgs,
           ctx: makeCtx(),
         });

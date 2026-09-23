@@ -11,7 +11,7 @@
  */
 
 import type { Sub } from "@demlik/tea";
-import { Cmd, defineMachine, subId, tryInterpret } from "@demlik/tea";
+import { Cmd, defineMachine, type Interpret, subId, tryInterpret } from "@demlik/tea";
 
 // ---------------------------------------------------------------------------
 // 1. State — discriminated union. Each phase carries only its own data.
@@ -91,20 +91,6 @@ export const machine = defineMachine({
     visibility_changed: (state) => [state, Cmd.none],
   },
 
-  // 8. Interpret — one handler per Cmd type. This is where I/O lives.
-  //    Use tryInterpret for Railway-style error handling.
-  //    See: .patterns/tea/patterns/13-error-handling.md
-  interpret: {
-    fetch_data: tryInterpret(
-      async () => {
-        const res = await fetch("https://example.com/data");
-        return res.text();
-      },
-      (data): Msg => ({ type: "fetch_succeeded", data }),
-      (error): Msg => ({ type: "fetch_failed", error: String(error) }),
-    ),
-  },
-
   // 9. Subscriptions — declare active subs as a function of state.
   //    The runtime diffs old vs new by `id`:
   //      Same id across transitions → keep running (no restart)
@@ -145,3 +131,22 @@ export const machine = defineMachine({
     },
   },
 });
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+// 8. Interpret — one handler per Cmd type. This is where I/O lives.
+//    It sits beside the machine, never on it: `run` takes it —
+//    `run(machine, { ctx, interpret })`.
+//    Use tryInterpret for Railway-style error handling.
+//    See: .patterns/tea/patterns/13-error-handling.md
+export const interpret: Interpret<Msg, Commands, Ctx> = {
+  fetch_data: tryInterpret(
+    async () => {
+      const res = await fetch("https://example.com/data");
+      return res.text();
+    },
+    (data): Msg => ({ type: "fetch_succeeded", data }),
+    (error): Msg => ({ type: "fetch_failed", error: String(error) }),
+  ),
+};

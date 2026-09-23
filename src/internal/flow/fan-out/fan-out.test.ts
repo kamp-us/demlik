@@ -263,13 +263,6 @@ const machine = defineMachine({
     },
     report_done: (s, m) => [{ ...s, phase: "done", report: m.results }, []],
   },
-  interpret: {
-    // The per-item effect + the join Cmd are performed by the consumer; here
-    // they are inert (replay never runs interpret). Declared to satisfy the
-    // Cmd union's exhaustive interpret map.
-    crawl: async () => {},
-    report_done: async () => {},
-  },
 });
 
 describe("machine integration", () => {
@@ -663,6 +656,10 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
           [],
         ],
       },
+    });
+
+    const runtime = await run(machine, {
+      ctx,
       interpret: {
         // The per-item effect: RE-ENTER the machine with the result, the way a
         // real consumer's interpret routes a resolved effect back to itemOk.
@@ -683,9 +680,7 @@ describe("wired machine — re-entrant interpret drives the real scatter-gather"
           results: cmd.results,
         }),
       },
-    });
-
-    const runtime = await run(machine, { ctx }).ready;
+    }).ready;
     ctx.runtime = runtime;
     return runtime;
   }

@@ -19,9 +19,10 @@ utilities).
 
 ## Quickstart
 
-A machine is plain data: an `init`, an `update` map keyed by `Msg` type, and —
-when it has effects — an `interpret` map. `run` drives it; `dispatch` folds a
-`Msg`; `getState` reads the current Model. You name the Model and the `Msg` union
+A machine is plain data: an `init` and an `update` map keyed by `Msg` type.
+`run` drives it, and when it has effects you hand `run` the `interpret` map
+that performs them; `dispatch` folds a `Msg`; `getState` reads the current
+Model. You name the Model and the `Msg` union
 once, under `types`; everything else is inferred from the machine itself.
 
 ```ts

@@ -87,7 +87,9 @@
  *   },
  *   subscriptions: (s) => rec.subs(s.rec),
  *   subscribe: { deadline: subscribeDeadline },
- *   interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }),
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }) });
  */
 
 import type { Cmd } from "../../../index";
@@ -645,7 +647,7 @@ export function createReconciler<
    * `pageOk`), failure → `resilient_err` (handled by `pageErr`), each stamped
    * with `Date.now()` at the effect boundary (the ONE permitted clock read).
    *
-   *   interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) })
+   *   run(machine, { interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }) })
    *
    * The apply-Cmd side is the CONSUMER's interpret handler (it knows how to
    * realize `apply(change)`); the consumer routes its settle Msg back through

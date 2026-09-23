@@ -111,7 +111,8 @@ export const CONFIDENCE_FLOOR = 0.8;
  * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
  * ALREADY settled, so there is no cell to put in the wrong order, and
  * `subscribe` / `interpret` ride along on the fragments rather than being
- * remembered. `answer.choice` is `Category` here, not `string`.
+ * remembered — `subscribe` into the machine, `interpret` to `run` beside it.
+ * `answer.choice` is `Category` here, not `string`.
  */
 export function mountAsk(ask: Ask) {
   return mountResilientCall(ask, {
@@ -142,9 +143,10 @@ export function mountAsk(ask: Ask) {
   });
 }
 
+/** The machine, plus the handlers a host hands to `run` beside it. */
 export function expenseMachine(ask: Ask) {
   const mounted = mountAsk(ask);
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as ExpenseState,
       msg: {} as ExpenseMsg,
@@ -159,15 +161,16 @@ export function expenseMachine(ask: Ask) {
     update: { ...mounted.update },
     subscriptions: mounted.subscriptions,
     subscribe: mounted.subscribe,
-    interpret: mounted.interpret,
   });
+  return { machine, interpret: mounted.interpret };
 }
 ```
 
 The three rules this page used to ask you to remember are now shapes you cannot
 get wrong: `onOk` never sees the pre-settle slice, `interpret` is the door's
-returning handler rather than one you re-declare, and `subscribe` rides on the
-fragments, so a backed-off retry is armed by construction.
+returning handler rather than one you re-declare — handed to `run` beside the
+machine — and `subscribe` rides on the fragments, so a backed-off retry is armed
+by construction.
 
 Three folds, not two. A call that runs out of its deadline settles `failed`
 inside the slice with no settle Msg to carry it, so `onErr` never sees that
@@ -271,17 +274,18 @@ export function classifyOne(
   key: string,
   memo: string,
 ): Promise<Classified> {
+  const { machine, interpret } = expenseMachine(ask);
   return drive(
-    expenseMachine(ask),
+    machine,
     { resilience: ask.init(), verdicts: {} },
     { type: "classify", key, memo, at: 0 },
-    ask.handlers(),
+    interpret,
   );
 }
 ```
 
-`ask.handlers()` is the same record the machine declares as its `interpret`, so
-the test drives the **real** interpreter and mocks only the port beneath it. A
+`interpret` is the same table a host hands `run`, so the test drives the
+**real** interpreter and mocks only the port beneath it. A
 machine that never settles is a throw (`DriveRoundsExceededError`, carrying the
 partial trace), never a half-driven state handed back as if it were done.
 

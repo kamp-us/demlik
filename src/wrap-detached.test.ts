@@ -57,14 +57,16 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
       },
       init: () => [{ phase: "idle" }, []],
       update,
+    });
+
+    const rt = await run(machine, {
+      ctx: undefined,
       interpret: { start_graph: wrapDetached(startGraph) } satisfies Interpret<
         Msg,
         Start,
         undefined
       >,
-    });
-
-    const rt = await run(machine, { ctx: undefined }).ready;
+    }).ready;
     await rt.dispatch({ type: "go" });
     await rt.idle();
 
@@ -118,14 +120,16 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
       },
       init: () => [{ phase: "idle" }, []],
       update,
+    });
+
+    const rt = await run(machine, {
+      ctx: undefined,
       interpret: { start_graph: wrapDetached(reentrant) } satisfies Interpret<
         Msg,
         Start,
         undefined
       >,
-    });
-
-    const rt = await run(machine, { ctx: undefined }).ready;
+    }).ready;
     await rt.dispatch({ type: "go" });
     await rt.idle();
     expect(rt.getState().phase).toBe("done");
@@ -143,12 +147,14 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
       },
       init: () => [{ phase: "idle" }, []],
       update,
+    });
+
+    const rt = await run(machine, {
+      ctx: undefined,
       interpret: {
         start_graph: async () => ({ type: "graph_finished" }) as const,
       } satisfies Interpret<Msg, Start, undefined>,
-    });
-
-    const rt = await run(machine, { ctx: undefined }).ready;
+    }).ready;
     await rt.dispatch({ type: "go" });
     await rt.idle();
     expect(rt.getState().phase).toBe("done");

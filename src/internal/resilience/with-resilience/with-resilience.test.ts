@@ -1,6 +1,12 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Cmd, defineMachine, replay, type subId } from "../../../index";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  replay,
+  type subId,
+} from "../../../index";
 import { run } from "../../../promise";
 import type { DurationRetryPolicy } from "../../../retry-backoff";
 import { assertWrapperFaithful } from "../../../testing";
@@ -40,14 +46,14 @@ type FetchCmd = DoFetchCmd | LogCmd;
 
 interface FetchCtx {
   // The fallible work the target Cmd performs. The wrapper composes the base
-  // interpret, so a throw here becomes a `$resilience:err`.
+  // handlers, so a throw here becomes a `$resilience:err`.
   readonly fetchUrl: (url: string) => Promise<string>;
   // The non-target effect's side channel.
   readonly logLine: (line: string) => void;
 }
 
 function makeBase() {
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as FetchState,
       msg: {} as FetchMsg,
@@ -65,25 +71,26 @@ function makeBase() {
           { type: "do_fetch", url: m.url },
         ],
       ],
-      // `loaded` is the follow-up the base interpret would dispatch on success;
+      // `loaded` is the follow-up the base handler would dispatch on success;
       // here it just records the body. Emits no Cmd.
       loaded: (s, m) => [{ ...s, body: m.body }, []],
       // `note` emits only the non-target Cmd — proves non-target is unaffected
       // even when no target Cmd is present in the transition.
       note: (s) => [s, [{ type: "log", line: "noted" }]],
     },
-    interpret: {
-      // The TARGET's base handler — the actual work the resilience layer wraps.
-      do_fetch: async (cmd, ctx): Promise<FetchMsg> => {
-        const body = await ctx.fetchUrl(cmd.url);
-        return { type: "loaded", body };
-      },
-      // The NON-target handler — fire-and-forget; never touched by the wrapper.
-      log: async (cmd, ctx) => {
-        ctx.logLine(cmd.line);
-      },
-    },
   });
+  const interpret: Interpret<FetchMsg, FetchCmd, FetchCtx> = {
+    // The TARGET's base handler — the actual work the resilience layer wraps.
+    do_fetch: async (cmd, ctx): Promise<FetchMsg> => {
+      const body = await ctx.fetchUrl(cmd.url);
+      return { type: "loaded", body };
+    },
+    // The NON-target handler — fire-and-forget; never touched by the wrapper.
+    log: async (cmd, ctx) => {
+      ctx.logLine(cmd.line);
+    },
+  };
+  return { machine, interpret };
 }
 
 // ===========================================================================
@@ -101,7 +108,7 @@ describe("withResilience — intercepting conformance gate", () => {
   it("is faithful: target retagged-not-swallowed, non-target untouched, slice reconstructs", () => {
     const base = makeBase();
     assertWrapperFaithful(
-      base,
+      base.machine,
       () =>
         withResilience(
           base,
@@ -118,7 +125,7 @@ describe("withResilience — intercepting conformance gate", () => {
             circuit: { threshold: 2, cooldownMs: 50 },
           },
           () => 0.5,
-        ),
+        ).machine,
       {
         // The wrapped machine's Msgs are the base Msgs UNION the wrapper Msgs;
         // the gate folds them through both machines (base ignores the wrapper
@@ -151,7 +158,7 @@ describe("withResilience — intercepting conformance gate", () => {
         circuit: { threshold: 2, cooldownMs: 50 },
       },
       () => 0.5,
-    );
+    ).machine;
     const { cmds } = replay(wrapped, {
       msgs: [{ type: "load", url: "/x", at: 1_000 }],
       ctx,
@@ -174,7 +181,11 @@ describe("withResilience — intercepting conformance gate", () => {
 
   it("non-target-only transitions leave the base Cmd untouched and emit no carrier", () => {
     const base = makeBase();
-    const wrapped = withResilience(base, { target: "do_fetch" }, () => 0.5);
+    const wrapped = withResilience(
+      base,
+      { target: "do_fetch" },
+      () => 0.5,
+    ).machine;
     const { cmds } = replay(wrapped, { msgs: [{ type: "note" }], ctx });
     expect(cmds).toEqual([{ type: "log", line: "noted" }]);
   });
@@ -185,7 +196,7 @@ describe("withResilience — intercepting conformance gate", () => {
       base,
       { target: "do_fetch", keyOf: (c) => (c as DoFetchCmd).url },
       () => 0.5,
-    );
+    ).machine;
     const { cmds, state } = replay(wrapped, {
       msgs: [
         { type: "load", url: "/a", at: 1_000 },
@@ -222,20 +233,21 @@ describe("withResilience — reserved namespace guard", () => {
         loaded: (s) => [s, []],
         note: (s) => [s, []],
       },
-      interpret: {
-        "$resilience:run": async () => {},
-      },
     });
+    const wired = {
+      machine: squatting,
+      interpret: { "$resilience:run": async () => {} },
+    };
     expect(() =>
-      withResilience(squatting as never, { target: "do_fetch" }),
+      withResilience(wired as never, { target: "do_fetch" }),
     ).toThrow(/reserved "\$resilience:run" interpret key/);
   });
 
   // The guard covers ALL FOUR reserved keys ($resilience:run / :ok / :err /
-  // :timer) across ALL THREE base surfaces (update / interpret / subscribe), not
-  // just `$resilience:run` on interpret. A base that squats on any of the twelve
-  // (key × surface) combinations is refused — the spread would otherwise silently
-  // clobber the wrapper's cell (or the base's would shadow it).
+  // :timer) across ALL THREE base surfaces (update / handlers / subscribe), not
+  // just `$resilience:run` on the handler table. A base that squats on any of the
+  // twelve (key × surface) combinations is refused — the spread would otherwise
+  // silently clobber the wrapper's cell (or the base's would shadow it).
 
   it("throws if the base declares a reserved $resilience:ok UPDATE key", () => {
     // The base reducer squats on `$resilience:ok` — the wrapper's `succeed`
@@ -257,10 +269,13 @@ describe("withResilience — reserved namespace guard", () => {
         loaded: (s) => [s, []],
         note: (s) => [s, []],
       },
-      interpret: { do_fetch: async () => ({ type: "note" }) as FetchMsg },
     });
+    const wired = {
+      machine: squatting,
+      interpret: { do_fetch: async () => ({ type: "note" }) as FetchMsg },
+    };
     expect(() =>
-      withResilience(squatting as never, {
+      withResilience(wired as never, {
         target: "do_fetch",
         at: atOf,
         circuit: { threshold: 1, cooldownMs: 50 },
@@ -283,10 +298,13 @@ describe("withResilience — reserved namespace guard", () => {
         loaded: (s) => [s, []],
         note: (s) => [s, []],
       },
-      interpret: { "$resilience:err": async () => {} },
     });
+    const wired = {
+      machine: squatting,
+      interpret: { "$resilience:err": async () => {} },
+    };
     expect(() =>
-      withResilience(squatting as never, { target: "do_fetch" }),
+      withResilience(wired as never, { target: "do_fetch" }),
     ).toThrow(/reserved "\$resilience:err" interpret key/);
   });
 
@@ -337,11 +355,14 @@ describe("withResilience — reserved namespace guard", () => {
           "$resilience:ok": (s) => [s, []],
         },
       },
-      interpret: { do_fetch: async () => ({ type: "note" }) as TMsg },
     });
+    const wired = {
+      machine: squatting,
+      interpret: { do_fetch: async () => ({ type: "note" }) as TMsg },
+    };
 
     expect(() =>
-      withResilience(squatting as never, {
+      withResilience(wired as never, {
         target: "do_fetch",
         at: ((m: TMsg) => (m.type === "load" ? m.at : 0)) as never,
         circuit: { threshold: 1, cooldownMs: 50 },
@@ -365,14 +386,17 @@ describe("withResilience — reserved namespace guard", () => {
         loaded: (s) => [s, []],
         note: (s) => [s, []],
       },
-      interpret: { do_fetch: async () => ({ type: "note" }) as FetchMsg },
       subscriptions: () => [],
       subscribe: {
         "$resilience:timer": () => () => {},
       },
     });
+    const wired = {
+      machine: squatting,
+      interpret: { do_fetch: async () => ({ type: "note" }) as FetchMsg },
+    };
     expect(() =>
-      withResilience(squatting as never, { target: "do_fetch" }),
+      withResilience(wired as never, { target: "do_fetch" }),
     ).toThrow(/reserved "\$resilience:timer" subscribe key/);
   });
 });
@@ -430,11 +454,11 @@ describe("withResilience — construction guard: time-sensitive brick needs `at`
 // ===========================================================================
 
 describe("withResilience — construction guard: target needs a base interpret handler", () => {
-  // A base whose interpret omits the `do_fetch` handler — the target Cmd has
-  // nothing to perform. (Built by hand rather than via makeBase so the gap is
+  // A base whose handler table omits `do_fetch` — the target Cmd has nothing
+  // to perform. (Built by hand rather than via makeBase so the gap is
   // explicit.)
   function makeBaseWithoutTargetHandler() {
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as FetchState,
         msg: {} as FetchMsg,
@@ -450,13 +474,14 @@ describe("withResilience — construction guard: target needs a base interpret h
         loaded: (s, m) => [{ ...s, body: m.body }, []],
         note: (s) => [s, [{ type: "log", line: "noted" }]],
       },
-      // Only the NON-target `log` handler — the target `do_fetch` is missing.
-      interpret: {
-        log: async (cmd, ctx) => {
-          ctx.logLine(cmd.line);
-        },
-      },
     });
+    // Only the NON-target `log` handler — the target `do_fetch` is missing.
+    const interpret = {
+      log: async (cmd: LogCmd, ctx: FetchCtx) => {
+        ctx.logLine(cmd.line);
+      },
+    };
+    return { machine, interpret };
   }
 
   it("throws at construction when the target has no base interpret handler", () => {
@@ -488,7 +513,7 @@ describe("withResilience — construction guard: target needs a base interpret h
 
 // ===========================================================================
 // Real run() — fail → retry-timer → succeed END TO END. The target Cmd is
-// actually performed via the composed base.interpret; the breaker opens on the
+// actually performed via the composed base handler; the breaker opens on the
 // failure, then recovers (half-open probe succeeds → closed) on the retry, and
 // the retry counter resets on success.
 // ===========================================================================
@@ -503,7 +528,7 @@ describe("withResilience — real runtime: fail, retry-timer, succeed", () => {
 
   const BASE = 1_000_000;
 
-  it("performs the target via base.interpret, opens then recovers the breaker, resets retry", async () => {
+  it("performs the target via the base handler, opens then recovers the breaker, resets retry", async () => {
     vi.setSystemTime(BASE);
 
     // The port fails the FIRST attempt, succeeds the SECOND. The wrapper drives
@@ -543,7 +568,10 @@ describe("withResilience — real runtime: fail, retry-timer, succeed", () => {
       () => 0.5,
     );
 
-    const runtime = await run(wrapped, { ctx }).ready;
+    const runtime = await run(wrapped.machine, {
+      ctx,
+      interpret: wrapped.interpret,
+    }).ready;
 
     // Drive the first attempt. The base emits `log` (fires immediately) + the
     // target `do_fetch` (retagged → run → base interpret throws → $resilience:err).
@@ -569,7 +597,7 @@ describe("withResilience — real runtime: fail, retry-timer, succeed", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     const afterSucceed = runtime.getState();
-    // The target was actually performed via the composed base.interpret twice
+    // The target was actually performed via the composed base handler twice
     // (one failure, one success) — the wrapper did not fabricate the result.
     expect(attempts).toBe(2);
     // The breaker RECOVERED: half-open probe succeeded → closed.
@@ -609,7 +637,10 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
       fetchUrl: async (url) => `BODY(${url})`,
       logLine: () => {},
     };
-    const runtime = await run(wrapped, { ctx }).ready;
+    const runtime = await run(wrapped.machine, {
+      ctx,
+      interpret: wrapped.interpret,
+    }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
       seen.push(msg.type);
@@ -637,7 +668,10 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
       },
       logLine: () => {},
     };
-    const runtime = await run(wrapped, { ctx }).ready;
+    const runtime = await run(wrapped.machine, {
+      ctx,
+      interpret: wrapped.interpret,
+    }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
       seen.push(msg.type);
@@ -653,7 +687,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
   });
 
   it("a `void` resolution leaves `base` unchanged and dispatches no extra Msg", async () => {
-    const base = defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as FetchState,
         msg: {} as FetchMsg,
@@ -669,20 +703,23 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
         loaded: (s, m) => [{ ...s, body: m.body }, []],
         note: (s) => [s, []],
       },
-      interpret: {
-        // Fire-and-forget target: resolves nothing.
-        do_fetch: async (cmd, ctx) => {
-          await ctx.fetchUrl(cmd.url);
-        },
-        log: async () => {},
-      },
     });
-    const wrapped = withResilience(base, config);
+    const interpret: Interpret<FetchMsg, FetchCmd, FetchCtx> = {
+      // Fire-and-forget target: resolves nothing.
+      do_fetch: async (cmd, ctx) => {
+        await ctx.fetchUrl(cmd.url);
+      },
+      log: async () => {},
+    };
+    const wrapped = withResilience({ machine, interpret }, config);
     const ctx: FetchCtx = {
       fetchUrl: async () => "ignored",
       logLine: () => {},
     };
-    const runtime = await run(wrapped, { ctx }).ready;
+    const runtime = await run(wrapped.machine, {
+      ctx,
+      interpret: wrapped.interpret,
+    }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
       seen.push(msg.type);
@@ -704,7 +741,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
   // the next page (until the body says it is the last) and logs it. The
   // re-emitted target must be RETAGGED; the `log` must ride through raw.
   function makeChainingBase() {
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as FetchState,
         msg: {} as FetchMsg,
@@ -728,20 +765,21 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
         ],
         note: (s) => [s, []],
       },
-      interpret: {
-        do_fetch: async (cmd, ctx): Promise<FetchMsg> => ({
-          type: "loaded",
-          body: await ctx.fetchUrl(cmd.url),
-        }),
-        log: async (cmd, ctx) => {
-          ctx.logLine(cmd.line);
-        },
-      },
     });
+    const interpret: Interpret<FetchMsg, FetchCmd, FetchCtx> = {
+      do_fetch: async (cmd, ctx): Promise<FetchMsg> => ({
+        type: "loaded",
+        body: await ctx.fetchUrl(cmd.url),
+      }),
+      log: async (cmd, ctx) => {
+        ctx.logLine(cmd.line);
+      },
+    };
+    return { machine, interpret };
   }
 
   it("a follow-up that re-emits the target is retagged into `$resilience:run`; its non-target Cmd passes through byte-identical", () => {
-    const wrapped = withResilience(makeChainingBase(), config);
+    const wrapped = withResilience(makeChainingBase(), config).machine;
     const ctx: FetchCtx = { fetchUrl: async () => "x", logLine: () => {} };
     const { state, cmds } = replay(wrapped, {
       msgs: [
@@ -777,7 +815,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
     expect(state.$resilience.calls.do_fetch?.phase).toBe("running");
   });
 
-  it("end to end, a chained follow-up runs the target again through the composed interpret", async () => {
+  it("end to end, a chained follow-up runs the target again through the composed handlers", async () => {
     const wrapped = withResilience(makeChainingBase(), config);
     const fetched: string[] = [];
     const logged: string[] = [];
@@ -790,7 +828,10 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
         logged.push(line);
       },
     };
-    const runtime = await run(wrapped, { ctx }).ready;
+    const runtime = await run(wrapped.machine, {
+      ctx,
+      interpret: wrapped.interpret,
+    }).ready;
     const seen: string[] = [];
     runtime.observe((msg) => {
       seen.push(msg.type);
@@ -810,7 +851,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
       target: "do_fetch",
       at: atOf,
       cache: { ttlMs: 60_000 },
-    });
+    }).machine;
     const ctx: FetchCtx = { fetchUrl: async () => "x", logLine: () => {} };
     const { state, cmds } = replay(wrapped, {
       msgs: [
@@ -848,7 +889,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
       target: "do_fetch",
       at: atOf,
       cache: { ttlMs: 60_000 },
-    });
+    }).machine;
     const ctx: FetchCtx = { fetchUrl: async () => "x", logLine: () => {} };
     const { state, cmds } = replay(wrapped, {
       msgs: [
@@ -886,7 +927,7 @@ describe("withResilience — the base handler's follow-up reaches the base reduc
       target: "do_fetch",
       at: atOf,
       cache: { ttlMs: 60_000 },
-    });
+    }).machine;
     const ctx: FetchCtx = { fetchUrl: async () => "x", logLine: () => {} };
     const { state, cmds } = replay(wrapped, {
       msgs: [
@@ -947,7 +988,7 @@ describe("withResilience — breaker recovers after a real-time trip + cooldown"
         circuit: { threshold: 1, cooldownMs: COOLDOWN },
       },
       () => 0.5,
-    );
+    ).machine;
   }
 
   it("fast-fails a cold attempt during cooldown, admits one after cooldown", () => {
@@ -1062,7 +1103,7 @@ describe("withResilience — fail/onTimer/succeed cells are pure under two ambie
         },
       },
       () => 0.5,
-    );
+    ).machine;
 
     // A log that exercises EVERY $resilience:* cell:
     //   - load            → base cell + cold attempt (admit)
@@ -1128,7 +1169,7 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
 
   function makeBootBase() {
     // A base whose init emits BOTH a non-target `log` and the target `do_fetch`.
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as FetchState,
         msg: {} as FetchMsg,
@@ -1147,21 +1188,26 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
         loaded: (s, m) => [{ ...s, body: m.body }, []],
         note: (s) => [s, [{ type: "log", line: "noted" }]],
       },
-      interpret: {
-        do_fetch: async (cmd, c): Promise<FetchMsg> => ({
-          type: "loaded",
-          body: await c.fetchUrl(cmd.url),
-        }),
-        log: async (cmd, c) => {
-          c.logLine(cmd.line);
-        },
-      },
     });
+    const interpret: Interpret<FetchMsg, FetchCmd, FetchCtx> = {
+      do_fetch: async (cmd, c): Promise<FetchMsg> => ({
+        type: "loaded",
+        body: await c.fetchUrl(cmd.url),
+      }),
+      log: async (cmd, c) => {
+        c.logLine(cmd.line);
+      },
+    };
+    return { machine, interpret };
   }
 
   it("the boot target Cmd is RETAGGED into $resilience:run, never raw; non-target passes through", () => {
     const base = makeBootBase();
-    const wrapped = withResilience(base, { target: "do_fetch" }, () => 0.5);
+    const wrapped = withResilience(
+      base,
+      { target: "do_fetch" },
+      () => 0.5,
+    ).machine;
     const { cmds, state } = replay(wrapped, { msgs: [], ctx });
 
     // No raw target at boot.
@@ -1183,7 +1229,11 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
 
   it("rehydrate (loaded non-null) returns [loaded, []] with no boot Cmds", () => {
     const base = makeBootBase();
-    const wrapped = withResilience(base, { target: "do_fetch" }, () => 0.5);
+    const wrapped = withResilience(
+      base,
+      { target: "do_fetch" },
+      () => 0.5,
+    ).machine;
     const loaded = {
       base: { url: "/saved", body: "saved" },
       $resilience: wrapped.init(null, ctx)[0].$resilience,
@@ -1215,7 +1265,7 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
         deadline: { ms: 5_000 },
       },
       () => 0.5,
-    );
+    ).machine;
     // The throw is at init time — neither replay (which calls init) nor a direct
     // init() call may silently arm a 0-anchored boot deadline.
     expect(() => wrapped.init(null, ctx)).toThrow(
@@ -1239,7 +1289,7 @@ describe("withResilience — init retags (admits) a target Cmd from base.init", 
         circuit: { threshold: 2, cooldownMs: 50 },
       },
       () => 0.5,
-    );
+    ).machine;
     // init does not throw, boots cleanly.
     expect(() => wrapped.init(null, ctx)).not.toThrow();
     const { cmds, state } = replay(wrapped, { msgs: [], ctx });
@@ -1306,7 +1356,7 @@ describe("withResilience — properties", () => {
             },
           },
           () => 0.5,
-        );
+        ).machine;
         // Two independent replays of the same log agree (no folded clock/RNG).
         const a = replay(wrapped, { msgs, ctx });
         const b = replay(wrapped, { msgs, ctx });
@@ -1316,7 +1366,7 @@ describe("withResilience — properties", () => {
           a.state.$resilience,
         );
         // The base slice matches the bare base run for every log.
-        const bare = replay(base, { msgs, ctx });
+        const bare = replay(base.machine, { msgs, ctx });
         expect(a.state.base).toEqual(bare.state);
         // No raw target Cmd ever escapes — always retagged into the carrier.
         expect(a.cmds.find((c) => c.type === "do_fetch")).toBeUndefined();
@@ -1339,7 +1389,7 @@ describe("withResilience — properties", () => {
         },
       },
       () => 0.5,
-    );
+    ).machine;
     const msgs: readonly FetchMsg[] = [
       { type: "load", url: "/a", at: 1_000 },
       { type: "note" },
@@ -1436,13 +1486,13 @@ describe("withResilience — real runtime: duration-bounded outage", () => {
     // No `at` in the config: retry alone is not a time-sensitive brick, and the
     // streak clock comes off `$resilience:err` / `$resilience:timer`, not the
     // cold gate.
-    const wrapped = withResilience(
+    const { machine, interpret } = withResilience(
       base,
       { target: "do_fetch", retry },
       () => 0,
     );
 
-    const runtime = await run(wrapped, { ctx }).ready;
+    const runtime = await run(machine, { ctx, interpret }).ready;
     await runtime.dispatch({ type: "load", url: "/x", at: 0 });
     await flush();
 
@@ -1453,7 +1503,7 @@ describe("withResilience — real runtime: duration-bounded outage", () => {
 
     // Terminal, and nothing left armed.
     expect(runtime.getState().$resilience.calls.do_fetch?.phase).toBe("failed");
-    expect(wrapped.subscriptions?.(runtime.getState())).toEqual([]);
+    expect(machine.subscriptions?.(runtime.getState())).toEqual([]);
 
     // Settled: no further port hit however long we wait.
     const settled = hitAt.length;

@@ -117,7 +117,9 @@
  *   },
  *   subscriptions: (s) => rc.subs(s.resilience),
  *   subscribe: { deadline: subscribeDeadline },
- *   interpret: rc.handlers({ run: ctx.call }),
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: rc.handlers({ run: ctx.call }) });
  *
  * `docs/how-to/hand-wire-a-resilient-call.md` walks the whole machine.
  *
@@ -1142,9 +1144,9 @@ export function createResilientCall<
    * `run` port via `tryInterpret` (Railway): success → `resilient_ok`, failure
    * → `resilient_err`, each stamped with `Date.now()` at the effect boundary —
    * the ONE permitted clock read (interpret is impure; the reducer never reads
-   * the clock). Assign to the machine's `interpret`:
+   * the clock). Hand it to `run` beside the machine:
    *
-   *   interpret: rc.handlers({ run: (input, key) => ctx.callBackend(input) })
+   *   run(machine, { interpret: rc.handlers({ run: (input, key) => ctx.callBackend(input) }) })
    */
   function handlers(ports: ResilientPorts<I, R>): ResilientHandlers<I, R, N> {
     const handle = tryInterpret<

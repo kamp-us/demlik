@@ -30,22 +30,30 @@ function Downloader() {
 ```
 
 Each `dispatch` folds a Msg through `update` and re-renders with the next state.
-Under the hood `useMachine` calls `run(machine, { ctx })`, subscribes via
+Under the hood `useMachine` calls `run(machine, { ctx, interpret })`, subscribes via
 `useSyncExternalStore` (so it is tearing-free under React 18's concurrent
 rendering), and calls `runtime.stop()` on unmount to drain the queue and clean up
 every active subscription.
 
-## 2. Pass a `ctx` when your effects need one
+## 2. Hand it the handlers, and a `ctx` when they need one
 
-If your machine's `interpret` reads dependencies — an HTTP client, a clock — pass
-them through `ctx`. Keep the `ctx` object identity stable (define it outside the
-component or memoize it), because `useMachine` rebuilds the runtime whenever the
-machine, `ctx`, or `store` identity changes:
+A machine that emits Cmds needs the handlers that perform them. Pass them as
+`interpret`, the same map `run` takes. If those handlers read dependencies — an
+HTTP client, a clock — pass them through `ctx`. Keep the `ctx` object identity
+stable (define it outside the component or memoize it), because `useMachine`
+rebuilds the runtime whenever the machine, `ctx`, or `store` identity changes:
 
 ```tsx
 const ctx = useMemo(() => ({ http: (url: string) => fetch(url).then((r) => r.text()) }), []);
-const [state, dispatch] = useMachine(resilientFetch, { ctx });
+const [state, dispatch] = useMachine(resilientFetch, {
+  ctx,
+  interpret: resilientFetchInterpret,
+});
 ```
+
+`interpret` is the exception to that identity rule. The hook reads each handler
+from the latest render when a Cmd runs, so a handler table written inline — one
+that closes over props or state — never rebuilds the runtime.
 
 ## 3. Persist across mounts with a `store`
 

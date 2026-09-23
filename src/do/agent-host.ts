@@ -18,6 +18,7 @@ import {
 import type {
   BootingRuntime,
   Cmd,
+  Interpret,
   Machine,
   Runtime,
   Store,
@@ -75,17 +76,22 @@ export interface AgentHostConfig<
   Ctx = unknown,
 > {
   /**
-   * Build the wired agent machine. Called once per host build (per activation),
-   * AFTER the previous runtime — if any — was torn down. The consumer wires its
-   * per-tool interpret here (`agent.toMachine({ toolInterpret })`).
+   * Build the wired agent machine and the `interpret` table it runs under (a
+   * machine carries no handlers — #278). Called once per host build (per
+   * activation), AFTER the previous runtime — if any — was torn down. The
+   * consumer wires its per-tool interpret here, and `agent.toMachine({
+   * toolInterpret })` already returns exactly this pair.
    */
-  readonly buildMachine: () => Machine<
-    AgentState<Stage, P, O, R>,
-    AgentMachineMsg<P, O, R>,
-    C,
-    U,
-    Ctx
-  >;
+  readonly buildMachine: () => {
+    readonly machine: Machine<
+      AgentState<Stage, P, O, R>,
+      AgentMachineMsg<P, O, R>,
+      C,
+      U,
+      Ctx
+    >;
+    readonly interpret: Interpret<AgentMachineMsg<P, O, R>, C, Ctx>;
+  };
   /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
   readonly store: Store<AgentState<Stage, P, O, R>>;
   /** The plain Ctx the machine threads to its interpret cells. */
@@ -225,7 +231,9 @@ export function createAgentHost<
     // SEMANTIC event projector (#47) so `runtime.on(...)` lights up, then drive
     // the SSE hub off that named stream (never the private-Msg firehose). The
     // `terminal` predicate makes `result()` / `done()` meaningful (#46).
-    const booting: BootingRuntime<S, M, E> = run(config.buildMachine(), {
+    const { machine, interpret } = config.buildMachine();
+    const booting: BootingRuntime<S, M, E> = run(machine, {
+      interpret,
       ctx: config.ctx,
       store: config.store,
       events: agentEvents<Stage, P, O, R>(),

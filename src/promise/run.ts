@@ -10,7 +10,9 @@ import type {
   Machine,
   Port,
   PortEmitter,
+  RunHandlers,
   Sub,
+  Subscribe,
 } from "../pure/core";
 import {
   applyCellChecked,
@@ -135,57 +137,61 @@ export function run<
 >(
   machine: Machine<S, M, C, U, Ctx>,
   // `ctx` is a plain object (ADR 0020): tea does no dependency injection, so
-  // a handler's services are whatever the host put on it.
-  opts: CtxArg<Ctx> & {
-    store?: Store<S>;
-    onError?: OnError;
-    /**
-     * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
-     * the interpret edge. Defaults to `Date.now`. Inject a fixed one for a
-     * deterministic run; a `replay` log carries its own `at`s and never reads
-     * this.
-     */
-    clock?: () => number;
-    /**
-     * The SEMANTIC event projector. Maps one APPLIED transition `(msg, state)`
-     * to zero-or-more public events of `E`; `[]` skips the transition. Maps the
-     * machine's PRIVATE Msg vocabulary to NAMED events — the private names never
-     * reach `on`'s `E` surface. Omit → `E = never` and `on` is uncallable. PURE.
-     */
-    events?: (msg: M, state: S) => readonly E[];
-    /**
-     * Declared policy for a reducer (`update`) throw. Always surfaced via
-     * `onError` (`phase: "reduce"`); the strategy decides what the runtime does
-     * next. Defaults to `"stop"`. See `Supervision`.
-     */
-    supervision?: Supervision<S, M>;
-    /**
-     * The run-terminality predicate — makes the run's outcome first-class. Fed to
-     * `Runtime.result()` and `Runtime.done()`. PURE. Omit → never terminal.
-     */
-    terminal?: (state: S) => boolean;
-    /**
-     * How long `stop()` waits for teardown work that returned a Promise (an
-     * async `release` in `defineManagedResource`, an async Sub cleanup) before
-     * giving up on it. Defaults to 5_000ms.
-     *
-     * `stop()` awaits those disposals so a host doing
-     * `await runtime.stop(); env.evict()` cannot drop the isolate mid-release —
-     * the leak the managed-resource battery exists to prevent, relocated to
-     * shutdown. The bound is what keeps a release that never settles from
-     * hanging the host: on expiry `stop()` reports a `DisposeTimeoutNotice`
-     * (warn-only, like every `RuntimeDiscardNotice`) and resolves anyway,
-     * because `stop()` resolving is a contract.
-     */
-    disposeTimeoutMs?: number;
-    /**
-     * Iteration cap for `idle()`'s quiescence wait. Defaults to 100_000. Test
-     * seam only. Production code must not set it.
-     *
-     * @internal test-only
-     */
-    __idleCap?: number;
-  },
+  // a handler's services are whatever the host put on it. The Cmd handlers
+  // arrive here, beside the machine and never on it (#251 R1.1). `NoInfer`
+  // keeps them a check against the machine's `M` / `C` rather than a second
+  // inference site that could widen either.
+  opts: CtxArg<Ctx> &
+    NoInfer<RunHandlers<M, C, U, Ctx>> & {
+      store?: Store<S>;
+      onError?: OnError;
+      /**
+       * The clock that stamps `at` on a `Cmd.define`d effect's settled Msg at
+       * the interpret edge. Defaults to `Date.now`. Inject a fixed one for a
+       * deterministic run; a `replay` log carries its own `at`s and never reads
+       * this.
+       */
+      clock?: () => number;
+      /**
+       * The SEMANTIC event projector. Maps one APPLIED transition `(msg, state)`
+       * to zero-or-more public events of `E`; `[]` skips the transition. Maps the
+       * machine's PRIVATE Msg vocabulary to NAMED events — the private names never
+       * reach `on`'s `E` surface. Omit → `E = never` and `on` is uncallable. PURE.
+       */
+      events?: (msg: M, state: S) => readonly E[];
+      /**
+       * Declared policy for a reducer (`update`) throw. Always surfaced via
+       * `onError` (`phase: "reduce"`); the strategy decides what the runtime does
+       * next. Defaults to `"stop"`. See `Supervision`.
+       */
+      supervision?: Supervision<S, M>;
+      /**
+       * The run-terminality predicate — makes the run's outcome first-class. Fed to
+       * `Runtime.result()` and `Runtime.done()`. PURE. Omit → never terminal.
+       */
+      terminal?: (state: S) => boolean;
+      /**
+       * How long `stop()` waits for teardown work that returned a Promise (an
+       * async `release` in `defineManagedResource`, an async Sub cleanup) before
+       * giving up on it. Defaults to 5_000ms.
+       *
+       * `stop()` awaits those disposals so a host doing
+       * `await runtime.stop(); env.evict()` cannot drop the isolate mid-release —
+       * the leak the managed-resource battery exists to prevent, relocated to
+       * shutdown. The bound is what keeps a release that never settles from
+       * hanging the host: on expiry `stop()` reports a `DisposeTimeoutNotice`
+       * (warn-only, like every `RuntimeDiscardNotice`) and resolves anyway,
+       * because `stop()` resolving is a contract.
+       */
+      disposeTimeoutMs?: number;
+      /**
+       * Iteration cap for `idle()`'s quiescence wait. Defaults to 100_000. Test
+       * seam only. Production code must not set it.
+       *
+       * @internal test-only
+       */
+      __idleCap?: number;
+    },
 ): BootingRuntime<S, M, E> {
   const { store } = opts;
   // Fencing is a property of the store the caller handed us, never a flag on
@@ -548,7 +554,7 @@ export function run<
     let firstStartError: unknown = depError;
     for (const sub of desired) {
       if (subRegistry.has(sub.id)) continue;
-      const handler = machine.subscribe?.[sub.type as U["type"]];
+      const handler = subscribeFor(sub.type as U["type"]);
       if (!handler) {
         // No handler for this sub type — programmer error; skip.
         continue;
@@ -574,8 +580,21 @@ export function run<
   // `{}` — the per-cmd `if (!handler) continue` preserves invariant-6 forward
   // progress for a miswired consumer.
   const interpretMap: Interpret<M, C, Ctx> =
-    (machine as { interpret?: Interpret<M, C, Ctx> }).interpret ??
+    (opts as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
+
+  // A `subscribe` runner handed to `run` replaces the machine's own runner of
+  // the same Sub type. Looked up per start rather than merged once, so a
+  // handler table that resolves its cells lazily (`/react` reads the latest
+  // render's) is honoured.
+  const subscribeOverrides = opts.subscribe as
+    | Partial<Subscribe<M, U, Ctx>>
+    | undefined;
+  function subscribeFor<K extends U["type"]>(
+    type: K,
+  ): Subscribe<M, U, Ctx>[K] | undefined {
+    return subscribeOverrides?.[type] ?? machine.subscribe?.[type];
+  }
 
   // The ONE `(msg) => void` handed to every producer that cannot await its own
   // dispatch: a detached interpret handler's `ctx.waitUntil(...)` tail, a

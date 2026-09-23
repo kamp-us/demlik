@@ -93,7 +93,7 @@ const turnOf = (stage: Stage | undefined): Purpose =>
 
 // The per-tool effect, as data — the consumer's own interpret performs it. A
 // CLOSED discriminated Cmd variant (`ToolCmd`) so the agent's `TC` type param
-// stays precise and the wired machine's interpret merge type-checks per key.
+// stays precise and the wired interpret merge type-checks per key.
 type ToolCmd = { readonly type: "run_tool" } & ToolCall;
 const toolOf = (call: ToolCall): ToolCmd => ({ type: "run_tool", ...call });
 
@@ -356,7 +356,7 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
   // arms. These replay tests hand-feed the re-entered settle Msg directly to
   // exercise the reducer arms; the true end-to-end re-entry is the WIRED test
   // below, which runs the real runtime so the handler return drives the loop.
-  const machine = agent.toMachine<object>();
+  const { machine } = agent.toMachine<object>();
   const bound = bindMachine(machine, {} as object);
 
   // The re-entered brain-call success settle Msg (what `brainHandlers` returns).
@@ -492,8 +492,8 @@ describe("createAgent — WIRED machine drives the full loop to terminal done", 
       snapshot_write: async () => {},
     };
 
-    const machine = agent.toMachine<object>({ toolInterpret });
-    const runtime = await run(machine, { ctx: {} as object }).ready;
+    const { machine, interpret } = agent.toMachine<object>({ toolInterpret });
+    const runtime = await run(machine, { ctx: {} as object, interpret }).ready;
 
     // Stop driving once the run is terminal.
     const off = runtime.observe((_msg, state) => {
@@ -575,9 +575,8 @@ describe("createAgent — plain-function model drives the wired machine", () => 
     const reachedDone = new Promise<void>((res) => {
       resolveDone = res;
     });
-    const runtime = await run(agent.toMachine<object>({ toolInterpret }), {
-      ctx: {} as object,
-    }).ready;
+    const { machine, interpret } = agent.toMachine<object>({ toolInterpret });
+    const runtime = await run(machine, { ctx: {} as object, interpret }).ready;
     const off = runtime.observe((_msg, state) => {
       if (agent.isSettled(state)) resolveDone();
     });

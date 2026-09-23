@@ -106,6 +106,7 @@
 import type {
   CmdOf,
   Interpret,
+  InterpretArg,
   Machine,
   Reducer,
   Sub,
@@ -352,11 +353,15 @@ function updateDeclaresMsgKey(
 
 /**
  * Wrap `base` so its `config.target` Cmd is run through the resilient-call
- * concern (cache → circuit → rate-limit → retry, deadline-capped). Returns a
- * NEW `Machine` over the composed Model `{ base, $resilience }`, with the
- * base's Msgs/Cmds/Subs/Ctx extended by the wrapper's own.
+ * concern (cache → circuit → rate-limit → retry, deadline-capped). Takes the
+ * base machine together with the handlers it runs under (a machine carries
+ * none — #278) and returns a NEW `Machine` over the composed Model
+ * `{ base, $resilience }` beside the composed `interpret`, with the base's
+ * Msgs/Cmds/Subs/Ctx extended by the wrapper's own. Run it as
+ * `run(wrapped.machine, { interpret: wrapped.interpret, ctx })`.
  *
- * @param base   any `Machine<S, M, C, U, Ctx>`.
+ * @param wired  any `Machine<S, M, C, U, Ctx>` as `machine`, beside its
+ *               `interpret` handlers — the target's handler among them.
  * @param config the resilience knob: `target`, the optional bricks, `keyOf`.
  * @param rng    injected backoff jitter source. Pass a fixed `() => 0.5` in
  *               tests to pin retry delays; defaults to `Math.random` (read only
@@ -369,16 +374,24 @@ export function withResilience<
   U extends Sub,
   Ctx,
 >(
-  base: Machine<S, M, C, U, Ctx>,
+  wired: { readonly machine: Machine<S, M, C, U, Ctx> } & InterpretArg<
+    M,
+    C,
+    Ctx
+  >,
   config: ResilienceConfig<C, M>,
   rng: () => number = Math.random,
-): Machine<
-  ResilienceModel<S, C>,
-  M | ResilienceMsg,
-  C | ResilienceCmd<C>,
-  U | ResilienceTimerSub,
-  Ctx
-> {
+): {
+  readonly machine: Machine<
+    ResilienceModel<S, C>,
+    M | ResilienceMsg,
+    C | ResilienceCmd<C>,
+    U | ResilienceTimerSub,
+    Ctx
+  >;
+  readonly interpret: Interpret<M | ResilienceMsg, C | ResilienceCmd<C>, Ctx>;
+} {
+  const base = wired.machine;
   type WM = ResilienceModel<S, C>;
   type WMsg = M | ResilienceMsg;
   type WCmd = C | ResilienceCmd<C>;
@@ -614,7 +627,7 @@ export function withResilience<
   // -------------------------------------------------------------------------
 
   const baseInterpret =
-    (base as { interpret?: Interpret<M, C, Ctx> }).interpret ??
+    (wired as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
 
   // Reserved-namespace guard (mirrors withTelemetry + the substrate's
@@ -795,8 +808,8 @@ export function withResilience<
       ),
   };
 
-  return {
-    init: (loaded, ctx) => {
+  const machine = {
+    init: (loaded: WM | null, ctx: Ctx) => {
       // Rehydrate: `loaded !== null` MUST return `[loaded, []]` (no Cmds) — the
       // substrate's replay enforces it. Split the composed loaded Model into its
       // base slice and feed the base its own snapshot so the base rehydrate
@@ -871,10 +884,10 @@ export function withResilience<
       U | ResilienceTimerSub,
       Ctx
     >["subscribe"],
-    interpret,
     // The base's `Cmd.define` list rides through so `run`'s interpret edge
     // still parses / stamps the base's NON-target settled Msgs behind the
     // wrap; the target's settle through the carrier above (#66).
     ...(base.cmds ? { cmds: base.cmds } : {}),
   } as Machine<WM, WMsg, WCmd, U | ResilienceTimerSub, Ctx>;
+  return { machine, interpret };
 }

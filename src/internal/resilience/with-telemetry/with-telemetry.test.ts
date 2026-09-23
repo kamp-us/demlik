@@ -1,6 +1,11 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, replay } from "../../../index";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  replay,
+} from "../../../index";
 import { run } from "../../../promise";
 import { assertWrapperFaithful } from "../../../testing";
 import {
@@ -30,7 +35,7 @@ interface CounterCtx {
 }
 
 function makeBase() {
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as CounterState,
       msg: {} as CounterMsg,
@@ -46,12 +51,13 @@ function makeBase() {
       // `reset` emits NO base Cmd — proves the wrapper still emits its own.
       reset: () => [{ count: 0 }, []],
     },
-    interpret: {
-      persist: async (cmd, ctx) => {
-        await ctx.persist(cmd.count);
-      },
-    },
   });
+  const interpret: Interpret<CounterMsg, PersistCmd, CounterCtx> = {
+    persist: async (cmd, ctx) => {
+      await ctx.persist(cmd.count);
+    },
+  };
+  return { machine, interpret };
 }
 
 const MSGS: readonly CounterMsg[] = [
@@ -84,7 +90,7 @@ describe("withTelemetry — observe-only composition", () => {
   it("is faithful by the shared conformance gate", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
-    assertWrapperFaithful(base, () => withTelemetry(base), {
+    assertWrapperFaithful(base.machine, () => withTelemetry(base).machine, {
       msgs: MSGS,
       ctx,
     });
@@ -94,14 +100,14 @@ describe("withTelemetry — observe-only composition", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
     assertWrapperFaithful(
-      base,
+      base.machine,
       () =>
         withTelemetry(base, {
           event: (msg, _prev, next) => ({
             seq: next.$telemetry.seq,
             msgType: msg.type,
           }),
-        }),
+        }).machine,
       { msgs: MSGS, ctx },
     );
   });
@@ -109,9 +115,9 @@ describe("withTelemetry — observe-only composition", () => {
   it("does NOT transform base Cmds — they pass through byte-identical", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
-    const wrapped = withTelemetry(base);
+    const wrapped = withTelemetry(base).machine;
 
-    const bare = replay(base, { msgs: MSGS, ctx });
+    const bare = replay(base.machine, { msgs: MSGS, ctx });
     const composed = replay(wrapped, { msgs: MSGS, ctx });
 
     // Every base `persist` Cmd is present in the composed stream, in order,
@@ -129,22 +135,22 @@ describe("withTelemetry — observe-only composition", () => {
   it("does NOT gate base Msgs — base state is byte-identical to the bare run", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
-    const bare = replay(base, { msgs: MSGS, ctx });
-    const composed = replay(withTelemetry(base), { msgs: MSGS, ctx });
+    const bare = replay(base.machine, { msgs: MSGS, ctx });
+    const composed = replay(withTelemetry(base).machine, { msgs: MSGS, ctx });
     expect(composed.state.base).toEqual(bare.state);
   });
 
   it("seq === msgs.length (one telemetry tick per base transition)", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
-    const { state } = replay(withTelemetry(base), { msgs: MSGS, ctx });
+    const { state } = replay(withTelemetry(base).machine, { msgs: MSGS, ctx });
     expect(state.$telemetry.seq).toBe(MSGS.length);
   });
 
   it("emits exactly one $telemetry:emit Cmd per transition, with the default event", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
-    const { cmds } = replay(withTelemetry(base), { msgs: MSGS, ctx });
+    const { cmds } = replay(withTelemetry(base).machine, { msgs: MSGS, ctx });
     const emits = cmds.filter((c) => c.type === "$telemetry:emit");
     expect(emits.length).toBe(MSGS.length);
     expect(emits).toEqual([
@@ -159,7 +165,7 @@ describe("withTelemetry — observe-only composition", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
     // Replay a single `inc`: base emits `persist`, wrapper appends `$telemetry:emit`.
-    const { cmds } = replay(withTelemetry(base), {
+    const { cmds } = replay(withTelemetry(base).machine, {
       msgs: [{ type: "inc", by: 3 }],
       ctx,
     });
@@ -172,7 +178,10 @@ describe("withTelemetry — observe-only composition", () => {
   it("init seeds seq: 0 and passes base init Cmds through (no telemetry on boot)", () => {
     const base = makeBase();
     const { ctx } = makeCtx();
-    const { state, cmds } = replay(withTelemetry(base), { msgs: [], ctx });
+    const { state, cmds } = replay(withTelemetry(base).machine, {
+      msgs: [],
+      ctx,
+    });
     expect(state).toEqual({ base: { count: 0 }, $telemetry: { seq: 0 } });
     expect(cmds).toEqual([]);
   });
@@ -186,7 +195,11 @@ describe("withTelemetry — observe-only composition", () => {
     };
     // replay throws if init returns Cmds on a non-null loaded — passing means
     // the rehydrate branch is a pure passthrough.
-    const { state } = replay(withTelemetry(base), { msgs: [], ctx, loaded });
+    const { state } = replay(withTelemetry(base).machine, {
+      msgs: [],
+      ctx,
+      loaded,
+    });
     expect(state).toEqual(loaded);
   });
 });
@@ -200,7 +213,8 @@ describe("withTelemetry — real runtime drives the sink", () => {
   it("delivers a projected, clock-stamped event to the sink per dispatch", async () => {
     const base = makeBase();
     const { ctx, events, persisted } = makeCtx();
-    const runtime = await run(withTelemetry(base), { ctx }).ready;
+    const { machine, interpret } = withTelemetry(base);
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     await runtime.dispatch({ type: "inc", by: 4 });
     await runtime.dispatch({ type: "reset" });
@@ -224,8 +238,8 @@ describe("withTelemetry — real runtime drives the sink", () => {
   });
 
   it("throws if the base already declares a reserved $telemetry:emit handler", () => {
-    // A base that squats on the wrapper's reserved Cmd namespace. The interpret
-    // spread would SILENTLY clobber this handler; the wrap-time guard refuses.
+    // A base that squats on the wrapper's reserved Cmd namespace. Merging the
+    // handler tables would SILENTLY clobber this handler; the wrap-time guard refuses.
     type SquatCmd = Cmd<"$telemetry:emit"> & { readonly note: string };
     const squatting = defineMachine({
       types: {
@@ -242,19 +256,21 @@ describe("withTelemetry — real runtime drives the sink", () => {
         ],
         reset: () => [{ count: 0 }, []],
       },
-      interpret: {
-        "$telemetry:emit": async () => {},
-      },
     });
-    expect(() => withTelemetry(squatting)).toThrow(
-      /reserved "\$telemetry:emit" interpret handler/,
-    );
+    expect(() =>
+      withTelemetry({
+        machine: squatting,
+        interpret: { "$telemetry:emit": async () => {} },
+      }),
+    ).toThrow(/reserved "\$telemetry:emit" interpret handler/);
   });
 
   it("leaves event.at unset when no clock port is supplied", async () => {
     const base = makeBase();
     const events: TelemetryEvent[] = [];
-    const runtime = await run(withTelemetry(base), {
+    const { machine, interpret } = withTelemetry(base);
+    const runtime = await run(machine, {
+      interpret,
       ctx: {
         persist: async () => {},
         telemetrySink: (e: TelemetryEvent) => {
@@ -283,7 +299,9 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
     // A sink that returns a forever-pending Promise. If the handler awaited it,
     // the dispatch loop would hang here and the second dispatch would never run.
     const hung = new Promise<void>(() => {}); // never resolves, never rejects
-    const runtime = await run(withTelemetry(base), {
+    const { machine, interpret } = withTelemetry(base);
+    const runtime = await run(machine, {
+      interpret,
       ctx: {
         persist: async (count: number) => {
           persisted.push(count);
@@ -322,7 +340,9 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
   it("a sink that REJECTS does not crash the machine — the run continues and state advances", async () => {
     const base = makeBase();
     const persisted: number[] = [];
-    const runtime = await run(withTelemetry(base), {
+    const { machine, interpret } = withTelemetry(base);
+    const runtime = await run(machine, {
+      interpret,
       ctx: {
         persist: async (count: number) => {
           persisted.push(count);
@@ -352,7 +372,9 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
   it("a sink that THROWS SYNCHRONOUSLY does not crash the machine either", async () => {
     const base = makeBase();
     const persisted: number[] = [];
-    const runtime = await run(withTelemetry(base), {
+    const { machine, interpret } = withTelemetry(base);
+    const runtime = await run(machine, {
+      interpret,
       ctx: {
         persist: async (count: number) => {
           persisted.push(count);
@@ -385,7 +407,9 @@ describe("withTelemetry — sink is fire-and-forget (non-blocking, non-crashing)
     const onUnhandled = (reason: unknown) => rejections.push(reason);
     process.on("unhandledRejection", onUnhandled);
     try {
-      const runtime = await run(withTelemetry(base), {
+      const { machine, interpret } = withTelemetry(base);
+      const runtime = await run(machine, {
+        interpret,
         ctx: {
           persist: async () => {},
           telemetrySink: async () => {
@@ -425,7 +449,7 @@ describe("withTelemetry — properties", () => {
     const { ctx } = makeCtx();
     fc.assert(
       fc.property(arbMsgs, (msgs) => {
-        const wrapped = withTelemetry(base);
+        const wrapped = withTelemetry(base).machine;
         // seq after N msgs is exactly N.
         const { state } = replay(wrapped, { msgs, ctx });
         expect(state.$telemetry.seq).toBe(msgs.length);
@@ -443,7 +467,7 @@ describe("withTelemetry — properties", () => {
     const { ctx } = makeCtx();
     fc.assert(
       fc.property(arbMsgs, (msgs) => {
-        const wrapped = withTelemetry(base);
+        const wrapped = withTelemetry(base).machine;
         // Two independent replays of the same log yield deep-equal results AND
         // the wrapper slice is JSON-round-trip stable (durable, no closure).
         const a = replay(wrapped, { msgs, ctx });
@@ -453,7 +477,7 @@ describe("withTelemetry — properties", () => {
           a.state.$telemetry,
         );
         // The base slice matches the bare base run for every log.
-        const bare = replay(base, { msgs, ctx });
+        const bare = replay(base.machine, { msgs, ctx });
         expect(a.state.base).toEqual(bare.state);
       }),
     );

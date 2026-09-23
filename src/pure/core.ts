@@ -1029,8 +1029,8 @@ export function msgKeysOf(machine: {
 // This is a DERIVED READING over the table, deliberately NOT a property on the
 // machine. It has to be: every `withX` wrapper builds a fresh flat
 // `Record<string, Cell>`, casts it to `Reducer`, and returns a NEW object
-// literal carrying `init`/`update`/`subscriptions`/`subscribe`/`interpret`
-// plus the base's `cmds` — the one property a wrapper forwards on purpose,
+// literal carrying `init`/`update`/`subscriptions`/`subscribe` plus the
+// base's `cmds` — the one property a wrapper forwards on purpose,
 // because `run`'s interpret edge reads it (#66). Any OTHER property hung on a
 // machine is destroyed by the first wrap, and the wrapped table is
 // reducer-form regardless of the base's. A function over `(update, formOf)`
@@ -1181,7 +1181,7 @@ export type Transitions<
 // Use it as an annotation on the table, then hand the table to `defineMachine`:
 //
 //   const update: ExhaustiveTransitions<State, Msg, Cmds> = { … };
-//   export const machine = defineMachine({ init, update, interpret });
+//   export const machine = defineMachine({ init, update });
 //
 // `satisfies` works the same way and keeps the literal's own type.
 /**
@@ -1697,8 +1697,8 @@ export type NoCtx = Readonly<Record<never, never>>;
 // absent". A handler authored via `wrapDetached` receives a NARROWER view of
 // this dispatch (only its declared result-Msg set).
 //
-// Hoisted out of `Machine.interpret` so consumers can type a free-standing
-// handler dictionary with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
+// A named type so consumers can type the free-standing handler dictionary
+// they hand `run` with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
 // re-declaring the mapped type at every effects module.
 //
 // A cell's `ctx` is the machine's plain `Ctx` plus the kernel's `emit`; tea
@@ -1803,6 +1803,42 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
   ) => Dispose;
 };
 
+// === InterpretArg / RunHandlers: the handlers an engine is handed at run ===
+//
+// The Cmd handlers live beside the machine, never on it (#251 R1.1): every
+// engine's `run(machine, { interpret, subscribe })` and `/react`'s
+// `useMachine(machine, { interpret, … })` take them in their options. So the
+// requiredness `Machine.interpret` used to carry lives here instead: a machine
+// that emits no Cmd (`C` is `Cmd<never>`) has nothing to interpret and may omit
+// the map, and one that emits a real Cmd union must hand over a handler for
+// every variant. The tuple-wrap (`[C] extends [Cmd<never>]`) disables the
+// distributive conditional, so a real union never degrades to optional because
+// one arm happens to be `Cmd<never>`.
+/**
+ * The `interpret` option of an engine's `run`: optional for a machine that
+ * emits no Cmd, required — one handler per Cmd variant — for one that does.
+ */
+export type InterpretArg<M extends { type: string }, C extends Cmd, Ctx> = [
+  C,
+] extends [Cmd<never>]
+  ? { interpret?: Interpret<M, C, Ctx> }
+  : { interpret: Interpret<M, C, Ctx> };
+
+/**
+ * The handlers an engine is handed beside a machine: the {@link InterpretArg}
+ * Cmd handlers, plus optional `subscribe` runners. A `subscribe` entry here
+ * replaces the machine's own runner of the same Sub type, so a test can swap
+ * one runner (a fake clock, a stub socket) without redefining the machine.
+ */
+export type RunHandlers<
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = InterpretArg<M, C, Ctx> & {
+  readonly subscribe?: Partial<Subscribe<M, U, Ctx>>;
+};
+
 // === Machine: pure data, host-agnostic ===
 //
 // `update` is stored as a union of the two record forms — the runtime branches
@@ -1819,13 +1855,11 @@ export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
 // `M` is constrained to `{ type: string }` because both record forms require
 // a string discriminant.
 //
-// `interpret` is conditionally optional: when `C` is `Cmd<never>` the
-// interpret map is keyed by `never`, so the only valid value is `{}`. Forcing
-// every cmdless machine to write `interpret: {} as never` is ceremony for a
-// shape the type already pins. The tuple-wrap (`[C] extends [Cmd<never>]`)
-// disables distributive conditional so a real cmd union (e.g.
-// `Cmd<"a"> | Cmd<"b">`) doesn't degrade to optional just because one arm
-// happens to be `Cmd<never>`. Same trick the `update` field uses.
+// A machine carries no Cmd handlers (#251 R1.1). `interpret` is code, and the
+// machine is data: the handlers arrive where the machine is run —
+// `run(machine, { interpret })`, `useMachine(machine, { interpret })` — so one
+// machine file runs unchanged under any engine. The conditional requiredness
+// the field used to carry lives on {@link InterpretArg} now.
 export type Machine<
   S,
   M extends { type: string },
@@ -1919,23 +1953,18 @@ export type Machine<
    * `detectUpdateForm` when the tag is absent. Never written by hand.
    */
   readonly __form?: UpdateForm;
-} & ([C] extends [Cmd<never>]
-  ? { interpret?: Interpret<M, C, Ctx> }
-  : { interpret: Interpret<M, C, Ctx> }) &
-  // `subscribe`/`subscriptions` are conditionally REQUIRED the same way
-  // `interpret` is (#276): a machine declaring a real Sub union without a
-  // subscribe map compiled and silently wired no subs (`reconcileSubs` skips
-  // undefined handlers) — the exact silent-failure class the `interpret`
-  // conditional prevents. The optional declarations above stay as U's
-  // inference sites (a conditional type is not an inference site); this
-  // intersection only adds requiredness when U is a real union. Same
-  // tuple-wrap trick as `interpret` to disable distribution.
-  ([U] extends [Sub<never>]
-    ? unknown
-    : {
-        subscriptions: (state: S) => readonly U[];
-        subscribe: Subscribe<M, U, Ctx>;
-      });
+  // `subscribe`/`subscriptions` are conditionally REQUIRED (#276): a machine
+  // declaring a real Sub union without a subscribe map compiled and silently
+  // wired no subs (`reconcileSubs` skips undefined handlers). The optional
+  // declarations above stay as U's inference sites (a conditional type is not
+  // an inference site); the intersection below only adds requiredness when U
+  // is a real union. The tuple-wrap disables distribution.
+} & ([U] extends [Sub<never>]
+  ? unknown
+  : {
+      subscriptions: (state: S) => readonly U[];
+      subscribe: Subscribe<M, U, Ctx>;
+    });
 
 // === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
 //

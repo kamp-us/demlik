@@ -661,9 +661,8 @@ function wiredMachine(
     },
     subscriptions: (s) => walk.subs(s.walk),
     subscribe: { deadline: () => () => {} },
-    interpret: walk.handlers({ run: run_ }),
   });
-  return { walk, machine };
+  return { walk, machine, interpret: walk.handlers({ run: run_ }) };
 }
 
 // Spin the microtask queue until `predicate(getState())` holds (the runtime
@@ -693,8 +692,10 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
   it("DEFECT 1: a stray page_err after the walk settles done is a pure no-op — the succeeded page-fetch slot and the SHARED breaker survive", async () => {
     // The port always resolves page 0 as the LAST page → the walk finishes done
     // with PAGE_KEY settled `succeeded` and the breaker untouched.
-    const { machine } = wiredMachine(oneShotConfig, async () => page(0, true));
-    const rt = await run(machine, { ctx }).ready;
+    const { machine, interpret } = wiredMachine(oneShotConfig, async () =>
+      page(0, true),
+    );
+    const rt = await run(machine, { ctx, interpret }).ready;
 
     // Drive: start → fetch(0) → port resolves → resilient_ok re-enters → done.
     await rt.dispatch({ type: "start", at: 0 });
@@ -734,11 +735,11 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
 
   it("DEFECT 2: backpressure is a real valve — drain + resume re-open a paused walk and fetch the parked cursor end-to-end", async () => {
     // hwm 1, pageSize 1 → the first page pauses the walk on cursor 1.
-    const { walk, machine } = wiredMachine(
+    const { walk, machine, interpret } = wiredMachine(
       { ...baseConfig, rateLimit: undefined, highWaterMark: 1 },
       async (cursor) => page(cursor, cursor >= 2),
     );
-    const rt = await run(machine, { ctx }).ready;
+    const rt = await run(machine, { ctx, interpret }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     await settleUntil(
@@ -770,13 +771,13 @@ describe("createPaginatedWalk — WIRED runtime (end-to-end)", () => {
   it("DEFECT 3: a terminal page failure makes the walk OBSERVABLY stuck — isStuck() / failure() surface a dead walk", async () => {
     // No retry → the first failure is terminal; the port always throws.
     const boom = { _tag: "upstream_down" as const };
-    const { walk, machine } = wiredMachine(
+    const { walk, machine, interpret } = wiredMachine(
       { ...baseConfig, rateLimit: undefined, retry: undefined },
       async () => {
         throw boom;
       },
     );
-    const rt = await run(machine, { ctx }).ready;
+    const rt = await run(machine, { ctx, interpret }).ready;
 
     await rt.dispatch({ type: "start", at: 0 });
     // Drive until the fetch slot terminally fails (re-entered via interpret's
