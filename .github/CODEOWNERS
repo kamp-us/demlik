@@ -1,8 +1,8 @@
 # Control-plane roots: a change here is a change to how this repo decides, not what it ships.
 # fabrika's `ship cp-approval` routes on this file; with no owner declared it holds every PR
 # that touches a governed root as `unknown` rather than waving it through.
-/.decisions/     @cansirin @usirin
-/.patterns/      @cansirin @usirin
-/MAINTAINING.md  @cansirin @usirin
-/ROADMAP.md      @cansirin @usirin
-/.github/        @cansirin @usirin
+/.decisions/     @kamp-us/control-plane
+/.patterns/      @kamp-us/control-plane
+/MAINTAINING.md  @kamp-us/control-plane
+/ROADMAP.md      @kamp-us/control-plane
+/.github/        @kamp-us/control-plane
