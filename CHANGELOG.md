@@ -1,5 +1,564 @@
 # @demlik/tea
 
+## 0.16.0
+
+### Minor Changes
+
+- cc5d9bb: **Breaking:** a `Cmd.define`d handler returns an outcome, and the engine mints
+  the Msg (ADR 0021). `Cmd.define` takes any Standard Schema.
+
+  A handler gets `ok` / `err` builders on its ctx and returns what they build.
+  The engine turns it into `<name>_ok` or `<name>_err`:
+
+  ```ts
+  // before
+  fetch: settle(fetch, async (cmd, ctx) =>
+    Result.ok(await ctx.http.get(cmd.url))
+  );
+  // after
+  fetch: async (cmd, { http, ok, err }) =>
+    res.status === 404
+      ? err({ _tag: "not_found" })
+      : ok(await http.get(cmd.url));
+  ```
+
+  - New in `@demlik/tea`: `Outcome` (the `{ _tag: "Ok", value } | { _tag: "Err", error }`
+    record, with `Outcome.ok` / `Outcome.err`), `OutcomeHelpers`, `InterpretCell`,
+    `OkOfCmd`, `DeclaredErrorsOf`, and three thrown errors: `UndeclaredFailureError`,
+    `OutcomeContractError` and `AsyncSchemaError`.
+  - A throw, an `err` whose tag the def does not declare, or a handler returning
+    any Msg goes to `onError` under the new `"interpret"` phase. No `_err` Msg is
+    dispatched, and the dispatch still resolves. A defined handler returns an
+    outcome or nothing: it can no longer answer with a follow-up Msg.
+  - `Cmd.define`'s `input` / `ok` take any Standard Schema whose `validate` is
+    synchronous: zod as it is, Effect Schema through `Schema.toStandardSchemaV1`.
+    `MalformedResult` issues now come from the schema's Standard Schema issues.
+  - Removed: `settle`. `tryApplyCell` and `tryFoldMsgs` return an `Outcome`
+    instead of a `better-result` `Result` — read `r._tag === "Ok"` and
+    `r.value` / `r.error`.
+  - Dependencies: `better-result` and `zod` are gone. The one runtime dependency
+    is `@standard-schema/spec` (types only). Install zod yourself if you use it.
+  - `@demlik/tea/agent`: a `tool()` handler's `ok` / `fail` build an `Outcome`,
+    a tool's `input` / `ok` take a Standard Schema, and `ToolDef.interpret`
+    returns the outcome rather than the settled Msg.
+  - Plain Cmds are unchanged: their handler still returns a Msg or nothing.
+
+- cc5d9bb: The Effect engine lands at `@demlik/tea/effect` (#283, `experimental` tier,
+  against Effect v4 RC). It runs the same machine file the Promise engine runs,
+  with the same Msg / State trace.
+
+  ```ts
+  import { run } from "@demlik/tea/effect";
+
+  const program = Effect.gen(function* () {
+    const rt = yield* run(machine, {
+      interpret: {
+        fetch_user: (cmd) =>
+          Effect.gen(function* () {
+            const users = yield* Users;
+            return yield* users.find(cmd.id);
+          }),
+      },
+    });
+    yield* Effect.promise(() => rt.dispatch({ type: "look", id: "u1" }));
+  });
+
+  Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(UsersLive)));
+  ```
+
+  - `run(machine, { interpret, subscribe?, … })` returns an Effect that needs a
+    `Scope` and the services its handlers and runners read, and yields the same
+    run handle the Promise engine returns.
+  - An `interpret` cell returns `Effect<Ok, E, R>`. A success settles
+    `<cmd>_ok`, a declared failure settles `<cmd>_err`, and a defect or an
+    undeclared failure goes to the error sink.
+  - A `subscribe` runner returns a `Stream<Msg>`, drained on its own fiber and
+    interrupted when the Sub stops. The built-in `timer` uses `Effect.sleep`; a
+    `timer` entry in `subscribe` replaces it.
+  - Closing the scope, or calling `stop()`, interrupts every handler still in
+    flight (its finalizers run) and dispatches no Msg afterwards.
+  - A fenced store is fenced exactly as on the Promise engine.
+  - The other options (`store`, `onError`, `clock`, `events`, `supervision`,
+    `terminal`, `telemetry`, `disposeTimeoutMs`) mean what they mean on the
+    Promise engine: both engines run one shared core loop with the same
+    built-ins in the same order.
+
+- cc5d9bb: **Breaking:** a machine carries no Cmd handlers. `interpret` leaves `Machine`
+  and moves to where the machine runs (#251 R1.1), so one machine file runs
+  under whatever handlers the host hands it.
+
+  ```ts
+  // before
+  const machine = defineMachine({ types, init, update, interpret });
+  run(machine, { ctx });
+
+  // after
+  const machine = defineMachine({ types, init, update });
+  run(machine, { ctx, interpret });
+  ```
+
+  - `Machine` has no `interpret` field. Passing one to `defineMachine` is a type
+    error, and `run` ignores one left on a machine object.
+  - `run` (`@demlik/tea/promise`) takes `interpret` in its options. It is
+    required once the machine emits a Cmd, optional for a cmdless one, and each
+    handler is checked against the machine's own Msg and Cmd unions.
+  - `run` also takes optional `subscribe` runners. An entry replaces the
+    machine's own runner of the same Sub type, so a test can swap one runner
+    without redefining the machine. `subscribe` and `subscriptions` stay on
+    `Machine` for now.
+  - New in `@demlik/tea`: `InterpretArg<M, C, Ctx>` (the conditionally required
+    `interpret` option) and `RunHandlers<M, C, U, Ctx>` (`interpret` plus
+    `subscribe`).
+  - `@demlik/tea/react`: `useMachine(machine, { ctx, interpret, subscribe?,
+store? })`. The hook reads the latest render's handlers per call, so an
+    inline handler table never reboots the runtime. `UseMachineOpts` is now
+    `UseMachineOpts<S, M, C, U, Ctx>`.
+  - `@demlik/tea/do`: `createAgentHost`'s `buildMachine` returns
+    `{ machine, interpret }`.
+  - `@demlik/tea/flow`: `runToTerminal`'s seed takes `interpret` beside `ctx`
+    and `msgs`.
+  - `@demlik/tea/resilience` (battery): `withResilience`, `withDeadline` and
+    `withTelemetry` take `{ machine, interpret }` and return
+    `{ machine, interpret }`. Run the result as
+    `run(wrapped.machine, { interpret: wrapped.interpret, ctx })`.
+  - `@demlik/tea/agent` (experimental): `createAgent(...).toMachine(opts)` and
+    `defineAgent(...).machine(input)` return `{ machine, interpret }`
+    (`DefinedAgentWired<T>` names the latter).
+
+- 4f60603: **Breaking (`@demlik/tea/resilience`, `battery` tier):** resilient-call's
+  `succeed` and `fail` verbs are replaced by one `settle(slice, msg)`.
+
+  `createResilientCall(...)` no longer returns `succeed` or `fail`. Its new
+  `settle` takes the knob's `_ok` or `_err` Msg, reads the key off `msg.key`, and
+  returns `{ call, cmds, outcome }`:
+
+  - `call` — the settled slice.
+  - `cmds` — the Cmds the settle emitted.
+  - `outcome` — `{ kind: "done", value }`, `{ kind: "failed", error }` or
+    `{ kind: "retrying" }`.
+
+  The port's value is only reachable through `outcome`, so a hand-wired settle
+  cell can no longer fold the result into its Model before the slice has settled —
+  the order that left a call stuck at `running`.
+
+  Migrate each settle cell:
+
+  ```ts
+  // before
+  resilient_ok: (s, m) => {
+    const [call, cmds] = rc.succeed(s.call, m.key, m);
+    return [{ ...s, call, user: m.result }, cmds];
+  },
+  resilient_err: (s, m) => {
+    const [call, cmds] = rc.fail(s.call, m.key, m);
+    return [{ ...s, call }, cmds];
+  },
+
+  // after — both cells route through one helper you write
+  resilient_ok: (s, m) => onSettle(s, rc.settle(s.call, m)),
+  resilient_err: (s, m) => onSettle(s, rc.settle(s.call, m)),
+  ```
+
+  `SettleOutcome` and `SettleResult` are exported for typing that helper. The new
+  how-to, `docs/how-to/hand-wire-a-resilient-call.md`, shows the whole machine.
+
+  Unchanged: `settleFailed`, and the `succeed` / `fail` verbs of the knobs built on
+  resilient-call (`createJevAsk`, `createLlmCall`, `createAuthedCall`), which now
+  settle through `settle` inside. `mountResilientCall` still takes a knob with
+  `succeed` / `fail`, so mounting a bare resilient-call knob now means binding both
+  to `settle` yourself.
+
+- cc5d9bb: **Breaking (battery tier):** the battery layer is gone (ADR 0022). There are no
+  `mount*` helpers and no `withResilience` / `withDeadline` wrappers. Reusable
+  logic is plain functions plus `Cmd.define`d Cmds you call from your own
+  `update`. The L2 helpers lose `handlers(ports)`: each ships its run Cmd, and you
+  write that Cmd's handler in your engine's style. It returns an outcome, and the
+  engine mints the settle Msg (ADR 0021). Their retry timers use the built-in
+  `timer` Sub, so `run` needs no `subscribe` for them.
+
+  ```ts
+  // before
+  const mounted = mountResilientCall(rc, {
+    slice: "call",
+    attempt,
+    onOk,
+    onErr,
+  });
+  run(machine, {
+    interpret: rc.handlers({ run: fetchUser }),
+    subscribe: { deadline: subscribeDeadline },
+  });
+
+  // after
+  defineMachine({
+    types,
+    cmds: [rc.run],
+    init,
+    update: {
+      load: (s, m) => {
+        const [call, cmds] = rc.attempt(s.call, m.id, m.id, m.at);
+        return [{ ...s, call }, cmds];
+      },
+      resilient_run_ok: (s, m) => onSettle(s, rc.settle(s.call, m)),
+      resilient_run_err: (s, m) => onSettle(s, rc.settle(s.call, m)),
+      deadline_exceeded: (s, m) => {
+        const [call, cmds] = rc.onTimer(s.call, m);
+        return [{ ...s, call }, cmds];
+      },
+    },
+    subs: [{ type: "timer", deps: (s) => rc.timer(s.call) }],
+  });
+  run(machine, {
+    interpret: {
+      resilient_run: async (cmd, { ok, err }) => {
+        try {
+          return ok(await fetchUser(cmd.input));
+        } catch (cause) {
+          return err({ _tag: "port_rejected", cause });
+        }
+      },
+    },
+  });
+  ```
+
+  `docs/how-to/hand-wire-a-resilient-call.md` walks the whole machine.
+
+  `./resilience`:
+
+  - Removed: `withResilience` (with `resilienceRunCmdDef`, `ResilienceConfig`,
+    `ResilienceModel`, `ResilienceCmd`, `ResilienceMsg`, `ResilienceOkMsg`,
+    `ResilienceErrMsg`, `ResilienceRunCmd`, `ResilienceTimerMsg`,
+    `ResilienceTimerSub`), `withDeadline` (with `deadlineDecision`,
+    `deadlineExceededMsg`, its `DeadlineConfig`, `DeadlineExceededMsg`,
+    `DeadlineModel`, `DeadlineSlice`, `DeadlineDecisionCmd`,
+    `ProgressPredicate`), `mountResilientCall` (with `MountableKnob`,
+    `MountConfig`, `MountedCell`, `MountedResilientCall`, `DeadlineSettled`,
+    `Settle`, `SettleFold`), `ResilientHandlers` and `ResilientPorts`.
+    `ResilientCallDeadlineConfig` keeps its name.
+  - `createResilientCall`: `handlers` is gone; `run` is the `Cmd.define`d run
+    Cmd (`<name>_run`). Its settle Msgs are the engine-minted `<name>_run_ok`
+    (`{ cmd, value, at }`) and `<name>_run_err` (`{ cmd, error, at }`), so a
+    named knob's `jev_ok` is now `jev_run_ok`. A handler fails with
+    `err({ _tag: "port_rejected", … })` (or `"deadline_exceeded"`); a throw goes
+    to the error sink and is not retried. New: `RunErr`, `SettleMsg`.
+  - `subs(slice)` is renamed `deadlines(slice)`. New `timer(slice)` returns the
+    built-in `timer` Sub's deps for the soonest deadline. The slice gains
+    `clockMs`, the instant of its latest clocked transition, which `timer`
+    counts down from. `settleFailed` takes `at`.
+  - `SucceedMsg` / `FailMsg` are the minted shapes above; `FailMsg` takes an
+    optional error type. `RunCmd` takes an optional result type.
+  - New in `deadline`: `nextTimer(deadlines, nowMs)`, the built-in `timer` deps
+    for the soonest of a deadline list.
+  - `token-refresh`: `handlers` / `TokenRefreshPorts` and the
+    `tokenRefreshedMsg` / `tokenRefreshFailedMsg` constructors are gone. `run`
+    is the `refresh_token` def; `TokenRefreshedMsg` / `TokenRefreshFailedMsg`
+    are its minted `refresh_token_ok` / `refresh_token_err`.
+  - `authed-call`: `refresh` leaves the config, `handlers` and `AuthedPorts`
+    are gone, `succeed(s, msg)` / `fail(s, msg)` read the key off `msg.cmd`,
+    and the knob exposes `run`, `refresh`, `deadlines` and `timer`.
+
+  `./paginate` / `./flow`:
+
+  - `paginated-walk`: `handlers` and `PaginatedWalkPorts` are gone;
+    `pageOk(s, msg)` / `pageErr(s, msg)` take the minted Msg; `fetch` is the
+    page-fetch def; `subs` → `deadlines`, plus `timer`. The deadline
+    re-exports are gone (import them from `./resilience`).
+  - `reconciler`: the same — `ReconcilerPorts` and `handlers` gone,
+    `pageOk(s, msg)` / `pageErr(s, msg)`, `scanPage` def, `deadlines` / `timer`.
+  - `monitored-run`: `handlers` / `MonitoredRunPorts` gone; `checkpoint` is the
+    `snapshot_write` def; `subs` → `deadlines`, plus `timer`.
+  - `batch-window`: the knob's `handlers()` is gone; new `timer` / `timerFor`
+    arm the window on the built-in `timer`. `subs` and `subscribeBatchWindow`
+    stay for the absolute-deadline form.
+  - `fan-out`: `handlers(ports)` is renamed `completion(ports)`.
+
+  `./persistence`:
+
+  - `snapshot`: `handlers`, `SnapshotStore`, `SnapshotPorts` and the
+    `snapshotSaved` / `snapshotFailed` / `snapshotLoaded` / `snapshotLoadFailed`
+    constructors are gone. `write` / `load` are the Cmd defs
+    (`snapshotWriteDef<V>()`, new `snapshotLoadDef<V>()` replacing the
+    `snapshotLoad` constant); their Msgs are the minted `snapshot_write_ok` /
+    `_err` and `snapshot_load_ok` / `_err`. `confirm` reads `msg.cmd.seq`.
+
+  `./jev`:
+
+  - `JevPort`, the `port` config, `handlers`, `ask()`, `JevAskFailure`,
+    `JevSub` and the deadline / mount re-exports are gone. The HTTP call is
+    your `resilient_run` handler: it returns `ask.decode(request, reply)` (new
+    pure `decodeJevReply`), `ask.rejected(cause)` (`jevCallThrew`) or
+    `ask.offline(request)` (`offlineJevAnswer`). New: `JevHttpReply`,
+    `JevRejected`, `jevAskErrOf`. `succeed(s, msg)` / `fail(s, msg)` take the
+    minted Msg; `fail` stores the typed `JevAskErr`.
+  - `classify-batch`: `port` and `handlers` gone; `ask` is the Cmd def and
+    `decode` / `rejected` / `offline` build the handler's outcome. `subEntries`
+    arms the window on the built-in `timer`; `subscribers()` returns only the
+    cache eviction runner.
+
+  `./agent` (experimental):
+
+  - `unsafeDetachedHandlers`, `AgentPorts` and `AgentDetachedHandlers` are gone.
+    New: `brainInterpret()` (the brain call's handler) and `brain` (its
+    `Cmd.define`d def). `toMachine()` lists the brain def in `cmds`.
+  - `succeed(s, msg, at)` / `fail(s, msg, at)` take no key. The brain settle
+    Msgs are the minted `resilient_run_ok` / `resilient_run_err`; an `llm`
+    failure's `error` is the `LlmErr` read off the Msg.
+
+  `./testing`: `drive` now mints a `Cmd.define`d Cmd's outcome into its settle
+  Msg through the machine's `cmds`, as `run` does, and takes an optional `clock`.
+
+- cc5d9bb: **Breaking:** tea no longer does dependency injection (ADR 0020). The provider
+  graph and the `R` (requirements) channel on Cmds are removed.
+
+  Removed from `@demlik/tea`:
+
+  - The provider graph: `provide`, `layer`, `value`, `dep`, `isProvided`,
+    `Provided`, `ProvidedCtx`, `Provider`, `Scope`, `OnReleaseError`, `DepToken`,
+    `DepsOf`, `ProvideFailedError`, `UnknownProviderError` and
+    `ProviderCycleError`.
+  - The `"provide"` runtime error phase and `RuntimeErrorContext.provider`.
+  - `Cmd.requirements`, `Requirements`, `RequirementsOf` and `RequiredCtx`, and
+    `Cmd.define`'s `requirements` field.
+  - `ScopedCtxArg`. `run`'s `ctx` is a plain object only.
+
+  A Cmd type is now `Cmd<Type, Ok, E>`: the tag, the value it settles with, and
+  the `_tag` union it can fail with. `CmdValue` and `CmdDef` lose their `R`
+  parameter too; `CmdValue` gains `Ok` in its place.
+
+  Migrate:
+
+  ```ts
+  // before
+  const fetch = Cmd.define("fetch", {
+    input, ok, err: ["not_found"],
+    requirements: Cmd.requirements<{ http: Http }>(),
+  });
+  defineMachine({ types: { model, msg }, cmds: [fetch], … });
+  run(machine, { ctx: provide({ http: layer(openHttp, closeHttp) }) });
+
+  // after — name the ctx on the machine and hand `run` the object
+  const fetch = Cmd.define("fetch", { input, ok, err: ["not_found"] });
+  defineMachine({ types: { model, msg, ctx: {} as { http: Http } }, cmds: [fetch], … });
+  const http = await openHttp();
+  try {
+    const rt = await run(machine, { ctx: { http } }).ready;
+    // …
+  } finally {
+    await closeHttp(http);
+  }
+  ```
+
+  `@demlik/tea/agent` (experimental): `tool()` no longer takes `requirements`.
+  Annotate the handler's `ctx` parameter instead — `async (args, ctx: { kb: Kb },
+{ ok, fail }) => …` — and `defineAgent` / `toMachine({ tools })` still demand
+  that ctx at `run`. `ToolsCtx<T>` names the ctx a tool set reads.
+
+  The how-to "Scope a resource across a run" is removed with the API it taught.
+
+- cc5d9bb: One run-handle type that every engine's `run` returns (#281, map finding #250).
+  `@demlik/tea/react` and `@demlik/tea/do` are typed against it and import no
+  engine.
+
+  **Breaking (`./react`, `./do`, stable tier):** `useMachine` and
+  `createAgentHost` take the engine's `run` as an input.
+
+  ```ts
+  // before
+  useMachine(machine, { ctx, interpret });
+  createAgentHost({ buildMachine, store, ctx, toSseFrame });
+
+  // after
+  import { run } from "@demlik/tea/promise";
+  useMachine(machine, { run, ctx, interpret });
+  createAgentHost({ run, buildMachine, store, ctx, toSseFrame });
+  ```
+
+  - New in `@demlik/tea`: `RunHandle<S, M, E>` (`dispatch`, `subscribe`,
+    `observe`, `onBoot`, `on`, `ready`, `stop`), `BootedRunHandle<S, M, E>` (the
+    handle `ready` resolves to, adding `getState`), `RunOptions` (the options
+    every engine's `run` accepts: `ctx`, `interpret`, `subscribe`, `store`,
+    `events`) and `EngineRun` (an engine's `run`, as a host adapter sees it).
+    The Promise engine's `BootingRuntime` extends `RunHandle`, and its `Runtime`
+    is a `BootedRunHandle`, so `run` from `@demlik/tea/promise` fits `EngineRun`
+    as it is.
+  - `useMachine` rebuilds the runtime when `run`'s identity changes, like
+    `ctx` and `store`. Pass the engine's own function, not an inline wrapper.
+  - `useRuntime` takes any `BootedRunHandle`. `bootResume` and `autoBoot` take
+    any `RunHandle`. `driveProjections` and `sseFromAgentEvents` were already
+    typed on the members they read, and accept any handle.
+  - `AgentHost.runtime()` resolves to a `BootedRunHandle`, not the Promise
+    engine's `Runtime`, so it has no `result()` / `done()` / `idle()`. Read the
+    terminal State from `host.result()`, which now applies the host's `terminal`
+    predicate itself.
+
+- cc5d9bb: The Promise engine's loop is a small core now (#280, spike #264). It keeps one
+  serial tail, saves before effects, reconciles Subs and runs Cmds, and it has
+  no special case for any built-in. Each built-in (identity filter, supervision,
+  dev checks, the `Cmd.define` edge, fenced stores, ports, `subscribe` /
+  `observe` / `onBoot`, `on` events, `result` / `done`) is an internal extension
+  of it, in a fixed order. `run` behaves as before.
+
+  **Breaking (`./resilience`, battery tier):** `withTelemetry` is removed. It
+  moved inside tea as the `telemetry` option of `run` (#268).
+
+  ```ts
+  // before
+  const observed = withTelemetry(wired);
+  run(observed.machine, { ...observed, ctx: { telemetrySink: (e) => log(e) } });
+
+  // after
+  run(wired.machine, { ...wired, telemetry: (e) => log(e) });
+  ```
+
+  - `run(machine, { telemetry })` hands the sink `{ seq, msgType, at }` after
+    every applied transition. `seq` counts this run's transitions from 1, and
+    `at` comes from `run`'s `clock`. The run never waits on the sink. A sink that
+    throws or rejects reaches `onError` under `"observer"`.
+  - The Model is no longer wrapped: state stays the machine's own, with no
+    `{ base, $telemetry }` layer. The count is per run and is not persisted.
+  - Removed from `./resilience`, with what replaces each: `withTelemetry` → the
+    `telemetry` option; `TelemetryEvent` → `TelemetryEvent` from `@demlik/tea`
+    (`at` is always set now); `TelemetryPorts` → nothing, the sink is the option
+    itself; `TelemetryConfig` → nothing, the event shape is fixed;
+    `TelemetryModel`, `TelemetrySlice`, `telemetryEmit`, `TelemetryEmitCmd` →
+    nothing, there is no wrapper Model or Cmd.
+  - New in `@demlik/tea`: `TelemetryEvent` and `TelemetrySink`.
+
+- cc5d9bb: Split the package into three entry points: the core, the Promise engine and the Effect engine
+
+  **Breaking:** `run`, `driveToDone` and `DriveToDoneOptions` moved from `@demlik/tea`
+  to `@demlik/tea/promise`. The root no longer exports them. Change the import:
+
+  ```ts
+  // before
+  import { defineMachine, run } from "@demlik/tea";
+  // after
+  import { defineMachine } from "@demlik/tea";
+  import { run } from "@demlik/tea/promise";
+  ```
+
+  - `@demlik/tea` is the neutral core (`defineMachine`, `Cmd`, `replay`, the pure
+    types). It imports no engine.
+  - `@demlik/tea/promise` (stable) is today's engine, unchanged apart from where
+    it lives.
+  - `@demlik/tea/effect` (experimental) is published empty for now. The Effect
+    engine lands there later. `effect` is a new **optional** peer dependency, so a
+    Promise user installs nothing new.
+
+  An import-graph test keeps the three apart: the core reaches neither engine,
+  `./promise` and `./effect` never import each other, and only `./effect` may
+  import `effect`.
+
+- cc5d9bb: **Breaking:** a machine's Subs are data. The two Sub forms merge into one
+  (#251 R1.4, spike #252), and the code that opens a resource moves to `run`.
+
+  ```ts
+  // before
+  const machine = defineMachine({
+    types,
+    init,
+    update,
+    subscriptions: (s) =>
+      s.waiting ? [{ id: subId("retry"), type: "retry", delayMs: 500 }] : [],
+    subscribe: { retry: fromTimeout(() => ({ type: "retry_due" })) },
+  });
+  run(machine, { interpret });
+
+  // after
+  const machine = defineMachine({
+    types,
+    init,
+    update,
+    subs: [
+      {
+        type: "timer",
+        deps: (s) =>
+          s.waiting ? { ms: 500, msg: { type: "retry_due" } } : null,
+      },
+    ],
+  });
+  run(machine, { interpret });
+  ```
+
+  - `Machine.subs` is `[{ type, deps(state) }]`. `deps` returning `null` or
+    `undefined` means off. The id is a hash of `{ type, deps }` (`subIdOf`), so a
+    Sub starts when `deps` turns non-null, is left alone while it is unchanged,
+    restarts when it changes, and stops on `null` or `stop()`. `deps` must be
+    plain data.
+  - `Machine` has no `subscriptions` or `subscribe`, and `DepKeyedSub` has no
+    `source`. `DepKeyedSub<S, U>` is now the entry type, typed per Sub variant.
+  - `Sub<T, D>` is `{ id, type, deps }` — the running Sub a runner receives. A
+    runner reads its data off `sub.deps`. Declare a machine's Subs in
+    `types.sub` as `Sub<"type", Deps>` variants.
+  - Runners arrive at `run(machine, { subscribe })` (and `useMachine`). A
+    runner is `(sub, ctx, dispatch) => Dispose`. `subscribe` is required when
+    the machine declares a Sub type the engine does not ship, one runner per
+    type. A declared type with no runner makes the dispatch reject instead of
+    silently never starting.
+  - Built-in `timer` on the Promise engine: `{ type: "timer", deps: (s) => ({
+ms, msg }) }` dispatches `msg` after `ms` with no runner. A `subscribe.timer`
+    entry replaces it, so a test can drive time with its own clock (#270).
+  - A runner's `dispatch` never runs a transition on the runner's own stack; the
+    Msg is queued behind the current step (spike #260).
+  - `replay(...).subs` is the list of running Subs at the final state
+    (`{ id, type, deps }`). `replay(...).depSubs` is gone.
+  - Removed: `SubIdCollisionError` (the type is part of the id, so two Sub types
+    can no longer collide).
+  - New in `@demlik/tea`: `subIdOf`, `TimerSub`, `TimerDeps`, `BuiltinSub`,
+    `BuiltinSubType`, `SubscribeArg`, and `Wired` (a machine beside its
+    `interpret` and `subscribe`).
+  - `structuralHash` treats a key holding `undefined` as absent, as JSON does,
+    so `{ name: undefined }` and `{}` are one id.
+
+  Every in-tree Sub is ported. By subpath:
+
+  - `.` Sub factories: runners read `sub.deps` (`S extends Sub<string, XData>`),
+    and `SubscribeHandler` returns `Dispose`. A changed deps value (url, period,
+    channel) is a new id, so the runner restarts; it used to be ignored.
+    `defineManagedResource` and `fromTransport` take the Sub type as their first
+    type parameter (`name`) and return `{ type, depKeyed(when), subscribe, … }`.
+    `ManagedResourceSub` / `TransportSub` are `Sub<N, TKey>`. Removed, each
+    with what replaces it:
+    - `.sub(key)` → `.depKeyed(when)`. Put the entry in `subs` and move the
+      `if` that picked the key into `when(state)`, returning `null` for off.
+    - `.subIdFor(key)` → `subIdOf(battery.type, key)`. The id is derived from
+      the type and the key now.
+    - `defineManagedResource`'s `.gated(when)` and `GatedManagedResource` →
+      `.depKeyed(when)`. It takes the same `when` and gives a `subs` entry.
+    - `combineManagedResources` and `CombinedManagedResources` → nothing to
+      combine. Each battery's `name` is its own Sub type, so list each
+      battery's `.depKeyed(when)` in `subs` and put each `.subscribe` in the
+      `subscribe` table under its `type`: `subscribe: { [a.type]: a.subscribe,
+[b.type]: b.subscribe }`.
+  - `./node`: `NodeWsSub` / `NodeTimerSub` / `NodeSignalSub` carry plain deps
+    (`NodeWsDeps { key, url }`, `NodeTimerDeps`, `NodeSignalDeps`). The ws
+    callbacks move to `nodeSubscribe({ ws: { onMessage, onOpen?, onClose?,
+onError? } })`. The ws registry and `sendToWebSocket(ctx, key, data)` key on
+    your `key`, not a `SubId`. Removed: `AssertNodeSubIsSub`, with no
+    replacement needed. It was a compile-time check that `NodeSub` fits `Sub`;
+    each node Sub is now declared as a `Sub<"type", Deps>`, so the fit holds by
+    construction. Delete any reference to it.
+  - `./resilience` (battery): `DeadlineSub` is one deadline entry. A machine arms
+    a battery's deadlines as ONE `deadline` Sub: `subs: [deadlinesSub((s) =>
+rc.subs(s.slice))]` and `run(machine, { subscribe: { deadline:
+subscribeDeadline } })`. New: `DeadlinesSub`, `deadlines`, `deadlinesSub`. A
+    change to the list re-arms every deadline for its remaining time.
+    `mountResilientCall` returns `subs` entries in place of `subscriptions`.
+    `withDeadline` / `withResilience` / `withTelemetry` take and return a
+    `Wired`. `withDeadline` counts down on the built-in `timer`; removed:
+    `DeadlineTimeoutSub`. `ResilienceTimerSub` is `Sub<"$resilience:timer",
+readonly DeadlineSub[]>`. `cacheEvictionSub(name, everyMs)` returns a `subs`
+    entry; `CacheEvictionSub` is `Sub<"cache", CacheEvictionDeps>`.
+  - `./flow`, `./timing`, `./paginate`, `./jev` (battery): the same deadline
+    shape; `deadlinesSub` / `DeadlinesSub` are re-exported. `JevSub` is
+    `DeadlinesSub`. classify-batch's `subs(state, id?)` returns only the window
+    deadlines, and the new `subEntries(select, id?)` gives the machine's `subs`
+    entries (window plus cache eviction).
+  - `./agent` (experimental): `toMachine()` and `defineAgent(...).machine(input)`
+    return a `Wired` that carries `subscribe`; the machine's Sub type is
+    `DeadlinesSub`.
+  - `./do`: `createAgentHost`'s `buildMachine` returns a `Wired`.
+
 ## 0.15.0
 
 ### Minor Changes
