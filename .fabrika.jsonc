@@ -15,6 +15,11 @@
 		{ "command": ["pnpm", "lint:worktree"] }
 	],
 
+	// The install `lane integrate` runs in an epic's assembly worktree after each child merge and
+	// before the validators, so a child that moves the lockfile is checked against what it pins
+	// (#292). `--frozen-lockfile` refuses a lockfile the merge left out of step with package.json.
+	"dependencyReconciler": { "command": ["pnpm", "install", "--frozen-lockfile"] },
+
 	// The paths whose diffs make the governance gate `required`. This list replaces fabrika's shipped
 	// default wholesale, so it restates the roots that still apply here (`claude-plugins/` does not
 	// exist in this repo) and adds the surfaces this repo's ADRs govern: `package.json` (the export
