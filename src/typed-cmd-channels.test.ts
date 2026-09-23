@@ -1,7 +1,7 @@
 /**
  * Typed effect channels on Cmd constructors — the RUNTIME half (ADR 0014, #44).
  * The compile-time half (an `_err` cell must cover every `_tag`; `run` refuses
- * a ctx missing a Cmd's `R`) lives in `__tests__/typed-cmd-channels.test-d.ts`.
+ * a ctx missing a key the machine's `ctx` names) lives in `__tests__/typed-cmd-channels.test-d.ts`.
  *
  * What the runtime owes:
  *   - the emitted Cmd is still a plain `{ type, ...input }` record (JSON
@@ -35,7 +35,6 @@ const fetch = Cmd.define("fetch", {
   input: z.object({ url: z.string() }),
   ok: z.object({ body: z.string() }),
   err: ["not_found", "timeout"],
-  requirements: Cmd.requirements<HttpCtx>(),
 });
 
 type FetchCmd = ReturnType<typeof fetch>;
@@ -78,7 +77,7 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
  */
 function machineOver(work: (cmd: FetchCmd, http: Http) => Promise<unknown>) {
   return defineMachine({
-    types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
+    types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
     cmds: [fetch],
     init: (_loaded) => [initial, []],
     update,
@@ -218,7 +217,7 @@ describe("settle — the Result lives in the helper, the kernel sees a Msg", () 
     >,
   ) {
     return defineMachine({
-      types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
+      types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
       cmds: [fetch],
       init: (_loaded) => [initial, []],
       update,
@@ -248,10 +247,10 @@ describe("settle — the Result lives in the helper, the kernel sees a Msg", () 
     expect(state.ats).toEqual([4]);
   });
 
-  it("the handler's ctx carries the Cmd's `R` slice", async () => {
+  it("the handler reads the plain ctx handed to `run`", async () => {
     const urls: string[] = [];
     const m = defineMachine({
-      types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
+      types: { model: {} as Model, msg: {} as Msg, ctx: {} as HttpCtx },
       cmds: [fetch],
       init: (_loaded) => [initial, []],
       update,

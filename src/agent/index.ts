@@ -162,6 +162,7 @@ import {
   type AnyToolDef,
   fanOutInterpret,
   type ToolRouter,
+  type ToolsCtx,
   type WiredToolCmd,
   type WiredToolMsg,
 } from "./tool";
@@ -1406,7 +1407,7 @@ export function createAgent<
     AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
     AgentCmd<P, TC, boolean, boolean>,
     DeadlineSub,
-    Ctx
+    Ctx & ToolsCtx<T>
   > {
     type M = AgentMachineMsg<P, O, R> | WiredToolMsg<T>;
     const tools = opts?.tools;

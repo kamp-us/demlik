@@ -34,7 +34,6 @@ import type {
   BootingRuntime,
   Cmd,
   Machine,
-  RequiredCtx,
   Runtime,
   Store,
   Sub,
@@ -83,8 +82,7 @@ export function useMachine<
   Ctx,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  // The ctx `run` demands: the machine's own plus every typed Cmd's `R`.
-  opts: UseMachineOpts<S, Ctx & RequiredCtx<C>>,
+  opts: UseMachineOpts<S, Ctx>,
 ): [S, (msg: M) => Promise<void>] {
   // Deps are literal: machine identity, ctx identity, store identity. NOT
   // `[opts]` (would rebuild every render — callers pass fresh objects).

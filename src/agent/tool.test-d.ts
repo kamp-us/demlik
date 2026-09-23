@@ -9,14 +9,15 @@
 //      the kernel's `malformed_result`.
 //   2. `toolOf` / `interpret` are derived — nothing per tool is hand-written,
 //      and `toMachine({ tools })` leaves no tool cell on `toolInterpret`.
-//   3. A `needs` slice a tool names is demanded at `run` — a ctx without it
-//      does not compile.
+//   3. The ctx a tool's handler annotates is demanded at `run` — a ctx
+//      without it does not compile. The tool's Cmd carries no requirements;
+//      the ctx is a fact about the handler (ADR 0020).
 //   4. A reserved name — an agent-owned Msg prefix or discriminant — does not
 //      compile as `tool()`'s `name` (#72); the set derives from `MsgType`.
 //   5. `description` is required on the spec and read back off the def (#91).
 
 import { z } from "zod";
-import { absurd, Cmd, type PortEmitter, type Settled } from "../index";
+import { absurd, type PortEmitter, type Settled } from "../index";
 import { run } from "../promise";
 import type { MsgTypeValue } from "../protocol";
 import {
@@ -45,10 +46,9 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found", "rate_limited"],
-    requirements: Cmd.requirements<KbCtx>(),
   },
-  async ({ q }, ctx, { ok, fail }) => {
-    // The `R` slice lands on the handler's ctx: `ctx.kb` is typed.
+  async ({ q }, ctx: KbCtx, { ok, fail }) => {
+    // The handler names the ctx it reads: `ctx.kb` is typed.
     const snippet = ctx.kb.lookup(q);
     if (snippet === undefined) return fail({ _tag: "not_found" });
     // Detail rides beside the tag.
@@ -183,17 +183,17 @@ const cell: (
 ) => Promise<unknown> = tools.interpret.search;
 void cell;
 
-// ── 3. `run` demands every tool's `needs` on ctx ────────────────────────────
+// ── 3. `run` demands the ctx every tool's handler reads ─────────────────────
 
 const kb: Kb = { lookup: () => undefined };
 
 // POSITIVE: the slice `search` needs is supplied.
 run(machine, { ctx: { kb } });
 
-// NEGATIVE: `search` names `kb`; a ctx without it does not compile.
+// NEGATIVE: `search`'s handler reads `kb`; a ctx without it does not compile.
 // @ts-expect-error ctx lacks `kb`
 run(machine, { ctx: {} });
-// @ts-expect-error ctx cannot be omitted while a tool names a requirement
+// @ts-expect-error ctx cannot be omitted while a tool's handler reads a key
 run(machine, {});
 
 // ── 4. a reserved name does not compile (#72) ───────────────────────────────

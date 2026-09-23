@@ -8,7 +8,6 @@
  */
 
 import { Result } from "better-result";
-import type { Provided } from "./provide";
 import type {
   AnyCmdDef,
   CmdOf,
@@ -19,7 +18,6 @@ import type {
   Port,
   PortEmitter,
   Reducer,
-  RequirementsOf,
   Settled,
   Sub,
   Transitions,
@@ -165,11 +163,6 @@ export function __resetPortRegistry(): void {
  *   `"discard"`: the loss is the FILTER WORKING, not a teardown, and a host
  *   routing it (a metric, a 409 back to the caller) wants it apart from
  *   unmount-time noise. Warn-only, like every `RuntimeDiscardNotice`.
- * - `"provide"` — a `provide({ … })` graph handed to `run` as `ctx`. Two
- *   witnesses: an `acquire` failed at boot (a `ProvideFailedError`, ALSO the
- *   rejection of `ready`, so this report is the copy a sink gets rather than the
- *   only route out), and a `release` threw during `stop()`, which carries
- *   `context.provider` and has no other route out at all — the run is over.
  *
  * The phase never decides fatality — the ERROR CLASS does (`RuntimeDiscardNotice`
  * warns, everything else rethrows). A phase is attached by the report site, so a
@@ -187,18 +180,11 @@ export type RuntimeErrorPhase =
   | "port-emit"
   | "sub-cleanup"
   | "discard"
-  | "identity-drop"
-  | "provide";
+  | "identity-drop";
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {
   readonly phase: RuntimeErrorPhase;
-  /**
-   * The provider key a `"provide"` report is about — set when a `release` threw
-   * (the run is over; the throw has nowhere else to go). Absent on the acquire
-   * report, which also rejects `ready` with a `ProvideFailedError` that names it.
-   */
-  readonly provider?: string;
 }
 
 /**
@@ -853,10 +839,7 @@ export interface Runtime<
 //   })
 //
 // and everything else is derived exactly as it already was — `C` and the
-// settled half of `M` from `cmds`, and each interpret handler's `ctx` from its
-// own Cmd's requirements (`Interpret` already intersects `RequirementsOf` onto
-// the cell's `ctx`, so a `Cmd.define`d effect types its handler with no
-// `types.ctx` at all). The shape is XState v5's `setup({ types })` in tea's
+// settled half of `M` from `cmds`. The shape is XState v5's `setup({ types })` in tea's
 // vocabulary; the keys are `model`, `msg`, `cmd`, `sub`, `ctx` — the words this
 // library already uses for those five slots.
 //
@@ -896,8 +879,7 @@ export interface Runtime<
  * `model` and `msg` are always named. `cmd` is named only by a machine whose
  * Cmds are hand-written records rather than `Cmd.define` constructors listed
  * under `cmds`; `sub` only by one whose Sub union `subscriptions` does not
- * imply; `ctx` only by one whose handlers read a `Ctx` slice no Cmd's
- * `requirements` declares.
+ * imply; `ctx` only by one whose handlers read a `Ctx`.
  */
 export type MachineTypes<
   S,
@@ -1057,24 +1039,6 @@ export function asReducer<S, M extends { type: string }, C extends Cmd>(
 export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
   ? { ctx?: Ctx }
   : { ctx: Ctx };
-
-// === ScopedCtxArg<Ctx>: `run`'s `ctx` field — the object, or the graph ===
-//
-// `CtxArg<Ctx>` widened by exactly one alternative: a `provide({ … })` graph
-// that BUILDS a `Ctx`, which `run` acquires at boot and releases at `stop()`.
-// The requirement is the same `Ctx` either way — only who assembles it moves.
-// Kept separate from `CtxArg` on purpose: the other `CtxArg` sites (`replay`'s
-// seed, `defineAgent`'s options) hand their `ctx` to a PURE fold, and a fold has
-// no boot to acquire in and no terminal to release at, so widening them would
-// promise a lifetime nothing there could honour.
-/**
- * `run`'s `ctx` field: the `Ctx` object, or a `provide` graph that builds one.
- * Conditionally optional exactly like {@link CtxArg} — a machine that reads
- * nothing from `ctx` may omit it.
- */
-export type ScopedCtxArg<Ctx> = [Record<never, never>] extends [Ctx]
-  ? { ctx?: Ctx | Provided<Ctx> }
-  : { ctx: Ctx | Provided<Ctx> };
 
 // === replay: pure unit-test helper ===
 //
@@ -1338,12 +1302,9 @@ export function settle<D extends AnyCmdDef, Ctx>(
   def: D,
   work: (
     cmd: CmdOf<D>,
-    ctx: Ctx & RequirementsOf<CmdOf<D>> & PortEmitter,
+    ctx: Ctx & PortEmitter,
   ) => Promise<Result<OkOf<D>, ErrOf<D>>>,
-): (
-  cmd: CmdOf<D>,
-  ctx: Ctx & RequirementsOf<CmdOf<D>> & PortEmitter,
-) => Promise<Settled<D>> {
+): (cmd: CmdOf<D>, ctx: Ctx & PortEmitter) => Promise<Settled<D>> {
   // `AnyCmdDef` is the declaration-erased view the runtime reads; the two
   // builders live on the full `CmdDef`, which every `D` structurally is.
   const builders = def as unknown as {

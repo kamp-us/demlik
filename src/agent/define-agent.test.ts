@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { Cmd, DriveFailedError, replay, type Store } from "../index";
+import { type Cmd, DriveFailedError, replay, type Store } from "../index";
 import { memoryJournal } from "../internal/journal";
 import { memoryStore } from "../mem";
 import { driveToDone, run } from "../promise";
@@ -49,9 +49,8 @@ const search = tool(
     input: z.object({ q: z.string() }),
     ok: z.object({ snippet: z.string() }),
     err: ["not_found"],
-    requirements: Cmd.requirements<{ readonly kb: Kb }>(),
   },
-  async ({ q }, ctx, { ok, fail }) => {
+  async ({ q }, ctx: { readonly kb: Kb }, { ok, fail }) => {
     const snippet = ctx.kb.lookup(q);
     return snippet === undefined
       ? fail({ _tag: "not_found", q })
@@ -1706,14 +1705,17 @@ const slow = tool(
     input: z.object({ id: z.string() }),
     ok: z.object({ id: z.string() }),
     err: ["never"],
-    requirements: Cmd.requirements<{
+  },
+  async (
+    { id },
+    ctx: {
       readonly log: string[];
       // Per-call durations, so a test can make the SECOND call finish first and
       // ask what that does to the fold.
       readonly delayMs?: Readonly<Record<string, number>>;
-    }>(),
-  },
-  async ({ id }, ctx, { ok }) => {
+    },
+    { ok },
+  ) => {
     ctx.log.push(`start:${id}`);
     await new Promise((r) => setTimeout(r, ctx.delayMs?.[id] ?? 20));
     ctx.log.push(`end:${id}`);

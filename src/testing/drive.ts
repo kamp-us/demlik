@@ -223,8 +223,7 @@ export async function drive<
   const maxRounds = options.maxRounds ?? DEFAULT_MAX_ROUNDS;
   const bound = bindMachine(machine, options.ctx as Ctx);
 
-  // A handler's ctx is `Ctx & RequirementsOf<C> & PortEmitter`. The Ctx half is
-  // the caller's; the PortEmitter half is the kernel's, and a driven test has
+  // A handler's ctx is `Ctx & PortEmitter`. The Ctx half is the caller's; the PortEmitter half is the kernel's, and a driven test has
   // no kernel — so a no-op `emit` stands in, placed FIRST so a caller's own
   // `emit` wins.
   const noopEmit: PortEmitter = { emit: () => {} };

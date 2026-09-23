@@ -10,15 +10,10 @@
 
 // The composition seam — `liftSlice` / `readInOrder`, the layer between a
 // battery and a door. It lands on the ROOT door rather than a battery subpath
-// for the same reason `provide` does: both `./resilience` and `./jev` import
-// it, so it cannot live inside either one.
+// because both `./resilience` and `./jev` import it, so it cannot live inside
+// either one.
 export * from "./compose";
 export * from "./observability";
-// The host-side provider graph — `provide` / `layer` / `value` — lands on the
-// ROOT door, not on a subpath of its own. It has no host-specific
-// half: `/node`, `/do` and `/mem` are `Store` adapters, and this satisfies a
-// Cmd's `R` at `run`'s `ctx` seam, which every one of them shares.
-export * from "./provide";
 // `./pure` and `./subs` are no longer doors of their own (#51): the closing
 // sweep pinned the export map to the public doors, and ADR 0016 moves parts
 // rather than dropping them — so the whole runtime-free surface and the whole
@@ -48,9 +43,6 @@ export type {
   Port,
   PortEmitter,
   Reducer,
-  RequiredCtx,
-  Requirements,
-  RequirementsOf,
   Settled,
   SettledErr,
   SettledOk,

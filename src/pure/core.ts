@@ -120,100 +120,45 @@ export function without<V>(
 
 // === Cmd: tagged-union, one-shot effect ===
 //
-// `E` and `R` are Effect's error and requirements channels, carried as PHANTOM
-// type parameters (ADR 0014): the runtime value stays `{ readonly type: T }` —
-// JSON-plain, hashable, replayable — and the two channels ride on optional
-// fields that are never assigned, exactly as `Port.__t` carries its `T`.
+// `Ok` and `E` are carried as PHANTOM type parameters (ADR 0014): the runtime
+// value stays `{ readonly type: T }` — JSON-plain, hashable, replayable — and
+// the two channels ride on optional fields that are never assigned, exactly as
+// `Port.__t` carries its `T`.
 //
+//   - `Ok` — the value this Cmd settles with on success. Defaults to `unknown`.
 //   - `E` — the `_tag` union this Cmd can settle with (`{ _tag: "timeout" } |
 //     …`). A reducer's `_err` cell reads it, so a new failure mode is a compile
 //     error at the cell, not a runtime surprise. Defaults to `unknown`, the
 //     "untyped" reading every hand-written battery Cmd has today.
-//   - `R` — REQUIREMENTS: the slice of `Ctx` this Cmd's interpret handler needs.
-//     `run` demands the intersection of every Cmd's `R` (`RequiredCtx`), so a
-//     missing dependency fails at `run`, not at 3 a.m. Defaults to `unknown` —
-//     "needs nothing", and the identity of `&`, so `Ctx & RequiredCtx<C>` is
-//     exactly `Ctx` for a machine with no typed Cmds. (`{}` would read the same
-//     in prose but is NOT the identity: `Ctx & {}` refuses an unconstrained
-//     `Ctx`, which every host adapter has.)
+//
+// A Cmd names no requirements (ADR 0020): which services run it is a fact
+// about the handler that interprets it, not about the journaled Cmd.
 //
 // Both channels are named by `Cmd.define`; a Cmd literal never spells them.
-// Every existing `Cmd<A>` and every battery's local Cmd union compiles unchanged
-// — the phantoms are optional, so a `{ type }` literal still satisfies `Cmd`.
+// The phantoms are optional, so a `{ type }` literal still satisfies `Cmd`.
 /**
  * A tagged-union, one-shot effect — JSON-plain, hashable, replayable.
  *
- * `T` is the tag. `E` and `R` are Effect's Error and **Requirements** channels,
- * carried as phantom type parameters (ADR 0014): `E` is the `_tag` union this
- * Cmd can settle with, and `R` is the slice of `Ctx` its interpret handler
- * reads. `R` is a requirement, not a wiring — what SATISFIES it is the `ctx`
- * handed to `run`, built by hand or by a `provide` graph that acquires each
- * dependency once and releases it when the run ends.
- *
- * @see {@link RequiredCtx} — every Cmd's `R`, intersected: what `run` demands.
- * @see `provide` — the host-side graph that builds a `ctx` satisfying `R`.
+ * `T` is the tag. `Ok` and `E` are phantom type parameters (ADR 0014): `Ok` is
+ * the value this Cmd settles with, and `E` is the `_tag` union it can fail
+ * with. A Cmd carries no requirements (ADR 0020) — its handler gets its
+ * services from the plain `ctx` handed to `run`.
  */
-export type Cmd<T extends string = string, E = unknown, R = unknown> = {
+export type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
   readonly type: T;
+  /** Phantom — the value this Cmd settles with. Never assigned. */
+  readonly __ok?: Ok;
   /** Phantom — the `_tag` union this Cmd can settle with. Never assigned. */
   readonly __e?: E;
-  /** Phantom — the `Ctx` slice this Cmd's handler needs. Never assigned. */
-  readonly __r?: R;
 };
-
-// === Typed effect channels: reading `E` and `R` back off a Cmd (ADR 0014) ===
-//
-// `RequirementsOf<C>` is one Cmd's `R`; `RequiredCtx<C>` is the intersection over a
-// whole Cmd union — what `run` demands of `ctx` beside the machine's own `Ctx`.
-// An untyped Cmd (`{ type }`, `__r` absent) infers `unknown` — "requires
-// nothing", the identity of `&` — so a machine of hand-written Cmds demands
-// exactly what it demanded before. `never` (a cmdless machine) intersects to
-// `unknown` too.
-export type RequirementsOf<C> = C extends { readonly __r?: infer R }
-  ? R
-  : unknown;
 
 /** The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. */
 export type ErrorsOf<C> = C extends { readonly __e?: infer E } ? E : unknown;
 
-type UnionToIntersection<U> = (
-  U extends unknown
-    ? (u: U) => void
-    : never
-) extends (u: infer I) => void
-  ? I
-  : never;
-
-// `unknown` is the identity of `&` but the annihilator of `|`: a union of
-// `RequirementsOf` over a MIXED Cmd set (`{ http } | unknown`) collapses to
-// `unknown` before it can be intersected, and the machine demands nothing. Box
-// each member first so the "requires nothing" arms can be dropped, not absorbed.
-type RequirementsBoxed<C> = C extends unknown ? [RequirementsOf<C>] : never;
-type KnownRequirements<B> = B extends [infer R]
-  ? unknown extends R
-    ? never
-    : R
-  : never;
-
-/**
- * The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected.
- * `run` types its `ctx` as `Ctx & RequiredCtx<C>`, so handing a machine whose
- * Cmds need `{ http }` to a `run` whose ctx lacks it is a compile error. A Cmd
- * that requires nothing — untyped, or `Cmd.define`d without `requirements` — leaves
- * the demand of its siblings intact (#56).
- *
- * This is the requirement. `provide` is what satisfies it: hand `run` a
- * `provide({ … })` graph in place of the object and the same `Ctx` is built once
- * at boot, in dependency order, and released in reverse when the run ends.
- */
-export type RequiredCtx<C> = UnionToIntersection<
-  KnownRequirements<RequirementsBoxed<C>>
->;
-
 // === Cmd.define: the typed Cmd constructor (ADR 0014 §1, 0015 §1) ===
 //
 // "Types on the constructor, data in the record." A Cmd built by hand carries
-// no `E` and no `R`; one built by `Cmd.define` carries both, and the minted
+// no `Ok` and no `E`; one built by `Cmd.define` carries both, and the minted
 // settled Msgs (`<name>_ok` / `<name>_err`) are derived from the same
 // declaration — so the reducer, the interpret handler and the runtime edge all
 // read ONE source for what this effect can produce.
@@ -221,7 +166,7 @@ export type RequiredCtx<C> = UnionToIntersection<
 // Everything a constructor names is a TYPE or a SCHEMA; the value it returns is
 // still the dead record `{ type, ...input }`. `input` and `ok` are zod schemas
 // (zod is the one runtime dependency this adds); `err` is the `_tag` list a
-// handler may settle with; `requirements` is the `Ctx` slice the handler reads.
+// handler may settle with.
 //
 // The failure union always carries one kernel tag beside the declared ones:
 // `MalformedResult`, minted at the interpret edge when a handler's `_ok` value
@@ -276,20 +221,13 @@ export function malformedResult(
  */
 export type CmdInput = { readonly type?: never } & Record<string, unknown>;
 
-/**
- * Phantom carrier for a Cmd's `R`. `Cmd.requirements<{ http: Http }>()` is how a
- * declaration names the `Ctx` slice its handler reads — a type, not a value, so
- * nothing is constructed and nothing is checked at runtime.
- */
-export type Requirements<R> = { readonly __r?: R };
-
 /** The value `Cmd.define("fetch", …)` builds: `{ type: "fetch", ...input }`. */
 export type CmdValue<
   Name extends string,
   Input extends CmdInput,
+  Ok,
   E extends Tagged,
-  R,
-> = Cmd<Name, E | MalformedResult, R> & Readonly<Input>;
+> = Cmd<Name, Ok, E | MalformedResult> & Readonly<Input>;
 
 export type SettledOk<Name extends string, C, Ok> = {
   readonly type: `${Name}_ok`;
@@ -321,23 +259,22 @@ export interface CmdDef<
   Input extends CmdInput,
   Ok,
   E extends Tagged,
-  R,
 > {
-  (input: Input): CmdValue<Name, Input, E, R>;
+  (input: Input): CmdValue<Name, Input, Ok, E>;
   /** The `type` discriminant of every Cmd this builds. */
   readonly cmdType: Name;
   readonly okType: `${Name}_ok`;
   readonly errType: `${Name}_err`;
   readonly ok: (
-    cmd: CmdValue<Name, Input, E, R>,
+    cmd: CmdValue<Name, Input, Ok, E>,
     value: Ok,
     at?: number,
-  ) => SettledOk<Name, CmdValue<Name, Input, E, R>, Ok>;
+  ) => SettledOk<Name, CmdValue<Name, Input, Ok, E>, Ok>;
   readonly err: (
-    cmd: CmdValue<Name, Input, E, R>,
+    cmd: CmdValue<Name, Input, Ok, E>,
     error: E,
     at?: number,
-  ) => SettledErr<Name, CmdValue<Name, Input, E, R>, E>;
+  ) => SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>;
   readonly schema: {
     readonly input: z.ZodType<Input>;
     readonly ok: z.ZodType<Ok>;
@@ -484,10 +421,10 @@ export type CmdOf<D extends AnyCmdDef> = D extends ((
  * into the machine's `M` so the user never spells the effect half of it.
  */
 export type Settled<D extends AnyCmdDef> =
-  D extends CmdDef<infer Name, infer Input, infer Ok, infer E, infer R>
+  D extends CmdDef<infer Name, infer Input, infer Ok, infer E>
     ?
-        | SettledOk<Name, CmdValue<Name, Input, E, R>, Ok>
-        | SettledErr<Name, CmdValue<Name, Input, E, R>, E>
+        | SettledOk<Name, CmdValue<Name, Input, Ok, E>, Ok>
+        | SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>
     : never;
 
 // Both read one slot of a `CmdDef`; every OTHER slot is `infer`red too, because
@@ -496,33 +433,27 @@ export type Settled<D extends AnyCmdDef> =
 
 /** The `Ok` a def's handler must produce. */
 export type OkOf<D extends AnyCmdDef> =
-  D extends CmdDef<infer _Name, infer _Input, infer Ok, infer _E, infer _R>
-    ? Ok
-    : never;
+  D extends CmdDef<infer _Name, infer _Input, infer Ok, infer _E> ? Ok : never;
 
 /** The DECLARED failure union a def's handler may settle with. */
 export type ErrOf<D extends AnyCmdDef> =
-  D extends CmdDef<infer _Name, infer _Input, infer _Ok, infer E, infer _R>
-    ? E
-    : never;
+  D extends CmdDef<infer _Name, infer _Input, infer _Ok, infer E> ? E : never;
 
 function defineCmd<
   const Name extends string,
   Input extends CmdInput,
   Ok,
   const Tags extends readonly string[],
-  R = unknown,
 >(
   name: Name,
   spec: {
     readonly input: z.ZodType<Input>;
     readonly ok: z.ZodType<Ok>;
     readonly err: Tags;
-    readonly requirements?: Requirements<R>;
   },
-): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>, R> {
+): CmdDef<Name, Input, Ok, TaggedError<Tags[number]>> {
   type E = TaggedError<Tags[number]>;
-  type C = CmdValue<Name, Input, E, R>;
+  type C = CmdValue<Name, Input, Ok, E>;
   const okType = `${name}_ok` as const;
   const errType = `${name}_err` as const;
   const build = (input: Input): C => ({ ...input, type: name });
@@ -1147,22 +1078,15 @@ export const Cmd = {
    *     input: z.object({ url: z.string() }),
    *     ok: z.object({ status: z.number(), body: z.string() }),
    *     err: ["not_found", "timeout"],
-   *     requirements: Cmd.requirements<{ http: Http }>(),
    *   });
    *
    * `err` is the `_tag` list the handler may settle with; the runtime adds
-   * `malformed_result` for an `_ok` value the `ok` schema rejects. `requirements`
-   * names the `Ctx` slice the handler reads — `run` refuses a ctx without it.
+   * `malformed_result` for an `_ok` value the `ok` schema rejects. The handler
+   * reads its services off the plain `ctx` handed to `run` (ADR 0020).
    *
    * A Cmd must not wait; see `DepKeyedSub` for anything that watches.
    */
   define: defineCmd,
-
-  /**
-   * Name a Cmd's `R` — the `Ctx` slice its handler reads. A phantom: nothing
-   * is built, nothing is checked at runtime; the type is what `run` reads.
-   */
-  requirements: <R>(): Requirements<R> => ({}),
 
   /**
    * The empty Cmd array. Typed `readonly never[]` so it's assignable to any
@@ -1594,11 +1518,9 @@ export type NoCtx = Readonly<Record<never, never>>;
 // handler dictionary with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
 // re-declaring the mapped type at every effects module.
 //
-// **The `R` channel lands here.** A cell's `ctx` is the machine's `Ctx`
-// intersected with ITS Cmd's `RequirementsOf` — so a `Cmd.define`d effect's handler
-// reads `ctx.http` typed, while `run` (via `RequiredCtx`) is what guarantees
-// the slice was actually supplied. An untyped Cmd's `RequirementsOf` is `unknown`,
-// so every hand-written handler's `ctx` is exactly what it was.
+// A cell's `ctx` is the machine's plain `Ctx` plus the kernel's `emit`; tea
+// does no dependency injection (ADR 0020), so every handler reads the same
+// object `run` was handed.
 //
 // Strengthens invariant 2 (the record form has no fall-through default to
 // hide impurity behind) and invariant 7 (identity is explicit — the Cmd
@@ -1606,7 +1528,7 @@ export type NoCtx = Readonly<Record<never, never>>;
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: (
     cmd: Extract<C, { type: K }>,
-    ctx: Ctx & RequirementsOf<Extract<C, { type: K }>> & PortEmitter,
+    ctx: Ctx & PortEmitter,
     dispatch?: (msg: M) => void,
     // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
   ) => Promise<M | void>;

@@ -15,9 +15,9 @@ import type { DeadlineSub, EndedRun } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
 import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
-import type { Interpret, RequiredCtx } from "../pure/core";
+import type { Interpret } from "../pure/core";
 import type { RetryPolicy } from "../retry-backoff";
-import type { BootingRuntime, ScopedCtxArg, Store } from "../runtime-types";
+import type { BootingRuntime, CtxArg, Store } from "../runtime-types";
 import {
   type AgentCompactOkMsg,
   type AgentCompactRunCmd,
@@ -39,6 +39,7 @@ import {
   type ToolFailureOf,
   type ToolResult,
   type ToolRouter,
+  type ToolsCtx,
   toolRouter,
   type WiredToolMsg,
 } from "./tool";
@@ -129,8 +130,8 @@ export type DefinedAgentResolvedState<T extends AnyToolDef> = Omit<
   "run"
 > & { readonly run: EndedRun<string> };
 
-/** The ctx the tools' `needs` demand, intersected — what `run` asks for. */
-export type DefinedAgentCtx<T extends AnyToolDef> = RequiredCtx<ToolCmd<T>>;
+/** The ctx the tools' handlers read, intersected — what `run` asks for. */
+export type DefinedAgentCtx<T extends AnyToolDef> = ToolsCtx<T>;
 
 /** The Msg union a defined agent's machine folds. */
 export type DefinedAgentMsg<T extends AnyToolDef> =
@@ -400,12 +401,10 @@ export type DefinedAgentEvent<T extends AnyToolDef> = AgentEvent<ToolResult<T>>;
 /**
  * Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock.
  *
- * `ctx` is `ScopedCtxArg`, the same widening `run` itself takes: an agent's tools
- * are exactly the handlers a scoped resource is for, so a `provide({ … })` graph
- * is accepted here in place of the object and gets the same acquire-at-boot /
- * release-at-terminal lifetime.
+ * `ctx` is the plain object the tools' handlers read (ADR 0020). A host with a
+ * resource to release wraps `run` in its own `try` / `finally`.
  */
-export type DefinedAgentRunOptions<T extends AnyToolDef> = ScopedCtxArg<
+export type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<
   DefinedAgentCtx<T>
 > & {
   readonly store?: Store<DefinedAgentState<T>>;
