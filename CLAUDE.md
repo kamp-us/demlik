@@ -54,8 +54,8 @@ repairing one PR — not the normal entry point:
   `kampus` marketplace (`kamp-us/phoenix`, live-tracking) plus `fabrika@kampus`.
 - The CLI is a devDependency pinned in `package.json`. Run `pnpm install`, then use the
   workspace binary — a global `fabrika` on a different version warns and may answer differently.
-- Every `fabrika status` call needs `--skills-dir <the installed fabrika roster>`, or it exits
-  with "no roster resolved".
+- `fabrika status` finds the installed skill roster on its own; pass `--skills-dir` only to
+  point it at a different one.
 
 ### What fabrika reads here
 
