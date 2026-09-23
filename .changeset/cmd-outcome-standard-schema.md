@@ -21,8 +21,9 @@ fetch: async (cmd, { http, ok, err }) =>
   `OkOfCmd`, `DeclaredErrorsOf`, and three thrown errors: `UndeclaredFailureError`,
   `OutcomeContractError` and `AsyncSchemaError`.
 - A throw, an `err` whose tag the def does not declare, or a handler returning
-  its own `_ok` / `_err` Msg goes to `onError` under the new `"interpret"`
-  phase. No `_err` Msg is dispatched, and the dispatch still resolves.
+  any Msg goes to `onError` under the new `"interpret"` phase. No `_err` Msg is
+  dispatched, and the dispatch still resolves. A defined handler returns an
+  outcome or nothing: it can no longer answer with a follow-up Msg.
 - `Cmd.define`'s `input` / `ok` take any Standard Schema whose `validate` is
   synchronous: zod as it is, Effect Schema through `Schema.toStandardSchemaV1`.
   `MalformedResult` issues now come from the schema's Standard Schema issues.

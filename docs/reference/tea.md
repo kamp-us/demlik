@@ -99,7 +99,7 @@ import { … } from "@demlik/tea";
 | `OnError` | Type | Sink for runtime failures that have no caller to reject at. |
 | `Outcome` | Type | The result a `Cmd.define`d handler returns: its value, or a declared failure. |
 | `Outcome` | Variable | Build an Outcome outside a handler's helpers — in a test that calls a handler directly, or in an adapter converting another result type. |
-| `OutcomeContractError` | Class | A `Cmd.define`d handler returned something the engine cannot settle: its own `<name>_ok` / `<name>_err` Msg (the engine mints those, never the handler — ADR 0021), or a value that is neither an Outcome, a Msg, nor nothing. |
+| `OutcomeContractError` | Class | A `Cmd.define`d handler returned something the engine cannot settle: any Msg (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler — ADR 0021), or any other value that is neither an Outcome nor nothing. |
 | `OutcomeHelpers` | Interface | The two builders the Promise engine hands a `Cmd.define`d handler on its ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared tags. |
 | `partitionByAck` | Function | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
 | `Port` | Interface |  |
