@@ -53,7 +53,13 @@
  * reconcile pass leaves it running across transitions instead of churning it).
  */
 
-import type { DepKeyedSub, Dispose, Sub, SubId } from "../../../index";
+import type {
+  DepKeyedSub,
+  Dispose,
+  Sub,
+  SubId,
+  TimerDeps,
+} from "../../../index";
 import { subId } from "../../../index";
 
 /**
@@ -333,4 +339,36 @@ export function deadlineMsgType<N extends string | undefined>(
   return (
     name === undefined ? "deadline_exceeded" : `${name}_deadline`
   ) as DeadlineMsgType<N>;
+}
+
+/**
+ * The built-in `timer` Sub's deps for the SOONEST deadline in `list`, counted
+ * from `nowMs`; `null` when the list is empty (no timer armed).
+ *
+ * This is how a battery arms a whole deadline list through the engine's
+ * built-in `timer` instead of a `deadline` runner: a machine declares ONE
+ * `{ type: "timer", deps: (s) => nextTimer(list(s), clock(s)) }` entry. The
+ * timer fires the soonest deadline's `DeadlineExceeded` Msg; the transition it
+ * causes drops that deadline from the list, and the next soonest is armed.
+ *
+ * `nowMs` is the instant the list was last computed against — the battery's
+ * own record of its latest transition, never a clock read (invariant 2). The
+ * countdown is `atMs - nowMs`, clamped at `0`, and because `ms` is part of the
+ * deps, every new `nowMs` restarts the countdown from that instant. PURE.
+ */
+export function nextTimer<N extends string | undefined = undefined>(
+  list: readonly DeadlineSub<N>[],
+  nowMs: number,
+): TimerDeps<DeadlineExceeded<N>> | null {
+  let soonest: DeadlineSub<N> | undefined;
+  for (const deadline of list) {
+    if (soonest === undefined || deadline.atMs < soonest.atMs) {
+      soonest = deadline;
+    }
+  }
+  if (soonest === undefined) return null;
+  return {
+    ms: Math.max(0, soonest.atMs - nowMs),
+    msg: deadlineExceeded(soonest.id, soonest.atMs, soonest.name),
+  };
 }

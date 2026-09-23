@@ -66,8 +66,6 @@ const DOORS: ReadonlyMap<string, readonly string[]> = new Map([
       "internal/resilience/resilient-call",
       "internal/resilience/retry-to-success",
       "internal/resilience/token-refresh",
-      "internal/resilience/with-deadline",
-      "internal/resilience/with-resilience",
     ],
   ],
   [

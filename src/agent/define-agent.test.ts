@@ -979,7 +979,13 @@ describe("onChunk — the streaming model port (#123)", () => {
     // is the watchdog's wall clock, the run's timing rather than its contract.
     const durable = (s: DefinedAgentState<typeof search>) =>
       JSON.parse(
-        JSON.stringify({ ...s, run: { ...s.run, lastProgressAt: 0 } }),
+        JSON.stringify({
+          ...s,
+          run: { ...s.run, lastProgressAt: 0 },
+          // The slice's clock is the engine-stamped `at` of the last settle,
+          // so it tracks the run's clock exactly as `lastProgressAt` does.
+          resilience: { ...s.resilience, clockMs: 0 },
+        }),
       );
     expect(durable(unwatched)).toEqual(durable(watched));
   });
@@ -1452,7 +1458,13 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
     }).run(INPUT, { ctx: { kb }, runId: "run-1", clock: () => 0 });
     const durable = (s: DefinedAgentState<typeof search>) =>
       JSON.parse(
-        JSON.stringify({ ...s, run: { ...s.run, lastProgressAt: 0 } }),
+        JSON.stringify({
+          ...s,
+          run: { ...s.run, lastProgressAt: 0 },
+          // The slice's clock is the engine-stamped `at` of the last settle,
+          // so it tracks the run's clock exactly as `lastProgressAt` does.
+          resilience: { ...s.resilience, clockMs: 0 },
+        }),
       );
     expect(durable(live)).toEqual(durable(unwrapped));
   });

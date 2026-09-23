@@ -10,7 +10,6 @@
 
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { JevPort } from "../internal/jev/ask";
 import {
   type ClassifyBatchCmd,
   type ClassifyBatchErrMsg,
@@ -122,7 +121,7 @@ const criteria = {
 } as const;
 
 /** One item per batch, so every `add` flushes and launches immediately. */
-function knob(port?: JevPort<ItemQuestions<Line>>) {
+function knob() {
   return createClassifyBatch<Txn, Line>({
     keyOf: (t) => t.merchant,
     criteria,
@@ -130,7 +129,6 @@ function knob(port?: JevPort<ItemQuestions<Line>>) {
     maxMs: 1_000,
     concurrency: 4,
     ttlMs: 60_000,
-    ...(port === undefined ? {} : { port }),
   });
 }
 
@@ -157,8 +155,8 @@ function okFor(
   for (const key of Object.keys(request.questions)) answers[key] = answer;
   return {
     type: MsgType.ResilientOk,
-    key: cmd.key,
-    result: {
+    cmd,
+    value: {
       answers,
       model: "jev-latest",
       usage: { input_tokens: 1, output_tokens: 1 },
@@ -173,8 +171,11 @@ const errFor = (
   at: number,
 ): ClassifyBatchErrMsg => ({
   type: MsgType.ResilientErr,
-  key: cmd.key,
-  error: { _tag: "http_terminal", status: 401 },
+  cmd,
+  error: {
+    _tag: "port_rejected",
+    jev: { _tag: "http_terminal", status: 401 },
+  },
   at,
 });
 

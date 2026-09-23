@@ -5,22 +5,66 @@ import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import {
   createSnapshot,
+  type SnapshotFailedMsg,
   type SnapshotLoadCmd,
   type SnapshotLoadedMsg,
   type SnapshotLoadFailedMsg,
   type SnapshotSavedMsg,
   type SnapshotState,
-  type SnapshotStore,
   type SnapshotWriteCmd,
-  snapshotFailed,
-  snapshotLoaded,
-  snapshotLoadFailed,
-  snapshotSaved,
+  snapshotLoadDef,
+  snapshotWriteDef,
 } from "./index";
 
 // A snapshot value is whatever the consumer checkpoints — here a tiny run-state
 // stand-in so the payload threading is observable in the emitted Cmd.
 type RunState = { readonly step: number };
+
+// The engine-minted ack for the write that decided checkpoint `seq` at `at`.
+// `confirm` reads the seq / at off the write Cmd the Msg carries.
+const writeDef = snapshotWriteDef<RunState>();
+function snapshotSaved(seq: number, at: number): SnapshotSavedMsg<RunState> {
+  return writeDef.ok(
+    writeDef({ key: "@@snapshot", seq, at, payload: { step: 0 } }),
+    undefined,
+    at,
+  );
+}
+
+// The R2/KV-shaped store a test's handlers read and write. The store is the
+// handler's business, never the knob's (ADR 0021).
+type TestStore<V> = {
+  get(key: string): Promise<V | null>;
+  put(key: string, value: V): Promise<void>;
+};
+
+// The two handlers a host writes for the knob's Cmds, over `store`: each
+// returns an outcome, and the engine mints the settled Msg.
+function storeHandlers(store: TestStore<RunState>) {
+  return {
+    snapshot_write: async (cmd: SnapshotWriteCmd<RunState>) => {
+      try {
+        await store.put(cmd.key, cmd.payload);
+        return { _tag: "Ok", value: undefined } as const;
+      } catch (cause) {
+        return {
+          _tag: "Err",
+          error: { _tag: "snapshot_write_failed", cause },
+        } as const;
+      }
+    },
+    snapshot_load: async (cmd: SnapshotLoadCmd<RunState>) => {
+      try {
+        return { _tag: "Ok", value: await store.get(cmd.key) } as const;
+      } catch (cause) {
+        return {
+          _tag: "Err",
+          error: { _tag: "snapshot_load_failed", cause },
+        } as const;
+      }
+    },
+  };
+}
 
 // The freshly-initialized slice, named once so the "no churn" assertions read
 // against a single source of truth.
@@ -201,16 +245,8 @@ type State = { readonly run: RunState; readonly snap: SnapshotState };
 type Msg =
   | { readonly type: "progress"; readonly at: number }
   | { readonly type: "finish"; readonly at: number }
-  | {
-      readonly type: "snapshot_saved";
-      readonly seq: number;
-      readonly at: number;
-    }
-  | {
-      readonly type: "snapshot_failed";
-      readonly seq: number;
-      readonly error: unknown;
-    };
+  | SnapshotSavedMsg<RunState>
+  | SnapshotFailedMsg<RunState>;
 
 const knob = createSnapshot<RunState>({ every: 2, key: "run/cp" });
 
@@ -224,11 +260,11 @@ const update: Reducer<State, Msg, Cmd> = {
     const [snap, cmds] = knob.force(s.snap, s.run, msg.at);
     return [{ ...s, snap }, cmds];
   },
-  snapshot_saved: (s, msg) => {
+  snapshot_write_ok: (s, msg) => {
     const [snap, cmds] = knob.confirm(s.snap, msg);
     return [{ ...s, snap }, cmds];
   },
-  snapshot_failed: (s) => [s, []],
+  snapshot_write_err: (s) => [s, []],
 };
 
 const machine = defineMachine({
@@ -283,35 +319,85 @@ describe("snapshot knob spliced into a machine", () => {
     );
   });
 
-  it("a snapshot_saved Msg advances the durable watermark in the final state", () => {
+  it("a snapshot_write_ok Msg advances the durable watermark in the final state", () => {
+    const write = knob.write({
+      key: "run/cp",
+      seq: 1,
+      at: 2,
+      payload: { step: 2 },
+    });
     const { state } = m.replay({
       msgs: [
         { type: "progress", at: 1 },
         { type: "progress", at: 2 }, // seq 1 write emitted
-        { type: "snapshot_saved", seq: 1, at: 5 },
+        knob.write.ok(write, undefined, 5),
       ],
     });
     expect(state.snap.lastSavedSeq).toBe(1);
-    expect(state.snap.lastSavedAt).toBe(5);
+    // The watermark is the instant the write was DECIDED — the Cmd's `at`.
+    expect(state.snap.lastSavedAt).toBe(2);
     expect(state.snap.seq).toBe(1);
   });
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Handlers: the I/O boundary. Drive the `snapshot_write` interpret cell against
-// a fake R2/KV-shaped store and assert it puts + routes Ok/Err to the right Msg.
+// The Cmd defs: the knob ships two `Cmd.define`d Cmds and no handler. A write
+// settles through the def's minted `_ok` / `_err`, which `confirm` folds.
 // ───────────────────────────────────────────────────────────────────────────
 
-describe("handlers — the write effect", () => {
-  function fakeStore<V>(): SnapshotStore<V> & {
-    puts: { key: string; value: V }[];
+describe("the write Cmd is Cmd.define'd — the engine mints its settle", () => {
+  it("knob.write builds the Cmd `record` emits, and its `_ok` feeds `confirm`", () => {
+    const [emitted, cmds] = knob.force(knob.init(), { step: 42 }, 1234);
+    expect(cmds).toEqual([
+      knob.write({ key: "run/cp", seq: 1, at: 1234, payload: { step: 42 } }),
+    ]);
+    const [cmd] = cmds;
+    if (cmd === undefined) throw new Error("no write emitted");
+    const saved = knob.write.ok(cmd, undefined, 2000);
+    expect(saved).toEqual({
+      type: "snapshot_write_ok",
+      cmd,
+      value: undefined,
+      at: 2000,
+    });
+    const [confirmed] = knob.confirm(emitted, saved);
+    expect(confirmed.lastSavedSeq).toBe(1);
+    expect(confirmed.lastSavedAt).toBe(1234);
+  });
+
+  it("declares its failure tags, so a failed write is a typed `_err`", () => {
+    expect(knob.write.errTags).toEqual(["snapshot_write_failed"]);
+    expect(knob.load.errTags).toEqual(["snapshot_load_failed"]);
+    const cmd = knob.write({
+      key: "run/cp",
+      seq: 3,
+      at: 99,
+      payload: { step: 1 },
+    });
+    const failed = knob.write.err(cmd, { _tag: "snapshot_write_failed" }, 100);
+    expect(failed).toEqual({
+      type: "snapshot_write_err",
+      cmd,
+      error: { _tag: "snapshot_write_failed" },
+      at: 100,
+    });
+  });
+
+  it("a knob carries no handler of its own (ADR 0021)", () => {
+    expect("handlers" in knob).toBe(false);
+  });
+});
+
+describe("the write effect — a host handler driven through `run`", () => {
+  function fakeStore(): TestStore<RunState> & {
+    puts: { key: string; value: RunState }[];
   } {
-    const cell = new Map<string, V>();
-    const puts: { key: string; value: V }[] = [];
+    const cell = new Map<string, RunState>();
+    const puts: { key: string; value: RunState }[] = [];
     return {
       puts,
       async get(key) {
-        return cell.has(key) ? (cell.get(key) as V) : null;
+        return cell.get(key) ?? null;
       },
       async put(key, value) {
         cell.set(key, value);
@@ -320,47 +406,54 @@ describe("handlers — the write effect", () => {
     };
   }
 
-  it("puts the payload under the Cmd's key and dispatches snapshot_saved on success", async () => {
-    const store = fakeStore<RunState>();
-    const handlers = knob.handlers({ store });
-    const cmd: SnapshotWriteCmd<RunState> = {
-      type: "snapshot_write",
-      key: "run/cp",
-      seq: 7,
-      at: 1234,
-      payload: { step: 42 },
-    };
+  function writeMachine() {
+    return defineMachine({
+      types: { model: {} as State, msg: {} as Msg, ctx: undefined },
+      cmds: [knob.write],
+      init: (loaded) =>
+        loaded ? [loaded, []] : [{ run: { step: 0 }, snap: knob.init() }, []],
+      update: {
+        progress: update.progress,
+        finish: update.finish,
+        snapshot_write_ok: update.snapshot_write_ok,
+        snapshot_write_err: update.snapshot_write_err,
+      } as Reducer<State, Msg, SnapshotWriteCmd<RunState>>,
+    });
+  }
 
-    const follow = await handlers.snapshot_write(cmd, {} as never);
+  it("puts the payload, and the minted snapshot_write_ok advances the watermark", async () => {
+    const store = fakeStore();
+    const runtime = await run(writeMachine(), {
+      ctx: undefined,
+      interpret: storeHandlers(store) as never,
+    }).ready;
+    await runtime.dispatch({ type: "progress", at: 1 });
+    await runtime.dispatch({ type: "progress", at: 2 }); // cadence hit → write
+    await runtime.stop();
 
-    expect(store.puts).toEqual([{ key: "run/cp", value: { step: 42 } }]);
-    expect(await store.get("run/cp")).toEqual({ step: 42 });
-    // Ok routes to snapshot_saved echoing the Cmd's seq + at — feeds `confirm`.
-    expect(follow).toEqual(snapshotSaved(7, 1234));
+    expect(store.puts).toEqual([{ key: "run/cp", value: { step: 2 } }]);
+    expect(runtime.getState().snap.lastSavedSeq).toBe(1);
+    expect(runtime.getState().snap.lastSavedAt).toBe(2);
   });
 
-  it("dispatches snapshot_failed (never throws) when the put rejects", async () => {
-    const boom = new Error("KV write failed");
-    const store: SnapshotStore<RunState> = {
+  it("a rejecting put settles snapshot_write_err — the watermark does not move", async () => {
+    const store: TestStore<RunState> = {
       async get() {
         return null;
       },
       async put() {
-        throw boom;
+        throw new Error("KV write failed");
       },
     };
-    const handlers = knob.handlers({ store });
-    const cmd: SnapshotWriteCmd<RunState> = {
-      type: "snapshot_write",
-      key: "run/cp",
-      seq: 3,
-      at: 99,
-      payload: { step: 1 },
-    };
+    const runtime = await run(writeMachine(), {
+      ctx: undefined,
+      interpret: storeHandlers(store) as never,
+    }).ready;
+    await runtime.dispatch({ type: "finish", at: 9 });
+    await runtime.stop();
 
-    // Railway: the handler resolves with an error Msg, it does not reject.
-    const follow = await handlers.snapshot_write(cmd, {} as never);
-    expect(follow).toEqual(snapshotFailed(3, boom));
+    expect(runtime.getState().snap.seq).toBe(1);
+    expect(runtime.getState().snap.lastSavedSeq).toBeNull();
   });
 });
 
@@ -538,51 +631,31 @@ describe("requestLoad — emits the read Cmd", () => {
   });
 });
 
-describe("handlers — the read effect", () => {
-  it("gets the payload under the Cmd's key and dispatches snapshot_loaded", async () => {
-    const store: SnapshotStore<RunState> = {
-      async get(key) {
-        return key === "run/cp" ? { step: 99 } : null;
-      },
-      async put() {},
-    };
-    const handlers = knob.handlers({ store });
-    const cmd: SnapshotLoadCmd = { type: "snapshot_load", key: "run/cp" };
-
-    const follow = await handlers.snapshot_load(cmd, {} as never);
-    expect(follow).toEqual(snapshotLoaded({ step: 99 }));
-  });
-
-  it("dispatches snapshot_loaded(null) when the store has no checkpoint", async () => {
-    const store: SnapshotStore<RunState> = {
-      async get() {
-        return null;
-      },
-      async put() {},
-    };
-    const handlers = knob.handlers({ store });
-    const cmd: SnapshotLoadCmd = { type: "snapshot_load", key: "run/cp" };
-
-    const follow = await handlers.snapshot_load(cmd, {} as never);
+describe("the read Cmd — its settled Msgs", () => {
+  it("snapshot_load_ok carries the payload, or null for no checkpoint", () => {
+    const load = snapshotLoadDef<RunState>();
+    const cmd = load({ key: "run/cp" });
+    const loaded: SnapshotLoadedMsg<RunState> = load.ok(cmd, { step: 99 }, 5);
+    expect(loaded).toEqual({
+      type: "snapshot_load_ok",
+      cmd,
+      value: { step: 99 },
+      at: 5,
+    });
     // null is "no checkpoint yet" — a normal first-run state, not an error.
-    expect(follow).toEqual(snapshotLoaded(null));
-    expect((follow as SnapshotLoadedMsg<RunState>).payload).toBeNull();
+    expect(load.ok(cmd, null, 5).value).toBeNull();
   });
 
-  it("dispatches snapshot_load_failed (never throws) when the get rejects", async () => {
-    const boom = new Error("KV read failed");
-    const store: SnapshotStore<RunState> = {
-      async get() {
-        throw boom;
-      },
-      async put() {},
-    };
-    const handlers = knob.handlers({ store });
-    const cmd: SnapshotLoadCmd = { type: "snapshot_load", key: "run/cp" };
-
-    // Railway: the handler resolves with an error Msg, it does not reject.
-    const follow = await handlers.snapshot_load(cmd, {} as never);
-    expect(follow).toEqual(snapshotLoadFailed(boom));
+  it("a failed read is a typed snapshot_load_err, distinct from a null load", () => {
+    const load = snapshotLoadDef<RunState>();
+    const cmd = load({ key: "run/cp" });
+    const failed: SnapshotLoadFailedMsg<RunState> = load.err(
+      cmd,
+      { _tag: "snapshot_load_failed" },
+      5,
+    );
+    expect(failed.type).toBe("snapshot_load_err");
+    expect(failed.error).toEqual({ _tag: "snapshot_load_failed" });
   });
 });
 
@@ -609,16 +682,13 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
   type RecState = { readonly run: RunState; readonly snap: SnapshotState };
   type RecMsg =
     | { readonly type: "boot" }
-    | { readonly type: "progress"; readonly at: number }
-    | SnapshotSavedMsg
-    | SnapshotLoadedMsg<RunState>
-    | SnapshotLoadFailedMsg;
+    | { readonly type: "progress"; readonly at: number };
 
   // A real R2/KV-shaped fake store backed by a Map, plus a recorder of failures.
   function makeStore(seed?: {
     key: string;
     value: RunState;
-  }): SnapshotStore<RunState> {
+  }): TestStore<RunState> {
     const cell = new Map<string, RunState>();
     if (seed) cell.set(seed.key, seed.value);
     return {
@@ -631,9 +701,17 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
     };
   }
 
-  function recoveryMachine(store: SnapshotStore<RunState>) {
+  function recoveryMachine(store: TestStore<RunState>) {
     const recKnob = createSnapshot<RunState>({ every: 2, key: "run/cp" });
-    const update: Reducer<RecState, RecMsg, Cmd> = {
+    const update: Reducer<
+      RecState,
+      | RecMsg
+      | SnapshotSavedMsg<RunState>
+      | SnapshotFailedMsg<RunState>
+      | SnapshotLoadedMsg<RunState>
+      | SnapshotLoadFailedMsg<RunState>,
+      Cmd
+    > = {
       // Resume: ask the durable store for the last checkpoint.
       boot: (s) => {
         const [snap, cmds] = recKnob.requestLoad(s.snap);
@@ -646,38 +724,39 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
       },
       // The recovery fold: a non-null payload seeds the run slice from the
       // durable checkpoint; null keeps the fresh init.
-      snapshot_loaded: (s, msg) => {
-        if (msg.payload === null) return [s, []];
+      snapshot_load_ok: (s, msg) => {
+        if (msg.value === null) return [s, []];
         const [snap, cmds] = recKnob.boot(s.snap);
-        return [{ run: msg.payload, snap }, cmds];
+        return [{ run: msg.value, snap }, cmds];
       },
-      snapshot_saved: (s, msg) => {
+      snapshot_load_err: (s) => [s, []],
+      snapshot_write_ok: (s, msg) => {
         const [snap, cmds] = recKnob.confirm(s.snap, msg);
         return [{ ...s, snap }, cmds];
       },
-      snapshot_load_failed: (s) => [s, []],
+      snapshot_write_err: (s) => [s, []],
     };
     const machine = defineMachine({
       types: {
         model: {} as RecState,
         msg: {} as RecMsg,
-        cmd: {} as Cmd,
         ctx: undefined,
       },
+      cmds: [recKnob.write, recKnob.load],
       // Fresh init — step 0. Recovery overwrites this via snapshot_loaded.
       init: (loaded) =>
         loaded
           ? [loaded, []]
           : [{ run: { step: 0 }, snap: recKnob.init() }, []],
-      update,
+      update: update as never,
     });
-    return { machine, interpret: { ...recKnob.handlers({ store }) } };
+    return { machine, interpret: storeHandlers(store) };
   }
 
-  // Run the recovery machine under the snapshot handlers bound to `store`.
-  function runRecovery(store: SnapshotStore<RunState>) {
+  // Run the recovery machine under the host's handlers bound to `store`.
+  function runRecovery(store: TestStore<RunState>) {
     const { machine, interpret } = recoveryMachine(store);
-    return run(machine, { ctx: undefined, interpret });
+    return run(machine, { ctx: undefined, interpret: interpret as never });
   }
 
   it("recovers the checkpointed run state: a fresh boot + dispatch(boot) restores step from the store", async () => {
@@ -689,7 +768,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
     expect(runtime.getState().run.step).toBe(0);
 
     // Drive the REAL recovery loop: boot → snapshot_load Cmd → store.get →
-    // snapshot_loaded follow-up re-enters → fold. `stop()` drains the tail so
+    // the minted snapshot_load_ok re-enters → fold. `stop()` drains the tail so
     // the fire-and-forget follow-up has fully landed before we read.
     await runtime.dispatch({ type: "boot" });
     await runtime.stop();

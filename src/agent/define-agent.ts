@@ -11,8 +11,9 @@
  */
 
 import type { Machine, Subscribe } from "../index";
-import type { DeadlinesSub, EndedRun } from "../internal/flow/monitored-run";
-import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
+import type { EndedRun } from "../internal/flow/monitored-run";
+import type { LlmCall } from "../internal/llm-call";
+import type { DeadlinesSub } from "../internal/resilience/deadline";
 import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
 import { cmdEdgeOf, type Interpret } from "../pure/core";
@@ -33,6 +34,7 @@ import {
   agentCancelMsg,
   agentEvents,
 } from "./machine";
+import type { MessageLoader, PlainModel } from "./model";
 import {
   type AnyToolDef,
   type ToolCmd,

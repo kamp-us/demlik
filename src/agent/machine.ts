@@ -9,19 +9,20 @@
  */
 
 import type { Cmd, Interpret, Machine, Subscribe } from "../index";
-import type {
-  DeadlineSub,
-  DeadlinesSub,
-  MonitoredRunCmd,
-} from "../internal/flow/monitored-run";
+import type { MonitoredRunCmd } from "../internal/flow/monitored-run";
 import type {
   LlmCall,
-  LlmCallPorts,
   LlmFailMsg,
+  LlmOk,
   LlmRunCmd,
   LlmSucceedMsg,
   LlmTimerMsg,
 } from "../internal/llm-call";
+import type {
+  DeadlineSub,
+  DeadlinesSub,
+} from "../internal/resilience/deadline";
+import type { RunCmdDef } from "../internal/resilience/resilient-call";
 import { MsgType } from "../protocol";
 import type {
   AgentCompactErrMsg,
@@ -158,8 +159,9 @@ export type AgentToMachine<
 
 /**
  * The agent handle `createAgent` returns — the uniform verb contract every tea
- * composition exposes, plus the wired `toMachine` and the `unsafeDetachedHandlers`
- * escape hatch. `Snap` flows ONLY into `toMachine`'s `toolInterpret` obligation
+ * composition exposes, plus the wired `toMachine` and `brainInterpret`, the
+ * brain call's handler for a consumer wiring the verbs by hand. `Snap` flows
+ * ONLY into `toMachine`'s `toolInterpret` obligation
  * (the snapshot derivation); every verb is snapshot-agnostic. The model
  * message shape `Msg` does not appear on the handle's surface (it is internal to the
  * brain call's loader), so it is not a type parameter here — only `createAgent`
@@ -212,7 +214,7 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [key: string, msg: AgentLlmOkMsg<P, O>, at: number]
+    [msg: AgentLlmOkMsg<P, O>, at: number]
   >;
   readonly fail: AgentVerb1<
     Stage,
@@ -220,7 +222,7 @@ export interface AgentKnob<
     O,
     R,
     TC,
-    [key: string, msg: AgentLlmErrMsg<P>, at: number]
+    [msg: AgentLlmErrMsg<P>, at: number]
   >;
   readonly compactOk: AgentVerb1<
     Stage,
@@ -245,9 +247,19 @@ export interface AgentKnob<
   readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
   readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
   readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
-  readonly unsafeDetachedHandlers: <M>(
-    ports: AgentPorts<P, O, M>,
-  ) => AgentDetachedHandlers<P, M>;
+  /**
+   * The brain call's `resilient_run` handler — the one `toMachine` wires. Its
+   * Cmd is `Cmd.define`d, so it returns an outcome and the engine mints the
+   * `resilient_run_ok` / `resilient_run_err` Msg that `succeed` / `fail` fold
+   * (ADR 0021). List `AgentKnob`'s brain Cmd def in `cmds` when you hand-wire.
+   */
+  readonly brainInterpret: () => Interpret<
+    AgentLlmOkMsg<P, O> | AgentLlmErrMsg<P>,
+    AgentLlmRunCmd<P>,
+    unknown
+  >;
+  /** The brain call's `Cmd.define`d run Cmd def — list it in `cmds` when you hand-wire. */
+  readonly brain: RunCmdDef<LlmCall<P>, LlmOk<P, O>>;
 }
 
 /** A verb taking the state + `Args`, returning the agent's `[State, Cmd[]]` tuple. */
@@ -284,40 +296,6 @@ export type AgentLlmErrMsg<P extends string> = LlmFailMsg<P>;
  * sibling gold standard.
  */
 export type AgentTimerMsg = LlmTimerMsg;
-
-/** Ports the consumer supplies to the llm-call handler — re-exported shape. */
-export type AgentPorts<
-  P extends string,
-  O extends Record<P, unknown>,
-  M,
-> = LlmCallPorts<P, O, M>;
-
-/**
- * The LEGACY detached brain-call handler dictionary `handlers(ports)` returns,
- * superseded by the `Interpret` table `AgentKnob.toMachine()` wires — reach for
- * `toMachine()` unless you are hand-wiring the verbs yourself.
- *
- * It is the inherited `../llm-call` detached form's exact shape, NOT an
- * `Interpret`.
- * The `resilient_run` handler runs the invoke inside `ctx.waitUntil` and dispatches
- * the consumer's `onOk` / `onErr` Msg directly (returning `void`), so it is a
- * fire-and-forget handler with a structural `{ waitUntil, dispatch }` ctx — it
- * does not re-enter the resilient settle Msg and so does not drive the retry
- * loop. Naming the type precisely (rather than laundering it through
- * `as unknown as Interpret<...>`) keeps `agent.unsafeDetachedHandlers(ports)` honest: the
- * consumer that wires the verbs by hand gets the real detached shape, and its
- * `resilient_run` is callable with a plain Cmd + a `{ waitUntil, dispatch }` ctx
- * with no `as never` at the call site.
- */
-export type AgentDetachedHandlers<P extends string, M> = {
-  readonly resilient_run: (
-    cmd: AgentLlmRunCmd<P>,
-    ctx: {
-      waitUntil(p: Promise<unknown>): void;
-      dispatch(msg: M): unknown;
-    },
-  ) => void;
-};
 
 // ===========================================================================
 // AgentBootPort — the typed do↔agent boot seam.
@@ -570,10 +548,10 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   switch (msg.type) {
     case MsgType.ResilientOk:
       // The PRIVATE brain-call settle Msg → the public TurnSettled. Its
-      // `result.output` is the parsed `AgentTurn` (the `O extends Record<P,
+      // `value.output` is the parsed `AgentTurn` (the `O extends Record<P,
       // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
       // same reasoning `state.output` relies on, #46/#48).
-      events.push({ type: "TurnSettled", turn: msg.result.output });
+      events.push({ type: "TurnSettled", turn: msg.value.output });
       break;
     case MsgType.AgentToolOk:
       // The PRIVATE tool-fan-out settle Msg → the public ToolSettled, unless

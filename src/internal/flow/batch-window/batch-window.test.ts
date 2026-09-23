@@ -258,14 +258,23 @@ describe("createBatchWindow — combinator knob shape", () => {
     expect(s).toEqual({ buffer: [], openedAt: null });
   });
 
-  it("subs / handlers wire the window timer", () => {
+  it("timer / subs arm the window timer", () => {
     const bw = createBatchWindow(cfg);
     let s = bw.init();
     expect(bw.subs(s)).toEqual([]); // closed → no timer
+    expect(bw.timer(s)).toBeNull();
     [s] = bw.add(s, 1, 100);
     expect(bw.subs(s, "logs")[0]).toMatchObject({ id: "logs", atMs: 1100 });
-    // The subscribe map is keyed "deadline" and reuses deadline's handler.
-    expect(bw.handlers().deadline).toBe(subscribeBatchWindow);
+    // The built-in `timer` counts `maxMs` from the item that opened the
+    // window and fires the same expiry Msg the absolute deadline would.
+    expect(bw.timer(s, "logs")).toEqual({
+      ms: 1_000,
+      msg: batchWindowExpired("logs", 1100),
+    });
+    // An appended item leaves the deps unchanged, so the countdown keeps
+    // running from the window's opening.
+    const [appended] = bw.add(s, 2, 400);
+    expect(bw.timer(appended, "logs")).toEqual(bw.timer(s, "logs"));
   });
 });
 

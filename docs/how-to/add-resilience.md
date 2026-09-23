@@ -141,9 +141,11 @@ does not type-check.
 That is the whole recipe: a transient failure moves the machine to
 `waiting_retry` with `retryAtMs` set to a backed-off future time, and a success
 resets the slice with `initRetry()`. To fire the scheduled retry automatically,
-list a `deadlineSub` at `retryAtMs` in the machine's `subs` through
-`deadlinesSub`, and hand `run` the `subscribeDeadline` runner — see the
-`resilient-fetch` example for the timer wiring.
+declare the engine's built-in `timer` in `subs`, on only while you wait: store
+the delay beside `retryAtMs` and hand it over as
+`{ type: "timer", deps: (s) => s.phase === "waiting_retry" ? { ms, msg } : null }`.
+`run` needs no runner for it. The `resilient-fetch` example has the whole
+wiring.
 
 ## 6. Retry a `defineAgent`'s brain call
 

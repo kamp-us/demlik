@@ -15,7 +15,8 @@
  *     whose key is cached never enters a batch; every settled answer is written
  *     back with `ttlMs`.
  *   - `../ask` is the one effect: each flushed batch becomes one `resilient_run`
- *     Cmd carrying Jev's NATIVE batch form (grill #215, R1.2) — the item array
+ *     Cmd (`Cmd.define`d; its handler is yours, and hands the HTTP reply to
+ *     `decode`) carrying Jev's NATIVE batch form (grill #215, R1.2) — the item array
  *     IS the request `state`, and `questions` holds one `choice` question per
  *     item, keyed by `keyOf(item)`. There is no `{ transactions }` envelope of
  *     any kind.
@@ -25,8 +26,7 @@
  * {@link ClassifyBatchState} is the three batteries' own slices plus a failure
  * map, so it survives a `Store` rehydrate unchanged. Every transition is a Msg
  * through the verbs (`add`, `onWindow`, `onBatchOk`, `onBatchErr`, `onEvict`);
- * no verb reads a clock, and the one `Date.now()` on the path is the one
- * `../ask`'s interpret handler already stamps at the effect boundary.
+ * no verb reads a clock — a settled batch carries the `at` the engine stamped.
  *
  * ## What this module deliberately does not decide
  *
@@ -44,32 +44,37 @@
  *     maxMs: 2_000,
  *     concurrency: 4,
  *     ttlMs: 86_400_000,
- *     port: fetchJevPort(apiKey),
  *   });
  *
+ *   cmds: [classify.ask],
  *   update: {
  *     classify_add: (s, m) => lift(s, classify.add(s.classify, m.item, m.at)),
  *     deadline_exceeded: (s, m) => lift(s, classify.onWindow(s.classify, m.atMs)),
- *     resilient_ok: (s, m) => lift(s, classify.onBatchOk(s.classify, m)),
- *     resilient_err: (s, m) => lift(s, classify.onBatchErr(s.classify, m)),
+ *     resilient_run_ok: (s, m) => lift(s, classify.onBatchOk(s.classify, m)),
+ *     resilient_run_err: (s, m) => lift(s, classify.onBatchErr(s.classify, m)),
  *     cache_evict: (s, m) => lift(s, classify.onEvict(s.classify, nowFromMsg)),
  *   },
  *   subs: classify.subEntries((s: Model) => s.classify),
  *
- *   // and where it runs — handlers ride beside the machine, not on it:
+ *   // and where it runs — the HTTP call is your handler:
  *   run(machine, {
- *     interpret: classify.handlers(),
+ *     interpret: {
+ *       resilient_run: async (cmd) => {
+ *         try { return classify.decode(cmd.input, await callJev(apiKey, cmd.input)); }
+ *         catch (cause) { return classify.rejected(cause); }
+ *       },
+ *     },
  *     subscribe: classify.subscribers(),
  *   });
  */
 
 import { liftSlice, type ReadStep, readInOrder } from "../../../compose";
-import type { Cmd, DepKeyedSub } from "../../../index";
+import type { Cmd, DepKeyedSub, TimerSub } from "../../../index";
 import {
   type BatchWindow,
+  type BatchWindowExpired,
   type BatchWindowSub,
   createBatchWindow,
-  subscribeBatchWindow,
 } from "../../flow/batch-window";
 import { createFanOut, type FanOutState } from "../../flow/fan-out";
 import {
@@ -83,18 +88,20 @@ import {
   initCache,
   type TtlCache,
 } from "../../resilience/cache";
-import { type DeadlinesSub, deadlinesSub } from "../../resilience/deadline";
 import {
-  createJevAsk,
   DEFAULT_JEV_MODEL,
+  decodeJevReply,
   type JevAskCmd,
   type JevAskErr,
   type JevFailMsg,
   type JevFallback,
+  type JevHttpReply,
   type JevOk,
-  type JevPort,
   type JevSucceedMsg,
   jevAskCmdDef,
+  jevAskErrOf,
+  jevCallThrew,
+  offlineJevAnswer,
 } from "../ask";
 import type {
   JevAnswerFor,
@@ -203,9 +210,7 @@ export interface ClassifyBatchConfig<I, C extends string> {
   readonly evictEveryMs?: number;
   /** The model asked for. Forwarded to `../ask`'s default when omitted. */
   readonly model?: string;
-  /** DI port — the HTTP caller. Forwarded to `../ask`; absent is the no-key case. */
-  readonly port?: JevPort<ItemQuestions<C>>;
-  /** The pure decider for the no-port path. Forwarded to `../ask`. */
+  /** The pure decider `offline` answers with, for a handler with no key. */
   readonly fallback?: JevFallback<ItemQuestions<C>>;
 }
 
@@ -408,21 +413,21 @@ export function createClassifyBatch<I, C extends string>(
     msg: ClassifyBatchOkMsg<C>,
   ): readonly [State, Cmds] {
     let cache = state.cache;
-    for (const [key, answer] of Object.entries(msg.result.answers)) {
+    for (const [key, answer] of Object.entries(msg.value.answers)) {
       cache = cacheSet(cache, key, answer, msg.at, config.ttlMs);
     }
     const failed: Record<string, JevAskErr> = { ...state.failed };
-    for (const key of Object.keys(msg.result.answers)) delete failed[key];
+    for (const key of Object.keys(msg.value.answers)) delete failed[key];
 
     return liftSlice(
       "fanOut",
       { ...state, cache, failed },
-      fanOut.itemOk(state.fanOut, msg.key, msg.result),
+      fanOut.itemOk(state.fanOut, msg.cmd.key, msg.value),
     );
   }
 
   /**
-   * A batch settled `resilient_err`. PURE.
+   * A batch settled `resilient_run_err`. PURE.
    *
    * Each of its keys is marked failed with the error that settled it and the
    * cache is NOT touched: a failure is not an answer, and writing one back under
@@ -434,15 +439,16 @@ export function createClassifyBatch<I, C extends string>(
     state: State,
     msg: ClassifyBatchErrMsg,
   ): readonly [State, Cmds] {
-    const batch = runningBatch(state, msg.key);
+    const batch = runningBatch(state, msg.cmd.key);
+    const error = jevAskErrOf(msg.error);
     const failed: Record<string, JevAskErr> = { ...state.failed };
     if (batch !== undefined) {
-      for (const item of batch.items) failed[config.keyOf(item)] = msg.error;
+      for (const item of batch.items) failed[config.keyOf(item)] = error;
     }
     return liftSlice(
       "fanOut",
       { ...state, failed },
-      fanOut.itemErr(state.fanOut, msg.key, msg.error),
+      fanOut.itemErr(state.fanOut, msg.cmd.key, error),
     );
   }
 
@@ -522,53 +528,35 @@ export function createClassifyBatch<I, C extends string>(
 
   /**
    * The machine's `subs` entries, over a host Model that holds the slice where
-   * `select` reads it: the window's `deadline` Sub, plus the cache's eviction
+   * `select` reads it: the window's built-in `timer`, plus the cache's eviction
    * tick when `evictEveryMs` is configured.
    */
   function subEntries<Model>(
     select: (model: Model) => State,
     id = "jev-classify-batch",
-  ): readonly DepKeyedSub<Model, DeadlinesSub | CacheEvictionSub>[] {
-    const flush = deadlinesSub((model: Model) => subs(select(model), id));
+  ): readonly DepKeyedSub<
+    Model,
+    TimerSub<BatchWindowExpired> | CacheEvictionSub
+  >[] {
+    const flush: DepKeyedSub<Model, TimerSub<BatchWindowExpired>> = {
+      type: "timer",
+      deps: (model: Model) => window.timer(select(model).window, id),
+    };
     if (config.evictEveryMs === undefined) return [flush];
     return [flush, cacheEvictionSub(id, config.evictEveryMs)];
   }
 
-  /** The runners the `subEntries` Subs need, handed to `run` as `subscribe`. */
-  function subscribers() {
-    return { deadline: subscribeBatchWindow, cache: cacheEvictionSubscribe };
-  }
-
   /**
-   * The interpret handler for the ask Cmd. The port call, the status
-   * classification and the parse are ALL `../ask`'s — this seam only builds the
-   * ask knob around the questions the Cmd is carrying, because a batch's
-   * question map is minted per batch while `createJevAsk` takes one map per
-   * knob. The knob is built at the effect boundary, so nothing impure and
-   * nothing closure-shaped ever reaches the slice.
+   * The runners the `subEntries` Subs need beyond the built-in `timer`, handed
+   * to `run` as `subscribe`: the cache's eviction tick.
    */
-  function handlers(): {
-    resilient_run: (
-      cmd: ClassifyBatchCmd<C>,
-    ) => Promise<ClassifyBatchOkMsg<C> | ClassifyBatchErrMsg>;
-  } {
-    return {
-      resilient_run: (cmd) => {
-        const request = cmd.input as JevRequest<ItemQuestions<C>>;
-        const ask = createJevAsk<ItemQuestions<C>>({
-          questions: request.questions,
-          ...(config.port === undefined ? {} : { port: config.port }),
-          ...(config.fallback === undefined
-            ? {}
-            : { fallback: config.fallback }),
-          ...(config.model === undefined ? {} : { model: config.model }),
-        });
-        return ask.handlers().resilient_run(cmd);
-      },
-    };
+  function subscribers() {
+    return { cache: cacheEvictionSubscribe };
   }
 
   return {
+    /** The ask Cmd def — list it in the machine's `cmds`. */
+    ask: askCmd,
     init,
     add,
     onWindow,
@@ -579,7 +567,17 @@ export function createClassifyBatch<I, C extends string>(
     subs,
     subEntries,
     subscribers,
-    handlers,
+    /**
+     * Your handler's outcome for Jev's reply to one batch — `../ask`'s
+     * `decodeJevReply`, parsing against the questions the batch carried.
+     */
+    decode: (request: JevRequest<ItemQuestions<C>>, reply: JevHttpReply) =>
+      decodeJevReply(request, reply),
+    /** Your handler's outcome when the call threw — `../ask`'s `jevCallThrew`. */
+    rejected: jevCallThrew,
+    /** Your handler's outcome with no network — the configured `fallback`. */
+    offline: (request: JevRequest<ItemQuestions<C>>) =>
+      offlineJevAnswer(request, config.fallback),
   };
 }
 

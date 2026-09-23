@@ -105,7 +105,7 @@ wrapper around it, runs to its own end, and the Msg it eventually resolves
 arrives for a call nothing is waiting on and folds nothing. So a wrapper's
 `finally` still fires, and its Msg still means nothing.
 
-If you were reaching for `resilient_ok` / `resilient_err` — those are the agent's
+If you were reaching for `resilient_run_ok` / `resilient_run_err` — those are the agent's
 own private settle Msgs for the brain call and for compaction. No tool settles
 through them, and a wrapped tool cell never sees one.
 

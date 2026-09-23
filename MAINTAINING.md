@@ -50,7 +50,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./retry-backoff` | battery | call-hardening |
 | `./idempotency` | battery | do-it-once: dedupe by key, cache the result, replay it to duplicates |
 | `./flow` | battery | multi-step control flow: fan-out, saga, workflow, poller, reconciler, batch window, monitored run, await-terminal |
-| `./resilience` | battery | call-hardening: deadlines, retries, breakers, rate limits, TTL cache, token refresh, and the `with*` wrappers |
+| `./resilience` | battery | call-hardening: deadlines, retries, breakers, rate limits, TTL cache, token refresh, as plain functions and `Cmd.define`d Cmds (ADR 0022) |
 | `./timing` | battery | call-rate: debounce, throttle, throttled input |
 | `./persistence` | battery | record a run, replay a trace, checkpoint a long-running machine |
 | `./paginate` | battery | the cursor walk, and the resumable end-to-end traversal over it |

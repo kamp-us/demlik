@@ -24,7 +24,7 @@
  * this helper does NOT invent one; the caller names their own terminal states.
  *
  * The optional `timeoutMs` is a plain caller-boundary timer (not an in-loop
- * progress deadline — see `../deadline` / `../with-deadline` for that shape): it
+ * progress deadline — see `../deadline` for that shape): it
  * clears on resolve and REJECTS with the `instanceof`-checkable
  * {@link TerminalTimeoutError} if the deadline elapses first, never silently
  * resolving.

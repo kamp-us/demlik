@@ -1,17 +1,17 @@
 /**
- * The hand-wired resilient-call recipe's compile-and-run gate (#271).
+ * The hand-wired resilient-call recipe's compile-and-run gate (#271, #282).
  *
  * `docs/how-to/hand-wire-a-resilient-call.md` hands the reader a whole machine
- * to paste, wired by hand with no `mountResilientCall`. Its claim is that the
- * settle cells cannot be written in the order that leaves a call stuck at
- * `running`, because the port's value is only reachable through the outcome
- * `settle` returns. A page nothing compiles cannot keep that claim.
+ * to paste, wired by hand from plain functions. Its claim is that the settle
+ * cells cannot be written in the order that leaves a call stuck at `running`,
+ * because the result is only reachable through the outcome `settle` returns.
+ * A page nothing compiles cannot keep that claim.
  *
  * So the machine lives HERE, as real TypeScript in the test program
  * (`tsconfig.test.json`, gated in CI as `typecheck:test`), and the last
  * describe asserts the page's `ts` blocks are this file's `#region` bodies
  * verbatim. The machine is driven through `@demlik/tea/testing`'s `drive`
- * against a scripted port, so the recipe is proven to RUN as well.
+ * against a scripted fetch, so the recipe is proven to RUN as well.
  */
 
 // biome-ignore-all assist/source/organizeImports: the `#region` markers below
@@ -27,13 +27,9 @@ import { describe, expect, it } from "vitest";
 // #region knob
 import {
   createResilientCall,
-  type DeadlinesSub,
-  type FailMsg,
   type ResilientState,
   type ResilientTimerMsg,
-  type RunCmd,
   type SettleResult,
-  type SucceedMsg,
 } from "@demlik/tea/resilience";
 
 export interface User {
@@ -41,7 +37,7 @@ export interface User {
   readonly name: string;
 }
 
-/** The knob: the port input is a user id, the result a `User`. */
+/** The knob: the call's input is a user id, its result a `User`. */
 export const rc = createResilientCall<string, User>({
   retry: {
     baseMs: 200,
@@ -67,9 +63,8 @@ export interface Load {
   readonly at: number;
 }
 
-export type UserMsg = Load | SucceedMsg<User> | FailMsg | ResilientTimerMsg;
-export type UserCmd = RunCmd<string>;
-export type UserSub = DeadlinesSub;
+export type UserMsg = Load | ResilientTimerMsg;
+export type UserCmd = ReturnType<typeof rc.run>;
 // #endregion model
 
 // #region on-settle
@@ -95,46 +90,51 @@ function onSettle(
 // #endregion on-settle
 
 // #region machine
-import { defineMachine } from "@demlik/tea";
-import { deadlinesSub, subscribeDeadline } from "@demlik/tea/resilience";
+import { defineMachine, type Interpret } from "@demlik/tea";
 
 export function userMachine(fetchUser: (id: string) => Promise<User>) {
   const machine = defineMachine({
     types: {
       model: {} as UserState,
       msg: {} as UserMsg,
-      cmd: {} as UserCmd,
-      sub: {} as UserSub,
       ctx: undefined,
     },
+    // 1. The knob's run Cmd. Listing it is what makes the engine turn your
+    //    handler's outcome into `resilient_run_ok` / `resilient_run_err`.
+    cmds: [rc.run],
     init: (loaded) =>
       loaded !== null
         ? [loaded, []]
         : [{ call: rc.init(), user: null, error: null }, []],
     update: {
-      // 1. Start the call. The key is the user id; so is the port input.
+      // 2. Start the call. The key is the user id; so is the input.
       load: (s, m) => {
         const [call, cmds] = rc.attempt(s.call, m.id, m.id, m.at);
         return [{ ...s, call }, cmds];
       },
-      // 2. Both settle Msgs go through `settle`, then your `onSettle`.
-      resilient_ok: (s, m) => onSettle(s, rc.settle(s.call, m)),
-      resilient_err: (s, m) => onSettle(s, rc.settle(s.call, m)),
-      // 3. The retry timer fired: `onTimer` re-issues the run Cmd.
+      // 3. Both settle Msgs go through `settle`, then your `onSettle`.
+      resilient_run_ok: (s, m) => onSettle(s, rc.settle(s.call, m)),
+      resilient_run_err: (s, m) => onSettle(s, rc.settle(s.call, m)),
+      // 4. The retry timer fired: `onTimer` re-issues the run Cmd.
       deadline_exceeded: (s, m) => {
         const [call, cmds] = rc.onTimer(s.call, m);
         return [{ ...s, call }, cmds];
       },
     },
-    // 4. Arm a timer for every call that is waiting to retry.
-    subs: [deadlinesSub((s: UserState) => rc.subs(s.call))],
+    // 5. Arm the retry timer. `timer` is built into the engine.
+    subs: [{ type: "timer", deps: (s: UserState) => rc.timer(s.call) }],
   });
-  // 5. Run the port. The handler returns the settle Msg; it never dispatches.
-  const interpret = rc.handlers({ run: (id) => fetchUser(id) });
-  // 6. `subscribeDeadline` arms the timers step 4 asks for. Hand both to `run`
-  //    beside the machine: `run(machine, { interpret, subscribe })`.
-  const subscribe = { deadline: subscribeDeadline };
-  return { machine, interpret, subscribe };
+  // 6. Do the work. The handler returns an outcome; it never builds a Msg.
+  const interpret: Interpret<UserMsg, UserCmd, unknown> = {
+    resilient_run: async (cmd, { ok, err }) => {
+      try {
+        return ok(await fetchUser(cmd.input));
+      } catch (cause) {
+        return err({ _tag: "port_rejected", cause });
+      }
+    },
+  };
+  return { machine, interpret };
 }
 // #endregion machine
 
@@ -149,7 +149,7 @@ const retryFires: ResilientTimerMsg = {
   atMs: 1_000,
 };
 
-/** A port that answers from a script: `"ok"` resolves Ada, `"down"` throws. */
+/** A fetch that answers from a script: `"ok"` resolves Ada, `"down"` throws. */
 function scripted(script: ("ok" | "down")[]) {
   const queue = [...script];
   return async (id: string): Promise<User> => {
@@ -163,7 +163,7 @@ function driveUser(
   s: UserState,
   m: UserMsg,
 ) {
-  return drive(machine, s, m, interpret);
+  return drive(machine, s, m, interpret, { clock: () => 0 });
 }
 
 describe("docs/how-to/hand-wire-a-resilient-call.md (#271) — it runs", () => {
@@ -179,10 +179,11 @@ describe("docs/how-to/hand-wire-a-resilient-call.md (#271) — it runs", () => {
     const first = await driveUser(user, initial, load);
     expect(first.state.user).toBeNull();
     expect(first.state.call.calls.u1?.phase).toBe("waiting_retry");
-    const [timers] = user.machine.subs ?? [];
-    expect(timers?.deps(first.state)).toEqual([
-      expect.objectContaining({ id: "resilient:retry:u1" }),
-    ]);
+    const [timer] = user.machine.subs ?? [];
+    expect(timer?.deps(first.state)).toEqual({
+      ms: expect.any(Number),
+      msg: expect.objectContaining({ id: "resilient:retry:u1" }),
+    });
 
     const second = await driveUser(user, first.state, retryFires);
     expect(second.state.user).toEqual(ada);
@@ -196,7 +197,10 @@ describe("docs/how-to/hand-wire-a-resilient-call.md (#271) — it runs", () => {
       ({ state } = await driveUser(user, state, retryFires));
     }
     expect(state.call.calls.u1?.phase).toBe("failed");
-    expect(state.error).toEqual({ _tag: "backend_down" });
+    expect(state.error).toEqual({
+      _tag: "port_rejected",
+      cause: { _tag: "backend_down" },
+    });
     expect(state.user).toBeNull();
   });
 });

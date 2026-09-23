@@ -1,13 +1,14 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { defineMachine } from "../../../index";
+import { run } from "../../../promise";
 import {
   createTokenRefresh,
   initTokenRefresh,
+  refreshToken,
   refreshTokenCmd,
   type Token,
   type TokenState,
-  tokenRefreshedMsg,
-  tokenRefreshFailedMsg,
 } from "./index";
 
 // A token expiring at t=1000. Reused across the timing assertions so the skew
@@ -212,45 +213,88 @@ describe("needsRefresh — negative skewed-expiry trigger", () => {
   });
 });
 
-describe("handlers — the refresh port splice", () => {
-  it("routes a resolved port to a token_refreshed Msg", async () => {
+describe("the refresh Cmd — a host handler driven through `run`", () => {
+  // A host machine: `need` asks for a fresh credential, the engine-minted
+  // `refresh_token_ok` installs it, `refresh_token_err` records the failure.
+  type Host = { readonly auth: TokenState; readonly failure: unknown };
+  type HostMsg = { readonly type: "need"; readonly at: number };
+
+  function hostWith(mint: () => Promise<Token>) {
+    const tr = createTokenRefresh();
+    const machine = defineMachine({
+      types: { model: {} as Host, msg: {} as HostMsg, ctx: undefined },
+      cmds: [tr.run],
+      init: () => [{ auth: tr.init(), failure: null }, []],
+      update: {
+        need: (s, m) => {
+          const [auth, cmds] = tr.ensureFresh(s.auth, m.at);
+          return [{ ...s, auth }, cmds];
+        },
+        refresh_token_ok: (s, m) => [
+          { ...s, auth: tr.refreshed(s.auth, m.value) },
+          [],
+        ],
+        refresh_token_err: (s, m) => [{ ...s, failure: m.error }, []],
+      },
+    });
+    return run(machine, {
+      ctx: undefined,
+      interpret: {
+        refresh_token: async (_cmd, { ok, err }) => {
+          try {
+            return ok(await mint());
+          } catch (cause) {
+            return err({ _tag: "token_refresh_failed", cause });
+          }
+        },
+      },
+    });
+  }
+
+  it("the knob's `run` is the `refresh_token` def, and it carries no handler", () => {
+    const tr = createTokenRefresh();
+    expect(tr.run).toBe(refreshToken);
+    expect(refreshTokenCmd()).toEqual({ type: "refresh_token" });
+    expect("handlers" in tr).toBe(false);
+  });
+
+  it("a minted token settles as refresh_token_ok and is installed", async () => {
     const minted = tok(9999, "minted");
-    const tr = createTokenRefresh();
-    const interpret = tr.handlers({ refresh: async () => minted });
-
-    const msg = await interpret.refresh_token(refreshTokenCmd(), {});
-    expect(msg).toEqual(tokenRefreshedMsg(minted));
+    const runtime = await hostWith(async () => minted).ready;
+    await runtime.dispatch({ type: "need", at: 0 });
+    await runtime.stop();
+    expect(runtime.getState().auth).toEqual({ token: minted, stale: false });
+    expect(runtime.getState().failure).toBeNull();
   });
 
-  it("routes a rejected port to a token_refresh_failed Msg without throwing", async () => {
-    const boom = new Error("mint failed");
-    const tr = createTokenRefresh();
-    const interpret = tr.handlers({
-      refresh: async () => {
-        throw boom;
-      },
-    });
-
-    // tryInterpret never rejects — the rejection becomes a Msg (errors are data).
-    const msg = await interpret.refresh_token(refreshTokenCmd(), {});
-    expect(msg).toEqual(tokenRefreshFailedMsg(boom));
-  });
-
-  it("preserves the original error identity for instanceof checks in onErr", async () => {
+  it("a rejected mint settles as refresh_token_err, keeping the cause by reference", async () => {
     class AuthError extends Error {}
-    const err = new AuthError("nope");
-    const tr = createTokenRefresh();
-    const interpret = tr.handlers({
-      refresh: async () => {
-        throw err;
-      },
-    });
+    const boom = new AuthError("nope");
+    const runtime = await hostWith(async () => {
+      throw boom;
+    }).ready;
+    await runtime.dispatch({ type: "need", at: 0 });
+    await runtime.stop();
+    const failure = runtime.getState().failure as {
+      readonly _tag: string;
+      readonly cause: unknown;
+    };
+    expect(failure._tag).toBe("token_refresh_failed");
+    expect(failure.cause).toBe(boom); // same reference, not wrapped
+    // A failed refresh leaves the slice untouched.
+    expect(runtime.getState().auth).toEqual(initTokenRefresh());
+  });
 
-    const msg = await interpret.refresh_token(refreshTokenCmd(), {});
-    expect(msg.type).toBe("token_refresh_failed");
-    if (msg.type === "token_refresh_failed") {
-      expect(msg.error).toBe(err); // same reference, not wrapped
-    }
+  it("the settled Msgs are the def's minted pair", () => {
+    const minted = tok(5, "m");
+    const cmd = refreshTokenCmd();
+    expect(refreshToken.ok(cmd, minted, 7)).toEqual({
+      type: "refresh_token_ok",
+      cmd,
+      value: minted,
+      at: 7,
+    });
+    expect(refreshToken.errTags).toEqual(["token_refresh_failed"]);
   });
 });
 

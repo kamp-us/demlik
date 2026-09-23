@@ -6,13 +6,13 @@ import { deadlineSub } from "../internal/resilience/deadline";
 import { run } from "../promise";
 import { bindMachine } from "../testing";
 import {
+  type AgentLlmErrMsg,
   type AgentLlmOkMsg,
   type AgentMachineMsg,
   type AgentTurn,
   agentTurnSchema,
   createAgent,
   type LlmErr,
-  type LlmOk,
   type LlmRunCmd,
   type MonitoredRunCmd,
   PLAIN_MODEL_MISROUTE_REASON,
@@ -148,6 +148,19 @@ const brainRunCmd = (purpose: Purpose): LlmRunCmd<Purpose> => ({
   type: "resilient_run",
   key: purpose,
   input: { purpose, model: null, payload: null },
+});
+
+// The engine-minted brain-call failure Msg: the handler returned
+// `err({ _tag: "port_rejected", cause })` for the purpose's run Cmd.
+const brainErr = (
+  purpose: Purpose,
+  cause: unknown,
+  at: number,
+): AgentLlmErrMsg<Purpose> => ({
+  type: "resilient_run_err",
+  cmd: brainRunCmd(purpose),
+  error: { _tag: "port_rejected", cause },
+  at,
 });
 
 // ---------------------------------------------------------------------------
@@ -364,9 +377,9 @@ describe("createAgent — full loop through the wired machine (replay)", () => {
     purpose: Purpose,
     output: AgentTurn,
   ): AgentLlmOkMsg<Purpose, Outputs> => ({
-    type: "resilient_ok",
-    key: purpose,
-    result: { key: purpose, purpose, output },
+    type: "resilient_run_ok",
+    cmd: brainRunCmd(purpose),
+    value: { key: purpose, purpose, output },
     at: 0,
   });
 
@@ -809,12 +822,7 @@ describe("createAgent — subs (merged across llm-call + monitored-run)", () => 
       reason: "e",
       error: "e",
     };
-    [s] = agent.fail(
-      s,
-      "plan_turn",
-      { type: "resilient_err", key: "plan_turn", error: err, at: 100 },
-      100,
-    );
+    [s] = agent.fail(s, brainErr("plan_turn", err.error, 100), 100);
     const ids = agent.subs(s).map((sub) => sub.id);
     expect(ids).toContain("resilient:retry:plan_turn");
     expect(ids).toContain("monitored:safety:r:0");
@@ -872,98 +880,50 @@ describe("createAgent — boot reconcile", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The detached brain-call handler (inherited from llm-call) — the UNSAFE
-// hand-wiring escape hatch (`unsafeDetachedHandlers`), renamed in #54 so the
-// name advertises that it does NOT drive the retry loop. `toMachine` is the one
-// wired path; this is exercised only to pin the escape hatch's dispatch shape.
+// The brain-call handler (`brainInterpret`) — the Cmd is `Cmd.define`d, so the
+// handler RETURNS an outcome and the engine mints the settle Msg (ADR 0021).
 // ---------------------------------------------------------------------------
 
-describe("createAgent — unsafeDetachedHandlers (detached brain call)", () => {
-  type HostMsg =
-    | { type: "agent_turn"; turn: AgentTurn; at: number }
-    | { type: "llm_failed"; reason: string };
-
-  const ports = {
-    onOk: (okv: LlmOk<Purpose, Outputs>): HostMsg => ({
-      type: "agent_turn",
-      turn: okv.output,
-      at: 0,
-    }),
-    onErr: (err: LlmErr<Purpose>): HostMsg => ({
-      type: "llm_failed",
-      reason: err.reason,
-    }),
-  };
-
-  function fakeCtx() {
-    const dispatched: HostMsg[] = [];
-    let pending: Promise<unknown> = Promise.resolve();
-    return {
-      dispatched,
-      ctx: {
-        waitUntil(p: Promise<unknown>) {
-          pending = p;
-        },
-        async dispatch(msg: HostMsg) {
-          dispatched.push(msg);
-        },
-      },
-      settled: () => pending,
-    };
-  }
-
-  it("dispatches the parsed AgentTurn on a model success (detached)", async () => {
+describe("createAgent — brainInterpret (the brain call's outcome)", () => {
+  it("returns the parsed AgentTurn as an Ok outcome on a model success", async () => {
     const agent = makeAgent({
       model: fakeModel(async () => ({
         content: "go",
         toolCalls: [tool("c1")],
       })),
     });
-    const handler = agent.unsafeDetachedHandlers<HostMsg>(ports).resilient_run;
-    const { ctx, dispatched, settled } = fakeCtx();
-    // `handlers(ports)` now returns the precise `AgentDetachedHandlers<P, HostMsg>`
-    // — the `resilient_run` cell takes the brain run Cmd + a `{ waitUntil, dispatch }`
-    // ctx, so the literal Cmd and `fakeCtx().ctx` flow in with NO `as never`.
-    const ret = handler(
-      {
-        type: "resilient_run",
+    const handler = agent.brainInterpret().resilient_run;
+    const outcome = await handler(brainRunCmd("plan_turn"), {} as never);
+    expect(outcome).toEqual({
+      _tag: "Ok",
+      value: {
         key: "plan_turn",
-        input: { purpose: "plan_turn", model: null, payload: null },
+        purpose: "plan_turn",
+        output: { content: "go", toolCalls: [tool("c1")] },
       },
-      ctx,
-    );
-    // Detached: returns synchronously.
-    expect(ret).toBeUndefined();
-    await settled();
-    expect(dispatched).toEqual([
-      {
-        type: "agent_turn",
-        turn: { content: "go", toolCalls: [tool("c1")] },
-        at: 0,
-      },
-    ]);
+    });
   });
 
-  it("dispatches the failure Msg on a model throw", async () => {
+  it("returns a port_rejected Err outcome on a model throw", async () => {
+    const boom = new Error("provider 503");
     const agent = makeAgent({
       model: fakeModel(async () => {
-        throw new Error("provider 503");
+        throw boom;
       }),
     });
-    const handler = agent.unsafeDetachedHandlers<HostMsg>(ports).resilient_run;
-    const { ctx, dispatched, settled } = fakeCtx();
-    handler(
-      {
-        type: "resilient_run",
-        key: "act_turn",
-        input: { purpose: "act_turn", model: null, payload: null },
-      },
-      ctx,
-    );
-    await settled();
-    expect(dispatched).toEqual([
-      { type: "llm_failed", reason: "provider 503" },
-    ]);
+    const handler = agent.brainInterpret().resilient_run;
+    const outcome = await handler(brainRunCmd("act_turn"), {} as never);
+    expect(outcome).toEqual({
+      _tag: "Err",
+      error: { _tag: "port_rejected", cause: boom },
+    });
+  });
+
+  it("exposes the brain Cmd def whose cmdType is the brain run Cmd", () => {
+    const agent = makeAgent();
+    expect(agent.brain.cmdType).toBe("resilient_run");
+    expect(agent.brain.okType).toBe("resilient_run_ok");
+    expect(agent.brain.errType).toBe("resilient_run_err");
   });
 });
 
@@ -1181,12 +1141,7 @@ describe("createAgent — properties", () => {
               reason: "provider 503",
               error: { _tag: "provider_error", status: 503 },
             };
-            [s] = durable.fail(
-              s,
-              "plan_turn",
-              { type: "resilient_err", key: "plan_turn", error: err, at: now },
-              now,
-            );
+            [s] = durable.fail(s, brainErr("plan_turn", err.error, now), now);
           }
 
           // Whenever the run has reached a terminal state, the WHOLE slice must
@@ -1212,7 +1167,7 @@ describe("createAgent — properties", () => {
       key: "plan_turn",
       purpose: "plan_turn",
       reason: "provider 503",
-      error: { _tag: "provider_error", status: 503 },
+      error: "provider 503",
     };
     const roundTrips = (s: unknown) =>
       expect(JSON.parse(JSON.stringify(s))).toEqual(s);
@@ -1277,12 +1232,7 @@ describe("createAgent — properties", () => {
         rng: rngZero,
       });
       let [s] = a.start(a.init(), "r", 0);
-      [s] = a.fail(
-        s,
-        "plan_turn",
-        { type: "resilient_err", key: "plan_turn", error: llmErr, at: 10 },
-        10,
-      );
+      [s] = a.fail(s, brainErr("plan_turn", llmErr.error, 10), 10);
       // `fail` stamps the agent `llm` failure carrying the resilient Msg's
       // `error` (the typed `LlmErr`) when the resilient slice settled terminal.
       expect(s.failure).toEqual({ reason: "llm", error: llmErr, at: 10 });
@@ -1300,8 +1250,8 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
   const llmErr: LlmErr<Purpose> = {
     key: "plan_turn",
     purpose: "plan_turn",
-    reason: "e",
-    error: { _tag: "boom" },
+    reason: "boom",
+    error: "boom",
   };
 
   it("running, not awaiting tools → { kind: 'running' }", () => {
@@ -1380,12 +1330,7 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
   it("failed via the AGENT channel (llm) → { kind: 'failed', failure } carrying the error", () => {
     const agent = makeAgent({ retry: undefined }); // no retry → first failure is terminal
     let [s] = agent.start(agent.init(), "r", 0);
-    [s] = agent.fail(
-      s,
-      "plan_turn",
-      { type: "resilient_err", key: "plan_turn", error: llmErr, at: 10 },
-      10,
-    );
+    [s] = agent.fail(s, brainErr("plan_turn", llmErr.error, 10), 10);
     expect(s.failure).toEqual({ reason: "llm", error: llmErr, at: 10 });
     expect(status(s)).toEqual({
       kind: "failed",

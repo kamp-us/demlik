@@ -32,7 +32,7 @@ written for someone maintaining it: they carry the alternatives considered and
 the history, and they live in the repository rather than in the published docs.
 They are one global ADR sequence, indexed in [`.decisions/`](../../.decisions/index.md).
 
-- [ADR 0001 — Resilience is built in-house, not installed](../../.decisions/0001-no-offtheshelf-resilience.md) — why the wrapper tier is hand-built, not an off-the-shelf library.
+- [ADR 0001 — Resilience is built in-house, not installed](../../.decisions/0001-no-offtheshelf-resilience.md) — why resilience is hand-built, not an off-the-shelf library.
 - [ADR 0002 — A Durable-Object host layer, not a DO framework](../../.decisions/0002-do-host-layer.md) — the `@demlik/tea/do` host is composable functions, not a base class.
 - [ADR 0003 — The DO host targets event-sourced virtual actors](../../.decisions/0003-do-targets-event-sourced-virtual-actors.md) — the target the DO host layer is converging toward.
 - [ADR 0004 — An opt-in context-compaction seam on `createAgent`](../../.decisions/0004-agent-context-compaction.md) — how an agent trims its own conversation without leaving the reducer.

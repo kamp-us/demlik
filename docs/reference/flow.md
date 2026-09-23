@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/flow";
 ```
 
-## Exports (110)
+## Exports (103)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -36,11 +36,6 @@ import { … } from "@demlik/tea/flow";
 | `createReconciler` | Function | Build a reconciler knob from `config`. |
 | `createSaga` | Function | Build the saga knob from `config`. |
 | `createWorkflow` | Function | Build a workflow hook bag. |
-| `DeadlineExceeded` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
-| `deadlinesSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
-| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
-| `deadlineSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
-| `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `debounce` | Function | Wrap `fn` so a BURST of calls collapses to a single invocation. |
 | `Debounced` | Interface | A debounced wrapper around `fn`. |
 | `DeliveryId` | Type | Monotonic, gap-free delivery id — the single correlation + dedup key. |
@@ -72,7 +67,6 @@ import { … } from "@demlik/tea/flow";
 | `liftRun` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.run`. |
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
 | `MonitoredRunConfig` | Interface | The monitored-run knob. |
-| `MonitoredRunPorts` | Interface | Ports the consumer supplies to `handlers` — just the checkpoint store. |
 | `MonitoredRunState` | Type | The slice — a discriminated union on `phase` so each phase carries ONLY its own data and impossible combinations are unrepresentable (pattern 11), the same idiom the sibling `CircuitState` / `PaginatorState` / `RunFailure` follow: - `idle` — created but never started. |
 | `MonitoredRunTimerMsg` | Type | The deadline Msg the safety alarm dispatches when the watchdog fires. |
 | `onWindow` | Function | Flush the open window because its time bound was reached. |
@@ -85,7 +79,6 @@ import { … } from "@demlik/tea/flow";
 | `PollerSub` | Type | The deadline the poller lists — a `../deadline` entry under the `poller:tick:` id family (see `pollerSubId`). |
 | `ReconcilePhase` | Type | Reconcile lifecycle phase. |
 | `ReconcilerConfig` | Interface | The reconciler knob. |
-| `ReconcilerPorts` | Interface | Ports the consumer supplies to `handlers`. |
 | `ReconcilerState` | Interface | The slice. |
 | `ReconcilerTimerMsg` | Type | The scan retry / deadline timer Msg — inherited from paginated-walk. |
 | `routeWorkflowMsg` | Function |  |
@@ -98,15 +91,15 @@ import { … } from "@demlik/tea/flow";
 | `SagaStep` | Interface | One step of the saga: the forward effect and its compensating inverse, both as data (plain Cmds). |
 | `ScanPageCmd` | Type | The actual-list page-fetch effect: the inherited `resilient_run` Cmd from paginated-walk, whose `input` is the `Cursor` to fetch and whose `key` is the fixed `PAGE_KEY`. |
 | `ScanPageErrMsg` | Type |  |
-| `ScanPageOkMsg` | Type | Page-settled Msgs the scan `handlers` port dispatches back (inherited verbatim). |
-| `SnapshotSavedMsg` | Type | The Msg the write handler dispatches on a SUCCESSFUL `put`. |
+| `ScanPageOkMsg` | Type | The page-settled Msgs the engine mints from that handler's outcome. |
+| `SnapshotSavedMsg` | Type | The Msg the engine mints when a write lands. |
 | `SnapshotWriteCmd` | Type |  |
 | `StageResult` | Type | The outcome a consumer reports to `advance`: the current stage either succeeded (retire it, claim the next) or failed (terminate the run). |
 | `StepId` | Type | A step's stable identity. |
-| `subscribeBatchWindow` | Variable | The `deadline` runner for a batch window's timer — the exact `../deadline` runner. |
-| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
+| `subscribeBatchWindow` | Variable | The `deadline` runner for a batch window's absolute timer — the exact `../deadline` runner. |
 | `subsFor` | Function | The window timer deadline, derived from the slice. |
 | `TerminalTimeoutError` | Class | Raised when `awaitTerminal` / `runToTerminal` is wired with a `timeoutMs` and the deadline elapses before any terminal state is reached. |
+| `timerFor` | Function | The built-in `timer` Sub's deps for a batch window. |
 | `Workflow` | Interface | The hook bag returned by createWorkflow. |
 | `WORKFLOW_MSG_TYPES` | Variable | The runtime accept-set of every WorkflowMsgType — the single source of truth the boundary replay parse keys off (see `do.ts`). |
 | `WORKFLOW_STATUSES` | Variable | The runtime accept-set of every WorkflowStatus — the single source of truth the boundary snapshot parse keys off (see `do.ts`). |

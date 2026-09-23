@@ -153,9 +153,13 @@ const brainOk = (
   purpose: Purpose,
   output: AgentTurn,
 ): AgentLlmOkMsg<Purpose, Outputs> => ({
-  type: "resilient_ok",
-  key: purpose,
-  result: { key: purpose, purpose, output },
+  type: "resilient_run_ok",
+  cmd: {
+    type: "resilient_run",
+    key: purpose,
+    input: { purpose, model: null, payload: null },
+  },
+  value: { key: purpose, purpose, output },
   at: 0,
 });
 

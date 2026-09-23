@@ -19,8 +19,6 @@ import type {
 import type {
   LlmCall,
   LlmOk,
-  MessageLoader,
-  ModelPort,
   ResilientState,
   Schema,
 } from "../internal/llm-call";
@@ -30,6 +28,7 @@ import type {
   CompactionOutputs,
   CompactionPurpose,
 } from "./compaction";
+import type { MessageLoader, ModelPort } from "./model";
 import { schemaFromGuard } from "./schema";
 
 // ===========================================================================

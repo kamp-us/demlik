@@ -1,4 +1,4 @@
-import { type Cmd, defineMachine, type Interpret, type Machine, type Reducer, type Sub, tryInterpret } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import {
   type AgentMachineMsg,
@@ -11,25 +11,19 @@ import { toMermaid } from "@demlik/tea/machine-viz";
 import { createIntake, type IntakeCmd } from "@demlik/tea/idempotency";
 import {
   createPaginatedWalk,
-  deadlinesSub as walkDeadlines,
   type PageErrMsg,
   type PageOkMsg,
   type PaginatedWalkState,
   type PaginatedWalkTimerMsg,
-  subscribeDeadline as subscribeWalkDeadline,
 } from "@demlik/tea/paginate";
 import { recorder, replayTrace } from "@demlik/tea/persistence";
 import {
   createResilientCall,
-  type DeadlinesSub,
-  deadlinesSub as auditDeadlines,
   type FailMsg,
   type ResilientState,
+  type ResilientTimerMsg,
   type RunCmd,
-  subscribeDeadline as subscribeAuditDeadline,
   type SucceedMsg,
-  withDeadline,
-  withResilience,
 } from "@demlik/tea/resilience";
 
 type Stage = "plan" | "crawl" | "audit" | "report";
@@ -240,9 +234,10 @@ const walkMachine = defineMachine({
     model: {} as WalkState,
     msg: {} as WalkMsg,
     cmd: {} as WalkCmd,
-    sub: {} as DeadlinesSub,
     ctx: {} as WalkCtx,
   },
+  // The page fetch is `Cmd.define`d: the engine mints its settle Msgs.
+  cmds: [crawler.fetch],
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ walk: crawler.init() }, []],
   update: {
@@ -250,12 +245,12 @@ const walkMachine = defineMachine({
       const [walk, cmds] = crawler.start(s.walk, m.at);
       return [{ walk }, cmds];
     },
-    resilient_ok: (s, m) => {
-      const [walk, cmds] = crawler.pageOk(s.walk, m.result, m.at);
+    resilient_run_ok: (s, m) => {
+      const [walk, cmds] = crawler.pageOk(s.walk, m);
       return [{ walk }, cmds];
     },
-    resilient_err: (s, m) => {
-      const [walk, cmds] = crawler.pageErr(s.walk, m.error, m.at);
+    resilient_run_err: (s, m) => {
+      const [walk, cmds] = crawler.pageErr(s.walk, m);
       return [{ walk }, cmds];
     },
     deadline_exceeded: (s, m) => {
@@ -263,27 +258,20 @@ const walkMachine = defineMachine({
       return [{ walk }, cmds];
     },
   },
-  subs: [walkDeadlines((s: WalkState) => crawler.subs(s.walk))],
+  // The retry timer. `timer` is built into the engine.
+  subs: [{ type: "timer", deps: (s: WalkState) => crawler.timer(s.walk) }],
 });
 
-// The machine is data; its handlers ride beside it into `run`.
-const walkSubscribe = { deadline: subscribeWalkDeadline };
+// The machine is data; its handler rides beside it into `run`. It returns an
+// outcome, and the engine turns it into the settle Msg.
 const walkInterpret: Interpret<WalkMsg, WalkCmd, WalkCtx> = {
-  resilient_run: tryInterpret<WalkCmd, SitemapPage, WalkMsg, WalkCtx>(
-    (cmd, ctx) => ctx.fetchPage(cmd.input),
-    (result, cmd): PageOkMsg<SitemapPage> => ({
-      type: "resilient_ok",
-      key: cmd.key,
-      result,
-      at: Date.now(),
-    }),
-    (error, cmd): PageErrMsg => ({
-      type: "resilient_err",
-      key: cmd.key,
-      error,
-      at: Date.now(),
-    }),
-  ),
+  resilient_run: async (cmd, ctx) => {
+    try {
+      return ctx.ok(await ctx.fetchPage(cmd.input));
+    } catch (cause) {
+      return ctx.err({ _tag: "port_rejected", cause: String(cause) });
+    }
+  },
 };
 
 let walkFetches = 0;
@@ -305,12 +293,11 @@ async function runCrawlSubRun(): Promise<readonly string[]> {
   const runtime = await run(walkMachine, {
     ctx: { fetchPage },
     interpret: walkInterpret,
-    subscribe: walkSubscribe,
   }).ready;
   const discovered: string[] = [];
   runtime.observe((msg) => {
-    if (msg !== null && msg.type === "resilient_ok") {
-      for (const url of msg.result.urls) discovered.push(url);
+    if (msg !== null && msg.type === "resilient_run_ok") {
+      for (const url of msg.value.urls) discovered.push(url);
     }
   });
   await runtime.dispatch({ type: "walk_start", at: 1 });
@@ -329,7 +316,7 @@ type AuditCallMsg =
   | { readonly type: "audit_start"; readonly url: string; readonly at: number }
   | SucceedMsg<AuditFinding>
   | FailMsg
-  | PaginatedWalkTimerMsg;
+  | ResilientTimerMsg;
 type AuditCallCmd = RunCmd<string>;
 type AuditCtx = {
   readonly callAuditEngine: (url: string) => Promise<AuditFinding>;
@@ -350,9 +337,9 @@ const auditMachine = defineMachine({
     model: {} as AuditCallState,
     msg: {} as AuditCallMsg,
     cmd: {} as AuditCallCmd,
-    sub: {} as DeadlinesSub,
     ctx: {} as AuditCtx,
   },
+  cmds: [auditCall.run],
   init: (loaded) =>
     loaded !== null ? [loaded, []] : [{ resilience: auditCall.init() }, []],
   update: {
@@ -365,11 +352,11 @@ const auditMachine = defineMachine({
       );
       return [{ resilience }, cmds];
     },
-    resilient_ok: (s, m) => {
+    resilient_run_ok: (s, m) => {
       const { call, cmds } = auditCall.settle(s.resilience, m);
       return [{ resilience: call }, cmds];
     },
-    resilient_err: (s, m) => {
+    resilient_run_err: (s, m) => {
       const { call, cmds } = auditCall.settle(s.resilience, m);
       return [{ resilience: call }, cmds];
     },
@@ -378,31 +365,23 @@ const auditMachine = defineMachine({
       return [{ resilience }, cmds];
     },
   },
-  subs: [auditDeadlines((s: AuditCallState) => auditCall.subs(s.resilience))],
+  subs: [
+    {
+      type: "timer",
+      deps: (s: AuditCallState) => auditCall.timer(s.resilience),
+    },
+  ],
 });
 
-// The machine is data; its handlers ride beside it into `run`.
+// The machine is data; its handler rides beside it into `run`.
 const auditInterpret: Interpret<AuditCallMsg, AuditCallCmd, AuditCtx> = {
-  resilient_run: tryInterpret<
-    AuditCallCmd,
-    AuditFinding,
-    AuditCallMsg,
-    AuditCtx
-  >(
-    (cmd, ctx) => ctx.callAuditEngine(cmd.input),
-    (result, cmd): SucceedMsg<AuditFinding> => ({
-      type: "resilient_ok",
-      key: cmd.key,
-      result,
-      at: Date.now(),
-    }),
-    (error, cmd): FailMsg => ({
-      type: "resilient_err",
-      key: cmd.key,
-      error,
-      at: Date.now(),
-    }),
-  ),
+  resilient_run: async (cmd, ctx) => {
+    try {
+      return ctx.ok(await ctx.callAuditEngine(cmd.input));
+    } catch (cause) {
+      return ctx.err({ _tag: "port_rejected", cause: String(cause) });
+    }
+  },
 };
 
 let flakyArmed = true;
@@ -431,7 +410,6 @@ async function runAuditSubRun(url: string): Promise<AuditFinding> {
   const runtime = await run(auditMachine, {
     ctx: { callAuditEngine },
     interpret: auditInterpret,
-    subscribe: { deadline: subscribeAuditDeadline },
   }).ready;
   auditClock += 1;
   await runtime.dispatch({ type: "audit_start", url, at: auditClock });
@@ -535,63 +513,87 @@ const agentMachine = agentWired.machine;
 type ReportSink = {
   readonly shipReport: (report: string) => Promise<string>;
 };
-type PublishReportCmd = Cmd<"publish_report"> & { readonly report: string };
-type UploaderState = { readonly phase: "idle" | "shipping" };
-type UploaderMsg = {
-  readonly type: "ship";
-  readonly report: string;
-  readonly at: number;
-};
 
-const uploaderUpdate: Reducer<UploaderState, UploaderMsg, PublishReportCmd> = {
-  ship: (_s, m) => [
-    { phase: "shipping" },
-    [{ type: "publish_report", report: m.report }],
-  ],
-};
-
-// The base uploader arms no Sub of its own — the retry deadline is the
-// `withResilience` wrapper's, added to the Sub union below it.
-const uploaderMachineDef: Machine<
-  UploaderState,
-  UploaderMsg,
-  PublishReportCmd,
-  Sub<never>,
-  ReportSink
-> = {
-  init: (loaded) => (loaded !== null ? [loaded, []] : [{ phase: "idle" }, []]),
-  update: uploaderUpdate,
-};
-
-const uploaderMachine = defineMachine(uploaderMachineDef);
-
-const uploaderInterpret: Interpret<UploaderMsg, PublishReportCmd, ReportSink> =
+// The report ship, hand-wired: a named resilient-call knob (`publish_run` /
+// `publish_run_ok` / `publish_run_err`) the uploader calls from its own
+// `update`. Circuit + rate limit + retry gate the ship, and the `deadline`
+// brick caps it — plain functions over the uploader's own slice.
+const publish = createResilientCall<string, string, "publish">(
   {
-    publish_report: async (cmd, ctx): Promise<void> => {
-      await ctx.shipReport(cmd.report);
-    },
-  };
-
-const resilientUploader = withResilience(
-  { machine: uploaderMachine, interpret: uploaderInterpret },
-  {
-    target: "publish_report",
-    keyOf: () => "report-sink",
-    at: (m) => ("at" in m ? m.at : 0),
+    name: "publish",
     circuit: { threshold: 3, cooldownMs: 1 },
     rateLimit: { capacity: 4, refillPerSec: 64 },
     retry: { baseMs: 1, factor: 2, capMs: 4, maxAttempts: 5, jitter: "none" },
+    deadline: { ms: 600_000 },
   },
   () => 0,
 );
 
-const optimusUploader = withDeadline(resilientUploader, { ms: 600_000 });
+const SINK_KEY = "report-sink";
+
+type UploaderState = {
+  readonly phase: "idle" | "shipping" | "shipped" | "failed";
+  readonly sink: ResilientState<string, string>;
+};
+type UploaderMsg =
+  | { readonly type: "ship"; readonly report: string; readonly at: number }
+  | ResilientTimerMsg<"publish">;
+
+/** The uploader's phase, read off the settled sink call. */
+function phaseOf(sink: UploaderState["sink"]): UploaderState["phase"] {
+  const call = sink.calls[SINK_KEY];
+  if (call?.phase === "succeeded") return "shipped";
+  if (call?.phase === "failed") return "failed";
+  return "shipping";
+}
+
+const uploaderMachine = defineMachine({
+  types: {
+    model: {} as UploaderState,
+    msg: {} as UploaderMsg,
+    ctx: {} as ReportSink,
+  },
+  cmds: [publish.run],
+  init: (loaded) =>
+    loaded !== null ? [loaded, []] : [{ phase: "idle", sink: publish.init() }, []],
+  update: {
+    ship: (s, m) => {
+      const [sink, cmds] = publish.attempt(s.sink, SINK_KEY, m.report, m.at);
+      return [{ phase: phaseOf(sink), sink }, cmds];
+    },
+    publish_run_ok: (s, m) => {
+      const { call: sink, cmds } = publish.settle(s.sink, m);
+      return [{ phase: phaseOf(sink), sink }, cmds];
+    },
+    publish_run_err: (s, m) => {
+      const { call: sink, cmds } = publish.settle(s.sink, m);
+      return [{ phase: phaseOf(sink), sink }, cmds];
+    },
+    publish_deadline: (s, m) => {
+      const [sink, cmds] = publish.onTimer(s.sink, m);
+      return [{ phase: phaseOf(sink), sink }, cmds];
+    },
+  },
+  // The retry and deadline timers. `timer` is built into the engine.
+  subs: [{ type: "timer", deps: (s: UploaderState) => publish.timer(s.sink) }],
+});
+
+const uploaderInterpret: Interpret<
+  UploaderMsg,
+  ReturnType<typeof publish.run>,
+  ReportSink
+> = {
+  publish_run: async (cmd, ctx) => {
+    try {
+      return ctx.ok(await ctx.shipReport(cmd.input));
+    } catch (cause) {
+      return ctx.err({ _tag: "port_rejected", cause: String(cause) });
+    }
+  },
+};
 
 type UploaderMetric = { readonly seq: number; readonly msgType: string };
 const uploaderMetrics: UploaderMetric[] = [];
-
-type UploaderOuterState = ReturnType<typeof optimusUploader.machine.init>[0];
-
 let sinkArmed = true;
 let sinkThrows = 0;
 
@@ -606,9 +608,6 @@ async function until(cond: () => boolean, label: string): Promise<void> {
   throw new Error(`timed out waiting for: ${label}`);
 }
 
-function uploaderResilience(state: UploaderOuterState) {
-  return state.base.$resilience;
-}
 
 async function main() {
   const ctx: AgentCtx = {
@@ -617,7 +616,7 @@ async function main() {
 
   line("assembling Optimus from the @demlik/tea stack");
   console.log(
-    "L1 bricks -> L2 compositions -> L3 agent -> wrapper tier -> DevX",
+    "L1 bricks -> L2 compositions -> L3 agent -> DevX",
   );
   console.log("");
   console.log(
@@ -651,13 +650,13 @@ async function main() {
     "               and recovers; the duplicate /docs replays cached.",
   );
   console.log("");
-  console.log("  uploader   = withDeadline(withResilience(");
-  console.log("               reportUploader, target=publish_report))");
+  console.log("  uploader   = a machine that hand-wires a named resilient-call");
+  console.log("               knob (publish_run) into its own update");
   console.log(
-    "               the agent hands it the report; the wrapper stack",
+    "               the agent hands it the report; the knob's plain",
   );
   console.log(
-    "               retries the flaky sink, caps the ship, and sinks",
+    "               functions retry the flaky sink and cap the ship, and",
   );
   console.log("               run's telemetry sink records every uploader");
   console.log("               transition to uploaderMetrics[].");
@@ -671,9 +670,9 @@ async function main() {
   runtime.observe((msg, _state) => {
     if (msg === null) return;
 
-    if (msg.type === "resilient_ok") {
-      const out = msg.result.output as AgentTurn;
-      const purpose = msg.key as Purpose;
+    if (msg.type === "resilient_run_ok") {
+      const out = msg.value.output as AgentTurn;
+      const purpose = msg.cmd.key as Purpose;
       if (purpose !== lastStage) {
         console.log(`\n> stage: ${purpose}`);
         lastStage = purpose;
@@ -724,7 +723,7 @@ async function main() {
 
   const finalAgent = runtime.getState();
 
-  line("resilience-on-the-fold-tool: at the audit-call I/O, not a wrapper");
+  line("resilience-on-the-fold-tool: plain functions at the audit call");
   console.log(
     "the run_audit tool runs a createResilientCall SUB-RUN (circuit+retry).",
   );
@@ -765,9 +764,9 @@ async function main() {
 
   await runtime.stop();
 
-  line("withResilience + withDeadline + telemetry: ship the report");
+  line("hand-wired resilient-call + telemetry: ship the report");
   console.log(
-    "the agent hands the finished report to the wrapped uploader machine.",
+    "the agent hands the finished report to the uploader machine.",
   );
   const shipReport = async (report: string): Promise<string> => {
     if (sinkArmed) {
@@ -778,8 +777,8 @@ async function main() {
     return `receipt:${report.length}`;
   };
 
-  const uploaderRuntime = await run(optimusUploader.machine, {
-    ...optimusUploader,
+  const uploaderRuntime = await run(uploaderMachine, {
+    interpret: uploaderInterpret,
     ctx: { shipReport },
     telemetry: (e) => {
       uploaderMetrics.push({ seq: e.seq, msgType: e.msgType });
@@ -793,29 +792,23 @@ async function main() {
   });
 
   await until(() => {
-    const call = uploaderResilience(uploaderRuntime.getState()).calls[
-      "report-sink"
-    ];
-    return call?.phase === "succeeded" || call?.phase === "failed";
+    const phase = uploaderRuntime.getState().phase;
+    return phase === "shipped" || phase === "failed";
   }, "flaky sink retries then recovers");
 
   const finalUploader = uploaderRuntime.getState();
-  const sinkPhase =
-    uploaderResilience(finalUploader).calls["report-sink"]?.phase;
+  const sinkCall = finalUploader.sink.calls[SINK_KEY];
   console.log(
-    `  - sink threw once (sinkThrows=${sinkThrows}) -> withResilience armed a retry`,
+    `  - sink threw once (sinkThrows=${sinkThrows}) -> publish.settle armed a retry`,
   );
   console.log(
-    `  - retry Sub fired -> sink recovered -> $resilience phase: ${sinkPhase}`,
+    `  - retry timer fired -> sink recovered -> call phase: ${sinkCall?.phase}`,
   );
   console.log(
-    `circuit phase: ${uploaderResilience(finalUploader).circuit.phase} (absorbed, then closed)`,
+    `circuit phase: ${finalUploader.sink.circuit.phase} (absorbed, then closed)`,
   );
   console.log(
-    `uploader base phase: ${finalUploader.base.base.phase} (stays "shipping": the ship result is opaque to the wrapper, no fold loop, no glue)`,
-  );
-  console.log(
-    `deadline phase: ${finalUploader.$deadline.phase} (cap not tripped)`,
+    `uploader phase: ${finalUploader.phase} (read off the settled call — the uploader's own update)`,
   );
 
   line("telemetry: every uploader transition sunk to metrics[]");
@@ -876,7 +869,7 @@ async function main() {
     "idempotent-intake decides process vs replay through receive(). The two",
   );
   console.log(
-    "wrappers harden a real fire-and-settle report ship. Faked: the model,",
+    "uploader hand-wires a resilient report ship. Faked: the model,",
   );
   console.log("the site, the sinks, and the clock - nothing else.");
 }
