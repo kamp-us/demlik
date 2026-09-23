@@ -99,7 +99,7 @@ import { defineMachine } from "@demlik/tea";
 import { subscribeDeadline } from "@demlik/tea/resilience";
 
 export function userMachine(fetchUser: (id: string) => Promise<User>) {
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as UserState,
       msg: {} as UserMsg,
@@ -129,9 +129,11 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
     // 4. Arm a timer for every call that is waiting to retry.
     subscriptions: (s) => rc.subs(s.call),
     subscribe: { deadline: subscribeDeadline },
-    // 5. Run the port. The handler returns the settle Msg; it never dispatches.
-    interpret: rc.handlers({ run: (id) => fetchUser(id) }),
   });
+  // 5. Run the port. The handler returns the settle Msg; it never dispatches.
+  //    Hand it to `run` beside the machine: `run(machine, { interpret })`.
+  const interpret = rc.handlers({ run: (id) => fetchUser(id) });
+  return { machine, interpret };
 }
 // #endregion machine
 
@@ -156,40 +158,40 @@ function scripted(script: ("ok" | "down")[]) {
 }
 
 function driveUser(
-  machine: ReturnType<typeof userMachine>,
+  { machine, interpret }: ReturnType<typeof userMachine>,
   s: UserState,
   m: UserMsg,
 ) {
-  return drive(machine, s, m, machine.interpret);
+  return drive(machine, s, m, interpret);
 }
 
 describe("docs/how-to/hand-wire-a-resilient-call.md (#271) — it runs", () => {
   it("a first-try success folds the user in and settles the call", async () => {
-    const machine = userMachine(scripted(["ok"]));
-    const { state } = await driveUser(machine, initial, load);
+    const user = userMachine(scripted(["ok"]));
+    const { state } = await driveUser(user, initial, load);
     expect(state.user).toEqual(ada);
     expect(state.call.calls.u1?.phase).toBe("succeeded");
   });
 
   it("a failure with retries left waits on the timer, and the retry lands", async () => {
-    const machine = userMachine(scripted(["down", "ok"]));
-    const first = await driveUser(machine, initial, load);
+    const user = userMachine(scripted(["down", "ok"]));
+    const first = await driveUser(user, initial, load);
     expect(first.state.user).toBeNull();
     expect(first.state.call.calls.u1?.phase).toBe("waiting_retry");
-    expect(machine.subscriptions(first.state).map((sub) => sub.id)).toEqual([
-      "resilient:retry:u1",
-    ]);
+    expect(
+      user.machine.subscriptions(first.state).map((sub) => sub.id),
+    ).toEqual(["resilient:retry:u1"]);
 
-    const second = await driveUser(machine, first.state, retryFires);
+    const second = await driveUser(user, first.state, retryFires);
     expect(second.state.user).toEqual(ada);
     expect(second.state.call.calls.u1?.phase).toBe("succeeded");
   });
 
   it("a failure with no retries left folds the error in", async () => {
-    const machine = userMachine(scripted(["down", "down", "down"]));
-    let { state } = await driveUser(machine, initial, load);
+    const user = userMachine(scripted(["down", "down", "down"]));
+    let { state } = await driveUser(user, initial, load);
     while (state.call.calls.u1?.phase === "waiting_retry") {
-      ({ state } = await driveUser(machine, state, retryFires));
+      ({ state } = await driveUser(user, state, retryFires));
     }
     expect(state.call.calls.u1?.phase).toBe("failed");
     expect(state.error).toEqual({ _tag: "backend_down" });

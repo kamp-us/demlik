@@ -91,11 +91,13 @@ const machine = defineMachine({
   init: (loaded, ctx) => [initialModel, []],          // (Model, [Cmd])
   update: (state, msg) => [nextModel, [cmd]],         // pure
   subscriptions: (state) => [sub],                    // pure list of Sub
-  interpret: { cmdType: async (cmd, ctx) => msg },    // host: turns Cmd → Msg
   subscribe: { subType: (sub, ctx, dispatch) => () => cleanup },
 });
 
-const runtime = run(machine, { ctx, store });
+// host: turns Cmd → Msg. Handed to `run` beside the machine, never on it.
+const interpret = { cmdType: async (cmd, ctx) => msg };
+
+const runtime = run(machine, { ctx, store, interpret });
 ```
 
 The shape is the same. The difference is that Elm has a single, opinionated
@@ -121,14 +123,13 @@ example, the increment/decrement counter, the form validator — all
 `Browser.sandbox`.
 
 In `@demlik/tea` you build the same thing by returning `[next, []]` from
-`update` and omitting `interpret` for any commands:
+`update`; a machine that emits no Cmd needs no `interpret` at `run`:
 
 ```ts
 const machine = defineMachine({
   types: { model: {} as number, msg: {} as "inc" | "dec", ctx: {} as {} },
   init: () => [0, []],
   update: (n, msg) => [msg === "inc" ? n + 1 : n - 1, []],
-  interpret: {} as never,
 });
 
 // in a React component
@@ -179,14 +180,17 @@ export interface Machine<S, M, C extends Cmd, U extends Sub, Ctx> {
   init: (loaded: S | null, ctx: Ctx) => [S, readonly C[]];
   update: (state: S, msg: M) => [S, readonly C[]];
   subscriptions?: (state: S) => readonly U[];
-  interpret: { [K in C["type"]]: (cmd: Extract<C, { type: K }>, ctx: Ctx & PortEmitter) => Promise<M | void> };
   subscribe?: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx: Ctx, dispatch: (msg: M) => Promise<void>) => () => void };
 }
+
+// …and the Cmd handlers, handed to `run` beside it:
+run(machine, { ctx, interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | void> } });
 ```
 
 Key difference: Elm's runtime owns `interpret` (the implementation of every
-Cmd type) and `subscribe` (the runtime side of every Sub type). We move
-those into the Machine itself, keyed by tag, so the host can supply them.
+Cmd type) and `subscribe` (the runtime side of every Sub type). We hand
+`interpret` to `run`, keyed by tag, so the host supplies it; `subscribe`
+still rides on the Machine for now (#279 moves it to `run` too).
 That's how the same `Machine` can run inside React, a Durable Object, a
 service worker, or a Node test process without the pure code changing.
 

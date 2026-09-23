@@ -562,7 +562,7 @@ describe("compaction — replay byte-identity with a mid-loop compaction", () =>
   const compactInterpret: Interpret<M, AgentCompactRunCmd, object> = {
     compact_run: async () => compactOk("SUM"),
   };
-  const machine = agent.toMachine<object>({
+  const { machine } = agent.toMachine<object>({
     toolInterpret: compactInterpret as Interpret<
       M,
       ToolCmd | AgentCompactRunCmd,
@@ -666,8 +666,8 @@ describe("compaction — WIRED machine drives a real compaction round-trip", () 
     const reachedDone = new Promise<void>((res) => {
       resolveDone = res;
     });
-    const machine = agent.toMachine<object>({ toolInterpret });
-    const runtime = await run(machine, { ctx: {} as object }).ready;
+    const { machine, interpret } = agent.toMachine<object>({ toolInterpret });
+    const runtime = await run(machine, { ctx: {} as object, interpret }).ready;
     const off = runtime.observe((_m, state) => {
       if (state.run.phase === "done" || state.run.phase === "failed") {
         resolveDone();

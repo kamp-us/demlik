@@ -614,9 +614,8 @@ function makeMachine(
     update,
     subscriptions: (s) => run.subs(s.run),
     subscribe: { deadline: () => () => {} },
-    interpret: run.handlers({ store: fakeStore }),
   });
-  return { run, machine };
+  return { run, machine, interpret: run.handlers({ store: fakeStore }) };
 }
 
 const ctx = {} as object;

@@ -3,7 +3,6 @@ import {
   acceptsOf,
   defineMachine,
   describeMachine,
-  type Interpret,
   type Reducer,
   type Transitions,
 } from "./index";
@@ -36,7 +35,6 @@ function lightMachine() {
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: (_loaded) => [{ type: "red" }, []],
     update,
-    interpret: {} as Interpret<LightMsg, never, undefined>,
   });
 }
 
@@ -78,7 +76,6 @@ describe("describeMachine — transitions form", () => {
         idle: { start: () => [{ type: "busy" }, []] },
         busy: { cancel: () => [{ type: "idle" }, []], tick: (s: S) => [s, []] },
       } as unknown as Transitions<S, M, never>,
-      interpret: {} as Interpret<M, never, undefined>,
     });
     const shape = describeMachine(m);
     expect(shape.form).toBe("transitions");
@@ -134,12 +131,12 @@ describe("why a derived reading and not a property on the machine", () => {
     const base = lightMachine();
     // Hang a marker on the base the way a property-based design would.
     const tagged = Object.assign(base, { __marker: "present" });
-    const wrapped = withTelemetry(tagged) as unknown as {
+    const wrapped = withTelemetry({ machine: tagged }).machine as unknown as {
       __marker?: string;
       __form?: string;
     };
-    // Gone. The wrapper builds `{ init, update, subscriptions, subscribe,
-    // interpret }` from scratch; nothing else crosses the boundary. Note the
+    // Gone. The wrapper builds `{ init, update, subscriptions, subscribe }`
+    // from scratch; nothing else crosses the boundary. Note the
     // `__form` tag stamped by `defineMachine` is lost for the same reason.
     expect(wrapped.__marker).toBeUndefined();
     expect(wrapped.__form).toBeUndefined();
@@ -149,7 +146,9 @@ describe("why a derived reading and not a property on the machine", () => {
     // The wrapper flattens a transitions base into a reducer over the composed
     // Model — so the wrapped machine really has no per-state accept-sets, and
     // `describeMachine` says exactly that rather than echoing the base.
-    const shape = describeMachine(withTelemetry(lightMachine()));
+    const shape = describeMachine(
+      withTelemetry({ machine: lightMachine() }).machine,
+    );
     expect(shape.form).toBe("reducer");
     expect(shape.msgs).toEqual(["go", "stop"]);
   });

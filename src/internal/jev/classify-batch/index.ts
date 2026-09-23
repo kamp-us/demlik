@@ -56,7 +56,9 @@
  *   },
  *   subscriptions: (s) => classify.subs(s.classify),
  *   subscribe: classify.subscribers(),
- *   interpret: classify.handlers(),
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: classify.handlers() });
  */
 
 import { liftSlice, type ReadStep, readInOrder } from "../../../compose";

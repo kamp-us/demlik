@@ -33,17 +33,29 @@ import {
 import type {
   BootingRuntime,
   Cmd,
+  Interpret,
   Machine,
+  RunHandlers,
   Runtime,
   Store,
   Sub,
+  Subscribe,
 } from "../index";
 import { run } from "../promise";
 
 /**
  * Options passed to `useMachine`. The shape is intentionally minimal — `ctx`
  * is required (every machine has one), `store` is optional (omit it for
- * volatile-state machines).
+ * volatile-state machines), and the handlers are the ones `run` takes beside
+ * the machine: `interpret` (required once the machine emits a Cmd) and optional
+ * `subscribe` runners (see {@link RunHandlers}).
+ *
+ * **The handlers are read fresh, never memoized on.** A handler table written
+ * inline in the component is a new object every render; keying the runtime on
+ * it would reboot the machine on every render. So `useMachine` hands `run` a
+ * table that looks each cell up on the latest render's `interpret` /
+ * `subscribe` at the moment a Cmd runs or a Sub starts — a handler may close
+ * over props and state freely.
  *
  * **Identity matters.** The runtime is memoized on `[machine, opts.ctx,
  * opts.store]`. A new `ctx` reference rebuilds the runtime. Always `useMemo`
@@ -53,10 +65,16 @@ import { run } from "../promise";
  * `RuntimeDiscardedError` under `phase: "discard"` when Cmds were still in
  * flight, which the substrate's default sink warns about (issue #365).
  */
-export interface UseMachineOpts<S, Ctx> {
+export type UseMachineOpts<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+> = {
   ctx: Ctx;
   store?: Store<S>;
-}
+} & RunHandlers<M, C, U, Ctx>;
 
 /**
  * Build and own a `Runtime<S, M>` for the lifetime of the component mount.
@@ -82,7 +100,7 @@ export function useMachine<
   Ctx,
 >(
   machine: Machine<S, M, C, U, Ctx>,
-  opts: UseMachineOpts<S, Ctx>,
+  opts: NoInfer<UseMachineOpts<S, M, C, U, Ctx>>,
 ): [S, (msg: M) => Promise<void>] {
   // Deps are literal: machine identity, ctx identity, store identity. NOT
   // `[opts]` (would rebuild every render — callers pass fresh objects).
@@ -91,14 +109,35 @@ export function useMachine<
   // without lying about what the memo actually depends on.
   const ctx = opts.ctx;
   const store = opts.store;
+  // The latest render's handlers, read per call (see `UseMachineOpts`). Written
+  // during render on purpose: a Cmd a transition emits runs after the render
+  // that produced it, so the table it reads is never older than that render.
+  const handlersRef = useRef<RunHandlers<M, C, U, Ctx>>(opts);
+  handlersRef.current = opts;
+  const handlers = useMemo(
+    () => ({
+      interpret: latestTable(
+        () => (handlersRef.current as { interpret?: object }).interpret,
+      ) as Interpret<M, C, Ctx>,
+      subscribe: latestTable(() => handlersRef.current.subscribe) as Partial<
+        Subscribe<M, U, Ctx>
+      >,
+    }),
+    [],
+  );
   // `run()` returns a `BootingRuntime<S, M>` SYNCHRONOUSLY (issue #45) — exactly
   // what `useMemo` needs. We never `await` here: awaiting would force an async
   // memo, a null first-commit state, and a resolved-flag dance. Instead we hold
   // the booting handle and capture the booted `Runtime` (the only thing with a
   // total `getState`) once `ready` resolves.
   const booting = useMemo<BootingRuntime<S, M>>(
-    () => run(machine, { ctx, store }),
-    [machine, ctx, store],
+    () =>
+      run(machine, {
+        ctx,
+        store,
+        ...handlers,
+      } as Parameters<typeof run<S, M, C, U, Ctx>>[1]),
+    [machine, ctx, store, handlers],
   );
 
   // Captures the booted `Runtime` once `ready` resolves. Until then it is
@@ -173,6 +212,21 @@ export function useMachine<
   }, [booting]);
 
   return [state, booting.dispatch];
+}
+
+/**
+ * A handler table whose every cell is looked up on `current()` at the moment it
+ * is read, so `run` — which reads a cell per Cmd / per Sub start — always sees
+ * the latest render's handler without the runtime being rebuilt.
+ */
+function latestTable(current: () => object | undefined): object {
+  return new Proxy(
+    {},
+    {
+      get: (_target, type) =>
+        (current() as Record<PropertyKey, unknown> | undefined)?.[type],
+    },
+  );
 }
 
 /**

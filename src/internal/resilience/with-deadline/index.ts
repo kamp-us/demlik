@@ -59,6 +59,7 @@ import {
   Cmd,
   type CmdOf,
   type Interpret,
+  type InterpretArg,
   type Machine,
   msgKeysOf,
   type Reducer,
@@ -202,10 +203,12 @@ export interface DeadlineConfig<M extends { type: string }> {
 // ===========================================================================
 
 /**
- * Wrap `base` with an inactivity deadline. Returns a NEW `Machine` over the
- * composed Model `{ base, $deadline }`, with the base's Msgs/Cmds/Subs extended
- * by the wrapper's own (`$deadline:exceeded` Msg, `$deadline:decision` Cmd,
- * `$deadline:timeout` Sub).
+ * Wrap `base` with an inactivity deadline. Takes the base machine together with
+ * the handlers it runs under (a machine carries none — #278) and returns a NEW
+ * `Machine` over the composed Model `{ base, $deadline }` beside the composed
+ * `interpret`, with the base's Msgs/Cmds/Subs extended by the wrapper's own
+ * (`$deadline:exceeded` Msg, `$deadline:decision` Cmd, `$deadline:timeout`
+ * Sub). Run it as `run(wrapped.machine, { interpret: wrapped.interpret })`.
  *
  * The composed machine:
  *   - `init` rehydrates the base (honoring the `[loaded, []]` contract) and
@@ -220,7 +223,8 @@ export interface DeadlineConfig<M extends { type: string }> {
  *   - `subscribe` is the base's, plus the `$deadline:timeout` cell.
  *   - `interpret` is the base's, plus a no-op `$deadline:decision` handler.
  *
- * @param base   any `Machine<S, M, C, U, Ctx>`.
+ * @param wired  any `Machine<S, M, C, U, Ctx>` as `machine`, beside its
+ *               `interpret` handlers.
  * @param config the deadline knob (`ms` window + optional `progress` predicate).
  */
 export function withDeadline<
@@ -230,15 +234,27 @@ export function withDeadline<
   U extends Sub,
   Ctx,
 >(
-  base: Machine<S, M, C, U, Ctx>,
+  wired: { readonly machine: Machine<S, M, C, U, Ctx> } & InterpretArg<
+    M,
+    C,
+    Ctx
+  >,
   config: DeadlineConfig<M>,
-): Machine<
-  DeadlineModel<S>,
-  M | DeadlineExceededMsg,
-  C | DeadlineDecisionCmd,
-  U | DeadlineTimeoutSub,
-  Ctx
-> {
+): {
+  readonly machine: Machine<
+    DeadlineModel<S>,
+    M | DeadlineExceededMsg,
+    C | DeadlineDecisionCmd,
+    U | DeadlineTimeoutSub,
+    Ctx
+  >;
+  readonly interpret: Interpret<
+    M | DeadlineExceededMsg,
+    C | DeadlineDecisionCmd,
+    Ctx
+  >;
+} {
+  const base = wired.machine;
   const windowMs = config.ms;
   const isProgress = config.progress;
 
@@ -323,7 +339,7 @@ export function withDeadline<
   // so the handler returns void and dispatches nothing. Namespace guard mirrors
   // withTelemetry: refuse to wrap a base that squats on the reserved Cmd key.
   const baseInterpret =
-    (base as { interpret?: Interpret<M, C, Ctx> }).interpret ??
+    (wired as { interpret?: Interpret<M, C, Ctx> }).interpret ??
     ({} as Interpret<M, C, Ctx>);
   if (Object.hasOwn(baseInterpret as object, "$deadline:decision")) {
     throw new Error(
@@ -382,8 +398,8 @@ export function withDeadline<
     "$deadline:timeout": timeoutCell,
   } as Subscribe<M | DeadlineExceededMsg, U | DeadlineTimeoutSub, Ctx>;
 
-  return {
-    init: (loaded, ctx) => {
+  const machine = {
+    init: (loaded: DeadlineModel<S> | null, ctx: Ctx) => {
       // Rehydrate path: `loaded !== null` MUST return `[loaded, []]` (no Cmds) —
       // the substrate's replay enforces this. We split the composed loaded Model
       // into its base slice and feed the base its own loaded snapshot.
@@ -406,7 +422,6 @@ export function withDeadline<
     >,
     subscriptions,
     subscribe,
-    interpret,
     // The base's `Cmd.define` list rides through so `run`'s interpret edge
     // still parses / stamps the base's settled Msgs behind the wrap (#66).
     ...(base.cmds ? { cmds: base.cmds } : {}),
@@ -417,4 +432,5 @@ export function withDeadline<
     U | DeadlineTimeoutSub,
     Ctx
   >;
+  return { machine, interpret };
 }

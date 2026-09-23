@@ -41,7 +41,7 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       // Every loop schedules another tick — the tail advances forever.
       loop: async () => ({ type: "tick" }),
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as State,
         msg: {} as Msg,
@@ -51,15 +51,17 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       // Kick the loop off at boot.
       init: () => [{ ticks: 0 }, [{ type: "loop" }]],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
   it("rejects with QuiescenceTimeoutError when the tail never stabilizes", async () => {
     // `__idleCap` keeps this fast — the production default is 100_000. The
     // no-op `onError` absorbs the expected "runtime stopped" follow-up
     // rejection that the in-flight livelock produces once we tear down.
-    const runtime = await run(livelockMachine(), {
+    const { machine, interpret } = livelockMachine();
+    const runtime = await run(machine, {
+      interpret,
       ctx: undefined,
       __idleCap: 25,
       onError: () => {},
@@ -70,7 +72,9 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
   });
 
   it("the rejection carries the iteration count it gave up at", async () => {
-    const runtime = await run(livelockMachine(), {
+    const { machine, interpret } = livelockMachine();
+    const runtime = await run(machine, {
+      interpret,
       ctx: undefined,
       __idleCap: 25,
       onError: () => {},
@@ -105,9 +109,12 @@ describe("idle() rejects on quiescence timeout (no silent fall-through)", () => 
       types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
       init: () => [{ n: 0 }, []],
       update,
-      interpret,
     });
-    const runtime = await run(machine, { ctx: undefined, __idleCap: 25 }).ready;
+    const runtime = await run(machine, {
+      ctx: undefined,
+      interpret,
+      __idleCap: 25,
+    }).ready;
     await runtime.dispatch({ type: "step" });
     await expect(runtime.idle()).resolves.toBeUndefined();
     await runtime.stop();
@@ -141,12 +148,12 @@ describe("follow-up dispatch failures route to the onError sink", () => {
       types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
       init: () => [{ seen: false }, []],
       update,
-      interpret,
     });
 
     const seen: { error: unknown; context: RuntimeErrorContext }[] = [];
     const runtime = await run(machine, {
       ctx: undefined,
+      interpret,
       onError: (error, context) => seen.push({ error, context }),
     }).ready;
 
@@ -190,7 +197,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       // The follow-up the pre-#50 `dispatch` did NOT await.
       step: async () => ({ type: "bump" }),
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as State,
         msg: {} as Msg,
@@ -199,12 +206,13 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       },
       init: () => [{ steps: 0, bumped: false }, []],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
   it("a plain await dispatch sees the follow-up Msg's consequences", async () => {
-    const runtime = await run(chainMachine(), { ctx: undefined }).ready;
+    const { machine, interpret } = chainMachine();
+    const runtime = await run(machine, { interpret, ctx: undefined }).ready;
     // No `idle()`, no poll — just the dispatch. The follow-up `bump` must have
     // landed by the time it resolves.
     await runtime.dispatch({ type: "kick" });
@@ -242,7 +250,7 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
         return { type: "mark" };
       },
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as State,
         msg: {} as GatedMsg,
@@ -251,8 +259,8 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       },
       init: () => [{ steps: 0, bumped: false }, []],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
   it("dispatchOnce settles ONE transition, leaving the follow-up in flight", async () => {
@@ -260,8 +268,8 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     const gate = new Promise<void>((res) => {
       openGate = res;
     });
-    const runtime = await run(gatedChainMachine(gate), { ctx: undefined })
-      .ready;
+    const { machine, interpret } = gatedChainMachine(gate);
+    const runtime = await run(machine, { interpret, ctx: undefined }).ready;
     // Single step: kick's transition. The follow-up chain (bump → await →
     // mark) is enqueued but stalls at the shut gate, so `bumped` stays false.
     await runtime.dispatchOnce({ type: "kick" });
@@ -278,8 +286,8 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
     const gate = new Promise<void>((res) => {
       openGate = res;
     });
-    const runtime = await run(gatedChainMachine(gate), { ctx: undefined })
-      .ready;
+    const { machine, interpret } = gatedChainMachine(gate);
+    const runtime = await run(machine, { interpret, ctx: undefined }).ready;
     await runtime.dispatch({ type: "kick" }, { settle: "once" });
     expect(runtime.getState()).toEqual({ steps: 1, bumped: false });
     openGate();
@@ -289,7 +297,8 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
   });
 
   it("dispatch(msg, { settle: 'quiescent' }) is the explicit form of the default", async () => {
-    const runtime = await run(chainMachine(), { ctx: undefined }).ready;
+    const { machine, interpret } = chainMachine();
+    const runtime = await run(machine, { interpret, ctx: undefined }).ready;
     await runtime.dispatch({ type: "kick" }, { settle: "quiescent" });
     expect(runtime.getState()).toEqual({ steps: 1, bumped: true });
     await runtime.stop();
@@ -312,10 +321,10 @@ describe("dispatch() runs to quiescence by default (#50)", () => {
       types: { model: {} as S2, msg: {} as M2, cmd: {} as C2, ctx: undefined },
       init: () => [{ ticks: 0 }, []],
       update,
-      interpret,
     });
     const runtime = await run(machine, {
       ctx: undefined,
+      interpret,
       __idleCap: 25,
       onError: () => {},
     }).ready;
@@ -439,7 +448,7 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
 
   const BOOM = new Error("follow-up boom, no sink");
 
-  function machine() {
+  function followUpMachine() {
     const update: Reducer<S, M, C> = {
       kick: (s) => [s, [{ type: "trigger" }]],
       boom: (s) => [s, [{ type: "explode" }]],
@@ -450,12 +459,12 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
         throw BOOM;
       },
     };
-    return defineMachine({
+    const machine = defineMachine({
       types: { model: {} as S, msg: {} as M, cmd: {} as C, ctx: undefined },
       init: () => [{ _: 0 }, []],
       update,
-      interpret,
     });
+    return { machine, interpret };
   }
 
   it("re-throws the follow-up failure on a macrotask (does not silently swallow)", async () => {
@@ -472,7 +481,8 @@ describe("default onError (no sink) surfaces rather than swallows", () => {
     }) as typeof setTimeout);
 
     try {
-      const runtime = await run(machine(), { ctx: undefined }).ready;
+      const { machine, interpret } = followUpMachine();
+      const runtime = await run(machine, { interpret, ctx: undefined }).ready;
       // Original dispatch resolves; the caller-less follow-up fails and is
       // handed to defaultOnError → scheduled here.
       await expect(runtime.dispatch({ type: "kick" })).resolves.toBeUndefined();

@@ -20,7 +20,6 @@ import {
   type Cmd,
   defineMachine,
   foldMsgs,
-  type Interpret,
   type Reducer,
   replay,
   type Sub,
@@ -101,7 +100,7 @@ describe("foldMsgs — folds update over Msg[] from a base state (#211)", () => 
 });
 
 describe("foldMsgs — fires no Store / interpret / subscription effects (#211)", () => {
-  it("invokes no init, interpret, subscribe, or subscriptions — even when each would throw", () => {
+  it("invokes no init, subscribe, or subscriptions and drops every Cmd — even when each would throw", () => {
     type FxState = { readonly n: number };
     type FxMsg = { readonly type: "inc" };
     type FxCmd = Cmd<"fx">;
@@ -110,21 +109,14 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
     // A spy: any of these firing flips a flag (and throws, to fail loudly).
     const fired = {
       init: false,
-      interpret: false,
       subscribe: false,
       subscriptions: false,
     };
 
     const update: Reducer<FxState, FxMsg, FxCmd> = {
-      // The cell EMITS a Cmd — if foldMsgs interpreted it, `fired.interpret`
-      // would flip. It must discard the Cmd instead.
+      // The cell EMITS a Cmd. foldMsgs takes no handlers (they are handed to
+      // `run`, never kept on the machine), so it can only discard the Cmd.
       inc: (s) => [{ n: s.n + 1 }, [{ type: "fx" }]],
-    };
-    const interpret: Interpret<FxMsg, FxCmd, undefined> = {
-      fx: async () => {
-        fired.interpret = true;
-        throw new Error("interpret fired — foldMsgs must not interpret Cmds");
-      },
     };
     const subscribe: Subscribe<FxMsg, FxSub, undefined> = {
       tick: () => {
@@ -146,7 +138,6 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
         throw new Error("init fired — foldMsgs must enter from base, not init");
       },
       update,
-      interpret,
       subscribe,
       subscriptions: () => {
         fired.subscriptions = true;
@@ -165,7 +156,6 @@ describe("foldMsgs — fires no Store / interpret / subscription effects (#211)"
     expect(result).toEqual({ n: 3 });
     expect(fired).toEqual({
       init: false,
-      interpret: false,
       subscribe: false,
       subscriptions: false,
     });

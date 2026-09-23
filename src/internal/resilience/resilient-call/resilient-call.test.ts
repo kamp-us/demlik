@@ -1075,7 +1075,7 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
     ctx: WCtx,
   ) {
     const rc = createResilientCall<string, string>(config, rngZero);
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as WState,
         msg: {} as WMsg,
@@ -1103,18 +1103,19 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
         },
         nop: (s) => [s, []],
       },
-      // The REAL handler — the same `tryInterpret`-wrapped port production uses —
-      // routes the port outcome back as resilient_ok / resilient_err, which the
-      // runtime enqueues as a follow-up Msg (re-entry).
-      interpret: rc.handlers({
-        run: async () => {
-          ctx.calls.count += 1;
-          const outcome = ctx.outcomes.shift() ?? "ok";
-          if (outcome === "fail") throw { _tag: "backend_down" };
-          return "VALUE";
-        },
-      }),
     });
+    // The REAL handler — the same `tryInterpret`-wrapped port production uses —
+    // routes the port outcome back as resilient_ok / resilient_err, which the
+    // runtime enqueues as a follow-up Msg (re-entry).
+    const interpret = rc.handlers({
+      run: async () => {
+        ctx.calls.count += 1;
+        const outcome = ctx.outcomes.shift() ?? "ok";
+        if (outcome === "fail") throw { _tag: "backend_down" };
+        return "VALUE";
+      },
+    });
+    return { machine, interpret };
   }
 
   // Drain the re-entrant follow-up chain: each `await dispatch` settles only its
@@ -1150,8 +1151,8 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
       circuit: { threshold: 1, cooldownMs: 100, halfOpenMaxProbes: 1 },
       rateLimit: { capacity: 1, refillPerSec: 1 },
     };
-    const machine = wiredMachine(config, ctx);
-    const runtime = await run(machine, { ctx }).ready;
+    const { machine, interpret } = wiredMachine(config, ctx);
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     // (1) t=0 — first attempt reaches the backend and FAILS. threshold 1 → the
     // breaker trips OPEN. Bucket now empty.
@@ -1411,15 +1412,17 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
       // The REAL timer cell — the retry Sub actually arms a setTimeout against
       // the (fake) wall clock, so the outage advances by itself.
       subscribe: { deadline: subscribeDeadline },
+    });
+
+    const runtime = await run(machine, {
+      ctx: {},
       interpret: rc.handlers({
         run: async () => {
           callAt.push(Date.now());
           throw { _tag: "peer_unreachable" };
         },
       }),
-    });
-
-    const runtime = await run(machine, { ctx: {} }).ready;
+    }).ready;
     await runtime.dispatch({ type: "attempt", key: "k", input: "in", at: 0 });
     await flush();
 
@@ -1739,7 +1742,6 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
       update: { ...mounted.update },
       subscriptions: mounted.subscriptions,
       subscribe: mounted.subscribe,
-      interpret: mounted.interpret,
     });
     return { rc, mounted, machine, calls, deadlineFolds };
   }
@@ -1965,7 +1967,7 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
   });
 
   it("`interpret` is the returning form — it re-enters through the settle cells", async () => {
-    const { machine, calls } = mount({}, ["ok"]);
+    const { mounted, machine, calls } = mount({}, ["ok"]);
     const bound = bindMachine(machine, ctx);
     const [running, cmds] = bound.step(start, {
       type: "go",
@@ -1976,7 +1978,7 @@ describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
     const first = cmds[0];
     if (first === undefined) throw new Error("no Cmd emitted");
 
-    const settle = await machine.interpret.resilient_run(first, ctx);
+    const settle = await mounted.interpret.resilient_run(first, ctx);
     expect(calls).toEqual(["in"]);
     expect(settle.type).toBe("resilient_ok");
 

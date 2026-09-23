@@ -1,6 +1,12 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, noop, type Store } from "../../../index";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  noop,
+  type Store,
+} from "../../../index";
 import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import { createIntake, type IntakeCmd, type IntakeState } from "./index";
@@ -645,27 +651,29 @@ function wiredMachine(intake: ReturnType<typeof createIntake<Hook, Charged>>) {
       boot: (s) => intake.boot(s),
       nop: (s) => [s, []],
     },
-    interpret: {
-      // A fresh key was accepted — kick the drain (re-enters via `claim`).
-      "intake:process": async (cmd) =>
-        ({ type: "claim", at: cmd.itemId.length }) as WiredMsg,
-      // The worker. THE side effect. Counts the run, then re-enters via
-      // `complete` to cache the result. This is the only place "work" happens.
-      "intake:work": async (cmd, ctx) => {
-        ctx.processed.set(cmd.key, (ctx.processed.get(cmd.key) ?? 0) + 1);
-        return {
-          type: "complete",
-          key: cmd.key,
-          result: { chargedCents: cmd.payload.amount * 100 },
-          at: ctx.clock.value,
-        } as WiredMsg;
-      },
-      // A duplicate after completion replays — the responder is a no-op here;
-      // what matters is that the worker was NOT re-invoked (count unchanged).
-      "intake:replay": async () => undefined,
-    },
   });
 }
+
+// The handlers `wiredMachine` runs under, handed to `run` beside it.
+const wiredInterpret: Interpret<WiredMsg, WiredCmd, WiredCtx> = {
+  // A fresh key was accepted — kick the drain (re-enters via `claim`).
+  "intake:process": async (cmd) =>
+    ({ type: "claim", at: cmd.itemId.length }) as WiredMsg,
+  // The worker. THE side effect. Counts the run, then re-enters via
+  // `complete` to cache the result. This is the only place "work" happens.
+  "intake:work": async (cmd, ctx) => {
+    ctx.processed.set(cmd.key, (ctx.processed.get(cmd.key) ?? 0) + 1);
+    return {
+      type: "complete",
+      key: cmd.key,
+      result: { chargedCents: cmd.payload.amount * 100 },
+      at: ctx.clock.value,
+    } as WiredMsg;
+  },
+  // A duplicate after completion replays — the responder is a no-op here;
+  // what matters is that the worker was NOT re-invoked (count unchanged).
+  "intake:replay": async () => undefined,
+};
 
 // Drain the re-entrant follow-up chain. Each `await dispatch` settles only the
 // transition it triggered; interpret follow-ups are scheduled on the tail.
@@ -719,6 +727,10 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
         boot: (s) => intake.boot(s),
         nop: (s) => [s, []],
       },
+    });
+
+    const runtime = await run(machine, {
+      ctx,
       interpret: {
         // Worker disabled: the key stays pending forever. Count the *intent*
         // to process so the assertion can catch a double-enqueue.
@@ -729,9 +741,7 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
         "intake:work": async () => undefined,
         "intake:replay": async () => undefined,
       },
-    });
-
-    const runtime = await run(machine, { ctx }).ready;
+    }).ready;
 
     const payload: Hook = { id: "evt_1", amount: 5 };
     // First receive at t=0 → enqueued, worker "starts" (pending), never done.
@@ -757,7 +767,11 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
     // --- First boot: receive → claim → work (count 1) → complete. The queue
     // item is left RUNNING (host never reached markDone) but the key is DONE
     // in the cache. Then the DO evicts. ---
-    const r1 = await run(wiredMachine(intake), { ctx, store }).ready;
+    const r1 = await run(wiredMachine(intake), {
+      ctx,
+      store,
+      interpret: wiredInterpret,
+    }).ready;
     const payload: Hook = { id: "evt_1", amount: 5 };
     await r1.dispatch({ type: "receive", payload, at: 0, id: "q1" });
     await settle(r1, ctx);
@@ -777,7 +791,11 @@ describe("WIRED machine — end-to-end receive-once guarantee", () => {
     // --- CRASH + reboot from the SAME persisted bytes. The host dispatches a
     // `boot` Msg, then resumes the drain with `claim`. A correct intake must
     // skip the already-done item on BOTH paths → the worker never re-runs. ---
-    const r2 = await run(wiredMachine(intake), { ctx, store }).ready;
+    const r2 = await run(wiredMachine(intake), {
+      ctx,
+      store,
+      interpret: wiredInterpret,
+    }).ready;
     await r2.dispatch({ type: "boot" });
     await settle(r2, ctx);
     await r2.dispatch({ type: "claim", at: 100 }); // resume drain

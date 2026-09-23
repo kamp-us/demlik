@@ -102,7 +102,10 @@ export type SnapshotInterpret<
   : { readonly snapshot_write?: never };
 
 /**
- * The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants
+ * The `toMachine` signature. It returns the wired machine and, beside it, the
+ * merged `interpret` table to hand `run` — a machine carries no handlers
+ * (#278), so the pair is run as `run(wired.machine, { interpret:
+ * wired.interpret, ctx })`. Parametrized on the `Snap` + `Compact` discriminants
  * so the snapshotting / compaction overloads of `createAgent` hand back the right
  * obligations. The `toolInterpret` requires (ON) or forbids (OFF) the
  * `snapshot_write` handler via {@link SnapshotInterpret} and the `compact_run` handler
@@ -132,13 +135,20 @@ export type AgentToMachine<
   > &
     SnapshotInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Snap, Ctx> &
     CompactInterpret<AgentMachineMsg<P, O, R> | WiredToolMsg<T>, Compact, Ctx>;
-}) => Machine<
-  AgentState<Stage, P, O, R>,
-  AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
-  AgentCmd<P, TC, Snap, Compact>,
-  DeadlineSub,
-  Ctx & ToolsCtx<T>
->;
+}) => {
+  readonly machine: Machine<
+    AgentState<Stage, P, O, R>,
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    AgentCmd<P, TC, Snap, Compact>,
+    DeadlineSub,
+    Ctx & ToolsCtx<T>
+  >;
+  readonly interpret: Interpret<
+    AgentMachineMsg<P, O, R> | WiredToolMsg<T>,
+    AgentCmd<P, TC, Snap, Compact>,
+    Ctx & ToolsCtx<T>
+  >;
+};
 
 /**
  * The agent handle `createAgent` returns — the uniform verb contract every tea

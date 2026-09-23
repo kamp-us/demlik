@@ -185,7 +185,7 @@ export function driveTraceOf<M, C>(
  * `handlers`, feeding every settle Msg back until the machine goes quiet, and
  * hand back the settled state together with the whole history.
  *
- * `handlers` is the same record the machine declares as its `interpret` (e.g.
+ * `handlers` is the same table a host hands `run` as its `interpret` (e.g.
  * `ask.handlers()` for a jev knob), so the test drives the real interpreter and
  * mocks only the port beneath it.
  *

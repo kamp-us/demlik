@@ -158,13 +158,6 @@ const machine = defineMachine({
   cmds: [fetch],
   init: () => [{ body: null, lastTag: null }, []],
   update: exhaustive,
-  interpret: {
-    // The handler reads the machine's plain ctx: `ctx.http` is typed.
-    fetch: async (c, ctx) => {
-      const body = await ctx.http.get(c.url);
-      return ctx.ok({ body });
-    },
-  },
 });
 
 // The reducer without the derived cells is refused — `fetch_ok` / `fetch_err`
@@ -180,7 +173,6 @@ defineMachine({
   cmds: [fetch],
   init: () => [{ body: null, lastTag: null }, []],
   update: onlyUser,
-  interpret: { fetch: async () => undefined },
 });
 
 // A hand-written handler for a typed Cmd is still a plain `Interpret` cell —
@@ -195,13 +187,22 @@ void direct;
 const http: Http = { get: async () => "" };
 
 // POSITIVE: the machine's ctx supplied.
-run(machine, { ctx: { http } });
+run(machine, {
+  ctx: { http },
+  interpret: {
+    // The handler reads the machine's plain ctx: `ctx.http` is typed.
+    fetch: async (c, ctx) => {
+      const body = await ctx.http.get(c.url);
+      return ctx.ok({ body });
+    },
+  },
+});
 
 // NEGATIVE: `types.ctx` names `http`.
 // @ts-expect-error ctx lacks `http`
-run(machine, { ctx: {} });
+run(machine, { ctx: {}, interpret: direct });
 // @ts-expect-error ctx cannot be omitted while the machine's ctx names a key
-run(machine, {});
+run(machine, { interpret: direct });
 
 // A machine with NO typed Cmds still runs ctx-less (the #182 win is untouched).
 type PureMsg = { readonly type: "bump" };

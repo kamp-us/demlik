@@ -128,7 +128,6 @@ function hostMachine(ask: Ask) {
     update: hostUpdate(ask),
     subscriptions: (s) => ask.subs(s.resilience),
     subscribe: { deadline: () => () => {} },
-    interpret: ask.handlers(),
   });
 }
 

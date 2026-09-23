@@ -139,7 +139,6 @@ function expenseMachine(ask: Ask) {
     update: update(ask),
     subscriptions: (s) => ask.subs(s.resilience),
     subscribe: { deadline: subscribeDeadline },
-    interpret: ask.handlers(),
   });
 }
 
@@ -224,7 +223,11 @@ async function main() {
     },
   });
 
-  const runtime = await run(expenseMachine(ask), { ctx: undefined }).ready;
+  // The machine is data; the handlers ride beside it into `run`.
+  const runtime = await run(expenseMachine(ask), {
+    ctx: undefined,
+    interpret: ask.handlers(),
+  }).ready;
 
   for (const expense of EXPENSES) {
     runtime.dispatch({

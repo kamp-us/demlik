@@ -100,7 +100,8 @@ export const CONFIDENCE_FLOOR = 0.8;
  * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
  * ALREADY settled, so there is no cell to put in the wrong order, and
  * `subscribe` / `interpret` ride along on the fragments rather than being
- * remembered. `answer.choice` is `Category` here, not `string`.
+ * remembered — `subscribe` into the machine, `interpret` to `run` beside it.
+ * `answer.choice` is `Category` here, not `string`.
  */
 export function mountAsk(ask: Ask) {
   return mountResilientCall(ask, {
@@ -131,9 +132,10 @@ export function mountAsk(ask: Ask) {
   });
 }
 
+/** The machine, plus the handlers a host hands to `run` beside it. */
 export function expenseMachine(ask: Ask) {
   const mounted = mountAsk(ask);
-  return defineMachine({
+  const machine = defineMachine({
     types: {
       model: {} as ExpenseState,
       msg: {} as ExpenseMsg,
@@ -148,8 +150,8 @@ export function expenseMachine(ask: Ask) {
     update: { ...mounted.update },
     subscriptions: mounted.subscriptions,
     subscribe: mounted.subscribe,
-    interpret: mounted.interpret,
   });
+  return { machine, interpret: mounted.interpret };
 }
 // #endregion machine
 
@@ -218,11 +220,12 @@ export function classifyOne(
   key: string,
   memo: string,
 ): Promise<Classified> {
+  const { machine, interpret } = expenseMachine(ask);
   return drive(
-    expenseMachine(ask),
+    machine,
     { resilience: ask.init(), verdicts: {} },
     { type: "classify", key, memo, at: 0 },
-    ask.handlers(),
+    interpret,
   );
 }
 // #endregion drive

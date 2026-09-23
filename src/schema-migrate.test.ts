@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   defineMachine,
-  type Interpret,
   type Reducer,
   type Schema,
   type Store,
@@ -92,7 +91,6 @@ describe("schemaMigrate — wired as a real Store.migrate", () => {
     types: { model: {} as State, msg: {} as Msg, ctx: undefined },
     init: (loaded) => [loaded ?? { count: 0, label: "fresh" }, []],
     update,
-    interpret: {} as Interpret<Msg, never, undefined>,
   });
 
   function storeOf(raw: unknown): Store<State> {

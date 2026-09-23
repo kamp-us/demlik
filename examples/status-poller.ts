@@ -1,4 +1,4 @@
-import { type Cmd, defineMachine, type Sub } from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret, type Sub } from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import { createPoller, type PollerState } from "@demlik/tea/flow";
 import {
@@ -87,18 +87,19 @@ export const statusPoller = defineMachine({
 
   subscriptions: (s) => poll.subs(s.poll).filter(isDeadlineSub),
   subscribe: { deadline: subscribeDeadline },
-
-  interpret: {
-    read_status: async (cmd, ctx): Promise<Msg> => {
-      try {
-        const result = await ctx.readStatus(cmd.jobId);
-        return { type: "poll_result", result, at: ctx.clock() };
-      } catch (error) {
-        return { type: "poll_failed", error: String(error), at: ctx.clock() };
-      }
-    },
-  },
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+export const statusPollerInterpret: Interpret<Msg, ReadStatus, Ctx> = {
+  read_status: async (cmd, ctx): Promise<Msg> => {
+    try {
+      const result = await ctx.readStatus(cmd.jobId);
+      return { type: "poll_result", result, at: ctx.clock() };
+    } catch (error) {
+      return { type: "poll_failed", error: String(error), at: ctx.clock() };
+    }
+  },
+};
 
 function fakeSource(): (jobId: string) => Promise<JobStatus> {
   const script: readonly [JobStatus, ...JobStatus[]] = [
@@ -119,6 +120,7 @@ async function main() {
   const clock = () => now;
 
   const runtime = await run(statusPoller, {
+    interpret: statusPollerInterpret,
     ctx: { readStatus: fakeSource(), clock },
   }).ready;
 

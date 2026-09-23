@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (141)
+## Exports (143)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -75,6 +75,7 @@ import { … } from "@demlik/tea";
 | `IdentityDropNotice` | Class | Reported to the `OnError` sink under `phase: "identity-drop"` when the `Identity` filter drops a message addressed to a different instance. |
 | `initAck` | Function | The `Ack` for a server that has applied nothing yet — `ack(NO_ACK)`. |
 | `Interpret` | Type |  |
+| `InterpretArg` | Type | The `interpret` option of an engine's `run`: optional for a machine that emits no Cmd, required — one handler per Cmd variant — for one that does. |
 | `InterpretCell` | Type | One cell of Interpret: the outcome-returning form for a `Cmd.define`d Cmd, the Msg-returning form for a hand-written one. |
 | `InterpretDetached` | Type |  |
 | `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
@@ -110,6 +111,7 @@ import { … } from "@demlik/tea";
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |
 | `replay` | Function |  |
+| `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers, plus optional `subscribe` runners. |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |

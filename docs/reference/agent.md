@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (132)
+## Exports (133)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ These are the ones to read first:
 | `AgentStatus` | Type | The agent's lifecycle status — THE single typed channel for "what is this run doing?". |
 | `AgentTerminalFailure` | Type | The unified terminal failure the agent settles on. |
 | `AgentTimerMsg` | Type | The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg` are both `DeadlineExceeded`). |
-| `AgentToMachine` | Type | The `toMachine` signature, parametrized on the `Snap` + `Compact` discriminants so the snapshotting / compaction overloads of `createAgent` hand back the right obligations. |
+| `AgentToMachine` | Type | The `toMachine` signature. |
 | `AgentTurn` | Interface | One model turn: the narration `content` the model produced and the `toolCalls` it asked us to run. |
 | `agentTurnSchema` | Variable | The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain call binds when the agentic purpose's output is a bare `AgentTurn` (the common case). |
 | `AnyToolDef` | Type | The declaration-erased view the router reads. |
@@ -75,13 +75,14 @@ These are the ones to read first:
 | `DefinedAgentCtx` | Type | The ctx the tools' handlers read, intersected — what `run` asks for. |
 | `DefinedAgentEvent` | Type | One lifecycle event a defined agent's run emits — AgentEvent with the tool results typed against this agent's own tool set. |
 | `DefinedAgentInterpret` | Type | The interpret table of the machine `defineAgent` wired: one cell per DefinedAgentCmd, keyed by its `type` — a tool's own Cmd type, the router's `tool_rejected`, and the agent-owned brain call. |
-| `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input` — feed it to the raw `run`. |
+| `DefinedAgentMachine` | Type | The wired machine `defineAgent` builds per `input`. |
 | `DefinedAgentModel` | Type | The brain a defined agent runs, in either of its two shapes: - `async (messages) => turn` — the plain port, and the common path. |
 | `DefinedAgentMsg` | Type | The Msg union a defined agent's machine folds. |
 | `DefinedAgentOverlay` | Interface | What `defineAgent(cfg).with(...)` takes — the one documented wrap point over the machine the lid built. |
 | `DefinedAgentResolvedState` | Type | The Model `run` RESOLVES with — DefinedAgentState whose `run` slice is narrowed to the ended phases (EndedRun). |
 | `DefinedAgentRunOptions` | Type | Host wiring for one `run`: the store, the ctx the tools need, a runId, a clock. |
 | `DefinedAgentState` | Type | The Model a defined agent runs — a hand-wired `createAgent`'s, key for key. |
+| `DefinedAgentWired` | Type | The machine `defineAgent` builds per `input` beside the interpret table it runs under — a machine carries no handlers (#278). |
 | `EndedRun` | Type | The ENDED phases — a run that finished (`done`) or was stopped from outside (`cancelled`). |
 | `fanOutInterpret` | Function | Give a router's interpret cells real wall-clock overlap without touching the kernel — pass the table `toolRouter` built, get back one whose cells launch their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn while the first tool is still running. |
 | `InterpretOverlay` | Type | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |

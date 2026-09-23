@@ -357,16 +357,6 @@ const machine = defineMachine({
     undo_ok: (s) => lift(s, machineSaga.undoOk(s.saga)),
     undo_err: (s, m) => lift(s, machineSaga.undoErr(s.saga, m.error)),
   },
-  interpret: {
-    // The do/undo effects are performed by the consumer; here they are inert
-    // (replay never runs interpret). Declared to satisfy the exhaustive map.
-    book_flight: async () => {},
-    charge_card: async () => {},
-    reserve_hotel: async () => {},
-    cancel_flight: async () => {},
-    refund_card: async () => {},
-    release_hotel: async () => {},
-  },
 });
 
 describe("machine integration", () => {

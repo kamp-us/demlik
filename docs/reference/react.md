@@ -11,5 +11,5 @@ import { … } from "@demlik/tea/react";
 | Symbol | Kind | Summary |
 | --- | --- | --- |
 | `useMachine` | Function | Build and own a `Runtime<S, M>` for the lifetime of the component mount. |
-| `UseMachineOpts` | Interface | Options passed to `useMachine`. |
+| `UseMachineOpts` | Type | Options passed to `useMachine`. |
 | `useRuntime` | Function | Lower-level escape hatch: consume an externally-built `Runtime<S, M>`. |

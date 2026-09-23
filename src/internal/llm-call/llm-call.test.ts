@@ -754,11 +754,16 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
       // Sub-fanout would fire only once. The verbs + handler re-entry under test
       // are unchanged; only the wall-clock that fires the timer is faked.
       subscribe: { deadline: () => () => {} },
-      // The REAL handler — returns the enriched settle Msg, which the runtime
-      // enqueues as a follow-up Msg (re-entry) into the reducer.
-      interpret: llm.handlers(),
     });
-    return machine;
+    // The REAL handler — returns the enriched settle Msg, which the runtime
+    // enqueues as a follow-up Msg (re-entry) into the reducer.
+    return { machine, interpret: llm.handlers() };
+  }
+
+  // Build the wired machine for `ctx` and run it under its real handler.
+  function runWired(ctx: WCtx) {
+    const { machine, interpret } = wiredMachine(ctx);
+    return run(machine, { ctx, interpret });
   }
 
   // Drive the full lifecycle to a fixed point. Each `dispatch` settles only its
@@ -796,7 +801,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
   it("fail → retry timer → succeed: the slice reaches succeeded and retry[key] resets", async () => {
     vi.spyOn(Date, "now").mockReturnValue(0);
     const ctx: WCtx = { outcomes: ["fail", "ok"], calls: { count: 0 } };
-    const runtime = await run(wiredMachine(ctx), { ctx }).ready;
+    const runtime = await runWired(ctx).ready;
 
     const input: LlmCall<Purpose> = {
       purpose: "plan",
@@ -828,7 +833,7 @@ describe("createLlmCall — wired end-to-end: retry loop drives to succeeded (de
       outcomes: ["fail", "fail", "fail"],
       calls: { count: 0 },
     };
-    const runtime = await run(wiredMachine(ctx), { ctx }).ready;
+    const runtime = await runWired(ctx).ready;
 
     const input: LlmCall<Purpose> = {
       purpose: "report",
@@ -1178,7 +1183,6 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
       update: { ...knob.update },
       subscriptions: knob.subscriptions,
       subscribe: knob.subscribe,
-      interpret: knob.interpret,
     });
     return { llm, knob, machine };
   }
@@ -1209,7 +1213,7 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
 
     // The mounted interpret cell is the RETURNING form, so its settle Msg goes
     // straight back through the mounted settle cell.
-    const failed = await machine.interpret.resilient_run(first, undefined);
+    const failed = await knob.interpret.resilient_run(first, undefined);
     const [waiting] = bound.step(running, failed);
     expect(waiting.resilience.calls.plan?.phase).toBe("waiting_retry");
     expect(waiting.failure?.purpose).toBe("plan");
@@ -1226,7 +1230,7 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
     const second = retryCmds[0];
     if (second === undefined) throw new Error("no retry Cmd emitted");
 
-    const ok = await machine.interpret.resilient_run(second, undefined);
+    const ok = await knob.interpret.resilient_run(second, undefined);
     const [done] = bound.step(retried, ok);
     expect(done.resilience.calls.plan?.phase).toBe("succeeded");
     expect(done.output).toEqual({ steps: ["a"] });
@@ -1250,7 +1254,7 @@ describe("createLlmCall — mounted through mountResilientCall", () => {
       const pending = cmds;
       cmds = [];
       for (const cmd of pending) {
-        const settle = await machine.interpret.resilient_run(cmd, undefined);
+        const settle = await knob.interpret.resilient_run(cmd, undefined);
         const next = bound.step(state, settle);
         state = next[0];
         cmds = [...cmds, ...next[1]];

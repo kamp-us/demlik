@@ -55,12 +55,11 @@ const machine = defineMachine({
   },
   init: () => [{ log: [] }, []],
   update,
-  interpret,
 });
 
 describe("dispatch from inside a listener", () => {
   it("folds after the current fold, in listener-issue order, before a later external dispatch", async () => {
-    const runtime = await run(machine, { ctx: undefined }).ready;
+    const runtime = await run(machine, { ctx: undefined, interpret }).ready;
 
     // Two listeners issuing in order: `subscribe` fans out before `observe`,
     // so `fromSubscribe` must fold before `fromObserve`.
@@ -94,7 +93,7 @@ describe("dispatch from inside a listener", () => {
   });
 
   it("gives a subscribe listener's getState() the state just committed", async () => {
-    const runtime = await run(machine, { ctx: undefined }).ready;
+    const runtime = await run(machine, { ctx: undefined, interpret }).ready;
 
     const fromSubscribe: State[] = [];
     const fromObserve: State[] = [];
@@ -117,7 +116,8 @@ describe("dispatch from inside a listener", () => {
 
   it("raises no RuntimeDiscardNotice for a listener-issued dispatch", async () => {
     const onError = vi.fn();
-    const runtime = await run(machine, { ctx: undefined, onError }).ready;
+    const runtime = await run(machine, { ctx: undefined, interpret, onError })
+      .ready;
 
     runtime.observe((msg) => {
       if (msg.type !== "outer") return;
@@ -137,7 +137,7 @@ describe("dispatch from inside a listener", () => {
   });
 
   it("needs no next-tick deferral when a script parks on an observed State", async () => {
-    const runtime = await run(machine, { ctx: undefined }).ready;
+    const runtime = await run(machine, { ctx: undefined, interpret }).ready;
 
     // The shape a scripted caller writes: park a promise, resolve it from
     // `observe`, dispatch from the continuation. No `setTimeout(resolve, 0)`.

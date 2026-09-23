@@ -81,7 +81,9 @@
  *   },
  *   subscriptions: (s) => ac.subs(s),
  *   subscribe: { deadline: subscribeDeadline },
- *   interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() }),
+ *
+ *   // and where it runs — handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() }) });
  */
 
 import type { Cmd } from "../../../index";
@@ -495,10 +497,10 @@ export function createAuthedCall<I, R>(
    * Pre-wired interpret handlers: resilient-call's `resilient_run` (wraps the
    * `run` port) AND token-refresh's `refresh_token` (wraps the `refresh` port).
    * Both route Ok/Err through `tryInterpret`, stamping `Date.now()` at the
-   * effect boundary — the only clock reads in the whole module. Assign to the
-   * machine's `interpret`:
+   * effect boundary — the only clock reads in the whole module. Hand it to
+   * `run` beside the machine:
    *
-   *   interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() })
+   *   run(machine, { interpret: ac.handlers({ run: ctx.call, refresh: () => sdk.mintToken() }) })
    */
   function handlers(ports: AuthedPorts<I, R>) {
     const trPorts: TokenRefreshPorts = { refresh: ports.refresh };

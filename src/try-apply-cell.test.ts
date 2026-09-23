@@ -3,7 +3,6 @@ import {
   applyCell,
   defineMachine,
   foldMsgs,
-  type Interpret,
   NoCellError,
   type Reducer,
   type Transitions,
@@ -57,7 +56,6 @@ function lightMachine() {
     types: { model: {} as LightState, msg: {} as LightMsg, ctx: undefined },
     init: () => [{ type: "red" }, []],
     update,
-    interpret: {} as Interpret<LightMsg, never, undefined>,
   });
 }
 

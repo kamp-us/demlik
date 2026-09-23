@@ -65,8 +65,9 @@
  *   },
  *   snapshot_load_failed: (s) => [s, []],                   // errors are data — decide here
  *
- *   // splice the I/O — both effect cells (write + load):
- *   interpret: { ...snap.handlers({ store: r2Adapter }) },
+ *   // splice the I/O — both effect cells (write + load) — where the machine
+ *   // runs; handlers ride beside the machine, not on it:
+ *   run(machine, { interpret: { ...snap.handlers({ store: r2Adapter }) } });
  */
 
 import { Cmd, type CmdOf, type Interpret, tryInterpret } from "../../../index";

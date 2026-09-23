@@ -769,7 +769,7 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
       },
       rngZero,
     );
-    return defineMachine({
+    const machine = defineMachine({
       types: {
         model: {} as WState,
         msg: {} as WMsg,
@@ -815,21 +815,22 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
         },
         nop: (s) => [s, []],
       },
-      // The REAL handlers — both ports spliced. The run port re-enters via
-      // resilient_ok / resilient_err; the refresh port re-enters via
-      // token_refreshed / token_refresh_failed.
-      interpret: ac.handlers({
-        run: async (_input, key) => {
-          const queue = ctx.outcomes[key] ?? [];
-          const outcome = queue.shift() ?? "ok";
-          ctx.reached.push(key);
-          if (outcome === "fail") throw { _tag: "backend_down" };
-          if (outcome === "401") return RUN_401;
-          return "VALUE";
-        },
-        refresh,
-      }),
     });
+    // The REAL handlers — both ports spliced. The run port re-enters via
+    // resilient_ok / resilient_err; the refresh port re-enters via
+    // token_refreshed / token_refresh_failed.
+    const interpret = ac.handlers({
+      run: async (_input, key) => {
+        const queue = ctx.outcomes[key] ?? [];
+        const outcome = queue.shift() ?? "ok";
+        ctx.reached.push(key);
+        if (outcome === "fail") throw { _tag: "backend_down" };
+        if (outcome === "401") return RUN_401;
+        return "VALUE";
+      },
+      refresh,
+    });
+    return { machine, interpret };
   }
 
   // Drain the re-entrant follow-up chain: each `await dispatch` settles only its
@@ -865,8 +866,8 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     drainLedger = () => ctx.reached.length;
     vi.spyOn(Date, "now").mockImplementation(() => ctx.now.value);
 
-    const machine = wiredMachine(ctx);
-    const runtime = await run(machine, { ctx }).ready;
+    const { machine, interpret } = wiredMachine(ctx);
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     // (1) attempt key "a" — reaches the backend, comes back 401, parks + asks
     // for a refresh; the refresh port re-enters with a fresh token and re-issues
@@ -932,8 +933,8 @@ describe("createAuthedCall — wired end-to-end: a terminal 401 must not pollute
     // Breaker threshold 5 → the single generic failure does NOT open the
     // breaker, so the re-issue after refresh can reach the backend. This test is
     // about the dropped refresh, not the breaker.
-    const machine = wiredMachine(ctx, 5);
-    const runtime = await run(machine, { ctx }).ready;
+    const { machine, interpret } = wiredMachine(ctx, 5);
+    const runtime = await run(machine, { ctx, interpret }).ready;
 
     // (1) attempt "a" — backend FAILS generically → retry brick backs it off
     // into waiting_retry (NOT running). The breaker (threshold 5) does NOT trip.

@@ -23,7 +23,7 @@ import {
 
 type State = { count: number };
 type Msg = { type: "inc" } | { type: "dec" };
-// Use a cmd-less machine (`Cmd<never>`) so `interpret` is optional — keeps these
+// Use a cmd-less machine (`Cmd<never>`) so `run` needs no `interpret` — keeps these
 // type-level cases focused on the reducer guard, not on effect wiring.
 type NoCmd = Cmd<never>;
 

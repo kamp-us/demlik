@@ -17,7 +17,12 @@
  *     it turns a result back into a Msg. Reducers stay pure (invariant 2).
  */
 
-import { type Cmd, defineMachine, tryInterpret } from "@demlik/tea";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  tryInterpret,
+} from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import {
   defaultRetryPolicy,
@@ -223,26 +228,28 @@ export const resilientFetch = defineMachine({
   subscriptions: (s) =>
     s.phase === "waiting_retry" ? [deadlineSub("retry", s.retryAtMs)] : [],
   subscribe: { deadline: subscribeDeadline },
-
-  // The effect. tryInterpret routes Ok/Err to two Msgs — and stamps the time:
-  // this is the ONE place a clock read is allowed (interpret is impure).
-  interpret: {
-    do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
-      (cmd, ctx) => ctx.http(cmd.url),
-      (body, cmd) => ({ type: "fetch_ok", url: cmd.url, body, at: Date.now() }),
-      (err, cmd) => ({
-        type: "fetch_err",
-        url: cmd.url,
-        error: String(err),
-        at: Date.now(),
-      }),
-    ),
-  },
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+// The effect. tryInterpret routes Ok/Err to two Msgs — and stamps the time:
+// this is the ONE place a clock read is allowed (interpret is impure).
+export const resilientFetchInterpret: Interpret<Msg, DoFetch, Ctx> = {
+  do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
+    (cmd, ctx) => ctx.http(cmd.url),
+    (body, cmd) => ({ type: "fetch_ok", url: cmd.url, body, at: Date.now() }),
+    (err, cmd) => ({
+      type: "fetch_err",
+      url: cmd.url,
+      error: String(err),
+      at: Date.now(),
+    }),
+  ),
+};
 
 // === Wiring it up — the layers OUTSIDE the machine ===
 export function startResilientFetch() {
   const runtime = run(resilientFetch, {
+    interpret: resilientFetchInterpret,
     ctx: { http: (url) => fetch(url).then((r) => r.text()) },
   });
 

@@ -1,4 +1,10 @@
-import { type Cmd, defineMachine, type Store, tryInterpret } from "@demlik/tea";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  type Store,
+  tryInterpret,
+} from "@demlik/tea";
 import { run } from "@demlik/tea/promise";
 import { createQueue, type QueueItem } from "@demlik/tea/work-queue";
 
@@ -159,40 +165,41 @@ export const jobQueue = defineMachine({
     settled: (s) =>
       s.phase === "drained" ? [s, []] : [s, [{ type: "claim_next" }]],
   },
-
-  interpret: {
-    claim_next: async (_cmd, ctx) => {
-      const item = await ctx.queue.claimNext();
-      return { type: "claimed", item };
-    },
-
-    run_job: tryInterpret<RunJob, string, Msg, Ctx>(
-      (cmd, ctx) => ctx.worker({ name: cmd.name, payload: cmd.payload }),
-      (_value, cmd) => ({ type: "ran_ok", id: cmd.id, name: cmd.name }),
-      (error, cmd) => ({
-        type: "ran_err",
-        id: cmd.id,
-        name: cmd.name,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    ),
-
-    complete: async (cmd, ctx) => {
-      await ctx.queue.markDone(cmd.id);
-      return { type: "settled" };
-    },
-
-    requeue: async (cmd, ctx) => {
-      await ctx.queue.retryItem(cmd.id);
-      return { type: "settled" };
-    },
-
-    dead_letter: async (cmd, ctx) => {
-      await ctx.queue.markFailed(cmd.id, cmd.error);
-      return { type: "settled" };
-    },
-  },
 });
+
+// The Cmd handlers ride beside the machine, never on it: `run` takes them.
+export const jobQueueInterpret: Interpret<Msg, JobCmd, Ctx> = {
+  claim_next: async (_cmd, ctx) => {
+    const item = await ctx.queue.claimNext();
+    return { type: "claimed", item };
+  },
+
+  run_job: tryInterpret<RunJob, string, Msg, Ctx>(
+    (cmd, ctx) => ctx.worker({ name: cmd.name, payload: cmd.payload }),
+    (_value, cmd) => ({ type: "ran_ok", id: cmd.id, name: cmd.name }),
+    (error, cmd) => ({
+      type: "ran_err",
+      id: cmd.id,
+      name: cmd.name,
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  ),
+
+  complete: async (cmd, ctx) => {
+    await ctx.queue.markDone(cmd.id);
+    return { type: "settled" };
+  },
+
+  requeue: async (cmd, ctx) => {
+    await ctx.queue.retryItem(cmd.id);
+    return { type: "settled" };
+  },
+
+  dead_letter: async (cmd, ctx) => {
+    await ctx.queue.markFailed(cmd.id, cmd.error);
+    return { type: "settled" };
+  },
+};
 
 async function main() {
   const queue = createQueue<Job>(memStore<Job>());
@@ -207,7 +214,8 @@ async function main() {
     console.log(`  ${item.input.name}  payload=${item.input.payload}`);
   }
 
-  const runtime = await run(jobQueue, { ctx }).ready;
+  const runtime = await run(jobQueue, { interpret: jobQueueInterpret, ctx })
+    .ready;
 
   const drained = new Promise<void>((resolve) => {
     const off = runtime.subscribe(() => {

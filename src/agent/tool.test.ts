@@ -365,11 +365,12 @@ async function drive(turns: Turns) {
     toolConcurrency: 8,
     rng: () => 0,
   });
-  const machine = agent.toMachine({ tools });
+  const { machine, interpret } = agent.toMachine({ tools });
   const events: AgentEvent<{ snippet: string } | number>[] = [];
   let clock = 100;
   const runtime = await run(machine, {
     ctx: { kb },
+    interpret,
     clock: () => {
       clock += 1;
       return clock;
@@ -501,7 +502,7 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
       toolOf: tools.toolOf,
       rng: () => 0,
     });
-    const machine = agent.toMachine({ tools });
+    const { machine } = agent.toMachine({ tools });
 
     // The router's two cells per def are one fold; the agent's cells are not it.
     const fold = machine.update.search_ok;

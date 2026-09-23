@@ -57,9 +57,6 @@ const counting = defineMachine({
       ];
     },
   },
-  interpret: {
-    work: async (cmd) => ({ type: "worked" as const, label: cmd.label }),
-  },
 });
 
 /** The real handler record, as a test hands it to `drive`. */
@@ -185,9 +182,6 @@ describe("drive", () => {
       update: {
         go: (s) => [s, [{ type: "peek" as const }]],
         saw: (_s, m) => [{ seen: m.mark }, []],
-      },
-      interpret: {
-        peek: async (_cmd, ctx) => ({ type: "saw" as const, mark: ctx.mark }),
       },
     });
 

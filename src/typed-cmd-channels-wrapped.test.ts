@@ -21,6 +21,7 @@ import { z } from "zod";
 import {
   Cmd,
   defineMachine,
+  type Interpret,
   type MalformedResult,
   type NoCtx,
   type Reducer,
@@ -64,17 +65,18 @@ const update: Reducer<Model, Msg | FetchSettled, FetchCmd> = {
 
 /** Same shape as the bare test: the "server" picks the boundary case. */
 function machineOver(answer: () => Promise<unknown>) {
-  return defineMachine({
+  const machine = defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: {} as NoCtx },
     cmds: [fetch],
     init: () => [initial, []],
     update,
-    interpret: {
-      fetch: async (_cmd, { ok }) =>
-        // Deliberately unparsed — the edge decides `_ok` vs `malformed_result`.
-        ok((await answer()) as { body: string }),
-    },
   });
+  const interpret: Interpret<Msg | FetchSettled, FetchCmd, NoCtx> = {
+    fetch: async (_cmd, { ok }) =>
+      // Deliberately unparsed — the edge decides `_ok` vs `malformed_result`.
+      ok((await answer()) as { body: string }),
+  };
+  return { machine, interpret };
 }
 
 const malformed = async () => ({ body: 42 });
@@ -90,8 +92,12 @@ function expectMalformed(error: FetchErr["error"] | null): void {
 
 describe("withDeadline — the edge still parses and stamps behind the wrap", () => {
   it("a malformed `_ok` becomes `fetch_err` (malformed_result); `base` is unchanged", async () => {
-    const rt = await run(withDeadline(machineOver(malformed), { ms: 60_000 }), {
+    const { machine, interpret } = withDeadline(machineOver(malformed), {
+      ms: 60_000,
+    });
+    const rt = await run(machine, {
       ctx: {},
+      interpret,
       clock: fixedClock(7),
     }).ready;
     const seen: string[] = [];
@@ -110,13 +116,14 @@ describe("withDeadline — the edge still parses and stamps behind the wrap", ()
   });
 
   it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const rt = await run(
-      withDeadline(machineOver(wellFormed), { ms: 60_000 }),
-      {
-        ctx: {},
-        clock: fixedClock(1_000),
-      },
-    ).ready;
+    const { machine, interpret } = withDeadline(machineOver(wellFormed), {
+      ms: 60_000,
+    });
+    const rt = await run(machine, {
+      ctx: {},
+      interpret,
+      clock: fixedClock(1_000),
+    }).ready;
 
     await rt.dispatch({ type: "go", url: "/" });
 
@@ -130,7 +137,9 @@ describe("withTelemetry — the edge still parses and stamps behind the wrap", (
   const ctx = { telemetrySink: () => {} };
 
   it("a malformed `_ok` becomes `fetch_err` (malformed_result); `base` is unchanged", async () => {
-    const rt = await run(withTelemetry(machineOver(malformed)), {
+    const { machine, interpret } = withTelemetry(machineOver(malformed));
+    const rt = await run(machine, {
+      interpret,
       ctx,
       clock: fixedClock(7),
     }).ready;
@@ -149,7 +158,9 @@ describe("withTelemetry — the edge still parses and stamps behind the wrap", (
   });
 
   it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const rt = await run(withTelemetry(machineOver(wellFormed)), {
+    const { machine, interpret } = withTelemetry(machineOver(wellFormed));
+    const rt = await run(machine, {
+      interpret,
       ctx,
       clock: fixedClock(1_000),
     }).ready;
@@ -167,7 +178,12 @@ describe("withResilience — the carrier settles the target through the same edg
   const config = { target: "fetch" as const };
 
   it("a malformed `_ok` reaches the base as `fetch_err` (malformed_result); `body` is unchanged", async () => {
-    const rt = await run(withResilience(machineOver(malformed), config), {
+    const { machine, interpret } = withResilience(
+      machineOver(malformed),
+      config,
+    );
+    const rt = await run(machine, {
+      interpret,
       ctx: {},
       clock: fixedClock(7),
     }).ready;
@@ -187,7 +203,12 @@ describe("withResilience — the carrier settles the target through the same edg
   });
 
   it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const rt = await run(withResilience(machineOver(wellFormed), config), {
+    const { machine, interpret } = withResilience(
+      machineOver(wellFormed),
+      config,
+    );
+    const rt = await run(machine, {
+      interpret,
       ctx: {},
       clock: fixedClock(1_000),
     }).ready;

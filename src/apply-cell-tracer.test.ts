@@ -31,6 +31,12 @@ type LState = { readonly type: "red" } | { readonly type: "green" };
 type LMsg = { readonly type: "go" } | { readonly type: "stop" };
 type LCmd = { readonly type: "ping" };
 
+// A real `ping` handler key: withResilience refuses a target Cmd with no
+// base interpret handler (#112). Never invoked — no cell emits `ping`.
+const interpret: Interpret<LMsg, LCmd, undefined> = {
+  ping: async () => undefined,
+} as unknown as Interpret<LMsg, LCmd, undefined>;
+
 // The __form-disambiguated shape: a Transitions table whose FIRST inner record
 // is a callable object — a function carrying the msg cells as own-enumerable
 // keys. The structural heuristic (`typeof firstValue === "function"` ⇒
@@ -60,13 +66,6 @@ function disambiguatedMachine(): Machine<LState, LMsg, LCmd, never, undefined> {
   const def: Machine<LState, LMsg, LCmd, never, undefined> = {
     init: () => [{ type: "red" }, []],
     update,
-    // A real `ping` handler key: withResilience refuses a target Cmd with no
-    // base interpret handler (#112). Never invoked — no cell emits `ping`.
-    interpret: { ping: async () => undefined } as unknown as Interpret<
-      LMsg,
-      LCmd,
-      undefined
-    >,
   };
   // Stamp the correct form the way the typed construction boundary would.
   // Hand-stamped here because `defineMachine`'s runtime fallback IS the
@@ -90,7 +89,8 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
   });
 
   it("production run steps red --go--> green", async () => {
-    const rt = await run(disambiguatedMachine(), { ctx: undefined }).ready;
+    const rt = await run(disambiguatedMachine(), { ctx: undefined, interpret })
+      .ready;
     await rt.dispatch(GO);
     expect(rt.getState()).toEqual({ type: "green" });
   });
@@ -123,8 +123,11 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
   });
 
   it("withTelemetry steps the base identically", () => {
-    const wrapped = withTelemetry(disambiguatedMachine());
-    const { state } = replay(wrapped, {
+    const wrapped = withTelemetry({
+      machine: disambiguatedMachine(),
+      interpret,
+    });
+    const { state } = replay(wrapped.machine, {
       msgs: [GO],
       ctx: undefined as never,
     });
@@ -132,14 +135,20 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
   });
 
   it("withDeadline steps the base identically", () => {
-    const wrapped = withDeadline(disambiguatedMachine(), { ms: 1000 });
-    const { state } = replay(wrapped, { msgs: [GO], ctx: undefined });
+    const wrapped = withDeadline(
+      { machine: disambiguatedMachine(), interpret },
+      { ms: 1000 },
+    );
+    const { state } = replay(wrapped.machine, { msgs: [GO], ctx: undefined });
     expect(state.base).toEqual({ type: "green" });
   });
 
   it("withResilience steps the base identically", () => {
-    const wrapped = withResilience(disambiguatedMachine(), { target: "ping" });
-    const { state } = replay(wrapped, {
+    const wrapped = withResilience(
+      { machine: disambiguatedMachine(), interpret },
+      { target: "ping" },
+    );
+    const { state } = replay(wrapped.machine, {
       msgs: [GO],
       ctx: undefined as never,
     });
