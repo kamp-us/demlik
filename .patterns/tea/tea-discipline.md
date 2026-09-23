@@ -244,7 +244,7 @@ Cmds are data. The `interpret` handler PERFORMS. The reducer EMITS.
 
 - Side effects (chrome API calls, WS sends, timer starts) live ONLY in `interpret`. The reducer never calls chrome or sends WS messages.
 - Cmds are pure data: `{ type, ...fields }`. No closures, no functions.
-- Cmd handlers are async and can return `Promise<M | void>`. The follow-up Msg is enqueued for the next tick.
+- Cmd handlers are async and can return `Promise<M | void>`. The follow-up Msg is enqueued for the next tick. A `Cmd.define`d Cmd's handler is the exception: it returns an outcome or nothing, never a Msg, and the engine mints `<name>_ok` / `<name>_err` (ADR 0021).
 - If a Cmd handler fails, see Rule 2 for whether to dispatch a Msg arm or log.
 
 ### Don't:

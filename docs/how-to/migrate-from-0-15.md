@@ -148,8 +148,12 @@ run(machine, {
 ```
 
 - **Return a failure, don't throw it.** A throw, an `err` with a tag the Cmd
-  does not declare, or a handler returning its own `_ok` / `_err` Msg reaches
-  `onError` under the `"interpret"` phase. No `_err` Msg is dispatched.
+  does not declare, or a handler returning any Msg reaches `onError` under the
+  `"interpret"` phase. No `_err` Msg is dispatched.
+- **A `Cmd.define`d handler returns no follow-up Msg.** Before, it could answer
+  with another Msg of the machine. Now it returns an outcome or nothing, on
+  both engines. Put the follow-up in the reducer's `<cmd>_ok` / `<cmd>_err`
+  cell instead.
 - **Plain Cmds don't change.** A hand-written Cmd's handler still returns a
   Msg or nothing.
 - **`Cmd.define` takes any Standard Schema.** zod works as it is. Effect Schema

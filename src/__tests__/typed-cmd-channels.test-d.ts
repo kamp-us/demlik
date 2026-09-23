@@ -175,12 +175,19 @@ defineMachine({
   update: onlyUser,
 });
 
-// A hand-written handler for a typed Cmd is still a plain `Interpret` cell —
-// it may return the minted Msg directly.
-const direct: Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> = {
+// A `Cmd.define`d Cmd's cell returns an outcome or nothing, never a Msg — the
+// engine mints `fetch_ok` / `fetch_err` (ADR 0021), on the Promise engine as on
+// the Effect engine.
+const selfMinted: Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> = {
+  // @ts-expect-error the cell may not mint its own `fetch_ok`
   fetch: async (c, ctx) => fetch.ok(c, { body: await ctx.http.get(c.url) }),
 };
-void direct;
+void selfMinted;
+const foreign: Interpret<Msg | FetchSettled, FetchCmd, HttpCtx> = {
+  // @ts-expect-error nor may it answer with another Msg of the machine
+  fetch: async () => ({ type: "go" }) as const,
+};
+void foreign;
 
 // ── 3. `run` takes the machine's plain ctx ──────────────────────────────────
 

@@ -328,9 +328,9 @@ function describeTag(failure: unknown): string {
 }
 
 /**
- * A `Cmd.define`d handler returned something the engine cannot settle: its own
- * `<name>_ok` / `<name>_err` Msg (the engine mints those, never the handler —
- * ADR 0021), or a value that is neither an {@link Outcome}, a Msg, nor nothing.
+ * A `Cmd.define`d handler returned something the engine cannot settle: any Msg
+ * (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler —
+ * ADR 0021), or any other value that is neither an {@link Outcome} nor nothing.
  */
 export class OutcomeContractError extends Error {
   override readonly name = "OutcomeContractError";
@@ -443,7 +443,7 @@ export type AnyCmdDef = {
 
 /**
  * Settle one handler's return: mint a def's outcome into its `_ok` / `_err`
- * Msg, or pass anything else through. Throws on a contract breach.
+ * Msg, or pass a hand-written Cmd's return through. Throws on a contract breach.
  */
 export type CmdEdge = (
   cmd: { readonly type: string },
@@ -464,9 +464,8 @@ export const cmdEdge: unique symbol = Symbol("tea.cmdEdge");
  *   - `Err` — minted into `<name>_err` when its `_tag` is declared, and thrown
  *     as {@link UndeclaredFailureError} when it is not;
  *   - nothing — nothing is dispatched;
- *   - its own `_ok` / `_err` Msg, or a non-Msg value — thrown as
- *     {@link OutcomeContractError};
- *   - any other Msg — passed through as a follow-up.
+ *   - anything else, a Msg included — thrown as {@link OutcomeContractError}.
+ *     The engine mints a defined Cmd's Msg, never the handler.
  *
  * Minted Msgs are stamped with `at` from the clock. A Cmd no def builds — a
  * hand-written Cmd's follow-up — passes through untouched.
@@ -482,24 +481,22 @@ export function cmdEdgeOver(
     if (def === undefined) return returned;
     if (returned === undefined || returned === null) return undefined;
     if (isOutcome(returned)) return mint(def, cmd, returned, clock());
-    const type =
-      typeof returned === "object"
-        ? (returned as { type?: unknown }).type
-        : undefined;
-    if (typeof type !== "string") {
-      throw new OutcomeContractError(
-        def.cmdType,
-        "returned a value that is neither an outcome nor a Msg",
-      );
-    }
-    if (type === def.okType || type === def.errType) {
-      throw new OutcomeContractError(
-        def.cmdType,
-        `returned its own "${type}" Msg`,
-      );
-    }
-    return returned;
+    throw new OutcomeContractError(def.cmdType, describeReturn(def, returned));
   };
+}
+
+function describeReturn(def: AnyCmdDef, returned: unknown): string {
+  const type =
+    typeof returned === "object"
+      ? (returned as { type?: unknown }).type
+      : undefined;
+  if (typeof type !== "string") {
+    return "returned a value that is not an outcome";
+  }
+  if (type === def.okType || type === def.errType) {
+    return `returned its own "${type}" Msg`;
+  }
+  return `returned the "${type}" Msg`;
 }
 
 function mint(
@@ -1767,8 +1764,8 @@ export type NoCtx = Readonly<Record<never, never>>;
 // **A `Cmd.define`d Cmd's cell returns an `Outcome` (ADR 0021).** Its ctx also
 // carries the `ok` / `err` builders (`OutcomeHelpers`), `err` typed to the
 // def's declared tags, and the engine mints `<name>_ok` / `<name>_err` from
-// what it returns. Such a cell may still resolve to another Msg or nothing. A
-// hand-written Cmd's cell is unchanged.
+// what it returns. Such a cell resolves to an outcome or nothing, never a Msg.
+// A hand-written Cmd's cell is unchanged.
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
 };
@@ -1792,10 +1789,8 @@ export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
           PortEmitter &
           OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
         dispatch?: (msg: M) => void,
-      ) => Promise<
         // biome-ignore lint/suspicious/noConfusingVoidType: as above — a no-return body is legal
-        Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | M | void
-      >;
+      ) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
 
 /** The value a Cmd settles with; `unknown` for a hand-written Cmd. */
 export type OkOfCmd<C> = C extends { readonly __ok?: infer Ok } ? Ok : unknown;

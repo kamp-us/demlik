@@ -337,6 +337,21 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
     expect(reports[0]?.context).toEqual({ phase: "interpret" });
   });
 
+  it("a handler returning any other Msg is refused too — no pass-through", async () => {
+    let calls = 0;
+    const { state, seen, reports } = await goOnce(async () => {
+      calls += 1;
+      // Once only, so a regression that passes it through cannot loop.
+      return calls === 1 ? { type: "go", url: "/follow-up" } : undefined;
+    });
+    expect(seen).toEqual(["go"]);
+    expect(state.errors).toEqual([]);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.error).toBeInstanceOf(OutcomeContractError);
+    expect(reports[0]?.error).toMatchObject({ cmdType: "fetch" });
+    expect(reports[0]?.context).toEqual({ phase: "interpret" });
+  });
+
   it("returning nothing dispatches nothing", async () => {
     const { seen, reports } = await goOnce(async () => undefined);
     expect(seen).toEqual(["go"]);
