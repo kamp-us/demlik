@@ -14,7 +14,7 @@
  *   1. No hand-written Cmd TYPE remains — `Cmd<"…">` / `Cmd<typeof MsgType.…>`
  *      was the pre-retype shape; the retyped one is `CmdOf<typeof def>`.
  *   2. No object literal spells a Cmd discriminant a `Cmd.define` in the
- *      folder declares — `type: "$telemetry:emit"` beside `telemetryEmit(…)`
+ *      folder declares — `type: "$deadline:decision"` beside its def
  *      is the drift this catches. Msg and Sub literals share the `type:` key
  *      and are deliberately NOT in scope: only the names a def claims count.
  *

@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (134)
+## Exports (126)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -119,13 +119,6 @@ import { … } from "@demlik/tea/resilience";
 | `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
 | `subscribeWith` | Function | Build the `deadline` runner from a host-plugged `armTimer`. |
 | `SucceedMsg` | Type | Settle Msgs the `handlers` port dispatches back. |
-| `TelemetryConfig` | Interface | The telemetry knob. |
-| `telemetryEmit` | Variable | The fire-and-forget Cmd the merged `update` appends after every base transition. |
-| `TelemetryEmitCmd` | Type |  |
-| `TelemetryEvent` | Interface | The datum handed to the sink. |
-| `TelemetryModel` | Interface | The composed Model. |
-| `TelemetryPorts` | Interface | The side-effecting ports the wrapper adds to `Ctx`. |
-| `TelemetrySlice` | Interface | The wrapper's Model slice. |
 | `Token` | Interface | A minted credential: the opaque `value` to send on the wire, and the absolute `expiresAt` (epoch milliseconds — the `Date.now()` scale) the issuer stamped it with. |
 | `TokenBucket` | Interface | A token bucket: `tokens` of `capacity` available now, replenished at `refillPerSec` tokens per second. |
 | `TokenRefresh` | Type | The shape `createTokenRefresh` returns — useful for typing a held knob. |
@@ -143,4 +136,3 @@ import { … } from "@demlik/tea/resilience";
 | `UnauthorizedError` | Type | The plain-data error a 401 we cannot fix settles with. |
 | `withDeadline` | Function | Wrap `base` with an inactivity deadline. |
 | `withResilience` | Function | Wrap `base` so its `config.target` Cmd is run through the resilient-call concern (cache → circuit → rate-limit → retry, deadline-capped). |
-| `withTelemetry` | Function | Wrap `base` with observe-only telemetry. |

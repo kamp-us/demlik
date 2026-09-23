@@ -1,8 +1,7 @@
 // ---------------------------------------------------------------------------
 // `assertWrapperFaithful` — the shared conformance gate for the wrapper tier.
 //
-// A `withX` wrapper bolts a cross-cutting concern (telemetry, deadline,
-// resilience) onto a base machine as an AUTHORING property — the base's source
+// A `withX` wrapper bolts a cross-cutting concern (deadline, resilience) onto a base machine as an AUTHORING property — the base's source
 // never hand-wires it. The DANGER is the runtime betrayal: hiding wrapper state
 // in a closure, or silently swallowing / retiming a base Cmd, so the wrapper's
 // behavior is invisible to the reducer + Msg log. This helper is the binary
@@ -74,7 +73,7 @@ export interface AssertWrapperFaithfulOpts<S, WM, BaseM, BaseCtx, WrapperCtx> {
    * Opt-in relaxation for an INTERCEPTING wrapper (e.g. `withResilience`).
    *
    * DEFAULT (`undefined` / `false`) — the OBSERVE-ONLY contract that
-   * `withTelemetry` and `withDeadline` satisfy: every bare base Cmd must appear
+   * `withDeadline` satisfies: every bare base Cmd must appear
    * UNCHANGED, in order, as a subsequence of the wrapped Cmd stream (properties
    * 1 and 3b). The wrapper may APPEND its own Cmds but may NOT alter, drop, or
    * retime a base Cmd. This is the strict default and it is NOT weakened.
@@ -136,7 +135,7 @@ export interface InterceptingOpt {
  *
  * @param base       the bare base `Machine`.
  * @param makeWrapped a thunk that wraps `base` and returns the composed machine
- *   (e.g. `() => withTelemetry(wired, cfg).machine`, where `wired.machine` is
+ *   (e.g. `() => withDeadline(wired, cfg).machine`, where `wired.machine` is
  *   `base`). A thunk — not the wrapped value — so a wrapper that registers
  *   process-scoped ports (`definePort`) is constructed inside the assertion's
  *   control, and so the same betrayal-detector reads as
@@ -255,11 +254,11 @@ export function assertWrapperFaithful<
 
   // --- Property 3: every wrapper decision appears as an XMsg/XCmd in the log -
   // The composed Model's wrapper slice is the single non-`base` `$`-key. We
-  // discover its key family (`$telemetry` → `$telemetry:*`) and require that,
+  // discover its key family (`$deadline` → `$deadline:*`) and require that,
   // whenever there is at least one transition, the replayed Cmd stream carries
   // at least one wrapper-tagged Cmd. (Wrappers whose decisions are Msgs route
-  // them through the SAME log; for a Cmd-emitting wrapper like withTelemetry the
-  // decision is the `$x:emit` Cmd.) A wrapper that performed its work off-ledger
+  // them through the SAME log; for a Cmd-emitting wrapper the decision is its
+  // `$x:*` Cmd.) A wrapper that performed its work off-ledger
   // would have an EMPTY wrapper-Cmd set here despite real transitions — the
   // exact betrayal this gate exists to catch.
   if (opts.msgs.length > 0) {
@@ -379,7 +378,7 @@ function wrapperSliceKey(model: object): string {
     throw new Error(
       `assertWrapperFaithful: expected exactly one "$"-prefixed wrapper slice ` +
         `on the composed Model, found ${dollarKeys.length} (${dollarKeys.join(", ") || "none"}). ` +
-        `Every withX wrapper owns exactly one named slice (e.g. "$telemetry").`,
+        `Every withX wrapper owns exactly one named slice (e.g. "$deadline").`,
     );
   }
   // biome-ignore lint/style/noNonNullAssertion: length checked to be exactly 1 above

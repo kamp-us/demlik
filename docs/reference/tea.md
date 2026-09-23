@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (146)
+## Exports (148)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -140,6 +140,8 @@ import { … } from "@demlik/tea";
 | `Tagged` | Type | The shape every settled failure has (ADR 0011): a plain `_tag` record. |
 | `TaggedError` | Type | One declared failure per tag. |
 | `tagSeq` | Function | Tag a command/`Msg` with its sequence number. |
+| `TelemetryEvent` | Interface | What the `telemetry` sink passed to `run` receives, once per APPLIED transition. |
+| `TelemetrySink` | Type | The `telemetry` option of `run`: a fire-and-forget sink. |
 | `TimerDeps` | Type | The `deps` a `timer` Sub declares: fire `msg` once, `ms` after it starts. |
 | `TimerSub` | Type | The built-in `timer` Sub, as its runner sees it. |
 | `Transitions` | Type | The state × message table form of `update`. |

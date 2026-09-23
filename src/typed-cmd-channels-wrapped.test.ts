@@ -1,14 +1,14 @@
 /**
  * The interpret edge behind a `withX` wrap (#66). The bare-machine half is
  * `typed-cmd-channels.test.ts`; this file wraps the SAME `cmds` machine in
- * each of the three batteries and asserts the guarantee still holds:
+ * each of the two batteries and asserts the guarantee still holds:
  *
  *   - a handler's `Ok` value that fails the `ok` schema becomes the minted
  *     `_err` carrying `malformed_result`, and the wrapped Model's `base` slice
  *     never sees the corrupt value;
  *   - a settled `_ok` / `_err` carries `at` from `run`'s clock.
  *
- * `withDeadline` / `withTelemetry` forward `cmds`, so `run`'s own edge does the
+ * `withDeadline` forwards `cmds`, so `run`'s own edge does the
  * work. `withResilience` retags the target into a `$resilience:run` carrier and
  * invokes the base handler inside it, so the settle happens there, through the
  * edge `run` hands over on ctx — the settled Msg is recorded as the call's
@@ -29,7 +29,6 @@ import {
 } from "./index";
 import { withDeadline } from "./internal/resilience/with-deadline";
 import { withResilience } from "./internal/resilience/with-resilience";
-import { withTelemetry } from "./internal/resilience/with-telemetry";
 import { run } from "./promise";
 
 const fetch = Cmd.define("fetch", {
@@ -130,45 +129,6 @@ describe("withDeadline — the edge still parses and stamps behind the wrap", ()
     expect(rt.getState().base.body).toBe("hello");
     expect(rt.getState().base.ats).toEqual([1_000]);
     await rt.stop();
-  });
-});
-
-describe("withTelemetry — the edge still parses and stamps behind the wrap", () => {
-  const ctx = { telemetrySink: () => {} };
-
-  it("a malformed `_ok` becomes `fetch_err` (malformed_result); `base` is unchanged", async () => {
-    const wired = withTelemetry(machineOver(malformed));
-    const rt = await run(wired.machine, {
-      ...wired,
-      ctx,
-      clock: fixedClock(7),
-    }).ready;
-    const seen: string[] = [];
-    rt.observe((msg) => {
-      seen.push(msg.type);
-    });
-
-    await rt.dispatch({ type: "go", url: "/" });
-
-    const { base } = rt.getState();
-    expect(base.body).toBe(initial.body);
-    expectMalformed(base.lastError);
-    expect(base.ats).toEqual([7]);
-    expect(seen).toEqual(["go", "fetch_err"]);
-  });
-
-  it("a well-formed `_ok` folds in, stamped with `run`'s clock", async () => {
-    const wired = withTelemetry(machineOver(wellFormed));
-    const rt = await run(wired.machine, {
-      ...wired,
-      ctx,
-      clock: fixedClock(1_000),
-    }).ready;
-
-    await rt.dispatch({ type: "go", url: "/" });
-
-    expect(rt.getState().base.body).toBe("hello");
-    expect(rt.getState().base.ats).toEqual([1_000]);
   });
 });
 

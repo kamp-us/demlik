@@ -11,7 +11,6 @@ import {
 } from "./index";
 import { withDeadline } from "./internal/resilience/with-deadline";
 import { withResilience } from "./internal/resilience/with-resilience";
-import { withTelemetry } from "./internal/resilience/with-telemetry";
 import { toMermaid } from "./machine-viz";
 import { foldEvents, msgTypeKeys } from "./pbt";
 import { run } from "./promise";
@@ -120,18 +119,6 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
       "go",
       "stop",
     ]);
-  });
-
-  it("withTelemetry steps the base identically", () => {
-    const wrapped = withTelemetry({
-      machine: disambiguatedMachine(),
-      interpret,
-    });
-    const { state } = replay(wrapped.machine, {
-      msgs: [GO],
-      ctx: undefined as never,
-    });
-    expect(state.base).toEqual({ type: "green" });
   });
 
   it("withDeadline steps the base identically", () => {

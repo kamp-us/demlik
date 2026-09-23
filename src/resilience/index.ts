@@ -25,7 +25,6 @@
  *   progress.
  * - `with-resilience` — wrap any machine so a chosen Cmd is retried, capped,
  *   cached and breaker-guarded on its way out.
- * - `with-telemetry` — wrap any machine so its transitions emit telemetry.
  *
  * `battery` tier (MAINTAINING.md): a published named pattern over the kernel,
  * which may break in a minor provided the changelog for that minor says so.
@@ -103,4 +102,3 @@ export * from "../internal/resilience/retry-to-success";
 export * from "../internal/resilience/token-refresh";
 export * from "../internal/resilience/with-deadline";
 export * from "../internal/resilience/with-resilience";
-export * from "../internal/resilience/with-telemetry";

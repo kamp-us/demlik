@@ -952,23 +952,35 @@ export function applyCell<S, M extends { type: string }, C extends Cmd>(
   return found.cell(state, msg);
 }
 
-// === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
+// === checkedStep: one fold step wrapped in the DEV pre/post invariant pair ===
 //
 // The dev-mode discipline every fold site shares: `deepFreeze` the input `state`
 // so a reducer that mutates it in place trips synchronously, then
-// `assertPureResult` the returned `[state, cmds]` shape. Both guards compile out
-// of production (`__DEV__`). `run`'s dispatch loop and `foldUpdates` both step
-// through THIS wrapper so the invariant enforcement lives in exactly one place
-// and cannot drift between the runtime and the pure fold.
+// `assertPureResult` the returned `[state, cmds]` shape (a `null` — a fold that
+// chose no transition — has no shape to check). Both guards compile out of
+// production (`__DEV__`). `run`'s dev-check extension and `foldUpdates` both
+// step through THIS function so the invariant enforcement lives in exactly one
+// place and cannot drift between the runtime and the pure fold.
+export function checkedStep<S, M extends { type: string }, R>(
+  state: S,
+  msg: M,
+  step: (state: S, msg: M) => R,
+): R {
+  if (__DEV__) deepFreeze(state);
+  const result = step(state, msg);
+  if (__DEV__ && result !== null) assertPureResult(result, msg.type);
+  return result;
+}
+
+// === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
 export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
   msg: M,
 ): readonly [S, readonly C[]] {
-  if (__DEV__) deepFreeze(state);
-  const result = applyCell<S, M, C>(machine, state, msg);
-  if (__DEV__) assertPureResult(result, msg.type);
-  return result;
+  return checkedStep(state, msg, (s: S, m: M) =>
+    applyCell<S, M, C>(machine, s, m),
+  );
 }
 
 // === msgKeysOf: recover the Msg.type set from either update form ===
@@ -1738,7 +1750,7 @@ export type NoCtx = Readonly<Record<never, never>>;
 // Additive: the third arg is OPTIONAL (`dispatch?: (msg: M) => void`), so a
 // handler declaring only `(cmd, ctx)` stays assignable, and a unit test that
 // invokes a handler directly with two args still typechecks. The kernel ALWAYS
-// passes the dispatch (see `runInterpret` in `../promise/run.ts`); the optionality is
+// passes the dispatch (see `callHandler` in `../promise/loop.ts`); the optionality is
 // purely a backward-compatibility affordance on the TYPE, not a runtime "maybe
 // absent". A handler authored via `wrapDetached` receives a NARROWER view of
 // this dispatch (only its declared result-Msg set).
