@@ -88,6 +88,8 @@ export type {
   RunCmdDef,
   Settle,
   SettleFold,
+  SettleOutcome,
+  SettleResult,
   SucceedMsg,
 } from "../internal/resilience/resilient-call";
 export {

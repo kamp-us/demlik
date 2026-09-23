@@ -31,8 +31,8 @@
  *     `intercepting` option verifies.
  *
  * The resilient-call result Msgs route back through the merged `update`:
- * `$resilience:ok` → `succeed` (close the breaker, fill the cache, reset the
- * retry run), `$resilience:err` → `fail` (trip the breaker, then back off or
+ * `$resilience:ok` → `settle` (close the breaker, fill the cache, reset the
+ * retry run), `$resilience:err` → `settle` (trip the breaker, then back off or
  * settle), `$resilience:timer` → `onTimer` (a retry timer re-runs the gate; a
  * deadline timer settles the call failed). Every decision is a Msg/Cmd through
  * the reducer + log — "why did this fire" is answerable from the log alone.
@@ -41,7 +41,7 @@
  *
  * The base interpret handler resolves `M | void` exactly as it would unwrapped.
  * The wrapper never inspects that value, but it does deliver it: once the
- * resilience verbs settle a call — `succeed` on `$resilience:ok`, or the cache
+ * resilience verbs settle a call — `settle` on `$resilience:ok`, or the cache
  * serving a fresh hit with no run at all — a resolved Msg is folded through the
  * base reducer in the same transition, by the same delegate-then-partition path
  * a host-dispatched base Msg takes. So the base's own `fetch_ok` / `fetch_err`
@@ -63,7 +63,7 @@
  *
  * The `$resilience` slice IS resilient-call's `ResilientState<I, R>` (per-key
  * call / retry / circuit / bucket / cache), and the gate / backoff / breaker
- * logic IS its `attempt` / `succeed` / `fail` / `onTimer` verbs + `subs`. The
+ * logic IS its `attempt` / `settle` / `onTimer` verbs + `subs`. The
  * wrapper only ADAPTS the boundary: the verb's `input` is the ORIGINAL base
  * Cmd, the verb's `resilient_run` carrier is renamed to `$resilience:run`, and
  * the sub / timer ids are re-keyed into the `$resilience:` namespace (rule 4).
@@ -532,10 +532,10 @@ export function withResilience<
     update[key] = (state, msg) => foldBase(state, msg as M);
   }
 
-  // --- `$resilience:ok` → succeed, then DELIVER the follow-up ---------------
+  // --- `$resilience:ok` → settle, then DELIVER the follow-up ---------------
   update["$resilience:ok"] = (state, msg) => {
     const m = msg as ResilienceOkMsg;
-    const [slice, runCmds] = rc.succeed(state.$resilience, m.key, {
+    const { call: slice, cmds: runCmds } = rc.settle(state.$resilience, {
       type: MsgType.ResilientOk,
       key: m.key,
       result: m.result,
@@ -552,10 +552,10 @@ export function withResilience<
     return [next, [...settleCmds, ...followCmds]];
   };
 
-  // --- `$resilience:err` → fail --------------------------------------------
+  // --- `$resilience:err` → settle ------------------------------------------
   update["$resilience:err"] = (state, msg) => {
     const m = msg as ResilienceErrMsg;
-    const [slice, runCmds] = rc.fail(state.$resilience, m.key, {
+    const { call: slice, cmds: runCmds } = rc.settle(state.$resilience, {
       type: MsgType.ResilientErr,
       key: m.key,
       error: m.error,

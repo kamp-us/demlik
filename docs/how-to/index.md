@@ -72,6 +72,10 @@ what you are trying to do, and it names the subpath you need.
   backed-off retry without your reducer authoring any timing. Ends with the
   one-field version for a `defineAgent` brain call, and the policy to declare
   against a provider 429/529.
+- [Hand-wire a resilient call](./hand-wire-a-resilient-call.md) — wire
+  `@demlik/tea/resilience`'s `createResilientCall` knob into your own `update`
+  cell by cell, with `settle` and an `onSettle` helper of your own, so a call
+  gets retry, backoff and a circuit breaker without `mountResilientCall`.
 
 ## Classify something
 

@@ -440,7 +440,7 @@ export function createAgent<
   }
 
   /**
-   * The compaction slice's four cmd-emitting verbs, wrapped so each returns its
+   * The compaction slice's three cmd-emitting verbs, wrapped so each returns its
    * `resilient_run` Cmds ALREADY re-keyed to the dedicated `compact_run`
    * discriminant. The re-key is an INVARIANT of talking to `compactRc` — its Cmds
    * must route to the compaction interpret cell, never the brain `resilient_run`
@@ -457,18 +457,13 @@ export function createAgent<
       at: number,
     ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
       reKeyCompactCmds(compactRc.attempt(slice, key, input, at)),
-    succeed: (
+    settle: (
       slice: CompactionSlice,
-      key: string,
-      msg: Parameters<typeof compactRc.succeed>[2],
-    ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
-      reKeyCompactCmds(compactRc.succeed(slice, key, msg)),
-    fail: (
-      slice: CompactionSlice,
-      key: string,
-      msg: Parameters<typeof compactRc.fail>[2],
-    ): readonly [CompactionSlice, readonly AgentCompactRunCmd[]] =>
-      reKeyCompactCmds(compactRc.fail(slice, key, msg)),
+      msg: Parameters<typeof compactRc.settle>[1],
+    ) => {
+      const { call, cmds, outcome } = compactRc.settle(slice, msg);
+      return { call, cmds: cmds.map(toCompactRunCmd), outcome };
+    },
     onTimer: (
       slice: CompactionSlice,
       msg: Parameters<typeof compactRc.onTimer>[1],
@@ -986,7 +981,7 @@ export function createAgent<
    * Fold the compaction SUMMARY back (#85, design A1) — the entry the re-entered
    * `compact_ok` settle Msg drives. Two halves, in order:
    *
-   *   1. The RETRY layer: `compactRc.succeed` closes the compaction breaker and
+   *   1. The RETRY layer: `compactRc.settle` closes the compaction breaker and
    *      DROPS the `$compact` retry counter (the same reset the brain `succeed`
    *      does, on the dedicated compaction slice).
    *   2. The FOLD-BACK: replace `turns[0..folding]` AND every `toolRecord` whose
@@ -1007,11 +1002,11 @@ export function createAgent<
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     // 1) Advance the compaction retry layer — resets retry[$compact], closes the
-    //    compaction breaker. Reuses llm-call's `succeed` on the dedicated slice;
-    //    the enriched `LlmSucceedMsg` is the `compact_ok` payload as-is.
-    const [compaction, retryCmds] = compact.succeed(s.compaction, key, {
+    //    compaction breaker. Reuses resilient-call's `settle` on the dedicated
+    //    slice; the enriched `LlmSucceedMsg` is the `compact_ok` payload as-is.
+    const { call: compaction, cmds: retryCmds } = compact.settle(s.compaction, {
       type: MsgType.ResilientOk,
-      key: msg.key,
+      key,
       result: msg.result,
       at: msg.at,
     });
@@ -1019,7 +1014,7 @@ export function createAgent<
 
     // Stale settle (the run is settled, or advanced/rebooted past this
     // compaction). The retry slice still resets above; emit only its cmds
-    // (`succeed` never emits a run Cmd, so `retryCmds` is empty here).
+    // (settling an `_ok` never emits a run Cmd, so `retryCmds` is empty here).
     const conv = requireAwaiting(settledRetry, "compacting");
     if (conv === null) return [settledRetry, retryCmds];
 
@@ -1057,18 +1052,21 @@ export function createAgent<
     msg: AgentCompactErrMsg,
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
-    const [compaction, cmds] = compact.fail(s.compaction, key, {
+    const {
+      call: compaction,
+      cmds,
+      outcome,
+    } = compact.settle(s.compaction, {
       type: MsgType.ResilientErr,
-      key: msg.key,
+      key,
       error: msg.error,
       at: msg.at,
     });
     const settledRetry: State = { ...s, compaction };
-    const call = compaction.calls[key];
 
-    // A retry is armed (`waiting_retry`) → not terminal → keep awaiting the
+    // A retry is armed (`retrying`) → not terminal → keep awaiting the
     // re-issued compaction call (the re-keyed run Cmd, if any, rides here).
-    if (call?.phase === "waiting_retry") {
+    if (outcome.kind === "retrying") {
       return [settledRetry, cmds];
     }
 

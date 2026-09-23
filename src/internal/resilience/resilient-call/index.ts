@@ -19,7 +19,7 @@
  *     time-sensitive brick; `withResilience` throws at construction without it).
  *   - The slice at your chosen Model field + `liftResilience` → the wrapper
  *     owns `model.$resilience`; there is nothing to lift.
- *   - Verbs `attempt` / `succeed` / `fail` / `onTimer` → internal to the
+ *   - Verbs `attempt` / `settle` / `onTimer` → internal to the
  *     wrapper; results route as `$resilience:ok` / `$resilience:err` /
  *     `$resilience:timer` Msgs through the merged `update` (the old
  *     `resilient_run` / `resilient_ok` / `resilient_err` vocabulary is renamed
@@ -49,8 +49,8 @@
  *     made explicit).
  *   - It is **config-driven**, not hand-wired. You hand `createResilientCall`
  *     a `ResilientConfig` and get back the uniform knob contract every L2
- *     composition exposes: `init()`, the four verbs (`attempt` / `succeed` /
- *     `fail` / `onTimer`), `subs(state)`, and `handlers(ports)`.
+ *     composition exposes: `init()`, the three verbs (`attempt` / `settle` /
+ *     `onTimer`), `subs(state)`, and `handlers(ports)`.
  *   - Every brick is **optional**. Omit `cache` and the cache gate disappears
  *     (`get` is never consulted); omit `circuit` and every call passes the
  *     breaker; omit `rateLimit` and the bucket never throttles; omit `retry`
@@ -96,34 +96,30 @@
  *     deadline: { ms: 5_000 },
  *   });
  *
- *   // `mountResilientCall` pre-assembles the wiring; the one cell it cannot
- *   // write is `attempt`, whose arguments only the consumer's Msg knows. This
- *   // knob's `handlers` takes ports, so it is bound before the mount reads it —
- *   // `../../jev/ask` and `../../llm-call` expose a nullary `handlers()` and
- *   // are passed straight in.
- *   const mounted = mountResilientCall({
- *     ...rc,
- *     handlers: () => rc.handlers({ run: ctx.call }),
- *   }, {
- *     slice: "resilience",
- *     attempt: {
- *       on: "fetch",
- *       run: (slice, m: Fetch) => rc.attempt(slice, m.key, m.input, m.at),
- *     },
- *     onOk: (model, m) => [{ ...model, result: m.result }, []],
- *   });
+ *   // One helper of your own folds the outcome into your Model. The value is
+ *   // only reachable through `r.outcome`, so the slice has always settled first.
+ *   function onSettle(s: Model, r: ReturnType<typeof rc.settle>) {
+ *     const next = { ...s, resilience: r.call };
+ *     switch (r.outcome.kind) {
+ *       case "done":     return [{ ...next, result: r.outcome.value }, r.cmds] as const;
+ *       case "failed":   return [next, r.cmds] as const;
+ *       case "retrying": return [next, r.cmds] as const;
+ *     }
+ *   }
  *
  *   // in the machine:
- *   init: () => [{ ...mounted.init(), result: null }, []],
- *   update: { ...mounted.update },
- *   subscriptions: mounted.subscriptions,
- *   subscribe: mounted.subscribe,
- *   interpret: mounted.interpret,
+ *   init: () => [{ resilience: rc.init(), result: null }, []],
+ *   update: {
+ *     fetch: (s, m) => liftResilience(s, rc.attempt(s.resilience, m.key, m.input, m.at)),
+ *     resilient_ok:  (s, m) => onSettle(s, rc.settle(s.resilience, m)),
+ *     resilient_err: (s, m) => onSettle(s, rc.settle(s.resilience, m)),
+ *     deadline_exceeded: (s, m) => liftResilience(s, rc.onTimer(s.resilience, m)),
+ *   },
+ *   subscriptions: (s) => rc.subs(s.resilience),
+ *   subscribe: { deadline: subscribeDeadline },
+ *   interpret: rc.handlers({ run: ctx.call }),
  *
- * The six verbs stay exported and callable by hand for a consumer that wants a
- * cell the mount cannot express (ADR 0015's escape hatch): `rc.succeed(...)`,
- * `rc.fail(...)`, `rc.onTimer(...)` and `liftResilience` splice exactly as
- * before.
+ * `docs/how-to/hand-wire-a-resilient-call.md` walks the whole machine.
  *
  * ## Naming a knob, when a machine mounts more than one
  *
@@ -302,7 +298,7 @@ export interface ResilientConfig<N extends string = DefaultResilientName> {
    * wall-clock outage budget (`DurationRetryPolicy`), or explicit
    * `unbounded: true`. A duration bound needs no extra wiring: every path that
    * records a failure already holds the instant it was observed as DATA —
-   * `fail`'s `msg.at` (stamped at the interpret boundary) and `gate`'s `at`
+   * `settle`'s `msg.at` (stamped at the interpret boundary) and `gate`'s `at`
    * (the caller's `attempt` / the retry timer's `atMs`) — so the streak clock
    * is fed from a Msg, never from a `Date.now()` inside a verb (invariant 2).
    */
@@ -351,7 +347,7 @@ export interface CallBudget {
  * `phase` so each phase carries only its own data (pattern 11):
  *
  *   - `idle`          — never attempted, or fully settled and forgotten.
- *   - `running`       — the effect Cmd is out; awaiting `succeed` / `fail`.
+ *   - `running`       — the effect Cmd is out; awaiting `settle`.
  *                       Carries the deadline budget ({@link CallBudget}) and the
  *                       last `input` so a retry can re-issue it.
  *   - `waiting_retry` — a transient failure backed off; the retry timer is armed
@@ -453,6 +449,32 @@ export type FailMsg<N extends string = DefaultResilientName> = {
 };
 
 /**
+ * How a settled call ended — the third thing `settle` hands back, and the only
+ * place the port's value can be read from.
+ *
+ *   - `done`     — the port answered; `value` is its result.
+ *   - `failed`   — no retry is left (or no retry brick); `error` is the last
+ *                  failure.
+ *   - `retrying` — backed off; the retry timer is armed and the call is still
+ *                  live.
+ */
+export type SettleOutcome<R> =
+  | { readonly kind: "done"; readonly value: R }
+  | { readonly kind: "failed"; readonly error: unknown }
+  | { readonly kind: "retrying" };
+
+/**
+ * What `settle` returns: the settled slice, the Cmds it emitted, and the
+ * {@link SettleOutcome}. One record, so the slice update and the result read
+ * cannot be split apart in a hand-wired `update` cell.
+ */
+export interface SettleResult<I, R, N extends string = DefaultResilientName> {
+  readonly call: ResilientState<I, R>;
+  readonly cmds: readonly RunCmd<I, N>[];
+  readonly outcome: SettleOutcome<R>;
+}
+
+/**
  * The deadline Msg tag this knob's timers dispatch, derived from its name the
  * same way `<name>_ok` / `<name>_err` are. The DEFAULT family keeps the bare
  * `"deadline_exceeded"` literal — that is the tag every machine wired before
@@ -508,7 +530,7 @@ export type ResilientHandlers<I, R, N extends string = DefaultResilientName> = {
 
 /** Ports the consumer supplies to `handlers`. */
 export interface ResilientPorts<I, R> {
-  /** The fallible work this knob wraps. Throws on failure → routed to `fail`. */
+  /** The fallible work this knob wraps. A throw settles as `<name>_err`. */
   readonly run: (input: I, key: string) => Promise<R>;
 }
 
@@ -873,18 +895,19 @@ export function createResilientCall<
     return { ...s, calls };
   }
 
-  // === Verb: succeed =======================================================
+  // === The two record steps `settle` is built from ==========================
 
   /**
-   * Record a success for `key`: close the breaker, fill the cache (if a cache
-   * brick exists), reset this key's retry count, and settle `succeeded`. PURE —
-   * `msg.at` is the cache write clock.
+   * Record a success for `msg.key`: close the breaker, fill the cache (if a
+   * cache brick exists), reset this key's retry count, and settle `succeeded`.
+   * PURE — `msg.at` is the cache write clock. Private: {@link settle} is the
+   * verb.
    */
-  function succeed(
+  function recordOk(
     s: ResilientState<I, R>,
-    key: string,
     msg: SucceedMsg<R, N>,
-  ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
+  ): ResilientState<I, R> {
+    const { key } = msg;
     const circuit =
       cPolicy !== null ? onSuccess(s.circuit, cPolicy) : s.circuit;
     const cache =
@@ -893,33 +916,28 @@ export function createResilientCall<
         : s.cache;
     // Drop this key's retry counter — a success ends the retry run.
     const retry = without(s.retry, key);
-    return [
-      {
-        ...setCall(s, key, { phase: "succeeded", result: msg.result }),
-        circuit,
-        cache,
-        retry,
-      },
-      [],
-    ];
+    return {
+      ...setCall(s, key, { phase: "succeeded", result: msg.result }),
+      circuit,
+      cache,
+      retry,
+    };
   }
 
-  // === Verb: fail ==========================================================
-
   /**
-   * Record a failure for `key`: trip the breaker (it may open), then back off —
-   * schedule a retry if `retry` permits, else settle `failed`. PURE — `msg.at`
-   * stamps the breaker trip + the retry delay base. Re-issues from the call's
-   * remembered `input` and carries the original budget forward, charged up to
-   * `msg.at` — the attempt that just failed spent in-process time, and a retry
-   * ladder shares ONE budget across its attempts rather than getting a fresh one
-   * per attempt.
+   * Record a failure for `msg.key`: trip the breaker (it may open), then back
+   * off — schedule a retry if `retry` permits, else settle `failed`. PURE —
+   * `msg.at` stamps the breaker trip + the retry delay base. Re-issues from the
+   * call's remembered `input` and carries the original budget forward, charged
+   * up to `msg.at` — the attempt that just failed spent in-process time, and a
+   * retry ladder shares ONE budget across its attempts rather than getting a
+   * fresh one per attempt. Private: {@link settle} is the verb.
    */
-  function fail(
+  function recordErr(
     s: ResilientState<I, R>,
-    key: string,
     msg: FailMsg<N>,
   ): readonly [ResilientState<I, R>, readonly RunCmd<I, N>[]] {
+    const { key } = msg;
     const circuit =
       cPolicy !== null ? onFailure(s.circuit, cPolicy, msg.at) : s.circuit;
     const withCircuit = { ...s, circuit };
@@ -937,6 +955,49 @@ export function createResilientCall<
     return backoff(withCircuit, key, input, msg.error, msg.at, budget);
   }
 
+  function isOk(msg: SucceedMsg<R, N> | FailMsg<N>): msg is SucceedMsg<R, N> {
+    return msg.type === okType;
+  }
+
+  // === Verb: settle ========================================================
+
+  /**
+   * Settle the call a `<name>_ok` / `<name>_err` Msg answers, keyed off
+   * `msg.key`, and say how it ended. PURE.
+   *
+   * A success closes the breaker, fills the cache and ends the retry run; the
+   * outcome is `done` with the port's value. A failure trips the breaker and
+   * backs off: `retrying` while the retry policy allows another attempt, and
+   * `failed` with the error once it does not. A `retrying` call waits on the
+   * retry timer `subs` arms; its fire re-issues the run Cmd through `onTimer`.
+   *
+   * The settled slice, its Cmds and the outcome come back together, and the
+   * result value is reachable ONLY through `outcome`. So a hand-wired settle
+   * cell cannot fold the answer into its Model before the slice has settled —
+   * the order that used to leave a call stuck at `running` cannot be written.
+   */
+  function settle(
+    s: ResilientState<I, R>,
+    msg: SucceedMsg<R, N> | FailMsg<N>,
+  ): SettleResult<I, R, N> {
+    if (isOk(msg)) {
+      return {
+        call: recordOk(s, msg),
+        cmds: [],
+        outcome: { kind: "done", value: msg.result },
+      };
+    }
+    const [call, cmds] = recordErr(s, msg);
+    return {
+      call,
+      cmds,
+      outcome:
+        call.calls[msg.key]?.phase === "waiting_retry"
+          ? { kind: "retrying" }
+          : { kind: "failed", error: msg.error },
+    };
+  }
+
   // === Verb: settleFailed ==================================================
 
   /**
@@ -945,8 +1006,9 @@ export function createResilientCall<
    *
    * This is the verb for a failure that is NOT a downstream-health signal: the
    * call must end now, but the breaker must not trip and the backoff run must
-   * not advance. `fail` is the opposite — it records the failure against the
-   * breaker (it may open) and feeds the retry policy (it may back off). Use
+   * not advance. `settle` on an `_err` Msg is the opposite — it records the
+   * failure against the breaker (it may open) and feeds the retry policy (it
+   * may back off). Use
    * `settleFailed` when the *reason* the call cannot proceed has nothing to do
    * with downstream health:
    *
@@ -1123,8 +1185,7 @@ export function createResilientCall<
     init,
     attempt,
     resume,
-    succeed,
-    fail,
+    settle,
     settleFailed,
     onTimer,
     subs,
@@ -1167,10 +1228,10 @@ export type Settle<I, R> = readonly [
 ];
 
 /**
- * The part of a resilient-call knob {@link mountResilientCall} needs. This knob
- * satisfies it, and so does every knob that delegates these verbs to it —
- * `internal/jev/ask` and `internal/llm-call` both do, which is why the mount is
- * written against the shape rather than against either door.
+ * The part of a resilient-call knob {@link mountResilientCall} needs: the
+ * two-verb `succeed` / `fail` shape `internal/jev/ask` and `internal/llm-call`
+ * expose. The base knob settles through one `settle` verb instead (#271), so
+ * mounting it directly means binding those two verbs to `settle` by hand.
  *
  * `OkMsg` / `ErrMsg` are parameters rather than {@link SucceedMsg} /
  * {@link FailMsg} because an inheriting knob narrows them: jev-ask's `fail`

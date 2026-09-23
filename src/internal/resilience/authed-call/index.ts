@@ -10,8 +10,8 @@
  *     → rate-limit → exponential-backoff retry, plus the per-call deadline. This
  *     knob does not re-implement a single line of it. The `attempt` / `succeed`
  *     / `fail` / `onTimer` verbs here are thin delegations that thread the
- *     composed slice's `resilience` field through the resilient-call verb of the
- *     same name. Whatever resilience config a consumer passes flows straight
+ *     composed slice's `resilience` field through the resilient-call verb —
+ *     `succeed` and `fail` both through its one `settle`. Whatever resilience config a consumer passes flows straight
  *     down — every `ResilientConfig` field is still optional, still "omit a
  *     brick → omit its gate".
  *
@@ -302,14 +302,15 @@ export function createAuthedCall<I, R>(
     msg: SucceedMsg<R>,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
     const settled = clearAuthKey(s, key);
-    return liftResilient(settled, rc.succeed(settled.resilience, key, msg));
+    const { call, cmds } = rc.settle(settled.resilience, { ...msg, key });
+    return liftResilient(settled, [call, cmds]);
   }
 
   // === Verb: fail ==========================================================
 
   /**
    * Record a NON-auth failure for `key` (a 5xx, a network drop — anything that
-   * is not a 401). Delegate to resilient-call's `fail`, which trips the breaker
+   * is not a 401). Delegate to resilient-call's `settle`, which trips the breaker
    * and backs off / settles per the retry policy. The auth dimension is
    * untouched: a generic failure says nothing about the credential. PURE.
    *
@@ -323,7 +324,10 @@ export function createAuthedCall<I, R>(
     msg: FailMsg,
   ): readonly [AuthedState<I, R>, readonly AuthedCmd<I>[]] {
     // If the resilient verb settles this call, forget its auth bookkeeping too.
-    const [resilience, cmds] = rc.fail(s.resilience, key, msg);
+    const { call: resilience, cmds } = rc.settle(s.resilience, {
+      ...msg,
+      key,
+    });
     const next = settleAuthIfDone({ ...s, resilience }, key, resilience);
     return [next, cmds];
   }

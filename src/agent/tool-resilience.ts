@@ -257,12 +257,12 @@ export function createToolLadder<TC>(
     const rc = rcFor(call);
     if (rc === null) return s;
     const key = toolCallKey(call.name, call.callId);
-    // `succeed` closes the ladder for this key: it drops `retry[key]` and moves
-    // the phase to `succeeded`, which is what disarms the timeout Sub. The
-    // result arm is `null` on purpose — the tool's VALUE travels through the
-    // fan-out ledger, and duplicating it here would put one fact in two places
-    // on the durable Model.
-    const [slice] = rc.succeed(sliceOf(s, call.name, rc), key, {
+    // Settling an `_ok` closes the ladder for this key: it drops `retry[key]`
+    // and moves the phase to `succeeded`, which is what disarms the timeout Sub.
+    // The result arm is `null` on purpose — the tool's VALUE travels through
+    // the fan-out ledger, and duplicating it here would put one fact in two
+    // places on the durable Model.
+    const { call: slice } = rc.settle(sliceOf(s, call.name, rc), {
       type: MsgType.ResilientOk,
       key,
       result: null,
@@ -276,17 +276,17 @@ export function createToolLadder<TC>(
     if (rc === null) return [s, failure];
     const key = toolCallKey(call.name, call.callId);
     const before = sliceOf(s, call.name, rc);
-    // `fail` records the attempt and consults the policy: it either arms the
-    // next one (`waiting_retry`, with the retry timer in `subs`) or settles the
-    // key `failed`. Both outcomes are Model writes — nothing is retried inside
-    // an effect, which is the whole point of routing through here.
-    const [slice] = rc.fail(before, key, {
+    // Settling an `_err` records the attempt and consults the policy: it either
+    // arms the next one (`retrying`, with the retry timer in `subs`) or settles
+    // the key `failed`. Both outcomes are Model writes — nothing is retried
+    // inside an effect, which is the whole point of routing through here.
+    const { call: slice, outcome } = rc.settle(before, {
       type: MsgType.ResilientErr,
       key,
       error: failure,
       at,
     });
-    if (slice.calls[key]?.phase === "waiting_retry") {
+    if (outcome.kind === "retrying") {
       // Absorbed: the fan-out entry stays `running` and the conversation learns
       // nothing, so the model never sees an attempt the ladder is still working.
       return [{ ...s, [call.name]: slice }, null];

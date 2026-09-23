@@ -365,21 +365,22 @@ export function createJevAsk<Q extends JevQuestionMap>(
     return rc.attempt(s, key, request, at);
   }
 
-  /** Record a settled answer for `key`. PURE — resilient-call's `succeed`. */
+  /** Record a settled answer for `key`. PURE — resilient-call's `settle`. */
   function succeed(
     s: State,
     key: string,
     msg: JevSucceedMsg<Q>,
   ): readonly [State, readonly JevAskCmd<Q>[]] {
-    return rc.succeed(s, key, msg);
+    const { call, cmds } = rc.settle(s, { ...msg, key });
+    return [call, cmds];
   }
 
   /**
    * Settle `key` from the fallback, as if the fallback's answer were the
-   * response. PURE — the fallback is a pure decider, and `succeed` / `settleFailed`
-   * are resilient-call's own settle verbs. `s` is the state BEFORE the failing
-   * attempt was recorded, so the call is still live and `succeed` closes it
-   * normally.
+   * response. PURE — the fallback is a pure decider, and `settle` /
+   * `settleFailed` are resilient-call's own settle verbs. `s` is the state
+   * BEFORE the failing attempt was recorded, so the call is still live and
+   * `settle` closes it normally.
    */
   function settleFromFallback(
     s: State,
@@ -390,7 +391,7 @@ export function createJevAsk<Q extends JevQuestionMap>(
   ): readonly [State, readonly JevAskCmd<Q>[]] {
     const decided = fallback(request);
     if (isErrDecision(decided)) return rc.settleFailed(s, key, decided);
-    return rc.succeed(s, key, {
+    const { call, cmds } = rc.settle(s, {
       type: MsgType.ResilientOk,
       key,
       result: {
@@ -401,6 +402,7 @@ export function createJevAsk<Q extends JevQuestionMap>(
       },
       at,
     });
+    return [call, cmds];
   }
 
   /**
@@ -428,10 +430,13 @@ export function createJevAsk<Q extends JevQuestionMap>(
       return rc.settleFailed(s, key, msg.error);
     }
     const request = liveRequest(s, key);
-    const settled = rc.fail(s, key, msg);
-    const backedOff = settled[0].calls[key]?.phase !== "failed";
-    if (backedOff || config.fallback === undefined || request === undefined) {
-      return settled;
+    const { call, cmds, outcome } = rc.settle(s, { ...msg, key });
+    if (
+      outcome.kind !== "failed" ||
+      config.fallback === undefined ||
+      request === undefined
+    ) {
+      return [call, cmds];
     }
     return settleFromFallback(s, key, request, config.fallback, msg.at);
   }

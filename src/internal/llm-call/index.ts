@@ -44,8 +44,8 @@
  *
  * The retry / backoff lives in `../resilient-call`: `createLlmCall` builds a
  * `createResilientCall` knob over the model-invoke port and DELEGATES `init`,
- * `attempt`, `succeed`, `fail`, `onTimer`, `subs` to it verbatim — the slice is
- * literally resilient-call's slice (the spec's "retry lives here"). There is no
+ * `attempt`, `onTimer`, `subs` to it verbatim, and `succeed` / `fail` to its
+ * `settle` — the slice is literally resilient-call's slice (the spec's "retry lives here"). There is no
  * second backoff implementation here. The handler runs the invoke through the
  * resilient-call handler so a transient model failure backs off exactly as a
  * resilient HTTP call would; the `purpose`-branch + structured parse wrap the
@@ -380,7 +380,7 @@ export interface LlmErr<P extends string> {
 // argument, the handler's resolve) thread through with no cast. The failure Msg
 // is the resilient `FailMsg` with its `error: unknown` NARROWED to the typed
 // `LlmErr`: every value the handler enriches is an `LlmErr`, and `LlmErr` is
-// assignable to `unknown`, so `LlmFailMsg` flows into `rc.fail` (which takes the
+// assignable to `unknown`, so `LlmFailMsg` flows into `rc.settle` (which takes the
 // wide `FailMsg`) directly while the host reducer reads the narrow `error` type.
 export type LlmSucceedMsg<
   P extends string,
@@ -496,18 +496,19 @@ export function createLlmCall<
     return rc.attempt(s, key, input, at);
   }
 
-  /** Record a parsed success for `key`. PURE — resilient-call's `succeed`. */
+  /** Record a parsed success for `key`. PURE — resilient-call's `settle`. */
   function succeed(
     s: State,
     key: string,
     msg: LlmSucceedMsg<P, O>,
   ): readonly [State, readonly LlmRunCmd<P>[]] {
-    return rc.succeed(s, key, msg);
+    const { call, cmds } = rc.settle(s, { ...msg, key });
+    return [call, cmds];
   }
 
   /**
    * Record a failure for `key`: back off via the inherited retry, or settle
-   * `failed`. PURE — resilient-call's `fail`. The `error` is the typed
+   * `failed`. PURE — resilient-call's `settle`. The `error` is the typed
    * `LlmErr`, carried on the call's `failed` phase for the consumer to read.
    */
   function fail(
@@ -515,7 +516,8 @@ export function createLlmCall<
     key: string,
     msg: LlmFailMsg<P>,
   ): readonly [State, readonly LlmRunCmd<P>[]] {
-    return rc.fail(s, key, msg);
+    const { call, cmds } = rc.settle(s, { ...msg, key });
+    return [call, cmds];
   }
 
   /** A retry / deadline timer fired. PURE — resilient-call's `onTimer`. */

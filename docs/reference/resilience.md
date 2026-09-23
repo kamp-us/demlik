@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/resilience";
 ```
 
-## Exports (129)
+## Exports (131)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ import { … } from "@demlik/tea/resilience";
 | `initWindow` | Function | Create an empty window. |
 | `liftAuthed` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.authed`. |
 | `liftResilience` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience`. |
-| `MountableKnob` | Interface | The part of a resilient-call knob mountResilientCall needs. |
+| `MountableKnob` | Interface | The part of a resilient-call knob mountResilientCall needs: the two-verb `succeed` / `fail` shape `internal/jev/ask` and `internal/llm-call` expose. |
 | `MountConfig` | Interface | What to mount, and where. |
 | `MountedCell` | Type | One cell of the update fragment mountResilientCall returns. |
 | `MountedResilientCall` | Interface | The four fragments a consumer spreads into `defineMachine`. |
@@ -110,6 +110,8 @@ import { … } from "@demlik/tea/resilience";
 | `setTimeoutArmTimer` | Function | The `setTimeout` timer backing — for node / browser / any host whose timer is a plain `setTimeout`. |
 | `Settle` | Type | What every verb of a knob in this family hands back. |
 | `SettleFold` | Type | The consumer's half of a settle cell: fold the settled answer into the machine's own Model. |
+| `SettleOutcome` | Type | How a settled call ended — the third thing `settle` hands back, and the only place the port's value can be read from. |
+| `SettleResult` | Interface | What `settle` returns: the settled slice, the Cmds it emitted, and the SettleOutcome. |
 | `SlidingWindow` | Interface | A sliding-window log: the timestamps of every hit still inside the trailing `windowMs`, capped at `limit` events per window. |
 | `subscribeDeadline` | Variable | The `subscribe["deadline"]` handler for the DEFAULT `setTimeout` backing. |
 | `subscribeWith` | Function | Build the `subscribe["deadline"]` cell from a host-plugged `armTimer`. |
