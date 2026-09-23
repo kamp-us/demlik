@@ -3,6 +3,7 @@
   "entryPointStrategy": "resolve",
   "entryPoints": [
     "src/index.ts",
+    "src/promise/index.ts",
     "src/react/index.ts",
     "src/do/index.ts",
     "src/node/index.ts",

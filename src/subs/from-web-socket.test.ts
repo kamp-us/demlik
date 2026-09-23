@@ -3,10 +3,10 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { fromWebSocket, type WebSocketSubData } from "./from-web-socket";
 import type {
   MinimalCloseEvent,

@@ -25,10 +25,10 @@ import {
   type NoCtx,
   type Reducer,
   type RequiredCtx,
-  run,
   type Settled,
   settle,
 } from "../index";
+import { run } from "../promise";
 
 // ── 1. additive: the untyped shapes are untouched ───────────────────────────
 

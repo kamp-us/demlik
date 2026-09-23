@@ -23,10 +23,10 @@ import {
   type MalformedResult,
   type NoCtx,
   type Reducer,
-  run,
   type Settled,
   settle,
 } from "./index";
+import { run } from "./promise";
 
 type Http = { readonly get: (url: string) => Promise<unknown> };
 type HttpCtx = { readonly http: Http };

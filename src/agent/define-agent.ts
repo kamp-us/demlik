@@ -10,9 +10,10 @@
  * raw kernel `run`. Each hidden thing is a named helper below.
  */
 
-import { defineMachine, driveToDone, type Machine, run } from "../index";
+import { defineMachine, type Machine } from "../index";
 import type { DeadlineSub, EndedRun } from "../internal/flow/monitored-run";
 import type { LlmCall, MessageLoader, PlainModel } from "../internal/llm-call";
+import { driveToDone, run } from "../promise";
 import { MsgType } from "../protocol";
 import type { Interpret, RequiredCtx } from "../pure/core";
 import type { RetryPolicy } from "../retry-backoff";

@@ -25,16 +25,8 @@
  *          (Node 23 strips the types; no build step for the example itself.)
  */
 
-import {
-  type Cmd,
-  defineMachine,
-  type Interpret,
-  type Machine,
-  type Reducer,
-  type Runtime,
-  run,
-  type Store,
-} from "@demlik/tea";
+import { type Cmd, defineMachine, type Interpret, type Machine, type Reducer, type Runtime, type Store } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   type AgentCmd,
   type AgentMachineMsg,

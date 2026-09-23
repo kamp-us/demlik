@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Cmd, defineMachine, run } from "../../../index";
+import { Cmd, defineMachine } from "../../../index";
+import { run } from "../../../promise";
 import { recorder } from "../recorder";
 import { replayTrace } from "./index";
 

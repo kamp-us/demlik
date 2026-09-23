@@ -6,10 +6,10 @@ import {
   type Port,
   type Reducer,
   type Runtime,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { fromPort } from "./from-port";
 
 // Lifecycle contract under a real runtime (issue #286) — the cross-runtime

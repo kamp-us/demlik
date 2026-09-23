@@ -4,10 +4,10 @@ import {
   defineMachine,
   type Reducer,
   type RuntimeErrorContext,
-  run,
   type Store,
   type Supervision,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Supervision — declared policy for a reducer (`update`) throw (ADR 0003 #4).

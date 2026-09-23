@@ -1,4 +1,5 @@
-import { type Cmd, defineMachine, run, type Sub } from "@demlik/tea";
+import { type Cmd, defineMachine, type Sub } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { Result } from "better-result";
 import { createPoller, type PollerState } from "@demlik/tea/flow";
 import {

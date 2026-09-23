@@ -5,19 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { doStore } from "./do";
 import {
   defineMachine,
-  driveToDone,
   type Interpret,
   layer,
   ProvideFailedError,
   provide,
   type Reducer,
   replay,
-  run,
   type Store,
   value,
 } from "./index";
 import { memoryStore } from "./mem";
 import { fileStore } from "./node";
+import { driveToDone, run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // The provider graph AT THE RUN SEAM (#183): `run(machine, { ctx: provide(…) })`

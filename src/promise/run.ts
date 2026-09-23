@@ -4,8 +4,8 @@
  * live in `./runtime-types`.
  */
 
-import type { Provided, Scope } from "./provide";
-import { isProvided } from "./provide";
+import type { Provided, Scope } from "../provide";
+import { isProvided } from "../provide";
 import type {
   Dispose,
   Interpret,
@@ -14,7 +14,7 @@ import type {
   PortEmitter,
   RequiredCtx,
   Sub,
-} from "./pure/core";
+} from "../pure/core";
 import {
   applyCellChecked,
   type Cmd,
@@ -23,7 +23,7 @@ import {
   depsInactive,
   detachWork,
   structuralHash,
-} from "./pure/core";
+} from "../pure/core";
 import type {
   BootingRuntime,
   DispatchSettle,
@@ -35,7 +35,7 @@ import type {
   ScopedCtxArg,
   Store,
   Supervision,
-} from "./runtime-types";
+} from "../runtime-types";
 import {
   DispatchDiscardedError,
   DisposeTimeoutNotice,
@@ -47,7 +47,7 @@ import {
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
   SubIdCollisionError,
-} from "./runtime-types";
+} from "../runtime-types";
 
 // Default `onError` sink: re-throw on a fresh macrotask so the failure reaches
 // the host's global error handler instead of vanishing — surface, not swallow

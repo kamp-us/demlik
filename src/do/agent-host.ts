@@ -15,16 +15,16 @@ import {
   agentEvents,
   status,
 } from "../agent/index";
-import {
-  type BootingRuntime,
-  type Cmd,
-  type Machine,
-  type RequiredCtx,
-  type Runtime,
-  run,
-  type Store,
-  type Sub,
+import type {
+  BootingRuntime,
+  Cmd,
+  Machine,
+  RequiredCtx,
+  Runtime,
+  Store,
+  Sub,
 } from "../index";
+import { run } from "../promise";
 import { autoBoot } from "./resume";
 import { type SseHub, sseFromAgentEvents, sseHub } from "./sse";
 

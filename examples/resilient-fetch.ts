@@ -17,7 +17,8 @@
  *     it turns a result back into a Msg. Reducers stay pure (invariant 2).
  */
 
-import { type Cmd, defineMachine, run, tryInterpret } from "@demlik/tea";
+import { type Cmd, defineMachine, tryInterpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   defaultRetryPolicy,
   initRetry,

@@ -19,7 +19,8 @@
  * Run it:  node packages/tea/examples/agent-research-loop.ts   (Node 23 strips types)
  */
 
-import { type Interpret, run } from "@demlik/tea";
+import { type Interpret } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import {
   type AgentMachineMsg,
   type AgentTurn,

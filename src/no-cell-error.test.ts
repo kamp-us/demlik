@@ -4,12 +4,12 @@ import {
   defineMachine,
   NoCellError,
   type Reducer,
-  run,
   type Sub,
   type Subscribe,
   subId,
   type Transitions,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // #276 — the runtime cell-lookup guard + the subscribe vertical tracer.

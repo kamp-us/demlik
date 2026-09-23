@@ -3,10 +3,10 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { fromEventSource } from "./from-event-source";
 import type {
   MinimalEvent,

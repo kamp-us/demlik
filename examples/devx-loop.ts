@@ -9,7 +9,8 @@
  * Run it:  node packages/tea/examples/devx-loop.ts   (Node 23 strips types)
  */
 
-import { defineMachine, noop, run } from "@demlik/tea";
+import { defineMachine, noop } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { toMermaid } from "@demlik/tea/machine-viz";
 import { parseJSONL, recorder, replayTrace } from "@demlik/tea/persistence";
 

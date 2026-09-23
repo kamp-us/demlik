@@ -3,10 +3,10 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { fromBroadcastChannel } from "./from-broadcast-channel";
 import type { MinimalBroadcastChannel, MinimalMessageEvent } from "./platform";
 

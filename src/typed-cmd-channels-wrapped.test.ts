@@ -24,12 +24,12 @@ import {
   type MalformedResult,
   type NoCtx,
   type Reducer,
-  run,
   type Settled,
 } from "./index";
 import { withDeadline } from "./internal/resilience/with-deadline";
 import { withResilience } from "./internal/resilience/with-resilience";
 import { withTelemetry } from "./internal/resilience/with-telemetry";
+import { run } from "./promise";
 
 const fetch = Cmd.define("fetch", {
   input: z.object({ url: z.string() }),

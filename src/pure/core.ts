@@ -16,7 +16,7 @@
  *
  * The one external name it reaches for is zod's TYPE surface (`import type`),
  * erased at compile time — `Cmd.define` accepts zod schemas, and the parse
- * against them happens at the interpret edge in `../run.ts`, never here.
+ * against them happens at the interpret edge in `../promise/run.ts`, never here.
  */
 
 import type { z } from "zod";
@@ -1407,7 +1407,7 @@ function stableStringify(value: unknown): string {
 // `source` returns a `Dispose`. On a `deps` change the substrate runs the old
 // `Dispose` then re-runs `source` with the new deps (re-arm); on `deps` going
 // null it runs `Dispose` (teardown). The same reconcile machinery the manual
-// `Sub` path uses (`reconcileSubs` in `../run.ts`) — no second loop.
+// `Sub` path uses (`reconcileSubs` in `../promise/run.ts`) — no second loop.
 //
 // Strengthens invariant 4 (external lifecycle owned by the substrate — the
 // dep-keyed Sub is reconciled, never hand-driven) and invariant 7 (identity is
@@ -1585,7 +1585,7 @@ export type NoCtx = Readonly<Record<never, never>>;
 // Additive: the third arg is OPTIONAL (`dispatch?: (msg: M) => void`), so a
 // handler declaring only `(cmd, ctx)` stays assignable, and a unit test that
 // invokes a handler directly with two args still typechecks. The kernel ALWAYS
-// passes the dispatch (see `runInterpret` in `../run.ts`); the optionality is
+// passes the dispatch (see `runInterpret` in `../promise/run.ts`); the optionality is
 // purely a backward-compatibility affordance on the TYPE, not a runtime "maybe
 // absent". A handler authored via `wrapDetached` receives a NARROWER view of
 // this dispatch (only its declared result-Msg set).

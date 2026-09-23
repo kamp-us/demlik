@@ -16,7 +16,8 @@
 //   5. `description` is required on the spec and read back off the def (#91).
 
 import { z } from "zod";
-import { absurd, Cmd, type PortEmitter, run, type Settled } from "../index";
+import { absurd, Cmd, type PortEmitter, type Settled } from "../index";
+import { run } from "../promise";
 import type { MsgTypeValue } from "../protocol";
 import {
   type AgentTurn,

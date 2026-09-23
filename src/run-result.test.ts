@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Interpret, type Reducer, run } from "./index";
+import { defineMachine, type Interpret, type Reducer } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // First-class run result (#46): `Runtime.result()` / `Runtime.done()`, driven

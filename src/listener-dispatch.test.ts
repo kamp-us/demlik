@@ -4,8 +4,8 @@ import {
   type Interpret,
   type Reducer,
   RuntimeDiscardNotice,
-  run,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Schedule, never apply (issue #202).

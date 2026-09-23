@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Interpret, run } from "../index";
+import type { Interpret } from "../index";
+import { run } from "../promise";
 import { bindMachine } from "../testing";
 import {
   type AgentCompactErrMsg,

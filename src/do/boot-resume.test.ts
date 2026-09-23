@@ -10,7 +10,8 @@
  * Globals are NOT enabled in vitest.config.ts — describe/it/expect are imported.
  */
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, run, type Store } from "../index";
+import { type Cmd, defineMachine, type Store } from "../index";
+import { run } from "../promise";
 import { bootResume, type ResumePort } from "./host";
 
 // A minimal non-agent durable grain: it processes one unit of work at a time.

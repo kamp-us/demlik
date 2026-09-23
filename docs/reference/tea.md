@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (155)
+## Exports (152)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -49,8 +49,6 @@ import { … } from "@demlik/tea";
 | `DisposeTimeoutNotice` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
 | `DriveFailedError` | Class | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
 | `DriveStalledError` | Class | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub (manual or dep-keyed), no in-flight Cmd. |
-| `driveToDone` | Function | Drive a machine from `start` to its terminal State in one call, then tear the runtime down. |
-| `DriveToDoneOptions` | Type | Options for `driveToDone`. |
 | `ErrOf` | Type | The DECLARED failure union a def's handler may settle with. |
 | `ErrorsOf` | Type | The `E` union one Cmd can settle with; `unknown` for an untyped Cmd. |
 | `EventSourceFactoryOpts` | Interface |  |
@@ -119,7 +117,6 @@ import { … } from "@demlik/tea";
 | `RequiredCtx` | Type | The `ctx` a machine's whole Cmd union requires: every Cmd's `R`, intersected. |
 | `Requirements` | Type | Phantom carrier for a Cmd's `R`. |
 | `RequirementsOf` | Type |  |
-| `run` | Function |  |
 | `Runtime` | Interface |  |
 | `RuntimeDiscardedError` | Class | Reported to the `OnError` sink under `phase: "discard"` when `stop()` is called while `interpret` handlers are still awaiting. |
 | `RuntimeDiscardNotice` | Class | Base of the LOSSY-BUT-LEGAL teardown facts: work the host discarded by letting go of a runtime that still had something outstanding. |

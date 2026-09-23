@@ -7,6 +7,9 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
+    // The two engines sit beside the neutral core, never inside it.
+    "promise/index": "src/promise/index.ts",
+    "effect/index": "src/effect/index.ts",
     "testing/index": "src/testing/index.ts",
     "do/index": "src/do/index.ts",
     "mem/index": "src/mem/index.ts",

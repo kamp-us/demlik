@@ -3,10 +3,10 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
   type Sub,
   subId,
 } from "../index";
+import { run } from "../promise";
 import { defineListener } from "./define-listener";
 
 // The two silent leaks `defineListener` makes unrepresentable (see the module

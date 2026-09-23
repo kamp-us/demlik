@@ -6,8 +6,8 @@ import {
   defineMachine,
   definePort,
   type Runtime,
-  run,
 } from "../../../index";
+import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import {
   createFanOut,

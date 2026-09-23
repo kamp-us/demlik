@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Cmd, defineMachine, replay, run } from "../../../index";
+import { Cmd, defineMachine, replay } from "../../../index";
+import { run } from "../../../promise";
 import {
   breadcrumbsFromTrace,
   parseJSONL,

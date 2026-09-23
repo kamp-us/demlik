@@ -6,9 +6,9 @@ import {
   type Interpret,
   type Reducer,
   replay,
-  run,
   type Transitions,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Update-form tag (#57): `defineMachine` stamps a non-enumerable `__form`

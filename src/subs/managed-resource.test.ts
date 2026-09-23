@@ -4,8 +4,8 @@ import {
   defineMachine,
   type NoCtx,
   type Reducer,
-  run,
 } from "../index";
+import { run } from "../promise";
 import {
   combineManagedResources,
   defineManagedResource,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { defineMachine, type Reducer, run, type Store } from "../index";
+import { defineMachine, type Reducer, type Store } from "../index";
+import { run } from "../promise";
 import { memoryStore } from "./index";
 
 // ───────────────────────────────────────────────────────────────────────────

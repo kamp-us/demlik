@@ -5,11 +5,11 @@ import {
   type Interpret,
   type Reducer,
   type RuntimeErrorContext,
-  run,
   type Sub,
   type Subscribe,
   subId,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // OnError sink routing for the runtime FANOUT paths (invariant 6 — the

@@ -1,15 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import {
-  Cmd,
-  DriveFailedError,
-  driveToDone,
-  replay,
-  run,
-  type Store,
-} from "../index";
+import { Cmd, DriveFailedError, replay, type Store } from "../index";
 import { memoryJournal } from "../internal/journal";
 import { memoryStore } from "../mem";
+import { driveToDone, run } from "../promise";
 import {
   type AgentMachineMsg,
   type AgentMessage,

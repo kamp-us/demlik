@@ -1,12 +1,7 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  type Cmd,
-  defineMachine,
-  replay,
-  run,
-  type subId,
-} from "../../../index";
+import { type Cmd, defineMachine, replay, type subId } from "../../../index";
+import { run } from "../../../promise";
 import type { DurationRetryPolicy } from "../../../retry-backoff";
 import { assertWrapperFaithful } from "../../../testing";
 import { type ResilienceRunCmd, withResilience } from "./index";

@@ -14,7 +14,7 @@ so the boot transition is captured as `loaded`. Drive the runtime as production
 does, then snapshot with `trace()`:
 
 ```ts
-import { run } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
 import { recordRun } from "@demlik/tea/parity";
 
 const runtime = run(auditMachine, { ctx });

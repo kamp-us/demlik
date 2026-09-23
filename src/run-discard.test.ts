@@ -6,8 +6,8 @@ import {
   type Reducer,
   RuntimeDiscardedError,
   type RuntimeErrorContext,
-  run,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // Loud on discard (issue #365). A host that lets go of a runtime while

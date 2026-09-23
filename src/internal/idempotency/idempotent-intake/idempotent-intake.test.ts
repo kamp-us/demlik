@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Cmd, defineMachine, noop, run, type Store } from "../../../index";
+import { type Cmd, defineMachine, noop, type Store } from "../../../index";
+import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import { createIntake, type IntakeCmd, type IntakeState } from "./index";
 

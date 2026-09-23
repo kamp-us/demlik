@@ -6,8 +6,8 @@ import {
   type Interpret,
   type Reducer,
   RuntimeDiscardNotice,
-  run,
 } from "./index";
+import { run } from "./promise";
 
 // ───────────────────────────────────────────────────────────────────────────
 // The instance-identity filter. Declared once on the machine, enforced by the
