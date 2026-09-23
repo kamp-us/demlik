@@ -6,7 +6,7 @@ makes tea worth using: given the same messages, a machine always lands in the
 same state. By the end you will have written a Model, a Msg, an `update`, and
 watched determinism fall out for free.
 
-You need only the root package:
+You need the core and the Promise engine:
 
 ```ts
 import { defineMachine, replay } from "@demlik/tea";
