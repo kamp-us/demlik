@@ -55,12 +55,13 @@
  *
  * ## Where the clock / RNG live
  *
- * Inside the verbs: nowhere. `at` arrives on `scan` / `pageOk` / `pageErr` /
- * `applied` / `onTimer` and threads into the underlying paginated-walk gate (so a
+ * Inside the verbs: nowhere. `at` arrives on `scan` / `applied`, on the settled
+ * Msg `pageOk` / `pageErr` read (stamped by the engine), and on the timer Msg
+ * `onTimer` reads, and threads into the underlying paginated-walk gate (so a
  * retried / rate-limited page measures backoff from that `at`) and into the
  * applied-ledger cache writes. The jitter RNG is injected at construction. The
- * only clock read is `Date.now()` inside the inherited paginated-walk `handlers`
- * port (the effect boundary).
+ * knob ships no I/O: the scan's page fetch is a `Cmd.define`d Cmd whose handler
+ * is yours.
  *
  * ## Typical wiring
  *
@@ -77,20 +78,26 @@
  *   });
  *
  *   // in the machine:
+ *   cmds: [rec.scanPage],
  *   init: () => [{ rec: rec.init() }, []],
  *   update: {
  *     reconcile:   (s, m) => lift(s, rec.scan(s.rec, m.at)),
- *     page_ok:     (s, m) => lift(s, rec.pageOk(s.rec, m.result, m.at)),
- *     page_err:    (s, m) => lift(s, rec.pageErr(s.rec, m.error, m.at)),
+ *     resilient_run_ok:  (s, m) => lift(s, rec.pageOk(s.rec, m)),
+ *     resilient_run_err: (s, m) => lift(s, rec.pageErr(s.rec, m)),
  *     change_done: (s, m) => lift(s, rec.applied(s.rec, m.change, m.at)),
- *     retry_due:   (s, m) => lift(s, rec.onTimer(s.rec, m)),
+ *     deadline_exceeded: (s, m) => lift(s, rec.onTimer(s.rec, m)),
  *   },
- *   subs: [deadlinesSub((s) => rec.subs(s.rec))],
+ *   subs: [{ type: "timer", deps: (s) => rec.timer(s.rec) }],
  *
- *   // and where it runs — handlers ride beside the machine, not on it:
+ *   // and where it runs — the scan's page fetch is the handler you write:
  *   run(machine, {
- *     interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }),
- *     subscribe: { deadline: subscribeDeadline },
+ *     interpret: {
+ *       resilient_run: async (cmd, { ok, err }) => {
+ *         try { return ok(await api.listActual(cmd.input)); }
+ *         catch (cause) { return err({ _tag: "port_rejected", cause }); }
+ *       },
+ *       apply_change: …,
+ *     },
  *   });
  */
 
@@ -98,17 +105,12 @@ import type { Cmd } from "../../../index";
 import type { RetryPolicy } from "../../../retry-backoff";
 import {
   createPaginatedWalk,
-  type DeadlineSub,
-  type DeadlinesSub,
-  deadlineSub,
-  deadlinesSub,
   type FetchPageCmd,
   PAGE_KEY,
   type PageErrMsg,
   type PageOkMsg,
   type PaginatedWalkState,
   type PaginatedWalkTimerMsg,
-  subscribeDeadline,
 } from "../../paginate/paginated-walk";
 import {
   get as cacheGet,
@@ -116,11 +118,11 @@ import {
   initCache,
   type TtlCache,
 } from "../../resilience/cache";
+import type { DeadlineSub } from "../../resilience/deadline";
 import type {
   CircuitConfig,
   DeadlineConfig,
   RateLimitConfig,
-  ResilientPorts,
 } from "../../resilience/resilient-call";
 
 // ===========================================================================
@@ -288,24 +290,18 @@ export interface ReconcilerState<Actual, Change, Page, Cursor = number> {
 /**
  * The actual-list page-fetch effect: the inherited `resilient_run` Cmd from
  * paginated-walk, whose `input` is the `Cursor` to fetch and whose `key` is the
- * fixed `PAGE_KEY`. The consumer's `handlers(ports)` interprets it.
+ * fixed `PAGE_KEY`. It is `Cmd.define`d; the handler you write fetches ONE page
+ * of the ACTUAL listing and returns `ok(page)` or
+ * `err({ _tag: "port_rejected", … })`.
  */
 export type ScanPageCmd<Cursor> = FetchPageCmd<Cursor>;
 
-/** Page-settled Msgs the scan `handlers` port dispatches back (inherited verbatim). */
+/** The page-settled Msgs the engine mints from that handler's outcome. */
 export type ScanPageOkMsg<Page> = PageOkMsg<Page>;
 export type ScanPageErrMsg = PageErrMsg;
 
 /** The scan retry / deadline timer Msg — inherited from paginated-walk. */
 export type ReconcilerTimerMsg = PaginatedWalkTimerMsg;
-
-/**
- * Ports the consumer supplies to `handlers`. `run(cursor)` fetches ONE page of
- * the ACTUAL listing for the given cursor; throwing routes to `pageErr` (and
- * thus the scan backoff). Same shape as paginated-walk's port.
- */
-export interface ReconcilerPorts<Cursor, Page>
-  extends ResilientPorts<Cursor, Page> {}
 
 // ===========================================================================
 // The knob factory.
@@ -317,9 +313,10 @@ export interface ReconcilerPorts<Cursor, Page>
  * to `Math.random` (read at the verb boundary inside resilient-call, never in a
  * reconciler verb). Inherited straight from paginated-walk.
  *
- * Returns the uniform L2 knob contract: `init()`, the verbs `scan` / `pageOk` /
- * `pageErr` / `planned` / `applyNext` / `applied` / `onTimer`, the derived
- * `isComplete`, `subs(state)`, and `handlers(ports)`.
+ * Returns plain functions: `init()`, the verbs `scan` / `pageOk` / `pageErr` /
+ * `planned` / `applyNext` / `applied` / `onTimer`, the derived `isComplete`,
+ * `deadlines(state)` / `timer(state)`, and the scan's page-fetch Cmd def
+ * (`scanPage`) to list in the machine's `cmds`.
  */
 export function createReconciler<
   Actual,
@@ -411,7 +408,7 @@ export function createReconciler<
    * Record a successfully fetched actual-list `page`: append its items to the
    * `actual` accumulator and advance the walk. When the walk finishes (the
    * listing is exhausted), the full actual snapshot is in hand → compute the
-   * plan (`planned`) and start applying. PURE — `at` is the scan clock.
+   * plan (`planned`) and start applying. PURE — `msg.at` is the scan clock.
    *
    * A stray `pageOk` while not `scanning` (a late duplicate after the scan
    * completed) is absorbed by the walk (no cursor advance) and contributes no
@@ -419,16 +416,16 @@ export function createReconciler<
    */
   function pageOk(
     s: State,
-    page: Page,
-    at: number,
+    msg: ScanPageOkMsg<Page>,
   ): readonly [State, readonly OutCmd[]] {
+    const { value: page, at } = msg;
     // Once we are past scanning, the actual snapshot is frozen — absorb stray pages.
     if (s.phase !== "scanning") {
-      const [w] = walk.pageOk(s.walk, page, at);
+      const [w] = walk.pageOk(s.walk, msg);
       return [withWalk(s, w), []];
     }
 
-    const [w, walkCmds] = walk.pageOk(s.walk, page, at);
+    const [w, walkCmds] = walk.pageOk(s.walk, msg);
     const actual = [...s.actual, ...config.itemsOf(page)];
     const scanned: State = { ...s, walk: w, actual };
 
@@ -453,14 +450,13 @@ export function createReconciler<
    * schedule a retry (the scan cursor stays parked — no advance) or, once the
    * page-fetch retries are exhausted, the underlying call settles `failed`. When
    * the scan call is terminally failed, the whole reconcile enters `failed`.
-   * PURE — `at` stamps the breaker trip + the retry-delay base.
+   * PURE — `msg.at` stamps the breaker trip + the retry-delay base.
    */
   function pageErr(
     s: State,
-    error: unknown,
-    at: number,
+    msg: ScanPageErrMsg,
   ): readonly [State, readonly OutCmd[]] {
-    const [w, cmds] = walk.pageErr(s.walk, error, at);
+    const [w, cmds] = walk.pageErr(s.walk, msg);
     let next = withWalk(s, w);
     // The page-fetch call settling `failed` (retries exhausted) is a terminal
     // scan failure → the reconcile cannot trust an incomplete actual snapshot.
@@ -628,41 +624,30 @@ export function createReconciler<
     return s.phase === "done";
   }
 
-  // === Subs ================================================================
+  // === Timers ==============================================================
 
   /**
    * The scan's deadlines — exactly paginated-walk's: a retry timer while a scan
    * page is `waiting_retry`, and (with the `deadline` brick) a per-page deadline
    * timer while a scan fetch is active. The apply loop emits no timers (each
    * apply settles via the consumer's own Msg), so once the scan finishes the
-   * list empties. Declare `subs: [deadlinesSub((s) => rec.subs(s.rec))]` and
-   * pass `subscribe: { deadline: subscribeDeadline }` to `run` (both
-   * re-exported below).
+   * list empties.
    */
-  function subs(s: State): readonly DeadlineSub[] {
-    return walk.subs(s.walk);
+  function deadlines(s: State): readonly DeadlineSub[] {
+    return walk.deadlines(s.walk);
   }
 
-  // === Handlers ============================================================
-
   /**
-   * Pre-wired interpret handler for the scan page-fetch effect. Inherited from
-   * paginated-walk (`resilient_run`): wraps the consumer's `run(cursor)` actual-
-   * list port via `tryInterpret` (Railway) — success → `resilient_ok` (handled by
-   * `pageOk`), failure → `resilient_err` (handled by `pageErr`), each stamped
-   * with `Date.now()` at the effect boundary (the ONE permitted clock read).
-   *
-   *   run(machine, { interpret: rec.handlers({ run: (cursor) => api.listActual(cursor) }) })
-   *
-   * The apply-Cmd side is the CONSUMER's interpret handler (it knows how to
-   * realize `apply(change)`); the consumer routes its settle Msg back through
-   * `applied`. This knob only owns the scan's interpret cell.
+   * The built-in `timer` Sub's deps for the scan. Declare
+   * `{ type: "timer", deps: (s) => rec.timer(s.rec) }`.
    */
-  function handlers(ports: ReconcilerPorts<Cursor, Page>) {
-    return walk.handlers(ports);
+  function timer(s: State) {
+    return walk.timer(s.walk);
   }
 
   return {
+    /** The scan's page-fetch Cmd def — list it in the machine's `cmds`. */
+    scanPage: walk.fetch,
     init,
     scan,
     pageOk,
@@ -672,8 +657,8 @@ export function createReconciler<
     applied,
     onTimer,
     isComplete,
-    subs,
-    handlers,
+    deadlines,
+    timer,
   };
 }
 
@@ -699,12 +684,3 @@ export function liftReconciler<
 ): readonly [S, readonly C[]] {
   return [{ ...state, rec: slice }, cmds];
 }
-
-/**
- * Re-export the deadline primitives (inherited from paginated-walk) so
- * consumers wire one import: `subscribeDeadline` is the `deadline` runner,
- * `deadlinesSub` the machine's `subs` entry, and `deadlineSub` builds the entry
- * this knob's `subs` lists.
- */
-export { subscribeDeadline, deadlineSub, deadlinesSub };
-export type { DeadlineSub, DeadlinesSub };

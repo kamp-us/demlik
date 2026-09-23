@@ -224,7 +224,7 @@ const noop = async (
 // the router's own rejection def.
 // @ts-expect-error `agent_tool` mints `agent_tool_ok` / `agent_tool_err`
 tool("agent_tool", spec, noop);
-// @ts-expect-error `resilient` mints `resilient_ok` / `resilient_err`
+// @ts-expect-error `resilient` is the prefix of the brain Cmd `resilient_run`
 tool("resilient", spec, noop);
 // @ts-expect-error `compact` mints `compact_ok` / `compact_err`
 tool("compact", spec, noop);

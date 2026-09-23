@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyCell,
   defineMachine,
   msgKeysOf,
-  NoCellError,
   type Reducer,
   type Transitions,
 } from "./index";
-import {
-  type DeadlineModel,
-  withDeadline,
-} from "./internal/resilience/with-deadline";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `msgKeysOf` over a RAGGED Transitions table.
@@ -23,12 +17,11 @@ import {
 // built at runtime from config looks like: the mapped type constrains nothing
 // and the rows are structurally ragged.
 //
-// The consequence is not cosmetic. All three `withX` wrappers build their
-// merged flat Reducer by iterating `msgKeysOf(base)`, so a Msg absent from row
-// zero got NO cell in the wrapped machine and threw `NoCellError` on dispatch
-// for a Msg the BASE handles fine. `withDeadline`'s reserved-namespace scan
-// missed a `$deadline:`-prefixed Msg living only in a later row for the same
-// reason.
+// The consequence was not cosmetic: the `withX` wrappers (since removed, ADR
+// 0022) built their merged flat Reducer by iterating `msgKeysOf(base)`, so a
+// Msg absent from row zero got NO cell in the wrapped machine and threw
+// `NoCellError` on dispatch for a Msg the BASE handles fine. Anything that
+// enumerates a machine's Msgs the same way still depends on the union.
 //
 // These tests pin both halves: the union is now reported (widening), and a
 // total table's answer is identical to before (no behaviour change).
@@ -149,49 +142,5 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
       update,
     });
     expect(msgKeysOf(m)).toEqual(["bump", "reset"]);
-  });
-});
-
-describe("the wrappers stop losing cells for a ragged base", () => {
-  it("withDeadline builds a cell for a Msg that lives only in a later row", () => {
-    const wrapped = withDeadline(
-      { machine: raggedMachine() },
-      { ms: 10 },
-    ).machine;
-    // The under-enumeration bug surfaced HERE: no cell for "late" in the
-    // wrapped flat record → NoCellError at dispatch for a Msg the base
-    // handles. Stepping the wrapped machine must now succeed.
-    const [next] = applyCell<DeadlineModel<DynState>, DynMsg, never>(
-      wrapped,
-      { base: { type: "busy" }, $deadline: { phase: "armed", seq: 0 } },
-      { type: "late" },
-    );
-    expect(next.base).toEqual({ type: "idle" });
-
-    // And the failure is still real for a Msg NO row declares — the widening
-    // did not turn the guard off.
-    expect(() =>
-      applyCell(
-        wrapped,
-        { base: { type: "busy" }, $deadline: { phase: "armed", seq: 0 } },
-        { type: "nonexistent" },
-      ),
-    ).toThrow(NoCellError);
-  });
-
-  it("withDeadline's reserved-namespace scan sees a later row's $deadline: Msg", () => {
-    const squatter = defineMachine({
-      types: { model: {} as DynState, msg: {} as DynMsg, ctx: undefined },
-      init: (_loaded) => [{ type: "idle" }, []],
-      update: {
-        idle: { start: () => [{ type: "busy" }, []] },
-        // The squat hides in row TWO — invisible to the first-row reading, so
-        // the wrapper used to accept the base and then silently clobber it.
-        busy: { "$deadline:exceeded": (s: DynState) => [s, []] },
-      } as unknown as Transitions<DynState, DynMsg, never>,
-    });
-    expect(() => withDeadline({ machine: squatter }, { ms: 10 })).toThrow(
-      /\$deadline:/,
-    );
   });
 });

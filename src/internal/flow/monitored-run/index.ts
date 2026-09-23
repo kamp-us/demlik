@@ -10,9 +10,10 @@
  * wake by re-emitting the one outstanding effect) and the no-progress safety
  * alarm (`subs.ts`, keyed on `progressSeq` so every progress event retires the
  * old alarm and arms a fresh one). `monitored-run` lifts both into one config-
- * driven knob with the uniform L2 contract `resilient-call` established:
- * `init()`, the verbs (`start` / `advance` / `progress` / `onDeadline` /
- * `boot`), `subs(state)`, and `handlers(ports)`.
+ * driven knob of plain functions (ADR 0022): `init()`, the verbs (`start` /
+ * `advance` / `progress` / `onDeadline` / `boot` / `confirmSnapshot`),
+ * `deadlines(state)` / `timer(state)`, and the checkpoint Cmd def
+ * (`checkpoint`).
  *
  *   - It is **staged, optionally**. Omit `stages` and the run is single-shot:
  *     `start` enters `running`, `advance` finishes it to `done`. Provide
@@ -30,9 +31,9 @@
  *     `deadlineMs` → no watchdog (the `stale` phase is never reachable).
  *   - It **checkpoints, optionally**. Provide `snapshotEvery` and every
  *     progress unit is accounted to a `../snapshot` slice; once the cadence is
- *     reached a checkpoint Cmd is emitted (interpreted by the spliced snapshot
- *     `handlers`), so a crashed run restarts from the last durable checkpoint
- *     rather than from zero. Omit it → no checkpointing.
+ *     reached a `snapshot_write` Cmd is emitted (its handler is yours), so a
+ *     crashed run restarts from the last durable checkpoint rather than from
+ *     zero. Omit it → no checkpointing.
  *
  * ## Why the run lifecycle is INLINE (run-tracker not extracted)
  *
@@ -56,8 +57,7 @@
  *     numbers), so it survives DO eviction / reload.
  *   - **Replayable** — every transition is a pure verb returning new state +
  *     Cmds; nothing here reads the clock or RNG. Time arrives as an `at` / `atMs`
- *     parameter; the only clock read is `Date.now()` inside the snapshot
- *     `handlers` port (the effect boundary), exactly as `../snapshot` stamps it.
+ *     parameter. The knob ships no I/O.
  *
  * ## Typical wiring
  *
@@ -67,43 +67,43 @@
  *     snapshotEvery: 25,
  *   });
  *
+ *   cmds: [run.checkpoint],
  *   init: (loaded) => loaded ? [loaded, []] : [{ run: run.init() }, []],
  *   update: {
  *     begin:    (s, m) => lift(s, run.start(s.run, m.runId, m.at)),
  *     advance:  (s, m) => lift(s, run.advance(s.run, checkpoint(s), m.result, m.at)),
  *     progress: (s, m) => lift(s, run.progress(s.run, checkpoint(s), m.at)),
- *     run_deadline: (s, m) => lift(s, run.onDeadline(s.run, m)),
+ *     deadline_exceeded: (s, m) => lift(s, run.onDeadline(s.run, m)),
  *     boot:     (s, m) => lift(s, run.boot(s.run, m.at)),
+ *     snapshot_write_ok: (s, m) => [{ ...s, run: run.confirmSnapshot(s.run, m) }, []],
+ *     snapshot_write_err: (s) => [s, []],
  *   },
- *   subs: [deadlinesSub((s) => run.subs(s.run))],
+ *   subs: [{ type: "timer", deps: (s) => run.timer(s.run) }],
  *
- *   // and where it runs — handlers ride beside the machine, not on it (the
+ *   // and where it runs — the checkpoint write is the handler you write (the
  *   // engine's `run` imported under another name, since `run` is the knob):
  *   runMachine(machine, {
- *     interpret: run.handlers({ store: r2 }),
- *     subscribe: { deadline: subscribeDeadline },
+ *     interpret: {
+ *       snapshot_write: async (cmd, { ok, err }) => {
+ *         try { await r2.put(cmd.key, cmd.payload); return ok(undefined); }
+ *         catch (cause) { return err({ _tag: "snapshot_write_failed", cause }); }
+ *       },
+ *     },
  *   });
  */
 
-import type { Cmd, Interpret } from "../../../index";
+import type { Cmd, TimerDeps } from "../../../index";
 import {
   createSnapshot,
-  type SnapshotFailedMsg,
-  type SnapshotLoadCmd,
-  type SnapshotLoadedMsg,
-  type SnapshotLoadFailedMsg,
   type SnapshotSavedMsg,
   type SnapshotState,
-  type SnapshotStore,
   type SnapshotWriteCmd,
 } from "../../persistence/snapshot";
 import {
   type DeadlineExceeded,
   type DeadlineSub,
-  type DeadlinesSub,
   deadlineSub,
-  deadlinesSub,
-  subscribeDeadline,
+  nextTimer,
 } from "../../resilience/deadline";
 import type { QueueItem } from "../../work-queue";
 import { queueAdapter } from "../../work-queue/adapter";
@@ -309,12 +309,6 @@ export type MonitoredRunCmd<V> = SnapshotWriteCmd<V>;
 /** The deadline Msg the safety alarm dispatches when the watchdog fires. */
 export type MonitoredRunTimerMsg = DeadlineExceeded;
 
-/** Ports the consumer supplies to `handlers` — just the checkpoint store. */
-export interface MonitoredRunPorts<V> {
-  /** Where periodic checkpoints are written (R2 / KV / DO sub-key / Map). */
-  readonly store: SnapshotStore<V>;
-}
-
 // ===========================================================================
 // Deadline-id family. The safety alarm is keyed on `progressSeq` so a progress
 // event retires the old alarm and arms a new one (single-shot, re-armed by id
@@ -336,7 +330,7 @@ function safetyTimerId(runId: string, progressSeq: number): string {
  *
  * No `rng` parameter: unlike `resilient-call`, nothing here jitters — the only
  * external inputs are time (an `at` / `atMs` parameter) and the consumer's
- * stage outcomes. The clock is read only inside the snapshot `handlers` port.
+ * stage outcomes.
  */
 export function createMonitoredRun<Stage, V = unknown>(
   config: MonitoredRunConfig<Stage> = {},
@@ -720,16 +714,14 @@ export function createMonitoredRun<Stage, V = unknown>(
     return [reseeded, []];
   }
 
-  // === Subs ================================================================
+  // === Timers ==============================================================
 
   /**
    * The no-progress safety deadline, listed only while the run is live
    * (`running` / `stale`) AND a `deadlineMs` is configured. Its id is keyed on
-   * `progressSeq`, so every progress event retires the old alarm and the engine
-   * arms a fresh one at the new `lastProgressAt + deadlineMs` — a self-rearming
-   * watchdog with no manual `clearTimeout`. A settled run lists none. Declare
-   * `subs: [deadlinesSub((s) => run.subs(s.run))]` and pass
-   * `subscribe: { deadline: subscribeDeadline }` to the engine's `run`.
+   * `progressSeq`, so every progress event retires the old alarm and arms a
+   * fresh one at the new `lastProgressAt + deadlineMs` — a self-rearming
+   * watchdog with no manual `clearTimeout`. A settled run lists none.
    *
    * A NEVER-STARTED slice (`init()`) is its OWN `idle` phase, not a `running` run
    * with an empty `runId`. The `phase !== "running" && phase !== "stale"` narrow
@@ -739,7 +731,7 @@ export function createMonitoredRun<Stage, V = unknown>(
    * defect. `start` is the only transition out of `idle`, so the watchdog exists
    * exactly once a real run is in flight.
    */
-  function subs(s: MonitoredRunState<Stage>): readonly DeadlineSub[] {
+  function deadlines(s: MonitoredRunState<Stage>): readonly DeadlineSub[] {
     if (config.deadlineMs === undefined) return [];
     if (s.phase !== "running" && s.phase !== "stale") return [];
     return [
@@ -750,40 +742,26 @@ export function createMonitoredRun<Stage, V = unknown>(
     ];
   }
 
-  // === Handlers ============================================================
-
   /**
-   * Pre-wired interpret handler for the checkpoint write. Delegates wholesale to
-   * `../snapshot`'s `handlers` (which performs the `put` and routes Ok →
-   * `snapshot_saved` / Err → `snapshot_failed` via Railway — the write never
-   * rejects into the runtime). When checkpointing is disabled (`snapshotEvery`
-   * omitted), no `snapshot_write` Cmd is ever emitted, so the returned map is an
-   * inert no-op handler — kept for a uniform `handlers(ports)` call shape.
-   *
-   * Fold the `snapshot_saved` Msg back through this knob's `confirmSnapshot`
-   * verb to advance the durable watermark.
+   * The built-in `timer` Sub's deps for the watchdog: `deadlineMs` counted from
+   * `lastProgressAt`, the instant the current alarm was armed. Its fire is a
+   * `deadline_exceeded` Msg; route it to `onDeadline`. Declare
+   * `{ type: "timer", deps: (s) => run.timer(s.run) }`. PURE.
    */
-  function handlers(
-    ports: MonitoredRunPorts<V>,
-  ): Interpret<
-    | SnapshotSavedMsg
-    | SnapshotFailedMsg
-    | SnapshotLoadedMsg<V>
-    | SnapshotLoadFailedMsg,
-    SnapshotWriteCmd<V> | SnapshotLoadCmd,
-    unknown
-  > {
-    return activeSnap.handlers({ store: ports.store });
+  function timer(
+    s: MonitoredRunState<Stage>,
+  ): TimerDeps<MonitoredRunTimerMsg> | null {
+    return nextTimer(deadlines(s), s.lastProgressAt);
   }
 
   /**
    * Fold a confirmed checkpoint write into the slice — advances the snapshot
    * watermark (forward-only). A no-op pass-through when checkpointing is
-   * disabled. PURE. Fold the `snapshot_saved` Msg here.
+   * disabled. PURE. Fold the `snapshot_write_ok` Msg here.
    */
   function confirmSnapshot(
     s: MonitoredRunState<Stage>,
-    msg: SnapshotSavedMsg,
+    msg: SnapshotSavedMsg<V>,
   ): MonitoredRunState<Stage> {
     if (snap === null) return s;
     // `snap.confirm` returns the reducer-cell shape `[SnapshotState, Cmd[]]`
@@ -795,6 +773,8 @@ export function createMonitoredRun<Stage, V = unknown>(
   }
 
   return {
+    /** The `snapshot_write` Cmd def — list it in `cmds` when checkpointing. */
+    checkpoint: activeSnap.write,
     init,
     start,
     progress,
@@ -804,8 +784,8 @@ export function createMonitoredRun<Stage, V = unknown>(
     onDeadline,
     boot,
     confirmSnapshot,
-    subs,
-    handlers,
+    deadlines,
+    timer,
   };
 }
 
@@ -826,16 +806,4 @@ export function liftRun<
   return [{ ...state, run: slice }, cmds];
 }
 
-/**
- * Re-export the deadline primitives so consumers (and tests) wire one import:
- * `subscribeDeadline` is the `deadline` runner, `deadlinesSub` the machine's
- * `subs` entry, and `deadlineSub` builds the entry this knob's `subs` lists.
- */
-export { subscribeDeadline, deadlineSub, deadlinesSub };
-export type {
-  DeadlineSub,
-  DeadlinesSub,
-  DeadlineExceeded,
-  SnapshotSavedMsg,
-  SnapshotWriteCmd,
-};
+export type { SnapshotSavedMsg, SnapshotWriteCmd };

@@ -192,12 +192,12 @@ describe("itemOk / itemErr — record + backfill", () => {
   });
 });
 
-describe("handlers — out-of-band completion Port", () => {
+describe("completion — out-of-band completion Port", () => {
   it("emits gathered results onto the Port iff the batch just completed", () => {
     __resetPortRegistry();
     const complete = definePort<readonly Result[]>("fan-out.test.complete");
     const fan = createFanOut(baseConfig);
-    const h = fan.handlers({ complete });
+    const h = fan.completion({ complete });
 
     const emitted: (readonly Result[])[] = [];
     const emit = <T>(_port: unknown, value: T) => {

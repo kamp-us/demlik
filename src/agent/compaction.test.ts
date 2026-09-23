@@ -148,14 +148,18 @@ const compactOk = (summary: string): AgentCompactOkMsg => ({
   at: 0,
 });
 
-// The re-entered brain-call success settle Msg.
+// The brain-call success settle Msg the engine mints from the brain handler's outcome.
 const brainOk = (
   purpose: Purpose,
   output: AgentTurn,
 ): AgentLlmOkMsg<Purpose, Outputs> => ({
-  type: "resilient_ok",
-  key: purpose,
-  result: { key: purpose, purpose, output },
+  type: "resilient_run_ok",
+  cmd: {
+    type: "resilient_run",
+    key: purpose,
+    input: { purpose, model: null, payload: null },
+  },
+  value: { key: purpose, purpose, output },
   at: 0,
 });
 
@@ -597,7 +601,7 @@ describe("compaction — replay byte-identity with a mid-loop compaction", () =>
     const conv = state.conversation;
     if (conv === null) throw new Error("expected a conversation");
     // turns: [summary] (2 folded into 1) + the brain call re-fired afterwards
-    // produced no new turn (no resilient_ok for it in the log).
+    // produced no new turn (no resilient_run_ok for it in the log).
     expect(conv.turns[0]).toEqual({ content: "SUM", toolCalls: [] });
     expect(conv.awaiting).toEqual({ kind: "llm" });
     // No surviving tool record from a folded turn.

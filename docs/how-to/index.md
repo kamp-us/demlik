@@ -71,13 +71,13 @@ what you are trying to do, and it names the subpath you need.
 - [Hand-wire a resilient call](./hand-wire-a-resilient-call.md) — wire
   `@demlik/tea/resilience`'s `createResilientCall` knob into your own `update`
   cell by cell, with `settle` and an `onSettle` helper of your own, so a call
-  gets retry, backoff and a circuit breaker without `mountResilientCall`.
+  gets retry, backoff and a circuit breaker from plain functions.
 
 ## Classify something
 
 - [Ask Jev a typed question](./ask-jev-a-typed-question.md) — send a rubric to
   TypeSafe Jev with `@demlik/tea/jev` and get the answer back narrowed to the
-  criteria keys you wrote, with the HTTP caller injected as a port so the whole
+  criteria keys you wrote, with the HTTP call as a handler you write so the whole
   call replays in a test without a key.
 
 *Guides are added as the how-to quadrant grows.*

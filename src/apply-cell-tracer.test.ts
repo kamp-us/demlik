@@ -9,8 +9,6 @@ import {
   replay,
   type Transitions,
 } from "./index";
-import { withDeadline } from "./internal/resilience/with-deadline";
-import { withResilience } from "./internal/resilience/with-resilience";
 import { toMermaid } from "./machine-viz";
 import { foldEvents, msgTypeKeys } from "./pbt";
 import { run } from "./promise";
@@ -18,7 +16,7 @@ import { run } from "./promise";
 // ───────────────────────────────────────────────────────────────────────────
 // Vertical tracer (#275): ONE machine, the exact shape `__form` disambiguates,
 // stepped/classified by EVERY dispatch consumer — production `run`, the pure
-// folds, the PBT fold runner, machine-viz, msg-keys, and the withX wrappers —
+// folds, the PBT fold runner, machine-viz and msg-keys —
 // asserting they all agree. Pre-#275 the verification tools re-derived the
 // update form with a local structural heuristic frozen at the pre-`__form`
 // snapshot, so they could disagree with production on this machine; every
@@ -30,8 +28,8 @@ type LState = { readonly type: "red" } | { readonly type: "green" };
 type LMsg = { readonly type: "go" } | { readonly type: "stop" };
 type LCmd = { readonly type: "ping" };
 
-// A real `ping` handler key: withResilience refuses a target Cmd with no
-// base interpret handler (#112). Never invoked — no cell emits `ping`.
+// A real `ping` handler key, so `run` has a cell for every Cmd variant.
+// Never invoked — no cell emits `ping`.
 const interpret: Interpret<LMsg, LCmd, undefined> = {
   ping: async () => undefined,
 } as unknown as Interpret<LMsg, LCmd, undefined>;
@@ -119,26 +117,5 @@ describe("applyCell vertical tracer — every consumer agrees on the __form-disa
       "go",
       "stop",
     ]);
-  });
-
-  it("withDeadline steps the base identically", () => {
-    const wrapped = withDeadline(
-      { machine: disambiguatedMachine(), interpret },
-      { ms: 1000 },
-    );
-    const { state } = replay(wrapped.machine, { msgs: [GO], ctx: undefined });
-    expect(state.base).toEqual({ type: "green" });
-  });
-
-  it("withResilience steps the base identically", () => {
-    const wrapped = withResilience(
-      { machine: disambiguatedMachine(), interpret },
-      { target: "ping" },
-    );
-    const { state } = replay(wrapped.machine, {
-      msgs: [GO],
-      ctx: undefined as never,
-    });
-    expect(state.base).toEqual({ type: "green" });
   });
 });

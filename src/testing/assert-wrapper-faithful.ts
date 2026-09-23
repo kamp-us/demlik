@@ -70,10 +70,10 @@ export interface AssertWrapperFaithfulOpts<S, WM, BaseM, BaseCtx, WrapperCtx> {
    */
   readonly baseLoaded?: S | null;
   /**
-   * Opt-in relaxation for an INTERCEPTING wrapper (e.g. `withResilience`).
+   * Opt-in relaxation for an INTERCEPTING wrapper (e.g. a retry wrapper).
    *
-   * DEFAULT (`undefined` / `false`) — the OBSERVE-ONLY contract that
-   * `withDeadline` satisfies: every bare base Cmd must appear
+   * DEFAULT (`undefined` / `false`) — the OBSERVE-ONLY contract that a
+   * deadline wrapper satisfies: every bare base Cmd must appear
    * UNCHANGED, in order, as a subsequence of the wrapped Cmd stream (properties
    * 1 and 3b). The wrapper may APPEND its own Cmds but may NOT alter, drop, or
    * retime a base Cmd. This is the strict default and it is NOT weakened.
@@ -97,7 +97,7 @@ export interface AssertWrapperFaithfulOpts<S, WM, BaseM, BaseCtx, WrapperCtx> {
    * Cmd in its window is a SWALLOW betrayal and still fails the gate.
    *
    * Provide the field names the carrier uses so the gate can unwrap it
-   * structurally without hard-coding `withResilience`'s vocabulary.
+   * structurally without hard-coding any one wrapper's vocabulary.
    */
   readonly intercepting?: InterceptingOpt;
 }
@@ -135,7 +135,7 @@ export interface InterceptingOpt {
  *
  * @param base       the bare base `Machine`.
  * @param makeWrapped a thunk that wraps `base` and returns the composed machine
- *   (e.g. `() => withDeadline(wired, cfg).machine`, where `wired.machine` is
+ *   (e.g. `() => withTimeout(wired, cfg).machine`, where `wired.machine` is
  *   `base`). A thunk — not the wrapped value — so a wrapper that registers
  *   process-scoped ports (`definePort`) is constructed inside the assertion's
  *   control, and so the same betrayal-detector reads as

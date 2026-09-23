@@ -433,9 +433,9 @@ export type AnyCmdDef = {
 //
 // `run` builds ONE edge over `machine.cmds` and its clock, applies it to every
 // interpret handler's return, and hands the same edge to the handlers under
-// `cmdEdge` on ctx (beside `emit`). The hand-off is for a wrapper that invokes
-// a base handler INSIDE its own — `withResilience`'s `$resilience:run` carrier,
-// the agent's fanned tool cells — where `run`'s edge sees the carrier's `type`,
+// `cmdEdge` on ctx (beside `emit`). The hand-off is for a handler that invokes
+// another def's handler INSIDE its own — the agent's fanned tool cells — where
+// `run`'s edge sees the carrier's `type`,
 // never the def's, so the base outcome would cross unminted (#66). Settling
 // through `cmdEdgeOf(ctx)` at the site the def's handler is actually invoked
 // keeps one mint, one parse and one clock for the bare and the wrapped machine
@@ -466,9 +466,7 @@ export const cmdEdge: unique symbol = Symbol("tea.cmdEdge");
  *   - nothing — nothing is dispatched;
  *   - its own `_ok` / `_err` Msg, or a non-Msg value — thrown as
  *     {@link OutcomeContractError};
- *   - any other Msg — passed through as a follow-up. That arm is the L2
- *     helpers' `handlers(ports)`, which answer in their own Msg vocabulary
- *     until they ship run Cmds instead (#282).
+ *   - any other Msg — passed through as a follow-up.
  *
  * Minted Msgs are stamped with `at` from the clock. A Cmd no def builds — a
  * hand-written Cmd's follow-up — passes through untouched.
@@ -998,11 +996,10 @@ export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
 // bind. A table assembled DYNAMICALLY — the discriminants widened to plain
 // `string`, rows pushed in a loop — is structurally ragged, and reading row
 // zero then under-reports the Msg union. That under-report is not cosmetic:
-// all three withX wrappers build their flat merged Reducer by iterating
-// `msgKeysOf(base)`, so a Msg missing from row zero got NO cell in the wrapped
-// machine and threw `NoCellError` at dispatch for a Msg the base handles
-// perfectly well; and `withDeadline`'s reserved-namespace scan silently missed
-// a `$deadline:`-prefixed base Msg that appeared only in a later row.
+// the `withX` wrappers (since removed, ADR 0022) built their flat merged
+// Reducer by iterating `msgKeysOf(base)`, so a Msg missing from row zero got
+// NO cell in the wrapped machine and threw `NoCellError` at dispatch for a Msg
+// the base handles perfectly well.
 //
 // The widening is pure: for any total table the returned array is identical
 // (same keys, same order). Cost goes from O(msgs) to O(states × msgs), paid
@@ -1770,9 +1767,8 @@ export type NoCtx = Readonly<Record<never, never>>;
 // **A `Cmd.define`d Cmd's cell returns an `Outcome` (ADR 0021).** Its ctx also
 // carries the `ok` / `err` builders (`OutcomeHelpers`), `err` typed to the
 // def's declared tags, and the engine mints `<name>_ok` / `<name>_err` from
-// what it returns. Such a cell may still resolve to another Msg or nothing:
-// the L2 helpers' `handlers(ports)` answer in their own Msg vocabulary until
-// they ship run Cmds instead (#282). A hand-written Cmd's cell is unchanged.
+// what it returns. Such a cell may still resolve to another Msg or nothing. A
+// hand-written Cmd's cell is unchanged.
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
 };

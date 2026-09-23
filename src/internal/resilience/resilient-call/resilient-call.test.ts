@@ -1,11 +1,6 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  type DepKeyedSub,
-  defineMachine,
-  replay,
-  subIdOf,
-} from "../../../index";
+import { defineMachine, replay } from "../../../index";
 import { run } from "../../../promise";
 import type {
   DurationRetryPolicy,
@@ -13,25 +8,15 @@ import type {
   TimedRetryState,
 } from "../../../retry-backoff";
 import { bindMachine } from "../../../testing";
-import {
-  type DeadlineSub,
-  type DeadlinesSub,
-  deadlineExceeded,
-  deadlinesSub,
-  subscribeWith,
-} from "../deadline";
+import { deadlineExceeded, deadlineSub } from "../deadline";
 import {
   createResilientCall,
   type DeadlineExceededError,
-  type DeadlineSettled,
-  deadlineSub,
   type FailMsg,
-  mountResilientCall,
   type ResilientState,
   type ResilientTimerMsg,
   type RunCmd,
   type SucceedMsg,
-  subscribeDeadline,
 } from "./index";
 
 // ---------------------------------------------------------------------------
@@ -46,25 +31,9 @@ interface HostState {
 type HostMsg =
   | { type: "attempt"; key: string; input: string; at: number }
   | SucceedMsg<string>
-  | FailMsg
+  | FailMsg<"resilient", unknown, unknown>
   | ResilientTimerMsg;
 type HostCmd = RunCmd<string>;
-
-// The deadlines a machine's `subs` list at `model` — what its `deadline`
-// runner arms. A mount's `subs` is one `deadline` entry over the knob's list.
-function armed<Model, N extends string | undefined>(
-  subs: readonly DepKeyedSub<Model, DeadlinesSub<N>>[],
-  model: Model,
-): readonly DeadlineSub<N>[] {
-  return subs.flatMap((entry) => entry.deps(model) ?? []);
-}
-
-// The running `deadline` Sub the engine hands the runner for `list`.
-function runningSub<N extends string | undefined>(
-  ...list: DeadlineSub<N>[]
-): DeadlinesSub<N> {
-  return { id: subIdOf("deadline", list), type: "deadline", deps: list };
-}
 
 // rng pinned to 0 → "full" jitter collapses the backoff delay to exactly 0,
 // so retryAtMs == at: deterministic, observable timer targets in assertions.
@@ -77,20 +46,6 @@ function pair<S, C>(r: {
   readonly cmds: C;
 }): readonly [S, C] {
   return [r.call, r.cmds];
-}
-
-// `mountResilientCall` is written against the two-verb `succeed` / `fail` shape
-// jev-ask and llm-call keep. The base knob settles through one `settle`, so a
-// test that mounts it directly binds both verbs to that one.
-function mountable<K extends { settle: (s: never, msg: never) => unknown }>(
-  rc: K,
-) {
-  const bySettle = (
-    s: Parameters<K["settle"]>[0],
-    _key: string,
-    msg: Parameters<K["settle"]>[1],
-  ) => pair(rc.settle(s, msg) as { call: never; cmds: never });
-  return { ...rc, succeed: bySettle, fail: bySettle };
 }
 
 const fullConfig = {
@@ -117,7 +72,6 @@ function makeMachine(
       model: {} as HostState,
       msg: {} as HostMsg,
       cmd: {} as HostCmd,
-      sub: {} as DeadlinesSub,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -127,11 +81,11 @@ function makeMachine(
         const [slice, cmds] = rc.attempt(s.resilience, m.key, m.input, m.at);
         return [{ resilience: slice }, cmds];
       },
-      resilient_ok: (s, m) => {
+      resilient_run_ok: (s, m) => {
         const [slice, cmds] = pair(rc.settle(s.resilience, m));
         return [{ resilience: slice }, cmds];
       },
-      resilient_err: (s, m) => {
+      resilient_run_err: (s, m) => {
         const [slice, cmds] = pair(rc.settle(s.resilience, m));
         return [{ resilience: slice }, cmds];
       },
@@ -140,7 +94,7 @@ function makeMachine(
         return [{ resilience: slice }, cmds];
       },
     },
-    subs: [deadlinesSub((s: HostState) => rc.subs(s.resilience))],
+    subs: [{ type: "timer", deps: (s: HostState) => rc.timer(s.resilience) }],
   });
   return { rc, machine };
 }
@@ -183,8 +137,8 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     },
   };
   const err = (at: number): FailMsg => ({
-    type: "resilient_err",
-    key: "k",
+    type: "resilient_run_err",
+    cmd: { key: "k" },
     error: { _tag: "backend_down" },
     at,
   });
@@ -193,9 +147,9 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     const rc = createResilientCall<string, string>(retryTwice, rngZero);
     const [running] = rc.attempt(rc.init(), "k", "in", 0);
     const r = rc.settle(running, {
-      type: "resilient_ok",
-      key: "k",
-      result: "VALUE",
+      type: "resilient_run_ok",
+      cmd: { key: "k" },
+      value: "VALUE",
       at: 1,
     });
     expect(r.outcome).toEqual({ kind: "done", value: "VALUE" });
@@ -210,7 +164,7 @@ describe("createResilientCall — settle hands back how the call ended (#271)", 
     expect(r.outcome).toEqual({ kind: "retrying" });
     expect(r.call.calls.k?.phase).toBe("waiting_retry");
     // The re-issue rides the retry timer `subs` arms, not the settle Cmds.
-    const [timer] = rc.subs(r.call);
+    const [timer] = rc.deadlines(r.call);
     expect(timer?.id).toBe("resilient:retry:k");
     const [, reissued] = rc.onTimer(r.call, {
       type: "deadline_exceeded",
@@ -267,9 +221,9 @@ describe("createResilientCall — the gate (attempt)", () => {
     const [s1] = rc.attempt(rc.init(), "k", "in", 0);
     const [s2] = pair(
       rc.settle(s1, {
-        type: "resilient_ok",
-        key: "k",
-        result: "VALUE",
+        type: "resilient_run_ok",
+        cmd: { key: "k" },
+        value: "VALUE",
         at: 0,
       }),
     );
@@ -284,9 +238,9 @@ describe("createResilientCall — the gate (attempt)", () => {
     const [s1] = rc.attempt(rc.init(), "k", "in", 0);
     const [s2] = pair(
       rc.settle(s1, {
-        type: "resilient_ok",
-        key: "k",
-        result: "V",
+        type: "resilient_run_ok",
+        cmd: { key: "k" },
+        value: "V",
         at: 0,
       }),
     );
@@ -324,8 +278,8 @@ describe("createResilientCall — the gate (attempt)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e1",
         at: 0,
       }),
@@ -334,8 +288,8 @@ describe("createResilientCall — the gate (attempt)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e2",
         at: 0,
       }),
@@ -369,8 +323,8 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 0,
       }),
@@ -379,9 +333,9 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_ok",
-        key: "k",
-        result: "OK",
+        type: "resilient_run_ok",
+        cmd: { key: "k" },
+        value: "OK",
         at: 0,
       }),
     );
@@ -399,8 +353,8 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 100);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "boom",
         at: 100,
       }),
@@ -424,8 +378,8 @@ describe("createResilientCall — succeed / fail", () => {
       [s] = rc.attempt(s, "k", "in", 0);
       [s] = pair(
         rc.settle(s, {
-          type: "resilient_err",
-          key: "k",
+          type: "resilient_run_err",
+          cmd: { key: "k" },
           error: `e${i}`,
           at: 0,
         }),
@@ -443,8 +397,8 @@ describe("createResilientCall — succeed / fail", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     const [s2, cmds] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "x",
         at: 0,
       }),
@@ -461,8 +415,8 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 0,
       }),
@@ -497,9 +451,9 @@ describe("createResilientCall — onTimer (retry + deadline)", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_ok",
-        key: "k",
-        result: "OK",
+        type: "resilient_run_ok",
+        cmd: { key: "k" },
+        value: "OK",
         at: 0,
       }),
     );
@@ -520,30 +474,32 @@ describe("createResilientCall — subs", () => {
     let s = rc.init();
     [s] = rc.attempt(s, "k", "in", 100);
     // running → only the deadline timer.
-    expect(rc.subs(s)).toEqual([deadlineSub("resilient:deadline:k", 5_100)]);
+    expect(rc.deadlines(s)).toEqual([
+      deadlineSub("resilient:deadline:k", 5_100),
+    ]);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 100,
       }),
     );
     // waiting_retry → both retry and deadline timers.
-    expect(rc.subs(s)).toEqual([
+    expect(rc.deadlines(s)).toEqual([
       deadlineSub("resilient:retry:k", 100),
       deadlineSub("resilient:deadline:k", 5_100),
     ]);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_ok",
-        key: "k",
-        result: "OK",
+        type: "resilient_run_ok",
+        cmd: { key: "k" },
+        value: "OK",
         at: 100,
       }),
     );
     // settled → no timers.
-    expect(rc.subs(s)).toEqual([]);
+    expect(rc.deadlines(s)).toEqual([]);
   });
 
   it("omitting the deadline brick arms only retry timers", () => {
@@ -563,13 +519,13 @@ describe("createResilientCall — subs", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 0,
       }),
     );
-    const subs = rc.subs(s);
+    const subs = rc.deadlines(s);
     expect(subs.every((sub) => sub.id.startsWith("resilient:retry:"))).toBe(
       true,
     );
@@ -592,8 +548,8 @@ describe("createResilientCall — the deadline budget", () => {
     // The attempt burns 4_900 of the 5_000ms budget before failing.
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 4_900,
       }),
@@ -628,8 +584,8 @@ describe("createResilientCall — the deadline budget", () => {
     [s] = rc.attempt(s, "k", "in", 0);
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 1_000,
       }),
@@ -642,7 +598,7 @@ describe("createResilientCall — the deadline budget", () => {
       phase: "waiting_retry",
       budget: { remainingMs: 4_000, chargingSinceMs: 3_600_000 },
     });
-    expect(rc.subs(woken)).toContainEqual(
+    expect(rc.deadlines(woken)).toContainEqual(
       deadlineSub("resilient:deadline:k", 3_600_000 + 4_000),
     );
   });
@@ -666,8 +622,8 @@ describe("createResilientCall — the deadline budget", () => {
     // pushes it negative nor settles the call.
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 9_999_999,
       }),
@@ -680,7 +636,7 @@ describe("createResilientCall — the deadline budget", () => {
 });
 
 describe("createResilientCall — wired in a machine (replay)", () => {
-  const { machine } = makeMachine(fullConfig);
+  const { machine, rc: wiredRc } = makeMachine(fullConfig);
   const bound = bindMachine(machine, ctx);
 
   it("init produces an empty resilience slice with no subs", () => {
@@ -696,28 +652,36 @@ describe("createResilientCall — wired in a machine (replay)", () => {
     );
   });
 
-  it("attempt → fail → leaves a retry timer desired at the final state", () => {
-    const { subs } = bound.replay({
+  it("attempt → fail → leaves the retry timer armed at the final state", () => {
+    const { state, subs } = bound.replay({
       msgs: [
         { type: "attempt", key: "k", input: "in", at: 0 },
-        { type: "resilient_err", key: "k", error: "e", at: 0 },
+        {
+          type: "resilient_run_err",
+          cmd: wiredRc.run({ key: "k", input: "in" }),
+          error: { _tag: "port_rejected" },
+          at: 0,
+        },
       ],
     });
-    // One `deadline` Sub, arming both timers the failed call left.
-    expect(subs.map((sub) => sub.type)).toEqual(["deadline"]);
-    expect(
-      subs.flatMap((sub) => (sub.type === "deadline" ? sub.deps : [])),
-    ).toEqual([
+    // Both deadlines the failed call left are listed; the built-in `timer`
+    // arms the soonest of them — the retry, due now.
+    expect(wiredRc.deadlines(state.resilience)).toEqual([
       deadlineSub("resilient:retry:k", 0),
       deadlineSub("resilient:deadline:k", 5_000),
     ]);
+    expect(subs.map((sub) => sub.type)).toEqual(["timer"]);
+    expect(subs[0]?.deps).toEqual({
+      ms: 0,
+      msg: deadlineExceeded("resilient:retry:k", 0),
+    });
   });
 
   it("attempt → ok → settles succeeded with no further subs", () => {
     const { state, subs } = bound.replay({
       msgs: [
         { type: "attempt", key: "k", input: "in", at: 0 },
-        { type: "resilient_ok", key: "k", result: "DONE", at: 0 },
+        wiredRc.run.ok(wiredRc.run({ key: "k", input: "in" }), "DONE", 0),
       ],
     });
     expect(state.resilience.calls.k).toEqual({
@@ -728,41 +692,115 @@ describe("createResilientCall — wired in a machine (replay)", () => {
   });
 });
 
-describe("createResilientCall — handlers route Ok/Err to settle Msgs", () => {
-  it("routes a resolving port to a resilient_ok msg", async () => {
-    const rc = createResilientCall<string, string>(fullConfig, rngZero);
-    const handler = rc.handlers({
-      run: async (input) => `result:${input}`,
-    }).resilient_run;
-    const msg = await handler(
-      { type: "resilient_run", key: "k", input: "hi" },
-      {} as never,
-    );
-    expect(msg?.type).toBe("resilient_ok");
-    if (msg?.type === "resilient_ok") {
-      expect(msg.key).toBe("k");
-      expect(msg.result).toBe("result:hi");
-      expect(typeof msg.at).toBe("number");
-    }
+describe("createResilientCall — timer (the built-in `timer` Sub's deps)", () => {
+  const retryOnce = {
+    retry: {
+      baseMs: 100,
+      factor: 2,
+      capMs: 10_000,
+      maxAttempts: 3,
+      jitter: "none" as const,
+    },
+    deadline: { ms: 5_000 },
+  };
+  const rejected = { _tag: "port_rejected" } as const;
+
+  it("is null while nothing waits", () => {
+    const rc = createResilientCall<string, string>(retryOnce, rngZero);
+    expect(rc.timer(rc.init())).toBeNull();
+    const [s] = rc.attempt(rc.init(), "k", "in", 0);
+    const cmd = rc.run({ key: "k", input: "in" });
+    const done = rc.settle(s, rc.run.ok(cmd, "v", 5)).call;
+    expect(rc.timer(done)).toBeNull();
   });
 
-  it("routes a rejecting port to a resilient_err msg carrying the original error", async () => {
-    const rc = createResilientCall<string, string>(fullConfig, rngZero);
-    const boom = new Error("backend down");
-    const handler = rc.handlers({
-      run: async () => {
-        throw boom;
+  it("counts the soonest deadline down from the slice's clock", () => {
+    const rc = createResilientCall<string, string>(retryOnce, rngZero);
+    const [s] = rc.attempt(rc.init(), "k", "in", 1_000);
+    expect(s.clockMs).toBe(1_000);
+    // Running: only the overall deadline, 5s after the attempt.
+    expect(rc.timer(s)).toEqual({
+      ms: 5_000,
+      msg: deadlineExceeded("resilient:deadline:k", 6_000),
+    });
+    // A failure at 1_200 backs off 200ms (jitter none, attempt 1) — the retry
+    // is now the soonest, counted from the failure's instant.
+    const cmd = rc.run({ key: "k", input: "in" });
+    const failed = rc.settle(s, rc.run.err(cmd, rejected, 1_200)).call;
+    expect(failed.clockMs).toBe(1_200);
+    expect(rc.timer(failed)).toEqual({
+      ms: 200,
+      msg: deadlineExceeded("resilient:retry:k", 1_400),
+    });
+  });
+
+  it("clamps a deadline already past to 0", () => {
+    const rc = createResilientCall<string, string>(retryOnce, rngZero);
+    const [s] = rc.attempt(rc.init(), "k", "in", 0);
+    const cmd = rc.run({ key: "k", input: "in" });
+    const failed = rc.settle(s, rc.run.err(cmd, rejected, 0)).call;
+    // A stale fire for another id ticks the clock past the retry's instant.
+    const [later] = rc.onTimer(failed, {
+      id: "resilient:retry:other",
+      atMs: 900,
+    });
+    expect(later.clockMs).toBe(900);
+    expect(rc.timer(later)?.ms).toBe(0);
+  });
+
+  it("a moved clock is new deps, so the engine restarts the countdown", () => {
+    const rc = createResilientCall<string, string>(retryOnce, rngZero);
+    const [a] = rc.attempt(rc.init(), "k", "in", 0);
+    const [b] = rc.attempt(a, "j", "in", 1_000);
+    expect(rc.timer(b)).not.toEqual(rc.timer(a));
+    // Same soonest deadline, counted from the later instant.
+    expect(rc.timer(b)).toEqual({
+      ms: 4_000,
+      msg: deadlineExceeded("resilient:deadline:k", 5_000),
+    });
+  });
+});
+
+describe("createResilientCall — a hand-written outcome handler (ADR 0021)", () => {
+  // The run Cmd is `Cmd.define`d: the handler returns an outcome, and the
+  // engine mints `resilient_run_ok` / `resilient_run_err` from it.
+  async function settleOnce(
+    handler: (
+      cmd: RunCmd<string>,
+      helpers: {
+        ok: (v: string) => unknown;
+        err: (e: { _tag: "port_rejected"; cause?: unknown }) => unknown;
       },
-    }).resilient_run;
-    const msg = await handler(
-      { type: "resilient_run", key: "k", input: "hi" },
-      {} as never,
+    ) => Promise<unknown>,
+  ) {
+    const { rc, machine } = makeMachine({});
+    const runtime = await run(
+      defineMachine({ ...machine, cmds: [rc.run] } as typeof machine),
+      { ctx, interpret: { resilient_run: handler as never } },
+    ).ready;
+    await runtime.dispatch({ type: "attempt", key: "k", input: "hi", at: 0 });
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    const call = runtime.getState().resilience.calls.k;
+    await runtime.stop();
+    return call;
+  }
+
+  it("an `ok` outcome settles the call with the handler's value", async () => {
+    const call = await settleOnce(async (cmd, { ok }) =>
+      ok(`result:${cmd.input}`),
     );
-    expect(msg?.type).toBe("resilient_err");
-    if (msg?.type === "resilient_err") {
-      expect(msg.error).toBe(boom); // original error passes through untouched
-      expect(msg.key).toBe("k");
-    }
+    expect(call).toEqual({ phase: "succeeded", result: "result:hi" });
+  });
+
+  it("an `err` outcome settles the call failed with the declared error", async () => {
+    const boom = new Error("backend down");
+    const call = await settleOnce(async (_cmd, { err }) =>
+      err({ _tag: "port_rejected", cause: boom }),
+    );
+    expect(call).toEqual({
+      phase: "failed",
+      error: { _tag: "port_rejected", cause: boom },
+    });
   });
 });
 
@@ -786,16 +824,16 @@ describe("createResilientCall — properties", () => {
           // succeed / fail likewise return fresh slices.
           const [s2] = pair(
             rc.settle(s1, {
-              type: "resilient_ok",
-              key: "k",
-              result: input,
+              type: "resilient_run_ok",
+              cmd: { key: "k" },
+              value: input,
               at,
             }),
           );
           const [s3] = pair(
             rc.settle(s1, {
-              type: "resilient_err",
-              key: "k",
+              type: "resilient_run_err",
+              cmd: { key: "k" },
               error: "e",
               at,
             }),
@@ -849,9 +887,9 @@ describe("createResilientCall — properties", () => {
             case "ok":
               [s, cmds] = pair(
                 rc.settle(s, {
-                  type: "resilient_ok",
-                  key: a.key,
-                  result: "r",
+                  type: "resilient_run_ok",
+                  cmd: { key: a.key },
+                  value: "r",
                   at: a.at,
                 }),
               );
@@ -859,8 +897,8 @@ describe("createResilientCall — properties", () => {
             case "err":
               [s, cmds] = pair(
                 rc.settle(s, {
-                  type: "resilient_err",
-                  key: a.key,
+                  type: "resilient_run_err",
+                  cmd: { key: a.key },
                   error: "e",
                   at: a.at,
                 }),
@@ -893,8 +931,8 @@ describe("createResilientCall — properties", () => {
           at: fc.nat(10_000),
         }),
         fc.record({
-          type: fc.constant("resilient_err" as const),
-          key: fc.constantFrom("a", "b"),
+          type: fc.constant("resilient_run_err" as const),
+          cmd: fc.record({ key: fc.constantFrom("a", "b") }),
           error: fc.constant("e"),
           at: fc.nat(10_000),
         }),
@@ -971,7 +1009,7 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
     const rc = createResilientCall<string, string>(fullConfig, rngZero);
     let s = rc.init();
     [s] = rc.attempt(s, "k", "in", 0);
-    const [s2, cmds] = rc.settleFailed(s, "k", { _tag: "unauthorized" });
+    const [s2, cmds] = rc.settleFailed(s, "k", { _tag: "unauthorized" }, 0);
     expect(cmds).toEqual([]);
     expect(s2.calls.k).toEqual({
       phase: "failed",
@@ -985,9 +1023,9 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
     const rc = createResilientCall<string, string>(fullConfig, rngZero);
     let s = rc.init();
     [s] = rc.attempt(s, "k", "in", 0);
-    [s] = rc.settleFailed(s, "k", "x1");
+    [s] = rc.settleFailed(s, "k", "x1", 0);
     [s] = rc.attempt(s, "k", "in", 0);
-    [s] = rc.settleFailed(s, "k", "x2");
+    [s] = rc.settleFailed(s, "k", "x2", 0);
     expect(s.circuit).toEqual({ phase: "closed", failures: 0 });
   });
 
@@ -998,15 +1036,15 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
     // Seed a real failure so a retry counter exists.
     [s] = pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "e",
         at: 0,
       }),
     );
     expect(s.retry.k?.attempt).toBe(1);
     const before = s.retry.k;
-    [s] = rc.settleFailed(s, "k", "terminal");
+    [s] = rc.settleFailed(s, "k", "terminal", 0);
     // Phase is now terminal `failed`, but the retry counter is byte-identical.
     expect(s.calls.k).toEqual({ phase: "failed", error: "terminal" });
     expect(s.retry.k).toBe(before);
@@ -1026,8 +1064,8 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
             [s] = rc.attempt(s, k, "in", 0);
             [s] = pair(
               rc.settle(s, {
-                type: "resilient_err",
-                key: k,
+                type: "resilient_run_err",
+                cmd: { key: k },
                 error: "e",
                 at: 0,
               }),
@@ -1035,7 +1073,7 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
           }
           const circuitBefore = s.circuit;
           const retryBefore = s.retry;
-          const [s2] = rc.settleFailed(s, target, error);
+          const [s2] = rc.settleFailed(s, target, error, 0);
           // circuit + retry references are preserved untouched.
           expect(s2.circuit).toBe(circuitBefore);
           expect(s2.retry).toBe(retryBefore);
@@ -1057,9 +1095,10 @@ describe("createResilientCall — settleFailed (terminal, breaker-neutral)", () 
 // and asserted the END STATE of the shared breaker.
 //
 // Here we build an actual `run()` Runtime from the knob's verbs + handlers and
-// wire the `run` port into `interpret` so a settle Msg RE-ENTERS the machine
-// exactly as production does: attempt → (Cmd) resilient_run → port → (follow-up
-// Msg) resilient_ok / resilient_err → succeed / fail. We then drive the precise
+// wire the `run` port into `interpret` as an outcome handler, so the engine mints
+// the settle Msg exactly as production does: attempt → (Cmd) resilient_run →
+// port → (outcome) → (minted Msg) resilient_run_ok / resilient_run_err →
+// succeed / fail. We then drive the precise
 // half-open + rate-limit-reject scenario and assert the breaker RECOVERS.
 //
 // Pre-fix (circuit probe consumed BEFORE the rate-limit gate): a rate-limited
@@ -1117,11 +1156,11 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
           const [slice, cmds] = rc.attempt(s.resilience, m.key, m.input, m.at);
           return [{ resilience: slice }, cmds];
         },
-        resilient_ok: (s, m) => {
+        resilient_run_ok: (s, m) => {
           const [slice, cmds] = pair(rc.settle(s.resilience, m));
           return [{ resilience: slice }, cmds];
         },
-        resilient_err: (s, m) => {
+        resilient_run_err: (s, m) => {
           const [slice, cmds] = pair(rc.settle(s.resilience, m));
           return [{ resilience: slice }, cmds];
         },
@@ -1132,22 +1171,33 @@ describe("createResilientCall — wired end-to-end: breaker recovers (defect 1)"
         nop: (s) => [s, []],
       },
     });
-    // The REAL handler — the same `tryInterpret`-wrapped port production uses —
-    // routes the port outcome back as resilient_ok / resilient_err, which the
-    // runtime enqueues as a follow-up Msg (re-entry).
-    const interpret = rc.handlers({
-      run: async () => {
+    // A hand-written outcome handler (ADR 0021): the engine mints
+    // resilient_run_ok / resilient_run_err from what it returns, because the
+    // machine lists the run Cmd's def, and dispatches the minted Msg back in.
+    const interpret = {
+      resilient_run: async (
+        _cmd: WCmd,
+        h: {
+          ok: (v: string) => unknown;
+          err: (e: { _tag: "port_rejected"; cause: unknown }) => unknown;
+        },
+      ) => {
         ctx.calls.count += 1;
         const outcome = ctx.outcomes.shift() ?? "ok";
-        if (outcome === "fail") throw { _tag: "backend_down" };
-        return "VALUE";
+        if (outcome === "fail") {
+          return h.err({ _tag: "port_rejected", cause: "backend_down" });
+        }
+        return h.ok("VALUE");
       },
-    });
-    return { machine, interpret };
+    } as never;
+    return {
+      machine: defineMachine({ ...machine, cmds: [rc.run] } as typeof machine),
+      interpret,
+    };
   }
 
   // Drain the re-entrant follow-up chain: each `await dispatch` settles only its
-  // own transition; the settle Msg interpret returns is enqueued on the tail.
+  // own transition; the settle Msg the engine mints is enqueued on the tail.
   // Pump `nop` until the backend-call ledger stops moving — same pattern the
   // idempotent-intake wired test uses.
   async function drain(
@@ -1282,8 +1332,8 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
   ) =>
     pair(
       rc.settle(s, {
-        type: "resilient_err",
-        key: "k",
+        type: "resilient_run_err",
+        cmd: { key: "k" },
         error: "peer_unreachable",
         at,
       }),
@@ -1361,9 +1411,9 @@ describe("createResilientCall — duration-bounded retry (the outage budget)", (
       expect((s.retry.k as TimedRetryState).firstFailureAtMs).toBe(at);
       s = pair(
         rc.settle(s, {
-          type: "resilient_ok",
-          key: "k",
-          result: "VALUE",
+          type: "resilient_run_ok",
+          cmd: { key: "k" },
+          value: "VALUE",
           at: at + 1,
         }),
       )[0];
@@ -1413,7 +1463,6 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
         model: {} as DState,
         msg: {} as DMsg,
         cmd: {} as RunCmd<string>,
-        sub: {} as DeadlinesSub,
         ctx: {} as object,
       },
       init: (loaded) =>
@@ -1423,11 +1472,11 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
           const [slice, cmds] = rc.attempt(s.resilience, m.key, m.input, m.at);
           return [{ resilience: slice }, cmds];
         },
-        resilient_ok: (s, m) => {
+        resilient_run_ok: (s, m) => {
           const [slice, cmds] = pair(rc.settle(s.resilience, m));
           return [{ resilience: slice }, cmds];
         },
-        resilient_err: (s, m) => {
+        resilient_run_err: (s, m) => {
           const [slice, cmds] = pair(rc.settle(s.resilience, m));
           return [{ resilience: slice }, cmds];
         },
@@ -1436,21 +1485,26 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
           return [{ resilience: slice }, cmds];
         },
       },
-      subs: [deadlinesSub((s: DState) => rc.subs(s.resilience))],
+      // The engine's built-in `timer` — the retry actually arms a setTimeout
+      // against the (fake) wall clock, so the outage advances by itself.
+      subs: [{ type: "timer", deps: (s: DState) => rc.timer(s.resilience) }],
     });
 
-    const runtime = await run(machine, {
-      ctx: {},
-      // The REAL deadline runner — the retry Sub actually arms a setTimeout
-      // against the (fake) wall clock, so the outage advances by itself.
-      subscribe: { deadline: subscribeDeadline },
-      interpret: rc.handlers({
-        run: async () => {
-          callAt.push(Date.now());
-          throw { _tag: "peer_unreachable" };
-        },
-      }),
-    }).ready;
+    const runtime = await run(
+      defineMachine({ ...machine, cmds: [rc.run] } as typeof machine),
+      {
+        ctx: {},
+        interpret: {
+          resilient_run: async (
+            _cmd: RunCmd<string>,
+            h: { err: (e: { _tag: "port_rejected" }) => unknown },
+          ) => {
+            callAt.push(Date.now());
+            return h.err({ _tag: "port_rejected" });
+          },
+        } as never,
+      },
+    ).ready;
     await runtime.dispatch({ type: "attempt", key: "k", input: "in", at: 0 });
     await flush();
 
@@ -1462,7 +1516,7 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
     // END STATE — settled on the DURATION, with no timer left armed.
     const end = runtime.getState();
     expect(end.resilience.calls.k?.phase).toBe("failed");
-    expect(rc.subs(end.resilience)).toEqual([]);
+    expect(rc.deadlines(end.resilience)).toEqual([]);
 
     // The observed ladder — read off the backend ledger, not the slice.
     expect(callAt).toEqual(OUTAGE_LADDER.slice(0, LAST_INSIDE + 1));
@@ -1481,8 +1535,8 @@ describe("createResilientCall — wired end-to-end: duration-bounded outage", ()
 });
 
 // ---------------------------------------------------------------------------
-// Two knobs, one machine (#229). Unnamed, both settle through `resilient_ok` /
-// `resilient_err`: one cell per name, carrying the UNION of both payloads, and
+// Two knobs, one machine (#229). Unnamed, both settle through `resilient_run_ok` /
+// `resilient_run_err`: one cell per name, carrying the UNION of both payloads, and
 // the consumer discriminates by hand on `key` — a switch the type checker
 // cannot grade. Named apart, each knob owns a cell already narrowed to its own
 // payload, which is what these tests pin.
@@ -1504,10 +1558,11 @@ describe("createResilientCall — two named knobs in one machine", () => {
     | { type: "ask"; key: string; input: string; at: number }
     | { type: "draft"; key: string; input: string; at: number }
     | SucceedMsg<Answer, "jev">
-    | FailMsg<"jev">
+    | FailMsg<"jev", unknown, unknown>
     | SucceedMsg<Draft, "llm">
-    | FailMsg<"llm">
-    | ResilientTimerMsg;
+    | FailMsg<"llm", unknown, unknown>
+    | ResilientTimerMsg<"jev">
+    | ResilientTimerMsg<"llm">;
   type TwoCmd = RunCmd<string, "jev"> | RunCmd<string, "llm">;
 
   const jev = createResilientCall<string, Answer, "jev">(
@@ -1524,7 +1579,6 @@ describe("createResilientCall — two named knobs in one machine", () => {
       model: {} as TwoState,
       msg: {} as TwoMsg,
       cmd: {} as TwoCmd,
-      sub: {} as DeadlinesSub<"jev" | "llm">,
       ctx: {} as object,
     },
     init: (loaded) =>
@@ -1541,40 +1595,47 @@ describe("createResilientCall — two named knobs in one machine", () => {
         return [{ ...s, llm: slice }, cmds];
       },
       // No `key` switch anywhere below: the cell's name already says which
-      // knob settled, so `m.result` is `Answer` here and `Draft` two cells
-      // down. Under one shared `resilient_ok` cell both would be a union.
-      jev_ok: (s, m) => {
-        const verdict: Answer["verdict"] = m.result.verdict;
+      // knob settled, so `m.value` is `Answer` here and `Draft` two cells
+      // down. Under one shared `resilient_run_ok` cell both would be a union.
+      jev_run_ok: (s, m) => {
+        const verdict: Answer["verdict"] = m.value.verdict;
         void verdict;
         const [slice, cmds] = pair(jev.settle(s.jev, m));
         return [{ ...s, jev: slice }, cmds];
       },
-      jev_err: (s, m) => {
+      jev_run_err: (s, m) => {
         const [slice, cmds] = pair(jev.settle(s.jev, m));
         return [{ ...s, jev: slice }, cmds];
       },
-      llm_ok: (s, m) => {
-        const text: string = m.result.text;
+      llm_run_ok: (s, m) => {
+        const text: string = m.value.text;
         void text;
         const [slice, cmds] = pair(llm.settle(s.llm, m));
         return [{ ...s, llm: slice }, cmds];
       },
-      llm_err: (s, m) => {
+      llm_run_err: (s, m) => {
         const [slice, cmds] = pair(llm.settle(s.llm, m));
         return [{ ...s, llm: slice }, cmds];
       },
-      deadline_exceeded: (s, m) => {
-        const [jevSlice] = jev.onTimer(s.jev, m);
-        const [llmSlice] = llm.onTimer(s.llm, m);
-        return [{ jev: jevSlice, llm: llmSlice }, []];
+      // Each knob's timer dispatches its own tag, so each has its own cell.
+      jev_deadline: (s, m) => {
+        const [slice, cmds] = jev.onTimer(s.jev, m);
+        return [{ ...s, jev: slice }, cmds];
+      },
+      llm_deadline: (s, m) => {
+        const [slice, cmds] = llm.onTimer(s.llm, m);
+        return [{ ...s, llm: slice }, cmds];
       },
     },
     subs: [
-      deadlinesSub((s: TwoState) => [...jev.subs(s.jev), ...llm.subs(s.llm)]),
+      { type: "timer", deps: (s: TwoState) => jev.timer(s.jev) },
+      { type: "timer", deps: (s: TwoState) => llm.timer(s.llm) },
     ],
   });
 
   const two = bindMachine(twoMachine, ctx);
+  const jevCmd = jev.run({ key: "k", input: "q" });
+  const llmCmd = llm.run({ key: "k", input: "p" });
 
   it("each knob emits its own run Cmd, not one shared `resilient_run`", () => {
     two.expectCmdSequence(
@@ -1596,8 +1657,8 @@ describe("createResilientCall — two named knobs in one machine", () => {
       msgs: [
         { type: "ask", key: "k", input: "q", at: 0 },
         { type: "draft", key: "k", input: "p", at: 0 },
-        { type: "jev_ok", key: "k", result: { verdict: "yes" }, at: 1 },
-        { type: "llm_ok", key: "k", result: { text: "hello" }, at: 1 },
+        jev.run.ok(jevCmd, { verdict: "yes" }, 1),
+        llm.run.ok(llmCmd, { text: "hello" }, 1),
       ],
     });
     expect(state.jev.calls.k).toEqual({
@@ -1615,8 +1676,8 @@ describe("createResilientCall — two named knobs in one machine", () => {
       msgs: [
         { type: "ask", key: "k", input: "q", at: 0 },
         { type: "draft", key: "k", input: "p", at: 0 },
-        { type: "jev_err", key: "k", error: "boom", at: 0 },
-        { type: "llm_ok", key: "k", result: { text: "hello" }, at: 0 },
+        jev.run.err(jevCmd, { _tag: "port_rejected" }, 0),
+        llm.run.ok(llmCmd, { text: "hello" }, 0),
       ],
     });
     expect(state.jev.calls.k).toMatchObject({ phase: "waiting_retry" });
@@ -1624,31 +1685,26 @@ describe("createResilientCall — two named knobs in one machine", () => {
       phase: "succeeded",
       result: { text: "hello" },
     });
-    // The retry timer is the failed knob's alone — Subs reconcile by id, so the
-    // name has to lead the id or the two knobs would share one timer on `k`.
-    // It leads the Msg too (#238): the Sub carries the name, so what it
-    // dispatches is `jev_deadline`, not a `deadline_exceeded` both knobs claim.
-    expect(
-      subs.flatMap((sub) => (sub.type === "deadline" ? sub.deps : [])),
-    ).toEqual([
+    // The retry timer is the failed knob's alone — timers route by id, so the
+    // name has to lead the id or the two knobs would answer each other's timer
+    // on `k`. It leads the Msg too (#238): the deadline carries the name, so
+    // what fires is `jev_deadline`, not a `deadline_exceeded` both knobs claim.
+    expect(jev.deadlines(state.jev)).toEqual([
       deadlineSub("jev:retry:k", 0, { name: "jev" }),
       deadlineSub("jev:deadline:k", 5_000, { name: "jev" }),
     ]);
+    expect(llm.deadlines(state.llm)).toEqual([]);
+    expect(subs.map((sub) => sub.deps)).toEqual([
+      { ms: 0, msg: deadlineExceeded("jev:retry:k", 0, "jev") },
+    ]);
   });
 
-  it("each knob's handlers record is keyed by its own run Cmd", async () => {
-    const jevSettle = await jev
-      .handlers({
-        run: async (): Promise<Answer> => ({ verdict: "no" }),
-      })
-      .jev_run({ type: "jev_run", key: "k", input: "q" }, {} as never);
-    const llmSettle = await llm
-      .handlers({
-        run: async (): Promise<Draft> => ({ text: "hi" }),
-      })
-      .llm_run({ type: "llm_run", key: "k", input: "p" }, {} as never);
-    expect(jevSettle.type).toBe("jev_ok");
-    expect(llmSettle.type).toBe("llm_ok");
+  it("each knob's run Cmd def is its own, so each mints its own settle Msgs", () => {
+    expect(jev.run.cmdType).toBe("jev_run");
+    expect(jev.run.okType).toBe("jev_run_ok");
+    expect(jev.run.errType).toBe("jev_run_err");
+    expect(llm.run.cmdType).toBe("llm_run");
+    expect(llm.run.okType).toBe("llm_run_ok");
   });
 });
 
@@ -1657,9 +1713,8 @@ describe("createResilientCall — the unnamed default is unchanged", () => {
     const rc = createResilientCall<string, string>(fullConfig, rngZero);
     const [, cmds] = rc.attempt(rc.init(), "k", "in", 0);
     expect(cmds[0]?.type).toBe("resilient_run");
-    expect(Object.keys(rc.handlers({ run: async () => "x" }))).toEqual([
-      "resilient_run",
-    ]);
+    expect(rc.run.okType).toBe("resilient_run_ok");
+    expect(rc.run.errType).toBe("resilient_run_err");
   });
 
   it("passing the default name explicitly is the same knob", () => {
@@ -1669,684 +1724,5 @@ describe("createResilientCall — the unnamed default is unchanged", () => {
     );
     const [, cmds] = named.attempt(named.init(), "k", "in", 0);
     expect(cmds[0]?.type).toBe("resilient_run");
-  });
-});
-
-// ===========================================================================
-// mountResilientCall — the wiring points as fragments (#228).
-// ===========================================================================
-
-describe("mountResilientCall — a mounted knob drives the whole cycle", () => {
-  interface MState {
-    readonly resilience: ResilientState<string, string>;
-    readonly result: string | null;
-    readonly failure: unknown;
-    /** What `calls.k.phase` read as at the moment `onOk` / `onErr` was called. */
-    readonly phaseSeenByFold: string | null;
-  }
-  type Go = { type: "go"; key: string; input: string; at: number };
-  type MMsg = Go | SucceedMsg<string> | FailMsg | ResilientTimerMsg;
-
-  function mount(
-    config: Parameters<typeof createResilientCall>[0],
-    outcomes: ("ok" | "fail")[] = [],
-  ) {
-    const rc = createResilientCall<string, string>(config, rngZero);
-    // Every entry is one call that actually reached the port — the ground truth
-    // for "did the mounted interpret cell really run the effect".
-    const calls: string[] = [];
-    // Every `onDeadline` fold, in order — the ground truth for "did the timer
-    // cell reach the consumer at all, and exactly once".
-    const deadlineFolds: DeadlineSettled[] = [];
-    // This knob's `handlers` takes ports, so it is bound before the mount reads
-    // it. The doors that mount directly (`jev/ask`, `llm-call`) expose a
-    // nullary `handlers()` and are passed straight in.
-    const mounted = mountResilientCall(
-      {
-        ...mountable(rc),
-        handlers: () =>
-          rc.handlers({
-            run: async (input) => {
-              calls.push(input);
-              if (outcomes.shift() === "fail") throw { _tag: "backend_down" };
-              return "VALUE";
-            },
-          }),
-      },
-      {
-        slice: "resilience",
-        attempt: {
-          on: "go",
-          run: (slice, m: Go) => rc.attempt(slice, m.key, m.input, m.at),
-        },
-        onOk: (model: MState, m) => [
-          {
-            ...model,
-            result: m.result,
-            phaseSeenByFold: model.resilience.calls[m.key]?.phase ?? null,
-          },
-          [],
-        ],
-        onErr: (model: MState, m) => [
-          {
-            ...model,
-            failure: m.error,
-            phaseSeenByFold: model.resilience.calls[m.key]?.phase ?? null,
-          },
-          [],
-        ],
-        // The failure class that carries no settle Msg: without this the
-        // deadline would advance the slice and fold nothing.
-        onDeadline: (model: MState, m) => {
-          deadlineFolds.push(m);
-          return [
-            {
-              ...model,
-              failure: m.error,
-              phaseSeenByFold: model.resilience.calls[m.key]?.phase ?? null,
-            },
-            [],
-          ];
-        },
-      },
-    );
-    const machine = defineMachine({
-      types: {
-        model: {} as MState,
-        msg: {} as MMsg,
-        cmd: {} as RunCmd<string>,
-        sub: {} as DeadlinesSub,
-        ctx: {} as object,
-      },
-      init: (loaded) =>
-        loaded !== null
-          ? [loaded, []]
-          : [
-              {
-                ...mounted.init(),
-                result: null,
-                failure: null,
-                phaseSeenByFold: null,
-              },
-              [],
-            ],
-      update: { ...mounted.update },
-      subs: mounted.subs,
-    });
-    return { rc, mounted, machine, calls, deadlineFolds };
-  }
-
-  const start: MState = {
-    resilience: createResilientCall<string, string>({}, rngZero).init(),
-    result: null,
-    failure: null,
-    phaseSeenByFold: null,
-  };
-
-  it("attempt → transient failure → backoff → retry timer → success", () => {
-    const { mounted, machine } = mount({
-      retry: {
-        baseMs: 100,
-        factor: 2,
-        capMs: 1_000,
-        maxAttempts: 3,
-        jitter: "full",
-      },
-      deadline: { ms: 5_000 },
-    });
-    const bound = bindMachine(machine, ctx);
-
-    const [running, runCmds] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    expect(running.resilience.calls.k?.phase).toBe("running");
-    expect(runCmds).toHaveLength(1);
-
-    const [waiting] = bound.step(running, {
-      type: "resilient_err",
-      key: "k",
-      error: { _tag: "backend_down" },
-      at: 10,
-    });
-    expect(waiting.resilience.calls.k?.phase).toBe("waiting_retry");
-    expect(waiting.failure).toEqual({ _tag: "backend_down" });
-
-    // `subs` is the fragment's, so the retry timer is armed off the same slice
-    // the settle cell just wrote.
-    expect(armed(mounted.subs, waiting).map((s) => s.id)).toContain(
-      "resilient:retry:k",
-    );
-
-    const [retried, retryCmds] = bound.step(waiting, {
-      type: "deadline_exceeded",
-      id: "resilient:retry:k",
-      atMs: 10,
-    });
-    expect(retried.resilience.calls.k?.phase).toBe("running");
-    expect(retryCmds).toHaveLength(1);
-
-    const [done] = bound.step(retried, {
-      type: "resilient_ok",
-      key: "k",
-      result: "VALUE",
-      at: 20,
-    });
-    expect(done.resilience.calls.k?.phase).toBe("succeeded");
-    expect(done.result).toBe("VALUE");
-  });
-
-  it("settles the deadline path through the mounted timer cell, and folds it", () => {
-    const { machine, deadlineFolds } = mount({
-      retry: {
-        baseMs: 100,
-        factor: 2,
-        capMs: 1_000,
-        maxAttempts: 3,
-        jitter: "full",
-      },
-      deadline: { ms: 50 },
-    });
-    const bound = bindMachine(machine, ctx);
-    const [running] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    const [expired] = bound.step(running, {
-      type: "deadline_exceeded",
-      id: "resilient:deadline:k",
-      atMs: 50,
-    });
-    const call = expired.resilience.calls.k;
-    expect(call?.phase).toBe("failed");
-    expect(call?.phase === "failed" && call.error).toEqual({
-      _tag: "deadline_exceeded",
-      id: "resilient:deadline:k",
-      atMs: 50,
-    } satisfies DeadlineExceededError);
-
-    // AC10: the failure class that emits no settle Msg still reaches the
-    // consumer's fold — once, named by key, carrying the slice's own error.
-    expect(deadlineFolds).toHaveLength(1);
-    expect(deadlineFolds[0]?.key).toBe("k");
-    expect(deadlineFolds[0]?.error).toEqual({
-      _tag: "deadline_exceeded",
-      id: "resilient:deadline:k",
-      atMs: 50,
-    } satisfies DeadlineExceededError);
-    expect(expired.failure).toEqual(deadlineFolds[0]?.error);
-    // The fold sees the ALREADY-settled slice, like the other two do.
-    expect(expired.phaseSeenByFold).toBe("failed");
-  });
-
-  it("a plain backoff tick and a stale deadline fire fold nothing", () => {
-    const { machine, deadlineFolds } = mount({
-      retry: {
-        baseMs: 100,
-        factor: 2,
-        capMs: 1_000,
-        maxAttempts: 3,
-        jitter: "full",
-      },
-      deadline: { ms: 5_000 },
-    });
-    const bound = bindMachine(machine, ctx);
-    const [running] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    const [waiting] = bound.step(running, {
-      type: "resilient_err",
-      key: "k",
-      error: { _tag: "backend_down" },
-      at: 10,
-    });
-    // The retry timer re-gates the call — no terminal transition, no fold.
-    const [retried] = bound.step(waiting, {
-      type: "deadline_exceeded",
-      id: "resilient:retry:k",
-      atMs: 10,
-    });
-    expect(retried.resilience.calls.k?.phase).toBe("running");
-    expect(deadlineFolds).toHaveLength(0);
-
-    // Settle it, then fire the deadline late: a stale fire for a call that is
-    // no longer in flight is a no-op, so it must not fold either.
-    const [done] = bound.step(retried, {
-      type: "resilient_ok",
-      key: "k",
-      result: "VALUE",
-      at: 20,
-    });
-    const [after] = bound.step(done, {
-      type: "deadline_exceeded",
-      id: "resilient:deadline:k",
-      atMs: 5_000,
-    });
-    expect(after.resilience.calls.k?.phase).toBe("succeeded");
-    expect(deadlineFolds).toHaveLength(0);
-  });
-
-  it("settles the terminal-failure path and folds the error", () => {
-    const { machine } = mount({
-      retry: {
-        baseMs: 100,
-        factor: 2,
-        capMs: 1_000,
-        maxAttempts: 1,
-        jitter: "full",
-      },
-    });
-    const bound = bindMachine(machine, ctx);
-    const [running] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    const [failed, cmds] = bound.step(running, {
-      type: "resilient_err",
-      key: "k",
-      error: { _tag: "gone" },
-      at: 5,
-    });
-    expect(failed.resilience.calls.k?.phase).toBe("failed");
-    expect(failed.failure).toEqual({ _tag: "gone" });
-    expect(cmds).toEqual([]);
-  });
-
-  it("runs the inherited verb BEFORE the fold — the wedge is unrepresentable", () => {
-    const { machine } = mount({
-      retry: {
-        baseMs: 100,
-        factor: 2,
-        capMs: 1_000,
-        maxAttempts: 3,
-        jitter: "full",
-      },
-    });
-    const bound = bindMachine(machine, ctx);
-    const [running] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-
-    const [ok] = bound.step(running, {
-      type: "resilient_ok",
-      key: "k",
-      result: "VALUE",
-      at: 1,
-    });
-    expect(ok.phaseSeenByFold).toBe("succeeded");
-
-    const [err] = bound.step(running, {
-      type: "resilient_err",
-      key: "k",
-      error: { _tag: "gone" },
-      at: 1,
-    });
-    expect(err.phaseSeenByFold).toBe("waiting_retry");
-  });
-
-  it("`interpret` is the returning form — it re-enters through the settle cells", async () => {
-    const { mounted, machine, calls } = mount({}, ["ok"]);
-    const bound = bindMachine(machine, ctx);
-    const [running, cmds] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    const first = cmds[0];
-    if (first === undefined) throw new Error("no Cmd emitted");
-
-    const settle = await mounted.interpret.resilient_run(first, ctx);
-    expect(calls).toEqual(["in"]);
-    expect(settle.type).toBe("resilient_ok");
-
-    const [done] = bound.step(running, settle);
-    expect(done.result).toBe("VALUE");
-    expect(done.resilience.calls.k?.phase).toBe("succeeded");
-  });
-
-  it("hides assembly only: the slice is plain data and the verbs stay callable", () => {
-    const { rc, mounted, machine } = mount({
-      retry: {
-        baseMs: 100,
-        factor: 2,
-        capMs: 1_000,
-        maxAttempts: 3,
-        jitter: "full",
-      },
-    });
-    const bound = bindMachine(machine, ctx);
-    const [running] = bound.step(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-
-    // ADR 0015 — the durable Model stays readable and round-trips as JSON.
-    expect(JSON.parse(JSON.stringify(running.resilience))).toEqual(
-      running.resilience,
-    );
-
-    // ADR 0015 — the escape hatch: the verbs the mount calls are still callable
-    // by hand, and produce exactly the slice the mounted cell produced.
-    const settleMsg: SucceedMsg<string> = {
-      type: "resilient_ok",
-      key: "k",
-      result: "VALUE",
-      at: 1,
-    };
-    const byHand = pair(rc.settle(running.resilience, settleMsg));
-    const [mountedOk] = mounted.update.resilient_ok(running, settleMsg);
-    expect(mountedOk.resilience).toEqual(byHand[0]);
-
-    // `subscribe` carries the real deadline cell, so a backed-off retry cannot
-    // be left unarmed by a consumer that spread the fragments.
-    expect(mounted.subscribe.deadline).toBe(subscribeDeadline);
-  });
-});
-
-// ===========================================================================
-// The mount keys its settle cells off the knob's OWN name (#228 over #229).
-// A knob named `jev` emits `jev_ok` / `jev_err`, so a mount that spelled the
-// `resilient_*` literals would spread two cells nothing ever dispatches to —
-// well-typed, silent, and wrong only at runtime. These pin the join.
-// ===========================================================================
-
-describe("mountResilientCall — settle cells carry the knob's own Msg names", () => {
-  interface NState {
-    readonly resilience: ResilientState<string, string>;
-    readonly result: string | null;
-  }
-  type Go = { type: "go"; key: string; input: string; at: number };
-
-  function mountNamed<N extends string>(name: N) {
-    const rc = createResilientCall<string, string, N>({ name }, rngZero);
-    return mountResilientCall(
-      {
-        ...mountable(rc),
-        handlers: () => rc.handlers({ run: async () => "VALUE" }),
-      },
-      {
-        slice: "resilience",
-        attempt: {
-          on: "go",
-          run: (slice, m: Go) => rc.attempt(slice, m.key, m.input, m.at),
-        },
-        onOk: (model: NState, m) => [{ ...model, result: m.result }, []],
-      },
-    );
-  }
-
-  it("a named knob mounts into `<name>_ok` / `<name>_err`, not `resilient_*`", () => {
-    const mounted = mountNamed("jev");
-    expect(Object.keys(mounted.update).sort()).toEqual([
-      "go",
-      "jev_deadline",
-      "jev_err",
-      "jev_ok",
-    ]);
-  });
-
-  it("the named cell settles the slice and folds, exactly as the default one does", () => {
-    const mounted = mountNamed("jev");
-    const start: NState = {
-      resilience: mounted.init().resilience,
-      result: null,
-    };
-    const [running] = mounted.update.go(start, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    expect(running.resilience.calls.k?.phase).toBe("running");
-
-    const [settled] = mounted.update.jev_ok(running, {
-      type: "jev_ok",
-      key: "k",
-      result: "VALUE",
-      at: 1,
-    } as never);
-    // The inherited verb ran before the fold: the slice is `succeeded` and the
-    // consumer's `result` is written — the ordering `mount` makes unwritable.
-    expect(settled.resilience.calls.k?.phase).toBe("succeeded");
-    expect(settled.result).toBe("VALUE");
-  });
-
-  it("two named knobs mount into four distinct cells, so neither shadows the other", () => {
-    const jev = mountNamed("jev");
-    const llm = mountNamed("llm");
-    const cells = { ...jev.update, ...llm.update };
-    expect(Object.keys(cells).sort()).toEqual([
-      "go",
-      "jev_deadline",
-      "jev_err",
-      "jev_ok",
-      "llm_deadline",
-      "llm_err",
-      "llm_ok",
-    ]);
-  });
-});
-
-// ===========================================================================
-// The deadline cell carries the knob's name too (#238).
-//
-// `mountResilientCall` name-spaced `<name>_ok` / `<name>_err` but left the
-// deadline cell on the unqualified `deadline_exceeded` literal, so two mounts
-// spread into one `defineMachine` agreed on that ONE key and the last spread
-// silently dropped the other knob's deadline fold. Nothing failed: both cells
-// had the same key and a compatible signature, so the type checker graded it
-// clean and the losing knob simply never saw its deadline.
-//
-// The fix is at the Msg: the deadline Sub carries the knob's name, so a named
-// knob dispatches `<name>_deadline` and mounts into its own cell. These two
-// pin both halves — the collision is gone, and the unnamed default is not.
-// ===========================================================================
-
-describe("mountResilientCall — the deadline cell is name-spaced too", () => {
-  interface TwoState {
-    readonly jev: ResilientState<string, string>;
-    readonly llm: ResilientState<string, string>;
-    readonly folds: readonly string[];
-  }
-
-  type Go = { type: "go"; key: string; input: string; at: number };
-
-  // One mount per knob, both folding into the SAME `folds` field, so a dropped
-  // cell shows up as a missing entry rather than as a silently identical Model.
-  function mountKnob<N extends "jev" | "llm">(name: N, slice: N) {
-    const rc = createResilientCall<string, string, N>(
-      { name, deadline: { ms: 5_000 } },
-      rngZero,
-    );
-    const mounted = mountResilientCall(
-      {
-        ...mountable(rc),
-        handlers: () => rc.handlers({ run: async () => "VALUE" }),
-      },
-      {
-        slice,
-        attempt: {
-          on: `go_${name}` as `go_${N}`,
-          run: (s, m: Go) => rc.attempt(s, m.key, m.input, m.at),
-        },
-        onDeadline: (model: TwoState, settled) => [
-          { ...model, folds: [...model.folds, `${name}:${settled.key}`] },
-          [],
-        ],
-      },
-    );
-    return { rc, mounted };
-  }
-
-  it("two mounted knobs each fold their OWN deadline, neither overwritten", () => {
-    const jev = mountKnob("jev", "jev");
-    const llm = mountKnob("llm", "llm");
-
-    // The whole point: ONE machine, both mounts spread into one `update`.
-    const machine = defineMachine<TwoState, Record<string, unknown>, never>({
-      init: (loaded) =>
-        loaded !== null
-          ? [loaded, []]
-          : [{ ...jev.mounted.init(), ...llm.mounted.init(), folds: [] }, []],
-      update: { ...jev.mounted.update, ...llm.mounted.update } as never,
-    });
-    // Against `origin/main` there is ONE deadline key here, not two: both
-    // mounts wrote `deadline_exceeded` and the second spread won.
-    expect(Object.keys(machine.update).sort()).toEqual([
-      "go_jev",
-      "go_llm",
-      "jev_deadline",
-      "jev_err",
-      "jev_ok",
-      "llm_deadline",
-      "llm_err",
-      "llm_ok",
-    ]);
-
-    const bound = bindMachine(machine, {});
-    const [seeded] = machine.init(null);
-    const [a] = bound.step(seeded, {
-      type: "go_jev",
-      key: "ka",
-      input: "in",
-      at: 0,
-    });
-    const [both] = bound.step(a, {
-      type: "go_llm",
-      key: "kb",
-      input: "in",
-      at: 0,
-    });
-
-    // Fire each knob's deadline in turn, each under its own tag and its own id.
-    const [afterJev] = bound.step(both, {
-      type: "jev_deadline",
-      id: "jev:deadline:ka",
-      atMs: 5_000,
-    });
-    expect(afterJev.jev.calls.ka?.phase).toBe("failed");
-    expect(afterJev.llm.calls.kb?.phase).toBe("running");
-    expect(afterJev.folds).toEqual(["jev:ka"]);
-
-    const [afterBoth] = bound.step(afterJev, {
-      type: "llm_deadline",
-      id: "llm:deadline:kb",
-      atMs: 5_000,
-    });
-    expect(afterBoth.llm.calls.kb?.phase).toBe("failed");
-    // Each fold ran exactly once, for its own call. On `origin/main` the llm
-    // cell had eaten the jev one, so `jev:ka` is absent here.
-    expect(afterBoth.folds).toEqual(["jev:ka", "llm:kb"]);
-  });
-
-  it("each knob's deadline Sub carries its own name, so the tags differ", () => {
-    const jev = mountKnob("jev", "jev");
-    const llm = mountKnob("llm", "llm");
-    const [seeded] = [
-      { ...jev.mounted.init(), ...llm.mounted.init(), folds: [] } as TwoState,
-    ];
-    const [running] = jev.mounted.update.go_jev(seeded, {
-      type: "go_jev",
-      key: "ka",
-      input: "in",
-      at: 0,
-    });
-    expect(armed(jev.mounted.subs, running)).toEqual([
-      deadlineSub("jev:deadline:ka", 5_000, { name: "jev" }),
-    ]);
-    // The name leads the Msg the Sub dispatches, not only the Sub id — the id
-    // was already scoped before #238 and the collision was on the tag.
-    expect(
-      subscribeWith<"jev">((_id, _atMs, msg) => {
-        expect(msg.type).toBe("jev_deadline");
-        return () => {};
-      })(
-        runningSub(deadlineSub("jev:deadline:ka", 5_000, { name: "jev" })),
-        undefined,
-        () => {},
-      ),
-    ).toBeTypeOf("function");
-    // And an unnamed knob's Sub carries no name at all, so it still dispatches
-    // the bare literal.
-    expect(deadlineExceeded("resilient:deadline:k", 5_000).type).toBe(
-      "deadline_exceeded",
-    );
-  });
-
-  it("an unnamed knob still mounts and fires `deadline_exceeded` end to end", () => {
-    interface OneState {
-      readonly resilience: ResilientState<string, string>;
-      readonly folds: readonly string[];
-    }
-    const rc = createResilientCall<string, string>(
-      { deadline: { ms: 5_000 } },
-      rngZero,
-    );
-    const mounted = mountResilientCall(
-      {
-        ...mountable(rc),
-        handlers: () => rc.handlers({ run: async () => "VALUE" }),
-      },
-      {
-        slice: "resilience",
-        attempt: {
-          on: "go",
-          run: (s, m: Go) => rc.attempt(s, m.key, m.input, m.at),
-        },
-        onDeadline: (model: OneState, settled) => [
-          { ...model, folds: [...model.folds, settled.key] },
-          [],
-        ],
-      },
-    );
-
-    // The pre-existing wiring, untouched: the cell key, the Sub, and the Msg
-    // tag are all the bare literal a machine wired before #238 is spread for.
-    expect(Object.keys(mounted.update).sort()).toEqual([
-      "deadline_exceeded",
-      "go",
-      "resilient_err",
-      "resilient_ok",
-    ]);
-
-    const machine = defineMachine<OneState, Record<string, unknown>, never>({
-      init: (loaded) =>
-        loaded !== null ? [loaded, []] : [{ ...mounted.init(), folds: [] }, []],
-      update: mounted.update as never,
-    });
-    const bound = bindMachine(machine, {});
-    const [seeded] = machine.init(null);
-    const [running] = bound.step(seeded, {
-      type: "go",
-      key: "k",
-      input: "in",
-      at: 0,
-    });
-    expect(armed(mounted.subs, running)).toEqual([
-      deadlineSub("resilient:deadline:k", 5_000),
-    ]);
-
-    const [dead] = bound.step(running, {
-      type: "deadline_exceeded",
-      id: "resilient:deadline:k",
-      atMs: 5_000,
-    });
-    expect(dead.resilience.calls.k?.phase).toBe("failed");
-    expect(dead.folds).toEqual(["k"]);
   });
 });

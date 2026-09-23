@@ -14,7 +14,8 @@
  * assert the page's `ts` blocks are this file's `#region` bodies verbatim. The
  * page cannot drift from a compiling artifact, because the page IS the
  * artifact. The last region is driven through `@demlik/tea/testing`'s `drive`
- * against a fake port, so the recipe is proven to RUN and not only to compile.
+ * against a scripted Jev, so the recipe is proven to RUN and not only to
+ * compile.
  */
 
 // biome-ignore-all assist/source/organizeImports: the `#region` markers below
@@ -56,13 +57,9 @@ import { defineMachine } from "@demlik/tea";
 import {
   createJevAsk,
   type JevCmd,
-  type JevFailMsg,
   type JevOk,
   type JevRequest,
-  type JevSub,
-  type JevSucceedMsg,
   type JevTimerMsg,
-  mountResilientCall,
   type ResilientState,
 } from "@demlik/tea/jev";
 
@@ -77,7 +74,7 @@ export interface ExpenseState {
   readonly verdicts: Readonly<Record<string, Verdict>>;
 }
 
-/** The Msg that starts one call. `mount` needs its type to write that cell. */
+/** The Msg that starts one call. */
 export interface Classify {
   readonly type: "classify";
   readonly key: string;
@@ -85,91 +82,127 @@ export interface Classify {
   readonly at: number;
 }
 
-export type ExpenseMsg =
-  | Classify
-  | JevSucceedMsg<Questions>
-  | JevFailMsg
-  | JevTimerMsg;
+export type ExpenseMsg = Classify | JevTimerMsg;
 
 type Ask = ReturnType<typeof createJevAsk<Questions>>;
+type Call = ExpenseState["resilience"]["calls"][string];
 
 /** Below this, a human looks at it. The threshold is the HOST's rule to set. */
 export const CONFIDENCE_FLOOR = 0.8;
 
 /**
- * The knob, mounted. `onOk` / `onErr` are handed the model the inherited verb
- * ALREADY settled, so there is no cell to put in the wrong order, and `subs` /
- * `subscribe` / `interpret` ride along on the fragments rather than being
- * remembered — `subs` into the machine, `subscribe` and `interpret` to `run`
- * beside it.
+ * The verdict a settled call earns, read off the slice AFTER the knob's verb
+ * ran — so a retry that is still backing off has no verdict yet, and an answer
+ * the fallback gave on a spent budget books like any other.
  * `answer.choice` is `Category` here, not `string`.
  */
-export function mountAsk(ask: Ask) {
-  return mountResilientCall(ask, {
-    slice: "resilience",
-    attempt: {
-      on: "classify",
-      run: (slice, m: Classify) => ask.attempt(slice, m.key, m.memo, m.at),
-    },
-    onOk: (s: ExpenseState, m) => {
-      const answer = m.result.answers.category;
-      const verdict: Verdict =
-        answer.confidence >= CONFIDENCE_FLOOR
-          ? { kind: "booked", category: answer.choice }
-          : { kind: "triage", why: `confidence ${answer.confidence}` };
-      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
-    },
-    onErr: (s: ExpenseState, m) => {
-      const verdict: Verdict = { kind: "triage", why: m.error._tag };
-      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
-    },
-    // A call that dies on its deadline settles inside the slice and emits no
-    // settle Msg, so it never reaches `onErr`. Omit this and an expense whose
-    // budget runs out gets no verdict written at all.
-    onDeadline: (s: ExpenseState, m) => {
-      const verdict: Verdict = { kind: "triage", why: "deadline_exceeded" };
-      return [{ ...s, verdicts: { ...s.verdicts, [m.key]: verdict } }, []];
-    },
-  });
+function verdictOf(call: Call | undefined): Verdict | undefined {
+  switch (call?.phase) {
+    case "succeeded": {
+      const answer = call.result.answers.category;
+      return answer.confidence >= CONFIDENCE_FLOOR
+        ? { kind: "booked", category: answer.choice }
+        : { kind: "triage", why: `confidence ${answer.confidence}` };
+    }
+    case "failed":
+      return { kind: "triage", why: (call.error as { _tag: string })._tag };
+    default:
+      return undefined;
+  }
 }
 
-/** The machine, plus the handlers a host hands to `run` beside it. */
+/** Put the knob's settled slice back, with the verdict for `key` if it has one. */
+function settle(
+  s: ExpenseState,
+  key: string,
+  [resilience, cmds]: readonly [
+    ExpenseState["resilience"],
+    readonly JevCmd<Questions>[],
+  ],
+): readonly [ExpenseState, readonly JevCmd<Questions>[]] {
+  const verdict = verdictOf(resilience.calls[key]);
+  const verdicts =
+    verdict === undefined ? s.verdicts : { ...s.verdicts, [key]: verdict };
+  return [{ resilience, verdicts }, cmds];
+}
+
+/** The machine. Every cell is yours; each one calls a plain function of the knob. */
 export function expenseMachine(ask: Ask) {
-  const mounted = mountAsk(ask);
-  const machine = defineMachine({
+  return defineMachine({
     types: {
       model: {} as ExpenseState,
       msg: {} as ExpenseMsg,
-      cmd: {} as JevCmd<Questions>,
-      sub: {} as JevSub,
       ctx: undefined,
     },
+    // The knob's run Cmd: the engine turns its handler's outcome into
+    // `resilient_run_ok` / `resilient_run_err`.
+    cmds: [ask.run],
     init: (loaded) =>
       loaded !== null
         ? [loaded, []]
-        : [{ ...mounted.init(), verdicts: {} }, []],
-    update: { ...mounted.update },
-    subs: mounted.subs,
+        : [{ resilience: ask.init(), verdicts: {} }, []],
+    update: {
+      classify: (s, m) =>
+        settle(s, m.key, ask.attempt(s.resilience, m.key, m.memo, m.at)),
+      resilient_run_ok: (s, m) =>
+        settle(s, m.cmd.key, ask.succeed(s.resilience, m)),
+      resilient_run_err: (s, m) =>
+        settle(s, m.cmd.key, ask.fail(s.resilience, m)),
+      // A retry fires, or a deadline settles a call `failed` in the slice.
+      deadline_exceeded: (s, m) => {
+        const [resilience, cmds] = ask.onTimer(s.resilience, m);
+        const verdicts = { ...s.verdicts };
+        for (const key of Object.keys(resilience.calls)) {
+          const verdict = verdictOf(resilience.calls[key]);
+          if (verdict !== undefined) verdicts[key] = verdict;
+        }
+        return [{ resilience, verdicts }, cmds];
+      },
+    },
+    // The retry timer. `timer` is built into the engine.
+    subs: [
+      { type: "timer", deps: (s: ExpenseState) => ask.timer(s.resilience) },
+    ],
   });
-  return {
-    machine,
-    interpret: mounted.interpret,
-    subscribe: mounted.subscribe,
-  };
 }
 // #endregion machine
 
-// #region fake
-import type { JevPort } from "@demlik/tea/jev";
+// #region handler
+import type { Interpret } from "@demlik/tea";
+import type { JevHttpReply } from "@demlik/tea/jev";
+
+/** One HTTP call to Jev, as the handler sees it: a request in, a reply out. */
+export type CallJev = (request: JevRequest<Questions>) => Promise<JevHttpReply>;
 
 /**
- * Jev, scripted. The same `JevPort` type the `fetch` adapter satisfies, so the
+ * The one handler the machine needs. It calls Jev and hands the reply to
+ * `ask.decode`, which returns the outcome. With no `callJev` — no key — it
+ * answers from the fallback instead.
+ */
+export function jevHandler(
+  ask: Ask,
+  callJev?: CallJev,
+): Interpret<ExpenseMsg, JevCmd<Questions>, unknown> {
+  return {
+    resilient_run: async (cmd) => {
+      if (callJev === undefined) return ask.offline(cmd.input);
+      try {
+        return ask.decode(cmd.input, await callJev(cmd.input));
+      } catch (cause) {
+        return ask.rejected(cause);
+      }
+    },
+  };
+}
+
+/**
+ * Jev, scripted. The same `CallJev` a `fetch` adapter satisfies, so the
  * machine under test is the machine that ships — and no key, clock or socket
  * is anywhere on the path, which is what keeps the run replayable.
  */
 export function fakeJev(
   script: readonly (readonly [Category, number])[],
-): JevPort<Questions> {
+): CallJev {
   const queue = [...script];
   return async () => {
     const next = queue.shift();
@@ -201,47 +234,38 @@ export function fakeJev(
     };
   };
 }
-// #endregion fake
+// #endregion handler
 
 // #region drive
-import { type DriveResult, drive } from "@demlik/tea/testing";
-
-/** What one driven classification hands back: the settled state and the history. */
-export type Classified = DriveResult<
-  ExpenseState,
-  ExpenseMsg,
-  JevCmd<Questions>
->;
+import { drive } from "@demlik/tea/testing";
 
 /**
  * Feed one `classify` and let `drive` do what the runtime does: run the real
- * interpret handlers over every Cmd, feed each settle Msg back, and stop when
- * the machine is quiet. It returns the settled state AND the `trace` — every
- * Cmd dispatched and every Msg folded, in order.
+ * handler over every Cmd, turn each outcome into its settle Msg and feed it
+ * back, and stop when the machine is quiet. It returns the settled state AND
+ * the `trace` — every Cmd dispatched and every Msg folded, in order.
  */
 export function classifyOne(
   ask: Ask,
+  callJev: CallJev | undefined,
   key: string,
   memo: string,
-): Promise<Classified> {
-  const { machine, interpret } = expenseMachine(ask);
+) {
   return drive(
-    machine,
+    expenseMachine(ask),
     { resilience: ask.init(), verdicts: {} },
     { type: "classify", key, memo, at: 0 },
-    interpret,
+    jevHandler(ask, callJev),
   );
 }
 // #endregion drive
 
 describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
   it("books a confident answer under its narrowed category", async () => {
-    const ask = createJevAsk({
-      questions,
-      port: fakeJev([["dining", 0.93]]),
-    });
+    const ask = createJevAsk({ questions });
     const { state, trace } = await classifyOne(
       ask,
+      fakeJev([["dining", 0.93]]),
       "tx-1",
       "PIZZA NAPOLI 24.10 EUR",
     );
@@ -255,18 +279,20 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
   });
 
   it("sends a low-confidence answer to triage instead of booking it", async () => {
-    const ask = createJevAsk({
-      questions,
-      port: fakeJev([["transport", 0.41]]),
-    });
-    const { state } = await classifyOne(ask, "tx-2", "SQ *UNKNOWN 8.00 EUR");
+    const ask = createJevAsk({ questions });
+    const { state } = await classifyOne(
+      ask,
+      fakeJev([["transport", 0.41]]),
+      "tx-2",
+      "SQ *UNKNOWN 8.00 EUR",
+    );
     expect(state.verdicts["tx-2"]).toEqual({
       kind: "triage",
       why: "confidence 0.41",
     });
   });
 
-  it("answers from the fallback when no port is configured", async () => {
+  it("answers from the fallback when the handler has no key", async () => {
     const ask = createJevAsk({
       questions,
       fallback: () => ({
@@ -278,7 +304,12 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
         },
       }),
     });
-    const { state } = await classifyOne(ask, "tx-3", "SUPERMARKET 12.00 EUR");
+    const { state } = await classifyOne(
+      ask,
+      undefined,
+      "tx-3",
+      "SUPERMARKET 12.00 EUR",
+    );
     expect(state.verdicts["tx-3"]).toEqual({
       kind: "booked",
       category: "groceries",
@@ -314,7 +345,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it cannot rot", () 
   it.each([
     "questions",
     "machine",
-    "fake",
+    "handler",
     "drive",
   ])("shows the compiled `%s` block verbatim", async (name) => {
     expect(await tsBlocks()).toContain(await region(name));

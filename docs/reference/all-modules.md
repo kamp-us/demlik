@@ -25,7 +25,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./persistence`](./persistence.md) | the durability batteries: record a run to a trace, replay that trace back, and checkpoint a long-running machine to a host store between evictions. |
 | [`./promise`](./promise.md) | the Promise engine: `run` boots a machine and drives its serial dispatch loop on Promises, and `driveToDone` runs one to its terminal state. |
 | [`./react`](./react.md) | React host adapter for `@demlik/tea`. |
-| [`./resilience`](./resilience.md) | the call-hardening batteries: deadlines, retries, circuit breakers, rate limits, TTL caches, credential refresh, and the wrappers that bolt them onto a machine you already have. |
+| [`./resilience`](./resilience.md) | the call-hardening batteries: deadlines, retries, circuit breakers, rate limits, TTL caches and credential refresh, as plain functions and `Cmd.define`d Cmds you call from your own `update` (ADR 0022). |
 | [`./retry-backoff`](./retry-backoff.md) | exponential backoff with jitter + cap, and the retry-attempt state every fallible `interpret` handler folds over. |
 | [`./testing`](./testing.md) | test-side ergonomics over @demlik/tea's pure substrate. |
 | [`./timing`](./timing.md) | the call-rate batteries: coalesce a burst into one fire, cap a stream to one fire per window, and gate a high-frequency input into a settled, rate-capped, optionally deduped sequence of emits. |

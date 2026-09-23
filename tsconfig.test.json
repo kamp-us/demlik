@@ -86,8 +86,6 @@
     "src/internal/resilience/token-refresh/token-refresh.test.ts",
     "src/try-apply-cell.test.ts",
     "src/update-form-tag.test.ts",
-    "src/internal/resilience/with-deadline/with-deadline.test.ts",
-    "src/internal/resilience/with-resilience/with-resilience.test.ts",
     "src/internal/resilience/with-telemetry/with-telemetry.test.ts",
     "src/internal/flow/workflow/compensation.test.ts",
     "src/internal/flow/workflow/do.test.ts",

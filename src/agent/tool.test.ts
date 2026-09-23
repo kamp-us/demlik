@@ -484,7 +484,7 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
   });
 
   // #72 — the regression the last-wins spread would hide: with a router wired,
-  // the agent's own `agent_tool_ok` / `resilient_ok` / `compact_ok` cells are
+  // the agent's own `agent_tool_ok` / `resilient_run_ok` / `compact_ok` cells are
   // still the agent's verbs, not the router's fold (which returns `[s, []]`
   // for any Msg outside its own `<name>_ok` / `<name>_err`).
   it("the agent's own settle cells survive the router merge", () => {
@@ -509,16 +509,20 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
     const fold = machine.update.search_ok;
     expect(machine.update.search_err).toBe(fold);
     expect(machine.update.agent_tool_ok).not.toBe(fold);
-    expect(machine.update.resilient_ok).not.toBe(fold);
+    expect(machine.update.resilient_run_ok).not.toBe(fold);
     expect(machine.update.compact_ok).not.toBe(fold);
 
     // And they still fold the loop: the brain settle folds the turn and fans
     // the tool out, the legacy tool settle folds the record and re-fires the
     // brain. Under the router's fold both would have been no-ops.
     const brainOk: AgentLlmOkMsg<Purpose, Outputs> = {
-      type: "resilient_ok",
-      key: "plan_turn",
-      result: {
+      type: "resilient_run_ok",
+      cmd: {
+        type: "resilient_run",
+        key: "plan_turn",
+        input: { purpose: "plan_turn", model: null, payload: null },
+      },
+      value: {
         key: "plan_turn",
         purpose: "plan_turn",
         output: {

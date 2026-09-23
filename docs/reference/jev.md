@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea/jev";
 ```
 
-## Exports (66)
+## Exports (62)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -21,11 +21,7 @@ import { … } from "@demlik/tea/jev";
 | `classifyStatus` | Function | Classify one HTTP status, per the reference page's error table. |
 | `createClassifyBatch` | Function | Build a classify-batch knob from `config`. |
 | `createJevAsk` | Function | Build a jev-ask knob from `config`. |
-| `DeadlineExceeded` | Type | The Msg the deadline dispatches when the wall clock crosses `atMs`. |
-| `deadlinesSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
-| `DeadlinesSub` | Type | The running `"deadline"` Sub: its `deps` is the non-empty list of deadlines to arm. |
-| `deadlineSub` | Function | Re-export the deadline primitives so consumers (and tests) wire one import: `subscribeDeadline` is the `deadline` runner, `deadlinesSub` a machine's `subs` entry, and `deadlineSub` builds the entry both composed wrappers' `subs` list. |
-| `DeadlineSub` | Type | One deadline, as a battery lists it. |
+| `decodeJevReply` | Function | Turn an HTTP reply into the run Cmd's outcome. |
 | `DEFAULT_CLASSIFY_MAX_ITEMS` | Variable | The default page size — the one the grill settled on for Jev. |
 | `DEFAULT_JEV_MODEL` | Variable | The model the door asks for when config names none. |
 | `isJevErr` | Function | Is `value` a JevErr? |
@@ -41,38 +37,38 @@ import { … } from "@demlik/tea/jev";
 | `jevAskCmdDef` | Function | The one effect this knob emits: run the ask for `key` with the plain-data JevRequest (ADR 0014 — a Cmd is DECLARED, so its input, ok and err channels are types on the constructor rather than a convention). |
 | `JevAskConfig` | Interface | The jev-ask knob. |
 | `JevAskErr` | Type | Every way an ask can fail, as DATA. |
-| `JevAskFailure` | Class | The carrier that gets a JevAskErr out of the port and through resilient-call's throw seam intact. |
+| `jevAskErrOf` | Function | Read a settled failure back as a JevAskErr. |
+| `jevCallThrew` | Function | The outcome for a call that threw before Jev answered — a socket error, a DNS failure. |
 | `JevChoiceAnswer` | Interface | The chosen option and the full distribution over the options. |
 | `JevChoiceCriteria` | Type | A choice question's rubric: option key → description, or `null` where an option needs no extra detail. |
 | `JevChoiceQuestion` | Interface | Pick one option from a set you define. |
 | `JevCmd` | Type | The Cmd type a host machine declares in `types.cmd` when it splices a createJevAsk knob in — JevAskCmd under the name a `types` block reads well with. |
 | `JevErr` | Type | Every way a response can fail to be the answers to the questions asked. |
-| `JevFailMsg` | Type | The failure settle Msg — resilient-call's, with `error` narrowed to JevAskErr. |
+| `JevFailMsg` | Type | The failure settle Msg the engine mints — resilient-call's. |
 | `JevFallback` | Type | The pure decider that answers when the network cannot. |
+| `JevHttpReply` | Interface | What an HTTP call to Jev came back with: the status and the undecoded body. |
 | `JevHttpStatus` | Type | What a caller does next with an HTTP status. |
 | `JevNoulAnswer` | Interface | The yes/no answer, on a scale from 0 (no) to 1 (yes). |
 | `JevNoulQuestion` | Interface | A yes/no question. |
-| `JevOk` | Interface | The settled answer carried on `resilient_ok`. |
+| `JevOk` | Interface | The settled answer carried on `resilient_run_ok`. |
 | `JevParse` | Type | What `parseAnswers` returns: typed answers, or one `JevErr`. |
-| `JevPort` | Type | The injected HTTP caller — the one seam that touches the network. |
 | `JevQuestion` | Type | One typed question. |
 | `JevQuestionMap` | Type | The `questions` map: an id you choose → the question asked under it. |
 | `jevQuestions` | Function | Identity, with the literal keys kept. |
 | `JevQuestionType` | Type | The three question types, as the `type` discriminant spells them. |
+| `JevRejected` | Type | How a JevAskErr crosses the handler: the run Cmd's declared `port_rejected` tag, with the typed error on `jev`. |
 | `JevRequest` | Interface | The request body of `POST /v1/systemone`. |
 | `JevResponse` | Interface | The response body of `POST /v1/systemone`. |
 | `JevScoreAnswer` | Interface | The probability-weighted value across the levels — it can land BETWEEN levels, which is why `score` is a `number` and not an index. |
 | `JevScoreCriteria` | Type | A score question's rubric: an ORDERED list of level descriptions, at least two of them. |
 | `JevScoreQuestion` | Interface | Rate the state along an ordered rubric. |
 | `JevState` | Type | The content to evaluate: text, or structured data. |
-| `JevSub` | Type | The Sub type a host machine declares in `types.sub` — the `deadline` Sub that arms the list `subs` returns, inherited from resilient-call. |
-| `JevSucceedMsg` | Type | The success settle Msg — resilient-call's, with `result` narrowed to JevOk. |
+| `JevSucceedMsg` | Type | The success settle Msg — resilient-call's, with `value` narrowed to JevOk. |
 | `JevText` | Type | What every `instructions` and every criterion description accepts. |
 | `JevTimerMsg` | Type | The retry / deadline timer Msg — `DeadlineExceeded`, inherited. |
 | `JevUsage` | Interface | Token usage for the request. |
 | `KeyAnswer` | Type | What ClassifyBatchKnob.answerFor reports about one key. |
 | `liftJevAsk` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience` — resilient-call's convenience, re-typed for this door's slice so a consumer wires one import. |
-| `mountResilientCall` | Function | Pre-assemble a resilient-call knob into the fragments a machine definition spreads, so mounting one is a spread instead of eight hand-spliced points. |
+| `offlineJevAnswer` | Function | The outcome with no network at all: the fallback's answer, or its refusal, or `no_answer_path` when there is no fallback. |
 | `parseAnswers` | Function | Turn an `unknown` response body into the typed answers for `questions`, or into one `JevErr`. |
 | `ResilientState` | Interface | The slice. |
-| `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
