@@ -84,6 +84,18 @@ world, and a Cmd carries no `R`.**
 - Nothing journaled changes. 0019 already kept providers out of the journal, and `R` was
   type-only.
 
+## Amendments
+
+- **#251 R1.1 — the Promise path may change; 0.5.0 compatibility is not a constraint
+  (2026-09-22).** Decision item 4 ("the Promise path stays as it is today … code written against
+  0.5.0 in this shape keeps working") and the third **Banned** line (no Promise-path change that
+  makes a 0.5.0-shape consumer write anything new) are withdrawn. Session
+  https://github.com/kamp-us/demlik/issues/251 ruled that `interpret` comes off `Machine` and that
+  handlers arrive at run time on both engines (R1.1), under one name per concept, `run` /
+  `interpret` / `subscribe` (R1.2, R1.3). A consumer on the 0.5.0 shape stays pinned until it
+  migrates. What still holds: `ctx` remains a plain object on the Promise engine, and tea still
+  owns no DI on either engine. The rest of this decision is unchanged.
+
 ## Records
 
 no vocabulary impact
