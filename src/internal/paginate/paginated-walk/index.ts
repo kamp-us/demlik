@@ -390,7 +390,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     at: number,
   ): readonly [PaginatedWalkState<Cursor, Page>, readonly OutCmd[]] {
     // 1) Settle the underlying resilient call as a success.
-    const [resilience] = rc.succeed(s.resilience, PAGE_KEY, {
+    const { call: resilience } = rc.settle(s.resilience, {
       type: MsgType.ResilientOk,
       key: PAGE_KEY,
       result: page,
@@ -423,7 +423,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
    * Record a failed page fetch and back off via resilience. PURE — `at` stamps
    * the breaker trip + the retry-delay base.
    *
-   * Defers to the resilient-call `fail` verb: it trips the breaker and either
+   * Defers to the resilient-call `settle` verb: it trips the breaker and either
    * schedules a retry (paginator stays parked on the SAME cursor — no advance)
    * or settles the resilient call `failed` once retries are exhausted. The
    * paginator is deliberately untouched: a failed fetch must NOT advance the
@@ -435,7 +435,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
    * page fetch is outstanding (`walk.phase === "fetching"`). A stray `pageErr`
    * that arrives after the walk has settled — `done` (exhausted), `paused`
    * (backpressure), or `idle` (not started) — has NO outstanding fetch to fail.
-   * Without this guard it would still call `rc.fail`, which trips the SHARED
+   * Without this guard it would still call `rc.settle`, which trips the SHARED
    * circuit breaker (dinging a healthy upstream) and overwrites the settled
    * `PAGE_KEY` resilient slot with `failed` (clobbering the succeeded result a
    * resume would otherwise observe). So a stray `pageErr` is absorbed as a pure
@@ -453,7 +453,7 @@ export function createPaginatedWalk<Cursor, Page, EmittedCmd extends Cmd = Cmd>(
     if (s.walk.phase !== "fetching") {
       return [s, []];
     }
-    const [resilience, cmds] = rc.fail(s.resilience, PAGE_KEY, {
+    const { call: resilience, cmds } = rc.settle(s.resilience, {
       type: MsgType.ResilientErr,
       key: PAGE_KEY,
       error,

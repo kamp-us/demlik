@@ -367,12 +367,12 @@ const auditMachine = defineMachine({
       return [{ resilience }, cmds];
     },
     resilient_ok: (s, m) => {
-      const [resilience, cmds] = auditCall.succeed(s.resilience, m.key, m);
-      return [{ resilience }, cmds];
+      const { call, cmds } = auditCall.settle(s.resilience, m);
+      return [{ resilience: call }, cmds];
     },
     resilient_err: (s, m) => {
-      const [resilience, cmds] = auditCall.fail(s.resilience, m.key, m);
-      return [{ resilience }, cmds];
+      const { call, cmds } = auditCall.settle(s.resilience, m);
+      return [{ resilience: call }, cmds];
     },
     deadline_exceeded: (s, m) => {
       const [resilience, cmds] = auditCall.onTimer(s.resilience, m);
