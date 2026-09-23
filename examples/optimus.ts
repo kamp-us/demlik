@@ -30,7 +30,6 @@ import {
   type SucceedMsg,
   withDeadline,
   withResilience,
-  withTelemetry,
 } from "@demlik/tea/resilience";
 
 type Stage = "plan" | "crawl" | "audit" | "report";
@@ -586,17 +585,10 @@ const resilientUploader = withResilience(
   () => 0,
 );
 
-const deadlinedUploader = withDeadline(resilientUploader, { ms: 600_000 });
+const optimusUploader = withDeadline(resilientUploader, { ms: 600_000 });
 
 type UploaderMetric = { readonly seq: number; readonly msgType: string };
 const uploaderMetrics: UploaderMetric[] = [];
-
-const optimusUploader = withTelemetry(deadlinedUploader, {
-  event: (msg, _prev, next) => ({
-    seq: next.$telemetry.seq,
-    msgType: msg.type,
-  }),
-});
 
 type UploaderOuterState = ReturnType<typeof optimusUploader.machine.init>[0];
 
@@ -615,7 +607,7 @@ async function until(cond: () => boolean, label: string): Promise<void> {
 }
 
 function uploaderResilience(state: UploaderOuterState) {
-  return state.base.base.$resilience;
+  return state.base.$resilience;
 }
 
 async function main() {
@@ -659,15 +651,16 @@ async function main() {
     "               and recovers; the duplicate /docs replays cached.",
   );
   console.log("");
-  console.log("  uploader   = withTelemetry(withDeadline(withResilience(");
-  console.log("               reportUploader, target=publish_report)))");
+  console.log("  uploader   = withDeadline(withResilience(");
+  console.log("               reportUploader, target=publish_report))");
   console.log(
     "               the agent hands it the report; the wrapper stack",
   );
   console.log(
     "               retries the flaky sink, caps the ship, and sinks",
   );
-  console.log("               every uploader transition to uploaderMetrics[].");
+  console.log("               run's telemetry sink records every uploader");
+  console.log("               transition to uploaderMetrics[].");
 
   line("the agent loop, narrated");
 
@@ -772,7 +765,7 @@ async function main() {
 
   await runtime.stop();
 
-  line("withResilience + withDeadline + withTelemetry: ship the report");
+  line("withResilience + withDeadline + telemetry: ship the report");
   console.log(
     "the agent hands the finished report to the wrapped uploader machine.",
   );
@@ -787,11 +780,9 @@ async function main() {
 
   const uploaderRuntime = await run(optimusUploader.machine, {
     ...optimusUploader,
-    ctx: {
-      shipReport,
-      telemetrySink: (e) => {
-        uploaderMetrics.push({ seq: e.seq, msgType: e.msgType });
-      },
+    ctx: { shipReport },
+    telemetry: (e) => {
+      uploaderMetrics.push({ seq: e.seq, msgType: e.msgType });
     },
   }).ready;
 
@@ -821,13 +812,13 @@ async function main() {
     `circuit phase: ${uploaderResilience(finalUploader).circuit.phase} (absorbed, then closed)`,
   );
   console.log(
-    `uploader base phase: ${finalUploader.base.base.base.phase} (stays "shipping": the ship result is opaque to the wrapper, no fold loop, no glue)`,
+    `uploader base phase: ${finalUploader.base.base.phase} (stays "shipping": the ship result is opaque to the wrapper, no fold loop, no glue)`,
   );
   console.log(
-    `deadline phase: ${finalUploader.base.$deadline.phase} (cap not tripped)`,
+    `deadline phase: ${finalUploader.$deadline.phase} (cap not tripped)`,
   );
 
-  line("withTelemetry: every uploader transition sunk to metrics[]");
+  line("telemetry: every uploader transition sunk to metrics[]");
   console.log(`uploaderMetrics captured ${uploaderMetrics.length} transitions`);
   const counts: Record<string, number> = {};
   for (const m of uploaderMetrics)
@@ -882,7 +873,7 @@ async function main() {
     "drive the crawl (paginated-walk) and the flaky audit (resilient-call).",
   );
   console.log(
-    "idempotent-intake decides process vs replay through receive(). The three",
+    "idempotent-intake decides process vs replay through receive(). The two",
   );
   console.log(
     "wrappers harden a real fire-and-settle report ship. Faked: the model,",

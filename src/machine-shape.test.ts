@@ -6,7 +6,7 @@ import {
   type Reducer,
   type Transitions,
 } from "./index";
-import { withTelemetry } from "./internal/resilience/with-telemetry";
+import { withDeadline } from "./internal/resilience/with-deadline";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `describeMachine` / `acceptsOf` — the per-state accept-sets as a public
@@ -131,7 +131,8 @@ describe("why a derived reading and not a property on the machine", () => {
     const base = lightMachine();
     // Hang a marker on the base the way a property-based design would.
     const tagged = Object.assign(base, { __marker: "present" });
-    const wrapped = withTelemetry({ machine: tagged }).machine as unknown as {
+    const wrapped = withDeadline({ machine: tagged }, { ms: 1000 })
+      .machine as unknown as {
       __marker?: string;
       __form?: string;
     };
@@ -147,9 +148,9 @@ describe("why a derived reading and not a property on the machine", () => {
     // Model — so the wrapped machine really has no per-state accept-sets, and
     // `describeMachine` says exactly that rather than echoing the base.
     const shape = describeMachine(
-      withTelemetry({ machine: lightMachine() }).machine,
+      withDeadline({ machine: lightMachine() }, { ms: 1000 }).machine,
     );
     expect(shape.form).toBe("reducer");
-    expect(shape.msgs).toEqual(["go", "stop"]);
+    expect(shape.msgs).toEqual(["go", "stop", "$deadline:exceeded"]);
   });
 });

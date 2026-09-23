@@ -7,8 +7,10 @@ import {
   type Reducer,
   type Transitions,
 } from "./index";
-import { withDeadline } from "./internal/resilience/with-deadline";
-import { withTelemetry } from "./internal/resilience/with-telemetry";
+import {
+  type DeadlineModel,
+  withDeadline,
+} from "./internal/resilience/with-deadline";
 
 // ───────────────────────────────────────────────────────────────────────────
 // `msgKeysOf` over a RAGGED Transitions table.
@@ -151,18 +153,17 @@ describe("msgKeysOf — total tables and reducers are UNCHANGED (pure widening)"
 });
 
 describe("the wrappers stop losing cells for a ragged base", () => {
-  it("withTelemetry builds a cell for a Msg that lives only in a later row", () => {
-    const wrapped = withTelemetry({ machine: raggedMachine() }).machine;
+  it("withDeadline builds a cell for a Msg that lives only in a later row", () => {
+    const wrapped = withDeadline(
+      { machine: raggedMachine() },
+      { ms: 10 },
+    ).machine;
     // The under-enumeration bug surfaced HERE: no cell for "late" in the
     // wrapped flat record → NoCellError at dispatch for a Msg the base
     // handles. Stepping the wrapped machine must now succeed.
-    const [next] = applyCell<
-      { base: DynState; $telemetry: { seq: number } },
-      DynMsg,
-      never
-    >(
+    const [next] = applyCell<DeadlineModel<DynState>, DynMsg, never>(
       wrapped,
-      { base: { type: "busy" }, $telemetry: { seq: 0 } },
+      { base: { type: "busy" }, $deadline: { phase: "armed", seq: 0 } },
       { type: "late" },
     );
     expect(next.base).toEqual({ type: "idle" });
@@ -172,7 +173,7 @@ describe("the wrappers stop losing cells for a ragged base", () => {
     expect(() =>
       applyCell(
         wrapped,
-        { base: { type: "busy" }, $telemetry: { seq: 0 } },
+        { base: { type: "busy" }, $deadline: { phase: "armed", seq: 0 } },
         { type: "nonexistent" },
       ),
     ).toThrow(NoCellError);

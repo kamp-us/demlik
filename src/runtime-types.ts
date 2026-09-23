@@ -129,7 +129,8 @@ export function __resetPortRegistry(): void {
  *   `Supervision` strategy decides what happens next, but the throw is surfaced
  *   here as data first.
  * - `"listener"` — a `runtime.subscribe(...)` listener threw during fanout.
- * - `"observer"` — a `runtime.observe(...)` observer threw during fanout.
+ * - `"observer"` — a `runtime.observe(...)` observer threw during fanout, or
+ *   the `telemetry` sink threw or rejected.
  * - `"event"` — the `events` projector or an `on(type, ...)` handler threw.
  * - `"boot"` — an `onBoot` handler threw (boot fanout, or a late registration).
  * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
@@ -166,6 +167,26 @@ export type RuntimeErrorPhase =
   | "sub-cleanup"
   | "discard"
   | "identity-drop";
+
+/**
+ * What the `telemetry` sink passed to `run` receives, once per APPLIED
+ * transition. Plain data, so a recorded stream stays durable.
+ */
+export interface TelemetryEvent {
+  /** This run's applied transitions so far, counted from 1. Boot is not one. */
+  readonly seq: number;
+  /** The `Msg.type` that drove the transition. */
+  readonly msgType: string;
+  /** When the transition committed, read off `run`'s `clock` (ms since epoch). */
+  readonly at: number;
+}
+
+/**
+ * The `telemetry` option of `run`: a fire-and-forget sink. The run never waits
+ * on it, and a throw or rejection reaches `onError` under `"observer"` without
+ * touching the run.
+ */
+export type TelemetrySink = (event: TelemetryEvent) => void | Promise<void>;
 
 /** Context handed to an `OnError` sink alongside the error itself. */
 export interface RuntimeErrorContext {

@@ -336,7 +336,7 @@ subs: [
 run(machine, { subscribe: { ws: (sub, ctx, dispatch) => open(sub.deps.socketId, dispatch) } });
 ```
 
-Reconcile logic: `src/promise/run.ts:reconcileSubs`. Same id across
+Reconcile logic: `src/promise/loop.ts:reconcileSubs`. Same id across
 transitions = same subscription, no churn. A Sub restarts exactly when its
 `deps` value changes; to *force* a restart, put the thing that should
 restart it into `deps`.
