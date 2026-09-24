@@ -35,5 +35,14 @@
 		".fabrika.jsonc",
 		"package.json",
 		"MAINTAINING.md"
-	]
+	],
+
+	// No standing lanes: every issue homes on a milestone. Left out, this key falls back to the
+	// shipped pair (`wayfinder:backlog`, `axis:pipeline-hardening`), which are phoenix's lanes and
+	// have no label here.
+	"boardVocabulary": { "standingLanes": [] },
+
+	// ADR 0013 does not adopt the rendered-visual lane, so a missing design manifest is expected
+	// here, not a gap to fail on.
+	"surfaceDispositions": { "design-manifest": "degrade" }
 }
