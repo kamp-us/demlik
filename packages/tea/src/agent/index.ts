@@ -1649,7 +1649,10 @@ export function createAgent<
    *
    * Every door a Msg enters by goes through here: the knob's verbs and
    * `toMachine`'s cells. The verbs calling one another inside a transition do
-   * not, so their notes accumulate in the order they happened. PURE.
+   * not, so their notes accumulate in the order they happened. Emptying and
+   * noting both build a fresh array, so a non-empty outbox belongs to the one
+   * transition that filled it — `agentEvents` keys its once-only projection
+   * on that (#355). PURE.
    */
   function transition(
     s: State,

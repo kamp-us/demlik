@@ -148,10 +148,14 @@ export function agentTool<
   const childCtx = spec.childCtx as
     | ((ctx: HandlerCtx<Ctx>) => unknown)
     | undefined;
+  // Only the three fields a tool spec shares are handed on. The child's answer
+  // reaches the parent as data, so an agent tool has no `content`, no timeout
+  // and no retry — and a spec object carrying any of them at runtime still
+  // builds a tool without them.
   return definedTool<Name, Args, Ok, AgentToolError | ToolThrown, Ctx>(
     "agentTool",
     name,
-    spec,
+    { description: spec.description, input: spec.input, ok: spec.ok },
     AGENT_TOOL_TAGS,
     async (cmd, ctx) => {
       const childRunId = `${spec.namespace(ctx)}/${cmd.callId}`;

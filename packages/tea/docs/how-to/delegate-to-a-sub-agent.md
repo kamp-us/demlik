@@ -62,7 +62,7 @@ JSON verdict, which the next step parses.
 ## 2. Wrap it as a tool and give it to the parent
 
 `agentTool` takes the child plus four functions that connect it to the parent's
-call:
+call, and a fifth, `childCtx`, when the child's tools read a ctx:
 
 - `prompt` turns the call's args into the child's input. The child sees only
   this string, never the parent's conversation.
@@ -72,6 +72,10 @@ call:
   parent runs apart, such as the journey id.
 - `store` returns the child run's Store for a key. The key is
   `<namespace>/<callId>`, and it is also the child's `runId`.
+- `childCtx` derives the child's ctx from the parent's. What it returns is the
+  child's whole ctx; nothing of the parent's is merged in. It is required when
+  the child's tools read a ctx. When they read none, as `dismiss` here does,
+  leave it out; the parent's ctx still never reaches the child.
 
 ```ts
 /** What the tester gets back, parsed at the edge like any tool's `ok`. */

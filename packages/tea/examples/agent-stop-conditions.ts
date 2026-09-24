@@ -186,8 +186,9 @@ console.log("  model calls:", calls);
 // each call cost the way a provider does, on the turn's `usage`: the prompt
 // grows by one exchange per turn, and so does `inputTokens`. The run sums
 // every report into `state.usage` and the conversation keeps the last one's
-// size as `conversation.contextTokens`. The budget is a `stopWhen` over the total; the
-// fold is `afterContextTokens` over the size. Neither estimates a token.
+// size as `conversation.contextTokens`. The budget is a `stopWhen` over the
+// total; the fold is `afterContextTokens` over the size. Neither estimates a
+// token.
 // ===========================================================================
 
 let summaries = 0;
