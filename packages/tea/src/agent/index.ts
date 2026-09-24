@@ -146,6 +146,7 @@ import {
   foldSummary,
   freshConversation,
   isSettled,
+  NO_USAGE,
   requireAwaiting,
   toCompactRunCmd,
   withTurnUsage,
@@ -375,6 +376,7 @@ export function createAgent<
       resilience: llm.init(),
       tools: initFanOut<ToolCall, ToolOutcome<R>>(),
       conversation: null,
+      usage: NO_USAGE,
       compaction: compactRc.init(),
       toolResilience: ladder.init(),
       refusedCalls: [],
@@ -414,12 +416,15 @@ export function createAgent<
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const call = brainCall(s);
     const [resilience, cmds] = llm.attempt(s.resilience, call, at);
+    // The note names the call and does not copy it: `llm.attempt` just keyed
+    // `call` on `resilience` by its purpose, and every verb that reaches here
+    // ends its transition on this call, so the projector reads the request off
+    // that slice — and a checkpoint holds the prompt once (#354).
     const started = noted(s, {
       kind: "brain_started",
       turn: s.conversation?.turnCount ?? 0,
       purpose: call.purpose,
       model: call.model,
-      payload: call.payload,
       at,
     });
     return [{ ...started, resilience }, cmds];
@@ -529,6 +534,8 @@ export function createAgent<
       ...s,
       run: runSlice,
       conversation,
+      // A new run has cost nothing yet (#332).
+      usage: NO_USAGE,
       failure: null,
       // A restart clears the prior run's terminal output — `result()` reads
       // `undefined` again until THIS run finishes (#46).
@@ -568,18 +575,20 @@ export function createAgent<
     const conv = requireAwaiting(s, "llm");
     if (conv === null) return [s, []];
 
-    // The turn's reported usage (#332) joins the running total and becomes the
+    // The turn's reported usage (#332) joins the run's total and becomes the
     // latest context size — both read off the settled turn, never estimated.
+    const [usage, measured] = withTurnUsage(s, conv, result);
     const withTurn: Conversation<R> = {
-      ...withTurnUsage(conv, result),
+      ...measured,
       turns: [...conv.turns, result],
     };
+    const counted: State = { ...s, usage };
 
     // ── No tool calls → the stage's loop is done → advance the pipeline. ──
     // `result` is the terminating turn — threaded into `advanceStage` so it can
     // be stamped as the run's `output` when this retire finishes the pipeline.
     if (result.toolCalls.length === 0) {
-      return advanceStage({ ...s, conversation: withTurn }, result, at);
+      return advanceStage({ ...counted, conversation: withTurn }, result, at);
     }
 
     // ── Tool calls → scatter across fan-out (serial by default). ──
@@ -606,7 +615,13 @@ export function createAgent<
     );
     return [
       noted(
-        { ...s, run: runSlice, tools, toolResilience, conversation: nextConv },
+        {
+          ...counted,
+          run: runSlice,
+          tools,
+          toolResilience,
+          conversation: nextConv,
+        },
         ...toolsStarted(launched, at),
       ),
       launchCmds,
@@ -639,7 +654,9 @@ export function createAgent<
     // Pipeline finished (or single-shot done) → no further brain call. The
     // terminating turn is the run's output; record it before clearing the
     // conversation so the result survives the retire (the field the deleted
-    // `captureLastTurn` host hook used to reconstruct off the stream).
+    // `captureLastTurn` host hook used to reconstruct off the stream). The
+    // run's usage total is on `s.usage`, not the conversation, so it survives
+    // the clear with no carrying (#354).
     if (runSlice.phase === "done") {
       return [
         { ...s, run: runSlice, conversation: null, output: terminatingTurn },
@@ -647,8 +664,8 @@ export function createAgent<
       ];
     }
     // Next stage → fresh conversation + its first brain call. The transcript
-    // starts over; the run's usage total does not — it is what the run cost.
-    const conversation = freshConversation<R>(s.conversation?.usage);
+    // starts over; the run's usage total lives on the run, so it goes on.
+    const conversation = freshConversation<R>();
     const moved: State = {
       ...s,
       run: runSlice,
@@ -1246,14 +1263,7 @@ export function createAgent<
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const [runSlice] = run.boot(s.run, at);
-    // A conversation persisted before #332 carries no usage readings; the
-    // resume fills them in once, here, so every later transition reads both.
-    const resumed: State = {
-      ...s,
-      run: runSlice,
-      conversation:
-        s.conversation === null ? null : withUsageDefaults(s.conversation),
-    };
+    const resumed: State = { ...s, run: runSlice };
     if (isSettled(resumed)) return [resumed, []];
 
     const conv = resumed.conversation;
@@ -1629,9 +1639,10 @@ export function createAgent<
   // === The transition boundary (#331) ======================================
 
   /**
-   * Run `verb` as ONE transition: empty the lifecycle outbox on the way in, and
-   * note `run_ended` on the way out when this is the transition that ended the
-   * run. Reading the end off `isSettled` before and after, rather than at each
+   * Run `verb` as ONE transition: empty the lifecycle outbox on the way in,
+   * bring a Model persisted before `state.usage` up to it
+   * ({@link withUsageDefaults}), and note `run_ended` on the way out when this
+   * is the transition that ended the run. Reading the end off `isSettled` before and after, rather than at each
    * site that can end a run, is what makes `RunDone` once-only whichever of
    * them did it — `done`, a turn or time limit, a spent brain retry, a
    * watchdog, a cancel.
@@ -1645,8 +1656,11 @@ export function createAgent<
     at: number,
     verb: (entered: State) => readonly [State, readonly AgentCmd<P, TC>[]],
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const current = withUsageDefaults(s);
     const entered: State =
-      (s.lifecycle ?? []).length === 0 ? s : { ...s, lifecycle: [] };
+      (current.lifecycle ?? []).length === 0
+        ? current
+        : { ...current, lifecycle: [] };
     const [next, cmds] = verb(entered);
     return !isSettled(entered) && isSettled(next)
       ? [noted(next, { kind: "run_ended", at }), cmds]

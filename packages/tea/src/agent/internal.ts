@@ -35,18 +35,15 @@ export const NO_USAGE: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
 /**
  * A fresh conversation entering the agentic loop — awaiting the first brain
- * call. `usage` is the run's total so far: zero at `agent_start`, the previous
- * stage's total when a stage advance seeds the next one (#332).
+ * call, with no context size yet. The run's usage total is not the
+ * conversation's, so a fresh one carries none (#354).
  */
-export function freshConversation<R>(
-  usage: TurnUsage = NO_USAGE,
-): Conversation<R> {
+export function freshConversation<R>(): Conversation<R> {
   return {
     turns: [],
     toolRecords: [],
     turnCount: 0,
     awaiting: { kind: "llm" },
-    usage,
     contextTokens: null,
   };
 }
@@ -70,41 +67,67 @@ export function addUsage(total: TurnUsage, turn: TurnUsage): TurnUsage {
 }
 
 /**
- * Fold one settled brain turn's usage into the conversation's two readings: add
- * it to the running total, and make it the latest context size. A turn that
+ * Fold one settled brain turn's usage into its two readings: add it to the
+ * run's total, and make it the conversation's latest context size. A turn that
  * reported none leaves the total alone and CLEARS the context size — the size
  * the previous turn reported no longer describes the transcript, and a stale
  * reading is exactly what must never fire a size-based fold. PURE.
  */
-export function withTurnUsage<R>(
+export function withTurnUsage<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+>(
+  s: AgentState<Stage, P, O, R>,
   conv: Conversation<R>,
   turn: AgentTurn,
-): Conversation<R> {
+): readonly [TurnUsage, Conversation<R>] {
   const { usage } = turn;
-  if (usage === undefined) return { ...conv, contextTokens: null };
-  return {
-    ...conv,
-    usage: addUsage(conv.usage, usage),
-    contextTokens: usage.inputTokens + usage.outputTokens,
-  };
+  if (usage === undefined) return [s.usage, { ...conv, contextTokens: null }];
+  return [
+    addUsage(s.usage, usage),
+    { ...conv, contextTokens: usage.inputTokens + usage.outputTokens },
+  ];
 }
 
+/** A conversation as a Model persisted before #354 may hold it: with the run's total on it. */
+type PersistedConversation<R> = Omit<Conversation<R>, "contextTokens"> & {
+  readonly contextTokens?: number | null;
+  readonly usage?: TurnUsage;
+};
+
 /**
- * Fill in the usage readings a conversation persisted before #332 lacks — a
- * zero total and no context size. The rehydration guard `agent_boot` runs, so
- * a 0.17.x Model resumes with its total starting from zero rather than a
- * `stopWhen` reading `undefined`. Identity on a conversation that has them.
- * PURE.
+ * The usage rehydration guard, run on entry to every transition. The run's
+ * total lives on `state.usage` and nowhere else; a Model persisted before that
+ * held it on `conversation.usage`, and one persisted by 0.17.x held no usage at
+ * all. This lifts an old conversation's total onto the run and drops the
+ * conversation's copy, starts a total that was never kept from zero, and fills
+ * in a missing context size as `null`. Identity on a Model that needs none of
+ * it. PURE.
  */
-export function withUsageDefaults<R>(conv: Conversation<R>): Conversation<R> {
-  const persisted = conv as Partial<Conversation<R>>;
-  if (persisted.usage !== undefined && persisted.contextTokens !== undefined) {
-    return conv;
+export function withUsageDefaults<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+>(s: AgentState<Stage, P, O, R>): AgentState<Stage, P, O, R> {
+  const persisted = s as Partial<AgentState<Stage, P, O, R>>;
+  const conv = s.conversation as PersistedConversation<R> | null;
+  const current =
+    persisted.usage !== undefined &&
+    (conv === null ||
+      (conv.usage === undefined && conv.contextTokens !== undefined));
+  if (current) return s;
+  let conversation: Conversation<R> | null = null;
+  if (conv !== null) {
+    const { usage: _lifted, ...rest } = conv;
+    conversation = { ...rest, contextTokens: rest.contextTokens ?? null };
   }
   return {
-    ...conv,
-    usage: persisted.usage ?? NO_USAGE,
-    contextTokens: persisted.contextTokens ?? null,
+    ...s,
+    usage: persisted.usage ?? conv?.usage ?? NO_USAGE,
+    conversation,
   };
 }
 
@@ -138,8 +161,8 @@ export function dedupeByCallId(
  * `folding` turns stood, so survivors shift left by `folding` then right by 1).
  * `turnCount` is UNCHANGED — compaction is not a model round-trip (decision C).
  *
- * The usage total is UNCHANGED too: the folded turns were still paid for. The
- * context size is CLEARED, because it measured the transcript before the fold;
+ * The run's usage total is not the conversation's, so a fold cannot touch it:
+ * the folded turns were still paid for. The context size is CLEARED, because it measured the transcript before the fold;
  * left standing it would fire a size-based fold again before the next brain
  * turn could report what the shrunk transcript costs (#332).
  *

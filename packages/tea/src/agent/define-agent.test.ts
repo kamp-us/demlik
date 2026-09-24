@@ -139,6 +139,7 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
         "resilience",
         "tools",
         "conversation",
+        "usage",
         "compaction",
         "toolResilience",
         "refusedCalls",
@@ -793,7 +794,11 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
     expect(events[6]).toEqual({
       ...head,
       type: "RunDone",
-      status: { kind: "done", output: ANSWER },
+      status: {
+        kind: "done",
+        output: ANSWER,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      },
     });
     expect(final.output).toEqual(ANSWER);
   });

@@ -174,12 +174,18 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
 
     // Fires once — the terminal `done` transition. Output is the last (empty)
     // model turn, the same first-class result `Runtime.result()` reads (#46).
+    // No turn reported usage, so the run's total (#354) is zero.
     expect(dones).toEqual([
-      { kind: "done", output: { content: "thinking", toolCalls: [] } },
+      {
+        kind: "done",
+        output: { content: "thinking", toolCalls: [] },
+        usage: { inputTokens: 0, outputTokens: 0 },
+      },
     ]);
     expect(dones[0]).toEqual({
       kind: "done",
       output: runtime.result()?.output,
+      usage: runtime.result()?.usage,
     });
   });
 

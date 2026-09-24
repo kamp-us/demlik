@@ -307,9 +307,9 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * the same terminal an aborted `signal` reaches, with the transcript intact
    * and no further model call made. Where `maxTurns` and `maxElapsedMs` bound
    * a quantity the agent counts for you and `deadlineMs` watches for a stall,
-   * this bounds whatever you name — a token budget over
-   * `conversation.usage` (the run's provider-reported total), an external flag,
-   * a condition on the turns so far. Omit → no predicate.
+   * this bounds whatever you name — a token budget over `state.usage` (the
+   * run's provider-reported total), an external flag, a condition on the turns
+   * so far. Omit → no predicate.
    *
    * It must be PURE: the reducer calls it, so a replay hands it the same state
    * and must get the same answer. And it is config rather than Model — a

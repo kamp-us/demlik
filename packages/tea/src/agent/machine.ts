@@ -639,7 +639,7 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
         turn: note.turn,
         purpose: note.purpose,
         model: note.model,
-        payload: note.payload,
+        payload: inFlightPayload(state, note.purpose),
       };
     case "tool_started":
       return {
@@ -666,6 +666,25 @@ function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
         : { type: "RunDone", runId, at: note.at, status };
     }
   }
+}
+
+// The request `payload` of the brain call in flight under `key` (#354). A
+// `brain_started` note carries no copy of it, because the call is already on
+// `state.resilience`: every verb that notes one ends its transition on the
+// `llm.attempt` that put it there, so the post-transition state the projector
+// reads holds it `running` (or `waiting_retry`, which keeps the same input).
+// The `null` arm is unreachable while that holds, and stays silent rather than
+// inventing a request if it ever stops holding.
+function inFlightPayload<
+  Stage,
+  P extends string,
+  O extends Record<P, unknown>,
+  R,
+>(state: AgentState<Stage, P, O, R>, key: string): unknown {
+  const call = state.resilience.calls[key];
+  return call?.phase === "running" || call?.phase === "waiting_retry"
+    ? call.input.payload
+    : null;
 }
 
 // The run's ending, narrowed. `run_ended` is noted exactly when `isSettled`

@@ -210,10 +210,10 @@ reported for that call. The tutorial's Anthropic adapter
 that reports none gets a zero total and never triggers a size-based fold. tea
 never estimates a token: it reads only what the provider said.
 
-The conversation keeps two readings of it. `conversation.usage` is the run's
-running total, every turn's report summed. `conversation.contextTokens` is the
-last turn's `inputTokens + outputTokens`: how full the context window is now.
-A token budget is a `stopWhen` over the first, and a size-based fold is
+The agent keeps two readings of it. `state.usage` is the run's running total,
+every turn's report summed. `conversation.contextTokens` is the last turn's
+`inputTokens + outputTokens`: how full the context window is now. A token
+budget is a `stopWhen` over the first, and a size-based fold is
 `compaction.afterContextTokens` over the second:
 
 ```ts
@@ -222,9 +222,7 @@ const budgeted = defineAgent({
   tools: [tick],
   instructions: "You tick.",
   compaction: { afterContextTokens: 8_000, keepTurns: 1 },
-  stopWhen: ({ conversation }) =>
-    conversation !== null &&
-    conversation.usage.inputTokens + conversation.usage.outputTokens >= 60_000,
+  stopWhen: ({ usage }) => usage.inputTokens + usage.outputTokens >= 60_000,
 });
 ```
 
@@ -247,6 +245,11 @@ the next call. What to expect from each:
   Set the number below the real limit by one turn's worth.
 - **The total survives a kill.** Each turn's usage is saved with the turn, so a
   resumed run adds up to the same total as one that was never interrupted.
+- **The total survives the end of the run.** It belongs to the run, not to a
+  stage's conversation, so a stage advance keeps it and so does `done`, which
+  clears the conversation. Read it off `state.usage` whichever way the run
+  ended, or off `status(state).usage` when `status(state).kind === "done"`.
+  `RunDone`'s `done` status carries it too.
 - **Summaries are not counted.** Only brain turns add to the total. The
   summarize call's own cost is not tracked yet.
 - **The threshold is your number.** tea knows no model's window size, so
@@ -261,7 +264,7 @@ the next call. What to expect from each:
 | A run that has hung | `deadlineMs` | Fails the run after that long with **no advance**; restarts on each advance |
 | Total wall-clock time | `maxElapsedMs` | Fails the run at the first turn boundary past that long since it started, progressing or not |
 | A condition only you can see | `stopWhen` | Ends the run **cancelled** at the turn boundary your predicate answers `true` on |
-| Tokens spent | `stopWhen` over `conversation.usage` | Ends the run **cancelled** at the first turn boundary past your budget |
+| Tokens spent | `stopWhen` over `state.usage` | Ends the run **cancelled** at the first turn boundary past your budget |
 | How long the prompt gets | `compaction` | Folds the oldest turns into one summary instead of failing anything |
 
 Use them together for the common case. `maxTurns` bounds the run's length,

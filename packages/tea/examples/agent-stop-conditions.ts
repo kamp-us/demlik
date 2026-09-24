@@ -184,9 +184,9 @@ console.log("  model calls:", calls);
 // ===========================================================================
 // 6 — a token budget, and compaction by context size. This model reports what
 // each call cost the way a provider does, on the turn's `usage`: the prompt
-// grows by one exchange per turn, and so does `inputTokens`. The conversation
-// sums every report into `conversation.usage` and keeps the last one's size as
-// `conversation.contextTokens`. The budget is a `stopWhen` over the total; the
+// grows by one exchange per turn, and so does `inputTokens`. The run sums
+// every report into `state.usage` and the conversation keeps the last one's
+// size as `conversation.contextTokens`. The budget is a `stopWhen` over the total; the
 // fold is `afterContextTokens` over the size. Neither estimates a token.
 // ===========================================================================
 
@@ -214,16 +214,14 @@ const budgeted = defineAgent({
   tools: [tick],
   instructions: "You tick.",
   compaction: { afterContextTokens: 8_000, keepTurns: 1 },
-  stopWhen: ({ conversation }) =>
-    conversation !== null &&
-    conversation.usage.inputTokens + conversation.usage.outputTokens >= 60_000,
+  stopWhen: ({ usage }) => usage.inputTokens + usage.outputTokens >= 60_000,
 });
 
 calls = 0;
 const spent = await budgeted.run("go");
 console.log("token budget 60k →", status(spent).kind);
 console.log("  model calls:", calls, "of which summaries:", summaries);
-console.log("  spent:", spent.conversation?.usage);
+console.log("  spent:", spent.usage);
 
 /*
  * What it prints. The millisecond figures move a little run to run — the shape
