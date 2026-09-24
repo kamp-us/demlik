@@ -19,9 +19,11 @@ export type CollapseCandidate = {
   aId: string;
   aFile: string;
   aStartLine: number;
+  aEndLine: number;
   bId: string;
   bFile: string;
   bStartLine: number;
+  bEndLine: number;
   signals: Signal[];
   confidence: number;
   cost: number;
@@ -130,9 +132,11 @@ function scorePair(
     aId: a.id,
     aFile: a.file,
     aStartLine: a.startLine,
+    aEndLine: a.endLine,
     bId: b.id,
     bFile: b.file,
     bStartLine: b.startLine,
+    bEndLine: b.endLine,
     signals,
     confidence,
     cost,

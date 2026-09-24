@@ -27,6 +27,8 @@ export type Opts = {
   nodeKinds?: string;
   layers?: boolean;
   layerRules?: string;
+  boundaries?: boolean;
+  boundaryRules?: string;
   collapse?: boolean;
   collapseConfig?: string;
   hotspots?: boolean;
@@ -88,6 +90,14 @@ function featureOptions(command: Command): Command {
     .option("--layers", "layer gate: every import edge pointing UP the declared layer stack")
     .option("--layer-rules <file>", "JSON file of layer-declaration overrides merged over defaults")
     .option(
+      "--boundaries",
+      "feature boundaries: cross-feature imports not through <feature>/index.ts, rules/ importing beyond itself and contracts, lib/ importing a feature (gateable via --ci)",
+    )
+    .option(
+      "--boundary-rules <file>",
+      "JSON file of boundary-declaration overrides (features per scope, lib, contracts) merged over defaults",
+    )
+    .option(
       "--collapse",
       "collapse candidates (a report) + partial twins: a shared decision prologue over the same named constants, diverging afterwards (gateable via --ci). Implies --kinds",
     )
@@ -109,7 +119,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--write-ceilings",
-      "with --comments: rewrite comment-ceilings.json; with --collapse: record this scope's partial-twin count in collapse-ceilings.json",
+      "with --comments: rewrite comment-ceilings.json; with --collapse: record this scope's partial-twin count in collapse-ceilings.json; with --boundaries: record each declared scope's violation count in boundary-ceilings.json",
     );
 }
 

@@ -7,6 +7,7 @@ export type Twin = {
   name: string;
   file: string;
   startLine: number;
+  endLine: number;
   loc: number;
   complexity: number;
   nestingDepth: number;
@@ -33,6 +34,7 @@ export function toTwin(fn: FunctionNode): Twin {
     name: fn.name,
     file: fn.file,
     startLine: fn.startLine,
+    endLine: fn.endLine,
     loc: fn.loc,
     complexity: fn.complexity,
     nestingDepth: fn.nestingDepth,

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { z } from "zod";
+import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
 import { type NodeKindRules, NodeKindRulesSchema } from "./kinds/rules.js";
@@ -114,4 +115,32 @@ export function resolveCommentCeilings(
   const defaults = CommentCeilingsSchema.parse({});
   if (file === undefined) return defaults;
   return loadOverrides(file, CommentCeilingsSchema.partial(), defaults, report);
+}
+
+export function resolveBoundaryRules(
+  file: string | undefined,
+  report: Reporter,
+): BoundaryRules | null {
+  const defaults = BoundaryRulesSchema.parse({});
+  const rules =
+    file === undefined
+      ? defaults
+      : loadOverrides(file, BoundaryRulesSchema.partial(), defaults, report);
+  if (rules === null) return null;
+  const lib = new Set(rules.lib);
+  for (const [scope, features] of Object.entries(rules.features)) {
+    const seen = new Set<string>();
+    for (const feature of features) {
+      if (seen.has(feature)) {
+        report(`feature "${feature}" is declared twice in "${scope}".`);
+        return null;
+      }
+      if (lib.has(feature)) {
+        report(`"${feature}" in "${scope}" is declared as both a feature and lib.`);
+        return null;
+      }
+      seen.add(feature);
+    }
+  }
+  return rules;
 }

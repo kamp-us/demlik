@@ -7,9 +7,12 @@ export const CrossRuntimeReasonSchema = z.enum([
 ]);
 export type CrossRuntimeReason = z.infer<typeof CrossRuntimeReasonSchema>;
 
+export const BindingKindSchema = z.enum(["service", "durable-object", "workflow"]);
+export type BindingKind = z.infer<typeof BindingKindSchema>;
+
 export const CrossRuntimeEdgeSchema = z.object({
   binding: z.string(),
-  bindingKind: z.enum(["service", "durable-object"]),
+  bindingKind: BindingKindSchema,
   callerId: z.string(),
   calleeId: z.string().nullable(),
   line: z.number(),
@@ -23,7 +26,7 @@ export type CrossRuntimeEdge = z.infer<typeof CrossRuntimeEdgeSchema>;
 
 export const BindingCensusRowSchema = z.object({
   binding: z.string(),
-  bindingKind: z.enum(["service", "durable-object"]),
+  bindingKind: BindingKindSchema,
   callSites: z.number(),
   ownerService: z.string(),
   targetClass: z.string(),

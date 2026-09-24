@@ -1,6 +1,12 @@
 import path from "node:path";
 import type { Node, SourceFile } from "ts-morph";
 import { type ClassifyContext, classifyFunction, compileKindRules } from "../kinds/classify.js";
+import {
+  mergeRuleMaps,
+  publicMethodRulesByBaseClass,
+  siblingPropertyRules,
+  typeScopeRules,
+} from "../kinds/declarations.js";
 import type { NodeKindRules } from "../kinds/rules.js";
 import { buildClusterReport } from "../query/clusters.js";
 import { findInterfaceWidth } from "../query/interface-width.js";
@@ -150,6 +156,7 @@ function crossRuntimeReport(input: CompleteInput): CrossRuntimeReport | null {
 function resolvedTargets(report: CrossRuntimeReport | null): Set<string> {
   const targets = new Set<string>();
   for (const e of report?.edges ?? []) {
+    if (e.bindingKind === "workflow") continue;
     if (e.calleeId !== null) targets.add(e.calleeId);
   }
   return targets;
@@ -218,11 +225,16 @@ export function completeAnalysis(input: CompleteInput): AnalysisBundle {
   const { options, prep, rootAbsolute, sourceFiles, nodeToId, names, exportsByFile } = input;
   const report = crossRuntimeReport(input);
 
+  const compiled = compileKindRules(options.kindRules);
   const context: ClassifyContext = {
     crossRuntimeTargets: resolvedTargets(report),
     durableObjectMethods: methodIdsOfClasses(nodeToId, durableObjectClasses(prep.catalog)),
+    baseClassEntries: publicMethodRulesByBaseClass(nodeToId, compiled.entryBaseClasses),
+    declaredGuards: mergeRuleMaps(
+      siblingPropertyRules(nodeToId, compiled.entryGuardProperties),
+      typeScopeRules(nodeToId, compiled.entryGuardProperties),
+    ),
   };
-  const compiled = compileKindRules(options.kindRules);
   const classify = options.kinds
     ? (fn: FunctionNode): NodeKind => classifyFunction(fn, compiled, context)
     : null;

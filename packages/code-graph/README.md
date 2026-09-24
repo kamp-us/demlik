@@ -48,6 +48,8 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Exported symbols nothing reaches | `code-graph X --unreachable` |
 | Writes reachable from an entry with no auth on the path | `code-graph X --unguarded` |
 | Imports pointing UP the declared layer stack (a gate) | `code-graph . --layers` |
+| Imports crossing a declared feature boundary | `code-graph X --boundaries` |
+| Gate feature-boundary crossings against `boundary-ceilings.json` | `code-graph . --boundaries --ci` |
 | Ranked collapse candidates + partial twins | `code-graph X --collapse` |
 | Gate the partial twins against their recorded ceiling | `code-graph . --collapse --ci` |
 | Re-record one scope's partial-twin ceiling | `code-graph X --collapse --write-ceilings` |
@@ -82,12 +84,15 @@ cross-package callers; re-run with `--deep`.
 | `--cross-runtime` | Resolve `env.<BINDING>.<method>()` to the target worker's method (implies the edge pass). Prints the binding census + every resolved and unresolved edge |
 | `--kinds` | Classify each function `entry`/`auth`/`effect`/`plain` and print the census. `plain` is reported as UNCLASSIFIED. Implies `--cross-runtime` |
 | `--unreachable` | Exported symbols with no path from any entry, split `dead` vs `only-called-from-tests`, plus the count of candidates WITHHELD and why. Implies `--kinds` |
-| `--unguarded` | `effect` nodes reachable from an `entry` without crossing an `auth` node, each with its shortest witness path. Implies `--kinds` |
+| `--unguarded` | `effect` nodes reachable from an `entry` without crossing an `auth` node, each with its shortest witness path and the `reach` of the entry that found it (`public`, `service-binding`, `platform`), listed per reach. Implies `--kinds` |
 | `--clusters` | Community detection over the call + import graph, compared against the directory tree: directories spanning several clusters, and clusters scattered across directories. Report, never a gate. Implies `--cross-runtime` |
 | `--interface-width` | Every exported symbol, grouped by its declaring package, ranked by export count; each export's consumer count OUTSIDE the package, and the zero-consumer ones called out as free deletions. Implies the edge pass (does NOT imply `--kinds`) |
 | `--node-kinds <file>` | JSON file of node-kind rule overrides, same boundary discipline as `--thresholds`. An override REPLACES a whole pattern group |
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. Runs on the cheap pass — no tsconfig, no Graph |
 | `--layer-rules <file>` | JSON file of layer-declaration overrides, same boundary discipline as `--thresholds`. An override REPLACES `layers` or `allowed` wholesale |
+| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges`: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`; **B3** a `lib` folder importing a feature. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
+| `--boundaries --ci` | Boundary ratchet: each declared scope's violation count against `boundary-ceilings.json`. Fails both ways, like `--collapse --ci`. `--write-ceilings` records the counts |
+| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …] }`. An override REPLACES each key wholesale |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
 | `--collapse --write-ceilings` | Record the analyzed path's partial-twin count in `collapse-ceilings.json`, leaving the other scopes as they are |
@@ -110,12 +115,13 @@ Capturing output to a file: prefer `--out <file>` (banner-safe). A bare `> file`
 `env.AUDITER.getProject()` used to resolve to `external:getProject` — a leaf. In a
 six-worker system that is where the real coupling lives, so the graph reported the
 core as decoupled precisely where it is not. This pass resolves a service-binding
-call or a Durable Object dispatch to the **target worker's method**, and the
+call or a Durable Object dispatch to the **target worker's method**, and a
+Workflow binding's `create`/`createBatch` to the workflow class's `run`, and the
 resolved id replaces the external one at the call site, so `--deep`, `--blast` and
 `callChainDepth` span workers with no parallel structure to keep in sync.
 
 The binding → service map is **derived** from the committed
-`wrangler.{json,jsonc,toml}` files (`services[]` and `durable_objects.bindings[]`,
+`wrangler.{json,jsonc,toml}` files (`services[]`, `durable_objects.bindings[]` and `workflows[]`,
 top-level environment only — `env.staging` re-declares the same binding names
 against `-staging` deployments of the same code). There is no table to maintain:
 delete a binding from the config and the edge leaves the graph.
@@ -145,10 +151,23 @@ so an added kind fails to compile at every consumer:
 
 | Kind | Meaning |
 |---|---|
-| `entry` | A place a real run starts: a `fetch`/`scheduled`/`queue` handler, a GraphQL resolver, a registered CLI command, any method of a class a wrangler config declares as a **Durable Object**, or an RPC method with at least one **real** cross-service caller (Feature A establishes that as a fact, not a guess) |
+| `entry` | A place a real run starts: a `fetch`/`email` handler, a `scheduled`/`queue`/`tail` handler, a GraphQL resolver, a registered CLI command, any method of a class a wrangler config declares as a **Durable Object**, any public instance method of a class extending `WorkerEntrypoint` or `DurableObject` (`worker-entrypoint-method`), or an RPC method with at least one **real** cross-service caller (Feature A establishes that as a fact, not a guess). A Workflow's `run` is not an entry: only its own worker starts it, so it is reached through the `create` call-site's edge |
 | `auth` | An authorization check |
-| `effect` | A DB write, a network call, a VM spawn, a queue send |
+| `effect` | A DB write, a network call, a VM spawn, a queue send — matched on where the callee is **declared**, not on its name (see below); a repo function outside the scope gets a `workspace:<file>:<name>` id and is never an effect |
 | `plain` | Nothing matched — reported as **unclassified**, never as a positive finding |
+
+Every entry carries a `reach` — who can start it — read off its evidence by the
+`entryReach` rule group, the most exposed evidence winning:
+
+| Reach | Evidence | Who starts it |
+|---|---|---|
+| `public` | anything not below: a `fetch`/`email` handler, a resolver, a CLI command, a DO lifecycle hook | an outside caller |
+| `service-binding` | `worker-entrypoint-method`, `cross-service-callee`, `durable-object-class` | another worker holding a binding: an RPC method is not an HTTP route, so a worker whose `fetch` exposes no route to it can only be called through the binding |
+| `platform` | `platform-trigger` (`scheduled`, `queue`, `tail`, `trace`) | the runtime itself |
+
+The attribute is static; the route is not. When a worker's `fetch` does call into an
+RPC method, the walk from that `fetch` reaches the effect first and reports it
+`public`.
 
 Precedence is `entry > auth > effect > plain`, and `evidence` keeps **every** rule
 that matched, so an entry handler that also writes is labelled `entry` while its
@@ -158,6 +177,22 @@ Detection is **declared, not clever**: `src/kinds/rules.ts` holds named regex gr
 with defaults tuned for this repo, overridable wholesale with `--node-kinds <file>`
 (an override replaces a group rather than extending it). Nothing infers, scores, or
 guesses.
+
+An effect rule matches a call's **declaration**, which the edge pass records on every
+call that leaves the repo's code as `<origin>:<Owner>.<member>`: the origin is the
+ambient module (`declare module "crypto"`), else the package the declaring file sits in
+(`@types/` dropped), else `workspace`; the owner is the class, interface or type alias
+the member is declared on. An unresolved cross-runtime call records
+`<service>:<class>.<method>`. So `db.update(t)` on a drizzle client is
+`drizzle-orm:PgDatabase.update` and a `db-write`, while
+`createHash("sha256").update(x)` is `crypto:Hash.update` and nothing, and a
+`Map.delete` or `Object.create` stops posing as a write or a workflow spawn.
+better-sqlite3 writes are `Statement.run`, `Database.exec` and `Database.transaction`;
+its reads (`Statement.get`/`all`/`iterate`) and `pragma` are not effects. A call
+whose receiver the checker cannot type has no declaration and is never an effect.
+The Cloudflare rules (`R2Bucket`, `KVNamespace`, `Queue`, `Workflow`, `D1Database`,
+`fetch`) match on the owner under any origin, because the runtime types arrive either
+from `@cloudflare/workers-types` or from a wrangler-generated `worker-configuration.d.ts`.
 
 ### `--unreachable` fails toward silence
 
@@ -185,11 +220,30 @@ named at module scope rooting its methods (`export const X = withObservabilityDO
 
 ### `--unguarded` uses the tight edge set
 
-An `effect` reachable from an `entry` with no `auth` on the path. It walks **calls +
+An `effect` reachable from an `entry` with no `auth` on the path. An entry whose
+config object declares its own guard — a Pothos field or mutation carrying
+`authScopes` beside its `resolve`, or a field of a type whose definition carries
+`authScopes` (wherever `objectField`/`objectFields` attaches it, unless it sets
+`skipTypeScopes`) (`entryGuardProperties`, evidence in the entry's `guards`) — starts
+the walk already guarded. It walks **calls +
 cross-runtime edges only** — a reference edge means "this value was passed", not
 "this ran", and admitting one here would manufacture findings rather than suppress
 them. One multi-source BFS over `(node, guarded)` state, so every finding ships the
 **shortest witness path** and a reader can confirm or dismiss it by eye.
+
+The walk runs once per reach, most exposed first — `public`, then `service-binding`,
+then `platform` — and an effect keeps the first reach that found it, so each finding
+carries a `reach` and the human view lists the three separately: a write only another
+worker can trigger is a different finding from one any caller can.
+
+The call edges include one idiom the checker does not resolve on its own: a callable a
+factory builds from a config object. `export const createProject = defineRpc({
+parameters, result, execute })` makes `createProject` a value, not a function, so a
+call to it used to end at `external:createProject`. The edge pass now reads the
+factory's own body: a member of a parameter that the factory's **returned** function
+calls (`spec.execute(...)`) is what runs when the value is called, so the call resolves
+to that member of the config literal. A member the factory calls while building the
+value is not followed, and nothing here names `defineRpc`.
 
 ## Layer violations (`--layers`)
 

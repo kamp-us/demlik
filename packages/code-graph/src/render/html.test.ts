@@ -181,7 +181,7 @@ describe("buildHtmlModel — node inclusion rule + hiddenCount (HTML-VIEW §3.2)
   const caller = fn({
     id: "f.ts:caller",
     file: "f.ts",
-    edges: edges({ calls: [{ calleeId: "f.ts:hub", line: 5, constArgs: [] }] }),
+    edges: edges({ calls: [{ calleeId: "f.ts:hub", line: 5, constArgs: [], declaration: null }] }),
   });
   const plain = fn({ id: "f.ts:plain", file: "f.ts" });
 

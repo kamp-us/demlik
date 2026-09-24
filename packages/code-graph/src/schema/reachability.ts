@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EntryReachSchema } from "./core.js";
 
 export const UnreachableCategorySchema = z.enum(["dead", "only-called-from-tests"]);
 export type UnreachableCategory = z.infer<typeof UnreachableCategorySchema>;
@@ -31,6 +32,7 @@ export const UnguardedEffectSchema = z.object({
   startLine: z.number(),
   entryId: z.string(),
   path: z.array(z.string()),
+  reach: EntryReachSchema,
 });
 export type UnguardedEffect = z.infer<typeof UnguardedEffectSchema>;
 

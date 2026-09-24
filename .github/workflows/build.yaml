@@ -113,6 +113,9 @@ jobs:
       - name: Verify every export resolves in dist
         run: pnpm --filter @demlik/tea exec node scripts/verify-exports.mjs
 
+      - name: Import every code-graph subpath from dist
+        run: pnpm --filter @demlik/code-graph run verify:exports
+
       # The one gate that runs the case this repo's node_modules can never
       # reproduce: pack the tarball, install it into a temp project WITHOUT the
       # optional `ws` peer, and import `@demlik/tea/node`. Every in-repo gate

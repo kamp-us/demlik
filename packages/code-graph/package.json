@@ -18,6 +18,10 @@
     "code-graph": "./dist/index.js"
   },
   "exports": {
+    "./project": {
+      "types": "./dist/project.d.ts",
+      "import": "./dist/project.js"
+    },
     "./resolve": {
       "types": "./dist/resolve.d.ts",
       "import": "./dist/resolve.js"
@@ -39,6 +43,7 @@
     "lint": "biome check src package.json biome.jsonc",
     "lint:worktree": "biome check src package.json biome.jsonc",
     "test": "vitest run",
+    "verify:exports": "node scripts/verify-exports.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

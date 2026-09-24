@@ -4,22 +4,20 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assembleGraphWithEdges } from "../extract/assemble.js";
 import { loadEdgeProject } from "../extract/project.js";
-import type { FunctionNode } from "../schema.js";
+import { evaluateScopeRatchet, recordScopeCeilings, scopesUnder } from "../ratchet/scope-count.js";
+import type { CallSite, FunctionNode } from "../schema.js";
 import { ThresholdsSchema } from "../schema.js";
 import { isCandidateFunction } from "./candidates.js";
-import { evaluatePartialTwinRatchet, governedScopes, recordCeilings } from "./ceilings.js";
 import { findPartialTwins } from "./partial.js";
 import { CollapseSettingsSchema } from "./settings.js";
 
 const SETTINGS = CollapseSettingsSchema.parse({});
 
-type Call = { calleeId: string; line: number; constArgs: string[] };
-
-function call(calleeId: string, line: number, ...constArgs: string[]): Call {
-  return { calleeId, line, constArgs };
+function call(calleeId: string, line: number, ...constArgs: string[]): CallSite {
+  return { calleeId, line, constArgs, declaration: null };
 }
 
-function fn(id: string, calls: Call[]): FunctionNode {
+function fn(id: string, calls: CallSite[]): FunctionNode {
   return {
     id,
     name: id,
@@ -39,7 +37,7 @@ function fn(id: string, calls: Call[]): FunctionNode {
   };
 }
 
-const PROLOGUE = (): Call[] => [
+const PROLOGUE = (): CallSite[] => [
   call("a.ts:noteAttempt", 10),
   call("a.ts:decide", 11, "MAX_ATTEMPTS"),
   call("external:log", 12),
@@ -82,7 +80,7 @@ describe("findPartialTwins", () => {
   });
 
   it("stays silent on a shared block of generic helpers carrying no named constant", () => {
-    const generic = (): Call[] => [
+    const generic = (): CallSite[] => [
       call("external:map", 10),
       call("external:filter", 11),
       call("external:join", 12),
@@ -275,10 +273,10 @@ describe("partial-twin ratchet", () => {
   const ceilings = { default: 0, scopes: { "services/auditer": 1, "services/kontrol": 1 } };
 
   it("passes when every governed scope sits exactly on its ceiling", () => {
-    const verdict = evaluatePartialTwinRatchet(
+    const verdict = evaluateScopeRatchet(
       [
-        { scope: "services/auditer", partialTwins: 1 },
-        { scope: "services/kontrol", partialTwins: 1 },
+        { scope: "services/auditer", count: 1 },
+        { scope: "services/kontrol", count: 1 },
       ],
       ceilings,
     );
@@ -286,10 +284,10 @@ describe("partial-twin ratchet", () => {
   });
 
   it("fails both ways — a new twin EXCEEDS, a fixed one leaves SLACK", () => {
-    const verdict = evaluatePartialTwinRatchet(
+    const verdict = evaluateScopeRatchet(
       [
-        { scope: "services/auditer", partialTwins: 3 },
-        { scope: "services/kontrol", partialTwins: 0 },
+        { scope: "services/auditer", count: 3 },
+        { scope: "services/kontrol", count: 0 },
       ],
       ceilings,
     );
@@ -298,14 +296,19 @@ describe("partial-twin ratchet", () => {
   });
 
   it("governs only the scopes at or under the analyzed root", () => {
-    expect(governedScopes(ceilings, ".")).toEqual(["services/auditer", "services/kontrol"]);
-    expect(governedScopes(ceilings, "services/auditer")).toEqual(["services/auditer"]);
-    expect(governedScopes(ceilings, "packages")).toEqual([]);
+    expect(scopesUnder(Object.keys(ceilings.scopes), ".")).toEqual([
+      "services/auditer",
+      "services/kontrol",
+    ]);
+    expect(scopesUnder(Object.keys(ceilings.scopes), "services/auditer")).toEqual([
+      "services/auditer",
+    ]);
+    expect(scopesUnder(Object.keys(ceilings.scopes), "packages")).toEqual([]);
   });
 
   it("records a measurement without dropping the scopes it did not measure", () => {
-    expect(
-      recordCeilings([{ scope: "services/auditer", partialTwins: 4 }], ceilings).scopes,
-    ).toEqual({ "services/auditer": 4, "services/kontrol": 1 });
+    expect(recordScopeCeilings([{ scope: "services/auditer", count: 4 }], ceilings).scopes).toEqual(
+      { "services/auditer": 4, "services/kontrol": 1 },
+    );
   });
 });

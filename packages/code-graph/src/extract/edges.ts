@@ -6,6 +6,8 @@ import {
   VariableDeclarationKind,
 } from "ts-morph";
 import type { CallerSite, CallSite, ImportEdge } from "../schema.js";
+import { createFactoryResolver } from "./callee/factory.js";
+import { resolveCallees } from "./callee/resolve.js";
 import { computeChainDepths } from "./chain-depth.js";
 import type { CrossRuntimeResolver } from "./cross-runtime.js";
 import { toRelative } from "./project.js";
@@ -141,49 +143,6 @@ function constantArguments(callExpression: Node, moduleConstants: ReadonlySet<st
   return [...found].sort((a, b) => a.localeCompare(b));
 }
 
-function externalId(name: string): string {
-  return `external:${name}`;
-}
-
-function enclosingId(node: Node, nodeToId: Map<Node, string>): string | null {
-  let current: Node | undefined = node;
-  while (current) {
-    const id = nodeToId.get(current);
-    if (id !== undefined) return id;
-    current = current.getParent();
-  }
-  return null;
-}
-
-function resolveCallee(callExpr: Node, nodeToId: Map<Node, string>): string {
-  if (!Node.isCallExpression(callExpr)) return externalId("unknown");
-  const expression = callExpr.getExpression();
-
-  const symbol = expression.getSymbol();
-  if (symbol) {
-    const aliased = symbol.getAliasedSymbol();
-    const candidates = aliased ? [aliased] : [symbol];
-    for (const cand of candidates) {
-      for (const decl of cand.getDeclarations()) {
-        const id = enclosingId(decl, nodeToId);
-        if (id !== null) return id;
-      }
-    }
-  }
-
-  return externalId(simpleCalleeName(expression));
-}
-
-function simpleCalleeName(expression: Node): string {
-  if (Node.isPropertyAccessExpression(expression)) return expression.getName();
-  if (Node.isIdentifier(expression)) return expression.getText();
-  if (Node.isElementAccessExpression(expression)) {
-    const arg = expression.getArgumentExpression();
-    if (arg && Node.isStringLiteral(arg)) return arg.getLiteralValue();
-  }
-  return "(dynamic)";
-}
-
 function dedupCalls(sites: CallSite[]): CallSite[] {
   const merged = new Map<string, CallSite>();
   for (const s of sites) {
@@ -229,6 +188,7 @@ function resolveCalls(
   const callsById = new Map<string, CallSite[]>();
   for (const id of ids) callsById.set(id, []);
 
+  const factories = createFactoryResolver(nodeToId);
   const literalConstants = literalConstantNames(sourceFiles);
   const constantsByFile = new Map<SourceFile, ReadonlySet<string>>();
   const constantsOf = (sourceFile: SourceFile): ReadonlySet<string> => {
@@ -251,11 +211,15 @@ function resolveCalls(
       }
       if (!Node.isCallExpression(d)) return;
       const cross = crossRuntime?.resolve(d, id, file) ?? null;
-      raw.push({
-        calleeId: cross ?? resolveCallee(d, nodeToId),
-        line: d.getStartLineNumber(),
-        constArgs: constantArguments(d, constants),
-      });
+      const callees =
+        cross === null ? resolveCallees(rootAbsolute, d, nodeToId, factories) : [cross];
+      for (const callee of callees) {
+        raw.push({
+          ...callee,
+          line: d.getStartLineNumber(),
+          constArgs: constantArguments(d, constants),
+        });
+      }
     });
     callsById.set(id, dedupCalls([...(callsById.get(id) ?? []), ...raw]));
   }
