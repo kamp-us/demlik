@@ -102,6 +102,11 @@ says so in its JSDoc: `chrome.storage` has no atomic compare-and-swap, and a fen
 success while both writers win is worse than none. Adding fencing to a factory is a **minor**;
 `Store<S>` itself is unchanged, so no implementor breaks.
 
+**Deletion is the same kind of widening.** `DeletableStore<S>` (root subpath, beside
+`FencedStore`) adds `delete(): Promise<void>`, and `fileStore`, `memoryStore` and `doStore`
+return one in both forms. `chromeStorageStore` does not yet. Adding `delete` to a factory is a
+**minor**; moving it onto `Store<S>` would break every external implementor, so it stays off.
+
 `./react` is a host adapter but binds the runtime to a view; it owns no `Store`
 factory and so has no row. If a future factory is added, prefer the
 mechanism-named form for consistency with the majority — but do **not** rename

@@ -100,6 +100,20 @@ continue — see [ADR 0017](../../.decisions/0017-fencing-is-an-optional-store-w
 Fencing refuses a second **writer**. It does not make effects exactly-once: everything in the
 section above still holds for the process that wins.
 
+## Forgetting a run: `delete()`
+
+`fileStore`, `memoryStore` and `doStore` return a **`DeletableStore`**, fenced or not. Its
+`delete()` removes the saved state, so a host that forgets a run does not need to know how each
+store lays out its bytes. `fileStore` removes the state file and its `.fence` stamp; `doStore`
+removes the state cell and its version cell. Deleting nothing resolves. After a delete, `load()`
+answers what a never-saved store answers, so the next `run` boots fresh.
+
+The store does not guard against a run that is still live. An unfenced `save` after a delete
+writes the state again. A fenced store drops its version with the state, so a live fenced run is
+refused with a `StoreConflictError` at its next save. Stop the run before you delete its state.
+`DeletableStore` is an optional widening like `FencedStore`: `Store<S>` itself has no `delete`,
+and a store you write yourself does not need one.
+
 ## What you do about it
 
 **Make handlers idempotent, or key them.**

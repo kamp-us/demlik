@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (152)
+## Exports (153)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ import { … } from "@demlik/tea";
 | `defineManagedResource` | Function | Build the battery. |
 | `DefineManagedResourceOpts` | Interface |  |
 | `definePort` | Function | Define a typed port. |
+| `DeletableStore` | Interface | A `Store<S>` that can remove what it saved — how a host forgets a run. |
 | `DepKeyedSub` | Type |  |
 | `describeMachine` | Function |  |
 | `detectUpdateForm` | Function |  |
