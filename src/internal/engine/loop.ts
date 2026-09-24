@@ -60,8 +60,15 @@ export type Transition<S, C> = readonly [S, readonly C[]];
 /** One fold step. `null` means the Msg produced no transition. */
 export type Step<S, M, C> = (state: S, msg: M) => Transition<S, C> | null;
 
-/** One Cmd's handler call; resolves to the Msg to dispatch, or nothing. */
-export type InterpretStep<C> = (cmd: C) => Promise<unknown>;
+/**
+ * One Cmd's handler call; resolves to the Msg to dispatch, or nothing.
+ * `dispatch` is what the handler is handed for Msgs it fires itself, so an
+ * extension can check them on the way out.
+ */
+export type InterpretStep<C, M> = (
+  cmd: C,
+  dispatch: (msg: M) => void,
+) => Promise<unknown>;
 
 /** What the loop lends an extension. */
 export interface LoopServices<S> {
@@ -82,7 +89,7 @@ export interface LoopServices<S> {
 /** One built-in, as the loop sees it. Every member is optional. */
 export interface Extension<S, M, C> {
   readonly update?: (next: Step<S, M, C>) => Step<S, M, C>;
-  readonly interpret?: (next: InterpretStep<C>) => InterpretStep<C>;
+  readonly interpret?: (next: InterpretStep<C, M>) => InterpretStep<C, M>;
   readonly store?: (store: Store<S>) => Store<S>;
   readonly commit?: (msg: M | undefined, state: S) => void;
   readonly ctx?: object;
@@ -260,10 +267,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     (next, ext) => (ext.update ? ext.update(next) : next),
     config.reduce,
   );
-  const interpret: InterpretStep<C> = extensions.reduceRight<InterpretStep<C>>(
-    (next, ext) => (ext.interpret ? ext.interpret(next) : next),
-    callHandler,
-  );
+  const interpret: InterpretStep<C, M> = extensions.reduceRight<
+    InterpretStep<C, M>
+  >((next, ext) => (ext.interpret ? ext.interpret(next) : next), callHandler);
   const store: Store<S> | undefined =
     config.store === undefined
       ? undefined
@@ -471,10 +477,10 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // The innermost interpret step: call the Cmd's handler, if one is wired. A
   // missing handler returns nothing, which is invariant 6's forward progress
   // for a miswired consumer.
-  function callHandler(cmd: C): Promise<unknown> {
+  function callHandler(cmd: C, dispatch: (msg: M) => void): Promise<unknown> {
     const handler = config.handlerFor((cmd as { type: string }).type);
     if (handler === undefined) return Promise.resolve(undefined);
-    return trackInFlight(handler(cmd as never, handlerCtx, dispatchUnawaited));
+    return trackInFlight(handler(cmd as never, handlerCtx, dispatch));
   }
 
   /**
@@ -490,7 +496,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    */
   async function runCmds(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
-      const follow = await interpret(cmd);
+      const follow = await interpret(cmd, dispatchUnawaited);
       if (follow !== undefined && follow !== null) {
         enqueueDispatch(follow as M).catch(reportUndelivered);
       }

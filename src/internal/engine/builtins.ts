@@ -7,8 +7,8 @@
 import type { AnyCmdDef, Identity, Port } from "../../pure/core";
 import {
   checkedStep,
+  cmdContractOver,
   cmdEdge,
-  cmdEdgeOver,
   Outcome,
   structuralHash,
 } from "../../pure/core";
@@ -120,6 +120,11 @@ export function devChecks<S, M extends { type: string }, C>(): AnyExtension<
  * its declared channel goes to the sink under `"interpret"`; a hand-written
  * Cmd's handler throw keeps rejecting the dispatch.
  *
+ * A defined Cmd's handler that DISPATCHES its own `_ok` / `_err`, built by hand
+ * rather than minted by this edge, breaks the same contract as one that
+ * returns it: the Msg is dropped and the `OutcomeContractError` goes to the
+ * sink under `"interpret"`. Its other Msgs are delivered as before.
+ *
  * The same edge rides on ctx under `cmdEdge`, beside the `ok` / `err` builders,
  * so a handler that runs a base handler inside its own settles the base's
  * outcome through this one edge (#66).
@@ -129,13 +134,24 @@ export function cmdDefinitions<S, M extends { type: string }, C>(
   clock: () => number,
 ): AnyExtension<S, M, C> {
   return (loop) => {
-    const settle = cmdEdgeOver(defs, clock);
+    const { settle, checkDispatch: check } = cmdContractOver(defs, clock);
     const defined = new Set(defs.map((d) => d.cmdType));
     return {
-      interpret: (next) => async (cmd) => {
+      interpret: (next) => async (cmd, dispatch) => {
         const type = (cmd as { type: string }).type;
+        const checked = defined.has(type)
+          ? (msg: M) => {
+              try {
+                check(cmd as { type: string }, msg);
+              } catch (err) {
+                loop.report(err, "interpret");
+                return;
+              }
+              dispatch(msg);
+            }
+          : dispatch;
         try {
-          return settle(cmd as { type: string }, await next(cmd));
+          return settle(cmd as { type: string }, await next(cmd, checked));
         } catch (err) {
           if (!defined.has(type)) throw err;
           loop.report(err, "interpret");
