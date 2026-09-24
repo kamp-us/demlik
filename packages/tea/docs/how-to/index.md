@@ -40,11 +40,11 @@ what you are trying to do, and it names the subpath you need.
 
 ## Give an agent a brain
 
-- [Use a Vercel AI SDK model as the agent's brain](./use-a-vercel-ai-sdk-model.md) —
-  bridge `generateText` to tea's `(messages) => AgentTurn` port so any provider the
-  AI SDK speaks works, replacing the tutorial's hand-written Anthropic adapter and
-  round-tripping signed reasoning through `AgentTurn.provider` — plus the
-  `streamText` variant for the streaming port.
+- [Supply the agent's model](./supply-the-agents-model.md) — the contract tea's
+  `async (messages) => AgentTurn` port holds you to (`toolCalls`, the `provider`
+  round-trip, the `async` requirement, the streaming arity form), and one
+  adapter over the `openai` SDK that reaches every provider behind an
+  OpenAI-compatible endpoint such as Cloudflare AI Gateway or OpenRouter.
 
 ## Test and verify
 
