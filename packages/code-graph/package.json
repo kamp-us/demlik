@@ -1,6 +1,6 @@
 {
   "name": "@demlik/code-graph",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Agent-native TypeScript code-graph + smell CLI: parse a folder with ts-morph, measure every function, flag smells, and rank refactor targets as deterministic JSON.",
   "homepage": "https://github.com/kamp-us/demlik/tree/main/packages/code-graph",
   "repository": {
@@ -18,7 +18,10 @@
     "code-graph": "./dist/index.js"
   },
   "exports": {
-    "./resolve": "./src/resolve.ts",
+    "./resolve": {
+      "types": "./dist/resolve.d.ts",
+      "import": "./dist/resolve.js"
+    },
     "./dist/*": "./dist/*"
   },
   "files": [
@@ -28,14 +31,7 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public",
-    "exports": {
-      "./resolve": {
-        "types": "./dist/resolve.d.ts",
-        "import": "./dist/resolve.js"
-      },
-      "./dist/*": "./dist/*"
-    }
+    "access": "public"
   },
   "scripts": {
     "build": "tsup",
