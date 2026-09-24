@@ -86,19 +86,18 @@ jobs:
           done
           echo "pending=${pending# }" >> "$GITHUB_OUTPUT"
 
-      - name: Build
-        if: steps.version.outputs.pending != ''
-        run: pnpm run build
-
-      # Last gate before the tarball is cut. `prepublishOnly` carries this same
-      # walker, but nothing on this path triggers it — `pnpm pack` runs
-      # prepack/prepare, and `npm publish <tarball>` skips the publish lifecycle
-      # entirely. Without this step the guard written for the v0.1.1 stale-dist
-      # incident does not run on the job that publishes.
-      - name: Verify every @demlik/tea export resolves in dist
-        if: contains(steps.version.outputs.pending, 'packages/tea')
-        run: pnpm --filter @demlik/tea exec node scripts/verify-exports.mjs
-
+      # Every pending package gets its own attempt, built from the commit that set its version
+      # (not main's HEAD), then one summary line per package; the step goes red only after all
+      # of them were tried. The inline loop this replaces stopped at the first failed publish,
+      # so code-graph's 404 kept tea 0.18.0 from ever being attempted (#372).
+      #
+      # The script also runs the last gate before each tarball is cut: each package's required
+      # `verify:exports` script, against the dist it is about to pack; a package without one fails.
+      # `prepublishOnly` carries that same walker, but nothing on this path triggers it —
+      # `pnpm pack` runs prepack/prepare, and `npm publish <tarball>` skips the publish
+      # lifecycle entirely. Without it the guard written for the v0.1.1 stale-dist incident
+      # does not run on the job that publishes.
+      #
       # OIDC trusted publishing via pack + `npm publish <tarball>`. `pnpm publish` shells
       # `npm@latest` and FORWARDS its pnpm-only `--no-git-checks` flag to npm, which rejects
       # the unknown flag and dies at flag-parse BEFORE the OIDC handshake. We sidestep that
@@ -114,12 +113,10 @@ jobs:
       #
       # No `--provenance` yet: it was disabled because the old home was a PRIVATE repo. This
       # repo is public, so provenance can be re-enabled as a deliberate follow-up.
-      - name: Publish to npm (pack + npm publish tarball, OIDC trusted publishing)
+      - name: Publish to npm (each package from its version commit, every package attempted)
         if: steps.version.outputs.pending != ''
+        env:
+          PENDING: ${{ steps.version.outputs.pending }}
         run: |
-          for dir in ${{ steps.version.outputs.pending }}; do
-            out="$RUNNER_TEMP/pack/${dir##*/}"
-            mkdir -p "$out"
-            (cd "$dir" && pnpm pack --pack-destination "$out")
-            npm publish "$out"/*.tgz --access public
-          done
+          read -ra dirs <<< "$PENDING"
+          node scripts/publish-pending.mjs --work-dir "$RUNNER_TEMP/publish" "${dirs[@]}"

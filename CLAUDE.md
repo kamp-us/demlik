@@ -88,7 +88,7 @@ write and a manifest here would be a foreign opinion.
 
 `pnpm typecheck && pnpm lint && pnpm test` from the root before opening one — the same commands
 `.github/workflows/build.yaml` runs, across every package (`pnpm -r`; `test` is one vitest run
-over `projects: ["packages/*"]`). A change that touches a package's published surface also
+over `packages/*` plus a `scripts` project for the root's `scripts/*.test.mjs`). A change that touches a package's published surface also
 needs a changeset (`pnpm changeset`). `pnpm lint:worktree` is an alias of `pnpm lint` that
 fabrika's `build check` invokes by that name.
 
