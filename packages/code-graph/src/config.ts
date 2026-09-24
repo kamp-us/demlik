@@ -88,6 +88,10 @@ export function resolveLayerRules(file: string | undefined, report: Reporter): L
       ? defaults
       : loadOverrides(file, LayerRulesSchema.partial(), defaults, report);
   if (rules === null) return null;
+  if (rules.layers.length === 0) {
+    report("no layer stack declared; pass --layer-rules <file> with a `layers` array.");
+    return null;
+  }
   const names = new Set<string>();
   const patterns = new Map<string, string>();
   for (const layer of rules.layers) {

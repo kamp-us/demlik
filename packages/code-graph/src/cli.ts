@@ -88,7 +88,10 @@ function analysisOptions(command: Command): Command {
 function featureOptions(command: Command): Command {
   return command
     .option("--layers", "layer gate: every import edge pointing UP the declared layer stack")
-    .option("--layer-rules <file>", "JSON file of layer-declaration overrides merged over defaults")
+    .option(
+      "--layer-rules <file>",
+      "JSON file declaring the layer stack and allowlist (required by --layers)",
+    )
     .option(
       "--boundaries",
       "feature boundaries: cross-feature imports not through <feature>/index.ts, rules/ importing beyond itself and contracts, lib/ importing a feature (gateable via --ci)",

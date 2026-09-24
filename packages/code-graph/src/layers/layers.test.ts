@@ -6,27 +6,28 @@ import { resolveLayerRules } from "../config.js";
 import { loadCheapProject } from "../extract/project.js";
 import { analyzeLayers } from "./analyze.js";
 import { compileMatchers, directionOf, layerOf } from "./classify.js";
+import { runLayerGate } from "./gate.js";
 import { reconcile } from "./reconcile.js";
 import { type Layer, LayerRulesSchema } from "./rules.js";
 
 const LAYERS: readonly Layer[] = [
   { name: "surface", paths: ["apps/web", "packages/cli"] },
   { name: "service", paths: ["services"] },
-  { name: "domain", paths: ["services/*/src/domain", "packages/a11y"] },
-  { name: "contract", paths: ["packages/a11y-contract"] },
+  { name: "domain", paths: ["services/*/src/domain", "packages/core"] },
+  { name: "contract", paths: ["packages/core-contract"] },
 ];
 const matchers = compileMatchers(LAYERS);
 const nameAt = (p: string): string | null => layerOf(p, matchers)?.name ?? null;
 
 describe("layer classification is declared, and the most specific declaration wins", () => {
   it("puts a service file in `service` and its domain subtree in `domain`", () => {
-    expect(nameAt("services/auditer/src/handlers/http.ts")).toBe("service");
-    expect(nameAt("services/auditer/src/domain/glyph/scan.ts")).toBe("domain");
+    expect(nameAt("services/billing/src/handlers/http.ts")).toBe("service");
+    expect(nameAt("services/billing/src/domain/invoice/total.ts")).toBe("domain");
   });
 
-  it("ends a prefix at a path separator, so a11y-contract is not a11y", () => {
-    expect(nameAt("packages/a11y/src/scan.ts")).toBe("domain");
-    expect(nameAt("packages/a11y-contract/src/wire.ts")).toBe("contract");
+  it("ends a prefix at a path separator, so core-contract is not core", () => {
+    expect(nameAt("packages/core/src/scan.ts")).toBe("domain");
+    expect(nameAt("packages/core-contract/src/wire.ts")).toBe("contract");
   });
 
   it("returns null OUTSIDE the lattice rather than defaulting to a layer", () => {
@@ -36,7 +37,7 @@ describe("layer classification is declared, and the most specific declaration wi
 
   it("reads a rank comparison as down / sideways / up, and null as unlayered", () => {
     const surface = layerOf("apps/web/x.ts", matchers);
-    const domain = layerOf("packages/a11y/x.ts", matchers);
+    const domain = layerOf("packages/core/x.ts", matchers);
     expect(directionOf(surface, domain).direction).toBe("down");
     expect(directionOf(domain, surface).direction).toBe("up");
     expect(directionOf(domain, domain).direction).toBe("sideways");
@@ -120,11 +121,65 @@ describe("the declaration is parsed at the config boundary", () => {
     errors.push(m);
   };
 
-  it("ships defaults that parse, and a repo declaration with unique names", () => {
-    const rules = LayerRulesSchema.parse({});
-    expect(rules.layers.length).toBeGreaterThan(1);
-    expect(new Set(rules.layers.map((l) => l.name)).size).toBe(rules.layers.length);
-    expect(resolveLayerRules(undefined, report)).not.toBeNull();
+  // Every user of the package gets these. A layer stack is repo-specific, so a default that
+  // names a path is one consumer's stack shipped to everyone; it lands as a snapshot diff.
+  it("ships no layer stack and no allowlist", () => {
+    expect(LayerRulesSchema.parse({})).toMatchInlineSnapshot(`
+      {
+        "allowed": [],
+        "layers": [],
+      }
+    `);
+  });
+
+  it("refuses to run with no declared stack, naming --layer-rules", () => {
+    const refusals: string[] = [];
+    const emitted: string[] = [];
+    const code = runLayerGate({
+      rootAbsolute: os.tmpdir(),
+      repoRoot: os.tmpdir(),
+      layerRulesFile: undefined,
+      emit: (payload) => emitted.push(payload),
+      report: (m) => refusals.push(m),
+      json: false,
+      pretty: false,
+    });
+    expect(code).toBe(2);
+    expect(emitted).toEqual([]);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toContain("--layer-rules");
+    expect(refusals[0]).not.toContain("\n");
+  });
+
+  it("refuses a rules file that declares an allowlist but no stack", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-layer-cfg-"));
+    const file = path.join(dir, "allowed-only.json");
+    fs.writeFileSync(file, JSON.stringify({ allowed: [] }));
+    const refusals: string[] = [];
+    expect(resolveLayerRules(file, (m) => refusals.push(m))).toBeNull();
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toContain("--layer-rules");
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses an explicit empty stack at the schema boundary", () => {
+    expect(LayerRulesSchema.safeParse({ layers: [] }).success).toBe(false);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-layer-cfg-"));
+    const file = path.join(dir, "empty.json");
+    fs.writeFileSync(file, JSON.stringify({ layers: [] }));
+    const refusals: string[] = [];
+    expect(resolveLayerRules(file, (m) => refusals.push(m))).toBeNull();
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/^invalid config in ".*": layers: /);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("accepts a declared stack, and leaves the allowlist empty when the file omits it", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cg-layer-cfg-"));
+    const file = path.join(dir, "stack.json");
+    fs.writeFileSync(file, JSON.stringify({ layers: LAYERS }));
+    expect(resolveLayerRules(file, report)).toEqual({ layers: [...LAYERS], allowed: [] });
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it("refuses a declaration that names one layer twice, or one path in two layers", () => {
