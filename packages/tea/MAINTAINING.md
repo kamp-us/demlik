@@ -95,7 +95,7 @@ subpath, so the split is documented here rather than flattened.
 | `./do` | `doStore` | `DurableObjectStorage` | `doStore<S>(storage, parse, key?)` | host |
 
 **Fencing is an opt-in per factory, not a fifth factory** ([ADR
-0017](./.decisions/0017-fencing-is-an-optional-store-widening.md)). `fileStore`, `memoryStore`
+0017](../../.decisions/0017-fencing-is-an-optional-store-widening.md)). `fileStore`, `memoryStore`
 and `doStore` each take `{ fenced: true }` and return a `FencedStore<S>` — the optional widening
 of `Store<S>` that carries a version and a compare-and-swap. `chromeStorageStore` does not, and
 says so in its JSDoc: `chrome.storage` has no atomic compare-and-swap, and a fence that reports
@@ -144,7 +144,7 @@ The package is at 0.x. Semver's 0.x escape hatch is not the policy — the tier 
 
 A subpath, module or exported name is removed in the **same PR** that replaces it — no
 deprecated re-export is published first
-([ADR 0016](./.decisions/0016-removal-lands-in-a-minor-at-0x.md)):
+([ADR 0016](../../.decisions/0016-removal-lands-in-a-minor-at-0x.md)):
 
 1. The removal, every internal import rewrite and a changeset land together. The
    changeset is `minor` for a `stable` or `battery` subpath and its breaking-change note

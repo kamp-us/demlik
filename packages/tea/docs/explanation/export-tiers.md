@@ -122,8 +122,8 @@ What it will not do is leave you guessing where something went.
 
 ## Further reading
 
-- [ADR 0010 — Export-map tiers](../../.decisions/0010-export-map-tiers.md) and
-  [ADR 0016 — Removal lands in a minor at 0.x](../../.decisions/0016-removal-lands-in-a-minor-at-0x.md)
+- [ADR 0010 — Export-map tiers](../../../../.decisions/0010-export-map-tiers.md) and
+  [ADR 0016 — Removal lands in a minor at 0.x](../../../../.decisions/0016-removal-lands-in-a-minor-at-0x.md)
   — the decision records behind the policy, written for maintainers.
 - `MAINTAINING.md` in the repository — the canonical tier stamp per subpath, and
   the store factory each host adapter ships.

@@ -95,7 +95,7 @@ Fencing is opt-in for the whole 0.x line, and not every host can offer it honest
 | `chromeStorageStore` (`@demlik/tea/extension`) | **no** | `chrome.storage` has no atomic compare-and-swap; a fence there would report success while both writers won |
 
 A conflict is a throw and not a Msg you fold, because there is no correct way for the loser to
-continue — see [ADR 0017](../../.decisions/0017-fencing-is-an-optional-store-widening.md).
+continue — see [ADR 0017](../../../../.decisions/0017-fencing-is-an-optional-store-widening.md).
 
 Fencing refuses a second **writer**. It does not make effects exactly-once: everything in the
 section above still holds for the process that wins.
@@ -145,7 +145,7 @@ continues on the **old** prompt; the new string reaches new runs only. That is
 the design, not a defect: the prompt is state rather than a closure so a replay
 reproduces the exact prompt that ran, a rehydrated run stays the run it was, and
 a compaction fold — which touches only the conversation — can never lose it
-([ADR 0004](../../.decisions/0004-agent-context-compaction.md)).
+([ADR 0004](../../../../.decisions/0004-agent-context-compaction.md)).
 
 There is no override. **A bad prompt already in flight is ended, not patched**:
 stop the run's process, leave its stored Model alone rather than resuming it, and

@@ -248,7 +248,7 @@ Two constraints follow from tea's Model being durable data:
 
 - Whatever lands in `provider` must be JSON-serializable, because it is written
   to the `Store` with the rest of the Model. `responseMessages` is.
-- A [compaction](../../.decisions/0004-agent-context-compaction.md) fold
+- A [compaction](../../../../.decisions/0004-agent-context-compaction.md) fold
   summarises old turns into text, and drops
   the slot with the turns it summarises. That is correct: a summarised turn is
   no longer being replayed.

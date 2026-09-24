@@ -26,7 +26,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const PKG_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 // The output directory is an ARGUMENT, not a constant, because this script does not
 // belong to any particular site. It projects the repo's docs into whatever content
@@ -45,7 +45,7 @@ if (!OUT_ARG) {
   );
   process.exit(2);
 }
-const OUT_ROOT = path.resolve(REPO_ROOT, OUT_ARG);
+const OUT_ROOT = path.resolve(PKG_ROOT, OUT_ARG);
 
 const GITHUB_BLOB = "https://github.com/kamp-us/demlik/blob/main";
 
@@ -171,7 +171,7 @@ function rewriteLinks(body, srcFileAbs, dangling) {
       if (!isExplicitlyRelative && !isMarkdown) return match;
 
       const targetAbs = path.resolve(srcDir, target);
-      const repoRel = toPosix(path.relative(REPO_ROOT, targetAbs));
+      const repoRel = toPosix(path.relative(PKG_ROOT, targetAbs));
       // Escaped the repo entirely — leave it alone rather than invent a link.
       if (repoRel.startsWith("..")) return match;
 
@@ -181,7 +181,7 @@ function rewriteLinks(body, srcFileAbs, dangling) {
       // links that resolved to a route.
       if (!existsSync(targetAbs)) {
         dangling.push(
-          `${toPosix(path.relative(REPO_ROOT, srcFileAbs))} → ${target} (no such file)`,
+          `${toPosix(path.relative(PKG_ROOT, srcFileAbs))} → ${target} (no such file)`,
         );
         return match;
       }
@@ -226,7 +226,7 @@ async function main() {
   const dangling = [];
 
   for (const tree of TREES) {
-    const srcRoot = path.join(REPO_ROOT, tree.src);
+    const srcRoot = path.join(PKG_ROOT, tree.src);
     if (!existsSync(srcRoot) || !(await stat(srcRoot)).isDirectory()) {
       throw new Error(
         `project-docs: source tree "${tree.src}" does not exist. Either it moved, or TREES is stale.`,
@@ -240,7 +240,7 @@ async function main() {
       const raw = await readFile(fileAbs, "utf8");
       if (raw.startsWith("---\n")) {
         throw new Error(
-          `project-docs: ${toPosix(path.relative(REPO_ROOT, fileAbs))} already has frontmatter. ` +
+          `project-docs: ${toPosix(path.relative(PKG_ROOT, fileAbs))} already has frontmatter. ` +
             `This script assumes plain Markdown and would double it up.`,
         );
       }

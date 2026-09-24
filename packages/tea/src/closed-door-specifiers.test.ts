@@ -22,7 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
  * Every `@demlik/tea…` specifier in `text`, whole. The trailing-extension arm
@@ -45,7 +45,7 @@ function closedDoorSpecifiers(
 /** The published specifier for every key in `exports`, `.` included. */
 function publishedSpecifiers(): Set<string> {
   const pkg = JSON.parse(
-    readFileSync(join(REPO_ROOT, "package.json"), "utf8"),
+    readFileSync(join(PKG_ROOT, "package.json"), "utf8"),
   ) as {
     exports: Record<string, unknown>;
   };
@@ -61,7 +61,7 @@ function scannedFiles(): string[] {
   const out = execFileSync(
     "git",
     ["ls-files", "--", ".patterns", "src", ":!*.test.ts", ":!*.test.tsx"],
-    { cwd: REPO_ROOT, encoding: "utf8" },
+    { cwd: PKG_ROOT, encoding: "utf8" },
   ).trim();
   return out === "" ? [] : out.split("\n");
 }
@@ -107,7 +107,7 @@ describe("no tracked file names a closed door", () => {
   const allowed = publishedSpecifiers();
 
   it.each(scannedFiles())("%s", (file) => {
-    const text = readFileSync(join(REPO_ROOT, file), "utf8");
+    const text = readFileSync(join(PKG_ROOT, file), "utf8");
     expect(closedDoorSpecifiers(text, allowed)).toEqual([]);
   });
 });

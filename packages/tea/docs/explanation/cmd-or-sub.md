@@ -16,7 +16,7 @@ The runtime interprets a transition's Cmds **serially**, awaiting each handler
 before it reaches the next one, and it folds nothing else until they have all
 settled. That is not an implementation detail that might get optimised away
 later — it is the guarantee replay is built on, and
-[ADR 0018](../../.decisions/0018-tool-overlap-inside-the-cmd-handler.md)
+[ADR 0018](../../../../.decisions/0018-tool-overlap-inside-the-cmd-handler.md)
 records the decision to keep it and the rejection of the concurrent alternative.
 
 So a Cmd handler that waits is a Cmd handler that holds the whole machine. Every
@@ -163,4 +163,4 @@ Msg and emits the retry Cmd, which does the work and settles.
 The tutorial introduces the effect list in [Build and replay your first
 machine](../tutorial/build-your-first-machine.md), and the ordering guarantee
 this page rests on is
-[ADR 0018](../../.decisions/0018-tool-overlap-inside-the-cmd-handler.md).
+[ADR 0018](../../../../.decisions/0018-tool-overlap-inside-the-cmd-handler.md).

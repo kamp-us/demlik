@@ -14,9 +14,9 @@ math to be a guarantee, not a hand-roll.
 The seam shipped in epic #186 (ADR
 [0006](../../.decisions/0006-client-prediction-fold-seam-and-pure-boundary.md)).
 The worked, tested code is
-[`src/internal/prediction/client-prediction.example.ts`](../../src/internal/prediction/client-prediction.example.ts)
+[`src/internal/prediction/client-prediction.example.ts`](../../packages/tea/src/internal/prediction/client-prediction.example.ts)
 (+ `.test.ts`); the consumer-facing version that imports the public boundary is
-[`examples/client-prediction.ts`](../../examples/client-prediction.ts).
+[`examples/client-prediction.ts`](../../packages/tea/examples/client-prediction.ts).
 
 ---
 
@@ -86,12 +86,12 @@ guarantee, not a tree-shaking accident**:
   (`foldMsgs`), the ack primitive (`tagSeq`/`nextSeq`/`partitionByAck`/`ack`)
   and the reconciliation helper (`reconcile`) are all named exports of it. The
   `/pure` subpath they used to ship on closed in the #51 sweep;
-  [`src/pure/`](../../src/pure/index.ts) is still the in-tree umbrella and still
+  [`src/pure/`](../../packages/tea/src/pure/index.ts) is still the in-tree umbrella and still
   the thing the fence below is drawn around. `src/internal/prediction/` is the
   focused internal leaf for just the ack + reconcile.
 - The pure-core module imports **nothing** from the runtime; the runtime imports
   *from* it. That dependency direction is the actual decoupling.
-- [`src/pure/import-graph.test.ts`](../../src/pure/import-graph.test.ts)
+- [`src/pure/import-graph.test.ts`](../../packages/tea/src/pure/import-graph.test.ts)
   BFS-walks the transitive import graph rooted at `src/pure/index.ts` and
   **fails if it ever reaches `run`/the host**. That is the regression fence, and
   closing the door did not move it.

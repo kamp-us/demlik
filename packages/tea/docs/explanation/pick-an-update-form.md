@@ -71,7 +71,7 @@ that tells them nothing.
 ## The refusal stays loud
 
 tea diverges from XState on exactly one point here, and it is deliberate
-([ADR 0011](../../.decisions/0011-errors-as-data.md)). An unhandled message is
+([ADR 0011](../../../../.decisions/0011-errors-as-data.md)). An unhandled message is
 not silently ignored. Dispatching it raises `NoCellError`, and the error carries
 the accepted set:
 

@@ -183,7 +183,7 @@ export function expenseMachine(ask: Ask) {
 ```
 
 The state stays yours
-([ADR 0015](../../.decisions/0015-hide-the-wiring-never-the-state.md)):
+([ADR 0015](../../../../.decisions/0015-hide-the-wiring-never-the-state.md)):
 `resilience` is a plain field you read, `replay` sees and the journal prints.
 
 ## 3. Write the handler — or don't call Jev at all

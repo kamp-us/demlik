@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
  * Door → the modules it re-exports, from the ruling on #205. A path is
@@ -125,19 +125,19 @@ const RENAMED: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
 
 /** `src/`-relative module path → the file that path means. */
 function sourceFileFor(relPath: string): string {
-  const base = join(REPO_ROOT, "src", relPath);
+  const base = join(PKG_ROOT, "src", relPath);
   return relPath.endsWith(".ts") ? base : join(base, "index.ts");
 }
 
 const entryFiles = [
-  ...[...DOORS.keys()].map((door) => join(REPO_ROOT, "src", door, "index.ts")),
+  ...[...DOORS.keys()].map((door) => join(PKG_ROOT, "src", door, "index.ts")),
   ...[...DOORS.values()].flat().map(sourceFileFor),
 ];
 
 const config = ts.parseJsonConfigFileContent(
-  ts.readConfigFile(join(REPO_ROOT, "tsconfig.json"), ts.sys.readFile).config,
+  ts.readConfigFile(join(PKG_ROOT, "tsconfig.json"), ts.sys.readFile).config,
   ts.sys,
-  REPO_ROOT,
+  PKG_ROOT,
 );
 const program = ts.createProgram(entryFiles, {
   ...config.options,
@@ -168,11 +168,11 @@ function exportsOf(file: string): Map<string, ts.Symbol> {
 /** Where a symbol is declared, as a repo-relative path — for the failure text. */
 function declaredIn(symbol: ts.Symbol): string {
   const decl = symbol.getDeclarations()?.[0];
-  return decl ? relative(REPO_ROOT, decl.getSourceFile().fileName) : "?";
+  return decl ? relative(PKG_ROOT, decl.getSourceFile().fileName) : "?";
 }
 
 describe.each([...DOORS])("@demlik/tea/%s", (door, modules) => {
-  const doorExports = exportsOf(join(REPO_ROOT, "src", door, "index.ts"));
+  const doorExports = exportsOf(join(PKG_ROOT, "src", door, "index.ts"));
   const renames = RENAMED.get(door) ?? new Map<string, string>();
 
   it.each(modules)("carries every export of src/%s", (relPath) => {

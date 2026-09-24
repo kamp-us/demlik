@@ -10,8 +10,8 @@ can name, export and assert on.
 This guide wires a two-battery door end to end and reads across it. Each
 function's own surface is in [the reference page](../reference/tea.md);
 why this is forty lines here rather than a dependency is settled in
-[ADR 0001](../../.decisions/0001-no-offtheshelf-resilience.md) and
-[ADR 0014](../../.decisions/0014-typed-effect-channels-on-cmd-constructors.md) —
+[ADR 0001](../../../../.decisions/0001-no-offtheshelf-resilience.md) and
+[ADR 0014](../../../../.decisions/0014-typed-effect-channels-on-cmd-constructors.md) —
 everything below is the wiring.
 
 ## 1. Start from two batteries that do not know about each other

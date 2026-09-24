@@ -10,7 +10,7 @@ tags: []
 
 **Scope:** how `@demlik/tea` refuses a second live writer against one persisted run, and what
 shape that refusal takes on the `Store<S>` seam. Amends the durability story
-[`docs/explanation/durability-model.md`](../docs/explanation/durability-model.md) tells;
+[`docs/explanation/durability-model.md`](../packages/tea/docs/explanation/durability-model.md) tells;
 follows [0011](./0011-errors-as-data.md) on when a failure is a throw rather than a value.
 
 **What this decides:** an optional `FencedStore<S> extends Store<S>` carries the version and the

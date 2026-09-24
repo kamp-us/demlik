@@ -30,7 +30,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// Changesets are workspace-wide; they live beside `pnpm-workspace.yaml`, not in the package.
+const WORKSPACE_ROOT = resolve(PKG_ROOT, "../..");
 
 /**
  * The public doors, exactly. Twenty-three module doors plus the two non-module
@@ -90,10 +92,7 @@ const PUBLIC_DOORS = [
  * `exports` is discovered to have been transcribed wrong.
  */
 const PUBLISHED_V0_12_0 = JSON.parse(
-  readFileSync(
-    join(REPO_ROOT, "src/__fixtures__/v0.12.0-exports.json"),
-    "utf8",
-  ),
+  readFileSync(join(PKG_ROOT, "src/__fixtures__/v0.12.0-exports.json"), "utf8"),
 ) as { version: string; commit: string; exports: string[] };
 
 function exportKeys(json: string): string[] {
@@ -103,7 +102,7 @@ function exportKeys(json: string): string[] {
 }
 
 const currentDoors = exportKeys(
-  readFileSync(join(REPO_ROOT, "package.json"), "utf8"),
+  readFileSync(join(PKG_ROOT, "package.json"), "utf8"),
 );
 
 describe("package.json `exports`", () => {
@@ -121,10 +120,10 @@ describe("every door closed since v0.12.0 is named in a release note", () => {
   // the next changelog. Where the entry lives depends only on whether the
   // release that carries it has run yet.
   const notes =
-    readFileSync(join(REPO_ROOT, "CHANGELOG.md"), "utf8") +
-    readdirSync(join(REPO_ROOT, ".changeset"))
+    readFileSync(join(PKG_ROOT, "CHANGELOG.md"), "utf8") +
+    readdirSync(join(WORKSPACE_ROOT, ".changeset"))
       .filter((f) => f.endsWith(".md") && f !== "README.md")
-      .map((f) => readFileSync(join(REPO_ROOT, ".changeset", f), "utf8"))
+      .map((f) => readFileSync(join(WORKSPACE_ROOT, ".changeset", f), "utf8"))
       .join("\n");
 
   it("removed at least the sub-doors this sweep closed", () => {

@@ -26,12 +26,12 @@ import { fileURLToPath } from "node:url";
 import { defineMachine } from "@demlik/tea";
 import { describe, expect, it } from "vitest";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Every module door: the subpaths whose target is JavaScript. */
 function moduleDoors(): string[] {
   const { exports: map } = JSON.parse(
-    readFileSync(join(REPO_ROOT, "package.json"), "utf8"),
+    readFileSync(join(PKG_ROOT, "package.json"), "utf8"),
   ) as { exports: Record<string, string | { import?: string }> };
   return Object.entries(map)
     .filter(([spec, entry]) => {

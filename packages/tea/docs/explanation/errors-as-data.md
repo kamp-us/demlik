@@ -105,5 +105,5 @@ under it.
 
 - [Make a machine durable and crash-recoverable](../how-to/make-durable.md) — why
   Model has to be JSON in the first place.
-- [ADR 0011 — Errors are data; a throw is reserved for a contract breach](../../.decisions/0011-errors-as-data.md)
+- [ADR 0011 — Errors are data; a throw is reserved for a contract breach](../../../../.decisions/0011-errors-as-data.md)
   — the decision record, written for maintainers of the library.

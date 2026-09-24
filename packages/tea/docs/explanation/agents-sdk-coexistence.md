@@ -189,7 +189,7 @@ The rule underneath the table: an export is incrementally adoptable when
 everything impure arrives as an injected port, and it is all-or-nothing when it
 reaches for a `@demlik/tea` `Runtime` or the gateway that feeds one. That is the
 same seam-versus-assembly split the rest of the package is built on — see
-[ADR 0002](../../.decisions/0002-do-host-layer.md).
+[ADR 0002](../../../../.decisions/0002-do-host-layer.md).
 
 ## Where to start
 

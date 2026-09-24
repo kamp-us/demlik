@@ -17,12 +17,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const PKG_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const TIERS = new Set(["stable", "battery", "experimental"]);
 
 /** Rows of MAINTAINING.md's "every published subpath" table. */
 function readTierTable() {
-  const md = readFileSync(path.join(REPO_ROOT, "MAINTAINING.md"), "utf8");
+  const md = readFileSync(path.join(PKG_ROOT, "MAINTAINING.md"), "utf8");
   const rows = new Map();
   for (const m of md.matchAll(
     /^\|\s*`(\.[^`]*)`\s*\|\s*([a-z]+)\s*\|\s*(.*?)\s*\|\s*$/gm,
@@ -40,7 +40,7 @@ function readTierTable() {
  */
 function readExportMap() {
   const pkg = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
+    readFileSync(path.join(PKG_ROOT, "package.json"), "utf8"),
   );
   return Object.keys(pkg.exports).filter(
     (k) => k !== "./package.json" && !k.endsWith(".css"),
