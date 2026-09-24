@@ -88,6 +88,12 @@ function exporterAndTracer() {
   return { exporter, tracer: provider.getTracer("tea-test") };
 }
 
+// The run clock's first reading, in epoch ms. It is below `performance.now()`
+// however young the worker is, which is the range the SDK misreads a bare
+// number as process-relative (#367) — so the timing tests fail on that bug
+// every time rather than only once the worker has been up past it.
+const START = 1;
+
 /** Run one agent to its end with `traceAgent` wired; return the finished spans. */
 async function traced(
   turns: readonly (AgentTurn | Error)[],
@@ -107,7 +113,7 @@ async function traced(
   const { machine, interpret, subscribe } = agent.toMachine<object>({
     toolInterpret,
   });
-  let clock = 1_000;
+  let clock = START;
   const runtime = await run(machine, {
     ctx: {},
     interpret,
@@ -120,7 +126,7 @@ async function traced(
     events: agentEvents<string, Purpose, Outputs, string>(),
   }).ready;
   const stop = traceAgent(runtime, { tracer, ...opts });
-  await runtime.dispatch({ type: "agent_start", runId: "run-1", at: 1_000 });
+  await runtime.dispatch({ type: "agent_start", runId: "run-1", at: START });
   await runtime.done();
   await runtime.stop();
   stop();
@@ -207,8 +213,8 @@ describe("traceAgent — one run as one span tree", () => {
   it("times each span by the transitions that opened and closed it", async () => {
     const spans = await traced([ASK, ANSWER]);
     const root = one(spans, "invoke_agent agent");
-    // `agent_start` was dispatched at 1000 ms.
-    expect(root.startTime).toEqual([1, 0]);
+    // `agent_start` was dispatched at START — 1 ms past the epoch.
+    expect(root.startTime).toEqual([0, 1_000_000]);
     for (const span of spans) {
       const start = span.startTime[0] * 1e9 + span.startTime[1];
       const end = span.endTime[0] * 1e9 + span.endTime[1];
@@ -300,6 +306,29 @@ describe("agentSpans — the listener form", () => {
       args: {},
     },
   ];
+
+  it("reads `at` as epoch milliseconds, however small, to the exact HrTime", () => {
+    expect(performance.now()).toBeGreaterThanOrEqual(1);
+    const { exporter, tracer } = exporterAndTracer();
+    const spans = agentSpans<string>({ tracer });
+    for (const e of events) spans.onEvent(e);
+    spans.onEvent({
+      ...head(1_790_000_000_123.5),
+      type: "RunDone",
+      status: { kind: "cancelled", at: 1_790_000_000_123.5 },
+    });
+
+    const done = exporter.getFinishedSpans();
+    const root = one(done, "invoke_agent agent");
+    expect(root.startTime).toEqual([0, 1_000_000]);
+    expect(root.endTime).toEqual([1_790_000_000, 123_500_000]);
+    const brain = one(done, "chat");
+    expect(brain.startTime).toEqual([0, 1_000_000]);
+    expect(brain.endTime).toEqual([0, 2_000_000]);
+    expect(one(done, "execute_tool screenshot").startTime).toEqual([
+      0, 3_000_000,
+    ]);
+  });
 
   it("a cancelled run closes its open spans as warnings, not errors", () => {
     const { exporter, tracer } = exporterAndTracer();

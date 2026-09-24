@@ -24,14 +24,24 @@
  * `Store` writes into the same trace as the one that was killed. Spans the
  * killed process never ended are never exported; OpenTelemetry exports a span
  * when it ends. What it did end is in the trace beside the resumed leg.
+ *
+ * ## Time
+ *
+ * Every span starts and ends at the `at` of the event that opened or closed
+ * it, and `at` is read as **epoch milliseconds** — the runtime's `clock`
+ * contract. It reaches OpenTelemetry as an exact `HrTime`, never a bare
+ * number, so a small clock value (a logical or test clock) stays the instant
+ * it names instead of being rebased onto process start.
  */
 
 import {
   type Attributes,
   type Context,
+  type HrTime,
   ROOT_CONTEXT,
   type Span,
   SpanKind,
+  type SpanOptions,
   SpanStatusCode,
   TraceFlags,
   type Tracer,
@@ -93,6 +103,8 @@ export interface AgentEventSource<R> {
  * `onEvent` listener instead of handing out its runtime, wire
  * {@link agentSpans}'s `onEvent` there.
  *
+ * Each span is timed by its events' `at`, read as epoch milliseconds.
+ *
  * @example
  *   const runtime = await run(machine, { ...wired, ctx, events: agentEvents() }).ready;
  *   const stop = traceAgent(runtime, { tracer: provider.getTracer("audit") });
@@ -149,11 +161,12 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
       traceFlags: TraceFlags.SAMPLED,
       isRemote: true,
     });
-    const span = tracer.startSpan(
+    const span = startSpan(
+      tracer,
       `invoke_agent ${name}`,
+      at,
       {
         kind: SpanKind.INTERNAL,
-        startTime: at,
         attributes: {
           "gen_ai.operation.name": "invoke_agent",
           "gen_ai.agent.name": name,
@@ -182,11 +195,12 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
         // A boot in the same process re-issues the call already open.
         if (run.brain !== null) return;
         const model = event.model;
-        run.brain = tracer.startSpan(
+        run.brain = startSpan(
+          tracer,
           model === null ? "chat" : `chat ${model}`,
+          event.at,
           {
             kind: SpanKind.CLIENT,
-            startTime: event.at,
             attributes: {
               "gen_ai.operation.name": "chat",
               ...(model === null
@@ -208,16 +222,18 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
       case "TurnSettled": {
         const brain =
           run.brain ??
-          tracer.startSpan(
+          startSpan(
+            tracer,
             "chat",
-            { kind: SpanKind.CLIENT, startTime: event.at },
+            event.at,
+            { kind: SpanKind.CLIENT },
             run.context,
           );
         brain.setAttributes({
           "langfuse.observation.output": exported(event.turn),
           ...usageAttributes(event.usage),
         });
-        brain.end(event.at);
+        endSpan(brain, event.at);
         run.brain = null;
         return;
       }
@@ -225,11 +241,12 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
         if (run.tools.has(event.callId)) return;
         run.tools.set(
           event.callId,
-          tracer.startSpan(
+          startSpan(
+            tracer,
             `execute_tool ${event.name}`,
+            event.at,
             {
               kind: SpanKind.INTERNAL,
-              startTime: event.at,
               attributes: {
                 "gen_ai.operation.name": "execute_tool",
                 "gen_ai.tool.name": event.name,
@@ -250,7 +267,7 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
           "langfuse.observation.output",
           exported(event.result),
         );
-        span.end(event.at);
+        endSpan(span, event.at);
         run.tools.delete(event.callId);
         return;
       }
@@ -262,7 +279,7 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
           exported(event.failure),
         );
         failed(span, event.failure.reason, errorType(event.failure));
-        span.end(event.at);
+        endSpan(span, event.at);
         run.tools.delete(event.callId);
         return;
       }
@@ -319,6 +336,37 @@ interface OpenRun {
   readonly tools: Map<string, Span>;
 }
 
+// The one place a run's clock becomes OpenTelemetry time. `at` is epoch
+// milliseconds. A bare number is ambiguous to the SDK: one no bigger than
+// `performance.now()` is read as milliseconds since process start and rebased
+// onto `performance.timeOrigin`, so a small clock value would silently move by
+// however long the process has been up (#367). An `HrTime` is taken as-is.
+function spanTime(at: number): HrTime {
+  const seconds = Math.floor(at / 1_000);
+  const nanos = Math.round((at - seconds * 1_000) * 1_000_000);
+  return nanos === 1_000_000_000 ? [seconds + 1, 0] : [seconds, nanos];
+}
+
+// A span opened at `at`. The options carry no `startTime`, so no call site
+// can hand OpenTelemetry a raw clock value.
+function startSpan(
+  tracer: Tracer,
+  spanName: string,
+  at: number,
+  options: Omit<SpanOptions, "startTime">,
+  context: Context,
+): Span {
+  return tracer.startSpan(
+    spanName,
+    { ...options, startTime: spanTime(at) },
+    context,
+  );
+}
+
+function endSpan(span: Span, at: number): void {
+  span.end(spanTime(at));
+}
+
 // The detached parent every run span hangs off. Derived from the run rather
 // than a constant so two runs never share a phantom parent; it is never
 // exported itself, only named as a parent.
@@ -343,7 +391,7 @@ function closeRun(
     case "done":
       // Nothing is still open on a run that finished, unless a settle never
       // reached the events — end it rather than leave it unexported.
-      for (const span of openChildren(run)) span.end(at);
+      for (const span of openChildren(run)) endSpan(span, at);
       run.span.setAttribute(
         "langfuse.observation.output",
         exported(status.output),
@@ -357,7 +405,7 @@ function closeRun(
           `run failed (${reason}) before this settled`,
           "run_failed",
         );
-        span.end(at);
+        endSpan(span, at);
       }
       run.span.setAttribute(
         "langfuse.observation.output",
@@ -369,12 +417,12 @@ function closeRun(
     case "cancelled":
       for (const span of openChildren(run)) {
         cancelled(span);
-        span.end(at);
+        endSpan(span, at);
       }
       cancelled(run.span);
       break;
   }
-  run.span.end(at);
+  endSpan(run.span, at);
 }
 
 function failed(span: Span, message: string, type: string): void {
