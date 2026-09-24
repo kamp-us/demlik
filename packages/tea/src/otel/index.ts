@@ -106,8 +106,16 @@ export interface AgentEventSource<R> {
  * Each span is timed by its events' `at`, read as epoch milliseconds.
  *
  * @example
- *   const runtime = await run(machine, { ...wired, ctx, events: agentEvents() }).ready;
- *   const stop = traceAgent(runtime, { tracer: provider.getTracer("audit") });
+ * ```ts
+ * import { type AgentEventSource, traceAgent } from "@demlik/tea/otel";
+ * import type { TracerProvider } from "@opentelemetry/api";
+ *
+ * declare const provider: TracerProvider;
+ * // Built with `run(machine, { ...wired, ctx, events: agentEvents() }).ready`.
+ * declare const runtime: AgentEventSource<string>;
+ *
+ * const stop = traceAgent(runtime, { tracer: provider.getTracer("audit") });
+ * ```
  */
 export function traceAgent<R>(
   runtime: AgentEventSource<R>,
@@ -137,8 +145,20 @@ export interface AgentSpans<R> {
  * events arrive through a callback rather than a runtime:
  *
  * @example
- *   const spans = agentSpans({ tracer });
- *   await agent.run(input, { onEvent: spans.onEvent });
+ * ```ts
+ * import { defineAgent } from "@demlik/tea/agent";
+ * import { agentSpans } from "@demlik/tea/otel";
+ * import { trace } from "@opentelemetry/api";
+ *
+ * const agent = defineAgent({
+ *   model: async () => ({ content: "done", toolCalls: [] }),
+ *   tools: [],
+ *   instructions: "Summarise the page.",
+ * });
+ *
+ * const spans = agentSpans({ tracer: trace.getTracer("audit") });
+ * await agent.run("https://example.com", { onEvent: spans.onEvent });
+ * ```
  */
 export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
   const { tracer } = opts;

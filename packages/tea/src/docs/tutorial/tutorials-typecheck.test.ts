@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { cacheDir, inMemoryProgram } from "../in-memory-program";
 import { programOf, UNNAMED_PAGE_FILE } from "./program";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
@@ -44,30 +45,13 @@ async function pages(): Promise<[string, Map<string, string>][]> {
 
 /** The compiler's diagnostics for one page's program, one formatted line each. */
 function diagnosticsOf(page: string, program: Map<string, string>): string[] {
-  const dir = join(repo, "node_modules/.cache/tea-tutorial-typecheck", page);
+  const dir = join(cacheDir("tea-tutorial-typecheck"), page);
   const files = new Map(
     [...program].map(([name, body]) => [join(dir, name), body]),
   );
-  const config = ts.getParsedCommandLineOfConfigFile(
-    join(repo, "tsconfig.test.json"),
-    { allowImportingTsExtensions: true },
-    { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} },
-  );
-  if (config === undefined) throw new Error("tsconfig.test.json is unreadable");
-  const host = ts.createCompilerHost(config.options);
-  const { fileExists, readFile: read, getSourceFile } = host;
-  const directoryExists = host.directoryExists?.bind(host);
-  host.fileExists = (path) => files.has(path) || fileExists(path);
-  host.directoryExists = (path) =>
-    path === dir || (directoryExists?.(path) ?? true);
-  host.readFile = (path) => files.get(path) ?? read(path);
-  host.getSourceFile = (path, language, ...rest) => {
-    const body = files.get(path);
-    return body === undefined
-      ? getSourceFile(path, language, ...rest)
-      : ts.createSourceFile(path, body, language);
-  };
-  const compiled = ts.createProgram([...files.keys()], config.options, host);
+  const compiled = inMemoryProgram(dir, files, {
+    allowImportingTsExtensions: true,
+  });
   return ts.getPreEmitDiagnostics(compiled).map((d) => {
     const text = ts.flattenDiagnosticMessageText(d.messageText, "\n");
     if (d.file === undefined || d.start === undefined) return text;

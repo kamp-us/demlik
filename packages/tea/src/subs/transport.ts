@@ -186,28 +186,65 @@ export interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
  * Build the battery. One call per seam at the machine's host file.
  *
  * @example
- *   const handsSeam = fromTransport<"hands", RunId, HandsInbound, HandsOutbound, Msg, Ctx>({
- *     name: "hands",
- *     openTransport: (runId, ctx) => ctx.openHandsWs(runId),
- *     parseInbound: (raw) => parseHandsInbound(JSON.parse(raw)),
- *     onInbound: (inbound, runId) => ({ type: "hands_said", runId, inbound }),
- *     lostMsg: (runId) => ({ type: "hands_lost", runId }),
- *     serializeOutbound: (out) => JSON.stringify(out),
- *   });
+ * ```ts
+ * import {
+ *   defineMachine,
+ *   fromTransport,
+ *   type Interpret,
+ *   type Reducer,
+ *   type Transport,
+ *   type TransportSub,
+ * } from "@demlik/tea";
+ * import { run } from "@demlik/tea/promise";
  *
- *   // In the machine:
- *   types: { …, sub: {} as TransportSub<"hands", RunId> },
+ * type RunId = string;
+ * type HandsInbound = { kind: "said"; text: string };
+ * type HandsOutbound = { kind: "do"; action: string };
+ * type State = { type: "idle" } | { type: "auditing"; runId: RunId };
+ * type Msg =
+ *   | { type: "hands_said"; runId: RunId; inbound: HandsInbound }
+ *   | { type: "hands_lost"; runId: RunId };
+ * type Cmd = { type: "send_hands"; runId: RunId; outbound: HandsOutbound };
+ * interface Ctx { readonly openHandsWs: (runId: RunId) => Transport }
+ * declare function parseHandsInbound(json: unknown): HandsInbound | null;
+ * declare const update: Reducer<State, Msg, Cmd>;
+ * declare const ctx: Ctx;
+ *
+ * const handsSeam = fromTransport<"hands", RunId, HandsInbound, HandsOutbound, Msg, Ctx>({
+ *   name: "hands",
+ *   openTransport: (runId, ctx) => ctx.openHandsWs(runId),
+ *   parseInbound: (raw) => parseHandsInbound(JSON.parse(raw)),
+ *   onInbound: (inbound, runId) => ({ type: "hands_said", runId, inbound }),
+ *   lostMsg: (runId) => ({ type: "hands_lost", runId }),
+ *   serializeOutbound: (out) => JSON.stringify(out),
+ * });
+ *
+ * // In the machine:
+ * const machine = defineMachine({
+ *   types: {
+ *     model: {} as State,
+ *     msg: {} as Msg,
+ *     cmd: {} as Cmd,
+ *     sub: {} as TransportSub<"hands", RunId>,
+ *     ctx: {} as Ctx,
+ *   },
+ *   init: (loaded) => [loaded ?? { type: "idle" }, []],
+ *   update,
  *   subs: [
  *     handsSeam.depKeyed((s: State) =>
  *       s.type === "auditing" ? s.runId : null,
  *     ),
  *   ],
+ * });
  *
- *   // At run:
- *   run(machine, { interpret, subscribe: { hands: handsSeam.subscribe } });
- *
- *   // In interpret:
+ * // In interpret:
+ * const interpret: Interpret<Msg, Cmd, Ctx> = {
  *   send_hands: async (cmd) => { handsSeam.send(cmd.runId, cmd.outbound); },
+ * };
+ *
+ * // At run:
+ * run(machine, { ctx, interpret, subscribe: { hands: handsSeam.subscribe } });
+ * ```
  */
 export function fromTransport<
   N extends string,

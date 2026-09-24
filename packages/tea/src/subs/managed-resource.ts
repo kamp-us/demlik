@@ -144,29 +144,65 @@ export interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
  * file.
  *
  * @example
- *   const checkpointStore = defineManagedResource<"checkpoint", RunId, CheckpointSaver, Ctx>({
- *     name: "checkpoint",
- *     acquire: (runId, ctx) =>
- *       new CheckpointSaver({ storage: ctx.storage, bucket: ctx.bucket, runId }),
- *     release: (saver) => saver.clear(),
- *   });
+ * ```ts
+ * import {
+ *   defineMachine,
+ *   defineManagedResource,
+ *   type Interpret,
+ *   type ManagedResourceSub,
+ *   type Reducer,
+ * } from "@demlik/tea";
+ * import { run } from "@demlik/tea/promise";
  *
- *   // In the machine:
- *   types: { …, sub: {} as ManagedResourceSub<"checkpoint", RunId> },
+ * type RunId = string;
+ * type State = { type: "idle" } | { type: "running"; runId: RunId };
+ * type Msg = { type: "start"; runId: RunId } | { type: "stop" };
+ * type Cmd = { type: "start_graph"; runId: RunId };
+ * interface Ctx { readonly storage: Storage; readonly bucket: string }
+ * declare class CheckpointSaver {
+ *   constructor(opts: { storage: Storage; bucket: string; runId: RunId });
+ *   save(step: string): Promise<void>;
+ *   clear(): Promise<void>;
+ * }
+ * declare const update: Reducer<State, Msg, Cmd>;
+ * declare const ctx: Ctx;
+ *
+ * const checkpointStore = defineManagedResource<"checkpoint", RunId, CheckpointSaver, Ctx>({
+ *   name: "checkpoint",
+ *   acquire: (runId, ctx) =>
+ *     new CheckpointSaver({ storage: ctx.storage, bucket: ctx.bucket, runId }),
+ *   release: (saver) => saver.clear(),
+ * });
+ *
+ * // In the machine:
+ * const machine = defineMachine({
+ *   types: {
+ *     model: {} as State,
+ *     msg: {} as Msg,
+ *     cmd: {} as Cmd,
+ *     sub: {} as ManagedResourceSub<"checkpoint", RunId>,
+ *     ctx: {} as Ctx,
+ *   },
+ *   init: (loaded) => [loaded ?? { type: "idle" }, []],
+ *   update,
  *   subs: [
  *     checkpointStore.depKeyed((s: State) =>
  *       s.type === "running" ? s.runId : null,
  *     ),
  *   ],
+ * });
  *
- *   // At run:
- *   run(machine, { interpret, subscribe: { checkpoint: checkpointStore.subscribe } });
- *
- *   // In interpret (read the live handle the reconciler holds):
- *   start_graph: async (cmd, ctx) => {
+ * // In interpret (read the live handle the reconciler holds):
+ * const interpret: Interpret<Msg, Cmd, Ctx> = {
+ *   start_graph: async (cmd) => {
  *     const saver = checkpointStore.get(cmd.runId);  // same owner, no rebuild
- *     ...
- *   }
+ *     await saver?.save("started");
+ *   },
+ * };
+ *
+ * // At run:
+ * run(machine, { ctx, interpret, subscribe: { checkpoint: checkpointStore.subscribe } });
+ * ```
  */
 export function defineManagedResource<N extends string, TKey, Handle, Ctx>(
   opts: DefineManagedResourceOpts<N, TKey, Handle, Ctx>,

@@ -100,11 +100,15 @@ function stripUndefined<T extends object>(obj: T): Partial<T> {
  * overrides (undefineds stripped), then stamps the `type` discriminator.
  *
  * @example
- *   type S = { type: "a"; n: number } | { type: "b"; s: string };
- *   const f = stateFactory<S>({ a: { n: 0 }, b: { s: "" } });
- *   f.a();              // { type: "a", n: 0 }
- *   f.a({ n: 42 });     // { type: "a", n: 42 }
- *   f.b({ s: "hi" });   // { type: "b", s: "hi" }
+ * ```ts
+ * import { stateFactory } from "@demlik/tea/testing";
+ *
+ * type S = { type: "a"; n: number } | { type: "b"; s: string };
+ * const f = stateFactory<S>({ a: { n: 0 }, b: { s: "" } });
+ * f.a();              // { type: "a", n: 0 }
+ * f.a({ n: 42 });     // { type: "a", n: 42 }
+ * f.b({ s: "hi" });   // { type: "b", s: "hi" }
+ * ```
  */
 export function stateFactory<S extends { type: string }>(
   defaults: StateFactoryDefaults<S>,

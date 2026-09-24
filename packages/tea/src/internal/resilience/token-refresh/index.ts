@@ -211,9 +211,13 @@ export type TokenRefreshMsg = TokenRefreshedMsg | TokenRefreshFailedMsg;
  * verbs, plus the `refresh_token` Cmd def (`run`) to list in `cmds`.
  *
  * @example
- *   const tr = createTokenRefresh({ skewMs: 30_000 });
- *   const s0 = tr.init();
- *   const [s1, cmds] = tr.ensureFresh(s0, Date.now()); // cmds = [refreshTokenCmd()]
+ * ```ts
+ * import { createTokenRefresh } from "@demlik/tea/resilience";
+ *
+ * const tr = createTokenRefresh({ skewMs: 30_000 });
+ * const s0 = tr.init();
+ * const [s1, cmds] = tr.ensureFresh(s0, Date.now()); // cmds = [refreshTokenCmd()]
+ * ```
  */
 export function createTokenRefresh(config: TokenRefreshConfig = {}) {
   // Clamp once at construction: a negative skew would push the refresh trigger

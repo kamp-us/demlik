@@ -40,9 +40,17 @@ import {
  *   the union.
  *
  * @example
- *   import { auditBackgroundMachine } from "./reducer";
- *   msgTypeKeys(auditBackgroundMachine);
- *   // → ["start_audit", "stop_audit", "window_created", ...]
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import { msgTypeKeys } from "@demlik/tea/pbt";
+ *
+ * type State = { type: "idle" } | { type: "auditing" };
+ * type Msg = { type: "start_audit" } | { type: "stop_audit" } | { type: "window_created" };
+ * declare const auditBackgroundMachine: Machine<State, Msg, never, never, unknown>;
+ *
+ * msgTypeKeys(auditBackgroundMachine);
+ * // → ["start_audit", "stop_audit", "window_created"]
+ * ```
  */
 export function msgTypeKeys<
   S,

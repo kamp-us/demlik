@@ -90,13 +90,30 @@ function runProperty<
  * (every msg variant is a noop from a given state).
  *
  * @example
- *   propertyTerminates(
- *     auditBackgroundMachine,
- *     stubCtxThrowingProxy<BackgroundCtx>(),
- *     arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 }),
- *     (s) => s.type === "done" || s.type === "idle",
- *     { loaded: auditingState, numRuns: 500 },
- *   );
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import {
+ *   arbMsgSequence,
+ *   propertyTerminates,
+ *   stubCtxThrowingProxy,
+ * } from "@demlik/tea/pbt";
+ * import type * as fc from "fast-check";
+ *
+ * type State = { type: "idle" } | { type: "auditing" } | { type: "done" };
+ * type Msg = { type: "start_audit" } | { type: "ws:audit:done" };
+ * interface BackgroundCtx { readonly tabId: number }
+ * declare const auditBackgroundMachine: Machine<State, Msg, never, never, BackgroundCtx>;
+ * declare const msgArb: fc.Arbitrary<Msg>;
+ * const auditingState: State = { type: "auditing" };
+ *
+ * propertyTerminates(
+ *   auditBackgroundMachine,
+ *   stubCtxThrowingProxy<BackgroundCtx>(),
+ *   arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 }),
+ *   (s) => s.type === "done" || s.type === "idle",
+ *   { loaded: auditingState, numRuns: 500 },
+ * );
+ * ```
  */
 export function propertyTerminates<
   S,
@@ -134,16 +151,31 @@ export function propertyTerminates<
  * that still violates the predicate.
  *
  * @example
- *   // Pin the resume-handshake fix: `ws:client:hello` in auditing must
- *   // emit `send_ws { client:ready }`.
- *   propertyInvariant(
- *     auditBackgroundMachine, ctx,
- *     arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }] }),
- *     ({ prev, msg, cmds }) =>
- *       !(prev.type === "auditing" && msg.type === "ws:client:hello") ||
- *       cmds.some((c) => c.type === "send_ws" && c.msg.type === "client:ready"),
- *     { loaded: auditingState, numRuns: 200 },
- *   );
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import { arbMsgSequence, propertyInvariant } from "@demlik/tea/pbt";
+ * import type * as fc from "fast-check";
+ *
+ * type State = { type: "idle" } | { type: "auditing" };
+ * type Msg = { type: "start_audit" } | { type: "ws:client:hello" };
+ * type Cmd = { type: "send_ws"; msg: { type: "client:ready" } };
+ * interface BackgroundCtx { readonly tabId: number }
+ * declare const auditBackgroundMachine: Machine<State, Msg, Cmd, never, BackgroundCtx>;
+ * declare const ctx: BackgroundCtx;
+ * declare const msgArb: fc.Arbitrary<Msg>;
+ * const auditingState: State = { type: "auditing" };
+ *
+ * // Pin the resume-handshake fix: `ws:client:hello` in auditing must
+ * // emit `send_ws { client:ready }`.
+ * propertyInvariant(
+ *   auditBackgroundMachine, ctx,
+ *   arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }] }),
+ *   ({ prev, msg, cmds }) =>
+ *     !(prev.type === "auditing" && msg.type === "ws:client:hello") ||
+ *     cmds.some((c) => c.type === "send_ws" && c.msg.type === "client:ready"),
+ *   { loaded: auditingState, numRuns: 200 },
+ * );
+ * ```
  */
 export function propertyInvariant<
   S,
@@ -178,13 +210,27 @@ export function propertyInvariant<
  * predicates that need the full sequence, not a single step.
  *
  * @example
- *   propertyTrace(
- *     machine, ctx, seqArb,
- *     (steps, final) =>
- *       final.type !== "done" ||
- *       steps.some((step) => step.msg.type === "ws:audit:done"),
- *     { loaded: auditingState, numRuns: 500 },
- *   );
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import { propertyTrace } from "@demlik/tea/pbt";
+ * import type * as fc from "fast-check";
+ *
+ * type State = { type: "auditing" } | { type: "done" };
+ * type Msg = { type: "ws:audit:progress" } | { type: "ws:audit:done" };
+ * interface Ctx { readonly tabId: number }
+ * declare const machine: Machine<State, Msg, never, never, Ctx>;
+ * declare const ctx: Ctx;
+ * declare const seqArb: fc.Arbitrary<readonly Msg[]>;
+ * const auditingState: State = { type: "auditing" };
+ *
+ * propertyTrace(
+ *   machine, ctx, seqArb,
+ *   (steps, final) =>
+ *     final.type !== "done" ||
+ *     steps.some((step) => step.msg.type === "ws:audit:done"),
+ *   { loaded: auditingState, numRuns: 500 },
+ * );
+ * ```
  */
 export function propertyTrace<
   S,

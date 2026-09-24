@@ -120,14 +120,29 @@ export function sseHub<E>(): SseHub<E> {
  *   - `name`/`key` default to `"sse"`/`"main"`; override for a second SSE view.
  *
  * @example
- *   const hub = sseHub<MyEvent>();
- *   const registry = projectionRegistry<MyState, MyMsg>();
- *   registry.register(sseProjection(hub, (msg) =>
- *     msg?.type === "turn_done" ? { kind: "turn", ... } : null,
- *   ));
- *   driveProjections(registry, runtime); // SSE is now one projection
- *   // /sse route unchanged:
- *   return hub.open();
+ * ```ts
+ * import type { Runtime } from "@demlik/tea";
+ * import {
+ *   driveProjections,
+ *   projectionRegistry,
+ *   sseHub,
+ *   sseProjection,
+ * } from "@demlik/tea/do";
+ *
+ * type MyState = { readonly turns: number };
+ * type MyMsg = { type: "turn_done"; turn: number } | { type: "tick" };
+ * type MyEvent = { kind: "turn"; turn: number };
+ * declare const runtime: Runtime<MyState, MyMsg>;
+ *
+ * const hub = sseHub<MyEvent>();
+ * const registry = projectionRegistry<MyState, MyMsg>();
+ * registry.register(sseProjection(hub, (msg: MyMsg | null) =>
+ *   msg?.type === "turn_done" ? { kind: "turn", turn: msg.turn } : null,
+ * ));
+ * driveProjections(registry, runtime); // SSE is now one projection
+ * // /sse route unchanged:
+ * const sseRoute = (): Response => hub.open();
+ * ```
  */
 export function sseProjection<Model, Msg extends { type: string }, E>(
   hub: SseHub<E>,
@@ -198,13 +213,22 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
  * hand-rolled Msg switch to `on`.
  *
  * @example
- *   const hub = sseHub<MyFrame>();
- *   const runtime = await run(machine, { ctx, events: agentEvents() }).ready;
- *   const off = sseFromAgentEvents(runtime, hub, (e) =>
- *     e.type === "RunDone" ? { kind: "ended", status: e.status } : null,
- *   );
- *   // /sse route unchanged:
- *   return hub.open();
+ * ```ts
+ * import type { Runtime } from "@demlik/tea";
+ * import type { AgentEndedStatus, AgentEvent } from "@demlik/tea/agent";
+ * import { sseFromAgentEvents, sseHub } from "@demlik/tea/do";
+ *
+ * type MyFrame = { kind: "ended"; status: AgentEndedStatus };
+ * // Built with `run(machine, { ctx, events: agentEvents() }).ready`.
+ * declare const runtime: Runtime<unknown, { type: string }, AgentEvent<string>>;
+ *
+ * const hub = sseHub<MyFrame>();
+ * const off = sseFromAgentEvents(runtime, hub, (e) =>
+ *   e.type === "RunDone" ? { kind: "ended", status: e.status } : null,
+ * );
+ * // /sse route unchanged:
+ * const sseRoute = (): Response => hub.open();
+ * ```
  */
 export function sseFromAgentEvents<R, Frame>(
   runtime: {
