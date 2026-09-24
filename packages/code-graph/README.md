@@ -88,8 +88,8 @@ cross-package callers; re-run with `--deep`.
 | `--clusters` | Community detection over the call + import graph, compared against the directory tree: directories spanning several clusters, and clusters scattered across directories. Report, never a gate. Implies `--cross-runtime` |
 | `--interface-width` | Every exported symbol, grouped by its declaring package, ranked by export count; each export's consumer count OUTSIDE the package, and the zero-consumer ones called out as free deletions. Implies the edge pass (does NOT imply `--kinds`) |
 | `--node-kinds <file>` | JSON file of node-kind rule overrides, same boundary discipline as `--thresholds`. An override REPLACES a whole pattern group |
-| `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. Runs on the cheap pass — no tsconfig, no Graph |
-| `--layer-rules <file>` | JSON file of layer-declaration overrides, same boundary discipline as `--thresholds`. An override REPLACES `layers` or `allowed` wholesale |
+| `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no tsconfig, no Graph |
+| `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
 | `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges`: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`; **B3** a `lib` folder importing a feature. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ratchet: each declared scope's violation count against `boundary-ceilings.json`. Fails both ways, like `--collapse --ci`. `--write-ceilings` records the counts |
 | `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …] }`. An override REPLACES each key wholesale |
@@ -285,34 +285,55 @@ value is not followed, and nothing here names `defineRpc`.
 ## Layer violations (`--layers`)
 
 **Does any edge go the wrong way through the architecture?** Layers are
-**declared** (`src/layers/rules.ts`), never inferred — an inferred boundary moves
+**declared** in a `--layer-rules` file, never inferred — an inferred boundary moves
 whenever the code moves, so it can never fail a build. Order is array order,
 index 0 is the top, and an edge may point **down** a layer or **sideways** within
 one. Never up.
 
-| Layer | Paths |
-|---|---|
-| `surface` | `apps/web`, `apps/widget`, `apps/docs`, `packages/cli` |
-| `service` | `services` |
-| `domain` | `services/*/src/domain`, `packages/a11y`, `packages/widget-engine`, `packages/widget-runtime`, `packages/hands-machine`, `packages/machine-auth`, `packages/sr-hands`, `packages/sr-tools` |
-| `storage` | `services/*/src/drizzle` |
-| `contract` | `packages/a11y-contract`, `packages/telemetry-contract`, `packages/audit-protocol`, `packages/stdlib` |
+A layer stack is specific to one repo, so **no stack and no allowlist ship**:
+`layers` and `allowed` both default to empty. `--layers` without a file that
+declares `layers` refuses with exit code 2 and one line naming `--layer-rules`
+rather than passing green with nothing checked, the same way dependency-cruiser's
+`--validate` refuses to run without a rules file.
+
+### Declaring the stack (`--layer-rules`)
+
+```json
+{
+  "layers": [
+    { "name": "app", "paths": ["apps/web", "packages/cli"] },
+    { "name": "service", "paths": ["services"] },
+    { "name": "domain", "paths": ["services/*/src/domain", "packages/core"] },
+    { "name": "contract", "paths": ["packages/core-contract"] }
+  ],
+  "allowed": [
+    {
+      "from": "services/billing/src/domain/invoice.ts",
+      "to": "services/billing/src/config.ts",
+      "sites": 1,
+      "reason": "The domain reads a service setting. Fix: pass the setting in."
+    }
+  ]
+}
+```
+
+```sh
+code-graph . --layers --layer-rules layer-rules.json
+```
+
+`layers` needs at least two entries, and an explicit `"layers": []` is refused at
+the schema boundary like any other malformed file. A layer name or a path pattern
+declared twice is refused too. `allowed` may be omitted, which means no upward edge
+is tolerated.
 
 The most SPECIFIC pattern wins, so `services/*/src/domain` claims a file
 `services` would otherwise take, and a prefix ends at a path separator —
-`packages/a11y` never claims `packages/a11y-contract`.
+`packages/core` never claims `packages/core-contract`.
 
-`storage` sits **below** `domain` deliberately: `tools/fitness` already enforces
-"domain does not import the schema" with its own exemptions for `repository/` and
-`infrastructure/`, and a layer rule that contradicted it would be a second,
-disagreeing copy of one decision. Layering says where storage sits; that fitness
-function says who may touch it.
-
-Paths not named are **outside the lattice** on purpose (`tools/*`, `packages/design`,
-the test-harness packages). Their edges are counted `unlayered` and never judged
-— the coverage gap is a number in every report, not a silence. `packages/design`
-in particular is consumed from two non-adjacent layers, so declaring it would
-manufacture findings about a shared UI kit rather than reveal one.
+Paths not named are **outside the lattice**. Their edges are counted `unlayered`
+and never judged — the coverage gap is a number in every report, not a silence. A
+package consumed from two non-adjacent layers, like a shared UI kit, is often
+better left undeclared than declared into findings it cannot fix.
 
 ### The edge set, and why it is imports
 
@@ -331,9 +352,9 @@ acceptable noise.
 
 ### The allowlist is a ratchet, in both directions
 
-`src/layers/allowed.ts` declares the upward edges that exist **today** — 6 causes,
-44 file pairs, 45 import sites — each with its exact site count and the concrete
-move that closes it. `--layers` exits non-zero on any of three disagreements:
+The `allowed` array declares the upward edges that exist **today**, each with its
+exact site count and the concrete move that closes it. `--layers` exits non-zero on
+any of three disagreements:
 
 - an **undeclared** violation — new drift cannot land;
 - a **stale** entry that no longer violates — a closed violation cannot keep its

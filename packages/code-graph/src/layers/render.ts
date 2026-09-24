@@ -39,8 +39,8 @@ function verdictLines(result: Reconciliation): string[] {
       `  ${result.undeclared.length} undeclared violation(s) — an edge points UP the stack:`,
       ...result.undeclared.map(edgeLine),
       "  Fix: point the dependency down (move the shared thing into a lower layer, or",
-      "  invert it behind a contract). If it cannot move in this PR, add the pair to",
-      "  `allowed` in src/layers/allowed.ts with its exact site count and a reason.",
+      "  invert it behind a contract). If it cannot move in this PR, add the pair to the",
+      "  `allowed` array in your --layer-rules file with its exact site count and a reason.",
     );
   }
   if (result.stale.length > 0) {
@@ -48,7 +48,7 @@ function verdictLines(result: Reconciliation): string[] {
       `  ${result.stale.length} declared violation(s) no longer exist — a closed violation`,
       "  must not keep its excuse, or the ratchet turns back into a baseline file:",
       ...result.stale.map(allowedLine),
-      "  Fix: delete those entries from `allowed` in src/layers/allowed.ts.",
+      "  Fix: delete those entries from the `allowed` array in your --layer-rules file.",
     );
   }
   if (result.miscounted.length > 0) {
@@ -59,7 +59,7 @@ function verdictLines(result: Reconciliation): string[] {
         (m) =>
           `  ${m.declared.from} -> ${m.declared.to}  declared ${m.declared.sites}, found ${m.actual}`,
       ),
-      "  Fix: update `sites` in src/layers/allowed.ts, or remove the import.",
+      "  Fix: update `sites` in the `allowed` array in your --layer-rules file, or remove the import.",
     );
   }
   return lines;
