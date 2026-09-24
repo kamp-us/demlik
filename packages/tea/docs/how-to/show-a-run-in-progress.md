@@ -79,9 +79,9 @@ const final = await agent.run(input, {
 ```
 
 `defineAgent` takes one `model` field for both shapes and tells them apart by
-arity — there is no flag to set, and none to get wrong. A recipe for the Vercel
-AI SDK's `streamText` is in
-[Use a Vercel AI SDK model as the agent's brain](./use-a-vercel-ai-sdk-model.md).
+arity — there is no flag to set, and none to get wrong. A streaming adapter for
+any OpenAI-compatible endpoint is in
+[Supply the agent's model](./supply-the-agents-model.md#stream-the-turn).
 
 **A chunk is a side channel, never state.** It is not journaled, not written to
 the `Store`, and never folded into the Model — a delta that has not settled is
