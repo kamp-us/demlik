@@ -187,7 +187,9 @@ export type Machine<S, M, C extends Cmd, U extends Sub, Ctx> = {
 // …and the handlers, handed to `run` beside it:
 run(machine, {
   ctx,
-  interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | void> },
+  // one Msg, a list of them (dispatched in order — Elm's `Cmd.batch`), or nothing;
+  // the Effect engine's cell is `(cmd) => Effect.Effect<M | readonly M[] | void, unknown, R>`
+  interpret: { [K in C["type"]]: (cmd, ctx) => Promise<M | readonly M[] | void> },
   subscribe: { [K in U["type"]]: (sub: Extract<U, { type: K }>, ctx, dispatch) => Dispose },
 });
 ```

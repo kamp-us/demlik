@@ -1329,9 +1329,9 @@ export function replay<
 // `Allowed`/`M` generic relation, not a cast.
 //
 // Opt-in / additive: a leaf handler that resolves on its own keeps returning
-// `Promise<M | void>` and never touches `wrapDetached`. Only the detached sites
-// adopt it. The wrapped result is structurally a plain cell, so the `interpret`
-// map type is unchanged.
+// its follow-ups inline (`Promise<M | readonly M[] | void>`) and never touches
+// `wrapDetached`. Only the detached sites adopt it. The wrapped result is
+// structurally a plain cell, so the `interpret` map type is unchanged.
 //
 // Strengthens invariant 3 (effects are data — the detached effect's terminal
 // result feeds back as a Msg, now a TYPED edge) and invariant 7 (identity is

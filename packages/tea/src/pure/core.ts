@@ -1820,9 +1820,10 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
 // every Cmd variant has one.
 //
 // **The injected `dispatch` — the typed Cmd→Msg edge.** A leaf handler that
-// resolves on its own returns its follow-up Msg (`Promise<M | void>`) and
-// IGNORES the third argument. A DETACHED handler (one that hands long-running
-// work to `ctx.waitUntil` and CANNOT return its terminal Msg inline — awaiting
+// resolves on its own returns its follow-ups — one Msg, a list of them, or
+// nothing (`Promise<M | readonly M[] | void>`) — and IGNORES the third
+// argument. A DETACHED handler (one that hands long-running work to
+// `ctx.waitUntil` and CANNOT return its terminal Msg inline — awaiting
 // it would deadlock the serial dispatch tail) fires its terminal Msg through
 // this injected `dispatch` instead. Today such a handler reaches for a
 // host-wired `ctx.dispatch` typed to the FULL Msg union — so a typo'd or wrong

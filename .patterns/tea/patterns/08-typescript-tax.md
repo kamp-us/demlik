@@ -32,13 +32,19 @@ Elm starts fresh on every page load. In TS, you often need persistence
 interface Store<S> {
   load(): Promise<unknown>   // raw data from storage
   save(state: S): Promise<void>
-  migrate(raw: unknown): S | null  // boundary parse
+  migrate(raw: unknown): Migrated<S>  // boundary parse
 }
+
+type Migrated<S> = S | null | Refusal  // build a Refusal with refuse(reason)
 ```
 
 `load()` returns `unknown` because storage doesn't know your type.
-`migrate()` is the boundary parse — returns `S` on recognized shape,
-`null` on unrecognized (boots fresh). Must not throw.
+`migrate()` is the boundary parse, with three answers: `S` on a recognized
+shape, `null` when nothing was saved (the fresh boot), or `refuse(reason)` for
+saved bytes it cannot read. A refusal — or a throw from `load` or `migrate` —
+stops `run`: `ready` rejects with a `StoreRefusedError` and nothing is written,
+so the saved bytes stay as they were (`packages/tea/src/runtime-types.ts`,
+`packages/tea/src/internal/engine/restore.ts`).
 
 ### 3. The Sub identity system
 
