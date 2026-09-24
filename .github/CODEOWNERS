@@ -6,3 +6,6 @@
 /MAINTAINING.md  @kamp-us/control-plane
 /ROADMAP.md      @kamp-us/control-plane
 /.github/        @kamp-us/control-plane
+/.claude/        @kamp-us/control-plane
+/.fabrika.jsonc  @kamp-us/control-plane
+/package.json    @kamp-us/control-plane
