@@ -29,6 +29,9 @@ what you are trying to do, and it names the subpath you need.
 - [Show a "couldn't restore" view](./restore-or-refuse.md) — `refuse` saved
   bytes `migrate` can't read, catch the `StoreRefusedError` `run` fails with,
   and start a run with no store so nothing saves over them.
+- [Change a saved state's shape without losing old saves](./migrate-a-saved-state.md) —
+  keep a `version` in the Model and walk an old save up one step at a time
+  inside `migrate`, refusing a version no step reads.
 - [Skip saving short-lived states](./skip-saving-transient-states.md) — wrap
   your `Store` so `save` does nothing while a reply streams, on either engine,
   with no tea option behind it.
