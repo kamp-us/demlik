@@ -1,0 +1,56 @@
+{
+  "name": "@demlik/structure-sweep",
+  "version": "0.0.0",
+  "description": "Ask Jev which feature and which role every source file in a folder belongs to, judge code-graph collapse pairs, and move files into feature folders with their imports rewritten.",
+  "homepage": "https://github.com/kamp-us/demlik/tree/main/packages/structure-sweep",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kamp-us/demlik.git",
+    "directory": "packages/structure-sweep"
+  },
+  "bugs": {
+    "url": "https://github.com/kamp-us/demlik/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Can Sirin",
+  "type": "module",
+  "bin": {
+    "structure-sweep": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "biome check src test scripts package.json",
+    "lint:worktree": "biome check src test scripts package.json",
+    "test": "vitest run",
+    "verify:exports": "node scripts/verify-exports.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@demlik/code-graph": "workspace:*",
+    "@demlik/tea": "workspace:*",
+    "smol-toml": "catalog:",
+    "ts-morph": "catalog:",
+    "zod": "catalog:code-graph"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:code-graph",
+    "typescript": "catalog:code-graph",
+    "vitest": "catalog:"
+  }
+}

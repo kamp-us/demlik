@@ -44,6 +44,8 @@
 		"packages/tea/package.json",
 		"packages/tea/MAINTAINING.md",
 		"packages/code-graph/package.json",
+		"packages/structure-sweep/package.json",
+		"packages/backlog-sweep/package.json",
 		"biome.jsonc",
 		"packages/code-graph/biome.jsonc"
 	],

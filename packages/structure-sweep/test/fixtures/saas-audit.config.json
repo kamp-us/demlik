@@ -1,0 +1,52 @@
+{
+  "product": "a SaaS accessibility-audit product",
+  "features": {
+    "projects": "A customer's project record: create, update, delete, list, look up by domain, its configuration, use cases, setup band, restart, and the org-ownership check on a project.",
+    "pages": "The pages of a website project: creating, listing, updating and deleting project pages and their shape.",
+    "targets": "What an audit points at: URL targets, mobile build targets, environments (staging/production) and whether a target is blocked.",
+    "mobile_builds": "Uploaded Android/iOS app builds: artifact upload, build ingress, malware scanning of uploaded files.",
+    "journeys": "User journeys and journey groups audited step by step, and the auth personas (test logins) a journey runs as.",
+    "audit_agent": "The AI agent that performs an audit: its reasoning loop, tools, prompts, what it observes from the screen reader, classifying issues, checkpoints, the audit graph and platform-specific audit logic (web, android, ios).",
+    "hands": "What physically drives the thing being audited: headless browsers and the browser pool, Android emulators and adb, iOS simulators and simctl, real screen readers through Guidepup (NVDA, VoiceOver, TalkBack), device settings, touch, screen capture, device preflight checks.",
+    "audit_runs": "The lifecycle of an audit run, not its execution: commissioning a local or cloud run, provisioning cloud runner VMs, the run queue (request, dequeue, settle, reconcile), schedules, run history, completion notifications.",
+    "findings": "Accessibility findings: ingesting them from CLI, CI, agents or external tools, authored findings, finding origin/provenance/environment/location, deduplication of findings, rule frequency.",
+    "tickets": "Tickets grouped from findings: agentic tickets, ticket counts, ticket dedup and status, reconciling tickets when a PR closes or a scope is rescanned, PR comments about findings.",
+    "evidence": "The evidence export a customer downloads: assembling, rendering and writing the evidence workbook.",
+    "descriptions": "Image descriptions (the product calls it Descriptions; code calls it glyph): scanning pages for images, generating alt text, reviewing alt text, glyph summaries, lineage, work items.",
+    "sitemap": "Sitemap crawling: listing due crawls, running the sitemap pipeline, computing sitemap diffs, the crawl workflow.",
+    "billing": "What a customer pays for and has used: plans, catalog, subscriptions, checkout, seat usage, quota counts, deducting actions, cloud-run spend. Customer-facing only; staff tools go to platform_admin.",
+    "access_gates": "The yes/no decision whether an org may use a feature right now: feature flags, the capability registry, entitlement enforcement gates (agentic, content, ingest, integrations, workspace). If a file refuses or admits a request, it is here even when the reason is billing.",
+    "identity": "Who the caller is: sessions, login and post-login, users, viewer, API keys, machine tokens, runner tokens, CI tokens.",
+    "organizations": "Organizations and their members: org record, slug, members, invites, leaving an org, first-contact onboarding records.",
+    "integrations": "Connections to outside tools: GitHub App connection, CI scans and CI PR findings, MCP, external finding ingestion endpoints.",
+    "widget": "The accessibility widget served on customer sites: widget data, org fonts used by the widget.",
+    "platform_admin": "Anything only platform staff can reach, whatever it is about: platform billing admin, platform org/project directory and members, banning users, platform project restart.",
+    "audit_log": "The audit log of who did what in an organization.",
+    "telemetry": "Product usage telemetry sent by the CLI, widget or dashboard, and its ingestion.",
+    "app_shell": "The frame of a client app rather than a product feature: dashboard navigation, layouts, page chrome, generic UI components, CLI command parsing, terminal output formatting, local CLI config.",
+    "shared_plumbing": "Generic code about no product concept: the worker entry point that only wires routes, GraphQL builder and type refs, cursors and pagination, error masking, healthchecks, database schema and helpers."
+  },
+  "roles": {
+    "business_rule": {
+      "description": "Decides what is allowed or what outcome happens: eligibility, limits, pricing, gating, status transitions, domain calculations.",
+      "dir": "rules"
+    },
+    "api_surface": {
+      "description": "Exposes an endpoint (GraphQL type/field/mutation, RPC handler, HTTP route): parses input, calls other code, shapes output.",
+      "dir": "api"
+    },
+    "persistence": {
+      "description": "Reads or writes storage: SQL queries, R2, KV, repositories.",
+      "dir": "store"
+    },
+    "orchestration": {
+      "description": "Sequences several steps over time: workflows, crons, queues, pipelines.",
+      "dir": "flows"
+    },
+    "plumbing": {
+      "description": "Generic helper with no product concept.",
+      "dir": "lib",
+      "shared": true
+    }
+  }
+}
