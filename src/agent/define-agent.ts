@@ -25,6 +25,7 @@ import {
   COMPACTION_PURPOSE,
   type CompactionPolicy,
 } from "./compaction";
+import { type ContentPart, type MessageContent, omitMedia } from "./content";
 import { createAgent } from "./index";
 import {
   type AgentCmd,
@@ -73,10 +74,16 @@ import {
  * adapter decides how a failure reads to its model. An `assistant` message
  * carries the turn's opaque `provider` slot exactly as the adapter returned it
  * (see `AgentTurn`), present only when the stored turn has one.
+ *
+ * A `user` message's content is a string or a list of {@link ContentPart}s —
+ * `contentParts` reads either as parts. A `tool` message carries `parts` beside
+ * its outcome when the tool declared `content` and settled `ok`: those parts
+ * are what the model should see (a screenshot, say), so an adapter sends them
+ * in place of the stringified result. No `parts` → the outcome is the payload.
  */
 export type AgentMessage =
   | { readonly role: "system"; readonly content: string }
-  | { readonly role: "user"; readonly content: string }
+  | { readonly role: "user"; readonly content: MessageContent }
   | {
       readonly role: "assistant";
       readonly content: string;
@@ -88,7 +95,17 @@ export type AgentMessage =
       readonly callId: string;
       readonly name: string;
       readonly outcome: ToolOutcome<unknown>;
+      readonly parts?: readonly ContentPart[];
     };
+
+/**
+ * How `renderPrompt` reads the parts a settled call shows the model — a
+ * `ToolRouter`'s `partsOf`. `null` → the message carries no `parts`.
+ */
+export type ToolPartsOf = (
+  call: ToolCall,
+  outcome: ToolOutcome<unknown>,
+) => readonly ContentPart[] | null;
 
 /**
  * The brain-call payload `defineAgent` builds from the durable state — everything
@@ -668,7 +685,7 @@ function definedAgent<T extends AnyToolDef>(
       model: brain,
       instructions: config.instructions,
       payloadOf: promptOf,
-      loadMessages: messagesOf,
+      loadMessages: messagesOf(tools.partsOf),
       toolOf: tools.toolOf,
       // The per-tool timeout / retry knob (#117). The lid grows no option for
       // it: the policy is declared on the `tool()` that needs it, and the
@@ -916,7 +933,7 @@ function compactingMachine<T extends AnyToolDef>(
   >({ ...core, compaction: compactionPolicyOf<ToolResult<T>>(knob) });
   const wiring = {
     tools,
-    toolInterpret: { compact_run: summarizeWith(brain) },
+    toolInterpret: { compact_run: summarizeWith(brain, tools.partsOf) },
   } as Parameters<typeof agent.toMachine<DefinedAgentCtx<T>, T>>[0];
   return agent.toMachine<DefinedAgentCtx<T>, T>(
     wiring,
@@ -982,13 +999,20 @@ function compactionPolicyOf<R>(
  * A throw propagates: the agent's dedicated compaction resilient slice owns the
  * retry / backoff and folds a failure as `compact_err`, which proceeds without
  * compacting rather than failing the run.
+ *
+ * Images and files in the folded turns reach the summarizer as text
+ * placeholders (`omitMedia`): the summary replaces those turns as text, so the
+ * pixels are not something it can carry forward, and resending every
+ * screenshot to write it would cost the most exactly when the transcript is
+ * longest.
  */
 function summarizeWith(
   model: PlainModel<AgentMessage, AgentTurn>,
+  partsOf: ToolPartsOf,
 ): (cmd: AgentCompactRunCmd) => Promise<AgentCompactOkMsg> {
   return async (cmd) => {
     const payload = cmd.input.payload as AgentPrompt<unknown>;
-    const turn = await model(renderPrompt(payload));
+    const turn = await model(renderPrompt(payload, partsOf).map(withoutMedia));
     // `Date.now()` at the settle, exactly as the composed llm-call handler
     // stamps the brain call's own settle Msg.
     return {
@@ -1018,12 +1042,22 @@ function promptOf<R>(
  * The payload is what `promptOf` built for this same agent, so the narrowing is
  * an identity — the one place the `unknown` payload is read back typed.
  */
-const messagesOf: MessageLoader<LidPurpose, AgentMessage> = async (
-  call: LlmCall<LidPurpose>,
-) => renderPrompt(call.payload as AgentPrompt<unknown>);
+function messagesOf(
+  partsOf: ToolPartsOf,
+): MessageLoader<LidPurpose, AgentMessage> {
+  return async (call: LlmCall<LidPurpose>) =>
+    renderPrompt(call.payload as AgentPrompt<unknown>, partsOf);
+}
 
-/** The prompt as messages: the head, then each turn with its tool outcomes. PURE. */
-export function renderPrompt(prompt: AgentPrompt<unknown>): AgentMessage[] {
+/**
+ * The prompt as messages: the head, then each turn with its tool outcomes.
+ * `partsOf` reads the parts a settled call shows the model; omit it and no
+ * `tool` message carries `parts`. PURE.
+ */
+export function renderPrompt(
+  prompt: AgentPrompt<unknown>,
+  partsOf: ToolPartsOf = noParts,
+): AgentMessage[] {
   const head: AgentMessage[] = [];
   if (prompt.instructions !== null) {
     head.push({ role: "system", content: prompt.instructions });
@@ -1036,14 +1070,39 @@ export function renderPrompt(prompt: AgentPrompt<unknown>): AgentMessage[] {
     assistantOf(turn),
     ...toolRecords
       .filter((r) => r.turn === i)
-      .map<AgentMessage>((r) => ({
-        role: "tool",
-        callId: r.call.callId,
-        name: r.call.name,
-        outcome: r.outcome,
-      })),
+      .map<AgentMessage>((r) => {
+        const message = {
+          role: "tool",
+          callId: r.call.callId,
+          name: r.call.name,
+          outcome: r.outcome,
+        } as const;
+        const parts = partsOf(r.call, r.outcome);
+        return parts === null ? message : { ...message, parts };
+      }),
   ]);
   return [...head, ...transcript];
+}
+
+/** The `partsOf` a render with no router gets: no call shows the model parts. PURE. */
+function noParts(): null {
+  return null;
+}
+
+/** The message with its images and files as text placeholders. PURE. */
+function withoutMedia(message: AgentMessage): AgentMessage {
+  switch (message.role) {
+    case "user":
+      return typeof message.content === "string"
+        ? message
+        : { ...message, content: omitMedia(message.content) };
+    case "tool":
+      return message.parts === undefined
+        ? message
+        : { ...message, parts: omitMedia(message.parts) };
+    default:
+      return message;
+  }
 }
 
 /**

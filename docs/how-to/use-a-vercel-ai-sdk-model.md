@@ -81,6 +81,11 @@ function toModelMessages(m: AgentMessage): ModelMessage[] {
     case "system":
       return [];
     case "user":
+      // This bridge maps text only: a message with image or file parts is
+      // refused here rather than silently sent without them.
+      if (typeof m.content !== "string") {
+        throw new Error("toModelMessages maps text content only");
+      }
       return [{ role: "user", content: m.content }];
     case "assistant":
       // Replay the stored `provider` when there is one — reconstructing the

@@ -84,7 +84,14 @@ adapter reads them under those names:
 ```ts
 // model.ts
 import Anthropic from "@anthropic-ai/sdk";
-import type { AgentMessage, AgentTurn, AnyToolDef } from "@demlik/tea/agent";
+import {
+  type AgentMessage,
+  type AgentTurn,
+  type AnyToolDef,
+  type ContentPart,
+  contentParts,
+  type MediaSource,
+} from "@demlik/tea/agent";
 import { z } from "zod";
 
 /** Anthropic's Messages API as tea's plain `(messages) => turn` model port. */
@@ -122,12 +129,12 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
 }
 
 /** One tea message in Anthropic's shape; the system line goes to `system`. */
-function toParam(m: AgentMessage): Anthropic.MessageParam[] {
+export function toParam(m: AgentMessage): Anthropic.MessageParam[] {
   switch (m.role) {
     case "system":
       return [];
     case "user":
-      return [{ role: "user", content: m.content }];
+      return [{ role: "user", content: contentParts(m.content).map(toBlock) }];
     case "assistant":
       return [
         {
@@ -154,7 +161,9 @@ function toParam(m: AgentMessage): Anthropic.MessageParam[] {
             {
               type: "tool_result",
               tool_use_id: m.callId,
-              content: JSON.stringify(m.outcome),
+              // A tool that declared `content` sends parts the model should
+              // see (a screenshot, say); every other outcome goes as data.
+              content: m.parts?.map(toBlock) ?? JSON.stringify(m.outcome),
               is_error: m.outcome.kind !== "ok",
             },
           ],
@@ -162,12 +171,59 @@ function toParam(m: AgentMessage): Anthropic.MessageParam[] {
       ];
   }
 }
+
+type Block =
+  | Anthropic.TextBlockParam
+  | Anthropic.ImageBlockParam
+  | Anthropic.DocumentBlockParam;
+
+/** One tea content part as an Anthropic block; a file is read as a PDF document. */
+function toBlock(p: ContentPart): Block {
+  switch (p.type) {
+    case "text":
+      return { type: "text", text: p.text };
+    case "image":
+      return {
+        type: "image",
+        source:
+          p.source.type === "url"
+            ? p.source
+            : {
+                type: "base64",
+                media_type: p.mediaType as Anthropic.Base64ImageSource["media_type"],
+                data: base64(p.source),
+              },
+      };
+    case "file":
+      return {
+        type: "document",
+        source:
+          p.source.type === "url"
+            ? p.source
+            : { type: "base64", media_type: "application/pdf", data: base64(p.source) },
+      };
+  }
+}
+
+/** Inline bytes as the base64 text Anthropic takes them in. */
+function base64(source: Exclude<MediaSource, { type: "url" }>): string {
+  return source.type === "base64"
+    ? source.data
+    : Buffer.from(source.data).toString("base64");
+}
 ```
 
 The turn's `provider` slot is how the signed `thinking` blocks survive a resume:
 tea saves whatever the adapter puts there with the turn and hands it back on the
 `assistant` message, never reading it, so the transcript a resumed process
 replays carries the blocks Anthropic requires beside its text and tool calls.
+
+`toBlock` is where pictures go. A tea message can carry content parts — text, an
+image, a file — and a tool that returns a screenshot declares which parts the
+model should see, so they arrive on its `tool` message as `parts`. The adapter
+sends those parts as Anthropic `image` and `document` blocks instead of
+stringifying the result; this lesson's tool has none, so its outcome goes as
+data.
 
 Swap this file for any provider's SDK and nothing below changes: the port is one
 `async` function from messages to a turn.
