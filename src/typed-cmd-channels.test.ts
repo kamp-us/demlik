@@ -36,6 +36,7 @@ import {
   UndeclaredFailureError,
 } from "./index";
 import { run } from "./promise";
+import { cmdEdgeOf } from "./pure/core";
 
 type Http = { readonly get: (url: string) => Promise<unknown> };
 type HttpCtx = { readonly http: Http };
@@ -491,5 +492,127 @@ describe("a machine of hand-written Cmds is untouched", () => {
     expect(rt.getState().n).toBe(1);
     // No `at` was grafted onto a Msg the kernel does not own.
     expect(seen[1]).toEqual({ type: "bumped" });
+  });
+});
+
+describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
+  type Progress = { readonly type: "progress"; readonly note: string };
+  type Kick = { readonly type: "kick" };
+  type PokeOk = { readonly type: "poke_ok" };
+  type PokeCmd = { readonly type: "poke" };
+  type DMsg = Msg | Kick | Progress | PokeOk;
+
+  const dispatchMachine = defineMachine({
+    types: {
+      model: {} as Model,
+      msg: {} as DMsg,
+      cmd: {} as FetchCmd | PokeCmd,
+      ctx: {} as HttpCtx,
+    },
+    cmds: [fetch],
+    init: (_loaded) => [initial, []],
+    update: {
+      ...update,
+      kick: (m) => [m, [{ type: "poke" }]],
+      progress: (m) => [m, []],
+      poke_ok: (m) => [m, []],
+    },
+  });
+
+  type Handlers = Interpret<DMsg | FetchSettled, FetchCmd | PokeCmd, HttpCtx>;
+
+  /** Dispatch `msg` through `handlers`, wait for quiet, report what folded. */
+  async function send(handlers: Handlers, msg: DMsg) {
+    const reports: { error: unknown; context: RuntimeErrorContext }[] = [];
+    const rt = await run(dispatchMachine, {
+      interpret: handlers,
+      ctx: { http: { get: async (url) => `body of ${url}` } },
+      clock: fixedClock(5),
+      onError: (error, context) => {
+        reports.push({ error, context });
+      },
+    }).ready;
+    const seen: string[] = [];
+    rt.observe((m) => {
+      seen.push(m.type);
+    });
+    await rt.dispatch(msg);
+    await rt.idle();
+    return { state: rt.getState(), seen, reports };
+  }
+
+  const noPoke: Handlers["poke"] = async () => undefined;
+
+  it.each([
+    ["fetch_ok", (cmd: FetchCmd) => fetch.ok(cmd, { body: "self-minted" })],
+    ["fetch_err", (cmd: FetchCmd) => fetch.err(cmd, { _tag: "timeout" })],
+  ] as const)("a defined handler dispatching its own `%s` is refused", async (own, mintOwn) => {
+    const { state, seen, reports } = await send(
+      {
+        fetch: async (cmd, _ctx, dispatch) => {
+          dispatch?.(mintOwn(cmd));
+        },
+        poke: noPoke,
+      },
+      { type: "go", url: "/a" },
+    );
+    expect(seen).toEqual(["go"]);
+    expect(state).toEqual(initial);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.error).toBeInstanceOf(OutcomeContractError);
+    expect(reports[0]?.error).toMatchObject({ cmdType: "fetch" });
+    expect((reports[0]?.error as Error).message).toContain(
+      `dispatched its own "${own}" Msg`,
+    );
+    expect(reports[0]?.context).toEqual({ phase: "interpret" });
+  });
+
+  it("a detached handler may dispatch the `_ok` the engine's edge minted (ADR 0018 fan-out)", async () => {
+    const { state, seen, reports } = await send(
+      {
+        fetch: async (cmd, ctx, dispatch) => {
+          dispatch?.(
+            cmdEdgeOf(ctx)(cmd, ctx.ok({ body: "via edge" })) as FetchSettled,
+          );
+        },
+        poke: noPoke,
+      },
+      { type: "go", url: "/a" },
+    );
+    expect(seen).toEqual(["go", "fetch_ok"]);
+    expect(state.body).toBe("via edge");
+    expect(state.ats).toEqual([5]);
+    expect(reports).toEqual([]);
+  });
+
+  it("a defined handler's other Msgs are delivered as before", async () => {
+    const { state, seen, reports } = await send(
+      {
+        fetch: async (_cmd, { ok }, dispatch) => {
+          dispatch?.({ type: "progress", note: "half way" });
+          return ok({ body: "done" });
+        },
+        poke: noPoke,
+      },
+      { type: "go", url: "/a" },
+    );
+    expect(seen).toEqual(["go", "progress", "fetch_ok"]);
+    expect(state.body).toBe("done");
+    expect(reports).toEqual([]);
+  });
+
+  it("a hand-written Cmd's handler may dispatch any Msg, `_ok`-named or not", async () => {
+    const { seen, reports } = await send(
+      {
+        fetch: async (_cmd, { ok }) => ok({ body: "unused" }),
+        poke: async (_cmd, _ctx, dispatch) => {
+          dispatch?.({ type: "poke_ok" });
+          dispatch?.({ type: "progress", note: "poked" });
+        },
+      },
+      { type: "kick" },
+    );
+    expect(seen).toEqual(["kick", "poke_ok", "progress"]);
+    expect(reports).toEqual([]);
   });
 });

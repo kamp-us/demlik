@@ -331,6 +331,7 @@ function describeTag(failure: unknown): string {
  * A `Cmd.define`d handler returned something the engine cannot settle: any Msg
  * (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler —
  * ADR 0021), or any other value that is neither an {@link Outcome} nor nothing.
+ * Also thrown when such a handler dispatches its own `_ok` / `_err` Msg.
  */
 export class OutcomeContractError extends Error {
   override readonly name = "OutcomeContractError";
@@ -474,14 +475,70 @@ export function cmdEdgeOver(
   defs: Iterable<AnyCmdDef>,
   clock: () => number,
 ): CmdEdge {
+  return cmdContractOver(defs, clock).settle;
+}
+
+/**
+ * Check one Msg a handler dispatches for the Cmd it was handed. Throws on a
+ * contract breach; returns when the Msg may be delivered.
+ */
+export type DispatchCheck = (
+  cmd: { readonly type: string },
+  msg: { readonly type: string },
+) => void;
+
+/** Both halves of ADR 0021 over one def list: the return edge and the dispatch check. */
+export interface CmdContract {
+  /** The edge a handler's return crosses — see {@link cmdEdgeOver}. */
+  readonly settle: CmdEdge;
+  /**
+   * The dispatch half of the ban. A `Cmd.define`d handler may dispatch other
+   * Msgs (progress, say), and may dispatch a `<name>_ok` / `<name>_err` that
+   * `settle` minted — a detached handler settling through `cmdEdgeOf(ctx)`
+   * (ADR 0018's fan-out). It may never dispatch one it built itself: that Msg
+   * skipped the `ok` parse and the `at` stamp, and throws
+   * {@link OutcomeContractError}. A Cmd no def builds may dispatch anything.
+   */
+  readonly checkDispatch: DispatchCheck;
+}
+
+/**
+ * The edge and the dispatch check over one def list. They share one record of
+ * the Msgs this edge minted, which is how the check tells an engine-minted
+ * settle from one the handler built by hand.
+ */
+export function cmdContractOver(
+  defs: Iterable<AnyCmdDef>,
+  clock: () => number,
+): CmdContract {
   const byType = new Map<string, AnyCmdDef>();
   for (const def of defs) byType.set(def.cmdType, def);
-  return (cmd, returned) => {
-    const def = byType.get(cmd.type);
-    if (def === undefined) return returned;
-    if (returned === undefined || returned === null) return undefined;
-    if (isOutcome(returned)) return mint(def, cmd, returned, clock());
-    throw new OutcomeContractError(def.cmdType, describeReturn(def, returned));
+  const minted = new WeakSet<object>();
+  return {
+    settle: (cmd, returned) => {
+      const def = byType.get(cmd.type);
+      if (def === undefined) return returned;
+      if (returned === undefined || returned === null) return undefined;
+      if (!isOutcome(returned)) {
+        throw new OutcomeContractError(
+          def.cmdType,
+          describeReturn(def, returned),
+        );
+      }
+      const msg = mint(def, cmd, returned, clock());
+      minted.add(msg);
+      return msg;
+    },
+    checkDispatch: (cmd, msg) => {
+      const def = byType.get(cmd.type);
+      if (def === undefined) return;
+      if (msg.type !== def.okType && msg.type !== def.errType) return;
+      if (minted.has(msg)) return;
+      throw new OutcomeContractError(
+        def.cmdType,
+        `dispatched its own "${msg.type}" Msg`,
+      );
+    },
   };
 }
 
