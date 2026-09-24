@@ -57,7 +57,9 @@ const MALFORMED = "chromeStorageStore: stored value is not a string";
  * at the key, or unparseable JSON) — matches @demlik/tea/do's "throw at boot via
  * store.load" contract so tea's `run()` surfaces it predictably. The
  * `parse` callback handles the semantic layer (shape mismatch → return
- * `null`); it must NOT throw, per the `Store<S>.migrate` contract.
+ * `refuse(reason)`, nothing saved → `null`); it must NOT throw, per the
+ * `Store<S>.migrate` contract. A throw or a refusal makes `ready` reject
+ * with `StoreRefusedError`, and nothing is saved.
  *
  * `parse` is REQUIRED because chrome.storage is a real serialization boundary
  * — JSON to disk, then back — and the structural type of what comes back is

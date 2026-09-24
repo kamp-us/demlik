@@ -248,22 +248,23 @@ export interface DoStoreOptions<S> {
  * `parse` is REQUIRED because DO storage is a real serialization boundary —
  * the bytes that come back through `JSON.parse` are structurally `unknown`,
  * and the caller (the DO that owns `S`) is the only party with enough
- * information to validate the shape. Returning `null` from `parse` means
- * "no usable persisted state" — the substrate boots `init` with `loaded =
- * null`, a known-good fresh-boot path. `parse` must NOT throw per the
- * `Store<S>.migrate` contract; shape mismatch is a value (null), not a
- * panic.
+ * information to validate the shape. `parse` returns `S` for a shape it
+ * recognizes, `null` when nothing was saved (the substrate boots `init` with
+ * `loaded = null`), and `refuse(reason)` for saved bytes it cannot read.
+ * `parse` must NOT throw per the `Store<S>.migrate` contract; a shape
+ * mismatch is a value (a refusal), not a panic.
  *
  * Structural malformations (the stored cell isn't even JSON) still throw at
  * `load()` — that's an infrastructure error, distinct from a schema
- * mismatch. The substrate surfaces it via `runtime.ready` rejection.
+ * mismatch. Either way `runtime.ready` rejects with `StoreRefusedError`
+ * before `init` runs, so nothing is saved over the old bytes.
  *
  * Concrete bite this closes: when a `State` variant is renamed between
  * deploys, the DO's new code previously received a value typed as the new
  * `S` that held a runtime string from the old `S` — silent undefined
- * behavior in `init`/`update`. After this, the boundary parse rejects the
- * old shape (returns null) and the DO boots fresh, picking up its new
- * schema from the next dispatch onward.
+ * behavior in `init`/`update`. After this, the boundary parse refuses the
+ * old shape and the DO fails to start instead of running on it or saving
+ * a fresh state over it.
  *
  * Serialization sharp edge (#182): `save` JSON-serializes the Model, and
  * `JSON.stringify` does NOT survive a `Map`/`Set`/`Date` (a `Map` stringifies
