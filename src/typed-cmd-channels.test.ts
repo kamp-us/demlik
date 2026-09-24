@@ -502,10 +502,12 @@ describe("a handler's own `dispatch` (ADR 0021, #298)", () => {
   type PokeCmd = { readonly type: "poke" };
   type DMsg = Msg | Kick | Progress | PokeOk;
 
+  // A hand-written `cmd` beside `cmds` takes the `types`-only overload, which
+  // derives no settled half, so `FetchSettled` is named in `msg` by hand.
   const dispatchMachine = defineMachine({
     types: {
       model: {} as Model,
-      msg: {} as DMsg,
+      msg: {} as DMsg | FetchSettled,
       cmd: {} as FetchCmd | PokeCmd,
       ctx: {} as HttpCtx,
     },
