@@ -8,7 +8,8 @@
  *      Atomic save (temp + rename). Absent file → `load()` resolves `null`
  *      (fresh boot). Structurally malformed JSON throws at `load()` (an infra
  *      error), matching `doStore`; a shape mismatch is NOT a throw — the
- *      substrate calls `migrate`, which returns `null` and boots fresh.
+ *      substrate calls `migrate`, which returns `refuse(reason)`. Both make
+ *      `ready` reject with `StoreRefusedError`, and the file is left as is.
  *      Use for resumable scripts / local repro of prod machines. Ephemeral
  *      CLIs can skip persistence with `memoryStore` from `@demlik/tea/mem`.
  *
@@ -53,7 +54,13 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
-import type { DeletableStore, Dispose, FencedStore, Sub } from "../index";
+import type {
+  DeletableStore,
+  Dispose,
+  FencedStore,
+  Migrated,
+  Sub,
+} from "../index";
 import { StoreConflictError } from "../index";
 import {
   type Journal,
@@ -75,9 +82,10 @@ import { dispatchIfPresent } from "../subs/types";
  * `parse` is REQUIRED because the file is a real serialization boundary — the
  * bytes that come back through `JSON.parse` are structurally `unknown`, and the
  * caller (who owns `S`) is the only party that can validate the shape.
- * Returning `null` from `parse` means "no usable persisted state" — the
- * substrate boots `init` with `loaded = null`. `parse` must NOT throw per the
- * `Store<S>.migrate` contract.
+ * `parse` returns `S` for a shape it recognizes, `null` when nothing was saved
+ * (the substrate boots `init` with `loaded = null`), and `refuse(reason)` for
+ * saved bytes it cannot read (`ready` rejects with `StoreRefusedError`).
+ * `parse` must NOT throw per the `Store<S>.migrate` contract.
  *
  * Pass `{ fenced: true }` to get a `FencedStore<S>` instead — see
  * {@link FileStoreOptions}.
@@ -88,21 +96,21 @@ import { dispatchIfPresent } from "../subs/types";
  */
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
 ): DeletableStore<S>;
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   options: FileStoreOptions & { readonly fenced: true },
 ): FencedStore<S> & DeletableStore<S>;
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   options?: FileStoreOptions,
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   options: FileStoreOptions = {},
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
   const base: DeletableStore<S> = {
@@ -133,7 +141,7 @@ export function fileStore<S>(
       await writeFile(tmp, JSON.stringify(state), "utf8");
       await rename(tmp, path);
     },
-    migrate(raw: unknown): S | null {
+    migrate(raw: unknown): Migrated<S> {
       return parse(raw);
     },
     async delete(): Promise<void> {

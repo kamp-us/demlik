@@ -19,6 +19,7 @@
  */
 
 import type { Store } from "../../index";
+import { restore } from "../engine/restore";
 import {
   claimNextOp,
   enqueueOp,
@@ -86,12 +87,12 @@ export type EnqueueInput<I> = I;
 export function createQueue<I>(store: Store<QueueItem<I>[]>) {
   // `Store<S>.load()` returns `unknown` (invariant 8 boundary). Route
   // through `store.migrate(raw)` to get the typed value before any
-  // queue operation reads it — same wiring the substrate's `run()` uses at
-  // boot. The work queue is a substrate-agnostic primitive on top of
+  // queue operation reads it — the same `restore` the substrate's `run()` uses
+  // at boot, so a queue it cannot read throws `StoreRefusedError` and no op
+  // saves over it. The work queue is a substrate-agnostic primitive on top of
   // `Store<S>`, so it honors the same contract.
-  async function loadParsed(): Promise<QueueItem<I>[] | null> {
-    const raw = await store.load();
-    return store.migrate(raw);
+  function loadParsed(): Promise<QueueItem<I>[] | null> {
+    return restore(store);
   }
 
   async function list(): Promise<QueueItem<I>[]> {

@@ -147,8 +147,12 @@ listened would hold the last leg and read like the whole run. The Model your
 from it:
 
 ```ts
+import { Refusal } from "@demlik/tea";
+
 // The Model the kill left behind, read back through the store's own migrate.
-const parked = store.migrate(await store.load());
+// A refused read seeds nothing: `agent.run` below refuses that store too.
+const read = store.migrate(await store.load());
+const parked = read instanceof Refusal ? null : read;
 
 const t = transcript(parked ?? { conversation: null });
 const final = await agent.run(input, { store, onEvent: t.onEvent });

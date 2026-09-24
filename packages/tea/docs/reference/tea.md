@@ -6,7 +6,7 @@
 import { … } from "@demlik/tea";
 ```
 
-## Exports (153)
+## Exports (157)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -89,6 +89,7 @@ import { … } from "@demlik/tea";
 | `MalformedResult` | Type | The kernel-minted failure: a handler returned an `Ok` value the Cmd's `ok` schema rejects. |
 | `ManagedResourceBattery` | Interface | What the battery returns: a `.depKeyed(when)` entry for the machine's `subs`, the `.subscribe` runner for the `subscribe` table handed to `run`, and a `.get(key)` accessor so Cmd handlers can reach the live Handle while the resource is held. |
 | `ManagedResourceSub` | Type | The running Sub of a managed resource named `N`: its `deps` is the lifetime key. |
+| `Migrated` | Type | What `Store.migrate` answers: the parsed `S`, `null` when nothing was saved, or a Refusal for saved bytes it cannot read. |
 | `msgKeysOf` | Function |  |
 | `nextSeq` | Function | The next sequence number to assign: one past the highest `seq` in the buffer, or `0` for an empty buffer. |
 | `NO_ACK` | Variable | The "nothing applied yet" cursor — the ack value for a server that has applied no client input at all. |
@@ -112,6 +113,8 @@ import { … } from "@demlik/tea";
 | `reconcile` | Function | The client prediction/reconciliation helper — the Gambetta/Valve authoritative-server loop's reconcile step, generalized. |
 | `ReconnectingWebSocketFactoryOpts` | Interface |  |
 | `Reducer` | Type |  |
+| `Refusal` | Class | `migrate`'s answer for saved bytes it cannot read. |
+| `refuse` | Function | Refuse saved bytes from `Store.migrate`. |
 | `replay` | Function |  |
 | `RunHandle` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
 | `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers and the SubscribeArg sub runners. |
@@ -131,6 +134,7 @@ import { … } from "@demlik/tea";
 | `SettledOk` | Type |  |
 | `Store` | Interface |  |
 | `StoreConflictError` | Class | Thrown when a fenced save finds a version other than the one it expected — another live writer has this run. |
+| `StoreRefusedError` | Class | `ready` rejects with this when the saved state could not be restored: `migrate` returned refuse, or `load` / `migrate` threw (that throw is the `cause`). |
 | `structuralHash` | Function |  |
 | `Sub` | Type |  |
 | `subId` | Function | Construct a `SubId` from a string. |

@@ -9,11 +9,12 @@ of it: the Model is plain data, so persistence is a round-trip, not code.
 
 A `Store<S>` has three methods: `load` returns whatever bytes are at the key
 (typed `unknown` — storage genuinely doesn't know your `S`), `save` persists the
-Model, and `migrate` parses raw bytes back into an `S` or returns `null` to boot
-fresh. `migrate` must never throw — an unrecognized shape returns `null`:
+Model, and `migrate` parses raw bytes back into an `S`. `migrate` returns `null`
+when nothing was saved, so the run boots fresh, and `refuse(reason)` for saved
+bytes it can't read:
 
 ```ts
-import type { Store } from "@demlik/tea";
+import { refuse, type Store } from "@demlik/tea";
 
 function memStore(box: { snapshot: string | null }): Store<State> {
   return {
@@ -23,17 +24,22 @@ function memStore(box: { snapshot: string | null }): Store<State> {
       return Promise.resolve();
     },
     migrate: (raw) => {
-      if (raw === null || typeof raw !== "string") return null;
-      const parsed: unknown = JSON.parse(raw);
+      if (raw === null) return null;
+      const parsed: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
       return typeof parsed === "object" &&
         parsed !== null &&
         "phase" in parsed
         ? (parsed as State)
-        : null;
+        : refuse("not a saved State");
     },
   };
 }
 ```
+
+A refusal, or a `load` or `migrate` that throws, stops the run: `ready` rejects
+with a `StoreRefusedError` and nothing is written, so the saved bytes are never
+overwritten by a fresh boot. To show a "couldn't restore" view instead, see
+[Show a "couldn't restore" view](./restore-or-refuse.md).
 
 On Cloudflare, swap `memStore` for `@demlik/tea/do`'s `doStore` (or
 `doEventSourcedStore`), whose `load`/`save` are backed by

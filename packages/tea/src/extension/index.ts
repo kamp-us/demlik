@@ -13,7 +13,7 @@
  * abstract them here until the shape stabilizes across consumers.
  */
 
-import type { Store } from "../index";
+import type { Migrated, Store } from "../index";
 
 export type {
   BridgeClient,
@@ -57,7 +57,9 @@ const MALFORMED = "chromeStorageStore: stored value is not a string";
  * at the key, or unparseable JSON) — matches @demlik/tea/do's "throw at boot via
  * store.load" contract so tea's `run()` surfaces it predictably. The
  * `parse` callback handles the semantic layer (shape mismatch → return
- * `null`); it must NOT throw, per the `Store<S>.migrate` contract.
+ * `refuse(reason)`, nothing saved → `null`); it must NOT throw, per the
+ * `Store<S>.migrate` contract. A throw or a refusal makes `ready` reject
+ * with `StoreRefusedError`, and nothing is saved.
  *
  * `parse` is REQUIRED because chrome.storage is a real serialization boundary
  * — JSON to disk, then back — and the structural type of what comes back is
@@ -79,7 +81,7 @@ const MALFORMED = "chromeStorageStore: stored value is not a string";
  */
 export function chromeStorageStore<S>(
   key: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   area: chrome.storage.StorageArea = chrome.storage.local,
 ): Store<S> {
   return {
@@ -92,13 +94,13 @@ export function chromeStorageStore<S>(
       // JSON.parse throws on malformed — propagate per @demlik/tea/do parity.
       // The decoded value is intentionally returned as `unknown`; the
       // substrate's `migrate` callback (forwarded from `parse`) is the
-      // boundary parse that turns it into `S | null`.
+      // boundary parse that turns it into `S`, `null` or a refusal.
       return JSON.parse(raw);
     },
     async save(state: S): Promise<void> {
       await area.set({ [key]: JSON.stringify(state) });
     },
-    migrate(raw: unknown): S | null {
+    migrate(raw: unknown): Migrated<S> {
       return parse(raw);
     },
   };

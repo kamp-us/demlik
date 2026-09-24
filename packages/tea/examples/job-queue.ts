@@ -2,6 +2,7 @@ import {
   type Cmd,
   defineMachine,
   type Interpret,
+  refuse,
   type Store,
   tryInterpret,
 } from "@demlik/tea";
@@ -66,7 +67,12 @@ function memStore<I>(): Store<QueueItem<I>[]> {
     save: async (next) => {
       cell = next;
     },
-    migrate: (raw) => (Array.isArray(raw) ? (raw as QueueItem<I>[]) : null),
+    migrate: (raw) => {
+      if (raw === null || raw === undefined) return null;
+      return Array.isArray(raw)
+        ? (raw as QueueItem<I>[])
+        : refuse("the saved queue is not a list of items");
+    },
   };
 }
 

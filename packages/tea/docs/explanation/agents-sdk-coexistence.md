@@ -114,11 +114,14 @@ of what a re-arming timer needs.
 to every connected client. It is a **view** cell: synchronous, client-facing, no
 deserialization boundary.
 
-`doStore` is a persistence boundary. It requires a `parse: (raw: unknown) => S | null`
-precisely because bytes coming back out of storage are `unknown`, and returning
-`null` from `parse` is the defined "no usable persisted state" path that boots
-your machine fresh instead of handing `update` a value that is typed as the new
-`S` but holds the old one.
+`doStore` is a persistence boundary. It requires a `parse: (raw: unknown) => Migrated<S>`
+precisely because bytes coming back out of storage are `unknown`. `parse` has
+three answers: an `S` for a shape it recognizes, `null` when nothing was saved
+(the machine boots fresh), and `refuse(reason)` for saved bytes it cannot read.
+A refusal makes `ready` reject with `StoreRefusedError` and writes nothing, so
+the old bytes are never saved over and `update` never sees a value that is
+typed as the new `S` but holds the old one. See
+[Show a "couldn't restore" view](../how-to/restore-or-refuse.md).
 
 So they do not compete, and `doStore` does not replace `cf_agents_state`:
 

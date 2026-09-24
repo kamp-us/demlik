@@ -26,6 +26,9 @@ what you are trying to do, and it names the subpath you need.
   run a `defineAgent` agent inside a Cloudflare Durable Object with `doStore`
   as its `Store`, so an eviction mid-run resumes on the next request instead of
   starting over.
+- [Show a "couldn't restore" view](./restore-or-refuse.md) — `refuse` saved
+  bytes `migrate` can't read, catch the `StoreRefusedError` `run` fails with,
+  and start a run with no store so nothing saves over them.
 - [Skip saving short-lived states](./skip-saving-transient-states.md) — wrap
   your `Store` so `save` does nothing while a reply streams, on either engine,
   with no tea option behind it.

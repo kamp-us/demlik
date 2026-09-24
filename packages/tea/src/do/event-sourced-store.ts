@@ -93,10 +93,11 @@ export interface EventSourcedOptions<S, M> {
    */
   readonly snapshotEvery?: number;
   /**
-   * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Same
-   * contract as `doStore`'s `parse`: returns `S` on a recognized shape, `null`
-   * on an unrecognized one (boot fresh), and must NOT throw. Default accepts
-   * any non-null, non-array object as `S`.
+   * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
+   * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
+   * Unlike `doStore`'s `parse`, `null` loses nothing: the snapshot is only a
+   * shortcut, so a `null` discards it and replays the whole event log from
+   * seq 0. Default accepts any non-null, non-array object as `S`.
    */
   readonly parse?: (raw: unknown) => S | null;
   /**
