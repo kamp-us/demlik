@@ -11,9 +11,9 @@
 // `version` to its current value — not from HEAD. A publish that was stuck for a while
 // otherwise ships whatever merged since under the old version's notes: #354/#357/#367 rode into
 // 0.18.0 that way while their changesets waited for 0.19.0. The script checks the commit out into
-// a detached worktree, installs, builds, runs the package's own `scripts/verify-exports.mjs` gate
-// when it has one, packs and publishes from there, and asserts the worktree's HEAD is that commit
-// before it packs.
+// a detached worktree, installs, builds, runs the package's required `verify:exports` script, packs
+// and publishes from there, and asserts the worktree's HEAD is that commit before it packs. A package
+// that declares no `verify:exports` fails at that stage; the gate is never skipped.
 //
 // Which packages are pending is NOT decided here: publish.yaml's version gate passes them in.
 //

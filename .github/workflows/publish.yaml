@@ -91,8 +91,8 @@ jobs:
       # of them were tried. The inline loop this replaces stopped at the first failed publish,
       # so code-graph's 404 kept tea 0.18.0 from ever being attempted (#372).
       #
-      # The script also runs the last gate before each tarball is cut: a package's own
-      # `scripts/verify-exports.mjs` (tea's), against the dist it is about to pack.
+      # The script also runs the last gate before each tarball is cut: each package's required
+      # `verify:exports` script, against the dist it is about to pack; a package without one fails.
       # `prepublishOnly` carries that same walker, but nothing on this path triggers it —
       # `pnpm pack` runs prepack/prepare, and `npm publish <tarball>` skips the publish
       # lifecycle entirely. Without it the guard written for the v0.1.1 stale-dist incident
