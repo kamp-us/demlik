@@ -203,6 +203,8 @@ describe("createAgent — init + start", () => {
       toolRecords: [],
       turnCount: 0,
       awaiting: { kind: "llm" },
+      usage: { inputTokens: 0, outputTokens: 0 },
+      contextTokens: null,
     });
     // The brain call for the "plan" stage's purpose.
     expect(cmds).toEqual([brainRunCmd("plan_turn")]);

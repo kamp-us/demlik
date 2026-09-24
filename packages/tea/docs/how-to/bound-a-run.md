@@ -187,8 +187,9 @@ so the run ends `cancelled` — the same terminal an aborted `signal` reaches �
 `{ kind: "cancelled", at }`, and the transcript stands.
 
 The example's condition is one `maxTurns` would also express. The point is the
-ones it would not: a token ledger you keep yourself, an external flag, a
-condition on the content of the turns so far. The predicate sees the whole Model.
+ones it would not: a token budget ([below](#budget-tokens-and-compact-by-context-size)),
+an external flag, a condition on the content of the turns so far. The predicate
+sees the whole Model.
 
 Two rules come with it:
 
@@ -201,6 +202,57 @@ Two rules come with it:
   the `maxTurns` you passed to this boot. Pass it on every resume, or the resumed
   run has no predicate.
 
+## Budget tokens, and compact by context size
+
+Both need a model whose turns carry `usage` — the token counts the provider
+reported for that call. The tutorial's Anthropic adapter
+[maps it](../tutorial/build-a-durable-agent.md#give-the-agent-a-brain); a model
+that reports none gets a zero total and never triggers a size-based fold. tea
+never estimates a token: it reads only what the provider said.
+
+The conversation keeps two readings of it. `conversation.usage` is the run's
+running total, every turn's report summed. `conversation.contextTokens` is the
+last turn's `inputTokens + outputTokens`: how full the context window is now.
+A token budget is a `stopWhen` over the first, and a size-based fold is
+`compaction.afterContextTokens` over the second:
+
+```ts
+const budgeted = defineAgent({
+  model: modelReporting(),
+  tools: [tick],
+  instructions: "You tick.",
+  compaction: { afterContextTokens: 8_000, keepTurns: 1 },
+  stopWhen: ({ conversation }) =>
+    conversation !== null &&
+    conversation.usage.inputTokens + conversation.usage.outputTokens >= 60_000,
+});
+```
+
+```
+token budget 60k → cancelled
+  model calls: 13 of which summaries: 2
+  spent: { inputTokens: 68000, outputTokens: 550 }
+```
+
+Eleven brain turns went out, and the eleventh took the total past 60k, so the run
+ended `cancelled` there, like any `stopWhen`. Twice before that, the last call's
+reported size reached 8k and the oldest turns were folded into a summary before
+the next call. What to expect from each:
+
+- **A fold does not reduce the total.** The folded turns were still paid for. It
+  clears the context size, so a stale reading from before the fold can't
+  trigger a second fold before the next turn reports the new size.
+- **The budget overshoots by up to one turn.** Like every guard here it is read
+  at the turn boundary, so the turn that crosses it has already been paid for.
+  Set the number below the real limit by one turn's worth.
+- **The total survives a kill.** Each turn's usage is saved with the turn, so a
+  resumed run adds up to the same total as one that was never interrupted.
+- **Summaries are not counted.** Only brain turns add to the total. The
+  summarize call's own cost is not tracked yet.
+- **The threshold is your number.** tea knows no model's window size, so
+  `afterContextTokens` is whatever headroom you want below it. It can sit
+  beside `afterTurns`, and the first trigger reached folds.
+
 ## Which guard bounds what
 
 | You want to bound | Use | What it actually does |
@@ -209,6 +261,7 @@ Two rules come with it:
 | A run that has hung | `deadlineMs` | Fails the run after that long with **no advance**; restarts on each advance |
 | Total wall-clock time | `maxElapsedMs` | Fails the run at the first turn boundary past that long since it started, progressing or not |
 | A condition only you can see | `stopWhen` | Ends the run **cancelled** at the turn boundary your predicate answers `true` on |
+| Tokens spent | `stopWhen` over `conversation.usage` | Ends the run **cancelled** at the first turn boundary past your budget |
 | How long the prompt gets | `compaction` | Folds the oldest turns into one summary instead of failing anything |
 
 Use them together for the common case. `maxTurns` bounds the run's length,

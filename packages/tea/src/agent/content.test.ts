@@ -210,6 +210,8 @@ describe("a tool's content parts reach the model as parts (#330)", () => {
         toolRecords: [{ call, outcome, turn: 0 }],
         turnCount: 1,
         awaiting: { kind: "llm" },
+        usage: { inputTokens: 0, outputTokens: 0 },
+        contextTokens: null,
       },
     };
     const [, message] = renderPrompt(prompt, toolRouter([plain]).partsOf);

@@ -306,7 +306,8 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * the same terminal an aborted `signal` reaches, with the transcript intact
    * and no further model call made. Where `maxTurns` and `maxElapsedMs` bound
    * a quantity the agent counts for you and `deadlineMs` watches for a stall,
-   * this bounds whatever you name — a token ledger you keep, an external flag,
+   * this bounds whatever you name — a token budget over
+   * `conversation.usage` (the run's provider-reported total), an external flag,
    * a condition on the turns so far. Omit → no predicate.
    *
    * It must be PURE: the reducer calls it, so a replay hands it the same state
@@ -399,9 +400,14 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
 }
 
 /**
- * The lid's compaction budget: the two numbers that say when a transcript is
- * too long and how much of it survives the fold. Both are plain counts, so the
- * trigger they build is PURE — a replay re-decides identically, and no clock or
+ * The lid's compaction budget: when a transcript is too long, and how much of
+ * it survives the fold. "Too long" is a turn count (`afterTurns`), a context
+ * size (`afterContextTokens`), or both — whichever is reached first folds — and
+ * a budget naming neither is a compile error, because it could never fire.
+ *
+ * Both triggers read durable facts, so the trigger they build is PURE — a replay
+ * re-decides identically. The context size is what the PROVIDER reported on the
+ * last brain turn, journaled with that turn like its `content`; no clock and no
  * token estimate enters the Model (ADR 0004).
  *
  * This is deliberately a threshold rather than the core's `planCompaction`
@@ -410,12 +416,35 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
  * run that needs its own heuristic descends to `createAgent`, whose
  * `CompactionPolicy` this is built from.
  */
-export interface DefineAgentCompaction {
+export type DefineAgentCompaction =
+  | (CompactionTriggers & {
+      readonly afterTurns: number;
+      readonly afterContextTokens?: number;
+    })
+  | (CompactionTriggers & {
+      readonly afterTurns?: number;
+      readonly afterContextTokens: number;
+    });
+
+/** The fields every {@link DefineAgentCompaction} arm shares. */
+interface CompactionTriggers {
   /**
    * Fold once the conversation holds at least this many turns, counted BEFORE
    * the brain call about to fire. Must be at least `1`.
    */
-  readonly afterTurns: number;
+  readonly afterTurns?: number;
+  /**
+   * Fold once the latest context size — `inputTokens + outputTokens` the
+   * provider reported for the most recent brain turn — reaches this many
+   * tokens, checked BEFORE the brain call about to fire (#332). The number is
+   * yours: tea keeps no per-model window registry.
+   *
+   * A turn that reported no usage never fires it, and a fold clears the
+   * reading, so one reading folds at most once: the next fold waits for a turn
+   * to report what the shrunk transcript costs. It needs a `model` whose turns
+   * carry `usage`; with one that never reports it, this trigger never fires.
+   */
+  readonly afterContextTokens?: number;
   /**
    * How many of the NEWEST turns survive the fold intact, beside the summary.
    * Everything older becomes the summary's one synthetic head turn. Omit → `0`:
@@ -955,8 +984,9 @@ const SUMMARIZE_INSTRUCTION =
  * translation from "how long a transcript I tolerate" to "how many of the oldest
  * turns to fold now".
  *
- * `planCompaction` is PURE and reads only turn counts, so a replay re-decides
- * identically (design D). Below the threshold it returns `0` and the agent fires
+ * `planCompaction` is PURE and reads only the turn count and the reported
+ * context size, so a replay re-decides identically (design D). Below every
+ * threshold it returns `0` and the agent fires
  * the brain call it was going to fire, which is what makes an unconfigured — and
  * an under-budget — run byte for byte the run it was before.
  *
@@ -971,7 +1001,7 @@ function compactionPolicyOf<R>(
   const keep = knob.keepTurns ?? 0;
   return {
     planCompaction: (conversation) =>
-      conversation.turns.length >= knob.afterTurns
+      isCompactionDue(knob, conversation)
         ? Math.max(0, conversation.turns.length - keep)
         : 0,
     payloadOf: (conversation, folding): AgentPrompt<R> => ({
@@ -984,6 +1014,25 @@ function compactionPolicyOf<R>(
       },
     }),
   };
+}
+
+/**
+ * Whether either configured trigger has been reached. A context size of `null`
+ * — no reading since the last fold, or a turn that reported none — never
+ * reaches a token threshold. PURE.
+ */
+function isCompactionDue<R>(
+  knob: DefineAgentCompaction,
+  conversation: Conversation<R>,
+): boolean {
+  const { afterTurns, afterContextTokens } = knob;
+  const { contextTokens } = conversation;
+  return (
+    (afterTurns !== undefined && conversation.turns.length >= afterTurns) ||
+    (afterContextTokens !== undefined &&
+      contextTokens !== null &&
+      contextTokens >= afterContextTokens)
+  );
 }
 
 /**

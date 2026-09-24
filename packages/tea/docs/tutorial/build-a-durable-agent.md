@@ -91,6 +91,7 @@ import {
   type ContentPart,
   contentParts,
   type MediaSource,
+  type TurnUsage,
 } from "@demlik/tea/agent";
 import { z } from "zod";
 
@@ -124,7 +125,23 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
       provider: response.content.filter(
         (b) => b.type !== "text" && b.type !== "tool_use",
       ),
+      usage: usageOf(response.usage),
     };
+  };
+}
+
+/**
+ * What the call cost, as Anthropic reported it. `input_tokens` leaves out the
+ * prompt cache, so the cached tokens are added back: tea's `inputTokens` is the
+ * whole prompt, the number that says how full the context window is.
+ */
+export function usageOf(usage: Anthropic.Usage): TurnUsage {
+  const cached = usage.cache_read_input_tokens ?? 0;
+  return {
+    inputTokens:
+      usage.input_tokens + cached + (usage.cache_creation_input_tokens ?? 0),
+    outputTokens: usage.output_tokens,
+    cachedInputTokens: cached,
   };
 }
 
@@ -217,6 +234,14 @@ The turn's `provider` slot is how the signed `thinking` blocks survive a resume:
 tea saves whatever the adapter puts there with the turn and hands it back on the
 `assistant` message, never reading it, so the transcript a resumed process
 replays carries the blocks Anthropic requires beside its text and tool calls.
+
+The turn's `usage` is the opposite kind of slot: tea does read it. It adds each
+turn's usage to a running total on the conversation and keeps the last turn's
+size as the context size, which is what a token budget or a size-based
+compaction reads. The numbers are the ones Anthropic reported, saved with the
+turn, so a resumed run adds up to the same total as one that was never killed.
+[Bound a run](../how-to/bound-a-run.md#budget-tokens-and-compact-by-context-size)
+shows both uses.
 
 `toBlock` is where pictures go. A tea message can carry content parts — text, an
 image, a file — and a tool that returns a screenshot declares which parts the

@@ -148,6 +148,8 @@ import {
   isSettled,
   requireAwaiting,
   toCompactRunCmd,
+  withTurnUsage,
+  withUsageDefaults,
 } from "./internal";
 import {
   type AgentCmd,
@@ -537,8 +539,10 @@ export function createAgent<
     const conv = requireAwaiting(s, "llm");
     if (conv === null) return [s, []];
 
+    // The turn's reported usage (#332) joins the running total and becomes the
+    // latest context size — both read off the settled turn, never estimated.
     const withTurn: Conversation<R> = {
-      ...conv,
+      ...withTurnUsage(conv, result),
       turns: [...conv.turns, result],
     };
 
@@ -605,8 +609,9 @@ export function createAgent<
         runCmds,
       ];
     }
-    // Next stage → fresh conversation + its first brain call.
-    const conversation = freshConversation<R>();
+    // Next stage → fresh conversation + its first brain call. The transcript
+    // starts over; the run's usage total does not — it is what the run cost.
+    const conversation = freshConversation<R>(s.conversation?.usage);
     const moved: State = {
       ...s,
       run: runSlice,
@@ -1196,16 +1201,23 @@ export function createAgent<
     at: number,
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const [runSlice] = run.boot(s.run, at);
-    const rebooted: State = { ...s, run: runSlice };
-    if (isSettled(rebooted)) return [rebooted, []];
+    // A conversation persisted before #332 carries no usage readings; the
+    // resume fills them in once, here, so every later transition reads both.
+    const resumed: State = {
+      ...s,
+      run: runSlice,
+      conversation:
+        s.conversation === null ? null : withUsageDefaults(s.conversation),
+    };
+    if (isSettled(resumed)) return [resumed, []];
 
-    const conv = rebooted.conversation;
-    if (conv === null) return [rebooted, []];
+    const conv = resumed.conversation;
+    if (conv === null) return [resumed, []];
 
     if (conv.awaiting.kind === "llm") {
       // Re-fire the brain call. The resilient slice already tracks it `running`;
       // re-issuing the same key is idempotent at the gate (re-emits the run Cmd).
-      return fireBrainCall(rebooted, at);
+      return fireBrainCall(resumed, at);
     }
 
     if (conv.awaiting.kind === "compacting") {
@@ -1214,12 +1226,12 @@ export function createAgent<
       // at the gate, and the re-emitted `resilient_run` is re-keyed to `compact_run`.
       const input = compactionCall(conv, conv.awaiting.folding);
       const [compaction, cmds] = compact.attempt(
-        rebooted.compaction,
+        resumed.compaction,
         COMPACTION_PURPOSE,
         input,
         at,
       );
-      return [{ ...rebooted, compaction }, cmds];
+      return [{ ...resumed, compaction }, cmds];
     }
 
     // awaiting tools → re-fire every running tool's effect Cmd, through the
@@ -1229,11 +1241,11 @@ export function createAgent<
     // the rehydrated slice, so re-firing here would buy an attempt the budget
     // never granted and reset the count that survived the kill.
     const [toolResilience, outcome] = ladder.boot(
-      toolSlice(rebooted),
-      rebooted.tools.running,
+      toolSlice(resumed),
+      resumed.tools.running,
       at,
     );
-    return applyLadder(rebooted, toolResilience, outcome, at);
+    return applyLadder(resumed, toolResilience, outcome, at);
   }
 
   // === Verb: cancel ========================================================
