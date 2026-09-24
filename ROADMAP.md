@@ -23,8 +23,17 @@ title, so renaming an arc cannot silently repoint it.
 Exactly three cells per row — `build`'s scope fence reads this table and a fourth column makes
 the whole thing unreadable, so what a campaign covers goes in prose above it, not in a column.
 
+**Tuval on tea** (#2). Tuval, kamp-us/phoenix's process desk, is built on tea and runs its own
+Effect host beside it (`packages/tuval/src/host/actor.ts` plus `demlik-bridges.ts`). This campaign
+ships, in one release, everything Tuval needs to delete that host and run fully on
+`@demlik/tea/effect`, then drop its own copies of persistence, process, test and React glue. It
+ends with a phoenix PR that moves Tuval onto the release, which phoenix plans and builds. The
+Effect engine leaves the experimental tier only once it powers Tuval fully. Declared and started 2026-09-24;
+no build starts until the decisions in grilling session #325 are ruled.
+
 | Campaign | Milestone | State |
 |---|---|---|
+| Tuval on tea | #2 | active |
 
 ## Dependencies
 
