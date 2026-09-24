@@ -91,7 +91,10 @@ export function withTurnUsage<
   ];
 }
 
-/** A conversation as a Model persisted before #354 may hold it: with the run's total on it. */
+/**
+ * A conversation as a Model persisted before #354 may hold it: with the run's
+ * total on it.
+ */
 type PersistedConversation<R> = Omit<Conversation<R>, "contextTokens"> & {
   readonly contextTokens?: number | null;
   readonly usage?: TurnUsage;
