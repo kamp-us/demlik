@@ -16,7 +16,13 @@ import {
   liveWork,
   startLoop,
 } from "../internal/engine/loop";
-import type { Interpret, Machine, RunHandlers, Sub } from "../pure/core";
+import type {
+  Dispose,
+  Interpret,
+  Machine,
+  RunHandlers,
+  Sub,
+} from "../pure/core";
 import { applyCell, type Cmd, subEntriesOf } from "../pure/core";
 import type {
   BootingRuntime,
@@ -127,17 +133,26 @@ export function run<
   // that resolves its cells lazily (`/react` reads the latest render's) is
   // honoured.
   const subscribeTable = (opts as { subscribe?: unknown }).subscribe as
-    | Readonly<Record<string, LoopRunner<Ctx, M> | undefined>>
+    | Readonly<Record<string, UserRunner<Ctx, M> | undefined>>
     | undefined;
   const builtins = builtinRunners as Readonly<
-    Record<string, LoopRunner<Ctx, M> | undefined>
+    Record<string, UserRunner<Ctx, M> | undefined>
   >;
+
+  // A Promise runner has no failure channel of its own: the one failure the
+  // engine sees is a throw while it starts, which the loop turns into a stopped
+  // run (#309). So the runner is called with the three arguments it declares.
+  function runnerFor(type: string): LoopRunner<Ctx, M> | undefined {
+    const runner = subscribeTable?.[type] ?? builtins[type];
+    if (runner === undefined) return undefined;
+    return (sub, ctx, dispatch) => runner(sub, ctx, dispatch);
+  }
 
   const handle = startLoop<S, M, C, Ctx>({
     init: machine.init,
     reduce: (state, msg) => applyCell<S, M, C>(machine, state, msg),
     subs: subEntriesOf<S>(machine),
-    runnerFor: (type) => subscribeTable?.[type] ?? builtins[type],
+    runnerFor,
     handlerFor: (type) => interpretMap[type],
     store: opts.store,
     // `ctx` is conditionally optional (see `CtxArg`); default the nullish case
@@ -147,9 +162,21 @@ export function run<
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,
     idleCap: opts.__idleCap ?? 100_000,
     extensions: builtinExtensions<S, M, C, E>(machine, opts),
+    // Deferred: a runner that throws during a storeless boot fails before
+    // `startLoop` has returned the handle.
+    stopOnSubFailure: () => {
+      queueMicrotask(() => void handle.stop());
+    },
   });
   return handle as unknown as BootingRuntime<S, M, E> & LiveWorkProbe;
 }
+
+/** A runner as a caller hands it to `run` in `subscribe`. */
+type UserRunner<Ctx, M> = (
+  sub: Sub,
+  ctx: Ctx,
+  dispatch: (msg: M) => void,
+) => Dispose;
 
 /**
  * Is the runtime provably out of ways to transition on its own? True only when

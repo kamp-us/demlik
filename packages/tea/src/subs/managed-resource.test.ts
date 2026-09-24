@@ -196,10 +196,15 @@ describe("defineManagedResource — acquire on appear, release on exit", () => {
       },
     });
 
-    // The throw surfaces out of the reconcile pass; what matters for the
-    // discipline is that no dangling half-built resource exists afterwards.
-    await runFor(battery).ready.catch(() => undefined);
+    // The throw surfaces out of the reconcile pass, and as a Sub failure it
+    // stops the run (#309); what matters for the discipline is that no
+    // dangling half-built resource exists afterwards.
+    const phases: string[] = [];
+    await runFor(battery, {
+      onError: (_error, context) => phases.push(context.phase),
+    }).ready.catch(() => undefined);
 
+    expect(phases).toEqual(["sub"]);
     expect(released).toEqual([]);
     expect(battery.get("run-1")).toBeUndefined();
   });

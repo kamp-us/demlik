@@ -465,11 +465,19 @@ describe("nodeSubscribe: node_ws through a real run", () => {
       ],
     });
     const ctx: NodeSubscribeCtx = { wsRegistry: new Map() };
-    const runtime = await run(machine, { subscribe: wsSubscribe, ctx }).ready;
+    // The refused start is a Sub failure, so it also reaches the sink and
+    // stops the run (#309).
+    const phases: string[] = [];
+    const runtime = await run(machine, {
+      subscribe: wsSubscribe,
+      ctx,
+      onError: (_error, context) => phases.push(context.phase),
+    }).ready;
 
     await expect(runtime.dispatch({ type: "connect" })).rejects.toThrow(
       /already registered under key "ws1"/,
     );
+    expect(phases).toEqual(["sub"]);
     await runtime.stop();
     expect(ctx.wsRegistry.size).toBe(0);
   });

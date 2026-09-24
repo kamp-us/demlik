@@ -139,6 +139,11 @@ export function __resetPortRegistry(): void {
  * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
  * - `"sub-cleanup"` — a subscription's cleanup threw (reconcile-removal or
  *   `stop()` teardown).
+ * - `"sub"` — a running Sub failed with an error it did not turn into a Msg:
+ *   its runner threw while starting, or (Effect engine) its Stream failed. The
+ *   run stops — on the Effect engine by closing its Scope with the failure. A
+ *   Sub that expects an error maps it to a Msg itself; there is no hook for it
+ *   here.
  * - `"discard"` — work lost to a teardown the host asked for. Two witnesses,
  *   both carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
  *   handlers were still awaiting (`RuntimeDiscardedError`), and a Msg that
@@ -168,6 +173,7 @@ export type RuntimeErrorPhase =
   | "boot"
   | "port-emit"
   | "sub-cleanup"
+  | "sub"
   | "discard"
   | "identity-drop";
 

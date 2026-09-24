@@ -16,10 +16,9 @@
  *   - stopping interrupts every handler fiber still in flight.
  */
 
-import { Cause, Effect, Exit, Fiber, Result, type Scope, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Result, Scope, Stream } from "effect";
 import { builtinExtensions } from "../internal/engine/builtins";
 import {
-  type ExtensionFactory,
   type LoopHandler,
   type LoopRunner,
   startLoop,
@@ -40,7 +39,6 @@ import type {
   BootingRuntime,
   CtxArg,
   OnError,
-  RuntimeErrorPhase,
   Store,
   Supervision,
   TelemetrySink,
@@ -80,8 +78,12 @@ export type EffectInterpret<
 
 /**
  * One Effect sub runner: the Sub in, a `Stream` of Msgs out. The engine drains
- * it on its own fiber and interrupts that fiber when the Sub stops. A stream
- * that fails reaches the error sink under `"follow-up"`.
+ * it on its own fiber and interrupts that fiber when the Sub stops.
+ *
+ * A Sub maps the errors it expects into Msgs itself, the way an Elm `Sub msg`
+ * carries no error type: `Stream.catchTag("Closed", () => Stream.make({ type:
+ * "disconnected" }))`. A stream that still fails reaches the error sink under
+ * `"sub"` and stops the run: the run's Scope closes with that failure (#309).
  */
 export type EffectRunner<
   M extends { type: string },
@@ -205,6 +207,9 @@ const builtinRunners = { timer } as const satisfies Record<
  * interrupted (its finalizers run), its Msg is never dispatched, and no Msg is
  * dispatched after stop. Calling `stop()` on the handle does the same.
  *
+ * A Sub whose Stream fails with an error it did not map to a Msg stops the
+ * run the other way round: the engine closes that Scope with the failure.
+ *
  * A fenced store is fenced here exactly as on the Promise engine: the check is
  * one of the built-ins both engines run.
  *
@@ -246,13 +251,18 @@ export function run<
     const services = yield* Effect.context<
       InterpretServices<I> | SubscribeServices<B>
     >();
+    const scope = yield* Scope.Scope;
+    const fork = Effect.runForkWith(services) as ForkEffect;
     return yield* Effect.acquireRelease(
       Effect.sync(() =>
         start<S, M, C, U, Ctx, E>(
           machine,
           opts as EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
           Effect.runPromiseExitWith(services) as RunEffect,
-          Effect.runForkWith(services) as ForkEffect,
+          fork,
+          // Closing the Scope runs the release below, which stops the run. A
+          // Scope that closes before that release is added runs it on add.
+          (exit) => fork(Scope.close(scope, exit)),
         ),
       ),
       (runtime) => Effect.promise(() => runtime.stop()),
@@ -286,6 +296,7 @@ function start<
   opts: EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
   runEffect: RunEffect,
   fork: ForkEffect,
+  closeScope: (exit: Exit.Exit<never, unknown>) => void,
 ): BootingRuntime<S, M, E> {
   const interpret = ((opts as { interpret?: unknown }).interpret ??
     {}) as Readonly<Record<string, AnyCell | undefined>>;
@@ -299,14 +310,6 @@ function start<
   // Aborted on stop: every handler fiber runs under this signal, so aborting
   // it interrupts all of them at once.
   const interruption = new AbortController();
-
-  // The loop's error sink, lent to the runners below: a stream that fails
-  // after it started has no caller to reject at.
-  let report: (error: unknown, phase: RuntimeErrorPhase) => void = () => {};
-  const edge: ExtensionFactory<S, M, C> = (loop) => {
-    report = loop.report;
-    return {};
-  };
 
   // Read the cell's Effect with `Effect.result`, so a declared failure is a
   // value and only a defect or an interruption is left in the Exit's cause.
@@ -338,20 +341,29 @@ function start<
     return (cmd) => settle(cell, cmd);
   }
 
+  // The Cause the run's Scope closes with when a Sub fails: the Stream's own
+  // when a Stream failed, else the runner's throw as a defect.
+  let subFailure: Cause.Cause<unknown> | undefined;
+
   // A runner's Msgs reach the loop through its `dispatch`, which queues each
   // one behind the step in progress — never a transition on the stream's own
-  // fiber (spike #260).
+  // fiber (spike #260). A Stream that fails with anything but an interrupt
+  // failed with an error the Sub did not map to a Msg, and the run stops
+  // (#309).
   function runnerFor(type: string): LoopRunner<Ctx, M> | undefined {
     const make = subscribe[type] ?? builtins[type];
     if (make === undefined) return undefined;
-    return (sub, _ctx, dispatch) => {
+    return (sub, _ctx, dispatch, fail) => {
       const drain = Stream.runForEach(make(sub), (msg) =>
         Effect.sync(() => dispatch(msg as M)),
       ).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
-            : Effect.sync(() => report(Cause.squash(cause), "follow-up")),
+            : Effect.sync(() => {
+                subFailure ??= cause;
+                fail(Cause.squash(cause));
+              }),
         ),
       );
       const fiber = fork(drain);
@@ -370,7 +382,9 @@ function start<
     onError: opts.onError,
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,
     idleCap: 100_000,
-    extensions: [...builtinExtensions<S, M, C, E>(machine, opts), edge],
+    extensions: builtinExtensions<S, M, C, E>(machine, opts),
+    stopOnSubFailure: (error) =>
+      closeScope(Exit.failCause(subFailure ?? Cause.die(error))),
   });
 
   // Stop closes the gate first, so nothing an interrupted handler leaves
