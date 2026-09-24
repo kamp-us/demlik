@@ -425,7 +425,7 @@ describe("the write effect — a host handler driven through `run`", () => {
     const store = fakeStore();
     const runtime = await run(writeMachine(), {
       ctx: undefined,
-      interpret: storeHandlers(store) as never,
+      interpret: storeHandlers(store),
     }).ready;
     await runtime.dispatch({ type: "progress", at: 1 });
     await runtime.dispatch({ type: "progress", at: 2 }); // cadence hit → write
@@ -447,7 +447,7 @@ describe("the write effect — a host handler driven through `run`", () => {
     };
     const runtime = await run(writeMachine(), {
       ctx: undefined,
-      interpret: storeHandlers(store) as never,
+      interpret: storeHandlers(store),
     }).ready;
     await runtime.dispatch({ type: "finish", at: 9 });
     await runtime.stop();
@@ -756,7 +756,7 @@ describe("WIRED: restart-from-checkpoint through a real runtime", () => {
   // Run the recovery machine under the host's handlers bound to `store`.
   function runRecovery(store: TestStore<RunState>) {
     const { machine, interpret } = recoveryMachine(store);
-    return run(machine, { ctx: undefined, interpret: interpret as never });
+    return run(machine, { ctx: undefined, interpret });
   }
 
   it("recovers the checkpointed run state: a fresh boot + dispatch(boot) restores step from the store", async () => {

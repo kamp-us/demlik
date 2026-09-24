@@ -5,7 +5,9 @@
  * Four concerns share the subpath:
  *
  *   - Assertions — `expectFinalState`, `expectCmdEmitted`,
- *     `expectCmdSequence`, `expectActiveSubs`, `step` (assertions.ts).
+ *     `expectCmdSequence`, `expectActiveSubs`, `step` (assertions.ts), and
+ *     `expectReplayDeterministic`, the clock/RNG replay check
+ *     (expect-replay-deterministic.ts).
  *   - Driving — `drive`, the runtime's Cmd→handler→settle-Msg loop said once,
  *     returning `{ state, trace }` so a test asserts on the sequence as well
  *     as the endpoint (drive.ts).
@@ -23,12 +25,6 @@
  * Strengthens invariant 9 (the testing surface is named and small).
  */
 
-export {
-  type AssertWrapperFaithfulOpts,
-  assertWrapperFaithful,
-  type InterceptingOpt,
-  type WrapperModel,
-} from "./assert-wrapper-faithful";
 export {
   expectActiveSubs,
   expectCmdEmitted,
@@ -49,6 +45,7 @@ export {
   drive,
   driveTraceOf,
 } from "./drive";
+export { expectReplayDeterministic } from "./expect-replay-deterministic";
 export { noopRuntime } from "./noop-runtime";
 export {
   type StateFactoryAPI,

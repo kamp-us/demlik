@@ -331,6 +331,7 @@ function describeTag(failure: unknown): string {
  * A `Cmd.define`d handler returned something the engine cannot settle: any Msg
  * (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler —
  * ADR 0021), or any other value that is neither an {@link Outcome} nor nothing.
+ * Also thrown when such a handler dispatches its own `_ok` / `_err` Msg.
  */
 export class OutcomeContractError extends Error {
   override readonly name = "OutcomeContractError";
@@ -474,14 +475,70 @@ export function cmdEdgeOver(
   defs: Iterable<AnyCmdDef>,
   clock: () => number,
 ): CmdEdge {
+  return cmdContractOver(defs, clock).settle;
+}
+
+/**
+ * Check one Msg a handler dispatches for the Cmd it was handed. Throws on a
+ * contract breach; returns when the Msg may be delivered.
+ */
+export type DispatchCheck = (
+  cmd: { readonly type: string },
+  msg: { readonly type: string },
+) => void;
+
+/** Both halves of ADR 0021 over one def list: the return edge and the dispatch check. */
+export interface CmdContract {
+  /** The edge a handler's return crosses — see {@link cmdEdgeOver}. */
+  readonly settle: CmdEdge;
+  /**
+   * The dispatch half of the ban. A `Cmd.define`d handler may dispatch other
+   * Msgs (progress, say), and may dispatch a `<name>_ok` / `<name>_err` that
+   * `settle` minted — a detached handler settling through `cmdEdgeOf(ctx)`
+   * (ADR 0018's fan-out). It may never dispatch one it built itself: that Msg
+   * skipped the `ok` parse and the `at` stamp, and throws
+   * {@link OutcomeContractError}. A Cmd no def builds may dispatch anything.
+   */
+  readonly checkDispatch: DispatchCheck;
+}
+
+/**
+ * The edge and the dispatch check over one def list. They share one record of
+ * the Msgs this edge minted, which is how the check tells an engine-minted
+ * settle from one the handler built by hand.
+ */
+export function cmdContractOver(
+  defs: Iterable<AnyCmdDef>,
+  clock: () => number,
+): CmdContract {
   const byType = new Map<string, AnyCmdDef>();
   for (const def of defs) byType.set(def.cmdType, def);
-  return (cmd, returned) => {
-    const def = byType.get(cmd.type);
-    if (def === undefined) return returned;
-    if (returned === undefined || returned === null) return undefined;
-    if (isOutcome(returned)) return mint(def, cmd, returned, clock());
-    throw new OutcomeContractError(def.cmdType, describeReturn(def, returned));
+  const minted = new WeakSet<object>();
+  return {
+    settle: (cmd, returned) => {
+      const def = byType.get(cmd.type);
+      if (def === undefined) return returned;
+      if (returned === undefined || returned === null) return undefined;
+      if (!isOutcome(returned)) {
+        throw new OutcomeContractError(
+          def.cmdType,
+          describeReturn(def, returned),
+        );
+      }
+      const msg = mint(def, cmd, returned, clock());
+      minted.add(msg);
+      return msg;
+    },
+    checkDispatch: (cmd, msg) => {
+      const def = byType.get(cmd.type);
+      if (def === undefined) return;
+      if (msg.type !== def.okType && msg.type !== def.errType) return;
+      if (minted.has(msg)) return;
+      throw new OutcomeContractError(
+        def.cmdType,
+        `dispatched its own "${msg.type}" Msg`,
+      );
+    },
   };
 }
 
@@ -1721,10 +1778,29 @@ export interface PortEmitter {
 // reserved for genuine wire-edge erasure, not for "didn't bother").
 export type NoCtx = Readonly<Record<never, never>>;
 
+// === HandlerCtx<Ctx>: the ctx a Cmd handler is handed ===
+//
+// The machine's `Ctx` plus the kernel's `emit`. A machine that declares no
+// context (`ctx: undefined`, or `void`) has no Ctx half to add, so that half
+// becomes `unknown` before the intersection — `undefined & PortEmitter` would
+// otherwise reduce to `never` and leave the handler unable to reach `emit`,
+// `ok` or `err` at all (#296). The check is wrapped in a tuple so a `Ctx`
+// that merely MAY be undefined (`Foo | undefined`) is left alone, and `any`
+// is left as `any` rather than narrowed to the kernel's half.
+//
+// Every handler-ctx site builds on this one alias, so the rule lives here.
+export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
+  ? Ctx
+  : // biome-ignore lint/suspicious/noConfusingVoidType: `void` catches both a `ctx: undefined` and a `ctx: void` machine; `undefined` alone misses the second
+    [Ctx] extends [void]
+    ? unknown
+    : Ctx) &
+  PortEmitter;
+
 // === Interpret<M, C, Ctx>: record-of-handlers form of `interpret` ===
 //
 // Flat dispatch table keyed by `Cmd.type`. Each cell receives the narrowed Cmd
-// and the runtime-augmented Ctx (`Ctx & PortEmitter`) and resolves to a
+// and the runtime-augmented Ctx (`HandlerCtx<Ctx>`) and resolves to a
 // follow-up Msg or `void` (fire-and-forget). The mapped type makes a missing
 // handler a compile error — `defineMachine` cannot accept the dictionary until
 // every Cmd variant has one.
@@ -1779,15 +1855,13 @@ export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
   unknown extends ErrorsOf<C>
     ? (
         cmd: C,
-        ctx: Ctx & PortEmitter,
+        ctx: HandlerCtx<Ctx>,
         dispatch?: (msg: M) => void,
         // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
       ) => Promise<M | void>
     : (
         cmd: C,
-        ctx: Ctx &
-          PortEmitter &
-          OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
+        ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
         dispatch?: (msg: M) => void,
         // biome-ignore lint/suspicious/noConfusingVoidType: as above — a no-return body is legal
       ) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
@@ -1820,7 +1894,7 @@ export type InterpretDetached<
   Ctx,
 > = (
   cmd: C,
-  ctx: Ctx & PortEmitter,
+  ctx: HandlerCtx<Ctx>,
   dispatch: (msg: Allowed) => void,
 ) => Promise<void>;
 
