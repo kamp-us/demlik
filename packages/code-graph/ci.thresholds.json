@@ -1,0 +1,11 @@
+{
+  "longFunctionLoc": 60,
+  "deepNesting": 4,
+  "highComplexity": 10,
+  "bigFileLoc": 400,
+  "highFanIn": 10,
+  "deepCallChain": 5,
+  "directorySprawl": 10,
+  "dependencyCycle": 1,
+  "crossBoundaryImports": 0
+}

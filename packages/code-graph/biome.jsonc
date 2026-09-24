@@ -1,0 +1,10 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "root": false,
+  "extends": "//",
+  // Written at 100 columns before it moved here. Its self-gate measures function
+  // length in lines, so a narrower width would fail the package on its own code.
+  "formatter": {
+    "lineWidth": 100
+  }
+}
