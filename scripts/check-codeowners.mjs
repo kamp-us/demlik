@@ -27,7 +27,8 @@ function parseJsonc(text) {
     const c = text[i];
     if (c === '"') {
       const start = i;
-      for (i++; i < text.length && text[i] !== '"'; i++) if (text[i] === "\\") i++;
+      for (i++; i < text.length && text[i] !== '"'; i++)
+        if (text[i] === "\\") i++;
       out += text.slice(start, i + 1);
     } else if (c === "/" && text[i + 1] === "/") {
       while (i < text.length && text[i] !== "\n") i++;
@@ -46,7 +47,11 @@ function parseJsonc(text) {
 function governedRoots() {
   const config = parseJsonc(readFileSync(path.join(REPO_ROOT, CONFIG), "utf8"));
   const roots = config.governedRoots;
-  if (!Array.isArray(roots) || roots.length === 0 || !roots.every((r) => typeof r === "string")) {
+  if (
+    !Array.isArray(roots) ||
+    roots.length === 0 ||
+    !roots.every((r) => typeof r === "string")
+  ) {
     throw new Error(`${CONFIG} has no non-empty string array at governedRoots`);
   }
   return roots;
@@ -56,9 +61,16 @@ function governedRoots() {
 function codeownersRows() {
   return readFileSync(path.join(REPO_ROOT, CODEOWNERS), "utf8")
     .split("\n")
-    .map((text, i) => ({ line: i + 1, fields: text.replace(/#.*/, "").trim().split(/\s+/) }))
+    .map((text, i) => ({
+      line: i + 1,
+      fields: text.replace(/#.*/, "").trim().split(/\s+/),
+    }))
     .filter(({ fields }) => fields[0] !== "")
-    .map(({ line, fields: [pattern, ...owners] }) => ({ line, pattern, owners }));
+    .map(({ line, fields: [pattern, ...owners] }) => ({
+      line,
+      pattern,
+      owners,
+    }));
 }
 
 /**
@@ -79,13 +91,17 @@ try {
   roots = governedRoots();
   rows = codeownersRows();
 } catch (error) {
-  console.error(`check-codeowners: could not read the inputs — ${error.message}`);
+  console.error(
+    `check-codeowners: could not read the inputs — ${error.message}`,
+  );
   process.exit(1);
 }
 
 const failures = [];
 for (const root of roots) {
-  const exact = rows.find((r) => r.pattern === `/${root}` && r.owners.includes(OWNER));
+  const exact = rows.find(
+    (r) => r.pattern === `/${root}` && r.owners.includes(OWNER),
+  );
   if (exact === undefined) {
     failures.push(`${root}: no \`/${root}  ${OWNER}\` row in ${CODEOWNERS}`);
     continue;
@@ -99,7 +115,9 @@ for (const root of roots) {
 }
 
 if (failures.length > 0) {
-  console.error(`check-codeowners: ${CONFIG} governed roots without control-plane review\n`);
+  console.error(
+    `check-codeowners: ${CONFIG} governed roots without control-plane review\n`,
+  );
   for (const failure of failures) console.error(`  ${failure}`);
   console.error(
     `\n${failures.length} root(s). Add the row to ${CODEOWNERS}; do not drop the root from ${CONFIG}.`,
@@ -107,4 +125,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.error(`check-codeowners: all ${roots.length} governed roots have a ${OWNER} row`);
+console.error(
+  `check-codeowners: all ${roots.length} governed roots have a ${OWNER} row`,
+);

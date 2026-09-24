@@ -25,7 +25,6 @@
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -101,6 +100,17 @@ function versionAt(repo, rev, dir) {
  * from HEAD, the oldest commit of the unbroken run that still carries the current version.
  */
 export function versionCommit(repo, dir) {
+  // A shallow history can end inside the run of commits carrying the current version, and the
+  // walk would then name a later commit as the version commit. Refuse rather than guess.
+  const shallow = spawnSync("git", ["rev-parse", "--is-shallow-repository"], {
+    cwd: repo,
+    encoding: "utf8",
+  });
+  if (shallow.status !== 0 || shallow.stdout.trim() !== "false")
+    throw new StepFailure(
+      "version-commit",
+      "the clone is shallow (or its depth is unreadable); fetch full history (fetch-depth: 0)",
+    );
   const current = versionAt(repo, "HEAD", dir);
   if (current === undefined)
     throw new StepFailure(
@@ -209,13 +219,19 @@ export function publishPending({
           }),
           "build",
         );
-        if (existsSync(path.join(pkgDir, "scripts", "verify-exports.mjs"))) {
-          must(
+        // Every published package declares `verify:exports`; a missing one fails the package
+        // rather than skipping the gate, so a moved or deleted script cannot ship unverified.
+        if (typeof built.scripts?.["verify:exports"] !== "string") {
+          throw new StepFailure(
             "verify-exports",
-            run("node", ["scripts/verify-exports.mjs"], { cwd: pkgDir }),
-            "verify-exports",
+            `${row.name} declares no "verify:exports" script`,
           );
         }
+        must(
+          "verify-exports",
+          run("pnpm", ["run", "verify:exports"], { cwd: pkgDir }),
+          "verify-exports",
+        );
 
         const out = path.join(workDir, "pack", path.basename(dir));
         mkdirSync(out, { recursive: true });

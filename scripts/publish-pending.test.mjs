@@ -49,7 +49,7 @@ function commit(message) {
 function writePackage(dir, name, version, source, extra = {}) {
   write(
     path.join(repo, dir, "package.json"),
-    `${JSON.stringify({ name, version, files: ["dist"], scripts: { build: "node build.mjs" }, ...extra }, null, 2)}\n`,
+    `${JSON.stringify({ name, version, files: ["dist"], scripts: { build: "node build.mjs", "verify:exports": "node -e 0" }, ...extra }, null, 2)}\n`,
   );
   write(
     path.join(repo, dir, "build.mjs"),
@@ -82,12 +82,12 @@ function writeFakePublish() {
   return `${JSON.stringify(process.execPath)} ${JSON.stringify(file)}`;
 }
 
-function runScript(args, env = {}) {
+function runScript(args, env = {}, cwd = repo) {
   const r = spawnSync(
     process.execPath,
     [SCRIPT, "--work-dir", path.join(root, "work"), ...args],
     {
-      cwd: repo,
+      cwd,
       encoding: "utf8",
       env: {
         ...process.env,
@@ -222,5 +222,53 @@ describe("publish-pending", () => {
       `@fx/b@2.1.0: dry-run, not published (built from ${versionCommitB.slice(0, 12)})`,
     ]);
     expect(() => readFileSync(path.join(root, "npm-called"))).toThrow();
+  }, 120_000);
+
+  it("fails a package that declares no verify:exports script instead of skipping the gate, and still attempts the rest", () => {
+    // a's next version drops the script; its version commit is the one that carries no gate.
+    writePackage("packages/a", "@fx/a", "1.1.0", "a-no-gate", {
+      scripts: { build: "node build.mjs" },
+    });
+    commit("version a 1.1.0 without verify:exports");
+
+    const { status, out } = runScript([
+      "--publish-cmd",
+      writeFakePublish(),
+      "packages/a",
+      "packages/b",
+    ]);
+
+    expect(status).toBe(1);
+    const lines = summary(out);
+    expect(lines[0]).toMatch(
+      /^@fx\/a@1\.1\.0: failed at verify-exports .*declares no "verify:exports" script/,
+    );
+    expect(lines[1]).toMatch(/^@fx\/b@2\.1\.0: published/);
+    expect(publishLog().map((l) => l.split(" ")[0])).toEqual([
+      "fx-b-2.1.0.tgz",
+    ]);
+  }, 120_000);
+
+  it("refuses to name a version commit from a shallow clone", () => {
+    const shallow = path.join(root, "shallow");
+    const r = spawnSync(
+      "git",
+      ["clone", "-q", "--depth", "1", `file://${repo}`, shallow],
+      { encoding: "utf8" },
+    );
+    expect(r.status).toBe(0);
+
+    const { status, out } = runScript(
+      ["--dry-run", "packages/a", "packages/b"],
+      {},
+      shallow,
+    );
+
+    expect(status).toBe(1);
+    const lines = summary(out);
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line).toMatch(/failed at version-commit .*shallow/);
+    }
   }, 120_000);
 });
