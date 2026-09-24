@@ -152,3 +152,42 @@ run(profile, {
 ```
 
 The built-in `timer` is `Effect.sleep` for `deps.ms`, then `deps.msg`.
+
+## 4. Turn a Sub's errors into Msgs
+
+An Elm `Sub msg` has no error type, and neither does a tea Sub. A runner maps
+the errors it expects into Msgs itself, and the machine decides what they mean:
+
+```ts
+import { Data, Stream } from "effect";
+
+class SocketClosed extends Data.TaggedError("SocketClosed")<{
+  readonly code: number;
+}> {}
+
+run(chat, {
+  subscribe: {
+    // `roomFeed` is a Stream<ChatMsg, SocketClosed>.
+    room: (sub) =>
+      roomFeed(sub.deps.roomId).pipe(
+        Stream.catchTag("SocketClosed", (e) =>
+          Stream.make({ type: "disconnected", code: e.code } as const),
+        ),
+      ),
+  },
+});
+```
+
+The machine handles `disconnected` like any other Msg. To reconnect, its
+`update` changes the State so the Sub's `deps` change, and the engine starts
+the Sub again.
+
+A failure the Sub does not catch stops the run. `onError` sees it under
+`phase: "sub"`, and the engine closes the run's Scope with that failure, so
+everything else in that Scope is released too. There is no hook on the machine
+or on `run` for it: a failure you expect belongs in the Sub.
+
+The Promise engine follows the same rule. Its runner dispatches the Msgs for
+the errors it expects (the `onError` option of `fromWebSocket` does this), and a
+runner that throws while it starts stops the run and reaches `onError` under
+`"sub"`.

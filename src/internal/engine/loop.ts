@@ -109,11 +109,16 @@ export type LoopHandler<M> = (
   dispatch: (msg: M) => void,
 ) => unknown;
 
-/** A Sub runner as the loop calls it. */
+/**
+ * A Sub runner as the loop calls it. `fail` is how an engine edge reports that
+ * a Sub's source died with an error the Sub did not turn into a Msg; the loop
+ * then drops the Sub and stops the run. A user runner is never handed it.
+ */
 export type LoopRunner<Ctx, M> = (
   sub: Sub,
   ctx: Ctx,
   dispatch: (msg: M) => void,
+  fail: (error: unknown) => void,
 ) => Dispose;
 
 /** Everything the loop needs from `run`. */
@@ -130,6 +135,15 @@ export interface LoopConfig<S, M extends { type: string }, C, Ctx> {
   readonly disposeTimeoutMs: number;
   readonly idleCap: number;
   readonly extensions: readonly ExtensionFactory<S, M, C>[];
+  /**
+   * How the engine stops the run once a Sub failed with an error it did not
+   * handle (#309). The loop has already dropped the Sub, reported the error
+   * under `"sub"` and closed the gate to new work; this does the rest —
+   * `stop()` on the Promise engine, closing the run's Scope with the failure on
+   * the Effect engine. Called at most once, possibly before `startLoop` has
+   * returned.
+   */
+  readonly stopOnSubFailure: (error: unknown) => void;
 }
 
 // === liveWork: "can anything still transition me without a dispatch?" ===
@@ -188,6 +202,13 @@ function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
   setTimeout(() => {
     throw error;
   }, 0);
+}
+
+/** One started Sub: its type, the cleanup its runner returned, and whether it failed. */
+class RunningSub {
+  dispose: Dispose = () => {};
+  failed = false;
+  constructor(readonly type: string) {}
 }
 
 /**
@@ -297,8 +318,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   let tail: Promise<void> = Promise.resolve();
 
   // The running Subs, keyed by their derived id. An id present here is a runner
-  // that started and has not been disposed.
-  const subRegistry = new Map<string, { type: string; dispose: Dispose }>();
+  // that started and has neither been disposed nor failed.
+  const subRegistry = new Map<string, RunningSub>();
 
   // Tear down each named sub: run its cleanup (throws routed to the sink under
   // `"sub-cleanup"`), then drop it from the registry regardless.
@@ -399,7 +420,10 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
       ),
     );
 
-    for (const [id, sub] of desired) {
+    // A run that is stopping starts nothing: stop() would only tear it down,
+    // and a Sub that failed must not be re-armed by a step still queued.
+    const starting = gate === "open" ? desired : new Map<string, Sub>();
+    for (const [id, sub] of starting) {
       if (subRegistry.has(id)) continue;
       const runner = config.runnerFor(sub.type);
       if (runner === undefined) {
@@ -411,17 +435,53 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
         );
         continue;
       }
+      const running = new RunningSub(sub.type);
       try {
         // A runner's dispatch is unawaited by construction, so it gets the
         // wrapped form, which also queues the transition behind this step —
         // never on the runner's own stack (spike #260).
-        const dispose = runner(sub, config.ctx, dispatchUnawaited);
-        subRegistry.set(id, { type: sub.type, dispose });
+        running.dispose = runner(sub, config.ctx, dispatchUnawaited, (error) =>
+          subFailed(id, running, error),
+        );
       } catch (err) {
+        // A runner that throws while starting is a Sub failure too: the step
+        // that started it rejects with the throw, and the run stops.
         remember(err);
+        subFailed(id, running, err);
+        continue;
+      }
+      if (!running.failed) {
+        subRegistry.set(id, running);
+        continue;
+      }
+      // The source died before its runner returned: never registered, but
+      // its cleanup still runs.
+      try {
+        trackDisposal(running.dispose());
+      } catch (err) {
+        report(err, "sub-cleanup");
       }
     }
     if (firstError !== null) throw firstError;
+  }
+
+  /**
+   * A Sub's source died with an error the Sub did not turn into a Msg (#309,
+   * ruling R3.1 of #325). The Elm answer: a Sub maps the failures it expects to
+   * Msgs itself, so one that reaches here is unhandled, and the run stops
+   * rather than keep a dead Sub counted as live. The Sub leaves the registry,
+   * the error reaches the sink under `"sub"`, the gate starts draining so no
+   * new Msg is accepted, and the engine stops the run. A failure while the
+   * run is already stopping is reported and nothing more.
+   */
+  function subFailed(id: string, running: RunningSub, error: unknown): void {
+    if (running.failed) return;
+    running.failed = true;
+    if (subRegistry.get(id) === running) subRegistry.delete(id);
+    report(error, "sub");
+    if (gate !== "open") return;
+    gate = "draining";
+    config.stopOnSubFailure(error);
   }
 
   // The ONE `(msg) => void` handed to every producer that cannot await its own

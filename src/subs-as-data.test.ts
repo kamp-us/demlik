@@ -260,9 +260,11 @@ describe("subs as data — failures are isolated and surfaced", () => {
   }
   const live = (s: State) => (s.phase === "live" ? { runId: s.runId } : null);
 
-  it("a throwing runner does not strand its siblings, and the throw surfaces", async () => {
+  it("a throwing runner does not strand its siblings, the throw surfaces, and the run stops", async () => {
     const log: string[] = [];
+    const phases: string[] = [];
     const rt = await run(two(live), {
+      onError: (_error, context) => phases.push(context.phase),
       subscribe: {
         ...recording(log),
         other: () => {
@@ -274,7 +276,10 @@ describe("subs as data — failures are isolated and surfaced", () => {
     await expect(rt.dispatch({ type: "start", runId: "r1" })).rejects.toThrow(
       "runner failed",
     );
-    expect(log).toEqual(["start:r1"]);
+    // The sibling started in the same pass; the failure then stopped the run
+    // (#309), which tears it down.
+    expect(phases).toEqual(["sub"]);
+    await vi.waitFor(() => expect(log).toEqual(["start:r1", "stop:r1"]));
   });
 
   it("a throwing `deps` does not strand its siblings, and the throw surfaces", async () => {
