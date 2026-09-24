@@ -38,9 +38,11 @@ import {
   malformedResult,
   validateSync,
 } from "../pure/core";
+import type { ContentPart } from "./content";
 import type {
   TaggedFailure,
   ToolCall,
+  ToolOutcome,
   ToolResilience,
   ToolResilienceError,
 } from "./types";
@@ -196,6 +198,11 @@ export type ToolDef<
    */
   readonly resilience: ToolResilience | null;
   /**
+   * The parts the model reads for an `ok` result, or `null` when the tool
+   * declared no `content` and the model reads the result as data.
+   */
+  readonly content: ((result: Ok) => readonly ContentPart[]) | null;
+  /**
    * The colocated handler, as an interpret cell: it returns the tool's
    * outcome, and the engine mints `<name>_ok` / `<name>_err` from it.
    */
@@ -212,6 +219,7 @@ export type AnyToolDef = AnyCmdDef & {
   readonly description: string;
   readonly args: StandardSchemaV1;
   readonly resilience: ToolResilience | null;
+  readonly content: ((result: never) => readonly ContentPart[]) | null;
   readonly interpret: (cmd: never, ctx: never) => Promise<unknown>;
 };
 
@@ -275,6 +283,16 @@ export function tool<
      * Omit → the first failure is the outcome.
      */
     readonly retry?: ToolResilience["retry"];
+    /**
+     * What the model SEES of an `ok` result, as content parts. A screenshot
+     * tool whose result is `{ jpeg }` (base64) declares
+     * `content: (r) => [{ type: "image", mediaType: "image/jpeg", source: { type: "base64", data: r.jpeg } }]`.
+     * The parts ride on the `tool` message beside the outcome, so an adapter
+     * sends them instead of stringifying the result. PURE: it runs on every
+     * render, over the result as the `Store` hands it back, and never on a
+     * failure. Omit → the model reads the outcome as data, as before.
+     */
+    readonly content?: (result: Ok) => readonly ContentPart[];
   },
   handler: ToolHandler<Args, Ok, TaggedError<Tags[number]>, Ctx>,
 ): ToolDef<Name, Args, Ok, TaggedError<Tags[number] | "thrown">, Ctx> {
@@ -318,6 +336,7 @@ export function tool<
     description: spec.description,
     args: spec.input,
     resilience: resilienceOf(spec),
+    content: spec.content ?? null,
     interpret,
   });
 }
@@ -485,6 +504,15 @@ export interface ToolRouter<T extends AnyToolDef> {
    */
   readonly resilienceOf: (call: ToolCall) => ToolResilience | null;
   /**
+   * The parts the model reads for one settled call: the called tool's
+   * `content` over an `ok` result. `null` for a failure, for a tool that
+   * declared no `content`, and for a call no tool answers. PURE.
+   */
+  readonly partsOf: (
+    call: ToolCall,
+    outcome: ToolOutcome<unknown>,
+  ) => readonly ContentPart[] | null;
+  /**
    * Read a settled tool off a Msg: `null` when the Msg is not one of this
    * router's `<name>_ok` / `<name>_err`. The one place a `{ _tag }` failure is
    * rendered to the `reason` string the conversation carries — and the tag and
@@ -590,7 +618,20 @@ export function toolRouter<T extends AnyToolDef>(
   const resilienceOf = (call: ToolCall): ToolResilience | null =>
     byName.get(call.name)?.resilience ?? null;
 
-  return { defs, toolOf, interpret, outcomeOf, resilienceOf };
+  const partsOf = (
+    call: ToolCall,
+    outcome: ToolOutcome<unknown>,
+  ): readonly ContentPart[] | null => {
+    const content = byName.get(call.name)?.content ?? null;
+    if (content === null || outcome.kind !== "ok") return null;
+    // The result settled through this tool's own `ok` schema, so it is the
+    // `Ok` the projection was declared over; `AnyToolDef` erases it to `never`.
+    return (content as (result: unknown) => readonly ContentPart[])(
+      outcome.result,
+    );
+  };
+
+  return { defs, toolOf, interpret, outcomeOf, resilienceOf, partsOf };
 }
 
 // ===========================================================================

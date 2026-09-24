@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (134)
+## Exports (145)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -61,6 +61,8 @@ These are the ones to read first:
 | `CompactionPurpose` | Type | The reserved purpose the compaction round-trip runs under. |
 | `CompactionSummary` | Interface | The result a compaction round-trip produces — the model's summary of the folded-away turns. |
 | `compactionSummarySchema` | Variable | The `Schema<CompactionSummary>` the compaction call binds — tea's own parse target for the summarize round-trip (it OWNS the `$compact` purpose's output). |
+| `ContentPart` | Type | One part of a multimodal message. |
+| `contentParts` | Function | A message's content as parts — a string reads as one text part, so an adapter maps one shape whichever it was handed. |
 | `Conversation` | Interface | The agentic-stage conversation — durable inside the agent slice so an eviction mid-loop resumes the exact turn. |
 | `createAgent` | Function | Assemble an agent from `config` — the model, the stages it walks, and how a tool call is turned into a command — and get back its `init`, verbs and `subs` plus a `toMachine()` that wires all of it into one machine you hand to `run`, which is the layer to reach for only once `defineAgent` cannot express the run you want — a newcomer starts there, not here. |
 | `deadlinesSub` | Function | The `subs` entry that arms whatever deadlines `select` lists at a state: subs: [deadlinesSub((s: State) => rc.subs(s.resilience))], // run(machine, { subscribe: { deadline: subscribeDeadline } }) |
@@ -85,6 +87,10 @@ These are the ones to read first:
 | `DefinedAgentWired` | Type | The machine `defineAgent` builds per `input` beside the handlers it runs under — the interpret table and the `deadline` runner (a machine carries none — #278, #279). |
 | `EndedRun` | Type | The ENDED phases — a run that finished (`done`) or was stopped from outside (`cancelled`). |
 | `fanOutInterpret` | Function | Give a router's interpret cells real wall-clock overlap without touching the kernel — pass the table `toolRouter` built, get back one whose cells launch their tool and RETURN, so `runInterpret` reaches the next Cmd of the turn while the first tool is still running. |
+| `FILE_OMITTED` | Variable | The text an omitted file stands in as. |
+| `FilePart` | Interface | A document the model reads; `mediaType` is its IANA type, such as `application/pdf`. |
+| `IMAGE_OMITTED` | Variable | The text an omitted image stands in as. |
+| `ImagePart` | Interface | An image the model looks at; `mediaType` is its IANA type, such as `image/jpeg`. |
 | `InterpretOverlay` | Type | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |
 | `isAgentTurn` | Function | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
@@ -99,12 +105,15 @@ These are the ones to read first:
 | `LlmOk` | Interface | The parsed, typed success carried on `resilient_run_ok`, tagged with its purpose. |
 | `LlmRunCmd` | Type | The effect Cmd this module emits: run the LLM call for `key` with `input`. |
 | `LlmSucceedMsg` | Type | The success Msg the engine mints — resilient-call's, with the parsed `LlmOk`. |
+| `MediaSource` | Type | Where an image's or a file's bytes are. |
 | `mergeInterpret` | Function | Join two `Interpret` dictionaries over DISJOINT Cmd subsets `A` and `B` (over the same Msg union `M` and Ctx) into the full `Interpret<M, A \| B, Ctx>`. |
+| `MessageContent` | Type | A message's content: a plain string, or a list of parts. |
 | `MessageLoader` | Type | Build the `Msg[]` the handler hands to the bound model for a given call. |
 | `ModelFactory` | Type | The model factory — the first DI port. |
 | `ModelPort` | Type | Either model port. |
 | `ModelStream` | Interface | The side channel a StreamingModel writes its deltas to — the second argument of the streaming port. |
 | `MonitoredRunCmd` | Type | The checkpoint-write Cmd, generic over the consumer's checkpoint value `V`. |
+| `omitMedia` | Function | The parts with every image and file replaced by a text placeholder — what a summarizer is handed, since the summary is text and cannot carry the pixels forward. |
 | `PLAIN_MODEL_MISROUTE_REASON` | Variable | The reason an `LlmErr` carries when a sync promise-returning function was passed as `model` bare — the one runtime shape neither port can own. |
 | `plainModel` | Function | Lift a plain-function model into the `ModelFactory` port. |
 | `PlainModel` | Type | The plain-function model port — the common path. |
@@ -117,6 +126,7 @@ These are the ones to read first:
 | `StreamingModel` | Type | The streaming model port — `(messages, { onChunk }) => Promise<AgentTurn>`. |
 | `subscribeDeadline` | Variable | The `deadline` runner for the DEFAULT `setTimeout` backing. |
 | `TaggedFailure` | Type | The failure arm typed against a KNOWN tag union — `{ kind, reason }` beside each arm of `E`, distributed, so a `switch` on `_tag` narrows the payload and an unhandled tag is a compile error. |
+| `TextPart` | Interface | A run of text. |
 | `tool` | Function | Declare one tool the model may call — its name, the schemas for its arguments and result, the failures it may return and the handler that runs it — and get back a `Cmd<T, Ok, E>` definition, whose `Ok` is what `ok` parses and whose `E` is the `err` tag union, that you pass to `toolRouter` or `defineAgent`. |
 | `TOOL_RETRY_EXHAUSTED_TAG` | Variable | The reason-tag a tool call that spent its retry budget settles under. |
 | `TOOL_TIMEOUT_TAG` | Variable | The reason-tag a timed-out tool call settles under. |
@@ -135,6 +145,7 @@ These are the ones to read first:
 | `ToolMsg` | Type | The settled Msg union a router's handlers return — folded by `toMachine`. |
 | `ToolOk` | Type | The typed success constructor a handler receives: `ok(value)` with `Ok` fixed to what the `ok` schema parses, so a value of the wrong shape is refused where it is written. |
 | `ToolOutcome` | Type | One settled tool outcome the consumer routes back into the loop. |
+| `ToolPartsOf` | Type | How `renderPrompt` reads the parts a settled call shows the model — a `ToolRouter`'s `partsOf`. |
 | `ToolRecord` | Interface | A folded tool record kept on the conversation once a tool settles — the call + its outcome, in settle order. |
 | `ToolRejectedCmd` | Type | The Cmd `tool_rejected` builds — the router-owned variant of `ToolCmd`. |
 | `ToolRejection` | Type | A call the router could not hand to a tool: the model named a tool nobody declared, or its `args` failed the tool's `input` schema. |

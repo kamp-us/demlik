@@ -13,11 +13,12 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // The sole consumer of the `vite` devDependency: it bundles the reassembled
 // tutorial program below. Prune `vite` only when this import goes with it.
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { AgentMessage, ContentPart } from "../../agent";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 const page = join(repo, "docs/tutorial/build-a-durable-agent.md");
@@ -47,21 +48,27 @@ function programOf(markdown: string): Map<string, string> {
   return files;
 }
 
-/** Bundle `agent.ts` against `src/`; deps stay external and resolve from the repo. */
-async function bundle(srcDir: string, outDir: string): Promise<string> {
+/** Bundle one page file against `src/`; deps stay external and resolve from the repo. */
+async function bundle(
+  srcDir: string,
+  outDir: string,
+  file = "agent",
+): Promise<string> {
   await build({
     configFile: join(repo, "vitest.config.ts"),
     root: repo,
     logLevel: "error",
     build: {
-      ssr: join(srcDir, "agent.ts"),
+      ssr: join(srcDir, `${file}.ts`),
       outDir,
       emptyOutDir: true,
       minify: false,
-      rollupOptions: { output: { entryFileNames: "agent.mjs", format: "es" } },
+      rollupOptions: {
+        output: { entryFileNames: `${file}.mjs`, format: "es" },
+      },
     },
   });
-  return join(outDir, "agent.mjs");
+  return join(outDir, `${file}.mjs`);
 }
 
 interface Run {
@@ -148,6 +155,7 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
   let work: string;
   let cache: string;
   let entry: string;
+  let modelEntry: string;
   let program: Map<string, string>;
 
   beforeAll(async () => {
@@ -167,11 +175,112 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
     for (const [name, body] of program)
       await writeFile(join(srcDir, name), body);
     entry = await bundle(srcDir, join(cache, "out"));
+    modelEntry = await bundle(srcDir, join(cache, "model-out"), "model");
   }, 120_000);
 
   afterAll(async () => {
     await rm(work, { recursive: true, force: true });
     await rm(cache, { recursive: true, force: true });
+  });
+
+  // #330 — the page's `toParam` maps content parts to Anthropic blocks: a
+  // user message's parts and a tool's `parts` go as `image` / `document`
+  // blocks with a base64 or url source, and a string is one text block.
+  it("toParam maps content parts to Anthropic image and document blocks", async () => {
+    const { toParam } = (await import(pathToFileURL(modelEntry).href)) as {
+      toParam: (m: AgentMessage) => unknown[];
+    };
+    const jpeg: ContentPart = {
+      type: "image",
+      mediaType: "image/jpeg",
+      source: { type: "base64", data: "/9j/4AAQ" },
+    };
+    const png: ContentPart = {
+      type: "image",
+      mediaType: "image/png",
+      source: { type: "url", url: "https://example.com/a.png" },
+    };
+    const pdf: ContentPart = {
+      type: "file",
+      mediaType: "application/pdf",
+      source: { type: "bytes", data: new Uint8Array([37, 80, 68, 70]) },
+    };
+
+    expect(toParam({ role: "user", content: "hi" })).toEqual([
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+    ]);
+    expect(
+      toParam({
+        role: "user",
+        content: [{ type: "text", text: "look" }, png, pdf],
+      }),
+    ).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "look" },
+          {
+            type: "image",
+            source: { type: "url", url: "https://example.com/a.png" },
+          },
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: "JVBERg==",
+            },
+          },
+        ],
+      },
+    ]);
+    const outcome = { kind: "ok" as const, result: { jpeg: "/9j/4AAQ" } };
+    expect(
+      toParam({
+        role: "tool",
+        callId: "s1",
+        name: "screenshot",
+        outcome,
+        parts: [jpeg],
+      }),
+    ).toEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "s1",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/jpeg",
+                  data: "/9j/4AAQ",
+                },
+              },
+            ],
+            is_error: false,
+          },
+        ],
+      },
+    ]);
+    // No parts → the outcome is the payload, as before.
+    expect(
+      toParam({ role: "tool", callId: "n1", name: "note", outcome }),
+    ).toEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "n1",
+            content: JSON.stringify(outcome),
+            is_error: false,
+          },
+        ],
+      },
+    ]);
   });
 
   it("the lesson's own file stays under the user-code ceiling", () => {

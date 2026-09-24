@@ -192,6 +192,7 @@ import type {
 // state/status), `./compaction` (the #85 seam), and `./machine` (the Cmd/Msg
 // vocabulary + wiring helpers). The reducer core — `createAgent` — stays here.
 export * from "./compaction";
+export * from "./content";
 export * from "./define-agent";
 export * from "./machine";
 export * from "./tool";
