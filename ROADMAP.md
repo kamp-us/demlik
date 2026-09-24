@@ -31,9 +31,19 @@ ends with a phoenix PR that moves Tuval onto the release, which phoenix plans an
 Effect engine leaves the experimental tier only once it powers Tuval fully. Declared and started 2026-09-24;
 no build starts until the decisions in grilling session #325 are ruled.
 
+**Binclusive agent migration** (#3). Binclusive's audit brain (`services/audit-agents` in
+Binclusive/monorepo) is moving from LangGraph onto `@demlik/tea/agent`, and the move hit four gaps
+in the agent layer. This campaign closes them, each as one feature sized to what that consumer
+actually does: multimodal message parts so a vision agent can show the model a screenshot (#330),
+agent tracing into Langfuse over OpenTelemetry via a `@demlik/tea/otel` subpath (#331), per-turn
+token usage for context-size compaction and budgets (#332), and a durable sub-agent-as-tool (#333).
+`./agent` is experimental, so none of it carries semver ceremony. It ends when the four ship; the
+Binclusive-side cutover is planned and built in that repo. Declared and started 2026-09-24.
+
 | Campaign | Milestone | State |
 |---|---|---|
 | Tuval on tea | #2 | active |
+| Binclusive agent migration | #3 | active |
 
 ## Dependencies
 
