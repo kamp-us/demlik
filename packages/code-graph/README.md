@@ -153,7 +153,7 @@ so an added kind fails to compile at every consumer:
 |---|---|
 | `entry` | A place a real run starts: a `fetch`/`email` handler, a `scheduled`/`queue`/`tail` handler, a GraphQL resolver, a registered CLI command, any method of a class a wrangler config declares as a **Durable Object**, any public instance method of a class extending `WorkerEntrypoint` or `DurableObject` (`worker-entrypoint-method`), or an RPC method with at least one **real** cross-service caller (Feature A establishes that as a fact, not a guess). A Workflow's `run` is not an entry: only its own worker starts it, so it is reached through the `create` call-site's edge |
 | `auth` | An authorization check |
-| `effect` | A DB write, a network call, a VM spawn, a queue send — matched on where the callee is **declared**, not on its name (see below); a repo function outside the scope gets a `workspace:<file>:<name>` id and is never an effect |
+| `effect` | A DB write, an object-store write, a network call, a queue send, a workflow spawn — matched on where the callee is **declared**, not on its name (see below); a repo function outside the scope gets a `workspace:<file>:<name>` id and is never an effect |
 | `plain` | Nothing matched — reported as **unclassified**, never as a positive finding |
 
 Every entry carries a `reach` — who can start it — read off its evidence by the
@@ -173,10 +173,47 @@ Precedence is `entry > auth > effect > plain`, and `evidence` keeps **every** ru
 that matched, so an entry handler that also writes is labelled `entry` while its
 `db-write` evidence stays visible.
 
-Detection is **declared, not clever**: `src/kinds/rules.ts` holds named regex groups
-with defaults tuned for this repo, overridable wholesale with `--node-kinds <file>`
-(an override replaces a group rather than extending it). Nothing infers, scores, or
-guesses.
+Detection is **declared, not clever**: `src/kinds/rules.ts` holds named regex groups,
+overridable with `--node-kinds <file>`. Nothing infers, scores, or guesses.
+
+The defaults are **framework-generic only**: platform handler names (Workers, Durable
+Objects, GraphQL), library declarations (drizzle, pg, better-sqlite3, D1, R2/KV, Queue,
+Workflow, `fetch`), Pothos `authScopes`, and conventional auth names
+(`require(Auth|Session|SessionToken)`, `verify(ApiKey|AccessToken|SharedSecret)`,
+`authorize*`). None of them names one codebase's own functions or SDKs, and a snapshot
+test pins the whole set, so a new default is a reviewed diff. Your own auth helpers,
+vendor SDKs and entry layouts go in the rules file. A top-level key in the file
+**replaces** that whole group rather than extending it, so restate the defaults you want
+to keep beside your own names; a key the file does not name keeps its default:
+
+```json
+{
+  "authNames": {
+    "auth-gate": ["^require(Auth|Session|SessionToken)$", "^assertProjectBelongsToOrg$"]
+  },
+  "authCallees": {
+    "calls-auth-gate": ["^require(Auth|Session|SessionToken)$", "^getSessionFromHeaders$"]
+  },
+  "effectDeclarations": {
+    "network-call": ["^[^:]+:([A-Za-z0-9]+\\.)?fetch$", "^stripe:"],
+    "vm-spawn": ["^[^:]+:([A-Za-z0-9]+\\.)?(insertGceInstance|spawnCloudRunner)$"]
+  },
+  "entryFilePatterns": {
+    "cli-command": ["(^|/)src/commands/", "(^|/)program/commands/"]
+  }
+}
+```
+
+```sh
+code-graph services --kinds --node-kinds node-kinds.json
+```
+
+That file keeps only the `network-call` effect it restates, so its `effectDeclarations`
+no longer holds `db-write`, `object-store-write`, `queue-send` or `workflow-spawn`; copy
+those from `src/kinds/rules.ts` when you want them. `authNames` labels a function `auth`
+by its own name, `authCallees` by a call it makes, `effectDeclarations` matches a call's
+declaration (below), and `entryNames` / `entryFilePatterns` / `entryBaseClasses` add
+entries by name, file path or base class.
 
 An effect rule matches a call's **declaration**, which the edge pass records on every
 call that leaves the repo's code as `<origin>:<Owner>.<member>`: the origin is the
