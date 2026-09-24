@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Interpret } from "../index";
 import { run } from "../promise";
 import {
+  type AgentEndedStatus,
   type AgentEvent,
   type AgentMachineMsg,
   type AgentTurn,
@@ -162,9 +163,9 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
 
   it("run.phase → done fires RunDone exactly once, carrying the output", async () => {
     const runtime = await wiredRuntime();
-    const dones: (AgentTurn | null)[] = [];
+    const dones: AgentEndedStatus[] = [];
     runtime.on("RunDone", (e) => {
-      dones.push(e.output);
+      dones.push(e.status);
     });
 
     await runtime.dispatch({ type: "agent_start", runId: "r", at: 0 });
@@ -173,9 +174,13 @@ describe("#47 — runtime.on delivers the semantic AgentEvent stream", () => {
 
     // Fires once — the terminal `done` transition. Output is the last (empty)
     // model turn, the same first-class result `Runtime.result()` reads (#46).
-    expect(dones.length).toBe(1);
-    expect(dones[0]).toEqual({ content: "thinking", toolCalls: [] });
-    expect(dones[0]).toEqual(runtime.result()?.output);
+    expect(dones).toEqual([
+      { kind: "done", output: { content: "thinking", toolCalls: [] } },
+    ]);
+    expect(dones[0]).toEqual({
+      kind: "done",
+      output: runtime.result()?.output,
+    });
   });
 
   it("on('TurnSettled', …) only receives TurnSettled — typed narrowing", async () => {
@@ -312,7 +317,7 @@ describe("#47 — an `on`-based consumer references no private Msg name", () => 
           summary.push(`tool:${e.callId}`);
           break;
         case "RunDone":
-          summary.push(`done:${e.output ? "turn" : "none"}`);
+          summary.push(`done:${e.status.kind}`);
           break;
       }
     };
@@ -331,7 +336,7 @@ describe("#47 — an `on`-based consumer references no private Msg name", () => 
       "tool:c1", // the tool settled
       "turn:0", // plan #2 — empty (advance to act)
       "turn:0", // act — empty (finish)
-      "done:turn", // run finished with the terminal turn
+      "done:done", // run finished
     ]);
 
     // Guard the "no private name" claim against drift: this test source must not

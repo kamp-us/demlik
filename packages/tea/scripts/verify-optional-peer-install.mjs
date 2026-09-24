@@ -9,6 +9,11 @@
 // So this runs the missing case for real — pack the tarball, install it into a
 // throwaway project that declares only the tutorial's dependencies, and import
 // the door. No mock of a clean install; the clean install itself.
+//
+// `@opentelemetry/api` is the second optional peer held to the same rule
+// (#331): `@demlik/tea/agent` must import without it, and only
+// `@demlik/tea/otel` may name it — and once a consumer installs it, that door
+// must import and hand back `traceAgent`.
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -40,6 +45,21 @@ if (/^\s*import\s[^;]*?["']ws["']/m.test(door)) {
   fail('dist/node/index.js has a static top-level import of "ws"');
 }
 
+// Every built file but the otel door must leave `@opentelemetry/api` alone. A
+// shared chunk naming it would pull it into every door that loads the chunk.
+const OTEL_API = /from\s*["']@opentelemetry\/api["']|import\s*\(?\s*["']@opentelemetry\/api["']/;
+const builtJs = readdirSync(join(pkgDir, "dist"), { recursive: true })
+  .map(String)
+  .filter((f) => f.endsWith(".js"));
+const otelImporters = builtJs.filter((f) =>
+  OTEL_API.test(readFileSync(join(pkgDir, "dist", f), "utf8")),
+);
+if (otelImporters.join() !== join("otel", "index.js")) {
+  fail(
+    `only dist/otel/index.js may import "@opentelemetry/api"; found it in: ${otelImporters.join(", ") || "(none)"}`,
+  );
+}
+
 // ── 2. The clean install, end to end. ───────────────────────────────────────
 const work = mkdtempSync(join(tmpdir(), "tea-clean-install-"));
 run("npm", ["pack", "--pack-destination", work], pkgDir);
@@ -58,8 +78,10 @@ writeFileSync(
 // which is the whole condition under test.
 run("npm", ["install", "--no-audit", "--no-fund", join(work, tarball)], project);
 
-if (existsSync(join(project, "node_modules/ws"))) {
-  fail("the clean install pulled in `ws` — the test proves nothing; is it still an optional peer?");
+for (const peer of ["ws", "@opentelemetry/api"]) {
+  if (existsSync(join(project, "node_modules", peer))) {
+    fail(`the clean install pulled in \`${peer}\` — the test proves nothing; is it still an optional peer?`);
+  }
 }
 
 const probe = join(project, "probe.mjs");
@@ -67,13 +89,32 @@ writeFileSync(
   probe,
   [
     'import { fileStore, fileJournal } from "@demlik/tea/node";',
+    'import { agentEvents } from "@demlik/tea/agent";',
     'if (typeof fileStore !== "function") throw new Error("fileStore is not a function");',
     'if (typeof fileJournal !== "function") throw new Error("fileJournal is not a function");',
+    'if (typeof agentEvents !== "function") throw new Error("agentEvents is not a function");',
     "",
   ].join("\n"),
 );
 run("node", [probe], project);
 
+// ── 3. With the peer installed, the otel door imports. ─────────────────────
+run(
+  "npm",
+  ["install", "--no-audit", "--no-fund", "@opentelemetry/api@^1.9.0"],
+  project,
+);
+const otelProbe = join(project, "probe-otel.mjs");
+writeFileSync(
+  otelProbe,
+  [
+    'import { traceAgent } from "@demlik/tea/otel";',
+    'if (typeof traceAgent !== "function") throw new Error("traceAgent is not a function");',
+    "",
+  ].join("\n"),
+);
+run("node", [otelProbe], project);
+
 console.log(
-  "verify-optional-peer-install: @demlik/tea/node imports with no `ws` installed",
+  "verify-optional-peer-install: @demlik/tea/node and /agent import with no `ws` or `@opentelemetry/api` installed; /otel imports once it is",
 );

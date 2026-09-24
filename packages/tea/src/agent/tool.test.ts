@@ -388,6 +388,9 @@ async function drive(turns: Turns) {
   runtime.on("ToolSettled", (e) => {
     events.push(e);
   });
+  runtime.on("ToolFailed", (e) => {
+    events.push(e);
+  });
   // The stage retire clears the conversation, so keep the fullest record set
   // seen on the way — that is the fold this test reads.
   let records: readonly ToolRecord<{ snippet: string } | number>[] = [];
@@ -430,13 +433,26 @@ describe("toMachine({ tools }) — the router's settles fold into the loop", () 
     expect(final.output).toEqual({ content: "done", toolCalls: [] });
 
     // `ToolSettled` projects off the router's `_ok` Msgs (#47 stays whole).
-    expect(events).toEqual([
+    const head = { runId: "r", at: expect.any(Number) };
+    expect(events.filter((e) => e.type === "ToolSettled")).toEqual([
       {
+        ...head,
         type: "ToolSettled",
         callId: "c1",
         result: { snippet: "TEA folds the loop in one reducer." },
       },
-      { type: "ToolSettled", callId: "c4", result: 3 },
+      { ...head, type: "ToolSettled", callId: "c4", result: 3 },
+    ]);
+    // …and every other call, whatever way it failed, is one `ToolFailed`
+    // carrying the failure the model reads (#331).
+    const failed = events.flatMap((e) =>
+      e.type === "ToolFailed" ? [[e.callId, e.failure.kind]] : [],
+    );
+    expect(failed.sort()).toEqual([
+      ["c2", "error"],
+      ["c3", "error"],
+      ["c5", "error"],
+      ["c6", "error"],
     ]);
   });
 

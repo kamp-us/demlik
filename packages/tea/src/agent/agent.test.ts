@@ -355,7 +355,9 @@ describe("createAgent — tool settle (serial drain → fold → next brain call
     let [s] = agent.start(agent.init(), "r", 0);
     [s] = agent.turn(s, turnWith(tool("c1")), 10);
     const [next, cmds] = agent.toolOk(s, "nope", "x", 20);
-    expect(next).toBe(s);
+    // Nothing moves but the outbox: a transition that did nothing noted
+    // nothing, so the turn's notes do not ride along into it (#331).
+    expect(next).toEqual({ ...s, lifecycle: [] });
     expect(cmds).toEqual([]);
   });
 });

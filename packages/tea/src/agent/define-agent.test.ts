@@ -136,6 +136,7 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
         "compaction",
         "toolResilience",
         "refusedCalls",
+        "lifecycle",
         "failure",
         "output",
         "instructions",
@@ -751,24 +752,43 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
     return { final, events };
   }
 
-  it("delivers TurnSettled / ToolSettled / RunDone in the order the kernel settles them", async () => {
+  it("delivers the lifecycle events in the order the kernel settles them", async () => {
     const { final, events } = await collect();
 
     expect(events.map((e) => e.type)).toEqual([
+      "BrainStarted",
       "TurnSettled",
+      "ToolStarted",
       "ToolSettled",
+      "BrainStarted",
       "TurnSettled",
       "RunDone",
     ]);
-    // Each event carries the settle it names, typed against this agent's tools.
-    expect(events[0]).toEqual({ type: "TurnSettled", turn: ASK });
-    expect(events[1]).toEqual({
+    // Each event carries the settle it names, typed against this agent's
+    // tools, and the run it belongs to.
+    const head = { runId: "run-pinned", at: expect.any(Number) };
+    expect(events[0]).toMatchObject({ type: "BrainStarted", turn: 0 });
+    expect(events[1]).toEqual({ ...head, type: "TurnSettled", turn: ASK });
+    expect(events[2]).toEqual({
+      ...head,
+      type: "ToolStarted",
+      callId: "c1",
+      name: "search",
+      args: { q: "tea" },
+    });
+    expect(events[3]).toEqual({
+      ...head,
       type: "ToolSettled",
       callId: "c1",
       result: { snippet: kb.lookup("tea") },
     });
-    expect(events[2]).toEqual({ type: "TurnSettled", turn: ANSWER });
-    expect(events[3]).toEqual({ type: "RunDone", output: ANSWER });
+    expect(events[4]).toMatchObject({ type: "BrainStarted", turn: 1 });
+    expect(events[5]).toEqual({ ...head, type: "TurnSettled", turn: ANSWER });
+    expect(events[6]).toEqual({
+      ...head,
+      type: "RunDone",
+      status: { kind: "done", output: ANSWER },
+    });
     expect(final.output).toEqual(ANSWER);
   });
 
@@ -819,8 +839,17 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
     });
 
     expect(final.run.phase).toBe("done");
-    expect(events.map((e) => e.type)).toEqual(["TurnSettled", "RunDone"]);
-    expect(events[0]).toEqual({ type: "TurnSettled", turn: ANSWER });
+    // The one thing the boot does is re-issue the outstanding brain call, so
+    // that is the one start this process reports — a listener attached after
+    // the kill needs it to have anything to settle against.
+    expect(events.map((e) => e.type)).toEqual([
+      "BrainStarted",
+      "TurnSettled",
+      "RunDone",
+    ]);
+    expect(events[1]).toMatchObject({ type: "TurnSettled", turn: ANSWER });
+    // …and every event names the run the killed process started (#331).
+    expect(new Set(events.map((e) => e.runId))).toEqual(new Set(["run-1"]));
   });
 
   it("a listener that throws is contained: the run still resolves, the throw is warned", async () => {
@@ -834,14 +863,17 @@ describe("onEvent — turn-level events off the lid (#122)", () => {
 
       // Every event was still offered, and the run reached its terminal Model.
       expect(events.map((e) => e.type)).toEqual([
+        "BrainStarted",
         "TurnSettled",
+        "ToolStarted",
         "ToolSettled",
+        "BrainStarted",
         "TurnSettled",
         "RunDone",
       ]);
       expect(final.run.phase).toBe("done");
       expect(final.output).toEqual(ANSWER);
-      expect(warn).toHaveBeenCalledTimes(4);
+      expect(warn).toHaveBeenCalledTimes(7);
     } finally {
       warn.mockRestore();
     }
@@ -1464,6 +1496,8 @@ describe("defineAgent(...).with — the one wrap point over the built machine", 
           // The slice's clock is the engine-stamped `at` of the last settle,
           // so it tracks the run's clock exactly as `lastProgressAt` does.
           resilience: { ...s.resilience, clockMs: 0 },
+          // The outbox's notes carry that same engine-stamped `at`.
+          lifecycle: s.lifecycle.map((note) => ({ ...note, at: 0 })),
         }),
       );
     expect(durable(live)).toEqual(durable(unwrapped));

@@ -4,7 +4,7 @@
  * semantic-event adapter. See `./host` for the transport-model rationale.
  */
 
-import type { AgentEvent } from "../agent/index";
+import { AGENT_EVENT_TYPES, type AgentEvent } from "../agent/index";
 import type { Projection } from "./projection";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ export function sseProjection<Model, Msg extends { type: string }, E>(
  *   const hub = sseHub<MyFrame>();
  *   const runtime = await run(machine, { ctx, events: agentEvents() }).ready;
  *   const off = sseFromAgentEvents(runtime, hub, (e) =>
- *     e.type === "RunDone" ? { kind: "done", output: e.output } : null,
+ *     e.type === "RunDone" ? { kind: "ended", status: e.status } : null,
  *   );
  *   // /sse route unchanged:
  *   return hub.open();
@@ -220,13 +220,10 @@ export function sseFromAgentEvents<R, Frame>(
     const frame = toFrame(event);
     if (frame !== null) hub.emit(frame);
   };
-  // One subscription per event type — the closed `AgentEvent` union enumerated
-  // here so a new variant forces a wiring decision at compile time.
-  const offs = [
-    runtime.on("TurnSettled", push),
-    runtime.on("ToolSettled", push),
-    runtime.on("RunDone", push),
-  ];
+  // One subscription per event type, off the one list that is checked against
+  // the `AgentEvent` union, so a new variant reaches `toFrame` without an edit
+  // here.
+  const offs = AGENT_EVENT_TYPES.map((type) => runtime.on(type, push));
   return () => {
     for (const off of offs) off();
   };

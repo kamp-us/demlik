@@ -20,18 +20,25 @@ const final = await agent.run(input, {
   onEvent: (event) => {
     if (event.type === "TurnSettled") console.log("thinking:", event.turn.content);
     if (event.type === "ToolSettled") console.log("tool:", event.callId);
-    if (event.type === "RunDone") console.log("done:", event.output?.content);
+    if (event.type === "RunDone") console.log("ended:", event.status.kind);
   },
 });
 ```
 
-Three events arrive in the order the kernel settles them:
+Six events arrive in the order the kernel produces them, each carrying the run's
+`runId` and the `at` of the transition behind it:
 
 | Event | When | Carries |
 | --- | --- | --- |
-| `TurnSettled` | the model produced a turn | `turn` — the narration and the tool calls it asked for |
+| `BrainStarted` | a brain call went out for a turn | `turn`, the request's `purpose`, `model` and `payload` |
+| `TurnSettled` | the model produced a turn | `turn` — the narration and the tool calls it asked for — and `usage` when the provider reported it |
+| `ToolStarted` | a tool call went out | `callId`, `name`, `args` |
 | `ToolSettled` | a tool call came back OK | `callId`, and `result` typed against your tool set |
-| `RunDone` | the run finished | `output` — the terminal turn, or `null` |
+| `ToolFailed` | a tool call ended on a failure | `callId`, `name`, and the `failure` the model reads |
+| `RunDone` | the run ended, however it ended | `status` — `done` with `output`, `failed` with `failure`, or `cancelled` |
+
+A retry is not a new start: `BrainStarted` fires once per turn and `ToolStarted`
+once per call, however many attempts the retry ladder spends.
 
 They are the same `AgentEvent`s a hand-wired `run(machine, { events: agentEvents() })`
 projects to `runtime.on(...)`; `onEvent` forwards that stream rather than minting
@@ -121,9 +128,10 @@ const { turns, tools, outcome } = t.read();
 
 `read()` returns a fresh immutable snapshot: `turns` is every model turn in
 order, `tools` is every call that settled OK as `{ callId, result }`, and
-`outcome` is `{ kind: "running" }` until `RunDone` and
-`{ kind: "done", output }` after it — a union rather than a nullable field,
-because a run can legitimately finish with no terminating turn.
+`outcome` is `{ kind: "running" }` until `RunDone` and the ending it carried
+after it — `{ kind: "done", output }`, `{ kind: "failed", failure }` or
+`{ kind: "cancelled", at }`. `done` keeps `output` in its own arm because a run
+can legitimately finish with no terminating turn.
 
 It changes nothing about the run. The collector is not state: it is never
 journaled, never written to the `Store`, and never folded into the Model, so a
@@ -152,7 +160,7 @@ One collector per process is the honest unit. A fresh run needs no seed, and a
 seed taken from an already-finished Model contributes nothing — that Model's
 `conversation` is `null`, and its answer is the `output` you already hold.
 
-**Failed tool calls are not in `tools`.** That is the event stream's shape, not
-a choice this collector makes: `ToolSettled` is projected off the OK settle
-alone. To see failures, pass `onToolError`, whose argument is typed per tag —
-see [Handle a tool failure](./handle-a-tool-failure.md).
+**Failed tool calls are not in `tools`.** The collector keeps what settled OK.
+A failure arrives on the stream as `ToolFailed`; to branch on it by tag, pass
+`onToolError`, whose argument is typed per tag — see
+[Handle a tool failure](./handle-a-tool-failure.md).

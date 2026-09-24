@@ -196,7 +196,7 @@ export interface AgentHost<
  *       e.type === "ToolSettled" ? { kind: "result", ...} :
  *       e.type === "TurnSettled" && e.turn.toolCalls.length === 0
  *         ? { kind: "verdict", verdict: e.turn.content } :
- *       e.type === "RunDone" ? { kind: "phase", phase: "done" } : null,
+ *       e.type === "RunDone" ? { kind: "phase", phase: e.status.kind } : null,
  *   });
  *   // route:   return host.sse.open();
  *   // start:   await (await host.runtime()).dispatch({ type: "agent_start", ... });
