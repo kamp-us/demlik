@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyCell,
   type Cmd,
   defineMachine,
+  foldMsgs,
+  NoCellError,
   type Reducer,
   type RuntimeErrorContext,
   type Store,
   type Supervision,
+  type Transitions,
 } from "./index";
 import { run } from "./promise";
 
@@ -243,5 +247,143 @@ describe("supervision: a non-throwing reducer is unaffected", () => {
       expect(runtime.getState()).toEqual({ n: 2 });
       await runtime.stop();
     }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// #310 — a Msg with no cell is the caller's bad dispatch, not a reducer throw.
+// No machine code ran, so no strategy applies: the dispatch rejects with
+// `NoCellError`, nothing is reported under `"reduce"`, and the run stays live.
+// ───────────────────────────────────────────────────────────────────────────
+
+type Door = { readonly type: "closed" } | { readonly type: "open" };
+type DoorMsg = { readonly type: "open" } | { readonly type: "close" };
+
+// Each phase has a cell for one Msg only, so the other one is refused there.
+const doorUpdate: Transitions<Door, DoorMsg, never> = {
+  closed: { open: () => [{ type: "open" }, []] },
+  open: { close: () => [{ type: "closed" }, []] },
+};
+
+function doorMachine() {
+  return defineMachine({
+    types: { model: {} as Door, msg: {} as DoorMsg, ctx: undefined },
+    init: (loaded) => [loaded ?? { type: "closed" }, []],
+    update: doorUpdate,
+  });
+}
+
+describe("supervision: a Msg with no cell is refused, not supervised (#310)", () => {
+  it.each([
+    ["default", undefined],
+    ["stop", "stop"],
+    ["escalate", "escalate"],
+  ] as const)("under %s: rejects that dispatch only, reports nothing under reduce, and a later valid Msg applies", async (_label, supervision) => {
+    const { seen, onError } = collectErrors();
+    const runtime = await run(doorMachine(), {
+      ctx: undefined,
+      onError,
+      supervision,
+    }).ready;
+
+    await expect(runtime.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+      NoCellError,
+    );
+    expect(seen).toEqual([]);
+    expect(runtime.getState()).toEqual({ type: "closed" });
+
+    await runtime.dispatch({ type: "open" });
+    expect(runtime.getState()).toEqual({ type: "open" });
+
+    await runtime.stop();
+  });
+
+  it("under restart: does not call rehydrate, and the run keeps its State", async () => {
+    const { seen, onError } = collectErrors();
+    const rehydrate = vi.fn((): Door => ({ type: "open" }));
+    const runtime = await run(doorMachine(), {
+      ctx: undefined,
+      onError,
+      supervision: { strategy: "restart", rehydrate },
+    }).ready;
+
+    await expect(runtime.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+      NoCellError,
+    );
+    expect(rehydrate).not.toHaveBeenCalled();
+    expect(seen).toEqual([]);
+    expect(runtime.getState()).toEqual({ type: "closed" });
+
+    await runtime.stop();
+  });
+
+  it("leaves no persisted or observed trace, so replaying the run never meets it", async () => {
+    const saved: Door[] = [];
+    const store: Store<Door> = {
+      async load() {
+        return null;
+      },
+      migrate: (raw) => (raw as Door | null) ?? null,
+      async save(s) {
+        saved.push(s);
+      },
+    };
+    const runtime = run(doorMachine(), { ctx: undefined, store });
+    const observed: DoorMsg[] = [];
+    runtime.observe((msg) => observed.push(msg));
+    const booted = await runtime.ready;
+    saved.length = 0; // drop the boot save
+
+    await expect(booted.dispatch({ type: "close" })).rejects.toBeInstanceOf(
+      NoCellError,
+    );
+    expect(saved).toEqual([]);
+    expect(observed).toEqual([]);
+
+    await booted.dispatch({ type: "open" });
+    expect(saved).toEqual([{ type: "open" }]);
+    expect(observed).toEqual([{ type: "open" }]);
+
+    // The observed log is what a host journals; folding it does not throw.
+    expect(foldMsgs(doorMachine(), { type: "closed" }, observed)).toEqual({
+      type: "open",
+    });
+
+    await booted.stop();
+  });
+
+  it("a NoCellError thrown INSIDE a cell that exists is a reducer throw, and stays supervised", async () => {
+    const child = doorMachine();
+    const update: Reducer<State, Msg, Cmd> = {
+      inc: (s) => [{ n: s.n + 1 }, []],
+      // A reducer stepping a child machine by hand, into a Msg it refuses.
+      boom: (s) => {
+        applyCell(child, { type: "closed" }, { type: "close" });
+        return [s, []];
+      },
+    };
+    const parent = defineMachine({
+      types: {
+        model: {} as State,
+        msg: {} as Msg,
+        cmd: {} as Cmd,
+        ctx: undefined,
+      },
+      init: (loaded) => [(loaded as State | null) ?? { n: 0 }, []],
+      update,
+    });
+    const { seen, onError } = collectErrors();
+    const runtime = await run(parent, { ctx: undefined, onError }).ready;
+
+    await expect(runtime.dispatch({ type: "boom" })).rejects.toBeInstanceOf(
+      NoCellError,
+    );
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.context.phase).toBe("reduce");
+    await expect(runtime.dispatch({ type: "inc" })).rejects.toThrow(
+      /runtime stopped/,
+    );
+
+    await runtime.stop();
   });
 });

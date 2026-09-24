@@ -92,6 +92,15 @@ that happen to agree — the refusal path calls the same helper. Asking first an
 dispatching-and-catching can never be told different things about the same
 machine and state.
 
+On a running machine the refusal rejects that one dispatch and nothing else. A
+missing cell is not a reducer throw: no machine code ran, the caller sent a
+Msg this state does not take. So `supervision` stays out of it under every
+strategy. The run does not halt, `restart` does not rehydrate, and `onError`
+hears nothing under `"reduce"`. The refused Msg never reaches the store or
+`observe`, so a replay of the run never meets it. The next Msg the state does
+accept is applied as usual. A host that forwards Msgs from outside (a UI, a
+socket, an agent) can catch the `NoCellError` and carry on.
+
 ## A row is required; a cell is not
 
 The asymmetry is the whole design. Leaving a **cell** out is a statement about

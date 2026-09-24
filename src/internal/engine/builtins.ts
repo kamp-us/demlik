@@ -9,6 +9,8 @@ import {
   checkedStep,
   cmdContractOver,
   cmdEdge,
+  lookupCell,
+  NoCellError,
   Outcome,
   structuralHash,
 } from "../../pure/core";
@@ -31,9 +33,17 @@ type AnyExtension<S, M, C> = ExtensionFactory<S, M, C>;
  * `restart` commits the host's rehydrated State with no Cmds, `escalate`
  * rethrows with the runtime still live, and `stop` (the default) halts the gate
  * and rethrows, so THIS dispatch rejects too.
+ *
+ * A Msg the current State has no cell for is not a reducer throw — no machine
+ * code ran, the caller dispatched something this State does not accept (#310).
+ * Its `NoCellError` rejects only that dispatch and keeps the run alive under
+ * every strategy: it is not reported under `"reduce"`, `restart` does not
+ * rehydrate, and `stop` does not halt. The refusal stays loud; it just is not
+ * the program's failure.
  */
 export function supervision<S, M extends { type: string }, C>(
   declared: Supervision<S, M> | undefined,
+  machine: CellTable,
 ): AnyExtension<S, M, C> {
   const policy =
     declared === undefined
@@ -46,6 +56,7 @@ export function supervision<S, M extends { type: string }, C>(
       try {
         return next(state, msg);
       } catch (reduceError) {
+        if (isRefusal(machine, reduceError, state, msg)) throw reduceError;
         loop.report(reduceError, "reduce");
         switch (policy.strategy) {
           case "restart":
@@ -60,6 +71,27 @@ export function supervision<S, M extends { type: string }, C>(
       }
     },
   });
+}
+
+/** The part of a machine that says which cell a `(state, msg)` pair selects. */
+type CellTable = Parameters<typeof lookupCell>[0];
+
+/**
+ * A `NoCellError` is a refusal only when the machine really has no cell for
+ * this `(state, msg)`: then nothing ran, and the error is the lookup's own. A
+ * `NoCellError` raised INSIDE a cell that does exist (a reducer stepping a
+ * child machine by hand) is that reducer failing, and stays supervised.
+ */
+function isRefusal<S, M extends { type: string }>(
+  machine: CellTable,
+  error: unknown,
+  state: S,
+  msg: M,
+): boolean {
+  return (
+    error instanceof NoCellError &&
+    lookupCell(machine, state, msg).cell === undefined
+  );
 }
 
 /**
@@ -411,7 +443,8 @@ export interface BuiltinOptions<
  *
  * Update middleware nests first-outermost: supervision wraps the identity
  * filter (a throwing `ofMsg` is supervised like a reducer throw — spike #264
- * run 3), which wraps the dev checks around the reducer itself. Commit
+ * run 3), which wraps the dev checks around the reducer itself. A Msg with no
+ * cell rejects through supervision unsupervised (#310). Commit
  * callbacks run in order: change listeners, then `observe` / `onBoot`, then
  * semantic events, then `done()` waiters, then telemetry.
  */
@@ -421,7 +454,7 @@ export function builtinExtensions<
   C,
   E extends { type: string },
 >(
-  machine: {
+  machine: CellTable & {
     readonly identity?: Identity<S, M>;
     readonly cmds?: readonly AnyCmdDef[];
   },
@@ -429,7 +462,7 @@ export function builtinExtensions<
 ): readonly ExtensionFactory<S, M, C>[] {
   const clock = opts.clock ?? Date.now;
   return [
-    supervision(opts.supervision),
+    supervision(opts.supervision, machine),
     identityFilter(machine.identity),
     devChecks(),
     cmdDefinitions(machine.cmds ?? [], clock),

@@ -12,14 +12,16 @@
 import { Effect, type Scope, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import {
+  type ConformanceCase,
   clock,
   conformanceMachines,
   counter,
+  door,
   lookup,
   lookupAnswer,
   owned,
 } from "../__fixtures__/engine-conformance";
-import type { BootingRuntime } from "../index";
+import { type BootingRuntime, NoCellError } from "../index";
 import { run as runPromise } from "../promise";
 import { run as runEffect } from "./index";
 
@@ -94,6 +96,11 @@ const engines: { readonly [K in Name]: EnginePair } = {
       },
     }) as EffectRun,
   },
+  door: {
+    // Default supervision on both engines: the refusal must not halt the run.
+    promise: () => runPromise(door, { clock: fixed }) as AnyRuntime,
+    effect: runEffect(door, { clock: fixed }) as EffectRun,
+  },
   owned: {
     promise: () =>
       runPromise(owned, { clock: fixed, onError: () => {} }) as AnyRuntime,
@@ -116,7 +123,13 @@ async function drive(name: Name, rt: AnyRuntime): Promise<Trace> {
     readonly script: readonly { type: string }[];
     readonly terminal?: (state: never) => boolean;
   };
-  for (const msg of spec.script) await booted.dispatch(msg);
+  for (const msg of spec.script) {
+    // A refusal is part of the trace, so both engines must refuse the same Msg.
+    await booted.dispatch(msg).catch((err: unknown) => {
+      if (!(err instanceof NoCellError)) throw err;
+      trace.push(["refused", JSON.stringify(msg)]);
+    });
+  }
   if (spec.terminal !== undefined) await booted.done();
   return trace;
 }
@@ -147,6 +160,9 @@ describe("both engines run every shared machine to the same trace", () => {
     expect(effect).toEqual(promise);
     // A trace of boot alone would match trivially; each script transitions.
     expect(promise.length).toBeGreaterThan(1);
+    const spec: ConformanceCase<never, unknown> = conformanceMachines[name];
+    const refused = promise.filter(([step]) => step === "refused").length;
+    expect(refused).toBe(spec.refusals ?? 0);
   });
 
   it("the lookup trace covers ok, a declared err, a malformed ok and a follow-up", async () => {
@@ -156,6 +172,16 @@ describe("both engines run every shared machine to the same trace", () => {
       errors: ["not_found", "malformed_result"],
       audits: ["look u1", "look u2", "look u3"],
     });
+  });
+
+  it("the door trace refuses the Msg with no cell and applies the ones after it", async () => {
+    const trace = await onEffect("door");
+    expect(trace).toEqual([
+      ["boot", { type: "closed" }],
+      ["refused", JSON.stringify({ type: "close" })],
+      [JSON.stringify({ type: "open" }), { type: "open" }],
+      [JSON.stringify({ type: "close" }), { type: "closed" }],
+    ]);
   });
 
   it("the owned trace drops the Msg addressed to another instance", async () => {

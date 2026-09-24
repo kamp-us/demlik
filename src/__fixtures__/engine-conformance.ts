@@ -7,7 +7,13 @@
  */
 
 import { z } from "zod";
-import { Cmd, defineMachine, type Settled, type Sub } from "../index";
+import {
+  Cmd,
+  defineMachine,
+  type Settled,
+  type Sub,
+  type Transitions,
+} from "../index";
 
 // === counter: pure folds, no effects ===
 
@@ -132,6 +138,23 @@ const owned = defineMachine({
   identity: { ofState: (s) => s.owner, ofMsg: (msg) => msg.to },
 });
 
+// === door: a Msg the current State has no cell for is refused, and the run goes on ===
+
+type DoorState = { readonly type: "closed" } | { readonly type: "open" };
+type DoorMsg = { readonly type: "open" } | { readonly type: "close" };
+
+// Each phase has a cell for one Msg only, so the other one is refused there.
+const doorUpdate: Transitions<DoorState, DoorMsg, never> = {
+  closed: { open: () => [{ type: "open" }, []] },
+  open: { close: () => [{ type: "closed" }, []] },
+};
+
+const door = defineMachine({
+  types: { model: {} as DoorState, msg: {} as DoorMsg },
+  init: (loaded) => [loaded ?? { type: "closed" }, []],
+  update: doorUpdate,
+});
+
 /** One shared machine and the run it gets on each engine. */
 export interface ConformanceCase<S, M> {
   readonly machine: unknown;
@@ -139,6 +162,11 @@ export interface ConformanceCase<S, M> {
   readonly script: readonly M[];
   /** When set, the run is awaited to this terminal State before it stops. */
   readonly terminal?: (state: S) => boolean;
+  /**
+   * How many script Msgs the run must refuse with `NoCellError`, each one
+   * leaving the run alive under the default supervision (#310). Absent is 0.
+   */
+  readonly refusals?: number;
 }
 
 export const conformanceMachines = {
@@ -167,6 +195,12 @@ export const conformanceMachines = {
       { type: "poke", to: "a" },
     ],
   } satisfies ConformanceCase<{ owner: string; pokes: number }, OwnedMsg>,
+  door: {
+    machine: door,
+    // `close` while closed has no cell: refused, and the `open` after it lands.
+    script: [{ type: "close" }, { type: "open" }, { type: "close" }],
+    refusals: 1,
+  } satisfies ConformanceCase<DoorState, DoorMsg>,
 } as const;
 
-export { clock, counter, lookup, owned };
+export { clock, counter, door, lookup, owned };
