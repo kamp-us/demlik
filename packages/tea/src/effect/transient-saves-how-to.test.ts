@@ -12,8 +12,6 @@
  * entry may do.
  */
 
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -24,6 +22,7 @@ import {
 } from "../../examples/streaming-reply";
 import { streamReply as onEffect } from "../../examples/streaming-reply-effect";
 import { streamReply as onPromise } from "../../examples/streaming-reply-promise";
+import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
 import type { Store } from "../index";
 import { memoryStore } from "../mem/index";
 import { run } from "../promise";
@@ -91,26 +90,18 @@ describe("skipSaving — the page's wrapper, on both engines", () => {
   });
 });
 
-const read = (path: string) =>
-  readFile(fileURLToPath(new URL(path, import.meta.url)), "utf8");
-
-/** Every fenced ```ts block on the page, in page order. */
-async function tsBlocks(): Promise<string[]> {
-  const markdown = await read(
-    "../../docs/how-to/skip-saving-transient-states.md",
-  );
-  return [...markdown.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) =>
-    (m[1] ?? "").trimEnd(),
-  );
-}
-
 describe("the skip-saving how-to — it cannot rot", () => {
   it.each([
     "streaming-reply.ts",
     "streaming-reply-promise.ts",
     "streaming-reply-effect.ts",
   ])("the page shows %s verbatim", async (file) => {
-    const example = (await read(`../../examples/${file}`)).trimEnd();
-    expect(await tsBlocks()).toContain(example);
+    await expectPageMirrors(
+      new URL(
+        "../../docs/how-to/skip-saving-transient-states.md",
+        import.meta.url,
+      ),
+      [fileMirror(new URL(`../../examples/${file}`, import.meta.url))],
+    );
   });
 });

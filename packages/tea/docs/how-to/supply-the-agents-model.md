@@ -296,8 +296,9 @@ Four details in this adapter carry the contract:
   carry `parts` the tool wants the model to see, such as a screenshot. `toPart`
   sends images as `image_url` and files as `file`, with bytes as a data URL.
   An image may stay a link, but `file_data` takes only data, so `toPart`
-  fetches a linked file and sends its bytes. Chat completions takes only text on a `tool` message, so a tool's parts
-  follow the turn's tool results as one `user` message.
+  fetches a linked file and sends its bytes. Chat completions takes only text
+  on a `tool` message, so a tool's parts follow the turn's tool results as one
+  `user` message.
 - A throw inside the function, including a `JSON.parse` failure on a truncated
   arguments string, fails that brain call. The agent's `retry` ladder then
   decides whether to call the model again.

@@ -23,9 +23,9 @@
 // biome-ignore-all lint/suspicious/noExportsInTest: the door is the artifact
 // under test, and it is exported because the reader pastes it as a module.
 
-import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { expectPageMirrors, regionMirror } from "../page-mirrors";
 
 // #region batteries
 /**
@@ -270,24 +270,8 @@ const page = fileURLToPath(
 );
 const self = fileURLToPath(import.meta.url);
 
-/** The text between one region's markers, which is what the page shows. */
-async function region(name: string): Promise<string> {
-  const source = await readFile(self, "utf8");
-  const body = source
-    .split(`// #region ${name}\n`)[1]
-    ?.split(`// #endregion ${name}\n`)[0];
-  if (body === undefined)
-    throw new Error(`the ${name} region markers are gone`);
-  return body.trimEnd();
-}
-
-/** Every fenced ```ts block on the page, in page order. */
-async function tsBlocks(): Promise<string[]> {
-  const markdown = await readFile(page, "utf8");
-  return [...markdown.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) =>
-    (m[1] ?? "").trimEnd(),
-  );
-}
+/** A region of this file, which the page shows as one block. */
+const region = (name: string) => regionMirror(self, name);
 
 describe("docs/how-to/compose-two-battery-slices.md (#240) — it cannot rot", () => {
   it.each([
@@ -296,6 +280,6 @@ describe("docs/how-to/compose-two-battery-slices.md (#240) — it cannot rot", (
     "read",
     "precedence",
   ])("shows the compiled `%s` block verbatim", async (name) => {
-    expect(await tsBlocks()).toContain(await region(name));
+    await expectPageMirrors(page, [region(name)]);
   });
 });

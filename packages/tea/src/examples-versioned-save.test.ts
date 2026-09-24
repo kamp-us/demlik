@@ -10,9 +10,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { migrateSettings, settings } from "../examples/versioned-save";
+import { expectPageMirrors, fileMirror } from "./docs/page-mirrors";
 import { Refusal, StoreRefusedError } from "./index";
 import { fileStore } from "./node";
 import { run } from "./promise";
@@ -106,13 +106,9 @@ describe("examples/versioned-save.ts — through a fileStore", () => {
 
 describe("the migrate-a-saved-state how-to", () => {
   it("the page shows the example verbatim", async () => {
-    const read = (at: string) =>
-      readFile(fileURLToPath(new URL(at, import.meta.url)), "utf8");
-    const page = await read("../docs/how-to/migrate-a-saved-state.md");
-    const blocks = [...page.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) =>
-      (m[1] ?? "").trimEnd(),
+    await expectPageMirrors(
+      new URL("../docs/how-to/migrate-a-saved-state.md", import.meta.url),
+      [fileMirror(new URL("../examples/versioned-save.ts", import.meta.url))],
     );
-    const example = (await read("../examples/versioned-save.ts")).trimEnd();
-    expect(blocks).toContain(example);
   });
 });
