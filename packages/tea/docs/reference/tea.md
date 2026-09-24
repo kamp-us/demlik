@@ -116,7 +116,7 @@ import { … } from "@demlik/tea";
 | `Refusal` | Class | `migrate`'s answer for saved bytes it cannot read. |
 | `refuse` | Function | Refuse saved bytes from `Store.migrate`. |
 | `replay` | Function |  |
-| `RunHandle` | Interface | What an engine's `run` returns: queue a Msg, listen, wait for boot, stop. |
+| `RunHandle` | Interface | A running machine's handle: queue a Msg, listen, wait for boot, stop. |
 | `RunHandlers` | Type | The handlers an engine is handed beside a machine: the InterpretArg Cmd handlers and the SubscribeArg sub runners. |
 | `RunOptions` | Type | The options every engine's `run` accepts: the `ctx`, the handlers the machine runs under, an optional `store`, and the `events` projector that feeds `on`. |
 | `Runtime` | Interface | The Promise engine's booted handle — what BootingRuntime's `ready` resolves to once boot completes. |

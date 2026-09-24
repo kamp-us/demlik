@@ -98,8 +98,8 @@ export const runProfile = run(profile, {
 export const lookUp = (id: string) =>
   Effect.gen(function* () {
     const handle = yield* runProfile;
-    const runtime = yield* Effect.promise(() => handle.ready);
-    yield* Effect.promise(() => runtime.dispatch({ type: "look_up", id }));
+    const runtime = yield* handle.ready;
+    yield* runtime.dispatch({ type: "look_up", id });
     return runtime.getState();
   }).pipe(Effect.scoped);
 ```
@@ -127,13 +127,16 @@ What changes from the Promise engine:
 - **Services come from your Layers.** `runProfile` needs `Directory` because
   its handler reads it, and the type says so. It does not compile as runnable
   until you provide it.
-- **`run` needs a `Scope`.** Closing the scope stops the run. Every handler
-  still in flight is interrupted, its finalizers run, and no Msg is dispatched
-  after stop. Calling `stop()` on the handle does the same.
-- **The handle is the Promise engine's handle.** `ready`, `dispatch`,
-  `getState`, `subscribe` and `stop` read the same. Anything typed on
-  `RunHandle` or `BootedRunHandle`, like `useRuntime` from `@demlik/tea/react`,
-  takes it as it is.
+- **`run` needs a `Scope`.** Closing the scope stops the run and its Subs.
+  Every handler still in flight is interrupted, its finalizers run, and no Msg
+  is dispatched after stop. Calling `stop()` on the handle does the same.
+- **The handle's verbs are Effects.** The members have the Promise engine's
+  names. Where the Promise engine returns a Promise (`ready`, `dispatch`,
+  `dispatchOnce`, `idle`, `done`, `stop`), this one returns an Effect, so you
+  `yield*` it. `getState`, `result` and the listeners (`subscribe`, `observe`,
+  `onBoot`, `on`) are the same functions on both engines. Hosts typed on the
+  Promise handle, like `useRuntime` from `@demlik/tea/react`, do not take this
+  one.
 
 The other options (`store`, `onError`, `clock`, `events`, `supervision`,
 `terminal`, `telemetry`, `disposeTimeoutMs`) mean what they mean on the Promise
@@ -191,3 +194,31 @@ The Promise engine follows the same rule. Its runner dispatches the Msgs for
 the errors it expects (the `onError` option of `fromWebSocket` does this), and a
 runner that throws while it starts stops the run and reaches `onError` under
 `"sub"`.
+
+## 5. Catch a run's failures by tag
+
+A dispatch fails with one of three typed errors, and `Effect.catchTags` sorts
+them:
+
+- **`Stopped`**: the run is stopping or has stopped, so the Msg was never
+  folded. `when` says which.
+- **`StoreFailed`**: the store failed. `operation` is `"save"` when a
+  transition's save threw (a fenced store's conflict included), and `"load"`
+  when `ready` could not restore the saved state. `cause` is the underlying
+  error.
+- **A hand-written cell's own failure**: the error type of the `interpret`
+  cell of a Cmd that is not `Cmd.define`d. A `Cmd.define`d Cmd's failure
+  becomes its `_err` Msg instead.
+
+```ts
+const sent = runtime.dispatch({ type: "look_up", id }).pipe(
+  Effect.as("sent"),
+  Effect.catchTags({
+    Stopped: () => Effect.succeed("stopped"),
+    StoreFailed: (e) => Effect.succeed(`store ${e.operation} failed`),
+  }),
+);
+```
+
+Anything else is a bug in the program, like a reducer that throws or a Msg
+with no cell. It ends the Effect as a defect.

@@ -27,7 +27,7 @@ export const runProfile = run(profile, {
 export const lookUp = (id: string) =>
   Effect.gen(function* () {
     const handle = yield* runProfile;
-    const runtime = yield* Effect.promise(() => handle.ready);
-    yield* Effect.promise(() => runtime.dispatch({ type: "look_up", id }));
+    const runtime = yield* handle.ready;
+    yield* runtime.dispatch({ type: "look_up", id });
     return runtime.getState();
   }).pipe(Effect.scoped);

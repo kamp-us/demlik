@@ -55,8 +55,9 @@ file imports only the core, so it runs unchanged on either engine.
   imports no engine.
 - `@demlik/tea/promise` — the Promise engine. Handlers return Promises.
 - `@demlik/tea/effect` — the Effect engine (`experimental`, Effect v4). Handlers
-  return Effects, services come from your Layers, and closing the scope
-  interrupts whatever is in flight.
+  return Effects, services come from your Layers, the handle's verbs return
+  Effects with typed errors, and closing the scope interrupts whatever is in
+  flight.
 
 [Run a machine on the Promise engine](https://github.com/kamp-us/demlik/blob/main/docs/how-to/run-on-the-promise-engine.md)
 and [on the Effect engine](https://github.com/kamp-us/demlik/blob/main/docs/how-to/run-on-the-effect-engine.md)

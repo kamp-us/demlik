@@ -2,7 +2,7 @@
  * @demlik/tea runtime interface surface + pure helpers — the public types,
  * interfaces, and construction/composition helpers the runtime (`./run`)
  * implements against: `Store`, the error-sink and supervision contracts, the
- * engine-neutral `RunHandle` / `BootedRunHandle` every engine's `run` returns,
+ * engine-neutral `RunHandle` / `BootedRunHandle` host adapters are typed on,
  * the Promise engine's `RuntimeRef` / `BootingRuntime` / `Runtime` handle
  * hierarchy that widens it, `definePort`, the
  * identity-typed constructors `defineMachine` / `asReducer`, and the pure tools
@@ -769,17 +769,19 @@ export interface RuntimeRef<M extends { type: string }> {
   dispatchOnce(msg: M): Promise<void>;
 }
 
-// === RunHandle: the handle every engine's `run` returns (#281, #250) ===
+// === RunHandle: the handle host adapters are typed on (#281, #250) ===
 //
-// The engine-neutral part of a running machine: what a host adapter needs and
-// nothing an engine has to invent. Both engines' `run` return a `RunHandle`, so
-// `/react` and `/do` are typed against it and never against one engine's
-// runtime. It splits the same way the Promise engine's handle does: before boot
-// there is no State to read, so `getState` lives only on the
-// `BootedRunHandle` that `ready` resolves to.
+// The part of a running machine a host adapter needs and nothing an engine has
+// to invent, so `/react` and `/do` are typed against it and never against one
+// engine's runtime. The Promise engine's `run` returns one. The Effect engine's
+// handle keeps these member names but returns Effects where this returns
+// Promises (#308, ruling R4.1 of #325), so it is not a `RunHandle`. It splits
+// the same way the Promise engine's handle does: before boot there is no State
+// to read, so `getState` lives only on the `BootedRunHandle` that `ready`
+// resolves to.
 
 /**
- * What an engine's `run` returns: queue a Msg, listen, wait for boot, stop.
+ * A running machine's handle: queue a Msg, listen, wait for boot, stop.
  * `getState` is not here — there is no State until boot runs, so it lives on
  * the {@link BootedRunHandle} that `ready` resolves to. `E` is the machine's
  * semantic event union (see `on`); `never` when the run projects none.
@@ -840,8 +842,8 @@ export type RunOptions<
 /**
  * An engine's `run`, seen from a host adapter: a machine and its
  * {@link RunOptions} in, a {@link RunHandle} out. `useMachine` and
- * `createAgentHost` take one, so they run on whichever engine the caller
- * imported — `run` from `@demlik/tea/promise` fits it as it is.
+ * `createAgentHost` take one — `run` from `@demlik/tea/promise` fits it as it
+ * is.
  */
 export type EngineRun<
   S,

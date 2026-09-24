@@ -195,7 +195,10 @@ export interface LoopHandle<S, M> extends LiveWorkProbe {
 // hands a THROWING consumer sink's own error back here with the phase it was
 // handling, so a phase-keyed branch would warn away a broken sink and re-create
 // the very silent failure this exists to remove.
-function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
+export function defaultOnError(
+  error: unknown,
+  _context: RuntimeErrorContext,
+): void {
   if (error instanceof RuntimeDiscardNotice) {
     console.warn(error);
     return;
@@ -203,6 +206,18 @@ function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
   setTimeout(() => {
     throw error;
   }, 0);
+}
+
+/**
+ * The rejection of a dispatch into a run whose gate is closed: `stop()` has
+ * returned, or a built-in halted it. Internal, so the Promise engine's
+ * rejection reads as before, an `Error` with this message; the Effect engine
+ * reads the class to fail the dispatch with `Stopped`.
+ */
+export class RuntimeStoppedError extends Error {
+  constructor(readonly msgType: string) {
+    super("@demlik/tea: runtime stopped");
+  }
 }
 
 /** One started Sub: its type, the cleanup its runner returned, and whether it failed. */
@@ -622,15 +637,15 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   /**
    * Enqueue a dispatch on the tail — the single gate re-entrant handler and
    * runner calls also go through. Rejects when the gate is not open (with a
-   * `DispatchDiscardedError` while `stop()` drains, a plain stopped Error once
-   * it has), boot failed, or the fold / save / sub start / handler throws.
+   * `DispatchDiscardedError` while `stop()` drains, a `RuntimeStoppedError`
+   * once it has), boot failed, or the fold / save / sub start / handler throws.
    */
   function enqueueDispatch(msg: M): Promise<void> {
     if (gate !== "open") {
       return Promise.reject(
         gate === "draining"
           ? new DispatchDiscardedError(msg.type)
-          : new Error("@demlik/tea: runtime stopped"),
+          : new RuntimeStoppedError(msg.type),
       );
     }
     const next = tail.then(() => {
