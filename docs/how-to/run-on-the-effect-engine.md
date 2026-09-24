@@ -122,6 +122,8 @@ What changes from the Promise engine:
 - **A handler returns an `Effect`.** Its success becomes `fetch_user_ok` and a
   failure with a declared tag becomes `fetch_user_err`. A defect, or a failure
   with a tag the Cmd does not declare, goes to `onError` and dispatches no Msg.
+  A hand-written Cmd's handler succeeds with one Msg, a list of Msgs, or
+  nothing, as on the Promise engine; a list is dispatched in order.
 - **Services come from your Layers.** `runProfile` needs `Directory` because
   its handler reads it, and the type says so. It does not compile as runnable
   until you provide it.

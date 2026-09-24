@@ -603,6 +603,18 @@ export function cmdEdgeOf(ctx: unknown): CmdEdge {
   return edge ?? ((_, returned) => returned);
 }
 
+/**
+ * The Msgs a handler's settled return dispatches, in order (#324). A plain
+ * Cmd's handler returns one Msg, a list of them, or nothing; by the time the
+ * return reaches here a `Cmd.define`d one has already been minted into its
+ * single `_ok` / `_err` Msg by the edge above. Both engines' loop and `drive`
+ * read a return through this one function, so they agree on what it sends.
+ */
+export function followUps<M>(returned: unknown): readonly M[] {
+  if (returned === undefined || returned === null) return [];
+  return Array.isArray(returned) ? (returned as readonly M[]) : [returned as M];
+}
+
 // === The detached-work edge — work a handler outlives ===
 //
 // A handler that returns BEFORE its effect finishes (so the serial interpret
@@ -1801,7 +1813,9 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
 //
 // Flat dispatch table keyed by `Cmd.type`. Each cell receives the narrowed Cmd
 // and the runtime-augmented Ctx (`HandlerCtx<Ctx>`) and resolves to a
-// follow-up Msg or `void` (fire-and-forget). The mapped type makes a missing
+// follow-up Msg, a list of them, or `void` (fire-and-forget). A list is
+// dispatched in order as follow-ups, the way Elm's `Cmd.batch` answers with
+// several Msgs (#324). The mapped type makes a missing
 // handler a compile error — `defineMachine` cannot accept the dictionary until
 // every Cmd variant has one.
 //
@@ -1841,15 +1855,16 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
 // carries the `ok` / `err` builders (`OutcomeHelpers`), `err` typed to the
 // def's declared tags, and the engine mints `<name>_ok` / `<name>_err` from
 // what it returns. Such a cell resolves to an outcome or nothing, never a Msg.
-// A hand-written Cmd's cell is unchanged.
+// A hand-written Cmd's cell returns a Msg, a list of Msgs, or nothing.
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
 };
 
 /**
  * One cell of {@link Interpret}: the outcome-returning form for a
- * `Cmd.define`d Cmd, the Msg-returning form for a hand-written one. A Cmd is
- * `Cmd.define`d exactly when its `E` phantom is declared (not `unknown`).
+ * `Cmd.define`d Cmd, the form returning a Msg, a list of Msgs or nothing for a
+ * hand-written one. A Cmd is `Cmd.define`d exactly when its `E` phantom is
+ * declared (not `unknown`). A returned list is dispatched in order.
  */
 export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
   unknown extends ErrorsOf<C>
@@ -1857,8 +1872,8 @@ export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
         cmd: C,
         ctx: HandlerCtx<Ctx>,
         dispatch?: (msg: M) => void,
-        // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
-      ) => Promise<M | void>
+        // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns follow-up Msgs or nothing; `void` permits no-return bodies that `M | undefined` would reject
+      ) => Promise<M | readonly M[] | void>
     : (
         cmd: C,
         ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,

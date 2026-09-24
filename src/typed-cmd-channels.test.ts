@@ -353,6 +353,19 @@ describe("the handler returns an outcome; the engine mints the Msg (ADR 0021)", 
     expect(reports[0]?.context).toEqual({ phase: "interpret" });
   });
 
+  it("a handler returning a list is refused too — a defined Cmd settles once (#324)", async () => {
+    const { state, seen, reports } = await goOnce(async (cmd) => [
+      fetch.ok(cmd, { body: "one" }),
+      fetch.ok(cmd, { body: "two" }),
+    ]);
+    expect(seen).toEqual(["go"]);
+    expect(state.errors).toEqual([]);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.error).toBeInstanceOf(OutcomeContractError);
+    expect(reports[0]?.error).toMatchObject({ cmdType: "fetch" });
+    expect(reports[0]?.context).toEqual({ phase: "interpret" });
+  });
+
   it("returning nothing dispatches nothing", async () => {
     const { seen, reports } = await goOnce(async () => undefined);
     expect(seen).toEqual(["go"]);

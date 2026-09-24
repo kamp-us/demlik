@@ -43,7 +43,7 @@ import {
   type PortEmitter,
   type Sub,
 } from "../index";
-import { cmdEdge, cmdEdgeOver } from "../pure/core";
+import { cmdEdge, cmdEdgeOver, followUps } from "../pure/core";
 import { bindMachine } from "./bind-machine";
 
 /**
@@ -262,8 +262,8 @@ export async function drive<
         cmd: C,
         ctx: unknown,
         dispatch?: (msg: M) => void,
-        // biome-ignore lint/suspicious/noConfusingVoidType: mirrors `Interpret`'s own cell return — a follow-up Msg, or nothing
-      ) => Promise<M | void>)
+        // biome-ignore lint/suspicious/noConfusingVoidType: mirrors `Interpret`'s own cell return — follow-up Msgs, or nothing
+      ) => Promise<M | readonly M[] | void>)
     | undefined
   >;
 
@@ -297,15 +297,14 @@ export async function drive<
       if (cell === undefined) {
         throw new DriveNoHandlerError<M, C>(cmd.type, trace);
       }
-      // biome-ignore lint/suspicious/noConfusingVoidType: mirrors `Interpret`'s own cell return — a follow-up Msg, or nothing
-      let settled: M | void;
+      let settled: unknown;
       try {
         settled = settle(
           cmd,
           await cell(cmd, handlerCtx, (fired) => {
             pending.push(fired);
           }),
-        ) as M | undefined;
+        );
       } catch (err) {
         // Unswallowed: the handler's own error is what leaves `drive`, so a
         // test's `instanceof` / `_tag` branch still lands. The trace rides on
@@ -320,7 +319,8 @@ export async function drive<
         }
         throw err;
       }
-      if (settled !== undefined) pending.push(settled);
+      // A returned list lands in order, as `run`'s loop enqueues it.
+      pending.push(...followUps<M>(settled));
     }
   }
 

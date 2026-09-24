@@ -78,7 +78,7 @@ import { … } from "@demlik/tea";
 | `initAck` | Function | The `Ack` for a server that has applied nothing yet — `ack(NO_ACK)`. |
 | `Interpret` | Type |  |
 | `InterpretArg` | Type | The `interpret` option of an engine's `run`: optional for a machine that emits no Cmd, required — one handler per Cmd variant — for one that does. |
-| `InterpretCell` | Type | One cell of Interpret: the outcome-returning form for a `Cmd.define`d Cmd, the Msg-returning form for a hand-written one. |
+| `InterpretCell` | Type | One cell of Interpret: the outcome-returning form for a `Cmd.define`d Cmd, the form returning a Msg, a list of Msgs or nothing for a hand-written one. |
 | `InterpretDetached` | Type |  |
 | `isFencedStore` | Function | Narrow a `Store<S>` to a FencedStore — what `run` uses to decide. |
 | `liftSlice` | Function | Lift a battery verb's result into the host state that carries its slice. |

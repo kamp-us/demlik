@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { burst, burstAnswer } from "../__fixtures__/engine-conformance";
 import { type Cmd, defineMachine, replay } from "../index";
 import {
   DEFAULT_MAX_ROUNDS,
@@ -163,6 +164,28 @@ describe("drive", () => {
 
     expect(state).toEqual({ left: 0, done: 2 });
     expect(msgsOf(trace)).toHaveLength(3);
+  });
+
+  it("folds a returned list of Msgs in order, as `run` does (#324)", async () => {
+    const { state, trace } = await drive(
+      burst,
+      { log: [] },
+      { type: "fire" },
+      {
+        burst: async (cmd) => burstAnswer(cmd.count),
+        hush: async () => [],
+        last: async () => ({ type: "done" }),
+      },
+    );
+
+    expect(state).toEqual({ log: ["got 0", "got 1", "got 2", "done"] });
+    expect(msgsOf(trace).map((m) => m.type)).toEqual([
+      "fire",
+      "got",
+      "got",
+      "got",
+      "done",
+    ]);
   });
 
   it("hands each handler the ctx the caller supplied", async () => {
