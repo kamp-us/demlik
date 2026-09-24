@@ -96,12 +96,11 @@ export function replayTrace<
 /**
  * Order-insensitive structural deep-equality — the comparator the
  * record/replay lane owns, exposed so consumers (e.g. `@demlik/tea/parity`'s
- * `parityEqual`) reuse it rather than adding a fourth deep-compare. It is one
- * of three structural walkers in the package, divergent on purpose:
+ * `parityEqual`) reuse it rather than adding a third deep-compare. It is one
+ * of two structural walkers in the package, divergent on purpose:
  * this `deepEqual` returns a boolean verdict (order-insensitive, for
- * replay/parity equality), `devtools`'s `diffState` returns a change list (for
- * a human-readable diff view), and `testing`'s `__deepEqual` is the assertion
- * helpers' internal compare — same shape, three jobs, not one to collapse.
+ * replay/parity equality), and `devtools`'s `diffState` returns a change list
+ * (for a human-readable diff view) — same shape, two jobs, not one to collapse.
  * `true` iff `a` and `b` are structurally equal under {@link firstDivergence}'s
  * walk (object keys compared order-insensitively, arrays index-by-index).
  */
