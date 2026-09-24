@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (151)
+## Exports (155)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -54,10 +54,14 @@ These are the ones to read first:
 | `AgentTerminalFailure` | Type | The unified terminal failure the agent settles on. |
 | `AgentTimerMsg` | Type | The timer Msg (retry + safety deadline) — `DeadlineExceeded`, the shared shape of both composed wrappers' timer Msgs (`LlmTimerMsg` and `MonitoredRunTimerMsg` are both `DeadlineExceeded`). |
 | `AgentToMachine` | Type | The `toMachine` signature. |
+| `agentTool` | Function | Wrap a child `defineAgent` as a tool a parent `defineAgent` calls and awaits — pass it the child, how to phrase its input and how to read its answer, and get back a tool definition the parent's `tools` accepts like any `tool()`. |
+| `AgentToolError` | Type | The failures an agent tool settles with beside `thrown`. |
+| `AgentToolSpec` | Type | What `agentTool` takes. |
 | `AgentTurn` | Interface | One model turn: the narration `content` the model produced and the `toolCalls` it asked us to run. |
 | `agentTurnSchema` | Variable | The `Schema<AgentTurn>` for tea's own turn type — the parse target a brain call binds when the agentic purpose's output is a bare `AgentTurn` (the common case). |
 | `AnyToolDef` | Type | The declaration-erased view the router reads. |
 | `Awaiting` | Type | Whether the agentic stage is waiting on the model (`llm`), on tools (`tools`), or on a compaction round-trip (`compacting`). |
+| `ChildFailureReason` | Type | Why a child run ended `failed` — the reason `status()` reports for it. |
 | `CompactInterpret` | Type | The CONFIG-DERIVED compaction obligation on `toMachine`'s `toolInterpret` — the exact twin of SnapshotInterpret. |
 | `COMPACTION_PURPOSE` | Variable | The reserved compaction purpose's value — the single in-flight summarize call's key. |
 | `CompactionOutputs` | Interface | The purpose→output map for the compaction LLM call — the single reserved `$compact` purpose mapping to a CompactionSummary. |
@@ -98,7 +102,7 @@ These are the ones to read first:
 | `InterpretOverlay` | Type | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |
 | `isAgentTurn` | Function | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
-| `isReservedToolName` | Function | Whether `name` is one `tool()` refuses — the set `ReservedToolName` types. |
+| `isReservedToolName` | Function | Whether `name` is one a tool door refuses — the set `ReservedToolName` types. |
 | `isStreamingModel` | Function | Whether a model port wants the ModelStream — read off its declared arity, which is the mark JavaScript already carries. |
 | `isTurnUsage` | Function | Narrow an unknown to a TurnUsage — the two required counts present, and each optional one either absent or a count too. |
 | `LidPurpose` | Type | The one purpose a `defineAgent` agent runs. |
@@ -123,7 +127,7 @@ These are the ones to read first:
 | `plainModel` | Function | Lift a plain-function model into the `ModelFactory` port. |
 | `PlainModel` | Type | The plain-function model port — the common path. |
 | `renderPrompt` | Function | The prompt as messages: the head, then each turn with its tool outcomes. |
-| `ReservedToolName` | Type | A tool name `tool()` refuses. |
+| `ReservedToolName` | Type | A tool name `tool()` and `agentTool()` refuse. |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `Schema` | Interface | The minimal structured-output schema contract: `parse(unknown) => T`, the zod-style call `decode` uses to validate the model's output before it settles `resilient_run_ok`. |
 | `SnapshotInterpret` | Type | The CONFIG-DERIVED snapshot obligation on `toMachine`'s `toolInterpret`. |
