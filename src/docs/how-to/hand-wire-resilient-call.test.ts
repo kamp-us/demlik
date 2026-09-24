@@ -125,7 +125,7 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
     subs: [{ type: "timer", deps: (s: UserState) => rc.timer(s.call) }],
   });
   // 6. Do the work. The handler returns an outcome; it never builds a Msg.
-  const interpret: Interpret<UserMsg, UserCmd, unknown> = {
+  const interpret: Interpret<UserMsg, UserCmd, undefined> = {
     resilient_run: async (cmd, { ok, err }) => {
       try {
         return ok(await fetchUser(cmd.input));

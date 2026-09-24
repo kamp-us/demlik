@@ -1721,10 +1721,29 @@ export interface PortEmitter {
 // reserved for genuine wire-edge erasure, not for "didn't bother").
 export type NoCtx = Readonly<Record<never, never>>;
 
+// === HandlerCtx<Ctx>: the ctx a Cmd handler is handed ===
+//
+// The machine's `Ctx` plus the kernel's `emit`. A machine that declares no
+// context (`ctx: undefined`, or `void`) has no Ctx half to add, so that half
+// becomes `unknown` before the intersection — `undefined & PortEmitter` would
+// otherwise reduce to `never` and leave the handler unable to reach `emit`,
+// `ok` or `err` at all (#296). The check is wrapped in a tuple so a `Ctx`
+// that merely MAY be undefined (`Foo | undefined`) is left alone, and `any`
+// is left as `any` rather than narrowed to the kernel's half.
+//
+// Every handler-ctx site builds on this one alias, so the rule lives here.
+export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
+  ? Ctx
+  : // biome-ignore lint/suspicious/noConfusingVoidType: `void` catches both a `ctx: undefined` and a `ctx: void` machine; `undefined` alone misses the second
+    [Ctx] extends [void]
+    ? unknown
+    : Ctx) &
+  PortEmitter;
+
 // === Interpret<M, C, Ctx>: record-of-handlers form of `interpret` ===
 //
 // Flat dispatch table keyed by `Cmd.type`. Each cell receives the narrowed Cmd
-// and the runtime-augmented Ctx (`Ctx & PortEmitter`) and resolves to a
+// and the runtime-augmented Ctx (`HandlerCtx<Ctx>`) and resolves to a
 // follow-up Msg or `void` (fire-and-forget). The mapped type makes a missing
 // handler a compile error — `defineMachine` cannot accept the dictionary until
 // every Cmd variant has one.
@@ -1779,15 +1798,13 @@ export type InterpretCell<M extends { type: string }, C extends Cmd, Ctx> =
   unknown extends ErrorsOf<C>
     ? (
         cmd: C,
-        ctx: Ctx & PortEmitter,
+        ctx: HandlerCtx<Ctx>,
         dispatch?: (msg: M) => void,
         // biome-ignore lint/suspicious/noConfusingVoidType: an interpret handler returns a follow-up Msg or nothing; `void` permits no-return bodies that `M | undefined` would reject
       ) => Promise<M | void>
     : (
         cmd: C,
-        ctx: Ctx &
-          PortEmitter &
-          OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
+        ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>,
         dispatch?: (msg: M) => void,
         // biome-ignore lint/suspicious/noConfusingVoidType: as above — a no-return body is legal
       ) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
@@ -1820,7 +1837,7 @@ export type InterpretDetached<
   Ctx,
 > = (
   cmd: C,
-  ctx: Ctx & PortEmitter,
+  ctx: HandlerCtx<Ctx>,
   dispatch: (msg: Allowed) => void,
 ) => Promise<void>;
 

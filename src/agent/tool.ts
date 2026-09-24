@@ -25,7 +25,6 @@ import {
   type MalformedResult,
   type OkOf,
   Outcome,
-  type PortEmitter,
   type Settled,
   type Tagged,
   type TaggedError,
@@ -35,6 +34,7 @@ import { MsgType, type MsgTypeValue } from "../protocol";
 import {
   cmdEdgeOf,
   detachWorkOf,
+  type HandlerCtx,
   malformedResult,
   validateSync,
 } from "../pure/core";
@@ -168,7 +168,7 @@ export type ToolConstructors<Ok, E extends Tagged> = {
  */
 export type ToolHandler<Args, Ok, E extends Tagged, Ctx> = (
   args: Args,
-  ctx: Ctx & PortEmitter,
+  ctx: HandlerCtx<Ctx>,
   settle: ToolConstructors<Ok, E>,
 ) => Promise<Outcome<Ok, E>>;
 
@@ -201,7 +201,7 @@ export type ToolDef<
    */
   readonly interpret: (
     cmd: CmdValue<Name, ToolInput<Args>, Ok, E>,
-    ctx: Ctx & PortEmitter,
+    ctx: HandlerCtx<Ctx>,
   ) => Promise<Outcome<Ok, E>>;
   /** Phantom — the ctx the handler reads. Never assigned. */
   readonly __ctx?: Ctx;
@@ -306,7 +306,7 @@ export function tool<
   // declared tags, so the engine mints it into `<name>_err` like any other.
   const interpret = async (
     cmd: C,
-    ctx: Ctx & PortEmitter,
+    ctx: HandlerCtx<Ctx>,
   ): Promise<Outcome<Ok, E>> => {
     try {
       return await handler(cmd.args, ctx, settle);
