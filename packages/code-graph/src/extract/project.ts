@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Project, type SourceFile } from "ts-morph";
@@ -8,6 +9,83 @@ declare module "ts-morph" {
       readonly parseDiagnostics?: readonly unknown[];
     }
   }
+}
+
+const WALK_PRUNE = new Set([
+  ".claude",
+  ".git",
+  ".next",
+  ".turbo",
+  ".wrangler",
+  "__generated__",
+  "coverage",
+  "dist",
+  "node_modules",
+  "vendor",
+]);
+
+function gitVisibleFiles(rootAbsolute: string): string[] | null {
+  let out: string;
+  try {
+    out = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
+      cwd: rootAbsolute,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+  return out.split("\0").filter((rel) => rel !== "" && !rel.endsWith("/"));
+}
+
+function walkedFiles(rootAbsolute: string): string[] {
+  const found: string[] = [];
+  const walk = (absDir: string, rel: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const childRel = rel === "" ? e.name : `${rel}/${e.name}`;
+      if (e.isDirectory()) {
+        if (!WALK_PRUNE.has(e.name)) walk(path.join(absDir, e.name), childRel);
+      } else if (e.isFile()) {
+        found.push(childRel);
+      }
+    }
+  };
+  walk(rootAbsolute, "");
+  return found;
+}
+
+function isRegularFile(absolute: string): boolean {
+  try {
+    return fs.statSync(absolute).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function listVisibleFiles(
+  rootAbsolute: string,
+  keep: (relPosix: string) => boolean,
+): string[] {
+  const candidates = gitVisibleFiles(rootAbsolute) ?? walkedFiles(rootAbsolute);
+  return candidates
+    .filter((rel) => keep(rel) && isRegularFile(path.join(rootAbsolute, rel)))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+const EXCLUDED_SEGMENTS = new Set(["node_modules", "vendor", "dist", ".next", "__generated__"]);
+
+function isSourceFile(rel: string): boolean {
+  if (!/\.tsx?$/.test(rel) || /\.d\.ts$/.test(rel) || /\.gen\.ts$/.test(rel)) return false;
+  return !rel
+    .split("/")
+    .some((segment) => segment.startsWith(".") || EXCLUDED_SEGMENTS.has(segment));
 }
 
 export type LoadedProject = {
@@ -22,59 +100,27 @@ export function toRelative(rootAbsolute: string, absolutePath: string): string {
   return rel.split(path.sep).join("/");
 }
 
-const PRUNED_DIRECTORIES = new Set([
-  "node_modules",
-  "vendor",
-  "dist",
-  ".next",
-  ".git",
-  "__generated__",
-]);
-
-function isSourceFileName(name: string): boolean {
-  return /\.tsx?$/.test(name) && !name.endsWith(".d.ts") && !name.endsWith(".gen.ts");
+export function discoverPackageRoots(rootAbsolute: string): string[] {
+  const roots = new Set<string>([""]);
+  for (const rel of listVisibleFiles(
+    rootAbsolute,
+    (f) => path.posix.basename(f) === "package.json",
+  )) {
+    if (rel.split("/").some((segment) => EXCLUDED_SEGMENTS.has(segment))) continue;
+    const dir = path.posix.dirname(rel);
+    roots.add(dir === "." ? "" : dir);
+  }
+  return [...roots].sort();
 }
 
 export function listSourceFiles(rootAbsolute: string): string[] {
-  const files: string[] = [];
-  const walk = (absDir: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.name.startsWith(".")) continue;
-      const abs = path.join(absDir, e.name);
-      if (e.isDirectory()) {
-        if (!PRUNED_DIRECTORIES.has(e.name)) walk(abs);
-      } else if (e.isFile() && isSourceFileName(e.name)) {
-        files.push(abs);
-      }
-    }
-  };
-  walk(rootAbsolute);
-  return files;
+  return listVisibleFiles(rootAbsolute, isSourceFile).map((rel) => path.join(rootAbsolute, rel));
 }
 
-export function discoverPackageRoots(rootAbsolute: string): string[] {
-  const roots = new Set<string>([""]);
-  const walk = (absDir: string, rel: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    if (entries.some((e) => e.isFile() && e.name === "package.json")) roots.add(rel);
-    for (const e of entries) {
-      if (!e.isDirectory() || PRUNED_DIRECTORIES.has(e.name)) continue;
-      walk(path.join(absDir, e.name), rel === "" ? e.name : `${rel}/${e.name}`);
-    }
-  };
-  walk(rootAbsolute, "");
-  return [...roots].sort();
+function addVisibleSourceFiles(project: Project, rootAbsolute: string): Set<string> {
+  const visible = listVisibleFiles(rootAbsolute, isSourceFile);
+  for (const rel of visible) project.addSourceFileAtPath(path.join(rootAbsolute, rel));
+  return new Set(visible);
 }
 
 function hasSyntaxError(sourceFile: SourceFile): boolean {
@@ -90,7 +136,8 @@ export function loadCheapProject(rootAbsolute: string): LoadedProject {
     compilerOptions: { allowJs: false },
   });
 
-  const added = listSourceFiles(rootAbsolute).map((file) => project.addSourceFileAtPath(file));
+  addVisibleSourceFiles(project, rootAbsolute);
+  const added = project.getSourceFiles();
 
   const clean: SourceFile[] = [];
   const failures: string[] = [];
@@ -153,34 +200,16 @@ export function resolveEdgeTsConfig(
   return found;
 }
 
-function isExcludedEdgeFile(rel: string): boolean {
-  return (
-    rel.includes("node_modules/") ||
-    rel.includes("/dist/") ||
-    rel.startsWith("dist/") ||
-    rel.includes("/.next/") ||
-    rel.includes("__generated__/") ||
-    /\.gen\.ts$/.test(rel)
-  );
-}
-
-function isEnumerableEdgeFile(sf: SourceFile, rootAbsolute: string, rootPosix: string): boolean {
-  const abs = sf.getFilePath();
-  if (!abs.split(path.sep).join("/").startsWith(rootPosix)) return false;
-  if (/\.d\.ts$/.test(abs)) return false;
-  return !isExcludedEdgeFile(toRelative(rootAbsolute, abs));
-}
-
 function collectEdgeSourceFiles(
   project: Project,
   rootAbsolute: string,
+  visible: ReadonlySet<string>,
 ): { clean: SourceFile[]; failures: string[] } {
-  const rootPosix = `${rootAbsolute.split(path.sep).join("/")}/`;
   const clean: SourceFile[] = [];
   const failures: string[] = [];
   for (const sf of project.getSourceFiles()) {
-    if (!isEnumerableEdgeFile(sf, rootAbsolute, rootPosix)) continue;
     const rel = toRelative(rootAbsolute, sf.getFilePath());
+    if (!visible.has(rel)) continue;
     let failed = false;
     try {
       failed = hasSyntaxError(sf);
@@ -212,9 +241,8 @@ export function loadEdgeProject(
     skipAddingFilesFromTsConfig: false,
   });
 
-  for (const file of listSourceFiles(rootAbsolute)) project.addSourceFileAtPath(file);
-
-  const { clean, failures } = collectEdgeSourceFiles(project, rootAbsolute);
+  const visible = addVisibleSourceFiles(project, rootAbsolute);
+  const { clean, failures } = collectEdgeSourceFiles(project, rootAbsolute, visible);
 
   return {
     project,

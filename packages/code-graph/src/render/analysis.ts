@@ -2,12 +2,14 @@ import path from "node:path";
 import type { EnvKeyReport } from "../env-keys/query.js";
 import { discoverPackageRoots } from "../extract/project.js";
 import { kindCensus } from "../kinds/classify.js";
-import type {
-  ClusterReport,
-  CrossRuntimeReport,
-  Graph,
-  ReachabilityReport,
-  WithheldReason,
+import {
+  type ClusterReport,
+  type CrossRuntimeReport,
+  type EntryReach,
+  EntryReachSchema,
+  type Graph,
+  type ReachabilityReport,
+  type WithheldReason,
 } from "../schema.js";
 import { analyzeCoupling, type Cycle } from "../smells/coupling.js";
 import { stableStringify } from "./json.js";
@@ -108,19 +110,31 @@ export function renderUnreachable(graph: Graph, json: boolean, pretty: boolean):
   return lines.join("\n");
 }
 
+const REACH_HEADINGS: Readonly<Record<EntryReach, string>> = {
+  public: "reachable from a public entry",
+  "service-binding": "reachable only through a service binding",
+  platform: "reachable only from a platform trigger (cron, queue, tail)",
+};
+
+function unguardedSection(report: ReachabilityReport, reach: EntryReach): string[] {
+  const rows = report.unguarded.filter((u) => u.reach === reach);
+  const lines = [`  ${reach} (${rows.length}) — ${REACH_HEADINGS[reach]}:`];
+  for (const u of rows) {
+    lines.push(`    ${u.effectId}  ${u.file}:${u.startLine}`);
+    lines.push(`      from ${u.entryId}  via ${u.path.join(" -> ")}`);
+  }
+  return lines;
+}
+
 export function renderUnguarded(graph: Graph, json: boolean, pretty: boolean): string {
   const report = graph.reachability;
   if (report === null) return REACH_NOT_RUN;
   if (json) return stableStringify(report.unguarded, pretty);
-  const lines: string[] = [
+  return [
     `unguarded: ${report.unguarded.length} effect nodes reachable from an entry ` +
       `without crossing an auth node (${report.entryCount} entries)`,
-  ];
-  for (const u of report.unguarded) {
-    lines.push(`  ${u.effectId}  ${u.file}:${u.startLine}`);
-    lines.push(`    from ${u.entryId}  via ${u.path.join(" -> ")}`);
-  }
-  return lines.join("\n");
+    ...EntryReachSchema.options.flatMap((reach) => unguardedSection(report, reach)),
+  ].join("\n");
 }
 
 const CLUSTERS_NOT_RUN =

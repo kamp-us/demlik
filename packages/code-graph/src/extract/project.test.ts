@@ -1,8 +1,15 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { discoverPackageRoots, listSourceFiles, loadCheapProject } from "./project.js";
+import {
+  discoverPackageRoots,
+  listSourceFiles,
+  loadCheapProject,
+  loadEdgeProject,
+} from "./project.js";
+import { findWranglerConfigs } from "./wrangler-config.js";
 
 describe("loadCheapProject parse-failure detection (SPEC §11)", () => {
   let tmpRoot: string;
@@ -52,6 +59,47 @@ describe("discoverPackageRoots (#2446)", () => {
 
   it('returns just [""] for a scoped run with no nested package.json', () => {
     expect(discoverPackageRoots(path.join(tmpRoot, "packages/a/src"))).toEqual([""]);
+  });
+});
+
+describe("file discovery respects .gitignore", () => {
+  let tmpRoot: string;
+  const relFiles = (files: { getFilePath(): string }[]): string[] =>
+    files.map((sf) => path.relative(tmpRoot, sf.getFilePath()).split(path.sep).join("/"));
+
+  beforeAll(() => {
+    tmpRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-gitignore-")));
+    execFileSync("git", ["init", "-q"], { cwd: tmpRoot });
+    const files: Record<string, string> = {
+      ".gitignore": "opensrc\n.git-worktrees/\n",
+      "tsconfig.json": JSON.stringify({ include: ["**/*.ts"] }),
+      "src/kept.ts": "export function kept(): number {\n  return 1;\n}\n",
+      "opensrc/repos/leak.ts": "export function leak(): number {\n  return 2;\n}\n",
+      "svc/wrangler.toml": 'name = "svc"\n',
+      ".git-worktrees/lane/svc/wrangler.toml": 'name = "svc"\n',
+    };
+    for (const [rel, content] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tmpRoot, rel)), { recursive: true });
+      fs.writeFileSync(path.join(tmpRoot, rel), content);
+    }
+  });
+
+  afterAll(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("loadCheapProject skips gitignored source files", () => {
+    expect(relFiles(loadCheapProject(tmpRoot).sourceFiles)).toEqual(["src/kept.ts"]);
+  });
+
+  it("loadEdgeProject skips gitignored source files even when the tsconfig includes them", () => {
+    expect(relFiles(loadEdgeProject(tmpRoot, "package", tmpRoot).sourceFiles)).toEqual([
+      "src/kept.ts",
+    ]);
+  });
+
+  it("findWranglerConfigs skips configs under gitignored directories", () => {
+    expect(findWranglerConfigs(tmpRoot)).toEqual([path.join(tmpRoot, "svc/wrangler.toml")]);
   });
 });
 

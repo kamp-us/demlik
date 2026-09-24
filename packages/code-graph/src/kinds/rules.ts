@@ -6,9 +6,25 @@ export type PatternGroup = z.infer<typeof PatternGroupSchema>;
 export const NodeKindRulesSchema = z
   .object({
     entryNames: PatternGroupSchema.default({
-      "worker-handler": ["^(fetch|scheduled|queue|email|tail|trace)$"],
+      "worker-handler": ["^(fetch|email)$"],
+      "platform-trigger": ["^(scheduled|queue|tail|trace)$"],
       "graphql-resolver": ["^(resolve|subscribe)$"],
-      "durable-object-lifecycle": ["^(alarm|webSocketMessage|webSocketClose|run)$"],
+      "durable-object-lifecycle": ["^(alarm|webSocketMessage|webSocketClose)$"],
+    }),
+    entryBaseClasses: PatternGroupSchema.default({
+      "worker-entrypoint-method": ["^(WorkerEntrypoint|DurableObject)$"],
+    }),
+    entryReach: z
+      .object({ "service-binding": z.array(z.string()), platform: z.array(z.string()) })
+      .strict()
+      .default({
+        "service-binding": [
+          "^(worker-entrypoint-method|cross-service-callee|durable-object-class)$",
+        ],
+        platform: ["^platform-trigger$"],
+      }),
+    entryGuardProperties: PatternGroupSchema.default({
+      "pothos-auth-scopes": ["^authScopes$"],
     }),
     entryFilePatterns: PatternGroupSchema.default({
       "cli-command": ["(^|/)program/commands/", "(^|/)src/commands/"],
@@ -42,13 +58,20 @@ export const NodeKindRulesSchema = z
         "^getSessionFromHeaders$",
       ],
     }),
-    effectCallees: PatternGroupSchema.default({
-      "db-write": ["^(insert|update|delete|execute|batch)$"],
-      "object-store-write": ["^(put|createMultipartUpload)$"],
-      "queue-send": ["^(send|sendBatch)$"],
-      "workflow-spawn": ["^(create|createBatch)$"],
-      "network-call": ["^fetch$"],
-      "vm-spawn": ["^(insertGceInstance|spawnCloudRunner|deleteGceHands)$"],
+    effectDeclarations: PatternGroupSchema.default({
+      "db-write": [
+        "^drizzle-orm:[A-Za-z]*(Database|Transaction)\\.(insert|update|delete|execute|batch)$",
+        "^[^:]+:D1Database\\.(prepare|batch|exec)$",
+        "^pg:(Client|ClientBase|Pool|PoolClient)\\.query$",
+        "^better-sqlite3:(Database\\.(exec|transaction)|Statement\\.run)$",
+      ],
+      "object-store-write": [
+        "^[^:]+:([A-Za-z0-9]*Bucket|KVNamespace)\\.(put|delete|createMultipartUpload)$",
+      ],
+      "queue-send": ["^[^:]+:Queue\\.(send|sendBatch)$"],
+      "workflow-spawn": ["^[^:]+:Workflow\\.(create|createBatch)$"],
+      "network-call": ["^[^:]+:([A-Za-z0-9]+\\.)?fetch$", "^dodopayments:"],
+      "vm-spawn": ["^[^:]+:([A-Za-z0-9]+\\.)?(insertGceInstance|spawnCloudRunner|deleteGceHands)$"],
     }),
   })
   .strict();

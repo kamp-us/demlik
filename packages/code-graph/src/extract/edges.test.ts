@@ -178,6 +178,59 @@ export function caller() { return parse("1"); }`;
   });
 });
 
+describe("resolveCallee — a callable a factory built from a config object", () => {
+  const FILES = [
+    {
+      path: "/define-rpc.ts",
+      source: `export interface Spec<P, R> { parameters: P; execute: (p: P) => Promise<R> }
+export function defineRpc<P, R>(spec: Spec<P, R>): (input: P) => Promise<R> {
+  return async (input: P) => spec.execute(input);
+}
+export function eager<P>(spec: { setup(): void; execute(p: P): void }): (input: P) => void {
+  spec.setup();
+  return () => {};
+}`,
+    },
+    {
+      path: "/handler.ts",
+      source: `import { defineRpc, eager } from "./define-rpc";
+export const createProject = defineRpc({
+  parameters: {},
+  execute: async (p: object) => p,
+});
+export const methodShaped = defineRpc({
+  parameters: {},
+  async execute(p: object) { return p; },
+});
+export const setupOnly = eager({ setup() {}, execute() {} });`,
+    },
+    {
+      path: "/store.ts",
+      source: `import { createProject as createProjectHandler, methodShaped, setupOnly } from "./handler";
+export function create(input: object) { return createProjectHandler(input); }
+export function viaMethod(input: object) { return methodShaped(input); }
+export function viaEager(input: object) { return setupOnly(input); }`,
+    },
+  ];
+
+  const calleesOf = (id: string) => {
+    const { result } = resolveMulti(FILES);
+    return (result.callsById.get(id) ?? []).map((c) => c.calleeId);
+  };
+
+  it("resolves a call to the value into the config member the factory's returned function invokes", () => {
+    expect(calleesOf("store.ts:create")).toEqual(["handler.ts:execute#0"]);
+  });
+
+  it("follows a method-shorthand member the same way", () => {
+    expect(calleesOf("store.ts:viaMethod")).toEqual(["handler.ts:execute#1"]);
+  });
+
+  it("does not follow a member the factory only invokes while building the value", () => {
+    expect(calleesOf("store.ts:viaEager")).toEqual(["external:setupOnly"]);
+  });
+});
+
 describe("computeChainDepths (C5) — SCC longest path", () => {
   it("a leaf with no internal callees has depth 0", () => {
     const src = `function leaf() { return 1; }`;

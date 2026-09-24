@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { runBoundaryGate } from "./boundaries/gate.js";
 import { cleanExit, defineProgram, type Opts } from "./cli.js";
 import { runCollapseGate } from "./collapse/gate.js";
 import { renderCollapse } from "./collapse/render.js";
@@ -84,6 +85,23 @@ defineProgram()
         rootAbsolute,
         repoRoot: findRepoRoot(rootAbsolute),
         layerRulesFile: opts.layerRules,
+        emit,
+        report: cleanExit,
+        json,
+        pretty,
+      });
+      if (code !== 0) process.exitCode = code;
+      return;
+    }
+
+    if (opts.boundaries === true) {
+      const code = runBoundaryGate({
+        rootAbsolute,
+        repoRoot: findRepoRoot(rootAbsolute),
+        boundaryRulesFile: opts.boundaryRules,
+        ci: opts.ci === true,
+        writeCeilings: opts.writeCeilings === true,
+        thresholds,
         emit,
         report: cleanExit,
         json,
@@ -209,6 +227,11 @@ defineProgram()
       return;
     }
 
+    if (opts.graph === true) {
+      emit(`${renderGraph(graph, pretty)}\n`);
+      return;
+    }
+
     if (opts.collapse === true) {
       emit(`${renderCollapse(graph, rootAbsolute, collapseSettings, json, pretty)}\n`);
       return;
@@ -310,11 +333,6 @@ defineProgram()
         return;
       }
       emit(`${renderTree(graph)}\n`);
-      return;
-    }
-
-    if (opts.graph === true) {
-      emit(`${renderGraph(graph, pretty)}\n`);
       return;
     }
 

@@ -3,6 +3,8 @@ import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
+import type { BindingKind } from "../schema.js";
+import { listVisibleFiles } from "./project.js";
 
 const ServiceBindingSchema = z.object({
   binding: z.string(),
@@ -16,10 +18,17 @@ const DurableObjectBindingSchema = z.object({
   script_name: z.string().optional(),
 });
 
+const WorkflowBindingSchema = z.object({
+  binding: z.string(),
+  class_name: z.string(),
+  script_name: z.string().optional(),
+});
+
 const WranglerConfigSchema = z.object({
   name: z.string().optional(),
   main: z.string().optional(),
   services: z.array(ServiceBindingSchema).catch([]).default([]),
+  workflows: z.array(WorkflowBindingSchema).catch([]).default([]),
   durable_objects: z
     .object({ bindings: z.array(DurableObjectBindingSchema).catch([]).default([]) })
     .catch({ bindings: [] })
@@ -31,21 +40,12 @@ const WranglerConfigSchema = z.object({
     .default({ required: [] }),
 });
 
-export type ServiceBindingDecl = {
-  kind: "service";
+export type BindingDecl = {
+  kind: BindingKind;
   binding: string;
   targetService: string;
   targetClass: string;
 };
-
-export type DurableObjectBindingDecl = {
-  kind: "durable-object";
-  binding: string;
-  targetService: string;
-  targetClass: string;
-};
-
-export type BindingDecl = ServiceBindingDecl | DurableObjectBindingDecl;
 
 export type ServiceManifest = {
   service: string;
@@ -65,42 +65,14 @@ export type BindingCatalog = {
 };
 
 const CONFIG_BASENAMES = new Set(["wrangler.json", "wrangler.jsonc", "wrangler.toml"]);
-const CATALOG_PRUNE = new Set([
-  ".claude",
-  ".git",
-  ".next",
-  ".turbo",
-  ".wrangler",
-  "__generated__",
-  "coverage",
-  "dist",
-  "node_modules",
-]);
-
 function rel(base: string, absolute: string): string {
   return path.relative(base, absolute).split(path.sep).join("/");
 }
 
 export function findWranglerConfigs(repoRoot: string): string[] {
-  const found: string[] = [];
-  const walk = (absDir: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      const abs = path.join(absDir, e.name);
-      if (e.isDirectory()) {
-        if (!CATALOG_PRUNE.has(e.name)) walk(abs);
-      } else if (e.isFile() && CONFIG_BASENAMES.has(e.name)) {
-        found.push(abs);
-      }
-    }
-  };
-  walk(repoRoot);
-  return found.sort((a, b) => a.localeCompare(b));
+  return listVisibleFiles(repoRoot, (f) => CONFIG_BASENAMES.has(path.posix.basename(f))).map((f) =>
+    path.join(repoRoot, f),
+  );
 }
 
 function readConfigDocument(absolute: string): unknown {
@@ -144,6 +116,14 @@ function declaredBindings(
       binding: d.name,
       targetService: d.script_name ?? self,
       targetClass: d.class_name,
+    });
+  }
+  for (const w of config.workflows) {
+    out.push({
+      kind: "workflow",
+      binding: w.binding,
+      targetService: w.script_name ?? self,
+      targetClass: w.class_name,
     });
   }
   return out.sort(compareBindings);

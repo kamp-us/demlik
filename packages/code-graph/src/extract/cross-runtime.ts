@@ -1,14 +1,16 @@
 import path from "node:path";
 import { Node } from "ts-morph";
 import type { CrossRuntimeEdge } from "../schema.js";
+import type { ResolvedCallee } from "./callee/resolve.js";
 import type { BindingCatalog, BindingDecl, ServiceManifest } from "./wrangler-config.js";
 
-export function unresolvedCalleeId(edge: {
-  targetService: string;
-  targetClass: string;
-  method: string;
-}): string {
-  return `unresolved:${edge.targetService}.${edge.targetClass}.${edge.method}`;
+type BindingTarget = { targetService: string; targetClass: string; method: string };
+
+function unresolvedCallee(target: BindingTarget): ResolvedCallee {
+  return {
+    calleeId: `unresolved:${target.targetService}.${target.targetClass}.${target.method}`,
+    declaration: `${target.targetService}:${target.targetClass}.${target.method}`,
+  };
 }
 
 function methodKey(dir: string, className: string, method: string): string {
@@ -51,7 +53,7 @@ export function ownerOf(
 }
 
 export type CrossRuntimeResolver = {
-  resolve(callExpr: Node, callerId: string, callerFile: string): string | null;
+  resolve(callExpr: Node, callerId: string, callerFile: string): ResolvedCallee | null;
   edges(): CrossRuntimeEdge[];
 };
 
@@ -62,6 +64,25 @@ export type CrossRuntimeInput = {
   nodeToId: Map<Node, string>;
 };
 
+function wrappingExportNames(method: Node, className: string): string[] {
+  const names: string[] = [];
+  for (const variable of method.getSourceFile().getVariableDeclarations()) {
+    const initializer = variable.getInitializer();
+    if (!Node.isCallExpression(initializer)) continue;
+    const wrapsClass = initializer
+      .getArguments()
+      .some((argument) => Node.isIdentifier(argument) && argument.getText() === className);
+    if (wrapsClass) names.push(variable.getName());
+  }
+  return names;
+}
+
+function classNamesOf(method: Node): string[] {
+  const className = enclosingClassName(method);
+  if (className === null) return [];
+  return [className, ...wrappingExportNames(method, className)];
+}
+
 function buildMethodIndex(
   nodeToId: Map<Node, string>,
   toRepoRelative: (file: string) => string,
@@ -69,14 +90,14 @@ function buildMethodIndex(
   const index = new Map<string, string[]>();
   for (const [node, id] of nodeToId) {
     if (!Node.isMethodDeclaration(node)) continue;
-    const className = enclosingClassName(node);
-    if (className === null) continue;
     const repoFile = toRepoRelative(toRelativeFileOf(node));
-    for (const dir of ancestorDirs(repoFile)) {
-      const key = methodKey(dir, className, node.getName());
-      const bucket = index.get(key);
-      if (bucket === undefined) index.set(key, [id]);
-      else bucket.push(id);
+    for (const className of classNamesOf(node)) {
+      for (const dir of ancestorDirs(repoFile)) {
+        const key = methodKey(dir, className, node.getName());
+        const bucket = index.get(key);
+        if (bucket === undefined) index.set(key, [id]);
+        else bucket.push(id);
+      }
     }
   }
   for (const bucket of index.values()) bucket.sort((a, b) => a.localeCompare(b));
@@ -90,8 +111,7 @@ export function methodIdsOfClasses(
   const ids = new Set<string>();
   for (const [node, id] of nodeToId) {
     if (!Node.isMethodDeclaration(node)) continue;
-    const className = enclosingClassName(node);
-    if (className !== null && classNames.has(className)) ids.add(id);
+    if (classNamesOf(node).some((name) => classNames.has(name))) ids.add(id);
   }
   return ids;
 }
@@ -119,6 +139,32 @@ function serviceDirectories(catalog: BindingCatalog): Map<string, string | null>
   return dirs;
 }
 
+const WORKFLOW_STARTERS: ReadonlySet<string> = new Set(["create", "createBatch"]);
+
+function invokedMethod(decl: BindingDecl, calledMethod: string): string | null {
+  switch (decl.kind) {
+    case "service":
+    case "durable-object":
+      return calledMethod;
+    case "workflow":
+      return WORKFLOW_STARTERS.has(calledMethod) ? "run" : null;
+    default: {
+      const exhaustive: never = decl.kind;
+      return exhaustive;
+    }
+  }
+}
+
+function invokedBinding(
+  owner: ServiceManifest,
+  shape: { binding: string; method: string },
+): { decl: BindingDecl; targetMethod: string } | null {
+  const decl = owner.bindings.find((b) => b.binding === shape.binding);
+  if (decl === undefined) return null;
+  const targetMethod = invokedMethod(decl, shape.method);
+  return targetMethod === null ? null : { decl, targetMethod };
+}
+
 function resolveTarget(
   index: Map<string, string[]>,
   decl: BindingDecl,
@@ -130,6 +176,25 @@ function resolveTarget(
   if (hits.length === 0) return { calleeId: null, reason: "target-not-loaded" };
   if (hits.length > 1) return { calleeId: null, reason: "ambiguous-target" };
   return { calleeId: hits[0], reason: null };
+}
+
+function distinctEdges(collected: readonly CrossRuntimeEdge[]): CrossRuntimeEdge[] {
+  const seen = new Set<string>();
+  const out: CrossRuntimeEdge[] = [];
+  for (const e of collected) {
+    const key = `${e.callerId}|${e.line}|${e.binding}|${e.method}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  out.sort(
+    (a, b) =>
+      a.callerId.localeCompare(b.callerId) ||
+      a.line - b.line ||
+      a.binding.localeCompare(b.binding) ||
+      a.method.localeCompare(b.method),
+  );
+  return out;
 }
 
 export function createCrossRuntimeResolver(input: CrossRuntimeInput): CrossRuntimeResolver {
@@ -151,11 +216,12 @@ export function createCrossRuntimeResolver(input: CrossRuntimeInput): CrossRunti
       );
       const owner = ownerOf(catalog.manifests, repoFile);
       if (owner === null) return null;
-      const decl = owner.bindings.find((b) => b.binding === shape.binding);
-      if (decl === undefined) return null;
+      const invoked = invokedBinding(owner, shape);
+      if (invoked === null) return null;
+      const { decl, targetMethod } = invoked;
 
       const targetDir = dirOfService.get(decl.targetService) ?? null;
-      const { calleeId, reason } = resolveTarget(index, decl, targetDir, shape.method);
+      const { calleeId, reason } = resolveTarget(index, decl, targetDir, targetMethod);
       const edge: CrossRuntimeEdge = {
         binding: decl.binding,
         bindingKind: decl.kind,
@@ -169,25 +235,12 @@ export function createCrossRuntimeResolver(input: CrossRuntimeInput): CrossRunti
         targetService: decl.targetService,
       };
       collected.push(edge);
-      return calleeId ?? unresolvedCalleeId({ ...decl, method: shape.method });
+      return calleeId === null
+        ? unresolvedCallee({ ...decl, method: shape.method })
+        : { calleeId, declaration: null };
     },
     edges() {
-      const seen = new Set<string>();
-      const out: CrossRuntimeEdge[] = [];
-      for (const e of collected) {
-        const key = `${e.callerId}|${e.line}|${e.binding}|${e.method}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(e);
-      }
-      out.sort(
-        (a, b) =>
-          a.callerId.localeCompare(b.callerId) ||
-          a.line - b.line ||
-          a.binding.localeCompare(b.binding) ||
-          a.method.localeCompare(b.method),
-      );
-      return out;
+      return distinctEdges(collected);
     },
   };
 }

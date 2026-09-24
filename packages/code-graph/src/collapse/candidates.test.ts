@@ -28,7 +28,7 @@ function fn(over: Partial<FunctionNode> & { id: string }): FunctionNode {
 }
 
 const calls = (...ids: string[]) =>
-  ids.map((calleeId, i) => ({ calleeId, line: i + 1, constArgs: [] }));
+  ids.map((calleeId, i) => ({ calleeId, line: i + 1, constArgs: [], declaration: null }));
 const calledBy = (...ids: string[]) => ids.map((callerId, i) => ({ callerId, line: i + 1 }));
 
 describe("nameTokens", () => {

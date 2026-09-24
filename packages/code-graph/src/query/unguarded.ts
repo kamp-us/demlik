@@ -1,5 +1,16 @@
-import type { FunctionNode, UnguardedEffect } from "../schema.js";
+import {
+  type EntryReach,
+  EntryReachSchema,
+  type FunctionNode,
+  type UnguardedEffect,
+} from "../schema.js";
 import { type Adjacency, invokedAdjacency } from "./reach.js";
+
+function isGuard(node: FunctionNode | undefined): boolean {
+  const kind = node?.nodeKind;
+  if (kind === undefined || kind === null) return false;
+  return kind.kind === "auth" || (kind.kind === "entry" && kind.guards.length > 0);
+}
 
 function stateKey(id: string, guarded: boolean): string {
   return `${guarded ? "1" : "0"} ${id}`;
@@ -23,12 +34,15 @@ function witnessPath(search: Search, key: string): string[] {
   return path.reverse();
 }
 
-function seed(functions: readonly FunctionNode[]): Search {
-  const search: Search = { parent: new Map(), nodeAt: new Map(), entryAt: new Map(), queue: [] };
-  const entries = functions
-    .filter((f) => f.nodeKind?.kind === "entry")
+function entriesReached(functions: readonly FunctionNode[], reach: EntryReach): string[] {
+  return functions
+    .filter((f) => f.nodeKind?.kind === "entry" && f.nodeKind.reach === reach)
     .map((f) => f.id)
     .sort((a, b) => a.localeCompare(b));
+}
+
+function seed(entries: readonly string[]): Search {
+  const search: Search = { parent: new Map(), nodeAt: new Map(), entryAt: new Map(), queue: [] };
   for (const id of entries) {
     const key = stateKey(id, false);
     if (search.parent.has(key)) continue;
@@ -40,24 +54,35 @@ function seed(functions: readonly FunctionNode[]): Search {
   return search;
 }
 
-export function findUnguarded(functions: readonly FunctionNode[]): UnguardedEffect[] {
-  const byId = new Map(functions.map((f) => [f.id, f]));
-  const adjacency: Adjacency = invokedAdjacency(functions);
-  const search = seed(functions);
-  const found = new Map<string, UnguardedEffect>();
+type Walk = {
+  byId: ReadonlyMap<string, FunctionNode>;
+  adjacency: Adjacency;
+  found: Map<string, UnguardedEffect>;
+};
 
+function walkFrom(walk: Walk, entries: readonly string[], reach: EntryReach): void {
+  const search = seed(entries);
   let i = 0;
   while (i < search.queue.length) {
     const key = search.queue[i++];
     const id = key === undefined ? undefined : search.nodeAt.get(key);
     if (key === undefined || id === undefined) continue;
-    const node = byId.get(id);
-    const guardedOut = key.startsWith("1 ") || node?.nodeKind?.kind === "auth";
-    record(found, search, key, node, guardedOut);
-    expand(search, adjacency, key, id, guardedOut);
+    const node = walk.byId.get(id);
+    const guardedOut = key.startsWith("1 ") || isGuard(node);
+    record(walk.found, search, key, node, guardedOut, reach);
+    expand(search, walk.adjacency, key, id, guardedOut);
   }
+}
 
-  return [...found.values()].sort((a, b) => a.effectId.localeCompare(b.effectId));
+export function findUnguarded(functions: readonly FunctionNode[]): UnguardedEffect[] {
+  const walk: Walk = {
+    byId: new Map(functions.map((f) => [f.id, f])),
+    adjacency: invokedAdjacency(functions),
+    found: new Map(),
+  };
+  for (const reach of EntryReachSchema.options)
+    walkFrom(walk, entriesReached(functions, reach), reach);
+  return [...walk.found.values()].sort((a, b) => a.effectId.localeCompare(b.effectId));
 }
 
 function record(
@@ -66,6 +91,7 @@ function record(
   key: string,
   node: FunctionNode | undefined,
   guarded: boolean,
+  reach: EntryReach,
 ): void {
   if (guarded || node === undefined) return;
   if (node.nodeKind?.kind !== "effect" || found.has(node.id)) return;
@@ -75,6 +101,7 @@ function record(
     startLine: node.startLine,
     entryId: search.entryAt.get(key) ?? node.id,
     path: witnessPath(search, key),
+    reach,
   });
 }
 

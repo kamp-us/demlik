@@ -54,6 +54,7 @@ export const CallSiteSchema = z.object({
   calleeId: z.string(),
   line: z.number(),
   constArgs: z.array(z.string()).default([]),
+  declaration: z.string().nullable().default(null),
 });
 export type CallSite = z.infer<typeof CallSiteSchema>;
 
@@ -81,8 +82,16 @@ export const EdgesSchema = z.object({
 });
 export type Edges = z.infer<typeof EdgesSchema>;
 
+export const EntryReachSchema = z.enum(["public", "service-binding", "platform"]);
+export type EntryReach = z.infer<typeof EntryReachSchema>;
+
 export const NodeKindSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("entry"), evidence: z.array(z.string()) }),
+  z.object({
+    kind: z.literal("entry"),
+    evidence: z.array(z.string()),
+    guards: z.array(z.string()),
+    reach: EntryReachSchema,
+  }),
   z.object({ kind: z.literal("auth"), evidence: z.array(z.string()) }),
   z.object({ kind: z.literal("effect"), evidence: z.array(z.string()) }),
   z.object({ kind: z.literal("plain") }),

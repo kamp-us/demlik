@@ -28,7 +28,7 @@ function fn(id: string, file: string, calls: string[]): FunctionNode {
     isExported: true,
     isTest: false,
     edges: {
-      calls: calls.map((calleeId) => ({ calleeId, line: 1, constArgs: [] })),
+      calls: calls.map((calleeId) => ({ calleeId, line: 1, constArgs: [], declaration: null })),
       calledBy: [],
       callChainDepth: 0,
     },
