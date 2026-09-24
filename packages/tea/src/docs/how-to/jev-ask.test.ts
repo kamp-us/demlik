@@ -13,7 +13,7 @@
  * (`tsconfig.test.json`, gated in CI as `typecheck:test`), and the tests below
  * assert the page's `ts` blocks are this file's `#region` bodies verbatim. The
  * page cannot drift from a compiling artifact, because the page IS the
- * artifact. The last region is driven through `@demlik/tea/testing`'s `drive`
+ * artifact. The last region is driven through `@demlik/tea/testing/promise`'s `drive`
  * against a scripted Jev, so the recipe is proven to RUN and not only to
  * compile.
  */
@@ -237,7 +237,7 @@ export function fakeJev(
 // #endregion handler
 
 // #region drive
-import { drive } from "@demlik/tea/testing";
+import { drive } from "@demlik/tea/testing/promise";
 
 /**
  * Feed one `classify` and let `drive` do what the runtime does: run the real

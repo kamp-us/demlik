@@ -10,7 +10,7 @@
  * So the machine lives HERE, as real TypeScript in the test program
  * (`tsconfig.test.json`, gated in CI as `typecheck:test`), and the last
  * describe asserts the page's `ts` blocks are this file's `#region` bodies
- * verbatim. The machine is driven through `@demlik/tea/testing`'s `drive`
+ * verbatim. The machine is driven through `@demlik/tea/testing/promise`'s `drive`
  * against a scripted fetch, so the recipe is proven to RUN as well.
  */
 
@@ -138,7 +138,7 @@ export function userMachine(fetchUser: (id: string) => Promise<User>) {
 }
 // #endregion machine
 
-import { drive } from "@demlik/tea/testing";
+import { drive } from "@demlik/tea/testing/promise";
 
 const initial: UserState = { call: rc.init(), user: null, error: null };
 const ada: User = { id: "u1", name: "Ada" };

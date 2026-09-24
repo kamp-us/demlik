@@ -2,15 +2,17 @@
  * @packageDocumentation
  * @demlik/tea/testing — test-side ergonomics over @demlik/tea's pure substrate.
  *
- * Four concerns share the subpath:
+ * Everything here is engine-neutral: it folds a machine and never runs a
+ * handler, so it serves a machine meant for either engine. `drive`, which
+ * does run handlers, has one form per engine: `@demlik/tea/testing/promise`
+ * and `@demlik/tea/testing/effect`.
+ *
+ * Three concerns share the subpath:
  *
  *   - Assertions — `expectFinalState`, `expectCmdEmitted`,
  *     `expectCmdSequence`, `expectActiveSubs`, `step` (assertions.ts), and
  *     `expectReplayDeterministic`, the clock/RNG replay check
  *     (expect-replay-deterministic.ts).
- *   - Driving — `drive`, the runtime's Cmd→handler→settle-Msg loop said once,
- *     returning `{ state, trace }` so a test asserts on the sequence as well
- *     as the endpoint (drive.ts).
  *   - Runtime hole — `noopRuntime` for ctx slots that demand a `Runtime<...>`
  *     reference replay never dereferences (noop-runtime.ts).
  *   - State scaffolding — `stateFactory` for typed phase-constructor APIs
@@ -34,17 +36,6 @@ export {
   step,
 } from "./assertions";
 export { type BoundMachine, bindMachine } from "./bind-machine";
-export {
-  DEFAULT_MAX_ROUNDS,
-  type DriveCtxArg,
-  DriveNoHandlerError,
-  type DriveOptions,
-  type DriveResult,
-  DriveRoundsExceededError,
-  type DriveTraceEntry,
-  drive,
-  driveTraceOf,
-} from "./drive";
 export { expectReplayDeterministic } from "./expect-replay-deterministic";
 export { noopRuntime } from "./noop-runtime";
 export {

@@ -64,6 +64,14 @@
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js"
     },
+    "./testing/promise": {
+      "types": "./dist/testing/promise/index.d.ts",
+      "import": "./dist/testing/promise/index.js"
+    },
+    "./testing/effect": {
+      "types": "./dist/testing/effect/index.d.ts",
+      "import": "./dist/testing/effect/index.js"
+    },
     "./pbt": {
       "types": "./dist/pbt/index.d.ts",
       "import": "./dist/pbt/index.js"
