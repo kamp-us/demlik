@@ -1,5 +1,207 @@
 # @demlik/tea
 
+## 0.18.0
+
+### Minor Changes
+
+- 039b3de: Trace an agent run as OpenTelemetry spans (#331).
+
+  The new `@demlik/tea/otel` subpath (experimental) has `traceAgent(runtime, { tracer, mask? })`.
+  It writes one span tree per run from the agent's events: a run span, a
+  generation per brain call and a tool span per tool call. The spans carry the
+  OpenTelemetry GenAI attributes (`gen_ai.*`), including a turn's reported token
+  usage, and Langfuse's observation attributes, so Langfuse renders them
+  natively. The trace id is derived from the
+  `runId`, so a run resumed from its `Store` stays one trace. `agentSpans` is the
+  same writer as an `onEvent` listener, for `defineAgent`. `@opentelemetry/api` is
+  a new optional peer that only `@demlik/tea/otel` imports. No Langfuse package is
+  a dependency.
+
+  The agent's event stream (`./agent`, experimental) changes shape:
+
+  - **New events.** `BrainStarted` (turn, purpose, model, payload) and
+    `ToolStarted` (callId, name, args) fire when the call is issued. `ToolFailed`
+    (callId, name, failure) fires when a call ends on a failure the model reads.
+  - **`runId` and `at` on every event.** The `runId` is the durable one, so it is
+    the same before and after a resume.
+  - **`RunDone` fires on every ending, once.** It carries `status`, which is `done`
+    with `output`, `failed` with `failure`, or `cancelled`. `RunDone.output` is
+    gone: read `status.output` when `status.kind === "done"`. A failed or
+    cancelled run now reports `RunDone` too. Before this change it reported
+    nothing.
+  - **`transcript().read().outcome`** is now `running`, or the ending `RunDone`
+    carried.
+  - **`AGENT_EVENT_TYPES`** lists every event type. `sseFromAgentEvents` and
+    `defineAgent`'s `onEvent` subscribe to all of them.
+  - **`AgentState` gains `lifecycle`.** This is the per-transition outbox the
+    projector reads. A Model persisted before this change reads it as empty.
+
+- a5dc8c2: `@demlik/tea/agent` exports `agentTool`, which wraps a child `defineAgent` as a
+  tool a parent `defineAgent` calls and awaits. The child runs under its own Store
+  and `runId`, both keyed `<namespace>/<callId>` from the parent's call, so a
+  parent resumed after an eviction resumes its child rather than restarting it,
+  and a child that had already ended gives back the outcome it recorded. A child
+  that ends `failed` or `cancelled` settles the parent call as `child_failed` or
+  `child_cancelled`, which the parent model reads as the call's reason (#333).
+- 7049252: `./agent` carries provider-reported token usage (#332). A model turn may return
+  `usage: TurnUsage` (`inputTokens`, `outputTokens`, and optionally
+  `reasoningTokens` and `cachedInputTokens`). `agentTurnSchema` rejects a malformed
+  report. The conversation keeps a running total in `conversation.usage`, which
+  survives compaction folds, stage advances and a kill/resume. It also keeps the
+  last turn's size in `conversation.contextTokens`. `defineAgent`'s `compaction`
+  gains `afterContextTokens`, which folds on that size. It works alone or beside
+  `afterTurns`, so `afterTurns` is now optional, but a budget must name at least
+  one of the two. A `stopWhen` over `conversation.usage` is a token budget.
+  `TurnSettled` carries the turn's `usage`. A Model persisted by 0.17.x resumes
+  with its total starting from zero.
+- 002f5b7: Add `DeletableStore<S>`, an optional widening of `Store<S>` with `delete()`.
+  `fileStore`, `memoryStore` and `doStore` now return one, fenced and unfenced, so
+  a host can forget a run without knowing how each store lays out its bytes.
+  `delete()` is idempotent, and afterwards `load()` answers what a never-saved
+  store answers. `fileStore` also removes the `.fence` stamp, and `doStore` the
+  version cell. A fenced run still live on the store is refused with a
+  `StoreConflictError` at its next save. `Store<S>` itself is unchanged (#314).
+- b11a5fa: `drive` now has one entry point per engine, and the Effect engine gets one
+  (#321).
+
+  - `@demlik/tea/testing/promise` (stable) is the Promise `drive`, moved off
+    `@demlik/tea/testing` with its types and errors (`DriveResult`,
+    `DriveTraceEntry`, `DriveOptions`, `DriveCtxArg`, `DriveRoundsExceededError`,
+    `DriveNoHandlerError`, `driveTraceOf`, `DEFAULT_MAX_ROUNDS`). Same signature,
+    same rounds.
+  - `@demlik/tea/testing/effect` (experimental) is a new `drive` for the Effect
+    engine: `drive(machine, initial, msg, interpret, opts?)` takes the same
+    `interpret` map as the Effect engine's `run`, runs the Subs the machine wants
+    (through `opts.subscribe` or the built-in runner), and returns
+    `Effect<{ state, trace }, DriveRoundsExceededError | DriveNoHandlerError |
+<a hand-written cell's failure>, R>`. Provide `R` with `Effect.provide(layer)`.
+    A hand-written cell may return a Msg, a list of Msgs or nothing (#324). It
+    runs the same loop as the Promise `drive`, so the rounds and the trace match.
+    Next to `@demlik/tea/effect`, it is the only entry point that imports `effect`.
+  - `@demlik/tea/testing` keeps only the helpers that work with either engine:
+    `expectFinalState`, `expectCmdEmitted`, `expectCmdSequence`,
+    `expectActiveSubs`, `step`, `expectReplayDeterministic`, `bindMachine`,
+    `noopRuntime` and `stateFactory`.
+  - The Promise `drive` now refuses a `Cmd.define`d handler that dispatches its
+    own `_ok` / `_err`, as `run` does (#304). It throws `OutcomeContractError`
+    with the trace attached (`driveTraceOf`). A settle minted through
+    `cmdEdgeOf(ctx)`, a defined handler's other Msgs, and anything a hand-written
+    Cmd's handler dispatches still pass.
+
+  **Breaking:** `drive` and its types are no longer exported from
+  `@demlik/tea/testing`. Change the import to `@demlik/tea/testing/promise`:
+
+  ```ts
+  // before
+  import { drive } from "@demlik/tea/testing";
+  // after
+  import { drive } from "@demlik/tea/testing/promise";
+  ```
+
+  A test whose defined handler dispatched its own `_ok` / `_err` now fails under
+  `drive`, as that program already failed under `run`.
+
+- 9864280: The Effect engine's `run` now yields an Effect handle instead of the Promise
+  engine's (#308). The members keep the Promise engine's names; where that handle
+  returns a Promise, this one returns an Effect with a typed error channel, so a
+  host sorts failures with `Effect.catchTags` instead of wrapping every call in
+  `Effect.tryPromise`.
+
+  - `dispatch` and `dispatchOnce` return `Effect<void, Err | Stopped | StoreFailed>`,
+    where `Err` is the declared failure of the run's hand-written `interpret`
+    cells. `ready` returns `Effect<EffectRuntime, Err | StoreFailed>`. `idle`,
+    `done` and `stop` return Effects that never fail. `getState`, `result` and the
+    listeners (`subscribe`, `observe`, `onBoot`, `on`, the Port members) are
+    unchanged.
+  - New `Stopped` (`msgType`, and `when`: `"stopping"` or `"stopped"`): a dispatch
+    into a run that is stopping or has stopped.
+  - New `StoreFailed` (`operation`: `"load"` or `"save"`, `cause`): a save that
+    threw, a fenced store's `StoreConflictError` included, or saved state `ready`
+    could not restore (the `cause` is then the `StoreRefusedError`). This covers
+    #319.
+  - A hand-written cell's failure now fails the dispatch with that value, typed,
+    instead of rejecting with it untyped. A reducer throw, a Msg with no cell and
+    a livelock are still bugs, so they end the Effect as a defect.
+  - New types `EffectBootingRuntime`, `EffectRuntime` and `CellErrors`.
+  - `run` still needs a `Scope`, and closing it still stops the run and its Subs.
+    The `onError` sink is handed the same values as before.
+
+  **Breaking:** the Effect handle is no longer a `BootingRuntime` / `RunHandle`.
+  Replace `yield* Effect.promise(() => handle.ready)` with `yield* handle.ready`,
+  and `Effect.promise(() => runtime.dispatch(msg))` with
+  `runtime.dispatch(msg)`. Hosts typed on the Promise handle, like `useRuntime`
+  from `@demlik/tea/react`, no longer take it.
+
+- 12d0080: A hand-written (non-`Cmd.define`d) Cmd handler may now return a list of Msgs,
+  on both engines: `Promise<M | readonly M[] | void>` on the Promise engine and
+  `Effect<M | readonly M[] | void>` on the Effect engine. The engine dispatches
+  the list in order as follow-ups, before the next Cmd's handler runs, the way
+  Elm's `Cmd.batch` answers with several Msgs. `drive` from
+  `@demlik/tea/testing` folds a returned list the same way. A `Cmd.define`d
+  handler still returns an outcome (ADR 0021); returning a list from one is an
+  `OutcomeContractError`, as any non-outcome return already was (#324).
+- 127a1aa: `run` now refuses saved state it cannot read instead of booting fresh over it
+  (#316). Before, a `migrate` that returned `null` for bytes it did not recognize
+  booted a fresh run, and the first save overwrote those bytes for good, so a
+  buggy migration wiped the user's saved state.
+
+  - **`Store.migrate` return type changed:** it now returns `Migrated<S>`, which is
+    `S | null | Refusal`. `null` still means "nothing was saved, boot fresh". Return
+    the new `refuse(reason)` for saved bytes you cannot read.
+  - On a refusal, `ready` rejects with the new `StoreRefusedError` (`_tag:
+"store_refused"`, `reason`) and nothing is written. A `load` or `migrate` that
+    throws is refused the same way, with the throw as `cause` — so a corrupt
+    `fileStore` / `doStore` file now rejects `ready` with a `StoreRefusedError`
+    instead of the raw `SyntaxError`. Both engines behave the same.
+  - `schemaMigrate` now refuses saved bytes the schema rejects, or that make
+    `upcast` throw. It still returns `null` for `null` / `undefined` (nothing
+    saved).
+  - The `parse` argument of `fileStore`, `memoryStore`, `doStore` and
+    `chromeStorageStore` may return a refusal too.
+  - `createQueue` (`@demlik/tea/work-queue`) throws `StoreRefusedError` on a queue
+    it cannot read, rather than treating it as empty and saving over it.
+
+  There is no placeholder or "saving is off" mode. A host that wants a "couldn't
+  restore" view catches `StoreRefusedError` and starts its own run with no store —
+  see the new how-to "Show a 'couldn't restore' view".
+
+  **Breaking:** code that reads `store.migrate(...)` directly now gets
+  `S | null | Refusal`; narrow with `instanceof Refusal`. A custom `migrate` that
+  returned `null` for unreadable bytes still boots fresh — switch it to
+  `refuse(reason)` to get the protection.
+
+- b6a282f: A Sub that fails with an error it did not handle now stops the run instead of
+  being logged and left counted as running (#309). This is the Elm way: a Sub
+  maps the errors it expects into Msgs itself, and anything else is fatal.
+
+  - **Effect engine:** a Sub's `Stream` that fails (anything but an interrupt)
+    reaches `onError` under the new `"sub"` phase, and the engine closes the run's
+    Scope with that failure, which stops the run. Before, it was reported under
+    `"follow-up"` and the dead Sub stayed registered, so the run looked healthy.
+  - **Promise engine:** a runner that throws while it starts still rejects the
+    dispatch (or `ready`) that started it, and now also reaches `onError` under
+    `"sub"` and stops the run.
+
+  There is no `subFailure` hook on the machine or on `run`. To keep a run going
+  through an error you expect, turn it into a Msg in the Sub, e.g. with
+  `Stream.catchTag` on the Effect engine. See "Turn a Sub's errors into Msgs" in
+  the Effect engine how-to.
+
+  **Breaking:** a Promise-engine runner that throws while starting used to leave
+  the run alive; it now stops it. `RuntimeErrorPhase` gains `"sub"`, so an
+  exhaustive `switch` over it needs a new case.
+
+### Patch Changes
+
+- 5b7f722: When a hand-written Cmd handler throws, the transition it ran in is no longer
+  hidden from the run's listeners. `subscribe`, `observe`, `on`, the telemetry
+  sink and `done()` now hear the State that was already installed and saved, and
+  the dispatch still rejects with the handler's error. Both the Promise and the
+  Effect engine are fixed (#311).
+- 2e071c0: A Msg with no cell for the current state no longer halts the run under the
+  default supervision. The reducer's `NoCellError` is reported to `onError` and
+  that one Msg is dropped; the run keeps going, on both engines (#310).
+
 ## 0.17.0
 
 ### Minor Changes
