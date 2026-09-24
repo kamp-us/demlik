@@ -96,7 +96,8 @@ export interface AgentEventSource<R> {
 /**
  * Trace an agent runtime into OpenTelemetry. Subscribes to every
  * `AgentEvent` type on `runtime` and returns a cleanup that detaches the
- * subscriptions and ends any span still open.
+ * subscriptions and ends any span still open, at the `at` of the last event
+ * its run folded.
  *
  * The runtime must project events — built with
  * `run(machine, { events: agentEvents() })`. For `defineAgent`, which takes an
@@ -128,8 +129,12 @@ export interface AgentSpans<R> {
   /**
    * End every span still open — the leg this process ran, when it stops
    * before its run does. Each carries `tea.run.detached: true`.
+   *
+   * With `at`, every open span ends at `at`, used as given. Without it, each
+   * run's spans end at the `at` of the last event that run folded — its own
+   * clock, never wall time.
    */
-  readonly end: () => void;
+  readonly end: (at?: number) => void;
 }
 
 /**
@@ -183,6 +188,7 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
       context: trace.setSpan(parent, span),
       brain: null,
       tools: new Map(),
+      lastAt: at,
     };
     runs.set(runId, opened);
     return opened;
@@ -190,6 +196,7 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
 
   const onEvent = (event: AgentEvent<R>): void => {
     const run = openRun(event.runId, event.at);
+    run.lastAt = event.at;
     switch (event.type) {
       case "BrainStarted": {
         // A boot in the same process re-issues the call already open.
@@ -290,14 +297,13 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
     }
   };
 
-  const end = (): void => {
+  const end = (at?: number): void => {
     for (const run of runs.values()) {
-      for (const span of openChildren(run)) {
+      const endAt = at ?? run.lastAt;
+      for (const span of [...openChildren(run), run.span]) {
         span.setAttribute("tea.run.detached", true);
-        span.end();
+        endSpan(span, endAt);
       }
-      run.span.setAttribute("tea.run.detached", true);
-      run.span.end();
     }
     runs.clear();
   };
@@ -334,6 +340,8 @@ interface OpenRun {
   readonly context: Context;
   brain: Span | null;
   readonly tools: Map<string, Span>;
+  /** The `at` of the last event this run folded — where a detach ends it. */
+  lastAt: number;
 }
 
 // The one place a run's clock becomes OpenTelemetry time. `at` is epoch
@@ -363,6 +371,9 @@ function startSpan(
   );
 }
 
+// The one place a span ends. Every `Span#end` in this module goes through it,
+// which `span-end.test.ts` holds, so no end reaches OpenTelemetry off the
+// run's clock.
 function endSpan(span: Span, at: number): void {
   span.end(spanTime(at));
 }
