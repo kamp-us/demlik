@@ -220,6 +220,10 @@ export type OnError = (error: unknown, context: RuntimeErrorContext) => void;
 //   - `restart` — re-init from a host-provided last-known-good state and keep
 //                 folding. The core owns no snapshot logic — the host supplies
 //                 `rehydrate()`, the core installs its result and continues.
+//
+// A Msg the current State has no cell for is NOT a reducer throw — no cell
+// ran — so its `NoCellError` bypasses every strategy: that dispatch rejects,
+// nothing is reported under `"reduce"`, and the run stays live (#310).
 
 /** The three declared reducer-throw supervision strategies. */
 export type SupervisionStrategy = "stop" | "escalate" | "restart";
