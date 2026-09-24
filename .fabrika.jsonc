@@ -41,7 +41,8 @@
 		"package.json",
 		"pnpm-workspace.yaml",
 		"packages/tea/package.json",
-		"packages/tea/MAINTAINING.md"
+		"packages/tea/MAINTAINING.md",
+		"packages/code-graph/package.json"
 	],
 
 	// No standing lanes: every issue homes on a milestone. Left out, this key falls back to the

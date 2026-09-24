@@ -5,6 +5,7 @@ A pnpm workspace; every package under `packages/` publishes to npm on its own ve
 | Package | What it is |
 |---|---|
 | [`packages/tea`](./packages/tea) — `@demlik/tea` | TEA / Elm-Architecture library for durable, replayable state machines — one pure reducer, every host adapter. |
+| [`packages/code-graph`](./packages/code-graph) — `@demlik/code-graph` | Agent-native TypeScript code-graph + smell CLI (ts-morph → deterministic JSON). |
 
 Each package's export map in its `package.json` **is** its contract. For tea,
 [`MAINTAINING.md`](./packages/tea/MAINTAINING.md) stamps every subpath with the promise it
