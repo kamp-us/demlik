@@ -40,10 +40,17 @@ token usage for context-size compaction and budgets (#332), and a durable sub-ag
 `./agent` is experimental, so none of it carries semver ceremony. It ends when the four ship; the
 Binclusive-side cutover is planned and built in that repo. Declared and started 2026-09-24.
 
+**Code coordinates** (#4). code-graph proposes and proves a codebase's structure, Jev judges what
+each file means, and CI ratchets hold the result. This campaign brings the toolset into the
+workspace: `@demlik/code-graph` syncs with the passes built after its snapshot (#344), then
+`@demlik/structure-sweep` and `@demlik/backlog-sweep` land as packages over `@demlik/tea/jev` (#345).
+It ends when both ship and Binclusive consumes the published packages. Declared and started 2026-09-24.
+
 | Campaign | Milestone | State |
 |---|---|---|
 | Tuval on tea | #2 | active |
 | Binclusive agent migration | #3 | active |
+| Code coordinates | #4 | active |
 
 ## Dependencies
 
