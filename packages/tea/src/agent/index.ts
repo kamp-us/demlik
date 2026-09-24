@@ -190,6 +190,7 @@ import type {
   ToolOutcome,
 } from "./types";
 
+export * from "./agent-tool";
 // Re-export the concern modules so the public `@demlik/tea/agent` barrel is
 // unchanged after the split into `./types` (domain + conversation + config +
 // state/status), `./compaction` (the #85 seam), and `./machine` (the Cmd/Msg

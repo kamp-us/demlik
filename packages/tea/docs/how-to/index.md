@@ -79,6 +79,11 @@ what you are trying to do, and it names the subpath you need.
   `defineAgent(cfg).with({ interpret })` to give one tool a behaviour the lid has
   no option for — a queue, an audit log — without rebuilding the agent with
   `createAgent`.
+- [Delegate to a sub-agent](./delegate-to-a-sub-agent.md) — wrap a child
+  `defineAgent` with `agentTool` so a parent agent calls it like a tool and
+  waits for its typed result, with the child's run under its own Store, so an
+  evicted parent resumes the child instead of restarting it. Covers the Promise
+  engine and a Durable Object.
 
 ## Compose batteries into one door
 
