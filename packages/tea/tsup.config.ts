@@ -11,6 +11,8 @@ export default defineConfig({
     "promise/index": "src/promise/index.ts",
     "effect/index": "src/effect/index.ts",
     "testing/index": "src/testing/index.ts",
+    "testing/promise/index": "src/testing/promise/index.ts",
+    "testing/effect/index": "src/testing/effect/index.ts",
     "do/index": "src/do/index.ts",
     "mem/index": "src/mem/index.ts",
     "react/index": "src/react/index.ts",

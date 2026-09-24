@@ -14,6 +14,9 @@
 // (#331): `@demlik/tea/agent` must import without it, and only
 // `@demlik/tea/otel` may name it — and once a consumer installs it, that door
 // must import and hand back `traceAgent`.
+//
+// `effect` is the third (#321): `.`, `./promise`, `./testing` and
+// `./testing/promise` must import without it.
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -78,7 +81,7 @@ writeFileSync(
 // which is the whole condition under test.
 run("npm", ["install", "--no-audit", "--no-fund", join(work, tarball)], project);
 
-for (const peer of ["ws", "@opentelemetry/api"]) {
+for (const peer of ["ws", "@opentelemetry/api", "effect"]) {
   if (existsSync(join(project, "node_modules", peer))) {
     fail(`the clean install pulled in \`${peer}\` — the test proves nothing; is it still an optional peer?`);
   }
@@ -98,7 +101,31 @@ writeFileSync(
 );
 run("node", [probe], project);
 
-// ── 3. With the peer installed, the otel door imports. ─────────────────────
+// ── 3. The Effect-free doors import with no `effect` installed. ─────────────
+// `effect` is the optional peer only `./effect` and `./testing/effect` may
+// import (#321). `./testing` and `./testing/promise` need `vitest`, their own
+// optional peer, so it goes in first — and must not bring `effect` with it.
+run("npm", ["install", "--no-audit", "--no-fund", "vitest@^5"], project);
+if (existsSync(join(project, "node_modules", "effect"))) {
+  fail("installing `vitest` pulled in `effect` — the check below proves nothing");
+}
+const effectFreeProbe = join(project, "probe-effect-free.mjs");
+writeFileSync(
+  effectFreeProbe,
+  [
+    'import { defineMachine } from "@demlik/tea";',
+    'import { run } from "@demlik/tea/promise";',
+    'import { expectFinalState } from "@demlik/tea/testing";',
+    'import { drive } from "@demlik/tea/testing/promise";',
+    'for (const [name, value] of Object.entries({ defineMachine, run, expectFinalState, drive })) {',
+    '  if (typeof value !== "function") throw new Error(`${name} is not a function`);',
+    "}",
+    "",
+  ].join("\n"),
+);
+run("node", [effectFreeProbe], project);
+
+// ── 4. With the peer installed, the otel door imports. ─────────────────────
 run(
   "npm",
   ["install", "--no-audit", "--no-fund", "@opentelemetry/api@^1.9.0"],
@@ -116,5 +143,5 @@ writeFileSync(
 run("node", [otelProbe], project);
 
 console.log(
-  "verify-optional-peer-install: @demlik/tea/node and /agent import with no `ws` or `@opentelemetry/api` installed; /otel imports once it is",
+  "verify-optional-peer-install: @demlik/tea/node and /agent import with no `ws` or `@opentelemetry/api` installed; ., /promise, /testing and /testing/promise with no `effect`; /otel imports once `@opentelemetry/api` is",
 );

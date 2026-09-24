@@ -21,6 +21,8 @@
     "src/work-queue/index.ts",
     "src/jev/index.ts",
     "src/testing/index.ts",
+    "src/testing/promise/index.ts",
+    "src/testing/effect/index.ts",
     "src/pbt/index.ts",
     "src/devtools/index.ts",
     "src/otel/index.ts"

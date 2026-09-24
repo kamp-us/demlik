@@ -35,7 +35,7 @@ const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE_ROOT = resolve(PKG_ROOT, "../..");
 
 /**
- * The public doors, exactly. Twenty-four module doors plus the two non-module
+ * The public doors, exactly. Twenty-six module doors plus the two non-module
  * entries — `./package.json` (metadata passthrough) and
  * `./devtools/styles.css` (the asset stays with its door).
  *
@@ -45,6 +45,11 @@ const WORKSPACE_ROOT = resolve(PKG_ROOT, "../..");
  * `./devtools`, `./machine-viz` and `./parity` are here rather than folded
  * because each has a live external callsite (ADR 0016 as amended by #83): a
  * part someone imports keeps its own door.
+ *
+ * `./testing/promise` and `./testing/effect` are `drive`'s two forms, one per
+ * engine, beside the engine-neutral `./testing` (#321, ruled R13.1 in #325):
+ * `./testing/effect` is the one door outside `./effect` that imports `effect`,
+ * so a Promise test never installs it.
  *
  * `./otel` is a door because it is the one module that imports
  * `@opentelemetry/api`, an optional peer (#331): folding it into `./agent`
@@ -71,6 +76,8 @@ const PUBLIC_DOORS = [
   "./react",
   "./extension",
   "./testing",
+  "./testing/promise",
+  "./testing/effect",
   "./pbt",
   "./agent",
   "./retry-backoff",

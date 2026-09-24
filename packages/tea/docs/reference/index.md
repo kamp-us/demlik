@@ -45,5 +45,7 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 ## Testing
 
 - [`@demlik/tea/testing`](./testing.md)
+- [`@demlik/tea/testing/promise`](./testing-promise.md)
+- [`@demlik/tea/testing/effect`](./testing-effect.md)
 - [`@demlik/tea/pbt`](./pbt.md)
 - [`@demlik/tea/devtools`](./devtools.md)

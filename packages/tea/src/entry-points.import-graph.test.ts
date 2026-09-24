@@ -1,14 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ONE NEUTRAL CORE, TWO ENGINES, AND NO PATH BETWEEN THEM (#274 R2.1, #275).
 //
-// The package has three entry points: the core at `@demlik/tea`, the Promise
-// engine at `@demlik/tea/promise`, and the Effect engine at
-// `@demlik/tea/effect`. A Promise user must install and bundle no Effect code,
-// and the core must stay usable by either engine. Three rules hold that:
+// The package has three engine entry points: the core at `@demlik/tea`, the
+// Promise engine at `@demlik/tea/promise`, and the Effect engine at
+// `@demlik/tea/effect` — and `drive` has one testing entry per engine beside
+// the neutral `@demlik/tea/testing` (#321). A Promise user must install and
+// bundle no Effect code, and the core must stay usable by either engine. Four
+// rules hold that:
 //
 //   1. the core's import graph reaches neither engine;
 //   2. `./promise` and `./effect` never reach each other;
-//   3. no module outside `src/effect/` imports the `effect` package.
+//   3. no module outside `src/effect/` and `src/testing/effect/` imports the
+//      `effect` package;
+//   4. `./testing` and `./testing/promise` reach neither `src/effect/` nor
+//      `src/testing/effect/`.
 //
 // The walk is the one `src/pure/import-graph.test.ts` uses: every `from "…"`
 // and bare `import "…"` specifier, relative ones followed. Type-only imports
@@ -25,6 +30,11 @@ type Tree = ReadonlyMap<string, string>;
 type Violation =
   | { readonly rule: "core-imports-engine"; readonly file: string }
   | { readonly rule: "engine-imports-engine"; readonly file: string }
+  | {
+      readonly rule: "testing-reaches-effect";
+      readonly entry: string;
+      readonly file: string;
+    }
   | {
       readonly rule: "effect-outside-effect";
       readonly file: string;
@@ -79,12 +89,21 @@ function graphOf(tree: Tree, entry: string): Set<string> {
 const inEngine = (file: string, engine: Engine): boolean =>
   file.startsWith(`${engine}/`);
 
+/** The two directories allowed to import the `effect` package. */
+const EFFECT_HOMES = ["effect/", "testing/effect/"] as const;
+
+const inEffectHome = (file: string): boolean =>
+  EFFECT_HOMES.some((home) => file.startsWith(home));
+
+/** The testing entries a Promise user imports, which must stay Effect-free. */
+const EFFECT_FREE_TESTING = ["testing/index.ts", "testing/promise/index.ts"];
+
 const isEffectPackage = (spec: string): boolean =>
   spec === "effect" ||
   spec.startsWith("effect/") ||
   spec.startsWith("@effect/");
 
-/** Every way `tree` breaks the three entry-point rules. Empty means clean. */
+/** Every way `tree` breaks the four entry-point rules. Empty means clean. */
 function entryPointViolations(tree: Tree): Violation[] {
   const out: Violation[] = [];
 
@@ -103,8 +122,16 @@ function entryPointViolations(tree: Tree): Violation[] {
     }
   }
 
+  for (const entry of EFFECT_FREE_TESTING) {
+    for (const file of graphOf(tree, entry)) {
+      if (inEffectHome(file)) {
+        out.push({ rule: "testing-reaches-effect", entry, file });
+      }
+    }
+  }
+
   for (const [file, src] of tree) {
-    if (inEngine(file, "effect")) continue;
+    if (inEffectHome(file)) continue;
     for (const specifier of specifiers(src)) {
       if (isEffectPackage(specifier)) {
         out.push({ rule: "effect-outside-effect", file, specifier });
@@ -152,6 +179,13 @@ const clean = (): Map<string, string> =>
     [
       "effect/index.ts",
       `import { Effect } from "${EFFECT_PACKAGE}";\nexport {};`,
+    ],
+    ["testing/index.ts", 'export * from "./assertions";'],
+    ["testing/assertions.ts", 'import type { Machine } from "../pure";'],
+    ["testing/promise/index.ts", 'export * from "../assertions";'],
+    [
+      "testing/effect/index.ts",
+      `import { Effect } from "${EFFECT_PACKAGE}";\nimport "../../effect";`,
     ],
   ]);
 
@@ -209,11 +243,61 @@ describe("the entry-point rules fire on each break", () => {
   });
 });
 
+describe("the testing entries keep Effect out of a Promise test (#321)", () => {
+  it("lets ./testing/effect import effect and the Effect engine", () => {
+    expect(entryPointViolations(clean())).toEqual([]);
+  });
+
+  it.each([
+    "testing/index.ts",
+    "testing/promise/index.ts",
+  ])("fails when %s reaches ./testing/effect", (entry) => {
+    const tree = clean();
+    tree.set(entry, 'export * from "./effect";\nexport * from "../effect";');
+    expect(entryPointViolations(tree)).toContainEqual({
+      rule: "testing-reaches-effect",
+      entry,
+      file: "testing/effect/index.ts",
+    });
+  });
+
+  it("fails when ./testing/promise reaches the Effect engine", () => {
+    const tree = clean();
+    tree.set("testing/promise/index.ts", 'import "../../effect";');
+    expect(entryPointViolations(tree)).toContainEqual({
+      rule: "testing-reaches-effect",
+      entry: "testing/promise/index.ts",
+      file: "effect/index.ts",
+    });
+  });
+
+  it("fails when a neutral testing module imports effect", () => {
+    const tree = clean();
+    tree.set(
+      "testing/assertions.ts",
+      `import { Effect } from "${EFFECT_PACKAGE}";`,
+    );
+    expect(entryPointViolations(tree)).toEqual([
+      {
+        rule: "effect-outside-effect",
+        file: "testing/assertions.ts",
+        specifier: EFFECT_PACKAGE,
+      },
+    ]);
+  });
+});
+
 describe("src/ obeys the entry-point rules", () => {
   const tree = readSrcTree();
 
   it("reads the three entries it guards", () => {
-    for (const entry of ["index.ts", "promise/index.ts", "effect/index.ts"]) {
+    for (const entry of [
+      "index.ts",
+      "promise/index.ts",
+      "effect/index.ts",
+      ...EFFECT_FREE_TESTING,
+      "testing/effect/index.ts",
+    ]) {
       expect(tree.has(entry)).toBe(true);
     }
   });

@@ -166,7 +166,7 @@ type InterpretOption<C extends Cmd, I> = [C] extends [Cmd<never>]
   ? { readonly interpret?: I }
   : { readonly interpret: I };
 
-type SubscribeOption<U extends Sub, B> = [
+export type SubscribeOption<U extends Sub, B> = [
   Exclude<U["type"], BuiltinSubType>,
 ] extends [never]
   ? { readonly subscribe?: B }
@@ -213,10 +213,52 @@ function timer<M>(sub: TimerSub<M>): Stream.Stream<M> {
 }
 
 /** The Effect engine's built-in runners, keyed by the Sub type each runs. */
-const builtinRunners = { timer } as const satisfies Record<
+export const builtinRunners = { timer } as const satisfies Record<
   BuiltinSubType,
   unknown
 >;
+
+// === Settling a cell ===
+
+/**
+ * The Effect a cell's Effect is run as: `Effect.result` makes a declared
+ * failure a value, so only a defect or an interruption is left in the Exit's
+ * cause. Read the Exit back with {@link settleCellExit}.
+ */
+export function cellResult(
+  effect: Effect.Effect<unknown, unknown>,
+): Effect.Effect<Result.Result<unknown, unknown>> {
+  return Effect.result(effect);
+}
+
+/**
+ * What one cell's run settles to, the rule the engine and the Effect `drive`
+ * share so they cannot drift:
+ *
+ *   - interrupted — `undefined`, nothing to dispatch;
+ *   - a defect — thrown;
+ *   - a `Cmd.define`d Cmd (`defined`) — its success as `Outcome.ok`, its
+ *     declared failure as `Outcome.err`, for the `Cmd.define` edge to mint;
+ *   - a hand-written Cmd — its success (the follow-up Msgs) as is, its failure
+ *     thrown as a {@link CellFailure}, so a caller types it.
+ */
+export function settleCellExit(
+  exit: Exit.Exit<unknown, unknown>,
+  defined: boolean,
+): unknown {
+  if (Exit.isFailure(exit)) {
+    if (Cause.hasInterruptsOnly(exit.cause)) return undefined;
+    throw Cause.squash(exit.cause);
+  }
+  const result = exit.value as Result.Result<unknown, unknown>;
+  if (defined) {
+    return Result.isSuccess(result)
+      ? Outcome.ok(result.success)
+      : Outcome.err(result.failure);
+  }
+  if (Result.isFailure(result)) throw new CellFailure(result.failure);
+  return result.success;
+}
 
 // === run ===
 
@@ -341,29 +383,16 @@ function start<
   // it interrupts all of them at once.
   const interruption = new AbortController();
 
-  // Read the cell's Effect with `Effect.result`, so a declared failure is a
-  // value and only a defect or an interruption is left in the Exit's cause.
+  // Interrupted by stop, a cell settles to nothing. A defect throws: for a
+  // defined Cmd the `Cmd.define` edge routes it to the error sink, for a
+  // hand-written one it rejects the dispatch. A hand-written cell's failure is
+  // marked, so the handle fails the dispatch with it as a typed error.
   async function settle(cell: AnyCell, cmd: unknown): Promise<unknown> {
     const type = (cmd as { type: string }).type;
-    const exit = await runEffect(Effect.result(cell(cmd)), {
+    const exit = await runEffect(cellResult(cell(cmd)), {
       signal: interruption.signal,
     });
-    if (Exit.isFailure(exit)) {
-      // Interrupted by stop: nothing to dispatch.
-      if (Cause.hasInterruptsOnly(exit.cause)) return undefined;
-      // A defect. For a defined Cmd the `Cmd.define` edge routes this throw to
-      // the error sink; for a hand-written one it rejects the dispatch.
-      throw Cause.squash(exit.cause);
-    }
-    const result = exit.value as Result.Result<unknown, unknown>;
-    if (defined.has(type)) {
-      return Result.isSuccess(result)
-        ? Outcome.ok(result.success)
-        : Outcome.err(result.failure);
-    }
-    // Marked, so the handle fails the dispatch with it as a typed error.
-    if (Result.isFailure(result)) throw new CellFailure(result.failure);
-    return result.success;
+    return settleCellExit(exit, defined.has(type));
   }
 
   function handlerFor(type: string): LoopHandler<M> | undefined {

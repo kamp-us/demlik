@@ -269,7 +269,7 @@ must be pure, because that path runs it inside the `fail` verb.
 
 ## 4. Drive it in a test
 
-`drive` from [`@demlik/tea/testing`](../reference/testing.md) runs the machine
+`drive` from [`@demlik/tea/testing/promise`](../reference/testing-promise.md) runs the machine
 the way the runtime does. It folds the Msg, hands every emitted Cmd to the real
 handler, turns each outcome into its settle Msg, feeds it back, and stops when
 the machine is quiet. There is no runtime, no clock and no socket anywhere on
@@ -277,7 +277,7 @@ the path. It returns the settled `state` **and** the `trace`: every Cmd
 dispatched and every Msg folded, in order.
 
 ```ts
-import { drive } from "@demlik/tea/testing";
+import { drive } from "@demlik/tea/testing/promise";
 
 /**
  * Feed one `classify` and let `drive` do what the runtime does: run the real

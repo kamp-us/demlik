@@ -261,6 +261,20 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     group: "Testing",
   },
   {
+    subpath: "./testing/promise",
+    importPath: "@demlik/tea/testing/promise",
+    file: "testing-promise.md",
+    typedocName: "testing/promise",
+    group: "Testing",
+  },
+  {
+    subpath: "./testing/effect",
+    importPath: "@demlik/tea/testing/effect",
+    file: "testing-effect.md",
+    typedocName: "testing/effect",
+    group: "Testing",
+  },
+  {
     subpath: "./pbt",
     importPath: "@demlik/tea/pbt",
     file: "pbt.md",

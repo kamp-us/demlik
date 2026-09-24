@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 25 public subpaths. Curated
+The complete export catalog — all 27 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -29,5 +29,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./resilience`](./resilience.md) | the call-hardening batteries: deadlines, retries, circuit breakers, rate limits, TTL caches and credential refresh, as plain functions and `Cmd.define`d Cmds you call from your own `update` (ADR 0022). |
 | [`./retry-backoff`](./retry-backoff.md) | exponential backoff with jitter + cap, and the retry-attempt state every fallible `interpret` handler folds over. |
 | [`./testing`](./testing.md) | test-side ergonomics over @demlik/tea's pure substrate. |
+| [`./testing/effect`](./testing-effect.md) | `drive` for the Effect engine: a machine run against its real Effect `interpret` handlers and its Subs, round by round, until it goes quiet, yielding `{ state, trace }`. |
+| [`./testing/promise`](./testing-promise.md) | `drive` for the Promise engine: a machine run against its real `interpret` handlers, round by round, until it goes quiet, returning `{ state, trace }` so a test asserts on the sequence as well as the endpoint. |
 | [`./timing`](./timing.md) | the call-rate batteries: coalesce a burst into one fire, cap a stream to one fire per window, and gate a high-frequency input into a settled, rate-capped, optionally deduped sequence of emits. |
 | [`./work-queue`](./work-queue.md) | a substrate-agnostic work-queue lifecycle over `Store<S>`: enqueue, claim the next item, mark it done, failed or cancelled, and reset whatever was running when the process went away. |

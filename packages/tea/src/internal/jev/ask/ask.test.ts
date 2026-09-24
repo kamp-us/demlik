@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineMachine } from "../../../index";
-import { drive } from "../../../testing";
+import { drive } from "../../../testing/promise";
 import { deadlineSub } from "../../resilience/deadline";
 import {
   type JevAnswers,
