@@ -25,6 +25,7 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 ## Machines
 
 - [`@demlik/tea/agent`](./agent.md)
+- [`@demlik/tea/otel`](./otel.md)
 
 ## Resilience
 

@@ -30,6 +30,7 @@ export default defineConfig({
     "machine-viz/index": "src/machine-viz/index.ts",
     "agent/index": "src/agent/index.ts",
     "parity/index": "src/parity/index.ts",
+    "otel/index": "src/otel/index.ts",
   },
   format: ["esm"],
   dts: true,

@@ -74,10 +74,18 @@ function makeAgent(turns: readonly AgentTurn[]) {
   });
 }
 
+// A run that has started (so it has a `runId` to stamp on events) and whose
+// outbox is empty, so the only event a Msg can produce is its own.
+function startedRun() {
+  const agent = makeAgent([]);
+  const [started] = agent.start(agent.init(), "r", 0);
+  return { ...started, lifecycle: [] };
+}
+
 describe("#145 — the projector refuses a settled call's late success", () => {
   it("the fan-out-settled arm emits only while the call is not refused", () => {
     const project = agentEvents<Stage, Purpose, Outputs, string>();
-    const base = makeAgent([]).init();
+    const base = startedRun();
     const lateOk: M = {
       type: "agent_tool_ok",
       callId: "c1",
@@ -88,7 +96,7 @@ describe("#145 — the projector refuses a settled call's late success", () => {
     // Same Msg, two states: the only difference is whether this call's public
     // outcome is already a failure.
     expect(project(lateOk, { ...base, refusedCalls: [] })).toEqual([
-      { type: "ToolSettled", callId: "c1", result: "late" },
+      { type: "ToolSettled", runId: "r", at: 2, callId: "c1", result: "late" },
     ] satisfies AgentEvent<string>[]);
     expect(project(lateOk, { ...base, refusedCalls: ["c1"] })).toEqual([]);
   });
@@ -112,17 +120,24 @@ describe("#145 — the projector refuses a settled call's late success", () => {
       { readonly at: string },
       typeof navigate
     >({ tools: router });
-    const base = makeAgent([]).init() as never as Parameters<typeof project>[1];
+    const base = startedRun() as never as Parameters<typeof project>[1];
     const okMsg = {
       type: navigate.okType,
       cmd: { callId: "c1", args: {} },
       value: { at: "home" },
+      at: 2,
     } as never as Parameters<typeof project>[0];
 
     // Same Msg, two states: the only difference is whether the call's public
     // outcome is already a failure.
     expect(project(okMsg, { ...base, refusedCalls: [] })).toEqual([
-      { type: "ToolSettled", callId: "c1", result: { at: "home" } },
+      {
+        type: "ToolSettled",
+        runId: "r",
+        at: 2,
+        callId: "c1",
+        result: { at: "home" },
+      },
     ] satisfies AgentEvent<{ readonly at: string }>[]);
     expect(project(okMsg, { ...base, refusedCalls: ["c1"] })).toEqual([]);
   });

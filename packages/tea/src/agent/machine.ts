@@ -37,7 +37,15 @@ import type {
   WiredToolCmd,
   WiredToolMsg,
 } from "./tool";
-import type { AgentState, AgentTurn, ToolFailure, TurnUsage } from "./types";
+import {
+  type AgentEndedStatus,
+  type AgentLifecycleNote,
+  type AgentState,
+  type AgentTurn,
+  status,
+  type ToolFailure,
+  type TurnUsage,
+} from "./types";
 
 // ===========================================================================
 // Cmds + Msgs the agent speaks. Generic over the composed wrappers' shapes.
@@ -426,59 +434,120 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  * or any exported type, so a UI built on `TurnSettled` does not break the day
  * the retry plumbing is renamed.
  *
+ * Every event carries the run's `runId` and the `at` of the transition that
+ * produced it. `runId` is the one the host passed to `agent_start` and it lives
+ * on the durable Model, so a run killed and resumed from its `Store` reports
+ * the same id on both sides of the kill (#331).
+ *
+ *   - `BrainStarted` — a brain call was issued for conversation turn `turn`,
+ *     with the request's `purpose`, `model` and `payload`. Once per turn: a
+ *     retry of the same turn is not a new start, a cold-wake `boot` that
+ *     re-fires it is.
  *   - `TurnSettled` — a brain turn settled (the model produced an `AgentTurn`).
- *     Projected off the private `resilient_run_ok` settle Msg; carries the parsed
- *     `turn` (the narration + tool calls the model asked for), and — when the
- *     provider reported one — that call's `usage` beside it (#332), so a
- *     progress surface reads the context size without digging into the turn.
- *   - `ToolSettled` — a tool call settled OK. Projected off the private
- *     `agent_tool_ok` Msg; carries the `callId` and the tool `result`.
- *   - `RunDone` — the run finished. Projected off the post-transition State
- *     reaching `run.phase === "done"`; carries the run's `output` (the terminal
- *     model turn, or `null`) — the same first-class result `Runtime.result()`
- *     reads (#46), surfaced as an event for the streaming consumer.
+ *     Carries the parsed `turn`, and — when the provider reported one — that
+ *     call's `usage` beside it (#332), so a progress surface reads the context
+ *     size without digging into the turn.
+ *   - `ToolStarted` — a tool call was issued: launched with its batch, a
+ *     queued call backfilling a freed slot, or re-fired by `boot`. A laddered
+ *     retry is not a new start.
+ *   - `ToolSettled` — a tool call settled OK, with the `callId` and `result`.
+ *   - `ToolFailed` — a tool call ended on the failure the model will read: its
+ *     own error, a spent retry budget, or its timeout. `failure` is the
+ *     `{ kind, reason, _tag? }` the conversation keeps.
+ *   - `RunDone` — the run ended, once. `status` says how: `done` with the
+ *     terminal turn, `failed` with the unified failure, or `cancelled`.
  */
 export type AgentEvent<R> =
-  | {
+  | (AgentEventHead & {
+      readonly type: "BrainStarted";
+      readonly turn: number;
+      readonly purpose: string;
+      readonly model: string | null;
+      readonly payload: unknown;
+    })
+  | (AgentEventHead & {
       readonly type: "TurnSettled";
       readonly turn: AgentTurn;
       /** The usage the provider reported for this turn. Absent → none reported. */
       readonly usage?: TurnUsage;
-    }
-  | {
+    })
+  | (AgentEventHead & {
+      readonly type: "ToolStarted";
+      readonly callId: string;
+      readonly name: string;
+      readonly args: Readonly<Record<string, unknown>>;
+    })
+  | (AgentEventHead & {
       readonly type: "ToolSettled";
       readonly callId: string;
       readonly result: R;
-    }
-  | { readonly type: "RunDone"; readonly output: AgentTurn | null };
+    })
+  | (AgentEventHead & {
+      readonly type: "ToolFailed";
+      readonly callId: string;
+      readonly name: string;
+      readonly failure: ToolFailure;
+    })
+  | (AgentEventHead & {
+      readonly type: "RunDone";
+      readonly status: AgentEndedStatus;
+    });
+
+/** The two fields every {@link AgentEvent} carries. */
+export interface AgentEventHead {
+  /** The run this event belongs to — stable across a kill and resume. */
+  readonly runId: string;
+  /** When the transition that produced it happened. */
+  readonly at: number;
+}
+
+/**
+ * Every {@link AgentEvent} `type`. A subscriber that wants the whole stream
+ * off `runtime.on` subscribes once per entry. `satisfies` proves each entry is
+ * a real type; a type test proves no real type is missing.
+ */
+export const AGENT_EVENT_TYPES = [
+  "BrainStarted",
+  "TurnSettled",
+  "ToolStarted",
+  "ToolSettled",
+  "ToolFailed",
+  "RunDone",
+] as const satisfies readonly AgentEvent<unknown>["type"][];
 
 /**
  * Project one APPLIED agent transition `(msg, state)` to its semantic
  * {@link AgentEvent}s — the `events` projector a consumer passes to
  * `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`.
  *
- * This is the ONE place the agent's PRIVATE Msg names are read: it maps
- * `resilient_run_ok` → `TurnSettled` and `agent_tool_ok` → `ToolSettled`, and reads
- * the post-transition `run.phase` for `RunDone`. The mapping is total over the
- * Msg union (a `default`-free switch on the discriminant) and returns `[]` for
- * the transitions that carry no public event (start / boot / timer / the error
- * arms), so a private name never escapes into `AgentEvent`.
+ * Two sources, in this order:
  *
- * A single transition may emit more than one event: the brain turn that retires
- * the final stage settles a turn (`TurnSettled`) AND finishes the run
- * (`RunDone`) — both are projected from that one `resilient_run_ok` transition.
- * `RunDone` is gated on `run.phase === "done"`, which the wired loop reaches
- * exactly once (the agent is terminal there and dispatches no further
- * transition), so the event fires once per run.
+ *   1. The Msg. `resilient_run_ok` → `TurnSettled`, `agent_tool_ok` (or a
+ *      router's `<name>_ok`) → `ToolSettled`. This is the ONE place the
+ *      agent's PRIVATE Msg names are read; the switch is total over the Msg
+ *      union, so a private name never escapes into `AgentEvent`.
+ *   2. The transition's lifecycle outbox, `state.lifecycle` — what the reducer
+ *      noted as it started a brain call or a tool, failed a tool, or ended the
+ *      run. These cannot be read off `(msg, state)`: a brain call issued after
+ *      a batch drains, a queued tool backfilling a slot, a timeout the ladder
+ *      settled and the transition that ended the run all leave a state that
+ *      looks like the one before (#331).
+ *
+ * So a turn that asks for tools reads `TurnSettled`, then one `ToolStarted`
+ * per launched call; the last tool of a batch reads `ToolSettled` (or
+ * `ToolFailed`), then the next `BrainStarted`; and the final turn reads
+ * `TurnSettled`, then `RunDone`.
  *
  * A `ToolSettled` is gated on `state.refusedCalls` (#145): a call whose public
  * outcome was already a failure — the ladder's `timeout` / `retry_exhausted`,
  * or the tool's own error — never emits a success here, however late its
  * abandoned attempt resolves. Both settle arms read the same list, so a
- * router-wired agent and a fan-out-wired one are silent on the same calls, and
- * the decision is made in the PURE layer rather than filtered at a
- * subscription seam — `runtime.on` and `defineAgent`'s `onEvent` see one
- * stream.
+ * router-wired agent and a fan-out-wired one are silent on the same calls.
+ * A cancelled run's Msg-shaped events are closed the same way — a tool that
+ * was in flight when the abort landed pushes nothing — while the cancel's own
+ * `RunDone` still comes through, because it is noted, not Msg-shaped.
+ *
+ * A run cancelled before it ever started has no `runId`, and projects nothing.
  *
  * A machine wired with `toMachine({ tools })` settles tools through the
  * router's `<name>_ok` Msgs instead of `agent_tool_ok`; pass the same router
@@ -507,48 +576,109 @@ export function agentEvents<
   const tools = opts?.tools;
   return (msg, state) => {
     const events: AgentEvent<R>[] = [];
-    // A cancelled run's public channel is CLOSED. The fold already ignores what
-    // arrives after the stop (`isSettled`), but this projector is Msg-shaped:
-    // without this gate a tool handler that was in flight when the abort landed
-    // would still push its `ToolSettled` to a listener whose run is over. Same
-    // reasoning as `refusedCalls` (#145), one phase up — there the discriminator
-    // is per call, here the whole run is the answer.
-    if (state.run.phase === "cancelled") return events;
-    // A call the ladder already settled is silent on EVERY public channel: the
-    // fan-out drops its late value, and `state.refusedCalls` is what lets this
-    // projector drop the matching event (#145). The `??` is the same
-    // rehydration guard the reducer's own reader carries.
-    const refused = new Set(state.refusedCalls ?? []);
-    const routed = tools === undefined ? null : tools.outcomeOf(msg);
-    if (routed !== null) {
-      // A router-settled tool: its `_ok` is the public ToolSettled, its `_err`
-      // stays silent like `agent_tool_err`. The router's `R` is the machine's.
-      if (routed.outcome.kind === "ok" && !refused.has(routed.callId)) {
-        events.push({
-          type: "ToolSettled",
-          callId: routed.callId,
-          result: routed.outcome.result as R,
-        });
+    const run = state.run;
+    const runId = run.phase === "idle" ? null : run.runId;
+    if (runId === null) return events;
+    if (run.phase !== "cancelled") {
+      // A call the ladder already settled is silent on EVERY public channel: the
+      // fan-out drops its late value, and `state.refusedCalls` is what lets this
+      // projector drop the matching event (#145). The `??` is the same
+      // rehydration guard the reducer's own reader carries.
+      const refused = new Set(state.refusedCalls ?? []);
+      const routed = tools === undefined ? null : tools.outcomeOf(msg);
+      if (routed !== null) {
+        // A router-settled tool: its `_ok` is the public ToolSettled; its
+        // `_err` is noted by the reducer and projected below.
+        if (routed.outcome.kind === "ok" && !refused.has(routed.callId)) {
+          events.push({
+            type: "ToolSettled",
+            runId,
+            // The router claimed it, so it is one of its settled Msgs.
+            at: (msg as WiredToolMsg<T>).at,
+            callId: routed.callId,
+            result: routed.outcome.result as R,
+          });
+        }
+      } else {
+        projectOwn(msg as AgentMachineMsg<P, O, R>, runId, events, refused);
       }
-    } else {
-      projectOwn(msg as AgentMachineMsg<P, O, R>, events, refused);
     }
-    // RunDone is a STATE-shaped event (the run's terminal output, #46), not a
-    // Msg-shaped one: the transition that lands `done` is the final brain turn
-    // (which also emits TurnSettled above). Gate on the post-transition phase so
-    // the same projector reports both.
-    if (state.run.phase === "done") {
-      events.push({ type: "RunDone", output: state.output });
+    for (const note of state.lifecycle ?? []) {
+      const event = projectNote<Stage, P, O, R>(note, runId, state);
+      if (event !== null) events.push(event);
     }
     return events;
   };
 }
 
 /** The `TurnSettled` for one settled turn — `usage` beside it only when reported. PURE. */
-function turnSettled<R>(turn: AgentTurn): AgentEvent<R> {
+function turnSettled<R>(
+  turn: AgentTurn,
+  runId: string,
+  at: number,
+): AgentEvent<R> {
   return turn.usage === undefined
-    ? { type: "TurnSettled", turn }
-    : { type: "TurnSettled", turn, usage: turn.usage };
+    ? { type: "TurnSettled", runId, at, turn }
+    : { type: "TurnSettled", runId, at, turn, usage: turn.usage };
+}
+
+// One outbox note → its public event. `run_ended` reads the ending off the
+// post-transition state through `status`, the same channel `runtime.result()`
+// callers read, so `RunDone` and `status` never disagree about how a run ended.
+function projectNote<Stage, P extends string, O extends Record<P, unknown>, R>(
+  note: AgentLifecycleNote,
+  runId: string,
+  state: AgentState<Stage, P, O, R>,
+): AgentEvent<R> | null {
+  switch (note.kind) {
+    case "brain_started":
+      return {
+        type: "BrainStarted",
+        runId,
+        at: note.at,
+        turn: note.turn,
+        purpose: note.purpose,
+        model: note.model,
+        payload: note.payload,
+      };
+    case "tool_started":
+      return {
+        type: "ToolStarted",
+        runId,
+        at: note.at,
+        callId: note.call.callId,
+        name: note.call.name,
+        args: note.call.args,
+      };
+    case "tool_failed":
+      return {
+        type: "ToolFailed",
+        runId,
+        at: note.at,
+        callId: note.call.callId,
+        name: note.call.name,
+        failure: note.failure,
+      };
+    case "run_ended": {
+      const status = ended(state);
+      return status === null
+        ? null
+        : { type: "RunDone", runId, at: note.at, status };
+    }
+  }
+}
+
+// The run's ending, narrowed. `run_ended` is noted exactly when `isSettled`
+// flipped true, and `status` answers every settled run with one of these
+// three, so the `null` arm is unreachable — and stays silent rather than
+// inventing an ending if that ever stops holding.
+function ended<Stage, P extends string, O extends Record<P, unknown>, R>(
+  state: AgentState<Stage, P, O, R>,
+): AgentEndedStatus | null {
+  const s = status(state);
+  return s.kind === "done" || s.kind === "failed" || s.kind === "cancelled"
+    ? s
+    : null;
 }
 
 // The agent's own Msg union, projected exhaustively. A Msg the router did not
@@ -556,6 +686,7 @@ function turnSettled<R>(turn: AgentTurn): AgentEvent<R> {
 // `type`, which the cast at the one call site records.
 function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
   msg: AgentMachineMsg<P, O, R>,
+  runId: string,
   events: AgentEvent<R>[],
   refused: ReadonlySet<string>,
 ): void {
@@ -565,7 +696,7 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
       // `value.output` is the parsed `AgentTurn` (the `O extends Record<P,
       // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
       // same reasoning `state.output` relies on, #46/#48).
-      events.push(turnSettled(msg.value.output));
+      events.push(turnSettled(msg.value.output, runId, msg.at));
       break;
     case MsgType.AgentToolOk:
       // The PRIVATE tool-fan-out settle Msg → the public ToolSettled, unless
@@ -574,19 +705,19 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
       if (!refused.has(msg.callId)) {
         events.push({
           type: "ToolSettled",
+          runId,
+          at: msg.at,
           callId: msg.callId,
           result: msg.result,
         });
       }
       break;
     // start / boot / cancel / timer / the *_err arms / the compaction settles
-    // carry no public event. (No `default`: the switch is exhaustive over the Msg
-    // discriminant, so a new Msg variant forces a decision here at compile
-    // time.) Compaction is an internal optimization, not a semantic lifecycle
-    // moment a UI folds — its settles are deliberately silent here. Cancel is
-    // silent for a stronger reason: the run the caller stopped owes the public
-    // channel nothing after the stop, so a `RunCancelled` would be one more
-    // late thing to have to ignore.
+    // carry no Msg-shaped event. What they start, fail or end is noted by the
+    // reducer and projected off `state.lifecycle`. (No `default`: the switch is
+    // exhaustive over the Msg discriminant, so a new Msg variant forces a
+    // decision here at compile time.) Compaction is an internal optimization,
+    // not a semantic lifecycle moment a UI folds, so its settles stay silent.
     case MsgType.AgentStart:
     case MsgType.AgentCancel:
     case MsgType.AgentToolErr:

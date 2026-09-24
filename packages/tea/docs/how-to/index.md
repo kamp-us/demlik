@@ -30,10 +30,15 @@ what you are trying to do, and it names the subpath you need.
   your `Store` so `save` does nothing while a reply streams, on either engine,
   with no tea option behind it.
 - [Show a run's progress while it runs](./show-a-run-in-progress.md) — pass
-  `onEvent` to `agent.run` and observe the run's `TurnSettled` / `ToolSettled` /
-  `RunDone` events as the kernel settles them, instead of waiting on the one
-  promise that resolves at the end, and `onChunk` for the token deltas below a
-  turn.
+  `onEvent` to `agent.run` and observe each brain call and tool call start and
+  settle, and the run's one `RunDone`, as the kernel produces them, instead of
+  waiting on the one promise that resolves at the end, and `onChunk` for the
+  token deltas below a turn.
+- [Trace an agent run in Langfuse](./trace-an-agent-run-in-langfuse.md) — hand
+  `traceAgent` from `@demlik/tea/otel` a tracer whose provider exports through
+  `LangfuseSpanProcessor`, and every run lands as one trace — a run span, a
+  generation per turn, a tool span per call — that a resume from the `Store`
+  keeps writing into. Any OpenTelemetry backend reads the same spans.
 - [Drive a machine from React](./drive-from-react.md) — use `useMachine` from
   `@demlik/tea/react` to own a runtime for a component's lifetime and get a
   `[state, dispatch]` pair.

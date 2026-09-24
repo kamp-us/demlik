@@ -1,6 +1,6 @@
 # @demlik/tea — all modules
 
-The complete export catalog — all 24 public subpaths. Curated
+The complete export catalog — all 25 public subpaths. Curated
 modules link to their dedicated reference page; the rest are plumbing,
 discoverable here with a one-line gloss from their source barrel.
 
@@ -19,6 +19,7 @@ discoverable here with a one-line gloss from their source barrel.
 | `./machine-viz` | turn a `Machine` into a Mermaid diagram string. |
 | [`./mem`](./mem.md) | in-memory `Store<S>` adapter for `@demlik/tea`. |
 | [`./node`](./node.md) | Node host adapter for `@demlik/tea`. |
+| [`./otel`](./otel.md) | an agent run as OpenTelemetry spans. |
 | [`./paginate`](./paginate.md) | the pagination batteries: the cursor walk as pure state, and the resumable end-to-end traversal built over it. |
 | `./parity` | the record → replay → normalized-diff go/no-go gate. |
 | [`./pbt`](./pbt.md) | Property-based testing primitives for `@demlik/tea` machines. |

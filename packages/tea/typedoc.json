@@ -22,7 +22,8 @@
     "src/jev/index.ts",
     "src/testing/index.ts",
     "src/pbt/index.ts",
-    "src/devtools/index.ts"
+    "src/devtools/index.ts",
+    "src/otel/index.ts"
   ],
   "tsconfig": "tsconfig.json",
   "json": ".typedoc/model.json",

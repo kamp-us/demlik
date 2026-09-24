@@ -31,7 +31,7 @@
  */
 
 import type { AgentEvent } from "./machine";
-import type { AgentTurn, Conversation } from "./types";
+import type { AgentEndedStatus, AgentTurn, Conversation } from "./types";
 
 /**
  * One tool call the run settled OK, as the transcript keeps it — the `callId`
@@ -47,16 +47,15 @@ export interface TranscriptToolResult<R> {
 }
 
 /**
- * Whether the run has finished, and its terminal turn once it has.
+ * Whether the run has ended, and how: `running` until `RunDone`, then the
+ * ending it carried — `done` with the terminal turn, `failed` with the
+ * failure, or `cancelled`.
  *
- * The two cases are a union rather than a nullable `output` field because
- * `output` is legitimately `null` on a finished run — a `RunDone` with no
- * terminating turn — and a single field would make "not finished yet" and
- * "finished with nothing" the same reading.
+ * `done` keeps `output` inside its own arm because `output` is legitimately
+ * `null` on a finished run, and a single nullable field would make "not
+ * finished yet" and "finished with nothing" the same reading.
  */
-export type TranscriptOutcome =
-  | { readonly kind: "running" }
-  | { readonly kind: "done"; readonly output: AgentTurn | null };
+export type TranscriptOutcome = { readonly kind: "running" } | AgentEndedStatus;
 
 /** What a collector holds right now — a plain, immutable read. */
 export interface TranscriptSnapshot<R> {
@@ -64,7 +63,7 @@ export interface TranscriptSnapshot<R> {
   readonly turns: readonly AgentTurn[];
   /** Every tool call that settled OK, in settle order. */
   readonly tools: readonly TranscriptToolResult<R>[];
-  /** Whether `RunDone` has been seen, and the terminal turn if so. */
+  /** Whether `RunDone` has been seen, and how the run ended if so. */
   readonly outcome: TranscriptOutcome;
 }
 
@@ -128,7 +127,13 @@ export function transcript<R>(seed?: TranscriptSeed<R>): Transcript<R> {
           tools.push({ callId: event.callId, result: event.result });
           return;
         case "RunDone":
-          outcome = { kind: "done", output: event.output };
+          outcome = event.status;
+          return;
+        // The started and failed events add nothing a transcript keeps: a
+        // turn is kept once it settles, and a failed call is `onToolError`'s.
+        case "BrainStarted":
+        case "ToolStarted":
+        case "ToolFailed":
           return;
       }
     },

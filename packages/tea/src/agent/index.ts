@@ -181,6 +181,7 @@ import type {
   AgentConfig,
   AgentConfigCore,
   AgentFailure,
+  AgentLifecycleNote,
   AgentState,
   AgentTurn,
   Conversation,
@@ -376,6 +377,7 @@ export function createAgent<
       compaction: compactRc.init(),
       toolResilience: ladder.init(),
       refusedCalls: [],
+      lifecycle: [],
       failure: null,
       output: null,
       instructions: config.instructions ?? null,
@@ -411,7 +413,33 @@ export function createAgent<
   ): readonly [State, readonly AgentCmd<P, TC>[]] {
     const call = brainCall(s);
     const [resilience, cmds] = llm.attempt(s.resilience, call, at);
-    return [{ ...s, resilience }, cmds];
+    const started = noted(s, {
+      kind: "brain_started",
+      turn: s.conversation?.turnCount ?? 0,
+      purpose: call.purpose,
+      model: call.model,
+      payload: call.payload,
+      at,
+    });
+    return [{ ...started, resilience }, cmds];
+  }
+
+  /**
+   * Append facts to this transition's lifecycle outbox (#331). The `??` is the
+   * rehydration guard: a Model persisted before the field existed has none.
+   * PURE.
+   */
+  function noted(s: State, ...notes: readonly AgentLifecycleNote[]): State {
+    if (notes.length === 0) return s;
+    return { ...s, lifecycle: [...(s.lifecycle ?? []), ...notes] };
+  }
+
+  /** One `tool_started` note per call just issued. PURE. */
+  function toolsStarted(
+    calls: readonly ToolCall[],
+    at: number,
+  ): readonly AgentLifecycleNote[] {
+    return calls.map((call) => ({ kind: "tool_started", call, at }));
   }
 
   /**
@@ -569,9 +597,17 @@ export function createAgent<
     };
     // An advance of the loop is progress — bump the monitored-run watchdog.
     const [runSlice] = run.progress(s.run, undefined, at);
-    const [toolResilience, launchCmds] = armLaunch(s, [], tools.running, at);
+    const [toolResilience, launchCmds, launched] = armLaunch(
+      s,
+      [],
+      tools.running,
+      at,
+    );
     return [
-      { ...s, run: runSlice, tools, toolResilience, conversation: nextConv },
+      noted(
+        { ...s, run: runSlice, tools, toolResilience, conversation: nextConv },
+        ...toolsStarted(launched, at),
+      ),
       launchCmds,
     ];
   }
@@ -717,20 +753,19 @@ export function createAgent<
    * by its resilient gate (which is what records the attempt and arms the
    * timeout), and a bare tool's is re-emitted here identically. The two lists
    * are the same calls either way — `after \ before` is exactly what the
-   * fan-out moved into `running`. PURE.
+   * fan-out moved into `running`, returned third so the caller can note each
+   * one as started (#331). PURE.
    */
   function armLaunch(
     s: State,
     before: readonly ToolCall[],
     after: readonly ToolCall[],
     at: number,
-  ): readonly [ToolResilienceState, readonly TC[]] {
+  ): readonly [ToolResilienceState, readonly TC[], readonly ToolCall[]] {
     const known = new Set(before.map((c) => c.callId));
-    return ladder.launch(
-      toolSlice(s),
-      after.filter((c) => !known.has(c.callId)),
-      at,
-    );
+    const launched = after.filter((c) => !known.has(c.callId));
+    const [slice, cmds] = ladder.launch(toolSlice(s), launched, at);
+    return [slice, cmds, launched];
   }
 
   /**
@@ -758,7 +793,7 @@ export function createAgent<
         : fan.itemErr(prev.tools, callId, outcome);
     // The freed slot backfills from the queue — those launches are armed exactly
     // like the batch's first ones, so a queued tool gets its timeout too.
-    const [toolResilience, launchCmds] = armLaunch(
+    const [toolResilience, launchCmds, launched] = armLaunch(
       prev,
       prev.tools.running,
       tools.running,
@@ -771,7 +806,16 @@ export function createAgent<
     // error pass through, so the projector needs no second rule per source.
     const refusedCalls =
       outcome.kind === "ok" ? refusedOf(prev) : [...refusedOf(prev), callId];
-    const s: State = { ...prev, toolResilience, refusedCalls };
+    // The same settle body is where a failure becomes public, so it is also
+    // where it is noted — ahead of the backfilled launches, the order they
+    // happened in (#331).
+    const s: State = noted(
+      { ...prev, toolResilience, refusedCalls },
+      ...(outcome.kind === "ok"
+        ? []
+        : [{ kind: "tool_failed" as const, call, failure: outcome, at }]),
+      ...toolsStarted(launched, at),
+    );
 
     const foldedConv: Conversation<R> = {
       ...conv,
@@ -1240,12 +1284,21 @@ export function createAgent<
     // one's next attempt is already owed to the retry timer `subs` re-arms off
     // the rehydrated slice, so re-firing here would buy an attempt the budget
     // never granted and reset the count that survived the kill.
+    //
+    // Every call still in flight starts again from THIS process's point of
+    // view, whether the ladder re-fires it now or a retry timer owes it: a
+    // listener attached after the kill saw none of them start (#331).
     const [toolResilience, outcome] = ladder.boot(
       toolSlice(resumed),
       resumed.tools.running,
       at,
     );
-    return applyLadder(resumed, toolResilience, outcome, at);
+    return applyLadder(
+      noted(resumed, ...toolsStarted(resumed.tools.running, at)),
+      toolResilience,
+      outcome,
+      at,
+    );
   }
 
   // === Verb: cancel ========================================================
@@ -1492,35 +1545,39 @@ export function createAgent<
         ? toolOk(s, settled.callId, settled.outcome.result as R, m.at)
         : toolErr(s, settled.callId, settled.outcome, m.at);
     };
+    const toolCell: ToolCell = (s, m) =>
+      transition(s, m.at, (entered) => foldTool(entered, m));
     const toolCells: Record<string, ToolCell> = {};
     for (const def of tools?.defs ?? []) {
-      toolCells[def.okType] = foldTool;
-      toolCells[def.errType] = foldTool;
+      toolCells[def.okType] = toolCell;
+      toolCells[def.errType] = toolCell;
     }
     const ownUpdate: Reducer<
       State,
       AgentMachineMsg<P, O, R>,
       AgentCmd<P, TC>
     > = {
-      [MsgType.AgentStart]: (s, m) => start(s, m.runId, m.at),
-      [MsgType.AgentToolOk]: (s, m) => toolOk(s, m.callId, m.result, m.at),
+      [MsgType.AgentStart]: (s, m) => door.start(s, m.runId, m.at),
+      [MsgType.AgentToolOk]: (s, m) => door.toolOk(s, m.callId, m.result, m.at),
       // `agent_tool_err` is `createAgent`'s own raw settle Msg and its wire
       // shape is a bare `reason` string — a consumer routing their own interpret
       // through it never declared a tag, so the failure it mints carries none.
-      [MsgType.AgentToolErr]: (s, m) => toolErr(s, m.callId, m.reason, m.at),
+      [MsgType.AgentToolErr]: (s, m) =>
+        door.toolErr(s, m.callId, m.reason, m.at),
       // The engine-minted brain-call settle Msgs (from `brainHandlers`' outcome):
       // success runs `succeed` (reset retry + fold the turn), failure runs `fail`.
-      [MsgType.ResilientOk]: (s, m) => succeed(s, m, m.at),
-      [MsgType.ResilientErr]: (s, m) => fail(s, m, m.at),
+      [MsgType.ResilientOk]: (s, m) => door.succeed(s, m, m.at),
+      [MsgType.ResilientErr]: (s, m) => door.fail(s, m, m.at),
       // The re-entered compaction settle Msgs (from the consumer's `compact_run`
       // cell, #85): `compact_ok` folds the summary back (drop oldest turns +
       // their records, fire the next brain call), `compact_err` backs off via the
       // compaction retry or proceeds without compacting.
-      [MsgType.CompactOk]: (s, m) => compactOk(s, m.key, m, m.at),
-      [MsgType.CompactErr]: (s, m) => compactErr(s, m.key, m, m.at),
-      deadline_exceeded: (s, m) => onTimer(s, m),
-      [MsgType.AgentBoot]: (s, m) => boot(s, m.at),
-      [MsgType.AgentCancel]: (s, m) => cancel(s, m.at),
+      [MsgType.CompactOk]: (s, m) => door.compactOk(s, m.key, m, m.at),
+      [MsgType.CompactErr]: (s, m) => door.compactErr(s, m.key, m, m.at),
+      deadline_exceeded: (s, m) => door.onTimer(s, m),
+      [MsgType.AgentBoot]: (s, m) => door.boot(s, m.at),
+      [MsgType.AgentCancel]: (s, m) =>
+        transition(s, m.at, (entered) => cancel(entered, m.at)),
     };
     // `ownUpdate` carries every `AgentMachineMsg` cell (checked above);
     // `toolCells` carries one per router def. The join is `Reducer` over the
@@ -1568,18 +1625,63 @@ export function createAgent<
     };
   }
 
+  // === The transition boundary (#331) ======================================
+
+  /**
+   * Run `verb` as ONE transition: empty the lifecycle outbox on the way in, and
+   * note `run_ended` on the way out when this is the transition that ended the
+   * run. Reading the end off `isSettled` before and after, rather than at each
+   * site that can end a run, is what makes `RunDone` once-only whichever of
+   * them did it — `done`, a turn or time limit, a spent brain retry, a
+   * watchdog, a cancel.
+   *
+   * Every door a Msg enters by goes through here: the knob's verbs and
+   * `toMachine`'s cells. The verbs calling one another inside a transition do
+   * not, so their notes accumulate in the order they happened. PURE.
+   */
+  function transition(
+    s: State,
+    at: number,
+    verb: (entered: State) => readonly [State, readonly AgentCmd<P, TC>[]],
+  ): readonly [State, readonly AgentCmd<P, TC>[]] {
+    const entered: State =
+      (s.lifecycle ?? []).length === 0 ? s : { ...s, lifecycle: [] };
+    const [next, cmds] = verb(entered);
+    return !isSettled(entered) && isSettled(next)
+      ? [noted(next, { kind: "run_ended", at }), cmds]
+      : [next, cmds];
+  }
+
+  /** The verbs as doors — each one a whole transition. */
+  const door = {
+    start: (s: State, runId: string, at: number) =>
+      transition(s, at, (e) => start(e, runId, at)),
+    turn: (s: State, result: AgentTurn, at: number) =>
+      transition(s, at, (e) => turn(e, result, at)),
+    toolOk: (s: State, callId: string, result: R, at: number) =>
+      transition(s, at, (e) => toolOk(e, callId, result, at)),
+    toolErr: (
+      s: State,
+      callId: string,
+      failure: string | ToolFailure,
+      at: number,
+    ) => transition(s, at, (e) => toolErr(e, callId, failure, at)),
+    succeed: (s: State, msg: AgentLlmOkMsg<P, O>, at: number) =>
+      transition(s, at, (e) => succeed(e, msg, at)),
+    fail: (s: State, msg: AgentLlmErrMsg<P>, at: number) =>
+      transition(s, at, (e) => fail(e, msg, at)),
+    compactOk: (s: State, key: string, msg: AgentCompactOkMsg, at: number) =>
+      transition(s, at, (e) => compactOk(e, key, msg, at)),
+    compactErr: (s: State, key: string, msg: AgentCompactErrMsg, at: number) =>
+      transition(s, at, (e) => compactErr(e, key, msg, at)),
+    onTimer: (s: State, msg: AgentTimerMsg) =>
+      transition(s, msg.atMs, (e) => onTimer(e, msg)),
+    boot: (s: State, at: number) => transition(s, at, (e) => boot(e, at)),
+  };
+
   return {
     init,
-    start,
-    turn,
-    toolOk,
-    toolErr,
-    succeed,
-    fail,
-    compactOk,
-    compactErr,
-    onTimer,
-    boot,
+    ...door,
     isSettled,
     currentStage,
     brainCall,

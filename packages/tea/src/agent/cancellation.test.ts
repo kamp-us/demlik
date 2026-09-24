@@ -268,9 +268,18 @@ describe("in-flight tool handlers after a cancellation", () => {
 
     expect(final.run.phase).toBe("cancelled");
     expect(finished).toEqual(["tea"]);
-    // The turn that settled BEFORE the abort is public; the tool that settled
-    // after it is not, and no `RunDone` is minted for a run nobody finished.
-    expect(events.map((e) => e.type)).toEqual(["TurnSettled"]);
+    // The turn that settled BEFORE the abort is public, and so is the tool it
+    // started; the tool's settle AFTER the abort is not. The run ends on one
+    // `RunDone` saying it was cancelled, so a listener holding open work —
+    // a span, a spinner — has the one signal to close it on (#331).
+    expect(events.map((e) => e.type)).toEqual([
+      "BrainStarted",
+      "TurnSettled",
+      "ToolStarted",
+      "RunDone",
+    ]);
+    const last = events.at(-1);
+    expect(last?.type === "RunDone" && last.status.kind).toBe("cancelled");
     // …and the late outcome never reached the Model either.
     expect(final.conversation?.toolRecords ?? []).toHaveLength(0);
   });

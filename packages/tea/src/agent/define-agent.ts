@@ -28,6 +28,7 @@ import {
 import { type ContentPart, type MessageContent, omitMedia } from "./content";
 import { createAgent } from "./index";
 import {
+  AGENT_EVENT_TYPES,
   type AgentCmd,
   type AgentEvent,
   type AgentMachineMsg,
@@ -1176,14 +1177,6 @@ function noHost<T extends AnyToolDef>(): DefinedAgentRunOptions<T> {
 }
 
 /**
- * Every `AgentEvent` discriminant, so one `on(...)` subscription per type
- * covers the whole union. Subscribing before the drive dispatches is what makes
- * the delivery total: an event of a type nobody is listening for is dropped by
- * the runtime's fanout, not queued.
- */
-const AGENT_EVENT_TYPES = ["TurnSettled", "ToolSettled", "RunDone"] as const;
-
-/**
  * Forward the runtime's semantic events to the caller's `onEvent`, CONTAINED.
  *
  * `defineAgent` owns the containment (see {@link contained}): a throwing
@@ -1192,7 +1185,8 @@ const AGENT_EVENT_TYPES = ["TurnSettled", "ToolSettled", "RunDone"] as const;
  *
  * Ordering is the kernel's: one handler per type, all attached before the
  * drive's first dispatch, so events arrive in the order the projector emits
- * them.
+ * them. Attaching first is also what makes delivery total: an event of a type
+ * nobody is listening for is dropped by the runtime's fanout, not queued.
  */
 function forwardEvents<T extends AnyToolDef>(
   handle: BootingRuntime<

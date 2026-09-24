@@ -757,6 +757,22 @@ export interface AgentState<
    * retire on purpose — that is exactly when a late settle arrives.
    */
   readonly refusedCalls: readonly string[];
+  /**
+   * What THIS transition started, failed or ended (#331) — the outbox the
+   * event projector reads. Cleared on entry to every verb, so it only ever
+   * holds the one transition's facts.
+   *
+   * The projector sees `(msg, post-state)` and nothing else, and none of these
+   * facts can be read back off that pair: a brain call issued after a batch
+   * drains, a queued tool backfilling a slot, a timeout the ladder settled and
+   * the transition that ended the run all leave a state that looks like the
+   * one before. The reducer knows at the moment it does them, so it writes
+   * them down here, the same way `refusedCalls` carries the one fact the
+   * projector could not derive.
+   *
+   * Absent on a Model persisted before 0.18; every reader treats that as empty.
+   */
+  readonly lifecycle: readonly AgentLifecycleNote[];
   readonly failure: AgentFailure | null;
   /**
    * The run's terminal output — the FIRST-CLASS result (issue #46). `null`
@@ -813,6 +829,44 @@ export interface AgentState<
 export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
 
 /**
+ * One fact a transition recorded on {@link AgentState.lifecycle} — the input
+ * the `agentEvents` projector turns into `BrainStarted`, `ToolStarted`,
+ * `ToolFailed` and `RunDone`.
+ *
+ *   - `brain_started` — a brain call was issued for conversation turn `turn`.
+ *     Once per turn, and again on a cold-wake `boot` that re-fires it; a retry
+ *     of the same turn is not a new start.
+ *   - `tool_started`  — a tool call was issued: launched from a batch, a
+ *     queued call backfilling a slot, or re-fired by `boot`. A retry is not a
+ *     new start.
+ *   - `tool_failed`   — a call ended on a failure the model will read: its own
+ *     error, a spent retry budget, or its timeout.
+ *   - `run_ended`     — the run reached `done`, `failed` or `cancelled` on
+ *     this transition.
+ */
+export type AgentLifecycleNote =
+  | {
+      readonly kind: "brain_started";
+      readonly turn: number;
+      readonly purpose: string;
+      readonly model: string | null;
+      readonly payload: unknown;
+      readonly at: number;
+    }
+  | {
+      readonly kind: "tool_started";
+      readonly call: ToolCall;
+      readonly at: number;
+    }
+  | {
+      readonly kind: "tool_failed";
+      readonly call: ToolCall;
+      readonly failure: ToolFailure;
+      readonly at: number;
+    }
+  | { readonly kind: "run_ended"; readonly at: number };
+
+/**
  * The agent's lifecycle status — THE single typed channel for "what is this run
  * doing?". A discriminated union on `kind` so any change to the
  * private slice shape (`Awaiting`, the failure channels, `run.phase`) forces a
@@ -856,6 +910,16 @@ export type AgentStatus<Stage> =
   | { readonly kind: "done"; readonly output: AgentTurn | null }
   | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> }
   | { readonly kind: "cancelled"; readonly at: number };
+
+/**
+ * The three {@link AgentStatus} arms a run can end on — what `RunDone` carries.
+ * `done` holds the output, `failed` the unified failure, `cancelled` when the
+ * stop landed.
+ */
+export type AgentEndedStatus<Stage = unknown> = Extract<
+  AgentStatus<Stage>,
+  { readonly kind: "done" | "failed" | "cancelled" }
+>;
 
 /**
  * Ask where an agent run stands: pass its state, get back one of `idle`,

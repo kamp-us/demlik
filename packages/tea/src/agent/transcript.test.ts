@@ -93,11 +93,16 @@ describe("transcript — a finished run's turns, without hand-writing a collecto
     const t = transcript<Result>();
     expect(t.read().outcome).toEqual({ kind: "running" });
 
-    t.onEvent({ type: "TurnSettled", turn: ASK });
+    t.onEvent({ type: "TurnSettled", runId: "r", at: 1, turn: ASK });
     const midRun = t.read();
     expect(midRun.turns).toEqual([ASK]);
 
-    t.onEvent({ type: "RunDone", output: null });
+    t.onEvent({
+      type: "RunDone",
+      runId: "r",
+      at: 2,
+      status: { kind: "done", output: null },
+    });
     // The earlier snapshot did not move under the later events.
     expect(midRun.turns).toEqual([ASK]);
     expect(midRun.outcome).toEqual({ kind: "running" });

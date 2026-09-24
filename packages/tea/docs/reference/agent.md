@@ -19,10 +19,11 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (147)
+## Exports (151)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
+| `AGENT_EVENT_TYPES` | Variable | Every AgentEvent `type`. |
 | `agentBootMsg` | Function | The do↔agent boot port: construct the `agent_boot` Msg `autoBoot` dispatches on a resumable rehydrate. |
 | `AgentBootMsg` | Type | The Msg `do/host`'s `autoBoot` fires to re-enter the agent's `boot` verb on rehydrate. |
 | `agentCancelMsg` | Function | Construct the `agent_cancel` Msg an abort dispatches. |
@@ -34,10 +35,13 @@ These are the ones to read first:
 | `AgentCompactRunCmd` | Type | The "summarize the oldest N turns" effect Cmd — the compaction round-trip's carrier. |
 | `AgentConfig` | Type | The agent configuration — the core seams intersected with the snapshotting discriminant (`AgentSnapshotConfig`). |
 | `AgentConfigCore` | Interface | The core (non-snapshot, non-compaction) agent configuration. |
+| `AgentEndedStatus` | Type | The three AgentStatus arms a run can end on — what `RunDone` carries. |
 | `AgentEvent` | Type | The agent's PUBLIC lifecycle events — the semantic stream a consumer subscribes to via `runtime.on(type, …)`. |
+| `AgentEventHead` | Interface | The two fields every AgentEvent carries. |
 | `agentEvents` | Function | Project one APPLIED agent transition `(msg, state)` to its semantic AgentEvents — the `events` projector a consumer passes to `run(machine, { events: agentEvents() })` to light up `runtime.on(...)`. |
 | `AgentFailure` | Type | Why a run terminated as `failed`, beyond monitored-run's own reasons. |
 | `AgentKnob` | Interface | The agent handle `createAgent` returns — the uniform verb contract every tea composition exposes, plus the wired `toMachine` and `brainInterpret`, the brain call's handler for a consumer wiring the verbs by hand. |
+| `AgentLifecycleNote` | Type | One fact a transition recorded on AgentState.lifecycle — the input the `agentEvents` projector turns into `BrainStarted`, `ToolStarted`, `ToolFailed` and `RunDone`. |
 | `AgentLlmErrMsg` | Type | The brain-call FAILURE settle Msg, inherited from `../llm-call` — the engine mints it from the brain handler's outcome and it drives the agent's `fail` verb, which backs off via the retry ladder rather than ending the run. |
 | `AgentLlmOkMsg` | Type | The brain-call SUCCESS settle Msg, inherited from `../llm-call`. |
 | `AgentLlmRunCmd` | Type | The brain-call effect Cmd, inherited from `../llm-call`. |
@@ -162,7 +166,7 @@ These are the ones to read first:
 | `ToolTimedOut` | Interface | A call that spent its `timeoutMs` budget — ToolResilience.timeoutMs. |
 | `transcript` | Function | Open a transcript collector over an agent run's event stream. |
 | `Transcript` | Interface | A live transcript: the listener you wire, and the read you take off it. |
-| `TranscriptOutcome` | Type | Whether the run has finished, and its terminal turn once it has. |
+| `TranscriptOutcome` | Type | Whether the run has ended, and how: `running` until `RunDone`, then the ending it carried — `done` with the terminal turn, `failed` with the failure, or `cancelled`. |
 | `TranscriptSeed` | Interface | The Model a resumed collector starts from — structural on purpose, so any agent state (`DefinedAgentState<T>`, `AgentState<…>`) satisfies it without this module importing the lid, and a bare `{ conversation }` object works in a test. |
 | `TranscriptSnapshot` | Interface | What a collector holds right now — a plain, immutable read. |
 | `TranscriptToolResult` | Interface | One tool call the run settled OK, as the transcript keeps it — the `callId` and the result, which is exactly what the `ToolSettled` event carries. |

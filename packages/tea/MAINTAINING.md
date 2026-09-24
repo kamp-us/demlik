@@ -57,6 +57,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./work-queue` | battery | queue lifecycle over `Store<S>`: the adapter, the pure ops, the verb seam |
 | `./jev` | battery | TypeSafe Jev (System One): the wire contract, the one `ask` Cmd over it, and the batching composition — and it breaks when that third-party wire contract does |
 | `./agent` | experimental | agent layer; the brain migration graduates it |
+| `./otel` | experimental | an agent run as OpenTelemetry spans (GenAI conventions + Langfuse's observation attributes); `@opentelemetry/api` is an optional peer, and only this entry may import it. Graduates with `./agent`, whose events it reads |
 
 **A new export added to an existing door inherits that door's stamp** and earns no row of its
 own — the table is per subpath, and a per-export list here would drift the moment a module is

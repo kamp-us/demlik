@@ -172,6 +172,25 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     ],
   },
   {
+    subpath: "./otel",
+    importPath: "@demlik/tea/otel",
+    file: "otel.md",
+    typedocName: "otel",
+    group: "Machines",
+    startHere: [
+      {
+        symbol: "traceAgent",
+        reachFor:
+          "You hold an agent runtime and want each run in Langfuse, or any OpenTelemetry backend, as one span tree.",
+      },
+      {
+        symbol: "agentSpans",
+        reachFor:
+          "The same span writer as an `onEvent` listener, for a `defineAgent` run.",
+      },
+    ],
+  },
+  {
     subpath: "./retry-backoff",
     importPath: "@demlik/tea/retry-backoff",
     file: "retry-backoff.md",
