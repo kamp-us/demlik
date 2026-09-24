@@ -28,6 +28,7 @@ import type {
   CompactionOutputs,
   CompactionPurpose,
 } from "./compaction";
+import { NO_USAGE } from "./internal";
 import type { MessageLoader, ModelPort } from "./model";
 import { schemaFromGuard } from "./schema";
 
@@ -68,8 +69,9 @@ export interface ToolCall {
  * `usage` is what the provider REPORTED this call cost (#332) — never an
  * estimate tea computes. It is part of the brain call's journaled outcome, like
  * `content`, so a replay folds the same numbers (ADR 0004's "no token estimate
- * enters the Model" still holds). The conversation sums it into a running total
- * and reads the latest context size off it. Optional and additive: a turn
+ * enters the Model" still holds). The run sums it into its running total
+ * ({@link AgentState.usage}) and the conversation reads the latest context size
+ * off it. Optional and additive: a turn
  * whose adapter maps no usage, or one persisted before the field existed,
  * parses and simply counts for nothing.
  */
@@ -96,8 +98,8 @@ export interface AgentTurn {
  * `inputTokens`. An adapter whose provider reports the two apart (Anthropic's
  * `input_tokens` excludes cache reads) adds them back together here.
  *
- * The same shape is the conversation's running total ({@link Conversation.usage}):
- * the sum, field by field, of every turn that reported one.
+ * The same shape is the run's running total ({@link AgentState.usage}): the
+ * sum, field by field, of every turn that reported one.
  */
 export interface TurnUsage {
   /** Prompt tokens the call read, cached ones included. */
@@ -424,10 +426,10 @@ export type Awaiting =
  *
  * Generic over the consumer's tool-result type `R` (what `toolOk` carries).
  *
- * `usage` and `contextTokens` are the two readings of provider-reported usage
- * (#332). A Model persisted before they existed comes back without them; the
- * `agent_boot` that resumes it fills them in (a zero total, no context size),
- * so every state a reducer transition hands on carries both.
+ * `contextTokens` is this transcript's reading of provider-reported usage
+ * (#332); the run's total is not the transcript's, so it lives on
+ * {@link AgentState.usage}. A Model persisted before `contextTokens` existed
+ * comes back without it, and the first transition fills it in as `null`.
  */
 export interface Conversation<R> {
   /** Model turns this stage has produced, in order. */
@@ -438,14 +440,6 @@ export interface Conversation<R> {
   readonly turnCount: number;
   /** What the loop is waiting for next. */
   readonly awaiting: Awaiting;
-  /**
-   * The running usage total: every brain turn of this RUN that reported usage,
-   * summed field by field. It is what the run has cost, so nothing that drops
-   * turns drops it — a compaction fold keeps it, and the next stage's fresh
-   * conversation starts from it. Only `agent_start` resets it to zero. Read it
-   * from `stopWhen` for a token budget.
-   */
-  readonly usage: TurnUsage;
   /**
    * The latest context size: `inputTokens + outputTokens` of the most recent
    * brain turn — how much of the context window the transcript now fills.
@@ -627,9 +621,9 @@ export interface AgentConfigCore<
    *
    * Where `maxTurns` and `maxElapsedMs` bound a quantity this agent counts,
    * this bounds one only the caller can see (an external flag, a condition on
-   * the turns so far) — or a token budget: `conversation.usage` is the run's
-   * running total of provider-reported usage, so a budget stop is a predicate
-   * over it and needs no knob of its own (#332). It must be PURE and total over the state
+   * the turns so far) — or a token budget: `state.usage` is the run's running
+   * total of provider-reported usage, so a budget stop is a predicate over it
+   * and needs no knob of its own (#332). It must be PURE and total over the state
    * it is handed — the reducer calls it, so a replay of the same Msg log calls
    * it with the same state and must get the same answer. It is config, not
    * Model: a resumed run consults the predicate the config passed to THIS boot.
@@ -691,6 +685,8 @@ export type AgentFailure =
  *   - `tools`        — the `../fan-out` ledger for the current turn's tools.
  *   - `conversation` — the agentic-stage loop state. `null` until the loop is
  *                      entered (the consumer seeds it at the agentic stage).
+ *   - `usage`        — the run's provider-reported token total. It outlives
+ *                      every conversation, `done` included.
  *   - `failure`      — the agent-specific terminal annotation (turn-limit /
  *                      llm), null otherwise. Distinct from `run.failure`.
  *   - `instructions` — the system prompt this run was configured with, set at
@@ -706,6 +702,20 @@ export interface AgentState<
   readonly resilience: ResilientState<LlmCall<P>, LlmOk<P, O>>;
   readonly tools: FanOutState<ToolCall, ToolOutcome<R>>;
   readonly conversation: Conversation<R> | null;
+  /**
+   * The run's running usage total (#332, #354): every brain turn of this RUN
+   * that reported usage, summed field by field. It is what the run cost, so it
+   * belongs to the run and not to any one conversation: a compaction fold keeps
+   * it, a stage advance keeps it, and the retire to `done` keeps it after the
+   * conversation is cleared — `status(state)`'s `done` arm hands it on. Only
+   * `agent_start` resets it to zero. Read it from `stopWhen` for a token budget.
+   *
+   * The one place the total lives. A Model persisted before this field held its
+   * total on `conversation.usage`, and one persisted by 0.17.x held none; the
+   * first transition either takes over lifts the old total here (or starts from
+   * zero) and drops the conversation's copy.
+   */
+  readonly usage: TurnUsage;
   /**
    * The compaction round-trip's resilient slice (#85, design B1) — a DEDICATED
    * resilient-call slice for the reserved `$compact` purpose, separate from the
@@ -835,7 +845,11 @@ export type AgentTerminalFailure<Stage> = AgentFailure | RunFailure<Stage>;
  *
  *   - `brain_started` — a brain call was issued for conversation turn `turn`.
  *     Once per turn, and again on a cold-wake `boot` that re-fires it; a retry
- *     of the same turn is not a new start.
+ *     of the same turn is not a new start. It names the call by its `purpose`,
+ *     which is the call's key on {@link AgentState.resilience}, and carries no
+ *     copy of the request: the in-flight `LlmCall` is already on that slice, so
+ *     a checkpoint holds the prompt once (#354). The projector reads the
+ *     request's `payload` from there.
  *   - `tool_started`  — a tool call was issued: launched from a batch, a
  *     queued call backfilling a slot, or re-fired by `boot`. A retry is not a
  *     new start.
@@ -850,7 +864,6 @@ export type AgentLifecycleNote =
       readonly turn: number;
       readonly purpose: string;
       readonly model: string | null;
-      readonly payload: unknown;
       readonly at: number;
     }
   | {
@@ -890,7 +903,8 @@ export type AgentLifecycleNote =
  *                   `agentIsResumable` re-derived by hand.
  *   - `done`      — the pipeline finished; `output` is the terminal model turn
  *                   stamped on `state.output` (issue #46), `null` if the run
- *                   produced no turn.
+ *                   produced no turn. `usage` is what the whole run cost,
+ *                   `state.usage` (#354).
  *   - `failed`    — terminal failure; `failure` is the UNIFIED channel
  *                   (`AgentTerminalFailure`), absorbing the `state.failure` vs
  *                   `state.run.failure` dual channel so callers stop unioning.
@@ -907,7 +921,11 @@ export type AgentStatus<Stage> =
   | { readonly kind: "idle" }
   | { readonly kind: "running" }
   | { readonly kind: "suspended"; readonly pending: readonly ToolCall[] }
-  | { readonly kind: "done"; readonly output: AgentTurn | null }
+  | {
+      readonly kind: "done";
+      readonly output: AgentTurn | null;
+      readonly usage: TurnUsage;
+    }
   | { readonly kind: "failed"; readonly failure: AgentTerminalFailure<Stage> }
   | { readonly kind: "cancelled"; readonly at: number };
 
@@ -942,7 +960,8 @@ export type AgentEndedStatus<Stage = unknown> = Extract<
  *      an `init` slice is never mistaken for a run in flight.
  *   3. `run.phase === "failed"` → `failed`, carrying `run.failure` (deadline /
  *      stage). The fallback channel.
- *   4. `run.phase === "done"` → `done` with `state.output` (#46).
+ *   4. `run.phase === "done"` → `done` with `state.output` (#46) and the run's
+ *      usage total (#354).
  *   5. `run.phase === "cancelled"` → `cancelled`, carrying when the stop landed.
  *   6. `running` / `stale` + conversation + `awaiting.kind === "tools"` →
  *      `suspended` with the outstanding tool calls (`tools.running`). THE
@@ -983,7 +1002,10 @@ export function status<
       return { kind: "failed", failure: run.failure };
     // 4) The pipeline finished — the terminal output landed on `state.output`.
     case "done":
-      return { kind: "done", output: s.output };
+      // `??`: a `done` Model persisted before `state.usage` existed lost its
+      // total with its conversation, and reads as zero — the same start a
+      // 0.17.x Model's total gets.
+      return { kind: "done", output: s.output, usage: s.usage ?? NO_USAGE };
     // 5) Stopped from outside. Terminal, and deliberately NOT folded into
     //    `failed`: the unified failure channel answers "what went wrong", and
     //    nothing did.

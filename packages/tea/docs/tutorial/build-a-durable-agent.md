@@ -236,9 +236,9 @@ tea saves whatever the adapter puts there with the turn and hands it back on the
 replays carries the blocks Anthropic requires beside its text and tool calls.
 
 The turn's `usage` is the opposite kind of slot: tea does read it. It adds each
-turn's usage to a running total on the conversation and keeps the last turn's
-size as the context size, which is what a token budget or a size-based
-compaction reads. The numbers are the ones Anthropic reported, saved with the
+turn's usage to the run's running total, `state.usage`, and keeps the last
+turn's size as the conversation's context size, which is what a token budget
+or a size-based compaction reads. The numbers are the ones Anthropic reported, saved with the
 turn, so a resumed run adds up to the same total as one that was never killed.
 [Bound a run](../how-to/bound-a-run.md#budget-tokens-and-compact-by-context-size)
 shows both uses.

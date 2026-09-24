@@ -203,9 +203,10 @@ describe("createAgent — init + start", () => {
       toolRecords: [],
       turnCount: 0,
       awaiting: { kind: "llm" },
-      usage: { inputTokens: 0, outputTokens: 0 },
       contextTokens: null,
     });
+    // The run's usage total starts from zero, on the run (#354).
+    expect(s.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
     // The brain call for the "plan" stage's purpose.
     expect(cmds).toEqual([brainRunCmd("plan_turn")]);
     // The resilient slice tracks it running.
@@ -1309,6 +1310,7 @@ describe("createAgent — status (the typed lifecycle channel, #49)", () => {
     expect(status(s)).toEqual({
       kind: "done",
       output: { content: "thinking", toolCalls: [] },
+      usage: { inputTokens: 0, outputTokens: 0 },
     });
     // The output matches state.output exactly.
     const st = status(s);

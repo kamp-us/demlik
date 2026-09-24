@@ -46,14 +46,14 @@
 - 7049252: `./agent` carries provider-reported token usage (#332). A model turn may return
   `usage: TurnUsage` (`inputTokens`, `outputTokens`, and optionally
   `reasoningTokens` and `cachedInputTokens`). `agentTurnSchema` rejects a malformed
-  report. The conversation keeps a running total in `conversation.usage`, which
-  survives compaction folds, stage advances and a kill/resume. It also keeps the
-  last turn's size in `conversation.contextTokens`. `defineAgent`'s `compaction`
-  gains `afterContextTokens`, which folds on that size. It works alone or beside
-  `afterTurns`, so `afterTurns` is now optional, but a budget must name at least
-  one of the two. A `stopWhen` over `conversation.usage` is a token budget.
-  `TurnSettled` carries the turn's `usage`. A Model persisted by 0.17.x resumes
-  with its total starting from zero.
+  report. The run keeps a running total in `state.usage`, which survives
+  compaction folds, stage advances, a kill/resume and the end of the run. The
+  conversation keeps the last turn's size in `conversation.contextTokens`.
+  `defineAgent`'s `compaction` gains `afterContextTokens`, which folds on that
+  size. It works alone or beside `afterTurns`, so `afterTurns` is now optional,
+  but a budget must name at least one of the two. A token budget is a `stopWhen`
+  over the total: `stopWhen: ({ usage }) => …`. `TurnSettled` carries the turn's
+  `usage`. A Model persisted by 0.17.x resumes with its total starting from zero.
 - 002f5b7: Add `DeletableStore<S>`, an optional widening of `Store<S>` with `delete()`.
   `fileStore`, `memoryStore` and `doStore` now return one, fenced and unfenced, so
   a host can forget a run without knowing how each store lays out its bytes.

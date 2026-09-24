@@ -86,7 +86,11 @@ describe("transcript — a finished run's turns, without hand-writing a collecto
       { callId: "c1", result: { snippet: "about tea" } },
       { callId: "c2", result: { snippet: "about elm" } },
     ]);
-    expect(read.outcome).toEqual({ kind: "done", output: ANSWER });
+    expect(read.outcome).toEqual({
+      kind: "done",
+      output: ANSWER,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
   });
 
   it("reads `running` until RunDone, and each read is an immutable snapshot", () => {
@@ -101,12 +105,20 @@ describe("transcript — a finished run's turns, without hand-writing a collecto
       type: "RunDone",
       runId: "r",
       at: 2,
-      status: { kind: "done", output: null },
+      status: {
+        kind: "done",
+        output: null,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      },
     });
     // The earlier snapshot did not move under the later events.
     expect(midRun.turns).toEqual([ASK]);
     expect(midRun.outcome).toEqual({ kind: "running" });
-    expect(t.read().outcome).toEqual({ kind: "done", output: null });
+    expect(t.read().outcome).toEqual({
+      kind: "done",
+      output: null,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
   });
 
   it("a run with no collector attached is the run it always was", async () => {
@@ -218,7 +230,11 @@ describe("transcript — a run that survives a kill and a resume", () => {
     expect(read.tools).toEqual([
       { callId: "c1", result: { snippet: "about tea" } },
     ]);
-    expect(read.outcome).toEqual({ kind: "done", output: ANSWER });
+    expect(read.outcome).toEqual({
+      kind: "done",
+      output: ANSWER,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
 
     // And the seed is what earned it: an UNSEEDED collector on the resumed
     // process would have held only this process's leg.

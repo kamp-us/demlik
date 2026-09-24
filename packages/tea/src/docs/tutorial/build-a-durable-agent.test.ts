@@ -308,7 +308,7 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
       cachedInputTokens: 0,
     };
     expect(parked.conversation.turns[0].usage).toEqual(firstCost);
-    expect(parked.conversation.usage).toEqual(firstCost);
+    expect(parked.usage).toEqual(firstCost);
     expect(parked.conversation.contextTokens).toBe(150);
 
     // Run 2: the same program over the same directory, nothing else changed.

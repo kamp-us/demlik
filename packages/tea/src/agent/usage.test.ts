@@ -19,8 +19,8 @@ import { foldSummary, freshConversation } from "./internal";
 
 // ---------------------------------------------------------------------------
 // #332 — provider-reported token usage. A turn carries what the provider said
-// the call cost; the conversation sums it into a running total and keeps the
-// latest context size; `compaction.afterContextTokens` folds on that size and
+// the call cost; the run sums it into its running total (`state.usage`, #354)
+// and the conversation keeps the latest context size; `compaction.afterContextTokens` folds on that size and
 // `stopWhen` reads the total as a budget. Nothing here estimates a token.
 // ---------------------------------------------------------------------------
 
@@ -148,7 +148,7 @@ describe("TurnUsage on AgentTurn — the schema reads it, never estimates it", (
   });
 });
 
-describe("Conversation.usage — the run's running total", () => {
+describe("state.usage — the run's running total", () => {
   it("sums every turn that reported usage, optional counts included, and skips the rest", async () => {
     const brain = metered([
       { inputTokens: 100, outputTokens: 10 },
@@ -163,7 +163,7 @@ describe("Conversation.usage — the run's running total", () => {
     }).run(INPUT);
 
     expect(status(final).kind).toBe("cancelled");
-    expect(final.conversation?.usage).toEqual({
+    expect(final.usage).toEqual({
       inputTokens: 300,
       outputTokens: 30,
       cachedInputTokens: 80,
@@ -181,7 +181,7 @@ describe("Conversation.usage — the run's running total", () => {
       stopWhen: afterTurns(2),
     }).run(INPUT);
 
-    expect(final.conversation?.usage).toEqual({
+    expect(final.usage).toEqual({
       inputTokens: 0,
       outputTokens: 0,
     });
@@ -219,15 +219,15 @@ describe("Conversation.usage — the run's running total", () => {
     expect(brain.summaries()).toBe(1);
     // The two folded turns are gone from the transcript, not from the total.
     expect(final.conversation?.turns[0]?.content).toBe("SUMMARY");
-    expect(final.conversation?.usage).toEqual({
+    expect(final.usage).toEqual({
       inputTokens: 350,
       outputTokens: 35,
     });
   });
 
-  it("a fold keeps the total and clears the context size", () => {
+  it("a fold clears the context size, and has no total of its own to touch", () => {
     const conv = {
-      ...freshConversation<unknown>({ inputTokens: 500, outputTokens: 50 }),
+      ...freshConversation<unknown>(),
       turns: [
         { content: "a", toolCalls: [] },
         { content: "b", toolCalls: [] },
@@ -235,11 +235,11 @@ describe("Conversation.usage — the run's running total", () => {
       contextTokens: 550,
     };
     const folded = foldSummary(conv, 2, { content: "S", toolCalls: [] });
-    expect(folded.usage).toEqual({ inputTokens: 500, outputTokens: 50 });
+    expect("usage" in folded).toBe(false);
     expect(folded.contextTokens).toBeNull();
   });
 
-  it("the next stage starts a fresh transcript but carries the run's total", () => {
+  it("the next stage starts a fresh transcript but keeps the run's total", () => {
     type Stage = "plan" | "act";
     const agent = createAgent<
       Stage,
@@ -268,16 +268,16 @@ describe("Conversation.usage — the run's running total", () => {
 
     expect(agent.currentStage(s)).toBe("act");
     expect(s.conversation?.turns).toEqual([]);
-    expect(s.conversation?.usage).toEqual({ inputTokens: 70, outputTokens: 7 });
+    expect(s.usage).toEqual({ inputTokens: 70, outputTokens: 7 });
     expect(s.conversation?.contextTokens).toBeNull();
 
     // A restart is a new run: its total starts from zero.
     [s] = agent.start(s, "r2", 2);
-    expect(s.conversation?.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(s.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
   });
 });
 
-describe("Conversation.usage is durable across a kill and a resume", () => {
+describe("state.usage is durable across a kill and a resume", () => {
   const USAGES: readonly TurnUsage[] = [
     { inputTokens: 100, outputTokens: 10 },
     { inputTokens: 200, outputTokens: 20, reasoningTokens: 4 },
@@ -338,7 +338,7 @@ describe("Conversation.usage is durable across a kill and a resume", () => {
 
     const parked = await parkedAfterFirstTurn();
     // The parked bytes already carry the first turn's cost.
-    expect(parked.conversation?.usage).toEqual(USAGES[0]);
+    expect(parked.usage).toEqual(USAGES[0]);
 
     const second = metered(USAGES, "prompt");
     const resumed = await defineAgent({
@@ -354,14 +354,12 @@ describe("Conversation.usage is durable across a kill and a resume", () => {
       "run-1",
     );
     // …and still reports what the whole run cost.
-    expect(uninterrupted.conversation?.usage).toEqual({
+    expect(uninterrupted.usage).toEqual({
       inputTokens: 600,
       outputTokens: 60,
       reasoningTokens: 4,
     });
-    expect(resumed.conversation?.usage).toEqual(
-      uninterrupted.conversation?.usage,
-    );
+    expect(resumed.usage).toEqual(uninterrupted.usage);
     expect(resumed.conversation?.contextTokens).toBe(
       uninterrupted.conversation?.contextTokens,
     );
@@ -372,9 +370,10 @@ describe("Conversation.usage is durable across a kill and a resume", () => {
     const conversation = parked.conversation;
     if (conversation === null) throw new Error("never parked");
     // What 0.17.x wrote: no usage readings, and turns that carry none.
-    const { usage: _u, contextTokens: _c, ...legacy } = conversation;
+    const { contextTokens: _c, ...legacy } = conversation;
+    const { usage: _u, ...run } = parked;
     const persisted = {
-      ...parked,
+      ...run,
       conversation: {
         ...legacy,
         turns: legacy.turns.map(({ usage: _t, ...t }) => t),
@@ -390,11 +389,40 @@ describe("Conversation.usage is durable across a kill and a resume", () => {
 
     expect(status(resumed).kind).toBe("cancelled");
     // Only the two turns this version saw are counted.
-    expect(resumed.conversation?.usage).toEqual({
+    expect(resumed.usage).toEqual({
       inputTokens: 500,
       outputTokens: 50,
       reasoningTokens: 4,
     });
+  });
+
+  it("a Model that held its total on the conversation (#332, before #354) resumes with it on the run, once", async () => {
+    const parked = await parkedAfterFirstTurn();
+    const conversation = parked.conversation;
+    if (conversation === null) throw new Error("never parked");
+    // What #332 wrote: the total on the conversation, none on the run.
+    const { usage, ...run } = parked;
+    const persisted = {
+      ...run,
+      conversation: { ...conversation, usage },
+    } as unknown as S;
+
+    const resumed = await defineAgent({
+      model: metered(USAGES, "prompt").model,
+      tools: [search],
+      instructions: INSTRUCTIONS,
+      stopWhen: afterTurns(3),
+    }).run(INPUT, { store: memoryStore(persisted) });
+
+    expect(resumed.usage).toEqual({
+      inputTokens: 600,
+      outputTokens: 60,
+      reasoningTokens: 4,
+    });
+    // The conversation's copy went with the lift: one field holds the total.
+    expect(
+      resumed.conversation !== null && "usage" in resumed.conversation,
+    ).toBe(false);
   });
 });
 
@@ -411,18 +439,107 @@ describe("stopWhen over the running total — a token budget with no new knob", 
       model: brain.model,
       tools: [search],
       instructions: INSTRUCTIONS,
-      stopWhen: ({ conversation }) =>
-        conversation !== null &&
-        conversation.usage.inputTokens + conversation.usage.outputTokens >=
-          BUDGET,
+      stopWhen: ({ usage }) => usage.inputTokens + usage.outputTokens >= BUDGET,
     }).run(INPUT);
 
     // 110, 220, 330: the third turn crosses 250, so there is no fourth call.
     expect(status(final).kind).toBe("cancelled");
     expect(brain.calls()).toBe(3);
-    expect(final.conversation?.usage).toEqual({
+    expect(final.usage).toEqual({
       inputTokens: 300,
       outputTokens: 30,
+    });
+  });
+});
+
+describe("the run's total outlives the run (#354)", () => {
+  type Stage = "plan" | "act";
+  const TURN_USAGES: readonly TurnUsage[] = [
+    { inputTokens: 100, outputTokens: 10 },
+    { inputTokens: 200, outputTokens: 20, cachedInputTokens: 50 },
+    { inputTokens: 300, outputTokens: 30, reasoningTokens: 6 },
+  ];
+  const SUM: TurnUsage = {
+    inputTokens: 600,
+    outputTokens: 60,
+    cachedInputTokens: 50,
+    reasoningTokens: 6,
+  };
+
+  function pipeline() {
+    return createAgent<
+      Stage,
+      "turn",
+      { turn: AgentTurn },
+      string,
+      { readonly type: "noop" },
+      unknown
+    >({
+      stages: ["plan", "act"],
+      model: async () => ({ content: "", toolCalls: [] }),
+      schemas: { turn: agentTurnSchema },
+      turnOf: () => "turn",
+      toolOf: () => ({ type: "noop" }),
+    });
+  }
+
+  it("a two-stage pipeline reports the sum of every turn once it is done", () => {
+    const agent = pipeline();
+    const [u0, u1, u2] = TURN_USAGES;
+    let [s] = agent.start(agent.init(), "r", 0);
+    // plan: a turn that asks for a tool, then one that ends the stage.
+    [s] = agent.turn(
+      s,
+      {
+        content: "look",
+        toolCalls: [{ callId: "c1", name: "noop", args: {} }],
+        usage: u0,
+      },
+      1,
+    );
+    // Live: the total is on the run, and the conversation holds no copy of it.
+    expect(s.usage).toEqual(u0);
+    expect(s.conversation !== null && "usage" in s.conversation).toBe(false);
+    [s] = agent.toolOk(s, "c1", "seen", 2);
+    [s] = agent.turn(s, { content: "planned", toolCalls: [], usage: u1 }, 3);
+    expect(agent.currentStage(s)).toBe("act");
+    // act: one turn ends the stage and the run.
+    const last: AgentTurn = { content: "acted", toolCalls: [], usage: u2 };
+    [s] = agent.turn(s, last, 4);
+
+    expect(s.conversation).toBeNull();
+    expect(s.usage).toEqual(SUM);
+    expect(status(s)).toEqual({ kind: "done", output: last, usage: SUM });
+    // The same total comes back across a Store round-trip.
+    const saved = JSON.parse(JSON.stringify(s)) as typeof s;
+    expect(status(saved)).toEqual({ kind: "done", output: last, usage: SUM });
+  });
+
+  it("RunDone's done status carries the total the run ended on", async () => {
+    const brain = metered([...TURN_USAGES]);
+    const ended: DefinedAgentEvent<typeof search>[] = [];
+    let k = 0;
+    const final = await defineAgent({
+      // Two searches, then an answer: three turns, each reporting.
+      model: async (messages: readonly AgentMessage[]) => {
+        const turn = await brain.model(messages);
+        k += 1;
+        return k < 3 ? turn : { ...turn, toolCalls: [] };
+      },
+      tools: [search],
+      instructions: INSTRUCTIONS,
+    }).run(INPUT, {
+      onEvent: (event) => {
+        if (event.type === "RunDone") ended.push(event);
+      },
+    });
+
+    expect(status(final)).toMatchObject({ kind: "done", usage: SUM });
+    expect(ended).toHaveLength(1);
+    const [done] = ended;
+    expect(done?.type === "RunDone" && done.status).toMatchObject({
+      kind: "done",
+      usage: SUM,
     });
   });
 });

@@ -210,7 +210,6 @@ describe("a tool's content parts reach the model as parts (#330)", () => {
         toolRecords: [{ call, outcome, turn: 0 }],
         turnCount: 1,
         awaiting: { kind: "llm" },
-        usage: { inputTokens: 0, outputTokens: 0 },
         contextTokens: null,
       },
     };
@@ -248,6 +247,21 @@ describe("a tool's content parts reach the model as parts (#330)", () => {
       outcome: { kind: "ok", result: { jpeg: JPEG, width: 1280 } },
       parts: SHOT_PARTS,
     });
+  });
+
+  it("a checkpoint mid-brain-call holds the image no more often than the Model without its outbox (#354)", async () => {
+    const parked = await parkAfterFirstTool(page());
+    // The saved Model is the one whose transition issued the brain call…
+    expect(parked.lifecycle.map((note) => note.kind)).toContain(
+      "brain_started",
+    );
+    // …and the request it issued, screenshot included, is on the brain slice.
+    expect(JSON.stringify(parked.resilience)).toContain(JPEG);
+
+    const copies = (model: unknown) =>
+      JSON.stringify(model).split(JPEG).length - 1;
+    expect(copies(parked)).toBeGreaterThan(0);
+    expect(copies(parked)).toBe(copies({ ...parked, lifecycle: [] }));
   });
 });
 
