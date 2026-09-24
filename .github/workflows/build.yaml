@@ -65,8 +65,8 @@ jobs:
       # generator reads SOURCE via typedoc (not dist), so it needs no prior build.
       - name: Docs reference drift
         run: |
-          pnpm run docs:reference:check || {
-            echo "::error::Reference docs are stale — run 'pnpm run docs:reference' and commit docs/reference/. Drift patch is printed above.";
+          pnpm --filter @demlik/tea run docs:reference:check || {
+            echo "::error::Reference docs are stale — run 'pnpm --filter @demlik/tea run docs:reference' and commit packages/tea/docs/reference/. Drift patch is printed above.";
             exit 1;
           }
 
@@ -74,7 +74,7 @@ jobs:
       # a subpath added to the export map with no tier stamp ships with no stated
       # stability promise. Runs before the slower suites.
       - name: Check every export carries a tier stamp
-        run: node scripts/check-export-stamps.mjs
+        run: pnpm --filter @demlik/tea exec node scripts/check-export-stamps.mjs
 
       - name: Run tests
         run: pnpm test
@@ -90,7 +90,7 @@ jobs:
       # drifted sixteen errors red (#24); a gate that is off is not a gate that is
       # lenient, it is a gate that is lying.
       - name: Typecheck consumers
-        run: pnpm run typecheck:consumers
+        run: pnpm --filter @demlik/tea run typecheck:consumers
 
       # The dist walker that makes the v0.1.1 failure class (an export map entry
       # with no matching dist/ output — a broken published subpath) unshippable.
@@ -99,7 +99,7 @@ jobs:
       # and neither `pnpm pack` nor a tarball publish runs `prepublishOnly`. So
       # this step is the one place the guard actually executes on every change.
       - name: Verify every export resolves in dist
-        run: node scripts/verify-exports.mjs
+        run: pnpm --filter @demlik/tea exec node scripts/verify-exports.mjs
 
       # The one gate that runs the case this repo's node_modules can never
       # reproduce: pack the tarball, install it into a temp project WITHOUT the
@@ -107,4 +107,4 @@ jobs:
       # stayed green while 0.12.0 shipped a door no clean install could import
       # (#113), because `ws` is always present here.
       - name: Import /node with no optional peer installed
-        run: node scripts/verify-optional-peer-install.mjs
+        run: pnpm --filter @demlik/tea exec node scripts/verify-optional-peer-install.mjs

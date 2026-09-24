@@ -1,8 +1,8 @@
 name: publish
 
-# Per-merge publishing for @demlik/tea, version-PR model. Trusted publishing can only ship
-# a NEW version number, so this job is version-gated: a merge to main publishes ONLY when
-# package.json's version is not yet on npm. Versioning is a PR — someone runs
+# Per-merge publishing for every public package under packages/, version-PR model. Trusted
+# publishing can only ship a NEW version number, so this job is version-gated: a merge to main
+# publishes a package ONLY when its package.json version is not yet on npm. Versioning is a PR — someone runs
 # `pnpm changeset version` on a branch, the queue merges it, this job sees the new
 # number and ships it. The job never pushes to main: branch rules reject a direct push
 # (the 2026-09-06 0.13.0 run published and then lost its version commit to exactly that
@@ -66,20 +66,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Detect whether this version is already on npm
+      # One row per public workspace package whose package.json version is not on npm yet.
+      # Each package is gated on its own version, so a tea release never re-publishes
+      # code-graph and a code-graph release never blocks on tea.
+      - name: Detect which package versions are not on npm yet
         id: version
         run: |
-          v="$(node -p "require('./package.json').version")"
-          if npm view "@demlik/tea@${v}" version >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "@demlik/tea@${v} is already published — nothing to do."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "@demlik/tea@${v} is not on npm — publishing."
-          fi
+          pending=""
+          for dir in packages/*/; do
+            name="$(node -p "require('./${dir}package.json').name")"
+            v="$(node -p "require('./${dir}package.json').version")"
+            if [ "$(node -p "!!require('./${dir}package.json').private")" = "true" ]; then continue; fi
+            if npm view "${name}@${v}" version >/dev/null 2>&1; then
+              echo "${name}@${v} is already published — nothing to do."
+            else
+              echo "${name}@${v} is not on npm — publishing."
+              pending="${pending} ${dir%/}"
+            fi
+          done
+          echo "pending=${pending# }" >> "$GITHUB_OUTPUT"
 
       - name: Build
-        if: steps.version.outputs.publish == 'true'
+        if: steps.version.outputs.pending != ''
         run: pnpm run build
 
       # Last gate before the tarball is cut. `prepublishOnly` carries this same
@@ -87,26 +95,31 @@ jobs:
       # prepack/prepare, and `npm publish <tarball>` skips the publish lifecycle
       # entirely. Without this step the guard written for the v0.1.1 stale-dist
       # incident does not run on the job that publishes.
-      - name: Verify every export resolves in dist
-        if: steps.version.outputs.publish == 'true'
-        run: node scripts/verify-exports.mjs
+      - name: Verify every @demlik/tea export resolves in dist
+        if: contains(steps.version.outputs.pending, 'packages/tea')
+        run: pnpm --filter @demlik/tea exec node scripts/verify-exports.mjs
 
       # OIDC trusted publishing via pack + `npm publish <tarball>`. `pnpm publish` shells
       # `npm@latest` and FORWARDS its pnpm-only `--no-git-checks` flag to npm, which rejects
       # the unknown flag and dies at flag-parse BEFORE the OIDC handshake. We sidestep that
       # wall by packing first, then `npm publish` ships the tarball directly — no git-checks
       # concept, no flag to forward. npm >= 11.5 (asserted above) exchanges the id-token
-      # automatically on tarball publish — tokenless, no NODE_AUTH_TOKEN.
+      # automatically on tarball publish — tokenless, no NODE_AUTH_TOKEN. `pnpm pack` also
+      # applies each package's `publishConfig` (code-graph's dist-pointed `exports`).
       #
-      # REQUIRES the npmjs.com trusted-publisher registration for @demlik/tea to point at
+      # REQUIRES an npmjs.com trusted-publisher registration per package, pointing at
       # kamp-us/demlik + this workflow file (owner-only, manual) or npm rejects the token.
-      # The registration that shipped 0.5.0 pointed at cansirin/monorepo and does NOT carry
-      # over — re-point it before the first release from here.
+      # npm only offers that registration on a package that already exists, so a NEW
+      # package's first version is published by hand, then registered.
       #
       # No `--provenance` yet: it was disabled because the old home was a PRIVATE repo. This
       # repo is public, so provenance can be re-enabled as a deliberate follow-up.
       - name: Publish to npm (pack + npm publish tarball, OIDC trusted publishing)
-        if: steps.version.outputs.publish == 'true'
+        if: steps.version.outputs.pending != ''
         run: |
-          pnpm pack --pack-destination "$RUNNER_TEMP"
-          npm publish "$RUNNER_TEMP"/demlik-tea-*.tgz --access public
+          for dir in ${{ steps.version.outputs.pending }}; do
+            out="$RUNNER_TEMP/pack/${dir##*/}"
+            mkdir -p "$out"
+            (cd "$dir" && pnpm pack --pack-destination "$out")
+            npm publish "$out"/*.tgz --access public
+          done

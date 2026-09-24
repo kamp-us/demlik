@@ -38,7 +38,7 @@ A doc earns a place when all four hold:
 
 1. **It is a shape, not a decision.** The choice and its history belong in `.decisions/`; how the
    code is laid out once the choice is made belongs here.
-2. **It is not consumer documentation.** Anything a package user reads goes to [`docs/`](../docs/README.md)
+2. **It is not consumer documentation.** Anything a package user reads goes to [`docs/`](../packages/tea/docs/README.md)
    under its Diátaxis quadrant. `.patterns/` is for the people writing this repo.
 3. **Something already relies on it.** Write the doc for a shape the code holds today, not one you
    intend to adopt. A doc with no code behind it drifts on the first commit.
