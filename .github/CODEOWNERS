@@ -15,6 +15,8 @@
 /packages/tea/package.json          @kamp-us/control-plane
 /packages/tea/MAINTAINING.md        @kamp-us/control-plane
 /packages/code-graph/package.json   @kamp-us/control-plane
+/biome.jsonc                        @kamp-us/control-plane
+/packages/code-graph/biome.jsonc    @kamp-us/control-plane
 
 # Not a governed root, but campaign state lives here and `campaignAuthors` is this same team.
 /ROADMAP.md                         @kamp-us/control-plane
