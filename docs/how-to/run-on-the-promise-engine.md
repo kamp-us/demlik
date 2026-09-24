@@ -104,6 +104,9 @@ What each piece does:
 - **Return a failure, don't throw it.** `err` only takes a tag the Cmd
   declares. A throw, or an `err` with a tag the Cmd does not declare, goes to
   `onError` and dispatches no Msg.
+- **A hand-written Cmd's handler returns Msgs.** It returns one Msg, a list of
+  Msgs, or nothing. The engine dispatches a list in order, like Elm's
+  `Cmd.batch`.
 - **The built-in `timer` needs no runner.** `run` only asks for `subscribe`
   when the machine declares a Sub type the engine does not ship.
 - **`dispatch` resolves after the step settles.** Here that includes the

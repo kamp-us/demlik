@@ -12,6 +12,8 @@
 import { Effect, type Scope, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import {
+  burst,
+  burstAnswer,
   type ConformanceCase,
   clock,
   conformanceMachines,
@@ -93,6 +95,25 @@ const engines: { readonly [K in Name]: EnginePair } = {
           Stream.range(0, sub.deps.count - 1).pipe(
             Stream.map((i) => ({ type: "fed" as const, i })),
           ),
+      },
+    }) as EffectRun,
+  },
+  burst: {
+    promise: () =>
+      runPromise(burst, {
+        clock: fixed,
+        interpret: {
+          burst: async (cmd) => burstAnswer(cmd.count),
+          hush: async () => [],
+          last: async () => ({ type: "done" }),
+        },
+      }) as AnyRuntime,
+    effect: runEffect(burst, {
+      clock: fixed,
+      interpret: {
+        burst: (cmd) => Effect.succeed(burstAnswer(cmd.count)),
+        hush: () => Effect.succeed([]),
+        last: () => Effect.succeed({ type: "done" as const }),
       },
     }) as EffectRun,
   },
@@ -182,6 +203,25 @@ describe("both engines run every shared machine to the same trace", () => {
       [JSON.stringify({ type: "open" }), { type: "open" }],
       [JSON.stringify({ type: "close" }), { type: "closed" }],
     ]);
+  });
+
+  it("a returned list folds in order as follow-ups, on each engine (#324)", async () => {
+    const expected = [
+      ["boot", { log: [] }],
+      [JSON.stringify({ type: "fire" }), { log: [] }],
+      [JSON.stringify({ type: "got", i: 0 }), { log: ["got 0"] }],
+      [JSON.stringify({ type: "got", i: 1 }), { log: ["got 0", "got 1"] }],
+      [
+        JSON.stringify({ type: "got", i: 2 }),
+        { log: ["got 0", "got 1", "got 2"] },
+      ],
+      [
+        JSON.stringify({ type: "done" }),
+        { log: ["got 0", "got 1", "got 2", "done"] },
+      ],
+    ];
+    expect(await onPromise("burst")).toEqual(expected);
+    expect(await onEffect("burst")).toEqual(expected);
   });
 
   it("the owned trace drops the Msg addressed to another instance", async () => {

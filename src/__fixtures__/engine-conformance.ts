@@ -155,6 +155,45 @@ const door = defineMachine({
   update: doorUpdate,
 });
 
+// === burst: a plain handler returns a list of Msgs (#324) ===
+
+/**
+ * Three hand-written Cmds in one transition: `burst` answers with `count`
+ * Msgs, `hush` with an empty list, `last` with one Msg. The run must fold the
+ * burst's Msgs in list order, then `last`'s.
+ */
+export type BurstCmd =
+  | { readonly type: "burst"; readonly count: number }
+  | { readonly type: "hush" }
+  | { readonly type: "last" };
+
+type BurstMsg =
+  | { readonly type: "fire" }
+  | { readonly type: "got"; readonly i: number }
+  | { readonly type: "done" };
+
+const burst = defineMachine({
+  types: {
+    model: {} as { readonly log: readonly string[] },
+    msg: {} as BurstMsg,
+    cmd: {} as BurstCmd,
+  },
+  init: (loaded) => [loaded ?? { log: [] }, []],
+  update: {
+    fire: (m) => [
+      m,
+      [{ type: "burst", count: 3 }, { type: "hush" }, { type: "last" }],
+    ],
+    got: (m, msg) => [{ log: [...m.log, `got ${msg.i}`] }, []],
+    done: (m) => [{ log: [...m.log, "done"] }, []],
+  },
+});
+
+/** The Msgs a `burst` handler answers with, the same on both engines. */
+export function burstAnswer(count: number): readonly BurstMsg[] {
+  return Array.from({ length: count }, (_, i) => ({ type: "got", i }));
+}
+
 /** One shared machine and the run it gets on each engine. */
 export interface ConformanceCase<S, M> {
   readonly machine: unknown;
@@ -195,6 +234,10 @@ export const conformanceMachines = {
       { type: "poke", to: "a" },
     ],
   } satisfies ConformanceCase<{ owner: string; pokes: number }, OwnedMsg>,
+  burst: {
+    machine: burst,
+    script: [{ type: "fire" }],
+  } satisfies ConformanceCase<{ log: readonly string[] }, BurstMsg>,
   door: {
     machine: door,
     // `close` while closed has no cell: refused, and the `open` after it lands.
@@ -203,4 +246,4 @@ export const conformanceMachines = {
   } satisfies ConformanceCase<DoorState, DoorMsg>,
 } as const;
 
-export { clock, counter, door, lookup, owned };
+export { burst, clock, counter, door, lookup, owned };

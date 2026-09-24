@@ -52,8 +52,9 @@ import type {
  * One Effect `interpret` cell. For a `Cmd.define`d Cmd it succeeds with the
  * Cmd's `Ok` and fails with one of its declared tags, and the engine mints
  * `<name>_ok` / `<name>_err` from that (ADR 0021). For a hand-written Cmd it
- * succeeds with a follow-up Msg or nothing, and a failure rejects the dispatch,
- * as a throw does on the Promise engine. `R` is whatever services it reads.
+ * succeeds with a follow-up Msg, a list of them (dispatched in order), or
+ * nothing, and a failure rejects the dispatch, as a throw does on the Promise
+ * engine. `R` is whatever services it reads.
  */
 export type EffectInterpretCell<
   M extends { type: string },
@@ -62,7 +63,7 @@ export type EffectInterpretCell<
 > =
   unknown extends ErrorsOf<C>
     ? // biome-ignore lint/suspicious/noConfusingVoidType: a hand-written Cmd's handler may settle with nothing
-      (cmd: C) => Effect.Effect<M | void, unknown, R>
+      (cmd: C) => Effect.Effect<M | readonly M[] | void, unknown, R>
     : (cmd: C) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>;
 
 /**

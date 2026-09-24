@@ -18,7 +18,7 @@
  *   1. `update`    — middleware over the fold. Returning `null` means "no
  *                    transition": no save, no effects, no commit.
  *   2. `interpret` — middleware over one Cmd's handler call; it maps what the
- *                    handler returned to the Msg to dispatch, if any.
+ *                    handler returned to the Msgs to dispatch, if any.
  *   3. `store`     — a wrapper over the store the caller handed `run`.
  *   4. `commit`    — called after a transition's effects, with the Msg and the
  *                    committed State. Boot passes `undefined` for the Msg.
@@ -36,7 +36,7 @@
  */
 
 import type { Dispose, Sub, SubEntry } from "../../pure/core";
-import { desiredSub, detachWork } from "../../pure/core";
+import { desiredSub, detachWork, followUps } from "../../pure/core";
 import type {
   DispatchSettle,
   OnError,
@@ -61,9 +61,9 @@ export type Transition<S, C> = readonly [S, readonly C[]];
 export type Step<S, M, C> = (state: S, msg: M) => Transition<S, C> | null;
 
 /**
- * One Cmd's handler call; resolves to the Msg to dispatch, or nothing.
- * `dispatch` is what the handler is handed for Msgs it fires itself, so an
- * extension can check them on the way out.
+ * One Cmd's handler call; resolves to the Msg to dispatch, a list of them in
+ * order, or nothing. `dispatch` is what the handler is handed for Msgs it fires
+ * itself, so an extension can check them on the way out.
  */
 export type InterpretStep<C, M> = (
   cmd: C,
@@ -485,8 +485,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
 
   /**
    * Run each emitted Cmd. A returned Msg is enqueued onto the tail, never
-   * dispatched re-entrantly. The first error stops further handlers in this
-   * transition.
+   * dispatched re-entrantly; a returned list enqueues each of its Msgs in
+   * order, before the next Cmd's handler runs (#324). The first error stops
+   * further handlers in this transition.
    *
    * THIS LOOP IS SERIAL BY RULING, NOT BY OVERSIGHT (ADR 0018). It runs a
    * transition's Cmds one at a time and never interleaves two handlers, so the
@@ -496,9 +497,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    */
   async function runCmds(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
-      const follow = await interpret(cmd, dispatchUnawaited);
-      if (follow !== undefined && follow !== null) {
-        enqueueDispatch(follow as M).catch(reportUndelivered);
+      const returned = await interpret(cmd, dispatchUnawaited);
+      for (const follow of followUps<M>(returned)) {
+        enqueueDispatch(follow).catch(reportUndelivered);
       }
     }
   }
