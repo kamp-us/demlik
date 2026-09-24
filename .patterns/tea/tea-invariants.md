@@ -370,7 +370,9 @@ interpret: {
   boundaries. Adapters that cross real serialization boundaries
   (`chromeStorageStore`, `doStore`) require an explicit parse function;
   `memoryStore` permits a default-identity parse because it is a
-  degenerate same-process boundary.
+  degenerate same-process boundary. `migrate` can also refuse
+  (`refuse(reason)`, or a throw from `load` / `migrate`): `ready` rejects
+  with `StoreRefusedError` and the refusal writes nothing to the store.
 - Phase 2.1: `Cmd` carries its own zod schema; substrate parses before
   the Msg lands. Promotes boundary parsing from convention to substrate
   property.
