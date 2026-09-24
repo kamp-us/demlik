@@ -19,6 +19,7 @@ import {
 import type { Interpret } from "../index";
 import { run } from "../promise";
 import {
+  type AgentEventSource,
   agentSpans,
   maskBase64DataUris,
   runTraceId,
@@ -144,6 +145,7 @@ const one = (spans: readonly ReadableSpan[], name: string): ReadableSpan => {
   return span;
 };
 const parentOf = (span: ReadableSpan) => span.parentSpanContext?.spanId;
+const nanos = ([seconds, ns]: readonly [number, number]) => seconds * 1e9 + ns;
 
 describe("traceAgent — one run as one span tree", () => {
   it("run → a generation per turn and a tool span per call, in the run's trace", async () => {
@@ -369,6 +371,93 @@ describe("agentSpans — the listener form", () => {
     expect(
       one(done, "execute_tool screenshot").attributes["tea.run.detached"],
     ).toBe(true);
+  });
+
+  // #373 — a detach ends on the run's clock, not the SDK's wall clock. On a
+  // clock starting at START a wall-clock end would still land after the start,
+  // so the ends are pinned to the exact HrTime, not just ordered.
+  it("end() ends each run's open spans at the `at` of the last event it folded", () => {
+    const { exporter, tracer } = exporterAndTracer();
+    const spans = agentSpans<string>({ tracer });
+    for (const e of events) spans.onEvent(e);
+    spans.onEvent({
+      ...head(4.25),
+      type: "ToolStarted",
+      callId: "c2",
+      name: "fetch",
+      args: {},
+    });
+    spans.onEvent({
+      runId: "run-7",
+      at: 9,
+      type: "BrainStarted",
+      turn: 0,
+      purpose: "act",
+      model: null,
+      payload: null,
+    });
+
+    spans.end();
+    const detached = exporter
+      .getFinishedSpans()
+      .filter((s) => s.attributes["tea.run.detached"] === true);
+    expect(detached.map((s) => s.name).sort()).toEqual([
+      "chat",
+      "execute_tool fetch",
+      "execute_tool screenshot",
+      "invoke_agent agent",
+      "invoke_agent agent",
+    ]);
+    for (const span of detached) {
+      // Each run on its own last `at`: run-9 last folded 4.25, run-7 9.
+      const lastAt =
+        span.spanContext().traceId === runTraceId("run-7")
+          ? [0, 9_000_000]
+          : [0, 4_250_000];
+      expect(span.endTime).toEqual(lastAt);
+      expect(nanos(span.endTime)).toBeGreaterThanOrEqual(nanos(span.startTime));
+    }
+  });
+
+  it("end(at) ends every still-open span at exactly that `at`", () => {
+    const { exporter, tracer } = exporterAndTracer();
+    const spans = agentSpans<string>({ tracer });
+    for (const e of events) spans.onEvent(e);
+
+    spans.end(1_790_000_000_123.5);
+    const detached = exporter
+      .getFinishedSpans()
+      .filter((s) => s.attributes["tea.run.detached"] === true);
+    expect(detached.map((s) => s.name).sort()).toEqual([
+      "execute_tool screenshot",
+      "invoke_agent agent",
+    ]);
+    for (const span of detached) {
+      expect(span.endTime).toEqual([1_790_000_000, 123_500_000]);
+    }
+  });
+
+  it("traceAgent's cleanup ends what is open at the run's last `at`", () => {
+    const { exporter, tracer } = exporterAndTracer();
+    const handlers = new Map<string, (event: AgentEvent<string>) => void>();
+    const source = {
+      on: (type: string, handler: (event: AgentEvent<string>) => void) => {
+        handlers.set(type, handler);
+        return () => handlers.delete(type);
+      },
+    } as AgentEventSource<string>;
+    const stop = traceAgent(source, { tracer });
+    for (const e of events) handlers.get(e.type)?.(e);
+
+    stop();
+    expect(handlers.size).toBe(0);
+    const detached = exporter
+      .getFinishedSpans()
+      .filter((s) => s.attributes["tea.run.detached"] === true);
+    expect(detached).toHaveLength(2);
+    for (const span of detached) {
+      expect(span.endTime).toEqual([0, 3_000_000]);
+    }
   });
 });
 
