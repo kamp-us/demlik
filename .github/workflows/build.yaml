@@ -116,6 +116,11 @@ jobs:
       - name: Import every code-graph subpath from dist
         run: pnpm --filter @demlik/code-graph run verify:exports
 
+      - name: Import every structure-sweep and backlog-sweep export from dist
+        run: |
+          pnpm --filter @demlik/structure-sweep run verify:exports
+          pnpm --filter @demlik/backlog-sweep run verify:exports
+
       # The one gate that runs the case this repo's node_modules can never
       # reproduce: pack the tarball, install it into a temp project WITHOUT the
       # optional `ws` peer, and import `@demlik/tea/node`. Every in-repo gate

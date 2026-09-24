@@ -1,0 +1,53 @@
+{
+  "name": "@demlik/backlog-sweep",
+  "version": "0.0.0",
+  "description": "Gather evidence for every open GitHub issue, ask Jev whether each is still needed, and write a verdict file a human reviews before anything is closed.",
+  "homepage": "https://github.com/kamp-us/demlik/tree/main/packages/backlog-sweep",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kamp-us/demlik.git",
+    "directory": "packages/backlog-sweep"
+  },
+  "bugs": {
+    "url": "https://github.com/kamp-us/demlik/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Can Sirin",
+  "type": "module",
+  "bin": {
+    "backlog-sweep": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "biome check src test scripts package.json",
+    "lint:worktree": "biome check src test scripts package.json",
+    "test": "vitest run",
+    "verify:exports": "node scripts/verify-exports.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@demlik/tea": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:code-graph",
+    "typescript": "catalog:code-graph",
+    "vitest": "catalog:"
+  }
+}
