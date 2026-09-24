@@ -101,7 +101,7 @@ export function anthropic(tools: readonly AnyToolDef[], apiKey?: string) {
   const declared: Anthropic.Tool[] = tools.map((t) => ({
     name: t.cmdType,
     description: t.description,
-    input_schema: z.toJSONSchema(t.args) as Anthropic.Tool.InputSchema,
+    input_schema: z.toJSONSchema(t.args as z.ZodType) as Anthropic.Tool.InputSchema,
   }));
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const response = await client.messages.create({

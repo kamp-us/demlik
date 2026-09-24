@@ -115,7 +115,7 @@ export function openaiCompatible(
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const completion = await client.chat.completions.create({
       model: endpoint.model,
-      messages: toParams(messages),
+      messages: await toParams(messages),
       tools: declared,
     });
     const message = completion.choices[0]?.message;
@@ -182,9 +182,9 @@ function argsOf(json: string): Record<string, unknown> {
 }
 
 /** tea's transcript as chat-completions messages. */
-function toParams(
+async function toParams(
   messages: readonly AgentMessage[],
-): ChatCompletionMessageParam[] {
+): Promise<ChatCompletionMessageParam[]> {
   const sent: ChatCompletionMessageParam[] = [];
   // A tool message carries text only, so the parts a tool shows the model (a
   // screenshot, say) wait here and follow the run of tool messages as one
@@ -203,7 +203,9 @@ function toParams(
         sent.push({
           role: "user",
           content:
-            typeof m.content === "string" ? m.content : m.content.map(toPart),
+            typeof m.content === "string"
+              ? m.content
+              : await Promise.all(m.content.map(toPart)),
         });
         break;
       case "assistant":
@@ -232,7 +234,7 @@ function toParams(
               ? JSON.stringify(m.outcome)
               : `The ${m.name} result is in the next user message.`,
         });
-        shown = [...shown, ...(m.parts ?? []).map(toPart)];
+        shown = [...shown, ...(await Promise.all((m.parts ?? []).map(toPart)))];
         break;
     }
   }
@@ -241,7 +243,7 @@ function toParams(
 }
 
 /** One tea content part as a chat-completions part. */
-function toPart(p: ContentPart): ChatCompletionContentPart {
+async function toPart(p: ContentPart): Promise<ChatCompletionContentPart> {
   switch (p.type) {
     case "text":
       return { type: "text", text: p.text };
@@ -251,11 +253,21 @@ function toPart(p: ContentPart): ChatCompletionContentPart {
         image_url: { url: urlOf(p.mediaType, p.source) },
       };
     case "file":
+      // `file_data` takes the file's bytes, never a link.
       return {
         type: "file",
-        file: { file_data: urlOf(p.mediaType, p.source) },
+        file: { file_data: urlOf(p.mediaType, await downloaded(p.source)) },
       };
   }
+}
+
+/** A linked file's bytes, fetched; a source that already holds them, as it is. */
+async function downloaded(source: MediaSource): Promise<MediaSource> {
+  if (source.type !== "url") return source;
+  const response = await fetch(source.url);
+  if (!response.ok)
+    throw new Error(`${source.url} answered ${response.status}`);
+  return { type: "bytes", data: new Uint8Array(await response.arrayBuffer()) };
 }
 
 /** A part's source as chat completions reads it: a link, or a data URL. */
@@ -283,7 +295,8 @@ Four details in this adapter carry the contract:
 - A `user` message's content may be a list of parts, and a `tool` message may
   carry `parts` the tool wants the model to see, such as a screenshot. `toPart`
   sends images as `image_url` and files as `file`, with bytes as a data URL.
-  Chat completions takes only text on a `tool` message, so a tool's parts
+  An image may stay a link, but `file_data` takes only data, so `toPart`
+  fetches a linked file and sends its bytes. Chat completions takes only text on a `tool` message, so a tool's parts
   follow the turn's tool results as one `user` message.
 - A throw inside the function, including a `JSON.parse` failure on a truncated
   arguments string, fails that brain call. The agent's `retry` ladder then
@@ -322,7 +335,7 @@ export function openaiCompatibleStreaming(
   ): Promise<AgentTurn> => {
     const stream = await client.chat.completions.create({
       model: endpoint.model,
-      messages: toParams(messages),
+      messages: await toParams(messages),
       tools: declared,
       stream: true,
     });
