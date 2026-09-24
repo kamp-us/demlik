@@ -225,8 +225,8 @@ cell for the notice.
 
 The check alone is not enough. The dispatch lands a moment after the check, so
 the State can change in between, and the parent can stop. That is why `tell`
-also drops a `NoCellError` and a `Stopped`. Closing the parent's scope hits the
-second case every time: the workers stop first, and their notices reach a
+also drops a `NoCellError` and a `Stopped`. Closing the parent's scope often
+hits the second case: the workers stop first, and their notices can reach a
 parent that is already stopping.
 
 The page's examples are `examples/parent-and-workers.ts` and
