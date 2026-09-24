@@ -27,7 +27,7 @@ export const NodeKindRulesSchema = z
       "pothos-auth-scopes": ["^authScopes$"],
     }),
     entryFilePatterns: PatternGroupSchema.default({
-      "cli-command": ["(^|/)program/commands/", "(^|/)src/commands/"],
+      "cli-command": ["(^|/)src/commands/"],
     }),
     testSupportFilePatterns: PatternGroupSchema.default({
       "test-directory": ["(^|/)tests?/", "(^|/)__tests__/", "(^|/)e2e[^/]*/"],
@@ -42,20 +42,16 @@ export const NodeKindRulesSchema = z
     }),
     authNames: PatternGroupSchema.default({
       "auth-gate": [
-        "^require(Auth|Session|SessionToken|ScanCredential|ProjectCiBotContext)$",
-        "^verify(ApiKey|MachineToken|RunnerToken|AccessToken|SharedSecret|GithubWebhookSignature)$",
+        "^require(Auth|Session|SessionToken)$",
+        "^verify(ApiKey|AccessToken|SharedSecret)$",
         "^authorize[A-Z][A-Za-z]*$",
-        "^assertProjectBelongsToOrg$",
       ],
     }),
     authCallees: PatternGroupSchema.default({
       "calls-auth-gate": [
-        "^require(Auth|Session|SessionToken|ScanCredential|ProjectCiBotContext)$",
-        "^verify(ApiKey|MachineToken|RunnerToken|AccessToken|SharedSecret|GithubWebhookSignature)$",
+        "^require(Auth|Session|SessionToken)$",
+        "^verify(ApiKey|AccessToken|SharedSecret)$",
         "^authorize[A-Z][A-Za-z]*$",
-        "^assertProjectBelongsToOrg$",
-        "^getUserMembership$",
-        "^getSessionFromHeaders$",
       ],
     }),
     effectDeclarations: PatternGroupSchema.default({
@@ -70,8 +66,7 @@ export const NodeKindRulesSchema = z
       ],
       "queue-send": ["^[^:]+:Queue\\.(send|sendBatch)$"],
       "workflow-spawn": ["^[^:]+:Workflow\\.(create|createBatch)$"],
-      "network-call": ["^[^:]+:([A-Za-z0-9]+\\.)?fetch$", "^dodopayments:"],
-      "vm-spawn": ["^[^:]+:([A-Za-z0-9]+\\.)?(insertGceInstance|spawnCloudRunner|deleteGceHands)$"],
+      "network-call": ["^[^:]+:([A-Za-z0-9]+\\.)?fetch$"],
     }),
   })
   .strict();
