@@ -26,6 +26,9 @@ what you are trying to do, and it names the subpath you need.
   run a `defineAgent` agent inside a Cloudflare Durable Object with `doStore`
   as its `Store`, so an eviction mid-run resumes on the next request instead of
   starting over.
+- [Skip saving short-lived states](./skip-saving-transient-states.md) — wrap
+  your `Store` so `save` does nothing while a reply streams, on either engine,
+  with no tea option behind it.
 - [Show a run's progress while it runs](./show-a-run-in-progress.md) — pass
   `onEvent` to `agent.run` and observe the run's `TurnSettled` / `ToolSettled` /
   `RunDone` events as the kernel settles them, instead of waiting on the one
