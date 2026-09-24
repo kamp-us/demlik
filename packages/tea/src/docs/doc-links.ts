@@ -19,8 +19,11 @@ const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 /** The package-root pages a reader meets on npm and GitHub. */
 const ROOT_PAGES = ["CHANGELOG.md", "README.md", "MAINTAINING.md"];
 
-/** `[text](target "title")` and `![alt](target)`: group 1 is the target. */
-const INLINE_LINK = /\]\(\s*<?([^)\s>]+)>?(?:\s+["'(][^)]*)?\)/g;
+/** What may follow an inline link's destination: an optional title, then `)`. */
+const LINK_TAIL =
+  /^[ \t]*(?:(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\))[ \t]*)?\)/;
+/** A backslash escape of an ASCII punctuation character. */
+const ESCAPE = /\\([!-/:-@[-`{-~])/g;
 /** `[label]: target`, a reference definition on its own line. */
 const REFERENCE_DEF = /^ {0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?/;
 /** A target that names a scheme (`https:`, `mailto:`) is not a file path. */
@@ -47,7 +50,7 @@ export interface LinkHit {
 export function filePathOf(target: string): string | undefined {
   if (SCHEME.test(target) || target.startsWith("/")) return undefined;
   const path = target.split("#")[0]?.split("?")[0] ?? "";
-  return path === "" ? undefined : decodeURI(path);
+  return path === "" ? undefined : decodeURI(path.replace(ESCAPE, "$1"));
 }
 
 /**
@@ -62,7 +65,7 @@ export function brokenLinksIn(
 ): readonly LinkHit[] {
   const hits: LinkHit[] = [];
   proseLines(source).forEach((text, index) => {
-    const targets = [...text.matchAll(INLINE_LINK)].map((m) => m[1] ?? "");
+    const targets = inlineTargets(text);
     const definition = REFERENCE_DEF.exec(text)?.[1];
     if (definition !== undefined) targets.push(definition);
     for (const target of targets) {
@@ -72,6 +75,47 @@ export function brokenLinksIn(
     }
   });
   return hits;
+}
+
+/**
+ * The destination of every `[text](target "title")` and `![alt](target)` on a
+ * line, as the page spells it. A destination is read the CommonMark way: in
+ * `<…>` it runs to the closing `>`; bare, it runs to whitespace or to the `)`
+ * that closes the link, so balanced parentheses inside it (`./a_(b).md`) and
+ * escaped ones (`./a\\).md`) stay part of the path.
+ */
+export function inlineTargets(line: string): string[] {
+  const targets: string[] = [];
+  for (
+    let open = line.indexOf("](");
+    open !== -1;
+    open = line.indexOf("](", open + 1)
+  ) {
+    let at = open + 2;
+    while (line[at] === " " || line[at] === "\t") at++;
+    let target = "";
+    if (line[at] === "<") {
+      const close = line.indexOf(">", at + 1);
+      if (close === -1) continue;
+      target = line.slice(at + 1, close);
+      if (target.includes("<")) continue;
+      at = close + 1;
+    } else {
+      const start = at;
+      let depth = 0;
+      for (; at < line.length; at++) {
+        const ch = line[at] ?? "";
+        if (ch === "\\" && at + 1 < line.length) at++;
+        else if (ch === "(") depth++;
+        else if (ch === ")" && depth-- === 0) break;
+        else if (/\s/.test(ch)) break;
+      }
+      if (depth > 0) continue;
+      target = line.slice(start, at);
+    }
+    if (target !== "" && LINK_TAIL.test(line.slice(at))) targets.push(target);
+  }
+  return targets;
 }
 
 /**

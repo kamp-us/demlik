@@ -11,8 +11,6 @@
  * entry may do.
  */
 
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Effect, Exit, Fiber, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { parent } from "../../examples/parent-and-workers";
@@ -22,6 +20,7 @@ import {
   stop,
   tell,
 } from "../../examples/parent-and-workers-effect";
+import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
 import { run } from "./index";
 
 /** The page's step 3: a parent in its own scope, and an empty table. */
@@ -184,17 +183,12 @@ describe("examples/parent-and-workers-effect.ts", () => {
 
 describe("the run-many-machines how-to", () => {
   it("the page shows both example files verbatim", async () => {
-    const read = (at: string) =>
-      readFile(fileURLToPath(new URL(at, import.meta.url)), "utf8");
-    const page = await read("../../docs/how-to/run-many-machines.md");
-    const blocks = [...page.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) =>
-      (m[1] ?? "").trimEnd(),
+    await expectPageMirrors(
+      new URL("../../docs/how-to/run-many-machines.md", import.meta.url),
+      [
+        "../../examples/parent-and-workers.ts",
+        "../../examples/parent-and-workers-effect.ts",
+      ].map((file) => fileMirror(new URL(file, import.meta.url))),
     );
-    for (const file of [
-      "../../examples/parent-and-workers.ts",
-      "../../examples/parent-and-workers-effect.ts",
-    ]) {
-      expect(blocks).toContain((await read(file)).trimEnd());
-    }
   });
 });

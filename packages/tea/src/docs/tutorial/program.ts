@@ -6,6 +6,8 @@
  * that names no file at all is one file, `main.ts`.
  */
 
+import { tsBlocksOf } from "../page-mirrors";
+
 /** The file a page that names none is reassembled into. */
 export const UNNAMED_PAGE_FILE = "main.ts";
 
@@ -17,9 +19,7 @@ const MARKER = /^\/\/ (\S+\.ts)\n/;
  * line; a file spread over several blocks is their concatenation in page order.
  */
 export function programOf(markdown: string): Map<string, string> {
-  const blocks = [...markdown.matchAll(/```ts\n([\s\S]*?)```/g)].map(
-    (m) => m[1] ?? "",
-  );
+  const blocks = tsBlocksOf(markdown);
   const files = new Map<string, string>();
   if (!blocks.some((block) => MARKER.test(block))) {
     if (blocks.length > 0) files.set(UNNAMED_PAGE_FILE, blocks.join(""));

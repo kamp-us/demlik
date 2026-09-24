@@ -21,6 +21,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isTurnUsage } from "../../agent";
+import { expectPageMirrors, regionMirror } from "../page-mirrors";
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { TurnUsage } from "@demlik/tea/agent";
@@ -50,16 +51,6 @@ const fixture = fileURLToPath(
   new URL("./fixtures/anthropic-notebook.json", import.meta.url),
 );
 
-/** The text between the region's markers, which is what the page shows. */
-async function region(): Promise<string> {
-  const source = await readFile(self, "utf8");
-  const body = source
-    .split("// #region usage\n")[1]
-    ?.split("// #endregion usage\n")[0];
-  if (body === undefined) throw new Error("the usage region markers are gone");
-  return body;
-}
-
 /** A full `Anthropic.Usage` — the fields the mapping does not read are null. */
 function reported(over: Partial<Anthropic.Usage>): Anthropic.Usage {
   return {
@@ -78,8 +69,8 @@ function reported(over: Partial<Anthropic.Usage>): Anthropic.Usage {
 
 describe("the tutorial adapter's usage mapping", () => {
   it("is on the page verbatim, and the adapter hands it the response's usage", async () => {
+    await expectPageMirrors(page, [regionMirror(self, "usage", "within")]);
     const markdown = await readFile(page, "utf8");
-    expect(markdown).toContain(await region());
     expect(markdown).toContain("usage: usageOf(response.usage),");
   });
 

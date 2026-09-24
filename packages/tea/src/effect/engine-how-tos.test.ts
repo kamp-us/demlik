@@ -13,8 +13,6 @@
  * `effect`, which only this entry may do.
  */
 
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Effect, Layer, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { profile } from "../../examples/profile-lookup";
@@ -23,6 +21,7 @@ import {
   lookUp as lookUpOnEffect,
 } from "../../examples/profile-lookup-effect";
 import { lookUp as lookUpOnPromise } from "../../examples/profile-lookup-promise";
+import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
 import { run as runPromise } from "../promise";
 import { run as runEffect } from "./index";
 
@@ -105,27 +104,17 @@ describe("a `timer` entry in `subscribe` replaces the built-in — both pages' s
   });
 });
 
-const read = (path: string) =>
-  readFile(fileURLToPath(new URL(path, import.meta.url)), "utf8");
-
-/** Every fenced ```ts block on a page, in page order. */
-async function tsBlocks(page: string): Promise<string[]> {
-  const markdown = await read(`../../docs/how-to/${page}`);
-  return [...markdown.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) =>
-    (m[1] ?? "").trimEnd(),
-  );
-}
-
-const example = async (file: string) =>
-  (await read(`../../examples/${file}`)).trimEnd();
+const example = (file: string) =>
+  fileMirror(new URL(`../../examples/${file}`, import.meta.url));
 
 describe("the engine how-tos — they cannot rot", () => {
   it.each([
     ["run-on-the-promise-engine.md", "profile-lookup-promise.ts"],
     ["run-on-the-effect-engine.md", "profile-lookup-effect.ts"],
   ])("%s shows the shared machine file and %s verbatim", async (page, runner) => {
-    const blocks = await tsBlocks(page);
-    expect(blocks).toContain(await example("profile-lookup.ts"));
-    expect(blocks).toContain(await example(runner));
+    await expectPageMirrors(
+      new URL(`../../docs/how-to/${page}`, import.meta.url),
+      [example("profile-lookup.ts"), example(runner)],
+    );
   });
 });

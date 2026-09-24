@@ -12,6 +12,7 @@ import {
   collectBrokenLinks,
   filePathOf,
   formatBrokenLinks,
+  inlineTargets,
   linkedPages,
 } from "./doc-links";
 
@@ -34,6 +35,25 @@ describe("published markdown — relative link gate", () => {
       },
       { file: "/pkg/docs/how-to/x.md", line: 2, target: "./missing.png" },
       { file: "/pkg/docs/how-to/x.md", line: 3, target: "./also-missing.md" },
+    ]);
+  });
+
+  it("reads a target with parentheses in it whole, not up to the first `)`", () => {
+    expect(
+      inlineTargets("[a](./a_(b).md) and [c](<./c (d).md> 'title')"),
+    ).toEqual(["./a_(b).md", "./c (d).md"]);
+    expect(inlineTargets(String.raw`[e](./e\).md "t") [f](./f.md)`)).toEqual([
+      String.raw`./e\).md`,
+      "./f.md",
+    ]);
+    expect(filePathOf(String.raw`./e\).md`)).toBe("./e).md");
+
+    const present = new Set(["/pkg/docs/how-to/a_(b).md"]);
+    const page = "[kept](./a_(b).md) and [gone](./gone_(v2).md#top)";
+    expect(
+      brokenLinksIn("/pkg/docs/how-to/x.md", page, (p) => present.has(p)),
+    ).toEqual([
+      { file: "/pkg/docs/how-to/x.md", line: 1, target: "./gone_(v2).md#top" },
     ]);
   });
 

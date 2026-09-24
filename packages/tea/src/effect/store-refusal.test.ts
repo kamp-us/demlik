@@ -15,7 +15,6 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -24,6 +23,7 @@ import {
   openNotes,
   parseNotes,
 } from "../../examples/restore-or-refuse";
+import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
 import { type Migrated, refuse, type Store, StoreRefusedError } from "../index";
 import { memoryStore } from "../mem";
 import { fileStore } from "../node";
@@ -223,15 +223,13 @@ describe("the restore-or-refuse how-to — the host's view", () => {
   });
 
   it("the page shows the example verbatim", async () => {
-    const read = (at: string) =>
-      readFile(fileURLToPath(new URL(at, import.meta.url)), "utf8");
-    const page = await read("../../docs/how-to/restore-or-refuse.md");
-    const blocks = [...page.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) =>
-      (m[1] ?? "").trimEnd(),
+    await expectPageMirrors(
+      new URL("../../docs/how-to/restore-or-refuse.md", import.meta.url),
+      [
+        fileMirror(
+          new URL("../../examples/restore-or-refuse.ts", import.meta.url),
+        ),
+      ],
     );
-    const example = (
-      await read("../../examples/restore-or-refuse.ts")
-    ).trimEnd();
-    expect(blocks).toContain(example);
   });
 });
