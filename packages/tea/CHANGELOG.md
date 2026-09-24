@@ -1183,7 +1183,7 @@ readonly DeadlineSub[]>`. `cacheEvictionSub(name, everyMs)` returns a `subs`
   unfenced call is byte-for-byte the old behaviour. `chromeStorageStore` stays
   unfenced deliberately: `chrome.storage` has no atomic compare-and-swap.
 
-  See [ADR 0017](../.decisions/0017-fencing-is-an-optional-store-widening.md).
+  See [ADR 0017](../../.decisions/0017-fencing-is-an-optional-store-widening.md).
 
 - 7159a87: A resource can have a lifetime that spans a run. `provide({ … })` builds the
   `ctx` object `run` already takes, from a graph of providers with `acquire` and
@@ -1729,7 +1729,7 @@ string[]` no longer fits the `readonly (keyof M)[]` the map wants — including 
 
   Their `docs/how-to/index.md` rows go with them. For a retry ladder from outside the package the
   public route is `@demlik/tea/retry-backoff` — [Add retry and backoff to a
-  call](../docs/how-to/add-resilience.md) — and the L2 intent layer is where these jobs come back.
+  call](./docs/how-to/add-resilience.md) — and the L2 intent layer is where these jobs come back.
 
   Pages that only mentioned a closed door keep their subject and lose the specifier:
   `gate-a-refactor-on-parity.md` now keeps its golden as plain JSON through `@demlik/tea/parity`

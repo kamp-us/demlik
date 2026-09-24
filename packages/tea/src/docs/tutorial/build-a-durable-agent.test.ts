@@ -19,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentMessage, ContentPart } from "../../agent";
+import { programOf } from "./program";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
 const page = join(repo, "docs/tutorial/build-a-durable-agent.md");
@@ -29,24 +30,6 @@ const preload = new URL("./fixtures/anthropic-fixture.mjs", import.meta.url);
 
 /** The user-code ceiling the issue names for the file the lesson is about. */
 const MAX_AGENT_LINES = 35;
-
-/**
- * Every ```ts block on the page, keyed by the `// <file>` marker on its first
- * line; a file spread over several blocks is their concatenation in page order.
- */
-function programOf(markdown: string): Map<string, string> {
-  const files = new Map<string, string>();
-  for (const m of markdown.matchAll(/```ts\n([\s\S]*?)```/g)) {
-    const block = m[1] ?? "";
-    const marker = /^\/\/ (\S+\.ts)\n/.exec(block);
-    const name = marker?.[1] ?? [...files.keys()].at(-1);
-    if (name === undefined)
-      throw new Error("a ts block precedes any file marker");
-    const body = marker ? block.slice(marker[0].length) : block;
-    files.set(name, `${files.get(name) ?? ""}${body}`);
-  }
-  return files;
-}
 
 /** Bundle one page file against `src/`; deps stay external and resolve from the repo. */
 async function bundle(

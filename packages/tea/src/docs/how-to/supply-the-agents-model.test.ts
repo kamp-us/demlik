@@ -84,7 +84,7 @@ export function openaiCompatible(
   return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
     const completion = await client.chat.completions.create({
       model: endpoint.model,
-      messages: toParams(messages),
+      messages: await toParams(messages),
       tools: declared,
     });
     const message = completion.choices[0]?.message;
@@ -151,9 +151,9 @@ function argsOf(json: string): Record<string, unknown> {
 }
 
 /** tea's transcript as chat-completions messages. */
-function toParams(
+async function toParams(
   messages: readonly AgentMessage[],
-): ChatCompletionMessageParam[] {
+): Promise<ChatCompletionMessageParam[]> {
   const sent: ChatCompletionMessageParam[] = [];
   // A tool message carries text only, so the parts a tool shows the model (a
   // screenshot, say) wait here and follow the run of tool messages as one
@@ -172,7 +172,9 @@ function toParams(
         sent.push({
           role: "user",
           content:
-            typeof m.content === "string" ? m.content : m.content.map(toPart),
+            typeof m.content === "string"
+              ? m.content
+              : await Promise.all(m.content.map(toPart)),
         });
         break;
       case "assistant":
@@ -201,7 +203,7 @@ function toParams(
               ? JSON.stringify(m.outcome)
               : `The ${m.name} result is in the next user message.`,
         });
-        shown = [...shown, ...(m.parts ?? []).map(toPart)];
+        shown = [...shown, ...(await Promise.all((m.parts ?? []).map(toPart)))];
         break;
     }
   }
@@ -210,7 +212,7 @@ function toParams(
 }
 
 /** One tea content part as a chat-completions part. */
-function toPart(p: ContentPart): ChatCompletionContentPart {
+async function toPart(p: ContentPart): Promise<ChatCompletionContentPart> {
   switch (p.type) {
     case "text":
       return { type: "text", text: p.text };
@@ -220,11 +222,21 @@ function toPart(p: ContentPart): ChatCompletionContentPart {
         image_url: { url: urlOf(p.mediaType, p.source) },
       };
     case "file":
+      // `file_data` takes the file's bytes, never a link.
       return {
         type: "file",
-        file: { file_data: urlOf(p.mediaType, p.source) },
+        file: { file_data: urlOf(p.mediaType, await downloaded(p.source)) },
       };
   }
+}
+
+/** A linked file's bytes, fetched; a source that already holds them, as it is. */
+async function downloaded(source: MediaSource): Promise<MediaSource> {
+  if (source.type !== "url") return source;
+  const response = await fetch(source.url);
+  if (!response.ok)
+    throw new Error(`${source.url} answered ${response.status}`);
+  return { type: "bytes", data: new Uint8Array(await response.arrayBuffer()) };
 }
 
 /** A part's source as chat completions reads it: a link, or a data URL. */
@@ -264,7 +276,7 @@ export function openaiCompatibleStreaming(
   ): Promise<AgentTurn> => {
     const stream = await client.chat.completions.create({
       model: endpoint.model,
-      messages: toParams(messages),
+      messages: await toParams(messages),
       tools: declared,
       stream: true,
     });
@@ -360,10 +372,18 @@ const ENDPOINT: Endpoint = {
   model: "openai/gpt-5",
 };
 
-/** Stub `fetch` with one canned response and record the request bodies it saw. */
-function stubFetch(respond: () => Response): unknown[] {
+/**
+ * Stub `fetch` with one canned response and record the request bodies it saw.
+ * A URL in `files` answers with those bytes instead, the way a linked file does.
+ */
+function stubFetch(
+  respond: () => Response,
+  files: Readonly<Record<string, Uint8Array>> = {},
+): unknown[] {
   const bodies: unknown[] = [];
-  vi.stubGlobal("fetch", async (_url: unknown, init?: RequestInit) => {
+  vi.stubGlobal("fetch", async (url: unknown, init?: RequestInit) => {
+    const file = files[String(url)];
+    if (file !== undefined) return new Response(file);
     bodies.push(JSON.parse(String(init?.body)));
     return respond();
   });
@@ -588,6 +608,54 @@ describe("docs/how-to/supply-the-agents-model.md (#337)", () => {
         { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
       ],
     });
+  });
+
+  // #356 — `file_data` takes data, so a linked file is fetched and sent as its
+  // bytes; an image's link is one `image_url` reads, so it goes as it is.
+  it("fetches a URL-sourced file and sends its bytes as file_data, never the link", async () => {
+    const pdf = "https://files.test/report.pdf";
+    const png = "https://files.test/chart.png";
+    const bodies = stubFetch(
+      () =>
+        json(completion({ role: "assistant", content: "ok", refusal: null })),
+      { [pdf]: new Uint8Array([1, 2, 3]) },
+    );
+    await openaiCompatible(
+      ENDPOINT,
+      [],
+    )([
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            source: { type: "url", url: pdf },
+          },
+          {
+            type: "image",
+            mediaType: "image/png",
+            source: { type: "url", url: png },
+          },
+        ],
+      },
+    ]);
+    const [file, image] =
+      (
+        bodies[0] as {
+          messages: {
+            content: {
+              file?: { file_data: string };
+              image_url?: { url: string };
+            }[];
+          }[];
+        }
+      ).messages[0]?.content ?? [];
+    const sent = file?.file?.file_data ?? "";
+    expect(sent.startsWith("data:")).toBe(true);
+    expect(sent.startsWith("http")).toBe(false);
+    expect(sent).toBe("data:application/pdf;base64,AQID");
+    expect(image?.image_url?.url).toBe(png);
   });
 
   it("streams text to onChunk and joins tool-call fragments by index", async () => {
