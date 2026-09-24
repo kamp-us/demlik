@@ -4,6 +4,7 @@ import type { Store } from "../index";
 import {
   type AgentMessage,
   type AgentTurn,
+  type AnyToolDef,
   agentTool,
   type DefinedAgentState,
   defineAgent,
@@ -448,5 +449,117 @@ describe("agentTool — a child that does not finish settles an error the parent
       },
     });
     expect(final.run.phase).toBe("done");
+  });
+});
+
+describe("agentTool — what the parent's tool carries (#355)", () => {
+  it("an agent tool declares no content: the parent model reads the child's answer as data", () => {
+    const unblock = requestUnblock(
+      unblocker(childModel({ calls: [] }), []),
+      new Map(),
+    );
+    expect(unblock.content).toBeNull();
+  });
+
+  it("a content function set on the spec at runtime is not handed on", () => {
+    const spec = {
+      description: "Hand a barrier over.",
+      input: z.object({ description: z.string() }),
+      ok: Verdict,
+      agent: unblocker(childModel({ calls: [] }), []),
+      prompt: ({ description }: { description: string }) => description,
+      result: (output: AgentTurn) => Verdict.parse(JSON.parse(output.content)),
+      namespace: (ctx: ParentCtx) => ctx.session,
+      store: (key: string) => cell(new Map(), key),
+      content: () => [{ type: "text", text: "leaked" }],
+    };
+    // The spec type has no `content`, so only a caller past the types can set
+    // one; `as never` stands in for that caller.
+    expect(agentTool("request_unblock", spec as never).content).toBeNull();
+  });
+});
+
+describe("agentTool — the child's ctx (#355)", () => {
+  const PEEK = {
+    description: "Peek at the barrier.",
+    input: z.object({}),
+    ok: z.object({ peeked: z.boolean() }),
+    err: [],
+  } as const;
+
+  /** A child whose one tool is `peek`: one call to it, then the verdict. */
+  function childWith<T extends AnyToolDef>(peek: T) {
+    return defineAgent({
+      model: async (messages: readonly AgentMessage[]) =>
+        messages.some((m) => m.role === "tool")
+          ? CLEARED
+          : {
+              content: "peeking",
+              toolCalls: [{ callId: "p1", name: "peek", args: {} }],
+            },
+      tools: [peek],
+      instructions: CHILD_INSTRUCTIONS,
+    });
+  }
+
+  const common = {
+    description: "Hand a barrier to the unblocker and wait for its verdict.",
+    input: z.object({ description: z.string() }),
+    ok: Verdict,
+    prompt: ({ description }: { description: string }) =>
+      `Barrier: ${description}`,
+    result: (output: AgentTurn) => Verdict.parse(JSON.parse(output.content)),
+    namespace: (ctx: ParentCtx) => ctx.session,
+    store: (key: string) => cell<never>(new Map(), `child:${key}`),
+  };
+  const PARENT = { session: "s1", emit: () => {} };
+
+  it("a supplied childCtx is the ctx the child's tools are handed, derived from the parent's", async () => {
+    const seen: unknown[] = [];
+    const unblock = agentTool("request_unblock", {
+      ...common,
+      agent: childWith(
+        tool(
+          "peek",
+          PEEK,
+          async (_args, ctx: { readonly credential: string }, { ok }) => {
+            seen.push(ctx);
+            return ok({ peeked: true });
+          },
+        ),
+      ),
+      childCtx: (ctx) => ({ credential: `child-of:${ctx.session}` }),
+    });
+    const outcome = await unblock.interpret(
+      unblock({ callId: "u1", args: { description: "a modal" } }),
+      PARENT,
+    );
+    expect(outcome).toMatchObject({ _tag: "Ok" });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ credential: "child-of:s1" });
+    // The derived ctx is the child's whole ctx: the parent's is not merged in.
+    expect(seen[0]).not.toHaveProperty("session");
+  });
+
+  it("an omitted childCtx hands the child none of the parent's ctx", async () => {
+    const seen: unknown[] = [];
+    const unblock = agentTool("request_unblock", {
+      ...common,
+      // `peek` names no ctx type, so the child reads none and `childCtx` is
+      // optional; the handler still records what it was handed.
+      agent: childWith(
+        tool("peek", PEEK, async (_args, ctx, { ok }) => {
+          seen.push(ctx);
+          return ok({ peeked: true });
+        }),
+      ),
+    });
+    const outcome = await unblock.interpret(
+      unblock({ callId: "u1", args: { description: "a modal" } }),
+      PARENT,
+    );
+    expect(outcome).toMatchObject({ _tag: "Ok" });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).not.toHaveProperty("session");
   });
 });

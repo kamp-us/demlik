@@ -553,7 +553,13 @@ export const AGENT_EVENT_TYPES = [
  * router's `<name>_ok` Msgs instead of `agent_tool_ok`; pass the same router
  * here so those settles project to `ToolSettled` too.
  *
- * PURE — reads only the passed `(msg, state)`; no clock, no RNG, no throw.
+ * Each outbox is projected once per projector (#355). A host that wires the
+ * verbs by hand and folds a Msg of its own leaves `state.lifecycle` as the
+ * previous agent transition left it, and that transition's notes are not
+ * projected a second time.
+ *
+ * Reads only the passed `(msg, state)` and the set of outboxes it has already
+ * projected; no clock, no RNG, no throw.
  *
  * @typeParam P     Brain-call purposes.
  * @typeParam O     Per-purpose outputs (bound to `AgentTurn`, the agentic shape).
@@ -574,6 +580,13 @@ export function agentEvents<
   state: AgentState<Stage, P, O, R>,
 ) => readonly AgentEvent<R>[] {
   const tools = opts?.tools;
+  // The outboxes this projector has already projected (#355). A transition
+  // that notes anything builds a fresh outbox array, and one that enters an
+  // agent door with a non-empty outbox empties it into a fresh one, so an
+  // outbox array belongs to exactly one transition. A host that embeds the
+  // verbs and folds a Msg of its own leaves the agent slice — and so this
+  // array — untouched, and it must not project the same notes again.
+  const projected = new WeakSet<readonly AgentLifecycleNote[]>();
   return (msg, state) => {
     const events: AgentEvent<R>[] = [];
     const run = state.run;
@@ -603,7 +616,10 @@ export function agentEvents<
         projectOwn(msg as AgentMachineMsg<P, O, R>, runId, events, refused);
       }
     }
-    for (const note of state.lifecycle ?? []) {
+    const outbox = state.lifecycle ?? [];
+    if (outbox.length === 0 || projected.has(outbox)) return events;
+    projected.add(outbox);
+    for (const note of outbox) {
       const event = projectNote<Stage, P, O, R>(note, runId, state);
       if (event !== null) events.push(event);
     }

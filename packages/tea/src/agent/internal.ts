@@ -91,7 +91,10 @@ export function withTurnUsage<
   ];
 }
 
-/** A conversation as a Model persisted before #354 may hold it: with the run's total on it. */
+/**
+ * A conversation as a Model persisted before #354 may hold it: with the run's
+ * total on it.
+ */
 type PersistedConversation<R> = Omit<Conversation<R>, "contextTokens"> & {
   readonly contextTokens?: number | null;
   readonly usage?: TurnUsage;
@@ -162,9 +165,10 @@ export function dedupeByCallId(
  * `turnCount` is UNCHANGED — compaction is not a model round-trip (decision C).
  *
  * The run's usage total is not the conversation's, so a fold cannot touch it:
- * the folded turns were still paid for. The context size is CLEARED, because it measured the transcript before the fold;
- * left standing it would fire a size-based fold again before the next brain
- * turn could report what the shrunk transcript costs (#332).
+ * the folded turns were still paid for. The context size is CLEARED, because
+ * it measured the transcript before the fold; left standing it would fire a
+ * size-based fold again before the next brain turn could report what the
+ * shrunk transcript costs (#332).
  *
  * Caller guarantees `2 <= folding <= turns.length` (the trigger clamps + skips
  * `< 2`), so the result is strictly shorter (`length - folding + 1`).

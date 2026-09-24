@@ -1644,12 +1644,15 @@ export function createAgent<
    * ({@link withUsageDefaults}), and note `run_ended` on the way out when this
    * is the transition that ended the run. Reading the end off `isSettled`
    * before and after, rather than at each site that can end a run, is what
-   * makes `RunDone` once-only whichever of them did it — `done`, a turn or time
-   * limit, a spent brain retry, a watchdog, a cancel.
+   * makes `RunDone` once-only whichever of them did it — `done`, a turn or
+   * time limit, a spent brain retry, a watchdog, a cancel.
    *
    * Every door a Msg enters by goes through here: the knob's verbs and
    * `toMachine`'s cells. The verbs calling one another inside a transition do
-   * not, so their notes accumulate in the order they happened. PURE.
+   * not, so their notes accumulate in the order they happened. Emptying and
+   * noting both build a fresh array, so a non-empty outbox belongs to the one
+   * transition that filled it — `agentEvents` keys its once-only projection
+   * on that (#355). PURE.
    */
   function transition(
     s: State,
