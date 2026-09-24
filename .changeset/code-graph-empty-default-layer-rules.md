@@ -10,4 +10,5 @@ empty. **Migration:** if you ran `--layers` on the implicit stack, declare your
 stack in a JSON file and pass it with `--layer-rules <file>`; the README shows the
 format. `--layers` with no declared stack now exits 2 with a one-line message
 naming `--layer-rules` instead of running. A rules file that declares its own
-stack gets the same verdict and exit code as before.
+stack gets the same verdict and exit code as before. A failing gate's
+`Fix:` lines now point at the `allowed` array in your `--layer-rules` file.

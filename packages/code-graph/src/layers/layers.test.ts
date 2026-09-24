@@ -8,6 +8,7 @@ import { analyzeLayers } from "./analyze.js";
 import { compileMatchers, directionOf, layerOf } from "./classify.js";
 import { runLayerGate } from "./gate.js";
 import { reconcile } from "./reconcile.js";
+import { renderLayers } from "./render.js";
 import { type Layer, LayerRulesSchema } from "./rules.js";
 
 const LAYERS: readonly Layer[] = [
@@ -112,6 +113,50 @@ describe("the allowlist is a ratchet — it fails in BOTH directions", () => {
   it("counts an allowed site only when its declaration matched exactly", () => {
     const result = reconcile(reportOf([{ ...A, line: 3 }]), [{ ...A, sites: 2, reason: REASON }]);
     expect(result.allowedSites).toBe(0);
+  });
+});
+
+describe("a failing gate sends the consumer to their own rules file", () => {
+  const B = { from: "services/s/src/domain/b.ts", to: "services/s/src/y.ts" };
+  const C = { from: "services/s/src/domain/c.ts", to: "services/s/src/z.ts" };
+
+  // The allowlist lives only in the consumer's --layer-rules file; a Fix line naming a file
+  // inside this package sends them somewhere they cannot, and should not, edit.
+  it("points every Fix line at the `allowed` array in the --layer-rules file", () => {
+    const { stdout, exitCode } = renderLayers(
+      reportOf([
+        { ...A, line: 3 },
+        { ...A, line: 9 },
+        { ...B, line: 4 },
+      ]),
+      [
+        { ...A, sites: 1, reason: REASON },
+        { ...C, sites: 1, reason: REASON },
+      ],
+      false,
+      false,
+    );
+    expect(exitCode).toBe(1);
+    // A Fix runs from its `Fix:` line to the next block's count line, or the end of output.
+    const lines = stdout.split("\n");
+    const fixes = lines
+      .map((line, i) => (line.startsWith("  Fix:") ? i : -1))
+      .filter((i) => i >= 0)
+      .map((start) => {
+        const next = lines.findIndex((l, j) => j > start && /^ {2}\d+ declared/.test(l));
+        return lines.slice(start, next === -1 ? undefined : next).join("\n");
+      });
+    expect(fixes).toMatchInlineSnapshot(`
+      [
+        "  Fix: point the dependency down (move the shared thing into a lower layer, or
+        invert it behind a contract). If it cannot move in this PR, add the pair to the
+        \`allowed\` array in your --layer-rules file with its exact site count and a reason.",
+        "  Fix: delete those entries from the \`allowed\` array in your --layer-rules file.",
+        "  Fix: update \`sites\` in the \`allowed\` array in your --layer-rules file, or remove the import.",
+      ]
+    `);
+    expect(stdout).not.toContain("src/layers");
+    expect(stdout).not.toContain("allowed.ts");
   });
 });
 
