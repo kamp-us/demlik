@@ -53,7 +53,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
-import type { Dispose, FencedStore, Store, Sub } from "../index";
+import type { DeletableStore, Dispose, FencedStore, Sub } from "../index";
 import { StoreConflictError } from "../index";
 import {
   type Journal,
@@ -81,27 +81,31 @@ import { dispatchIfPresent } from "../subs/types";
  *
  * Pass `{ fenced: true }` to get a `FencedStore<S>` instead — see
  * {@link FileStoreOptions}.
+ *
+ * Either form is a `DeletableStore<S>`: `delete()` removes the state file and
+ * its `<path>.fence` version stamp, so a host that forgets a run needs no
+ * knowledge of the layout on disk.
  */
 export function fileStore<S>(
   path: string,
   parse: (raw: unknown) => S | null,
-): Store<S>;
+): DeletableStore<S>;
 export function fileStore<S>(
   path: string,
   parse: (raw: unknown) => S | null,
   options: FileStoreOptions & { readonly fenced: true },
-): FencedStore<S>;
+): FencedStore<S> & DeletableStore<S>;
 export function fileStore<S>(
   path: string,
   parse: (raw: unknown) => S | null,
   options?: FileStoreOptions,
-): Store<S> | FencedStore<S>;
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function fileStore<S>(
   path: string,
   parse: (raw: unknown) => S | null,
   options: FileStoreOptions = {},
-): Store<S> | FencedStore<S> {
-  const base: Store<S> = {
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
+  const base: DeletableStore<S> = {
     async load(): Promise<unknown> {
       let raw: string;
       try {
@@ -132,8 +136,29 @@ export function fileStore<S>(
     migrate(raw: unknown): S | null {
       return parse(raw);
     },
+    async delete(): Promise<void> {
+      await removeStateFiles(path);
+    },
   };
   return options.fenced === true ? fenceFileStore(base, path) : base;
+}
+
+/**
+ * Remove a `fileStore`'s state file and its `.fence` stamp; an absent one is
+ * already deleted. The unfenced store removes the stamp too, because a file
+ * written fenced can be opened unfenced and a stale stamp would outlive it.
+ *
+ * Stamp FIRST, state second. A crash between the two leaves the bytes at
+ * version `0`, which a live fenced run reads as a conflict — the safe
+ * direction. The reverse leaves the old version beside no state, and a run
+ * still holding that version would swap cleanly onto a deleted run.
+ */
+async function removeStateFiles(path: string): Promise<void> {
+  for (const file of [`${path}.fence`, path]) {
+    await unlink(file).catch((err: NodeJS.ErrnoException) => {
+      if (err.code !== "ENOENT") throw err;
+    });
+  }
 }
 
 /** Options for {@link fileStore}. */
@@ -161,7 +186,10 @@ export interface FileStoreOptions {
  * both pass their own check. Rename-over-tmp still does the torn-write work for
  * each of the two files; the lock does the exclusion no rename could.
  */
-function fenceFileStore<S>(base: Store<S>, path: string): FencedStore<S> {
+function fenceFileStore<S>(
+  base: DeletableStore<S>,
+  path: string,
+): FencedStore<S> & DeletableStore<S> {
   const fencePath = `${path}.fence`;
   const lockPath = `${path}.fence.lock`;
 
@@ -212,6 +240,16 @@ function fenceFileStore<S>(base: Store<S>, path: string): FencedStore<S> {
         await writeFile(tmp, String(next), "utf8");
         await rename(tmp, fencePath);
         return next;
+      } finally {
+        await unlink(lockPath).catch(() => {});
+      }
+    },
+    async delete(): Promise<void> {
+      // Under the swap's own lock, so a delete never lands between another
+      // writer's state write and its stamp write.
+      await acquireFileLock(dirname(path), lockPath);
+      try {
+        await base.delete();
       } finally {
         await unlink(lockPath).catch(() => {});
       }

@@ -28,7 +28,7 @@
  * may pass an explicit `parse` to override.
  */
 
-import type { FencedStore, Store } from "../index";
+import type { DeletableStore, FencedStore } from "../index";
 import { StoreConflictError } from "../index";
 
 /** Options for {@link memoryStore}. */
@@ -57,22 +57,22 @@ export interface MemoryStoreOptions {
 export function memoryStore<S>(
   initial?: S | null,
   parse?: (raw: unknown) => S | null,
-): Store<S>;
+): DeletableStore<S>;
 export function memoryStore<S>(
   initial: S | null | undefined,
   parse: ((raw: unknown) => S | null) | undefined,
   options: MemoryStoreOptions & { readonly fenced: true },
-): FencedStore<S>;
+): FencedStore<S> & DeletableStore<S>;
 export function memoryStore<S>(
   initial?: S | null,
   parse?: (raw: unknown) => S | null,
   options?: MemoryStoreOptions,
-): Store<S> | FencedStore<S>;
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function memoryStore<S>(
   initial?: S | null,
   parse: (raw: unknown) => S | null = (raw) => raw as S | null,
   options: MemoryStoreOptions = {},
-): Store<S> | FencedStore<S> {
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
   // Single internal cell — `undefined` and `null` collapse to one
   // representation so the load site is branchless.
   let cell: S | null = initial ?? null;
@@ -80,7 +80,7 @@ export function memoryStore<S>(
   // matching `fileStore`'s absent stamp.
   let version = 0;
 
-  const base: Store<S> = {
+  const base: DeletableStore<S> = {
     async load(): Promise<unknown> {
       return cell;
     },
@@ -90,6 +90,12 @@ export function memoryStore<S>(
     },
     migrate(raw: unknown): S | null {
       return parse(raw);
+    },
+    async delete(): Promise<void> {
+      // Back to never-written: an empty cell at version `0`. The seed is gone
+      // too — `load()` answers what an unseeded store answers.
+      cell = null;
+      version = 0;
     },
   };
   if (options.fenced !== true) return base;

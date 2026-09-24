@@ -556,6 +556,25 @@ export interface FencedStore<S> extends Store<S> {
   saveFenced(state: S, expectedVersion: number): Promise<number>;
 }
 
+/**
+ * A `Store<S>` that can remove what it saved — how a host forgets a run.
+ *
+ * The same optional widening as {@link FencedStore} (ADR 0017): `Store<S>` is
+ * unchanged, so every external implementor still compiles. `fileStore`,
+ * `memoryStore` and `doStore` return one, fenced and unfenced alike.
+ *
+ * After `delete()`, `load()` returns what a never-saved store returns, so the
+ * next `run` boots fresh. The store stays dumb about who deletes: an unfenced
+ * `save` after `delete()` simply writes the state again. A fenced store drops
+ * its version with the state, so a run still live on it is refused with a
+ * {@link StoreConflictError} at its next save. Deleting under a live run is the
+ * host's mistake to avoid.
+ */
+export interface DeletableStore<S> extends Store<S> {
+  /** Remove the saved state. Idempotent: deleting nothing resolves. */
+  delete(): Promise<void>;
+}
+
 /** Narrow a `Store<S>` to a {@link FencedStore} — what `run` uses to decide. */
 export function isFencedStore<S>(store: Store<S>): store is FencedStore<S> {
   return "fenced" in store && store.fenced === true;

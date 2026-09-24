@@ -36,7 +36,7 @@
  * callers. They were dropped in favor of the gateway as the single transport.)
  */
 
-import type { FencedStore, Store } from "../index";
+import type { DeletableStore, FencedStore } from "../index";
 import { StoreConflictError } from "../index";
 
 // Durable pending-effects ledger (ADR 0003 primitive #1 — durable effects).
@@ -281,22 +281,25 @@ export interface DoStoreOptions<S> {
  * @param keyOrOptions - either the storage key (legacy positional form,
  *   defaults to `@@state`) or a {@link DoStoreOptions} bag carrying `key`
  *   and/or the `serialize` hook. A bare string is treated as `{ key }`.
+ *
+ * Either form is a `DeletableStore<S>`: `delete()` removes the state cell and
+ * its `<key>@@version` cell in one `storage.delete` call.
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => S | null,
   keyOrOptions: DoStoreOptions<S> & { readonly fenced: true },
-): FencedStore<S>;
+): FencedStore<S> & DeletableStore<S>;
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => S | null,
   keyOrOptions?: string | DoStoreOptions<S>,
-): Store<S>;
+): DeletableStore<S>;
 export function doStore<S>(
   storage: DurableObjectStorage,
   parse: (raw: unknown) => S | null,
   keyOrOptions: string | DoStoreOptions<S> = DEFAULT_STATE_KEY,
-): Store<S> | FencedStore<S> {
+): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
   // Normalize the legacy positional `key` string and the options bag to one
   // shape, so the body reads a single `key` + `serialize` regardless of which
   // call form the caller used. Backward-compatible: a string `keyOrOptions`
@@ -308,7 +311,7 @@ export function doStore<S>(
   const serialize: (state: S) => unknown =
     options.serialize ?? ((state: S): unknown => state);
   const versionKey = `${key}@@version`;
-  const base: Store<S> = {
+  const base: DeletableStore<S> = {
     async load(): Promise<unknown> {
       const raw = await storage.get<string>(key);
       if (raw === undefined || raw === null) return null;
@@ -325,6 +328,13 @@ export function doStore<S>(
     },
     migrate(raw: unknown): S | null {
       return parse(raw);
+    },
+    async delete(): Promise<void> {
+      // Both cells, fenced or not: a key written fenced can be opened unfenced,
+      // and a version left behind would outlive its state. One multi-key
+      // `delete` commits atomically, so no reader sees one cell without the
+      // other.
+      await storage.delete([key, versionKey]);
     },
   };
   if (options.fenced !== true) return base;
