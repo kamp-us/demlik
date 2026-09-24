@@ -8,12 +8,11 @@
  *   1. `doStore<S>(storage, parse, key?)` — `Store<S>` impl backed by
  *      `DurableObjectStorage`. JSON-stringifies on save, JSON-parses on load
  *      and returns `unknown` (invariant-8 boundary); the substrate then calls
- *      `migrate(raw)` (which forwards to `parse`) to turn it into `S | null`.
- *      Returns `null` (typed as `unknown`) when the key is absent. Structural
- *      JSON malformation throws at load — `run()`'s boot path surfaces that
- *      (PRD throw-semantics table: "store.load throw at boot → run() throws
- *      synchronously"). Shape mismatch is NOT a throw — `parse` returns
- *      `null` and the substrate boots fresh.
+ *      `migrate(raw)` (which forwards to `parse`) to turn it into `S`, `null`
+ *      or a refusal. Returns `null` (typed as `unknown`) when the key is
+ *      absent. Structural JSON malformation throws at load, and `run()`'s boot
+ *      path turns that into a `StoreRefusedError` on `ready`. A shape
+ *      mismatch is `parse`'s to answer with `refuse(reason)` (#316).
  *
  *   2. `deferredGateway` + `createAgentHost` (from `./host`) — THE transport for
  *      a DO-hosted agent. A `createAgent().toMachine()` machine owns exactly one
@@ -36,7 +35,7 @@
  * callers. They were dropped in favor of the gateway as the single transport.)
  */
 
-import type { DeletableStore, FencedStore } from "../index";
+import type { DeletableStore, FencedStore, Migrated } from "../index";
 import { StoreConflictError } from "../index";
 
 // Durable pending-effects ledger (ADR 0003 primitive #1 — durable effects).
@@ -277,7 +276,8 @@ export interface DoStoreOptions<S> {
  * value equal to `state`. Omit `serialize` and the Model must stay plain-JSON
  * (the `Record`-not-`Map` constraint the default imposes, unchanged).
  *
- * @param parse - boundary parse, the deserialize half (`unknown -> S | null`).
+ * @param parse - boundary parse, the deserialize half (`unknown -> S | null`,
+ *   or `refuse(reason)` for bytes it cannot read).
  * @param keyOrOptions - either the storage key (legacy positional form,
  *   defaults to `@@state`) or a {@link DoStoreOptions} bag carrying `key`
  *   and/or the `serialize` hook. A bare string is treated as `{ key }`.
@@ -287,17 +287,17 @@ export interface DoStoreOptions<S> {
  */
 export function doStore<S>(
   storage: DurableObjectStorage,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   keyOrOptions: DoStoreOptions<S> & { readonly fenced: true },
 ): FencedStore<S> & DeletableStore<S>;
 export function doStore<S>(
   storage: DurableObjectStorage,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   keyOrOptions?: string | DoStoreOptions<S>,
 ): DeletableStore<S>;
 export function doStore<S>(
   storage: DurableObjectStorage,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   keyOrOptions: string | DoStoreOptions<S> = DEFAULT_STATE_KEY,
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
   // Normalize the legacy positional `key` string and the options bag to one
@@ -318,7 +318,7 @@ export function doStore<S>(
       // JSON.parse throws on malformed — propagate per PRD throw-semantics.
       // The decoded value is intentionally returned as `unknown`; the
       // substrate's `migrate` callback (forwarded from `parse`) is the
-      // boundary parse that turns it into `S | null`.
+      // boundary parse that turns it into `S`, `null` or a refusal.
       return JSON.parse(raw);
     },
     async save(state: S): Promise<void> {
@@ -326,7 +326,7 @@ export function doStore<S>(
       // hold a Map/Set) to a JSON-safe carrier before `JSON.stringify` (#182).
       await storage.put(key, JSON.stringify(serialize(state)));
     },
-    migrate(raw: unknown): S | null {
+    migrate(raw: unknown): Migrated<S> {
       return parse(raw);
     },
     async delete(): Promise<void> {

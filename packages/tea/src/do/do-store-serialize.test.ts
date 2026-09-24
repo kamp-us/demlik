@@ -11,6 +11,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { Refusal } from "../index";
 import { doStore } from "./index";
 
 // ── In-memory `DurableObjectStorage` fake (mirrors event-sourced-store.test). ──
@@ -84,6 +85,7 @@ describe("doStore — (de)serialize hook round-trips a Map Model (#182)", () => 
       serialize: serializeRoster,
     });
     const loaded = reader.migrate(await reader.load());
+    if (loaded instanceof Refusal) throw new Error(loaded.reason);
     expect(loaded).not.toBeNull();
     expect(loaded?.members).toBeInstanceOf(Map);
     expect(loaded?.members.get("a1")).toEqual({ name: "Aragorn" });

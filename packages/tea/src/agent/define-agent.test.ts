@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { type Cmd, DriveFailedError, replay, type Store } from "../index";
+import {
+  type Cmd,
+  DriveFailedError,
+  Refusal,
+  replay,
+  type Store,
+} from "../index";
 import { memoryJournal } from "../internal/journal";
 import { memoryStore } from "../mem";
 import { driveToDone, run } from "../promise";
@@ -1205,6 +1211,7 @@ describe("tool failures carry their tag into the conversation (#115)", () => {
     // Through the wire a Store is: serialize, keep, hand back, migrate.
     await store.save(JSON.parse(JSON.stringify(held)));
     const loaded = store.migrate(await store.load());
+    if (loaded instanceof Refusal) throw new Error(loaded.reason);
 
     expect(loaded?.conversation?.toolRecords).toEqual(records);
   });

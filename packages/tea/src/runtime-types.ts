@@ -9,6 +9,7 @@
  * `replay` (compose without running) and `tryInterpret` (Railway).
  */
 
+import { describeError } from "./describe-error";
 import type {
   AnyCmdDef,
   BuiltinSub,
@@ -497,13 +498,17 @@ export function definePort<T>(name: string): Port<T> {
 // everywhere else in the substrate. `load()` returning `unknown` makes the
 // substrate stop pretending.
 //
-// `migrate(raw)` is the boundary parse. Returns `S` on a recognized shape —
-// the substrate passes it to `init` as `loaded`. Returns `null` on any
-// unrecognized shape — the substrate passes `null` to `init`, fresh-boot
-// path. Must NOT throw: if a future shape is unrecognizable, returning
-// `null` boots clean from a known-good path. Throwing here would
-// indistinguishably collapse "storage corruption" and "schema migration not
-// yet written" — both are runtime decisions, not panics.
+// `migrate(raw)` is the boundary parse, with three answers:
+//   - `S` on a recognized shape — the substrate passes it to `init` as `loaded`;
+//   - `null` when nothing was saved — `init(null)`, the fresh-boot path;
+//   - `refuse(reason)` for saved bytes it cannot read (#316).
+//
+// A refusal stops `run`: `ready` rejects with a `StoreRefusedError` and nothing
+// is written, so the bytes stay exactly as they were. A throw from `load` or
+// `migrate` is read the same way. Booting fresh over bytes nobody could read
+// would overwrite them on the first save, so a buggy migration would wipe the
+// user's saved state for good. Whether it was corrupt storage or a migration
+// not yet written is the host's call to make, never a silent fresh start.
 //
 // Strengthens invariant 8 (the boundary parses; the core trusts) — the
 // substrate now enforces the parse instead of relying on every adapter
@@ -511,7 +516,61 @@ export function definePort<T>(name: string): Port<T> {
 export interface Store<S> {
   load(): Promise<unknown>;
   save(state: S): Promise<void>;
-  migrate(raw: unknown): S | null;
+  migrate(raw: unknown): Migrated<S>;
+}
+
+/**
+ * What `Store.migrate` answers: the parsed `S`, `null` when nothing was saved,
+ * or a {@link Refusal} for saved bytes it cannot read.
+ */
+export type Migrated<S> = S | null | Refusal;
+
+/**
+ * `migrate`'s answer for saved bytes it cannot read. Build one with
+ * {@link refuse}. A class, so no plain State object can pass for one.
+ */
+export class Refusal {
+  readonly _tag = "refusal" as const;
+  constructor(readonly reason: string) {}
+}
+
+/**
+ * Refuse saved bytes from `Store.migrate`. `run` then fails with a
+ * {@link StoreRefusedError} carrying `reason`, and writes nothing to the store.
+ *
+ * ```ts
+ * migrate: (raw) => {
+ *   if (raw === null) return null; // nothing saved: boot fresh
+ *   return isState(raw) ? raw : refuse("not a saved State");
+ * }
+ * ```
+ */
+export function refuse(reason: string): Refusal {
+  return new Refusal(reason);
+}
+
+/**
+ * `ready` rejects with this when the saved state could not be restored:
+ * `migrate` returned {@link refuse}, or `load` / `migrate` threw (that throw is
+ * the `cause`). The run never booted and wrote nothing, so the stored bytes are
+ * unchanged.
+ *
+ * A host that wants a "couldn't restore" view catches it and starts its own run
+ * with no store; tea has no placeholder mode.
+ */
+export class StoreRefusedError extends Error {
+  override readonly name = "StoreRefusedError";
+  readonly _tag = "store_refused" as const;
+  constructor(
+    readonly reason: string,
+    options?: { readonly cause?: unknown },
+  ) {
+    super(
+      `@demlik/tea: store refused — ${reason}. The saved state was not ` +
+        `restored and nothing was written.`,
+      options,
+    );
+  }
 }
 
 // === FencedStore: the same seam, with a second writer refused ===
@@ -647,23 +706,26 @@ export interface Schema<S> {
  * (job 2). `upcast` maps a recognized-but-OLD raw shape forward into the shape
  * the schema validates; it defaults to identity (no version migration yet).
  *
- * Never throws — a shape the schema rejects returns `null`, the substrate's
- * fresh-boot path, per the `Store.migrate` contract. An `upcast` that itself
- * throws on a corrupt blob is caught and collapses to `null` (same posture).
+ * Never throws. Nothing saved (`null` or `undefined`) returns `null`, the
+ * fresh-boot path. Saved bytes the schema rejects, or that make `upcast` throw,
+ * return a {@link refuse}, so `run` fails instead of booting fresh over them.
  */
 export function schemaMigrate<S>(
   schema: Schema<S>,
   upcast: (raw: unknown) => unknown = (raw) => raw,
-): (raw: unknown) => S | null {
-  return (raw: unknown): S | null => {
+): (raw: unknown) => Migrated<S> {
+  return (raw: unknown): Migrated<S> => {
+    if (raw === null || raw === undefined) return null;
     let migrated: unknown;
     try {
       migrated = upcast(raw);
-    } catch {
-      return null;
+    } catch (err) {
+      return refuse(`upcast threw on the saved state (${describeError(err)})`);
     }
     const parsed = schema.safeParse(migrated);
-    return parsed.success ? parsed.data : null;
+    return parsed.success
+      ? parsed.data
+      : refuse("the saved state does not match the schema");
   };
 }
 

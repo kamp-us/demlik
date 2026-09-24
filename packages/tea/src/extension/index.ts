@@ -13,7 +13,7 @@
  * abstract them here until the shape stabilizes across consumers.
  */
 
-import type { Store } from "../index";
+import type { Migrated, Store } from "../index";
 
 export type {
   BridgeClient,
@@ -79,7 +79,7 @@ const MALFORMED = "chromeStorageStore: stored value is not a string";
  */
 export function chromeStorageStore<S>(
   key: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   area: chrome.storage.StorageArea = chrome.storage.local,
 ): Store<S> {
   return {
@@ -92,13 +92,13 @@ export function chromeStorageStore<S>(
       // JSON.parse throws on malformed — propagate per @demlik/tea/do parity.
       // The decoded value is intentionally returned as `unknown`; the
       // substrate's `migrate` callback (forwarded from `parse`) is the
-      // boundary parse that turns it into `S | null`.
+      // boundary parse that turns it into `S`, `null` or a refusal.
       return JSON.parse(raw);
     },
     async save(state: S): Promise<void> {
       await area.set({ [key]: JSON.stringify(state) });
     },
-    migrate(raw: unknown): S | null {
+    migrate(raw: unknown): Migrated<S> {
       return parse(raw);
     },
   };

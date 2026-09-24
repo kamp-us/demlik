@@ -28,7 +28,7 @@
  * may pass an explicit `parse` to override.
  */
 
-import type { DeletableStore, FencedStore } from "../index";
+import type { DeletableStore, FencedStore, Migrated } from "../index";
 import { StoreConflictError } from "../index";
 
 /** Options for {@link memoryStore}. */
@@ -56,21 +56,21 @@ export interface MemoryStoreOptions {
  */
 export function memoryStore<S>(
   initial?: S | null,
-  parse?: (raw: unknown) => S | null,
+  parse?: (raw: unknown) => Migrated<S>,
 ): DeletableStore<S>;
 export function memoryStore<S>(
   initial: S | null | undefined,
-  parse: ((raw: unknown) => S | null) | undefined,
+  parse: ((raw: unknown) => Migrated<S>) | undefined,
   options: MemoryStoreOptions & { readonly fenced: true },
 ): FencedStore<S> & DeletableStore<S>;
 export function memoryStore<S>(
   initial?: S | null,
-  parse?: (raw: unknown) => S | null,
+  parse?: (raw: unknown) => Migrated<S>,
   options?: MemoryStoreOptions,
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function memoryStore<S>(
   initial?: S | null,
-  parse: (raw: unknown) => S | null = (raw) => raw as S | null,
+  parse: (raw: unknown) => Migrated<S> = (raw) => raw as S | null,
   options: MemoryStoreOptions = {},
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
   // Single internal cell — `undefined` and `null` collapse to one
@@ -88,7 +88,7 @@ export function memoryStore<S>(
       cell = state;
       version += 1;
     },
-    migrate(raw: unknown): S | null {
+    migrate(raw: unknown): Migrated<S> {
       return parse(raw);
     },
     async delete(): Promise<void> {

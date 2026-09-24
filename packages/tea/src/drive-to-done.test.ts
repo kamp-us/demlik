@@ -9,6 +9,7 @@ import {
   type Reducer,
   type Runtime,
   type Store,
+  StoreRefusedError,
   type Sub,
 } from "./index";
 import { memoryStore } from "./mem";
@@ -244,7 +245,8 @@ describe("driveToDone — typed rejections (#57)", () => {
   });
 
   it("a boot failure rejects with the boot error and still stops", async () => {
-    // A store whose `load` throws is the boot failure that surfaces on `ready`.
+    // A store whose `load` throws is the boot failure that surfaces on `ready`,
+    // as a refusal carrying the throw (#316).
     const boom = new Error("boot exploded");
     const store: Store<State> = {
       load: async () => {
@@ -262,9 +264,13 @@ describe("driveToDone — typed rejections (#57)", () => {
       }),
     );
 
-    await expect(
-      driveToDone(probe.handle, { type: "start" }, isDone),
-    ).rejects.toBe(boom);
+    const failure = await driveToDone(
+      probe.handle,
+      { type: "start" },
+      isDone,
+    ).catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(StoreRefusedError);
+    expect((failure as StoreRefusedError).cause).toBe(boom);
     expect(probe.stopped).toBe(true);
   });
 });

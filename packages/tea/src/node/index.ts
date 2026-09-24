@@ -53,7 +53,13 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
-import type { DeletableStore, Dispose, FencedStore, Sub } from "../index";
+import type {
+  DeletableStore,
+  Dispose,
+  FencedStore,
+  Migrated,
+  Sub,
+} from "../index";
 import { StoreConflictError } from "../index";
 import {
   type Journal,
@@ -88,21 +94,21 @@ import { dispatchIfPresent } from "../subs/types";
  */
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
 ): DeletableStore<S>;
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   options: FileStoreOptions & { readonly fenced: true },
 ): FencedStore<S> & DeletableStore<S>;
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   options?: FileStoreOptions,
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>);
 export function fileStore<S>(
   path: string,
-  parse: (raw: unknown) => S | null,
+  parse: (raw: unknown) => Migrated<S>,
   options: FileStoreOptions = {},
 ): DeletableStore<S> | (FencedStore<S> & DeletableStore<S>) {
   const base: DeletableStore<S> = {
@@ -133,7 +139,7 @@ export function fileStore<S>(
       await writeFile(tmp, JSON.stringify(state), "utf8");
       await rename(tmp, path);
     },
-    migrate(raw: unknown): S | null {
+    migrate(raw: unknown): Migrated<S> {
       return parse(raw);
     },
     async delete(): Promise<void> {

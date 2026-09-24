@@ -52,6 +52,7 @@ import {
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
 } from "../../runtime-types";
+import { restore } from "./restore";
 
 // === The extension points ===
 
@@ -603,7 +604,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // `getState()` is observable synchronously (what `useSyncExternalStore`
   // consumers need to render the first commit without a flicker); an `init`
   // throw leaves `run` itself. With a store, the read is the first thing boot
-  // awaits; a `load` or `migrate` throw rejects `ready`.
+  // awaits; saved state it cannot restore rejects `ready` with a
+  // `StoreRefusedError` before `init` runs, so nothing is saved over it.
   const storeless: Transition<S, C> | null =
     store === undefined ? config.init(null, config.ctx) : null;
   if (storeless !== null) state = storeless[0];
@@ -611,13 +613,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   async function boot(): Promise<void> {
     // Boundary parse (invariant 8): `store.load()` returns `unknown`;
     // `store.migrate(raw)` is the required parse — `S` on a recognized shape,
-    // `null` on an unrecognized one (boots fresh).
+    // `null` when nothing was saved (boots fresh), a refusal otherwise.
     const [initial, cmds] =
-      storeless ??
-      config.init(
-        (store as Store<S>).migrate(await (store as Store<S>).load()),
-        config.ctx,
-      );
+      storeless ?? config.init(await restore(store as Store<S>), config.ctx);
     await commit(initial, undefined, cmds);
   }
 
