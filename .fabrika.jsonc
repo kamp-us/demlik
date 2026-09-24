@@ -4,6 +4,10 @@
 	// deliberately not set — it only applies to a repo with zero workflows, so here it would be inert.
 	"ci": { "gateWorkflow": "build.yaml" },
 
+	// Who may declare a campaign or flip its state in ROADMAP.md. The same team that owns every
+	// governed path in CODEOWNERS; each author must still hold `write` on the repo at the moment.
+	"campaignAuthors": ["@kamp-us/control-plane"],
+
 	// The commands `fabrika build check --surface code` spawns in-tree; with none declared the verb
 	// refuses UNKNOWN (#63, #70). All three are `package.json` scripts CI runs first: `typecheck` is
 	// `tsc --noEmit`, `typecheck:test` covers the test tsconfig, `lint:worktree` is the alias of

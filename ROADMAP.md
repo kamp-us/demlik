@@ -25,6 +25,7 @@ the whole thing unreadable, so what a campaign covers goes in prose above it, no
 
 | Campaign | Milestone | State |
 |---|---|---|
+| Tuval on tea | #2 | paused |
 
 ## Dependencies
 
