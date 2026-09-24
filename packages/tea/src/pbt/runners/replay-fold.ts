@@ -58,10 +58,21 @@ export interface Step<S, M, C> {
  * @param msgs     The Msg sequence to fold.
  *
  * @example
- *   const { states, steps, finalState } = foldEvents(machine, ctx, null, [
- *     { type: "start" }, { type: "tick" }, { type: "stop" },
- *   ]);
- *   // steps[1] = { prev: { type: "counting", n: 0 }, msg: { type: "tick" }, ... }
+ * ```ts
+ * import type { Machine } from "@demlik/tea";
+ * import { foldEvents } from "@demlik/tea/pbt";
+ *
+ * type State = { type: "idle" } | { type: "counting"; n: number } | { type: "stopped" };
+ * type Msg = { type: "start" } | { type: "tick" } | { type: "stop" };
+ * interface Ctx { readonly tabId: number }
+ * declare const machine: Machine<State, Msg, never, never, Ctx>;
+ * declare const ctx: Ctx;
+ *
+ * const { states, steps, finalState } = foldEvents(machine, ctx, null, [
+ *   { type: "start" }, { type: "tick" }, { type: "stop" },
+ * ]);
+ * // steps[1] = { prev: { type: "counting", n: 0 }, msg: { type: "tick" }, ... }
+ * ```
  */
 export function foldEvents<
   S,

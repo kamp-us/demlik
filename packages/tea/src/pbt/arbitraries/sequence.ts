@@ -29,8 +29,16 @@ import type { Cmd, Machine, Sub } from "../../index";
  *   `auditing.ws:client:hello` cell on the first transition).
  *
  * @example
- *   arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 });
- *   arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }], maxLength: 20 });
+ * ```ts
+ * import { arbMsgSequence } from "@demlik/tea/pbt";
+ * import type * as fc from "fast-check";
+ *
+ * type Msg = { type: "ws:client:hello" } | { type: "tick" };
+ * declare const msgArb: fc.Arbitrary<Msg>;
+ *
+ * arbMsgSequence(msgArb, { minLength: 1, maxLength: 30 });
+ * arbMsgSequence(msgArb, { prefix: [{ type: "ws:client:hello" }], maxLength: 20 });
+ * ```
  */
 export function arbMsgSequence<M extends { type: string }>(
   msgArb: fc.Arbitrary<M>,

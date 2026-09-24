@@ -25,12 +25,13 @@ export function tsBlocksOf(markdown: string): string[] {
 }
 
 /** One ```ts block and the page line its body starts on. */
-interface Block {
+export interface Block {
   readonly body: string;
   readonly line: number;
 }
 
-function blocksOf(markdown: string): Block[] {
+/** Every fenced ```ts block on the page, with the line its body starts on. */
+export function blocksOf(markdown: string): Block[] {
   return [...markdown.matchAll(TS_BLOCK)].map((m) => ({
     body: m[1] ?? "",
     line: markdown.slice(0, m.index).split("\n").length + 1,

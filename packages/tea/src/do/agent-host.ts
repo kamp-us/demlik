@@ -187,20 +187,55 @@ export interface AgentHost<
  * issue #53 had every consumer re-write.
  *
  * @example
- *   const host = createAgentHost<Stage, Purpose, Outputs, ClientResult, SseEvent>({
- *     run, // from `@demlik/tea/promise`
- *     buildMachine: () => agent.toMachine<Ctx>({ toolInterpret }),
- *     store: doStore(storage, parse),
- *     ctx,
- *     toSseFrame: (e) =>
- *       e.type === "ToolSettled" ? { kind: "result", ...} :
- *       e.type === "TurnSettled" && e.turn.toolCalls.length === 0
- *         ? { kind: "verdict", verdict: e.turn.content } :
- *       e.type === "RunDone" ? { kind: "phase", phase: e.status.kind } : null,
- *   });
- *   // route:   return host.sse.open();
- *   // start:   await (await host.runtime()).dispatch({ type: "agent_start", ... });
- *   // test:    (await host.status()).kind === "suspended"
+ * ```ts
+ * import type { Interpret, Migrated } from "@demlik/tea";
+ * import type {
+ *   AgentKnob,
+ *   AgentMachineMsg,
+ *   AgentState,
+ *   AgentTurn,
+ *   ToolCall,
+ * } from "@demlik/tea/agent";
+ * import { createAgentHost, doStore } from "@demlik/tea/do";
+ * import { run } from "@demlik/tea/promise";
+ *
+ * type Stage = "plan" | "act";
+ * type Purpose = "plan_turn" | "act_turn";
+ * type Outputs = Record<Purpose, AgentTurn>;
+ * type ClientResult = string;
+ * type ToolCmd = { readonly type: "run_tool" } & ToolCall;
+ * type SseEvent =
+ *   | { kind: "result"; callId: string; result: ClientResult }
+ *   | { kind: "verdict"; verdict: string }
+ *   | { kind: "phase"; phase: string };
+ * interface Ctx { readonly apiKey: string }
+ * type S = AgentState<Stage, Purpose, Outputs, ClientResult>;
+ *
+ * // From `createAgent(...)`, and the interpret for its tool Cmd.
+ * declare const agent: AgentKnob<Stage, Purpose, Outputs, ClientResult, ToolCmd, false, false>;
+ * declare const toolInterpret: Interpret<AgentMachineMsg<Purpose, Outputs, ClientResult>, ToolCmd, Ctx>;
+ * declare const storage: DurableObjectStorage;
+ * declare const parse: (raw: unknown) => Migrated<S>;
+ * declare const ctx: Ctx;
+ *
+ * const host = createAgentHost({
+ *   run,
+ *   buildMachine: () => agent.toMachine<Ctx>({ toolInterpret }),
+ *   store: doStore(storage, parse),
+ *   ctx,
+ *   toSseFrame: (e): SseEvent | null =>
+ *     e.type === "ToolSettled" ? { kind: "result", callId: e.callId, result: e.result } :
+ *     e.type === "TurnSettled" && e.turn.toolCalls.length === 0
+ *       ? { kind: "verdict", verdict: e.turn.content } :
+ *     e.type === "RunDone" ? { kind: "phase", phase: e.status.kind } : null,
+ * });
+ * // route:
+ * const sseRoute = (): Response => host.sse.open();
+ * // start:
+ * await (await host.runtime()).dispatch({ type: "agent_start", runId: "run-1", at: Date.now() });
+ * // test:
+ * const suspended = (await host.status()).kind === "suspended";
+ * ```
  */
 export function createAgentHost<
   Stage,

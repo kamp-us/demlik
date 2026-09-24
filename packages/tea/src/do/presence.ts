@@ -232,10 +232,20 @@ export interface PresenceUpgrade {
  * via {@link registerHibernatableSocket}.
  *
  * @example
+ * ```ts
+ * import { acceptPresenceSocket, type PresenceCtx } from "@demlik/tea/do";
+ *
+ * declare const room: { snapshot(): unknown };
+ *
+ * class Lobby {
+ *   constructor(readonly ctx: PresenceCtx) {}
+ *
  *   async fetch(request: Request): Promise<Response> {
  *     if (request.headers.get("Upgrade") !== "websocket") {
  *       return new Response("expected a websocket upgrade", { status: 426 });
  *     }
+ *     const playerId = new URL(request.url).searchParams.get("player");
+ *     const welcome = { type: "welcome", playerId };
  *     const { server, response } = acceptPresenceSocket(this.ctx, {
  *       attachment: { playerId },
  *     });
@@ -243,6 +253,8 @@ export interface PresenceUpgrade {
  *     server.send(JSON.stringify(room.snapshot()));
  *     return response;
  *   }
+ * }
+ * ```
  */
 export function acceptPresenceSocket<A>(
   ctx: PresenceCtx,

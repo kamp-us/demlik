@@ -60,11 +60,19 @@ export type Branded<T> = T & { readonly [ReducerBrand]: true };
  * site. Strengthens invariant 7 (identity is explicit).
  *
  * @example
+ * ```ts
+ * import { absurd } from "@demlik/tea";
+ *
+ * type Msg = { type: "a" } | { type: "b" };
+ *
+ * function label(msg: Msg): string {
  *   switch (msg.type) {
- *     case "a": return ...;
- *     case "b": return ...;
+ *     case "a": return "A";
+ *     case "b": return "B";
  *     default: return absurd(msg);  // compile error if a "c" is added
  *   }
+ * }
+ * ```
  */
 export function absurd(x: never): never {
   throw new Error(`unreachable: ${JSON.stringify(x)}`);

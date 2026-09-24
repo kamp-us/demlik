@@ -32,11 +32,20 @@ import * as fc from "fast-check";
  * (same load-bearing discipline as `Reducer<S, M, C>` in the substrate).
  *
  * @example
- *   type Msg = { type: "start" } | { type: "tick"; now: number };
- *   const table: MsgArbitraryTable<Msg> = {
- *     start: arbConstantMsg("start"),
- *     tick: arbRecordMsg("tick", { now: fc.integer({ min: 0 }) }),
- *   };
+ * ```ts
+ * import {
+ *   arbConstantMsg,
+ *   arbRecordMsg,
+ *   type MsgArbitraryTable,
+ * } from "@demlik/tea/pbt";
+ * import * as fc from "fast-check";
+ *
+ * type Msg = { type: "start" } | { type: "tick"; now: number };
+ * const table: MsgArbitraryTable<Msg> = {
+ *   start: arbConstantMsg("start"),
+ *   tick: arbRecordMsg("tick", { now: fc.integer({ min: 0 }) }),
+ * };
+ * ```
  */
 export type MsgArbitraryTable<M extends { type: string }> = {
   [K in M["type"]]: fc.Arbitrary<Extract<M, { type: K }>>;
@@ -52,11 +61,17 @@ export type MsgArbitraryTable<M extends { type: string }> = {
  *                Variants without an explicit weight default to 1.
  *
  * @example
- *   const msgArb = arbMsg<Msg>({
- *     start: arbConstantMsg("start"),
- *     tick:  arbRecordMsg("tick", { now: fc.integer() }),
- *     stop:  arbConstantMsg("stop"),
- *   }, { weights: { tick: 5, start: 1, stop: 1 } });
+ * ```ts
+ * import { arbConstantMsg, arbMsg, arbRecordMsg } from "@demlik/tea/pbt";
+ * import * as fc from "fast-check";
+ *
+ * type Msg = { type: "start" } | { type: "tick"; now: number } | { type: "stop" };
+ * const msgArb = arbMsg<Msg>({
+ *   start: arbConstantMsg("start"),
+ *   tick:  arbRecordMsg("tick", { now: fc.integer() }),
+ *   stop:  arbConstantMsg("stop"),
+ * }, { weights: { tick: 5, start: 1, stop: 1 } });
+ * ```
  */
 export function arbMsg<M extends { type: string }>(
   table: MsgArbitraryTable<M>,
@@ -79,7 +94,12 @@ export function arbMsg<M extends { type: string }>(
  * `fc.constant({ type })` that narrows the result to `{ type: T }` literal.
  *
  * @example
- *   arbConstantMsg("stop") // fc.Arbitrary<{ type: "stop" }>
+ * ```ts
+ * import { arbConstantMsg } from "@demlik/tea/pbt";
+ * import type * as fc from "fast-check";
+ *
+ * const stop: fc.Arbitrary<{ type: "stop" }> = arbConstantMsg("stop");
+ * ```
  */
 export function arbConstantMsg<T extends string>(
   type: T,
@@ -93,8 +113,13 @@ export function arbConstantMsg<T extends string>(
  * discriminator literal and combines with the per-field arbitraries.
  *
  * @example
- *   arbRecordMsg("tick", { now: fc.integer({ min: 0 }) })
- *   // fc.Arbitrary<{ type: "tick"; now: number }>
+ * ```ts
+ * import { arbRecordMsg } from "@demlik/tea/pbt";
+ * import * as fc from "fast-check";
+ *
+ * const tick: fc.Arbitrary<{ type: "tick"; now: number }> =
+ *   arbRecordMsg("tick", { now: fc.integer({ min: 0 }) });
+ * ```
  */
 export function arbRecordMsg<T extends string, R>(
   type: T,
