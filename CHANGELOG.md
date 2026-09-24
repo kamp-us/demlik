@@ -1,5 +1,51 @@
 # @demlik/tea
 
+## 0.17.0
+
+### Minor Changes
+
+- caced3c: **Breaking (stable tier, `@demlik/tea/testing`):** `assertWrapperFaithful` is
+  removed, with its types `AssertWrapperFaithfulOpts`, `InterceptingOpt` and
+  `WrapperModel`. It checked `withX` machine wrappers, and ADR 0022 removed every
+  one of them, so nothing is left for it to check.
+
+  Its clock/RNG half lives on as `expectReplayDeterministic`, the successor for
+  any machine, wrapped or not. It replays a Msg list under two different global
+  wall-clocks and RNG seeds and fails if the final state or the emitted Cmds
+  differ, which is what happens when `init` or `update` reads `Date.now()` or
+  `Math.random()`.
+
+  ```ts
+  // before
+  assertWrapperFaithful(wired.machine, () => withX(wired, cfg).machine, {
+    msgs,
+    ctx,
+  });
+
+  // after
+  import { expectReplayDeterministic } from "@demlik/tea/testing";
+  expectReplayDeterministic(machine, { msgs, ctx });
+  ```
+
+  The other wrapper checks (base behaviour unchanged, wrapper decisions in the
+  log, `$`-slice JSON round-trip) have no successor: there is no wrapper tier
+  left to hold to them.
+
+### Patch Changes
+
+- 19a21fd: On the Promise engine, a `Cmd.define`d handler that `dispatch`es its own
+  `<name>_ok` or `<name>_err` Msg now has that Msg dropped, and an
+  `OutcomeContractError` goes to `onError`, as ADR 0021 requires: only the engine
+  mints a defined Cmd's outcome Msg. Any other Msg the handler dispatches is still
+  delivered, and hand-written Cmds are unaffected (#298).
+- 19a21fd: A `Cmd.define`d handler on a machine whose ctx is `undefined` no longer gets a
+  ctx typed `never`. `ok`, `err` and `emit` are callable again without a cast, on
+  plain and detached handlers and on agent tool handlers alike (#296).
+- 05b206a: The optional `vitest` peer now accepts `^4` and `^5` beside `^2` and `^3`
+  (#293). npm 11 enforces optional peer ranges, so a project on vitest 4 or 5
+  got `ERESOLVE` when installing `@demlik/tea` next to it. tea's own suite,
+  including `@demlik/tea/testing`, now runs under vitest 5.
+
 ## 0.16.0
 
 ### Minor Changes
@@ -518,17 +564,13 @@ ms, msg }) }` dispatches `msg` after `ms` with no runner. A `subscribe.timer`
     `defineManagedResource` and `fromTransport` take the Sub type as their first
     type parameter (`name`) and return `{ type, depKeyed(when), subscribe, … }`.
     `ManagedResourceSub` / `TransportSub` are `Sub<N, TKey>`. Removed, each
-    with what replaces it:
-    - `.sub(key)` → `.depKeyed(when)`. Put the entry in `subs` and move the
-      `if` that picked the key into `when(state)`, returning `null` for off.
-    - `.subIdFor(key)` → `subIdOf(battery.type, key)`. The id is derived from
-      the type and the key now.
-    - `defineManagedResource`'s `.gated(when)` and `GatedManagedResource` →
-      `.depKeyed(when)`. It takes the same `when` and gives a `subs` entry.
-    - `combineManagedResources` and `CombinedManagedResources` → nothing to
-      combine. Each battery's `name` is its own Sub type, so list each
-      battery's `.depKeyed(when)` in `subs` and put each `.subscribe` in the
-      `subscribe` table under its `type`: `subscribe: { [a.type]: a.subscribe,
+    with what replaces it: - `.sub(key)` → `.depKeyed(when)`. Put the entry in `subs` and move the
+    `if` that picked the key into `when(state)`, returning `null` for off. - `.subIdFor(key)` → `subIdOf(battery.type, key)`. The id is derived from
+    the type and the key now. - `defineManagedResource`'s `.gated(when)` and `GatedManagedResource` →
+    `.depKeyed(when)`. It takes the same `when` and gives a `subs` entry. - `combineManagedResources` and `CombinedManagedResources` → nothing to
+    combine. Each battery's `name` is its own Sub type, so list each
+    battery's `.depKeyed(when)` in `subs` and put each `.subscribe` in the
+    `subscribe` table under its `type`: `subscribe: { [a.type]: a.subscribe,
 [b.type]: b.subscribe }`.
   - `./node`: `NodeWsSub` / `NodeTimerSub` / `NodeSignalSub` carry plain deps
     (`NodeWsDeps { key, url }`, `NodeTimerDeps`, `NodeSignalDeps`). The ws
