@@ -13,10 +13,10 @@ import type {
   AnyCmdDef,
   BuiltinSub,
   CmdOf,
+  HandlerCtx,
   InterpretDetached,
   Machine,
   Port,
-  PortEmitter,
   Reducer,
   RunHandlers,
   Settled,
@@ -1252,7 +1252,7 @@ export function wrapDetached<
   handler: InterpretDetached<C, Allowed, Ctx>,
 ): (
   cmd: C,
-  ctx: Ctx & PortEmitter,
+  ctx: HandlerCtx<Ctx>,
   dispatch?: (msg: M) => void,
 ) => Promise<void> {
   // The injected `dispatch` accepts the full `M`. The handler's signature only
