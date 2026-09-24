@@ -9,8 +9,17 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { burst, burstAnswer } from "../__fixtures__/engine-conformance";
-import { type Cmd, defineMachine, replay } from "../index";
+import { z } from "zod";
+import { burst, burstAnswer } from "../../__fixtures__/engine-conformance";
+import {
+  Cmd,
+  defineMachine,
+  type Interpret,
+  OutcomeContractError,
+  replay,
+  type Settled,
+} from "../../index";
+import { cmdEdgeOf } from "../../pure/core";
 import {
   DEFAULT_MAX_ROUNDS,
   DriveNoHandlerError,
@@ -18,7 +27,7 @@ import {
   type DriveTraceEntry,
   drive,
   driveTraceOf,
-} from "./drive";
+} from ".";
 
 // --- a counting machine that settles ----------------------------------------
 //
@@ -396,5 +405,171 @@ describe("drive", () => {
     expect((failure as DriveNoHandlerError<CountMsg, WorkCmd>).cmdType).toBe(
       "work",
     );
+  });
+});
+
+// --- the dispatch half of the `Cmd.define` contract (#304) ------------------
+//
+// The Promise engine refuses a defined Cmd's handler dispatching a `_ok` /
+// `_err` it built itself (ADR 0021, #302). `drive` holds a handler to the same
+// rule, so a test cannot go green on a program `run` rejects.
+
+describe("drive and a defined handler's own dispatch (#304)", () => {
+  const fetch = Cmd.define("fetch", {
+    input: z.object({ url: z.string() }),
+    ok: z.object({ body: z.string() }),
+    err: ["timeout"],
+  });
+
+  type FetchCmd = ReturnType<typeof fetch>;
+  type PokeCmd = { readonly type: "poke" };
+  type DMsg =
+    | { readonly type: "go"; readonly url: string }
+    | { readonly type: "kick" }
+    | { readonly type: "progress"; readonly note: string }
+    | { readonly type: "poke_ok" }
+    | Settled<typeof fetch>;
+
+  interface Seen {
+    readonly seen: readonly string[];
+    readonly body: string | null;
+  }
+
+  const note = (s: Seen, type: string): Seen => ({
+    ...s,
+    seen: [...s.seen, type],
+  });
+
+  const dispatching = defineMachine({
+    types: {
+      model: {} as Seen,
+      msg: {} as DMsg,
+      cmd: {} as FetchCmd | PokeCmd,
+      ctx: undefined,
+    },
+    cmds: [fetch],
+    init: (loaded) => [loaded ?? { seen: [], body: null }, []],
+    update: {
+      go: (s, m) => [note(s, m.type), [fetch({ url: m.url })]],
+      kick: (s, m) => [note(s, m.type), [{ type: "poke" as const }]],
+      progress: (s, m) => [note(s, m.type), []],
+      poke_ok: (s, m) => [note(s, m.type), []],
+      fetch_ok: (s, m) => [{ ...note(s, m.type), body: m.value.body }, []],
+      fetch_err: (s, m) => [note(s, m.type), []],
+    },
+  });
+
+  type Handlers = Interpret<DMsg, FetchCmd | PokeCmd, undefined>;
+  const noPoke: Handlers["poke"] = async () => undefined;
+  const start: Seen = { seen: [], body: null };
+
+  it.each([
+    ["fetch_ok", (cmd: FetchCmd) => fetch.ok(cmd, { body: "self-minted" })],
+    ["fetch_err", (cmd: FetchCmd) => fetch.err(cmd, { _tag: "timeout" })],
+  ] as const)("throws OutcomeContractError when a defined handler dispatches its own `%s`", async (own, mintOwn) => {
+    const handlers: Handlers = {
+      fetch: async (cmd, _ctx, dispatch) => {
+        dispatch?.(mintOwn(cmd));
+      },
+      poke: noPoke,
+    };
+
+    const failure = await drive(
+      dispatching,
+      start,
+      { type: "go", url: "/a" },
+      handlers,
+    ).catch((err: unknown) => err);
+
+    expect(failure).toBeInstanceOf(OutcomeContractError);
+    expect(failure).toMatchObject({ cmdType: "fetch" });
+    expect((failure as Error).message).toContain(
+      `dispatched its own "${own}" Msg`,
+    );
+    expect(driveTraceOf(failure)).toEqual([
+      { kind: "msg", msg: { type: "go", url: "/a" } },
+      { kind: "cmd", cmd: { type: "fetch", url: "/a" } },
+    ]);
+  });
+
+  it("refuses it even when the handler catches what its dispatch threw", async () => {
+    const handlers: Handlers = {
+      fetch: async (cmd, _ctx, dispatch) => {
+        try {
+          dispatch?.(fetch.ok(cmd, { body: "self-minted" }));
+        } catch {
+          // Swallowing it here must not smuggle the violation past drive.
+        }
+      },
+      poke: noPoke,
+    };
+
+    await expect(
+      drive(dispatching, start, { type: "go", url: "/a" }, handlers),
+    ).rejects.toBeInstanceOf(OutcomeContractError);
+  });
+
+  it("passes a settle the engine's edge minted, dispatched through `cmdEdgeOf(ctx)`", async () => {
+    const handlers: Handlers = {
+      fetch: async (cmd, ctx, dispatch) => {
+        dispatch?.(
+          cmdEdgeOf(ctx)(cmd, ctx.ok({ body: "via edge" })) as Settled<
+            typeof fetch
+          >,
+        );
+      },
+      poke: noPoke,
+    };
+
+    const { state } = await drive(
+      dispatching,
+      start,
+      { type: "go", url: "/a" },
+      handlers,
+      { clock: () => 5 },
+    );
+
+    expect(state).toEqual({ seen: ["go", "fetch_ok"], body: "via edge" });
+  });
+
+  it("passes a defined handler's other Msgs", async () => {
+    const handlers: Handlers = {
+      fetch: async (_cmd, { ok }, dispatch) => {
+        dispatch?.({ type: "progress", note: "half way" });
+        return ok({ body: "done" });
+      },
+      poke: noPoke,
+    };
+
+    const { state } = await drive(
+      dispatching,
+      start,
+      { type: "go", url: "/a" },
+      handlers,
+    );
+
+    expect(state).toEqual({
+      seen: ["go", "progress", "fetch_ok"],
+      body: "done",
+    });
+  });
+
+  it("lets a hand-written Cmd's handler dispatch any Msg, `_ok`-named or not", async () => {
+    const handlers: Handlers = {
+      fetch: async (_cmd, { ok }) => ok({ body: "unused" }),
+      poke: async (_cmd, _ctx, dispatch) => {
+        dispatch?.({ type: "poke_ok" });
+        dispatch?.({ type: "progress", note: "poked" });
+      },
+    };
+
+    const { state } = await drive(
+      dispatching,
+      start,
+      { type: "kick" },
+      handlers,
+    );
+
+    expect(state.seen).toEqual(["kick", "poke_ok", "progress"]);
   });
 });

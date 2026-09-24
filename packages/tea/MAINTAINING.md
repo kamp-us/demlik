@@ -34,8 +34,10 @@ export is not done until it has a row here. The list itself is pinned by
 |---|---|---|
 | `.` | stable | the neutral core: defineMachine / Cmd / replay / supervision / ports — plus the runtime-free surface, the Sub factories, and the composition seam (`liftSlice` / `readInOrder`) both `./resilience` and `./jev` import. It imports no engine |
 | `./promise` | stable | the Promise engine: `run` and `driveToDone`, moved off `.` |
-| `./effect` | experimental | the Effect engine: `run` with Effect handlers, Stream sub runners, Layers and interruption, against Effect v4 RC; `effect` is an optional peer, and only this entry may import it |
-| `./testing` | stable | testing infra is kernel |
+| `./effect` | experimental | the Effect engine: `run` with Effect handlers, Stream sub runners, Layers and interruption, against Effect v4 RC; `effect` is an optional peer, and only this entry and `./testing/effect` may import it |
+| `./testing` | stable | testing infra is kernel: the engine-neutral helpers (`expectFinalState`, `step`, `expectReplayDeterministic`, …); it imports no engine |
+| `./testing/promise` | stable | `drive` for the Promise engine, moved off `./testing` (#321) |
+| `./testing/effect` | experimental | `drive` for the Effect engine: Effect handlers, Layers for `R`, Subs; graduates with `./effect`, and is the one entry besides it that may import `effect` |
 | `./pbt` | stable | arbitraries + runners, one door |
 | `./do` | stable | durable/host seam |
 | `./react` | stable | |
