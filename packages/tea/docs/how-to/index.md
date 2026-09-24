@@ -19,6 +19,10 @@ what you are trying to do, and it names the subpath you need.
 - [Run a machine on the Effect engine](./run-on-the-effect-engine.md) — run the
   same machine file with `run` from `@demlik/tea/effect`: Effect handlers,
   services from your Layers, and interruption when the scope closes.
+- [Run many machines under one parent](./run-many-machines.md) — start each
+  child with the Effect engine's `run` in a `Scope.fork` of the parent's scope,
+  keep your own table of live children, and tell the parent when one stops,
+  with no supervisor from tea.
 - [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
   `Store` so the Model survives a Durable Object eviction and resumes on the next
   boot.
