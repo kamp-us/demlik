@@ -36,10 +36,13 @@ import { builtinRunners } from "./builtin-runners";
 //
 // Save-then-effects ordering is structural: every transition mutates state,
 // awaits `store.save(newState)`, then reconciles subscriptions, then runs
-// `interpret` for emitted cmds, then fires external listeners. A throw in any
-// effect phase leaves the persisted state ahead of the host's belief about
-// what executed — the Railway discipline (`tryInterpret` in handlers) makes
-// that safe in practice.
+// `interpret` for emitted cmds, then fires external listeners. The listeners
+// fire even when a Cmd handler throws: the dispatch rejects with the handler's
+// error, and every listener, observer, `on` handler and `done()` waiter still
+// hears the State that was installed and saved (#311). A throw in any effect
+// phase leaves the persisted state ahead of the host's belief about what
+// executed — the Railway discipline (`tryInterpret` in handlers) makes that
+// safe in practice.
 export function run<
   S,
   M extends { type: string },

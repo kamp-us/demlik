@@ -21,7 +21,8 @@
  *                    handler returned to the Msg to dispatch, if any.
  *   3. `store`     — a wrapper over the store the caller handed `run`.
  *   4. `commit`    — called after a transition's effects, with the Msg and the
- *                    committed State. Boot passes `undefined` for the Msg.
+ *                    committed State, even when a Cmd handler threw. Boot
+ *                    passes `undefined` for the Msg.
  *   5. `ctx`       — keys added to the ctx every Cmd handler receives, so a
  *                    handler that runs another handler inside its own can reach
  *                    the same machinery the loop applies to it.
@@ -193,7 +194,7 @@ function defaultOnError(error: unknown, _context: RuntimeErrorContext): void {
  * Start the loop. Returns the handle synchronously; boot runs as the FIRST entry
  * on the serial tail. Save-then-effects ordering is structural: every
  * transition installs State, awaits the save, reconciles Subs, runs the Cmds,
- * then calls the commit callbacks.
+ * then calls the commit callbacks — even when a Cmd handler throws.
  */
 export function startLoop<S, M extends { type: string }, C, Ctx>(
   config: LoopConfig<S, M, C, Ctx>,
@@ -506,6 +507,11 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // Install State, then save → reconcile subs → run Cmds → commit callbacks.
   // Save-before-effects is the hard ordering; tests pin it. Boot and every
   // transition end here; boot passes no Msg.
+  //
+  // The commit callbacks run in a `finally`: a Cmd handler that throws still
+  // rejects the dispatch with its own error, but the State it left installed
+  // and saved still reaches every listener, observer, `on` handler, `done()`
+  // waiter and the telemetry sink (#311).
   async function commit(
     next: S,
     msg: M | undefined,
@@ -514,8 +520,11 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     state = next;
     if (store) await store.save(next);
     reconcileSubs();
-    await runCmds(cmds);
-    for (const callback of commitCallbacks) callback(msg, next);
+    try {
+      await runCmds(cmds);
+    } finally {
+      for (const callback of commitCallbacks) callback(msg, next);
+    }
   }
 
   // One full transition. A `null` from the fold is no transition at all, and

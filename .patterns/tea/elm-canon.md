@@ -1030,6 +1030,9 @@ the substrate guarantee:
 - Throws from `save` propagate AFTER in-memory state advances (PRD row:
   "state advanced; persisted state did not").
 - Throws from `reconcile` or `interpret` propagate AFTER save succeeded.
+- A throw from `interpret` still fires the commit callbacks (listeners,
+  observers, `on`, `done()`, telemetry) for the saved State before the
+  dispatch rejects with the handler's error.
 - A single failing dispatch does NOT poison the tail (the rejection is
   swallowed on the tail; only the original caller's promise rejects).
 
