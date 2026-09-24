@@ -21,6 +21,7 @@ import type {
   Awaiting,
   Conversation,
   ToolCall,
+  TurnUsage,
 } from "./types";
 
 /** The narrowed `awaiting` variant for a given `kind`. */
@@ -29,13 +30,81 @@ export type AwaitingOf<K extends Awaiting["kind"]> = Extract<
   { kind: K }
 >;
 
-/** A fresh conversation entering the agentic loop — awaiting the first brain call. */
-export function freshConversation<R>(): Conversation<R> {
+/** The running total before any turn has reported usage. */
+export const NO_USAGE: TurnUsage = { inputTokens: 0, outputTokens: 0 };
+
+/**
+ * A fresh conversation entering the agentic loop — awaiting the first brain
+ * call. `usage` is the run's total so far: zero at `agent_start`, the previous
+ * stage's total when a stage advance seeds the next one (#332).
+ */
+export function freshConversation<R>(
+  usage: TurnUsage = NO_USAGE,
+): Conversation<R> {
   return {
     turns: [],
     toolRecords: [],
     turnCount: 0,
     awaiting: { kind: "llm" },
+    usage,
+    contextTokens: null,
+  };
+}
+
+/**
+ * Sum two usage readings field by field. An optional count rides the sum only
+ * when at least one side reported it, so a provider that never reports
+ * reasoning tokens never grows a `reasoningTokens: 0`. PURE.
+ */
+export function addUsage(total: TurnUsage, turn: TurnUsage): TurnUsage {
+  const optional = (key: "reasoningTokens" | "cachedInputTokens") =>
+    total[key] === undefined && turn[key] === undefined
+      ? {}
+      : { [key]: (total[key] ?? 0) + (turn[key] ?? 0) };
+  return {
+    inputTokens: total.inputTokens + turn.inputTokens,
+    outputTokens: total.outputTokens + turn.outputTokens,
+    ...optional("reasoningTokens"),
+    ...optional("cachedInputTokens"),
+  };
+}
+
+/**
+ * Fold one settled brain turn's usage into the conversation's two readings: add
+ * it to the running total, and make it the latest context size. A turn that
+ * reported none leaves the total alone and CLEARS the context size — the size
+ * the previous turn reported no longer describes the transcript, and a stale
+ * reading is exactly what must never fire a size-based fold. PURE.
+ */
+export function withTurnUsage<R>(
+  conv: Conversation<R>,
+  turn: AgentTurn,
+): Conversation<R> {
+  const { usage } = turn;
+  if (usage === undefined) return { ...conv, contextTokens: null };
+  return {
+    ...conv,
+    usage: addUsage(conv.usage, usage),
+    contextTokens: usage.inputTokens + usage.outputTokens,
+  };
+}
+
+/**
+ * Fill in the usage readings a conversation persisted before #332 lacks — a
+ * zero total and no context size. The rehydration guard `agent_boot` runs, so
+ * a 0.17.x Model resumes with its total starting from zero rather than a
+ * `stopWhen` reading `undefined`. Identity on a conversation that has them.
+ * PURE.
+ */
+export function withUsageDefaults<R>(conv: Conversation<R>): Conversation<R> {
+  const persisted = conv as Partial<Conversation<R>>;
+  if (persisted.usage !== undefined && persisted.contextTokens !== undefined) {
+    return conv;
+  }
+  return {
+    ...conv,
+    usage: persisted.usage ?? NO_USAGE,
+    contextTokens: persisted.contextTokens ?? null,
   };
 }
 
@@ -69,6 +138,11 @@ export function dedupeByCallId(
  * `folding` turns stood, so survivors shift left by `folding` then right by 1).
  * `turnCount` is UNCHANGED — compaction is not a model round-trip (decision C).
  *
+ * The usage total is UNCHANGED too: the folded turns were still paid for. The
+ * context size is CLEARED, because it measured the transcript before the fold;
+ * left standing it would fire a size-based fold again before the next brain
+ * turn could report what the shrunk transcript costs (#332).
+ *
  * Caller guarantees `2 <= folding <= turns.length` (the trigger clamps + skips
  * `< 2`), so the result is strictly shorter (`length - folding + 1`).
  */
@@ -87,6 +161,7 @@ export function foldSummary<R>(
     turns: [summaryTurn, ...survivingTurns],
     toolRecords: survivingRecords,
     awaiting: { kind: "llm" },
+    contextTokens: null,
   };
 }
 

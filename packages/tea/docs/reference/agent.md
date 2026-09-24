@@ -19,7 +19,7 @@ These are the ones to read first:
 | `DefinedAgentState` | Type the Model a defined agent persists — what a `Store` reads and writes. |
 | `createAgent` | Drop below the lid, once you need to walk a stage pipeline `defineAgent` does not express. |
 
-## Exports (145)
+## Exports (147)
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ These are the ones to read first:
 | `deadlineSub` | Function | Build a deadline literal. |
 | `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `defineAgent` | Function | Define an agent from a model, the tools it may call and its instructions, and get back `run(input)` — a promise of the finished state — plus `machine(input)` for driving the same run yourself, which is the entry point a newcomer picks, `createAgent` being the layer underneath that you drop to only to walk a stage pipeline of your own. |
-| `DefineAgentCompaction` | Interface | The lid's compaction budget: the two numbers that say when a transcript is too long and how much of it survives the fold. |
+| `DefineAgentCompaction` | Type | The lid's compaction budget: when a transcript is too long, and how much of it survives the fold. |
 | `DefineAgentConfig` | Interface | What `defineAgent` takes: the model, the tools and the instructions, plus the four optional guards that stop a run — `maxTurns`, `deadlineMs`, `maxElapsedMs` and `stopWhen` — and the one that keeps a run going, `retry`, the brain call's backoff ladder. |
 | `DefinedAgent` | Interface | What `defineAgent` returns. |
 | `DefinedAgentCmd` | Type | The Cmd union a defined agent's machine emits — one interpret cell per member. |
@@ -96,6 +96,7 @@ These are the ones to read first:
 | `isCompactionSummary` | Function | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
 | `isReservedToolName` | Function | Whether `name` is one `tool()` refuses — the set `ReservedToolName` types. |
 | `isStreamingModel` | Function | Whether a model port wants the ModelStream — read off its declared arity, which is the mark JavaScript already carries. |
+| `isTurnUsage` | Function | Narrow an unknown to a TurnUsage — the two required counts present, and each optional one either absent or a count too. |
 | `LidPurpose` | Type | The one purpose a `defineAgent` agent runs. |
 | `liftAgent` | Function | Lift an agent result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.agent`. |
 | `Llm` | Interface | The minimal chat-model contract every model the handler talks to must satisfy — the seed's `InjectableChatModel`, trimmed to the one operation the brain call drives for brain-only stages: `withStructuredOutput(schema)` → a runnable whose `invoke(messages)` resolves to a typed object matching `schema`. |
@@ -166,5 +167,6 @@ These are the ones to read first:
 | `TranscriptSnapshot` | Interface | What a collector holds right now — a plain, immutable read. |
 | `TranscriptToolResult` | Interface | One tool call the run settled OK, as the transcript keeps it — the `callId` and the result, which is exactly what the `ToolSettled` event carries. |
 | `TurnChunk` | Interface | One partial piece of a turn the model is still producing — a token delta, as the provider emitted it. |
+| `TurnUsage` | Interface | The token usage a provider reported for one model call, in the provider's own counts. |
 | `WiredToolCmd` | Type | `ToolCmd<T>` as `toMachine` reads it: `never` for `T = never` — the "no router" reading it defaults to — so the router-owned `tool_rejected` arm does not leak into a machine that wired no router. |
 | `WiredToolMsg` | Type | `ToolMsg<T>` as `toMachine` / `agentEvents` read it — see `WiredToolCmd`. |

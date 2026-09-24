@@ -64,6 +64,14 @@ export interface ToolCall {
  * which must be JSON-serializable like the rest of the Model. A compaction fold
  * (ADR 0004) summarises turns into text, so it drops the slot with the turns it
  * summarises. Optional and additive: a persisted turn without it still parses.
+ *
+ * `usage` is what the provider REPORTED this call cost (#332) — never an
+ * estimate tea computes. It is part of the brain call's journaled outcome, like
+ * `content`, so a replay folds the same numbers (ADR 0004's "no token estimate
+ * enters the Model" still holds). The conversation sums it into a running total
+ * and reads the latest context size off it. Optional and additive: a turn
+ * whose adapter maps no usage, or one persisted before the field existed,
+ * parses and simply counts for nothing.
  */
 export interface AgentTurn {
   /** Free-text narration the model produced this turn (folded into the conversation). */
@@ -72,6 +80,54 @@ export interface AgentTurn {
   readonly toolCalls: readonly ToolCall[];
   /** Provider-opaque blocks to echo back verbatim next turn. tea never reads it. */
   readonly provider?: unknown;
+  /** The token usage the provider reported for this call. Omit → none reported. */
+  readonly usage?: TurnUsage;
+}
+
+/**
+ * The token usage a provider reported for one model call, in the provider's own
+ * counts. Every field is a non-negative integer; `agentTurnSchema` refuses
+ * anything else, so a malformed report is the brain call's `llm` failure rather
+ * than a `NaN` in the running total.
+ *
+ * `inputTokens` is the WHOLE prompt the call read, cached tokens included —
+ * the number that says how full the context window is. `cachedInputTokens` is
+ * the part of it the provider served from its prompt cache, so it never exceeds
+ * `inputTokens`. An adapter whose provider reports the two apart (Anthropic's
+ * `input_tokens` excludes cache reads) adds them back together here.
+ *
+ * The same shape is the conversation's running total ({@link Conversation.usage}):
+ * the sum, field by field, of every turn that reported one.
+ */
+export interface TurnUsage {
+  /** Prompt tokens the call read, cached ones included. */
+  readonly inputTokens: number;
+  /** Tokens the model produced. */
+  readonly outputTokens: number;
+  /** Of `outputTokens`, those spent on reasoning — when the provider says. */
+  readonly reasoningTokens?: number;
+  /** Of `inputTokens`, those served from the provider's prompt cache — when it says. */
+  readonly cachedInputTokens?: number;
+}
+
+/** A token count as a provider reports one: a non-negative integer. PURE. */
+function isTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * Narrow an unknown to a {@link TurnUsage} — the two required counts present,
+ * and each optional one either absent or a count too. PURE — allocates no Error.
+ */
+export function isTurnUsage(value: unknown): value is TurnUsage {
+  if (value === null || typeof value !== "object") return false;
+  const u = value as Record<keyof TurnUsage, unknown>;
+  return (
+    isTokenCount(u.inputTokens) &&
+    isTokenCount(u.outputTokens) &&
+    (u.reasoningTokens === undefined || isTokenCount(u.reasoningTokens)) &&
+    (u.cachedInputTokens === undefined || isTokenCount(u.cachedInputTokens))
+  );
 }
 
 /**
@@ -167,16 +223,22 @@ function isToolCall(value: unknown): value is ToolCall {
  * agent exports both. Checks the load-bearing fields: `content` is a string and
  * `toolCalls` is an array of `ToolCall` (each element guarded — the narrow is a
  * real parse of the boundary, not a shallow `Array.isArray`). `provider` is
- * opaque, so its presence or absence is not a fact the guard reads. PURE —
- * allocates no Error.
+ * opaque, so its presence or absence is not a fact the guard reads. `usage` is
+ * not opaque — the reducer sums it — so it is either absent or a well-formed
+ * {@link TurnUsage}. PURE — allocates no Error.
  */
 export function isAgentTurn(value: unknown): value is AgentTurn {
   if (value === null || typeof value !== "object") return false;
-  const t = value as { content?: unknown; toolCalls?: unknown };
+  const t = value as {
+    content?: unknown;
+    toolCalls?: unknown;
+    usage?: unknown;
+  };
   return (
     typeof t.content === "string" &&
     Array.isArray(t.toolCalls) &&
-    t.toolCalls.every(isToolCall)
+    t.toolCalls.every(isToolCall) &&
+    (t.usage === undefined || isTurnUsage(t.usage))
   );
 }
 
@@ -361,6 +423,11 @@ export type Awaiting =
  * effect for the agentic stage.
  *
  * Generic over the consumer's tool-result type `R` (what `toolOk` carries).
+ *
+ * `usage` and `contextTokens` are the two readings of provider-reported usage
+ * (#332). A Model persisted before they existed comes back without them; the
+ * `agent_boot` that resumes it fills them in (a zero total, no context size),
+ * so every state a reducer transition hands on carries both.
  */
 export interface Conversation<R> {
   /** Model turns this stage has produced, in order. */
@@ -371,6 +438,22 @@ export interface Conversation<R> {
   readonly turnCount: number;
   /** What the loop is waiting for next. */
   readonly awaiting: Awaiting;
+  /**
+   * The running usage total: every brain turn of this RUN that reported usage,
+   * summed field by field. It is what the run has cost, so nothing that drops
+   * turns drops it — a compaction fold keeps it, and the next stage's fresh
+   * conversation starts from it. Only `agent_start` resets it to zero. Read it
+   * from `stopWhen` for a token budget.
+   */
+  readonly usage: TurnUsage;
+  /**
+   * The latest context size: `inputTokens + outputTokens` of the most recent
+   * brain turn — how much of the context window the transcript now fills.
+   * `null` when that turn reported no usage, when a compaction fold has run
+   * since (the pre-fold size describes a transcript that no longer exists), and
+   * at the start of each stage. `compaction.afterContextTokens` reads it.
+   */
+  readonly contextTokens: number | null;
 }
 
 // ===========================================================================
@@ -543,8 +626,10 @@ export interface AgentConfigCore<
    * transcript stands and no further model call goes out. Omit → no predicate.
    *
    * Where `maxTurns` and `maxElapsedMs` bound a quantity this agent counts,
-   * this bounds one only the caller can see (a token ledger, an external flag,
-   * a condition on the turns so far). It must be PURE and total over the state
+   * this bounds one only the caller can see (an external flag, a condition on
+   * the turns so far) — or a token budget: `conversation.usage` is the run's
+   * running total of provider-reported usage, so a budget stop is a predicate
+   * over it and needs no knob of its own (#332). It must be PURE and total over the state
    * it is handed — the reducer calls it, so a replay of the same Msg log calls
    * it with the same state and must get the same answer. It is config, not
    * Model: a resumed run consults the predicate the config passed to THIS boot.

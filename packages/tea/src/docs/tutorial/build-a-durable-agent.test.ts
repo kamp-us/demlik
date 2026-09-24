@@ -316,6 +316,18 @@ describe("docs/tutorial/build-a-durable-agent.md runs, dies mid-run, and resumes
     const parkedRunId = await runId(cwd);
     expect(parkedRunId).not.toBe("");
 
+    // #332 — the adapter mapped the recorded `usage`, and the parked Model
+    // already carries the first turn's cost as the run's running total.
+    const parked = JSON.parse(await readFile(join(cwd, "agent.json"), "utf8"));
+    const firstCost = {
+      inputTokens: 120,
+      outputTokens: 30,
+      cachedInputTokens: 0,
+    };
+    expect(parked.conversation.turns[0].usage).toEqual(firstCost);
+    expect(parked.conversation.usage).toEqual(firstCost);
+    expect(parked.conversation.contextTokens).toBe(150);
+
     // Run 2: the same program over the same directory, nothing else changed.
     const second = launch(entry, cwd, {});
     expect(await second.exited).toBe(0);

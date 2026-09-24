@@ -37,7 +37,7 @@ import type {
   WiredToolCmd,
   WiredToolMsg,
 } from "./tool";
-import type { AgentState, AgentTurn, ToolFailure } from "./types";
+import type { AgentState, AgentTurn, ToolFailure, TurnUsage } from "./types";
 
 // ===========================================================================
 // Cmds + Msgs the agent speaks. Generic over the composed wrappers' shapes.
@@ -428,7 +428,9 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  *
  *   - `TurnSettled` — a brain turn settled (the model produced an `AgentTurn`).
  *     Projected off the private `resilient_run_ok` settle Msg; carries the parsed
- *     `turn` (the narration + tool calls the model asked for).
+ *     `turn` (the narration + tool calls the model asked for), and — when the
+ *     provider reported one — that call's `usage` beside it (#332), so a
+ *     progress surface reads the context size without digging into the turn.
  *   - `ToolSettled` — a tool call settled OK. Projected off the private
  *     `agent_tool_ok` Msg; carries the `callId` and the tool `result`.
  *   - `RunDone` — the run finished. Projected off the post-transition State
@@ -437,7 +439,12 @@ export type AgentMachineMsg<P extends string, O extends Record<P, unknown>, R> =
  *     reads (#46), surfaced as an event for the streaming consumer.
  */
 export type AgentEvent<R> =
-  | { readonly type: "TurnSettled"; readonly turn: AgentTurn }
+  | {
+      readonly type: "TurnSettled";
+      readonly turn: AgentTurn;
+      /** The usage the provider reported for this turn. Absent → none reported. */
+      readonly usage?: TurnUsage;
+    }
   | {
       readonly type: "ToolSettled";
       readonly callId: string;
@@ -537,6 +544,13 @@ export function agentEvents<
   };
 }
 
+/** The `TurnSettled` for one settled turn — `usage` beside it only when reported. PURE. */
+function turnSettled<R>(turn: AgentTurn): AgentEvent<R> {
+  return turn.usage === undefined
+    ? { type: "TurnSettled", turn }
+    : { type: "TurnSettled", turn, usage: turn.usage };
+}
+
 // The agent's own Msg union, projected exhaustively. A Msg the router did not
 // claim is one of these: `WiredToolMsg<T>` and `AgentMachineMsg` are disjoint on
 // `type`, which the cast at the one call site records.
@@ -551,7 +565,7 @@ function projectOwn<P extends string, O extends Record<P, AgentTurn>, R>(
       // `value.output` is the parsed `AgentTurn` (the `O extends Record<P,
       // AgentTurn>` bound pins every purpose's output to an `AgentTurn`, the
       // same reasoning `state.output` relies on, #46/#48).
-      events.push({ type: "TurnSettled", turn: msg.value.output });
+      events.push(turnSettled(msg.value.output));
       break;
     case MsgType.AgentToolOk:
       // The PRIVATE tool-fan-out settle Msg → the public ToolSettled, unless

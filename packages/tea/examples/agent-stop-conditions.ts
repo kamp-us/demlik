@@ -15,6 +15,9 @@
  *      budget never restarts, so progress buys the run nothing.
  *   5. `stopWhen` over the same run — the caller's own condition, read at the
  *      turn boundary, ends it `cancelled` rather than failed.
+ *   6. A token budget — `stopWhen` over the provider-reported usage total the
+ *      conversation keeps — beside `compaction.afterContextTokens`, which folds
+ *      the transcript once the last call's reported size reaches a threshold.
  *
  * (2) beside (4) is the whole reason this file exists. `deadlineMs` is not a
  * wall-clock cap on a run and setting it is not a spend cap; `maxElapsedMs` is.
@@ -26,6 +29,7 @@ import {
   type AgentMessage,
   type AgentTurn,
   defineAgent,
+  status,
   tool,
 } from "@demlik/tea/agent";
 import { DriveFailedError } from "@demlik/tea";
@@ -177,6 +181,50 @@ calls = 0;
 console.log("stopWhen: turnCount >= 5 →", await ended(() => untilFive.run("go")));
 console.log("  model calls:", calls);
 
+// ===========================================================================
+// 6 — a token budget, and compaction by context size. This model reports what
+// each call cost the way a provider does, on the turn's `usage`: the prompt
+// grows by one exchange per turn, and so does `inputTokens`. The conversation
+// sums every report into `conversation.usage` and keeps the last one's size as
+// `conversation.contextTokens`. The budget is a `stopWhen` over the total; the
+// fold is `afterContextTokens` over the size. Neither estimates a token.
+// ===========================================================================
+
+let summaries = 0;
+
+const modelReporting = () => {
+  let n = 0;
+  return async (messages: readonly AgentMessage[]): Promise<AgentTurn> => {
+    calls += 1;
+    // The summarize call runs through the same model; its prompt opens with
+    // the summarize instruction rather than the agent's own.
+    const head = messages[0];
+    if (head?.role !== "system" || head.content !== "You tick.") summaries += 1;
+    n += 1;
+    return {
+      content: `turn ${n}`,
+      toolCalls: [{ callId: `c${n}`, name: "tick", args: { napMs: 1 } }],
+      usage: { inputTokens: 1_000 * messages.length, outputTokens: 50 },
+    };
+  };
+};
+
+const budgeted = defineAgent({
+  model: modelReporting(),
+  tools: [tick],
+  instructions: "You tick.",
+  compaction: { afterContextTokens: 8_000, keepTurns: 1 },
+  stopWhen: ({ conversation }) =>
+    conversation !== null &&
+    conversation.usage.inputTokens + conversation.usage.outputTokens >= 60_000,
+});
+
+calls = 0;
+const spent = await budgeted.run("go");
+console.log("token budget 60k →", status(spent).kind);
+console.log("  model calls:", calls, "of which summaries:", summaries);
+console.log("  spent:", spent.conversation?.usage);
+
 /*
  * What it prints. The millisecond figures move a little run to run — the shape
  * is what matters:
@@ -191,6 +239,9 @@ console.log("  model calls:", calls);
  *     model calls: 8
  *   stopWhen: turnCount >= 5 → resolved after 7ms
  *     model calls: 5
+ *   token budget 60k → cancelled
+ *     model calls: 13 of which summaries: 2
+ *     spent: { inputTokens: 68000, outputTokens: 550 }
  *
  * Read the second line beside the fourth. Same agent, same 20ms ticks, two 150ms
  * budgets. `deadlineMs` let it take 531ms and 25 model calls — every tick was an
@@ -205,7 +256,14 @@ console.log("  model calls:", calls);
  * is not an upper bound on how long `run` takes to settle, and that is as true of
  * `maxElapsedMs` as it is of `deadlineMs`.
  *
- * The last line is the one that does not say "failed". `stopWhen` is the caller
+ * The `stopWhen` line is the first that does not say "failed". `stopWhen` is the caller
  * asking, not a budget being spent, so the run ends `cancelled` and `run`
  * resolves with the Model rather than rejecting.
+ *
+ * The last three are case 6. Eleven brain turns went out, and the total they
+ * reported crossed 60k on the eleventh, so there was no twelfth. Twice the last
+ * call's reported size reached 8k and the transcript folded before the next
+ * call — the two summaries — and the total kept every folded turn's cost: a
+ * fold shrinks the prompt, never the bill. The summarize calls' own usage is
+ * not in the total; only brain turns are counted.
  */
