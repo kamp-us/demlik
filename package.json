@@ -15,13 +15,15 @@
     "lint:worktree": "pnpm -r lint:worktree",
     "test": "vitest run",
     "check:merge-markers": "node scripts/check-merge-markers.mjs",
+    "check:codeowners": "node scripts/check-codeowners.mjs",
+    "check:catalog": "fabrika guard catalog-guard check",
     "release": "changeset"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.14",
-    "@changesets/cli": "^2.27.11",
-    "@kampus/fabrika-cli": "0.7.1",
-    "vitest": "~5.0.1"
+    "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:",
+    "@kampus/fabrika-cli": "catalog:",
+    "vitest": "catalog:"
   },
   "packageManager": "pnpm@10.2.1",
   "volta": {
