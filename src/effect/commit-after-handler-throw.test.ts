@@ -9,7 +9,7 @@
  * on both.
  */
 
-import { Effect, Exit, type Scope, Scope as ScopeModule, Stream } from "effect";
+import { Effect, Exit, Scope as ScopeModule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   type BootingRuntime,
@@ -131,7 +131,7 @@ const engines: Record<"promise" | "effect", () => Promise<Harness>> = {
             },
           },
         }),
-      ) as Effect.Effect<BootingRuntime<Model, Msg, Went>, never, Scope.Scope>,
+      ) as Effect.Effect<BootingRuntime<Model, Msg, Went>>,
     );
     const rt = await booting.ready;
     return {
