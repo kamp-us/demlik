@@ -42,6 +42,18 @@ jobs:
       - name: Conflict markers
         run: pnpm run check:merge-markers
 
+      # Every `.fabrika.jsonc` governed root must have a control-plane row in
+      # CODEOWNERS. The #307 move updated one and not the other, and tea's export
+      # map could then merge without control-plane review (#358).
+      - name: CODEOWNERS covers every governed root
+        run: pnpm run check:codeowners
+
+      # Every dependency specifier is `catalog:` / `catalog:<name>` / `workspace:`,
+      # so a pin lives once in pnpm-workspace.yaml. Unrun, this guard sat red
+      # locally on every lane and a real red read the same as the standing one.
+      - name: Catalog guard
+        run: pnpm run check:catalog
+
       # Fast + deterministic, so it gates before the slower test/build.
       - name: Typecheck
         run: pnpm run typecheck

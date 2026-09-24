@@ -61,10 +61,18 @@ if (otelImporters.join() !== join("otel", "index.js")) {
 }
 
 // ── 2. The clean install, end to end. ───────────────────────────────────────
+// `pnpm pack`, because that is what publish.yaml packs with: it rewrites each
+// `catalog:` specifier to the pnpm-workspace.yaml range (#358), and `npm pack`
+// ships the `catalog:` string verbatim, which no consumer's npm can install.
 const work = mkdtempSync(join(tmpdir(), "tea-clean-install-"));
-run("npm", ["pack", "--pack-destination", work], pkgDir);
+run("pnpm", ["pack", "--pack-destination", work], pkgDir);
 const tarball = readdirSync(work).find((f) => f.endsWith(".tgz"));
-if (!tarball) fail("npm pack produced no tarball");
+if (!tarball) fail("pnpm pack produced no tarball");
+const packedManifest = run("tar", ["-xOzf", join(work, tarball), "package/package.json"], work);
+const workspaceOnly = packedManifest.match(/"(catalog|workspace):[^"]*"/);
+if (workspaceOnly) {
+  fail(`the packed package.json still carries ${workspaceOnly[0]}; a consumer cannot install it`);
+}
 
 const project = join(work, "consumer");
 mkdirSync(project, { recursive: true });

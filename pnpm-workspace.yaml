@@ -1,2 +1,64 @@
 packages:
   - packages/*
+
+# Every dependency specifier in a workspace package.json is `catalog:`, `catalog:<name>` or
+# `workspace:` — `fabrika guard catalog-guard check` enforces it in CI (#358). A pin lives here
+# once. `pnpm pack` rewrites each `catalog:` back to the range below, so a published tarball
+# carries the concrete specifier.
+
+# The default catalog (`catalog:`): dev and runtime pins.
+catalog:
+  "@anthropic-ai/sdk": 0.124.0
+  "@biomejs/biome": 2.3.14
+  "@changesets/cli": ^2.27.11
+  "@cloudflare/workers-types": 4.20260312.1
+  "@kampus/fabrika-cli": 0.7.1
+  "@langfuse/otel": 5.11.1
+  "@opentelemetry/api": 1.9.1
+  "@opentelemetry/sdk-trace-base": 2.11.0
+  "@standard-schema/spec": ^1.1.0
+  "@types/chrome": ^0.1.42
+  "@types/node": ^22
+  "@types/react": 19.0.8
+  "@types/react-dom": 19.0.3
+  "@types/ws": 8.5.14
+  chalk: ^5.3.0
+  commander: ^11.1.0
+  effect: 4.0.0-rc.117
+  fast-check: ^3.23.0
+  happy-dom: ^20.9.0
+  jsonc-parser: ^3.3.1
+  openai: 7.23.0
+  react: 19.0.0
+  react-dom: 19.0.0
+  smol-toml: ^1.6.1
+  ts-morph: 28.0.0
+  tsup: ^8.3.5
+  tsx: ^4.21.0
+  typedoc: 0.28.20
+  typescript: 5.7.3
+  vite: ^8.2.1
+  vitest: ~5.0.1
+  # openai@7.23.0 declares a `ws@^8.21.0` peer.
+  ws: ^8.21.0
+  zod: ^4.5.4
+
+catalogs:
+  # Published peer ranges (`catalog:peers`). A peer range is a promise to consumers, not a dev
+  # pin, so it never shares an entry with the default catalog.
+  peers:
+    "@opentelemetry/api": ^1.9.0
+    effect: ^4.0.0-rc.0
+    fast-check: ^3 || ^4
+    react: ^18 || ^19
+    react-dom: ^18 || ^19
+    vitest: ^2 || ^3 || ^4 || ^5
+    ws: ^8
+
+  # `@demlik/code-graph`'s pins that differ from the default catalog's (`catalog:code-graph`).
+  # Moved as they were; converging them on one version is a dependency change of its own.
+  code-graph:
+    fast-check: ^4.8.0
+    tsup: ^8.0.1
+    typescript: 5.8.3
+    zod: 4.0.0
