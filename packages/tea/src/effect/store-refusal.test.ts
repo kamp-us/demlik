@@ -16,7 +16,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect, Exit, Scope } from "effect";
+import { Cause, Effect, Exit, Scope } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type NotesState,
@@ -24,23 +24,25 @@ import {
   openNotes,
   parseNotes,
 } from "../../examples/restore-or-refuse";
-import {
-  type BootingRuntime,
-  type Migrated,
-  refuse,
-  type Store,
-  StoreRefusedError,
-} from "../index";
+import { type Migrated, refuse, type Store, StoreRefusedError } from "../index";
 import { memoryStore } from "../mem";
 import { fileStore } from "../node";
 import { run as runPromise } from "../promise";
 import { createQueue, type QueueItem } from "../work-queue";
-import { run as runEffect } from "./index";
+import { run as runEffect, StoreFailed } from "./index";
 
-type Msg = { readonly type: "add"; readonly text: string };
-type Ready = Awaited<BootingRuntime<NotesState, Msg, never>["ready"]>;
+/** What each case reads off a booted run. */
+interface Ready {
+  getState(): NotesState;
+  stop(): Promise<void>;
+}
 
-/** Boot a notes machine on one engine and settle `ready`. */
+/**
+ * Boot a notes machine on one engine and settle `ready`. The Effect engine's
+ * `ready` fails with a typed `StoreFailed` on the load, carrying the refusal
+ * the Promise engine rejects with; it is rethrown here so both engines are
+ * read the same way.
+ */
 const engines: Record<
   "Promise" | "Effect",
   (store: Store<NotesState>, machine?: typeof notes) => Promise<Ready>
@@ -49,14 +51,27 @@ const engines: Record<
     runPromise(machine, { ctx: {}, store }).ready,
   Effect: async (store, machine = notes) => {
     const scope = await Effect.runPromise(Scope.make());
-    const booting = await Effect.runPromise(
-      Scope.provide(scope)(runEffect(machine, { ctx: {}, store })),
+    const exit = await Effect.runPromiseExit(
+      Scope.provide(scope)(
+        Effect.flatMap(
+          runEffect(machine, { ctx: {}, store }),
+          (booting) => booting.ready,
+        ),
+      ),
     );
+    if (Exit.isSuccess(exit)) {
+      const booted = exit.value;
+      return {
+        getState: () => booted.getState(),
+        stop: () => Effect.runPromise(booted.stop()),
+      };
+    }
     // A run that never booted leaves nothing for `stop()` to close.
-    return booting.ready.catch(async (err: unknown) => {
-      await Effect.runPromise(Scope.close(scope, Exit.void));
-      throw err;
-    });
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    const failure = Cause.squash(exit.cause);
+    expect(failure).toBeInstanceOf(StoreFailed);
+    expect((failure as StoreFailed).operation).toBe("load");
+    throw (failure as StoreFailed).cause;
   },
 };
 

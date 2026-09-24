@@ -106,7 +106,7 @@ describe("Effect engine: an unhandled Sub failure", () => {
         },
       }),
     );
-    const rt = await booting.ready;
+    const rt = await Effect.runPromise(booting.ready);
 
     await vi.waitFor(() => expect(exits).toHaveLength(1));
     const exit = exits[0] as Exit.Exit<unknown, unknown>;
@@ -118,7 +118,10 @@ describe("Effect engine: an unhandled Sub failure", () => {
     // counted as live, and the run takes no more Msgs.
     await vi.waitFor(() => expect(otherReleased).toBe(true));
     expect(liveSubs(rt)).toBe(0);
-    await expect(rt.dispatch({ type: "poke" })).rejects.toThrow(/stopped/);
+    const refused = await Effect.runPromise(
+      Effect.flip(rt.dispatch({ type: "poke" })),
+    );
+    expect(refused).toBeInstanceOf(EffectEngine.Stopped);
   });
 
   it("a defect in the Stream closes the Scope with that defect", async () => {
@@ -133,7 +136,7 @@ describe("Effect engine: an unhandled Sub failure", () => {
         },
       }),
     );
-    await booting.ready;
+    await Effect.runPromise(booting.ready);
 
     await vi.waitFor(() => expect(exits).toHaveLength(1));
     const exit = exits[0] as Exit.Exit<unknown, unknown>;
@@ -155,7 +158,9 @@ describe("Effect engine: an unhandled Sub failure", () => {
         },
       }),
     );
-    await expect(booting.ready).rejects.toBe(boom);
+    // A throw is a defect: `ready` dies with it.
+    const booted = await Effect.runPromiseExit(booting.ready);
+    expect(Exit.isFailure(booted) && Cause.squash(booted.cause)).toBe(boom);
 
     await vi.waitFor(() => expect(exits).toHaveLength(1));
     const exit = exits[0] as Exit.Exit<unknown, unknown>;
@@ -183,12 +188,12 @@ describe("Effect engine: a Sub that maps its own errors to Msgs", () => {
         },
       }),
     );
-    const rt = await booting.ready;
+    const rt = await Effect.runPromise(booting.ready);
 
     await vi.waitFor(() =>
       expect(rt.getState()).toEqual({ ticks: 1, failed: 1006, pokes: 0 }),
     );
-    await rt.dispatch({ type: "poke" });
+    await Effect.runPromise(rt.dispatch({ type: "poke" }));
     expect(rt.getState().pokes).toBe(1);
     expect(exits).toEqual([]);
     expect(reports).toEqual([]);

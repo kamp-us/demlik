@@ -93,14 +93,12 @@ describe("a `timer` entry in `subscribe` replaces the built-in — both pages' s
           },
           subscribe: { timer: (sub) => Stream.make(sub.deps.msg) },
         });
-        return yield* Effect.promise(async () => {
-          const runtime = await handle.ready;
-          await runtime.dispatch({ type: "look_up", id: "u2" });
-          await vi.waitFor(() =>
-            expect(runtime.getState().status).toBe("idle"),
-          );
-          return runtime.getState().status;
-        });
+        const runtime = yield* handle.ready;
+        yield* runtime.dispatch({ type: "look_up", id: "u2" });
+        yield* Effect.promise(() =>
+          vi.waitFor(() => expect(runtime.getState().status).toBe("idle")),
+        );
+        return runtime.getState().status;
       }).pipe(Effect.scoped),
     );
     expect(status).toBe("idle");

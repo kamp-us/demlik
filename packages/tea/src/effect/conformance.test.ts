@@ -9,7 +9,7 @@
  * does not compile.
  */
 
-import { Effect, type Scope, Stream } from "effect";
+import { Cause, Effect, Exit, type Scope, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   burst,
@@ -25,14 +25,51 @@ import {
 } from "../__fixtures__/engine-conformance";
 import { type BootingRuntime, NoCellError } from "../index";
 import { run as runPromise } from "../promise";
-import { run as runEffect } from "./index";
+import { type EffectBootingRuntime, run as runEffect } from "./index";
 
 type Name = keyof typeof conformanceMachines;
 
-/** What both engines hand back for one case: a started run. */
+/** What the Promise engine hands back for one case: a started run. */
 type AnyRuntime = BootingRuntime<unknown, { type: string }, never>;
 
-type EffectRun = Effect.Effect<AnyRuntime, never, Scope.Scope>;
+/** The Effect engine's started run for one case. */
+type AnyEffectRuntime = EffectBootingRuntime<
+  unknown,
+  { type: string },
+  never,
+  unknown
+>;
+
+type EffectRun = Effect.Effect<AnyEffectRuntime, never, Scope.Scope>;
+
+/** The members `drive` reads, with every verb a Promise. */
+interface Driven {
+  onBoot(handler: (state: unknown) => void): unknown;
+  observe(observer: (msg: { type: string }, state: unknown) => void): unknown;
+  readonly ready: Promise<{
+    dispatch(msg: { type: string }): Promise<void>;
+    done(): Promise<unknown>;
+  }>;
+}
+
+/** Run an Effect, rejecting with its failure or defect as it stands. */
+async function settle<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+  const exit = await Effect.runPromiseExit(effect);
+  if (Exit.isSuccess(exit)) return exit.value;
+  throw Cause.squash(exit.cause);
+}
+
+/** The Effect handle driven through the same Promise-shaped `drive`. */
+function driven(rt: AnyEffectRuntime): Driven {
+  return {
+    onBoot: (handler) => rt.onBoot(handler),
+    observe: (observer) => rt.observe(observer),
+    ready: settle(rt.ready).then((booted) => ({
+      dispatch: (msg) => settle(booted.dispatch(msg)),
+      done: () => settle(booted.done()),
+    })),
+  };
+}
 
 interface EnginePair {
   readonly promise: () => AnyRuntime;
@@ -135,7 +172,7 @@ const engines: { readonly [K in Name]: EnginePair } = {
 type Trace = readonly (readonly [string, unknown])[];
 
 /** Boot, dispatch the script, wait for the terminal State if any, and record. */
-async function drive(name: Name, rt: AnyRuntime): Promise<Trace> {
+async function drive(name: Name, rt: Driven): Promise<Trace> {
   const trace: (readonly [string, unknown])[] = [];
   rt.onBoot((state) => trace.push(["boot", state]));
   rt.observe((msg, state) => trace.push([JSON.stringify(msg), state]));
@@ -168,7 +205,7 @@ function onEffect(name: Name): Promise<Trace> {
   return Effect.runPromise(
     Effect.scoped(
       Effect.flatMap(engines[name].effect, (rt) =>
-        Effect.promise(() => drive(name, rt)),
+        Effect.promise(() => drive(name, driven(rt))),
       ),
     ),
   );

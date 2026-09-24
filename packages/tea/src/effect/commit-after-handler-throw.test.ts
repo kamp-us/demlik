@@ -3,13 +3,14 @@
  *
  * A transition installs its State, saves it, reconciles the Subs, runs its
  * Cmds, and then calls the commit callbacks — `subscribe`, `observe`, `on`,
- * `done()` and the telemetry sink. A hand-written Cmd handler that throws
- * still rejects the dispatch with its own error, but the State it left saved
+ * `done()` and the telemetry sink. A hand-written Cmd handler that throws (or,
+ * on the Effect engine, fails) still fails the dispatch with its own error,
+ * but the State it left saved
  * reaches every one of those. Both engines share the loop, so each case runs
  * on both.
  */
 
-import { Effect, Exit, Scope as ScopeModule, Stream } from "effect";
+import { Cause, Effect, Exit, Scope as ScopeModule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   type BootingRuntime,
@@ -21,7 +22,7 @@ import {
 } from "../index";
 import { memoryStore } from "../mem";
 import { run as runPromise } from "../promise";
-import { run as runEffect } from "./index";
+import { type EffectRuntime, run as runEffect } from "./index";
 
 type Model = { readonly armed: boolean; readonly done: boolean };
 type Msg = { readonly type: "go"; readonly fail: boolean };
@@ -56,7 +57,21 @@ const machine = defineMachine({
 
 const boom = new Error("handler boom");
 
-type Runtime = Awaited<BootingRuntime<Model, Msg, Went>["ready"]>;
+/** The members each case drives, with the Effect engine's run as Promises. */
+type Runtime = Pick<
+  Awaited<BootingRuntime<Model, Msg, Went>["ready"]>,
+  "subscribe" | "observe" | "on" | "getState"
+> & {
+  dispatch(msg: Msg): Promise<void>;
+  done(): Promise<Model>;
+};
+
+/** Run an Effect, rejecting with its failure or defect as it stands. */
+async function settle<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+  const exit = await Effect.runPromiseExit(effect);
+  if (Exit.isSuccess(exit)) return exit.value;
+  throw Cause.squash(exit.cause);
+}
 
 interface Harness {
   readonly rt: Runtime;
@@ -113,27 +128,39 @@ const engines: Record<"promise" | "effect", () => Promise<Harness>> = {
     const log: string[] = [];
     const telemetry: TelemetryEvent[] = [];
     const scope = await Effect.runPromise(ScopeModule.make());
-    const booting = await Effect.runPromise(
+    const booted = await Effect.runPromise(
       ScopeModule.provide(scope)(
-        runEffect(machine, {
-          ...shared(log, telemetry),
-          interpret: {
-            work: (cmd) =>
-              Effect.sync(() => {
-                log.push("cmd");
-                if (cmd.fail) throw boom;
-              }),
-          },
-          subscribe: {
-            watch: () => {
-              log.push("sub");
-              return Stream.never;
+        Effect.flatMap(
+          runEffect(machine, {
+            ...shared(log, telemetry),
+            interpret: {
+              // The cell's failure is typed: the dispatch fails with it.
+              work: (cmd) =>
+                Effect.sync(() => {
+                  log.push("cmd");
+                }).pipe(
+                  Effect.andThen(cmd.fail ? Effect.fail(boom) : Effect.void),
+                ),
             },
-          },
-        }),
-      ) as Effect.Effect<BootingRuntime<Model, Msg, Went>>,
+            subscribe: {
+              watch: () => {
+                log.push("sub");
+                return Stream.never;
+              },
+            },
+          }),
+          (booting) => booting.ready,
+        ),
+      ) as Effect.Effect<EffectRuntime<Model, Msg, Went, Error>, Error>,
     );
-    const rt = await booting.ready;
+    const rt: Runtime = {
+      subscribe: booted.subscribe,
+      observe: booted.observe,
+      on: booted.on,
+      getState: booted.getState,
+      dispatch: (msg) => settle(booted.dispatch(msg)),
+      done: () => settle(booted.done()),
+    };
     return {
       rt,
       log,

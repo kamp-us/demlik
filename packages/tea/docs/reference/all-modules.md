@@ -11,7 +11,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`./devtools`](./devtools.md) | presentational inspector for any tea machine. |
 | `./devtools/styles.css` |  |
 | [`./do`](./do.md) | Durable Object adapter for `@demlik/tea`. |
-| [`./effect`](./effect.md) | the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields the same run handle the Promise engine returns. |
+| [`./effect`](./effect.md) | the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises. |
 | [`./extension`](./extension.md) | Chrome service-worker host adapter for @demlik/tea. |
 | [`./flow`](./flow.md) | the multi-step control-flow batteries: fan a batch out, run steps in order and compensate on failure, poll until a predicate holds, reconcile desired against actual. |
 | [`./idempotency`](./idempotency.md) | do-it-once: dedupe by key, cache the result, and replay that result to every duplicate arrival. |

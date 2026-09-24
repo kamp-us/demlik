@@ -13,12 +13,16 @@
  *   - a `subscribe` runner returns a `Stream<Msg>`, drained on its own fiber;
  *   - every handler and runner fiber runs with the services the caller
  *     provided, so `R` reaches them from the caller's Layers;
- *   - stopping interrupts every handler fiber still in flight.
+ *   - stopping interrupts every handler fiber still in flight;
+ *   - the handle's verbs are Effects with a typed error channel
+ *     (`./handle`, `./failures`).
  */
 
 import { Cause, Effect, Exit, Fiber, Result, Scope, Stream } from "effect";
 import { builtinExtensions } from "../internal/engine/builtins";
 import {
+  defaultOnError,
+  type LiveWorkProbe,
   type LoopHandler,
   type LoopRunner,
   startLoop,
@@ -36,13 +40,15 @@ import type {
 } from "../pure/core";
 import { applyCell, Outcome, subEntriesOf } from "../pure/core";
 import type {
-  BootingRuntime,
   CtxArg,
   OnError,
+  Runtime,
   Store,
   Supervision,
   TelemetrySink,
 } from "../runtime-types";
+import { CellFailure, saveFailures, unwrapped } from "./failures";
+import { type EffectBootingRuntime, effectHandle } from "./handle";
 
 // === The handler and runner shapes ===
 
@@ -51,8 +57,8 @@ import type {
  * Cmd's `Ok` and fails with one of its declared tags, and the engine mints
  * `<name>_ok` / `<name>_err` from that (ADR 0021). For a hand-written Cmd it
  * succeeds with a follow-up Msg, a list of them (dispatched in order), or
- * nothing, and a failure rejects the dispatch, as a throw does on the Promise
- * engine. `R` is whatever services it reads.
+ * nothing, and its failure fails the dispatch with that error, typed on the
+ * handle (see {@link CellErrors}). `R` is whatever services it reads.
  */
 export type EffectInterpretCell<
   M extends { type: string },
@@ -123,6 +129,23 @@ type ServicesOfCell<F> = F extends (
   cmd: never,
 ) => Effect.Effect<unknown, unknown, infer R>
   ? R
+  : never;
+
+/**
+ * The failures a dispatch on the handle can end with from an `interpret` map:
+ * the error type of every hand-written Cmd's cell. A `Cmd.define`d Cmd's
+ * declared failure settles its `_err` Msg instead, so it adds nothing here.
+ */
+export type CellErrors<C extends Cmd, I> = {
+  [K in keyof I & C["type"]]: unknown extends ErrorsOf<Extract<C, { type: K }>>
+    ? ErrorOfCell<I[K]>
+    : never;
+}[keyof I & C["type"]];
+
+type ErrorOfCell<F> = F extends (
+  cmd: never,
+) => Effect.Effect<unknown, infer Err, unknown>
+  ? Err
   : never;
 
 /** The services every runner of a `subscribe` map reads. */
@@ -199,13 +222,16 @@ const builtinRunners = { timer } as const satisfies Record<
 
 /**
  * Run `machine` on the Effect engine. The returned Effect needs a `Scope` and
- * the services its handlers and runners read, and yields the run handle —
- * the same handle the Promise engine returns, so a host adapter typed against
- * `RunHandle` takes either.
+ * the services its handlers and runners read, and yields the run handle. The
+ * handle's members have the Promise engine's names; the ones that return a
+ * Promise there return an Effect here, failing with `Stopped`, `StoreFailed`
+ * or a hand-written cell's declared failure, so a host sorts them with
+ * `Effect.catchTags`.
  *
- * Closing the scope stops the run: every handler still in flight is
- * interrupted (its finalizers run), its Msg is never dispatched, and no Msg is
- * dispatched after stop. Calling `stop()` on the handle does the same.
+ * Closing the scope stops the run and its Subs: every handler still in flight
+ * is interrupted (its finalizers run), its Msg is never dispatched, and a
+ * dispatch after stop fails with `Stopped`. The handle's `stop()` does the
+ * same.
  *
  * A Sub whose Stream fails with an error it did not map to a Msg stops the
  * run the other way round: the engine closes that Scope with the failure.
@@ -215,7 +241,7 @@ const builtinRunners = { timer } as const satisfies Record<
  *
  * ```ts
  * const program = Effect.gen(function* () {
- *   const rt = yield* run(machine, {
+ *   const handle = yield* run(machine, {
  *     interpret: {
  *       fetch: (cmd) =>
  *         Effect.gen(function* () {
@@ -224,7 +250,9 @@ const builtinRunners = { timer } as const satisfies Record<
  *         }),
  *     },
  *   });
- *   yield* Effect.promise(() => rt.dispatch({ type: "go", id: "7" }));
+ *   const runtime = yield* handle.ready;
+ *   yield* runtime.dispatch({ type: "go", id: "7" });
+ *   return runtime.getState();
  * });
  * Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(ApiLive)));
  * ```
@@ -243,7 +271,7 @@ export function run<
   machine: Machine<S, M, C, U, Ctx>,
   opts: EffectRunOptions<S, M, C, U, Ctx, E, I, B>,
 ): Effect.Effect<
-  BootingRuntime<S, M, E>,
+  EffectBootingRuntime<S, M, E, CellErrors<C, I>>,
   never,
   Scope.Scope | InterpretServices<I> | SubscribeServices<B>
 > {
@@ -255,17 +283,19 @@ export function run<
     const fork = Effect.runForkWith(services) as ForkEffect;
     return yield* Effect.acquireRelease(
       Effect.sync(() =>
-        start<S, M, C, U, Ctx, E>(
-          machine,
-          opts as EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
-          Effect.runPromiseExitWith(services) as RunEffect,
-          fork,
-          // Closing the Scope runs the release below, which stops the run. A
-          // Scope that closes before that release is added runs it on add.
-          (exit) => fork(Scope.close(scope, exit)),
+        effectHandle<S, M, E, CellErrors<C, I>>(
+          start<S, M, C, U, Ctx, E>(
+            machine,
+            opts as EffectRunOptions<S, M, C, U, Ctx, E, unknown, unknown>,
+            Effect.runPromiseExitWith(services) as RunEffect,
+            fork,
+            // Closing the Scope runs the release below, which stops the run.
+            // A Scope that closes before that release is added runs it on add.
+            (exit) => fork(Scope.close(scope, exit)),
+          ),
         ),
       ),
-      (runtime) => Effect.promise(() => runtime.stop()),
+      (runtime) => runtime.stop(),
     );
   });
 }
@@ -297,7 +327,7 @@ function start<
   runEffect: RunEffect,
   fork: ForkEffect,
   closeScope: (exit: Exit.Exit<never, unknown>) => void,
-): BootingRuntime<S, M, E> {
+): Runtime<S, M, E> & LiveWorkProbe {
   const interpret = ((opts as { interpret?: unknown }).interpret ??
     {}) as Readonly<Record<string, AnyCell | undefined>>;
   const subscribe = ((opts as { subscribe?: unknown }).subscribe ??
@@ -331,7 +361,8 @@ function start<
         ? Outcome.ok(result.success)
         : Outcome.err(result.failure);
     }
-    if (Result.isFailure(result)) throw result.failure;
+    // Marked, so the handle fails the dispatch with it as a typed error.
+    if (Result.isFailure(result)) throw new CellFailure(result.failure);
     return result.success;
   }
 
@@ -371,6 +402,9 @@ function start<
     };
   }
 
+  // The sink is handed what was thrown, never the edge's marker around it.
+  const sink = opts.onError ?? defaultOnError;
+
   const handle = startLoop<S, M, C, Ctx>({
     init: machine.init,
     reduce: (state, msg) => applyCell<S, M, C>(machine, state, msg),
@@ -379,10 +413,14 @@ function start<
     handlerFor,
     store: opts.store,
     ctx: (opts.ctx ?? {}) as Ctx,
-    onError: opts.onError,
+    onError: (error, context) => sink(unwrapped(error), context),
     disposeTimeoutMs: opts.disposeTimeoutMs ?? 5_000,
     idleCap: 100_000,
-    extensions: builtinExtensions<S, M, C, E>(machine, opts),
+    // The save marker wraps outermost, around the fence the built-ins add.
+    extensions: [
+      saveFailures<S, M, C>(),
+      ...builtinExtensions<S, M, C, E>(machine, opts),
+    ],
     stopOnSubFailure: (error) =>
       closeScope(Exit.failCause(subFailure ?? Cause.die(error))),
   });
@@ -396,5 +434,5 @@ function start<
     interruption.abort();
     return stopped;
   };
-  return handle as unknown as BootingRuntime<S, M, E>;
+  return handle as unknown as Runtime<S, M, E> & LiveWorkProbe;
 }

@@ -17,13 +17,11 @@ export const streamReply = (
     const handle = yield* run(reply, {
       store: skipSaving(store, isStreaming),
     });
-    const runtime = yield* Effect.promise(() => handle.ready);
-    yield* Effect.promise(async () => {
-      await runtime.dispatch({ type: "start" });
-      for (const text of tokens) {
-        await runtime.dispatch({ type: "token", text });
-      }
-      await runtime.dispatch({ type: "finish" });
-    });
+    const runtime = yield* handle.ready;
+    yield* runtime.dispatch({ type: "start" });
+    for (const text of tokens) {
+      yield* runtime.dispatch({ type: "token", text });
+    }
+    yield* runtime.dispatch({ type: "finish" });
     return runtime.getState();
   }).pipe(Effect.scoped);
