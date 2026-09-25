@@ -1,9 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { git } from "../git.js";
+import { git, ignoredPaths } from "../git.js";
 
 const Signal = z.object({
   signal: z.enum(["shape", "callees", "callers", "name"]),
@@ -45,15 +44,6 @@ export interface Pair {
   readonly b: PairFunction;
   readonly signals: readonly GraphSignal[];
   readonly graphConfidence: number;
-}
-
-function ignoredPaths(cwd: string, paths: readonly string[]): Set<string> {
-  const result = spawnSync("git", ["check-ignore", "--stdin"], {
-    cwd,
-    input: paths.join("\n"),
-    encoding: "utf8",
-  });
-  return new Set(result.stdout.split("\n").filter(Boolean));
 }
 
 function functionName(id: string): string {
