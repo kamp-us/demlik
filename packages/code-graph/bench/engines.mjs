@@ -2,7 +2,7 @@
 // Engine benchmark for @demlik/code-graph (#384): ts-morph (today's loaders) against oxc
 // (syntax + module resolution) and tsgo (the native checker). Run by hand, never in CI:
 //
-//   node packages/code-graph/bench/engines.mjs [target] [--codegraph] [--json <file>]
+//   node packages/code-graph/bench/engines.mjs [target] [--codegraph] [--runs <n>] [--json <file>]
 //
 // `target` defaults to packages/code-graph. Every engine runs in its own child process under
 // `/usr/bin/time`, so wall time and peak RSS are per engine; parity is computed here, in the
@@ -12,12 +12,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 const BENCH_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.resolve(BENCH_DIR, "..");
 const SRC = (rel) => pathToFileURL(path.join(PACKAGE_DIR, "src", rel)).href;
-
-// ---------------------------------------------------------------- shared helpers
 
 function findUp(start, name) {
   let dir = start;
@@ -55,8 +54,6 @@ function writeResult(out, result) {
     JSON.stringify({ ...result, selfMaxRssKb: process.resourceUsage().maxRSS }),
   );
 }
-
-// ---------------------------------------------------------------- children
 
 async function childTsMorphCheap(target, out) {
   const { loadCheapProject } = await import(SRC("extract/project.ts"));
@@ -374,8 +371,6 @@ async function runChild(argv) {
   throw new Error(`unknown engine ${engine}`);
 }
 
-// ---------------------------------------------------------------- parent: measurement
-
 // Peak RSS of a child and everything it waited for, from the OS: BSD `time -l` prints bytes,
 // GNU `time -v` prints kilobytes. Absent `/usr/bin/time`, node children still self-report.
 function timeFlavour() {
@@ -562,8 +557,6 @@ function codegraphRun(flavour, target, tmp) {
   };
 }
 
-// ---------------------------------------------------------------- parent: parity
-
 function setDiff(baseline, candidate) {
   const b = new Set(baseline);
   const c = new Set(candidate);
@@ -645,8 +638,6 @@ function calleeParity(edge, tsgo) {
   };
 }
 
-// ---------------------------------------------------------------- parent: report
-
 const mb = (kb) => (kb === null || kb === undefined ? "n/a" : `${Math.round(kb / 1024)} MB`);
 const sec = (ms) => `${(ms / 1000).toFixed(2)} s`;
 
@@ -660,13 +651,16 @@ function row(name, r, parity, note = "") {
 async function main() {
   const args = process.argv.slice(2);
   if (args[0] === "--child") return runChild(args.slice(1));
-  const flag = (name) => args.includes(name);
-  const option = (name) => {
-    const i = args.indexOf(name);
-    return i === -1 ? null : args[i + 1];
-  };
-  const positional = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--json");
-  const target = path.resolve(positional[0] ?? PACKAGE_DIR);
+  const { values: opts, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      codegraph: { type: "boolean", default: false },
+      runs: { type: "string", default: "3" },
+      json: { type: "string" },
+    },
+  });
+  const target = path.resolve(positionals[0] ?? PACKAGE_DIR);
   const repoRoot = path.dirname(findUp(target, "pnpm-workspace.yaml") ?? path.join(target, "x"));
   const label = path.relative(repoRoot, target) || ".";
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-bench-"));
@@ -675,7 +669,7 @@ async function main() {
   const { tsconfig, synthesized, tsgoArgs } = checkerConfig(target, tmp);
   const log = (m) => process.stderr.write(`bench: ${m}\n`);
 
-  const runs = Math.max(1, Number(option("--runs") ?? 3));
+  const runs = Math.max(1, Number(opts.runs));
   const load = os
     .loadavg()
     .map((l) => l.toFixed(1))
@@ -693,7 +687,7 @@ async function main() {
     tsgoCheck: () => checkRun(flavour, bin.tsgo, ["-p", tsconfig, ...tsgoArgs]),
     tscCheck: () => checkRun(flavour, process.execPath, [bin.tsc, "-p", tsconfig]),
     tsgoCallees: () => nodeChild(flavour, "tsgo-callees", target, tmp, [tsconfig]),
-    ...(flag("--codegraph") ? { codegraph: () => codegraphRun(flavour, target, tmp) } : {}),
+    ...(opts.codegraph ? { codegraph: () => codegraphRun(flavour, target, tmp) } : {}),
   };
   const samples = Object.fromEntries(Object.keys(plan).map((k) => [k, []]));
   for (let round = 1; round <= runs; round++) {
@@ -789,7 +783,7 @@ async function main() {
   lines.push("", `Phases of the last run (ms): \`${JSON.stringify(phases)}\``);
   process.stdout.write(`${lines.join("\n").replaceAll(repoRoot, "<repo>")}\n`);
 
-  const jsonOut = option("--json");
+  const jsonOut = opts.json;
   if (jsonOut) {
     const strip = ({
       stdout,
