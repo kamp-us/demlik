@@ -42,6 +42,19 @@ export {
   type PairTarget,
   runPairs,
 } from "./pairs/run.js";
+export { renderScoreTable } from "./score/cli.js";
+export { type HistoryOptions, readChangeSets } from "./score/history.js";
+export {
+  type ChangeSet,
+  type ConfidenceShare,
+  type FeatureScore,
+  type Metric,
+  type Prf,
+  type ScoreOptions,
+  type ScoreReport,
+  ScoreRow,
+  scoreCoChange,
+} from "./score/score.js";
 export {
   type SweepAnswers,
   type SweepQuestions,

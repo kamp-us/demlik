@@ -10,6 +10,7 @@ export const DEFAULTS = {
   pairs: `${OUT_DIR}/pairs.json`,
   pairsReport: `${OUT_DIR}/pairs.md`,
   manifest: `${OUT_DIR}/move-manifest.json`,
+  score: `${OUT_DIR}/score.json`,
 } as const;
 
 /** A path flag: absolute as given, otherwise under the repository root. */
