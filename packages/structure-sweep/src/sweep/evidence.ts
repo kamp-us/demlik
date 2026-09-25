@@ -40,7 +40,7 @@ export function listSources(
   scope: string,
 ): SourceFile[] {
   return trackedPaths(cwd, { ref }, scope)
-    .filter((path) => IS_SOURCE.test(path) && !IS_EXCLUDED.test(path))
+    .filter(isSweptSource)
     .map((path) => {
       const text = git(cwd, ["show", `${ref}:${path}`]);
       return { path, text, hash: contentHash(text) };
