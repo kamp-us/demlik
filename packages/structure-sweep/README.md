@@ -126,8 +126,43 @@ report, including `staleStringRefs` — old paths still written as plain text so
 source and destination both exist stops the run. A second `apply` over the same manifest changes
 nothing.
 
+### `structure-sweep score`
+
+```sh
+structure-sweep score --since 2026-01-01 --pr-only
+```
+
+Grades the sweep's file-to-feature assignment against git history, on the idea that files in one
+feature change together. It reads `.structure-sweep/verdicts.json` and `git log`, prints a table
+and writes `.structure-sweep/score.json`. It calls no model and no network.
+
+Each non-merge commit is one change set: the paths it touched that have a verdict row, deduped.
+Only change sets with 2 to `--max-files` such paths are kept. A pair of files counts only when both
+rows share a `scope`, the folder that was swept.
+
+| Metric | Means |
+|---|---|
+| precision | Of the same-scope pairs in one feature, among files some kept change set touched, the share that changed together at least once. |
+| recall | Of the same-scope pairs that changed together, the share in one feature. |
+| f1 | `2PR / (P + R)`. |
+| per-feature precision / recall / f1 | Precision over the pairs inside the feature; recall is co-changed pairs with both files in it over co-changed pairs with at least one. |
+| leaf folders | The same precision, recall and f1 with each file's own folder as its label: the number the vocabulary has to beat. |
+| confident | Rows whose feature confidence is at least `0.8`, overall and per feature, with the counts behind it. |
+
+A metric whose denominator is zero is `null` in the JSON and `n/a` in the table.
+
+| Flag | Default | |
+|---|---|---|
+| `--verdicts <file>` | `.structure-sweep/verdicts.json` | sweep output to grade |
+| `--ref <ref>` | `HEAD` | read history back from here |
+| `--since <date>` | all history | only commits after this date, as `git log --since` takes it |
+| `--pr-only` | off | only commits whose subject ends in `(#N)`, the squash-merge shape |
+| `--max-files <n>` | `40` | drop commits touching more labelled files than this |
+| `--out <file>` | `.structure-sweep/score.json` | JSON report |
+
 ## As a library
 
 Every command is also a function — `runSweep`, `runPairs`, `planScope` / `planManifest`,
-`applyManifest` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
+`applyManifest`, and `scoreCoChange` over rows and change sets with `readChangeSets` as its git
+reader — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
 hand it a stub.

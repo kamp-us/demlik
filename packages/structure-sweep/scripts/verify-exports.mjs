@@ -14,6 +14,9 @@ const expected = {
     "loadVocabulary",
     "parseVocabulary",
     "httpJevClient",
+    "scoreCoChange",
+    "readChangeSets",
+    "renderScoreTable",
   ],
 };
 
