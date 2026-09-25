@@ -91,8 +91,9 @@ It writes two files:
 - `.structure-sweep/signals.json` — the folders under each folder you pass (to `--depth` levels,
   each with the number of files `sweep` would classify), every named workspace `package.json`, and,
   from each `--graph` file, the code-graph clusters that span several folders (the graph needs
-  `code-graph --graph --clusters`) and every cross-runtime `service.method` call. The same checkout
-  gives byte-identical JSON.
+  `code-graph --graph --clusters`; each cluster names the file it came from, since two graphs number
+  theirs independently) and every cross-runtime `service.method` call. The same checkout gives
+  byte-identical JSON.
 - `.structure-sweep/propose-prompt.md` — a prompt that carries those signals, the roles to use,
   the vocabulary's JSON Schema, a filled example, the number of features to draft, and the path to
   write the config to. It names no coding agent, so any of them can follow it.

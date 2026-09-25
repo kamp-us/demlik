@@ -78,7 +78,10 @@ export function proposeCommand(argv: readonly string[], cwd: string): void {
     ref: values.ref,
     scopes: positionals.map((p) => scopeOf(root, cwd, p)),
     depth: count("depth", values.depth, 1),
-    graphs: graphPaths.map(readGraphFile),
+    graphs: graphPaths.map((g) => ({
+      file: shown(root, g),
+      graph: readGraphFile(g),
+    })),
   });
   const prompt = renderProposePrompt({
     signals,

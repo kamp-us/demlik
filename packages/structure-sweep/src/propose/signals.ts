@@ -18,8 +18,13 @@ export interface PackageSignal {
   readonly name: string;
 }
 
-/** A code-graph cluster that spans several folders: one concept the layout has not named. */
+/**
+ * A code-graph cluster that spans several folders: one concept the layout has not named. code-graph
+ * numbers clusters per run, so `id` is unique only within its `graph`; the pair names the cluster.
+ */
 export interface ClusterSignal {
+  /** The `--graph` file the cluster came from, repo-relative. */
+  readonly graph: string;
   readonly id: string;
   readonly dirs: readonly string[];
 }
@@ -42,12 +47,18 @@ export interface ProposeSignals {
   readonly graph: GraphSignals | null;
 }
 
+/** One parsed `--graph` file and where it lives, repo-relative. */
+export interface GraphSource {
+  readonly file: string;
+  readonly graph: Graph;
+}
+
 export interface SignalsInput {
   readonly root: string;
   readonly ref: string;
   readonly scopes: readonly string[];
   readonly depth: number;
-  readonly graphs: readonly Graph[];
+  readonly graphs: readonly GraphSource[];
 }
 
 /** Code-unit order: the same on every machine and locale, unlike `localeCompare`. */
@@ -58,7 +69,8 @@ function directorySignals(
   scopes: readonly string[],
   depth: number,
 ): DirectorySignal[] {
-  const counts = new Map<string, number>();
+  // A set per folder: overlapping scopes reach one file twice, and it counts once.
+  const files = new Map<string, Set<string>>();
   for (const scope of scopes) {
     for (const path of paths) {
       if (!path.startsWith(`${scope}/`) || !isSweptSource(path)) continue;
@@ -67,13 +79,13 @@ function directorySignals(
       const segments = below.split("/").slice(0, depth);
       for (let n = 1; n <= segments.length; n++) {
         const dir = `${scope}/${segments.slice(0, n).join("/")}`;
-        counts.set(dir, (counts.get(dir) ?? 0) + 1);
+        files.set(dir, (files.get(dir) ?? new Set()).add(path));
       }
     }
   }
-  return [...counts]
+  return [...files]
     .sort(([a], [b]) => byCodeUnit(a, b))
-    .map(([path, files]) => ({ path, files }));
+    .map(([path, under]) => ({ path, files: under.size }));
 }
 
 function packageName(root: string, ref: string, path: string): string | null {
@@ -103,23 +115,24 @@ function packageSignals(
 
 function graphSignals(
   root: string,
-  graphs: readonly Graph[],
+  graphs: readonly GraphSource[],
 ): GraphSignals | null {
   if (graphs.length === 0) return null;
-  const reports = graphs.flatMap((graph) =>
-    graph.clusters ? [{ graph, clusters: graph.clusters }] : [],
+  const reports = graphs.flatMap(({ file, graph }) =>
+    graph.clusters ? [{ file, graph, clusters: graph.clusters }] : [],
   );
   const clusters =
     reports.length === 0
       ? null
-      : reports.flatMap(({ graph, clusters }) =>
+      : reports.flatMap(({ file, graph, clusters }) =>
           clusters.scatteredClusters.map((c) => ({
+            graph: file,
             id: c.id,
             dirs: c.dirs.map((d) => repoPathOf(root, graph, d.dir)),
           })),
         );
   const methods = new Set(
-    graphs.flatMap((graph) =>
+    graphs.flatMap(({ graph }) =>
       (graph.crossRuntime?.edges ?? []).map(
         (e) => `${e.targetService}.${e.method}`,
       ),

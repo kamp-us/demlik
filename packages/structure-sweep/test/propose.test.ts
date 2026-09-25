@@ -5,7 +5,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
 import { describe, expect, it } from "vitest";
 import { proposeCommand } from "../src/propose/cli.js";
@@ -32,17 +32,28 @@ const fixture = () =>
     "tools/package.json": "{ not json",
   });
 
-const signalsOf = (root: string, graphs: string[] = []) =>
+const signalsOf = (
+  root: string,
+  graphs: string[] = [],
+  scopes = ["apps/web/src"],
+) =>
   gatherSignals({
     root,
     ref: "HEAD",
-    scopes: ["apps/web/src"],
+    scopes,
     depth: 3,
-    graphs: graphs.map(readGraphFile),
+    graphs: graphs.map((g) => ({
+      file: relative(root, g),
+      graph: readGraphFile(g),
+    })),
   });
 
-function graphFile(dir: string, body: Record<string, unknown>): string {
-  const path = join(dir, `${Object.keys(body).join("-")}.graph.json`);
+function graphFile(
+  dir: string,
+  body: Record<string, unknown>,
+  name = Object.keys(body).join("-"),
+): string {
+  const path = join(dir, `${name}.graph.json`);
   writeFileSync(
     path,
     JSON.stringify({
@@ -127,13 +138,63 @@ describe("gatherSignals", () => {
 
     expect(signalsOf(root, [clustered]).graph).toEqual({
       clusters: [
-        { id: "c01", dirs: ["apps/web/src/catalog", "apps/web/src/ödeme"] },
+        {
+          graph: "crossRuntime-clusters.graph.json",
+          id: "c01",
+          dirs: ["apps/web/src/catalog", "apps/web/src/ödeme"],
+        },
       ],
       crossRuntime: ["auth.verify", "billing.charge"],
     });
     expect(
       signalsOf(root, [graphFile(root, { clusters: null })]).graph,
     ).toEqual({ clusters: null, crossRuntime: [] });
+  });
+
+  it("keeps two graphs' same-numbered clusters apart by naming the graph each came from", () => {
+    const root = fixture();
+    const clusterIn = (name: string, dir: string) =>
+      graphFile(
+        root,
+        {
+          clusters: {
+            scatteredClusters: [
+              { id: "c01", dirs: [{ dir: "src/catalog" }, { dir }] },
+            ],
+          },
+        },
+        name,
+      );
+
+    const clusters = signalsOf(root, [
+      clusterIn("web", "src/ödeme"),
+      clusterIn("admin", "src/assets"),
+    ]).graph?.clusters;
+
+    expect(clusters?.map((c) => [c.graph, c.id])).toEqual([
+      ["web.graph.json", "c01"],
+      ["admin.graph.json", "c01"],
+    ]);
+    expect(
+      promptFor(signalsOf(root, [clusterIn("web", "src/ödeme")])),
+    ).toContain(
+      "- c01 in `web.graph.json`: `apps/web/src/catalog`, `apps/web/src/ödeme`",
+    );
+  });
+
+  it("counts a file once when two scopes overlap", () => {
+    const root = fixture();
+
+    const { directories } = signalsOf(root, [], ["apps/web", "apps/web/src"]);
+
+    expect(directories).toContainEqual({
+      path: "apps/web/src/catalog",
+      files: 2,
+    });
+    expect(directories).toContainEqual({
+      path: "apps/web/src/catalog/ui",
+      files: 1,
+    });
   });
 });
 

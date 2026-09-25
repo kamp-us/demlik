@@ -97,7 +97,8 @@ function signalSections(signals: ProposeSignals): string[] {
         ? "_not read: the graph was not built with `code-graph --clusters`_"
         : list(
             graph.clusters.map(
-              (c) => `${c.id}: ${c.dirs.map((d) => `\`${d}\``).join(", ")}`,
+              (c) =>
+                `${c.id} in \`${c.graph}\`: ${c.dirs.map((d) => `\`${d}\``).join(", ")}`,
             ),
             "no cluster spans more than one folder",
           ),
