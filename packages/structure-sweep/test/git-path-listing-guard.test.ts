@@ -28,10 +28,7 @@ const PATH_LISTING = new Set([
 
 /** Paths relative to `src/`, forward-slashed. */
 function exempt(path: string): boolean {
-  if (path === "git.ts") return true;
-  // #385 (PR #403) lists paths in propose/signals.ts with its own `-z` ls-tree; its follow-up
-  // switches that to git.ts's `trackedPaths` and removes this exemption.
-  return path.startsWith("propose/");
+  return path === "git.ts";
 }
 
 function literal(node: Node | undefined): string | undefined {
@@ -113,7 +110,7 @@ describe("the git path-listing guard", () => {
     ]);
   });
 
-  it("exempts git.ts and, until #385 lands its follow-up, propose/**", () => {
+  it("exempts git.ts and nothing else", () => {
     const sample = 'git(root, ["ls-tree", "-r", "-z", "--name-only", ref]);';
     expect(
       pathListingOffenders(
@@ -122,6 +119,6 @@ describe("the git path-listing guard", () => {
           ["propose/signals.ts", sample],
         ]),
       ),
-    ).toEqual([]);
+    ).toEqual(["propose/signals.ts"]);
   });
 });
