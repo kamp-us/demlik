@@ -160,9 +160,50 @@ A metric whose denominator is zero is `null` in the JSON and `n/a` in the table.
 | `--max-files <n>` | `40` | drop commits touching more labelled files than this |
 | `--out <file>` | `.structure-sweep/score.json` | JSON report |
 
+### `structure-sweep consolidate`
+
+```sh
+structure-sweep consolidate --max-lines 40 --min-cluster 3
+```
+
+Turns outputs already on disk into a consolidation plan: which tiny files to merge and which
+plumbing to extract. It calls no model and no network, needs no `TYPESAFE_API_KEY`, and changes no
+source file — it writes `.structure-sweep/consolidate.json` and a markdown summary
+`.structure-sweep/consolidate.md`, nothing else. The same inputs give byte-identical JSON.
+
+- **merge** — from the sweep verdicts: files sharing one `scope`, feature and role whose non-blank
+  line count at `--ref` is at most `--max-lines`. A group with at least `--min-cluster` such files is
+  one proposal.
+- **extract** — from `pairs.json`: only `shared_helper` pairs, joined into one candidate wherever
+  two pairs share a function, within a scope.
+
+A missing input skips its kind with a line on stderr naming the file, and that kind is `null` in the
+plan; a malformed one fails the run with its parse error.
+
+```json
+{
+ "ref": "HEAD", "maxLines": 40, "minCluster": 3,
+ "merge": [{ "scope": "apps/web/src", "feature": "billing", "role": "ui",
+   "files": [{ "path": "apps/web/src/billing/price.tsx", "lines": 12 }], "lines": 12 }],
+ "extract": [{ "scope": "apps/web/src", "members": ["a.ts:fetchA", "b.ts:fetchB"], "pairs": 1 }]
+}
+```
+
+Merge proposals are sorted by file count, extract candidates by member count, then pair count.
+
+| Flag | Default | |
+|---|---|---|
+| `--verdicts <file>` | `.structure-sweep/verdicts.json` | sweep output |
+| `--pairs <file>` | `.structure-sweep/pairs.json` | `pairs` output |
+| `--ref <ref>` | `HEAD` | tree the line counts are read from |
+| `--max-lines <n>` | `40` | a file is small at or under this many non-blank lines |
+| `--min-cluster <n>` | `3` | small files a group needs to become a proposal (at least 2) |
+| `--out <file>` | `.structure-sweep/consolidate.json` | JSON plan |
+| `--report <file>` | `.structure-sweep/consolidate.md` | markdown summary |
+
 ## As a library
 
 Every command is also a function — `runSweep`, `runPairs`, `planScope` / `planManifest`,
-`applyManifest`, and `scoreCoChange` over rows and change sets with `readChangeSets` as its git
-reader — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
+`applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as its git
+reader, and `mergeProposals` / `extractProposals` / `renderConsolidation` for `consolidate` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
 hand it a stub.

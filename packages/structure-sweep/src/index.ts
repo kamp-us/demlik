@@ -5,6 +5,18 @@
  */
 
 export {
+  type ClusterOptions,
+  ClusterRow,
+  type ConsolidationPlan,
+  type ExtractProposal,
+  extractProposals,
+  HelperPairRow,
+  type MergeProposal,
+  mergeProposals,
+  renderConsolidation,
+  type SmallFile,
+} from "./consolidate/plan.js";
+export {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,
