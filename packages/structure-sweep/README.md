@@ -3,6 +3,8 @@
 Sort a codebase onto its own feature vocabulary. [`@demlik/code-graph`](../code-graph) proves
 structure; `structure-sweep` asks TypeSafe **Jev** what the code _means_, then moves it.
 
+- `propose` — gather repo signals and write a prompt for drafting the feature vocabulary `sweep`
+  reads, with you or your coding agent doing the drafting.
 - `sweep` — for every source file under a folder, which feature it belongs to, which role it plays,
   and whether a business rule sits inside an API file.
 - `pairs` — for every code-graph collapse pair, whether the two functions are the same decision,
@@ -18,14 +20,16 @@ npm install -D @demlik/structure-sweep
 
 Calls go to Jev's endpoint through [`@demlik/tea/jev`](../tea/docs/how-to/ask-jev-a-typed-question.md),
 which decodes each reply; `@demlik/tea/retry-backoff` retries 429/529 and dropped connections. The
-key is read from `TYPESAFE_API_KEY` — `sweep` and `pairs` refuse to start without it. `move` never
-calls Jev.
+key is read from `TYPESAFE_API_KEY` — `sweep` and `pairs` refuse to start without it. `propose`
+and `move` never call Jev.
 
 ## The vocabulary file
 
 `sweep` and `move plan` read the features and roles from `structure-sweep.config.json` at the
 repository root (`--config <file>` to point elsewhere). It is parsed with zod when the command
-starts; an invalid file stops the run with every problem listed, before any call is made.
+starts; an invalid file stops the run with every problem listed, before any call is made. To
+draft one for a repository you do not know yet, start with
+[`propose`](#structure-sweep-propose-folder).
 
 ```json
 {
@@ -71,6 +75,56 @@ twice.
 
 Folders and paths are taken relative to where you run the command; outputs default to
 `.structure-sweep/` at the repository root.
+
+### `structure-sweep propose <folder>...`
+
+```sh
+structure-sweep propose apps/web/src services/api/src --graph web-graph.json
+```
+
+Writes the material for drafting a vocabulary, and leaves the drafting to whoever runs it: you, or
+the coding agent you are working in (Claude Code, Codex, Cursor or any other). It calls no model and
+no network, reads no API key, and reads the git tree at `--ref`, not the working copy.
+
+It writes two files:
+
+- `.structure-sweep/signals.json` — the folders under each folder you pass (to `--depth` levels,
+  each with the number of files `sweep` would classify), every named workspace `package.json`, and,
+  from each `--graph` file, the code-graph clusters that span several folders (the graph needs
+  `code-graph --graph --clusters`; each cluster names the file it came from, since two graphs number
+  theirs independently) and every cross-runtime `service.method` call. The same checkout gives
+  byte-identical JSON.
+- `.structure-sweep/propose-prompt.md` — a prompt that carries those signals, the roles to use,
+  the vocabulary's JSON Schema, a filled example, the number of features to draft, and the path to
+  write the config to. It names no coding agent, so any of them can follow it.
+
+Either file already there stops the run; `--force` overwrites both.
+
+The loop, by hand or by an agent reading the prompt:
+
+1. **propose** — `structure-sweep propose <folder>...`.
+2. **draft** — read `propose-prompt.md` and write the config to
+   `.structure-sweep/proposed.config.json`.
+3. **sweep** — `structure-sweep sweep <folder>... --config .structure-sweep/proposed.config.json`.
+4. **score** — `structure-sweep score`.
+5. **adjust** — merge or sharpen features with a low `confident` share, split features with low
+   precision, and go back to 3 until the score stops improving.
+
+With no `--config`, the prompt hands over four roles: `business_rule` (`rules/`), `api_surface`
+(`api/`), `persistence` (`store/`) and `plumbing` (`lib/`, shared) — the ones in the example
+above. With `--config`, it takes that vocabulary's roles and product line instead.
+
+| Flag | Default | |
+|---|---|---|
+| `--features <n>` | `12` | features the prompt asks for (at least 2) |
+| `--config <file>` | four built-in roles | vocabulary to take the roles and product line from |
+| `--graph <file>` | none | code-graph `--graph` JSON to read clusters and cross-runtime calls from (repeatable) |
+| `--ref <ref>` | `HEAD` | git tree to read folders and packages from |
+| `--depth <n>` | `3` | folder levels listed under each folder |
+| `--draft <file>` | `.structure-sweep/proposed.config.json` | where the prompt says to write the config |
+| `--out <file>` | `.structure-sweep/signals.json` | signals JSON |
+| `--prompt <file>` | `.structure-sweep/propose-prompt.md` | prompt |
+| `--force` | off | overwrite `--out` and `--prompt` |
 
 ### `structure-sweep sweep <folder>...`
 
@@ -184,7 +238,9 @@ plan; a malformed one fails the run with its parse error.
 {
  "ref": "HEAD", "maxLines": 40, "minCluster": 3,
  "merge": [{ "scope": "apps/web/src", "feature": "billing", "role": "ui",
-   "files": [{ "path": "apps/web/src/billing/price.tsx", "lines": 12 }], "lines": 12 }],
+   "files": [{ "path": "apps/web/src/billing/price.tsx", "lines": 12 },
+    { "path": "apps/web/src/billing/tax.tsx", "lines": 9 },
+    { "path": "apps/web/src/billing/total.tsx", "lines": 7 }], "lines": 28 }],
  "extract": [{ "scope": "apps/web/src", "members": ["a.ts:fetchA", "b.ts:fetchB"], "pairs": 1 }]
 }
 ```
@@ -203,7 +259,8 @@ Merge proposals are sorted by file count, extract candidates by member count, th
 
 ## As a library
 
-Every command is also a function — `runSweep`, `runPairs`, `planScope` / `planManifest`,
-`applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as its git
-reader, and `mergeProposals` / `extractProposals` / `renderConsolidation` for `consolidate` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
+Every command except `propose` is also a function — `runSweep`, `runPairs`, `planScope` /
+`planManifest`, `applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as
+its git reader, and `mergeProposals` / `extractProposals` / `renderConsolidation` for
+`consolidate` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
 hand it a stub.

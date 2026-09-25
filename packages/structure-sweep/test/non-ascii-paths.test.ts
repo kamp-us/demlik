@@ -139,4 +139,29 @@ describe("ignoredPaths", () => {
       /git check-ignore failed/,
     );
   });
+
+  it("throws its own error when git exits before reading stdin (EPIPE)", () => {
+    const outside = mkdtempSync(join(tmpdir(), "structure-sweep-no-repo-"));
+    // Far past any pipe buffer, so the write is still pending when git exits 128 unread.
+    const paths = Array.from({ length: 100_000 }, (_, i) => `svc/src/${i}.ts`);
+    const error = (() => {
+      try {
+        ignoredPaths(outside, paths);
+      } catch (thrown) {
+        return thrown as Error;
+      }
+    })();
+    expect(error?.message).toMatch(/git check-ignore failed .*\(128\)/);
+    expect(error?.cause).toMatchObject({ code: "EPIPE" });
+  });
+
+  it("throws its own error when git cannot be spawned at all", () => {
+    const missing = join(
+      mkdtempSync(join(tmpdir(), "structure-sweep-no-repo-")),
+      "gone",
+    );
+    expect(() => ignoredPaths(missing, [ASCII])).toThrow(
+      /git check-ignore failed .*ENOENT/,
+    );
+  });
 });

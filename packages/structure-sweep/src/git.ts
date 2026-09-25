@@ -33,8 +33,9 @@ export function trackedPaths(
 
 /**
  * The subset of `paths` git ignores, each exactly as given. `check-ignore` exits 1 when none is
- * ignored, so that is an empty set; any other failure throws rather than reading as "nothing
- * ignored". `-z` both ways keeps a non-ASCII or newline-holding path unquoted.
+ * ignored, so that is an empty set; any other outcome throws rather than reading as "nothing
+ * ignored" — including a spawn error, since an `EPIPE` means git exited before reading every path.
+ * `-z` both ways keeps a non-ASCII or newline-holding path unquoted.
  */
 export function ignoredPaths(
   cwd: string,
@@ -46,13 +47,14 @@ export function ignoredPaths(
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
   });
-  if (result.error !== undefined) throw result.error;
-  if (result.status === 1) return new Set();
-  if (result.status !== 0)
-    throw new Error(
-      `git check-ignore failed in ${cwd} (${result.status ?? result.signal}): ${result.stderr.trim()}`,
-    );
-  return new Set(result.stdout.split("\0").filter(Boolean));
+  if (result.error === undefined && result.status === 0)
+    return new Set(result.stdout.split("\0").filter(Boolean));
+  if (result.error === undefined && result.status === 1) return new Set();
+  const exit = result.status ?? result.signal ?? "no exit";
+  const reason = result.stderr?.trim() || result.error?.message || "";
+  throw new Error(`git check-ignore failed in ${cwd} (${exit}): ${reason}`, {
+    cause: result.error,
+  });
 }
 
 /** One non-merge commit: its subject line and every path it touched, exactly as git stores them. */

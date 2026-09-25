@@ -2,10 +2,12 @@
 import { CONSOLIDATE_USAGE, consolidateCommand } from "./consolidate/cli.js";
 import { MOVE_USAGE, moveCommand } from "./move/cli.js";
 import { PAIRS_USAGE, pairsCommand } from "./pairs/cli.js";
+import { PROPOSE_USAGE, proposeCommand } from "./propose/cli.js";
 import { SCORE_USAGE, scoreCommand } from "./score/cli.js";
 import { SWEEP_USAGE, sweepCommand } from "./sweep/cli.js";
 
 const USAGE = [
+  PROPOSE_USAGE,
   SWEEP_USAGE,
   PAIRS_USAGE,
   MOVE_USAGE,
@@ -16,6 +18,8 @@ const USAGE = [
 async function main(argv: readonly string[]): Promise<void> {
   const [command, ...rest] = argv;
   switch (command) {
+    case "propose":
+      return proposeCommand(rest, process.cwd());
     case "sweep":
       return sweepCommand(rest, process.cwd());
     case "pairs":
