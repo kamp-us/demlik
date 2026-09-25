@@ -13,6 +13,9 @@ export const DEFAULTS = {
   score: `${OUT_DIR}/score.json`,
   consolidate: `${OUT_DIR}/consolidate.json`,
   consolidateReport: `${OUT_DIR}/consolidate.md`,
+  signals: `${OUT_DIR}/signals.json`,
+  proposePrompt: `${OUT_DIR}/propose-prompt.md`,
+  proposedConfig: `${OUT_DIR}/proposed.config.json`,
 } as const;
 
 /** A path flag: absolute as given, otherwise under the repository root. */

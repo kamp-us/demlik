@@ -26,6 +26,10 @@ const IS_SOURCE = /\.(ts|tsx)$/;
 const IS_EXCLUDED =
   /(\.test\.|\.spec\.|\.stories\.|\.d\.ts$|__generated__|\/test\/|\/__tests__\/)/;
 
+/** Whether `sweep` asks about the file at `path`: TypeScript source, not a test, story or declaration. */
+export const isSweptSource = (path: string) =>
+  IS_SOURCE.test(path) && !IS_EXCLUDED.test(path);
+
 export const contentHash = (text: string) =>
   createHash("sha256").update(text).digest("hex").slice(0, 16);
 
@@ -37,7 +41,7 @@ export function listSources(
 ): SourceFile[] {
   return git(cwd, ["ls-tree", "-r", "--name-only", ref, "--", scope])
     .split("\n")
-    .filter((path) => IS_SOURCE.test(path) && !IS_EXCLUDED.test(path))
+    .filter(isSweptSource)
     .map((path) => {
       const text = git(cwd, ["show", `${ref}:${path}`]);
       return { path, text, hash: contentHash(text) };

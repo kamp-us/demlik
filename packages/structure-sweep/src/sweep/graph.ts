@@ -37,7 +37,36 @@ const GraphFile = z.object({
       ),
     })
     .nullable(),
+  /** Present only in a graph built with `code-graph --clusters`; `sweep` never reads it. */
+  clusters: z
+    .object({
+      scatteredClusters: z.array(
+        z.object({
+          id: z.string(),
+          dirs: z.array(z.object({ dir: z.string() })),
+        }),
+      ),
+    })
+    .nullish(),
 });
+
+export type Graph = z.infer<typeof GraphFile>;
+
+/** A code-graph `--graph` JSON file, parsed to the fields structure-sweep reads. */
+export const readGraphFile = (path: string): Graph =>
+  GraphFile.parse(JSON.parse(readFileSync(path, "utf8")));
+
+/** Where a path the graph reports relative to its own `root` sits in the repository. */
+export function repoPathOf(
+  repoRoot: string,
+  graph: Graph,
+  path: string,
+): string {
+  const rootAbs = isAbsolute(graph.root)
+    ? graph.root
+    : join(repoRoot, graph.root);
+  return relative(repoRoot, join(rootAbs, path));
+}
 
 export type GraphFacts = {
   readonly calledFromFiles: readonly string[];
@@ -70,8 +99,7 @@ function bump(counts: Map<string, number>, key: string): void {
 
 const fileOf = (id: string) => id.slice(0, id.lastIndexOf(":"));
 
-type GraphFunction = z.infer<typeof GraphFile>["functions"][number];
-type Graph = z.infer<typeof GraphFile>;
+type GraphFunction = Graph["functions"][number];
 
 function functionsByFile(graph: Graph): Map<string, GraphFunction[]> {
   const perFile = new Map<string, GraphFunction[]>();
@@ -163,14 +191,11 @@ export function loadGraphFacts(
 ): Map<string, GraphFacts> {
   const out = new Map<string, GraphFacts>();
   for (const graphPath of graphPaths) {
-    const graph = GraphFile.parse(JSON.parse(readFileSync(graphPath, "utf8")));
-    const rootAbs = isAbsolute(graph.root)
-      ? graph.root
-      : join(repoRoot, graph.root);
+    const graph = readGraphFile(graphPath);
     const workerCalls = workerCallsByFile(graph);
     for (const [file, fns] of functionsByFile(graph)) {
       out.set(
-        relative(repoRoot, join(rootAbs, file)),
+        repoPathOf(repoRoot, graph, file),
         factsForFile(file, fns, workerCalls),
       );
     }
