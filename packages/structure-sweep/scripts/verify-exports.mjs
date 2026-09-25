@@ -17,6 +17,9 @@ const expected = {
     "scoreCoChange",
     "readChangeSets",
     "renderScoreTable",
+    "mergeProposals",
+    "extractProposals",
+    "renderConsolidation",
   ],
 };
 

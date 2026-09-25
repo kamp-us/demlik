@@ -11,6 +11,8 @@ export const DEFAULTS = {
   pairsReport: `${OUT_DIR}/pairs.md`,
   manifest: `${OUT_DIR}/move-manifest.json`,
   score: `${OUT_DIR}/score.json`,
+  consolidate: `${OUT_DIR}/consolidate.json`,
+  consolidateReport: `${OUT_DIR}/consolidate.md`,
 } as const;
 
 /** A path flag: absolute as given, otherwise under the repository root. */

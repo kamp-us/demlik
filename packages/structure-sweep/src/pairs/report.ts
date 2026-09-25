@@ -21,12 +21,23 @@ export interface PairRow {
   readonly usage: JevUsage;
 }
 
-export interface DecisionGroup {
-  readonly members: readonly string[];
-  readonly pairs: readonly PairRow[];
+/** The slice of a pair row `pairGroups` reads: its two functions and the verdict. */
+export interface GroupablePair {
+  readonly a: Pick<JudgedFunction, "path" | "function">;
+  readonly b: Pick<JudgedFunction, "path" | "function">;
+  readonly answers: { readonly verdict: { readonly choice: PairVerdict } };
 }
 
-const key = (fn: JudgedFunction) => `${fn.path}:${fn.function}`;
+/** Functions (`path:function`) joined by pairs that share one, and the pairs that joined them. */
+export interface PairGroup<R extends GroupablePair = PairRow> {
+  readonly members: readonly string[];
+  readonly pairs: readonly R[];
+}
+
+export type DecisionGroup = PairGroup<PairRow>;
+
+const key = (fn: Pick<JudgedFunction, "path" | "function">) =>
+  `${fn.path}:${fn.function}`;
 
 /** What a human does about a pair Jev judged this way. Exhaustive: a new verdict fails to compile here. */
 export function actionFor(verdict: PairVerdict): string {
@@ -54,7 +65,14 @@ export function countVerdicts(
   return counts;
 }
 
-export function decisionGroups(rows: readonly PairRow[]): DecisionGroup[] {
+/**
+ * The connected groups the `verdict` pairs form: two pairs sharing a function land in one group.
+ * Groups come in first-seen order, each with its members sorted.
+ */
+export function pairGroups<R extends GroupablePair>(
+  rows: readonly R[],
+  verdict: PairVerdict,
+): PairGroup<R>[] {
   const parent = new Map<string, string>();
   const find = (x: string): string => {
     const p = parent.get(x) ?? x;
@@ -63,9 +81,9 @@ export function decisionGroups(rows: readonly PairRow[]): DecisionGroup[] {
     parent.set(x, root);
     return root;
   };
-  const same = rows.filter((r) => r.answers.verdict.choice === "same_decision");
+  const same = rows.filter((r) => r.answers.verdict.choice === verdict);
   for (const row of same) parent.set(find(key(row.a)), find(key(row.b)));
-  const groups = new Map<string, { members: Set<string>; pairs: PairRow[] }>();
+  const groups = new Map<string, { members: Set<string>; pairs: R[] }>();
   for (const row of same) {
     const root = find(key(row.a));
     const group = groups.get(root) ?? { members: new Set<string>(), pairs: [] };
@@ -73,12 +91,17 @@ export function decisionGroups(rows: readonly PairRow[]): DecisionGroup[] {
     group.pairs.push(row);
     groups.set(root, group);
   }
-  return [...groups.values()]
-    .map((g) => ({ members: [...g.members].sort(), pairs: g.pairs }))
-    .sort(
-      (x, y) =>
-        y.members.length - x.members.length || y.pairs.length - x.pairs.length,
-    );
+  return [...groups.values()].map((g) => ({
+    members: [...g.members].sort(),
+    pairs: g.pairs,
+  }));
+}
+
+export function decisionGroups(rows: readonly PairRow[]): DecisionGroup[] {
+  return pairGroups(rows, "same_decision").sort(
+    (x, y) =>
+      y.members.length - x.members.length || y.pairs.length - x.pairs.length,
+  );
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
