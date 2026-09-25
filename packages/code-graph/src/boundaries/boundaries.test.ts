@@ -98,6 +98,7 @@ describe("analyzeBoundaries over a real fixture's import edges", () => {
       ["impure-rules", "services/svc/src/findings/rules/score.ts", "../store/repo.js"],
       ["impure-rules", "services/svc/src/findings/rules/score.ts", "zod"],
       ["lib-imports-feature", "services/svc/src/lib/util.ts", "../findings/index.js"],
+      ["outside-imports-feature-internal", "services/svc/src/index.ts", "./findings/store/repo.js"],
     ]);
   });
 
@@ -110,8 +111,17 @@ describe("analyzeBoundaries over a real fixture's import edges", () => {
     expect(specifiers).not.toContain("@acme/wire-contract");
   });
 
-  it("leaves a file outside every feature and lib unjudged", () => {
-    expect(violations().some((v) => v.from.endsWith("src/index.ts"))).toBe(false);
+  it("judges a file outside every feature and lib: a feature's internal file is B4", () => {
+    expect(violations().filter((v) => v.from.endsWith("svc/src/index.ts"))).toEqual([
+      {
+        kind: "outside-imports-feature-internal",
+        from: "services/svc/src/index.ts",
+        to: "services/svc/src/findings/store/repo.ts",
+        toFeature: "findings",
+        specifier: "./findings/store/repo.js",
+        typeOnly: false,
+      },
+    ]);
   });
 
   it("renders the human view one line per violation, tagged with its rule", () => {
@@ -123,6 +133,10 @@ describe("analyzeBoundaries over a real fixture's import edges", () => {
     );
     expect(stdout).toContain(
       "B2 impure-rules        services/svc/src/findings/rules/score.ts -> zod",
+    );
+    expect(stdout).toContain(
+      "B4 outside-imports-feature-internal services/svc/src/index.ts -> services/svc/src/findings/store/repo.ts" +
+        '  ("./findings/store/repo.js")',
     );
   });
 
@@ -145,24 +159,133 @@ describe("the boundary ratchet grandfathers today's count and only lets it fall"
     const recorded: { scopes: Record<string, number> } = JSON.parse(
       fs.readFileSync(ceilingsFile(), "utf8"),
     );
-    expect(recorded.scopes[SCOPE]).toBe(4);
+    expect(recorded.scopes[SCOPE]).toBe(5);
     const { code, stdout } = run({ ci: true });
     expect(code).toBe(0);
     expect(stdout).toContain("boundary ratchet: PASS");
   });
 
   it("fails EXCEEDED when a new crossing lands above the ceiling", () => {
-    record(3);
+    record(4);
     const { code, stdout } = run({ ci: true });
     expect(code).toBe(1);
     expect(stdout).toContain("EXCEEDED");
   });
 
   it("fails SLACK when a fixed crossing leaves the ceiling above reality", () => {
-    record(5);
+    record(6);
     const { code, stdout } = run({ ci: true });
     expect(code).toBe(1);
     expect(stdout).toContain("SLACK");
+  });
+});
+
+describe("B4 judges an importer outside every declared feature and every lib folder", () => {
+  const OUTSIDE_SCOPE = "apps/web";
+  const OUTSIDE_FILES: Record<string, string> = {
+    "tsconfig.json": JSON.stringify({
+      compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true },
+      include: ["src", "scripts"],
+    }),
+    "src/billing/index.ts": "export { charge } from './flows/charge.js';\n",
+    "src/billing/flows/charge.ts":
+      "import { price } from '../rules/price.js';\nexport const charge = price;\n",
+    "src/billing/rules/price.ts": "export const price = 1;\n",
+    "src/billing/store/ledger.ts": "export const ledger = 1;\n",
+    "src/main.ts": [
+      "import { charge } from './billing/index.js';",
+      "import { ledger } from './billing/store/ledger.js';",
+      "import { price } from './billing/rules/price.js';",
+      "export const main = charge + ledger + price;",
+    ].join("\n"),
+    "src/lib/clock.ts":
+      "import { ledger } from '../billing/store/ledger.js';\nexport const clock = ledger;\n",
+    "scripts/seed.ts":
+      "import { ledger } from '../src/billing/store/ledger.js';\nexport const seed = ledger;\n",
+  };
+  let outsideRoot = "";
+  let outsideRules = "";
+
+  const put = (rel: string, body: string) => {
+    const file = path.join(outsideRoot, OUTSIDE_SCOPE, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, body);
+  };
+  const gate = (over: { ci?: boolean; writeCeilings?: boolean; json?: boolean }) => {
+    const out: string[] = [];
+    const code = runBoundaryGate({
+      rootAbsolute: path.join(outsideRoot, OUTSIDE_SCOPE),
+      repoRoot: outsideRoot,
+      boundaryRulesFile: outsideRules,
+      ci: over.ci === true,
+      writeCeilings: over.writeCeilings === true,
+      thresholds: ThresholdsSchema.parse({}),
+      emit: (payload) => {
+        out.push(payload);
+      },
+      report: () => {},
+      json: over.json === true,
+      pretty: false,
+    });
+    return { code, stdout: out.join("") };
+  };
+  const found = (): BoundaryViolation[] => {
+    const parsed: { scopes: { violations: BoundaryViolation[] }[] } = JSON.parse(
+      gate({ json: true }).stdout,
+    );
+    return parsed.scopes.flatMap((s) => s.violations);
+  };
+
+  beforeAll(() => {
+    outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cg-boundaries-b4-"));
+    for (const [rel, body] of Object.entries(OUTSIDE_FILES)) put(rel, body);
+    outsideRules = path.join(outsideRoot, "boundaries.json");
+    fs.writeFileSync(outsideRules, JSON.stringify({ features: { [OUTSIDE_SCOPE]: ["billing"] } }));
+  });
+  afterAll(() => fs.rmSync(outsideRoot, { recursive: true, force: true }));
+
+  it("allows the feature's index.ts and flags every other file, rules/ included, once per edge", () => {
+    expect(found().map((v) => [v.kind, v.from, v.specifier])).toEqual([
+      ["lib-imports-feature", "apps/web/src/lib/clock.ts", "../billing/store/ledger.js"],
+      [
+        "outside-imports-feature-internal",
+        "apps/web/scripts/seed.ts",
+        "../src/billing/store/ledger.js",
+      ],
+      ["outside-imports-feature-internal", "apps/web/src/main.ts", "./billing/rules/price.js"],
+      ["outside-imports-feature-internal", "apps/web/src/main.ts", "./billing/store/ledger.js"],
+    ]);
+    expect(found().map((v) => v.specifier)).not.toContain("./billing/index.js");
+  });
+
+  it("leaves a lib importer to B3 alone", () => {
+    expect(found().filter((v) => v.from.endsWith("src/lib/clock.ts"))).toEqual([
+      {
+        kind: "lib-imports-feature",
+        from: "apps/web/src/lib/clock.ts",
+        to: "apps/web/src/billing/store/ledger.ts",
+        toFeature: "billing",
+        specifier: "../billing/store/ledger.js",
+        typeOnly: false,
+      },
+    ]);
+  });
+
+  it("counts B4 in the scope's ceiling: recorded, passing, then EXCEEDED by one more edge", () => {
+    expect(gate({ writeCeilings: true }).code).toBe(0);
+    const recorded: { scopes: Record<string, number> } = JSON.parse(
+      fs.readFileSync(path.join(outsideRoot, CEILINGS_FILENAME), "utf8"),
+    );
+    expect(recorded.scopes[OUTSIDE_SCOPE]).toBe(4);
+    expect(gate({ ci: true }).code).toBe(0);
+
+    put(
+      "src/extra.ts",
+      "import { ledger } from './billing/store/ledger.js';\nexport const extra = ledger;\n",
+    );
+    const { code, stdout } = gate({ ci: true });
+    expect(code).toBe(1);
+    expect(stdout).toContain("EXCEEDED");
   });
 });
 

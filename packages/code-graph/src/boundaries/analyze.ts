@@ -33,6 +33,14 @@ export type BoundaryViolation =
       readonly toFeature: string;
       readonly specifier: string;
       readonly typeOnly: boolean;
+    }
+  | {
+      readonly kind: "outside-imports-feature-internal";
+      readonly from: string;
+      readonly to: string;
+      readonly toFeature: string;
+      readonly specifier: string;
+      readonly typeOnly: boolean;
     };
 
 export type BoundaryKind = BoundaryViolation["kind"];
@@ -102,6 +110,33 @@ function rulesViolation(ctx: EdgeContext, feature: string): BoundaryViolation | 
   };
 }
 
+type FeaturePlace = Extract<Place, { readonly kind: "feature" }>;
+
+function crossingOf(ctx: EdgeContext, target: string, to: FeaturePlace): BoundaryViolation | null {
+  const { fromPlace, edge } = ctx;
+  const crossing = {
+    from: inScope(ctx.scope, ctx.from),
+    to: inScope(ctx.scope, target),
+    toFeature: to.feature,
+    specifier: edge.specifier,
+    typeOnly: edge.typeOnly,
+  };
+  switch (fromPlace.kind) {
+    case "feature":
+      if (to.feature === fromPlace.feature || to.zone === "index") return null;
+      return { kind: "cross-feature", fromFeature: fromPlace.feature, ...crossing };
+    case "lib":
+      return { kind: "lib-imports-feature", ...crossing };
+    case "elsewhere":
+      if (to.zone === "index") return null;
+      return { kind: "outside-imports-feature-internal", ...crossing };
+    default: {
+      const exhaustive: never = fromPlace;
+      return exhaustive;
+    }
+  }
+}
+
 function violationOf(ctx: EdgeContext): BoundaryViolation | null {
   const { fromPlace, edge } = ctx;
   if (fromPlace.kind === "feature" && fromPlace.zone === "rules") {
@@ -109,35 +144,7 @@ function violationOf(ctx: EdgeContext): BoundaryViolation | null {
   }
   if (edge.target === null) return null;
   const to = placeOf(edge.target, ctx.layout);
-  if (to.kind !== "feature") return null;
-  switch (fromPlace.kind) {
-    case "feature":
-      if (to.feature === fromPlace.feature || to.zone === "index") return null;
-      return {
-        kind: "cross-feature",
-        from: inScope(ctx.scope, ctx.from),
-        fromFeature: fromPlace.feature,
-        to: inScope(ctx.scope, edge.target),
-        toFeature: to.feature,
-        specifier: edge.specifier,
-        typeOnly: edge.typeOnly,
-      };
-    case "lib":
-      return {
-        kind: "lib-imports-feature",
-        from: inScope(ctx.scope, ctx.from),
-        to: inScope(ctx.scope, edge.target),
-        toFeature: to.feature,
-        specifier: edge.specifier,
-        typeOnly: edge.typeOnly,
-      };
-    case "elsewhere":
-      return null;
-    default: {
-      const exhaustive: never = fromPlace;
-      return exhaustive;
-    }
-  }
+  return to.kind === "feature" ? crossingOf(ctx, edge.target, to) : null;
 }
 
 export function analyzeBoundaries(
@@ -150,7 +157,6 @@ export function analyzeBoundaries(
   const violations: BoundaryViolation[] = [];
   for (const module of modules) {
     const fromPlace = placeOf(module.file, layout);
-    if (fromPlace.kind === "elsewhere") continue;
     for (const edge of module.importEdges) {
       const found = violationOf({
         scope,

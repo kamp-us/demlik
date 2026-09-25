@@ -12,6 +12,8 @@ function ruleOf(kind: BoundaryKind): string {
       return "B2";
     case "lib-imports-feature":
       return "B3";
+    case "outside-imports-feature-internal":
+      return "B4";
     default: {
       const exhaustive: never = kind;
       return exhaustive;
@@ -23,6 +25,7 @@ function targetOf(violation: BoundaryViolation): string {
   switch (violation.kind) {
     case "cross-feature":
     case "lib-imports-feature":
+    case "outside-imports-feature-internal":
       return violation.to;
     case "impure-rules":
       return violation.to ?? violation.specifier;
@@ -66,8 +69,8 @@ function failureLines(verdict: ScopeCountVerdict): string[] {
   const lines = ratchetTableLines(verdict, "BOUNDARY");
   if (hasDirection(verdict, "EXCEEDED")) {
     lines.push(
-      "  EXCEEDED: a new import crosses a feature boundary. Import the other feature through",
-      "  its index.ts, keep rules/ on contracts only, and keep lib/ out of features.",
+      "  EXCEEDED: a new import crosses a feature boundary. Import a feature from outside it",
+      "  through its index.ts, keep rules/ on contracts only, and keep lib/ out of features.",
       "  `pnpm code-graph <scope> --boundaries` lists the edges.",
     );
   }
