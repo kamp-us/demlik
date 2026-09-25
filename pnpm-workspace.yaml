@@ -17,6 +17,7 @@ catalog:
   "@opentelemetry/api": 1.9.1
   "@opentelemetry/sdk-trace-base": 2.11.0
   "@standard-schema/spec": ^1.1.0
+  "@typescript/native-preview": 7.0.0-dev.20260707.2
   "@types/chrome": ^0.1.42
   "@types/node": ^22
   "@types/react": 19.0.8
@@ -29,6 +30,8 @@ catalog:
   happy-dom: ^20.9.0
   jsonc-parser: ^3.3.1
   openai: 7.23.0
+  oxc-parser: 0.151.0
+  oxc-resolver: 11.24.2
   react: 19.0.0
   react-dom: 19.0.0
   smol-toml: ^1.6.1
