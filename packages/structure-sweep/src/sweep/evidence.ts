@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename, dirname, extname, join, normalize } from "node:path";
-import { git } from "../git.js";
+import { git, trackedPaths } from "../git.js";
 import type { GraphFacts } from "./graph.js";
 
 export const SOURCE_LIMIT = 7000;
@@ -35,8 +35,7 @@ export function listSources(
   ref: string,
   scope: string,
 ): SourceFile[] {
-  return git(cwd, ["ls-tree", "-r", "--name-only", ref, "--", scope])
-    .split("\n")
+  return trackedPaths(cwd, { ref }, scope)
     .filter((path) => IS_SOURCE.test(path) && !IS_EXCLUDED.test(path))
     .map((path) => {
       const text = git(cwd, ["show", `${ref}:${path}`]);

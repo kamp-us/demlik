@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { DEFAULTS, scopeOf, underRoot } from "../cli-paths.js";
-import { git, repoRootOf } from "../git.js";
+import { repoRootOf, trackedPaths } from "../git.js";
 import { loadVocabulary, type Vocabulary } from "../vocabulary.js";
 import { applyManifest } from "./apply.js";
 import { entryFiles } from "./entries.js";
@@ -34,9 +34,7 @@ export interface PlanScopeInput {
 
 /** `planManifest` over the scope as git tracks it, with its entry files read from the disk. */
 export function planScope(input: PlanScopeInput): Manifest {
-  const tree = git(input.root, ["ls-files", "--", input.scope])
-    .split("\n")
-    .filter(Boolean);
+  const tree = trackedPaths(input.root, "index", input.scope);
   return Manifest.parse(
     planManifest({
       ...input,
