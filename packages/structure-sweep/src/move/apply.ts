@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { loadEdgeProject } from "@demlik/code-graph/project";
 import type { SourceFile } from "ts-morph";
 import { absurd } from "../absurd.js";
-import { git } from "../git.js";
+import { git, trackedPaths } from "../git.js";
 import {
   hasDangling,
   heal,
@@ -156,8 +156,7 @@ function moveAndMeasure(
 }
 
 function scopeSources(repoRoot: string, scope: string): string[] {
-  return git(repoRoot, ["ls-files", "--", scope])
-    .split("\n")
+  return trackedPaths(repoRoot, "index", scope)
     .filter((p) => /\.tsx?$/.test(p) && existsSync(join(repoRoot, p)))
     .map((p) => join(repoRoot, p));
 }

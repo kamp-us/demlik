@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { DEFAULTS, underRoot } from "../cli-paths.js";
-import { git, repoRootOf } from "../git.js";
+import { git, repoRootOf, trackedPaths } from "../git.js";
 import {
   ClusterRow,
   type ConsolidationPlan,
@@ -59,11 +59,7 @@ function linesAt(
   } catch {
     throw new Error(`--ref ${ref} names no tree in ${root}`);
   }
-  const present = new Set(
-    git(root, ["-c", "core.quotepath=off", "ls-tree", "-r", "--name-only", ref])
-      .split("\n")
-      .filter(Boolean),
-  );
+  const present = new Set(trackedPaths(root, { ref }));
   return (path) =>
     present.has(path)
       ? nonBlankLines(git(root, ["show", `${ref}:${path}`]))

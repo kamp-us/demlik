@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import { git } from "../git.js";
+import { git, trackedPaths } from "../git.js";
 import { isSweptSource } from "../sweep/evidence.js";
 import { type Graph, repoPathOf } from "../sweep/graph.js";
 
@@ -52,16 +52,6 @@ export interface SignalsInput {
 
 /** Code-unit order: the same on every machine and locale, unlike `localeCompare`. */
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
-/**
- * Every path `ref` tracks. `-z` hands paths over raw: without it git quotes and octal-escapes any
- * name outside ASCII, and `ödeme/` would read back as `"\303\266deme/"`.
- */
-function trackedPaths(root: string, ref: string): string[] {
-  return git(root, ["ls-tree", "-r", "-z", "--name-only", ref])
-    .split("\0")
-    .filter(Boolean);
-}
 
 function directorySignals(
   paths: readonly string[],
@@ -143,7 +133,7 @@ function graphSignals(
  * never the working copy, so an uncommitted scratch file does not show up as a feature.
  */
 export function gatherSignals(input: SignalsInput): ProposeSignals {
-  const paths = trackedPaths(input.root, input.ref);
+  const paths = trackedPaths(input.root, { ref: input.ref });
   return {
     ref: input.ref,
     scopes: input.scopes,
