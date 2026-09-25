@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { consolidateCommand } from "../src/consolidate/cli.js";
 import type { ConsolidationPlan } from "../src/consolidate/plan.js";
+import { ignoredPaths } from "../src/git.js";
 import { planScope } from "../src/move/cli.js";
 import { VerdictRow } from "../src/move/manifest.js";
 import { readChangeSets } from "../src/score/history.js";
@@ -110,5 +112,31 @@ describe("a non-ASCII file name", () => {
   it("comes back unquoted from score's change history", () => {
     const root = fixture();
     expect(readChangeSets(root)).toContainEqual([ASCII, CAY]);
+  });
+
+  it("is reported by ignoredPaths as itself when an ignore rule covers it", () => {
+    const root = fixture();
+    const ignored = "dist/çay.ts";
+    write(root, { ".gitignore": "dist/\n", [ignored]: "export {};\n" });
+    expect(gitIn(root, "check-ignore", "--", ignored).trim()).toBe(
+      '"dist/\\303\\247ay.ts"',
+    );
+    expect(ignoredPaths(root, [ignored, ASCII, CAY])).toEqual(
+      new Set([ignored]),
+    );
+  });
+});
+
+describe("ignoredPaths", () => {
+  it("answers an empty set when git ignores none of the paths", () => {
+    const root = fixture();
+    expect(ignoredPaths(root, [ASCII, CAY])).toEqual(new Set());
+  });
+
+  it("throws rather than reading a failed check-ignore as nothing ignored", () => {
+    const outside = mkdtempSync(join(tmpdir(), "structure-sweep-no-repo-"));
+    expect(() => ignoredPaths(outside, [ASCII])).toThrow(
+      /git check-ignore failed/,
+    );
   });
 });

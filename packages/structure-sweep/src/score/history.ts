@@ -1,4 +1,4 @@
-import { git } from "../git.js";
+import { commitPaths } from "../git.js";
 import type { ChangeSet } from "./score.js";
 
 export interface HistoryOptions {
@@ -10,7 +10,6 @@ export interface HistoryOptions {
   readonly prOnly?: boolean;
 }
 
-const RECORD = "\x1e";
 const PR_SUBJECT = /\(#\d+\)$/;
 
 /** One change set per non-merge commit reachable from `ref`: the paths it touched. */
@@ -18,23 +17,7 @@ export function readChangeSets(
   root: string,
   options: HistoryOptions = {},
 ): ChangeSet[] {
-  const out = git(root, [
-    "-c",
-    "core.quotepath=off",
-    "log",
-    options.ref ?? "HEAD",
-    "--no-merges",
-    "--name-only",
-    `--format=${RECORD}%s`,
-    ...(options.since === undefined ? [] : [`--since=${options.since}`]),
-    "--",
-  ]);
-  return out
-    .split(RECORD)
-    .slice(1)
-    .map((record) => record.split("\n"))
-    .filter(
-      ([subject]) => !options.prOnly || PR_SUBJECT.test((subject ?? "").trim()),
-    )
-    .map(([, ...files]) => files.filter(Boolean));
+  return commitPaths(root, { ref: options.ref ?? "HEAD", since: options.since })
+    .filter(({ subject }) => !options.prOnly || PR_SUBJECT.test(subject.trim()))
+    .map(({ paths }) => paths);
 }
