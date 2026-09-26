@@ -1,15 +1,16 @@
 # @demlik/code-graph
 
 Agent-native TypeScript code-graph + smell tool. Point it at a folder; it parses
-every `.ts`/`.tsx` (via `ts-morph`), measures each function (loc, complexity,
+every `.ts`/`.tsx` (with oxc), measures each function (loc, complexity,
 nesting depth, comment lines), groups them into modules and directories, flags
 smells against the thresholds in `schema.ts`, and ranks refactor targets. Output
 is deterministic JSON (sorted object keys, sorted arrays — same input, same
 bytes) so an agent reads a graph instead of re-reading files.
 
-The default run is **cheap** (no tsconfig, syntactic getters only — fast). Call
+The default run is **cheap** (no tsconfig, syntax only — fast). Call
 edges (`calls`/`calledBy`/`importedBy`/`callChainDepth` + their smells) are an
-**opt-in** pass triggered by `--edges`, `--deep`, or `--blast`.
+**opt-in** pass triggered by `--edges`, `--deep`, or `--blast`; it resolves
+modules with oxc-resolver and callees with tsgo's checker.
 
 Three further passes are opt-in on top of that, and each implies the ones below it:
 **cross-runtime edges** (`--cross-runtime`), **node kinds** (`--kinds`), and the

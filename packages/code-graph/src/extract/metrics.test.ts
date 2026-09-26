@@ -1,5 +1,5 @@
-import { Project, type SourceFile } from "ts-morph";
 import { describe, expect, it } from "vitest";
+import { sourceUnit } from "../test-helpers/source-unit.js";
 import { discoverFunctions } from "./functions.js";
 import {
   collectModuleCommentRanges,
@@ -7,21 +7,10 @@ import {
   moduleCommentLines,
 } from "./metrics.js";
 
-function parse(source: string, name = "fixture.ts"): SourceFile {
-  const project = new Project({
-    useInMemoryFileSystem: true,
-    skipLoadingLibFiles: true,
-    skipFileDependencyResolution: true,
-    skipAddingFilesFromTsConfig: true,
-  });
-  return project.createSourceFile(name, source);
-}
-
 function metricsByName(source: string): Map<string, ReturnType<typeof computeFunctionMetrics>> {
-  const sf = parse(source);
-  const { functions } = discoverFunctions("/", [sf]);
+  const { functions } = discoverFunctions([sourceUnit(source)]);
   const out = new Map<string, ReturnType<typeof computeFunctionMetrics>>();
-  for (const f of functions) out.set(f.name, computeFunctionMetrics(f.node));
+  for (const f of functions) out.set(f.name, computeFunctionMetrics(f));
   return out;
 }
 
@@ -32,7 +21,7 @@ describe("complexity (B3) — token counting", () => {
   });
 
   it("counts each && / || / ?? token exactly once (no double-count)", () => {
-    const m = metricsByName("function f(a, b, c, d) { return a && b || c ?? d; }");
+    const m = metricsByName("function f(a, b, c, d) { return (a && b || c) ?? d; }");
     expect(m.get("f")?.complexity).toBe(4);
   });
 
@@ -152,11 +141,11 @@ function f() {
 }
 // between
 function g() { return 2; }`;
-    const sf = parse(src);
-    const { functions } = discoverFunctions("/", [sf]);
-    const total = moduleCommentLines(sf);
+    const unit = sourceUnit(src);
+    const { functions } = discoverFunctions([unit]);
+    const total = moduleCommentLines(unit.syntax);
     const byName = new Map(
-      functions.map((fn) => [fn.name, computeFunctionMetrics(fn.node).commentLines]),
+      functions.map((fn) => [fn.name, computeFunctionMetrics(fn).commentLines]),
     );
     expect(total).toBe(3);
     expect(byName.get("f")).toBe(2);
@@ -177,24 +166,27 @@ function f() {
 
 describe("the two comments forEachDescendant cannot reach", () => {
   it("counts a comment sitting before a closing brace", () => {
-    const sf = parse(`function f() {
+    const { syntax } = sourceUnit(`function f() {
   try { go(); } catch {
     // swallowed on purpose
   }
 }
 `);
-    const texts = collectModuleCommentRanges(sf).map((c) => c.text);
+    const texts = collectModuleCommentRanges(syntax).map((c) => c.text);
     expect(texts).toContain("// swallowed on purpose");
   });
 
   it("counts a JSX comment, which TypeScript reports as no trivia at all", () => {
-    const sf = parse(`const x = (<div>\n  {/* jsx */}\n  <b />\n</div>);\n`, "a.tsx");
-    const texts = collectModuleCommentRanges(sf).map((c) => c.text.trim());
+    const { syntax } = sourceUnit(`const x = (<div>\n  {/* jsx */}\n  <b />\n</div>);\n`, "a.tsx");
+    const texts = collectModuleCommentRanges(syntax).map((c) => c.text.trim());
     expect(texts).toContain("/* jsx */");
   });
 
   it("counts a MULTI-LINE JSX comment once per physical line", () => {
-    const sf = parse(`const x = (<div>\n  {/* one\n      two */}\n</div>);\n`, "a.tsx");
-    expect(moduleCommentLines(sf)).toBe(2);
+    const { syntax } = sourceUnit(
+      `const x = (<div>\n  {/* one\n      two */}\n</div>);\n`,
+      "a.tsx",
+    );
+    expect(moduleCommentLines(syntax)).toBe(2);
   });
 });

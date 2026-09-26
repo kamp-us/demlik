@@ -1,6 +1,6 @@
 import path from "node:path";
-import { Node, type SourceFile } from "ts-morph";
-import { discoverPackageRoots, type LoadedProject } from "../extract/project.js";
+import { discoverPackageRoots, type LoadedProject, type SourceUnit } from "../extract/project.js";
+import { importLiterals } from "../syntax/imports.js";
 import { compileMatchers, directionOf, layerOf } from "./classify.js";
 import { type ResolvedTarget, resolveTarget, workspacePackages } from "./resolve-target.js";
 import type { LayerRules } from "./rules.js";
@@ -39,18 +39,13 @@ type Specifier = {
   readonly typeOnly: boolean;
 };
 
-function isTypeOnlyStatement(literal: Node): boolean {
-  const parent = literal.getParent();
-  if (Node.isImportDeclaration(parent)) return parent.isTypeOnly();
-  if (Node.isExportDeclaration(parent)) return parent.isTypeOnly();
-  return false;
-}
-
-function specifiersOf(sf: SourceFile): Specifier[] {
-  return sf.getImportStringLiterals().map((literal) => ({
-    value: literal.getLiteralValue(),
-    line: literal.getStartLineNumber(),
-    typeOnly: isTypeOnlyStatement(literal),
+// A specifier is type-only when its own `import type` / `export type … from` says so; a dynamic
+// `import()` or `typeof import()` never is.
+function specifiersOf(unit: SourceUnit): Specifier[] {
+  return importLiterals(unit.syntax).map((literal) => ({
+    value: literal.specifier,
+    line: unit.syntax.lineOf(literal.start),
+    typeOnly: literal.typeOnly,
   }));
 }
 
@@ -94,10 +89,10 @@ export function analyzeLayers(
   const violations: LayerEdge[] = [];
   const unresolved: string[] = [];
 
-  for (const sf of loaded.sourceFiles) {
-    const from = path.relative(repoRoot, sf.getFilePath()).split(path.sep).join("/");
+  for (const unit of loaded.sourceFiles) {
+    const from = path.relative(repoRoot, unit.absolutePath).split(path.sep).join("/");
     const fromLayer = layerOf(from, matchers);
-    for (const spec of specifiersOf(sf)) {
+    for (const spec of specifiersOf(unit)) {
       const target = resolveTarget(repoRoot, from, spec.value, packages);
       if (target.kind === "external") {
         census.external++;

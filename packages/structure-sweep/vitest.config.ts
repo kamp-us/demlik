@@ -10,7 +10,7 @@ export default defineConfig({
       "@demlik/tea/jev": source("../tea/src/jev/index.ts"),
       "@demlik/tea/retry-backoff": source("../tea/src/retry-backoff/index.ts"),
       "@demlik/code-graph/project": source(
-        "../code-graph/src/extract/project.ts",
+        "../code-graph/src/project.ts",
       ),
     },
   },

@@ -5,7 +5,7 @@ A pnpm workspace; every package under `packages/` publishes to npm on its own ve
 | Package | What it is |
 |---|---|
 | [`packages/tea`](./packages/tea) — `@demlik/tea` | TEA / Elm-Architecture library for durable, replayable state machines — one pure reducer, every host adapter. |
-| [`packages/code-graph`](./packages/code-graph) — `@demlik/code-graph` | Agent-native TypeScript code-graph + smell CLI (ts-morph → deterministic JSON). |
+| [`packages/code-graph`](./packages/code-graph) — `@demlik/code-graph` | Agent-native TypeScript code-graph + smell CLI (oxc + tsgo → deterministic JSON). |
 | [`packages/structure-sweep`](./packages/structure-sweep) — `@demlik/structure-sweep` | Jev-judged feature/role sweep, collapse-pair verdicts, and the feature-folder mover. |
 | [`packages/backlog-sweep`](./packages/backlog-sweep) — `@demlik/backlog-sweep` | Jev-judged "is this issue still needed" sweep over a GitHub backlog. |
 

@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Node, SourceFile } from "ts-morph";
+import type { TypeContext } from "../checker/context.js";
 import { type ClassifyContext, classifyFunction, compileKindRules } from "../kinds/classify.js";
 import {
   mergeRuleMaps,
@@ -61,7 +61,7 @@ export type AnalysisPrep = {
 export function prepareAnalysis(
   options: AnalysisOptions,
   rootAbsolute: string,
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
 ): AnalysisPrep {
   if (!options.crossRuntime) return { resolver: null, catalog: null };
   const catalog = loadBindingCatalog(options.repoRoot);
@@ -71,7 +71,7 @@ export function prepareAnalysis(
       catalog,
       rootAbsolute,
       repoRoot: options.repoRoot,
-      nodeToId,
+      ctx,
     }),
   };
 }
@@ -135,8 +135,7 @@ export type CompleteInput = {
   options: AnalysisOptions;
   prep: AnalysisPrep;
   rootAbsolute: string;
-  sourceFiles: SourceFile[];
-  nodeToId: Map<Node, string>;
+  ctx: TypeContext;
   names: Set<string>;
   exportsByFile: Map<string, string[]>;
 };
@@ -222,17 +221,17 @@ function buildInterfaceWidth(
 }
 
 export function completeAnalysis(input: CompleteInput): AnalysisBundle {
-  const { options, prep, rootAbsolute, sourceFiles, nodeToId, names, exportsByFile } = input;
+  const { options, prep, rootAbsolute, ctx, names, exportsByFile } = input;
   const report = crossRuntimeReport(input);
 
   const compiled = compileKindRules(options.kindRules);
   const context: ClassifyContext = {
     crossRuntimeTargets: resolvedTargets(report),
-    durableObjectMethods: methodIdsOfClasses(nodeToId, durableObjectClasses(prep.catalog)),
-    baseClassEntries: publicMethodRulesByBaseClass(nodeToId, compiled.entryBaseClasses),
+    durableObjectMethods: methodIdsOfClasses(ctx, durableObjectClasses(prep.catalog)),
+    baseClassEntries: publicMethodRulesByBaseClass(ctx, compiled.entryBaseClasses),
     declaredGuards: mergeRuleMaps(
-      siblingPropertyRules(nodeToId, compiled.entryGuardProperties),
-      typeScopeRules(nodeToId, compiled.entryGuardProperties),
+      siblingPropertyRules(ctx, compiled.entryGuardProperties),
+      typeScopeRules(ctx, compiled.entryGuardProperties),
     ),
   };
   const classify = options.kinds
@@ -245,7 +244,7 @@ export function completeAnalysis(input: CompleteInput): AnalysisBundle {
     return { crossRuntime: report, classify, clusters, reachability: null, interfaceWidth: null };
   }
 
-  const refs = resolveReferences(rootAbsolute, sourceFiles, nodeToId, names, exportsByFile);
+  const refs = resolveReferences(ctx, names, exportsByFile);
   const reachability = options.reach
     ? buildReachability(options, prep, rootAbsolute, compiled, refs)
     : null;

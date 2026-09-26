@@ -86,6 +86,9 @@ function run(view: View): string {
 beforeAll(() => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-parity-")));
   fs.cpSync(FIXTURE, root, { recursive: true });
+  // Committed under another name so the repo's own `--cross-runtime` runs do not read it.
+  const worker = path.join(root, "apps", "worker");
+  fs.renameSync(path.join(worker, "wrangler.fixture.toml"), path.join(worker, "wrangler.toml"));
   writeFakePackages(root);
 });
 

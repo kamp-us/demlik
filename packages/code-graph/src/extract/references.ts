@@ -1,6 +1,6 @@
-import { Node, type SourceFile } from "ts-morph";
+import type { TypeContext } from "../checker/context.js";
+import * as ts from "../engine/tsgo.js";
 import { isTestFile } from "./functions.js";
-import { toRelative } from "./project.js";
 
 export type ReferenceResult = {
   referencesById: Map<string, string[]>;
@@ -11,64 +11,69 @@ export type ReferenceResult = {
 
 const MODULE_SCOPE = "<module-scope>";
 
-function inModuleSpecifierClause(node: Node): boolean {
-  let current: Node | undefined = node;
+function inModuleSpecifierClause(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node;
   while (current) {
-    if (Node.isImportDeclaration(current) || Node.isExportDeclaration(current)) return true;
-    if (Node.isStatement(current)) return false;
-    current = current.getParent();
+    if (ts.isImportDeclaration(current) || ts.isExportDeclaration(current)) return true;
+    if (ts.isStatement(current)) return false;
+    current = current.parent;
   }
   return false;
 }
 
-function isDeclarationName(node: Node): boolean {
-  const parent = node.getParent();
-  if (parent === undefined) return false;
-  return Node.hasName(parent) && parent.getNameNode() === node;
+// ts-morph's `Node.hasName(parent) && parent.getNameNode() === node`: the node is the `name` of
+// whatever declares it.
+function isDeclarationName(node: ts.Node): boolean {
+  const parent = node.parent;
+  return parent !== undefined && (parent as { name?: ts.Node }).name === node;
 }
 
-function isCalleePosition(node: Node): boolean {
-  const parent = node.getParent();
+function isCalleePosition(node: ts.Node): boolean {
+  const parent = node.parent;
   if (parent === undefined) return false;
-  if (Node.isCallExpression(parent)) return parent.getExpression() === node;
-  if (Node.isPropertyAccessExpression(parent) && parent.getNameNode() === node) {
-    const grand = parent.getParent();
-    return grand !== undefined && Node.isCallExpression(grand) && grand.getExpression() === parent;
+  if (ts.isCallExpression(parent)) return parent.expression === node;
+  if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
+    const grand = parent.parent;
+    return grand !== undefined && ts.isCallExpression(grand) && grand.expression === parent;
   }
   return false;
 }
 
-function ownerId(node: Node, nodeToId: Map<Node, string>): string {
-  let current: Node | undefined = node.getParent();
+function ownerId(node: ts.Node, nodeToId: ReadonlyMap<ts.Node, string>): string {
+  let current: ts.Node | undefined = node.parent;
   while (current) {
     const id = nodeToId.get(current);
     if (id !== undefined) return id;
-    current = current.getParent();
+    current = current.parent;
   }
   return MODULE_SCOPE;
 }
 
-function idOfDeclaration(decl: Node, nodeToId: Map<Node, string>): string | null {
+function idOfDeclaration(decl: ts.Node, nodeToId: ReadonlyMap<ts.Node, string>): string | null {
   const direct = nodeToId.get(decl);
   if (direct !== undefined) return direct;
   if (
-    Node.isVariableDeclaration(decl) ||
-    Node.isPropertyAssignment(decl) ||
-    Node.isPropertyDeclaration(decl)
+    ts.isVariableDeclaration(decl) ||
+    ts.isPropertyAssignment(decl) ||
+    ts.isPropertyDeclaration(decl)
   ) {
-    const initializer = decl.getInitializer();
+    const initializer = decl.initializer;
     if (initializer !== undefined) return nodeToId.get(initializer) ?? null;
   }
   return null;
 }
 
-function referencedId(node: Node, nodeToId: Map<Node, string>): string | null {
-  const symbol = node.getSymbol();
-  if (symbol === undefined) return null;
-  const aliased = symbol.getAliasedSymbol();
-  for (const cand of aliased ? [aliased] : [symbol]) {
-    for (const decl of cand.getDeclarations()) {
-      const id = idOfDeclaration(decl, nodeToId);
+function candidateSymbols(ctx: TypeContext, node: ts.Node): ts.TsSymbol[] {
+  const symbol = ctx.symbolOf(node);
+  if (symbol === undefined) return [];
+  const aliased = ctx.aliasedSymbol(symbol);
+  return aliased ? [aliased] : [symbol];
+}
+
+function referencedId(ctx: TypeContext, node: ts.Node): string | null {
+  for (const cand of candidateSymbols(ctx, node)) {
+    for (const decl of ctx.declarationsOf(cand)) {
+      const id = idOfDeclaration(decl, ctx.nodeToId);
       if (id !== null) return id;
     }
   }
@@ -93,116 +98,117 @@ function addEdge(acc: Accum, owner: string, target: string, inTest: boolean): vo
 }
 
 function dynamicImportTargets(
-  call: Node,
+  ctx: TypeContext,
+  call: ts.CallExpression,
   exportsByFile: Map<string, string[]>,
-  rootAbsolute: string,
 ): string[] {
-  if (!Node.isCallExpression(call)) return [];
-  const literal = call.getArguments()[0];
-  if (literal === undefined || !Node.isStringLiteral(literal)) return [];
-  const target = literal.getSymbol()?.getDeclarations()?.[0]?.getSourceFile();
+  const literal = call.arguments[0];
+  if (literal === undefined || !ts.isStringLiteral(literal)) return [];
+  const symbol = ctx.symbolOf(literal);
+  const target = symbol === undefined ? undefined : ctx.declarationsOf(symbol)[0]?.getSourceFile();
   if (target === undefined) return [];
-  return exportsByFile.get(toRelative(rootAbsolute, target.getFilePath())) ?? [];
+  return exportsByFile.get(ctx.relativePath(target)) ?? [];
 }
 
 type FileContext = {
   file: string;
   inTest: boolean;
-  nodeToId: Map<Node, string>;
+  ctx: TypeContext;
   knownNames: ReadonlySet<string>;
   exportsByFile: Map<string, string[]>;
-  methodsByClass: Map<Node, string[]>;
-  rootAbsolute: string;
+  methodsByClass: Map<ts.Node, string[]>;
 };
 
-function indexClassMethods(nodeToId: Map<Node, string>): Map<Node, string[]> {
-  const index = new Map<Node, string[]>();
+function indexClassMethods(nodeToId: ReadonlyMap<ts.Node, string>): Map<ts.Node, string[]> {
+  const index = new Map<ts.Node, string[]>();
   for (const [node, id] of nodeToId) {
-    const parent = node.getParent();
+    const parent = node.parent;
     if (parent === undefined) continue;
-    if (!Node.isClassDeclaration(parent) && !Node.isClassExpression(parent)) continue;
+    if (!ts.isClassDeclaration(parent) && !ts.isClassExpression(parent)) continue;
     index.set(parent, [...(index.get(parent) ?? []), id]);
   }
   return index;
 }
 
-function classMethodRoots(node: Node, ctx: FileContext, acc: Accum): void {
-  const symbol = node.getSymbol();
-  if (symbol === undefined) return;
-  const aliased = symbol.getAliasedSymbol();
-  for (const cand of aliased ? [aliased] : [symbol]) {
-    for (const decl of cand.getDeclarations()) {
-      for (const id of ctx.methodsByClass.get(decl) ?? []) {
-        addEdge(acc, MODULE_SCOPE, id, ctx.inTest);
+function classMethodRoots(node: ts.Node, fc: FileContext, acc: Accum): void {
+  for (const cand of candidateSymbols(fc.ctx, node)) {
+    for (const decl of fc.ctx.declarationsOf(cand)) {
+      for (const id of fc.methodsByClass.get(decl) ?? []) {
+        addEdge(acc, MODULE_SCOPE, id, fc.inTest);
       }
     }
   }
 }
 
-function visitIdentifier(node: Node, ctx: FileContext, acc: Accum): void {
-  const name = node.getText();
-  if (ownerId(node, ctx.nodeToId) === MODULE_SCOPE) classMethodRoots(node, ctx, acc);
+function visitIdentifier(node: ts.Node, fc: FileContext, acc: Accum): void {
+  const name = fc.ctx.text(node);
+  if (ownerId(node, fc.ctx.nodeToId) === MODULE_SCOPE) classMethodRoots(node, fc, acc);
 
-  if (!ctx.knownNames.has(name)) return;
+  if (!fc.knownNames.has(name)) return;
   const files = acc.identifierFiles.get(name);
-  if (files === undefined) acc.identifierFiles.set(name, new Set([ctx.file]));
-  else files.add(ctx.file);
+  if (files === undefined) acc.identifierFiles.set(name, new Set([fc.file]));
+  else files.add(fc.file);
 
   if (inModuleSpecifierClause(node) || isDeclarationName(node)) return;
-  const owner = ownerId(node, ctx.nodeToId);
+  const owner = ownerId(node, fc.ctx.nodeToId);
   if (owner !== MODULE_SCOPE && isCalleePosition(node)) return;
-  const target = referencedId(node, ctx.nodeToId);
-  if (target !== null) addEdge(acc, owner, target, ctx.inTest);
+  const target = referencedId(fc.ctx, node);
+  if (target !== null) addEdge(acc, owner, target, fc.inTest);
 }
 
-function visitCallArguments(call: Node, ctx: FileContext, acc: Accum): void {
-  if (!Node.isCallExpression(call)) return;
-  const owner = ownerId(call, ctx.nodeToId);
-  for (const arg of call.getArguments()) {
-    const direct = ctx.nodeToId.get(arg);
+function forEachDescendant(node: ts.Node, visit: (descendant: ts.Node) => void): void {
+  node.forEachChild((child) => {
+    visit(child);
+    forEachDescendant(child, visit);
+    return undefined;
+  });
+}
+
+function visitCallArguments(call: ts.CallExpression, fc: FileContext, acc: Accum): void {
+  const owner = ownerId(call, fc.ctx.nodeToId);
+  for (const arg of call.arguments) {
+    const direct = fc.ctx.nodeToId.get(arg);
     if (direct !== undefined) {
-      addEdge(acc, owner, direct, ctx.inTest);
+      addEdge(acc, owner, direct, fc.inTest);
       continue;
     }
-    arg.forEachDescendant((d) => {
-      const id = ctx.nodeToId.get(d);
-      if (id !== undefined) addEdge(acc, owner, id, ctx.inTest);
+    forEachDescendant(arg, (d) => {
+      const id = fc.ctx.nodeToId.get(d);
+      if (id !== undefined) addEdge(acc, owner, id, fc.inTest);
     });
   }
 }
 
-function visitDynamicImport(node: Node, ctx: FileContext, acc: Accum): void {
-  const owner = ownerId(node, ctx.nodeToId);
-  for (const target of dynamicImportTargets(node, ctx.exportsByFile, ctx.rootAbsolute)) {
-    addEdge(acc, owner, target, ctx.inTest);
+function visitDynamicImport(call: ts.CallExpression, fc: FileContext, acc: Accum): void {
+  const owner = ownerId(call, fc.ctx.nodeToId);
+  for (const target of dynamicImportTargets(fc.ctx, call, fc.exportsByFile)) {
+    addEdge(acc, owner, target, fc.inTest);
   }
 }
 
-function isDynamicImport(node: Node): boolean {
-  return Node.isCallExpression(node) && node.getExpression().getText() === "import";
+function isDynamicImport(fc: FileContext, node: ts.Node): node is ts.CallExpression {
+  return ts.isCallExpression(node) && fc.ctx.text(node.expression) === "import";
 }
 
-function visitLiteralMember(node: Node, ctx: FileContext, acc: Accum): void {
-  const id = ctx.nodeToId.get(node);
+function visitLiteralMember(node: ts.Node, fc: FileContext, acc: Accum): void {
+  const id = fc.ctx.nodeToId.get(node);
   if (id === undefined) return;
-  const parent = node.getParent();
+  const parent = node.parent;
   if (parent === undefined) return;
-  const grand = parent.getParent();
+  const grand = parent.parent;
   const isMember =
-    Node.isObjectLiteralExpression(parent) ||
-    (Node.isPropertyAssignment(parent) &&
-      grand !== undefined &&
-      Node.isObjectLiteralExpression(grand));
+    ts.isObjectLiteralExpression(parent) ||
+    (ts.isPropertyAssignment(parent) && grand !== undefined && ts.isObjectLiteralExpression(grand));
   if (!isMember) return;
-  addEdge(acc, ownerId(node, ctx.nodeToId), id, ctx.inTest);
+  addEdge(acc, ownerId(node, fc.ctx.nodeToId), id, fc.inTest);
 }
 
-function walkFile(sourceFile: SourceFile, ctx: FileContext, acc: Accum): void {
-  sourceFile.forEachDescendant((node) => {
-    if (isDynamicImport(node)) visitDynamicImport(node, ctx, acc);
-    else if (Node.isCallExpression(node)) visitCallArguments(node, ctx, acc);
-    else if (Node.isIdentifier(node)) visitIdentifier(node, ctx, acc);
-    else visitLiteralMember(node, ctx, acc);
+function walkFile(source: ts.SourceFile, fc: FileContext, acc: Accum): void {
+  forEachDescendant(source, (node) => {
+    if (isDynamicImport(fc, node)) visitDynamicImport(node, fc, acc);
+    else if (ts.isCallExpression(node)) visitCallArguments(node, fc, acc);
+    else if (ts.isIdentifier(node)) visitIdentifier(node, fc, acc);
+    else visitLiteralMember(node, fc, acc);
   });
 }
 
@@ -217,10 +223,16 @@ function freeze(map: Map<string, Set<string>>): Map<string, string[]> {
   return out;
 }
 
+function prefetchIdentifiers(ctx: TypeContext, source: ts.SourceFile): void {
+  const identifiers: ts.Node[] = [];
+  forEachDescendant(source, (node) => {
+    if (ts.isIdentifier(node)) identifiers.push(node);
+  });
+  ctx.prefetchSymbols(identifiers);
+}
+
 export function resolveReferences(
-  rootAbsolute: string,
-  sourceFiles: SourceFile[],
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
   knownNames: ReadonlySet<string>,
   exportedIdsByFile: Map<string, string[]>,
 ): ReferenceResult {
@@ -230,19 +242,18 @@ export function resolveReferences(
     testModuleRoots: new Set(),
     identifierFiles: new Map(),
   };
-  const methodsByClass = indexClassMethods(nodeToId);
-  for (const sf of sourceFiles) {
-    const file = toRelative(rootAbsolute, sf.getFilePath());
+  const methodsByClass = indexClassMethods(ctx.nodeToId);
+  for (const { unit, source } of ctx.files) {
+    prefetchIdentifiers(ctx, source);
     walkFile(
-      sf,
+      source,
       {
-        file,
-        inTest: isTestFile(file),
-        nodeToId,
+        file: unit.file,
+        inTest: isTestFile(unit.file),
+        ctx,
         knownNames,
         exportsByFile: exportedIdsByFile,
         methodsByClass,
-        rootAbsolute,
       },
       acc,
     );

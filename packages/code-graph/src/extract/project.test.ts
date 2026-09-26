@@ -32,7 +32,7 @@ describe("loadCheapProject parse-failure detection (SPEC §11)", () => {
 
     expect(loaded.parseFailures).toContain("broken.ts");
     expect(loaded.parseFailures).not.toContain("good.ts");
-    expect(loaded.sourceFiles.map((sf) => path.basename(sf.getFilePath()))).toContain("good.ts");
+    expect(loaded.sourceFiles.map((sf) => path.basename(sf.absolutePath))).toContain("good.ts");
   });
 });
 
@@ -64,8 +64,8 @@ describe("discoverPackageRoots (#2446)", () => {
 
 describe("file discovery respects .gitignore", () => {
   let tmpRoot: string;
-  const relFiles = (files: { getFilePath(): string }[]): string[] =>
-    files.map((sf) => path.relative(tmpRoot, sf.getFilePath()).split(path.sep).join("/"));
+  const relFiles = (files: readonly { absolutePath: string }[]): string[] =>
+    files.map((sf) => path.relative(tmpRoot, sf.absolutePath).split(path.sep).join("/"));
 
   beforeAll(() => {
     tmpRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-gitignore-")));
