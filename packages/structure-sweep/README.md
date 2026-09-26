@@ -139,6 +139,26 @@ rows are added beside the others. `--graph <file>` (repeatable) passes a `code-g
 as extra evidence. A file whose call fails is left out and asked again on the next run; the command
 then exits 1.
 
+`--files <path>` judges a chosen set of files instead of whole folders — a stratified sample, say:
+
+```sh
+structure-sweep sweep --files sample.txt
+printf 'apps/web/src/cart.ts\nservices/api/src/billing/invoice.ts\n' | structure-sweep sweep --files -
+```
+
+`<path>` holds one repo-relative source path per line, resolved from the current directory like
+`--graph`; `-` reads the list from stdin. Blank lines are skipped and a repeated path is judged
+once. Every listed path is checked against the files git tracks at `--ref` before Jev is asked
+anything: a path git does not track there, one the sweep would never judge (not `.ts`/`.tsx`, or a
+test, story or `.d.ts`), or one at the repository root fails the run with an error naming every
+such path. `--files` cannot be combined with folders; pass one or the other.
+
+Each listed file is judged over its parent folder's evidence: the run reads every source a sweep of
+that folder would read, gathers the evidence over all of them, and asks only about the listed ones.
+So a sampled file gets exactly the state `structure-sweep sweep <its parent folder>` would give it,
+whichever other files are listed, and its row records that folder as `scope`. Rows are cached like
+a folder run's, and `--redact` applies unchanged.
+
 `--redact` (off by default) keeps names out of what Jev sees, so it has to place a file by its
 code rather than read the answer off its folder. The file's path becomes an opaque id that keeps
 only the extension (`f3.tsx`); every relative specifier — in `import … from`, a bare `import "…"`,
