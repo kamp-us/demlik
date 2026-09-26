@@ -73,8 +73,14 @@ describe("the gold-set format", () => {
 
   it("refuses a gold set with no rewording, since one wording cannot flip", () => {
     expect(() => parseGoldSet({ ...valid, rewordings: [] }, labels)).toThrow(
-      GoldSetError,
+      /rewordings: name at least one rewording/,
     );
+  });
+
+  it("refuses a gold set with no items", () => {
+    const parse = () => parseGoldSet({ ...valid, items: [] }, labels);
+    expect(parse).toThrow(GoldSetError);
+    expect(parse).toThrow(/items: a gold set holds at least one item/);
   });
 });
 
@@ -251,5 +257,29 @@ describe("evaluate", () => {
           connect: () => stubBranchJev(() => verdict("gate", confidence)),
         }),
       ).rejects.toThrow(/a confidence is in \[0, 1\]/);
+  });
+
+  it("refuses a hand-built gold set with no items or no rewording before asking Jev", async () => {
+    let connected = 0;
+    const run = (set: typeof gold) =>
+      evaluate({
+        question: branchQuestion,
+        gold: set,
+        thresholds: { ece: 0.1, flipRate: 0.1 },
+        target: 0.9,
+        connect: () => {
+          connected += 1;
+          return stubBranchJev(() => verdict("gate", 0.9));
+        },
+      });
+    // @ts-expect-error a GoldSet's items are non-empty; a caller outside the type system can still pass []
+    await expect(run({ ...gold, items: [] })).rejects.toThrow(
+      /items: a gold set holds at least one item/,
+    );
+    // @ts-expect-error a GoldSet's rewordings are non-empty; one wording alone cannot flip
+    await expect(run({ ...gold, rewordings: [] })).rejects.toThrow(
+      /rewordings: name at least one rewording/,
+    );
+    expect(connected).toBe(0);
   });
 });

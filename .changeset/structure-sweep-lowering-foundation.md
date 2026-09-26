@@ -13,7 +13,8 @@ Add the lowering foundation: stage artifacts, an evaluation harness and a confid
   every rewording of the question. It reports accuracy, the flip rate, the expected calibration
   error (ECE), coverage and abstain rate, and the verdict is `shippable` only when ECE and flip rate
   are both under their thresholds. A bin count that is not a positive whole number, or a confidence
-  outside [0, 1], is refused rather than skipped.
+  outside [0, 1], is refused rather than skipped, and so is a gold set with no items or no
+  rewording.
 - **Per-stage floor.** `calibrate` bins a stage's answers by confidence and derives the lowest floor
   whose bands all meet a stated accuracy target, or reports it `unreachable`. `evaluate` returns it
   as `calibration`.

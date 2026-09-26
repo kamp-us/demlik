@@ -29,20 +29,16 @@ const GoldFile = z.strictObject({
   /** The stage this gold set scores. */
   stage: z.string().min(1),
   /** Other wordings of the stage question's `instructions`; each is asked beside the original. */
-  rewordings: z
-    .array(z.string().trim().min(1))
-    .min(1, "name at least one rewording; flip rate needs two wordings"),
-  items: z
-    .array(
-      z.strictObject({
-        id: z.string().min(1),
-        span: SourceSpan,
-        state: JevStateSchema,
-        /** The hand-labelled answer: one of the question's criteria keys. */
-        gold: z.string(),
-      }),
-    )
-    .min(1, "a gold set holds at least one item"),
+  rewordings: z.array(z.string().trim().min(1)),
+  items: z.array(
+    z.strictObject({
+      id: z.string().min(1),
+      span: SourceSpan,
+      state: JevStateSchema,
+      /** The hand-labelled answer: one of the question's criteria keys. */
+      gold: z.string(),
+    }),
+  ),
 });
 
 export interface GoldItem<K extends string> {
@@ -52,11 +48,19 @@ export interface GoldItem<K extends string> {
   readonly gold: K;
 }
 
+type NonEmpty<T> = readonly [T, ...T[]];
+
+/** At least one item, and at least one rewording beside the question's own wording: a flip needs two. */
 export interface GoldSet<K extends string> {
   readonly stage: string;
-  readonly rewordings: readonly string[];
-  readonly items: readonly GoldItem<K>[];
+  readonly rewordings: NonEmpty<string>;
+  readonly items: NonEmpty<GoldItem<K>>;
 }
+
+const nonEmpty = <T>(xs: readonly T[]): NonEmpty<T> | undefined => {
+  const [first, ...rest] = xs;
+  return first === undefined ? undefined : [first, ...rest];
+};
 
 export class GoldSetError extends Error {}
 
@@ -92,11 +96,34 @@ export function parseGoldSet<K extends string>(
       );
   });
   if (problems.length > 0) throw goldSetError(source, problems);
-  return {
-    stage: parsed.data.stage,
-    rewordings: parsed.data.rewordings,
-    items,
-  };
+  return goldSet(parsed.data.stage, parsed.data.rewordings, items, source);
+}
+
+/**
+ * The one runtime check behind `GoldSet`'s non-empty types, for a set built by a caller the type
+ * system does not reach. An empty set scores ECE 0 and flip rate 0 on no answers, and a set with no
+ * rewording can never flip, so either would read `shippable` on no evidence.
+ */
+function goldSet<K extends string>(
+  stage: string,
+  rewordings: readonly string[],
+  items: readonly GoldItem<K>[],
+  source: string,
+): GoldSet<K> {
+  const wordings = nonEmpty(rewordings);
+  const labelled = nonEmpty(items);
+  if (wordings !== undefined && labelled !== undefined)
+    return { stage, rewordings: wordings, items: labelled };
+  throw goldSetError(source, [
+    ...(wordings === undefined
+      ? [
+          "rewordings: name at least one rewording; flip rate needs two wordings",
+        ]
+      : []),
+    ...(labelled === undefined
+      ? ["items: a gold set holds at least one item"]
+      : []),
+  ]);
 }
 
 const goldSetError = (source: string, problems: readonly string[]) =>
@@ -210,7 +237,13 @@ export interface EvaluateOptions<K extends string> {
 export async function evaluate<K extends string>(
   options: EvaluateOptions<K>,
 ): Promise<Evaluation<K>> {
-  const { question, gold, target, bins = 10 } = options;
+  const { question, target, bins = 10 } = options;
+  const gold = goldSet(
+    options.gold.stage,
+    options.gold.rewordings,
+    options.gold.items,
+    options.gold.stage,
+  );
   assertBins(bins);
   if (!(target >= 0 && target <= 1))
     throw new RangeError(`a target accuracy is in [0, 1], not ${target}`);

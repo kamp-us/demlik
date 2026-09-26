@@ -327,7 +327,10 @@ gold item under the question's own `instructions` and under each rewording, thro
 
 `bins` must be a positive whole number and every confidence Jev returns must be in [0, 1]. Anything
 else is a `RangeError`, never a skipped answer, so a bad input cannot pull ECE down to 0 and read
-`shippable`. `expectedCalibrationError` refuses the same inputs.
+`shippable`. `expectedCalibrationError` refuses the same inputs. `evaluate` also refuses a gold set
+with no items or no rewording with a `GoldSetError`, before it asks Jev anything: no items would score
+ECE and flip rate 0 on no answers, and one wording alone can never flip. `GoldSet` types both arrays
+as non-empty, and `evaluate` checks again for a set built outside the type system.
 
 **The floor is derived, per stage.** `calibrate(scored, { target, bins })` bins scored answers by
 confidence and walks down from the top band. The floor is the lower edge of the lowest band such that
