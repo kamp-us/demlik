@@ -38,3 +38,35 @@ export function nested(env: Env) {
   const db = env.DB;
   return [1, 2].map((id) => db.prepare("SELECT ?").bind(id));
 }
+
+// A block's `const db` shadows the outer alias inside that block only.
+export function blocks(env: Env, items: number[], f: boolean) {
+  const db = env.DB;
+  return items.map(() => {
+    db.prepare("SELECT 5");
+    if (f) {
+      const db = openLocal();
+      return db.prepare("SELECT 6");
+    }
+    return db.prepare("SELECT 7");
+  });
+}
+
+// Sibling blocks each declare their own `db`; only the aliasing one reaches a binding.
+export function branches(env: Env, f: boolean) {
+  if (f) {
+    const db = env.DB;
+    return db.prepare("SELECT 8");
+  } else {
+    const db = openLocal();
+    return db.prepare("SELECT 9");
+  }
+}
+
+// A `var` belongs to its function, so it stays bound after the block that declares it.
+export function hoisted(env: Env, f: boolean) {
+  if (f) {
+    var db = env.DB;
+  }
+  return db.prepare("SELECT 10");
+}

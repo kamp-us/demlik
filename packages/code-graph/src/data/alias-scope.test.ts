@@ -66,3 +66,25 @@ describe("--data: an alias is scoped to the function that declares it", () => {
     expect(rows).toEqual([[39, "DB", "prepare"]]);
   });
 });
+
+describe("--data: `let`/`const` aliases are block-scoped, `var` is function-scoped", () => {
+  const edgesOf = (name: string) =>
+    report.edges
+      .filter((e) => e.functionId === `${FILE}:${name}`)
+      .map((e) => [e.line, e.binding, e.method]);
+
+  it("lets a nested block's `const db` shadow the outer alias only inside that block", () => {
+    expect(edgesOf("blocks")).toEqual([
+      [46, "DB", "prepare"],
+      [51, "DB", "prepare"],
+    ]);
+  });
+
+  it("records an edge only in the sibling block that aliases the binding", () => {
+    expect(edgesOf("branches")).toEqual([[59, "DB", "prepare"]]);
+  });
+
+  it("keeps a block's `var` alias bound after the block closes", () => {
+    expect(edgesOf("hoisted")).toEqual([[71, "DB", "prepare"]]);
+  });
+});
