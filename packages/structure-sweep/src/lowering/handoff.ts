@@ -21,9 +21,9 @@ import { type Fact, SourceSpan } from "./fact.js";
 import {
   type CandidateCluster,
   ClusterBasis,
+  type ClusterMember,
   clusterId,
   clusterInput,
-  type ClusterMember,
   clusterStage,
   type GroupingGraph,
   type RuleGroup,
@@ -235,9 +235,7 @@ const stillHolds = (
     return (cluster) =>
       canonicalJson(cluster.basis) === key ? leavers(cluster) : [];
   }
-  const group = new Set(
-    [spec.owner, ...spec.members].map((m) => m.function),
-  );
+  const group = new Set([spec.owner, ...spec.members].map((m) => m.function));
   return (cluster) => {
     if (cluster.basis._tag !== "embedding") return [];
     const inGroup = new Set(
