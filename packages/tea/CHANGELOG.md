@@ -1,5 +1,40 @@
 # @demlik/tea
 
+## 0.19.0
+
+### Minor Changes
+
+- 8907b3c: `./agent`: a run's usage total survives `done`, and a checkpoint holds the
+  pending prompt once (#354).
+
+  - **The total outlives the run.** `state.usage` is the one field that holds the
+    run's total, and the retire to `done` keeps it. `status(state)`'s `done` arm
+    carries it as `usage`, so `RunDone`'s `done` status does too.
+  - **The outbox no longer copies the brain request.** The `brain_started`
+    lifecycle note drops its `payload`. The request is already held on the brain
+    call's resilient slice, so a Model saved mid-brain-call carries the prompt,
+    images included, once instead of twice. `BrainStarted` events keep the same
+    `purpose`, `model` and `payload`.
+  - **Older Models still load.** A 0.17.x Model starts its total from zero.
+
+- c9bee15: `@demlik/tea/effect` and `@demlik/tea/testing/effect` graduate from `experimental` to `stable`. The Effect engine now runs Tuval fully, so it carries the stable semver promise: a breaking change needs a major bump and a migration note. No code changes.
+
+### Patch Changes
+
+- 52f93cc: `./agent`: `agentEvents` projects each transition's notes once for a host that
+  embeds the agent's verbs (#355).
+
+  - **No repeat events from a host's own Msgs.** A host that wires the verbs by
+    hand and folds a Msg of its own left the previous agent transition's outbox
+    standing, and `agentEvents` projected it again, so `traceAgent` opened
+    duplicate spans. Each projector now projects an outbox once. The host's
+    wiring does not change, and `toMachine` runs project exactly as before.
+  - **`agentTool` hands on only its tool fields.** The tool it builds never
+    carries `content`, even from a spec object that has one at runtime.
+
+- 495705d: `@demlik/tea/otel`: a detached span now ends on the run's own clock. `agentSpans().end()` (and the cleanup `traceAgent` returns) used to close every still-open span with a bare `Span#end()`, so OpenTelemetry stamped it with wall-clock now while its start came from the event's `at` — a meaningless duration under a logical, test or replayed clock. Each run's open spans now end at the `at` of the last event that run folded, still marked `tea.run.detached: true`. `agentSpans().end` also takes an optional `at` (`end(at?: number)`); given one, every open span ends at exactly that instant.
+- 72bdfa5: `@demlik/tea/otel` now hands OpenTelemetry every span start and end as an exact `HrTime` built from the event's `at`, read as epoch milliseconds. It used to pass `at` as a bare number, and the OTel SDK reads a number no bigger than `performance.now()` as time since process start. So a host whose `clock` returns small values (a logical or test clock) got its span times silently moved to process start plus `at`.
+
 ## 0.18.0
 
 ### Minor Changes
