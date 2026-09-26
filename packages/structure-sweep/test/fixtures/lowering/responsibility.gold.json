@@ -1,0 +1,2441 @@
+{
+  "stage": "responsibility",
+  "rewordings": [
+    "state.function is a function in lowered form, with its callees summarized. state.feature is one feature of the product. Does this function do any of that feature's work? Answer for that one feature only: a function may do work for several features or for none, and a generic helper does work for none."
+  ],
+  "items": [
+    {
+      "id": "src/billing/invoice.ts:totalDue#billing",
+      "span": {
+        "file": "src/billing/invoice.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/billing/invoice.ts:totalDue",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/invoice.ts:totalDue@0",
+            "condition": [],
+            "outcome": "return sumLines(v0.lines) - v0.credit",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "sumLines",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/invoice.ts:totalDue#notifications",
+      "span": {
+        "file": "src/billing/invoice.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/billing/invoice.ts:totalDue",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/invoice.ts:totalDue@0",
+            "condition": [],
+            "outcome": "return sumLines(v0.lines) - v0.credit",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "sumLines",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/invoice.ts:totalDue#projects",
+      "span": {
+        "file": "src/billing/invoice.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/billing/invoice.ts:totalDue",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/invoice.ts:totalDue@0",
+            "condition": [],
+            "outcome": "return sumLines(v0.lines) - v0.credit",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "sumLines",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/plan.ts:seatLimit#billing",
+      "span": {
+        "file": "src/billing/plan.ts",
+        "startLine": 1,
+        "endLine": 5
+      },
+      "state": {
+        "function": "src/billing/plan.ts:seatLimit",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/plan.ts:seatLimit@0",
+            "condition": ["v0 === \"team\""],
+            "outcome": "return 25",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/plan.ts:seatLimit@1",
+            "condition": ["¬(v0 === \"team\")"],
+            "outcome": "return 5",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/plan.ts:seatLimit#notifications",
+      "span": {
+        "file": "src/billing/plan.ts",
+        "startLine": 1,
+        "endLine": 5
+      },
+      "state": {
+        "function": "src/billing/plan.ts:seatLimit",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/plan.ts:seatLimit@0",
+            "condition": ["v0 === \"team\""],
+            "outcome": "return 25",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/plan.ts:seatLimit@1",
+            "condition": ["¬(v0 === \"team\")"],
+            "outcome": "return 5",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/plan.ts:seatLimit#projects",
+      "span": {
+        "file": "src/billing/plan.ts",
+        "startLine": 1,
+        "endLine": 5
+      },
+      "state": {
+        "function": "src/billing/plan.ts:seatLimit",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/plan.ts:seatLimit@0",
+            "condition": ["v0 === \"team\""],
+            "outcome": "return 25",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/plan.ts:seatLimit@1",
+            "condition": ["¬(v0 === \"team\")"],
+            "outcome": "return 5",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/charge.ts:chargeCard#billing",
+      "span": {
+        "file": "src/billing/charge.ts",
+        "startLine": 4,
+        "endLine": 9
+      },
+      "state": {
+        "function": "src/billing/charge.ts:chargeCard",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/charge.ts:chargeCard@0",
+            "condition": ["¬(v0.amount > 0)"],
+            "outcome": "throw new RangeError(\"nothing to charge\")",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/charge.ts:chargeCard@1",
+            "condition": ["v0.amount > 0"],
+            "outcome": "return payments.charge(v0.card, v0.amount)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "payments.charge",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/charge.ts:chargeCard#notifications",
+      "span": {
+        "file": "src/billing/charge.ts",
+        "startLine": 4,
+        "endLine": 9
+      },
+      "state": {
+        "function": "src/billing/charge.ts:chargeCard",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/charge.ts:chargeCard@0",
+            "condition": ["¬(v0.amount > 0)"],
+            "outcome": "throw new RangeError(\"nothing to charge\")",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/charge.ts:chargeCard@1",
+            "condition": ["v0.amount > 0"],
+            "outcome": "return payments.charge(v0.card, v0.amount)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "payments.charge",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/charge.ts:chargeCard#projects",
+      "span": {
+        "file": "src/billing/charge.ts",
+        "startLine": 4,
+        "endLine": 9
+      },
+      "state": {
+        "function": "src/billing/charge.ts:chargeCard",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/charge.ts:chargeCard@0",
+            "condition": ["¬(v0.amount > 0)"],
+            "outcome": "throw new RangeError(\"nothing to charge\")",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/charge.ts:chargeCard@1",
+            "condition": ["v0.amount > 0"],
+            "outcome": "return payments.charge(v0.card, v0.amount)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "payments.charge",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/create.ts:createProject#billing",
+      "span": {
+        "file": "src/projects/create.ts",
+        "startLine": 5,
+        "endLine": 12
+      },
+      "state": {
+        "function": "src/projects/create.ts:createProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/create.ts:createProject@0",
+            "condition": ["v0.projectCount >= v1"],
+            "outcome": "throw new LimitReached()",
+            "bindings": ["v1 = plans.projectLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "plans.projectLimit",
+                "site": "binding",
+                "concept": "plan project-limit"
+              }
+            ]
+          },
+          {
+            "branch": "src/projects/create.ts:createProject@1",
+            "condition": ["¬(v0.projectCount >= v1)"],
+            "outcome": "return projectStore.insert(v0.id)",
+            "bindings": ["v1 = plans.projectLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "plans.projectLimit",
+                "site": "binding",
+                "concept": "plan project-limit"
+              },
+              {
+                "identifier": "projectStore.insert",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/projects/create.ts:createProject#notifications",
+      "span": {
+        "file": "src/projects/create.ts",
+        "startLine": 5,
+        "endLine": 12
+      },
+      "state": {
+        "function": "src/projects/create.ts:createProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/create.ts:createProject@0",
+            "condition": ["v0.projectCount >= v1"],
+            "outcome": "throw new LimitReached()",
+            "bindings": ["v1 = plans.projectLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "plans.projectLimit",
+                "site": "binding",
+                "concept": "plan project-limit"
+              }
+            ]
+          },
+          {
+            "branch": "src/projects/create.ts:createProject@1",
+            "condition": ["¬(v0.projectCount >= v1)"],
+            "outcome": "return projectStore.insert(v0.id)",
+            "bindings": ["v1 = plans.projectLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "plans.projectLimit",
+                "site": "binding",
+                "concept": "plan project-limit"
+              },
+              {
+                "identifier": "projectStore.insert",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/create.ts:createProject#projects",
+      "span": {
+        "file": "src/projects/create.ts",
+        "startLine": 5,
+        "endLine": 12
+      },
+      "state": {
+        "function": "src/projects/create.ts:createProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/create.ts:createProject@0",
+            "condition": ["v0.projectCount >= v1"],
+            "outcome": "throw new LimitReached()",
+            "bindings": ["v1 = plans.projectLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "plans.projectLimit",
+                "site": "binding",
+                "concept": "plan project-limit"
+              }
+            ]
+          },
+          {
+            "branch": "src/projects/create.ts:createProject@1",
+            "condition": ["¬(v0.projectCount >= v1)"],
+            "outcome": "return projectStore.insert(v0.id)",
+            "bindings": ["v1 = plans.projectLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "plans.projectLimit",
+                "site": "binding",
+                "concept": "plan project-limit"
+              },
+              {
+                "identifier": "projectStore.insert",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/projects/archive.ts:archiveProject#billing",
+      "span": {
+        "file": "src/projects/archive.ts",
+        "startLine": 2,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/projects/archive.ts:archiveProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/archive.ts:archiveProject@0",
+            "condition": [],
+            "outcome": "return projectStore.update(v0, { archived: true })",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "projectStore.update",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/archive.ts:archiveProject#notifications",
+      "span": {
+        "file": "src/projects/archive.ts",
+        "startLine": 2,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/projects/archive.ts:archiveProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/archive.ts:archiveProject@0",
+            "condition": [],
+            "outcome": "return projectStore.update(v0, { archived: true })",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "projectStore.update",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/archive.ts:archiveProject#projects",
+      "span": {
+        "file": "src/projects/archive.ts",
+        "startLine": 2,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/projects/archive.ts:archiveProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/archive.ts:archiveProject@0",
+            "condition": [],
+            "outcome": "return projectStore.update(v0, { archived: true })",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "projectStore.update",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/projects/members.ts:addMember#billing",
+      "span": {
+        "file": "src/projects/members.ts",
+        "startLine": 6,
+        "endLine": 14
+      },
+      "state": {
+        "function": "src/projects/members.ts:addMember",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/members.ts:addMember@0",
+            "condition": ["v0.members.length >= v2"],
+            "outcome": "throw new SeatLimitReached()",
+            "bindings": ["v2 = seatLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "seatLimit",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          },
+          {
+            "branch": "src/projects/members.ts:addMember@1",
+            "condition": ["¬(v0.members.length >= v2)"],
+            "outcome": "return memberStore.add(v0.id, v1)",
+            "bindings": ["v2 = seatLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "memberStore.add",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/billing/plan.ts:seatLimit",
+            "returns": [
+              "returns 25 ⇐ v0 === \"team\"",
+              "returns 5 ⇐ ¬(v0 === \"team\")"
+            ],
+            "labels": [
+              {
+                "branch": "src/billing/plan.ts:seatLimit@0",
+                "label": "could-be-data"
+              },
+              {
+                "branch": "src/billing/plan.ts:seatLimit@1",
+                "label": "could-be-data"
+              }
+            ]
+          }
+        ]
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/projects/members.ts:addMember#notifications",
+      "span": {
+        "file": "src/projects/members.ts",
+        "startLine": 6,
+        "endLine": 14
+      },
+      "state": {
+        "function": "src/projects/members.ts:addMember",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/members.ts:addMember@0",
+            "condition": ["v0.members.length >= v2"],
+            "outcome": "throw new SeatLimitReached()",
+            "bindings": ["v2 = seatLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "seatLimit",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          },
+          {
+            "branch": "src/projects/members.ts:addMember@1",
+            "condition": ["¬(v0.members.length >= v2)"],
+            "outcome": "return memberStore.add(v0.id, v1)",
+            "bindings": ["v2 = seatLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "memberStore.add",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/billing/plan.ts:seatLimit",
+            "returns": [
+              "returns 25 ⇐ v0 === \"team\"",
+              "returns 5 ⇐ ¬(v0 === \"team\")"
+            ],
+            "labels": [
+              {
+                "branch": "src/billing/plan.ts:seatLimit@0",
+                "label": "could-be-data"
+              },
+              {
+                "branch": "src/billing/plan.ts:seatLimit@1",
+                "label": "could-be-data"
+              }
+            ]
+          }
+        ]
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/members.ts:addMember#projects",
+      "span": {
+        "file": "src/projects/members.ts",
+        "startLine": 6,
+        "endLine": 14
+      },
+      "state": {
+        "function": "src/projects/members.ts:addMember",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/members.ts:addMember@0",
+            "condition": ["v0.members.length >= v2"],
+            "outcome": "throw new SeatLimitReached()",
+            "bindings": ["v2 = seatLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "seatLimit",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          },
+          {
+            "branch": "src/projects/members.ts:addMember@1",
+            "condition": ["¬(v0.members.length >= v2)"],
+            "outcome": "return memberStore.add(v0.id, v1)",
+            "bindings": ["v2 = seatLimit(v0.plan)"],
+            "concepts": [
+              {
+                "identifier": "memberStore.add",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/billing/plan.ts:seatLimit",
+            "returns": [
+              "returns 25 ⇐ v0 === \"team\"",
+              "returns 5 ⇐ ¬(v0 === \"team\")"
+            ],
+            "labels": [
+              {
+                "branch": "src/billing/plan.ts:seatLimit@0",
+                "label": "could-be-data"
+              },
+              {
+                "branch": "src/billing/plan.ts:seatLimit@1",
+                "label": "could-be-data"
+              }
+            ]
+          }
+        ]
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/email.ts:sendInvoiceEmail#billing",
+      "span": {
+        "file": "src/notifications/email.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/notifications/email.ts:sendInvoiceEmail",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/email.ts:sendInvoiceEmail@0",
+            "condition": [],
+            "outcome": "return mailer.send(template(\"invoice\"), v0.customerEmail, v0)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "mailer.send",
+                "site": "outcome",
+                "concept": "unresolved"
+              },
+              {
+                "identifier": "template",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/email.ts:sendInvoiceEmail#notifications",
+      "span": {
+        "file": "src/notifications/email.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/notifications/email.ts:sendInvoiceEmail",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/email.ts:sendInvoiceEmail@0",
+            "condition": [],
+            "outcome": "return mailer.send(template(\"invoice\"), v0.customerEmail, v0)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "mailer.send",
+                "site": "outcome",
+                "concept": "unresolved"
+              },
+              {
+                "identifier": "template",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/email.ts:sendInvoiceEmail#projects",
+      "span": {
+        "file": "src/notifications/email.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/notifications/email.ts:sendInvoiceEmail",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/email.ts:sendInvoiceEmail@0",
+            "condition": [],
+            "outcome": "return mailer.send(template(\"invoice\"), v0.customerEmail, v0)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "mailer.send",
+                "site": "outcome",
+                "concept": "unresolved"
+              },
+              {
+                "identifier": "template",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/notifications/digest.ts:buildDigest#billing",
+      "span": {
+        "file": "src/notifications/digest.ts",
+        "startLine": 1,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/notifications/digest.ts:buildDigest",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/digest.ts:buildDigest@0",
+            "condition": ["v0.length === 0"],
+            "outcome": "return null",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/notifications/digest.ts:buildDigest@1",
+            "condition": ["¬(v0.length === 0)"],
+            "outcome": "return renderDigest(v0)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "renderDigest",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/notifications/digest.ts:buildDigest#notifications",
+      "span": {
+        "file": "src/notifications/digest.ts",
+        "startLine": 1,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/notifications/digest.ts:buildDigest",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/digest.ts:buildDigest@0",
+            "condition": ["v0.length === 0"],
+            "outcome": "return null",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/notifications/digest.ts:buildDigest@1",
+            "condition": ["¬(v0.length === 0)"],
+            "outcome": "return renderDigest(v0)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "renderDigest",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/digest.ts:buildDigest#projects",
+      "span": {
+        "file": "src/notifications/digest.ts",
+        "startLine": 1,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/notifications/digest.ts:buildDigest",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/digest.ts:buildDigest@0",
+            "condition": ["v0.length === 0"],
+            "outcome": "return null",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/notifications/digest.ts:buildDigest@1",
+            "condition": ["¬(v0.length === 0)"],
+            "outcome": "return renderDigest(v0)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "renderDigest",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/notifications/prefs.ts:wantsEmail#billing",
+      "span": {
+        "file": "src/notifications/prefs.ts",
+        "startLine": 1,
+        "endLine": 5
+      },
+      "state": {
+        "function": "src/notifications/prefs.ts:wantsEmail",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/prefs.ts:wantsEmail@0",
+            "condition": ["v0.prefs.email === false"],
+            "outcome": "return false",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/notifications/prefs.ts:wantsEmail@1",
+            "condition": ["¬(v0.prefs.email === false)"],
+            "outcome": "return true",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/notifications/prefs.ts:wantsEmail#notifications",
+      "span": {
+        "file": "src/notifications/prefs.ts",
+        "startLine": 1,
+        "endLine": 5
+      },
+      "state": {
+        "function": "src/notifications/prefs.ts:wantsEmail",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/prefs.ts:wantsEmail@0",
+            "condition": ["v0.prefs.email === false"],
+            "outcome": "return false",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/notifications/prefs.ts:wantsEmail@1",
+            "condition": ["¬(v0.prefs.email === false)"],
+            "outcome": "return true",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/prefs.ts:wantsEmail#projects",
+      "span": {
+        "file": "src/notifications/prefs.ts",
+        "startLine": 1,
+        "endLine": 5
+      },
+      "state": {
+        "function": "src/notifications/prefs.ts:wantsEmail",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/prefs.ts:wantsEmail@0",
+            "condition": ["v0.prefs.email === false"],
+            "outcome": "return false",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/notifications/prefs.ts:wantsEmail@1",
+            "condition": ["¬(v0.prefs.email === false)"],
+            "outcome": "return true",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/retry.ts:withRetry#billing",
+      "span": {
+        "file": "src/shared/retry.ts",
+        "startLine": 1,
+        "endLine": 12
+      },
+      "state": {
+        "function": "src/shared/retry.ts:withRetry",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/retry.ts:withRetry@0",
+            "condition": ["v1 >= v2"],
+            "outcome": "throw v3",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/shared/retry.ts:withRetry@1",
+            "condition": ["¬(v1 >= v2)"],
+            "outcome": "return v0()",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/retry.ts:withRetry#notifications",
+      "span": {
+        "file": "src/shared/retry.ts",
+        "startLine": 1,
+        "endLine": 12
+      },
+      "state": {
+        "function": "src/shared/retry.ts:withRetry",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/retry.ts:withRetry@0",
+            "condition": ["v1 >= v2"],
+            "outcome": "throw v3",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/shared/retry.ts:withRetry@1",
+            "condition": ["¬(v1 >= v2)"],
+            "outcome": "return v0()",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/retry.ts:withRetry#projects",
+      "span": {
+        "file": "src/shared/retry.ts",
+        "startLine": 1,
+        "endLine": 12
+      },
+      "state": {
+        "function": "src/shared/retry.ts:withRetry",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/retry.ts:withRetry@0",
+            "condition": ["v1 >= v2"],
+            "outcome": "throw v3",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/shared/retry.ts:withRetry@1",
+            "condition": ["¬(v1 >= v2)"],
+            "outcome": "return v0()",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/format.ts:formatDate#billing",
+      "span": {
+        "file": "src/shared/format.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/format.ts:formatDate",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/format.ts:formatDate@0",
+            "condition": [],
+            "outcome": "return v0.toISOString().slice(0, 10)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/format.ts:formatDate#notifications",
+      "span": {
+        "file": "src/shared/format.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/format.ts:formatDate",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/format.ts:formatDate@0",
+            "condition": [],
+            "outcome": "return v0.toISOString().slice(0, 10)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/format.ts:formatDate#projects",
+      "span": {
+        "file": "src/shared/format.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/format.ts:formatDate",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/format.ts:formatDate@0",
+            "condition": [],
+            "outcome": "return v0.toISOString().slice(0, 10)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/http.ts:getJson#billing",
+      "span": {
+        "file": "src/shared/http.ts",
+        "startLine": 1,
+        "endLine": 7
+      },
+      "state": {
+        "function": "src/shared/http.ts:getJson",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/http.ts:getJson@0",
+            "condition": ["¬(v1.ok)"],
+            "outcome": "throw new HttpError(v1.status)",
+            "bindings": ["v1 = fetch(v0)"],
+            "concepts": [
+              {
+                "identifier": "fetch",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          },
+          {
+            "branch": "src/shared/http.ts:getJson@1",
+            "condition": ["v1.ok"],
+            "outcome": "return v1.json()",
+            "bindings": ["v1 = fetch(v0)"],
+            "concepts": [
+              {
+                "identifier": "fetch",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/http.ts:getJson#notifications",
+      "span": {
+        "file": "src/shared/http.ts",
+        "startLine": 1,
+        "endLine": 7
+      },
+      "state": {
+        "function": "src/shared/http.ts:getJson",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/http.ts:getJson@0",
+            "condition": ["¬(v1.ok)"],
+            "outcome": "throw new HttpError(v1.status)",
+            "bindings": ["v1 = fetch(v0)"],
+            "concepts": [
+              {
+                "identifier": "fetch",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          },
+          {
+            "branch": "src/shared/http.ts:getJson@1",
+            "condition": ["v1.ok"],
+            "outcome": "return v1.json()",
+            "bindings": ["v1 = fetch(v0)"],
+            "concepts": [
+              {
+                "identifier": "fetch",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/http.ts:getJson#projects",
+      "span": {
+        "file": "src/shared/http.ts",
+        "startLine": 1,
+        "endLine": 7
+      },
+      "state": {
+        "function": "src/shared/http.ts:getJson",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/http.ts:getJson@0",
+            "condition": ["¬(v1.ok)"],
+            "outcome": "throw new HttpError(v1.status)",
+            "bindings": ["v1 = fetch(v0)"],
+            "concepts": [
+              {
+                "identifier": "fetch",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          },
+          {
+            "branch": "src/shared/http.ts:getJson@1",
+            "condition": ["v1.ok"],
+            "outcome": "return v1.json()",
+            "bindings": ["v1 = fetch(v0)"],
+            "concepts": [
+              {
+                "identifier": "fetch",
+                "site": "binding",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/assert.ts:assertString#billing",
+      "span": {
+        "file": "src/shared/assert.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/shared/assert.ts:assertString",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/assert.ts:assertString@0",
+            "condition": ["¬(typeof v0 === \"string\")"],
+            "outcome": "throw new TypeError(\"expected a string\")",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/assert.ts:assertString#notifications",
+      "span": {
+        "file": "src/shared/assert.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/shared/assert.ts:assertString",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/assert.ts:assertString@0",
+            "condition": ["¬(typeof v0 === \"string\")"],
+            "outcome": "throw new TypeError(\"expected a string\")",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/assert.ts:assertString#projects",
+      "span": {
+        "file": "src/shared/assert.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/shared/assert.ts:assertString",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/assert.ts:assertString@0",
+            "condition": ["¬(typeof v0 === \"string\")"],
+            "outcome": "throw new TypeError(\"expected a string\")",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/ids.ts:newId#billing",
+      "span": {
+        "file": "src/shared/ids.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/ids.ts:newId",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/ids.ts:newId@0",
+            "condition": [],
+            "outcome": "return crypto.randomUUID()",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "crypto.randomUUID",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/ids.ts:newId#notifications",
+      "span": {
+        "file": "src/shared/ids.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/ids.ts:newId",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/ids.ts:newId@0",
+            "condition": [],
+            "outcome": "return crypto.randomUUID()",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "crypto.randomUUID",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/ids.ts:newId#projects",
+      "span": {
+        "file": "src/shared/ids.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/ids.ts:newId",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/ids.ts:newId@0",
+            "condition": [],
+            "outcome": "return crypto.randomUUID()",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "crypto.randomUUID",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/tax.ts:taxRate#billing",
+      "span": {
+        "file": "src/billing/tax.ts",
+        "startLine": 1,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/billing/tax.ts:taxRate",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/tax.ts:taxRate@0",
+            "condition": ["v0 === \"EU\""],
+            "outcome": "return 0.2",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/tax.ts:taxRate@1",
+            "condition": ["¬(v0 === \"EU\")"],
+            "outcome": "return 0",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/tax.ts:taxRate#notifications",
+      "span": {
+        "file": "src/billing/tax.ts",
+        "startLine": 1,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/billing/tax.ts:taxRate",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/tax.ts:taxRate@0",
+            "condition": ["v0 === \"EU\""],
+            "outcome": "return 0.2",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/tax.ts:taxRate@1",
+            "condition": ["¬(v0 === \"EU\")"],
+            "outcome": "return 0",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/tax.ts:taxRate#projects",
+      "span": {
+        "file": "src/billing/tax.ts",
+        "startLine": 1,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/billing/tax.ts:taxRate",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/tax.ts:taxRate@0",
+            "condition": ["v0 === \"EU\""],
+            "outcome": "return 0.2",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/tax.ts:taxRate@1",
+            "condition": ["¬(v0 === \"EU\")"],
+            "outcome": "return 0",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/rename.ts:renameProject#billing",
+      "span": {
+        "file": "src/projects/rename.ts",
+        "startLine": 2,
+        "endLine": 7
+      },
+      "state": {
+        "function": "src/projects/rename.ts:renameProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/rename.ts:renameProject@0",
+            "condition": ["v1.trim().length === 0"],
+            "outcome": "throw new RangeError(\"a project needs a name\")",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/projects/rename.ts:renameProject@1",
+            "condition": ["¬(v1.trim().length === 0)"],
+            "outcome": "return projectStore.update(v0, { name: v1 })",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "projectStore.update",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/rename.ts:renameProject#notifications",
+      "span": {
+        "file": "src/projects/rename.ts",
+        "startLine": 2,
+        "endLine": 7
+      },
+      "state": {
+        "function": "src/projects/rename.ts:renameProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/rename.ts:renameProject@0",
+            "condition": ["v1.trim().length === 0"],
+            "outcome": "throw new RangeError(\"a project needs a name\")",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/projects/rename.ts:renameProject@1",
+            "condition": ["¬(v1.trim().length === 0)"],
+            "outcome": "return projectStore.update(v0, { name: v1 })",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "projectStore.update",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/rename.ts:renameProject#projects",
+      "span": {
+        "file": "src/projects/rename.ts",
+        "startLine": 2,
+        "endLine": 7
+      },
+      "state": {
+        "function": "src/projects/rename.ts:renameProject",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/rename.ts:renameProject@0",
+            "condition": ["v1.trim().length === 0"],
+            "outcome": "throw new RangeError(\"a project needs a name\")",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/projects/rename.ts:renameProject@1",
+            "condition": ["¬(v1.trim().length === 0)"],
+            "outcome": "return projectStore.update(v0, { name: v1 })",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "projectStore.update",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/projects/due.ts:overdueTasks#billing",
+      "span": {
+        "file": "src/projects/due.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/projects/due.ts:overdueTasks",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/due.ts:overdueTasks@0",
+            "condition": [],
+            "outcome": "return v0.tasks.filter((v2) => v2.dueAt < v1)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/due.ts:overdueTasks#notifications",
+      "span": {
+        "file": "src/projects/due.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/projects/due.ts:overdueTasks",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/due.ts:overdueTasks@0",
+            "condition": [],
+            "outcome": "return v0.tasks.filter((v2) => v2.dueAt < v1)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/due.ts:overdueTasks#projects",
+      "span": {
+        "file": "src/projects/due.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/projects/due.ts:overdueTasks",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/due.ts:overdueTasks@0",
+            "condition": [],
+            "outcome": "return v0.tasks.filter((v2) => v2.dueAt < v1)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/reminder.ts:remindOverdue#billing",
+      "span": {
+        "file": "src/notifications/reminder.ts",
+        "startLine": 4,
+        "endLine": 9
+      },
+      "state": {
+        "function": "src/notifications/reminder.ts:remindOverdue",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/reminder.ts:remindOverdue@0",
+            "condition": ["v2.length > 0"],
+            "outcome": "notify.send(v0.owner, v2)",
+            "bindings": ["v2 = overdueTasks(v0, v1)"],
+            "concepts": [
+              {
+                "identifier": "overdueTasks",
+                "site": "binding",
+                "concept": "unresolved"
+              },
+              {
+                "identifier": "notify.send",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/projects/due.ts:overdueTasks",
+            "returns": ["returns v0.tasks.filter((v2) => v2.dueAt < v1) ⇐ ⊤"],
+            "labels": [
+              {
+                "branch": "src/projects/due.ts:overdueTasks@0",
+                "label": "plumbing"
+              }
+            ]
+          }
+        ]
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/notifications/reminder.ts:remindOverdue#notifications",
+      "span": {
+        "file": "src/notifications/reminder.ts",
+        "startLine": 4,
+        "endLine": 9
+      },
+      "state": {
+        "function": "src/notifications/reminder.ts:remindOverdue",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/reminder.ts:remindOverdue@0",
+            "condition": ["v2.length > 0"],
+            "outcome": "notify.send(v0.owner, v2)",
+            "bindings": ["v2 = overdueTasks(v0, v1)"],
+            "concepts": [
+              {
+                "identifier": "overdueTasks",
+                "site": "binding",
+                "concept": "unresolved"
+              },
+              {
+                "identifier": "notify.send",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/projects/due.ts:overdueTasks",
+            "returns": ["returns v0.tasks.filter((v2) => v2.dueAt < v1) ⇐ ⊤"],
+            "labels": [
+              {
+                "branch": "src/projects/due.ts:overdueTasks@0",
+                "label": "plumbing"
+              }
+            ]
+          }
+        ]
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/notifications/reminder.ts:remindOverdue#projects",
+      "span": {
+        "file": "src/notifications/reminder.ts",
+        "startLine": 4,
+        "endLine": 9
+      },
+      "state": {
+        "function": "src/notifications/reminder.ts:remindOverdue",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/notifications/reminder.ts:remindOverdue@0",
+            "condition": ["v2.length > 0"],
+            "outcome": "notify.send(v0.owner, v2)",
+            "bindings": ["v2 = overdueTasks(v0, v1)"],
+            "concepts": [
+              {
+                "identifier": "overdueTasks",
+                "site": "binding",
+                "concept": "unresolved"
+              },
+              {
+                "identifier": "notify.send",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/projects/due.ts:overdueTasks",
+            "returns": ["returns v0.tasks.filter((v2) => v2.dueAt < v1) ⇐ ⊤"],
+            "labels": [
+              {
+                "branch": "src/projects/due.ts:overdueTasks@0",
+                "label": "plumbing"
+              }
+            ]
+          }
+        ]
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/trial.ts:trialEnded#billing",
+      "span": {
+        "file": "src/billing/trial.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/billing/trial.ts:trialEnded",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/trial.ts:trialEnded@0",
+            "condition": ["v0.trialEndsAt < v1"],
+            "outcome": "return true",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/trial.ts:trialEnded@1",
+            "condition": ["¬(v0.trialEndsAt < v1)"],
+            "outcome": "return false",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/trial.ts:trialEnded#notifications",
+      "span": {
+        "file": "src/billing/trial.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/billing/trial.ts:trialEnded",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/trial.ts:trialEnded@0",
+            "condition": ["v0.trialEndsAt < v1"],
+            "outcome": "return true",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/trial.ts:trialEnded@1",
+            "condition": ["¬(v0.trialEndsAt < v1)"],
+            "outcome": "return false",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/trial.ts:trialEnded#projects",
+      "span": {
+        "file": "src/billing/trial.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/billing/trial.ts:trialEnded",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/trial.ts:trialEnded@0",
+            "condition": ["v0.trialEndsAt < v1"],
+            "outcome": "return true",
+            "bindings": [],
+            "concepts": []
+          },
+          {
+            "branch": "src/billing/trial.ts:trialEnded@1",
+            "condition": ["¬(v0.trialEndsAt < v1)"],
+            "outcome": "return false",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/log.ts:toLogLine#billing",
+      "span": {
+        "file": "src/shared/log.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/log.ts:toLogLine",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/log.ts:toLogLine@0",
+            "condition": [],
+            "outcome": "return JSON.stringify(v0)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/log.ts:toLogLine#notifications",
+      "span": {
+        "file": "src/shared/log.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/log.ts:toLogLine",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/log.ts:toLogLine@0",
+            "condition": [],
+            "outcome": "return JSON.stringify(v0)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/shared/log.ts:toLogLine#projects",
+      "span": {
+        "file": "src/shared/log.ts",
+        "startLine": 1,
+        "endLine": 3
+      },
+      "state": {
+        "function": "src/shared/log.ts:toLogLine",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/shared/log.ts:toLogLine@0",
+            "condition": [],
+            "outcome": "return JSON.stringify(v0)",
+            "bindings": [],
+            "concepts": []
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/export.ts:exportProjectCsv#billing",
+      "span": {
+        "file": "src/projects/export.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/projects/export.ts:exportProjectCsv",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/export.ts:exportProjectCsv@0",
+            "condition": [],
+            "outcome": "return toCsv(v0.tasks)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "toCsv",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/export.ts:exportProjectCsv#notifications",
+      "span": {
+        "file": "src/projects/export.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/projects/export.ts:exportProjectCsv",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/export.ts:exportProjectCsv@0",
+            "condition": [],
+            "outcome": "return toCsv(v0.tasks)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "toCsv",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/projects/export.ts:exportProjectCsv#projects",
+      "span": {
+        "file": "src/projects/export.ts",
+        "startLine": 3,
+        "endLine": 6
+      },
+      "state": {
+        "function": "src/projects/export.ts:exportProjectCsv",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/projects/export.ts:exportProjectCsv@0",
+            "condition": [],
+            "outcome": "return toCsv(v0.tasks)",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "toCsv",
+                "site": "outcome",
+                "concept": "unresolved"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/usage.ts:recordUsage#billing",
+      "span": {
+        "file": "src/billing/usage.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/billing/usage.ts:recordUsage",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "billing",
+          "description": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/usage.ts:recordUsage@0",
+            "condition": [],
+            "outcome": "return meter.increment(v0.orgId, \"seats\")",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "meter.increment",
+                "site": "outcome",
+                "concept": "entitlement metered-seats"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "serves"
+    },
+    {
+      "id": "src/billing/usage.ts:recordUsage#notifications",
+      "span": {
+        "file": "src/billing/usage.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/billing/usage.ts:recordUsage",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "notifications",
+          "description": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/usage.ts:recordUsage@0",
+            "condition": [],
+            "outcome": "return meter.increment(v0.orgId, \"seats\")",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "meter.increment",
+                "site": "outcome",
+                "concept": "entitlement metered-seats"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    },
+    {
+      "id": "src/billing/usage.ts:recordUsage#projects",
+      "span": {
+        "file": "src/billing/usage.ts",
+        "startLine": 1,
+        "endLine": 4
+      },
+      "state": {
+        "function": "src/billing/usage.ts:recordUsage",
+        "product": "A synthetic team task tracker, written for these tests.",
+        "feature": {
+          "key": "projects",
+          "description": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+        },
+        "branches": [
+          {
+            "branch": "src/billing/usage.ts:recordUsage@0",
+            "condition": [],
+            "outcome": "return meter.increment(v0.orgId, \"seats\")",
+            "bindings": [],
+            "concepts": [
+              {
+                "identifier": "meter.increment",
+                "site": "outcome",
+                "concept": "entitlement metered-seats"
+              }
+            ]
+          }
+        ],
+        "callees": []
+      },
+      "gold": "does-not-serve"
+    }
+  ]
+}

@@ -179,6 +179,36 @@ export {
   type Term,
 } from "./lowering/lower.js";
 export {
+  type BranchView,
+  type CalleeView,
+  type FunctionEvidence,
+  type LabelResponsibilitiesOptions,
+  labelResponsibilities,
+  RESPONSIBILITY_ANSWERS,
+  RESPONSIBILITY_INSTRUCTIONS,
+  RESPONSIBILITY_STAGE,
+  type Responsibilities,
+  type Responsibility,
+  type ResponsibilityAnswer,
+  type ResponsibilityOptions,
+  type ResponsibilityRequest,
+  type ResponsibilityRequestsOptions,
+  type ResponsibilityStage,
+  type ResponsibilityState,
+  responsibilityId,
+  responsibilityQuestion,
+  responsibilityRequests,
+  responsibilityStage,
+  responsibilityState,
+  verdictOf,
+} from "./lowering/responsibility.js";
+export {
+  type FeatureCounts,
+  type Rollup,
+  type RollupRow,
+  rollup,
+} from "./lowering/rollup.js";
+export {
   type FunctionSummary,
   type Labeller,
   type LabelRecord,
