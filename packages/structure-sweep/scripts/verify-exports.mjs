@@ -24,6 +24,7 @@ const expected = {
     "memoryArtifactStore",
     "evaluate",
     "loadGoldSet",
+    "calibrate",
     "gate",
     "gateAll",
     "gatePolicy",

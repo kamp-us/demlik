@@ -290,13 +290,33 @@ input)` keys the run on the stage name, its version, the hash of `input.content`
 of every input artifact, in order. An unchanged key is a `hit` answered from the store without
 running the stage; changing any part is `computed`. `memoryArtifactStore()` is the store.
 
-**Evaluation harness.** `evaluate({ question, gold, connect, thresholds })` asks every gold item
-under the question's own `instructions` and under each rewording, through the client `connect`
-builds for that wording. It reports the flip rate (the share of items whose label is not the same
-under every wording), the expected calibration error over all answers (10 equal-width confidence
-bins by default), the accuracy, and a verdict: `shippable` only when ECE and flip rate are both
-strictly under their thresholds, else `not-shippable` naming each metric that is not. A gold set is
-a JSON file read by `loadGoldSet(file, labels)`:
+**Evaluation harness.** `evaluate({ question, gold, connect, thresholds, target })` asks every
+gold item under the question's own `instructions` and under each rewording, through the client
+`connect` builds for that wording. It reports:
+
+- `accuracy`: the share of all answers, under every wording, that match the gold label.
+- `flipRate`: the share of items whose label is not the same under every wording.
+- `ece`: the expected calibration error over all answers, in equal-width confidence bins (`bins`,
+  10 by default).
+- `calibration`: accuracy per non-empty confidence band, and the stage's floor derived from it
+  (below).
+- `coverage`: the share of items whose answer under the question's own wording clears that floor,
+  so the gate would promote them on the first ask. `abstainRate` is the rest.
+- `verdict`: `shippable` only when ECE and flip rate are both strictly under their thresholds, else
+  `not-shippable` naming each metric that is not.
+
+`bins` must be a positive whole number and every confidence Jev returns must be in [0, 1]. Anything
+else is a `RangeError`, never a skipped answer, so a bad input cannot pull ECE down to 0 and read
+`shippable`. `expectedCalibrationError` refuses the same inputs.
+
+**The floor is derived, per stage.** `calibrate(scored, { target, bins })` bins scored answers by
+confidence and walks down from the top band. The floor is the lower edge of the lowest band such that
+it and every non-empty band above it are at least `target` accurate, with empty bands skipped. That
+is `{ _tag: "derived", floor, target, bands }`. When even the top band misses the target, the result
+is `{ _tag: "unreachable" }` and no answer from that stage can be promoted. `evaluate` returns this as
+`calibration`, and `calibrate` is the only way to build a `derived` one.
+
+**Gold-set format.** A gold set is a JSON file read by `loadGoldSet(file, labels)`:
 
 ```json
 {
@@ -317,8 +337,9 @@ a JSON file read by `loadGoldSet(file, labels)`:
 is what Jev is shown, and `gold` must be one of the question's criteria keys. An unknown label or a
 repeated `id` is refused with every problem listed.
 
-**Confidence gate.** `gatePolicy({ floor, maxRounds })` sets one stage's rule. `gate(item, { policy,
-ask, enrich })` promotes an answer at or above the floor. A below-floor item is passed to `enrich`
+**Confidence gate.** `gatePolicy({ calibration, maxRounds })` sets one stage's rule. It takes the
+stage's `derived` calibration and reads the floor off it: there is no default floor and no way to pass
+a bare number. `gate(item, { policy, ask, enrich })` promotes an answer at or above the floor. A below-floor item is passed to `enrich`
 for more context and asked again, for at most `maxRounds` rounds, and then it abstains. `decide`
 is the pure step, and its outcome is `promoted`, `retrying` (with the round about to run) or
 `abstained`. `gateAll(stage, items, options)` returns the facts for the next stage and a

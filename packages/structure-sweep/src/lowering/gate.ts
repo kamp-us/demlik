@@ -1,13 +1,14 @@
 import type { JevState } from "@demlik/tea/jev";
 import type { Asker, Judgement } from "./ask.js";
+import type { DerivedFloor } from "./calibration.js";
 import { type Fact, type SourceSpan, unknownValue } from "./fact.js";
 
 declare const validPolicy: unique symbol;
 
 /**
  * The gate's rule for one stage: the floor an answer must reach, and how many enrichment rounds a
- * below-floor item gets before it abstains. Built only by `gatePolicy`, so a floor outside [0, 1]
- * or a negative round count never reaches the gate.
+ * below-floor item gets before it abstains. Built only by `gatePolicy`, whose floor comes from the
+ * stage's calibration, so no gate runs on a floor its gold set did not earn.
  */
 export interface GatePolicy {
   readonly floor: number;
@@ -15,19 +16,22 @@ export interface GatePolicy {
   readonly [validPolicy]: true;
 }
 
+/**
+ * One stage's policy from its calibration. Only a `derived` calibration is accepted: a stage whose
+ * floor is `unreachable` has nothing the gate could promote, so it has no policy to build.
+ */
 export function gatePolicy(policy: {
-  readonly floor: number;
+  readonly calibration: DerivedFloor;
   readonly maxRounds: number;
 }): GatePolicy {
-  if (!(policy.floor >= 0 && policy.floor <= 1))
-    throw new RangeError(
-      `a floor is a confidence in [0, 1], not ${policy.floor}`,
-    );
   if (!Number.isInteger(policy.maxRounds) || policy.maxRounds < 0)
     throw new RangeError(
       `maxRounds is a whole number of rounds, not ${policy.maxRounds}`,
     );
-  return policy as GatePolicy;
+  return {
+    floor: policy.calibration.floor,
+    maxRounds: policy.maxRounds,
+  } as GatePolicy;
 }
 
 /**

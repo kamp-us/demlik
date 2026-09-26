@@ -9,7 +9,15 @@ import {
   type Judgement,
   labelsOf,
 } from "./ask.js";
+import {
+  assertBins,
+  assertConfidence,
+  type Calibration,
+  calibrate,
+  expectedCalibrationError,
+} from "./calibration.js";
 import { SourceSpan } from "./fact.js";
+import { decide, gatePolicy } from "./gate.js";
 
 const JevStateSchema = z.union([
   z.string(),
@@ -122,44 +130,6 @@ export function flipRate(
   return flipped / labelsPerItem.length;
 }
 
-export interface Scored {
-  readonly confidence: number;
-  readonly correct: boolean;
-}
-
-/**
- * Expected calibration error: answers bucketed into `bins` equal-width confidence bins, then the
- * gap between each bin's mean confidence and its accuracy, weighted by the bin's share of answers.
- */
-export function expectedCalibrationError(
-  answers: readonly Scored[],
-  bins = 10,
-): number {
-  if (answers.length === 0) return 0;
-  const buckets = Array.from({ length: bins }, () => ({
-    n: 0,
-    confidence: 0,
-    correct: 0,
-  }));
-  for (const { confidence, correct } of answers) {
-    const bucket =
-      buckets[Math.min(bins - 1, Math.max(0, Math.floor(confidence * bins)))];
-    if (bucket === undefined) continue;
-    bucket.n += 1;
-    bucket.confidence += confidence;
-    bucket.correct += correct ? 1 : 0;
-  }
-  return buckets.reduce(
-    (ece, b) =>
-      b.n === 0
-        ? ece
-        : ece +
-          (b.n / answers.length) *
-            Math.abs(b.correct / b.n - b.confidence / b.n),
-    0,
-  );
-}
-
 export interface Thresholds {
   readonly ece: number;
   readonly flipRate: number;
@@ -207,9 +177,16 @@ export interface ItemScore<K extends string> {
 export interface Evaluation<K extends string> {
   readonly stage: string;
   readonly items: readonly ItemScore<K>[];
+  /** Share of all answers, under every wording, that matched the gold label. */
   readonly accuracy: number;
   readonly flipRate: number;
   readonly ece: number;
+  /** Accuracy by confidence band, and the floor derived from it against the stated target. */
+  readonly calibration: Calibration;
+  /** Share of items the gate would promote on the first ask: the question's own wording at the floor. */
+  readonly coverage: number;
+  /** Share of items that answer falls below the floor for, so the gate would not promote them. */
+  readonly abstainRate: number;
   readonly verdict: ShipVerdict;
 }
 
@@ -221,14 +198,22 @@ export interface EvaluateOptions<K extends string> {
     questions: ChoiceQuestions<K>,
   ) => JevClient<ChoiceQuestions<K>>;
   readonly thresholds: Thresholds;
+  /** The accuracy the derived floor must guarantee in every band at or above it, in [0, 1]. */
+  readonly target: number;
   readonly bins?: number;
 }
 
-/** Ask every gold item under every wording, then score flip rate and ECE against the gold labels. */
+/**
+ * Ask every gold item under every wording, then score flip rate, ECE and accuracy against the gold
+ * labels, derive the stage's floor, and report the coverage and abstain rate that floor gives.
+ */
 export async function evaluate<K extends string>(
   options: EvaluateOptions<K>,
 ): Promise<Evaluation<K>> {
-  const { question, gold } = options;
+  const { question, gold, target, bins = 10 } = options;
+  assertBins(bins);
+  if (!(target >= 0 && target <= 1))
+    throw new RangeError(`a target accuracy is in [0, 1], not ${target}`);
   const labels = labelsOf(question);
   for (const item of gold.items)
     if (!labels.includes(item.gold))
@@ -242,7 +227,11 @@ export async function evaluate<K extends string>(
   const items: ItemScore<K>[] = [];
   for (const item of gold.items) {
     const answers: Judgement<K>[] = [];
-    for (const ask of askers) answers.push(await ask(item.state));
+    for (const ask of askers) {
+      const answer = await ask(item.state);
+      assertConfidence(answer.confidence);
+      answers.push(answer);
+    }
     items.push({
       id: item.id,
       gold: item.gold,
@@ -257,14 +246,33 @@ export async function evaluate<K extends string>(
     })),
   );
   const measured = {
-    ece: expectedCalibrationError(scored, options.bins),
+    ece: expectedCalibrationError(scored, bins),
     flipRate: flipRate(items.map((i) => i.answers.map((a) => a.label))),
   };
+  const calibration = calibrate(scored, { target, bins });
+  const coverage = promotedShare(items, calibration);
   return {
     stage: gold.stage,
     items,
     accuracy: scored.filter((s) => s.correct).length / scored.length,
     ...measured,
+    calibration,
+    coverage,
+    abstainRate: 1 - coverage,
     verdict: shipVerdict(measured, options.thresholds),
   };
+}
+
+/** The gate's own first-ask decision over each item's original-wording answer, at the derived floor. */
+function promotedShare<K extends string>(
+  items: readonly ItemScore<K>[],
+  calibration: Calibration,
+): number {
+  if (calibration._tag === "unreachable") return 0;
+  const policy = gatePolicy({ calibration, maxRounds: 0 });
+  const promoted = items.filter((item) => {
+    const [first] = item.answers;
+    return first !== undefined && decide(policy, 0, first)._tag === "promoted";
+  }).length;
+  return promoted / items.length;
 }

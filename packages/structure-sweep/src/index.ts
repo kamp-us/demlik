@@ -45,6 +45,17 @@ export {
   labelsOf,
 } from "./lowering/ask.js";
 export {
+  type Band,
+  type CalibrateOptions,
+  type Calibration,
+  calibrate,
+  confidenceBands,
+  type DerivedFloor,
+  expectedCalibrationError,
+  type Scored,
+  type UnreachableFloor,
+} from "./lowering/calibration.js";
+export {
   type Basis,
   derived,
   type Fact,
@@ -76,7 +87,6 @@ export {
   type Evaluation,
   type Exceeded,
   evaluate,
-  expectedCalibrationError,
   flipRate,
   type GoldItem,
   type GoldSet,
@@ -84,7 +94,6 @@ export {
   type ItemScore,
   loadGoldSet,
   parseGoldSet,
-  type Scored,
   type ShipVerdict,
   shipVerdict,
   type Thresholds,

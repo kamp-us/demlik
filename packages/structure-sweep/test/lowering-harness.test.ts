@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { labelsOf } from "../src/lowering/ask.js";
+import { expectedCalibrationError } from "../src/lowering/calibration.js";
 import {
   evaluate,
-  expectedCalibrationError,
   flipRate,
   GoldSetError,
   loadGoldSet,
@@ -141,6 +141,7 @@ describe("evaluate", () => {
       question: branchQuestion,
       gold,
       thresholds: { ece: 0.05, flipRate: 0.3 },
+      target: 0.8,
       connect: (questions) => {
         const wording = questions.verdict.instructions as string;
         asked.push(wording);
@@ -172,13 +173,83 @@ describe("evaluate", () => {
       question: branchQuestion,
       gold,
       thresholds: { ece: 0.1, flipRate: 0.1 },
+      target: 0.8,
       connect: () => stubBranchJev(() => verdict("gate", 0.99)),
     });
     expect(result.flipRate).toBe(0);
     expect(result.ece).toBeCloseTo(0.49, 10);
+    // Its only band is half right, so no floor reaches 0.8 and the gate would promote nothing.
+    expect(result.calibration._tag).toBe("unreachable");
+    expect(result.coverage).toBe(0);
+    expect(result.abstainRate).toBe(1);
     expect(result.verdict).toMatchObject({
       _tag: "not-shippable",
       exceeded: [{ metric: "ece", threshold: 0.1 }],
     });
+  });
+
+  it("reports accuracy, ECE, coverage and abstain rate side by side", async () => {
+    // Items a, b, c: their gold label at 0.95 under both wordings. Item d: "gate" (gold plumbing)
+    // at 0.65 under both wordings. Target 0.9, 10 bins.
+    // Accuracy: 6 of 8 answers right = 0.75.
+    // Band [0.9, 1.0): 6 answers, confidence 0.95, accuracy 1 → gap 0.05.
+    // Band [0.6, 0.7): 2 answers, confidence 0.65, accuracy 0 → gap 0.65.
+    // ECE = 6/8 × 0.05 + 2/8 × 0.65 = 0.0375 + 0.1625 = 0.2.
+    // Floor: [0.9, 1.0) meets 0.9, [0.6, 0.7) does not, so 0.9.
+    // Coverage: a, b, c clear 0.9 on the first ask = 3/4; abstain rate 1/4.
+    const result = await evaluate({
+      question: branchQuestion,
+      gold,
+      thresholds: { ece: 0.1, flipRate: 0.1 },
+      target: 0.9,
+      connect: () =>
+        stubBranchJev((state) => {
+          const id = idOf(state);
+          return id === "d"
+            ? verdict("gate", 0.65)
+            : verdict(goldOf.get(id) ?? "gate", 0.95);
+        }),
+    });
+    expect(result.accuracy).toBe(0.75);
+    expect(result.ece).toBeCloseTo(0.2, 10);
+    expect(result.coverage).toBe(0.75);
+    expect(result.abstainRate).toBe(0.25);
+    expect(result.calibration).toMatchObject({
+      _tag: "derived",
+      target: 0.9,
+      floor: 0.9,
+    });
+  });
+
+  it("refuses a bin count that is not a positive whole number before asking Jev", async () => {
+    let connected = 0;
+    for (const bins of [0, -1, 2.5, Number.NaN])
+      await expect(
+        evaluate({
+          question: branchQuestion,
+          gold,
+          thresholds: { ece: 0.1, flipRate: 0.1 },
+          target: 0.9,
+          bins,
+          connect: () => {
+            connected += 1;
+            return stubBranchJev(() => verdict("gate", 0.9));
+          },
+        }),
+      ).rejects.toThrow(RangeError);
+    expect(connected).toBe(0);
+  });
+
+  it("refuses an answer whose confidence is outside [0, 1] instead of skipping it", async () => {
+    for (const confidence of [1.2, -0.1, Number.NaN])
+      await expect(
+        evaluate({
+          question: branchQuestion,
+          gold,
+          thresholds: { ece: 0.1, flipRate: 0.1 },
+          target: 0.9,
+          connect: () => stubBranchJev(() => verdict("gate", confidence)),
+        }),
+      ).rejects.toThrow(/a confidence is in \[0, 1\]/);
   });
 });

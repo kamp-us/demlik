@@ -1,6 +1,7 @@
 import type { JevState } from "@demlik/tea/jev";
 import { describe, expect, it } from "vitest";
 import { askVerdict } from "../src/lowering/ask.js";
+import { calibrate } from "../src/lowering/calibration.js";
 import { type Fact, sourceSpan } from "../src/lowering/fact.js";
 import {
   decide,
@@ -16,7 +17,17 @@ import {
   verdict,
 } from "./lowering-fixture.js";
 
-const policy = gatePolicy({ floor: 0.8, maxRounds: 2 });
+// A stage whose [0.8, 0.9) band is always right and whose [0.7, 0.8) band never is: against a 0.9
+// target its derived floor is 0.8.
+const calibration = calibrate(
+  [
+    { confidence: 0.85, correct: true },
+    { confidence: 0.75, correct: false },
+  ],
+  { target: 0.9 },
+);
+if (calibration._tag !== "derived") throw new Error("expected a derived floor");
+const policy = gatePolicy({ calibration, maxRounds: 2 });
 
 const item = (id: string, line: number): GateItem => ({
   id,
@@ -71,10 +82,15 @@ describe("decide", () => {
     });
   });
 
-  it("refuses a policy the gate could not apply", () => {
-    expect(() => gatePolicy({ floor: 1.5, maxRounds: 1 })).toThrow(RangeError);
-    expect(() => gatePolicy({ floor: 0.8, maxRounds: -1 })).toThrow(RangeError);
-    expect(() => gatePolicy({ floor: 0.8, maxRounds: 1.5 })).toThrow(
+  it("reads its floor from the stage's calibration", () => {
+    expect(policy.floor).toBe(calibration.floor);
+  });
+
+  it("refuses a round count the gate could not apply", () => {
+    expect(() => gatePolicy({ calibration, maxRounds: -1 })).toThrow(
+      RangeError,
+    );
+    expect(() => gatePolicy({ calibration, maxRounds: 1.5 })).toThrow(
       RangeError,
     );
   });
