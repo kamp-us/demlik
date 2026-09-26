@@ -6,6 +6,8 @@ const expected = {
   "@demlik/backlog-sweep": [
     "runBacklogSweep",
     "propose",
+    "pullRelation",
+    "findDuplicateGroups",
     "gatherEvidence",
     "snapshotRepo",
     "resolveRepo",

@@ -1,11 +1,23 @@
 import { execFileSync } from "node:child_process";
 import { z } from "zod";
+import {
+  type IssueAddress,
+  type PullRelation,
+  pullRelation,
+} from "./relation.js";
+
+const RepositoryRef = z.object({ nameWithOwner: z.string() });
 
 const PullRef = z.object({
   __typename: z.literal("PullRequest"),
   number: z.number(),
   title: z.string(),
+  body: z.string(),
   state: z.enum(["OPEN", "CLOSED", "MERGED"]),
+  repository: RepositoryRef,
+  closingIssuesReferences: z.object({
+    nodes: z.array(z.object({ number: z.number(), repository: RepositoryRef })),
+  }),
 });
 
 const IssueRef = z.object({
@@ -68,7 +80,23 @@ const ClosedIssue = z.object({
   stateReason: z.string().nullable().optional(),
 });
 
-export type LinkedPull = z.infer<typeof PullRef>;
+/** A linked pull request as the evidence states it; `closed-unmerged` was closed without merging. */
+export interface LinkedPull {
+  readonly number: number;
+  readonly title: string;
+  readonly state: "open" | "merged" | "closed-unmerged";
+  readonly relation: PullRelation;
+}
+
+const PULL_STATE = {
+  OPEN: "open",
+  MERGED: "merged",
+  CLOSED: "closed-unmerged",
+} as const satisfies Record<
+  z.infer<typeof PullRef>["state"],
+  LinkedPull["state"]
+>;
+
 export type LinkedIssue = z.infer<typeof IssueRef>;
 
 export interface OpenIssue {
@@ -90,6 +118,12 @@ export interface OpenIssue {
 export type ClosedIssue = z.infer<typeof ClosedIssue>;
 
 const ISSUES_QUERY = `
+fragment LinkedPull on PullRequest {
+  number title body state
+  repository { nameWithOwner }
+  closingIssuesReferences(first: 10) { nodes { number repository { nameWithOwner } } }
+}
+
 query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     issues(states: OPEN, first: 40, after: $after, orderBy: {field: CREATED_AT, direction: ASC}) {
@@ -104,14 +138,14 @@ query($owner: String!, $name: String!, $after: String) {
             ... on CrossReferencedEvent {
               source {
                 __typename
-                ... on PullRequest { number title state }
+                ... on PullRequest { ...LinkedPull }
                 ... on Issue { number title state stateReason }
               }
             }
             ... on ConnectedEvent {
               subject {
                 __typename
-                ... on PullRequest { number title state }
+                ... on PullRequest { ...LinkedPull }
                 ... on Issue { number title state stateReason }
               }
             }
@@ -129,7 +163,11 @@ function gh(args: readonly string[]): string {
   });
 }
 
-function linksOf(nodes: readonly z.infer<typeof TimelineNode>[]) {
+/** The pull requests and issues a timeline links, each pull request with its relation to `issue`. */
+function linksOf(
+  nodes: readonly z.infer<typeof TimelineNode>[],
+  issue: IssueAddress,
+) {
   const pulls = new Map<number, LinkedPull>();
   const issues = new Map<number, LinkedIssue>();
   for (const node of nodes) {
@@ -140,8 +178,26 @@ function linksOf(nodes: readonly z.infer<typeof TimelineNode>[]) {
           ? node.subject
           : undefined;
     if (ref === undefined) continue;
-    if (ref.__typename === "PullRequest") pulls.set(ref.number, ref);
-    else issues.set(ref.number, ref);
+    if (ref.__typename === "PullRequest") {
+      pulls.set(ref.number, {
+        number: ref.number,
+        title: ref.title,
+        state: PULL_STATE[ref.state],
+        relation: pullRelation(
+          {
+            repository: ref.repository.nameWithOwner,
+            body: ref.body,
+            closingIssuesReferences: ref.closingIssuesReferences.nodes.map(
+              (c) => ({
+                number: c.number,
+                repository: c.repository.nameWithOwner,
+              }),
+            ),
+          },
+          issue,
+        ),
+      });
+    } else issues.set(ref.number, ref);
   }
   return {
     linkedPulls: [...pulls.values()],
@@ -179,7 +235,10 @@ export function fetchOpenIssues(owner: string, name: string): OpenIssue[] {
           author: c.author?.login ?? "ghost",
           body: c.body,
         })),
-        ...linksOf(node.timelineItems.nodes),
+        ...linksOf(node.timelineItems.nodes, {
+          number: node.number,
+          repository: `${owner}/${name}`,
+        }),
       });
     }
     after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;

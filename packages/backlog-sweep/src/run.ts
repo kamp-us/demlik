@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { JevUsage } from "@demlik/tea/jev";
-import { buildIndex, type Evidence, gatherEvidence } from "./evidence.js";
+import {
+  buildIndex,
+  type Evidence,
+  gatherEvidence,
+  withCandidates,
+} from "./evidence.js";
 import type { ClosedIssue, OpenIssue } from "./github.js";
 import { type JevClient, pool } from "./jev.js";
 import type { RepoSnapshot } from "./repo.js";
@@ -86,6 +91,26 @@ export async function runBacklogSweep(
   const todo = chosen.filter(
     (i) => done.get(i.number)?.updatedAt !== i.updatedAt,
   );
+  const evidenceOf = (issue: OpenIssue) =>
+    gatherEvidence(
+      issue,
+      options.snapshot,
+      index,
+      openByNumber,
+      closedByNumber,
+    );
+  // A cached row keeps Jev's answers and the candidates they judged. The facts a close stands on are
+  // read fresh and the proposal recomputed, so a row written under an older rule is never replayed.
+  for (const issue of chosen) {
+    const row = done.get(issue.number);
+    if (row === undefined || row.updatedAt !== issue.updatedAt) continue;
+    const evidence = withCandidates(evidenceOf(issue), row.evidence.candidates);
+    done.set(issue.number, {
+      ...row,
+      evidence: evidence.evidence,
+      proposal: propose(evidence, row.answers),
+    });
+  }
   log(
     `${open.length} open, ${eligible.length} eligible, ${chosen.length} chosen, ${todo.length} to ask`,
   );
@@ -98,13 +123,7 @@ export async function runBacklogSweep(
 
   let asked = 0;
   await pool(todo, options.concurrency ?? 6, async (issue) => {
-    const evidence = gatherEvidence(
-      issue,
-      options.snapshot,
-      index,
-      openByNumber,
-      closedByNumber,
-    );
+    const evidence = evidenceOf(issue);
     try {
       const ok = await options.jev(evidence);
       done.set(issue.number, {
