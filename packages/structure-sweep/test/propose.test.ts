@@ -214,6 +214,13 @@ describe("renderProposePrompt", () => {
       "not read: no code-graph `--graph` file was passed",
     );
     expect(jsonUnder(prompt, "Roles")).toEqual(DEFAULT_ROLES);
+    expect(Object.keys(jsonUnder(prompt, "Roles") as object)).toEqual([
+      "business_rule",
+      "api_surface",
+      "flows",
+      "persistence",
+      "plumbing",
+    ]);
     expect(jsonUnder(prompt, "Schema")).toMatchObject({
       required: ["features", "roles"],
       additionalProperties: false,
