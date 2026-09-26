@@ -162,6 +162,7 @@ export {
   GraphFunction,
   LOWERING_RULES,
   type LoweredBranch,
+  type LoweringFileInput,
   LoweringGraph,
   type LoweringOptions,
   type LoweringRule,

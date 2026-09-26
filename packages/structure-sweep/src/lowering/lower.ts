@@ -288,6 +288,9 @@ const LoweringInput = z.strictObject({
   loggingRoots: z.array(z.string().min(1)),
 });
 
+/** What stage 2 reads for one file, as `loweringInput` writes it into the stage's content. */
+export type LoweringFileInput = z.infer<typeof LoweringInput>;
+
 export interface LoweringOptions {
   /** The file's path as the graph names it. */
   readonly file: string;
@@ -422,7 +425,7 @@ function locateFunctions(program: Node, lines: Lines): readonly Located[] {
 
 /** Lower every function the input names; one that does not parse is one `undetermined` fact. */
 export function lowerFile(
-  input: z.infer<typeof LoweringInput>,
+  input: LoweringFileInput,
 ): readonly Fact<LoweredBranch>[] {
   const lang = input.file.endsWith(".tsx")
     ? "tsx"
@@ -448,7 +451,10 @@ export function lowerFile(
   const facts: Fact<LoweredBranch>[] = [];
   const functions = input.functions
     .filter((fn) => fn.file === input.file)
-    .sort((a, b) => a.startLine - b.startLine || (a.id < b.id ? -1 : 1));
+    .sort(
+      (a, b) =>
+        a.startLine - b.startLine || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
   for (const fn of functions) {
     const undetermined = (): Fact<LoweredBranch> => ({
       id: fn.id,
@@ -491,6 +497,10 @@ export function lowerFile(
   return facts;
 }
 
+/**
+ * Parentheses, type assertions, optional chaining and `await` do not change what a branch decides,
+ * so they lower away: `(await a?.b) as T` reads as `a.b`.
+ */
 const unwrapExpression = (node: Node): Node => {
   let current = node;
   for (;;) {
