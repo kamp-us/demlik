@@ -45,6 +45,53 @@ export function commit(root: string, message: string): void {
   gitIn(root, "commit", "-q", "--allow-empty", "-m", message);
 }
 
+/**
+ * A committed repository holding `files` plus a git submodule at `at` whose own history holds
+ * `inside`. `drift` checks the submodule out at a new commit, leaving the gitlink the parent
+ * recorded where it was.
+ */
+export function withSubmodule(
+  files: Readonly<Record<string, string>>,
+  at: string,
+  inside: Readonly<Record<string, string>>,
+): { readonly root: string; readonly drift: () => void } {
+  const sub = repo(inside);
+  const root = repo(files);
+  gitIn(
+    root,
+    "-c",
+    "protocol.file.allow=always",
+    "submodule",
+    "add",
+    "-q",
+    sub,
+    at,
+  );
+  commit(root, "add the submodule");
+  const drift = () => {
+    const checkout = join(root, at);
+    write(
+      checkout,
+      Object.fromEntries(
+        Object.entries(inside).map(([path, text]) => [path, `${text}\n// 2`]),
+      ),
+    );
+    gitIn(
+      checkout,
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=test",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-qam",
+      "drift",
+    );
+  };
+  return { root, drift };
+}
+
 export function choice<K extends string>(
   key: K,
   keys: readonly string[],

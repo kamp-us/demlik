@@ -25,6 +25,7 @@ import {
   gitIn,
   repo,
   stubJev,
+  withSubmodule,
   write,
 } from "./helpers.js";
 
@@ -536,5 +537,164 @@ describe("sweep --redact resolves aliases only against a working tree that match
       /in 2 path\(s\)[\s\S]*modified configs\/base\.json\n {2}modified package\.json/,
     );
     expect(jev.asked).toEqual([]);
+  });
+});
+
+describe("sweep --redact gives an id only to a file the tree --ref names", () => {
+  const sweep = (root: string) => {
+    const vocabulary = fixtureVocabulary();
+    const jev = jevFor(vocabulary);
+    const run = runSweep({
+      root,
+      ref: "HEAD",
+      scopes: ["src"],
+      vocabulary,
+      jev,
+      verdictsPath: verdictsIn(),
+      redact: true,
+    });
+    return { run, jev };
+  };
+
+  /** The one import each named export's file makes, as Jev saw it. */
+  const importOf = (jev: { asked: readonly JevState[] }, name: string) =>
+    jev.asked.map(fileOf).find((f) => f.exports.includes(name))?.imports[0];
+
+  const ALIAS = (paths: readonly string[]) =>
+    JSON.stringify({
+      compilerOptions: { baseUrl: ".", paths: { "@app/*": paths } },
+    });
+
+  it("never numbers an alias by an ignored file a paths fallback reaches first", async () => {
+    const root = repo({
+      ".gitignore": "gen/\n",
+      "tsconfig.json": ALIAS(["gen/*", "src/*"]),
+      "src/billing/invoice.ts": [
+        'import { rate } from "@app/tax/rate";',
+        "export const invoice = rate;",
+      ].join("\n"),
+      // A relative specifier is keyed on the path it names, so it carries the id
+      // `gen/tax/rate.ts` would get: the alias must not share it.
+      "src/billing/audit.ts": [
+        'import { rate } from "../../gen/tax/rate";',
+        "export const audit = rate;",
+      ].join("\n"),
+      "src/tax/rate.ts": "export const rate = 1;",
+    });
+    write(root, { "gen/tax/rate.ts": "export const rate = 2;" });
+    const { run, jev } = sweep(root);
+    await run;
+    const alias = importOf(jev, "invoice");
+    expect(alias).toMatch(/^\.\/f\d+$/);
+    expect(alias).not.toBe(importOf(jev, "audit"));
+    const rate = jev.asked.map(fileOf).find((f) => f.exports.includes("rate"));
+    expect(alias).not.toBe(`./${rate?.path.replace(/\.ts$/, "")}`);
+  });
+
+  it("runs over a drifted submodule and numbers no alias by a file inside it", async () => {
+    const { root, drift } = withSubmodule(
+      {
+        "tsconfig.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: { "@vendor/*": ["vendor/rates/*"] },
+          },
+        }),
+        "src/billing/invoice.ts": [
+          'import { rate } from "@vendor/rate";',
+          "export const invoice = rate;",
+        ].join("\n"),
+        "src/billing/audit.ts": [
+          'import { rate } from "../../vendor/rates/rate";',
+          "export const audit = rate;",
+        ].join("\n"),
+      },
+      "vendor/rates",
+      { "rate.ts": "export const rate = 1;" },
+    );
+    drift();
+    const { run, jev } = sweep(root);
+    await run;
+    expect(importOf(jev, "invoice")).toMatch(/^\.\/f\d+$/);
+    expect(importOf(jev, "invoice")).not.toBe(importOf(jev, "audit"));
+  });
+
+  it("refuses, naming it, on a tsconfig the chain extends that is not a file at --ref", async () => {
+    const root = repo({
+      ".gitignore": "tsconfig.local.json\n",
+      "tsconfig.json": JSON.stringify({ extends: "./tsconfig.local.json" }),
+      "src/billing/invoice.ts": 'import { rate } from "@app/tax/rate";',
+      "src/tax/rate.ts": "export const rate = 1;",
+    });
+    write(root, { "tsconfig.local.json": ALIAS(["src/*"]) });
+    const { run, jev } = sweep(root);
+    await expect(run).rejects.toThrow(
+      /in 1 path\(s\)[\s\S]*\n {2}ignored tsconfig\.local\.json\n/,
+    );
+    expect(jev.asked).toEqual([]);
+  });
+
+  it("refuses, naming each, on a package.json outside node_modules that is on disk but not at --ref", async () => {
+    const root = repo({
+      ".gitignore": "gen/\nnode_modules/\n",
+      "tsconfig.json": ALIAS(["src/*"]),
+      "src/billing/invoice.ts": 'import { rate } from "@app/tax/rate";',
+      "src/tax/rate.ts": "export const rate = 1;",
+    });
+    write(root, {
+      "gen/package.json": '{ "name": "gen" }',
+      "src/tax/package.json": '{ "name": "tax" }',
+      // An install's manifests are not configuration the ref could hold.
+      "node_modules/zod/package.json": '{ "name": "zod" }',
+    });
+    const { run, jev } = sweep(root);
+    await expect(run).rejects.toThrow(
+      /in 2 path\(s\)[\s\S]*\n {2}ignored gen\/package\.json\n {2}untracked src\/tax\/package\.json\n/,
+    );
+    expect(jev.asked).toEqual([]);
+  });
+
+  it("runs over an untracked file that is neither a package.json nor a tsconfig", async () => {
+    const root = repo({
+      "tsconfig.json": ALIAS(["src/*"]),
+      "src/billing/invoice.ts": [
+        'import { rate } from "@app/tax/rate";',
+        "export const invoice = rate;",
+      ].join("\n"),
+      "src/tax/rate.ts": "export const rate = 1;",
+    });
+    write(root, {
+      "src/tax/draft.ts": "export const draft = 1;",
+      "notes/todo.md": "- rates",
+    });
+    const { run, jev } = sweep(root);
+    await run;
+    const rate = jev.asked.map(fileOf).find((f) => f.exports.includes("rate"));
+    expect(importOf(jev, "invoice")).toBe(
+      `./${rate?.path.replace(/\.ts$/, "")}`,
+    );
+  });
+
+  it("runs over an ignored linked worktree and an ignored nested repository", async () => {
+    const root = repo({
+      ".gitignore": "/.claude/worktrees/\n",
+      "package.json": '{ "name": "root" }',
+      "tsconfig.json": ALIAS(["src/*"]),
+      "src/billing/invoice.ts": [
+        'import { rate } from "@app/tax/rate";',
+        "export const invoice = rate;",
+      ].join("\n"),
+      "src/tax/rate.ts": "export const rate = 1;",
+    });
+    // `ls-files --others --ignored` lists each as `<dir>/` whatever the pathspec: a linked
+    // worktree checking out the root's own package.json, and a nested repository holding none.
+    gitIn(root, "worktree", "add", "-q", ".claude/worktrees/agent", "HEAD");
+    gitIn(root, "init", "-q", ".claude/worktrees/nested");
+    const { run, jev } = sweep(root);
+    await run;
+    const rate = jev.asked.map(fileOf).find((f) => f.exports.includes("rate"));
+    expect(importOf(jev, "invoice")).toBe(
+      `./${rate?.path.replace(/\.ts$/, "")}`,
+    );
   });
 });

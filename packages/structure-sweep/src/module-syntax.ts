@@ -10,7 +10,13 @@ import {
 } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 import { ts } from "ts-morph";
-import { type WorkingTreeChange, workingTreeChanges } from "./git.js";
+import {
+  trackedPaths,
+  type UntrackedFile,
+  untrackedFiles,
+  type WorkingTreeChange,
+  workingTreeChanges,
+} from "./git.js";
 
 /**
  * One `import … from` / `import "…"` statement, or one `export … from` re-export: the module it
@@ -162,6 +168,10 @@ const inNodeModules = (path: string) =>
 const repoPath = (root: string, path: string) =>
   relative(root, path).split(sep).join("/");
 
+const outsideRepo = (path: string) => path === ".." || path.startsWith("../");
+
+const installed = (path: string) => path.split("/").includes("node_modules");
+
 /**
  * The tsconfig `configFile` and every config its `extends` chain reads, repo-relative: the only
  * files whose content decides where an alias resolves.
@@ -185,32 +195,77 @@ function tsconfigChain(root: string, configFile: string): Set<string> {
 const within = (path: string, owned: string) =>
   path === owned || path.startsWith(`${owned}/`);
 
+const isPackageJson = (path: string) =>
+  path.split("/").at(-1) === "package.json";
+
 /**
- * Whether a working-tree change can move where a specifier resolves. A path appearing, vanishing
- * or changing type can: a specifier may name any path exactly. So can a symlink pointing somewhere
- * else, since resolution follows it to a real path. A content edit can only in a file resolution
- * reads as configuration — a `package.json`, or a member of the tsconfig `chain`. The
- * run's own files (`owned`: repo-relative files, or directories taken whole) are neither a
- * destination nor configuration, so no change under them counts.
+ * Whether a change to a tracked path can move where a specifier resolves. A path appearing,
+ * vanishing or changing type can: a specifier may name any path exactly. So can a symlink pointing
+ * somewhere else, since resolution follows it to a real path. A content edit can only in a file
+ * resolution reads as configuration — a `package.json`, or a member of the tsconfig `chain`.
  */
 const movesResolution =
-  (chain: ReadonlySet<string>, owned: readonly string[]) =>
-  (change: WorkingTreeChange): boolean => {
-    if (owned.some((path) => within(change.path, path))) return false;
-    if (change.kind !== "modified") return true;
-    return (
-      change.path.split("/").at(-1) === "package.json" || chain.has(change.path)
-    );
-  };
+  (chain: ReadonlySet<string>) =>
+  (change: WorkingTreeChange): boolean =>
+    change.kind !== "modified" ||
+    isPackageJson(change.path) ||
+    chain.has(change.path);
+
+/**
+ * A path the working tree holds differently from `--ref` in a way that can steer where a specifier
+ * resolves: a tracked change, a configuration file on disk the ref tree does not hold (`untracked`
+ * or `ignored`), or a tsconfig the chain extends from outside the repository.
+ */
+type Divergence =
+  | WorkingTreeChange
+  | UntrackedFile
+  | { readonly kind: "outside"; readonly path: string };
+
+/**
+ * Every divergence between the working tree at `root` and the tree `ref` names (`atRef`) that can
+ * move a specifier onto a different file at `ref`, sorted by path. An answer that is not a file at
+ * `ref` already reads `unknown`, so what is left is a tracked path appearing, vanishing, retyped or
+ * retargeted, and configuration: a `package.json` outside any `node_modules`, or a member of the
+ * tsconfig `chain`, edited or on disk off the ref tree. The run's own files (`owned`:
+ * repo-relative files, or directories taken whole) are neither a destination nor configuration.
+ */
+function resolutionDivergence(
+  root: string,
+  ref: string,
+  atRef: ReadonlySet<string>,
+  chain: ReadonlySet<string>,
+  owned: readonly string[],
+): Divergence[] {
+  const config = [...chain].filter((path) => !installed(path));
+  const offRef = untrackedFiles(root, [
+    ":(glob)**/package.json",
+    ...config
+      .filter((path) => !outsideRepo(path))
+      .map((path) => `:(literal)${path}`),
+    ":(exclude,glob)**/node_modules/**",
+  ]).filter((file) => !atRef.has(file.path));
+  const divergences: Divergence[] = [
+    ...workingTreeChanges(root, ref).filter(movesResolution(chain)),
+    ...offRef,
+    ...config
+      .filter(outsideRepo)
+      .map((path) => ({ kind: "outside" as const, path })),
+  ];
+  return divergences
+    .filter((d) => !owned.some((path) => within(d.path, path)))
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
 
 /**
  * Resolve specifiers written in the tree `ref` names the way the scope's own build would:
  * oxc-resolver under the tsconfig `resolveEdgeTsConfig` picks for `scope`, so a `paths` alias
  * resolves to the file it names. With no tsconfig at or above the scope, aliases stay `unknown`.
- * oxc-resolver reads the checkout on disk, so this throws, naming every path, when the working tree
- * at `root` differs from `ref` in anything resolution reads: an answer read off the working tree
- * would then be an answer about a tree the sweep never read. `owned` lists the absolute paths —
- * files, or directories taken whole — the run itself reads or writes outside resolution.
+ * oxc-resolver reads the checkout on disk, so an in-repo answer is `repo` only when it is a file in
+ * the tree `ref` names: an ignored or untracked file, a file inside a submodule, or build output
+ * reads `unknown`. That check cannot see the working tree steering resolution onto a different
+ * file that is at `ref`, so this throws, naming every path, on any divergence that can
+ * (`resolutionDivergence`). `owned` lists the absolute paths — files, or directories taken whole —
+ * the run itself reads or writes outside resolution.
  */
 export function specifierResolver(
   root: string,
@@ -228,16 +283,18 @@ export function specifierResolver(
     configFile === undefined
       ? new Set<string>()
       : tsconfigChain(root, configFile);
-  const diverging = workingTreeChanges(root, ref).filter(
-    movesResolution(
-      chain,
-      owned.map((path) => repoPath(root, path)),
-    ),
+  const atRef = new Set(trackedPaths(root, { ref }));
+  const diverging = resolutionDivergence(
+    root,
+    ref,
+    atRef,
+    chain,
+    owned.map((path) => repoPath(root, path)),
   );
   if (diverging.length > 0)
     throw new Error(
       `--redact resolves module aliases from the working tree, which differs from ${ref} in ${diverging.length} path(s) that decide where a specifier resolves:\n${diverging
-        .map((change) => `  ${change.kind} ${change.path}`)
+        .map((divergence) => `  ${divergence.kind} ${divergence.path}`)
         .join(
           "\n",
         )}\nsweep --ref at a commit the working tree matches, or check out ${ref} first`,
@@ -276,6 +333,7 @@ export function specifierResolver(
     if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path))
       return { kind: "unknown" };
     if (inNodeModules(path)) return { kind: "external" };
-    return { kind: "repo", path: path.split(sep).join("/") };
+    const file = path.split(sep).join("/");
+    return atRef.has(file) ? { kind: "repo", path: file } : { kind: "unknown" };
   };
 }

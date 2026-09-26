@@ -1,10 +1,12 @@
+import { mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   readModule,
   specifierResolver,
   staticDependencies,
 } from "../src/module-syntax.js";
-import { repo } from "./helpers.js";
+import { gitIn, repo, withSubmodule, write } from "./helpers.js";
 
 const specifiers = (list: readonly { specifier: string }[]) =>
   list.map((s) => s.specifier);
@@ -182,6 +184,101 @@ describe("specifierResolver", () => {
       kind: "unknown",
     });
     expect(resolve("src/billing/invoice.ts", "not-installed")).toEqual({
+      kind: "unknown",
+    });
+  });
+});
+
+describe("specifierResolver answers repo only for a file in the tree --ref names", () => {
+  it("reads an ignored file a paths fallback list reaches first as unknown, never as that file", () => {
+    const root = repo({
+      ".gitignore": "gen/\n",
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: {
+          baseUrl: ".",
+          paths: { "@app/*": ["gen/*", "src/*"] },
+        },
+      }),
+      "src/tax/rate.ts": "export const rate = 1;",
+      "src/billing/invoice.ts": "export const invoice = 1;",
+    });
+    write(root, { "gen/tax/rate.ts": "export const rate = 2;" });
+    expect(gitIn(root, "status", "--porcelain")).toBe("");
+    const resolve = specifierResolver(root, "src", "HEAD");
+    expect(resolve("src/billing/invoice.ts", "@app/tax/rate")).toEqual({
+      kind: "unknown",
+    });
+  });
+
+  it("reads an untracked file as unknown", () => {
+    const root = repo({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { "@app/*": ["src/*"] } },
+      }),
+      "src/billing/invoice.ts": "export const invoice = 1;",
+    });
+    write(root, { "src/tax/rate.ts": "export const rate = 1;" });
+    const resolve = specifierResolver(root, "src", "HEAD");
+    expect(resolve("src/billing/invoice.ts", "@app/tax/rate")).toEqual({
+      kind: "unknown",
+    });
+  });
+
+  it("reads an alias into a submodule as unknown, at its recorded commit and after it drifts", () => {
+    const { root, drift } = withSubmodule(
+      {
+        "tsconfig.json": JSON.stringify({
+          compilerOptions: {
+            baseUrl: ".",
+            paths: { "@vendor/*": ["vendor/rates/*"] },
+          },
+        }),
+        "src/billing/invoice.ts": "export const invoice = 1;",
+      },
+      "vendor/rates",
+      { "rate.ts": "export const rate = 1;" },
+    );
+    const at = () =>
+      specifierResolver(
+        root,
+        "src",
+        "HEAD",
+      )("src/billing/invoice.ts", "@vendor/rate");
+    expect(at()).toEqual({ kind: "unknown" });
+    drift();
+    expect(gitIn(root, "diff", "--name-status", "HEAD")).toBe(
+      "M\tvendor/rates\n",
+    );
+    expect(at()).toEqual({ kind: "unknown" });
+  });
+
+  it("reads a workspace import into ignored build output as unknown, without refusing", () => {
+    const root = repo({
+      ".gitignore": "node_modules/\ndist/\n",
+      "packages/lib/package.json": JSON.stringify({
+        name: "@ws/lib",
+        exports: {
+          ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
+        },
+      }),
+      "packages/lib/src/index.ts": "export const lib = 1;",
+      "packages/app/tsconfig.json": JSON.stringify({
+        compilerOptions: { module: "nodenext" },
+      }),
+      "packages/app/src/main.ts": 'import { lib } from "@ws/lib";',
+    });
+    write(root, {
+      "packages/lib/dist/index.d.ts": "export declare const lib: number;",
+      "packages/lib/dist/index.js": "export const lib = 1;",
+    });
+    mkdirSync(join(root, "packages/app/node_modules/@ws"), { recursive: true });
+    symlinkSync(
+      "../../../lib",
+      join(root, "packages/app/node_modules/@ws/lib"),
+    );
+    expect(gitIn(root, "status", "--porcelain")).toBe("");
+    const resolve = specifierResolver(root, "packages/app", "HEAD");
+    expect(resolve("packages/app/src/main.ts", "@ws/lib")).toEqual({
       kind: "unknown",
     });
   });
