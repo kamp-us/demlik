@@ -1,7 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { JevUsage } from "@demlik/tea/jev";
-import { buildIndex, type Evidence, gatherEvidence } from "./evidence.js";
+import {
+  buildIndex,
+  type Evidence,
+  gatherEvidence,
+  withCandidates,
+} from "./evidence.js";
 import type { ClosedIssue, OpenIssue } from "./github.js";
 import { type JevClient, pool } from "./jev.js";
 import type { RepoSnapshot } from "./repo.js";
@@ -94,12 +99,12 @@ export async function runBacklogSweep(
       openByNumber,
       closedByNumber,
     );
-  // A cached row keeps Jev's answers, but its evidence and proposal are recomputed: the facts a
-  // close stands on are read fresh, and a row written under an older rule is never replayed.
+  // A cached row keeps Jev's answers and the candidates they judged. The facts a close stands on are
+  // read fresh and the proposal recomputed, so a row written under an older rule is never replayed.
   for (const issue of chosen) {
     const row = done.get(issue.number);
     if (row === undefined || row.updatedAt !== issue.updatedAt) continue;
-    const evidence = evidenceOf(issue);
+    const evidence = withCandidates(evidenceOf(issue), row.evidence.candidates);
     done.set(issue.number, {
       ...row,
       evidence: evidence.evidence,

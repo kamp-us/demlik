@@ -49,10 +49,10 @@ times, both confident `already_done` closes were wrong, and the pairwise duplica
 | Kind | When |
 |---|---|
 | `keep` | `still_needed` at or above 0.8 confidence. |
-| `verify` | `already_done` at any confidence with no merged pull request that closes the issue. Carries every linked pull request with its number, state and relation, and the commits on the ref that reference the issue — what a human checks. |
+| `verify` | `already_done` below 0.8, or at or above 0.8 with no merged pull request that closes the issue. Carries every linked pull request with its number, state and relation, and the commits on the ref that reference the issue — what a human checks. |
 | `close` | `already_done` at or above 0.8 beside a merged pull request whose relation is `closes` (basis: that pull request), or `obsolete` at or above 0.8 when `allMentionedPathsGone` or `linkedPullRequestClosedUnmerged` holds (basis: the fact that held). |
 | `close_duplicate` | `duplicate` at or above 0.8 with a similar issue Jev also calls a duplicate at or above 0.8. |
-| `review` | Any other verdict below 0.8, `unclear`, a duplicate with no confident match, or an `obsolete` that no computed fact backs. |
+| `review` | `still_needed`, `obsolete` or `duplicate` below 0.8, `unclear`, a duplicate with no confident match, or an `obsolete` that no computed fact backs. |
 
 ## Jev credentials
 
@@ -77,7 +77,9 @@ backlog-sweep --repo acme/widgets --ref origin/main
 | `--concurrency <n>` | `6` | |
 
 The verdict file is rewritten after every answer, so a killed run resumes; an issue is asked again
-only when its `updatedAt` moved. A cached answer's evidence and proposal are recomputed on every run.
+only when its `updatedAt` moved. A cached answer keeps the similar-issue candidates Jev compared, so
+its duplicate answers stay bound to the issues they judged; the rest of its evidence and its
+proposal are recomputed on every run.
 
 ## Finding duplicate groups
 

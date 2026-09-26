@@ -71,6 +71,18 @@ export function buildIndex(
   ]);
 }
 
+/**
+ * Fresh computed facts under the candidates a cached answer was given against. Jev's pair answers
+ * bind to candidate slots, and the index reorders as issues open and close, so a resumed row keeps
+ * the candidates it was asked about.
+ */
+export function withCandidates(
+  fresh: Evidence,
+  candidates: Evidence["evidence"]["candidates"],
+): Evidence {
+  return { ...fresh, evidence: { ...fresh.evidence, candidates } };
+}
+
 export function gatherEvidence(
   issue: OpenIssue,
   repo: RepoSnapshot,

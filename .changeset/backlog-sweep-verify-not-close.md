@@ -14,4 +14,5 @@ A `close` is proposed only on a fact the tool computed, never on Jev's word alon
   `linkedPullRequestClosedUnmerged`, and an `obsolete` answer with neither true proposes `review`.
 - **`backlog-sweep duplicates`** groups open issues Jev confirms are the same defect, from TF-IDF
   candidate pairs, into `.backlog-sweep/duplicates.json`. It closes and labels nothing.
-- A resumed run recomputes each cached answer's evidence and proposal.
+- A resumed run recomputes each cached answer's evidence and proposal, keeping the similar-issue
+  candidates Jev compared so a duplicate answer never lands on an issue Jev did not see.
