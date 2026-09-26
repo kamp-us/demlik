@@ -1,5 +1,5 @@
 import { posix } from "node:path";
-import { git, trackedPaths } from "../git.js";
+import { blobsAt, trackedPaths } from "../git.js";
 import {
   contentHash,
   isSweptSource,
@@ -94,16 +94,17 @@ function sweptSources(
   paths: readonly string[],
   scopes: readonly string[],
 ): SourceFile[] {
-  return paths
+  const swept = paths
     .filter(
       (path) =>
         isSweptSource(path) && scopes.some((s) => path.startsWith(`${s}/`)),
     )
-    .sort(byCodeUnit)
-    .map((path) => {
-      const text = git(root, ["show", `${ref}:${path}`]);
-      return { path, text, hash: contentHash(text) };
-    });
+    .sort(byCodeUnit);
+  return [...blobsAt(root, ref, swept)].map(([path, text]) => ({
+    path,
+    text,
+    hash: contentHash(text),
+  }));
 }
 
 /** `f<n>` in code-unit order of path, keeping the extension: the same ids on every machine. */
@@ -142,9 +143,9 @@ function directorySignals(
     .map(([path, under]) => ({ path, files: under.size }));
 }
 
-function packageName(root: string, ref: string, path: string): string | null {
+function packageName(text: string): string | null {
   try {
-    const parsed: unknown = JSON.parse(git(root, ["show", `${ref}:${path}`]));
+    const parsed: unknown = JSON.parse(text);
     const name = (parsed as { name?: unknown } | null)?.name;
     return typeof name === "string" && name !== "" ? name : null;
   } catch {
@@ -157,10 +158,12 @@ function packageSignals(
   ref: string,
   paths: readonly string[],
 ): PackageSignal[] {
-  return paths
-    .filter((path) => posix.basename(path) === "package.json")
-    .flatMap((path) => {
-      const name = packageName(root, ref, path);
+  const manifests = paths.filter(
+    (path) => posix.basename(path) === "package.json",
+  );
+  return [...blobsAt(root, ref, manifests)]
+    .flatMap(([path, text]) => {
+      const name = packageName(text);
       const dir = posix.dirname(path);
       return name === null ? [] : [{ path: dir === "." ? "" : dir, name }];
     })

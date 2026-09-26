@@ -57,6 +57,53 @@ export function ignoredPaths(
   });
 }
 
+const BLOB_HEADER = /^[0-9a-f]+ blob (\d+)$/;
+
+/**
+ * The text of every `paths` entry in the tree `ref` names, keyed by path in the order given, read in one
+ * `git cat-file --batch` subprocess however many paths there are. `-z` takes the names
+ * NUL-separated, so a space, a newline or a non-ASCII byte in a path is read as itself. A path the
+ * tree does not hold, or one that is not a file, throws naming it: it never reads as empty text.
+ */
+export function blobsAt(
+  cwd: string,
+  ref: string,
+  paths: readonly string[],
+): Map<string, string> {
+  const blobs = new Map<string, string>();
+  const unique = [...new Set(paths)];
+  if (unique.length === 0) return blobs;
+  const result = spawnSync("git", ["cat-file", "--batch", "-z"], {
+    cwd,
+    input: unique.map((path) => `${ref}:${path}\0`).join(""),
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  if (result.error !== undefined || result.status !== 0) {
+    const exit = result.status ?? result.signal ?? "no exit";
+    const reason =
+      result.stderr?.toString().trim() || result.error?.message || "";
+    throw new Error(`git cat-file failed in ${cwd} (${exit}): ${reason}`, {
+      cause: result.error,
+    });
+  }
+  // Each answer is `<oid> blob <size>\n<size bytes>\n`, or `<object> <problem>\n` when git cannot
+  // give that object's content; answers come in the order the names went in.
+  const out = result.stdout;
+  let at = 0;
+  for (const path of unique) {
+    const eol = out.indexOf(0x0a, at);
+    const header = eol === -1 ? "" : out.toString("utf8", at, eol);
+    const size = BLOB_HEADER.exec(header)?.[1];
+    if (size === undefined)
+      throw new Error(`${ref}:${path} is not a file in ${cwd}`);
+    const start = eol + 1;
+    const end = start + Number(size);
+    blobs.set(path, out.toString("utf8", start, end));
+    at = end + 1;
+  }
+  return blobs;
+}
+
 /** One non-merge commit: its subject line and every path it touched, exactly as git stores them. */
 export interface CommitPaths {
   readonly subject: string;

@@ -118,6 +118,106 @@ describe("contentSignals", () => {
     expect(signals.terms).toContainEqual({ term: "tax", files: 1 });
   });
 
+  it("reads exported names written in any script whole", () => {
+    const signals = contentSignals(
+      [
+        source("src/odeme.ts", "export class ÖdemeServisi {}"),
+        source("src/kullanici.ts", "export const kullanıcıAdı = '';"),
+        source("src/sehir.ts", "export function getŞehirListesi() {}"),
+      ],
+      (path) => path,
+    );
+    const terms = signals.terms.map((t) => t.term);
+    for (const term of [
+      "ödeme",
+      "servisi",
+      "kullanıcı",
+      "adı",
+      "şehir",
+      "listesi",
+    ])
+      expect(terms).toContain(term);
+  });
+
+  it.each([
+    'export * from "./a";',
+    'export { a } from "./a";',
+    'export * as ns from "./a";',
+    'export type { T } from "./a";',
+  ])("counts `%s` as an edge from the barrel", (reExport) => {
+    const signals = contentSignals(
+      [
+        source("src/app.ts", 'import { a } from "./feature";'),
+        source("src/feature/index.ts", reExport),
+        source("src/feature/a.ts", "export const a = 1;"),
+      ],
+      (path) => path,
+    );
+    expect(signals.importClusters.listed.map((c) => c.files)).toEqual([
+      ["src/app.ts", "src/feature/a.ts", "src/feature/index.ts"],
+    ]);
+  });
+
+  it("joins a feature reached only through its index barrel into one cluster", () => {
+    const signals = contentSignals(
+      [
+        source(
+          "src/app.ts",
+          'import { a, b } from "./feature";\nexport const app = a + b;',
+        ),
+        source(
+          "src/feature/index.ts",
+          'export * from "./a";\nexport { b } from "./b";',
+        ),
+        source("src/feature/a.ts", "export const a = 1;"),
+        source("src/feature/b.ts", "export const b = 2;"),
+      ],
+      (path) => path,
+    );
+    expect(signals.importClusters.total).toBe(1);
+    expect(signals.importClusters.listed[0]?.files).toEqual([
+      "src/app.ts",
+      "src/feature/a.ts",
+      "src/feature/b.ts",
+      "src/feature/index.ts",
+    ]);
+  });
+
+  it("adds no edge for a re-export of a package, even one named like a swept file", () => {
+    const signals = contentSignals(
+      [
+        source(
+          "src/index.ts",
+          'export * from "pkg";\nexport { z } from "zod";',
+        ),
+        source("src/pkg.ts", "export const pkg = 1;"),
+        source("src/zod.ts", "export const z = 1;"),
+      ],
+      (path) => path,
+    );
+    expect(signals.importClusters.total).toBe(0);
+  });
+
+  it("does not join a hub's re-exporters through it", () => {
+    const reExporters = Array.from({ length: HUB_IMPORTERS + 1 }, (_, n) =>
+      source(`src/u${n}.ts`, 'export * from "./shared";'),
+    );
+    const signals = contentSignals(
+      [...reExporters, source("src/shared.ts", "export const shared = 1;")],
+      (path) => path,
+    );
+    expect(signals.importClusters.total).toBe(0);
+
+    const underHub = contentSignals(
+      [
+        ...reExporters.slice(0, HUB_IMPORTERS),
+        source("src/shared.ts", "export const shared = 1;"),
+      ],
+      (path) => path,
+    );
+    expect(underHub.importClusters.total).toBe(1);
+  });
+
   it("does not join a hub's importers through it", () => {
     const importers = Array.from({ length: HUB_IMPORTERS + 1 }, (_, n) =>
       source(
