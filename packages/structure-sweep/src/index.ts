@@ -153,6 +153,7 @@ export {
   type SweepResult,
   type SweepRow,
   type SweepScopeResult,
+  type SweepSelection,
 } from "./sweep/run.js";
 export {
   DEFAULT_CONFIG_FILE,
