@@ -203,6 +203,31 @@ comments and string literals. `verdicts.json` still records each file's real pat
 is marked `"redacted": true`, and redacted and unredacted runs never share cached answers: each
 asks Jev again about a file the other answered.
 
+`--nominated` (off by default) asks Jev only about the files the import graph says may be
+misplaced, instead of every file:
+
+- **Current feature.** A file's current feature is the vocabulary feature whose folder name
+  (the key with `_` turned into `-`, as `move plan` names a feature's home) matches a directory
+  segment of its path. The deepest matching segment wins; with no match the file has no current
+  feature. The file's own name never counts.
+- **Nomination.** The run reads the import graph the way `move plan` does (resolved relative
+  imports and re-exports between tracked sources, through the nearest `tsconfig.json`) and takes
+  each file's pull: the current feature holding a strict majority of its import edges, both
+  directions, to files that have one. A file is asked when its pull and its current feature
+  disagree: they name different features, or only one of them names a feature. A file whose pull
+  matches its folder, or that has neither, is skipped. A folder run reads that folder's graph;
+  under `--files` the graph spans the nearest folder at or above each listed file that holds a
+  `tsconfig.json`, so neighbours outside the file's own folder count.
+- **Skipped count.** Each folder's progress line and the closing summary line add how many Jev
+  calls were skipped: files that were neither nominated nor already cached. A cached file is
+  never asked either way, so it is not counted.
+
+The graph is read from the checkout on disk, not from `--ref`. Nomination only works in a tree
+that already has some feature folders: where no file sits in one, no file has a current feature,
+no file has a pull, and `--nominated` asks nothing. `--nominated` changes which files are asked,
+never what a file is shown, so it combines with `--files` and `--redact` unchanged, and a
+nominated row caches like any other.
+
 ### `structure-sweep pairs <folder>=<collapse.json>...`
 
 ```sh
