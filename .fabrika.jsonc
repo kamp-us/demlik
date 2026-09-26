@@ -25,30 +25,12 @@
 	"dependencyReconciler": { "command": ["pnpm", "install", "--frozen-lockfile"] },
 
 	// The paths whose diffs make the governance gate `required`. This list replaces fabrika's shipped
-	// default wholesale, so it restates the roots that still apply here (`claude-plugins/` does not
-	// exist in this repo) and adds the surfaces this repo's ADRs govern: each published package's
-	// `package.json` (the export map, ADR 0010), tea's `MAINTAINING.md` (the tier stamps and removal
-	// ritual, ADR 0016), the root `package.json` + `pnpm-workspace.yaml` that shape the workspace, and
-	// every `biome.jsonc` — lint config is a gate, and a nested one can relax it for one package. `.patterns/`
-	// is here because CLAUDE.md names it beside `.decisions/` as a surface fabrika writes through.
-	// `.fabrika.jsonc` must stay listed or the config refuses to load. `ROADMAP.md` is board config,
-	// not decision corpus, and is deliberately absent.
-	"governedRoots": [
-		".decisions/",
-		".patterns/",
-		".claude/",
-		".github/",
-		".fabrika.jsonc",
-		"package.json",
-		"pnpm-workspace.yaml",
-		"packages/tea/package.json",
-		"packages/tea/MAINTAINING.md",
-		"packages/code-graph/package.json",
-		"packages/structure-sweep/package.json",
-		"packages/backlog-sweep/package.json",
-		"biome.jsonc",
-		"packages/code-graph/biome.jsonc"
-	],
+	// default wholesale. It matches phoenix: only what shapes how the repo checks and runs work —
+	// agent config, CI, the fabrika config, and lint config (a nested `biome.jsonc` can relax the
+	// gate for one package). Docs, decisions, the roadmap, tier stamps and package manifests merge
+	// without control-plane review; umut ruled that 2026-09-26. `.fabrika.jsonc` must stay listed or
+	// the config refuses to load.
+	"governedRoots": [".claude/", ".github/", ".fabrika.jsonc", "biome.jsonc", "packages/code-graph/biome.jsonc"],
 
 	// No standing lanes: every issue homes on a milestone. Left out, this key falls back to the
 	// shipped pair (`wayfinder:backlog`, `axis:pipeline-hardening`), which are phoenix's lanes and

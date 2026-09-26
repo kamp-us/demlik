@@ -5,20 +5,10 @@
 # Every `.fabrika.jsonc` `governedRoots` entry has its own row below, and
 # `scripts/check-codeowners.mjs` fails CI when one is missing. CODEOWNERS follows governedRoots,
 # never the other way around: add the root there first, then its row here.
-/.decisions/                        @kamp-us/control-plane
-/.patterns/                         @kamp-us/control-plane
 /.claude/                           @kamp-us/control-plane
 /.github/                           @kamp-us/control-plane
 /.fabrika.jsonc                     @kamp-us/control-plane
-/package.json                       @kamp-us/control-plane
-/pnpm-workspace.yaml                @kamp-us/control-plane
-/packages/tea/package.json          @kamp-us/control-plane
-/packages/tea/MAINTAINING.md        @kamp-us/control-plane
-/packages/code-graph/package.json   @kamp-us/control-plane
-/packages/structure-sweep/package.json @kamp-us/control-plane
-/packages/backlog-sweep/package.json  @kamp-us/control-plane
 /biome.jsonc                        @kamp-us/control-plane
 /packages/code-graph/biome.jsonc    @kamp-us/control-plane
 
 # Not a governed root, but campaign state lives here and `campaignAuthors` is this same team.
-/ROADMAP.md                         @kamp-us/control-plane
