@@ -265,10 +265,13 @@ history:
    is healed, and the changed files are formatted with the repository's biome when it has one. When
    none of that changes a file, there is no second commit.
 
-Apply refuses to start while a tracked file has staged or unstaged changes, or an untracked
-`.ts`/`.tsx` source sits under the scope, and names them: the rewrite pass reads every source git
-can see, so an untracked importer of a moved file would otherwise be rewritten and committed.
-Other untracked files are left alone. The commits are a function of `HEAD` and the manifest: two applies
+Apply works out every file the rewrite will change before it commits anything. It refuses to start,
+naming the paths and writing nothing, while a tracked file has staged or unstaged changes, or while
+any file the rewrite would change is not tracked by git. That covers an untracked or gitignored
+importer of a moved file, whatever its extension (`.mts`, `.cts`, a `.js` under `allowJs`) and
+however the rewrite loaded it, including through the scope's `tsconfig.json` `include`: neither
+commit could carry it. Commit, move or delete such a file, then apply again. An untracked
+file the rewrite does not change is left alone and stays out of both commits. The commits are a function of `HEAD` and the manifest: two applies
 of one manifest over one `HEAD` make the same trees and messages. A run that stopped after the
 rename commit resumes with the rewrite commit alone, and a second `apply` over a finished manifest
 commits nothing and reports `lint: "untouched"`. It prints a JSON report, including `commits`

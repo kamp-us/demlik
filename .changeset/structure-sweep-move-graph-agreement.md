@@ -15,8 +15,10 @@ with `feature: null` and no `share` when there is no pull. A file neither side w
 longer listed, and a confident verdict with no pull no longer moves. `PlanInput` takes the
 graph as `edges`.
 
-`move apply` refuses to start over staged or unstaged changes to tracked files, or while an
-untracked `.ts`/`.tsx` source sits under the scope, naming each path. It then makes two
+`move apply` works out the import rewrite before it commits anything, and refuses to start over
+staged or unstaged changes to tracked files, or while the rewrite would change a file git does not
+track (an untracked or gitignored importer of a moved file, of any extension), naming each path.
+Untracked files the rewrite leaves unchanged stay out of its commits. It then makes two
 commits: the first holds only the renames with content unchanged, so git records each as a 100%
 rename and `git log --follow` keeps the history; the second holds the specifier rewrites, heals and
 formatting, and is skipped when nothing changed. Both are a function of `HEAD` and the manifest. A

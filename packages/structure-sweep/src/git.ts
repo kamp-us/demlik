@@ -188,20 +188,6 @@ export function uncommittedPaths(cwd: string): string[] {
   return paths;
 }
 
-/** Every untracked path under `scope` that git does not ignore, exactly as git stores it. */
-export function untrackedPaths(cwd: string, scope: string): string[] {
-  return git(cwd, [
-    "ls-files",
-    "-z",
-    "--others",
-    "--exclude-standard",
-    "--",
-    scope,
-  ])
-    .split("\0")
-    .filter(Boolean);
-}
-
 /** Every path the index changes against HEAD. */
 export function stagedPaths(cwd: string): string[] {
   return git(cwd, ["diff", "--cached", "--name-only", "-z"])

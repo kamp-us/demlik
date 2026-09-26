@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import type { SourceFile } from "ts-morph";
 import { absurd } from "../absurd.js";
@@ -9,10 +9,10 @@ import {
   stagedPaths,
   trackedPaths,
   uncommittedPaths,
-  untrackedPaths,
 } from "../git.js";
 import { canonicalJson, contentHash } from "../lowering/artifact.js";
 import {
+  type Exists,
   hasDangling,
   heal,
   type MovedModules,
@@ -194,59 +194,107 @@ function renamedAtHead(
   return manifest.moves.filter((row) => destinations.has(row.to));
 }
 
+/** One file the rewrite changes: the path its text was read from, where it lands, and its new text. */
+type Edit = {
+  readonly origin: string;
+  readonly path: string;
+  readonly text: string;
+};
+
+type Rewrite = {
+  readonly edits: readonly Edit[];
+  readonly healed: number;
+  readonly specifiersRewritten: number;
+};
+
+const NO_REWRITE: Rewrite = { edits: [], healed: 0, specifiersRewritten: 0 };
+
 /**
- * Rewrite the imports `renamed` owes over the renamed tree on disk. ts-morph reads the files back at
- * their old paths in memory and moves them, so every specifier is rewritten from the directory it
- * was written in; heal then fixes any relative specifier still left dangling. Only files whose text
- * changed are written.
+ * The tree once every row is renamed: a row's destination exists and its source does not, whatever
+ * the disk holds now. Heal resolves specifiers against this, so the rewrite comes out the same
+ * whether the renames are still to be made or an earlier run already committed them.
  */
-function rewrite(
+function renamedTree(repoRoot: string, rows: readonly MoveRow[]): Exists {
+  const sources = new Set(rows.map((r) => join(repoRoot, r.from)));
+  const destinations = new Set(rows.map((r) => join(repoRoot, r.to)));
+  return (path) =>
+    destinations.has(path) || (!sources.has(path) && existsSync(path));
+}
+
+/**
+ * Every file the import rewrite for `rows` changes, worked out in memory with nothing written.
+ * ts-morph holds each row's file at its old path (reading it from its new one when an earlier run
+ * already renamed it) and moves it, so every specifier is rewritten from the directory it was
+ * written in; heal then fixes any relative specifier still dangling in the renamed tree. Each edit
+ * names the path its text was read from, so apply can check git tracks it before committing.
+ */
+function planRewrite(
   repoRoot: string,
   scope: string,
-  renamed: readonly MoveRow[],
+  rows: readonly MoveRow[],
   moved: MovedModules,
-) {
+): Rewrite {
   const scopeRoot = join(repoRoot, scope);
   const project = loadMoveProject(scopeRoot, repoRoot);
-  for (const row of renamed) {
-    const at = project.getSourceFileOrThrow(join(repoRoot, row.to));
+  const renamedFrom = new Map<SourceFile, string>();
+  for (const row of rows) {
+    const at = project.getSourceFile(join(repoRoot, row.to));
+    if (at === undefined) continue;
     const text = at.getFullText();
     project.removeSourceFile(at);
-    project.createSourceFile(join(repoRoot, row.from), text);
+    renamedFrom.set(
+      project.createSourceFile(join(repoRoot, row.from), text),
+      row.to,
+    );
   }
   const before = new Map(
-    project.getSourceFiles().map((sf) => [sf, specifiersOf(sf)]),
+    project.getSourceFiles().map((sf) => [
+      sf,
+      {
+        origin: renamedFrom.get(sf) ?? relative(repoRoot, sf.getFilePath()),
+        text: sf.getFullText(),
+        specifiers: specifiersOf(sf),
+      },
+    ]),
   );
   applyMoves(
     project,
     scopeRoot,
-    renamed.map((r) => [
+    rows.map((r) => [
       relative(scopeRoot, join(repoRoot, r.from)),
       relative(scopeRoot, join(repoRoot, r.to)),
     ]),
   );
-  const healed = heal(project.getSourceFiles(), moved);
-  const written: string[] = [];
+  const healed = heal(
+    project.getSourceFiles(),
+    moved,
+    renamedTree(repoRoot, rows),
+  );
+  const edits: Edit[] = [];
   let specifiersRewritten = 0;
   for (const sf of project.getSourceFiles()) {
-    const path = sf.getFilePath();
+    const was = before.get(sf);
     const text = sf.getFullText();
-    if (existsSync(path) && readFileSync(path, "utf8") === text) continue;
-    writeFileSync(path, text);
-    written.push(relative(repoRoot, path));
-    specifiersRewritten += differing(before.get(sf) ?? [], specifiersOf(sf));
+    if (was === undefined || was.text === text) continue;
+    edits.push({ origin: was.origin, path: sf.getFilePath(), text });
+    specifiersRewritten += differing(was.specifiers, specifiersOf(sf));
   }
-  return { healed, specifiersRewritten, written };
+  return { edits, healed, specifiersRewritten };
+}
+
+/**
+ * The files the rewrite would change that git does not track: untracked, gitignored, or outside
+ * the repository. Apply's commits can carry none of them, so it refuses to start while any exists.
+ */
+function untrackedEdits(repoRoot: string, rewrite: Rewrite): string[] {
+  const tracked = new Set(trackedPaths(repoRoot, "index"));
+  return rewrite.edits
+    .map((edit) => edit.origin)
+    .filter((path) => !tracked.has(path))
+    .sort();
 }
 
 const SOURCE = /\.tsx?$/;
-
-/**
- * Untracked sources under the scope. The move project loads every source git can see, so apply
- * would rewrite one of these and commit it with the moves; it refuses to start instead.
- */
-const untrackedSources = (repoRoot: string, scope: string) =>
-  untrackedPaths(repoRoot, scope).filter((path) => SOURCE.test(path));
 
 function scopeSources(repoRoot: string, scope: string): string[] {
   return trackedPaths(repoRoot, "index", scope)
@@ -267,12 +315,7 @@ export function applyManifest(
   manifest: Manifest,
 ): ApplyReport {
   const started = performance.now();
-  const dirty = [
-    ...uncommittedPaths(repoRoot),
-    ...untrackedSources(repoRoot, manifest.scope).map(
-      (path) => `${path} (untracked)`,
-    ),
-  ];
+  const dirty = uncommittedPaths(repoRoot);
   if (dirty.length > 0)
     throw new Error(
       `uncommitted changes, refusing to apply over them; commit or discard them first:\n${dirty.map((d) => `  ${d}`).join("\n")}`,
@@ -288,15 +331,25 @@ export function applyManifest(
   const id = manifestId(manifest);
   const moved = movedModules(repoRoot, manifest.moves);
 
+  const rows =
+    pending.length > 0 ? pending : renamedAtHead(repoRoot, manifest, id);
+  const owed =
+    rows.length > 0 ||
+    hasDangling(scopeSources(repoRoot, manifest.scope), moved);
+  const rewrite = owed
+    ? planRewrite(repoRoot, manifest.scope, rows, moved)
+    : NO_REWRITE;
+  const untracked = untrackedEdits(repoRoot, rewrite);
+  if (untracked.length > 0)
+    throw new Error(
+      `the import rewrite would change files git does not track, refusing to apply; commit, move or delete them first:\n${untracked.map((p) => `  ${p}`).join("\n")}`,
+    );
+
   const rename =
     pending.length > 0 ? commitRenames(repoRoot, pending, id) : null;
-  const renamed = renamedAtHead(repoRoot, manifest, id);
-  const owed =
-    renamed.length > 0 ||
-    hasDangling(scopeSources(repoRoot, manifest.scope), moved);
-  const { healed, specifiersRewritten, written } = owed
-    ? rewrite(repoRoot, manifest.scope, renamed, moved)
-    : { healed: 0, specifiersRewritten: 0, written: [] };
+  for (const edit of rewrite.edits) writeFileSync(edit.path, edit.text);
+  const written = rewrite.edits.map((edit) => relative(repoRoot, edit.path));
+  const { healed, specifiersRewritten } = rewrite;
 
   const lint = written.length > 0 ? format(repoRoot, written) : "untouched";
   if (written.length > 0) git(repoRoot, ["add", "--", ...written]);

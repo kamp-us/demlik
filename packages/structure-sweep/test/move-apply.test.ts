@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -197,30 +203,114 @@ describe("applyManifest", () => {
     expect(existsSync(join(root, "svc/src/handlers/runs.ts"))).toBe(true);
   });
 
-  it("refuses to start while an untracked source sits under the scope, names it, and writes nothing", () => {
-    const root = service();
-    const manifest = plan(root);
-    const scratch = 'import { saveRun } from "./db/run-store";\n\nsaveRun();\n';
-    writeFileSync(join(root, "svc/src/scratch.ts"), scratch);
-    writeFileSync(join(root, "svc/notes.md"), "not a source\n");
-    const head = git(root, "rev-parse", "HEAD");
-    const status = git(root, "status", "--porcelain");
+  describe("refuses to start, names the file and writes nothing, when the rewrite would change a file git does not track", () => {
+    const importer = (from: string) =>
+      `import { saveRun } from "${from}";\n\nsaveRun();\n`;
 
-    const refusal = (() => {
+    /** The refusal apply throws, with HEAD, status and every probed file byte-identical after it. */
+    function refusalOver(root: string, files: readonly string[]): string {
+      const manifest = plan(root);
+      const head = git(root, "rev-parse", "HEAD");
+      const status = git(root, "status", "--porcelain", "--ignored");
+      const texts = files.map((f) => read(root, f));
+      let refusal = "no refusal";
       try {
         applyManifest(root, manifest);
       } catch (error) {
-        return error instanceof Error ? error.message : String(error);
+        refusal = error instanceof Error ? error.message : String(error);
       }
-      return "no refusal";
-    })();
-    expect(refusal).toMatch(
-      /uncommitted changes[\s\S]*svc\/src\/scratch\.ts \(untracked\)/,
+      expect(git(root, "rev-parse", "HEAD")).toBe(head);
+      expect(git(root, "status", "--porcelain", "--ignored")).toBe(status);
+      expect(files.map((f) => read(root, f))).toEqual(texts);
+      return refusal;
+    }
+
+    it.each([
+      ["an untracked .ts", "svc/src/scratch.ts"],
+      ["an untracked .mts", "svc/src/scratch.mts"],
+      ["an untracked .cts", "svc/src/scratch.cts"],
+    ])("%s importer", (_, path) => {
+      const root = service();
+      writeFileSync(join(root, path), importer("./db/run-store"));
+      writeFileSync(join(root, "svc/notes.md"), "not a source\n");
+
+      const refusal = refusalOver(root, [path, "svc/src/index.ts"]);
+
+      expect(refusal).toMatch(/files git does not track/);
+      expect(refusal).toContain(`  ${path}`);
+      expect(refusal).not.toContain("notes.md");
+    });
+
+    it("an untracked .js importer under allowJs", () => {
+      const root = service();
+      writeFileSync(
+        join(root, "svc/tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: {
+            module: "ESNext",
+            moduleResolution: "Bundler",
+            allowJs: true,
+          },
+          include: ["src"],
+        }),
+      );
+      gitIn(root, "commit", "-qam", "allowJs");
+      writeFileSync(
+        join(root, "svc/src/scratch.js"),
+        importer("./db/run-store"),
+      );
+
+      expect(refusalOver(root, ["svc/src/scratch.js"])).toContain(
+        "  svc/src/scratch.js",
+      );
+    });
+
+    it("a gitignored importer the tsconfig include loads", () => {
+      const root = service();
+      writeFileSync(join(root, ".gitignore"), "svc/src/gen/\n");
+      gitIn(root, "add", ".gitignore");
+      gitIn(root, "commit", "-qm", "ignore codegen");
+      mkdirSync(join(root, "svc/src/gen"));
+      writeFileSync(
+        join(root, "svc/src/gen/client.ts"),
+        importer("../db/run-store"),
+      );
+
+      expect(refusalOver(root, ["svc/src/gen/client.ts"])).toContain(
+        "  svc/src/gen/client.ts",
+      );
+    });
+  });
+
+  it("rewrites a dynamic import of a moved file into the rewrite commit", () => {
+    const root = service();
+    writeFileSync(
+      join(root, "svc/src/lazy.ts"),
+      'export const lazy = () => import("./db/run-store");\n',
     );
-    expect(refusal).not.toContain("notes.md");
-    expect(git(root, "rev-parse", "HEAD")).toBe(head);
-    expect(git(root, "status", "--porcelain")).toBe(status);
-    expect(read(root, "svc/src/scratch.ts")).toBe(scratch);
+    gitIn(root, "add", "svc/src/lazy.ts");
+    gitIn(root, "commit", "-qm", "lazy");
+
+    applyManifest(root, plan(root));
+
+    expect(read(root, "svc/src/lazy.ts")).toContain(
+      'import("./audit-runs/store/run-store")',
+    );
+    expect(git(root, "diff", "--name-only", "HEAD~1", "HEAD")).toContain(
+      "svc/src/lazy.ts",
+    );
+  });
+
+  it("leaves an untracked source the rewrite does not change out of both commits", () => {
+    const root = service();
+    const scratch = "export const unrelated = 1;\n";
+    writeFileSync(join(root, "svc/src/scratch.mts"), scratch);
+
+    const report = applyManifest(root, plan(root));
+
+    expect(report.commits.rewrite).toBe(git(root, "rev-parse", "HEAD"));
+    expect(git(root, "status", "--porcelain")).toBe("?? svc/src/scratch.mts");
+    expect(read(root, "svc/src/scratch.mts")).toBe(scratch);
   });
 
   it("makes identical trees and messages from the same HEAD in two fresh copies", () => {

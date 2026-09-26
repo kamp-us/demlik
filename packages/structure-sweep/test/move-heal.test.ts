@@ -34,6 +34,21 @@ describe("healedSpecifier", () => {
     );
   });
 
+  it("resolves against the tree it is given, so it heals before the rename reaches the disk", () => {
+    const root = tree(["svc/src/index.ts", "svc/src/handlers/a.ts"]);
+    const moved = movedModules(root, [
+      row("svc/src/handlers/a.ts", "svc/src/runs/api/a.ts"),
+    ]);
+    const index = join(root, "svc/src/index.ts");
+    const renamed = (path: string) =>
+      path === join(root, "svc/src/runs/api/a.ts") ||
+      path === join(root, "svc/src/index.ts");
+    expect(healedSpecifier(index, "./handlers/a", moved)).toBeUndefined();
+    expect(healedSpecifier(index, "./handlers/a", moved, renamed)).toBe(
+      "./runs/api/a",
+    );
+  });
+
   it("leaves a specifier that still resolves, and one the manifest does not name", () => {
     const root = tree([
       "svc/src/index.ts",

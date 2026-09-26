@@ -14,6 +14,9 @@ const MODULE_CALL = /^vi\.(do)?(un)?mock$|^vi\.import(Actual|Mock)$/;
 
 export type MovedModules = ReadonlyMap<string, string>;
 
+/** Whether a file exists in the tree a specifier is healed against; the disk unless told otherwise. */
+export type Exists = (path: string) => boolean;
+
 export function movedModules(
   repoRoot: string,
   rows: readonly MoveRow[],
@@ -30,13 +33,13 @@ export function healedSpecifier(
   fromFile: string,
   literal: string,
   moved: MovedModules,
+  exists: Exists = existsSync,
 ): string | undefined {
   if (!literal.startsWith(".")) return undefined;
   const { base: bare, extension } = splitSpecifierExtension(literal);
   const dir = dirname(fromFile);
   const base = resolve(dir, bare);
-  if (RESOLVABLE.some((suffix) => existsSync(`${base}${suffix}`)))
-    return undefined;
+  if (RESOLVABLE.some((suffix) => exists(`${base}${suffix}`))) return undefined;
   const target = moved.get(base);
   if (target === undefined) return undefined;
   const rel = relative(dir, target);
@@ -84,6 +87,7 @@ export function hasDangling(
 export function heal(
   sourceFiles: readonly SourceFile[],
   moved: MovedModules,
+  exists: Exists = existsSync,
 ): number {
   let healed = 0;
   for (const sourceFile of sourceFiles) {
@@ -92,6 +96,7 @@ export function heal(
         sourceFile.getFilePath(),
         literal.getLiteralValue(),
         moved,
+        exists,
       );
       if (next === undefined) continue;
       literal.setLiteralValue(next);
