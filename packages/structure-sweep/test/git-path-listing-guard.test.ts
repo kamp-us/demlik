@@ -42,7 +42,8 @@ function spawnsGit(command: string | undefined): boolean {
   return command !== undefined && /^git(\s|$)/.test(command);
 }
 
-function offends(source: string): boolean {
+/** Whether `source` spawns git itself, or hands `git()` an argument in `flagged`. */
+function callsGit(source: string, flagged: ReadonlySet<string>): boolean {
   const project = new Project({ useInMemoryFileSystem: true });
   const file = project.createSourceFile("source.ts", source);
   return file.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
@@ -55,7 +56,7 @@ function offends(source: string): boolean {
     if (name !== "git") return false;
     return args.some((arg) =>
       [arg, ...arg.getDescendants()].some((node) =>
-        PATH_LISTING.has(literal(node) ?? ""),
+        flagged.has(literal(node) ?? ""),
       ),
     );
   });
@@ -64,7 +65,7 @@ function offends(source: string): boolean {
 /** The sources, by their `src/`-relative path, that list paths with git outside `git.ts`. */
 function pathListingOffenders(sources: ReadonlyMap<string, string>): string[] {
   return [...sources]
-    .filter(([path, text]) => !exempt(path) && offends(text))
+    .filter(([path, text]) => !exempt(path) && callsGit(text, PATH_LISTING))
     .map(([path]) => path);
 }
 
@@ -78,6 +79,42 @@ function sourceTree(dir: string): Map<string, string> {
       ]),
   );
 }
+
+/**
+ * `propose` reads file content through `blobsAt`, one subprocess for every file, never one
+ * `git show` per file (#436). A `propose/` source that hands `git()` a `show` or spawns git itself
+ * is named.
+ */
+const PER_FILE_READ = new Set(["show", "cat-file"]);
+
+function proposeReadOffenders(sources: ReadonlyMap<string, string>): string[] {
+  return [...sources]
+    .filter(
+      ([path, text]) =>
+        path.startsWith("propose/") && callsGit(text, PER_FILE_READ),
+    )
+    .map(([path]) => path);
+}
+
+describe("the propose content-read guard", () => {
+  it("finds no propose source that reads git itself", () => {
+    expect(proposeReadOffenders(sourceTree(SRC))).toEqual([]);
+  });
+
+  it("names a propose source that shows a blob or spawns git, and nothing outside propose", () => {
+    const show = 'git(root, ["show", ref + ":" + path]);';
+    const samples = new Map([
+      ["propose/signals.ts", show],
+      ["propose/spawn.ts", 'spawnSync("git", ["cat-file", "--batch"]);'],
+      ["propose/helper.ts", "blobsAt(root, ref, paths);"],
+      ["sweep/show.ts", show],
+    ]);
+    expect(proposeReadOffenders(samples)).toEqual([
+      "propose/signals.ts",
+      "propose/spawn.ts",
+    ]);
+  });
+});
 
 describe("the git path-listing guard", () => {
   it("finds no source outside git.ts that lists paths with git", () => {
