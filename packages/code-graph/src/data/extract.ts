@@ -54,21 +54,103 @@ function localName(value: SyntaxNode | null): string | null {
   return target?.type === "Identifier" ? String(field(target, "name")) : null;
 }
 
-type Aliases = Map<string, DataBindingDecl>;
+const FUNCTION_LIKE = new Set([
+  "ArrowFunctionExpression",
+  "FunctionExpression",
+  "FunctionDeclaration",
+]);
+
+function isFunctionLike(node: SyntaxNode): boolean {
+  return FUNCTION_LIKE.has(node.type);
+}
+
+// Every local a binding pattern introduces: `db`, `db = x`, `...db`, `{ db }`, `[db]`, and a
+// TypeScript parameter property's `private db`.
+function patternNames(pattern: SyntaxNode | null): string[] {
+  if (pattern === null) return [];
+  switch (pattern.type) {
+    case "Identifier":
+      return [String(field(pattern, "name"))];
+    case "AssignmentPattern":
+      return patternNames(nodeField(pattern, "left"));
+    case "RestElement":
+      return patternNames(nodeField(pattern, "argument"));
+    case "TSParameterProperty":
+      return patternNames(nodeField(pattern, "parameter"));
+    case "Property":
+      return patternNames(nodeField(pattern, "value"));
+    case "ObjectPattern":
+      return (field(pattern, "properties") as SyntaxNode[]).flatMap(patternNames);
+    case "ArrayPattern":
+      return (field(pattern, "elements") as (SyntaxNode | null)[]).flatMap(patternNames);
+    default:
+      return [];
+  }
+}
+
+// The names a function declares for itself: its parameters, a named expression's own name, and
+// every var/let/const, function, class and catch binding in its body short of a nested function,
+// which declares its own.
+function declaredNames(syntax: SyntaxFile, fn: SyntaxNode): string[] {
+  const names = (field(fn, "params") as SyntaxNode[]).flatMap(patternNames);
+  if (fn.type === "FunctionExpression") names.push(...patternNames(nodeField(fn, "id")));
+  const visit = (node: SyntaxNode): void => {
+    if (node.type === "VariableDeclarator") names.push(...patternNames(nodeField(node, "id")));
+    if (node.type === "CatchClause") names.push(...patternNames(nodeField(node, "param")));
+    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+      names.push(...patternNames(nodeField(node, "id")));
+    }
+    if (isFunctionLike(node)) return;
+    for (const child of syntax.children(node)) visit(child);
+  };
+  const body = nodeField(fn, "body");
+  if (body !== null) visit(body);
+  return names;
+}
+
+// One lexical alias scope per function. A name the function declares starts out shadowing any
+// outer alias of that name, and becomes an alias only where its own declaration reads a binding;
+// a name it does not declare resolves through the enclosing scopes.
+class AliasScope {
+  private readonly own = new Map<string, DataBindingDecl | null>();
+
+  private constructor(private readonly parent: AliasScope | null) {}
+
+  static root(): AliasScope {
+    return new AliasScope(null);
+  }
+
+  child(syntax: SyntaxFile, fn: SyntaxNode): AliasScope {
+    const scope = new AliasScope(this);
+    for (const name of declaredNames(syntax, fn)) scope.own.set(name, null);
+    return scope;
+  }
+
+  bind(name: string, decl: DataBindingDecl): void {
+    this.own.set(name, decl);
+  }
+
+  resolve(name: string): DataBindingDecl | null {
+    for (let scope: AliasScope | null = this; scope !== null; scope = scope.parent) {
+      if (scope.own.has(name)) return scope.own.get(name) ?? null;
+    }
+    return null;
+  }
+}
 
 // `const { DB, KV: kv } = env`.
-function declareDestructured(pattern: SyntaxNode, bindings: Bindings, aliases: Aliases): void {
+function declareDestructured(pattern: SyntaxNode, bindings: Bindings, aliases: AliasScope): void {
   for (const property of field(pattern, "properties") as SyntaxNode[]) {
     if (property.type !== "Property") continue;
     const key = keyName(property, nodeField(property, "key"));
     const decl = key === null ? undefined : bindings.get(key);
     const local = localName(nodeField(property, "value"));
-    if (decl !== undefined && local !== null) aliases.set(local, decl);
+    if (decl !== undefined && local !== null) aliases.bind(local, decl);
   }
 }
 
 // One level of aliasing: `const db = env.DB`, or a destructure off `env`.
-function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: Aliases): void {
+function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: AliasScope): void {
   if (node.type !== "VariableDeclarator") return;
   const id = nodeField(node, "id");
   const init = nodeField(node, "init");
@@ -78,7 +160,7 @@ function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: Aliases):
     return;
   }
   const decl = id.type === "Identifier" ? envBinding(init, bindings) : null;
-  if (decl !== null) aliases.set(String(field(id, "name")), decl);
+  if (decl !== null) aliases.bind(String(field(id, "name")), decl);
 }
 
 function isAliasInitializer(node: SyntaxNode, parent: SyntaxNode | undefined): boolean {
@@ -101,7 +183,7 @@ function referencedBinding(
   syntax: SyntaxFile,
   node: SyntaxNode,
   bindings: Bindings,
-  aliases: ReadonlyMap<string, DataBindingDecl>,
+  aliases: AliasScope,
 ): DataBindingDecl | null {
   const parent = syntax.parentOf(node);
   if (node.type === "MemberExpression") {
@@ -109,8 +191,8 @@ function referencedBinding(
     return decl === null || isAliasInitializer(node, parent) ? null : decl;
   }
   if (node.type !== "Identifier") return null;
-  const decl = aliases.get(String(field(node, "name")));
-  return decl !== undefined && isAliasUse(node, parent) ? decl : null;
+  const decl = aliases.resolve(String(field(node, "name")));
+  return decl !== null && isAliasUse(node, parent) ? decl : null;
 }
 
 function literalText(node: SyntaxNode | undefined): string | null {
@@ -148,7 +230,8 @@ function siteAt(syntax: SyntaxFile, ref: SyntaxNode, decl: DataBindingDecl): Sit
 type Held = { holder: DiscoveredFunction | null; site: Site };
 
 // One preorder walk of a file. Entering a discovered function hands every site below it to that
-// function, under a fresh alias scope; an anonymous callback stays with whoever holds it.
+// function; an anonymous callback stays with whoever holds it. Alias scope is a separate axis:
+// every function-like node, named or anonymous, opens a child of the scope around it.
 function sitesOf(
   unit: SourceUnit,
   holders: ReadonlyMap<SyntaxNode, DiscoveredFunction>,
@@ -156,19 +239,15 @@ function sitesOf(
 ): Held[] {
   const { syntax } = unit;
   const held: Held[] = [];
-  const enter = (node: SyntaxNode, holder: DiscoveredFunction | null, aliases: Aliases): void => {
-    const own = holders.get(node);
-    if (own !== undefined) {
-      const scope: Aliases = new Map();
-      for (const child of syntax.children(node)) enter(child, own, scope);
-      return;
-    }
+  const enter = (node: SyntaxNode, outer: DiscoveredFunction | null, around: AliasScope): void => {
+    const holder = holders.get(node) ?? outer;
+    const aliases = isFunctionLike(node) ? around.child(syntax, node) : around;
     declareAliases(node, bindings, aliases);
     const decl = referencedBinding(syntax, node, bindings, aliases);
     if (decl !== null) held.push({ holder, site: siteAt(syntax, node, decl) });
     for (const child of syntax.children(node)) enter(child, holder, aliases);
   };
-  enter(syntax.program, null, new Map());
+  enter(syntax.program, null, AliasScope.root());
   return held;
 }
 
