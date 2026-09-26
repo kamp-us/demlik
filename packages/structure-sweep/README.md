@@ -8,7 +8,7 @@ structure; `structure-sweep` asks TypeSafe **Jev** what the code _means_, then m
 - `sweep` — for every source file under a folder, which feature it belongs to, which role it plays,
   and whether a business rule sits inside an API file.
 - `pairs` — for every code-graph collapse pair, whether the two functions are the same decision:
-  one question per anchor function over its candidate partners by default, or the three-way
+  one request per anchor function, one yes/no per candidate partner, by default, or the three-way
   same decision / look-alike / shared helper verdict per pair under `--pairwise`.
 - `move plan | apply` — move files into feature folders where Jev's verdict and the import graph
   agree, committing the renames apart from the import rewrites and never moving an entry file.
@@ -330,28 +330,35 @@ should become one. A pair already answered the same way keeps its answer.
 **Anchor mode is the default.** Each pair is dealt to one of its two functions, the **anchor**, and
 Jev is asked once per anchor rather than once per pair. Functions are taken in order of how many
 pairs they appear in, most first, a tie going to the lower `path:function`. Each takes every pair
-not already dealt to an earlier anchor, so no pair is asked twice. The anchor's question sends its
-body once, then each candidate partner under a ref (`c0`, `c1`, …), and asks which candidate
-encodes the same business rule as the anchor, or `none`. The same call asks `business_rule` about
-the anchor.
+not already dealt to an earlier anchor, so no pair is asked twice. The anchor's request sends its
+body once, then each candidate partner under a ref (`c0`, `c1`, …), and asks one yes/no question
+per candidate, `same_rule_c0`, `same_rule_c1`, …: does this candidate encode the same business rule
+as the anchor? Each candidate is judged on its own, so an anchor with two or more true duplicates
+confirms every one of them, and `pairs.md` groups the whole family. The same request asks
+`business_rule` about the anchor. One request carries at most 32 questions; an anchor with more
+candidates than fit beside `business_rule` is asked in one request per chunk, each candidate
+keeping its ref, and `--plan` counts every chunk as a Jev call.
 
 `pairs.json` still holds one row per pair, with the same fields a pairwise row has, so `inventory`
-and `consolidate` read both the same way. A row's `answers` records what the anchor's one answer means
-for that pair:
+and `consolidate` read both the same way. A row's `answers` records what its candidate's own
+question answered:
 
-- the candidate Jev picked is `same_decision`, at the probability Jev gave its ref;
-- every other candidate, including all of them when Jev answered `none`, is `look_alike`, at one
-  minus its ref's probability. Anchor mode never records `shared_helper`: `none` does not tell
-  plumbing from a look-alike, so shared helpers are found with `--pairwise` only;
-- a candidate whose ref Jev's answer gives no probability, picked or not, is `unanswered`: its
-  verdict is `{ "choice": "unanswered" }`, with no confidence, and its `partner` has no
-  `probability`. `pairs.md` counts it on an `unanswered` line, no group or `inventory` lever reads
-  it as a verdict, and it is never served from the ledger, so the next run asks its anchor's menu
-  again;
-- `business_rule` is the anchor's, the same on every row of its menu;
-- `partner` carries which side is the anchor, the candidate's `ref`, its `probability`, the ref
-  Jev `chosen` for the anchor, and a `menu` hash of the whole state the anchor was asked about;
-- `usage` is the one call's, repeated on every row of the anchor's menu.
+- above one half, the candidate is `same_decision`, at the probability Jev gave yes;
+- at or below it, the candidate is `look_alike`, at one minus that probability. Anchor mode never
+  records `shared_helper`: a no does not tell plumbing from a look-alike, so shared helpers are
+  found with `--pairwise` only;
+- a candidate whose question Jev's answer leaves out is `unanswered`: its verdict is
+  `{ "choice": "unanswered" }`, with no confidence, and its `partner` has no `probability`.
+  `pairs.md` counts it on an `unanswered` line, no group or `inventory` lever reads it as a verdict,
+  and it is never served from the ledger, so the next run asks its chunk again;
+- `business_rule` is the anchor's, the same on every row of its request;
+- `partner` carries which side is the anchor, the candidate's `ref`, its `probability`, a `menu`
+  hash of the whole state the request was asked about, and the anchor question `version` it was
+  asked under;
+- `usage` is the one request's, repeated on every row it answered.
+
+The anchor question `version` is part of the cache key, so a row asked under an earlier version of
+the question is never served: the first run after an upgrade asks those anchors again.
 
 Every row, in either mode, carries `id`, `scope`, its two functions `a` and `b`, the graph's
 `signals` and `graphConfidence`, `answers`, `model` and `usage`, and two optional fields that are

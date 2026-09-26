@@ -9,13 +9,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JevOk, JevState } from "@demlik/tea/jev";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_MODEL } from "../src/jev.js";
+import { DEFAULT_MODEL, JEV_MAX_QUESTIONS } from "../src/jev.js";
 import { embeddingText } from "../src/lowering/embed.js";
 import {
-  ANCHOR_NONE,
+  ANCHOR_INSTRUCTIONS,
+  ANCHOR_QUESTION_VERSION,
   type AnchorJev,
   type AnchorQuestions,
+  type AnchorRef,
+  anchorChunks,
   anchorQuestions,
+  anchorRef,
+  sameRuleId,
   UNANSWERED,
 } from "../src/pairs/anchor.js";
 import {
@@ -39,6 +44,7 @@ import {
   actionFor,
   countVerdicts,
   type PairRow,
+  pairGroups,
   renderMarkdown,
 } from "../src/pairs/report.js";
 import {
@@ -308,46 +314,39 @@ interface AnchorAsked {
   readonly state: {
     readonly anchor: { readonly function: string };
     readonly candidates: readonly {
-      readonly ref: string;
+      readonly ref: AnchorRef;
       readonly function: string;
     }[];
   };
 }
 
+/** The `same_rule` question ids a request asks, in the order it asks them. */
+const sameRuleIds = (questions: AnchorQuestions) =>
+  Object.keys(questions).filter((id) => id !== "business_rule");
+
 /**
- * An anchor-mode Jev stand-in. `picks` names, per anchor function, the candidate it picks; an
- * anchor it does not name answers `none`. The pick gets 0.8 and the rest share 0.2 evenly. A
- * candidate function named in `omit` gets no probability at all: its ref is left out of the answer.
+ * An anchor-mode Jev stand-in. `same` names, per anchor function, the candidates it says yes to:
+ * each gets 0.8 on its own `same_rule` question, every other candidate 0.1. A candidate function
+ * named in `omit` gets no answer at all: its question is left out of the answer.
  */
 function anchorJev(
-  picks: Readonly<Record<string, string>>,
+  same: Readonly<Record<string, readonly string[]>>,
   omit: readonly string[] = [],
 ) {
   const asked: AnchorAsked[] = [];
   const ask: AnchorJev = async (questions, state) => {
     const read = state as unknown as AnchorAsked["state"];
     asked.push({ questions, state: read });
-    const pick = read.candidates.find(
-      (c) => c.function === picks[read.anchor.function],
-    );
-    const chosen = pick?.ref ?? ANCHOR_NONE;
-    const refs = Object.keys(questions.partner.criteria);
-    const omitted = new Set(
-      read.candidates
-        .filter((c) => omit.includes(c.function))
-        .map((c) => c.ref),
-    );
+    const yes = same[read.anchor.function] ?? [];
     const answers: JevOk<AnchorQuestions>["answers"] = {
-      partner: {
-        type: "choice",
-        choice: chosen,
-        confidence: 0.8,
-        probabilities: Object.fromEntries(
-          refs
-            .filter((r) => !omitted.has(r))
-            .map((r) => [r, r === chosen ? 0.8 : 0.2 / (refs.length - 1)]),
-        ),
-      },
+      ...Object.fromEntries(
+        read.candidates
+          .filter((c) => !omit.includes(c.function))
+          .map((c) => [
+            sameRuleId(c.ref),
+            { type: "noul", noul: yes.includes(c.function) ? 0.8 : 0.1 },
+          ]),
+      ),
       business_rule: { type: "noul", noul: 0.7 },
     };
     return {
@@ -393,8 +392,8 @@ describe("anchor mode", () => {
     expect(PAIRS_USAGE).toContain("gold-set evaluation");
   });
 
-  it("makes one Jev call per anchor and sends each anchor's source once", async () => {
-    const asked = anchorJev({ canEdit: "mayEdit" });
+  it("makes one Jev call per anchor, one same_rule question per candidate, and sends each anchor's source once", async () => {
+    const asked = anchorJev({ canEdit: ["mayEdit"] });
     const { rows } = await run(fresh(), { mode: "anchor", ask: asked });
     // canEdit is in two pairs and anchors both; mapRow anchors the pair left over.
     expect(asked.asked).toHaveLength(2);
@@ -405,12 +404,13 @@ describe("anchor mode", () => {
     expect(
       asked.asked.map((a) => a.state.candidates.map((c) => c.function)),
     ).toEqual([["mayEdit", "mapRow"], ["toRow"]]);
-    expect(
-      asked.asked.map((a) => Object.keys(a.questions.partner.criteria)),
-    ).toEqual([
-      ["c0", "c1", "none"],
-      ["c0", "none"],
+    expect(asked.asked.map((a) => sameRuleIds(a.questions))).toEqual([
+      ["same_rule_c0", "same_rule_c1"],
+      ["same_rule_c0"],
     ]);
+    expect(
+      asked.asked.every((a) => a.questions.business_rule.type === "noul"),
+    ).toBe(true);
     const anchorSource = JSON.stringify(SOURCES["svc/src/a.ts"].trimEnd());
     expect(
       JSON.stringify(asked.asked[0]?.state).split(anchorSource).length - 1,
@@ -418,26 +418,27 @@ describe("anchor mode", () => {
     expect(rows).toHaveLength(3);
   });
 
-  it("records one row per pair, carrying its candidate's probability, and every un-chosen candidate as look_alike", async () => {
+  it("records one row per pair, its verdict read off its own same_rule question's probability", async () => {
     const at = fresh();
     const { rows } = await run(at, {
       mode: "anchor",
-      ask: anchorJev({ canEdit: "mayEdit" }),
+      ask: anchorJev({ canEdit: ["mayEdit"] }),
     });
     const byPair = Object.fromEntries(
       rows.map((r) => [`${r.a.function}|${r.b.function}`, r.answers]),
     );
+    const version = ANCHOR_QUESTION_VERSION;
     expect(byPair["canEdit|mayEdit"]).toMatchObject({
       verdict: { choice: "same_decision", confidence: 0.8 },
-      partner: { anchor: "a", ref: "c0", probability: 0.8, chosen: "c0" },
+      partner: { anchor: "a", ref: "c0", probability: 0.8, version },
     });
     expect(byPair["canEdit|mapRow"]).toMatchObject({
       verdict: { choice: "look_alike", confidence: 0.9 },
-      partner: { anchor: "a", ref: "c1", probability: 0.1, chosen: "c0" },
+      partner: { anchor: "a", ref: "c1", probability: 0.1, version },
     });
     expect(byPair["mapRow|toRow"]).toMatchObject({
-      verdict: { choice: "look_alike", confidence: 0.8 },
-      partner: { anchor: "a", ref: "c0", probability: 0.2, chosen: "none" },
+      verdict: { choice: "look_alike", confidence: 0.9 },
+      partner: { anchor: "a", ref: "c0", probability: 0.1, version },
     });
     expect(countVerdicts(rows)).toEqual({
       same_decision: 1,
@@ -452,34 +453,34 @@ describe("anchor mode", () => {
     expect(JSON.parse(readFileSync(at.outPath, "utf8"))).toHaveLength(3);
   });
 
-  it("records a candidate whose ref Jev's answer omits as unanswered, picked or not, never as a verdict", async () => {
+  it("records a candidate whose same_rule question Jev's answer omits as unanswered, never as a verdict", async () => {
     const at = fresh();
     const { rows } = await run(at, {
       mode: "anchor",
-      ask: anchorJev({ canEdit: "mayEdit" }, ["mayEdit", "mapRow"]),
+      ask: anchorJev({ canEdit: ["mayEdit"] }, ["mayEdit", "mapRow"]),
     });
     const byPair = Object.fromEntries(
       rows.map((r) => [`${r.a.function}|${r.b.function}`, r.answers]),
     );
-    // Jev picked c0 but gave it no probability, and gave c1 none either.
+    // Jev said yes to c0 in the script, but its answer covers neither c0 nor c1.
     expect(byPair["canEdit|mayEdit"]).toEqual({
       verdict: { choice: UNANSWERED },
       business_rule: { type: "noul", noul: 0.7 },
       partner: {
         anchor: "a",
         ref: "c0",
-        chosen: "c0",
         menu: expect.any(String),
+        version: ANCHOR_QUESTION_VERSION,
       },
     });
     expect(byPair["canEdit|mapRow"]).toMatchObject({
       verdict: { choice: UNANSWERED },
-      partner: { ref: "c1", chosen: "c0" },
+      partner: { ref: "c1" },
     });
     expect(byPair["canEdit|mapRow"]?.verdict).not.toHaveProperty("confidence");
     expect(byPair["canEdit|mapRow"]).not.toHaveProperty("partner.probability");
     expect(byPair["mapRow|toRow"]).toMatchObject({
-      verdict: { choice: "look_alike", confidence: 0.8 },
+      verdict: { choice: "look_alike", confidence: 0.9 },
     });
     expect(countVerdicts(rows)).toEqual({
       same_decision: 0,
@@ -499,7 +500,7 @@ describe("anchor mode", () => {
     const at = fresh();
     await run(at, {
       mode: "anchor",
-      ask: anchorJev({ canEdit: "mayEdit" }, ["mayEdit"]),
+      ask: anchorJev({ canEdit: ["mayEdit"] }, ["mayEdit"]),
     });
     const onFile: PairRow[] = JSON.parse(readFileSync(at.outPath, "utf8"));
     expect(onFile.map((r) => r.answers.verdict.choice).sort()).toEqual([
@@ -516,7 +517,7 @@ describe("anchor mode", () => {
       model: DEFAULT_MODEL,
     });
     expect(plan.toAsk).toBe(1);
-    const again = anchorJev({ canEdit: "mayEdit" });
+    const again = anchorJev({ canEdit: ["mayEdit"] });
     const { rows } = await run(at, { mode: "anchor", ask: again });
     // Only canEdit's menu held the unanswered row; mapRow's is served from the ledger.
     expect(again.asked.map((a) => a.state.anchor.function)).toEqual([
@@ -528,6 +529,23 @@ describe("anchor mode", () => {
       shared_helper: 0,
       unanswered: 0,
     });
+  });
+
+  it("never serves a row asked under the single-choice question, even over the same menu", async () => {
+    const at = fresh();
+    await run(at, { mode: "anchor", ask: anchorJev({}) });
+    // A row written before the question was versioned: the same menu hash, and no version.
+    const onFile: PairRow[] = JSON.parse(readFileSync(at.outPath, "utf8"));
+    const legacy = onFile.map((row) => {
+      const { version: _version, ...partner } = (
+        row.answers as { partner: { version: number } }
+      ).partner;
+      return { ...row, answers: { ...row.answers, partner } };
+    });
+    writeFileSync(at.outPath, JSON.stringify(legacy));
+    const again = anchorJev({});
+    await run(at, { mode: "anchor", ask: again });
+    expect(again.asked).toHaveLength(2);
   });
 
   it("never reuses a pairwise answer, nor serves an anchor answer to a pairwise run", async () => {
@@ -553,13 +571,145 @@ describe("anchor mode", () => {
     expect(JSON.stringify(redacted.asked)).not.toContain("svc/");
   });
 
-  it("offers one ref per candidate plus none", () => {
-    expect(Object.keys(anchorQuestions(3).partner.criteria)).toEqual([
-      "c0",
-      "c1",
-      "c2",
-      "none",
+  it("asks one same_rule question per candidate ref, plus business_rule", () => {
+    const questions = anchorQuestions(["c0", "c1", "c2"]);
+    expect(Object.keys(questions).sort()).toEqual([
+      "business_rule",
+      "same_rule_c0",
+      "same_rule_c1",
+      "same_rule_c2",
     ]);
+    expect(questions.same_rule_c1).toMatchObject({
+      type: "noul",
+      instructions: { candidate: "c1", question: ANCHOR_INSTRUCTIONS },
+    });
+  });
+
+  it("describes a yes/no about one candidate, never a pick among them", () => {
+    expect(ANCHOR_INSTRUCTIONS).not.toMatch(/pick the candidate/i);
+    expect(ANCHOR_INSTRUCTIONS).toContain(
+      "yes/no question about one candidate",
+    );
+    expect(ANCHOR_INSTRUCTIONS).toContain("Answer yes");
+    expect(ANCHOR_INSTRUCTIONS).toContain("Answer no");
+  });
+
+  it("confirms every true duplicate on one anchor's menu, so pairGroups yields the whole family", async () => {
+    const sources = {
+      "svc/src/can.ts": "export function canEdit(u) {\n  return u.owner;\n}\n",
+      "svc/src/may.ts": "export function mayEdit(u) {\n  return u.owner;\n}\n",
+      "svc/src/allow.ts":
+        "export function allowEdit(u) {\n  return u.owner;\n}\n",
+      "svc/src/row.ts": "export function mapRow(r) {\n  return r.owner;\n}\n",
+    };
+    const { rows } = await runPairs({
+      root: repo(sources),
+      ref: "HEAD",
+      targets: [
+        {
+          scope: "svc",
+          collapsePath: collapseOf([
+            candidate("src/can.ts", "canEdit", "src/may.ts", "mayEdit"),
+            candidate("src/can.ts", "canEdit", "src/allow.ts", "allowEdit"),
+            candidate("src/can.ts", "canEdit", "src/row.ts", "mapRow"),
+          ]),
+        },
+      ],
+      jev: {
+        mode: "anchor",
+        ask: anchorJev({ canEdit: ["mayEdit", "allowEdit"] }),
+      },
+      outPath: join(mkdtempSync(join(tmpdir(), "pairs-")), "pairs.json"),
+    });
+    const verdicts = Object.fromEntries(
+      rows.map((r) => [r.b.function, r.answers.verdict]),
+    );
+    expect(verdicts).toEqual({
+      mayEdit: { choice: "same_decision", confidence: 0.8 },
+      allowEdit: { choice: "same_decision", confidence: 0.8 },
+      mapRow: { choice: "look_alike", confidence: 0.9 },
+    });
+    expect(pairGroups(rows, "same_decision").map((g) => g.members)).toEqual([
+      [
+        "svc/src/allow.ts:allowEdit",
+        "svc/src/can.ts:canEdit",
+        "svc/src/may.ts:mayEdit",
+      ],
+    ]);
+  });
+});
+
+describe("anchor chunks", () => {
+  it("fits business_rule and at most maxQuestions - 1 candidates in each request", () => {
+    const refs = Array.from({ length: 7 }, (_, i) => anchorRef(i));
+    expect(anchorChunks(refs, 4)).toEqual([
+      ["c0", "c1", "c2"],
+      ["c3", "c4", "c5"],
+      ["c6"],
+    ]);
+    expect(anchorChunks(refs, 8)).toEqual([refs]);
+    expect(anchorChunks(refs)).toEqual([refs]);
+    expect(() => anchorChunks(refs, 1)).toThrow(/at least 2/);
+  });
+
+  it("splits a menu past the question cap into one request per chunk, and --plan counts the requests", async () => {
+    const partners = Array.from(
+      { length: JEV_MAX_QUESTIONS + 2 },
+      (_, i) => `q${i}`,
+    );
+    const sources = Object.fromEntries([
+      ["svc/src/hub.ts", "export function hub(u) {\n  return u.owner;\n}\n"],
+      ...partners.map((p) => [
+        `svc/src/${p}.ts`,
+        `export function ${p}(u) {\n  return u.owner;\n}\n`,
+      ]),
+    ]);
+    const at = {
+      root: repo(sources),
+      ref: "HEAD",
+      targets: [
+        {
+          scope: "svc",
+          collapsePath: collapseOf(
+            partners.map((p) =>
+              candidate("src/hub.ts", "hub", `src/${p}.ts`, p),
+            ),
+          ),
+        },
+      ],
+      outPath: join(mkdtempSync(join(tmpdir(), "pairs-")), "pairs.json"),
+      maxPartners: partners.length,
+    };
+    const plan = planPairs({ ...at, mode: "anchor", model: DEFAULT_MODEL });
+    expect(plan).toMatchObject({ anchors: 1, toAsk: 2 });
+    const asked = anchorJev({});
+    const { rows } = await runPairs({
+      ...at,
+      jev: { mode: "anchor", ask: asked },
+    });
+    expect(asked.asked.map((a) => a.state.anchor.function)).toEqual([
+      "hub",
+      "hub",
+    ]);
+    expect(asked.asked.map((a) => sameRuleIds(a.questions).length)).toEqual([
+      JEV_MAX_QUESTIONS - 1,
+      3,
+    ]);
+    expect(
+      asked.asked.every(
+        (a) => Object.keys(a.questions).length <= JEV_MAX_QUESTIONS,
+      ),
+    ).toBe(true);
+    // Refs stay the candidate's place in the anchor's whole menu across chunks.
+    expect(asked.asked[1]?.state.candidates.map((c) => c.ref)).toEqual([
+      anchorRef(JEV_MAX_QUESTIONS - 1),
+      anchorRef(JEV_MAX_QUESTIONS),
+      anchorRef(JEV_MAX_QUESTIONS + 1),
+    ]);
+    expect(rows).toHaveLength(partners.length);
+    expect(
+      planPairs({ ...at, mode: "anchor", model: DEFAULT_MODEL }).toAsk,
+    ).toBe(0);
   });
 });
 
@@ -739,8 +889,8 @@ describe("pairs --plan", () => {
       ["--max-partners", "2"],
     );
     expect(printed).toEqual([
-      "svc: 4 candidate pairs over 5 functions, 1 anchors, 2 skipped over --max-partners 2, 1 Jev calls to make, ~565 input tokens",
-      "plan (anchor mode): 4 candidate pairs, 1 anchors, 5 functions, 2 skipped, 1 Jev calls to make, ~565 input tokens (request JSON at 4 characters per token); no Jev call made",
+      "svc: 4 candidate pairs over 5 functions, 1 anchors, 2 skipped over --max-partners 2, 1 Jev calls to make, ~910 input tokens",
+      "plan (anchor mode): 4 candidate pairs, 1 anchors, 5 functions, 2 skipped, 1 Jev calls to make, ~910 input tokens (request JSON at 4 characters per token); no Jev call made",
     ]);
     expect(existsSync(join(out, "pairs.json"))).toBe(false);
     expect(existsSync(join(out, "pairs.md"))).toBe(false);

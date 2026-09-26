@@ -28,8 +28,9 @@ import {
 export const PAIRS_USAGE = `structure-sweep pairs <folder>=<collapse.json>... [options]
 
   Ask Jev what each code-graph collapse pair means. By default each pair is dealt to one anchor
-  function, and each anchor is asked once which of its candidate partners encodes the same
-  business rule, or none: the chosen one is same_decision, every other one look_alike.
+  function, and each anchor is asked in one request, one yes/no question per candidate partner,
+  whether it encodes the same business rule: a yes is same_decision, a no look_alike. An anchor
+  with more candidates than one request's question cap is asked in one request per chunk.
   <collapse.json> is the output of \`code-graph <folder> --collapse --json\`.
   <folder> may be ., the whole tree: only its report holds a pair whose two functions
   sit in different top-level folders.
