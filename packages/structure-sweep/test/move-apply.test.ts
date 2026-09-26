@@ -197,6 +197,32 @@ describe("applyManifest", () => {
     expect(existsSync(join(root, "svc/src/handlers/runs.ts"))).toBe(true);
   });
 
+  it("refuses to start while an untracked source sits under the scope, names it, and writes nothing", () => {
+    const root = service();
+    const manifest = plan(root);
+    const scratch = 'import { saveRun } from "./db/run-store";\n\nsaveRun();\n';
+    writeFileSync(join(root, "svc/src/scratch.ts"), scratch);
+    writeFileSync(join(root, "svc/notes.md"), "not a source\n");
+    const head = git(root, "rev-parse", "HEAD");
+    const status = git(root, "status", "--porcelain");
+
+    const refusal = (() => {
+      try {
+        applyManifest(root, manifest);
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+      return "no refusal";
+    })();
+    expect(refusal).toMatch(
+      /uncommitted changes[\s\S]*svc\/src\/scratch\.ts \(untracked\)/,
+    );
+    expect(refusal).not.toContain("notes.md");
+    expect(git(root, "rev-parse", "HEAD")).toBe(head);
+    expect(git(root, "status", "--porcelain")).toBe(status);
+    expect(read(root, "svc/src/scratch.ts")).toBe(scratch);
+  });
+
   it("makes identical trees and messages from the same HEAD in two fresh copies", () => {
     const origin = service();
     const manifest = plan(origin);

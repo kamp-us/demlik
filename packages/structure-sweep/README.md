@@ -265,8 +265,10 @@ history:
    is healed, and the changed files are formatted with the repository's biome when it has one. When
    none of that changes a file, there is no second commit.
 
-Apply refuses to start while a tracked file has staged or unstaged changes, and names them;
-untracked files are left alone. The commits are a function of `HEAD` and the manifest: two applies
+Apply refuses to start while a tracked file has staged or unstaged changes, or an untracked
+`.ts`/`.tsx` source sits under the scope, and names them: the rewrite pass reads every source git
+can see, so an untracked importer of a moved file would otherwise be rewritten and committed.
+Other untracked files are left alone. The commits are a function of `HEAD` and the manifest: two applies
 of one manifest over one `HEAD` make the same trees and messages. A run that stopped after the
 rename commit resumes with the rewrite commit alone, and a second `apply` over a finished manifest
 commits nothing and reports `lint: "untouched"`. It prints a JSON report, including `commits`

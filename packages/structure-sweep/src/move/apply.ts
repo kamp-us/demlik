@@ -9,6 +9,7 @@ import {
   stagedPaths,
   trackedPaths,
   uncommittedPaths,
+  untrackedPaths,
 } from "../git.js";
 import { canonicalJson, contentHash } from "../lowering/artifact.js";
 import {
@@ -238,9 +239,18 @@ function rewrite(
   return { healed, specifiersRewritten, written };
 }
 
+const SOURCE = /\.tsx?$/;
+
+/**
+ * Untracked sources under the scope. The move project loads every source git can see, so apply
+ * would rewrite one of these and commit it with the moves; it refuses to start instead.
+ */
+const untrackedSources = (repoRoot: string, scope: string) =>
+  untrackedPaths(repoRoot, scope).filter((path) => SOURCE.test(path));
+
 function scopeSources(repoRoot: string, scope: string): string[] {
   return trackedPaths(repoRoot, "index", scope)
-    .filter((p) => /\.tsx?$/.test(p) && existsSync(join(repoRoot, p)))
+    .filter((p) => SOURCE.test(p) && existsSync(join(repoRoot, p)))
     .map((p) => join(repoRoot, p));
 }
 
@@ -257,8 +267,12 @@ export function applyManifest(
   manifest: Manifest,
 ): ApplyReport {
   const started = performance.now();
-  // Untracked files may stay: apply commits only the paths it moved or rewrote.
-  const dirty = uncommittedPaths(repoRoot);
+  const dirty = [
+    ...uncommittedPaths(repoRoot),
+    ...untrackedSources(repoRoot, manifest.scope).map(
+      (path) => `${path} (untracked)`,
+    ),
+  ];
   if (dirty.length > 0)
     throw new Error(
       `uncommitted changes, refusing to apply over them; commit or discard them first:\n${dirty.map((d) => `  ${d}`).join("\n")}`,
