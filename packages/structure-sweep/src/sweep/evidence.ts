@@ -47,7 +47,12 @@ export function listSources(
     });
 }
 
-const IMPORT = /^\s*import[\s\S]*?from\s+["']([^"']+)["'];?\s*$/gm;
+/**
+ * One static import statement, bindings optional: `import … from "…"` across any number of lines, or
+ * a bare `import "…"`. The bindings may not hold a quote, `;` or `(`, so a bare import never runs on
+ * into the next statement's `from "…"`, and a dynamic `import("…")` is not a statement.
+ */
+const IMPORT = /^\s*import\b(?:[^;"'()]*?\bfrom)?\s*["']([^"']+)["'];?\s*$/gm;
 const EXPORT =
   /^export\s+(?:default\s+)?(?:async\s+)?(?:function\*?|const|let|class|type|interface|enum)\s+([A-Za-z_$][\w$]*)/gm;
 
@@ -99,8 +104,8 @@ const asNamed: Naming = {
 
 /**
  * Opaque ids for one input set: `f<n>` for a module (a swept file keeps its extension, a specifier
- * reads `./f<n>`), `g<n>` for a file a graph list names only by basename. Ids follow sorted order,
- * so the same files and graph give the same ids.
+ * reads `./f<n>`), `g<n>` for a file a graph list names only by basename. Ids follow code-unit
+ * order, never the host locale's, so the same files and graph give the same ids on every machine.
  */
 function opaque(
   files: readonly SourceFile[],
@@ -112,7 +117,9 @@ function opaque(
     modules.set(key, n);
     return n;
   };
-  const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
+  const sorted = [...files].sort((a, b) =>
+    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+  );
   for (const file of sorted) number(moduleKey(file.path));
   const targets = sorted.flatMap((file) =>
     [...file.text.matchAll(RELATIVE_SITE)].flatMap((m) => {

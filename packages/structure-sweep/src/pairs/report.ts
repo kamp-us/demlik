@@ -16,6 +16,8 @@ export interface PairRow {
   readonly b: JudgedFunction;
   readonly signals: readonly GraphSignal[];
   readonly graphConfidence: number;
+  /** Present only on a row Jev answered without file paths; a default row has no such field. Part of the cache key. */
+  readonly redacted?: true;
   readonly answers: PairAnswers;
   readonly model: string;
   readonly usage: JevUsage;
