@@ -6,7 +6,12 @@ import { cleanExit, defineProgram, type Opts } from "./cli.js";
 import { runCollapseGate } from "./collapse/gate.js";
 import { renderCollapse } from "./collapse/render.js";
 import { runCommentGate } from "./comments/gate.js";
-import { resolveCollapseSettings, resolveNodeKindRules, resolveThresholds } from "./config.js";
+import {
+  resolveCollapseSettings,
+  resolveNodeKindRules,
+  resolveThresholds,
+  withEntryPresets,
+} from "./config.js";
 import { renderData } from "./data/render.js";
 import { loadEnvKeyReport } from "./env-keys/query.js";
 import type { AnalysisOptions } from "./extract/analysis.js";
@@ -62,7 +67,9 @@ defineProgram()
 
     const thresholds = resolveThresholds(opts.thresholds, cleanExit);
     if (thresholds === null) return;
-    const kindRules = resolveNodeKindRules(opts.nodeKinds, cleanExit);
+    const fileKindRules = resolveNodeKindRules(opts.nodeKinds, cleanExit);
+    if (fileKindRules === null) return;
+    const kindRules = withEntryPresets(fileKindRules, opts.entryPreset ?? [], cleanExit);
     if (kindRules === null) return;
     const collapseSettings = resolveCollapseSettings(opts.collapseConfig, cleanExit);
     if (collapseSettings === null) return;

@@ -6,6 +6,7 @@ export type ClassifyContext = {
   durableObjectMethods: ReadonlySet<string>;
   baseClassEntries: ReadonlyMap<string, readonly string[]>;
   declaredGuards: ReadonlyMap<string, readonly string[]>;
+  conventionEntries: ReadonlyMap<string, readonly string[]>;
 };
 
 export type CompiledKindRules = {
@@ -80,6 +81,7 @@ function entryEvidence(
   if (context.crossRuntimeTargets.has(fn.id)) out.add("cross-service-callee");
   if (context.durableObjectMethods.has(fn.id)) out.add("durable-object-class");
   for (const key of context.baseClassEntries.get(fn.id) ?? []) out.add(key);
+  for (const key of context.conventionEntries.get(fn.id) ?? []) out.add(key);
   return [...out].sort((a, b) => a.localeCompare(b));
 }
 

@@ -3,7 +3,9 @@ import type { z } from "zod";
 import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
-import { type NodeKindRules, NodeKindRulesSchema } from "./kinds/rules.js";
+import { GlobSyntaxError, globToRegExp } from "./kinds/glob.js";
+import { EntryExportPresetNameSchema, entryExportPresetNames } from "./kinds/presets.js";
+import { type NodeKindRules, NodeKindRulesSchema, regexSources } from "./kinds/rules.js";
 import { type LayerRules, LayerRulesSchema } from "./layers/rules.js";
 import { type Thresholds, ThresholdsSchema } from "./schema.js";
 
@@ -66,19 +68,44 @@ export function resolveNodeKindRules(
       ? defaults
       : loadOverrides(file, NodeKindRulesSchema.partial(), defaults, report);
   if (rules === null) return null;
-  for (const group of Object.values(rules)) {
-    for (const sources of Object.values(group)) {
-      for (const source of sources) {
-        try {
-          new RegExp(source);
-        } catch {
-          report(`invalid regular expression in node-kind rules: ${source}`);
-          return null;
-        }
-      }
+  for (const source of regexSources(rules)) {
+    try {
+      new RegExp(source);
+    } catch {
+      report(`invalid regular expression in node-kind rules: ${source}`);
+      return null;
+    }
+  }
+  for (const [name, convention] of Object.entries(rules.entryExportConventions)) {
+    try {
+      globToRegExp(convention.files);
+    } catch (error) {
+      if (!(error instanceof GlobSyntaxError)) throw error;
+      report(`invalid glob in entry-export convention "${name}": ${error.message}.`);
+      return null;
     }
   }
   return rules;
+}
+
+// The rules with every preset named on the command line opted into beside the file's own.
+export function withEntryPresets(
+  rules: NodeKindRules,
+  names: readonly string[],
+  report: Reporter,
+): NodeKindRules | null {
+  const presets = new Set(rules.entryExportPresets);
+  for (const name of names) {
+    const parsed = EntryExportPresetNameSchema.safeParse(name);
+    if (!parsed.success) {
+      report(
+        `unknown --entry-preset "${name}"; expected one of: ${entryExportPresetNames().join(", ")}.`,
+      );
+      return null;
+    }
+    presets.add(parsed.data);
+  }
+  return { ...rules, entryExportPresets: [...presets].sort((a, b) => a.localeCompare(b)) };
 }
 
 export function resolveLayerRules(file: string | undefined, report: Reporter): LayerRules | null {
