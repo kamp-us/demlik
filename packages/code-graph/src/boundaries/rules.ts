@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-export const CEILINGS_FILENAME = "boundary-ceilings.json";
+// The per-scope count file the ledger replaced. `--boundaries --migrate-ceilings` reads it once,
+// and the gate refuses to run while it stands without a ledger.
+export const LEGACY_CEILINGS_FILENAME = "boundary-ceilings.json";
 
 const FolderSchema = z
   .string()
