@@ -185,8 +185,15 @@ Each call:
    - **merge candidates** — feature pairs ranked by **coupling**: of the co-changed file pairs
      touching either feature, the share with one file in each. 1 means the two only ever change
      together.
-   - **split candidates** — features of at least 4 files ranked by **cohesion**, lowest first: of
-     the same-scope file pairs inside the feature, the share some commit changed together.
+   - **split candidates** — features of at least 4 files ranked by **cohesion**, lowest first. A
+     **kept change set** is a commit cut to its labelled files, kept when it holds 2..`--max-files`
+     of them. Cohesion takes the feature's files that at least one kept change set touched, and of
+     the same-scope pairs among them gives the share some kept change set changed together. A file
+     of the feature that no kept change set touched is left out of its cohesion: no history is no
+     evidence either way. It still counts toward the feature's `files` and the at-least-4-files
+     threshold, so a feature can clear the threshold with its cohesion read from fewer files.
+     Cohesion is the feature's `precision` in the per-feature cohesion entries (`features` in
+     `refine.json`): the split number and that precision are the same value.
    - with `--sweep`, **Jev signals** from the swept rows judged under this vocabulary: the confident
      share per feature, and the **top-2 confusion** pairs, the features that were a row's two most
      probable answers, counted over rows. Without it, the report's `signals.basis` is `co-change`
