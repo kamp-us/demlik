@@ -1,0 +1,42 @@
+{
+  "stage": "branch-label",
+  "rewordings": [
+    "Read state.source. Does this branch decide who may do something, or does it only move data along?"
+  ],
+  "items": [
+    {
+      "id": "a",
+      "span": {
+        "file": "src/access/can-edit.ts",
+        "startLine": 12,
+        "endLine": 18
+      },
+      "state": {
+        "id": "a",
+        "source": "if (user.role !== \"owner\") return deny();"
+      },
+      "gold": "gate"
+    },
+    {
+      "id": "b",
+      "span": { "file": "src/access/quota.ts", "startLine": 4, "endLine": 9 },
+      "state": {
+        "id": "b",
+        "source": "if (used >= plan.limit) throw new QuotaExceeded();"
+      },
+      "gold": "gate"
+    },
+    {
+      "id": "c",
+      "span": { "file": "src/db/rows.ts", "startLine": 30, "endLine": 33 },
+      "state": { "id": "c", "source": "if (row === undefined) return [];" },
+      "gold": "plumbing"
+    },
+    {
+      "id": "d",
+      "span": { "file": "src/http/retry.ts", "startLine": 7, "endLine": 7 },
+      "state": { "id": "d", "source": "if (attempt < 3) return retry();" },
+      "gold": "plumbing"
+    }
+  ]
+}

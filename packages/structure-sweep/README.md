@@ -276,3 +276,51 @@ Every command except `propose` is also a function — `runSweep`, `runPairs`, `p
 its git reader, and `mergeProposals` / `extractProposals` / `renderConsolidation` for
 `consolidate` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
 hand it a stub.
+
+## Lowering: stage artifacts, the evaluation harness and the confidence gate
+
+The foundation the staged lowering pipeline builds against. No command uses it yet: each piece is a
+library function, and each Jev-calling one takes its client as an argument.
+
+**Stage artifacts.** A `Stage<V>` has a `name`, a `version` and a `run` that writes `Fact<V>`s. Every
+fact carries a `SourceSpan` (file plus 1-based inclusive lines), and its value is either `known`,
+with the basis it is known on (`derived` from source, or `promoted` by the gate), or `unknown`, with
+a reason. There is no arm for a guess, and `unknown` carries no answer. `runStage(store, stage,
+input)` keys the run on the stage name, its version, the hash of `input.content` and the `digest`
+of every input artifact, in order. An unchanged key is a `hit` answered from the store without
+running the stage; changing any part is `computed`. `memoryArtifactStore()` is the store.
+
+**Evaluation harness.** `evaluate({ question, gold, connect, thresholds })` asks every gold item
+under the question's own `instructions` and under each rewording, through the client `connect`
+builds for that wording. It reports the flip rate (the share of items whose label is not the same
+under every wording), the expected calibration error over all answers (10 equal-width confidence
+bins by default), the accuracy, and a verdict: `shippable` only when ECE and flip rate are both
+strictly under their thresholds, else `not-shippable` naming each metric that is not. A gold set is
+a JSON file read by `loadGoldSet(file, labels)`:
+
+```json
+{
+  "stage": "branch-label",
+  "rewordings": ["Does this branch decide who may do something, or only move data?"],
+  "items": [
+    {
+      "id": "a",
+      "span": { "file": "src/access/can-edit.ts", "startLine": 12, "endLine": 18 },
+      "state": { "source": "if (user.role !== \"owner\") return deny();" },
+      "gold": "gate"
+    }
+  ]
+}
+```
+
+`rewordings` holds at least one alternative to the question's `instructions`. Each item's `state`
+is what Jev is shown, and `gold` must be one of the question's criteria keys. An unknown label or a
+repeated `id` is refused with every problem listed.
+
+**Confidence gate.** `gatePolicy({ floor, maxRounds })` sets one stage's rule. `gate(item, { policy,
+ask, enrich })` promotes an answer at or above the floor. A below-floor item is passed to `enrich`
+for more context and asked again, for at most `maxRounds` rounds, and then it abstains. `decide`
+is the pure step, and its outcome is `promoted`, `retrying` (with the round about to run) or
+`abstained`. `gateAll(stage, items, options)` returns the facts for the next stage and a
+`HumanQueue` holding each abstained item's span, final answer and round count. An abstained item's
+fact is `unknown`, so no downstream stage reads it as an answer.

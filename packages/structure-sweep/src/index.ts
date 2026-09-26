@@ -23,6 +23,72 @@ export {
   JevAskError,
   type JevClient,
 } from "./jev.js";
+export {
+  type ArtifactKey,
+  type ArtifactStore,
+  artifactKey,
+  canonicalJson,
+  contentHash,
+  memoryArtifactStore,
+  runStage,
+  type Stage,
+  type StageArtifact,
+  type StageInput,
+  type StageRun,
+} from "./lowering/artifact.js";
+export {
+  type Asker,
+  askVerdict,
+  type ChoiceQuestion,
+  type ChoiceQuestions,
+  type Judgement,
+  labelsOf,
+} from "./lowering/ask.js";
+export {
+  type Basis,
+  derived,
+  type Fact,
+  type FactValue,
+  SourceSpan,
+  sourceSpan,
+  type UnknownReason,
+  unknownValue,
+} from "./lowering/fact.js";
+export {
+  decide,
+  type Enrich,
+  factOf,
+  type Gated,
+  type GateItem,
+  type GateOptions,
+  type GateOutcome,
+  type GatePolicy,
+  gate,
+  gateAll,
+  gatePolicy,
+  type HumanQueue,
+  type HumanQueueEntry,
+  type Retrying,
+  type Settled,
+} from "./lowering/gate.js";
+export {
+  type EvaluateOptions,
+  type Evaluation,
+  type Exceeded,
+  evaluate,
+  expectedCalibrationError,
+  flipRate,
+  type GoldItem,
+  type GoldSet,
+  GoldSetError,
+  type ItemScore,
+  loadGoldSet,
+  parseGoldSet,
+  type Scored,
+  type ShipVerdict,
+  shipVerdict,
+  type Thresholds,
+} from "./lowering/harness.js";
 export { type ApplyReport, applyManifest } from "./move/apply.js";
 export { planScope } from "./move/cli.js";
 export { entryFiles } from "./move/entries.js";
