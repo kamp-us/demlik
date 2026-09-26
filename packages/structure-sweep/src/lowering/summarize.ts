@@ -195,7 +195,7 @@ export interface Summaries<L extends string, A extends Judgement<L>> {
   readonly sccs: readonly SccRun<L, A>[];
   readonly summaries: ReadonlyMap<string, Fact<FunctionSummary<L, A>>>;
   /** Every branch stage 5 abstained on, across every SCC. */
-  readonly queue: HumanQueue<L>;
+  readonly queue: HumanQueue<L, A>;
 }
 
 const SUMMARY_STAGE = { name: "summarize", version: "1" } as const;
@@ -404,8 +404,8 @@ async function summarizeScc<L extends string, A extends Judgement<L>>(
 function queueOf<L extends string, A extends Judgement<L>>(
   labeller: Labeller<L, A>,
   summaries: readonly Fact<FunctionSummary<L, A>>[],
-): HumanQueue<L> {
-  const entries: HumanQueueEntry<L>[] = [];
+): HumanQueue<L, A> {
+  const entries: HumanQueueEntry<L, A>[] = [];
   for (const summary of summaries) {
     if (summary.value._tag !== "known") continue;
     for (const record of summary.value.value.branches)

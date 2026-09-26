@@ -16,10 +16,14 @@ export interface Judgement<K extends string> {
   readonly confidence: number;
 }
 
-/** Ask one item's state; every Jev stage the harness scores or the gate filters is one of these. */
-export type Asker<K extends string> = (
+/**
+ * Ask one item's state; every Jev stage the harness scores or the gate filters is one of these. A
+ * stage whose answer carries more than the label and confidence — the evidence it rests on — names
+ * that answer as `J`, and the gate hands it back untouched.
+ */
+export type Asker<K extends string, J extends Judgement<K> = Judgement<K>> = (
   state: JevState,
-) => Promise<Judgement<K>>;
+) => Promise<J>;
 
 export const askVerdict =
   <K extends string>(client: JevClient<ChoiceQuestions<K>>): Asker<K> =>

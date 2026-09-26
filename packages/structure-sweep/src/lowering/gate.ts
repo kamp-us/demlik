@@ -38,40 +38,43 @@ export function gatePolicy(policy: {
  * What the gate makes of one answer. `round` counts enrichments: 0 is the first ask. `retrying`
  * names the enrichment round about to run.
  */
-export type GateOutcome<K extends string> =
+export type GateOutcome<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> =
   | {
       readonly _tag: "promoted";
-      readonly judgement: Judgement<K>;
+      readonly judgement: J;
       readonly round: number;
     }
   | {
       readonly _tag: "retrying";
-      readonly judgement: Judgement<K>;
+      readonly judgement: J;
       readonly round: number;
     }
   | {
       readonly _tag: "abstained";
-      readonly judgement: Judgement<K>;
+      readonly judgement: J;
       readonly rounds: number;
     };
 
-export type Retrying<K extends string> = Extract<
-  GateOutcome<K>,
-  { _tag: "retrying" }
->;
+export type Retrying<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> = Extract<GateOutcome<K, J>, { _tag: "retrying" }>;
 
 /** Where an item comes to rest: the gate never hands back an item still retrying. */
-export type Settled<K extends string> = Exclude<
-  GateOutcome<K>,
-  { _tag: "retrying" }
->;
+export type Settled<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> = Exclude<GateOutcome<K, J>, { _tag: "retrying" }>;
 
 /** The pure decision: at or above the floor promotes; below it retries until `maxRounds`, then abstains. */
-export function decide<K extends string>(
+export function decide<K extends string, J extends Judgement<K>>(
   policy: GatePolicy,
   round: number,
-  judgement: Judgement<K>,
-): GateOutcome<K> {
+  judgement: J,
+): GateOutcome<K, J> {
   if (judgement.confidence >= policy.floor)
     return { _tag: "promoted", judgement, round };
   if (round < policy.maxRounds)
@@ -86,27 +89,34 @@ export interface GateItem {
 }
 
 /** Add context to a below-floor item — callee bodies, call sites, the data it reads — for the next ask. */
-export type Enrich<K extends string> = (
+export type Enrich<K extends string, J extends Judgement<K> = Judgement<K>> = (
   item: GateItem,
   state: JevState,
-  retrying: Retrying<K>,
+  retrying: Retrying<K, J>,
 ) => Promise<JevState>;
 
-export interface GateOptions<K extends string> {
+export interface GateOptions<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> {
   readonly policy: GatePolicy;
-  readonly ask: Asker<K>;
-  readonly enrich: Enrich<K>;
+  readonly ask: Asker<K, J>;
+  readonly enrich: Enrich<K, J>;
 }
 
 /** Ask, then enrich and re-ask while the gate says retry, until the item is promoted or abstains. */
-export async function gate<K extends string>(
-  item: GateItem,
-  options: GateOptions<K>,
-): Promise<Settled<K>> {
+export async function gate<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+>(item: GateItem, options: GateOptions<K, J>): Promise<Settled<K, J>> {
   let state = item.state;
   let round = 0;
   for (;;) {
-    const outcome = decide(options.policy, round, await options.ask(state));
+    const outcome = decide<K, J>(
+      options.policy,
+      round,
+      await options.ask(state),
+    );
     if (outcome._tag !== "retrying") return outcome;
     state = await options.enrich(item, state, outcome);
     round = outcome.round;
@@ -114,9 +124,9 @@ export async function gate<K extends string>(
 }
 
 /** A settled item as the next stage reads it: a promoted answer is known, an abstained one unknown. */
-export function factOf<K extends string>(
+export function factOf<K extends string, J extends Judgement<K>>(
   item: GateItem,
-  settled: Settled<K>,
+  settled: Settled<K, J>,
   policy: GatePolicy,
 ): Fact<K> {
   switch (settled._tag) {
@@ -140,36 +150,52 @@ export function factOf<K extends string>(
   }
 }
 
-export interface HumanQueueEntry<K extends string> {
+export interface HumanQueueEntry<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> {
   readonly id: string;
   readonly span: SourceSpan;
   /** The last answer Jev gave, below the floor, for the human to confirm or overrule. */
-  readonly answer: Judgement<K>;
+  readonly answer: J;
   readonly rounds: number;
 }
 
 /** Every item a stage abstained on: the one place a human touches the pipeline. */
-export interface HumanQueue<K extends string> {
+export interface HumanQueue<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> {
   readonly stage: string;
   readonly floor: number;
-  readonly entries: readonly HumanQueueEntry<K>[];
+  readonly entries: readonly HumanQueueEntry<K, J>[];
 }
 
-export interface Gated<K extends string> {
+export interface Gated<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+> {
   readonly facts: readonly Fact<K>[];
-  readonly queue: HumanQueue<K>;
+  readonly queue: HumanQueue<K, J>;
+  /** Where each item came to rest, in item order, with the whole answer the gate settled on. */
+  readonly settled: readonly Settled<K, J>[];
 }
 
 /** Gate every item of one stage: facts for the next stage, abstentions for the human queue. */
-export async function gateAll<K extends string>(
+export async function gateAll<
+  K extends string,
+  J extends Judgement<K> = Judgement<K>,
+>(
   stage: string,
   items: readonly GateItem[],
-  options: GateOptions<K>,
-): Promise<Gated<K>> {
+  options: GateOptions<K, J>,
+): Promise<Gated<K, J>> {
   const facts: Fact<K>[] = [];
-  const entries: HumanQueueEntry<K>[] = [];
+  const entries: HumanQueueEntry<K, J>[] = [];
+  const outcomes: Settled<K, J>[] = [];
   for (const item of items) {
     const settled = await gate(item, options);
+    outcomes.push(settled);
     facts.push(factOf(item, settled, options.policy));
     if (settled._tag === "abstained")
       entries.push({
@@ -179,5 +205,9 @@ export async function gateAll<K extends string>(
         rounds: settled.rounds,
       });
   }
-  return { facts, queue: { stage, floor: options.policy.floor, entries } };
+  return {
+    facts,
+    queue: { stage, floor: options.policy.floor, entries },
+    settled: outcomes,
+  };
 }

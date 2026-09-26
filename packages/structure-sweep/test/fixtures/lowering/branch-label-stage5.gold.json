@@ -1,0 +1,192 @@
+{
+  "stage": "branch-label",
+  "rewordings": [
+    "Each state is one branch lowered to atoms and an outcome, with its concepts and its callees' summaries. Name the atoms and whether the outcome the answer rests on, then say whether the branch is a product rule, a defence, plumbing, or a constant mapping that could be data."
+  ],
+  "items": [
+    {
+      "id": "seat-cap",
+      "span": { "file": "src/seats/invite.ts", "startLine": 4, "endLine": 4 },
+      "state": {
+        "branch": "src/seats/invite.ts:canInvite@1",
+        "atoms": [
+          {
+            "ref": "a0",
+            "text": "v0.seatCount >= v0.maxSeats",
+            "span": {
+              "file": "src/seats/invite.ts",
+              "startLine": 3,
+              "endLine": 3
+            }
+          }
+        ],
+        "outcome": {
+          "text": "throw new SeatLimitReached(v0.id)",
+          "span": {
+            "file": "src/seats/invite.ts",
+            "startLine": 4,
+            "endLine": 4
+          }
+        },
+        "bindings": [],
+        "concepts": [],
+        "callees": [],
+        "returnChecks": []
+      },
+      "gold": "rule"
+    },
+    {
+      "id": "caps-switch-off",
+      "span": { "file": "src/seats/invite.ts", "startLine": 9, "endLine": 9 },
+      "state": {
+        "branch": "src/seats/invite.ts:canAddProject@0",
+        "atoms": [
+          {
+            "ref": "a0",
+            "text": "v2 === null",
+            "span": {
+              "file": "src/seats/invite.ts",
+              "startLine": 9,
+              "endLine": 9
+            }
+          }
+        ],
+        "outcome": {
+          "text": "return true",
+          "span": {
+            "file": "src/seats/invite.ts",
+            "startLine": 9,
+            "endLine": 9
+          }
+        },
+        "bindings": ["v2 = loadCaps(v0)"],
+        "concepts": [
+          {
+            "identifier": "loadCaps",
+            "site": "binding",
+            "concept": "unresolved"
+          }
+        ],
+        "callees": [
+          {
+            "callee": "src/seats/caps.ts:loadCaps",
+            "returns": [
+              "returns null ⇐ ¬(features.isOn(\"project-caps\"))",
+              "returns capTable.get(v0.tier) ⇐ features.isOn(\"project-caps\")"
+            ],
+            "labels": [
+              { "branch": "src/seats/caps.ts:loadCaps@0", "label": "rule" },
+              { "branch": "src/seats/caps.ts:loadCaps@1", "label": "plumbing" }
+            ]
+          }
+        ],
+        "returnChecks": [
+          {
+            "atom": "v2 === null",
+            "callee": "src/seats/caps.ts:loadCaps",
+            "selects": ["returns null ⇐ ¬(features.isOn(\"project-caps\"))"]
+          }
+        ]
+      },
+      "gold": "rule"
+    },
+    {
+      "id": "missing-input",
+      "span": { "file": "src/http/parse.ts", "startLine": 2, "endLine": 2 },
+      "state": {
+        "branch": "src/http/parse.ts:parseBody@0",
+        "atoms": [
+          {
+            "ref": "a0",
+            "text": "¬(v0)",
+            "span": {
+              "file": "src/http/parse.ts",
+              "startLine": 2,
+              "endLine": 2
+            }
+          }
+        ],
+        "outcome": {
+          "text": "throw new TypeError(\"missing body\")",
+          "span": { "file": "src/http/parse.ts", "startLine": 2, "endLine": 2 }
+        },
+        "bindings": [],
+        "concepts": [],
+        "callees": [],
+        "returnChecks": []
+      },
+      "gold": "defence"
+    },
+    {
+      "id": "entitlement-pass-through",
+      "span": {
+        "file": "src/graphql/resolvers.ts",
+        "startLine": 12,
+        "endLine": 12
+      },
+      "state": {
+        "branch": "src/graphql/resolvers.ts:addOns@0",
+        "atoms": [],
+        "outcome": {
+          "text": "return entitlements.listFor(v1.orgId)",
+          "span": {
+            "file": "src/graphql/resolvers.ts",
+            "startLine": 12,
+            "endLine": 12
+          }
+        },
+        "bindings": [],
+        "concepts": [
+          {
+            "identifier": "entitlements.listFor",
+            "site": "outcome",
+            "concept": "entitlement add-ons"
+          }
+        ],
+        "callees": [],
+        "returnChecks": []
+      },
+      "gold": "plumbing"
+    },
+    {
+      "id": "tier-seat-table",
+      "span": { "file": "src/billing/tiers.ts", "startLine": 3, "endLine": 3 },
+      "state": {
+        "branch": "src/billing/tiers.ts:seatsFor@1",
+        "atoms": [
+          {
+            "ref": "a0",
+            "text": "¬(v0 === \"starter\")",
+            "span": {
+              "file": "src/billing/tiers.ts",
+              "startLine": 2,
+              "endLine": 2
+            }
+          },
+          {
+            "ref": "a1",
+            "text": "v0 === \"growth\"",
+            "span": {
+              "file": "src/billing/tiers.ts",
+              "startLine": 3,
+              "endLine": 3
+            }
+          }
+        ],
+        "outcome": {
+          "text": "return 40",
+          "span": {
+            "file": "src/billing/tiers.ts",
+            "startLine": 3,
+            "endLine": 3
+          }
+        },
+        "bindings": [],
+        "concepts": [],
+        "callees": [],
+        "returnChecks": []
+      },
+      "gold": "could-be-data"
+    }
+  ]
+}

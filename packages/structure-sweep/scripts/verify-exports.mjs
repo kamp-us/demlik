@@ -40,6 +40,13 @@ const expected = {
     "summarize",
     "resolveReturns",
     "renderReturnFact",
+    "branchLabelQuestion",
+    "branchLabelState",
+    "askBranchLabel",
+    "labelBranches",
+    "branchLabeller",
+    "evidenceFirst",
+    "evaluateAnchoring",
   ],
 };
 
