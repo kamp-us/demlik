@@ -1,0 +1,18 @@
+{
+  "product": "A synthetic team task tracker, written for these tests.",
+  "features": {
+    "billing": "Plans, prices, invoices, taxes, trials and charging a card: what a customer pays for and what their plan allows.",
+    "notifications": "Emails, reminders and digests sent to a user, and the preferences that switch them on or off.",
+    "projects": "Creating, renaming, archiving and exporting projects, their members and their tasks."
+  },
+  "roles": {
+    "domain": {
+      "description": "Rules and data for one feature.",
+      "dir": "domain"
+    },
+    "ui": {
+      "description": "Screens and components.",
+      "dir": "ui"
+    }
+  }
+}
