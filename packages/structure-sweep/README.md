@@ -405,3 +405,95 @@ is the pure step, and its outcome is `promoted`, `retrying` (with the round abou
 `abstained`. `gateAll(stage, items, options)` returns the facts for the next stage and a
 `HumanQueue` holding each abstained item's span, final answer and round count. An abstained item's
 fact is `unknown`, so no downstream stage reads it as an answer.
+`gateAll` also returns `settled`, each item's final outcome in item order. A stage whose answer
+carries more than a label and a confidence types it as the gate's second parameter
+(`GateOptions<K, J>`), and the gate returns that answer unchanged in `settled` and in the queue.
+
+## Lowering stages 2–5: branches, the lexicon, callee summaries and the branch label
+
+Four stages built on that foundation. Each is a library export and none is a command yet. Stage 5
+is the only one that asks Jev.
+
+**Stage 2, lowering** (`lowerStage`). `loweringInput({ file, source, functions, loggingRoots })`
+builds a file's input from its text and the `--graph` JSON function nodes (`readLoweringGraph`
+reads `id`, `file`, `startLine`, `endLine` and `edges.calls`). The file is parsed with `oxc-parser`.
+For every function the graph names in the file, the stage writes one `Fact<LoweredBranch>` per
+`return`, per `throw`, and per call statement reached under a non-empty path condition. Each fact
+carries:
+
+- **A path condition** made of atoms, each with its own span. An atom is one comparison, one
+  predicate call, one `in` / `instanceof`, or one truthiness test. `&&` is flattened into the
+  conjunction, `!` is the atom's polarity (`!==` is a negated `===`), and `||` stays one `any` atom
+  over its disjuncts. An early exit carries its negation into every later branch, so in
+  `if (a) return; if (b) throw …` the throw runs under `¬a ∧ b`.
+- **An outcome** from the closed union `return` / `throw` / `call`.
+- **Neutral names.** Parameters and locals are renamed `v0`, `v1`, … in first-occurrence order.
+  Free identifiers (imports, globals, member paths rooted at them, and callee names) keep their
+  names. A call is bound to its code-graph `calleeId` when exactly one call edge on its line names
+  it. Parentheses, type assertions, optional chaining and `await` are dropped, because none of them
+  changes what a branch decides.
+- **No logging.** Calls rooted at `console`, plus any root in `loggingRoots` such as `logger`, are
+  dropped. Every other call stays.
+
+A function that does not parse, or that the graph names but the parser cannot find, lowers to one
+fact whose value is `unknown` with reason `undetermined`, never to a partial branch list. Of the
+prototype's resolver rules, only `parameter-defaults-ignored` is ported: a parameter's default
+contributes no atom, binding or call. It is listed in `LOWERING_RULES`.
+
+**Stage 3, the lexicon** (`resolveStage`). `structure-sweep.lexicon.json` sits beside
+`structure-sweep.config.json` and maps an identifier (a callee name or member path) to a concept:
+
+```json
+{
+  "entries": {
+    "features.isOn": { "kind": "flag", "concept": "project-caps" },
+    "grants.has": { "kind": "entitlement", "concept": "add-ons" }
+  }
+}
+```
+
+`kind` is one of `flag`, `entitlement`, `role`, `plan`, `setting` or `env`, and any other kind is
+refused. `loadLexicon` / `parseLexicon` compute a `fingerprint`, and `resolveInput(lexicon,
+stage2Artifact)` puts that fingerprint in the stage-3 key. Editing the lexicon therefore re-runs
+stage 3 while stage 2 stays a hit. Resolution is an exact lookup with no Jev call, and an
+identifier with no entry stays `unresolved`.
+
+`proposeLexicon({ resolved, limit, gate })` asks the gate about the `limit` most frequent
+unresolved identifiers (`lexiconQuestion`, over the six kinds plus `none`). It returns a draft
+of the promoted entries plus the abstention queue. `writeLexiconDraft` writes that draft to
+`structure-sweep.lexicon.draft.json` beside the lexicon, never over it; a human reviews it and
+moves entries across.
+
+**Stage 4, callee summaries** (`summarize`). The call graph from `edges.calls[].calleeId` is
+condensed with `@demlik/code-graph/scc` and walked leaves-first, one `runStage` per SCC. Each SCC
+labels its branches through stage 5 with every callee's summary already written, then summarizes
+its members as one unit, so a mutually recursive group is one run. A `FunctionSummary` carries:
+
+- **Return-value facts**, `returns <value> ⇐ <condition>` (`renderReturnFact`), read off the
+  function's own return branches together with the concepts that condition resolved to.
+  `resolveReturns` uses them to turn a caller's `=== null`, `== null` or truthiness check on the
+  callee's result (directly, or through a `const` bound to the call) into the callee returns it
+  selects. `const caps = loadCaps(org); if (caps === null) …` resolves to
+  `returns null ⇐ ¬(features.isOn("project-caps"))`.
+- **Each branch's stage-5 label** as a `FactValue`. A label that settled below the floor reads
+  `unknown`, never a label.
+
+An SCC's key cites its callees' summary-artifact digests, along with its own members' stage-3 facts
+and the labeller's question and policy. A changed leaf re-summarizes only its ancestors.
+
+**Stage 5, the branch label** (`label.ts`). `branchLabelQuestion()` is a `ChoiceQuestion` over
+exactly `rule`, `defence`, `plumbing` and `could-be-data`. Each criterion carries a definition and
+at least one worked, synthetic anchoring example (`BRANCH_LABEL_CRITERIA`), and
+`branchLabelQuestion({ anchors: false })` asks with the definitions alone. Jev is asked on
+`branchLabelState(request)`: the lowered branch's atoms (each with a ref and a span), its outcome,
+its bindings and resolved concepts, its callees' returns and labels, and the return checks stage 4
+resolved. It never sees the raw function.
+
+Evidence comes before the verdict. `branchLabelQuestions` asks one yes/no per atom and one for the
+outcome, all ahead of `verdict`, and `askBranchLabel` records a `BranchJudgement`: the label, the
+confidence, and the atoms and spans the label rests on. `labelBranches` gates through `gateAll`
+under a `gatePolicy` built from stage 5's calibration, so an abstained branch becomes an `unknown`
+fact and a human-queue entry with its evidence. `branchLabeller` wraps this as the labeller the
+stage-4 walk calls. `evaluateAnchoring({ gold, connect, thresholds, target })` evaluates one gold
+file with and without the anchoring examples, evidence first in both. Comparing the two flip rates
+against a live Jev is one call.
