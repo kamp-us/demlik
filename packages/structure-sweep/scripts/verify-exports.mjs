@@ -78,6 +78,13 @@ const expected = {
     "readGroupsFile",
     "listGroups",
     "showGroup",
+    "responsibilityRequests",
+    "responsibilityState",
+    "responsibilityStage",
+    "labelResponsibilities",
+    "responsibilityId",
+    "verdictOf",
+    "rollup",
   ],
 };
 

@@ -651,6 +651,40 @@ stage-4 walk calls. `evaluateAnchoring({ gold, connect, thresholds, target })` e
 file with and without the anchoring examples, evidence first in both. Comparing the two flip rates
 against a live Jev is one call.
 
+## Lowering: which features a function serves, rolled up to files and folders
+
+Stage 5 says what kind of code a branch is. The responsibility stage says which product features a
+**function** serves, and a function can serve several features or none. It is a library export, not
+a command, and it leaves `sweep`'s per-file `feature` and `role` questions as they are.
+
+**The stage** (`responsibility.ts`). `responsibilityRequests({ graph, resolved, summaries })` builds
+one request per function from what stages 2 to 4 wrote: its lowered branches with their stage-3
+resolutions, and the stage-4 summary (returns and branch labels) of every function it calls. A
+function stage 2 could not lower is `undetermined` and is never asked. Jev never sees the raw
+function source.
+
+`responsibilityStage({ vocabulary, policy, connect, enrich })` asks one closed two-answer question
+per feature of the vocabulary: `serves` or `does-not-serve` (`responsibilityQuestion`). The features
+come from `loadVocabulary`, unchanged. Each question's state is the function plus that one feature
+and its description (`responsibilityState`). All of a function's features go through one `gateAll`
+under a `gatePolicy` built from this stage's own calibration over its gold set. The stage writes one
+fact per (function, feature), with id `<function>#<feature>`, and each reads through `verdictOf` as
+`serves`, `does-not-serve` or `unknown`. `unknown` means the gate abstained or the function was
+undetermined. An abstained feature also lands on the human queue with Jev's last answer.
+
+`labelResponsibilities({ requests, stage, store })` runs the stage once per function through
+`runStage`. The key holds the function's evidence, the vocabulary's fingerprint and features, and the
+question and policy, so an unchanged function is a `hit` with no Jev call. The human queue is rebuilt
+from the stored facts, so a hit keeps its abstentions queued. The price is one Jev call per function
+per feature, which is what a gated confidence per label costs.
+
+**The rollup** (`rollup.ts`). `rollup(facts)` is deterministic and calls no Jev. For every file and
+every folder, and for each feature, it counts the functions that serve it (`serves`), the ones that
+do not (`doesNotServe`), and the ones that are `unknown`. `unknown` is never counted as either
+answer. A folder's counts are the sums over every file beneath it, and `.` is the root. Rows come out
+in path order and features in key order, so the same facts give byte-identical output in any input
+order. A (function, feature) pair that appears twice is refused.
+
 ## Lowering stages 6–8: rule groups, owners and the collapse handoff
 
 Three stages on top of stages 2 and 3, each a library export. `structure-sweep groups` reads their
