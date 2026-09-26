@@ -28,8 +28,9 @@ Effect host beside it (`packages/tuval/src/host/actor.ts` plus `demlik-bridges.t
 ships, in one release, everything Tuval needs to delete that host and run fully on
 `@demlik/tea/effect`, then drop its own copies of persistence, process, test and React glue. It
 ends with a phoenix PR that moves Tuval onto the release, which phoenix plans and builds. The
-Effect engine leaves the experimental tier only once it powers Tuval fully. Declared and started 2026-09-24;
-no build starts until the decisions in grilling session #325 are ruled.
+Effect engine leaves the experimental tier only once it powers Tuval fully. Declared and started 2026-09-24,
+ruled in grilling session #325, shipped as `@demlik/tea` 0.18.0. Done 2026-09-25: Tuval runs on
+`@demlik/tea/effect` and its own host is deleted (kamp-us/phoenix#9785, PR kamp-us/phoenix#9798).
 
 **Binclusive agent migration** (#3). Binclusive's audit brain (`services/audit-agents` in
 Binclusive/monorepo) is moving from LangGraph onto `@demlik/tea/agent`, and the move hit four gaps
@@ -48,7 +49,7 @@ It ends when both ship and Binclusive consumes the published packages. Declared 
 
 | Campaign | Milestone | State |
 |---|---|---|
-| Tuval on tea | #2 | active |
+| Tuval on tea | #2 | done |
 | Binclusive agent migration | #3 | active |
 | Code coordinates | #4 | active |
 
