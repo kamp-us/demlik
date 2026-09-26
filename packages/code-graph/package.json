@@ -56,7 +56,10 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "fast-check": "catalog:code-graph",
+    "oxc-parser": "catalog:",
+    "oxc-resolver": "catalog:",
     "tsup": "catalog:code-graph",
     "tsx": "catalog:",
     "typescript": "catalog:code-graph",
