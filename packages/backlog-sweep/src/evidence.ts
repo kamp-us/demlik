@@ -1,4 +1,4 @@
-import type { ClosedIssue, OpenIssue } from "./github.js";
+import type { ClosedIssue, LinkedPull, OpenIssue } from "./github.js";
 import { mentionedPaths, pathExists, type RepoSnapshot } from "./repo.js";
 import { TfIdf } from "./similarity.js";
 
@@ -27,11 +27,11 @@ export type Evidence = {
   readonly evidence: {
     readonly mentionedPathsStillOnMain: readonly string[];
     readonly mentionedPathsGoneFromMain: readonly string[];
-    readonly linkedPullRequests: readonly {
-      number: number;
-      title: string;
-      state: string;
-    }[];
+    /** True only when the issue mentions at least one path and every one is gone from the ref. */
+    readonly allMentionedPathsGone: boolean;
+    readonly linkedPullRequests: readonly LinkedPull[];
+    /** True only when the issue has a linked pull request and every one was closed without merging. */
+    readonly linkedPullRequestClosedUnmerged: boolean;
     readonly linkedIssues: readonly {
       number: number;
       title: string;
@@ -46,7 +46,7 @@ const BODY_LIMIT = 2500;
 const COMMENT_LIMIT = 400;
 const EXCERPT_LIMIT = 500;
 
-function clip(text: string, limit: number): string {
+export function clip(text: string, limit: number): string {
   const flat = text.replace(/<!--[\s\S]*?-->/g, "").trim();
   if (flat.length <= limit) return flat;
   return `${Array.from(flat).slice(0, limit).join("")}…`;
@@ -82,6 +82,8 @@ export function gatherEvidence(
     `${issue.body}\n${issue.comments.map((c) => c.body).join("\n")}`,
     repo.topLevel,
   );
+  const still = paths.filter((p) => pathExists(repo, p));
+  const gone = paths.filter((p) => !pathExists(repo, p));
   const candidates: Candidate[] = [];
   for (const hit of index.nearest(issue.number, CANDIDATE_COUNT * 3)) {
     if (candidates.length === CANDIDATE_COUNT) break;
@@ -118,13 +120,13 @@ export function gatherEvidence(
         .map((c) => ({ author: c.author, body: clip(c.body, COMMENT_LIMIT) })),
     },
     evidence: {
-      mentionedPathsStillOnMain: paths.filter((p) => pathExists(repo, p)),
-      mentionedPathsGoneFromMain: paths.filter((p) => !pathExists(repo, p)),
-      linkedPullRequests: issue.linkedPulls.map((p) => ({
-        number: p.number,
-        title: p.title,
-        state: p.state.toLowerCase(),
-      })),
+      mentionedPathsStillOnMain: still,
+      mentionedPathsGoneFromMain: gone,
+      allMentionedPathsGone: paths.length > 0 && still.length === 0,
+      linkedPullRequests: issue.linkedPulls,
+      linkedPullRequestClosedUnmerged:
+        issue.linkedPulls.length > 0 &&
+        issue.linkedPulls.every((p) => p.state === "closed-unmerged"),
       linkedIssues: issue.linkedIssues.map((i) => ({
         number: i.number,
         title: i.title,

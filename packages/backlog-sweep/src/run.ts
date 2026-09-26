@@ -86,6 +86,26 @@ export async function runBacklogSweep(
   const todo = chosen.filter(
     (i) => done.get(i.number)?.updatedAt !== i.updatedAt,
   );
+  const evidenceOf = (issue: OpenIssue) =>
+    gatherEvidence(
+      issue,
+      options.snapshot,
+      index,
+      openByNumber,
+      closedByNumber,
+    );
+  // A cached row keeps Jev's answers, but its evidence and proposal are recomputed: the facts a
+  // close stands on are read fresh, and a row written under an older rule is never replayed.
+  for (const issue of chosen) {
+    const row = done.get(issue.number);
+    if (row === undefined || row.updatedAt !== issue.updatedAt) continue;
+    const evidence = evidenceOf(issue);
+    done.set(issue.number, {
+      ...row,
+      evidence: evidence.evidence,
+      proposal: propose(evidence, row.answers),
+    });
+  }
   log(
     `${open.length} open, ${eligible.length} eligible, ${chosen.length} chosen, ${todo.length} to ask`,
   );
@@ -98,13 +118,7 @@ export async function runBacklogSweep(
 
   let asked = 0;
   await pool(todo, options.concurrency ?? 6, async (issue) => {
-    const evidence = gatherEvidence(
-      issue,
-      options.snapshot,
-      index,
-      openByNumber,
-      closedByNumber,
-    );
+    const evidence = evidenceOf(issue);
     try {
       const ok = await options.jev(evidence);
       done.set(issue.number, {
