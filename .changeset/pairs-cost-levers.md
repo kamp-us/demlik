@@ -14,6 +14,9 @@ The cache key now includes the mode, so the new default does not reuse cached pa
 earlier versions: the first anchor-mode run over an existing `pairs.json` asks Jev again. A
 `--pairwise` run still reuses them.
 
+For library callers, `runPairs` now takes `jev: { mode: "anchor", ask }` or
+`jev: { mode: "pairwise", ask }` in place of a bare pairwise client. The old call is the second form.
+
 `--plan` prints the candidate pairs, anchors, distinct functions and an estimate of the input
 tokens for the selected mode, then exits without calling Jev or reading `TYPESAFE_API_KEY`.
 `--max-partners <n>` (default 10) judges each anchor against at most its `n` best partners by graph
