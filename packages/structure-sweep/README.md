@@ -48,6 +48,10 @@ draft one for a repository you do not know yet, start with
       "description": "Exposes an endpoint: parses input, calls other code, shapes output.",
       "dir": "api"
     },
+    "flows": {
+      "description": "Orchestrates a multi-step user or system flow: a saga, a wizard, a workflow, or the sequencing of steps across other code.",
+      "dir": "flows"
+    },
     "persistence": {
       "description": "Reads or writes storage: queries, repositories, caches.",
       "dir": "store"
@@ -76,6 +80,12 @@ twice.
 Folders and paths are taken relative to where you run the command; outputs default to
 `.structure-sweep/` at the repository root.
 
+`--graph` (on `sweep` and `propose`) is not yet supported for repositories with more than about 5k
+source files: code-graph's ts-morph loader can hang or run out of memory there
+([#384](https://github.com/kamp-us/demlik/issues/384)). Until code-graph moves off ts-morph
+([#397](https://github.com/kamp-us/demlik/issues/397)), run both commands without `--graph` on
+those repositories.
+
 ### `structure-sweep propose <folder>...`
 
 ```sh
@@ -92,13 +102,33 @@ It writes two files:
   each with the number of files `sweep` would classify), every named workspace `package.json`, and,
   from each `--graph` file, the code-graph clusters that span several folders (the graph needs
   `code-graph --graph --clusters`; each cluster names the file it came from, since two graphs number
-  theirs independently) and every cross-runtime `service.method` call. The same checkout gives
-  byte-identical JSON.
+  theirs independently) and every cross-runtime `service.method` call. Beside those, two content
+  signals read from the files themselves (see below). The same checkout gives byte-identical JSON.
 - `.structure-sweep/propose-prompt.md` — a prompt that carries those signals, the roles to use,
   the vocabulary's JSON Schema, a filled example, the number of features to draft, and the path to
   write the config to. It names no coding agent, so any of them can follow it.
 
 Either file already there stops the run; `--force` overwrites both.
+
+The content signals come from what each file `sweep` would classify says, not from where it sits:
+
+- **terms** — the exported names split into words (`parseHTTPReply` → `parse`, `http`, `reply`;
+  camelCase, PascalCase and snake_case alike), with the number of files exporting a name that holds
+  each word. The 60 most widespread are listed.
+- **import clusters** — groups of files more tightly linked by relative imports to each other than
+  to the rest, found by label propagation over the import graph. A file imported by more than 8
+  others is shared plumbing and links none of its importers. Each group is given as its member files
+  (up to 12, with its full size) and its 10 most common terms; the 30 largest groups are listed.
+
+Every list is capped, so the prompt does not grow with the file count.
+
+`--blind` drafts from the code alone. It leaves the folders, the packages and the code-graph
+clusters (which code-graph gives only as folders) out of both files, and names every file in the
+content signals by an opaque id — `f<n>` plus the extension, numbered in code-unit order of path, so
+one checkout always gets the same ids. Cross-runtime `service.method` calls stay. The prompt says the
+names were withheld on purpose, and its check step runs `sweep --redact` so the loop stays blind.
+Use it to measure `propose` against a repository whose folders are the answer, or on a repository
+whose folder names mislead.
 
 The loop, by hand or by an agent reading the prompt:
 
@@ -110,17 +140,19 @@ The loop, by hand or by an agent reading the prompt:
 5. **adjust** — merge or sharpen features with a low `confident` share, split features with low
    precision, and go back to 3 until the score stops improving.
 
-With no `--config`, the prompt hands over four roles: `business_rule` (`rules/`), `api_surface`
-(`api/`), `persistence` (`store/`) and `plumbing` (`lib/`, shared) — the ones in the example
-above. With `--config`, it takes that vocabulary's roles and product line instead.
+With no `--config`, the prompt hands over five built-in roles: `business_rule` (`rules/`),
+`api_surface` (`api/`), `flows` (`flows/`: code that orchestrates a multi-step user or system flow —
+sagas, wizards, workflows, step sequencing), `persistence` (`store/`) and `plumbing` (`lib/`,
+shared) — the ones in the example above. With `--config`, it takes that vocabulary's roles and product line instead.
 
 | Flag | Default | |
 |---|---|---|
 | `--features <n>` | `12` | features the prompt asks for (at least 2) |
-| `--config <file>` | four built-in roles | vocabulary to take the roles and product line from |
+| `--config <file>` | five built-in roles | vocabulary to take the roles and product line from |
 | `--graph <file>` | none | code-graph `--graph` JSON to read clusters and cross-runtime calls from (repeatable) |
-| `--ref <ref>` | `HEAD` | git tree to read folders and packages from |
-| `--depth <n>` | `3` | folder levels listed under each folder |
+| `--blind` | off | leave out folders, packages and code-graph clusters, and name files by opaque id |
+| `--ref <ref>` | `HEAD` | git tree to read folders, packages and file content from |
+| `--depth <n>` | `3` | folder levels listed under each folder (unused with `--blind`) |
 | `--draft <file>` | `.structure-sweep/proposed.config.json` | where the prompt says to write the config |
 | `--out <file>` | `.structure-sweep/signals.json` | signals JSON |
 | `--prompt <file>` | `.structure-sweep/propose-prompt.md` | prompt |

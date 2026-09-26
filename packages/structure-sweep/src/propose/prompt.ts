@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type RoleConfig, VocabularyConfig } from "../vocabulary.js";
-import type { ProposeSignals } from "./signals.js";
+import type { ContentSignals } from "./content.js";
+import type { BlindSignals, NamedSignals, ProposeSignals } from "./signals.js";
 
 /** How many features the prompt asks for when `--features` names no count. */
 export const DEFAULT_FEATURE_COUNT = 12;
@@ -17,6 +18,12 @@ export const DEFAULT_ROLES: Readonly<Record<string, RoleConfig>> = {
     description:
       "Exposes an endpoint: parses input, calls other code, shapes output.",
     dir: "api",
+    shared: false,
+  },
+  flows: {
+    description:
+      "Orchestrates a multi-step user or system flow: a saga, a wizard, a workflow, or the sequencing of steps across other code.",
+    dir: "flows",
     shared: false,
   },
   persistence: {
@@ -64,9 +71,58 @@ const json = (value: unknown) =>
 const list = (items: readonly string[], empty: string) =>
   items.length === 0 ? `_${empty}_` : items.map((i) => `- ${i}`).join("\n");
 
-function signalSections(signals: ProposeSignals): string[] {
+const noGraph = "not read: no code-graph `--graph` file was passed";
+
+function contentSections(content: ContentSignals, fileNames: string): string[] {
+  const { total, listed } = content.importClusters;
+  const more = (size: number, shown: number) =>
+    size > shown ? `, … (${size - shown} more)` : "";
+  return [
+    "### Terms in exported names",
+    "",
+    `Words split out of the names each of the ${content.files} source files exports, with the number of`,
+    "files exporting a name that holds the word. Most widespread first, capped.",
+    "",
+    list(
+      content.terms.map((t) => `${t.term} (${t.files})`),
+      "no exported names found",
+    ),
+    "",
+    "### Files that import each other",
+    "",
+    "Source files more tightly linked by relative imports to each other than to the rest: code that",
+    "works as one unit, wherever it sits. A file imported by many others is shared plumbing and links",
+    "none of them. Each group lists its most common terms.",
+    "",
+    `Files are named ${fileNames}. Largest group first, ${listed.length} of ${total} shown.`,
+    "",
+    list(
+      listed.map(
+        (c) =>
+          `${c.size} files: ${c.files.map((f) => `\`${f}\``).join(", ")}${more(c.size, c.files.length)}${c.terms.length === 0 ? "" : ` — ${c.terms.join(", ")}`}`,
+      ),
+      "no two source files import each other",
+    ),
+  ];
+}
+
+function crossRuntimeSection(
+  graph: { readonly crossRuntime: readonly string[] } | null,
+): string[] {
+  return [
+    "### Cross-runtime calls (RPC, GraphQL)",
+    "",
+    graph === null
+      ? `_${noGraph}_`
+      : list(
+          graph.crossRuntime.map((m) => `\`${m}\``),
+          "no cross-runtime call found",
+        ),
+  ];
+}
+
+function namedSections(signals: NamedSignals): string[] {
   const { graph } = signals;
-  const noGraph = "not read: no code-graph `--graph` file was passed";
   return [
     `### Folders under ${signals.scopes.map((s) => `\`${s}\``).join(", ")}, to depth ${signals.depth}`,
     "",
@@ -103,22 +159,36 @@ function signalSections(signals: ProposeSignals): string[] {
             "no cluster spans more than one folder",
           ),
     "",
-    "### Cross-runtime calls (RPC, GraphQL)",
+    ...contentSections(signals.content, "by repo-relative path"),
     "",
-    graph === null
-      ? `_${noGraph}_`
-      : list(
-          graph.crossRuntime.map((m) => `\`${m}\``),
-          "no cross-runtime call found",
-        ),
+    ...crossRuntimeSection(graph),
   ];
 }
 
+function blindSections(signals: BlindSignals): string[] {
+  return [
+    "Folder names, file paths and package names were withheld on purpose (`--blind`), and so were",
+    "code-graph clusters, which name only folders. Draft the features from what the code says, not",
+    "from where it sits.",
+    "",
+    ...contentSections(
+      signals.content,
+      "by opaque id (`f<n>` plus the extension), not by path",
+    ),
+    "",
+    ...crossRuntimeSection(signals.graph),
+  ];
+}
+
+const signalSections = (signals: ProposeSignals): string[] =>
+  signals.blind ? blindSections(signals) : namedSections(signals);
+
 function checkCommands(input: PromptInput): string {
   const graphs = input.graphs.map((g) => ` --graph ${g}`).join("");
+  const redact = input.signals.blind ? " --redact" : "";
   return [
     "```sh",
-    `structure-sweep sweep ${input.signals.scopes.join(" ")} --config ${input.draft}${graphs}`,
+    `structure-sweep sweep ${input.signals.scopes.join(" ")} --config ${input.draft}${graphs}${redact}`,
     "structure-sweep score",
     "```",
   ].join("\n");
