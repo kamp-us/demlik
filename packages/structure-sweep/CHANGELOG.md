@@ -1,5 +1,50 @@
 # @demlik/structure-sweep
 
+## 0.2.0
+
+### Minor Changes
+
+- 168762a: `structure-sweep pairs` now asks in **anchor mode by default**. Each collapse pair is dealt to one of
+  its two functions, the anchor, and Jev is asked once per anchor, which of its candidate partners
+  encodes the same business rule, or `none`. The anchor's body is sent once rather than once per
+  pair. `pairs.json` keeps one row per pair with the same fields: the picked candidate is
+  `same_decision` at its ref's probability, and every other candidate is `look_alike`. Anchor mode
+  never records `shared_helper`. The old per-pair question stays behind `--pairwise`, for gold-set
+  evaluation.
+
+  The cache key now includes the mode, so the new default does not reuse cached pair rows written by
+  earlier versions: the first anchor-mode run over an existing `pairs.json` asks Jev again. A
+  `--pairwise` run still reuses them.
+
+  For library callers, `runPairs` now takes `jev: { mode: "anchor", ask }` or
+  `jev: { mode: "pairwise", ask }` in place of a bare pairwise client. The old call is the second form.
+
+  `--plan` prints the candidate pairs, anchors, distinct functions and an estimate of the input
+  tokens for the selected mode, then exits without calling Jev or reading `TYPESAFE_API_KEY`.
+  `--max-partners <n>` (default 10) judges each anchor against at most its `n` best partners by graph
+  confidence and lists every skipped pair in `pairs.md`. `--graph <graph.json>` sends each function's
+  stage-2 lowered body instead of its source, in either mode, and lowered and raw sends never share a
+  cached answer.
+
+### Patch Changes
+
+- 63c0e49: An anchor-mode `pairs` row whose candidate ref Jev's answer gives no probability is now
+  **`unanswered`**, not a verdict. Before, a missing ref read as probability 0, so the row recorded
+  `look_alike` at confidence 1 (or `same_decision` at 0 when Jev picked that ref), and the cache served
+  that made-up answer on every later run. Now the row's verdict is `{ "choice": "unanswered" }`, with
+  no confidence, and its `partner` has no `probability`. It is never served from `pairs.json` as an
+  answer, so the next run asks that anchor's menu again. `pairs.md` and the stderr summary count it
+  on an `unanswered` line, shown only when a row is unanswered, and no `pairs.md` group, `consolidate`
+  proposal or `inventory` lever reads it as a verdict.
+
+  For library callers, `AnchorAnswers` is now a union with the `unanswered` variant, `countVerdicts`
+  and `actionFor` take the new `RowVerdict` (`PairVerdict` or `unanswered`), and the index exports
+  `UNANSWERED`, `RowVerdict` and `isAnswered`.
+
+  The `pairs.json` row fields are now listed in the README, including the optional `lowered` field:
+  a hash of the lowered bodies sent, present on a row asked under `--graph` where at least one side
+  went out lowered, and part of the row's cache key.
+
 ## 0.1.0
 
 ### Minor Changes
