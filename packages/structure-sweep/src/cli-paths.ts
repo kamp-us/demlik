@@ -19,6 +19,11 @@ export const DEFAULTS = {
   signals: `${OUT_DIR}/signals.json`,
   proposePrompt: `${OUT_DIR}/propose-prompt.md`,
   proposedConfig: `${OUT_DIR}/proposed.config.json`,
+  refineReport: `${OUT_DIR}/refine.json`,
+  refinePrompt: `${OUT_DIR}/refine-prompt.md`,
+  refineHistory: `${OUT_DIR}/refine-history.json`,
+  refineSample: `${OUT_DIR}/refine-sample.txt`,
+  refineSweep: `${OUT_DIR}/refine-sweep.json`,
 } as const;
 
 /** A path flag: absolute as given, otherwise under the repository root. */

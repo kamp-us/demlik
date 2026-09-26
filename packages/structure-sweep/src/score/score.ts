@@ -65,7 +65,8 @@ function prf(hits: number, predicted: number, actual: number): Prf {
   return { precision, recall, f1 };
 }
 
-function share(rows: readonly ScoreRow[]): ConfidenceShare {
+/** Rows at or above `CONFIDENCE_FLOOR`, out of `rows`. */
+export function confidenceShare(rows: readonly ScoreRow[]): ConfidenceShare {
   const confident = rows.filter(
     (r) => r.answers.feature.confidence >= CONFIDENCE_FLOOR,
   ).length;
@@ -88,28 +89,33 @@ function predictedPairs(
   return [...groups.values()].reduce((sum, n) => sum + pairsIn(n), 0);
 }
 
+/** One row per path, the last one winning, as the verdict file itself keys them. */
+export const uniqueRows = <R extends ScoreRow>(rows: readonly R[]): R[] => [
+  ...new Map(rows.map((r) => [r.path, r])).values(),
+];
+
+/** The change sets a score reads, and every same-scope file pair at least one of them touched. */
+export interface CoChange {
+  /** Each change set cut to labelled paths, sorted, kept only when it holds 2..maxFiles of them. */
+  readonly changeSets: readonly ChangeSet[];
+  /** Each co-changed pair once, `a < b`, both files in one `scope`. */
+  readonly pairs: readonly (readonly [string, string])[];
+}
+
 /**
- * Grade a file-to-feature assignment against the change sets it has to explain: files in one feature
- * should change together. Only pairs of files in the same `scope` count. Pure — the history comes in
- * as change sets, see `readChangeSets`.
+ * The co-change `scoreCoChange` grades against: the kept change sets and the same-scope pairs they
+ * touched. Exported so a diagnostic over the same assignment reads the pairs the score read.
  */
-export function scoreCoChange(
+export function coChangedPairs(
   rows: readonly ScoreRow[],
   changeSets: readonly ChangeSet[],
   options: ScoreOptions = {},
-): ScoreReport {
+): CoChange {
   const maxFiles = options.maxFiles ?? 40;
-  // One row per path, the last one winning, as the verdict file itself keys them.
-  const unique = [...new Map(rows.map((r) => [r.path, r])).values()];
-  const scopeOf = new Map(unique.map((r) => [r.path, r.scope]));
-  const labels = new Map(unique.map((r) => [r.path, r.answers.feature.choice]));
-  const featureOf = (p: string) => labels.get(p);
-
+  const scopeOf = new Map(uniqueRows(rows).map((r) => [r.path, r.scope]));
   const kept = changeSets
     .map((set) => [...new Set(set.filter((p) => scopeOf.has(p)))].sort())
     .filter((set) => set.length >= 2 && set.length <= maxFiles);
-
-  const active = new Set(kept.flat());
   const cochanged = new Map<string, readonly [string, string]>();
   for (const set of kept) {
     for (let i = 0; i < set.length; i++) {
@@ -120,7 +126,29 @@ export function scoreCoChange(
       }
     }
   }
-  const pairs = [...cochanged.values()];
+  return { changeSets: kept, pairs: [...cochanged.values()] };
+}
+
+/**
+ * Grade a file-to-feature assignment against the change sets it has to explain: files in one feature
+ * should change together. Only pairs of files in the same `scope` count. Pure — the history comes in
+ * as change sets, see `readChangeSets`.
+ */
+export function scoreCoChange(
+  rows: readonly ScoreRow[],
+  changeSets: readonly ChangeSet[],
+  options: ScoreOptions = {},
+): ScoreReport {
+  const unique = uniqueRows(rows);
+  const scopeOf = new Map(unique.map((r) => [r.path, r.scope]));
+  const labels = new Map(unique.map((r) => [r.path, r.answers.feature.choice]));
+  const featureOf = (p: string) => labels.get(p);
+  const { changeSets: kept, pairs } = coChangedPairs(
+    unique,
+    changeSets,
+    options,
+  );
+  const active = new Set(kept.flat());
 
   const overall = (labelOf: (p: string) => string | undefined) =>
     prf(
@@ -142,7 +170,7 @@ export function scoreCoChange(
           predictedPairs([...active].filter(inF), scopeOf, () => feature),
           touching.length,
         ),
-        confidence: share(
+        confidence: confidenceShare(
           unique.filter((r) => r.answers.feature.choice === feature),
         ),
       };
@@ -153,7 +181,7 @@ export function scoreCoChange(
     files: active.size,
     floor: CONFIDENCE_FLOOR,
     ...overall(featureOf),
-    confidence: share(unique),
+    confidence: confidenceShare(unique),
     baseline: overall((p) => posix.dirname(p)),
     features,
   };

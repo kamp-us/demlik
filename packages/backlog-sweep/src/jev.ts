@@ -39,9 +39,51 @@ export type JevClient<Q extends JevQuestionMap> = (
 
 /** A Jev call that failed for good: terminal on its first answer, or transient past the retry budget. */
 export class JevAskError extends Error {
-  constructor(readonly reason: JevAskErr) {
-    super(`jev: ${JSON.stringify(reason)}`);
+  /**
+   * `detail` is the provider's own `error.message` / `error.code`, bounded by
+   * {@link DETAIL_MAX_LENGTH}: the readable half of an account error that `reason` reduces to a status.
+   */
+  constructor(
+    readonly reason: JevAskErr,
+    readonly detail?: string,
+  ) {
+    super(`jev: ${JSON.stringify(reason)}${detail ? `: ${detail}` : ""}`);
   }
+}
+
+/** The longest provider error text a {@link JevAskError} carries. */
+export const DETAIL_MAX_LENGTH = 500;
+
+/** The provider's `error.message` / `error.code` off a failed reply's body, bounded; absent when it names neither. */
+function jevErrorDetail(body: unknown): string | undefined {
+  if (!isRecord(body)) return undefined;
+  const error = isRecord(body.error) ? body.error : body;
+  const parts = [error.message, error.code, body.error].filter(
+    (part): part is string => typeof part === "string" && part !== "",
+  );
+  return parts.length === 0
+    ? undefined
+    : parts.join("; ").slice(0, DETAIL_MAX_LENGTH);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** `value` with every occurrence of `secret` in its strings, object keys included, replaced by `[redacted]`. */
+function redactSecret(value: unknown, secret: string): unknown {
+  if (secret === "") return value;
+  if (typeof value === "string") return value.replaceAll(secret, "[redacted]");
+  if (Array.isArray(value))
+    return value.map((item) => redactSecret(item, secret));
+  if (isRecord(value))
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key.replaceAll(secret, "[redacted]"),
+        redactSecret(item, secret),
+      ]),
+    );
+  return value;
 }
 
 export type JevPost = (request: JevRequest) => Promise<JevHttpReply>;
@@ -56,9 +98,11 @@ export function fetchPost(apiKey: string): JevPost {
       },
       body: JSON.stringify(request),
     });
+    const body: unknown = await response.json().catch(() => ({}));
+    // An error body can echo request material, so the key never leaves here inside one.
     return {
       status: response.status,
-      body: await response.json().catch(() => ({})),
+      body: response.status >= 400 ? redactSecret(body, apiKey) : body,
     };
   };
 }
@@ -91,8 +135,11 @@ export function httpJevClient<Q extends JevQuestionMap>(
     let retry = initRetry();
     for (;;) {
       let reason: JevAskErr;
+      let detail: string | undefined;
       try {
-        const outcome = decodeJevReply(request, await options.post(request));
+        const reply = await options.post(request);
+        if (reply.status >= 400) detail = jevErrorDetail(reply.body);
+        const outcome = decodeJevReply(request, reply);
         if (outcome._tag === "Ok") return outcome.value;
         reason = outcome.error.jev;
       } catch (cause) {
@@ -100,7 +147,7 @@ export function httpJevClient<Q extends JevQuestionMap>(
       }
       retry = recordFailure(retry, reason);
       if (!isTransientJevAskErr(reason) || !shouldRetry(retry, policy)) {
-        throw new JevAskError(reason);
+        throw new JevAskError(reason, detail);
       }
       await sleep(nextDelayMs(retry, policy));
     }
