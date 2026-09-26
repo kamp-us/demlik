@@ -12,12 +12,17 @@ import {
 import type { GraphFacts } from "./graph.js";
 import type { SweepAnswers, SweepQuestions } from "./questions.js";
 
-/** One judged file. `hash` and `vocabulary` together are the cache key: both must match to skip. */
+/**
+ * One judged file. `hash`, `vocabulary` and `redacted` together are the cache key: all must match
+ * to skip. `path` is always the real repo path, whatever Jev was shown.
+ */
 export interface SweepRow {
   readonly path: string;
   readonly scope: string;
   readonly hash: string;
   readonly vocabulary: string;
+  /** Present only on a row Jev answered from redacted evidence; a default row has no such field. */
+  readonly redacted?: true;
   readonly answers: SweepAnswers;
   readonly model: string;
   readonly usage: JevUsage;
@@ -32,6 +37,8 @@ export interface SweepOptions {
   /** The verdict file. Read when it exists, created when it does not. */
   readonly verdictsPath: string;
   readonly graph?: ReadonlyMap<string, GraphFacts>;
+  /** Show Jev opaque ids instead of paths, relative specifiers and sibling names. */
+  readonly redact?: boolean;
   readonly concurrency?: number;
   readonly log?: (line: string) => void;
 }
@@ -73,11 +80,12 @@ function openVerdicts(path: string): Verdicts {
 const isCached = (
   row: SweepRow | undefined,
   file: SourceFile,
-  vocabulary: Vocabulary,
+  options: SweepOptions,
 ) =>
   row !== undefined &&
   row.hash === file.hash &&
-  row.vocabulary === vocabulary.fingerprint;
+  row.vocabulary === options.vocabulary.fingerprint &&
+  (row.redacted === true) === (options.redact === true);
 
 async function judgeScope(
   options: SweepOptions,
@@ -87,7 +95,7 @@ async function judgeScope(
   evidence: ReadonlyMap<string, FileEvidence>,
 ): Promise<SweepScopeResult> {
   const todo = files.filter(
-    (f) => !isCached(verdicts.done.get(f.path), f, options.vocabulary),
+    (f) => !isCached(verdicts.done.get(f.path), f, options),
   );
   options.log?.(`${scope}: ${files.length} files, ${todo.length} to ask`);
   const failed: string[] = [];
@@ -101,6 +109,7 @@ async function judgeScope(
         scope,
         hash: file.hash,
         vocabulary: options.vocabulary.fingerprint,
+        ...(options.redact === true ? { redacted: true as const } : {}),
         answers: ok.answers,
         model: ok.model,
         usage: ok.usage,
@@ -137,7 +146,7 @@ export async function runSweep(options: SweepOptions): Promise<SweepResult> {
         verdicts,
         scope,
         files,
-        gatherEvidence(files, options.graph),
+        gatherEvidence(files, options.graph, { redact: options.redact }),
       ),
     );
   }

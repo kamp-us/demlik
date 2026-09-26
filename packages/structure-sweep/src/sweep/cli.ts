@@ -21,14 +21,14 @@ export const SWEEP_USAGE = `structure-sweep sweep <folder>... [options]
   --ref <ref>           git tree to read sources from (default: HEAD)
   --out <file>          verdict file, created if absent (default: ${DEFAULTS.verdicts})
   --graph <file>        code-graph --graph JSON to pass as evidence (repeatable)
+  --redact              show Jev opaque ids, not paths, relative imports or sibling names
+                        (default: off; redacted and plain runs never share cached answers)
   --model <id>          Jev model (default: ${DEFAULT_MODEL})
   --concurrency <n>     calls in flight (default: 6)`;
 
-export async function sweepCommand(
-  argv: readonly string[],
-  cwd: string,
-): Promise<void> {
-  const { values, positionals } = parseArgs({
+/** `sweep`'s flags and folders, defaults applied. */
+export const parseSweepArgs = (argv: readonly string[]) =>
+  parseArgs({
     args: [...argv],
     allowPositionals: true,
     options: {
@@ -36,10 +36,17 @@ export async function sweepCommand(
       ref: { type: "string", default: "HEAD" },
       out: { type: "string", default: DEFAULTS.verdicts },
       graph: { type: "string", multiple: true, default: [] },
+      redact: { type: "boolean", default: false },
       model: { type: "string", default: DEFAULT_MODEL },
       concurrency: { type: "string", default: "6" },
     },
   });
+
+export async function sweepCommand(
+  argv: readonly string[],
+  cwd: string,
+): Promise<void> {
+  const { values, positionals } = parseSweepArgs(argv);
   if (positionals.length === 0)
     throw new Error(`pass one or more folders\n\n${SWEEP_USAGE}`);
   const root = repoRootOf(cwd);
@@ -66,6 +73,7 @@ export async function sweepCommand(
     }),
     verdictsPath,
     graph,
+    redact: values.redact,
     concurrency: Number(values.concurrency),
     log,
   });

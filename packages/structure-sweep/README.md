@@ -139,6 +139,18 @@ rows are added beside the others. `--graph <file>` (repeatable) passes a `code-g
 as extra evidence. A file whose call fails is left out and asked again on the next run; the command
 then exits 1.
 
+`--redact` (off by default) keeps names out of what Jev sees, so it has to place a file by its
+code rather than read the answer off its folder. The file's path becomes an opaque id that keeps
+only the extension (`f3.tsx`); every relative specifier — in `import … from`, a bare `import "…"`,
+`export … from`, `export * from`, a dynamic `import("…")` and `require("…")`, whether in the
+import list or left in the source — becomes the same kind of id (`./f3`); the files that import
+it are listed by their ids; and the `--graph` caller and callee file names become `g<n>` ids that
+keep their `×n` counts. The ids are fixed by the input, so the same files give the same payload.
+Package specifiers (`zod`, `@scope/pkg`) and path aliases are kept, as are exported names,
+comments and string literals. `verdicts.json` still records each file's real path. A redacted row
+is marked `"redacted": true`, and redacted and unredacted runs never share cached answers: each
+asks Jev again about a file the other answered.
+
 ### `structure-sweep pairs <folder>=<collapse.json>...`
 
 ```sh
