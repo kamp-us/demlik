@@ -1,0 +1,245 @@
+exit 0
+{
+  "algorithm": "louvain-deterministic",
+  "clusterCount": 10,
+  "clusteredFileCount": 48,
+  "excludedTestFileCount": 3,
+  "isolatedFileCount": 11,
+  "modularity": 0.663305,
+  "scatteredClusters": [
+    {
+      "dirCount": 4,
+      "dirs": [
+        {
+          "dir": "src/cg/schema",
+          "files": [
+            "src/cg/schema/clusters.ts",
+            "src/cg/schema/core.ts",
+            "src/cg/schema/cross-runtime.ts",
+            "src/cg/schema/graph.ts",
+            "src/cg/schema/interface-width.ts",
+            "src/cg/schema/reachability.ts"
+          ]
+        },
+        {
+          "dir": "src/cg",
+          "files": [
+            "src/cg/config.ts",
+            "src/cg/schema.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/smells",
+          "files": [
+            "src/cg/smells/evaluate.ts",
+            "src/cg/smells/rules.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/collapse",
+          "files": [
+            "src/cg/collapse/settings.ts"
+          ]
+        }
+      ],
+      "id": "c01",
+      "size": 11
+    },
+    {
+      "dirCount": 3,
+      "dirs": [
+        {
+          "dir": "src/cg/render",
+          "files": [
+            "src/cg/render/analysis.ts",
+            "src/cg/render/blast.ts",
+            "src/cg/render/file.ts",
+            "src/cg/render/graph.ts",
+            "src/cg/render/json.ts",
+            "src/cg/render/smells.ts",
+            "src/cg/render/summary.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/query",
+          "files": [
+            "src/cg/query/clusters.ts",
+            "src/cg/query/louvain.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/smells",
+          "files": [
+            "src/cg/smells/coupling.ts"
+          ]
+        }
+      ],
+      "id": "c02",
+      "size": 10
+    },
+    {
+      "dirCount": 2,
+      "dirs": [
+        {
+          "dir": "src/cg/render",
+          "files": [
+            "src/cg/render/html-model.ts",
+            "src/cg/render/html-template.ts",
+            "src/cg/render/html.ts",
+            "src/cg/render/plan.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/smells",
+          "files": [
+            "src/cg/smells/plan.ts"
+          ]
+        }
+      ],
+      "id": "c04",
+      "size": 5
+    },
+    {
+      "dirCount": 2,
+      "dirs": [
+        {
+          "dir": "src/cg/collapse",
+          "files": [
+            "src/cg/collapse/ceilings.ts",
+            "src/cg/collapse/gate.ts",
+            "src/cg/collapse/partial.ts"
+          ]
+        },
+        {
+          "dir": "src/cg/ratchet",
+          "files": [
+            "src/cg/ratchet/scope-count.ts"
+          ]
+        }
+      ],
+      "id": "c05",
+      "size": 4
+    }
+  ],
+  "splitDirectories": [
+    {
+      "clusterCount": 3,
+      "clusters": [
+        {
+          "clusterId": "c03",
+          "files": [
+            "src/cg/collapse/candidates.ts",
+            "src/cg/collapse/cost.ts",
+            "src/cg/collapse/render.ts",
+            "src/cg/collapse/signals.ts",
+            "src/cg/collapse/tokens.ts"
+          ]
+        },
+        {
+          "clusterId": "c05",
+          "files": [
+            "src/cg/collapse/ceilings.ts",
+            "src/cg/collapse/gate.ts",
+            "src/cg/collapse/partial.ts"
+          ]
+        },
+        {
+          "clusterId": "c01",
+          "files": [
+            "src/cg/collapse/settings.ts"
+          ]
+        }
+      ],
+      "dir": "src/cg/collapse",
+      "fileCount": 9,
+      "isolatedFiles": []
+    },
+    {
+      "clusterCount": 3,
+      "clusters": [
+        {
+          "clusterId": "c01",
+          "files": [
+            "src/cg/smells/evaluate.ts",
+            "src/cg/smells/rules.ts"
+          ]
+        },
+        {
+          "clusterId": "c02",
+          "files": [
+            "src/cg/smells/coupling.ts"
+          ]
+        },
+        {
+          "clusterId": "c04",
+          "files": [
+            "src/cg/smells/plan.ts"
+          ]
+        }
+      ],
+      "dir": "src/cg/smells",
+      "fileCount": 5,
+      "isolatedFiles": [
+        "src/cg/smells/health.ts"
+      ]
+    },
+    {
+      "clusterCount": 2,
+      "clusters": [
+        {
+          "clusterId": "c02",
+          "files": [
+            "src/cg/render/analysis.ts",
+            "src/cg/render/blast.ts",
+            "src/cg/render/file.ts",
+            "src/cg/render/graph.ts",
+            "src/cg/render/json.ts",
+            "src/cg/render/smells.ts",
+            "src/cg/render/summary.ts"
+          ]
+        },
+        {
+          "clusterId": "c04",
+          "files": [
+            "src/cg/render/html-model.ts",
+            "src/cg/render/html-template.ts",
+            "src/cg/render/html.ts",
+            "src/cg/render/plan.ts"
+          ]
+        }
+      ],
+      "dir": "src/cg/render",
+      "fileCount": 13,
+      "isolatedFiles": [
+        "src/cg/render/ci.ts",
+        "src/cg/render/tree.ts"
+      ]
+    },
+    {
+      "clusterCount": 2,
+      "clusters": [
+        {
+          "clusterId": "c06",
+          "files": [
+            "src/cg/query/reach.ts",
+            "src/cg/query/surface.ts",
+            "src/cg/query/unguarded.ts",
+            "src/cg/query/unreachable.ts"
+          ]
+        },
+        {
+          "clusterId": "c02",
+          "files": [
+            "src/cg/query/clusters.ts",
+            "src/cg/query/louvain.ts"
+          ]
+        }
+      ],
+      "dir": "src/cg/query",
+      "fileCount": 7,
+      "isolatedFiles": [
+        "src/cg/query/interface-width.ts"
+      ]
+    }
+  ]
+}

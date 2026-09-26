@@ -1,0 +1,47 @@
+exit 0
+[
+  {
+    "effectId": "src/pothos/schema.ts:persistOpen",
+    "entryId": "src/pothos/schema.ts:resolve#2",
+    "file": "src/pothos/schema.ts",
+    "path": [
+      "src/pothos/schema.ts:resolve#2",
+      "src/pothos/schema.ts:persistOpen"
+    ],
+    "reach": "public",
+    "startLine": 13
+  },
+  {
+    "effectId": "src/pothos/types.ts:persistOpenAttached",
+    "entryId": "src/pothos/types.ts:resolve#6",
+    "file": "src/pothos/types.ts",
+    "path": [
+      "src/pothos/types.ts:resolve#6",
+      "src/pothos/types.ts:persistOpenAttached"
+    ],
+    "reach": "public",
+    "startLine": 10
+  },
+  {
+    "effectId": "src/pothos/types.ts:persistOpenImplemented",
+    "entryId": "src/pothos/types.ts:resolve#5",
+    "file": "src/pothos/types.ts",
+    "path": [
+      "src/pothos/types.ts:resolve#5",
+      "src/pothos/types.ts:persistOpenImplemented"
+    ],
+    "reach": "public",
+    "startLine": 9
+  },
+  {
+    "effectId": "src/pothos/types.ts:persistSkipped",
+    "entryId": "src/pothos/types.ts:resolve#3",
+    "file": "src/pothos/types.ts",
+    "path": [
+      "src/pothos/types.ts:resolve#3",
+      "src/pothos/types.ts:persistSkipped"
+    ],
+    "reach": "public",
+    "startLine": 7
+  }
+]

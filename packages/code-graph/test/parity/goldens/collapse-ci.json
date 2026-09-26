@@ -1,0 +1,14 @@
+exit 1
+{
+  "passed": false,
+  "scopesChecked": 2,
+  "violations": [
+    {
+      "ceiling": 1,
+      "delta": 2,
+      "direction": "EXCEEDED",
+      "measured": 3,
+      "scope": "apps/core"
+    }
+  ]
+}

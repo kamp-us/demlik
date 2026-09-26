@@ -1,0 +1,116 @@
+exit 0
+{
+  "algorithm": "louvain-deterministic",
+  "clusterCount": 4,
+  "clusteredFileCount": 10,
+  "excludedTestFileCount": 0,
+  "isolatedFileCount": 0,
+  "modularity": 0.342975,
+  "scatteredClusters": [
+    {
+      "dirCount": 3,
+      "dirs": [
+        {
+          "dir": "src/audit-runs",
+          "files": [
+            "src/audit-runs/index.ts"
+          ]
+        },
+        {
+          "dir": "src/audit-runs/store",
+          "files": [
+            "src/audit-runs/store/db.ts"
+          ]
+        },
+        {
+          "dir": "src/findings/flows",
+          "files": [
+            "src/findings/flows/run.ts"
+          ]
+        }
+      ],
+      "id": "c1",
+      "size": 3
+    },
+    {
+      "dirCount": 2,
+      "dirs": [
+        {
+          "dir": "src/findings/rules",
+          "files": [
+            "src/findings/rules/helper.ts",
+            "src/findings/rules/score.ts"
+          ]
+        },
+        {
+          "dir": "src/findings/flows",
+          "files": [
+            "src/findings/flows/lazy.ts"
+          ]
+        }
+      ],
+      "id": "c2",
+      "size": 3
+    },
+    {
+      "dirCount": 2,
+      "dirs": [
+        {
+          "dir": "src/findings",
+          "files": [
+            "src/findings/index.ts"
+          ]
+        },
+        {
+          "dir": "src/lib",
+          "files": [
+            "src/lib/util.ts"
+          ]
+        }
+      ],
+      "id": "c3",
+      "size": 2
+    },
+    {
+      "dirCount": 2,
+      "dirs": [
+        {
+          "dir": "src",
+          "files": [
+            "src/index.ts"
+          ]
+        },
+        {
+          "dir": "src/findings/store",
+          "files": [
+            "src/findings/store/repo.ts"
+          ]
+        }
+      ],
+      "id": "c4",
+      "size": 2
+    }
+  ],
+  "splitDirectories": [
+    {
+      "clusterCount": 2,
+      "clusters": [
+        {
+          "clusterId": "c1",
+          "files": [
+            "src/findings/flows/run.ts"
+          ]
+        },
+        {
+          "clusterId": "c2",
+          "files": [
+            "src/findings/flows/lazy.ts"
+          ]
+        }
+      ],
+      "dir": "src/findings/flows",
+      "fileCount": 2,
+      "isolatedFiles": []
+    }
+  ]
+}

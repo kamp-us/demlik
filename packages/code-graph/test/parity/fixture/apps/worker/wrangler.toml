@@ -1,0 +1,12 @@
+name = "store"
+main = "store.ts"
+
+[[workflows]]
+name = "scan"
+binding = "SCAN_WORKFLOW"
+class_name = "ScanWorkflow"
+
+[[workflows]]
+name = "orphan"
+binding = "ORPHAN_WORKFLOW"
+class_name = "OrphanWorkflow"

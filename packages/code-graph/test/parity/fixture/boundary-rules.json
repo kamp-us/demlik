@@ -1,0 +1,14 @@
+{
+  "features": {
+    "services/svc": [
+      "audit-runs",
+      "findings"
+    ]
+  },
+  "lib": [
+    "lib"
+  ],
+  "contracts": [
+    "@acme/wire-contract"
+  ]
+}
