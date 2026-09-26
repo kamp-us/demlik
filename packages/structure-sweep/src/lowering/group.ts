@@ -1,11 +1,385 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { JevState, JevText } from "@demlik/tea/jev";
+import { z } from "zod";
 import type { JevClient } from "../jev.js";
+import {
+  canonicalJson,
+  type Stage,
+  type StageArtifact,
+  type StageInput,
+} from "./artifact.js";
 import type {
   Asker,
   ChoiceQuestion,
   ChoiceQuestions,
   Judgement,
 } from "./ask.js";
+import {
+  derived,
+  type Fact,
+  factValueSchema,
+  type SourceSpan,
+  SourceSpan as SourceSpanSchema,
+} from "./fact.js";
+import {
+  type Enrich,
+  type GateItem,
+  type GatePolicy,
+  gateAll,
+} from "./gate.js";
+import { type ResolvedBranch, resolveStage } from "./lexicon.js";
+import {
+  type Atom,
+  type LoweredBranch,
+  type Outcome,
+  renderAtom,
+  renderOutcome,
+  renderTerm,
+  type Term,
+} from "./lower.js";
+
+// ── the named rules ───────────────────────────────────────────────────────
+
+/**
+ * The resolver rules stage 6 adds to the canonical key, by name, each pinned by its own fixture on
+ * held-out synthetic cases. `deny-outcome` (the issue's polarity normalization, in the form this
+ * lowering needs): a `throw` of any value and a `return false` normalize to one outcome, `deny`, so a
+ * guard that throws on the denied case and one that returns `false` on it key alike. A bare `return`,
+ * `return null` and `return 0` are not `deny`.
+ */
+export const GROUPING_RULES = ["deny-outcome"] as const;
+
+export type GroupingRule = (typeof GROUPING_RULES)[number];
+
+/** The normalized outcome every `deny-outcome` branch keys on. */
+export const DENY = "deny";
+
+// ── the graph input ───────────────────────────────────────────────────────
+
+const DataBindingKind = z.enum(["d1", "durable-object", "kv", "queue", "r2"]);
+
+/**
+ * One `Graph.data` edge of a code-graph `--graph` JSON file (`--data`): a binding call site inside
+ * a named function. Read through this schema because the sweep's graph reader does not parse `data`.
+ */
+export const DataEdgeRow = z.object({
+  functionId: z.string().min(1),
+  ownerService: z.string(),
+  binding: z.string().min(1),
+  bindingKind: DataBindingKind,
+  method: z.string().nullable(),
+  access: z.enum(["read", "unknown", "write"]),
+  line: z.number().int(),
+  column: z.number().int(),
+});
+
+export type DataEdgeRow = z.infer<typeof DataEdgeRow>;
+
+const CallerSite = z.object({ callerId: z.string(), line: z.number().int() });
+
+/**
+ * A code-graph `--graph` JSON file, parsed to what stages 6 to 8 read: each function's file and
+ * callers, and the `data` report's attributed edges. `unattributed` sites name no function, so they
+ * are never read. A graph with no `data` (null, or a file from before `--data`) reads as `null`.
+ */
+export const GroupingGraph = z.object({
+  functions: z.array(
+    z.object({
+      id: z.string().min(1),
+      file: z.string().min(1),
+      edges: z
+        .object({ calledBy: z.array(CallerSite).default([]) })
+        .nullable()
+        .default(null),
+    }),
+  ),
+  data: z
+    .object({ edges: z.array(DataEdgeRow) })
+    .nullish()
+    .transform((data) => data ?? null),
+});
+
+export type GroupingGraph = z.infer<typeof GroupingGraph>;
+
+export const readGroupingGraph = (path: string): GroupingGraph =>
+  GroupingGraph.parse(JSON.parse(readFileSync(path, "utf8")));
+
+// ── the candidate cluster ─────────────────────────────────────────────────
+
+/** A branch's canonical key: its atoms as an order-independent set, and its normalized outcome. */
+export const ConditionKey = z.strictObject({
+  atoms: z.array(z.string()),
+  outcome: z.string(),
+});
+
+export type ConditionKey = z.infer<typeof ConditionKey>;
+
+/** One binding as the data signal keys it: the service that declares it, its kind and its name. */
+export const DataBinding = z.strictObject({
+  ownerService: z.string(),
+  bindingKind: DataBindingKind,
+  binding: z.string().min(1),
+});
+
+export type DataBinding = z.infer<typeof DataBinding>;
+
+/** Why branches are one candidate: an equal condition key, or functions that touch one binding. */
+export const ClusterBasis = z.discriminatedUnion("_tag", [
+  z.strictObject({ _tag: z.literal("condition"), key: ConditionKey }),
+  z.strictObject({ _tag: z.literal("data"), binding: DataBinding }),
+]);
+
+export type ClusterBasis = z.infer<typeof ClusterBasis>;
+
+/** One branch of a cluster, with its span and its lowered text as a reader of the cluster sees it. */
+export const ClusterMember = z.strictObject({
+  branch: z.string().min(1),
+  function: z.string().min(1),
+  span: SourceSpanSchema,
+  atoms: z.array(z.string()),
+  outcome: z.string(),
+  bindings: z.array(z.string()),
+});
+
+export type ClusterMember = z.infer<typeof ClusterMember>;
+
+/**
+ * N branches that stage 6 put together, from at least two functions: never a pair of functions,
+ * and never a group until Jev confirms it.
+ */
+export const CandidateCluster = z
+  .strictObject({
+    id: z.string().min(1),
+    basis: ClusterBasis,
+    members: z.array(ClusterMember).min(2),
+  })
+  .refine((c) => new Set(c.members.map((m) => m.function)).size >= 2, {
+    message: "a cluster holds branches from at least two functions",
+  });
+
+export type CandidateCluster = z.infer<typeof CandidateCluster>;
+
+/** A cluster's id: a hash of its basis, so the same key names the same cluster on every run. */
+export const clusterId = (basis: ClusterBasis): string =>
+  `g-${createHash("sha256").update(canonicalJson(basis)).digest("hex").slice(0, 12)}`;
+
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const sortedSet = (xs: readonly string[]) => [...new Set(xs)].sort(byText);
+
+/** A term as the key reads it: a free path the lexicon resolved is its concept, not its name. */
+function keyTerm(term: Term, concepts: ReadonlyMap<string, string>): string {
+  switch (term.kind) {
+    case "free":
+      return concepts.get(term.path) ?? term.path;
+    case "member":
+      return `${keyTerm(term.object, concepts)}.${term.property}`;
+    case "call":
+      return `${keyTerm(term.callee, concepts)}(${term.args.map((a) => keyTerm(a, concepts)).join(", ")})`;
+    default:
+      return renderTerm(term);
+  }
+}
+
+/** An atom as the key reads it: `renderAtom`'s form, an `any`'s disjuncts and conjuncts sorted. */
+function keyAtom(atom: Atom, concepts: ReadonlyMap<string, string>): string {
+  const sign = (polarity: boolean, text: string) =>
+    polarity ? text : `¬(${text})`;
+  const term = (t: Term) => keyTerm(t, concepts);
+  switch (atom.kind) {
+    case "compare":
+      return sign(
+        atom.polarity,
+        `${term(atom.left)} ${atom.operator} ${term(atom.right)}`,
+      );
+    case "predicate":
+      return sign(atom.polarity, term(atom.call));
+    case "in":
+      return sign(atom.polarity, `${term(atom.key)} in ${term(atom.object)}`);
+    case "instanceof":
+      return sign(
+        atom.polarity,
+        `${term(atom.value)} instanceof ${term(atom.type)}`,
+      );
+    case "truthy":
+      return sign(atom.polarity, term(atom.subject));
+    case "any":
+      return `(${sortedSet(
+        atom.disjuncts.map((d) =>
+          sortedSet(d.map((a) => keyAtom(a, concepts))).join(" ∧ "),
+        ),
+      ).join(" ∨ ")})`;
+  }
+}
+
+/** The outcome as the key reads it, `deny-outcome` applied. */
+function keyOutcome(
+  outcome: Outcome,
+  concepts: ReadonlyMap<string, string>,
+): string {
+  switch (outcome.kind) {
+    case "throw":
+      return DENY;
+    case "return":
+      if (outcome.value === null) return "return";
+      if (outcome.value.kind === "literal" && outcome.value.raw === "false")
+        return DENY;
+      return `return ${keyTerm(outcome.value, concepts)}`;
+    case "call":
+      return `call ${keyTerm(outcome.call, concepts)}`;
+  }
+}
+
+/**
+ * Reduce one stage-3-resolved branch to its canonical key. Stage 2's neutral names already remove
+ * local and parameter names; the atoms become a sorted set, so their order does not matter; an
+ * identifier the lexicon resolved reads as its concept (`⟨flag project-caps⟩`); and the outcome is
+ * normalized under `deny-outcome`.
+ */
+export function conditionKey(resolved: ResolvedBranch): ConditionKey {
+  const concepts = new Map<string, string>();
+  for (const r of resolved.resolutions)
+    if (r._tag === "resolved")
+      concepts.set(r.identifier, `⟨${r.kind} ${r.concept}⟩`);
+  const { branch } = resolved;
+  return {
+    atoms: sortedSet(branch.path.map((atom) => keyAtom(atom, concepts))),
+    outcome: keyOutcome(branch.outcome, concepts),
+  };
+}
+
+function memberOf(id: string, span: SourceSpan, branch: LoweredBranch) {
+  return {
+    branch: id,
+    function: branch.function,
+    span,
+    atoms: branch.path.map(renderAtom),
+    outcome: renderOutcome(branch.outcome),
+    bindings: branch.bindings.map((b) => `${b.local} = ${renderTerm(b.init)}`),
+  } satisfies ClusterMember;
+}
+
+function clusterFact(
+  basis: ClusterBasis,
+  members: readonly ClusterMember[],
+): Fact<CandidateCluster> | null {
+  const sorted = [...members].sort((a, b) => byText(a.branch, b.branch));
+  const [first] = sorted;
+  if (
+    first === undefined ||
+    sorted.length < 2 ||
+    new Set(sorted.map((m) => m.function)).size < 2
+  )
+    return null;
+  const cluster = { id: clusterId(basis), basis, members: sorted };
+  return { id: cluster.id, span: first.span, value: derived(cluster) };
+}
+
+/**
+ * Cluster branches, with no Jev call. Branches whose condition keys are equal form one candidate;
+ * with `data`, so do the branches of every function whose data edges touch one binding, whatever
+ * their atoms. Each cluster holds at least two branches from at least two functions. A branch can
+ * sit in a condition cluster and a data cluster at once; they are separate candidates.
+ */
+export function clusterBranches(
+  branches: readonly Fact<ResolvedBranch>[],
+  data: readonly DataEdgeRow[] | null,
+): readonly Fact<CandidateCluster>[] {
+  const byKey = new Map<
+    string,
+    { basis: ClusterBasis; members: ClusterMember[] }
+  >();
+  const byFunction = new Map<string, ClusterMember[]>();
+  for (const fact of branches) {
+    if (fact.value._tag !== "known") continue;
+    const resolved = fact.value.value;
+    const member = memberOf(fact.id, fact.span, resolved.branch);
+    const basis: ClusterBasis = {
+      _tag: "condition",
+      key: conditionKey(resolved),
+    };
+    const key = canonicalJson(basis);
+    const entry = byKey.get(key) ?? { basis, members: [] };
+    entry.members.push(member);
+    byKey.set(key, entry);
+    byFunction.set(member.function, [
+      ...(byFunction.get(member.function) ?? []),
+      member,
+    ]);
+  }
+  for (const edge of data ?? []) {
+    const basis: ClusterBasis = {
+      _tag: "data",
+      binding: {
+        ownerService: edge.ownerService,
+        bindingKind: edge.bindingKind,
+        binding: edge.binding,
+      },
+    };
+    const key = canonicalJson(basis);
+    const entry = byKey.get(key) ?? { basis, members: [] };
+    const seen = new Set(entry.members.map((m) => m.branch));
+    for (const member of byFunction.get(edge.functionId) ?? [])
+      if (!seen.has(member.branch)) entry.members.push(member);
+    byKey.set(key, entry);
+  }
+  return [...byKey.values()]
+    .flatMap(({ basis, members }) => {
+      const fact = clusterFact(basis, members);
+      return fact === null ? [] : [fact];
+    })
+    .sort((a, b) => byText(a.id, b.id));
+}
+
+const ClusterContent = z.strictObject({
+  data: z.array(DataEdgeRow).nullable(),
+});
+
+const resolvedFactsOf = (
+  artifacts: readonly StageArtifact<unknown>[],
+): readonly Fact<ResolvedBranch>[] =>
+  artifacts.flatMap((artifact) => {
+    if (artifact.stage !== resolveStage.name)
+      throw new TypeError(
+        `stage 6 reads "${resolveStage.name}" artifacts, not "${artifact.stage}"`,
+      );
+    return (artifact as StageArtifact<ResolvedBranch>).facts;
+  });
+
+/**
+ * Stage 6's input: every file's stage-3 artifact, and the graph's data edges on the functions those
+ * artifacts hold (or `null` without `--data`). Artifacts are keyed in digest order, so the order a
+ * caller lists files in does not change the key.
+ */
+export function clusterInput(
+  resolved: readonly StageArtifact<ResolvedBranch>[],
+  data: GroupingGraph["data"] = null,
+): StageInput {
+  const artifacts = [...resolved].sort((a, b) => byText(a.digest, b.digest));
+  const functions = new Set(
+    resolvedFactsOf(artifacts).flatMap((f) =>
+      f.value._tag === "known" ? [f.value.value.branch.function] : [],
+    ),
+  );
+  const edges =
+    data === null
+      ? null
+      : data.edges
+          .filter((e) => functions.has(e.functionId))
+          .map((e) => DataEdgeRow.parse(e))
+          .sort((a, b) => byText(canonicalJson(a), canonicalJson(b)));
+  return { content: canonicalJson({ data: edges }), artifacts };
+}
+
+/** Stage 6, deterministic half: one fact per candidate cluster. It makes no Jev call. */
+export const clusterStage: Stage<CandidateCluster> = {
+  name: "cluster",
+  version: "1",
+  run: async (input) => {
+    const { data } = ClusterContent.parse(JSON.parse(input.content));
+    return clusterBranches(resolvedFactsOf(input.artifacts), data);
+  },
+};
 
 // ── the confirm question ──────────────────────────────────────────────────
 
@@ -140,3 +514,226 @@ export const askGroupVerdict =
       probabilities: verdict.probabilities,
     };
   };
+
+/** A function id's own name, without the file it is in. */
+const functionName = (id: string) => id.slice(id.lastIndexOf(":") + 1);
+
+/**
+ * What stage 6 asks about one cluster. The differences are computed, not asked: per member, the
+ * atoms not every member has, and its outcome when the members' outcomes are not all one text.
+ */
+export function clusterQuestionState(
+  cluster: CandidateCluster,
+): ClusterQuestionState {
+  const members = cluster.members.map((m, i) => ({
+    ref: `m${i}`,
+    function: functionName(m.function),
+    atoms: m.atoms,
+    outcome: m.outcome,
+    bindings: m.bindings,
+  }));
+  const common = new Set(
+    members[0]?.atoms.filter((a) => members.every((m) => m.atoms.includes(a))),
+  );
+  const outcomesDiffer = new Set(members.map((m) => m.outcome)).size > 1;
+  const differences = members.flatMap((m): ClusterDifference[] => {
+    const atoms = m.atoms.filter((a) => !common.has(a));
+    return atoms.length === 0 && !outcomesDiffer
+      ? []
+      : [{ ref: m.ref, atoms, outcome: outcomesDiffer ? m.outcome : null }];
+  });
+  const { basis } = cluster;
+  return {
+    cluster: cluster.id,
+    shared:
+      basis._tag === "condition"
+        ? { signal: "condition", ...basis.key }
+        : {
+            signal: "data",
+            binding: `${basis.binding.bindingKind} ${basis.binding.binding} (service ${basis.binding.ownerService})`,
+          },
+    members,
+    differences,
+  };
+}
+
+// ── the confirm stage ─────────────────────────────────────────────────────
+
+const GroupVerdictSchema = z.enum(GROUP_VERDICTS);
+
+export const GroupJudgementSchema = z.strictObject({
+  label: GroupVerdictSchema,
+  confidence: z.number().min(0).max(1),
+  probabilities: z.record(GroupVerdictSchema, z.number()),
+});
+
+/**
+ * Where one candidate came to rest: its verdict (`known` when the gate promoted it, `unknown` when
+ * it abstained), the answer the gate settled on, and how many enrichment rounds it took.
+ */
+export const ClusterRecord = z.strictObject({
+  cluster: CandidateCluster,
+  verdict: factValueSchema(GroupVerdictSchema),
+  answer: GroupJudgementSchema,
+  rounds: z.number().int().min(0),
+});
+
+export type ClusterRecord = z.infer<typeof ClusterRecord>;
+
+export const GROUP_CONFIRM_STAGE = "group-confirm";
+
+export interface ConfirmOptions {
+  /** Built by `gatePolicy` from stage 6's own calibration over its gold set. */
+  readonly policy: GatePolicy;
+  readonly ask: Asker<GroupVerdict, GroupJudgement>;
+  readonly enrich: Enrich<GroupVerdict, GroupJudgement>;
+  /** The question `ask` asks; part of the stage's key. Defaults to `groupConfirmQuestion()`. */
+  readonly question?: ChoiceQuestion<GroupVerdict>;
+}
+
+/** The confirm stage's input: the cluster artifact, keyed with the question and policy it is asked under. */
+export function confirmInput(
+  clusters: StageArtifact<CandidateCluster>,
+  options: ConfirmOptions,
+): StageInput {
+  return {
+    content: canonicalJson({
+      question: options.question ?? groupConfirmQuestion(),
+      floor: options.policy.floor,
+      maxRounds: options.policy.maxRounds,
+    }),
+    artifacts: [clusters],
+  };
+}
+
+/**
+ * Stage 6, Jev half: asks the confirm question per candidate cluster through `gateAll`, and writes
+ * one record per cluster. A repeat run over the same store is a `hit` and asks nothing.
+ */
+export function confirmStage(options: ConfirmOptions): Stage<ClusterRecord> {
+  return {
+    name: GROUP_CONFIRM_STAGE,
+    version: "1",
+    run: async (input) => {
+      const [clusters, ...rest] = input.artifacts;
+      if (
+        clusters === undefined ||
+        rest.length > 0 ||
+        clusters.stage !== clusterStage.name
+      )
+        throw new TypeError(
+          `stage 6 confirms exactly one "${clusterStage.name}" artifact`,
+        );
+      const candidates = (
+        clusters as StageArtifact<CandidateCluster>
+      ).facts.flatMap((f) =>
+        f.value._tag === "known" ? [{ fact: f, cluster: f.value.value }] : [],
+      );
+      const items: GateItem[] = candidates.map(({ fact, cluster }) => ({
+        id: cluster.id,
+        span: fact.span,
+        state: clusterQuestionState(cluster),
+      }));
+      const gated = await gateAll(GROUP_CONFIRM_STAGE, items, options);
+      return candidates.map(({ fact, cluster }, i): Fact<ClusterRecord> => {
+        const settled = gated.settled[i];
+        const verdict = gated.facts[i];
+        if (settled === undefined || verdict === undefined)
+          throw new Error(`stage 6: no settled answer for ${cluster.id}`);
+        return {
+          id: cluster.id,
+          span: fact.span,
+          value: derived({
+            cluster,
+            verdict: verdict.value,
+            answer: settled.judgement,
+            rounds:
+              settled._tag === "promoted" ? settled.round : settled.rounds,
+          }),
+        };
+      });
+    },
+  };
+}
+
+// ── reading the records ───────────────────────────────────────────────────
+
+/** A confirmed cluster is a rule group; a rejected or abstained one is a human-queue entry. */
+export type ClusterStatus = "confirmed" | "rejected" | "abstained";
+
+export function clusterStatus(record: ClusterRecord): ClusterStatus {
+  if (record.verdict._tag === "unknown") return "abstained";
+  return record.verdict.value === "same-rule" ? "confirmed" : "rejected";
+}
+
+/** A rule group: one fact, N branches with their spans, the cluster Jev confirmed as one rule. */
+export interface RuleGroup {
+  readonly id: string;
+  readonly basis: ClusterBasis;
+  readonly members: readonly ClusterMember[];
+}
+
+const recordsOf = (records: readonly Fact<ClusterRecord>[]) =>
+  records.flatMap((f) => (f.value._tag === "known" ? [f.value.value] : []));
+
+/** Every confirmed cluster as a rule-group fact, promoted on the confirm answer's own basis. */
+export function ruleGroups(
+  records: readonly Fact<ClusterRecord>[],
+): readonly Fact<RuleGroup>[] {
+  return records.flatMap((fact): Fact<RuleGroup>[] => {
+    if (fact.value._tag !== "known") return [];
+    const { cluster, verdict } = fact.value.value;
+    if (verdict._tag !== "known" || verdict.value !== "same-rule") return [];
+    return [
+      {
+        id: cluster.id,
+        span: fact.span,
+        value: {
+          _tag: "known",
+          value: {
+            id: cluster.id,
+            basis: cluster.basis,
+            members: cluster.members,
+          },
+          basis: verdict.basis,
+        },
+      },
+    ];
+  });
+}
+
+export interface GroupQueueEntry {
+  readonly id: string;
+  readonly span: SourceSpan;
+  readonly status: Exclude<ClusterStatus, "confirmed">;
+  /** The answer the gate settled on, for a human to confirm or overrule. */
+  readonly answer: GroupJudgement;
+  readonly rounds: number;
+}
+
+/** Every cluster that did not become a rule group: the one place a human touches stage 6. */
+export interface GroupQueue {
+  readonly stage: typeof GROUP_CONFIRM_STAGE;
+  readonly entries: readonly GroupQueueEntry[];
+}
+
+export function groupQueue(
+  records: readonly Fact<ClusterRecord>[],
+): GroupQueue {
+  const entries = recordsOf(records).flatMap((record): GroupQueueEntry[] => {
+    const status = clusterStatus(record);
+    const [first] = record.cluster.members;
+    return status === "confirmed" || first === undefined
+      ? []
+      : [
+          {
+            id: record.cluster.id,
+            span: first.span,
+            status,
+            answer: record.answer,
+            rounds: record.rounds,
+          },
+        ];
+  });
+  return { stage: GROUP_CONFIRM_STAGE, entries };
+}

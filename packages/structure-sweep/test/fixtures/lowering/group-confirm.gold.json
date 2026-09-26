@@ -15,27 +15,21 @@
         "cluster": "g-000000000001",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "¬(v0.isAdmin)"
-          ],
+          "atoms": ["¬(v0.isAdmin)"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "guardDocEdit",
-            "atoms": [
-              "¬(v0.isAdmin)"
-            ],
+            "atoms": ["¬(v0.isAdmin)"],
             "outcome": "throw new Forbidden()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "canEditDoc",
-            "atoms": [
-              "¬(v0.isAdmin)"
-            ],
+            "atoms": ["¬(v0.isAdmin)"],
             "outcome": "return false",
             "bindings": []
           }
@@ -66,27 +60,21 @@
         "cluster": "g-000000000002",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0.seatCount >= v0.maxSeats"
-          ],
+          "atoms": ["v0.seatCount >= v0.maxSeats"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "assertSeatAvailable",
-            "atoms": [
-              "v0.seatCount >= v0.maxSeats"
-            ],
+            "atoms": ["v0.seatCount >= v0.maxSeats"],
             "outcome": "throw new SeatLimitReached(v0.id)",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "hasFreeSeat",
-            "atoms": [
-              "v0.seatCount >= v0.maxSeats"
-            ],
+            "atoms": ["v0.seatCount >= v0.maxSeats"],
             "outcome": "return false",
             "bindings": []
           }
@@ -117,27 +105,21 @@
         "cluster": "g-000000000003",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v1 > v0.trialEndsAt"
-          ],
+          "atoms": ["v1 > v0.trialEndsAt"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "requireActiveTrial",
-            "atoms": [
-              "v1 > v0.trialEndsAt"
-            ],
+            "atoms": ["v1 > v0.trialEndsAt"],
             "outcome": "throw new TrialExpired()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "checkTrial",
-            "atoms": [
-              "v1 > v0.trialEndsAt"
-            ],
+            "atoms": ["v1 > v0.trialEndsAt"],
             "outcome": "throw new Error(\"trial over\")",
             "bindings": []
           }
@@ -202,36 +184,28 @@
         "cluster": "g-000000000005",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "¬(v0.role === \"owner\")"
-          ],
+          "atoms": ["¬(v0.role === \"owner\")"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "guardProjectDelete",
-            "atoms": [
-              "¬(v0.role === \"owner\")"
-            ],
+            "atoms": ["¬(v0.role === \"owner\")"],
             "outcome": "throw new Forbidden()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "mayDeleteProject",
-            "atoms": [
-              "¬(v0.role === \"owner\")"
-            ],
+            "atoms": ["¬(v0.role === \"owner\")"],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m2",
             "function": "projectDeleteCheck",
-            "atoms": [
-              "¬(v0.role === \"owner\")"
-            ],
+            "atoms": ["¬(v0.role === \"owner\")"],
             "outcome": "throw new HttpError(403, \"owners only\")",
             "bindings": []
           }
@@ -267,33 +241,23 @@
         "cluster": "g-000000000006",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v1.count > 100"
-          ],
+          "atoms": ["v1.count > 100"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "underRequestLimit",
-            "atoms": [
-              "v1.count > 100"
-            ],
+            "atoms": ["v1.count > 100"],
             "outcome": "return false",
-            "bindings": [
-              "v1 = window.of(v0)"
-            ]
+            "bindings": ["v1 = window.of(v0)"]
           },
           {
             "ref": "m1",
             "function": "enforceRequestLimit",
-            "atoms": [
-              "v1.count > 100"
-            ],
+            "atoms": ["v1.count > 100"],
             "outcome": "throw new TooManyRequests()",
-            "bindings": [
-              "v1 = window.of(v0)"
-            ]
+            "bindings": ["v1 = window.of(v0)"]
           }
         ],
         "differences": [
@@ -322,36 +286,28 @@
         "cluster": "g-000000000007",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0.status === \"suspended\""
-          ],
+          "atoms": ["v0.status === \"suspended\""],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "assertAccountActive",
-            "atoms": [
-              "v0.status === \"suspended\""
-            ],
+            "atoms": ["v0.status === \"suspended\""],
             "outcome": "throw new AccountSuspended()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "accountCanAct",
-            "atoms": [
-              "v0.status === \"suspended\""
-            ],
+            "atoms": ["v0.status === \"suspended\""],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m2",
             "function": "rejectSuspended",
-            "atoms": [
-              "v0.status === \"suspended\""
-            ],
+            "atoms": ["v0.status === \"suspended\""],
             "outcome": "throw new Forbidden()",
             "bindings": []
           }
@@ -387,27 +343,21 @@
         "cluster": "g-000000000008",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "¬(v0.emailVerified)"
-          ],
+          "atoms": ["¬(v0.emailVerified)"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "requireVerifiedEmail",
-            "atoms": [
-              "¬(v0.emailVerified)"
-            ],
+            "atoms": ["¬(v0.emailVerified)"],
             "outcome": "throw new Unverified()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "isVerifiedSender",
-            "atoms": [
-              "¬(v0.emailVerified)"
-            ],
+            "atoms": ["¬(v0.emailVerified)"],
             "outcome": "return false",
             "bindings": []
           }
@@ -438,27 +388,21 @@
         "cluster": "g-000000000009",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0.plan === \"free\""
-          ],
+          "atoms": ["v0.plan === \"free\""],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "guardExport",
-            "atoms": [
-              "v0.plan === \"free\""
-            ],
+            "atoms": ["v0.plan === \"free\""],
             "outcome": "throw new UpgradeRequired()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "canExport",
-            "atoms": [
-              "v0.plan === \"free\""
-            ],
+            "atoms": ["v0.plan === \"free\""],
             "outcome": "return false",
             "bindings": []
           }
@@ -489,27 +433,21 @@
         "cluster": "g-000000000010",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0 === \"team\""
-          ],
+          "atoms": ["v0 === \"team\""],
           "outcome": "return 25"
         },
         "members": [
           {
             "ref": "m0",
             "function": "seatsForTier",
-            "atoms": [
-              "v0 === \"team\""
-            ],
+            "atoms": ["v0 === \"team\""],
             "outcome": "return 25",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "tierSeatCount",
-            "atoms": [
-              "v0 === \"team\""
-            ],
+            "atoms": ["v0 === \"team\""],
             "outcome": "return 25",
             "bindings": []
           }
@@ -529,27 +467,21 @@
         "cluster": "g-000000000011",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "¬(v0.archivedAt === null)"
-          ],
+          "atoms": ["¬(v0.archivedAt === null)"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "assertBoardWritable",
-            "atoms": [
-              "¬(v0.archivedAt === null)"
-            ],
+            "atoms": ["¬(v0.archivedAt === null)"],
             "outcome": "throw new ReadOnly()",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "boardAcceptsWrites",
-            "atoms": [
-              "¬(v0.archivedAt === null)"
-            ],
+            "atoms": ["¬(v0.archivedAt === null)"],
             "outcome": "return false",
             "bindings": []
           }
@@ -593,9 +525,7 @@
           {
             "ref": "m1",
             "function": "logSignIn",
-            "atoms": [
-              "¬(v0.id === undefined)"
-            ],
+            "atoms": ["¬(v0.id === undefined)"],
             "outcome": "return env.DB.prepare(\"INSERT INTO audit (actor, action) VALUES (?, ?)\").bind(v0, \"login\").run()",
             "bindings": []
           }
@@ -603,9 +533,7 @@
         "differences": [
           {
             "ref": "m1",
-            "atoms": [
-              "¬(v0.id === undefined)"
-            ],
+            "atoms": ["¬(v0.id === undefined)"],
             "outcome": null
           }
         ]
@@ -623,27 +551,21 @@
         "cluster": "g-000000000013",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "¬(v0.role === \"owner\")"
-          ],
+          "atoms": ["¬(v0.role === \"owner\")"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "canDeleteProject",
-            "atoms": [
-              "¬(v0.role === \"owner\")"
-            ],
+            "atoms": ["¬(v0.role === \"owner\")"],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "canTransferBilling",
-            "atoms": [
-              "¬(v0.role === \"owner\")"
-            ],
+            "atoms": ["¬(v0.role === \"owner\")"],
             "outcome": "return false",
             "bindings": []
           }
@@ -663,27 +585,21 @@
         "cluster": "g-000000000014",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0.plan === \"free\""
-          ],
+          "atoms": ["v0.plan === \"free\""],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "canScheduleExports",
-            "atoms": [
-              "v0.plan === \"free\""
-            ],
+            "atoms": ["v0.plan === \"free\""],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "canInviteGuests",
-            "atoms": [
-              "v0.plan === \"free\""
-            ],
+            "atoms": ["v0.plan === \"free\""],
             "outcome": "throw new UpgradeRequired()",
             "bindings": []
           }
@@ -714,27 +630,21 @@
         "cluster": "g-000000000015",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0.age < 18"
-          ],
+          "atoms": ["v0.age < 18"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "mayBuyRestricted",
-            "atoms": [
-              "v0.age < 18"
-            ],
+            "atoms": ["v0.age < 18"],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "mayOpenAccount",
-            "atoms": [
-              "v0.age < 18"
-            ],
+            "atoms": ["v0.age < 18"],
             "outcome": "return false",
             "bindings": []
           }
@@ -767,9 +677,7 @@
           {
             "ref": "m1",
             "function": "purgeOrg",
-            "atoms": [
-              "v1.role === \"owner\""
-            ],
+            "atoms": ["v1.role === \"owner\""],
             "outcome": "call env.DB.prepare(\"DELETE FROM orgs WHERE id = ?\").bind(v0).run()",
             "bindings": []
           }
@@ -782,9 +690,7 @@
           },
           {
             "ref": "m1",
-            "atoms": [
-              "v1.role === \"owner\""
-            ],
+            "atoms": ["v1.role === \"owner\""],
             "outcome": "call env.DB.prepare(\"DELETE FROM orgs WHERE id = ?\").bind(v0).run()"
           }
         ]
@@ -815,9 +721,7 @@
           {
             "ref": "m1",
             "function": "overrideFlag",
-            "atoms": [
-              "v2.isStaff"
-            ],
+            "atoms": ["v2.isStaff"],
             "outcome": "call env.FLAGS.put(v0, v1)",
             "bindings": []
           }
@@ -830,9 +734,7 @@
           },
           {
             "ref": "m1",
-            "atoms": [
-              "v2.isStaff"
-            ],
+            "atoms": ["v2.isStaff"],
             "outcome": "call env.FLAGS.put(v0, v1)"
           }
         ]
@@ -907,9 +809,7 @@
           {
             "ref": "m1",
             "function": "queuePasswordReset",
-            "atoms": [
-              "v1.expiresAt > v2"
-            ],
+            "atoms": ["v1.expiresAt > v2"],
             "outcome": "call env.EMAILS.send({ kind: \"reset\", to: v0 })",
             "bindings": []
           }
@@ -922,9 +822,7 @@
           },
           {
             "ref": "m1",
-            "atoms": [
-              "v1.expiresAt > v2"
-            ],
+            "atoms": ["v1.expiresAt > v2"],
             "outcome": "call env.EMAILS.send({ kind: \"reset\", to: v0 })"
           }
         ]
@@ -942,27 +840,21 @@
         "cluster": "g-000000000020",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "¬(v0)"
-          ],
+          "atoms": ["¬(v0)"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "hasItems",
-            "atoms": [
-              "¬(v0)"
-            ],
+            "atoms": ["¬(v0)"],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "isSignedIn",
-            "atoms": [
-              "¬(v0)"
-            ],
+            "atoms": ["¬(v0)"],
             "outcome": "return false",
             "bindings": []
           }
@@ -982,27 +874,21 @@
         "cluster": "g-000000000021",
         "shared": {
           "signal": "condition",
-          "atoms": [
-            "v0.length > 10"
-          ],
+          "atoms": ["v0.length > 10"],
           "outcome": "deny"
         },
         "members": [
           {
             "ref": "m0",
             "function": "isShortName",
-            "atoms": [
-              "v0.length > 10"
-            ],
+            "atoms": ["v0.length > 10"],
             "outcome": "return false",
             "bindings": []
           },
           {
             "ref": "m1",
             "function": "fitsOnePage",
-            "atoms": [
-              "v0.length > 10"
-            ],
+            "atoms": ["v0.length > 10"],
             "outcome": "return false",
             "bindings": []
           }
@@ -1035,9 +921,7 @@
           {
             "ref": "m1",
             "function": "dropExportArchive",
-            "atoms": [
-              "v1 < v0.createdAt"
-            ],
+            "atoms": ["v1 < v0.createdAt"],
             "outcome": "call env.ASSETS.delete(v0.key)",
             "bindings": []
           }
@@ -1050,9 +934,7 @@
           },
           {
             "ref": "m1",
-            "atoms": [
-              "v1 < v0.createdAt"
-            ],
+            "atoms": ["v1 < v0.createdAt"],
             "outcome": "call env.ASSETS.delete(v0.key)"
           }
         ]

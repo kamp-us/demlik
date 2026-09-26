@@ -72,3 +72,31 @@ export const unknownValue = (reason: UnknownReason): FactValue<never> => ({
   _tag: "unknown",
   reason,
 });
+
+const BasisSchema = z.discriminatedUnion("_tag", [
+  z.strictObject({ _tag: z.literal("derived") }),
+  z.strictObject({
+    _tag: z.literal("promoted"),
+    confidence: z.number().min(0).max(1),
+    floor: z.number().min(0).max(1),
+    round: z.number().int().min(0),
+  }),
+]);
+
+/** The schema of a `FactValue<V>` over `value`, for reading a stage's facts back off disk. */
+export const factValueSchema = <T extends z.ZodType>(value: T) =>
+  z.discriminatedUnion("_tag", [
+    z.strictObject({ _tag: z.literal("known"), value, basis: BasisSchema }),
+    z.strictObject({
+      _tag: z.literal("unknown"),
+      reason: z.enum(["abstained", "undetermined"]),
+    }),
+  ]);
+
+/** The schema of a `Fact<V>` over `value`. */
+export const factSchema = <T extends z.ZodType>(value: T) =>
+  z.strictObject({
+    id: z.string().min(1),
+    span: SourceSpan,
+    value: factValueSchema(value),
+  });

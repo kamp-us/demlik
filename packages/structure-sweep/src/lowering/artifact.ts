@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { Fact } from "./fact.js";
+import { z } from "zod";
+import { type Fact, factSchema } from "./fact.js";
 
 /**
  * The identity of one stage run: the stage, its version, a hash of its input and the digests of the
@@ -78,6 +79,19 @@ export function artifactKey(parts: {
     ]),
   ) as ArtifactKey;
 }
+
+/** The schema of a `StageArtifact<V>` whose facts' values parse under `value`, for reading one off disk. */
+export const stageArtifactSchema = <T extends z.ZodType>(value: T) =>
+  z.strictObject({
+    stage: z.string().min(1),
+    version: z.string().min(1),
+    key: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/, "an artifact key is a sha-256 hex digest")
+      .transform((key) => key as ArtifactKey),
+    digest: z.string().regex(/^[0-9a-f]{64}$/),
+    facts: z.array(factSchema(value)),
+  });
 
 /** How a run was answered: off the store, or by running the stage. */
 export type StageRun<V> =

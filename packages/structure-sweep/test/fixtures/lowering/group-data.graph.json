@@ -1,0 +1,66 @@
+{
+  "functions": [
+    {
+      "id": "src/ledger/invoices.ts:loadInvoice",
+      "file": "src/ledger/invoices.ts",
+      "startLine": 1,
+      "endLine": 5,
+      "edges": {
+        "calls": [],
+        "calledBy": [
+          { "callerId": "src/api/invoices.ts:getInvoice", "line": 4 }
+        ],
+        "callChainDepth": 0
+      }
+    },
+    {
+      "id": "src/ledger/invoices.ts:voidInvoice",
+      "file": "src/ledger/invoices.ts",
+      "startLine": 6,
+      "endLine": 10,
+      "edges": {
+        "calls": [],
+        "calledBy": [{ "callerId": "src/api/invoices.ts:postVoid", "line": 9 }],
+        "callChainDepth": 0
+      }
+    }
+  ],
+  "data": {
+    "configFiles": ["wrangler.toml"],
+    "unparsedConfigs": [],
+    "edges": [
+      {
+        "functionId": "src/ledger/invoices.ts:loadInvoice",
+        "ownerService": "billing",
+        "binding": "LEDGER",
+        "bindingKind": "d1",
+        "method": "prepare",
+        "access": "read",
+        "line": 2,
+        "column": 20
+      },
+      {
+        "functionId": "src/ledger/invoices.ts:voidInvoice",
+        "ownerService": "billing",
+        "binding": "LEDGER",
+        "bindingKind": "d1",
+        "method": "prepare",
+        "access": "write",
+        "line": 8,
+        "column": 8
+      }
+    ],
+    "unattributed": [
+      {
+        "file": "src/ledger/routes.ts",
+        "ownerService": "billing",
+        "binding": "LEDGER",
+        "bindingKind": "d1",
+        "method": "prepare",
+        "access": "read",
+        "line": 3,
+        "column": 5
+      }
+    ]
+  }
+}
