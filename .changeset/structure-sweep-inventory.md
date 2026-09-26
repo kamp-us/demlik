@@ -9,5 +9,7 @@ same-decision groups and shared-helper families from `pairs.json`, exported-name
 `.structure-sweep/inventory.json` and `.structure-sweep/inventory.md`, ordered by lever and then by
 deletions, biggest first, with a content-derived id and `{ file, startLine, endLine }` spans on
 every entry. A missing input is a skipped lever, `--exclude <glob>` keeps files out of the merges,
-and it calls no model and runs no other command. The library exports `buildInventory`,
-`renderInventory` and the entry types.
+and it calls no model and runs no other command. The library exports exactly `buildInventory` and
+`renderInventory`, plus the type-only `Inventory`, `InventoryEntry`, `InventoryInputs`,
+`InventoryOptions`, `LeverStatus`, `Span`, `Lever`, `Source`, `UnreachableInput`, `GraphInput`,
+`ConsolidateInput` and `PairInput` (#477).
