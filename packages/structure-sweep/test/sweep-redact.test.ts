@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
 import { describe, expect, it } from "vitest";
+import { DEFAULTS } from "../src/cli-paths.js";
 import { parseSweepArgs, SWEEP_USAGE } from "../src/sweep/cli.js";
 import {
   contentHash,
@@ -16,8 +17,16 @@ import {
   runSweep,
   type SweepRow,
 } from "../src/sweep/run.js";
-import type { Vocabulary } from "../src/vocabulary.js";
-import { choice, fixtureVocabulary, repo, stubJev } from "./helpers.js";
+import { loadVocabulary, type Vocabulary } from "../src/vocabulary.js";
+import {
+  choice,
+  commit,
+  fixtureVocabulary,
+  gitIn,
+  repo,
+  stubJev,
+  write,
+} from "./helpers.js";
 
 function jevFor(vocabulary: Vocabulary) {
   const features = Object.keys(vocabulary.features);
@@ -322,5 +331,210 @@ describe("sweep cache across redaction modes", () => {
         1,
       )}\n`,
     );
+  });
+});
+
+describe("sweep --redact resolves aliases only against a working tree that matches --ref", () => {
+  const ALIASED = {
+    "tsconfig.json": JSON.stringify({
+      compilerOptions: { baseUrl: ".", paths: { "@app/*": ["src/*"] } },
+    }),
+    "src/billing/invoice.ts": [
+      'import { rate } from "@app/tax/rate";',
+      "export const invoice = rate;",
+    ].join("\n"),
+    "src/tax/rate.ts": "export const rate = 1;",
+  };
+
+  const sweep = async (root: string, ref: string) => {
+    const vocabulary = fixtureVocabulary();
+    const jev = jevFor(vocabulary);
+    const run = runSweep({
+      root,
+      ref,
+      scopes: ["src"],
+      vocabulary,
+      jev,
+      verdictsPath: verdictsIn(),
+      redact: true,
+    });
+    return { run, jev };
+  };
+
+  it("resolves the alias to the swept file's id when the working tree matches --ref", async () => {
+    const root = repo(ALIASED);
+    // A source edit moves no resolution, so it does not count as a divergence.
+    write(root, {
+      "src/billing/invoice.ts": `${ALIASED["src/billing/invoice.ts"]}\nexport const total = 2;`,
+    });
+    const { run, jev } = await sweep(root, "HEAD");
+    await run;
+    const files = jev.asked.map(fileOf);
+    const rate = files.find((f) => f.exports.includes("rate"));
+    const invoice = files.find((f) => f.exports.includes("invoice"));
+    expect(rate?.path).toMatch(/^f\d+\.ts$/);
+    expect(invoice?.imports).toEqual([`./${rate?.path.replace(/\.ts$/, "")}`]);
+  });
+
+  it("refuses, naming the tsconfig, when --ref maps the alias differently", async () => {
+    const root = repo(ALIASED);
+    const ref = gitIn(root, "rev-parse", "HEAD").trim();
+    write(root, {
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { "@app/*": ["lib/*"] } },
+      }),
+      "lib/tax/rate.ts": "export const rate = 2;",
+    });
+    commit(root, "move the alias");
+    const { run, jev } = await sweep(root, ref);
+    await expect(run).rejects.toThrow(
+      new RegExp(
+        `differs from ${ref} in 2 path\\(s\\)[^]*added lib/tax/rate\\.ts\\n  modified tsconfig\\.json`,
+      ),
+    );
+    expect(jev.asked).toEqual([]);
+  });
+
+  it("refuses, naming the file, when the aliased file exists at --ref but not on disk", async () => {
+    const root = repo(ALIASED);
+    rmSync(join(root, "src/tax/rate.ts"));
+    const { run, jev } = await sweep(root, "HEAD");
+    await expect(run).rejects.toThrow(/deleted src\/tax\/rate\.ts/);
+    expect(jev.asked).toEqual([]);
+  });
+
+  it("refuses, naming the symlink, when a tracked symlink the alias resolves through points elsewhere", async () => {
+    const root = repo({
+      "tsconfig.json": ALIASED["tsconfig.json"],
+      "src/billing/invoice.ts": ALIASED["src/billing/invoice.ts"],
+      "rates/a/rate.ts": "export const rate = 1;",
+      "rates/b/rate.ts": "export const rate = 2;",
+    });
+    // `@app/tax/rate` resolves through `src/tax`, which --ref points at `rates/a`.
+    symlinkSync("../rates/a", join(root, "src/tax"));
+    commit(root, "link the tax rates");
+    rmSync(join(root, "src/tax"));
+    symlinkSync("../rates/b", join(root, "src/tax"));
+    expect(gitIn(root, "diff", "--name-status", "HEAD")).toBe("M\tsrc/tax\n");
+    const { run, jev } = await sweep(root, "HEAD");
+    await expect(run).rejects.toThrow(
+      /in 1 path\(s\)[\s\S]*\n {2}retargeted src\/tax\n/,
+    );
+    expect(jev.asked).toEqual([]);
+  });
+
+  /** The alias `invoice` imports, read off the state Jev saw: `./fN` when it resolved. */
+  const aliasOf = (jev: { asked: readonly JevState[] }) => {
+    const files = jev.asked.map(fileOf);
+    const rate = files.find((f) => f.exports.includes("rate"));
+    const invoice = files.find((f) => f.exports.includes("invoice"));
+    return { rate: rate?.path, imports: invoice?.imports };
+  };
+
+  it("runs twice over its own untracked outputs and the proposed config it reads", async () => {
+    const root = repo(ALIASED);
+    // Nothing ignores `.structure-sweep/`: `propose` wrote the config there, and the first run
+    // writes its verdicts beside it at the default `--out`.
+    write(root, {
+      [DEFAULTS.proposedConfig]: readFileSync(
+        join(import.meta.dirname, "fixtures/saas-audit.config.json"),
+        "utf8",
+      ),
+    });
+    const vocabularyPath = join(root, DEFAULTS.proposedConfig);
+    const verdictsPath = join(root, DEFAULTS.verdicts);
+    const run = async () => {
+      const vocabulary = loadVocabulary(vocabularyPath);
+      const jev = jevFor(vocabulary);
+      await runSweep({
+        root,
+        ref: "HEAD",
+        scopes: ["src"],
+        vocabulary,
+        vocabularyPath,
+        jev,
+        verdictsPath,
+        redact: true,
+      });
+      return jev;
+    };
+
+    const first = aliasOf(await run());
+    expect(first.rate).toMatch(/^f\d+\.ts$/);
+    expect(first.imports).toEqual([`./${first.rate?.replace(/\.ts$/, "")}`]);
+    expect(gitIn(root, "status", "--porcelain")).toContain(
+      "?? .structure-sweep/",
+    );
+
+    // A committed source edit sends `invoice` back to Jev, so the second run resolves the alias
+    // again; `.structure-sweep/` stays untracked.
+    write(root, {
+      "src/billing/invoice.ts": `${ALIASED["src/billing/invoice.ts"]}\nexport const total = 2;`,
+    });
+    gitIn(root, "add", "src/billing/invoice.ts");
+    gitIn(root, "commit", "-q", "-m", "edit invoice");
+    const second = await run();
+    expect(second.asked).toHaveLength(1);
+    const { imports } = aliasOf(second);
+    expect(imports).toEqual([`./${first.rate?.replace(/\.ts$/, "")}`]);
+    expect(readRows(verdictsPath).map((r) => [r.path, r.redacted])).toEqual([
+      ["src/billing/invoice.ts", true],
+      ["src/tax/rate.ts", true],
+    ]);
+  });
+
+  it("reads an edit to the vocabulary config or to a JSON file resolution never reads as no divergence", async () => {
+    const root = repo({
+      ...ALIASED,
+      [DEFAULTS.config]: readFileSync(
+        join(import.meta.dirname, "fixtures/saas-audit.config.json"),
+        "utf8",
+      ),
+      "src/tax/bands.json": "[1, 2]",
+    });
+    write(root, {
+      [DEFAULTS.config]: readFileSync(
+        join(import.meta.dirname, "fixtures/saas-audit.config.json"),
+        "utf8",
+      ).replace(/\n$/, "\n\n"),
+      "src/tax/bands.json": "[1, 2, 3]",
+    });
+    const vocabularyPath = join(root, DEFAULTS.config);
+    const vocabulary = loadVocabulary(vocabularyPath);
+    const jev = jevFor(vocabulary);
+    await runSweep({
+      root,
+      ref: "HEAD",
+      scopes: ["src"],
+      vocabulary,
+      vocabularyPath,
+      jev,
+      verdictsPath: verdictsIn(),
+      redact: true,
+    });
+    const { rate, imports } = aliasOf(jev);
+    expect(imports).toEqual([`./${rate?.replace(/\.ts$/, "")}`]);
+  });
+
+  it("refuses on an edit to a tsconfig the chain extends, or to a package.json", async () => {
+    const root = repo({
+      ...ALIASED,
+      "tsconfig.json": JSON.stringify({ extends: "./configs/base.json" }),
+      "configs/base.json": JSON.stringify({
+        compilerOptions: { baseUrl: "..", paths: { "@app/*": ["src/*"] } },
+      }),
+      "package.json": '{ "name": "app" }',
+    });
+    write(root, {
+      "configs/base.json": JSON.stringify({
+        compilerOptions: { baseUrl: "..", paths: { "@app/*": ["lib/*"] } },
+      }),
+      "package.json": '{ "name": "app", "imports": {} }',
+    });
+    const { run, jev } = await sweep(root, "HEAD");
+    await expect(run).rejects.toThrow(
+      /in 2 path\(s\)[\s\S]*modified configs\/base\.json\n {2}modified package\.json/,
+    );
+    expect(jev.asked).toEqual([]);
   });
 });

@@ -4,8 +4,9 @@ import type { GraphPull } from "./move/manifest.js";
 export type ImportEdge = { readonly from: string; readonly to: string };
 
 /**
- * Each file's graph pull: its import edges, both directions, to neighbours Jev put in a named
- * feature, grouped by that neighbour's feature; the feature holding a strict majority is the pull.
+ * Each file's graph pull: its import edges, both directions, to neighbours `featureOf` names a
+ * feature for — Jev's verdict when planning a move, the feature folder a file sits in when sweep
+ * nominates — grouped by that neighbour's feature; the feature holding a strict majority is the pull.
  * An edge listed twice counts once, and a self-import not at all.
  */
 export function graphPulls(

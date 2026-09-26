@@ -74,7 +74,7 @@ function resolveRelative(from: string, specifier: string): string | undefined {
 const isSpace = (char: string | undefined) =>
   char !== undefined && /\s/.test(char);
 const isLineEnd = (char: string | undefined) =>
-  char === "\n" || char === "\r" || char === " " || char === " ";
+  char === "\n" || char === "\r" || char === "\u2028" || char === "\u2029";
 
 /**
  * The text an import statement at `[start, end)` takes out of the source: its own line, from the

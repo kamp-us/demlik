@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, posix } from "node:path";
+import { dirname, join, posix } from "node:path";
 import type { JevUsage } from "@demlik/tea/jev";
+import { OUT_DIR } from "../cli-paths.js";
 import { trackedPaths } from "../git.js";
 import { type JevClient, pool } from "../jev.js";
 import { specifierResolver } from "../module-syntax.js";
@@ -55,6 +56,8 @@ export type SweepOptions = SweepSelection & {
   readonly root: string;
   readonly ref: string;
   readonly vocabulary: Vocabulary;
+  /** The file `vocabulary` was read from; `--redact` never reads a change to it as a divergence. */
+  readonly vocabularyPath?: string;
   readonly jev: JevClient<SweepQuestions>;
   /** The verdict file. Read when it exists, created when it does not. */
   readonly verdictsPath: string;
@@ -233,7 +236,13 @@ export async function runSweep(options: SweepOptions): Promise<SweepResult> {
       options.redact === true
         ? {
             redact: true,
-            resolve: specifierResolver(options.root, scope),
+            resolve: specifierResolver(options.root, scope, options.ref, [
+              join(options.root, OUT_DIR),
+              options.verdictsPath,
+              ...(options.vocabularyPath === undefined
+                ? []
+                : [options.vocabularyPath]),
+            ]),
           }
         : {},
     );

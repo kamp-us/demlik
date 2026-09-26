@@ -159,7 +159,7 @@ describe("specifierResolver", () => {
     });
 
   it("resolves a tsconfig paths alias to the repo file it names", () => {
-    const resolve = specifierResolver(root(), "src");
+    const resolve = specifierResolver(root(), "src", "HEAD");
     expect(resolve("src/billing/invoice.ts", "@app/tax/rate")).toEqual({
       kind: "repo",
       path: "src/tax/rate.ts",
@@ -171,7 +171,7 @@ describe("specifierResolver", () => {
   });
 
   it("reads an installed package or a builtin as external, and anything unresolved as unknown", () => {
-    const resolve = specifierResolver(root(), "src");
+    const resolve = specifierResolver(root(), "src", "HEAD");
     expect(resolve("src/billing/invoice.ts", "zod")).toEqual({
       kind: "external",
     });

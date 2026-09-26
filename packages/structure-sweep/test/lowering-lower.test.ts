@@ -279,6 +279,26 @@ describe("neutral names follow scope", () => {
       { path: [], outcome: "return plan.allows(v0)" },
     ]);
   });
+
+  it("resolves a switch discriminant outside the case block, and a case body inside it", async () => {
+    const shadowed = "src/shadowed.ts";
+    const facts = await lower(
+      shadowed,
+      [
+        "export function shadowedSwitch(x) {",
+        "  switch (x) {",
+        "    case 1:",
+        "      let x = 2;",
+        "      return x;",
+        "  }",
+        "}",
+      ].join("\n"),
+    );
+    // v0 is the parameter `x`, v1 the case-local `let x`.
+    expect(facts.map((f) => shape(known(f)))).toEqual([
+      { path: ["v0 === 1"], outcome: "return v1" },
+    ]);
+  });
 });
 
 describe("switch", () => {

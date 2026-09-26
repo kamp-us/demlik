@@ -219,3 +219,72 @@ export function exactRenames(
   }
   return renames;
 }
+
+/**
+ * How one path in the working tree differs from a tree: the working tree has it and the tree does
+ * not (an untracked, unignored file included), the reverse, its content changed, its type did (a
+ * file become a symlink, say), or it is a symlink on both sides that now points somewhere else.
+ */
+export interface WorkingTreeChange {
+  readonly kind: "added" | "deleted" | "modified" | "retyped" | "retargeted";
+  readonly path: string;
+}
+
+const CHANGE_KINDS: Readonly<Record<string, WorkingTreeChange["kind"]>> = {
+  A: "added",
+  D: "deleted",
+  T: "retyped",
+};
+
+const SYMLINK_MODE = "120000";
+
+/**
+ * One `git diff --raw` header, `:<old mode> <new mode> <old oid> <new oid> <status>`, as a change
+ * kind. A symlink's content is its target, so a content change with a symlink mode on both sides
+ * is a retarget, never an edit.
+ */
+function changeKind(header: string): WorkingTreeChange["kind"] {
+  const [oldMode, newMode, , , status = ""] = header.slice(1).split(" ");
+  const kind = CHANGE_KINDS[status.charAt(0)];
+  if (kind !== undefined) return kind;
+  return oldMode === SYMLINK_MODE && newMode === SYMLINK_MODE
+    ? "retargeted"
+    : "modified";
+}
+
+/**
+ * Every path whose working-tree state differs from the tree `ref` names, ignored files left out,
+ * sorted by path. Staged and unstaged edits both count: this is the checkout on disk, not the index.
+ */
+export function workingTreeChanges(
+  cwd: string,
+  ref: string,
+): WorkingTreeChange[] {
+  const fields = git(cwd, [
+    "diff",
+    "--no-renames",
+    "--raw",
+    "-z",
+    ref,
+    "--",
+  ]).split("\0");
+  const changes: WorkingTreeChange[] = [];
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const header = fields[i];
+    const path = fields[i + 1];
+    if (!header || path === undefined) continue;
+    changes.push({ kind: changeKind(header), path });
+  }
+  const untracked = git(cwd, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "--full-name",
+    "-z",
+  ]);
+  for (const path of untracked.split("\0").filter(Boolean))
+    changes.push({ kind: "added", path });
+  return changes.sort((a, b) =>
+    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+  );
+}
