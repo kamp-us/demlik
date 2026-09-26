@@ -11,6 +11,7 @@ import {
   DEFAULT_ROLES,
   renderProposePrompt,
 } from "./prompt.js";
+import { REFINE_USAGE } from "./refine-cli.js";
 import { DEFAULT_DEPTH, gatherSignals } from "./signals.js";
 
 export const PROPOSE_USAGE = `structure-sweep propose <folder>... [options]
@@ -31,7 +32,9 @@ export const PROPOSE_USAGE = `structure-sweep propose <folder>... [options]
                         (default: ${DEFAULTS.proposedConfig})
   --out <file>          signals JSON (default: ${DEFAULTS.signals})
   --prompt <file>       prompt (default: ${DEFAULTS.proposePrompt})
-  --force               overwrite --out and --prompt when they exist`;
+  --force               overwrite --out and --prompt when they exist
+
+${REFINE_USAGE}`;
 
 const count = (name: string, value: string, min: number) =>
   z.coerce

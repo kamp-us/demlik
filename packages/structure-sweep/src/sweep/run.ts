@@ -177,7 +177,12 @@ interface Batch {
   readonly listed?: ReadonlySet<string>;
 }
 
-function refusal(path: string, ref: string, tracked: ReadonlySet<string>) {
+/** Why `--files` cannot judge `path` at `ref`, or `undefined` when it can. */
+export function fileListRefusal(
+  path: string,
+  ref: string,
+  tracked: ReadonlySet<string>,
+) {
   if (!tracked.has(path)) return `not tracked at ${ref}`;
   if (!isSweptSource(path))
     return "not a swept source (.ts/.tsx, not a test, story or .d.ts)";
@@ -198,7 +203,7 @@ function listedBatches(
   const tracked = new Set(trackedPaths(root, { ref }));
   const unique = [...new Set(files)];
   const refused = unique.flatMap((path) => {
-    const reason = refusal(path, ref, tracked);
+    const reason = fileListRefusal(path, ref, tracked);
     return reason === undefined ? [] : [`  ${path}: ${reason}`];
   });
   if (refused.length > 0) {
