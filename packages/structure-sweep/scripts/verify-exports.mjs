@@ -32,6 +32,11 @@ const expected = {
     "lowerFile",
     "readLoweringGraph",
     "renderAtom",
+    "parseLexicon",
+    "loadLexicon",
+    "resolveInput",
+    "proposeLexicon",
+    "writeLexiconDraft",
   ],
 };
 

@@ -1,0 +1,84 @@
+{
+  "stage": "lexicon",
+  "rewordings": [
+    "Read state.identifier and the branches in state.uses that read it. Which kind of product concept does the identifier stand for, if any?"
+  ],
+  "items": [
+    {
+      "id": "limits.enforcementEnabled",
+      "span": {
+        "file": "src/seats/can-invite.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "identifier": "limits.enforcementEnabled",
+        "uses": [
+          "¬(limits.enforcementEnabled(\"seat-cap\")) ⇒ return true",
+          "limits.enforcementEnabled(\"seat-cap\") ∧ v1 >= v2.maxSeats ⇒ return false"
+        ]
+      },
+      "gold": "flag"
+    },
+    {
+      "id": "grants.has",
+      "span": { "file": "src/reports/export.ts", "startLine": 5, "endLine": 5 },
+      "state": {
+        "identifier": "grants.has",
+        "uses": [
+          "¬(grants.has(v0.orgId, \"bulk-export\")) ⇒ throw new Forbidden()"
+        ]
+      },
+      "gold": "entitlement"
+    },
+    {
+      "id": "membership.isOwner",
+      "span": {
+        "file": "src/projects/delete.ts",
+        "startLine": 2,
+        "endLine": 2
+      },
+      "state": {
+        "identifier": "membership.isOwner",
+        "uses": ["¬(membership.isOwner(v0, v1)) ⇒ throw new Forbidden()"]
+      },
+      "gold": "role"
+    },
+    {
+      "id": "subscription.tier",
+      "span": { "file": "src/usage/cap.ts", "startLine": 4, "endLine": 4 },
+      "state": {
+        "identifier": "subscription.tier",
+        "uses": ["subscription.tier === \"starter\" ⇒ return 3"]
+      },
+      "gold": "plan"
+    },
+    {
+      "id": "prefs.retentionDays",
+      "span": { "file": "src/archive/sweep.ts", "startLine": 7, "endLine": 7 },
+      "state": {
+        "identifier": "prefs.retentionDays",
+        "uses": ["v0.ageDays > prefs.retentionDays ⇒ call v1.archive(v0)"]
+      },
+      "gold": "setting"
+    },
+    {
+      "id": "process.env.DEPLOY_STAGE",
+      "span": { "file": "src/mail/send.ts", "startLine": 2, "endLine": 2 },
+      "state": {
+        "identifier": "process.env.DEPLOY_STAGE",
+        "uses": ["process.env.DEPLOY_STAGE === \"preview\" ⇒ return"]
+      },
+      "gold": "env"
+    },
+    {
+      "id": "JSON.stringify",
+      "span": { "file": "src/http/body.ts", "startLine": 3, "endLine": 3 },
+      "state": {
+        "identifier": "JSON.stringify",
+        "uses": ["v0 ⇒ return JSON.stringify(v0)"]
+      },
+      "gold": "none"
+    }
+  ]
+}
