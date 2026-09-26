@@ -476,12 +476,94 @@ owner answer's distribution cut):
 | `--artifacts <file>` | `.structure-sweep/groups.json` | the groups file |
 | `--graph <file>` | (required for `show`) | code-graph `--graph` JSON, for each member's callers |
 
+### `structure-sweep inventory`
+
+```sh
+code-graph . --unreachable --json > unreachable.json
+code-graph . --graph > graph.json
+structure-sweep inventory --unreachable unreachable.json --graph graph.json --exclude 'packages/design/**'
+```
+
+Joins outputs already on disk into one consolidation list: every deletable or mergeable thing, with
+file and lines, biggest lever first. It writes `.structure-sweep/inventory.json` and
+`.structure-sweep/inventory.md` and nothing else. It calls no model and no network, needs no
+`TYPESAFE_API_KEY`, and runs no other command — not `sweep`, `pairs`, `consolidate` or `code-graph`;
+running those stays the caller's job. The same inputs give byte-identical JSON and markdown.
+
+Inputs, each by its own flag:
+
+- `--unreachable <file>`: `code-graph --unreachable --json` output, or a `--graph --unreachable`
+  dump. No default.
+- `--graph <file>`: a `code-graph --graph` JSON. No default.
+- `--consolidate <file>`: `consolidate` output, default `.structure-sweep/consolidate.json`.
+- `--pairs <file>`: `pairs` output, default `.structure-sweep/pairs.json`.
+- `--groups <file>`: the lowering stage 6 to 8 groups file `writeGroupsFile` wrote, default
+  `.structure-sweep/groups.json`. Read where present.
+
+Run code-graph on the repository root, so its paths are repo-relative like every other input's.
+
+Levers, in the order the inventory lists them:
+
+| Lever | Reads | One entry per | Deletions |
+|---|---|---|---|
+| A dead exports | `--unreachable` | unreachable export; `dead` (no reference) and `only-called-from-tests` stay distinct signals and actions | lines of the export; its end line comes from the `--graph` JSON (or the dump), else it is the start line |
+| B tiny-file merges | `--consolidate` | `merge` proposal, as `consolidate` made it | files that go: all but one |
+| C same decision | `--pairs` | group of `same_decision` pairs at confidence >= 0.5, joined wherever two pairs share a function | lines of every copy but the largest |
+| D shared helper | `--pairs` | family of `shared_helper` pairs at confidence >= 0.7 with the same function name(s) | lines of every copy but the largest |
+| E exported-name twins | `--graph` | exported, non-test name found in two or more top-level scopes (a file's first two directories); generic names such as `GET`, `handler` or `default` excluded | lines of every copy but the largest |
+| F rule groups | `--groups` | confirmed rule group | lines of every member but the largest |
+
+Entries are ordered by lever, then by deletions, biggest first. Each carries an `id` hashed from its
+lever, subject, spans and signals (the same content, the same id, on every run), its `lever`, a
+`subject`, its source `signals`, `spans` as `{ file, startLine, endLine }`, the weakest verdict
+`confidence` behind it (`null` where the source judges nothing: A, B and E), its `deletions` and a
+suggested `action`.
+
+```json
+{
+ "version": 1,
+ "levers": [
+  { "lever": "dead-export", "state": "built", "input": "unreachable.json", "entries": 1 },
+  { "lever": "tiny-file-merge", "state": "skipped", "flag": "--consolidate",
+    "path": ".structure-sweep/consolidate.json", "reason": "no such file" }
+ ],
+ "entries": [
+  { "id": "A-be9199777a65", "lever": "dead-export", "subject": "src/old.ts:unusedLong",
+    "signals": ["unreachable:dead"],
+    "spans": [{ "file": "src/old.ts", "startLine": 5, "endLine": 24 }],
+    "confidence": null, "deletions": 20, "action": "delete the export" }
+ ]
+}
+```
+
+**A missing input skips its levers.** The lever is listed with `state: "skipped"`, the flag and the
+path it looked for (`null` when a flag with no default was not given) in the JSON, and as
+`skipped: …` in the markdown; the command still exits 0 with every lever it could build. B is also
+skipped when `consolidate` ran without sweep verdicts, so its plan has no `merge`. An input that
+exists but does not parse fails the run.
+
+**`--exclude <glob>`** (repeatable) keeps matching files out of lever B: no tiny-file merge lists an
+excluded file, and a proposal left with fewer files than `consolidate`'s `--min-cluster` is dropped.
+`**` spans directories, `*` and `?` stay inside one, and a plain path excludes everything under it.
+
+| Flag | Default | |
+|---|---|---|
+| `--unreachable <file>` | (none) | lever A |
+| `--graph <file>` | (none) | lever E, and lever A's end lines |
+| `--consolidate <file>` | `.structure-sweep/consolidate.json` | lever B |
+| `--pairs <file>` | `.structure-sweep/pairs.json` | levers C and D |
+| `--groups <file>` | `.structure-sweep/groups.json` | lever F |
+| `--exclude <glob>` | (none) | files kept out of lever B, repeatable |
+| `--out <file>` | `.structure-sweep/inventory.json` | JSON inventory |
+| `--report <file>` | `.structure-sweep/inventory.md` | markdown inventory |
+
 ## As a library
 
 Every command except `propose` is also a function — `runSweep`, `runPairs`, `planScope` /
 `planManifest`, `applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as
 its git reader, `mergeProposals` / `extractProposals` / `renderConsolidation` for
-`consolidate`, and `readGroupsFile` / `listGroups` / `showGroup` for `groups` — and each
+`consolidate`, and `readGroupsFile` / `listGroups` / `showGroup` for `groups`, and `buildInventory` /
+`renderInventory` for `inventory` — and each
 Jev-calling one takes its `JevClient` as an argument, so a caller can hand it a stub.
 
 ## Lowering: stage artifacts, the evaluation harness and the confidence gate

@@ -34,6 +34,37 @@ export {
   UnknownGroupError,
 } from "./groups/query.js";
 export {
+  buildInventory,
+  type Inventory,
+  type InventoryEntry,
+  type InventoryInputs,
+  type InventoryOptions,
+  type LeverStatus,
+  type Span,
+  topLevelScope,
+} from "./inventory/build.js";
+export { anyGlob, globMatcher } from "./inventory/glob.js";
+export {
+  ConsolidateInput,
+  GraphInput,
+  PairInput,
+  PairsInput,
+  readSource,
+  type Source,
+  UnreachableInput,
+} from "./inventory/inputs.js";
+export {
+  DEFAULT_GENERIC_NAMES,
+  type InputName,
+  LEVER_ORDER,
+  LEVERS,
+  type Lever,
+  SAME_DECISION_FLOOR,
+  SCOPE_DEPTH,
+  SHARED_HELPER_FLOOR,
+} from "./inventory/levers.js";
+export { renderInventory } from "./inventory/render.js";
+export {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,
