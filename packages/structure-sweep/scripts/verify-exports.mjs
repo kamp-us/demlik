@@ -28,6 +28,10 @@ const expected = {
     "gate",
     "gateAll",
     "gatePolicy",
+    "loweringInput",
+    "lowerFile",
+    "readLoweringGraph",
+    "renderAtom",
   ],
 };
 

@@ -98,6 +98,33 @@ export {
   shipVerdict,
   type Thresholds,
 } from "./lowering/harness.js";
+export {
+  type Atom,
+  atomTerms,
+  type Binding,
+  type CallTerm,
+  type CompareOperator,
+  DEFAULT_LOGGING_ROOTS,
+  type EqualityOperator,
+  freeIdentifiers,
+  GraphFunction,
+  LOWERING_RULES,
+  type LoweredBranch,
+  LoweringGraph,
+  type LoweringOptions,
+  type LoweringRule,
+  lowerFile,
+  loweringInput,
+  lowerStage,
+  negate,
+  type Outcome,
+  outcomeTerms,
+  readLoweringGraph,
+  renderAtom,
+  renderOutcome,
+  renderTerm,
+  type Term,
+} from "./lowering/lower.js";
 export { type ApplyReport, applyManifest } from "./move/apply.js";
 export { planScope } from "./move/cli.js";
 export { entryFiles } from "./move/entries.js";

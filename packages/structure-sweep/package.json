@@ -43,6 +43,7 @@
   "dependencies": {
     "@demlik/code-graph": "workspace:*",
     "@demlik/tea": "workspace:*",
+    "oxc-parser": "catalog:",
     "smol-toml": "catalog:",
     "ts-morph": "catalog:",
     "zod": "catalog:code-graph"
