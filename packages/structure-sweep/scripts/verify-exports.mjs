@@ -47,6 +47,13 @@ const expected = {
     "branchLabeller",
     "evidenceFirst",
     "evaluateAnchoring",
+    "responsibilityRequests",
+    "responsibilityState",
+    "responsibilityStage",
+    "labelResponsibilities",
+    "responsibilityId",
+    "verdictOf",
+    "rollup",
   ],
 };
 
