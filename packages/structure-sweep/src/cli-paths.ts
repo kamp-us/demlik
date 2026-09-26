@@ -14,6 +14,8 @@ export const DEFAULTS = {
   consolidate: `${OUT_DIR}/consolidate.json`,
   consolidateReport: `${OUT_DIR}/consolidate.md`,
   groups: `${OUT_DIR}/groups.json`,
+  inventory: `${OUT_DIR}/inventory.json`,
+  inventoryReport: `${OUT_DIR}/inventory.md`,
   signals: `${OUT_DIR}/signals.json`,
   proposePrompt: `${OUT_DIR}/propose-prompt.md`,
   proposedConfig: `${OUT_DIR}/proposed.config.json`,

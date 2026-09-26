@@ -20,6 +20,8 @@ const expected = {
     "mergeProposals",
     "extractProposals",
     "renderConsolidation",
+    "buildInventory",
+    "renderInventory",
     "runStage",
     "memoryArtifactStore",
     "evaluate",
