@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveBoundaryRules } from "../config.js";
-import { ThresholdsSchema } from "../schema.js";
 import type { BoundaryViolation } from "./analyze.js";
 import { runBoundaryGate } from "./gate.js";
 import { CEILINGS_FILENAME } from "./rules.js";
@@ -71,7 +70,6 @@ function run(over: { ci?: boolean; writeCeilings?: boolean; json?: boolean; rule
     boundaryRulesFile: over.rules ?? rulesFile,
     ci: over.ci === true,
     writeCeilings: over.writeCeilings === true,
-    thresholds: ThresholdsSchema.parse({}),
     emit: (payload) => {
       out.push(payload);
     },
@@ -219,7 +217,6 @@ describe("B4 judges an importer outside every declared feature and every lib fol
       boundaryRulesFile: outsideRules,
       ci: over.ci === true,
       writeCeilings: over.writeCeilings === true,
-      thresholds: ThresholdsSchema.parse({}),
       emit: (payload) => {
         out.push(payload);
       },

@@ -1,0 +1,57 @@
+exit 0
+[
+  {
+    "kind": "directory-sprawl",
+    "severity": "warn",
+    "target": {
+      "dir": "src/cg/render",
+      "type": "directory"
+    },
+    "threshold": 10,
+    "value": 13
+  },
+  {
+    "kind": "big-file",
+    "severity": "high",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "type": "module"
+    },
+    "threshold": 400,
+    "value": 1401
+  },
+  {
+    "kind": "long-function",
+    "severity": "high",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:definedAgent",
+      "startLine": 695,
+      "type": "function"
+    },
+    "threshold": 60,
+    "value": 133
+  },
+  {
+    "kind": "long-function",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:machineWith",
+      "startLine": 702,
+      "type": "function"
+    },
+    "threshold": 60,
+    "value": 68
+  },
+  {
+    "kind": "big-file",
+    "severity": "high",
+    "target": {
+      "file": "src/tea/runtime-types.ts",
+      "type": "module"
+    },
+    "threshold": 400,
+    "value": 1501
+  }
+]

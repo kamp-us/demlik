@@ -1,15 +1,8 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { Project, type SourceFile } from "ts-morph";
-
-declare module "ts-morph" {
-  namespace ts {
-    interface SourceFile {
-      readonly parseDiagnostics?: readonly unknown[];
-    }
-  }
-}
+import { parseTypeScript } from "../engine/oxc.js";
+import { SyntaxFile } from "../syntax/file.js";
 
 const WALK_PRUNE = new Set([
   ".claude",
@@ -88,11 +81,16 @@ function isSourceFile(rel: string): boolean {
     .some((segment) => segment.startsWith(".") || EXCLUDED_SEGMENTS.has(segment));
 }
 
+export type SourceUnit = {
+  readonly absolutePath: string;
+  readonly file: string;
+  readonly syntax: SyntaxFile;
+};
+
 export type LoadedProject = {
-  project: Project;
-  rootAbsolute: string;
-  sourceFiles: SourceFile[];
-  parseFailures: string[];
+  readonly rootAbsolute: string;
+  readonly sourceFiles: readonly SourceUnit[];
+  readonly parseFailures: readonly string[];
 };
 
 export function toRelative(rootAbsolute: string, absolutePath: string): string {
@@ -117,61 +115,45 @@ export function listSourceFiles(rootAbsolute: string): string[] {
   return listVisibleFiles(rootAbsolute, isSourceFile).map((rel) => path.join(rootAbsolute, rel));
 }
 
-function addVisibleSourceFiles(project: Project, rootAbsolute: string): Set<string> {
-  const visible = listVisibleFiles(rootAbsolute, isSourceFile);
-  for (const rel of visible) project.addSourceFileAtPath(path.join(rootAbsolute, rel));
-  return new Set(visible);
+function readSource(absolutePath: string): string {
+  const text = fs.readFileSync(absolutePath, "utf8");
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-function hasSyntaxError(sourceFile: SourceFile): boolean {
-  const diagnostics = sourceFile.compilerNode.parseDiagnostics;
-  return Array.isArray(diagnostics) && diagnostics.length > 0;
+function parseUnit(rootAbsolute: string, rel: string): SourceUnit | null {
+  const absolutePath = path.join(rootAbsolute, rel);
+  let text: string;
+  try {
+    text = readSource(absolutePath);
+  } catch {
+    return null;
+  }
+  const parsed = parseTypeScript(absolutePath, text);
+  if (!parsed.ok) return null;
+  return {
+    absolutePath,
+    file: rel,
+    syntax: new SyntaxFile(text, parsed.program, parsed.comments),
+  };
 }
 
 export function loadCheapProject(rootAbsolute: string): LoadedProject {
-  const project = new Project({
-    skipAddingFilesFromTsConfig: true,
-    skipFileDependencyResolution: true,
-    skipLoadingLibFiles: true,
-    compilerOptions: { allowJs: false },
-  });
-
-  addVisibleSourceFiles(project, rootAbsolute);
-  const added = project.getSourceFiles();
-
-  const clean: SourceFile[] = [];
-  const failures: string[] = [];
-  for (const sf of added) {
-    const rel = toRelative(rootAbsolute, sf.getFilePath());
-    let failed = false;
-    try {
-      failed = hasSyntaxError(sf);
-    } catch {
-      failed = true;
-    }
-    if (failed) {
-      failures.push(rel);
-      project.removeSourceFile(sf);
-    } else {
-      clean.push(sf);
-    }
+  const sourceFiles: SourceUnit[] = [];
+  const parseFailures: string[] = [];
+  for (const rel of listVisibleFiles(rootAbsolute, isSourceFile)) {
+    const unit = parseUnit(rootAbsolute, rel);
+    if (unit === null) parseFailures.push(rel);
+    else sourceFiles.push(unit);
   }
-
-  clean.sort((a, b) =>
-    toRelative(rootAbsolute, a.getFilePath()).localeCompare(
-      toRelative(rootAbsolute, b.getFilePath()),
-    ),
-  );
-  failures.sort((a, b) => a.localeCompare(b));
-
-  return { project, rootAbsolute, sourceFiles: clean, parseFailures: failures };
+  parseFailures.sort((a, b) => a.localeCompare(b));
+  return { rootAbsolute, sourceFiles, parseFailures };
 }
 
 export type EdgeScope = "package" | "deep";
 
 export type LoadedEdgeProject = LoadedProject & {
-  tsConfigPath: string;
-  scope: EdgeScope;
+  readonly tsConfigPath: string;
+  readonly scope: EdgeScope;
 };
 
 function findNearestTsConfig(start: string): string | null {
@@ -200,58 +182,13 @@ export function resolveEdgeTsConfig(
   return found;
 }
 
-function collectEdgeSourceFiles(
-  project: Project,
-  rootAbsolute: string,
-  visible: ReadonlySet<string>,
-): { clean: SourceFile[]; failures: string[] } {
-  const clean: SourceFile[] = [];
-  const failures: string[] = [];
-  for (const sf of project.getSourceFiles()) {
-    const rel = toRelative(rootAbsolute, sf.getFilePath());
-    if (!visible.has(rel)) continue;
-    let failed = false;
-    try {
-      failed = hasSyntaxError(sf);
-    } catch {
-      failed = true;
-    }
-    if (failed) failures.push(rel);
-    else clean.push(sf);
-  }
-
-  clean.sort((a, b) =>
-    toRelative(rootAbsolute, a.getFilePath()).localeCompare(
-      toRelative(rootAbsolute, b.getFilePath()),
-    ),
-  );
-  failures.sort((a, b) => a.localeCompare(b));
-  return { clean, failures };
-}
-
 export function loadEdgeProject(
   rootAbsolute: string,
   scope: EdgeScope,
   repoRoot: string,
 ): LoadedEdgeProject {
   const tsConfigPath = resolveEdgeTsConfig(rootAbsolute, scope, repoRoot);
-
-  const project = new Project({
-    tsConfigFilePath: tsConfigPath,
-    skipAddingFilesFromTsConfig: false,
-  });
-
-  const visible = addVisibleSourceFiles(project, rootAbsolute);
-  const { clean, failures } = collectEdgeSourceFiles(project, rootAbsolute, visible);
-
-  return {
-    project,
-    rootAbsolute,
-    sourceFiles: clean,
-    parseFailures: failures,
-    tsConfigPath,
-    scope,
-  };
+  return { ...loadCheapProject(rootAbsolute), tsConfigPath, scope };
 }
 
 export function findRepoRoot(start: string): string {

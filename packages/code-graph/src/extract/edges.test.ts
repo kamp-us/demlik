@@ -1,34 +1,46 @@
-import { Project, type SourceFile } from "ts-morph";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveEdges } from "./edges.js";
+import { TypeContext } from "../checker/context.js";
+import { resolveImports } from "../syntax/imports.js";
+import { type EdgeResult, resolveEdges } from "./edges.js";
 import { discoverFunctions } from "./functions.js";
+import { loadEdgeProject } from "./project.js";
 
-function resolve(source: string) {
-  const project = new Project({
-    useInMemoryFileSystem: true,
-    compilerOptions: { strict: false },
-    skipLoadingLibFiles: true,
-    skipFileDependencyResolution: true,
-    skipAddingFilesFromTsConfig: true,
-  });
-  const sf: SourceFile = project.createSourceFile("fixture.ts", source);
-  const { functions, nodeToId } = discoverFunctions("/", [sf]);
-  const ids = functions.map((f) => f.id);
-  return { result: resolveEdges("/", [sf], nodeToId, ids), ids };
+function resolveMulti(files: { path: string; source: string }[]): {
+  result: EdgeResult;
+  ids: string[];
+} {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-edges-")));
+  try {
+    fs.writeFileSync(
+      path.join(root, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { strict: false } }),
+    );
+    for (const f of files) fs.writeFileSync(path.join(root, f.path), f.source);
+    const loaded = loadEdgeProject(root, "package", root);
+    const { functions } = discoverFunctions(loaded.sourceFiles);
+    const ids = functions.map((f) => f.id);
+    const imports = resolveImports(root, loaded.sourceFiles, loaded.tsConfigPath);
+    const ctx = TypeContext.open({
+      rootAbsolute: root,
+      tsConfigPath: loaded.tsConfigPath,
+      sourceFiles: loaded.sourceFiles,
+      functions,
+    });
+    try {
+      return { result: resolveEdges(ctx, imports, ids), ids };
+    } finally {
+      ctx.close();
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
-function resolveMulti(files: { path: string; source: string }[]) {
-  const project = new Project({
-    useInMemoryFileSystem: true,
-    compilerOptions: { strict: false },
-    skipLoadingLibFiles: true,
-    skipFileDependencyResolution: true,
-    skipAddingFilesFromTsConfig: true,
-  });
-  const sfs: SourceFile[] = files.map((f) => project.createSourceFile(f.path, f.source));
-  const { functions, nodeToId } = discoverFunctions("/", sfs);
-  const ids = functions.map((f) => f.id);
-  return { result: resolveEdges("/", sfs, nodeToId, ids), ids };
+function resolve(source: string) {
+  return resolveMulti([{ path: "fixture.ts", source }]);
 }
 
 describe("resolveCallee / C1 — callee ids", () => {

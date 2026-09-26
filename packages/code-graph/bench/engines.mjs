@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-// Engine benchmark for @demlik/code-graph (#384): ts-morph (today's loaders) against oxc
-// (syntax + module resolution) and tsgo (the native checker). Run by hand, never in CI:
+// Engine benchmark for @demlik/code-graph. #384 measured ts-morph against oxc and tsgo prototypes;
+// since #397 code-graph runs on oxc and tsgo itself, so this measures the production passes and,
+// given a baseline, checks their output against the ts-morph engine's. Run by hand, never in CI:
 //
-//   node packages/code-graph/bench/engines.mjs [target] [--codegraph] [--runs <n>] [--json <file>]
+//   node packages/code-graph/bench/engines.mjs [target] [--baseline <graph.json>]
+//       [--codegraph] [--runs <n>] [--json <file>]
 //
-// `target` defaults to packages/code-graph. Every engine runs in its own child process under
-// `/usr/bin/time`, so wall time and peak RSS are per engine; parity is computed here, in the
-// parent, from the artifacts each child writes. See FINDINGS.md for the numbers and their read.
+// `target` defaults to packages/code-graph. `--baseline` is `code-graph <target> --graph --edges`
+// as the ts-morph engine printed it, from a checkout before #397; the parity rows compare against
+// it. Every engine runs in its own child process under `/usr/bin/time`, so wall time and peak RSS
+// are per engine. See FINDINGS.md for the numbers and their read.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -29,23 +32,6 @@ function findUp(start, name) {
   }
 }
 
-function lineStarts(text) {
-  const starts = [0];
-  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) starts.push(i + 1);
-  return starts;
-}
-
-function lineOf(starts, offset) {
-  let lo = 0;
-  let hi = starts.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (starts[mid] <= offset) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo + 1;
-}
-
 const elapsed = (t0) => Math.round(performance.now() - t0);
 
 function writeResult(out, result) {
@@ -55,7 +41,7 @@ function writeResult(out, result) {
   );
 }
 
-async function childTsMorphCheap(target, out) {
+async function childCheap(target, out) {
   const { loadCheapProject } = await import(SRC("extract/project.ts"));
   const { assembleGraph } = await import(SRC("extract/assemble.ts"));
   const { resolveThresholds } = await import(SRC("config.ts"));
@@ -72,18 +58,10 @@ async function childTsMorphCheap(target, out) {
   });
 }
 
-function calleeKey(id) {
-  if (id.startsWith("external:")) return null;
-  const bare = id.startsWith("workspace:") ? id.slice("workspace:".length) : id;
-  if (bare.startsWith("../")) return null;
-  return bare.replace(/#\d+$/, "").toLowerCase();
-}
-
-async function childTsMorphEdge(target, out) {
+async function childEdge(target, out) {
   const { loadEdgeProject, findRepoRoot } = await import(SRC("extract/project.ts"));
   const { assembleGraphWithEdges } = await import(SRC("extract/assemble.ts"));
   const { buildClusterReport } = await import(SRC("query/clusters.ts"));
-  const { nameTokens } = await import(SRC("collapse/tokens.ts"));
   const { resolveThresholds } = await import(SRC("config.ts"));
   const thresholds = resolveThresholds(undefined, () => {});
   const t0 = performance.now();
@@ -98,276 +76,30 @@ async function childTsMorphEdge(target, out) {
   const graph = assembleGraphWithEdges(loaded, thresholds, "package", loaded.tsConfigPath);
   const assembleMs = elapsed(t0) - loadMs;
   const t1 = performance.now();
-  const clusters = buildClusterReport(graph.functions, graph.modules);
-  const clustersImportOnly = buildClusterReport([], graph.modules);
-  const clustersMs = elapsed(t1);
+  buildClusterReport(graph.functions, graph.modules);
   writeResult(out, {
     workMs: elapsed(t0),
-    phases: { loadMs, assembleMs, clustersMs },
+    phases: { loadMs, assembleMs, clustersMs: elapsed(t1) },
     files: graph.modules.length,
     functions: graph.functions.length,
-    edges: graph.modules.flatMap((m) =>
-      m.importEdges
-        .filter((e) => e.target !== null)
-        .map((e) => ({ from: m.file, to: e.target, typeOnly: e.typeOnly })),
-    ),
-    clusters,
-    clustersImportOnly,
-    tokens: graph.functions.map((f) => ({
-      key: `${f.file}:${f.startLine}:${f.name}`,
-      tokens: nameTokens(f.name),
-    })),
-    spans: graph.functions.map((f) => [f.file.toLowerCase(), f.startLine, f.endLine]),
-    callees: graph.functions.flatMap((f) =>
-      (f.edges?.calls ?? []).flatMap((c) => {
-        const key = calleeKey(c.calleeId);
-        return key === null ? [] : [`${f.file.toLowerCase()}:${c.line}->${key}`];
-      }),
-    ),
+    graph,
   });
 }
 
-// oxc: the same file set (listSourceFiles is file discovery, not engine logic), parsed with
-// oxc-parser and resolved with oxc-resolver. Nothing here reads ts-morph.
-function oxcImportEdges(file, source, module, resolver, fileSet, root) {
-  const edges = [];
-  const push = (specifier, kind, typeOnly) => {
-    let target = null;
-    const resolved = resolver.sync(path.dirname(file), specifier);
-    if (resolved.path) {
-      const rel = path.relative(root, resolved.path).split(path.sep).join("/");
-      if (fileSet.has(rel)) target = rel;
-    }
-    edges.push({ specifier, kind, typeOnly, target });
-  };
-  for (const imp of module.staticImports) {
-    const text = source.slice(imp.start, imp.end);
-    push(imp.moduleRequest.value, "static", /^import\s+type[\s{]/.test(text));
-  }
-  for (const exp of module.staticExports) {
-    // The module record gives `import { x } from "m"; export { x }` an indirect export entry
-    // naming "m" and spanning the import; only an `export … from` statement is an edge here.
-    const request = exp.entries.find((e) => e.moduleRequest !== null)?.moduleRequest;
-    const text = source.slice(exp.start, exp.end);
-    if (!request || !/^export\b/.test(text) || !/\bfrom\s*['"]/.test(text)) continue;
-    push(request.value, "export-from", /^export\s+type[\s{*]/.test(text));
-  }
-  for (const dyn of module.dynamicImports) {
-    const raw = source.slice(dyn.moduleRequest.start, dyn.moduleRequest.end).trim();
-    const literal = /^(['"`])([^'"`]*)\1$/.exec(raw);
-    if (literal) push(literal[2], "dynamic", false);
-  }
-  return edges;
-}
-
-// The name ts-morph's getName() reports for a member: the key's source text, so a string key
-// keeps its quotes, a private one its `#`, and a computed one its brackets.
-function memberName(holder, source) {
-  const key = holder.key;
-  if (!key) return null;
-  const text = source.slice(key.start, key.end);
-  if (holder.computed) return `[${text}]`;
-  return key.type === "Identifier" ? key.name : text;
-}
-
-// Mirrors the *shape* of src/extract/functions.ts's discovery on the ESTree AST oxc emits:
-// named function declarations, class and object-literal methods/accessors, constructors, and
-// arrows / function expressions bound to a name.
-function oxcFunctions(program, source) {
-  const found = [];
-  const bindingName = (parent) => {
-    if (!parent) return null;
-    if (parent.type === "VariableDeclarator") {
-      return parent.id.type === "Identifier" ? parent.id.name : null;
-    }
-    if (parent.type === "Property" && !parent.method && parent.kind === "init") {
-      return memberName(parent, source);
-    }
-    if (parent.type === "PropertyDefinition") return memberName(parent, source);
-    if (parent.type === "ExportDefaultDeclaration") return "default";
-    return null;
-  };
-  const visit = (node, parent) => {
-    if (node === null || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child, parent);
-      return;
-    }
-    if (typeof node.type !== "string") return;
-    let name = null;
-    const methodValue =
-      parent &&
-      (parent.type === "MethodDefinition" ||
-        (parent.type === "Property" && (parent.method || parent.kind !== "init")));
-    if (node.type === "FunctionDeclaration" && node.body) {
-      name = node.id?.name ?? (parent?.type === "ExportDefaultDeclaration" ? "default" : null);
-    } else if (node.type === "MethodDefinition" && node.value?.body) {
-      name = node.kind === "constructor" ? "constructor" : memberName(node, source);
-    } else if (node.type === "Property" && (node.method || node.kind !== "init")) {
-      name = memberName(node, source);
-    } else if (node.type === "ArrowFunctionExpression") {
-      name = bindingName(parent);
-    } else if (node.type === "FunctionExpression" && !methodValue) {
-      name = node.id?.name ?? bindingName(parent);
-    }
-    if (name !== null) found.push({ name, start: node.start });
-    for (const [field, child] of Object.entries(node)) {
-      if (field !== "type" && child !== null && typeof child === "object") visit(child, node);
-    }
-  };
-  visit(program, null);
-  return found;
-}
-
-async function childOxc(target, out) {
-  const { parseSync } = await import("oxc-parser");
-  const { ResolverFactory } = await import("oxc-resolver");
-  const { listSourceFiles } = await import(SRC("extract/project.ts"));
-  const { buildClusterReport } = await import(SRC("query/clusters.ts"));
-  const { nameTokens } = await import(SRC("collapse/tokens.ts"));
-  const t0 = performance.now();
-  const files = listSourceFiles(target);
-  const rel = (abs) => path.relative(target, abs).split(path.sep).join("/");
-  const fileSet = new Set(files.map(rel));
-  // One tsconfig per target, the one `loadEdgeProject` would pick, so both engines resolve under
-  // the same config; only a target with none (the repo root) falls back to per-file discovery.
-  const ownTsconfig = findUp(target, "tsconfig.json");
-  const resolver = new ResolverFactory({
-    tsconfig: ownTsconfig === null ? "auto" : { configFile: ownTsconfig },
-    extensions: [".ts", ".tsx", ".d.ts", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"],
-    extensionAlias: {
-      ".js": [".ts", ".tsx", ".d.ts", ".js"],
-      ".mjs": [".mts", ".mjs"],
-      ".cjs": [".cts", ".cjs"],
-    },
-    conditionNames: ["types", "import", "node", "default"],
-  });
-  const modules = [];
-  const parsed = [];
-  let parseFailures = 0;
-  for (const abs of files) {
-    const source = fs.readFileSync(abs, "utf8");
-    const result = parseSync(abs, source);
-    if (result.errors.length > 0) {
-      parseFailures++;
-      continue;
-    }
-    const file = rel(abs);
-    const importEdges = oxcImportEdges(abs, source, result.module, resolver, fileSet, target);
-    modules.push({ file, importEdges, isTest: /\.(test|spec)\.tsx?$/.test(file) });
-    parsed.push({ file, source, program: result.program });
-  }
-  const graphMs = elapsed(t0);
-  const t1 = performance.now();
-  const clusters = buildClusterReport([], modules);
-  const clustersMs = elapsed(t1);
-  const t2 = performance.now();
-  const tokens = parsed.flatMap(({ file, source, program }) => {
-    const starts = lineStarts(source);
-    return oxcFunctions(program, source).map((f) => ({
-      key: `${file}:${lineOf(starts, f.start)}:${f.name}`,
-      tokens: nameTokens(f.name),
-    }));
-  });
-  const tokensMs = elapsed(t2);
-  writeResult(out, {
-    workMs: elapsed(t0),
-    phases: { graphMs, clustersMs, tokensMs },
-    files: modules.length,
-    parseFailures,
-    edges: modules.flatMap((m) =>
-      m.importEdges
-        .filter((e) => e.target !== null)
-        .map((e) => ({ from: m.file, to: e.target, typeOnly: e.typeOnly })),
-    ),
-    clustersImportOnly: clusters,
-    tokens,
-  });
-}
-
-// tsgo's programmatic surface (@typescript/native-preview/unstable/sync): open the project,
-// walk each target file's call expressions on tsgo's own AST, and resolve every callee through
-// the checker in one batched getSymbolAtLocation per file.
-async function childTsgoCallees(target, out, tsconfig) {
-  const { API } = await import("@typescript/native-preview/unstable/sync");
-  const { SyntaxKind } = await import("@typescript/native-preview/unstable/ast");
-  const { listSourceFiles } = await import(SRC("extract/project.ts"));
-  const t0 = performance.now();
-  // tsgo hands back declaration paths case-folded on a case-insensitive filesystem.
-  const relLower = (abs) =>
-    path.relative(target.toLowerCase(), abs.toLowerCase()).split(path.sep).join("/");
-  const targetFiles = new Map(listSourceFiles(target).map((abs) => [relLower(abs), abs]));
-  const api = new API({ cwd: path.dirname(tsconfig) });
-  const snapshot = api.updateSnapshot({ openProjects: [tsconfig] });
-  const project = snapshot.getProject(tsconfig);
-  const openMs = elapsed(t0);
-  const declKinds = new Set([
-    SyntaxKind.FunctionDeclaration,
-    SyntaxKind.MethodDeclaration,
-    SyntaxKind.VariableDeclaration,
-    SyntaxKind.PropertyDeclaration,
-    SyntaxKind.PropertyAssignment,
-    SyntaxKind.GetAccessor,
-    SyntaxKind.SetAccessor,
-  ]);
-  const callees = [];
-  const programFiles = [];
-  let callSites = 0;
-  for (const name of project.program.getSourceFileNames()) {
-    const fileKey = relLower(name);
-    if (!targetFiles.has(fileKey)) continue;
-    programFiles.push(fileKey);
-    const sf = project.program.getSourceFile(name);
-    if (!sf) continue;
-    const calls = [];
-    const visit = (node) => {
-      if (node.kind === SyntaxKind.CallExpression) calls.push(node);
-      node.forEachChild(visit);
-    };
-    sf.forEachChild(visit);
-    callSites += calls.length;
-    const at = calls.map((c) =>
-      c.expression.kind === SyntaxKind.PropertyAccessExpression ? c.expression.name : c.expression,
-    );
-    const symbols = at.length === 0 ? [] : project.checker.getSymbolAtLocation(at);
-    symbols.forEach((symbol, i) => {
-      if (!symbol) return;
-      const resolved = symbol.flags & 2097152 ? project.checker.getAliasedSymbol(symbol) : symbol;
-      const decl = resolved.declarations.find((d) => declKinds.has(d.kind));
-      if (!decl) return;
-      const declKey = relLower(decl.path);
-      if (declKey.startsWith("../") || !targetFiles.has(declKey)) return;
-      const line = sf.getLineAndCharacterOfPosition(calls[i].getStart(sf)).line + 1;
-      callees.push({ file: fileKey, line, key: `${declKey}:${resolved.name.toLowerCase()}` });
-    });
-  }
-  const workMs = elapsed(t0);
-  api.close();
-  writeResult(out, {
-    workMs,
-    phases: { openMs, resolveMs: workMs - openMs },
-    callSites,
-    programFiles,
-    callees,
-  });
-}
-
-// The floor every node child stands on: node + the tsx loader + the src modules the oxc child
-// imports (listSourceFiles drags ts-morph in with it), doing no work.
+// The floor every node child stands on: node + the tsx loader + the src modules the edge child
+// imports, doing no work.
 async function childFloor(_target, out) {
   await import(SRC("extract/project.ts"));
+  await import(SRC("extract/assemble.ts"));
   await import(SRC("query/clusters.ts"));
-  await import(SRC("collapse/tokens.ts"));
   writeResult(out, { workMs: 0 });
 }
 
 async function runChild(argv) {
-  const [engine, target, out, tsconfig] = argv;
+  const [engine, target, out] = argv;
   if (engine === "floor") return childFloor(target, out);
-  if (engine === "tsmorph-cheap") return childTsMorphCheap(target, out);
-  if (engine === "tsmorph-edge") return childTsMorphEdge(target, out);
-  if (engine === "oxc") return childOxc(target, out);
-  if (engine === "tsgo-callees") return childTsgoCallees(target, out, tsconfig);
+  if (engine === "cheap") return childCheap(target, out);
+  if (engine === "edge") return childEdge(target, out);
   throw new Error(`unknown engine ${engine}`);
 }
 
@@ -414,7 +146,7 @@ function measure(flavour, command, args, options = {}) {
   };
 }
 
-function nodeChild(flavour, engine, target, tmp, extra = []) {
+function nodeChild(flavour, engine, target, tmp) {
   const out = path.join(tmp, `${engine}.json`);
   const tsx = import.meta.resolve("tsx");
   const run = measure(flavour, process.execPath, [
@@ -426,7 +158,6 @@ function nodeChild(flavour, engine, target, tmp, extra = []) {
     engine,
     target,
     out,
-    ...extra,
   ]);
   if (run.status !== 0 || !fs.existsSync(out)) {
     const tail = run.stderr.trim().split("\n").slice(-3).join(" ").slice(0, 300);
@@ -462,7 +193,7 @@ function sourceFilesUnder(target) {
 }
 
 // A target without a tsconfig of its own (the repo root) gets one synthesized over its source
-// files, so the checkers have a program to check. The ts-morph edge loader has no such seam.
+// files, so the checkers have a program to check. The edge pass has no such seam.
 function checkerConfig(target, tmp) {
   const own = findUp(target, "tsconfig.json");
   if (own !== null) {
@@ -508,16 +239,12 @@ function checkerConfig(target, tmp) {
 }
 
 async function binaries() {
-  const tsgoPkg = path.dirname(
-    fileURLToPath(import.meta.resolve("@typescript/native-preview/package.json")),
-  );
-  const { default: getExePath } = await import(
-    pathToFileURL(path.join(tsgoPkg, "lib", "getExePath.js")).href
-  );
+  const { tsgoBinary } = await import(SRC("engine/tsgo.ts"));
+  const tsgo = await tsgoBinary();
   const tscPkg = path.dirname(fileURLToPath(import.meta.resolve("typescript/package.json")));
   return {
-    tsgo: getExePath(),
-    tsgoVersion: JSON.parse(fs.readFileSync(path.join(tsgoPkg, "package.json"), "utf8")).version,
+    tsgo: tsgo.path,
+    tsgoVersion: tsgo.version,
     tsc: path.join(tscPkg, "lib", "tsc.js"),
     tscVersion: JSON.parse(fs.readFileSync(path.join(tscPkg, "package.json"), "utf8")).version,
   };
@@ -557,84 +284,47 @@ function codegraphRun(flavour, target, tmp) {
   };
 }
 
+const EXAMPLES = 3;
+
 function setDiff(baseline, candidate) {
   const b = new Set(baseline);
   const c = new Set(candidate);
-  let matching = 0;
-  for (const x of c) if (b.has(x)) matching++;
-  return { matching, missing: b.size - matching, extra: c.size - matching };
-}
-
-const edgeKeys = (edges) => edges.map((e) => `${e.from}\t${e.to}`);
-
-// A ClusterReport names every file of a scattered cluster and of a split directory; a file of
-// a single-directory cluster in an unsplit directory is not named. Parity is compared over the
-// files both reports name, label-free: a file moved if its set of co-members changed.
-function membership(report) {
-  const of = new Map();
-  for (const c of report.scatteredClusters) {
-    for (const d of c.dirs) for (const f of d.files) of.set(f, c.id);
-  }
-  for (const d of report.splitDirectories) {
-    for (const c of d.clusters) for (const f of c.files) of.set(f, c.clusterId);
-  }
-  return of;
-}
-
-function clusterParity(baseline, candidate) {
-  const strip = (r) => JSON.stringify(r);
-  const a = membership(baseline);
-  const b = membership(candidate);
-  const common = [...a.keys()].filter((f) => b.has(f));
-  const peers = (m, f) =>
-    common
-      .filter((g) => m.get(g) === m.get(f))
-      .sort()
-      .join("|");
-  const moved = common.filter((f) => peers(a, f) !== peers(b, f)).length;
+  const missing = [...b].filter((x) => !c.has(x));
+  const extra = [...c].filter((x) => !b.has(x));
   return {
-    identical: strip(baseline) === strip(candidate),
-    clusters: `${baseline.clusterCount} vs ${candidate.clusterCount}`,
-    modularity: `${baseline.modularity} vs ${candidate.modularity}`,
-    compared: common.length,
-    moved,
+    matching: c.size - extra.length,
+    missing: missing.length,
+    extra: extra.length,
+    examples: { missing: missing.slice(0, EXAMPLES), extra: extra.slice(0, EXAMPLES) },
   };
 }
 
-function tokenParity(baseline, candidate) {
-  const byKey = new Map(candidate.map((t) => [t.key, t.tokens.join(" ")]));
-  let matching = 0;
-  let differing = 0;
-  let missing = 0;
-  for (const t of baseline) {
-    const other = byKey.get(t.key);
-    if (other === undefined) missing++;
-    else if (other === t.tokens.join(" ")) matching++;
-    else differing++;
-  }
-  const baseKeys = new Set(baseline.map((t) => t.key));
-  const extra = candidate.filter((t) => !baseKeys.has(t.key)).length;
-  return { functions: baseline.length, matching, differing, missing, extra };
+// The facts the parity rows compare, read off a Graph: resolved module edges, each function's
+// position and name, and every call edge with the declaration it names.
+function graphFacts(graph) {
+  return {
+    moduleEdges: graph.modules.flatMap((m) =>
+      m.importEdges
+        .filter((e) => e.target !== null)
+        .map((e) => `${m.file} -> ${e.target} ${e.kind}${e.typeOnly ? " type" : ""}`),
+    ),
+    functions: graph.functions.map((f) => `${f.id} @${f.startLine}-${f.endLine} ${f.kind}`),
+    callees: graph.functions.flatMap((f) =>
+      (f.edges?.calls ?? []).map(
+        (c) => `${f.id} :${c.line} -> ${c.calleeId}${c.declaration ? ` (${c.declaration})` : ""}`,
+      ),
+    ),
+  };
 }
 
-// Compared over the caller files both programs hold: `loadEdgeProject` adds every visible
-// source file to the tsconfig's program, while tsgo opens the tsconfig's own file set (which
-// may exclude tests and examples). ts-morph records calls inside discovered functions only, so
-// tsgo's call sites are kept when they fall inside one of ts-morph's function spans.
-function calleeParity(edge, tsgo) {
-  const spans = new Map();
-  for (const [file, start, end] of edge.spans) {
-    const list = spans.get(file) ?? [];
-    list.push([start, end]);
-    spans.set(file, list);
-  }
-  const shared = new Set(tsgo.programFiles);
-  const inFunction = (c) => (spans.get(c.file) ?? []).some(([s, e]) => c.line >= s && c.line <= e);
-  const tsgoKeys = tsgo.callees.filter(inFunction).map((c) => `${c.file}:${c.line}->${c.key}`);
-  const baseline = edge.callees.filter((k) => shared.has(k.slice(0, k.indexOf(":"))));
+function parityAgainst(baselineFile, edge) {
+  if (!baselineFile || edge.error) return null;
+  const baseline = graphFacts(JSON.parse(fs.readFileSync(baselineFile, "utf8")));
+  const candidate = graphFacts(edge.graph);
   return {
-    ...setDiff(baseline, tsgoKeys),
-    outsideTsconfig: new Set(edge.callees).size - new Set(baseline).size,
+    moduleEdges: setDiff(baseline.moduleEdges, candidate.moduleEdges),
+    functions: setDiff(baseline.functions, candidate.functions),
+    callees: setDiff(baseline.callees, candidate.callees),
   };
 }
 
@@ -648,6 +338,25 @@ function row(name, r, parity, note = "") {
   return `| ${name} | ${sec(r.wallMs)}${work} | ${mb(r.peakKb)} | ${parity}${note} |`;
 }
 
+const counts = (d) => `${d.matching} match / ${d.missing} missing / ${d.extra} extra`;
+
+function parityLines(parity) {
+  if (parity === null) return ["No `--baseline`: parity not measured."];
+  const out = [
+    "| Parity against the ts-morph baseline | Result |",
+    "|---|---|",
+    `| module edges (resolved, in the file set) | ${counts(parity.moduleEdges)} |`,
+    `| functions (id, lines, kind) | ${counts(parity.functions)} |`,
+    `| callee edges (caller, line, callee, declaration) | ${counts(parity.callees)} |`,
+  ];
+  for (const [name, diff] of Object.entries(parity)) {
+    for (const side of ["missing", "extra"]) {
+      for (const example of diff.examples[side]) out.push(`- ${name} ${side}: \`${example}\``);
+    }
+  }
+  return out;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args[0] === "--child") return runChild(args.slice(1));
@@ -655,6 +364,7 @@ async function main() {
     args,
     allowPositionals: true,
     options: {
+      baseline: { type: "string" },
       codegraph: { type: "boolean", default: false },
       runs: { type: "string", default: "3" },
       json: { type: "string" },
@@ -681,12 +391,10 @@ async function main() {
   // alike; the row reports the median wall and the median peak.
   const plan = {
     floor: () => nodeChild(flavour, "floor", target, tmp),
-    cheap: () => nodeChild(flavour, "tsmorph-cheap", target, tmp),
-    edge: () => nodeChild(flavour, "tsmorph-edge", target, tmp),
-    oxc: () => nodeChild(flavour, "oxc", target, tmp),
+    cheap: () => nodeChild(flavour, "cheap", target, tmp),
+    edge: () => nodeChild(flavour, "edge", target, tmp),
     tsgoCheck: () => checkRun(flavour, bin.tsgo, ["-p", tsconfig, ...tsgoArgs]),
     tscCheck: () => checkRun(flavour, process.execPath, [bin.tsc, "-p", tsconfig]),
-    tsgoCallees: () => nodeChild(flavour, "tsgo-callees", target, tmp, [tsconfig]),
     ...(opts.codegraph ? { codegraph: () => codegraphRun(flavour, target, tmp) } : {}),
   };
   const samples = Object.fromEntries(Object.keys(plan).map((k) => [k, []]));
@@ -707,61 +415,44 @@ async function main() {
       peakKb: ok.some((r) => r.peakKb == null) ? null : median(ok.map((r) => r.peakKb)),
     };
   };
-  const { floor, cheap, edge, oxc, tsgoCheck, tscCheck, tsgoCallees } = Object.fromEntries(
+  const { floor, cheap, edge, tsgoCheck, tscCheck } = Object.fromEntries(
     Object.entries(samples).map(([k, v]) => [k, pick(v)]),
   );
   const codegraph = samples.codegraph ? pick(samples.codegraph) : null;
+  const parity = parityAgainst(opts.baseline, edge);
+  const edgeFacts = edge.error ? null : graphFacts(edge.graph);
 
-  const edgeOk = !edge.error;
-  const oxcOk = !oxc.error;
-  const edges = edgeOk && oxcOk ? setDiff(edgeKeys(edge.edges), edgeKeys(oxc.edges)) : null;
-  const clusters =
-    edgeOk && oxcOk ? clusterParity(edge.clustersImportOnly, oxc.clustersImportOnly) : null;
-  const checkerDrop = edgeOk ? clusterParity(edge.clusters, edge.clustersImportOnly) : null;
-  const tokens = edgeOk && oxcOk ? tokenParity(edge.tokens, oxc.tokens) : null;
-  const callees = edgeOk && !tsgoCallees.error ? calleeParity(edge, tsgoCallees) : null;
-
-  const noBaseline = "no ts-morph edge baseline on this target";
-  const oxcParity = edges
-    ? `edges ${edges.matching} match / ${edges.missing} missing / ${edges.extra} extra; ` +
-      `clusters (imports only) ${clusters.identical ? "identical" : `${clusters.moved} of ${clusters.compared} named files moved`}, ${clusters.clusters}; ` +
-      `name tokens ${tokens.matching}/${tokens.functions} match, ${tokens.differing} differ, ${tokens.missing} missing, ${tokens.extra} extra`
-    : noBaseline;
   const lines = [
     `### Target \`${label}\``,
     "",
-    `${cheap.files ?? "?"} files parsed by ts-morph cheap; ${oxc.files ?? "?"} by oxc` +
+    `${cheap.files ?? "?"} files parsed` +
       `${synthesized ? "; checkers ran against a synthesized tsconfig (the target has none)" : ""}. ` +
       `Median of ${runs} run(s); load average at start: ${load}.`,
     "",
-    "| Engine | Wall (process) | Peak RSS | Parity |",
+    "| Engine | Wall (process) | Peak RSS | Output |",
     "|---|---|---|---|",
     row("harness floor (node + tsx + imports, no work)", floor, "subtract from every node row"),
-    row("ts-morph cheap (`loadCheapProject` + `assembleGraph`)", cheap, "baseline (syntax)"),
     row(
-      "ts-morph edge (`loadEdgeProject` + `assembleGraphWithEdges` + clusters)",
-      edge,
-      edgeOk
-        ? `baseline; ${new Set(edgeKeys(edge.edges)).size} distinct resolved module edges; call edges ${checkerDrop.identical ? "do not change" : `move ${checkerDrop.moved} of ${checkerDrop.compared} named files in`} the cluster partition`
-        : "",
+      "cheap pass (oxc: `loadCheapProject` + `assembleGraph`)",
+      cheap,
+      `${cheap.functions ?? "?"} functions`,
     ),
-    row("oxc (`oxc-parser` + `oxc-resolver`: import graph, clusters, name tokens)", oxc, oxcParity),
     row(
-      `tsgo full check (\`tsgo --noEmit\`)`,
+      "edge pass (oxc + tsgo: `loadEdgeProject` + `assembleGraphWithEdges` + clusters)",
+      edge,
+      edgeFacts === null
+        ? ""
+        : `${new Set(edgeFacts.moduleEdges).size} resolved module edges; ${edgeFacts.callees.length} callee edges`,
+    ),
+    row(
+      `tsgo full check (\`tsgo --noEmit\`, ${bin.tsgoVersion})`,
       tsgoCheck,
-      `${tsgoCheck.diagnostics ?? "?"} diagnostics (cost proxy, no parity)`,
+      `${tsgoCheck.diagnostics ?? "?"} diagnostics (cost proxy)`,
     ),
     row(
       `tsc full check (\`tsc --noEmit\`, TypeScript ${bin.tscVersion})`,
       tscCheck,
       `${tscCheck.diagnostics ?? "?"} diagnostics`,
-    ),
-    row(
-      "tsgo callee resolution (`unstable/sync` API)",
-      tsgoCallees,
-      callees
-        ? `callee edges vs \`resolveCallees\`: ${callees.matching} match / ${callees.missing} missing / ${callees.extra} extra over the files tsgo's tsconfig holds; ${callees.outsideTsconfig} ts-morph callee edges sit in files it excludes`
-        : `${tsgoCallees.callSites ?? "?"} call sites resolved; ${noBaseline}`,
     ),
   ];
   if (codegraph !== null) {
@@ -774,28 +465,16 @@ async function main() {
       ),
     );
   }
-  const phases = {
-    cheap: cheap.phases,
-    edge: edge.phases,
-    oxc: oxc.phases,
-    tsgoCallees: tsgoCallees.phases,
-  };
-  lines.push("", `Phases of the last run (ms): \`${JSON.stringify(phases)}\``);
+  lines.push("", ...parityLines(parity));
+  lines.push(
+    "",
+    `Phases of the last run (ms): \`${JSON.stringify({ cheap: cheap.phases, edge: edge.phases })}\``,
+  );
   process.stdout.write(`${lines.join("\n").replaceAll(repoRoot, "<repo>")}\n`);
 
   const jsonOut = opts.json;
   if (jsonOut) {
-    const strip = ({
-      stdout,
-      stderr,
-      edges: e,
-      tokens: t,
-      callees: c,
-      spans,
-      clusters: cl,
-      clustersImportOnly,
-      ...rest
-    }) => rest;
+    const strip = ({ stdout, stderr, graph, ...rest }) => rest;
     fs.writeFileSync(
       jsonOut,
       JSON.stringify(
@@ -809,15 +488,14 @@ async function main() {
           memoryGb: Math.round(os.totalmem() / 1024 ** 3),
           versions: { tsgo: bin.tsgoVersion, tsc: bin.tscVersion },
           engines: {
+            floor: strip(floor),
             cheap: strip(cheap),
             edge: strip(edge),
-            oxc: strip(oxc),
             tsgoCheck: strip(tsgoCheck),
             tscCheck: strip(tscCheck),
-            tsgoCallees: strip(tsgoCallees),
             codegraph: codegraph && strip(codegraph),
           },
-          parity: { edges, clusters, checkerDrop, tokens, callees },
+          parity,
         },
         null,
         2,

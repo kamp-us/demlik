@@ -1,4 +1,3 @@
-import { Node, type SourceFile } from "ts-morph";
 import { isTestFile } from "../extract/functions.js";
 import {
   type CommentSpan,
@@ -7,7 +6,8 @@ import {
   commentLineSpan,
   moduleLoc,
 } from "../extract/metrics.js";
-import { discoverPackageRoots, loadCheapProject, toRelative } from "../extract/project.js";
+import { discoverPackageRoots, loadCheapProject } from "../extract/project.js";
+import type { SyntaxFile } from "../syntax/file.js";
 import {
   bucketRecord,
   bucketsIn,
@@ -73,15 +73,15 @@ export function governedRatio(
   return ratioOf(row.proseLines + row.mechanicalLines, row.codeLines);
 }
 
-function firstNonImportStart(sourceFile: SourceFile): number {
-  for (const statement of sourceFile.getStatements()) {
-    if (!Node.isImportDeclaration(statement)) return statement.getStart();
+function firstNonImportStart(syntax: SyntaxFile): number {
+  for (const statement of syntax.program.body) {
+    if (statement.type !== "ImportDeclaration") return syntax.tsStart(statement);
   }
   return Number.POSITIVE_INFINITY;
 }
 
 function tallyBuckets(
-  sourceFile: SourceFile,
+  sourceFile: SyntaxFile,
   ranges: readonly CommentSpan[],
 ): { lines: Record<CommentBucket, number>; counts: Record<CommentBucket, number> } {
   const lines = bucketRecord(() => 0);
@@ -111,8 +111,8 @@ function tallyBuckets(
   return { lines, counts };
 }
 
-function countBlankLines(sourceFile: SourceFile, loc: number, commentLines: Set<number>): number {
-  const text = sourceFile.getFullText().split("\n");
+function countBlankLines(sourceFile: SyntaxFile, loc: number, commentLines: Set<number>): number {
+  const text = sourceFile.text.split("\n");
   let blank = 0;
   for (let line = 1; line <= loc; line++) {
     if (commentLines.has(line)) continue;
@@ -136,7 +136,7 @@ function classLines(lines: Record<CommentBucket, number>): {
 }
 
 function censusFile(
-  sourceFile: SourceFile,
+  sourceFile: SyntaxFile,
   file: string,
 ): { row: CommentFileRow; counts: Record<CommentBucket, number> } {
   const ranges = collectModuleCommentRanges(sourceFile);
@@ -249,14 +249,10 @@ export function loadCommentCensus(rootAbsolute: string): CommentCensus {
 
   const rows: CommentFileRow[] = [];
   const perFileCounts: Record<CommentBucket, number>[] = [];
-  for (const sourceFile of sourceFiles) {
-    const { row, counts } = censusFile(
-      sourceFile,
-      toRelative(rootAbsolute, sourceFile.getFilePath()),
-    );
+  for (const unit of sourceFiles) {
+    const { row, counts } = censusFile(unit.syntax, unit.file);
     rows.push(row);
     perFileCounts.push(counts);
-    sourceFile.forgetDescendants();
   }
 
   const { totals, buckets } = summarize(rows, perFileCounts);

@@ -1,4 +1,4 @@
-import { ts } from "ts-morph";
+import { type Program, parseSnippet } from "../engine/oxc.js";
 
 export const COMMENT_BUCKETS = [
   "pragma",
@@ -77,29 +77,31 @@ export function commentBody(text: string): string {
     .trim();
 }
 
-function isLoneLiteral(statements: ts.NodeArray<ts.Statement>): boolean {
+type Statement = Program["body"][number];
+
+function isLoneLiteral(statements: readonly Statement[]): boolean {
   const only = statements.length === 1 ? statements[0] : undefined;
-  if (only === undefined || !ts.isExpressionStatement(only)) return false;
-  const kind = only.expression.kind;
-  return (
-    kind === ts.SyntaxKind.Identifier ||
-    kind === ts.SyntaxKind.StringLiteral ||
-    kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral
-  );
+  if (only === undefined || only.type !== "ExpressionStatement") return false;
+  const expression = only.expression;
+  if (expression.type === "Identifier") return true;
+  if (expression.type === "Literal") return typeof expression.value === "string";
+  return expression.type === "TemplateLiteral" && expression.expressions.length === 0;
+}
+
+// TypeScript's parser accepts a `return` outside any function and leaves it to the checker to
+// object; oxc's refuses it, so a body that fails as a module is read again as a function body.
+function snippetStatements(body: string): readonly Statement[] | null {
+  const program = parseSnippet(body);
+  if (program !== null) return program.body;
+  const wrapped = parseSnippet(`function snippet() {\n${body}\n}`);
+  const fn = wrapped?.body[0];
+  return fn?.type === "FunctionDeclaration" && fn.body !== null ? fn.body.body : null;
 }
 
 function parsesAsTypeScript(body: string): boolean {
-  const parsed = ts.createSourceFile(
-    "comment.tsx",
-    body,
-    ts.ScriptTarget.Latest,
-    false,
-    ts.ScriptKind.TSX,
-  );
-  const diagnostics = parsed.parseDiagnostics;
-  if (!Array.isArray(diagnostics) || diagnostics.length > 0) return false;
-  if (parsed.statements.length === 0) return false;
-  return !isLoneLiteral(parsed.statements);
+  const statements = snippetStatements(body);
+  if (statements === null || statements.length === 0) return false;
+  return !isLoneLiteral(statements);
 }
 
 export function isCommentedOutCode(body: string): boolean {

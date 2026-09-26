@@ -121,7 +121,7 @@ export function loadEnvKeyReport(rootAbsolute: string, repoRoot: string): EnvKey
     for (const k of m.envKeys) candidateNames.add(k);
     for (const k of m.devVarsKeys) candidateNames.add(k);
   }
-  const rawScan = scanEnvKeys(sourceFiles, rootAbsolute, candidateNames);
+  const rawScan = scanEnvKeys(sourceFiles, candidateNames);
   const scan: EnvKeyScan = {
     ...rawScan,
     reads: rawScan.reads.map((r) => ({

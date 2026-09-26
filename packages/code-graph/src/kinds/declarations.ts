@@ -1,37 +1,40 @@
-import {
-  type MethodDeclaration,
-  Node,
-  type ObjectLiteralExpression,
-  Scope,
-  SyntaxKind,
-} from "ts-morph";
+import type { TypeContext } from "../checker/context.js";
+import * as ts from "../engine/tsgo.js";
 import { type CompiledRule, matchingRules } from "./rules.js";
 
-function baseClassName(method: MethodDeclaration): string | null {
-  const owner = method.getParent();
-  if (!Node.isClassDeclaration(owner) && !Node.isClassExpression(owner)) return null;
-  const heritage = owner.getExtends();
+function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
+  const modifiers = (node as { modifiers?: readonly ts.Node[] }).modifiers;
+  return modifiers?.some((m) => m.kind === kind) ?? false;
+}
+
+function baseClassName(ctx: TypeContext, method: ts.MethodDeclaration): string | null {
+  const owner = method.parent;
+  if (!ts.isClassDeclaration(owner) && !ts.isClassExpression(owner)) return null;
+  const heritage = owner.heritageClauses
+    ?.find((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword)
+    ?.types.at(0);
   if (heritage === undefined) return null;
-  const text = heritage.getExpression().getText();
+  const text = ctx.text(heritage.expression);
   return text.slice(text.lastIndexOf(".") + 1);
 }
 
-function isPublicInstanceMethod(method: MethodDeclaration): boolean {
+function isPublicInstanceMethod(method: ts.MethodDeclaration): boolean {
   return (
-    !method.isStatic() &&
-    method.getScope() === Scope.Public &&
-    !Node.isPrivateIdentifier(method.getNameNode())
+    !hasModifier(method, ts.SyntaxKind.StaticKeyword) &&
+    !hasModifier(method, ts.SyntaxKind.PrivateKeyword) &&
+    !hasModifier(method, ts.SyntaxKind.ProtectedKeyword) &&
+    !ts.isPrivateIdentifier(method.name)
   );
 }
 
 export function publicMethodRulesByBaseClass(
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
   rules: readonly CompiledRule[],
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  for (const [node, id] of nodeToId) {
-    if (!Node.isMethodDeclaration(node) || !isPublicInstanceMethod(node)) continue;
-    const base = baseClassName(node);
+  for (const [node, id] of ctx.nodeToId) {
+    if (!ts.isMethodDeclaration(node) || !isPublicInstanceMethod(node)) continue;
+    const base = baseClassName(ctx, node);
     if (base === null) continue;
     const keys = matchingRules(rules, base);
     if (keys.length > 0) out.set(id, keys);
@@ -39,44 +42,48 @@ export function publicMethodRulesByBaseClass(
   return out;
 }
 
-function owningObjectLiteral(node: Node): ObjectLiteralExpression | null {
-  const parent = node.getParent();
-  if (Node.isMethodDeclaration(node) && Node.isObjectLiteralExpression(parent)) return parent;
-  if (!Node.isArrowFunction(node) && !Node.isFunctionExpression(node)) return null;
-  if (!Node.isPropertyAssignment(parent)) return null;
-  const owner = parent.getParent();
-  return Node.isObjectLiteralExpression(owner) ? owner : null;
+function owningObjectLiteral(node: ts.Node): ts.ObjectLiteralExpression | null {
+  const parent = node.parent;
+  if (ts.isMethodDeclaration(node) && ts.isObjectLiteralExpression(parent)) return parent;
+  if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return null;
+  if (!ts.isPropertyAssignment(parent)) return null;
+  const owner = parent.parent;
+  return ts.isObjectLiteralExpression(owner) ? owner : null;
 }
 
-function siblingPropertyNames(literal: ObjectLiteralExpression): string[] {
+function siblingPropertyNames(ctx: TypeContext, literal: ts.ObjectLiteralExpression): string[] {
   const names: string[] = [];
-  for (const property of literal.getProperties()) {
+  for (const property of literal.properties) {
     if (
-      Node.isPropertyAssignment(property) ||
-      Node.isShorthandPropertyAssignment(property) ||
-      Node.isMethodDeclaration(property)
+      ts.isPropertyAssignment(property) ||
+      ts.isShorthandPropertyAssignment(property) ||
+      ts.isMethodDeclaration(property)
     ) {
-      names.push(property.getName());
+      names.push(ctx.text(property.name));
     }
   }
   return names;
 }
 
-function guardKeys(literal: ObjectLiteralExpression, rules: readonly CompiledRule[]): string[] {
+function guardKeys(
+  ctx: TypeContext,
+  literal: ts.ObjectLiteralExpression,
+  rules: readonly CompiledRule[],
+): string[] {
   return [
-    ...new Set(siblingPropertyNames(literal).flatMap((name) => matchingRules(rules, name))),
+    ...new Set(siblingPropertyNames(ctx, literal).flatMap((name) => matchingRules(rules, name))),
   ].sort((a, b) => a.localeCompare(b));
 }
 
 export function siblingPropertyRules(
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
   rules: readonly CompiledRule[],
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  for (const [node, id] of nodeToId) {
+  for (const [node, id] of ctx.nodeToId) {
     const literal = owningObjectLiteral(node);
     if (literal === null) continue;
-    const keys = guardKeys(literal, rules);
+    const keys = guardKeys(ctx, literal, rules);
     if (keys.length > 0) out.set(id, keys);
   }
   return out;
@@ -89,99 +96,114 @@ const TYPE_FIELD_ATTACHERS: ReadonlySet<string> = new Set([
   "interfaceFields",
 ]);
 
-function propertyNamed(literal: ObjectLiteralExpression, name: string): Node | undefined {
-  return literal
-    .getProperties()
-    .find(
-      (p) => (Node.isPropertyAssignment(p) || Node.isMethodDeclaration(p)) && p.getName() === name,
-    );
+function propertyNamed(
+  ctx: TypeContext,
+  literal: ts.ObjectLiteralExpression,
+  name: string,
+): ts.Node | undefined {
+  return literal.properties.find(
+    (p) => (ts.isPropertyAssignment(p) || ts.isMethodDeclaration(p)) && ctx.text(p.name) === name,
+  );
 }
 
-function declarationOf(expression: Node | undefined): Node | null {
-  if (expression === undefined || !Node.isIdentifier(expression)) return null;
-  const symbol = expression.getSymbol();
+function declarationOf(ctx: TypeContext, expression: ts.Node | undefined): ts.Node | null {
+  if (expression === undefined || !ts.isIdentifier(expression)) return null;
+  const symbol = ctx.symbolOf(expression);
   if (symbol === undefined) return null;
-  return (symbol.getAliasedSymbol() ?? symbol).getDeclarations()[0] ?? null;
+  return ctx.declarationsOf(ctx.aliasedSymbol(symbol) ?? symbol)[0] ?? null;
 }
 
-function refsDefinedBy(typeConfig: ObjectLiteralExpression): Node[] {
-  const call = typeConfig.getParent();
-  if (!Node.isCallExpression(call)) return [];
-  const callee = call.getExpression();
-  if (Node.isPropertyAccessExpression(callee) && callee.getName() === "implement") {
-    const ref = declarationOf(callee.getExpression());
+function refsDefinedBy(ctx: TypeContext, typeConfig: ts.ObjectLiteralExpression): ts.Node[] {
+  const call = typeConfig.parent;
+  if (!ts.isCallExpression(call)) return [];
+  const callee = call.expression;
+  if (ts.isPropertyAccessExpression(callee) && ctx.text(callee.name) === "implement") {
+    const ref = declarationOf(ctx, callee.expression);
     return ref === null ? [] : [ref];
   }
-  const refs: Node[] = [];
-  const named = declarationOf(call.getArguments()[0]);
+  const refs: ts.Node[] = [];
+  const named = declarationOf(ctx, call.arguments[0]);
   if (named !== null) refs.push(named);
-  const owner = call.getParent();
-  if (Node.isVariableDeclaration(owner)) refs.push(owner);
+  const owner = call.parent;
+  if (ts.isVariableDeclaration(owner)) refs.push(owner);
   return refs;
 }
 
-function typeConfigOwning(fieldsProperty: Node): ObjectLiteralExpression | null {
-  if (!Node.isPropertyAssignment(fieldsProperty) && !Node.isMethodDeclaration(fieldsProperty)) {
+function typeConfigOwning(
+  ctx: TypeContext,
+  fieldsProperty: ts.Node,
+): ts.ObjectLiteralExpression | null {
+  if (!ts.isPropertyAssignment(fieldsProperty) && !ts.isMethodDeclaration(fieldsProperty)) {
     return null;
   }
-  if (fieldsProperty.getName() !== "fields") return null;
-  const literal = fieldsProperty.getParent();
-  return Node.isObjectLiteralExpression(literal) ? literal : null;
+  if (ctx.text(fieldsProperty.name) !== "fields") return null;
+  const literal = fieldsProperty.parent;
+  return ts.isObjectLiteralExpression(literal) ? literal : null;
 }
 
-function scopedTypeRefs(
-  nodeToId: Map<Node, string>,
-  rules: readonly CompiledRule[],
-): Map<Node, string[]> {
-  const scoped = new Map<Node, string[]>();
-  const files = new Set([...nodeToId.keys()].map((node) => node.getSourceFile()));
+function objectLiteralsIn(source: ts.SourceFile): ts.ObjectLiteralExpression[] {
+  const out: ts.ObjectLiteralExpression[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isObjectLiteralExpression(node)) out.push(node);
+    node.forEachChild(visit);
+  };
+  source.forEachChild(visit);
+  return out;
+}
+
+function scopedTypeRefs(ctx: TypeContext, rules: readonly CompiledRule[]): Map<ts.Node, string[]> {
+  const scoped = new Map<ts.Node, string[]>();
+  const files = new Set([...ctx.nodeToId.keys()].map((node) => node.getSourceFile()));
   for (const file of files) {
-    for (const literal of file.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
-      if (propertyNamed(literal, "fields") === undefined) continue;
-      const keys = guardKeys(literal, rules);
+    for (const literal of objectLiteralsIn(file)) {
+      if (propertyNamed(ctx, literal, "fields") === undefined) continue;
+      const keys = guardKeys(ctx, literal, rules);
       if (keys.length === 0) continue;
-      for (const ref of refsDefinedBy(literal)) scoped.set(ref, keys);
+      for (const ref of refsDefinedBy(ctx, literal)) scoped.set(ref, keys);
     }
   }
   return scoped;
 }
 
-function skipsTypeScopes(node: Node): boolean {
+function skipsTypeScopes(ctx: TypeContext, node: ts.Node): boolean {
   const literal = owningObjectLiteral(node);
   if (literal === null) return false;
-  const skip = propertyNamed(literal, "skipTypeScopes");
+  const skip = propertyNamed(ctx, literal, "skipTypeScopes");
   return (
-    Node.isPropertyAssignment(skip) && skip.getInitializer()?.getKind() === SyntaxKind.TrueKeyword
+    skip !== undefined &&
+    ts.isPropertyAssignment(skip) &&
+    skip.initializer.kind === ts.SyntaxKind.TrueKeyword
   );
 }
 
 function typeGuardOf(
-  node: Node,
-  scoped: ReadonlyMap<Node, string[]>,
+  ctx: TypeContext,
+  node: ts.Node,
+  scoped: ReadonlyMap<ts.Node, string[]>,
   rules: readonly CompiledRule[],
 ): string[] {
-  for (const ancestor of node.getAncestors()) {
-    const typeConfig = typeConfigOwning(ancestor);
-    if (typeConfig !== null) return guardKeys(typeConfig, rules);
-    if (!Node.isCallExpression(ancestor)) continue;
-    const callee = ancestor.getExpression();
-    if (!Node.isPropertyAccessExpression(callee)) continue;
-    if (!TYPE_FIELD_ATTACHERS.has(callee.getName())) continue;
-    const ref = declarationOf(ancestor.getArguments()[0]);
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+    const typeConfig = typeConfigOwning(ctx, ancestor);
+    if (typeConfig !== null) return guardKeys(ctx, typeConfig, rules);
+    if (!ts.isCallExpression(ancestor)) continue;
+    const callee = ancestor.expression;
+    if (!ts.isPropertyAccessExpression(callee)) continue;
+    if (!TYPE_FIELD_ATTACHERS.has(ctx.text(callee.name))) continue;
+    const ref = declarationOf(ctx, ancestor.arguments[0]);
     return ref === null ? [] : (scoped.get(ref) ?? []);
   }
   return [];
 }
 
 export function typeScopeRules(
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
   rules: readonly CompiledRule[],
 ): Map<string, string[]> {
-  const scoped = scopedTypeRefs(nodeToId, rules);
+  const scoped = scopedTypeRefs(ctx, rules);
   const out = new Map<string, string[]>();
-  for (const [node, id] of nodeToId) {
-    if (skipsTypeScopes(node)) continue;
-    const keys = typeGuardOf(node, scoped, rules);
+  for (const [node, id] of ctx.nodeToId) {
+    if (skipsTypeScopes(ctx, node)) continue;
+    const keys = typeGuardOf(ctx, node, scoped, rules);
     if (keys.length > 0) out.set(id, keys);
   }
   return out;

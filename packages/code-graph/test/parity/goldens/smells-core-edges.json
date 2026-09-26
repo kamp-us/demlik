@@ -1,0 +1,105 @@
+exit 0
+[
+  {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/cg/collapse/gate.ts",
+      "id": "src/cg/collapse/gate.ts:runCollapseGate",
+      "startLine": 57,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 6
+  },
+  {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/cg/collapse/render.ts",
+      "id": "src/cg/collapse/render.ts:renderCollapse",
+      "startLine": 127,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 6
+  },
+  {
+    "kind": "directory-sprawl",
+    "severity": "warn",
+    "target": {
+      "dir": "src/cg/render",
+      "type": "directory"
+    },
+    "threshold": 10,
+    "value": 13
+  },
+  {
+    "kind": "high-fan-in",
+    "severity": "warn",
+    "target": {
+      "file": "src/cg/render/json.ts",
+      "id": "src/cg/render/json.ts:stableStringify",
+      "startLine": 16,
+      "type": "function"
+    },
+    "threshold": 10,
+    "value": 18
+  },
+  {
+    "kind": "big-file",
+    "severity": "high",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "type": "module"
+    },
+    "threshold": 400,
+    "value": 1401
+  },
+  {
+    "kind": "long-function",
+    "severity": "high",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:definedAgent",
+      "startLine": 695,
+      "type": "function"
+    },
+    "threshold": 60,
+    "value": 133
+  },
+  {
+    "kind": "deep-call-chain",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:machineWith",
+      "startLine": 702,
+      "type": "function"
+    },
+    "threshold": 5,
+    "value": 6
+  },
+  {
+    "kind": "long-function",
+    "severity": "warn",
+    "target": {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:machineWith",
+      "startLine": 702,
+      "type": "function"
+    },
+    "threshold": 60,
+    "value": 68
+  },
+  {
+    "kind": "big-file",
+    "severity": "high",
+    "target": {
+      "file": "src/tea/runtime-types.ts",
+      "type": "module"
+    },
+    "threshold": 400,
+    "value": 1501
+  }
+]

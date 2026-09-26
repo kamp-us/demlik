@@ -29,13 +29,13 @@ When sent to refactor folder `X`, the agent's first moves are Bash calls, not Re
 
 ## 3. Architecture
 
-- **ts-morph is the parser for everything.** No hand-rolled parsing, ever. Pinned version (comment/JSDoc range behavior is version-sensitive).
+- **Two engines behind one seam (`src/engine/`).** oxc (`oxc-parser` + `oxc-resolver`) reads syntax and resolves module specifiers; tsgo (`@typescript/native-preview`, its `unstable/sync` API, pinned to one exact build) answers symbol questions. `src/engine/tsgo.ts` is the only module that imports tsgo, and oxc is imported only under `src/engine/` (`seam.test.ts` holds both). No hand-rolled parsing, ever; comment ranges follow TypeScript's leading/trailing rules (`src/syntax/trivia.ts`).
 - **Two-pass loading:**
-  1. **Cheap pass** — `Project.addSourceFilesAtPaths(glob)`, **no tsconfig**, syntactic getters only. Fills `name, file, lines, loc, commentLines, nestingDepth, complexity, imports`. The TS type-checker is never built (lazy), so this is fast. `provenance.pass = "cheap"`.
-  2. **Edge pass** — load via the target's nearest `tsConfigFilePath` so module resolution works. Resolves `calls[]`; `calledBy[]` is derived by **inverting** `calls[]` (never `findReferences`, which forces the whole monorepo into RAM). `provenance.pass = "edges"`.
+  1. **Cheap pass** — every visible source file parsed by oxc, **no tsconfig**, syntax only. Fills `name, file, lines, loc, commentLines, nestingDepth, complexity, imports`. No checker is started, so this is fast. `provenance.pass = "cheap"`.
+  2. **Edge pass** — the target's nearest tsconfig drives module resolution (oxc-resolver) and a tsgo program over that tsconfig's files plus every loaded file. Resolves `calls[]`; `calledBy[]` is derived by **inverting** `calls[]` (never `findReferences`, which forces the whole monorepo into RAM). `provenance.pass = "edges"`. `--boundaries` reads only the import edges, so it never starts tsgo.
 
 **The edge pass is opt-in.** Only `calls`/`calledBy`/`importedBy`/`callChainDepth` and the smells `high-fan-in` + `deep-call-chain` require it. It runs when **any** of these is passed: `--blast <id>` (required — blast radius is a callers query), `--deep` (implies edges + monorepo scope), or `--edges` (opt-in; makes summary/plan/smells/graph include edge data + edge smells). With no flag the run stays cheap/fast (cheap-pass smells only, plus `directory-sprawl` which needs no type info — see §8-C4).
-- **Node→id map.** During function enumeration (A1) build a `ts-morph Node → FunctionNode.id` map and reuse it for all edge resolution (C1). Never re-derive ids by re-matching line numbers.
+- **Node→id map.** Function enumeration (A1) runs on oxc's tree; the edge pass joins each function to its node in tsgo's tree by TypeScript start position and node kind, once, and every rule that reads a symbol resolves through that `tsgo Node → FunctionNode.id` map (C1).
 - **Determinism:** **every** array in the output is sorted by a total order and deduped; JSON is serialized with sorted object keys. No `Date`, no random. Same input → same bytes. (Sort keys per array type in §6/§8.)
 
 ## 4. Module layout
@@ -43,7 +43,7 @@ When sent to refactor folder `X`, the agent's first moves are Bash calls, not Re
 ```
 packages/code-graph/
   SPEC.md                 ← this file
-  package.json            @demlik/code-graph, type:module, bin:{code-graph}; deps incl. pinned ts-morph
+  package.json            @demlik/code-graph, type:module, bin:{code-graph}; deps incl. oxc and an exact tsgo pin
   tsconfig.json           standalone strict ESM config
   tsup.config.ts          ESM build
   src/
@@ -61,6 +61,10 @@ packages/code-graph/
       metrics.ts          ONE AST walk per function: loc, commentLines, nestingDepth, complexity (B)
       edges.ts            calls[] resolve (C1) → invert to calledBy (C2); imports/importedBy; call-chain (C5)
       directories.ts      group files by directory (C4)
+    engine/     the seam: oxc.ts (oxc-parser + oxc-resolver), tsgo.ts (the one tsgo import), seam.test.ts
+    syntax/     file.ts (oxc's tree, parents, TypeScript-shaped children, lines), trivia.ts (TypeScript's
+                comment ranges), imports.ts (import literals and their resolution)
+    checker/    context.ts: the tsgo program and the join from oxc's functions to tsgo's nodes
     smells/
       rules.ts            the keyed rule table RULES: Record<SmellKind, Rule> — SSOT for kinds + thresholds
       plan.ts             ranking score + --by axes (§7)

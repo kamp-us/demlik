@@ -149,7 +149,7 @@ function violationOf(ctx: EdgeContext): BoundaryViolation | null {
 
 export function analyzeBoundaries(
   scope: string,
-  modules: readonly ModuleNode[],
+  modules: readonly Pick<ModuleNode, "file" | "importEdges">[],
   rules: BoundaryRules,
 ): ScopeBoundaryReport {
   const features = rules.features[scope] ?? [];

@@ -1,5 +1,6 @@
 import path from "node:path";
-import { Node } from "ts-morph";
+import type { TypeContext } from "../checker/context.js";
+import * as ts from "../engine/tsgo.js";
 import type { CrossRuntimeEdge } from "../schema.js";
 import type { ResolvedCallee } from "./callee/resolve.js";
 import type { BindingCatalog, BindingDecl, ServiceManifest } from "./wrangler-config.js";
@@ -17,26 +18,27 @@ function methodKey(dir: string, className: string, method: string): string {
   return `${dir}|${className}|${method}`;
 }
 
-function enclosingClassName(node: Node): string | null {
-  const parent = node.getParent();
+function enclosingClassName(ctx: TypeContext, node: ts.Node): string | null {
+  const parent = node.parent;
   if (parent === undefined) return null;
-  if (Node.isClassDeclaration(parent)) return parent.getName() ?? "default";
-  if (Node.isClassExpression(parent)) {
-    const name = parent.getName();
-    if (name !== undefined) return name;
-    const owner = parent.getParent();
-    if (owner !== undefined && Node.isVariableDeclaration(owner)) return owner.getName();
+  if (ts.isClassDeclaration(parent)) return parent.name?.text ?? "default";
+  if (ts.isClassExpression(parent)) {
+    if (parent.name !== undefined) return parent.name.text;
+    const owner = parent.parent;
+    if (owner !== undefined && ts.isVariableDeclaration(owner)) return ctx.text(owner.name);
   }
   return null;
 }
 
-function bindingCallShape(callExpr: Node): { binding: string; method: string } | null {
-  if (!Node.isCallExpression(callExpr)) return null;
-  const method = callExpr.getExpression();
-  if (!Node.isPropertyAccessExpression(method)) return null;
-  const receiver = method.getExpression();
-  if (!Node.isPropertyAccessExpression(receiver)) return null;
-  return { binding: receiver.getName(), method: method.getName() };
+function bindingCallShape(
+  ctx: TypeContext,
+  callExpr: ts.CallExpression,
+): { binding: string; method: string } | null {
+  const method = callExpr.expression;
+  if (!ts.isPropertyAccessExpression(method)) return null;
+  const receiver = method.expression;
+  if (!ts.isPropertyAccessExpression(receiver)) return null;
+  return { binding: ctx.text(receiver.name), method: ctx.text(method.name) };
 }
 
 export function ownerOf(
@@ -53,7 +55,7 @@ export function ownerOf(
 }
 
 export type CrossRuntimeResolver = {
-  resolve(callExpr: Node, callerId: string, callerFile: string): ResolvedCallee | null;
+  resolve(callExpr: ts.CallExpression, callerId: string, callerFile: string): ResolvedCallee | null;
   edges(): CrossRuntimeEdge[];
 };
 
@@ -61,39 +63,47 @@ export type CrossRuntimeInput = {
   catalog: BindingCatalog;
   rootAbsolute: string;
   repoRoot: string;
-  nodeToId: Map<Node, string>;
+  ctx: TypeContext;
 };
 
-function wrappingExportNames(method: Node, className: string): string[] {
+function topLevelVariables(source: ts.SourceFile): ts.VariableDeclaration[] {
+  const out: ts.VariableDeclaration[] = [];
+  for (const statement of source.statements) {
+    if (ts.isVariableStatement(statement)) out.push(...statement.declarationList.declarations);
+  }
+  return out;
+}
+
+function wrappingExportNames(ctx: TypeContext, method: ts.Node, className: string): string[] {
   const names: string[] = [];
-  for (const variable of method.getSourceFile().getVariableDeclarations()) {
-    const initializer = variable.getInitializer();
-    if (!Node.isCallExpression(initializer)) continue;
-    const wrapsClass = initializer
-      .getArguments()
-      .some((argument) => Node.isIdentifier(argument) && argument.getText() === className);
-    if (wrapsClass) names.push(variable.getName());
+  for (const variable of topLevelVariables(method.getSourceFile())) {
+    const initializer = variable.initializer;
+    if (initializer === undefined || !ts.isCallExpression(initializer)) continue;
+    const wrapsClass = initializer.arguments.some(
+      (argument) => ts.isIdentifier(argument) && ctx.text(argument) === className,
+    );
+    if (wrapsClass) names.push(ctx.text(variable.name));
   }
   return names;
 }
 
-function classNamesOf(method: Node): string[] {
-  const className = enclosingClassName(method);
+function classNamesOf(ctx: TypeContext, method: ts.Node): string[] {
+  const className = enclosingClassName(ctx, method);
   if (className === null) return [];
-  return [className, ...wrappingExportNames(method, className)];
+  return [className, ...wrappingExportNames(ctx, method, className)];
 }
 
 function buildMethodIndex(
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
   toRepoRelative: (file: string) => string,
 ): Map<string, string[]> {
   const index = new Map<string, string[]>();
-  for (const [node, id] of nodeToId) {
-    if (!Node.isMethodDeclaration(node)) continue;
-    const repoFile = toRepoRelative(toRelativeFileOf(node));
-    for (const className of classNamesOf(node)) {
+  for (const [node, id] of ctx.nodeToId) {
+    if (!ts.isMethodDeclaration(node)) continue;
+    const repoFile = toRepoRelative(absoluteFileOf(ctx, node));
+    for (const className of classNamesOf(ctx, node)) {
       for (const dir of ancestorDirs(repoFile)) {
-        const key = methodKey(dir, className, node.getName());
+        const key = methodKey(dir, className, ctx.text(node.name));
         const bucket = index.get(key);
         if (bucket === undefined) index.set(key, [id]);
         else bucket.push(id);
@@ -104,20 +114,18 @@ function buildMethodIndex(
   return index;
 }
 
-export function methodIdsOfClasses(
-  nodeToId: Map<Node, string>,
-  classNames: ReadonlySet<string>,
-): Set<string> {
+export function methodIdsOfClasses(ctx: TypeContext, classNames: ReadonlySet<string>): Set<string> {
   const ids = new Set<string>();
-  for (const [node, id] of nodeToId) {
-    if (!Node.isMethodDeclaration(node)) continue;
-    if (classNamesOf(node).some((name) => classNames.has(name))) ids.add(id);
+  for (const [node, id] of ctx.nodeToId) {
+    if (!ts.isMethodDeclaration(node)) continue;
+    if (classNamesOf(ctx, node).some((name) => classNames.has(name))) ids.add(id);
   }
   return ids;
 }
 
-function toRelativeFileOf(node: Node): string {
-  return node.getSourceFile().getFilePath().split(path.sep).join("/");
+function absoluteFileOf(ctx: TypeContext, node: ts.Node): string {
+  const source = node.getSourceFile();
+  return (ctx.unitOf(source)?.absolutePath ?? source.fileName).split(path.sep).join("/");
 }
 
 function ancestorDirs(file: string): string[] {
@@ -198,18 +206,18 @@ function distinctEdges(collected: readonly CrossRuntimeEdge[]): CrossRuntimeEdge
 }
 
 export function createCrossRuntimeResolver(input: CrossRuntimeInput): CrossRuntimeResolver {
-  const { catalog, rootAbsolute, repoRoot, nodeToId } = input;
+  const { catalog, rootAbsolute, repoRoot, ctx } = input;
   const repoPosix = repoRoot.split(path.sep).join("/");
   const toRepoRelative = (absPosix: string): string =>
     absPosix.startsWith(`${repoPosix}/`) ? absPosix.slice(repoPosix.length + 1) : absPosix;
 
-  const index = buildMethodIndex(nodeToId, toRepoRelative);
+  const index = buildMethodIndex(ctx, toRepoRelative);
   const dirOfService = serviceDirectories(catalog);
   const collected: CrossRuntimeEdge[] = [];
 
   return {
     resolve(callExpr, callerId, callerFile) {
-      const shape = bindingCallShape(callExpr);
+      const shape = bindingCallShape(ctx, callExpr);
       if (shape === null) return null;
       const repoFile = toRepoRelative(
         `${rootAbsolute.split(path.sep).join("/")}/${callerFile}`.replace(/\/\.\//g, "/"),
@@ -227,7 +235,7 @@ export function createCrossRuntimeResolver(input: CrossRuntimeInput): CrossRunti
         bindingKind: decl.kind,
         callerId,
         calleeId,
-        line: callExpr.getStartLineNumber(),
+        line: ctx.startLine(callExpr),
         method: shape.method,
         ownerService: owner.service,
         reason,

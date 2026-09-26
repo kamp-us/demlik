@@ -1,0 +1,14 @@
+exit 1
+{
+  "passed": false,
+  "scopesChecked": 1,
+  "violations": [
+    {
+      "ceiling": 3,
+      "delta": 3,
+      "direction": "EXCEEDED",
+      "measured": 6,
+      "scope": "services/svc"
+    }
+  ]
+}

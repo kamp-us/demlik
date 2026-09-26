@@ -1,0 +1,529 @@
+exit 0
+{
+  "clusters": {
+    "algorithm": "louvain-deterministic",
+    "clusterCount": 2,
+    "clusteredFileCount": 4,
+    "excludedTestFileCount": 0,
+    "isolatedFileCount": 0,
+    "modularity": 0,
+    "scatteredClusters": [],
+    "splitDirectories": [
+      {
+        "clusterCount": 2,
+        "clusters": [
+          {
+            "clusterId": "c1",
+            "files": [
+              "orphan.workflow.ts",
+              "platform.ts"
+            ]
+          },
+          {
+            "clusterId": "c2",
+            "files": [
+              "scan.workflow.ts",
+              "store.ts"
+            ]
+          }
+        ],
+        "dir": ".",
+        "fileCount": 4,
+        "isolatedFiles": []
+      }
+    ]
+  },
+  "crossRuntime": {
+    "census": [
+      {
+        "binding": "ORPHAN_WORKFLOW",
+        "bindingKind": "workflow",
+        "callSites": 0,
+        "ownerService": "store",
+        "targetClass": "OrphanWorkflow",
+        "targetService": "store"
+      },
+      {
+        "binding": "SCAN_WORKFLOW",
+        "bindingKind": "workflow",
+        "callSites": 1,
+        "ownerService": "store",
+        "targetClass": "ScanWorkflow",
+        "targetService": "store"
+      }
+    ],
+    "configFiles": [
+      "wrangler.toml"
+    ],
+    "edges": [
+      {
+        "binding": "SCAN_WORKFLOW",
+        "bindingKind": "workflow",
+        "calleeId": "scan.workflow.ts:run",
+        "callerId": "store.ts:startScan",
+        "line": 7,
+        "method": "create",
+        "ownerService": "store",
+        "reason": null,
+        "targetClass": "ScanWorkflow",
+        "targetService": "store"
+      }
+    ],
+    "unparsedConfigs": []
+  },
+  "directories": [
+    {
+      "dir": ".",
+      "fileCount": 4,
+      "files": [
+        "orphan.workflow.ts",
+        "platform.ts",
+        "scan.workflow.ts",
+        "store.ts"
+      ],
+      "functionCount": 7,
+      "smells": []
+    }
+  ],
+  "functions": [
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 0,
+        "calledBy": [
+          {
+            "callerId": "orphan.workflow.ts:run",
+            "line": 9
+          }
+        ],
+        "calls": [
+          {
+            "calleeId": "external:insert",
+            "constArgs": [],
+            "declaration": "drizzle-orm:PgDatabase.insert",
+            "line": 4
+          }
+        ]
+      },
+      "endLine": 5,
+      "file": "orphan.workflow.ts",
+      "id": "orphan.workflow.ts:persistOrphan",
+      "isExported": true,
+      "isTest": false,
+      "kind": "function",
+      "loc": 3,
+      "name": "persistOrphan",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "evidence": [
+          "db-write"
+        ],
+        "kind": "effect"
+      },
+      "smells": [],
+      "startLine": 3
+    },
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 1,
+        "calledBy": [],
+        "calls": [
+          {
+            "calleeId": "orphan.workflow.ts:persistOrphan",
+            "constArgs": [],
+            "declaration": null,
+            "line": 9
+          }
+        ]
+      },
+      "endLine": 10,
+      "file": "orphan.workflow.ts",
+      "id": "orphan.workflow.ts:run",
+      "isExported": false,
+      "isTest": false,
+      "kind": "method",
+      "loc": 3,
+      "name": "run",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "kind": "plain"
+      },
+      "smells": [],
+      "startLine": 8
+    },
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 0,
+        "calledBy": [
+          {
+            "callerId": "scan.workflow.ts:run",
+            "line": 9
+          }
+        ],
+        "calls": [
+          {
+            "calleeId": "external:insert",
+            "constArgs": [],
+            "declaration": "drizzle-orm:PgDatabase.insert",
+            "line": 4
+          }
+        ]
+      },
+      "endLine": 5,
+      "file": "scan.workflow.ts",
+      "id": "scan.workflow.ts:persistScan",
+      "isExported": true,
+      "isTest": false,
+      "kind": "function",
+      "loc": 3,
+      "name": "persistScan",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "evidence": [
+          "db-write"
+        ],
+        "kind": "effect"
+      },
+      "smells": [],
+      "startLine": 3
+    },
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 1,
+        "calledBy": [
+          {
+            "callerId": "store.ts:startScan",
+            "line": 7
+          }
+        ],
+        "calls": [
+          {
+            "calleeId": "scan.workflow.ts:persistScan",
+            "constArgs": [],
+            "declaration": null,
+            "line": 9
+          }
+        ]
+      },
+      "endLine": 10,
+      "file": "scan.workflow.ts",
+      "id": "scan.workflow.ts:run",
+      "isExported": false,
+      "isTest": false,
+      "kind": "method",
+      "loc": 3,
+      "name": "run",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "kind": "plain"
+      },
+      "smells": [],
+      "startLine": 8
+    },
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 2,
+        "calledBy": [
+          {
+            "callerId": "store.ts:fetch",
+            "line": 17
+          }
+        ],
+        "calls": [
+          {
+            "calleeId": "scan.workflow.ts:run",
+            "constArgs": [],
+            "declaration": null,
+            "line": 7
+          }
+        ]
+      },
+      "endLine": 8,
+      "file": "store.ts",
+      "id": "store.ts:startScan",
+      "isExported": false,
+      "isTest": false,
+      "kind": "method",
+      "loc": 3,
+      "name": "startScan",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "evidence": [
+          "worker-entrypoint-method"
+        ],
+        "guards": [],
+        "kind": "entry",
+        "reach": "service-binding"
+      },
+      "smells": [],
+      "startLine": 6
+    },
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 0,
+        "calledBy": [],
+        "calls": [
+          {
+            "calleeId": "external:get",
+            "constArgs": [],
+            "declaration": "workspace:Workflow.get",
+            "line": 11
+          }
+        ]
+      },
+      "endLine": 12,
+      "file": "store.ts",
+      "id": "store.ts:inspectOrphan",
+      "isExported": false,
+      "isTest": false,
+      "kind": "method",
+      "loc": 3,
+      "name": "inspectOrphan",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "evidence": [
+          "worker-entrypoint-method"
+        ],
+        "guards": [],
+        "kind": "entry",
+        "reach": "service-binding"
+      },
+      "smells": [],
+      "startLine": 10
+    },
+    {
+      "commentLines": 0,
+      "complexity": 2,
+      "edges": {
+        "callChainDepth": 3,
+        "calledBy": [],
+        "calls": [
+          {
+            "calleeId": "external:endsWith",
+            "constArgs": [],
+            "declaration": "typescript:String.endsWith",
+            "line": 17
+          },
+          {
+            "calleeId": "store.ts:startScan",
+            "constArgs": [],
+            "declaration": null,
+            "line": 17
+          }
+        ]
+      },
+      "endLine": 19,
+      "file": "store.ts",
+      "id": "store.ts:fetch",
+      "isExported": false,
+      "isTest": false,
+      "kind": "method",
+      "loc": 4,
+      "name": "fetch",
+      "nestingDepth": 0,
+      "nodeKind": {
+        "evidence": [
+          "worker-handler"
+        ],
+        "guards": [],
+        "kind": "entry",
+        "reach": "public"
+      },
+      "smells": [],
+      "startLine": 16
+    }
+  ],
+  "interfaceWidth": {
+    "packages": [
+      {
+        "exportCount": 2,
+        "exports": [
+          {
+            "externalConsumers": [],
+            "file": "orphan.workflow.ts",
+            "id": "orphan.workflow.ts:persistOrphan",
+            "name": "persistOrphan",
+            "startLine": 3
+          },
+          {
+            "externalConsumers": [],
+            "file": "scan.workflow.ts",
+            "id": "scan.workflow.ts:persistScan",
+            "name": "persistScan",
+            "startLine": 3
+          }
+        ],
+        "package": "",
+        "zeroConsumerCount": 2
+      }
+    ],
+    "totalExports": 2,
+    "totalZeroConsumer": 2
+  },
+  "modules": [
+    {
+      "commentLines": 0,
+      "file": "orphan.workflow.ts",
+      "functionIds": [
+        "orphan.workflow.ts:persistOrphan",
+        "orphan.workflow.ts:run"
+      ],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "./platform",
+          "target": "platform.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [],
+      "imports": [
+        "./platform"
+      ],
+      "isTest": false,
+      "loc": 12,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "platform.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "export-from",
+          "specifier": "drizzle-orm",
+          "target": null,
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [
+        "orphan.workflow.ts",
+        "scan.workflow.ts",
+        "store.ts"
+      ],
+      "imports": [
+        "drizzle-orm"
+      ],
+      "isTest": false,
+      "loc": 8,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "scan.workflow.ts",
+      "functionIds": [
+        "scan.workflow.ts:persistScan",
+        "scan.workflow.ts:run"
+      ],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "./platform",
+          "target": "platform.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [],
+      "imports": [
+        "./platform"
+      ],
+      "isTest": false,
+      "loc": 16,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "store.ts",
+      "functionIds": [
+        "store.ts:fetch",
+        "store.ts:inspectOrphan",
+        "store.ts:startScan"
+      ],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "./platform",
+          "target": "platform.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [],
+      "imports": [
+        "./platform"
+      ],
+      "isTest": false,
+      "loc": 21,
+      "smells": []
+    }
+  ],
+  "provenance": {
+    "pass": "edges",
+    "scope": "package",
+    "tsConfig": "<root>/apps/worker/tsconfig.json"
+  },
+  "reachability": {
+    "entryCount": 3,
+    "exportedCount": 2,
+    "reachableCount": 7,
+    "unguarded": [
+      {
+        "effectId": "scan.workflow.ts:persistScan",
+        "entryId": "store.ts:fetch",
+        "file": "scan.workflow.ts",
+        "path": [
+          "store.ts:fetch",
+          "store.ts:startScan",
+          "scan.workflow.ts:run",
+          "scan.workflow.ts:persistScan"
+        ],
+        "reach": "public",
+        "startLine": 3
+      }
+    ],
+    "unreachable": [],
+    "withheld": []
+  },
+  "root": "<root>/apps/worker",
+  "smells": [],
+  "stats": {
+    "fileCount": 4,
+    "functionCount": 7,
+    "parseFailures": [],
+    "smellCount": 0,
+    "totalCommentLines": 0,
+    "totalLoc": 57
+  },
+  "summary": {
+    "fileCount": 4,
+    "functionCount": 7,
+    "health": "healthy",
+    "highSeverityCount": 0,
+    "parseFailures": [],
+    "smellCount": 0,
+    "topTargets": [],
+    "worstFile": null,
+    "worstFunction": null
+  },
+  "thresholds": {
+    "bigFileLoc": 400,
+    "crossBoundaryImports": 0,
+    "deepCallChain": 5,
+    "deepNesting": 4,
+    "dependencyCycle": 1,
+    "directorySprawl": 10,
+    "highComplexity": 10,
+    "highFanIn": 10,
+    "longFunctionLoc": 60
+  }
+}

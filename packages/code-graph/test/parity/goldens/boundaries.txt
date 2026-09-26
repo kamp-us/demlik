@@ -1,0 +1,9 @@
+exit 0
+services/svc — features: audit-runs, findings
+  scanned 10 files — 6 violation(s)
+  B1 cross-feature       services/svc/src/findings/flows/lazy.ts -> services/svc/src/audit-runs/store/db.ts  ("../../audit-runs/store/db.js")
+  B1 cross-feature       services/svc/src/findings/flows/run.ts -> services/svc/src/audit-runs/store/db.ts  ("../../audit-runs/store/db.js")
+  B2 impure-rules        services/svc/src/findings/rules/score.ts -> services/svc/src/findings/store/repo.ts  ("../store/repo.js")
+  B2 impure-rules        services/svc/src/findings/rules/score.ts -> zod  ("zod")
+  B3 lib-imports-feature services/svc/src/lib/util.ts -> services/svc/src/findings/index.ts  ("../findings/index.js")
+  B4 outside-imports-feature-internal services/svc/src/index.ts -> services/svc/src/findings/store/repo.ts  ("./findings/store/repo.js")

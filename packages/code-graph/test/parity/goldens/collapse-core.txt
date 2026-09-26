@@ -1,0 +1,162 @@
+exit 0
+collapse candidates: 64 findings / 153 pairs (top 20 shown) from 5499 scored over 220 functions, minSignals=2
+a REPORT, not a gate — the graph narrows, a human judges
+  1. rank=0.5  confidence=0.5  cluster of 3 (3 pairs)
+     A src/cg/config.ts:resolveCollapseSettings  src/cg/config.ts:50
+     B src/cg/config.ts:resolveCommentCeilings  src/cg/config.ts:115
+     cost=1  callers=0 packages=1
+     + shape 1  loc 8/8 cx 2/2 nest 0/0
+     + callees 1  jaccard 1 over 3/3 callees
+     also: src/cg/config.ts:resolveThresholds
+  2. rank=0.5  confidence=0.5  cluster of 9 (29 pairs)
+     A src/cg/smells/rules.ts:evaluate#0  src/cg/smells/rules.ts:51
+     B src/cg/smells/rules.ts:evaluate#1  src/cg/smells/rules.ts:66
+     cost=1  callers=0 packages=1
+     + shape 1  loc 13/13 cx 3/3 nest 0/0
+     + name 1  shared {evaluate}
+     also: src/cg/render/ci.ts:evaluateCi, src/cg/smells/rules.ts:evaluate#2, src/cg/smells/rules.ts:evaluate#3, src/cg/smells/rules.ts:evaluate#4, src/cg/smells/rules.ts:evaluate#5, src/cg/smells/rules.ts:evaluate#6, src/cg/smells/rules.ts:evaluate#7
+  3. rank=0.5  confidence=0.5  cluster of 5 (7 pairs)
+     A src/cg/smells/rules.ts:evaluate#5  src/cg/smells/rules.ts:126
+     B src/cg/smells/rules.ts:evaluate#6  src/cg/smells/rules.ts:142
+     cost=1  callers=0 packages=1
+     + shape 1  loc 14/14 cx 4/4 nest 0/0
+     + name 1  shared {evaluate}
+     also: src/cg/smells/rules.ts:evaluate#3, src/cg/smells/rules.ts:evaluate#4, src/cg/smells/rules.ts:evaluate#7
+  4. rank=0.5  confidence=0.5  cluster of 5 (7 pairs)
+     A src/cg/smells/rules.ts:evaluate#8  src/cg/smells/rules.ts:173
+     B src/cg/smells/rules.ts:evaluate#9  src/cg/smells/rules.ts:188
+     cost=1  callers=0 packages=1
+     + shape 1  loc 13/13 cx 5/5 nest 0/0
+     + name 1  shared {evaluate}
+     also: src/cg/smells/rules.ts:evaluate#3, src/cg/smells/rules.ts:evaluate#5, src/cg/smells/rules.ts:evaluate#6
+  5. rank=0.4583  confidence=0.4583  cluster of 3 (3 pairs)
+     A src/cg/query/unguarded.ts:findUnguarded  src/cg/query/unguarded.ts:77
+     B src/cg/render/analysis.ts:renderUnguarded  src/cg/render/analysis.ts:129
+     cost=1  callers=0 packages=1
+     + shape 0.8333  loc 10/10 cx 2/3 nest 1/1
+     + name 1  shared {unguarded}
+     also: src/cg/render/analysis.ts:unguardedSection
+  6. rank=0.4583  confidence=0.4583  cluster of 3 (3 pairs)
+     A src/cg/smells/evaluate.ts:smellsForFunction  src/cg/smells/evaluate.ts:31
+     B src/cg/smells/evaluate.ts:smellsForModule  src/cg/smells/evaluate.ts:57
+     cost=1  callers=0 packages=1
+     + shape 0.7333  loc 16/20 cx 3/3 nest 2/2
+     + callees 0.6  jaccard 0.6 over 4/4 callees
+     + name 0.5  shared {smell}
+     also: src/cg/smells/evaluate.ts:smellsForDirectory
+  7. rank=0.4375  confidence=0.4375  cluster of 3 (3 pairs)
+     A src/cg/render/smells.ts:renderSmells  src/cg/render/smells.ts:109
+     B src/cg/smells/evaluate.ts:compareFlatSmells  src/cg/smells/evaluate.ts:89
+     cost=1  callers=0 packages=1
+     + shape 0.75  loc 6/5 cx 2/2 nest 1/0
+     + name 1  shared {smell}
+     also: src/cg/render/tree.ts:smellSuffix
+  8. rank=0.3244  confidence=0.3244
+     A src/resume/resume.ts:recoverTransientGraphStep  src/resume/resume.ts:49
+     B src/resume/resume.ts:reDispatchOrGiveUp  src/resume/resume.ts:34
+     cost=1  callers=0 packages=1
+     + shape 0.5833  loc 17/14 cx 3/2 nest 1/1
+     + callees 0.7143  jaccard 0.7143 over 6/6 callees
+  9. rank=0.3125  confidence=0.625  cluster of 3 (3 pairs)
+     A src/cg/collapse/signals.ts:calleeSignal  src/cg/collapse/signals.ts:87
+     B src/cg/collapse/signals.ts:callerSignal  src/cg/collapse/signals.ts:98
+     cost=2  callers=1 packages=1
+     + shape 1  loc 10/10 cx 4/4 nest 0/0
+     + callees 1  jaccard 1 over 2/2 callees
+     + name 0.5  shared {signal}
+     also: src/cg/collapse/signals.ts:nameSignal
+ 10. rank=0.3042  confidence=0.3042
+     A src/cg/render/analysis.ts:renderInterfaceWidth  src/cg/render/analysis.ts:198
+     B src/cg/render/analysis.ts:renderUnreachable  src/cg/render/analysis.ts:91
+     cost=1  callers=0 packages=1
+     + shape 0.4667  loc 18/21 cx 7/6 nest 2/1
+     + callees 0.75  jaccard 0.75 over 3/4 callees
+ 11. rank=0.2901  confidence=0.75  cluster of 4 (5 pairs)
+     A src/cg/render/analysis.ts:envWithheldTally  src/cg/render/analysis.ts:237
+     B src/cg/render/analysis.ts:withheldTally  src/cg/render/analysis.ts:85
+     cost=2.585  callers=2 packages=1
+     + shape 1  loc 5/5 cx 3/3 nest 1/1
+     + callees 1  jaccard 1 over 4/4 callees
+     + name 1  shared {tally,withheld}
+     also: src/cg/query/clusters.ts:bump, src/cg/query/louvain.ts:addWeight
+ 12. rank=0.2396  confidence=0.4792  cluster of 4 (6 pairs)
+     A src/cg/collapse/render.ts:partialTwinLines  src/cg/collapse/render.ts:84
+     B src/cg/collapse/signals.ts:toTwin  src/cg/collapse/signals.ts:31
+     cost=2  callers=1 packages=1
+     + shape 0.9167  loc 14/15 cx 3/3 nest 1/1
+     + name 1  shared {twin}
+     also: src/cg/collapse/ceilings.ts:renderPartialTwinRatchet, src/cg/collapse/partial.ts:findPartialTwins
+ 13. rank=0.2334  confidence=0.4667  cluster of 3 (3 pairs)
+     A src/cg/render/html-model.ts:buildGraph  src/cg/render/html-model.ts:195
+     B src/resume/resume.ts:recoverTransientGraphStep  src/resume/resume.ts:49
+     cost=2  callers=1 packages=1
+     + shape 0.8667  loc 19/17 cx 3/3 nest 1/1
+     + name 1  shared {graph}
+     also: src/cg/render/html-model.ts:toGraphNode
+ 14. rank=0.2292  confidence=0.2292
+     A src/cg/query/interface-width.ts:findInterfaceWidth  src/cg/query/interface-width.ts:32
+     B src/cg/query/unreachable.ts:findUnreachable  src/cg/query/unreachable.ts:68
+     cost=1  callers=0 packages=1
+     + shape 0.4167  loc 37/31 cx 7/8 nest 2/1
+     + name 0.5  shared {find}
+ 15. rank=0.2292  confidence=0.4583
+     A src/cg/render/html-model.ts:includedEdges  src/cg/render/html-model.ts:177
+     B src/cg/render/html-model.ts:includedSet  src/cg/render/html-model.ts:159
+     cost=2  callers=1 packages=1
+     + shape 0.8333  loc 17/17 cx 7/8 nest 2/2
+     + name 1  shared {included}
+ 16. rank=0.2084  confidence=0.4167
+     A src/cg/render/analysis.ts:renderCycles  src/cg/render/analysis.ts:227
+     B src/cg/render/analysis.ts:renderCyclesHuman  src/cg/render/analysis.ts:217
+     cost=2  callers=1 packages=1
+     + shape 0.6667  loc 9/9 cx 3/4 nest 1/2
+     + name 1  shared {cycl}
+ 17. rank=0.1979  confidence=0.3958  cluster of 3 (3 pairs)
+     A src/cg/render/analysis.ts:scatteredLines  src/cg/render/analysis.ts:178
+     B src/cg/render/analysis.ts:splitLines  src/cg/render/analysis.ts:165
+     cost=2  callers=1 packages=1
+     + shape 0.5833  loc 9/12 cx 3/4 nest 2/2
+     + callees 1  jaccard 1 over 4/4 callees
+     also: src/cg/collapse/render.ts:skippedLines
+ 18. rank=0.1934  confidence=0.5  cluster of 4 (5 pairs)
+     A src/cg/collapse/candidates.ts:addTo  src/cg/collapse/candidates.ts:59
+     B src/cg/collapse/candidates.ts:remember  src/cg/collapse/candidates.ts:167
+     cost=2.585  callers=2 packages=1
+     + shape 1  loc 5/5 cx 2/2 nest 0/0
+     + callees 1  jaccard 1 over 3/3 callees
+     also: src/cg/collapse/partial.ts:keep, src/cg/query/louvain.ts:addWeight
+ 19. rank=0.1934  confidence=0.5
+     A src/cg/render/smells.ts:locator  src/cg/render/smells.ts:13
+     B src/cg/smells/evaluate.ts:smellLocator  src/cg/smells/evaluate.ts:95
+     cost=2.585  callers=2 packages=1
+     + shape 1  loc 15/15 cx 4/4 nest 1/1
+     + name 1  shared {locator}
+ 20. rank=0.1854  confidence=0.4792  cluster of 4 (6 pairs)
+     A src/cg/render/analysis.ts:renderEnvKeysHuman  src/cg/render/analysis.ts:243
+     B src/cg/render/blast.ts:renderBlastHuman  src/cg/render/blast.ts:125
+     cost=2.585  callers=2 packages=1
+     + shape 0.75  loc 16/17 cx 4/4 nest 1/2
+     + callees 0.6667  jaccard 0.6667 over 3/2 callees
+     + name 0.5  shared {human}
+     also: src/cg/render/analysis.ts:renderCrossRuntimeHuman, src/cg/render/analysis.ts:renderCyclesHuman
+
+partial twins: 3 — one decision block over the same named constants, two different outcomes
+GATEABLE (--collapse --ci) — each is intended and said so in the PR body, or it is a defect
+  1. block=4  constants=1
+     A src/cg/render/analysis.ts:scatteredLines  src/cg/render/analysis.ts:181
+     B src/cg/render/analysis.ts:splitLines  src/cg/render/analysis.ts:168
+     shared block (4 calls)  slice -> push -> push -> fileList
+     shared constants  TOP_N
+     DIVERGES: A calls moreLine (src/cg/render/analysis.ts:185)  B calls push (src/cg/render/analysis.ts:172)
+  2. block=3  constants=2
+     A src/resume/resume.ts:recoverTransientGraphStep  src/resume/resume.ts:53
+     B src/resume/resume.ts:reDispatchOrGiveUp  src/resume/resume.ts:35
+     shared block (3 calls)  noteResumeAttemptCount -> decideResume -> log
+     shared constants  MAX_RESUME_ATTEMPTS, RESUME_BACKOFF_MAX_S
+     DIVERGES: A calls salvageCheckpoint (src/resume/resume.ts:62)  B calls finalizeFailed (src/resume/resume.ts:44)
+  3. block=3  constants=1
+     A src/cg/collapse/render.ts:partialTwinLines  src/cg/collapse/render.ts:93
+     B src/cg/collapse/render.ts:renderHuman  src/cg/collapse/render.ts:120
+     shared block (3 calls)  entries -> slice -> push
+     shared constants  HUMAN_LIMIT
+     DIVERGES: A calls formatPartialTwin (src/cg/collapse/render.ts:94)  B calls formatCluster (src/cg/collapse/render.ts:121)

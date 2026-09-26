@@ -1,20 +1,54 @@
 # Engine benchmark findings (#384)
 
-What today's ts-morph loaders cost next to oxc (syntax and module resolution) and tsgo (the
-native type checker), measured on targets in this repo that anyone can re-run. These are the
-numbers the engine follow-up decides from. This document makes no engine decision.
+What the ts-morph loaders cost next to oxc (syntax and module resolution) and tsgo (the native type
+checker), measured on targets in this repo that anyone can re-run. #397 moved code-graph onto oxc
+and tsgo on these numbers.
 
-Re-run from the repo root:
+## Since #397
+
+`engines.mjs` now measures the production passes, which run on oxc and tsgo, and checks them
+against the ts-morph engine instead of racing prototypes. ts-morph is no longer a dependency, so the
+baseline is a graph the ts-morph engine printed, taken from a checkout before #397:
 
 ```sh
-node packages/code-graph/bench/engines.mjs                 # medium: packages/code-graph
-node packages/code-graph/bench/engines.mjs .               # large: the repo root
-node packages/code-graph/bench/engines.mjs packages/tea    # largest target the edge loader can open
-node packages/code-graph/bench/engines.mjs <path> --codegraph --runs 3 --json out.json
+# on a pre-#397 checkout, once per target
+node --import tsx packages/code-graph/src/index.ts <target> --graph --edges > baseline.json
+# on this checkout
+node packages/code-graph/bench/engines.mjs <target> --baseline baseline.json
+node packages/code-graph/bench/engines.mjs <target> --codegraph --runs 3 --json out.json
 ```
 
-The script is not part of `pnpm test` or CI. `--codegraph` adds the #381 row, which fetches
-`@colbymchenry/codegraph` through `npx` on its first run.
+The parity rows compare resolved module edges, functions (id, lines, kind) and callee edges
+(caller, call line, callee, declaration) exactly. The script is not part of `pnpm test` or CI.
+`--codegraph` adds the #381 row, which fetches `@colbymchenry/codegraph` through `npx` on its first
+run.
+
+### Measured at #397
+
+Median of 3 runs each, on the machine below with other agent lanes running (load average 24 to 29
+at start). Baselines were printed by the ts-morph engine over the same trees.
+
+| Target | Cheap pass | Edge pass (+ clusters) | Module edges | Functions | Callee edges |
+|---|---|---|---|---|---|
+| `packages/code-graph` (201 files) | 3.01 s, 200 MB | 6.27 s, 292 MB | 508 / 0 / 0 | 1189 / 0 / 0 | 4410 / 0 / 0 |
+| `packages/tea` (387 files) | 1.57 s, 378 MB | 4.19 s, 653 MB | 972 / 0 / 0 | 4071 / 0 / 0 | 6225 / 15 / 15 |
+
+Parity cells read match / missing / extra. The ts-morph edge pass needed 9.53 s and 1099 MB on tea
+(the #384 table below). The 15 tea callee edges that differ all keep their caller, line and callee
+id; only the `declaration` string moved, and no node kind changed:
+
+- **A global a lib and a package both declare as values** (13 edges, plus 1 ts-morph left without a
+  declaration). `lib.dom` and `@cloudflare/workers-types` each declare `AbortController`, `crypto`,
+  `TextEncoder` and `AbortSignal`; the checker keeps whichever it merges first, and tsgo merges the
+  lib first. Example: `crypto.randomUUID()` in `src/agent/define-agent.ts:begin` names
+  `typescript:Crypto.randomUUID`, where ts-morph named `@cloudflare/workers-types:Crypto.randomUUID`.
+- **A call on a union-typed receiver** (1 edge). The declaration names whichever constituent the
+  checker lists first. Example: `data.toString()` on a `RawData` in
+  `src/node/index.ts:nodeWsRunner` names `typescript:Array.toString`, where ts-morph named
+  `typescript:Object.toString`.
+
+The rest of this document is the #384 record: the ts-morph rows below can only be re-run from a
+pre-#397 checkout.
 
 ## How the numbers were taken
 

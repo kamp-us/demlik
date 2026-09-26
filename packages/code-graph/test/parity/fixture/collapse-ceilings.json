@@ -1,0 +1,7 @@
+{
+  "default": 0,
+  "scopes": {
+    "apps/core": 1,
+    "apps/worker": 0
+  }
+}

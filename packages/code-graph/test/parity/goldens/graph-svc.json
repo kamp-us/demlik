@@ -1,0 +1,393 @@
+exit 0
+{
+  "clusters": null,
+  "crossRuntime": null,
+  "directories": [
+    {
+      "dir": "src",
+      "fileCount": 1,
+      "files": [
+        "src/index.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    },
+    {
+      "dir": "src/audit-runs",
+      "fileCount": 1,
+      "files": [
+        "src/audit-runs/index.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    },
+    {
+      "dir": "src/audit-runs/store",
+      "fileCount": 1,
+      "files": [
+        "src/audit-runs/store/db.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    },
+    {
+      "dir": "src/findings",
+      "fileCount": 1,
+      "files": [
+        "src/findings/index.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    },
+    {
+      "dir": "src/findings/flows",
+      "fileCount": 2,
+      "files": [
+        "src/findings/flows/lazy.ts",
+        "src/findings/flows/run.ts"
+      ],
+      "functionCount": 1,
+      "smells": []
+    },
+    {
+      "dir": "src/findings/rules",
+      "fileCount": 2,
+      "files": [
+        "src/findings/rules/helper.ts",
+        "src/findings/rules/score.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    },
+    {
+      "dir": "src/findings/store",
+      "fileCount": 1,
+      "files": [
+        "src/findings/store/repo.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    },
+    {
+      "dir": "src/lib",
+      "fileCount": 1,
+      "files": [
+        "src/lib/util.ts"
+      ],
+      "functionCount": 0,
+      "smells": []
+    }
+  ],
+  "functions": [
+    {
+      "commentLines": 0,
+      "complexity": 1,
+      "edges": {
+        "callChainDepth": 0,
+        "calledBy": [],
+        "calls": [
+          {
+            "calleeId": "external:(dynamic)",
+            "constArgs": [],
+            "declaration": null,
+            "line": 2
+          }
+        ]
+      },
+      "endLine": 4,
+      "file": "src/findings/flows/lazy.ts",
+      "id": "src/findings/flows/lazy.ts:loadRules",
+      "isExported": true,
+      "isTest": false,
+      "kind": "function",
+      "loc": 4,
+      "name": "loadRules",
+      "nestingDepth": 0,
+      "nodeKind": null,
+      "smells": [],
+      "startLine": 1
+    }
+  ],
+  "interfaceWidth": null,
+  "modules": [
+    {
+      "commentLines": 0,
+      "file": "src/audit-runs/index.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "export-from",
+          "specifier": "./store/db.js",
+          "target": "src/audit-runs/store/db.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [
+        "src/findings/flows/run.ts"
+      ],
+      "imports": [
+        "./store/db.js"
+      ],
+      "isTest": false,
+      "loc": 2,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/audit-runs/store/db.ts",
+      "functionIds": [],
+      "importEdges": [],
+      "importedBy": [
+        "src/audit-runs/index.ts",
+        "src/findings/flows/lazy.ts",
+        "src/findings/flows/run.ts"
+      ],
+      "imports": [],
+      "isTest": false,
+      "loc": 2,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/findings/flows/lazy.ts",
+      "functionIds": [
+        "src/findings/flows/lazy.ts:loadRules"
+      ],
+      "importEdges": [
+        {
+          "kind": "export-from",
+          "specifier": "../../audit-runs/store/db.js",
+          "target": "src/audit-runs/store/db.ts",
+          "typeOnly": false
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../rules/score.js",
+          "target": "src/findings/rules/score.ts",
+          "typeOnly": false
+        },
+        {
+          "kind": "export-from",
+          "specifier": "../rules/score.js",
+          "target": "src/findings/rules/score.ts",
+          "typeOnly": true
+        }
+      ],
+      "importedBy": [],
+      "imports": [
+        "../../audit-runs/store/db.js",
+        "../rules/score.js"
+      ],
+      "isTest": false,
+      "loc": 7,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/findings/flows/run.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "../../audit-runs/index.js",
+          "target": "src/audit-runs/index.ts",
+          "typeOnly": false
+        },
+        {
+          "kind": "static",
+          "specifier": "../../audit-runs/store/db.js",
+          "target": "src/audit-runs/store/db.ts",
+          "typeOnly": false
+        },
+        {
+          "kind": "static",
+          "specifier": "../store/repo.js",
+          "target": "src/findings/store/repo.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [
+        "src/findings/index.ts"
+      ],
+      "imports": [
+        "../../audit-runs/index.js",
+        "../../audit-runs/store/db.js",
+        "../store/repo.js"
+      ],
+      "isTest": false,
+      "loc": 5,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/findings/index.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "export-from",
+          "specifier": "./flows/run.js",
+          "target": "src/findings/flows/run.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [
+        "src/lib/util.ts"
+      ],
+      "imports": [
+        "./flows/run.js"
+      ],
+      "isTest": false,
+      "loc": 2,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/findings/rules/helper.ts",
+      "functionIds": [],
+      "importEdges": [],
+      "importedBy": [
+        "src/findings/rules/score.ts"
+      ],
+      "imports": [],
+      "isTest": false,
+      "loc": 2,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/findings/rules/score.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "../store/repo.js",
+          "target": "src/findings/store/repo.ts",
+          "typeOnly": false
+        },
+        {
+          "kind": "static",
+          "specifier": "./helper.js",
+          "target": "src/findings/rules/helper.ts",
+          "typeOnly": false
+        },
+        {
+          "kind": "static",
+          "specifier": "@acme/wire-contract",
+          "target": null,
+          "typeOnly": true
+        },
+        {
+          "kind": "static",
+          "specifier": "zod",
+          "target": null,
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [
+        "src/findings/flows/lazy.ts"
+      ],
+      "imports": [
+        "../store/repo.js",
+        "./helper.js",
+        "@acme/wire-contract",
+        "zod"
+      ],
+      "isTest": false,
+      "loc": 7,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/findings/store/repo.ts",
+      "functionIds": [],
+      "importEdges": [],
+      "importedBy": [
+        "src/findings/flows/run.ts",
+        "src/findings/rules/score.ts",
+        "src/index.ts"
+      ],
+      "imports": [],
+      "isTest": false,
+      "loc": 2,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/index.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "./findings/store/repo.js",
+          "target": "src/findings/store/repo.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [],
+      "imports": [
+        "./findings/store/repo.js"
+      ],
+      "isTest": false,
+      "loc": 3,
+      "smells": []
+    },
+    {
+      "commentLines": 0,
+      "file": "src/lib/util.ts",
+      "functionIds": [],
+      "importEdges": [
+        {
+          "kind": "static",
+          "specifier": "../findings/index.js",
+          "target": "src/findings/index.ts",
+          "typeOnly": false
+        }
+      ],
+      "importedBy": [],
+      "imports": [
+        "../findings/index.js"
+      ],
+      "isTest": false,
+      "loc": 3,
+      "smells": []
+    }
+  ],
+  "provenance": {
+    "pass": "edges",
+    "scope": "package",
+    "tsConfig": "<root>/services/svc/tsconfig.json"
+  },
+  "reachability": null,
+  "root": "<root>/services/svc",
+  "smells": [],
+  "stats": {
+    "fileCount": 10,
+    "functionCount": 1,
+    "parseFailures": [],
+    "smellCount": 0,
+    "totalCommentLines": 0,
+    "totalLoc": 35
+  },
+  "summary": {
+    "fileCount": 10,
+    "functionCount": 1,
+    "health": "healthy",
+    "highSeverityCount": 0,
+    "parseFailures": [],
+    "smellCount": 0,
+    "topTargets": [],
+    "worstFile": null,
+    "worstFunction": null
+  },
+  "thresholds": {
+    "bigFileLoc": 400,
+    "crossBoundaryImports": 0,
+    "deepCallChain": 5,
+    "deepNesting": 4,
+    "dependencyCycle": 1,
+    "directorySprawl": 10,
+    "highComplexity": 10,
+    "highFanIn": 10,
+    "longFunctionLoc": 60
+  }
+}

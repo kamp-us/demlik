@@ -1,7 +1,7 @@
 {
   "name": "@demlik/code-graph",
   "version": "0.0.3",
-  "description": "Agent-native TypeScript code-graph + smell CLI: parse a folder with ts-morph, measure every function, flag smells, and rank refactor targets as deterministic JSON.",
+  "description": "Agent-native TypeScript code-graph + smell CLI: parse a folder with oxc, resolve it with tsgo, measure every function, flag smells, and rank refactor targets as deterministic JSON.",
   "homepage": "https://github.com/kamp-us/demlik/tree/main/packages/code-graph",
   "repository": {
     "type": "git",
@@ -47,19 +47,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@typescript/native-preview": "catalog:",
     "chalk": "catalog:",
     "commander": "catalog:",
     "jsonc-parser": "catalog:",
+    "oxc-parser": "catalog:",
+    "oxc-resolver": "catalog:",
     "smol-toml": "catalog:",
-    "ts-morph": "catalog:",
     "zod": "catalog:code-graph"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
     "fast-check": "catalog:code-graph",
-    "oxc-parser": "catalog:",
-    "oxc-resolver": "catalog:",
     "tsup": "catalog:code-graph",
     "tsx": "catalog:",
     "typescript": "catalog:code-graph",

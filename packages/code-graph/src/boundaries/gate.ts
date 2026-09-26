@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { type Reporter, resolveBoundaryRules } from "../config.js";
-import { assembleGraphWithEdges } from "../extract/assemble.js";
 import { loadEdgeProject } from "../extract/project.js";
 import {
   evaluateScopeRatchet,
@@ -11,7 +10,7 @@ import {
   scopesUnder,
 } from "../ratchet/scope-count.js";
 import { stableStringify } from "../render/json.js";
-import type { Thresholds } from "../schema.js";
+import { resolveImports } from "../syntax/imports.js";
 import { analyzeBoundaries, type ScopeBoundaryReport } from "./analyze.js";
 import { renderBoundaries, renderBoundaryRatchet } from "./render.js";
 import { type BoundaryRules, CEILINGS_FILENAME } from "./rules.js";
@@ -22,7 +21,6 @@ export type BoundaryGateArgs = {
   readonly boundaryRulesFile: string | undefined;
   readonly ci: boolean;
   readonly writeCeilings: boolean;
-  readonly thresholds: Thresholds;
   readonly emit: (payload: string) => void;
   readonly report: Reporter;
   readonly json: boolean;
@@ -36,8 +34,16 @@ function analyzeScope(
 ): ScopeBoundaryReport {
   const scopeAbsolute = scope === "." ? args.repoRoot : path.join(args.repoRoot, scope);
   const loaded = loadEdgeProject(scopeAbsolute, "package", args.repoRoot);
-  const graph = assembleGraphWithEdges(loaded, args.thresholds, "package", loaded.tsConfigPath);
-  return analyzeBoundaries(scope, graph.modules, rules);
+  const { importEdgesByFile } = resolveImports(
+    loaded.rootAbsolute,
+    loaded.sourceFiles,
+    loaded.tsConfigPath,
+  );
+  const modules = loaded.sourceFiles.map(({ file }) => ({
+    file,
+    importEdges: importEdgesByFile.get(file) ?? [],
+  }));
+  return analyzeBoundaries(scope, modules, rules);
 }
 
 function analyzeAll(

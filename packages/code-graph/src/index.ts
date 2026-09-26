@@ -101,7 +101,6 @@ defineProgram()
         boundaryRulesFile: opts.boundaryRules,
         ci: opts.ci === true,
         writeCeilings: opts.writeCeilings === true,
-        thresholds,
         emit,
         report: cleanExit,
         json,

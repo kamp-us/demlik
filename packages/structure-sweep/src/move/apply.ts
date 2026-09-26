@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
-import { loadEdgeProject } from "@demlik/code-graph/project";
 import type { SourceFile } from "ts-morph";
 import { absurd } from "../absurd.js";
 import { git, trackedPaths } from "../git.js";
@@ -14,6 +13,7 @@ import {
 } from "./heal.js";
 import type { Manifest, MoveRow } from "./manifest.js";
 import { applyMoves } from "./mover.js";
+import { loadMoveProject } from "./project.js";
 
 export type RowState =
   | { readonly kind: "pending"; readonly row: MoveRow }
@@ -124,7 +124,7 @@ function moveAndMeasure(
   moved: MovedModules,
 ) {
   const scopeRoot = join(repoRoot, scope);
-  const { project } = loadEdgeProject(scopeRoot, "package", repoRoot);
+  const project = loadMoveProject(scopeRoot, repoRoot);
   const before = new Map(
     project.getSourceFiles().map((sf) => [sf, specifiersOf(sf)]),
   );

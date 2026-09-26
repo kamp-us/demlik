@@ -1,5 +1,5 @@
-import { type CallExpression, Node } from "ts-morph";
-import { toRelative } from "../project.js";
+import type { TypeContext } from "../../checker/context.js";
+import * as ts from "../../engine/tsgo.js";
 import type { FactoryResolver } from "./factory.js";
 
 export type ResolvedCallee = { calleeId: string; declaration: string | null };
@@ -8,34 +8,41 @@ function externalId(name: string): string {
   return `external:${name}`;
 }
 
-function enclosingId(node: Node, nodeToId: Map<Node, string>): string | null {
-  let current: Node | undefined = node;
+export function enclosingId(node: ts.Node, nodeToId: ReadonlyMap<ts.Node, string>): string | null {
+  let current: ts.Node | undefined = node;
   while (current) {
     const id = nodeToId.get(current);
     if (id !== undefined) return id;
-    current = current.getParent();
+    current = current.parent;
   }
   return null;
 }
 
-function isImplementation(decl: Node): boolean {
-  if (Node.isFunctionDeclaration(decl) || Node.isMethodDeclaration(decl)) {
-    return decl.hasBody();
+function isImplementation(decl: ts.Node): boolean {
+  if (ts.isFunctionDeclaration(decl) || ts.isMethodDeclaration(decl)) {
+    return decl.body !== undefined;
   }
-  if (!Node.isVariableDeclaration(decl)) return false;
-  const initializer = decl.getInitializer();
-  return Node.isArrowFunction(initializer) || Node.isFunctionExpression(initializer);
-}
-
-function workspaceId(rootAbsolute: string, decl: Node, name: string): string | null {
-  const sourceFile = decl.getSourceFile();
-  if (sourceFile.isDeclarationFile() || sourceFile.isInNodeModules()) return null;
-  if (!isImplementation(decl)) return null;
-  return `workspace:${toRelative(rootAbsolute, sourceFile.getFilePath())}:${name}`;
+  if (!ts.isVariableDeclaration(decl)) return false;
+  const initializer = decl.initializer;
+  return (
+    initializer !== undefined &&
+    (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+  );
 }
 
 const NODE_MODULES = "/node_modules/";
 const TYPES_SCOPE = "@types/";
+
+function isInNodeModules(ctx: TypeContext, source: ts.SourceFile): boolean {
+  return ctx.libraryKind(source) !== null || source.fileName.includes(NODE_MODULES);
+}
+
+function workspaceId(ctx: TypeContext, decl: ts.Node, name: string): string | null {
+  const source = decl.getSourceFile();
+  if (source.isDeclarationFile || isInNodeModules(ctx, source)) return null;
+  if (!isImplementation(decl)) return null;
+  return `workspace:${ctx.relativePath(source)}:${name}`;
+}
 
 function packageOf(filePath: string): string | null {
   const at = filePath.lastIndexOf(NODE_MODULES);
@@ -46,81 +53,115 @@ function packageOf(filePath: string): string | null {
   return name.startsWith(TYPES_SCOPE) ? name.slice(TYPES_SCOPE.length) : name;
 }
 
-function ambientModuleName(decl: Node): string | null {
-  for (const ancestor of decl.getAncestors()) {
-    if (!Node.isModuleDeclaration(ancestor)) continue;
-    const name = ancestor.getNameNode();
-    if (Node.isStringLiteral(name)) return name.getLiteralValue();
+function ambientModuleName(decl: ts.Node): string | null {
+  for (let ancestor = decl.parent; ancestor; ancestor = ancestor.parent) {
+    if (!ts.isModuleDeclaration(ancestor)) continue;
+    const name = ancestor.name;
+    if (ts.isStringLiteral(name)) return name.text;
   }
   return null;
 }
 
-function declarationOrigin(decl: Node): string {
-  return ambientModuleName(decl) ?? packageOf(decl.getSourceFile().getFilePath()) ?? "workspace";
+// The TypeScript lib files: ts-morph served them from `/node_modules/typescript/lib`, so their
+// declarations have always read as the `typescript` package's.
+function declarationOrigin(ctx: TypeContext, decl: ts.Node): string {
+  const source = decl.getSourceFile();
+  if (ctx.libraryKind(source) !== null) return ambientModuleName(decl) ?? "typescript";
+  return ambientModuleName(decl) ?? packageOf(source.fileName) ?? "workspace";
 }
 
-function ownerName(decl: Node): string | null {
-  const parent = decl.getParent();
+function ownerName(decl: ts.Node): string | null {
+  const parent = decl.parent;
   if (
-    Node.isClassDeclaration(parent) ||
-    Node.isClassExpression(parent) ||
-    Node.isInterfaceDeclaration(parent)
+    ts.isClassDeclaration(parent) ||
+    ts.isClassExpression(parent) ||
+    ts.isInterfaceDeclaration(parent)
   ) {
-    return parent.getName() ?? null;
+    return parent.name?.text ?? null;
   }
-  if (!Node.isTypeLiteral(parent)) return null;
-  const alias = parent.getParent();
-  return Node.isTypeAliasDeclaration(alias) ? alias.getName() : null;
+  if (!ts.isTypeLiteralNode(parent)) return null;
+  const alias = parent.parent;
+  return ts.isTypeAliasDeclaration(alias) ? alias.name.text : null;
 }
 
-function qualifiedDeclaration(decl: Node, name: string): string {
+function qualifiedDeclaration(ctx: TypeContext, decl: ts.Node, name: string): string {
   const owner = ownerName(decl);
   const member = owner === null ? name : `${owner}.${name}`;
-  return `${declarationOrigin(decl)}:${member}`;
+  return `${declarationOrigin(ctx, decl)}:${member}`;
 }
 
-function resolveCallee(
-  rootAbsolute: string,
-  callExpr: CallExpression,
-  nodeToId: Map<Node, string>,
-): ResolvedCallee {
-  const expression = callExpr.getExpression();
-  const external = { calleeId: externalId(simpleCalleeName(expression)), declaration: null };
-
-  const symbol = expression.getSymbol();
-  if (symbol === undefined) return external;
-  const target = symbol.getAliasedSymbol() ?? symbol;
-  const declarations = target.getDeclarations();
-  for (const decl of declarations) {
-    const id = enclosingId(decl, nodeToId);
-    if (id !== null) return { calleeId: id, declaration: null };
-  }
-  for (const decl of declarations) {
-    const id = workspaceId(rootAbsolute, decl, target.getName());
-    if (id !== null) return { calleeId: id, declaration: null };
-  }
-  const first = declarations[0];
-  if (first === undefined) return external;
-  return { ...external, declaration: qualifiedDeclaration(first, target.getName()) };
-}
-
-function simpleCalleeName(expression: Node): string {
-  if (Node.isPropertyAccessExpression(expression)) return expression.getName();
-  if (Node.isIdentifier(expression)) return expression.getText();
-  if (Node.isElementAccessExpression(expression)) {
-    const arg = expression.getArgumentExpression();
-    if (arg && Node.isStringLiteral(arg)) return arg.getLiteralValue();
+export function simpleCalleeName(ctx: TypeContext, expression: ts.Node): string {
+  if (ts.isPropertyAccessExpression(expression)) return ctx.text(expression.name);
+  if (ts.isIdentifier(expression)) return ctx.text(expression);
+  if (ts.isElementAccessExpression(expression)) {
+    const arg = expression.argumentExpression;
+    if (ts.isStringLiteral(arg)) return arg.text;
   }
   return "(dynamic)";
 }
 
+function inGlobalAugmentation(decl: ts.Node): boolean {
+  for (let ancestor = decl.parent; ancestor; ancestor = ancestor.parent) {
+    if (ts.isModuleDeclaration(ancestor) && ts.isIdentifier(ancestor.name)) {
+      if (ancestor.name.text === "global") return true;
+    }
+  }
+  return false;
+}
+
+const MERGE_RANK: Record<ts.LibraryKind, number> = { referenced: 0, root: 2 };
+
+// Where a declaration sat in the order TypeScript merged globals for ts-morph: the libs a root lib
+// references, then the program's own files and packages, then the root libs, and every
+// `declare global` augmentation after all of them. tsgo lists every lib first, so a global a
+// package and a lib both declare (`console` beside @cloudflare/workers-types, `String` beside
+// @types/node) would otherwise name a different declaration than it always has.
+function mergeRank(ctx: TypeContext, decl: ts.Node): number {
+  if (inGlobalAugmentation(decl)) return 3;
+  const library = ctx.libraryKind(decl.getSourceFile());
+  return library === null ? 1 : MERGE_RANK[library];
+}
+
+function firstDeclaration(ctx: TypeContext, declarations: readonly ts.Node[]): ts.Node | undefined {
+  let first: ts.Node | undefined;
+  let firstRank = Number.POSITIVE_INFINITY;
+  for (const decl of declarations) {
+    const rank = mergeRank(ctx, decl);
+    if (rank < firstRank) {
+      first = decl;
+      firstRank = rank;
+    }
+  }
+  return first;
+}
+
+function resolveCallee(ctx: TypeContext, callExpr: ts.CallExpression): ResolvedCallee {
+  const expression = callExpr.expression;
+  const external = { calleeId: externalId(simpleCalleeName(ctx, expression)), declaration: null };
+
+  const symbol = ctx.symbolOf(expression);
+  if (symbol === undefined) return external;
+  const target = ctx.aliasedSymbol(symbol) ?? symbol;
+  const declarations = ctx.declarationsOf(target);
+  for (const decl of declarations) {
+    const id = enclosingId(decl, ctx.nodeToId);
+    if (id !== null) return { calleeId: id, declaration: null };
+  }
+  for (const decl of declarations) {
+    const id = workspaceId(ctx, decl, target.name);
+    if (id !== null) return { calleeId: id, declaration: null };
+  }
+  const first = firstDeclaration(ctx, declarations);
+  if (first === undefined) return external;
+  return { ...external, declaration: qualifiedDeclaration(ctx, first, target.name) };
+}
+
 export function resolveCallees(
-  rootAbsolute: string,
-  callExpr: CallExpression,
-  nodeToId: Map<Node, string>,
+  ctx: TypeContext,
+  callExpr: ts.CallExpression,
   factories: FactoryResolver,
 ): ResolvedCallee[] {
   const forwarded = factories(callExpr);
-  if (forwarded.length === 0) return [resolveCallee(rootAbsolute, callExpr, nodeToId)];
+  if (forwarded.length === 0) return [resolveCallee(ctx, callExpr)];
   return forwarded.map((calleeId) => ({ calleeId, declaration: null }));
 }

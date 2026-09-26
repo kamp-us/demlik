@@ -1,0 +1,65 @@
+exit 0
+{
+  "scopes": [
+    {
+      "features": [
+        "audit-runs",
+        "findings"
+      ],
+      "filesScanned": 10,
+      "scope": "services/svc",
+      "violations": [
+        {
+          "from": "services/svc/src/findings/flows/lazy.ts",
+          "fromFeature": "findings",
+          "kind": "cross-feature",
+          "specifier": "../../audit-runs/store/db.js",
+          "to": "services/svc/src/audit-runs/store/db.ts",
+          "toFeature": "audit-runs",
+          "typeOnly": false
+        },
+        {
+          "from": "services/svc/src/findings/flows/run.ts",
+          "fromFeature": "findings",
+          "kind": "cross-feature",
+          "specifier": "../../audit-runs/store/db.js",
+          "to": "services/svc/src/audit-runs/store/db.ts",
+          "toFeature": "audit-runs",
+          "typeOnly": false
+        },
+        {
+          "feature": "findings",
+          "from": "services/svc/src/findings/rules/score.ts",
+          "kind": "impure-rules",
+          "specifier": "../store/repo.js",
+          "to": "services/svc/src/findings/store/repo.ts",
+          "typeOnly": false
+        },
+        {
+          "feature": "findings",
+          "from": "services/svc/src/findings/rules/score.ts",
+          "kind": "impure-rules",
+          "specifier": "zod",
+          "to": null,
+          "typeOnly": false
+        },
+        {
+          "from": "services/svc/src/lib/util.ts",
+          "kind": "lib-imports-feature",
+          "specifier": "../findings/index.js",
+          "to": "services/svc/src/findings/index.ts",
+          "toFeature": "findings",
+          "typeOnly": false
+        },
+        {
+          "from": "services/svc/src/index.ts",
+          "kind": "outside-imports-feature-internal",
+          "specifier": "./findings/store/repo.js",
+          "to": "services/svc/src/findings/store/repo.ts",
+          "toFeature": "findings",
+          "typeOnly": false
+        }
+      ]
+    }
+  ]
+}

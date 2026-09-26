@@ -1,4 +1,5 @@
 import path from "node:path";
+import { TypeContext } from "../checker/context.js";
 import {
   type DirectoryNode,
   type FunctionNode,
@@ -14,6 +15,7 @@ import { couplingByFile } from "../smells/coupling.js";
 import { compareFlatSmells, smellsForFunction, smellsForModule } from "../smells/evaluate.js";
 import { healthBand } from "../smells/health.js";
 import { rankPlan } from "../smells/plan.js";
+import { importDeclarationSpecifiers, resolveImports } from "../syntax/imports.js";
 import {
   type AnalysisBundle,
   type AnalysisOptions,
@@ -25,7 +27,7 @@ import { buildDirectories } from "./directories.js";
 import { type EdgeResult, resolveEdges } from "./edges.js";
 import { type DiscoveredFunction, discoverFunctions, isTestFile } from "./functions.js";
 import { computeFunctionMetrics, moduleCommentLines, moduleLoc } from "./metrics.js";
-import { discoverPackageRoots, type EdgeScope, type LoadedProject, toRelative } from "./project.js";
+import { discoverPackageRoots, type EdgeScope, type LoadedProject } from "./project.js";
 
 function smellWeight(smells: Smell[]): number {
   return smells.reduce((s, m) => s + (m.severity === "high" ? 2 : 1), 0);
@@ -44,7 +46,7 @@ function buildFunctionNodes(
   analysis: AnalysisBundle | null,
 ): FunctionNode[] {
   return fns.map((d) => {
-    const m = computeFunctionMetrics(d.node);
+    const m = computeFunctionMetrics(d);
     const fn: FunctionNode = {
       id: d.id,
       name: d.name,
@@ -79,7 +81,7 @@ function buildModuleNodes(
   edges: EdgeBundle | null,
   functions: FunctionNode[],
 ): ModuleNode[] {
-  const { rootAbsolute, sourceFiles } = loaded;
+  const { sourceFiles } = loaded;
   const idsByFile = new Map<string, string[]>();
   for (const f of functions) {
     const arr = idsByFile.get(f.file) ?? [];
@@ -87,23 +89,15 @@ function buildModuleNodes(
     idsByFile.set(f.file, arr);
   }
 
-  const modules: ModuleNode[] = sourceFiles.map((sf) => {
-    const file = toRelative(rootAbsolute, sf.getFilePath());
+  const modules: ModuleNode[] = sourceFiles.map(({ file, syntax }) => {
     const imports = edges
       ? (edges.result.importsByFile.get(file) ?? [])
-      : [
-          ...new Set(
-            sf
-              .getImportDeclarations()
-              .map((i) => i.getModuleSpecifierValue())
-              .filter((v): v is string => typeof v === "string"),
-          ),
-        ].sort((a, b) => a.localeCompare(b));
+      : importDeclarationSpecifiers(syntax);
     const functionIds = (idsByFile.get(file) ?? []).slice().sort((a, b) => a.localeCompare(b));
     const module: ModuleNode = {
       file,
-      loc: moduleLoc(sf),
-      commentLines: moduleCommentLines(sf),
+      loc: moduleLoc(syntax),
+      commentLines: moduleCommentLines(syntax),
       functionIds,
       imports,
       importedBy: edges ? (edges.result.importedByFile.get(file) ?? []) : [],
@@ -151,7 +145,7 @@ function buildSummary(
   modules: ModuleNode[],
   smellCount: number,
   highSeverityCount: number,
-  parseFailures: string[],
+  parseFailures: readonly string[],
 ): Summary {
   const ranked = rankPlan(functions, "rot");
   const flagged = ranked.filter((r) => r.components.smells > 0);
@@ -177,7 +171,7 @@ function buildSummary(
     worstFile,
     worstFunction,
     topTargets,
-    parseFailures,
+    parseFailures: [...parseFailures],
   };
 }
 
@@ -191,7 +185,7 @@ function build(
   const { rootAbsolute, sourceFiles, parseFailures } = loaded;
   const root = path.relative(process.cwd(), rootAbsolute) || ".";
 
-  const fns = discovered ?? discoverFunctions(rootAbsolute, sourceFiles).functions;
+  const fns = discovered ?? discoverFunctions(sourceFiles).functions;
   const functions = buildFunctionNodes(fns, thresholds, edges, analysis);
   const modules = buildModuleNodes(loaded, edges, functions);
   attachModuleSmells(modules, thresholds, edges, rootAbsolute);
@@ -227,7 +221,7 @@ function build(
       totalLoc: modules.reduce((s, m) => s + m.loc, 0),
       totalCommentLines: modules.reduce((s, m) => s + m.commentLines, 0),
       smellCount,
-      parseFailures,
+      parseFailures: [...parseFailures],
     },
   };
 
@@ -238,6 +232,15 @@ export function assembleGraph(loaded: LoadedProject, thresholds: Thresholds): Gr
   return build(loaded, thresholds, null, null, null);
 }
 
+function reportUnjoined(unjoined: readonly string[]): void {
+  if (unjoined.length === 0) return;
+  const shown = unjoined.slice(0, 5).join(", ");
+  const more = unjoined.length > 5 ? ", ..." : "";
+  process.stderr.write(
+    `code-graph: warning: ${unjoined.length} function(s) have no node in tsgo's tree, so their calls are not resolved: ${shown}${more}\n`,
+  );
+}
+
 export function assembleGraphWithEdges(
   loaded: LoadedProject,
   thresholds: Thresholds,
@@ -246,22 +249,21 @@ export function assembleGraphWithEdges(
   options: AnalysisOptions | null = null,
 ): Graph {
   const { rootAbsolute, sourceFiles } = loaded;
-  const { functions, nodeToId } = discoverFunctions(rootAbsolute, sourceFiles);
+  const { functions } = discoverFunctions(sourceFiles);
   const ids = functions.map((f) => f.id);
+  const imports = resolveImports(rootAbsolute, sourceFiles, tsConfig);
 
-  const prep = options === null ? null : prepareAnalysis(options, rootAbsolute, nodeToId);
-  const result = resolveEdges(rootAbsolute, sourceFiles, nodeToId, ids, prep?.resolver ?? null);
-
-  const analysis =
-    options === null || prep === null
-      ? null
-      : completeAnalysis({
-          options,
-          prep,
-          rootAbsolute,
-          sourceFiles,
-          nodeToId,
-          ...analysisInputs(functions),
-        });
-  return build(loaded, thresholds, { result, scope, tsConfig }, functions, analysis);
+  const ctx = TypeContext.open({ rootAbsolute, tsConfigPath: tsConfig, sourceFiles, functions });
+  try {
+    reportUnjoined(ctx.unjoined);
+    const prep = options === null ? null : prepareAnalysis(options, rootAbsolute, ctx);
+    const result = resolveEdges(ctx, imports, ids, prep?.resolver ?? null);
+    const analysis =
+      options === null || prep === null
+        ? null
+        : completeAnalysis({ options, prep, rootAbsolute, ctx, ...analysisInputs(functions) });
+    return build(loaded, thresholds, { result, scope, tsConfig }, functions, analysis);
+  } finally {
+    ctx.close();
+  }
 }
