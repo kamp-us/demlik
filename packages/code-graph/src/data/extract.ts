@@ -9,6 +9,7 @@ import {
 import type { DataEdge, DataReport, DataSite, UnattributedDataSite } from "../schema.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import { accessOf } from "./access.js";
+import { AliasScope } from "./alias-scope.js";
 
 type Bindings = ReadonlyMap<string, DataBindingDecl>;
 type Site = {
@@ -54,21 +55,19 @@ function localName(value: SyntaxNode | null): string | null {
   return target?.type === "Identifier" ? String(field(target, "name")) : null;
 }
 
-type Aliases = Map<string, DataBindingDecl>;
-
 // `const { DB, KV: kv } = env`.
-function declareDestructured(pattern: SyntaxNode, bindings: Bindings, aliases: Aliases): void {
+function declareDestructured(pattern: SyntaxNode, bindings: Bindings, aliases: AliasScope): void {
   for (const property of field(pattern, "properties") as SyntaxNode[]) {
     if (property.type !== "Property") continue;
     const key = keyName(property, nodeField(property, "key"));
     const decl = key === null ? undefined : bindings.get(key);
     const local = localName(nodeField(property, "value"));
-    if (decl !== undefined && local !== null) aliases.set(local, decl);
+    if (decl !== undefined && local !== null) aliases.bind(local, decl);
   }
 }
 
 // One level of aliasing: `const db = env.DB`, or a destructure off `env`.
-function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: Aliases): void {
+function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: AliasScope): void {
   if (node.type !== "VariableDeclarator") return;
   const id = nodeField(node, "id");
   const init = nodeField(node, "init");
@@ -78,7 +77,7 @@ function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: Aliases):
     return;
   }
   const decl = id.type === "Identifier" ? envBinding(init, bindings) : null;
-  if (decl !== null) aliases.set(String(field(id, "name")), decl);
+  if (decl !== null) aliases.bind(String(field(id, "name")), decl);
 }
 
 function isAliasInitializer(node: SyntaxNode, parent: SyntaxNode | undefined): boolean {
@@ -101,7 +100,7 @@ function referencedBinding(
   syntax: SyntaxFile,
   node: SyntaxNode,
   bindings: Bindings,
-  aliases: ReadonlyMap<string, DataBindingDecl>,
+  aliases: AliasScope,
 ): DataBindingDecl | null {
   const parent = syntax.parentOf(node);
   if (node.type === "MemberExpression") {
@@ -109,8 +108,8 @@ function referencedBinding(
     return decl === null || isAliasInitializer(node, parent) ? null : decl;
   }
   if (node.type !== "Identifier") return null;
-  const decl = aliases.get(String(field(node, "name")));
-  return decl !== undefined && isAliasUse(node, parent) ? decl : null;
+  const decl = aliases.resolve(String(field(node, "name")));
+  return decl !== null && isAliasUse(node, parent) ? decl : null;
 }
 
 function literalText(node: SyntaxNode | undefined): string | null {
@@ -148,7 +147,8 @@ function siteAt(syntax: SyntaxFile, ref: SyntaxNode, decl: DataBindingDecl): Sit
 type Held = { holder: DiscoveredFunction | null; site: Site };
 
 // One preorder walk of a file. Entering a discovered function hands every site below it to that
-// function, under a fresh alias scope; an anonymous callback stays with whoever holds it.
+// function; an anonymous callback stays with whoever holds it. Alias scope is a separate axis:
+// every scope-opening node, a named function or not, opens a child of the scope around it.
 function sitesOf(
   unit: SourceUnit,
   holders: ReadonlyMap<SyntaxNode, DiscoveredFunction>,
@@ -156,19 +156,15 @@ function sitesOf(
 ): Held[] {
   const { syntax } = unit;
   const held: Held[] = [];
-  const enter = (node: SyntaxNode, holder: DiscoveredFunction | null, aliases: Aliases): void => {
-    const own = holders.get(node);
-    if (own !== undefined) {
-      const scope: Aliases = new Map();
-      for (const child of syntax.children(node)) enter(child, own, scope);
-      return;
-    }
+  const enter = (node: SyntaxNode, outer: DiscoveredFunction | null, around: AliasScope): void => {
+    const holder = holders.get(node) ?? outer;
+    const aliases = around.enter(syntax, node);
     declareAliases(node, bindings, aliases);
     const decl = referencedBinding(syntax, node, bindings, aliases);
     if (decl !== null) held.push({ holder, site: siteAt(syntax, node, decl) });
     for (const child of syntax.children(node)) enter(child, holder, aliases);
   };
-  enter(syntax.program, null, new Map());
+  enter(syntax.program, null, AliasScope.root());
   return held;
 }
 

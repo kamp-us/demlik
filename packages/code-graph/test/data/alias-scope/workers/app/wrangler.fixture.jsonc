@@ -1,0 +1,10 @@
+{
+  // Committed under another name so the repo's own wrangler scans do not read it; the test
+  // renames it to wrangler.jsonc in a temp copy.
+  "name": "app",
+  "main": "src/handlers.ts",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "app", "database_id": "00000000" },
+    { "binding": "OTHER", "database_name": "other", "database_id": "00000001" }
+  ]
+}
