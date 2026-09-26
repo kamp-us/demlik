@@ -20,10 +20,13 @@ export const PROPOSE_USAGE = `structure-sweep propose <folder>... [options]
 
   --features <n>        features the prompt asks for (default: ${DEFAULT_FEATURE_COUNT})
   --config <file>       take the roles (and product line) from this vocabulary
-                        (default: four built-in roles, see the README)
+                        (default: five built-in roles, see the README)
   --graph <file>        code-graph --graph JSON: clusters and cross-runtime calls (repeatable)
-  --ref <ref>           git tree to read folders and packages from (default: HEAD)
-  --depth <n>           folder levels listed under each folder (default: ${DEFAULT_DEPTH})
+  --blind               leave out folders, packages and code-graph clusters, and name files in
+                        the content signals by opaque id, so the draft comes from the code alone
+  --ref <ref>           git tree to read folders, packages and file content from (default: HEAD)
+  --depth <n>           folder levels listed under each folder (default: ${DEFAULT_DEPTH};
+                        unused with --blind)
   --draft <file>        where the prompt says to write the config
                         (default: ${DEFAULTS.proposedConfig})
   --out <file>          signals JSON (default: ${DEFAULTS.signals})
@@ -55,6 +58,7 @@ export function proposeCommand(argv: readonly string[], cwd: string): void {
       out: { type: "string", default: DEFAULTS.signals },
       prompt: { type: "string", default: DEFAULTS.proposePrompt },
       force: { type: "boolean", default: false },
+      blind: { type: "boolean", default: false },
     },
   });
   if (positionals.length === 0)
@@ -78,6 +82,7 @@ export function proposeCommand(argv: readonly string[], cwd: string): void {
     ref: values.ref,
     scopes: positionals.map((p) => scopeOf(root, cwd, p)),
     depth: count("depth", values.depth, 1),
+    blind: values.blind,
     graphs: graphPaths.map((g) => ({
       file: shown(root, g),
       graph: readGraphFile(g),
@@ -96,8 +101,10 @@ export function proposeCommand(argv: readonly string[], cwd: string): void {
     mkdirSync(dirname(path), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(signals, null, 1)}\n`);
   writeFileSync(promptPath, prompt);
+  const { files, importClusters } = signals.content;
+  const read = `${files} files, ${importClusters.total} import clusters`;
   console.error(
-    `${signals.directories.length} folders, ${signals.packages.length} packages → ${outPath}, ${promptPath}`,
+    `${signals.blind ? `blind: ${read}` : `${signals.directories.length} folders, ${signals.packages.length} packages, ${read}`} → ${outPath}, ${promptPath}`,
   );
   console.error(
     `next: draft the config from ${promptPath}, write it to ${values.draft}, then run sweep and score`,
