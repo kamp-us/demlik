@@ -152,6 +152,21 @@ export {
   renderTerm,
   type Term,
 } from "./lowering/lower.js";
+export {
+  type FunctionSummary,
+  type Labeller,
+  type LabelRecord,
+  type LabelRequest,
+  labelOf,
+  type ReturnFact,
+  type ReturnResolution,
+  renderReturnFact,
+  resolveReturns,
+  type SccRun,
+  type Summaries,
+  type SummarizeOptions,
+  summarize,
+} from "./lowering/summarize.js";
 export { type ApplyReport, applyManifest } from "./move/apply.js";
 export { planScope } from "./move/cli.js";
 export { entryFiles } from "./move/entries.js";

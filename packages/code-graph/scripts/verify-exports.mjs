@@ -12,13 +12,16 @@ const expected = {
     "findRepoRoot",
   ],
   "@demlik/code-graph/resolve": ["loadInProcessGraph"],
+  "@demlik/code-graph/scc": ["stronglyConnectedComponents", "sccMembers"],
 };
 
 // Removed from ./project in #397 with ts-morph: the loaders returned ts-morph's Project.
 const removed = { "@demlik/code-graph/project": ["loadEdgeProject", "loadCheapProject"] };
 
 const packageDir = path.dirname(createRequire(import.meta.url).resolve("../package.json"));
-const exportMap = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")).exports;
+const exportMap = JSON.parse(
+  fs.readFileSync(path.join(packageDir, "package.json"), "utf8"),
+).exports;
 
 function typesFileOf(specifier) {
   const entry = exportMap[`.${specifier.slice("@demlik/code-graph".length)}`];
@@ -41,7 +44,11 @@ for (const [specifier, names] of Object.entries(expected)) {
     if (name in mod) failures.push(`${specifier}: still exports ${name}`);
   }
   const types = typesFileOf(specifier);
-  if (types !== null && fs.existsSync(types) && fs.readFileSync(types, "utf8").includes("ts-morph")) {
+  if (
+    types !== null &&
+    fs.existsSync(types) &&
+    fs.readFileSync(types, "utf8").includes("ts-morph")
+  ) {
     failures.push(`${specifier}: ${path.relative(packageDir, types)} names ts-morph`);
   }
 }

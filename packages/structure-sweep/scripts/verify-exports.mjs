@@ -37,6 +37,9 @@ const expected = {
     "resolveInput",
     "proposeLexicon",
     "writeLexiconDraft",
+    "summarize",
+    "resolveReturns",
+    "renderReturnFact",
   ],
 };
 
