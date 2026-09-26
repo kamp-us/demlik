@@ -9,6 +9,7 @@ import {
   Visitor,
 } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
+import { ts } from "ts-morph";
 import { type WorkingTreeChange, workingTreeChanges } from "./git.js";
 
 /**
@@ -158,13 +159,48 @@ export const resolvesNothing: SpecifierResolver = () => ({ kind: "unknown" });
 const inNodeModules = (path: string) =>
   path.split(sep).includes("node_modules");
 
+const repoPath = (root: string, path: string) =>
+  relative(root, path).split(sep).join("/");
+
 /**
- * Whether a working-tree change can move where a specifier resolves: a path appearing, vanishing
- * or changing type, or an edit to any JSON file — the tsconfig chain `extends` may name and every
- * `package.json` are JSON. An edit to a source file's content leaves every resolution where it was.
+ * The tsconfig `configFile` and every config its `extends` chain reads, repo-relative: the only
+ * files whose content decides where an alias resolves.
  */
-const movesResolution = (change: WorkingTreeChange): boolean =>
-  change.kind !== "modified" || change.path.endsWith(".json");
+function tsconfigChain(root: string, configFile: string): Set<string> {
+  const source = ts.readJsonConfigFile(configFile, ts.sys.readFile);
+  ts.parseJsonSourceFileConfigFileContent(
+    source,
+    ts.sys,
+    dirname(configFile),
+    undefined,
+    configFile,
+  );
+  return new Set(
+    [configFile, ...(source.extendedSourceFiles ?? [])].map((path) =>
+      repoPath(root, path),
+    ),
+  );
+}
+
+const within = (path: string, owned: string) =>
+  path === owned || path.startsWith(`${owned}/`);
+
+/**
+ * Whether a working-tree change can move where a specifier resolves. A path appearing, vanishing
+ * or changing type can: a specifier may name any path exactly. A content edit can only in a file
+ * resolution reads as configuration — a `package.json`, or a member of the tsconfig `chain`. The
+ * run's own files (`owned`: repo-relative files, or directories taken whole) are neither a
+ * destination nor configuration, so no change under them counts.
+ */
+const movesResolution =
+  (chain: ReadonlySet<string>, owned: readonly string[]) =>
+  (change: WorkingTreeChange): boolean => {
+    if (owned.some((path) => within(change.path, path))) return false;
+    if (change.kind !== "modified") return true;
+    return (
+      change.path.split("/").at(-1) === "package.json" || chain.has(change.path)
+    );
+  };
 
 /**
  * Resolve specifiers written in the tree `ref` names the way the scope's own build would:
@@ -172,14 +208,31 @@ const movesResolution = (change: WorkingTreeChange): boolean =>
  * resolves to the file it names. With no tsconfig at or above the scope, aliases stay `unknown`.
  * oxc-resolver reads the checkout on disk, so this throws, naming every path, when the working tree
  * at `root` differs from `ref` in anything resolution reads: an answer read off the working tree
- * would then be an answer about a tree the sweep never read.
+ * would then be an answer about a tree the sweep never read. `owned` lists the absolute paths —
+ * files, or directories taken whole — the run itself reads or writes outside resolution.
  */
 export function specifierResolver(
   root: string,
   scope: string,
   ref: string,
+  owned: readonly string[] = [],
 ): SpecifierResolver {
-  const diverging = workingTreeChanges(root, ref).filter(movesResolution);
+  let configFile: string | undefined;
+  try {
+    configFile = resolveEdgeTsConfig(join(root, scope), "package", root);
+  } catch {
+    configFile = undefined;
+  }
+  const chain =
+    configFile === undefined
+      ? new Set<string>()
+      : tsconfigChain(root, configFile);
+  const diverging = workingTreeChanges(root, ref).filter(
+    movesResolution(
+      chain,
+      owned.map((path) => repoPath(root, path)),
+    ),
+  );
   if (diverging.length > 0)
     throw new Error(
       `--redact resolves module aliases from the working tree, which differs from ${ref} in ${diverging.length} path(s) that decide where a specifier resolves:\n${diverging
@@ -188,12 +241,6 @@ export function specifierResolver(
           "\n",
         )}\nsweep --ref at a commit the working tree matches, or check out ${ref} first`,
     );
-  let configFile: string | undefined;
-  try {
-    configFile = resolveEdgeTsConfig(join(root, scope), "package", root);
-  } catch {
-    configFile = undefined;
-  }
   const factory = new ResolverFactory({
     ...(configFile === undefined ? {} : { tsconfig: { configFile } }),
     builtinModules: true,

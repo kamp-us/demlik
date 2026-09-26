@@ -113,7 +113,8 @@ export async function sweepCommand(
   const { values, positionals } = parseSweepArgs(argv);
   const root = repoRootOf(cwd);
   const selection = sweepSelection(values.files, positionals, { root, cwd });
-  const vocabulary = loadVocabulary(underRoot(root, values.config));
+  const vocabularyPath = underRoot(root, values.config);
+  const vocabulary = loadVocabulary(vocabularyPath);
   const apiKey = requireApiKey();
   const questions = sweepQuestions(vocabulary);
   const verdictsPath = underRoot(root, values.out);
@@ -129,6 +130,7 @@ export async function sweepCommand(
     ref: values.ref,
     ...selection,
     vocabulary,
+    vocabularyPath,
     jev: httpJevClient({
       questions,
       model: values.model,
