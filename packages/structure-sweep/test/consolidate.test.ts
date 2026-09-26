@@ -5,10 +5,12 @@ import { consolidateCommand } from "../src/consolidate/cli.js";
 import {
   type ClusterRow,
   type ConsolidationPlan,
+  collapseProposals,
   extractProposals,
-  type HelperPairRow,
+  type JudgedPairRow,
   mergeProposals,
 } from "../src/consolidate/plan.js";
+import { UNANSWERED } from "../src/pairs/anchor.js";
 import type { PairVerdict } from "../src/pairs/questions.js";
 import { gitIn, repo, write } from "./helpers.js";
 
@@ -24,18 +26,29 @@ const verdict = (path: string, feature: string, role: string): ClusterRow => ({
   answers: { feature: { choice: feature }, role: { choice: role } },
 });
 
-const pair = (a: string, b: string, choice: PairVerdict): HelperPairRow => {
-  const fn = (key: string) => {
-    const [path = "", fnName = ""] = key.split(":");
-    return { path, function: fnName };
-  };
-  return {
-    scope: "app/src",
-    a: fn(a),
-    b: fn(b),
-    answers: { verdict: { choice } },
-  };
+const fn = (key: string) => {
+  const [path = "", fnName = ""] = key.split(":");
+  return { path, function: fnName };
 };
+
+const pair = (
+  a: string,
+  b: string,
+  choice: PairVerdict,
+  confidence = 0.9,
+): JudgedPairRow => ({
+  scope: "app/src",
+  a: fn(a),
+  b: fn(b),
+  answers: { verdict: { choice, confidence } },
+});
+
+const unanswered = (a: string, b: string): JudgedPairRow => ({
+  scope: "app/src",
+  a: fn(a),
+  b: fn(b),
+  answers: { verdict: { choice: UNANSWERED } },
+});
 
 const FILES = {
   "app/src/f/at-limit.ts": lines(40),
@@ -131,6 +144,52 @@ describe("extractProposals", () => {
   });
 });
 
+describe("collapseProposals", () => {
+  const RULE = [
+    pair("a.ts:canEdit", "b.ts:mayEdit", "same_decision", 0.95),
+    // asked from another anchor: joins through b.ts:mayEdit
+    pair("b.ts:mayEdit", "c.ts:allowEdit", "same_decision", 0.85),
+    pair("a.ts:canEdit", "v.ts:canView", "look_alike", 0.9),
+    pair("c.ts:allowEdit", "w.ts:weak", "same_decision", 0.6),
+    unanswered("a.ts:canEdit", "u.ts:unasked"),
+    pair("x.ts:fetchX", "y.ts:fetchY", "shared_helper"),
+  ];
+
+  it("joins same_decision pairs at or above the floor, whichever anchor asked each", () => {
+    expect(collapseProposals(RULE)).toEqual([
+      {
+        scope: "app/src",
+        members: ["a.ts:canEdit", "b.ts:mayEdit", "c.ts:allowEdit"],
+        pairs: 2,
+        confidence: 0.85,
+      },
+    ]);
+  });
+
+  it("counts a pair exactly at the floor, and a lower floor lets a weak link in", () => {
+    expect(
+      collapseProposals(RULE, { floor: 0.6 }).map((p) => p.members),
+    ).toEqual([
+      ["a.ts:canEdit", "b.ts:mayEdit", "c.ts:allowEdit", "w.ts:weak"],
+    ]);
+    expect(collapseProposals(RULE, { floor: 0.95 })).toEqual([
+      {
+        scope: "app/src",
+        members: ["a.ts:canEdit", "b.ts:mayEdit"],
+        pairs: 1,
+        confidence: 0.95,
+      },
+    ]);
+  });
+
+  it("refuses a floor that is no confidence", () => {
+    expect(() => collapseProposals(RULE, { floor: 1.5 })).toThrow(/0 to 1/);
+    expect(() => collapseProposals(RULE, { floor: Number.NaN })).toThrow(
+      /0 to 1/,
+    );
+  });
+});
+
 describe("structure-sweep consolidate", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -158,8 +217,16 @@ describe("structure-sweep consolidate", () => {
     consolidateCommand([], root);
     const first = read(root, ".structure-sweep/consolidate.json");
     const plan = JSON.parse(first) as ConsolidationPlan;
-    expect(plan).toMatchObject({ ref: "HEAD", maxLines: 40, minCluster: 3 });
+    expect(plan).toMatchObject({
+      ref: "HEAD",
+      maxLines: 40,
+      minCluster: 3,
+      floor: 0.8,
+    });
     expect(plan.merge?.map((p) => p.lines)).toEqual([44]);
+    expect(plan.collapse?.map((p) => p.members)).toEqual([
+      ["a.ts:fetchA", "x.ts:rule"],
+    ]);
     expect(plan.extract?.map((p) => p.members.length)).toEqual([3, 2]);
     expect(read(root, ".structure-sweep/consolidate.md")).toContain(
       "`app/src/f/at-limit.ts` (40)",
@@ -208,6 +275,7 @@ describe("structure-sweep consolidate", () => {
       read(root, ".structure-sweep/consolidate.json"),
     ) as ConsolidationPlan;
     expect(plan.extract).toBeNull();
+    expect(plan.collapse).toBeNull();
     expect(plan.merge).toHaveLength(1);
     expect(errors.some((e) => e.includes("nowhere.json"))).toBe(true);
   });

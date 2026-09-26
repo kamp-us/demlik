@@ -18,6 +18,7 @@ const expected = {
     "readChangeSets",
     "renderScoreTable",
     "mergeProposals",
+    "collapseProposals",
     "extractProposals",
     "renderConsolidation",
     "buildInventory",

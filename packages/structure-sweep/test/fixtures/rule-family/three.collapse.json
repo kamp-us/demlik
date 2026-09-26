@@ -1,0 +1,266 @@
+{
+  "candidates": [
+    {
+      "aEndLine": 8,
+      "aFile": "allowed.ts",
+      "aId": "allowed.ts:isEditAllowed",
+      "aStartLine": 4,
+      "bEndLine": 20,
+      "bFile": "edit.ts",
+      "bId": "edit.ts:canEditDocument",
+      "bStartLine": 17,
+      "confidence": 0.6042,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.6042,
+      "signals": [
+        {
+          "detail": "loc 5/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 0.9167
+        },
+        {
+          "detail": "jaccard 1 over 3/3 callees",
+          "signal": "callees",
+          "strength": 1
+        },
+        { "detail": "shared {edit}", "signal": "name", "strength": 0.5 }
+      ]
+    },
+    {
+      "aEndLine": 20,
+      "aFile": "edit.ts",
+      "aId": "edit.ts:canEditDocument",
+      "aStartLine": 17,
+      "bEndLine": 7,
+      "bFile": "view.ts",
+      "bId": "view.ts:canViewDocument",
+      "bStartLine": 4,
+      "confidence": 0.5834,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.5834,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 0.6667 over 3/2 callees",
+          "signal": "callees",
+          "strength": 0.6667
+        },
+        {
+          "detail": "shared {can,document}",
+          "signal": "name",
+          "strength": 0.6667
+        }
+      ]
+    },
+    {
+      "aEndLine": 20,
+      "aFile": "edit.ts",
+      "aId": "edit.ts:canEditDocument",
+      "aStartLine": 17,
+      "bEndLine": 6,
+      "bFile": "modify.ts",
+      "bId": "modify.ts:mayModifyDoc",
+      "bStartLine": 4,
+      "confidence": 0.4792,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.4792,
+      "signals": [
+        {
+          "detail": "loc 4/3 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 0.9167
+        },
+        {
+          "detail": "jaccard 1 over 3/3 callees",
+          "signal": "callees",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 8,
+      "aFile": "allowed.ts",
+      "aId": "allowed.ts:isEditAllowed",
+      "aStartLine": 4,
+      "bEndLine": 6,
+      "bFile": "modify.ts",
+      "bId": "modify.ts:mayModifyDoc",
+      "bStartLine": 4,
+      "confidence": 0.4583,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.4583,
+      "signals": [
+        {
+          "detail": "loc 5/3 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 0.8333
+        },
+        {
+          "detail": "jaccard 1 over 3/3 callees",
+          "signal": "callees",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 8,
+      "aFile": "allowed.ts",
+      "aId": "allowed.ts:isEditAllowed",
+      "aStartLine": 4,
+      "bEndLine": 7,
+      "bFile": "view.ts",
+      "bId": "view.ts:canViewDocument",
+      "bStartLine": 4,
+      "confidence": 0.3959,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.3959,
+      "signals": [
+        {
+          "detail": "loc 5/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 0.9167
+        },
+        {
+          "detail": "jaccard 0.6667 over 3/2 callees",
+          "signal": "callees",
+          "strength": 0.6667
+        }
+      ]
+    },
+    {
+      "aEndLine": 6,
+      "aFile": "modify.ts",
+      "aId": "modify.ts:mayModifyDoc",
+      "aStartLine": 4,
+      "bEndLine": 7,
+      "bFile": "view.ts",
+      "bId": "view.ts:canViewDocument",
+      "bStartLine": 4,
+      "confidence": 0.3959,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.3959,
+      "signals": [
+        {
+          "detail": "loc 3/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 0.9167
+        },
+        {
+          "detail": "jaccard 0.6667 over 3/2 callees",
+          "signal": "callees",
+          "strength": 0.6667
+        }
+      ]
+    }
+  ],
+  "clusters": [
+    {
+      "members": [
+        "allowed.ts:isEditAllowed",
+        "edit.ts:canEditDocument",
+        "modify.ts:mayModifyDoc",
+        "view.ts:canViewDocument"
+      ],
+      "pairCount": 6,
+      "rank": 0.6042,
+      "representative": {
+        "aEndLine": 8,
+        "aFile": "allowed.ts",
+        "aId": "allowed.ts:isEditAllowed",
+        "aStartLine": 4,
+        "bEndLine": 20,
+        "bFile": "edit.ts",
+        "bId": "edit.ts:canEditDocument",
+        "bStartLine": 17,
+        "confidence": 0.6042,
+        "cost": 1,
+        "costInputs": {
+          "callerUnion": 0,
+          "crossesPackage": false,
+          "effectOnPath": false,
+          "packagesSpanned": 1
+        },
+        "rank": 0.6042,
+        "signals": [
+          {
+            "detail": "loc 5/4 cx 3/3 nest 0/0",
+            "signal": "shape",
+            "strength": 0.9167
+          },
+          {
+            "detail": "jaccard 1 over 3/3 callees",
+            "signal": "callees",
+            "strength": 1
+          },
+          { "detail": "shared {edit}", "signal": "name", "strength": 0.5 }
+        ]
+      }
+    }
+  ],
+  "consideredFunctions": 4,
+  "pairsScored": 6,
+  "partialTwins": [],
+  "settings": {
+    "calleeJaccard": 0.5,
+    "callerJaccard": 0.5,
+    "costCallerWeight": 1,
+    "costCrossPackageWeight": 2,
+    "costEffectWeight": 1,
+    "costPackageWeight": 1,
+    "maxBlockSize": 120,
+    "minComplexity": 1,
+    "minLoc": 3,
+    "minSetSize": 2,
+    "minSignals": 2,
+    "nameMinTokenLength": 4,
+    "nameOverlap": 0.5,
+    "partialMaxBlockSize": 40,
+    "partialMinPrefix": 3,
+    "partialMinSharedConstants": 1,
+    "shapeComplexitySlack": 1,
+    "shapeLocRatio": 0.2,
+    "shapeLocSlack": 3,
+    "shapeNestingSlack": 1
+  },
+  "skippedBlocks": []
+}

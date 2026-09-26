@@ -151,9 +151,9 @@ function loweredHash(pair: Pair): string | undefined {
 }
 
 /**
- * How one row's answer was asked: the question (mode, and for an anchor the question version and
- * the whole chunk it was asked over), the redaction and the lowered bodies. Every field is part of
- * the cache key.
+ * How one row's answer was asked: the question (mode, and for an anchor the question version, the
+ * whole chunk it was asked over and the candidate's ref in it), the redaction and the lowered
+ * bodies. Every field is part of the cache key.
  */
 type Send = {
   readonly redacted: boolean;
@@ -164,18 +164,23 @@ type Send = {
       readonly mode: "anchor";
       readonly version: number;
       readonly menu: string;
+      readonly ref: AnchorRef;
     }
 );
 
 /**
  * A cached answer serves a pair only when it was asked the same way, so no answer crosses between
  * modes, anchor question versions, anchor chunks, redacted and plain runs, or lowered and raw
- * sends. A plain raw pairwise row keeps its bare `id` key.
+ * sends. An anchor row is keyed on its candidate's ref as well, because two byte-identical copies
+ * on one menu share an `id` but each was asked its own question. A plain raw pairwise row keeps
+ * its bare `id` key.
  */
 const cacheKey = (id: string, send: Send) =>
   [
     id,
-    send.mode === "anchor" ? `anchor v${send.version} ${send.menu}` : "",
+    send.mode === "anchor"
+      ? `anchor v${send.version} ${send.menu} ${send.ref}`
+      : "",
     send.redacted ? "redacted" : "",
     send.lowered ? `lowered ${send.lowered}` : "",
   ]
@@ -190,13 +195,27 @@ const sendOf = (row: PairRow): Send => {
         mode: "anchor",
         version: questionVersionOf(row.answers),
         menu: row.answers.partner.menu,
+        ref: row.answers.partner.ref,
       }
     : { ...base, mode: "pairwise" };
 };
 
+/**
+ * Which pair a row is about: its scope and its two functions. A row's `id` hashes the two bodies,
+ * so byte-identical copies share one; this does not, so every copy of a pasted function keeps its
+ * own row and joins its family.
+ */
+const placeOf = (row: Pick<PairRow, "scope" | "a" | "b">) =>
+  [
+    row.scope,
+    `${row.a.path}:${row.a.function}`,
+    `${row.b.path}:${row.b.function}`,
+  ].join("\u0000");
+
 interface Ledger {
   /** Every answered row on file, under its cache key. An unanswered row is asked again. */
   readonly cache: ReadonlyMap<string, PairRow>;
+  /** This run's rows, one per pair under `placeOf`. */
   readonly judged: Map<string, PairRow>;
   rows(): PairRow[];
   save(): void;
@@ -210,7 +229,10 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
   const judged = new Map<string, PairRow>();
   const rows = () =>
     [...kept, ...judged.values()].sort(
-      (x, y) => x.scope.localeCompare(y.scope) || x.id.localeCompare(y.id),
+      (x, y) =>
+        x.scope.localeCompare(y.scope) ||
+        x.id.localeCompare(y.id) ||
+        placeOf(x).localeCompare(placeOf(y)),
     );
   return {
     cache: new Map(
@@ -317,6 +339,7 @@ function anchorQuestion(
       mode: "anchor",
       version: ANCHOR_QUESTION_VERSION,
       menu: menuHash,
+      ref,
       redacted: redact,
       lowered: loweredHash(candidate.pair),
     } satisfies Send,
@@ -449,7 +472,7 @@ async function judgeScope(
 ): Promise<Spent> {
   const todo = scoped.questions.filter((q) => {
     if (q.cached === undefined) return true;
-    for (const row of q.cached) ledger.judged.set(row.id, row);
+    for (const row of q.cached) ledger.judged.set(placeOf(row), row);
     return false;
   });
   options.log?.(
@@ -461,7 +484,7 @@ async function judgeScope(
   await pool(todo, options.concurrency ?? 6, async (question) => {
     try {
       const { rows, usage } = await question.ask(options.jev);
-      for (const row of rows) ledger.judged.set(row.id, row);
+      for (const row of rows) ledger.judged.set(placeOf(row), row);
       spent = {
         input: spent.input + usage.input_tokens,
         output: spent.output + usage.output_tokens,

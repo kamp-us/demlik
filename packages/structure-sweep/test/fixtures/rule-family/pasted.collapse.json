@@ -1,0 +1,294 @@
+{
+  "candidates": [
+    {
+      "aEndLine": 6,
+      "aFile": "billing.ts",
+      "aId": "billing.ts:canEditDocument",
+      "aStartLine": 3,
+      "bEndLine": 6,
+      "bFile": "editor.ts",
+      "bId": "editor.ts:canEditDocument",
+      "bStartLine": 3,
+      "confidence": 0.75,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.75,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 1 over 3/3 callees",
+          "signal": "callees",
+          "strength": 1
+        },
+        {
+          "detail": "shared {can,document,edit}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 6,
+      "aFile": "billing.ts",
+      "aId": "billing.ts:canEditDocument",
+      "aStartLine": 3,
+      "bEndLine": 6,
+      "bFile": "sharing.ts",
+      "bId": "sharing.ts:canEditDocument",
+      "bStartLine": 3,
+      "confidence": 0.75,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.75,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 1 over 3/3 callees",
+          "signal": "callees",
+          "strength": 1
+        },
+        {
+          "detail": "shared {can,document,edit}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 6,
+      "aFile": "editor.ts",
+      "aId": "editor.ts:canEditDocument",
+      "aStartLine": 3,
+      "bEndLine": 6,
+      "bFile": "sharing.ts",
+      "bId": "sharing.ts:canEditDocument",
+      "bStartLine": 3,
+      "confidence": 0.75,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.75,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 1 over 3/3 callees",
+          "signal": "callees",
+          "strength": 1
+        },
+        {
+          "detail": "shared {can,document,edit}",
+          "signal": "name",
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "aEndLine": 6,
+      "aFile": "billing.ts",
+      "aId": "billing.ts:canEditDocument",
+      "aStartLine": 3,
+      "bEndLine": 6,
+      "bFile": "view.ts",
+      "bId": "view.ts:canViewDocument",
+      "bStartLine": 3,
+      "confidence": 0.5834,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.5834,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 0.6667 over 3/2 callees",
+          "signal": "callees",
+          "strength": 0.6667
+        },
+        {
+          "detail": "shared {can,document}",
+          "signal": "name",
+          "strength": 0.6667
+        }
+      ]
+    },
+    {
+      "aEndLine": 6,
+      "aFile": "editor.ts",
+      "aId": "editor.ts:canEditDocument",
+      "aStartLine": 3,
+      "bEndLine": 6,
+      "bFile": "view.ts",
+      "bId": "view.ts:canViewDocument",
+      "bStartLine": 3,
+      "confidence": 0.5834,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.5834,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 0.6667 over 3/2 callees",
+          "signal": "callees",
+          "strength": 0.6667
+        },
+        {
+          "detail": "shared {can,document}",
+          "signal": "name",
+          "strength": 0.6667
+        }
+      ]
+    },
+    {
+      "aEndLine": 6,
+      "aFile": "sharing.ts",
+      "aId": "sharing.ts:canEditDocument",
+      "aStartLine": 3,
+      "bEndLine": 6,
+      "bFile": "view.ts",
+      "bId": "view.ts:canViewDocument",
+      "bStartLine": 3,
+      "confidence": 0.5834,
+      "cost": 1,
+      "costInputs": {
+        "callerUnion": 0,
+        "crossesPackage": false,
+        "effectOnPath": false,
+        "packagesSpanned": 1
+      },
+      "rank": 0.5834,
+      "signals": [
+        {
+          "detail": "loc 4/4 cx 3/3 nest 0/0",
+          "signal": "shape",
+          "strength": 1
+        },
+        {
+          "detail": "jaccard 0.6667 over 3/2 callees",
+          "signal": "callees",
+          "strength": 0.6667
+        },
+        {
+          "detail": "shared {can,document}",
+          "signal": "name",
+          "strength": 0.6667
+        }
+      ]
+    }
+  ],
+  "clusters": [
+    {
+      "members": [
+        "billing.ts:canEditDocument",
+        "editor.ts:canEditDocument",
+        "sharing.ts:canEditDocument",
+        "view.ts:canViewDocument"
+      ],
+      "pairCount": 6,
+      "rank": 0.75,
+      "representative": {
+        "aEndLine": 6,
+        "aFile": "billing.ts",
+        "aId": "billing.ts:canEditDocument",
+        "aStartLine": 3,
+        "bEndLine": 6,
+        "bFile": "editor.ts",
+        "bId": "editor.ts:canEditDocument",
+        "bStartLine": 3,
+        "confidence": 0.75,
+        "cost": 1,
+        "costInputs": {
+          "callerUnion": 0,
+          "crossesPackage": false,
+          "effectOnPath": false,
+          "packagesSpanned": 1
+        },
+        "rank": 0.75,
+        "signals": [
+          {
+            "detail": "loc 4/4 cx 3/3 nest 0/0",
+            "signal": "shape",
+            "strength": 1
+          },
+          {
+            "detail": "jaccard 1 over 3/3 callees",
+            "signal": "callees",
+            "strength": 1
+          },
+          {
+            "detail": "shared {can,document,edit}",
+            "signal": "name",
+            "strength": 1
+          }
+        ]
+      }
+    }
+  ],
+  "consideredFunctions": 4,
+  "pairsScored": 6,
+  "partialTwins": [],
+  "settings": {
+    "calleeJaccard": 0.5,
+    "callerJaccard": 0.5,
+    "costCallerWeight": 1,
+    "costCrossPackageWeight": 2,
+    "costEffectWeight": 1,
+    "costPackageWeight": 1,
+    "maxBlockSize": 120,
+    "minComplexity": 1,
+    "minLoc": 3,
+    "minSetSize": 2,
+    "minSignals": 2,
+    "nameMinTokenLength": 4,
+    "nameOverlap": 0.5,
+    "partialMaxBlockSize": 40,
+    "partialMinPrefix": 3,
+    "partialMinSharedConstants": 1,
+    "shapeComplexitySlack": 1,
+    "shapeLocRatio": 0.2,
+    "shapeLocSlack": 3,
+    "shapeNestingSlack": 1
+  },
+  "skippedBlocks": []
+}

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { pairGroups, ROW_VERDICTS, type RowVerdict } from "../pairs/report.js";
+import { UNANSWERED } from "../pairs/anchor.js";
+import { PAIR_VERDICTS, type PairVerdict } from "../pairs/questions.js";
+import { isAnswered, pairGroups } from "../pairs/report.js";
 
 /** The slice of a `sweep` verdict row `consolidate` reads. */
 export const ClusterRow = z.object({
@@ -14,18 +16,27 @@ export type ClusterRow = z.infer<typeof ClusterRow>;
 
 const JudgedFunction = z.object({ path: z.string(), function: z.string() });
 
-/** The slice of a `pairs` row `consolidate` reads. */
-export const HelperPairRow = z.object({
+/** The slice of a `pairs` row `consolidate` reads: its two functions and the verdict Jev gave, if any. */
+export const JudgedPairRow = z.object({
   scope: z.string(),
   a: JudgedFunction,
   b: JudgedFunction,
   answers: z.object({
-    verdict: z.object({
-      choice: z.enum(ROW_VERDICTS as [RowVerdict, ...RowVerdict[]]),
-    }),
+    verdict: z.union([
+      z.object({
+        choice: z.enum(PAIR_VERDICTS as [PairVerdict, ...PairVerdict[]]),
+        confidence: z.number().min(0).max(1),
+      }),
+      z.object({ choice: z.literal(UNANSWERED) }),
+    ]),
   }),
 });
-export type HelperPairRow = z.infer<typeof HelperPairRow>;
+export type JudgedPairRow = z.infer<typeof JudgedPairRow>;
+
+/** @deprecated Renamed `JudgedPairRow`: `consolidate` reads every verdict off a pair row, not only `shared_helper`. */
+export const HelperPairRow = JudgedPairRow;
+/** @deprecated Renamed `JudgedPairRow`. */
+export type HelperPairRow = JudgedPairRow;
 
 export interface SmallFile {
   readonly path: string;
@@ -40,6 +51,20 @@ export interface MergeProposal {
   readonly role: string;
   readonly files: readonly SmallFile[];
   readonly lines: number;
+}
+
+/**
+ * Functions joined by `same_decision` pairs at or above the collapse floor: copies of one business
+ * rule to collapse into one function.
+ */
+export interface CollapseProposal {
+  readonly scope: string;
+  /** `path:function`, sorted. */
+  readonly members: readonly string[];
+  /** The `same_decision` pairs at or above the floor that joined them. */
+  readonly pairs: number;
+  /** The weakest of those pairs' confidences. */
+  readonly confidence: number;
 }
 
 /** Functions joined by `shared_helper` pairs: plumbing to extract into one helper. */
@@ -57,18 +82,41 @@ export interface ClusterOptions {
   readonly minCluster?: number;
 }
 
+export interface CollapseOptions {
+  /** A `same_decision` pair joins a group at or above this confidence (default `DEFAULT_COLLAPSE_FLOOR`). */
+  readonly floor?: number;
+}
+
 export interface ConsolidationPlan {
   readonly ref: string;
   readonly maxLines: number;
   readonly minCluster: number;
   /** `null` when the verdicts file was absent: not computed, as against none found. */
   readonly merge: readonly MergeProposal[] | null;
+  /** The confidence a `same_decision` pair needs to join a collapse group. */
+  readonly floor: number;
+  /** `null` when the pairs file was absent. */
+  readonly collapse: readonly CollapseProposal[] | null;
   /** `null` when the pairs file was absent. */
   readonly extract: readonly ExtractProposal[] | null;
 }
 
 export const DEFAULT_MAX_LINES = 40;
 export const DEFAULT_MIN_CLUSTER = 3;
+
+/**
+ * The confidence a `same_decision` pair needs before `consolidate` joins its two functions. A group
+ * is a connected component of the pairs left at or above it, so one weak link merges two rules into
+ * one proposal: the floor sits where `move` trusts a verdict, not at the bare yes of one half.
+ */
+export const DEFAULT_COLLAPSE_FLOOR = 0.8;
+
+/** A collapse floor is a confidence, from 0 to 1. */
+export function collapseFloor(floor: number): number {
+  if (!Number.isFinite(floor) || floor < 0 || floor > 1)
+    throw new RangeError(`--floor is a confidence from 0 to 1, not ${floor}`);
+  return floor;
+}
 
 export const nonBlankLines = (text: string) =>
   text.split("\n").filter((line) => line.trim() !== "").length;
@@ -127,29 +175,68 @@ export function mergeProposals(
   );
 }
 
+interface ScopedGroup {
+  readonly scope: string;
+  readonly members: readonly string[];
+  readonly pairs: number;
+}
+
+/** Most members first, then most pairs, then scope and first member, so the order is stable. */
+const bySize = (x: ScopedGroup, y: ScopedGroup) =>
+  y.members.length - x.members.length ||
+  y.pairs - x.pairs ||
+  byText(x.scope, y.scope) ||
+  byText(x.members[0] ?? "", y.members[0] ?? "");
+
+/** The connected groups the `verdict` pairs form within each scope, scopes in order. */
+function scopedGroups<R extends JudgedPairRow>(
+  rows: readonly R[],
+  verdict: PairVerdict,
+) {
+  const scopes = [...new Set(rows.map((r) => r.scope))].sort(byText);
+  return scopes.flatMap((scope) =>
+    pairGroups(
+      rows.filter((r) => r.scope === scope),
+      verdict,
+    ).map((g) => ({ scope, ...g })),
+  );
+}
+
+/**
+ * One proposal per connected group of `same_decision` pairs within a scope, counting only pairs at
+ * or above `floor`. An `unanswered` pair or one under the floor joins nothing, so every function in
+ * a group is linked to it by confirmations at the floor. The pairs can come from any number of
+ * anchors: two pairs sharing a function join wherever each was asked.
+ */
+export function collapseProposals(
+  rows: readonly JudgedPairRow[],
+  options: CollapseOptions = {},
+): CollapseProposal[] {
+  const floor = collapseFloor(options.floor ?? DEFAULT_COLLAPSE_FLOOR);
+  const confirmed = rows
+    .filter(isAnswered)
+    .filter((r) => r.answers.verdict.confidence >= floor);
+  return scopedGroups(confirmed, "same_decision")
+    .map(({ scope, members, pairs }) => ({
+      scope,
+      members,
+      pairs: pairs.length,
+      confidence: Math.min(...pairs.map((p) => p.answers.verdict.confidence)),
+    }))
+    .sort(bySize);
+}
+
 /** One candidate per connected group of `shared_helper` pairs within a scope. */
 export function extractProposals(
-  rows: readonly HelperPairRow[],
+  rows: readonly JudgedPairRow[],
 ): ExtractProposal[] {
-  const scopes = [...new Set(rows.map((r) => r.scope))].sort(byText);
-  return scopes
-    .flatMap((scope) =>
-      pairGroups(
-        rows.filter((r) => r.scope === scope),
-        "shared_helper",
-      ).map((g) => ({
-        scope,
-        members: g.members,
-        pairs: g.pairs.length,
-      })),
-    )
-    .sort(
-      (x, y) =>
-        y.members.length - x.members.length ||
-        y.pairs - x.pairs ||
-        byText(x.scope, y.scope) ||
-        byText(x.members[0] ?? "", y.members[0] ?? ""),
-    );
+  return scopedGroups(rows, "shared_helper")
+    .map(({ scope, members, pairs }) => ({
+      scope,
+      members,
+      pairs: pairs.length,
+    }))
+    .sort(bySize);
 }
 
 function mergeLines(merge: ConsolidationPlan["merge"]): string[] {
@@ -158,6 +245,18 @@ function mergeLines(merge: ConsolidationPlan["merge"]): string[] {
   return merge.flatMap((p, i) => [
     `${i + 1}. **${p.scope}** · ${p.feature} · ${p.role}: ${p.files.length} files, ${p.lines} lines`,
     ...p.files.map((f) => `   - \`${f.path}\` (${f.lines})`),
+    "",
+  ]);
+}
+
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+function collapseLines(collapse: ConsolidationPlan["collapse"]): string[] {
+  if (collapse === null) return ["skipped: no judged pairs", ""];
+  if (collapse.length === 0) return ["none", ""];
+  return collapse.flatMap((p, i) => [
+    `${i + 1}. **${p.scope}**: ${p.members.length} functions, ${p.pairs} pairs judged same_decision, weakest ${pct(p.confidence)}`,
+    ...p.members.map((m) => `   - \`${m}\``),
     "",
   ]);
 }
@@ -172,7 +271,7 @@ function extractLines(extract: ConsolidationPlan["extract"]): string[] {
   ]);
 }
 
-/** The plan as a markdown summary: merge clusters, then extract candidates. */
+/** The plan as a markdown summary: merge clusters, collapse groups, then extract candidates. */
 export function renderConsolidation(plan: ConsolidationPlan): string {
   return [
     "# Consolidation plan",
@@ -182,6 +281,11 @@ export function renderConsolidation(plan: ConsolidationPlan): string {
     "## Merge small files",
     "",
     ...mergeLines(plan.merge),
+    "## Collapse copies of one rule",
+    "",
+    `Functions joined by \`same_decision\` pairs at confidence ${pct(plan.floor)} or above.`,
+    "",
+    ...collapseLines(plan.collapse),
     "## Extract shared helpers",
     "",
     ...extractLines(plan.extract),

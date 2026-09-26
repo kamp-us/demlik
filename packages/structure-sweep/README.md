@@ -334,7 +334,8 @@ not already dealt to an earlier anchor, so no pair is asked twice. The anchor's 
 body once, then each candidate partner under a ref (`c0`, `c1`, …), and asks one yes/no question
 per candidate, `same_rule_c0`, `same_rule_c1`, …: does this candidate encode the same business rule
 as the anchor? Each candidate is judged on its own, so an anchor with two or more true duplicates
-confirms every one of them, and `pairs.md` groups the whole family. The same request asks
+confirms every one of them: `pairs.md` groups the whole family, and `consolidate` proposes it as
+one collapse group once every link clears its `--floor`. The same request asks
 `business_rule` about the anchor. One request carries at most 32 questions; an anchor with more
 candidates than fit beside `business_rule` is asked in one request per chunk, each candidate
 keeping its ref, and `--plan` counts every chunk as a Jev call.
@@ -357,13 +358,16 @@ question answered:
   asked under;
 - `usage` is the one request's, repeated on every row it answered.
 
-The anchor question `version` is part of the cache key, so a row asked under an earlier version of
-the question is never served: the first run after an upgrade asks those anchors again.
+The anchor question `version` and the candidate's `ref` are part of the cache key, so a row asked
+under an earlier version of the question is never served: the first run after an upgrade asks those
+anchors again.
 
 Every row, in either mode, carries `id`, `scope`, its two functions `a` and `b`, the graph's
 `signals` and `graphConfidence`, `answers`, `model` and `usage`, and two optional fields that are
 part of its cache key: `redacted` (`true` on a row asked under `--redact`) and `lowered` (a hash of
 the lowered bodies sent, on a row asked under `--graph` where at least one side went out lowered).
+`id` hashes the two bodies, so pairs of byte-identical copies share one; `pairs.json` still holds
+one row per scope and pair of functions, so every pasted copy of a rule joins its group.
 
 `--pairwise` asks the older question instead, once per pair: the three-way `same_decision`,
 `look_alike` or `shared_helper` verdict plus `business_rule`, for gold-set evaluation. Anchor and
@@ -544,32 +548,44 @@ A metric whose denominator is zero is `null` in the JSON and `n/a` in the table.
 structure-sweep consolidate --max-lines 40 --min-cluster 3
 ```
 
-Turns outputs already on disk into a consolidation plan: which tiny files to merge and which
-plumbing to extract. It calls no model and no network, needs no `TYPESAFE_API_KEY`, and changes no
+Turns outputs already on disk into a consolidation plan: which tiny files to merge, which copies of
+one business rule to collapse, and which plumbing to extract. It calls no model and no network, needs no `TYPESAFE_API_KEY`, and changes no
 source file — it writes `.structure-sweep/consolidate.json` and a markdown summary
 `.structure-sweep/consolidate.md`, nothing else. The same inputs give byte-identical JSON.
 
 - **merge** — from the sweep verdicts: files sharing one `scope`, feature and role whose non-blank
   line count at `--ref` is at most `--max-lines`. A group with at least `--min-cluster` such files is
   one proposal.
+- **collapse** — from `pairs.json`: `same_decision` pairs at confidence `--floor` or above (default
+  0.8), joined into one group wherever two pairs share a function, within a scope. The pairs may
+  come from different anchors' requests: three copies of one rule are one group whether one anchor
+  confirmed both others or each pair was asked from a different anchor. A pair under the floor, a
+  `look_alike` and an `unanswered` pair join nothing, so every function in a group is linked to it
+  by confirmations at the floor, and `confidence` is the weakest of them. The floor is where `move`
+  trusts a verdict rather than anchor mode's bare yes of one half, because a group is every
+  function one chain of links reaches: one weak link would fold a second rule into the group.
 - **extract** — from `pairs.json`: only `shared_helper` pairs, joined into one candidate wherever
   two pairs share a function, within a scope.
 
-A missing input skips its kind with a line on stderr naming the file, and that kind is `null` in the
-plan; a malformed one fails the run with its parse error.
+A missing input skips its kinds with a line on stderr naming the file, and those kinds are `null` in
+the plan; a malformed one fails the run with its parse error.
 
 ```json
 {
- "ref": "HEAD", "maxLines": 40, "minCluster": 3,
+ "ref": "HEAD", "maxLines": 40, "minCluster": 3, "floor": 0.8,
  "merge": [{ "scope": "apps/web/src", "feature": "billing", "role": "ui",
    "files": [{ "path": "apps/web/src/billing/price.tsx", "lines": 12 },
     { "path": "apps/web/src/billing/tax.tsx", "lines": 9 },
     { "path": "apps/web/src/billing/total.tsx", "lines": 7 }], "lines": 28 }],
+ "collapse": [{ "scope": "apps/web/src",
+   "members": ["docs/allowed.ts:isEditAllowed", "docs/edit.ts:canEditDocument",
+    "docs/modify.ts:mayModifyDoc"], "pairs": 3, "confidence": 0.85 }],
  "extract": [{ "scope": "apps/web/src", "members": ["a.ts:fetchA", "b.ts:fetchB"], "pairs": 1 }]
 }
 ```
 
-Merge proposals are sorted by file count, extract candidates by member count, then pair count.
+Merge proposals are sorted by file count; collapse groups and extract candidates by member count,
+then pair count.
 
 | Flag | Default | |
 |---|---|---|
@@ -578,6 +594,7 @@ Merge proposals are sorted by file count, extract candidates by member count, th
 | `--ref <ref>` | `HEAD` | tree the line counts are read from |
 | `--max-lines <n>` | `40` | a file is small at or under this many non-blank lines |
 | `--min-cluster <n>` | `3` | small files a group needs to become a proposal (at least 2) |
+| `--floor <0..1>` | `0.8` | a `same_decision` pair joins a collapse group at or above this confidence |
 | `--out <file>` | `.structure-sweep/consolidate.json` | JSON plan |
 | `--report <file>` | `.structure-sweep/consolidate.md` | markdown summary |
 
@@ -759,7 +776,7 @@ excluded file, and a proposal left with fewer files than `consolidate`'s `--min-
 
 Every command except `propose` is also a function — `runSweep`, `runPairs`, `planScope` /
 `planManifest`, `applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as
-its git reader, `mergeProposals` / `extractProposals` / `renderConsolidation` for
+its git reader, `mergeProposals` / `collapseProposals` / `extractProposals` / `renderConsolidation` for
 `consolidate`, and `readGroupsFile` / `listGroups` / `showGroup` for `groups`, and `buildInventory` /
 `renderInventory` for `inventory` — and each
 Jev-calling one takes its `JevClient` as an argument, so a caller can hand it a stub.
