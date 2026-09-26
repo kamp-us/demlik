@@ -1,0 +1,7 @@
+{
+  "name": "entry-conventions-nextjs-src",
+  "private": true,
+  "devDependencies": {
+    "next": "16.0.0"
+  }
+}

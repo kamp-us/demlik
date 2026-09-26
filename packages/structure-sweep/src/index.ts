@@ -34,6 +34,24 @@ export {
   UnknownGroupError,
 } from "./groups/query.js";
 export {
+  buildInventory,
+  type Inventory,
+  type InventoryEntry,
+  type InventoryInputs,
+  type InventoryOptions,
+  type LeverStatus,
+  type Span,
+} from "./inventory/build.js";
+export type {
+  ConsolidateInput,
+  GraphInput,
+  PairInput,
+  Source,
+  UnreachableInput,
+} from "./inventory/inputs.js";
+export type { Lever } from "./inventory/levers.js";
+export { renderInventory } from "./inventory/render.js";
+export {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,

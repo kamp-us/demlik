@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { entryExportPresetNames } from "./kinds/presets.js";
 
 export type Opts = {
   pretty?: boolean;
@@ -25,6 +26,7 @@ export type Opts = {
   clusters?: boolean;
   interfaceWidth?: boolean;
   nodeKinds?: string;
+  entryPreset?: string[];
   layers?: boolean;
   layerRules?: string;
   boundaries?: boolean;
@@ -90,7 +92,13 @@ function analysisOptions(command: Command): Command {
       "data edges: which function reads or writes which D1 / Durable Object / KV / R2 / queue binding",
     )
     .option("--cycles", "module-import cycles, reported as participating files (implies --edges)")
-    .option("--node-kinds <file>", "JSON file of node-kind rule overrides merged over defaults");
+    .option("--node-kinds <file>", "JSON file of node-kind rule overrides merged over defaults")
+    .option(
+      "--entry-preset <name>",
+      `turn on a built-in entrypoint-export preset (${entryExportPresetNames().join(" | ")}) even where the package does not depend on its framework; repeatable`,
+      (name: string, previous: string[]) => [...previous, name],
+      [] as string[],
+    );
 }
 
 function featureOptions(command: Command): Command {
