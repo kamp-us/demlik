@@ -16,6 +16,14 @@ import type {
   Judgement,
 } from "./ask.js";
 import {
+  type BranchVector,
+  DEFAULT_SIMILARITY_THRESHOLD,
+  EMBED_STAGE,
+  nearestNeighbourPairs,
+  similarityThreshold,
+  textHash,
+} from "./embed.js";
+import {
   derived,
   type Fact,
   factValueSchema,
@@ -124,10 +132,20 @@ export const DataBinding = z.strictObject({
 
 export type DataBinding = z.infer<typeof DataBinding>;
 
-/** Why branches are one candidate: an equal condition key, or functions that touch one binding. */
+/**
+ * Why branches are one candidate: an equal condition key, functions that touch one binding, or
+ * nearest-neighbour branches whose embedded lowered texts are at least the threshold similar. An
+ * `embedding` basis names the content hashes of the one or two texts its members carry, and their
+ * cosine similarity to four places.
+ */
 export const ClusterBasis = z.discriminatedUnion("_tag", [
   z.strictObject({ _tag: z.literal("condition"), key: ConditionKey }),
   z.strictObject({ _tag: z.literal("data"), binding: DataBinding }),
+  z.strictObject({
+    _tag: z.literal("embedding"),
+    texts: z.array(z.string().min(1)).min(1).max(2),
+    similarity: z.number().min(-1).max(1),
+  }),
 ]);
 
 export type ClusterBasis = z.infer<typeof ClusterBasis>;
@@ -275,21 +293,42 @@ function clusterFact(
   return { id: cluster.id, span: first.span, value: derived(cluster) };
 }
 
+/** The embedding candidate source: every branch's vector, and the similarity a pair must reach. */
+export interface EmbeddingCandidates {
+  readonly vectors: readonly Fact<BranchVector>[];
+  readonly threshold: number;
+}
+
+const roundSimilarity = (similarity: number) =>
+  Math.round(similarity * 10_000) / 10_000;
+
 /**
  * Cluster branches, with no Jev call. Branches whose condition keys are equal form one candidate;
  * with `data`, so do the branches of every function whose data edges touch one binding, whatever
- * their atoms. Each cluster holds at least two branches from at least two functions. A branch can
- * sit in a condition cluster and a data cluster at once; they are separate candidates.
+ * their atoms; with `embedding`, so does each branch and its nearest neighbour in another function
+ * when their vectors are at least the threshold similar and their condition keys differ. Each
+ * cluster holds at least two branches from at least two functions. A branch can sit in clusters on
+ * several signals at once; they are separate candidates.
  */
 export function clusterBranches(
   branches: readonly Fact<ResolvedBranch>[],
   data: readonly DataEdgeRow[] | null,
+  embedding?: EmbeddingCandidates,
 ): readonly Fact<CandidateCluster>[] {
   const byKey = new Map<
     string,
     { basis: ClusterBasis; members: ClusterMember[] }
   >();
   const byFunction = new Map<string, ClusterMember[]>();
+  const byBranch = new Map<string, { member: ClusterMember; key: string }>();
+  const join = (basis: ClusterBasis, members: readonly ClusterMember[]) => {
+    const key = canonicalJson(basis);
+    const entry = byKey.get(key) ?? { basis, members: [] };
+    const seen = new Set(entry.members.map((m) => m.branch));
+    for (const member of members)
+      if (!seen.has(member.branch)) entry.members.push(member);
+    byKey.set(key, entry);
+  };
   for (const fact of branches) {
     if (fact.value._tag !== "known") continue;
     const resolved = fact.value.value;
@@ -302,6 +341,7 @@ export function clusterBranches(
     const entry = byKey.get(key) ?? { basis, members: [] };
     entry.members.push(member);
     byKey.set(key, entry);
+    byBranch.set(fact.id, { member, key });
     byFunction.set(member.function, [
       ...(byFunction.get(member.function) ?? []),
       member,
@@ -316,12 +356,41 @@ export function clusterBranches(
         binding: edge.binding,
       },
     };
-    const key = canonicalJson(basis);
-    const entry = byKey.get(key) ?? { basis, members: [] };
-    const seen = new Set(entry.members.map((m) => m.branch));
-    for (const member of byFunction.get(edge.functionId) ?? [])
-      if (!seen.has(member.branch)) entry.members.push(member);
-    byKey.set(key, entry);
+    join(basis, byFunction.get(edge.functionId) ?? []);
+  }
+  if (embedding !== undefined) {
+    const vectorOf = new Map(
+      embedding.vectors.flatMap((f) =>
+        f.value._tag === "known" ? [[f.id, f.value.value] as const] : [],
+      ),
+    );
+    const embedded = [...byBranch.values()].flatMap(({ member }) => {
+      const v = vectorOf.get(member.branch);
+      return v === undefined
+        ? []
+        : [
+            {
+              branch: member.branch,
+              function: member.function,
+              text: v.text,
+              vector: v.vector,
+            },
+          ];
+    });
+    const textOf = new Map(embedded.map((e) => [e.branch, e.text]));
+    for (const pair of nearestNeighbourPairs(embedded, embedding.threshold)) {
+      const [a, b] = pair.branches.map((id) => byBranch.get(id));
+      // Equal condition keys are already one candidate on the condition signal.
+      if (a === undefined || b === undefined || a.key === b.key) continue;
+      const basis: ClusterBasis = {
+        _tag: "embedding",
+        texts: sortedSet(
+          pair.branches.map((id) => textHash(textOf.get(id) ?? "")),
+        ),
+        similarity: roundSimilarity(pair.similarity),
+      };
+      join(basis, [a.member, b.member]);
+    }
   }
   return [...byKey.values()]
     .flatMap(({ basis, members }) => {
@@ -333,6 +402,7 @@ export function clusterBranches(
 
 const ClusterContent = z.strictObject({
   data: z.array(DataEdgeRow).nullable(),
+  embedding: z.strictObject({ threshold: z.number() }).optional(),
 });
 
 const resolvedFactsOf = (
@@ -346,14 +416,25 @@ const resolvedFactsOf = (
     return (artifact as StageArtifact<ResolvedBranch>).facts;
   });
 
+/** The embedding candidate source, as stage 6's input takes it. */
+export interface ClusterEmbedding {
+  /** Every file's embedding-stage artifact (`embeddingStage` over its stage-2 artifact). */
+  readonly vectors: readonly StageArtifact<BranchVector>[];
+  /** The similarity a nearest-neighbour pair must reach. Defaults to `DEFAULT_SIMILARITY_THRESHOLD`. */
+  readonly threshold?: number;
+}
+
 /**
  * Stage 6's input: every file's stage-3 artifact, and the graph's data edges on the functions those
- * artifacts hold (or `null` without `--data`). Artifacts are keyed in digest order, so the order a
- * caller lists files in does not change the key.
+ * artifacts hold (or `null` without `--data`). With `embedding`, every file's vector artifact
+ * follows the stage-3 artifacts and the threshold enters the content; without it, the input and its
+ * key are exactly what they were before the embedding source existed. Artifacts are keyed in digest
+ * order, so the order a caller lists files in does not change the key.
  */
 export function clusterInput(
   resolved: readonly StageArtifact<ResolvedBranch>[],
   data: GroupingGraph["data"] = null,
+  embedding?: ClusterEmbedding,
 ): StageInput {
   const artifacts = [...resolved].sort((a, b) => byText(a.digest, b.digest));
   const functions = new Set(
@@ -368,7 +449,23 @@ export function clusterInput(
           .filter((e) => functions.has(e.functionId))
           .map((e) => DataEdgeRow.parse(e))
           .sort((a, b) => byText(canonicalJson(a), canonicalJson(b)));
-  return { content: canonicalJson({ data: edges }), artifacts };
+  if (embedding === undefined)
+    return { content: canonicalJson({ data: edges }), artifacts };
+  for (const artifact of embedding.vectors)
+    if (artifact.stage !== EMBED_STAGE)
+      throw new TypeError(
+        `stage 6 embeds from "${EMBED_STAGE}" artifacts, not "${artifact.stage}"`,
+      );
+  const threshold = similarityThreshold(
+    embedding.threshold ?? DEFAULT_SIMILARITY_THRESHOLD,
+  );
+  return {
+    content: canonicalJson({ data: edges, embedding: { threshold } }),
+    artifacts: [
+      ...artifacts,
+      ...[...embedding.vectors].sort((a, b) => byText(a.digest, b.digest)),
+    ],
+  };
 }
 
 /** Stage 6, deterministic half: one fact per candidate cluster. It makes no Jev call. */
@@ -376,8 +473,27 @@ export const clusterStage: Stage<CandidateCluster> = {
   name: "cluster",
   version: "1",
   run: async (input) => {
-    const { data } = ClusterContent.parse(JSON.parse(input.content));
-    return clusterBranches(resolvedFactsOf(input.artifacts), data);
+    const { data, embedding } = ClusterContent.parse(JSON.parse(input.content));
+    const vectors = input.artifacts.filter((a) => a.stage === EMBED_STAGE);
+    if (embedding === undefined && vectors.length > 0)
+      throw new TypeError(
+        `stage 6 read "${EMBED_STAGE}" artifacts with no similarity threshold in its content`,
+      );
+    const resolved = resolvedFactsOf(
+      input.artifacts.filter((a) => a.stage !== EMBED_STAGE),
+    );
+    return clusterBranches(
+      resolved,
+      data,
+      embedding === undefined
+        ? undefined
+        : {
+            vectors: vectors.flatMap(
+              (a) => (a as StageArtifact<BranchVector>).facts,
+            ),
+            threshold: embedding.threshold,
+          },
+    );
   },
 };
 
@@ -471,14 +587,18 @@ export function groupConfirmQuestion(): ChoiceQuestion<GroupVerdict> {
 /** What Jev is shown about one candidate cluster: its members' lowered branches, never raw source. */
 export type ClusterQuestionState = {
   readonly cluster: string;
-  /** Why the members are one candidate: the condition key they share, or the binding they touch. */
+  /**
+   * Why the members are one candidate: the condition key they share, the binding they touch, or how
+   * similar their embedded lowered texts are.
+   */
   readonly shared:
     | {
         readonly signal: "condition";
         readonly atoms: readonly string[];
         readonly outcome: string;
       }
-    | { readonly signal: "data"; readonly binding: string };
+    | { readonly signal: "data"; readonly binding: string }
+    | { readonly signal: "embedding"; readonly similarity: number };
   readonly members: readonly {
     readonly ref: string;
     readonly function: string;
@@ -542,19 +662,26 @@ export function clusterQuestionState(
       ? []
       : [{ ref: m.ref, atoms, outcome: outcomesDiffer ? m.outcome : null }];
   });
-  const { basis } = cluster;
   return {
     cluster: cluster.id,
-    shared:
-      basis._tag === "condition"
-        ? { signal: "condition", ...basis.key }
-        : {
-            signal: "data",
-            binding: `${basis.binding.bindingKind} ${basis.binding.binding} (service ${basis.binding.ownerService})`,
-          },
+    shared: sharedOf(cluster.basis),
     members,
     differences,
   };
+}
+
+function sharedOf(basis: ClusterBasis): ClusterQuestionState["shared"] {
+  switch (basis._tag) {
+    case "condition":
+      return { signal: "condition", ...basis.key };
+    case "data":
+      return {
+        signal: "data",
+        binding: `${basis.binding.bindingKind} ${basis.binding.binding} (service ${basis.binding.ownerService})`,
+      };
+    case "embedding":
+      return { signal: "embedding", similarity: basis.similarity };
+  }
 }
 
 // ── the confirm stage ─────────────────────────────────────────────────────
