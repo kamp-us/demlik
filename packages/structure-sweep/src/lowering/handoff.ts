@@ -11,6 +11,12 @@ import {
   runStage,
   type StageRun,
 } from "./artifact.js";
+import {
+  type BranchVector,
+  type EmbeddingPort,
+  embeddingInput,
+  embeddingStage,
+} from "./embed.js";
 import { type Fact, SourceSpan } from "./fact.js";
 import {
   type CandidateCluster,
@@ -150,6 +156,15 @@ export interface RemeasureStores {
   readonly cluster: ArtifactStore<CandidateCluster>;
 }
 
+/** The embedding candidate source a re-measure re-runs: the port, where its vectors live, the threshold. */
+export interface RemeasureEmbedding {
+  readonly port: EmbeddingPort;
+  /** An unchanged file's vectors are a `hit` here, so its branches are not embedded again. */
+  readonly store: ArtifactStore<BranchVector>;
+  /** Defaults to `DEFAULT_SIMILARITY_THRESHOLD`. */
+  readonly threshold?: number;
+}
+
 /** The post-change tree, as far as the re-measure reads it. */
 export interface RemeasureInput {
   /** The post-change source of every file the spec names. */
@@ -159,6 +174,8 @@ export interface RemeasureInput {
   readonly lexicon: Lexicon;
   /** The post-change graph's data edges, or `null` without `--data`. A data-basis spec needs them. */
   readonly data?: GroupingGraph["data"];
+  /** The embedding source, or none. An embedding-basis spec needs it. */
+  readonly embedding?: RemeasureEmbedding;
   /** The post-change boundary crossings. */
   readonly boundaries: readonly BoundaryCrossing[];
   readonly loggingRoots?: readonly string[];
@@ -201,7 +218,8 @@ export interface Remeasure {
  * expected delta: `collapsed` when no member function it expects to leave still has a branch in a
  * cluster on the spec's key, otherwise `still-clustered`, naming those branches. Artifacts are
  * hash-keyed, so an unchanged file is answered from `after.stores`. A data-basis spec needs
- * `after.data`: without it the re-measure refuses rather than read a collapse it cannot see.
+ * `after.data`, and an embedding-basis spec `after.embedding`: without it the re-measure refuses
+ * rather than read a collapse it cannot see.
  */
 export async function remeasure(
   spec: TaskSpec,
@@ -214,6 +232,10 @@ export async function remeasure(
     throw new RangeError(
       `remeasure: the spec for ${spec.group} has a data basis, and the post-change graph carries no data edges`,
     );
+  if (spec.basis._tag === "embedding" && after.embedding === undefined)
+    throw new RangeError(
+      `remeasure: the spec for ${spec.group} has an embedding basis, and no embedding port was supplied`,
+    );
   const files = specFiles(spec);
   const runs: {
     file: string;
@@ -221,6 +243,7 @@ export async function remeasure(
     resolve: StageRun<ResolvedBranch>["_tag"];
   }[] = [];
   const resolved = [];
+  const vectors = [];
   for (const file of files) {
     const source = after.sources[file];
     if (source === undefined)
@@ -246,11 +269,32 @@ export async function remeasure(
     );
     runs.push({ file, lower: lowered._tag, resolve: resolvedRun._tag });
     resolved.push(resolvedRun.artifact);
+    if (after.embedding !== undefined)
+      vectors.push(
+        (
+          await runStage(
+            after.embedding.store,
+            embeddingStage(after.embedding.port),
+            embeddingInput(after.embedding.port, lowered.artifact),
+          )
+        ).artifact,
+      );
   }
   const clustered = await runStage(
     after.stores.cluster,
     clusterStage,
-    clusterInput(resolved, data),
+    clusterInput(
+      resolved,
+      data,
+      after.embedding === undefined
+        ? undefined
+        : {
+            vectors,
+            ...(after.embedding.threshold === undefined
+              ? {}
+              : { threshold: after.embedding.threshold }),
+          },
+    ),
   );
   const leaving = new Set(spec.expectedDelta.leaves);
   const key = canonicalJson(spec.basis);
