@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { PAIR_VERDICTS, type PairVerdict } from "../pairs/questions.js";
-import { pairGroups } from "../pairs/report.js";
+import { pairGroups, ROW_VERDICTS, type RowVerdict } from "../pairs/report.js";
 
 /** The slice of a `sweep` verdict row `consolidate` reads. */
 export const ClusterRow = z.object({
@@ -22,7 +21,7 @@ export const HelperPairRow = z.object({
   b: JudgedFunction,
   answers: z.object({
     verdict: z.object({
-      choice: z.enum(PAIR_VERDICTS as [PairVerdict, ...PairVerdict[]]),
+      choice: z.enum(ROW_VERDICTS as [RowVerdict, ...RowVerdict[]]),
     }),
   }),
 });

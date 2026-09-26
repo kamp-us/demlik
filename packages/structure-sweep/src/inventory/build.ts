@@ -3,7 +3,12 @@ import { dirname } from "node:path/posix";
 import type { GroupsFile } from "../groups/file.js";
 import { canonicalJson } from "../lowering/artifact.js";
 import { clusterStatus } from "../lowering/group.js";
-import { actionFor, pairGroups } from "../pairs/report.js";
+import {
+  type Answered,
+  actionFor,
+  isAnswered,
+  pairGroups,
+} from "../pairs/report.js";
 import { anyGlob } from "./glob.js";
 import {
   type ConsolidateInput,
@@ -228,7 +233,7 @@ const sideSpan = (fn: PairInput["a"]): Span => ({
 function pairsDraft(
   subject: string,
   verdict: "same_decision" | "shared_helper",
-  pairs: readonly PairInput[],
+  pairs: readonly Answered<PairInput>[],
 ): Draft {
   const spans = uniqueSpans(
     pairs.flatMap((p) => [sideSpan(p.a), sideSpan(p.b)]),
@@ -251,11 +256,13 @@ const atLeast = (
   verdict: "same_decision" | "shared_helper",
   floor: number,
 ) =>
-  rows.filter(
-    (r) =>
-      r.answers.verdict.choice === verdict &&
-      r.answers.verdict.confidence >= floor,
-  );
+  rows
+    .filter(isAnswered)
+    .filter(
+      (r) =>
+        r.answers.verdict.choice === verdict &&
+        r.answers.verdict.confidence >= floor,
+    );
 
 function sameDecision(pairs: Source<readonly PairInput[]>): LeverResult {
   if (pairs._tag === "missing") return skipped(pairs);
@@ -274,7 +281,7 @@ const bareName = (fn: PairInput["a"]) => fn.function.replace(/#\d+$/, "");
 
 function sharedHelper(pairs: Source<readonly PairInput[]>): LeverResult {
   if (pairs._tag === "missing") return skipped(pairs);
-  const families = new Map<string, PairInput[]>();
+  const families = new Map<string, Answered<PairInput>[]>();
   for (const row of atLeast(
     pairs.value,
     "shared_helper",

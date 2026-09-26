@@ -16,6 +16,7 @@ import {
   type AnchorJev,
   type AnchorQuestions,
   anchorQuestions,
+  UNANSWERED,
 } from "../src/pairs/anchor.js";
 import {
   anchorMenus,
@@ -152,6 +153,7 @@ describe("runPairs", () => {
       same_decision: 1,
       look_alike: 1,
       shared_helper: 1,
+      unanswered: 0,
     });
     expect(JSON.parse(readFileSync(outPath, "utf8"))).toHaveLength(3);
     const markdown = renderMarkdown(rows);
@@ -314,9 +316,13 @@ interface AnchorAsked {
 
 /**
  * An anchor-mode Jev stand-in. `picks` names, per anchor function, the candidate it picks; an
- * anchor it does not name answers `none`. The pick gets 0.8 and the rest share 0.2 evenly.
+ * anchor it does not name answers `none`. The pick gets 0.8 and the rest share 0.2 evenly. A
+ * candidate function named in `omit` gets no probability at all: its ref is left out of the answer.
  */
-function anchorJev(picks: Readonly<Record<string, string>>) {
+function anchorJev(
+  picks: Readonly<Record<string, string>>,
+  omit: readonly string[] = [],
+) {
   const asked: AnchorAsked[] = [];
   const ask: AnchorJev = async (questions, state) => {
     const read = state as unknown as AnchorAsked["state"];
@@ -326,13 +332,20 @@ function anchorJev(picks: Readonly<Record<string, string>>) {
     );
     const chosen = pick?.ref ?? ANCHOR_NONE;
     const refs = Object.keys(questions.partner.criteria);
+    const omitted = new Set(
+      read.candidates
+        .filter((c) => omit.includes(c.function))
+        .map((c) => c.ref),
+    );
     const answers: JevOk<AnchorQuestions>["answers"] = {
       partner: {
         type: "choice",
         choice: chosen,
         confidence: 0.8,
         probabilities: Object.fromEntries(
-          refs.map((r) => [r, r === chosen ? 0.8 : 0.2 / (refs.length - 1)]),
+          refs
+            .filter((r) => !omitted.has(r))
+            .map((r) => [r, r === chosen ? 0.8 : 0.2 / (refs.length - 1)]),
         ),
       },
       business_rule: { type: "noul", noul: 0.7 },
@@ -430,12 +443,91 @@ describe("anchor mode", () => {
       same_decision: 1,
       look_alike: 2,
       shared_helper: 0,
+      unanswered: 0,
     });
     // The rows keep the pairwise field set, so inventory and consolidate read them as they are.
     const pairwiseRows = (await run(fresh(), pairwise(jev()))).rows;
     const fields = (row: object) => Object.keys(row).sort();
     expect(rows.map(fields)).toEqual(pairwiseRows.map(fields));
     expect(JSON.parse(readFileSync(at.outPath, "utf8"))).toHaveLength(3);
+  });
+
+  it("records a candidate whose ref Jev's answer omits as unanswered, picked or not, never as a verdict", async () => {
+    const at = fresh();
+    const { rows } = await run(at, {
+      mode: "anchor",
+      ask: anchorJev({ canEdit: "mayEdit" }, ["mayEdit", "mapRow"]),
+    });
+    const byPair = Object.fromEntries(
+      rows.map((r) => [`${r.a.function}|${r.b.function}`, r.answers]),
+    );
+    // Jev picked c0 but gave it no probability, and gave c1 none either.
+    expect(byPair["canEdit|mayEdit"]).toEqual({
+      verdict: { choice: UNANSWERED },
+      business_rule: { type: "noul", noul: 0.7 },
+      partner: {
+        anchor: "a",
+        ref: "c0",
+        chosen: "c0",
+        menu: expect.any(String),
+      },
+    });
+    expect(byPair["canEdit|mapRow"]).toMatchObject({
+      verdict: { choice: UNANSWERED },
+      partner: { ref: "c1", chosen: "c0" },
+    });
+    expect(byPair["canEdit|mapRow"]?.verdict).not.toHaveProperty("confidence");
+    expect(byPair["canEdit|mapRow"]).not.toHaveProperty("partner.probability");
+    expect(byPair["mapRow|toRow"]).toMatchObject({
+      verdict: { choice: "look_alike", confidence: 0.8 },
+    });
+    expect(countVerdicts(rows)).toEqual({
+      same_decision: 0,
+      look_alike: 1,
+      shared_helper: 0,
+      unanswered: 2,
+    });
+    const markdown = renderMarkdown(rows);
+    expect(markdown).toContain(
+      `| ${UNANSWERED} | 2 | ${actionFor(UNANSWERED)} |`,
+    );
+    expect(markdown).toContain("| same_decision | 0 |");
+    expect(markdown).toContain("### same_decision groups\n\nnone");
+  });
+
+  it("asks an anchor's menu again when the ledger holds an unanswered row for it, and serves the rest", async () => {
+    const at = fresh();
+    await run(at, {
+      mode: "anchor",
+      ask: anchorJev({ canEdit: "mayEdit" }, ["mayEdit"]),
+    });
+    const onFile: PairRow[] = JSON.parse(readFileSync(at.outPath, "utf8"));
+    expect(onFile.map((r) => r.answers.verdict.choice).sort()).toEqual([
+      "look_alike",
+      "look_alike",
+      UNANSWERED,
+    ]);
+    const plan = planPairs({
+      root: at.root,
+      ref: "HEAD",
+      targets: [{ scope: "svc", collapsePath: at.collapsePath }],
+      outPath: at.outPath,
+      mode: "anchor",
+      model: DEFAULT_MODEL,
+    });
+    expect(plan.toAsk).toBe(1);
+    const again = anchorJev({ canEdit: "mayEdit" });
+    const { rows } = await run(at, { mode: "anchor", ask: again });
+    // Only canEdit's menu held the unanswered row; mapRow's is served from the ledger.
+    expect(again.asked.map((a) => a.state.anchor.function)).toEqual([
+      "canEdit",
+    ]);
+    expect(countVerdicts(rows)).toEqual({
+      same_decision: 1,
+      look_alike: 2,
+      shared_helper: 0,
+      unanswered: 0,
+    });
   });
 
   it("never reuses a pairwise answer, nor serves an anchor answer to a pairwise run", async () => {

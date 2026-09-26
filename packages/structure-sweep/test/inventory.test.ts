@@ -11,12 +11,13 @@ import {
 } from "../src/inventory/build.js";
 import { INVENTORY_USAGE, inventoryCommand } from "../src/inventory/cli.js";
 import { globMatcher } from "../src/inventory/glob.js";
-import type {
-  ConsolidateInput,
-  GraphInput,
-  PairInput,
-  Source,
-  UnreachableInput,
+import {
+  type ConsolidateInput,
+  type GraphInput,
+  type PairInput,
+  PairsInput,
+  type Source,
+  type UnreachableInput,
 } from "../src/inventory/inputs.js";
 import { memoryArtifactStore, runStage } from "../src/lowering/artifact.js";
 import {
@@ -318,6 +319,27 @@ describe("structure-sweep inventory: levers", () => {
       ["fetchUser", 3, 0.75],
       ["mapRow / toRow", 2, 0.9],
     ]);
+  });
+
+  it("C and D read an unanswered pair as no verdict, never as a same-decision or shared-helper one", async () => {
+    const unanswered = PairsInput.parse([
+      {
+        id: "p9",
+        a: { path: "s/c.ts", function: "editAllowed", lines: [3, 6] },
+        b: { path: "s/z.ts", function: "canWrite", lines: [1, 4] },
+        answers: { verdict: { choice: "unanswered" } },
+      },
+    ]);
+    const answered = buildInventory(await allInputs());
+    const inventory = buildInventory({
+      ...(await allInputs()),
+      pairs: read(".structure-sweep/pairs.json", [...PAIRS, ...unanswered]),
+    });
+    for (const lever of ["same-decision", "shared-helper"])
+      expect(ofLever(inventory.entries, lever)).toEqual(
+        ofLever(answered.entries, lever),
+      );
+    expect(JSON.stringify(inventory.entries)).not.toContain("pair:p9");
   });
 
   it("E lists an exported name in two top-level scopes, never a generic, private or same-scope one", async () => {

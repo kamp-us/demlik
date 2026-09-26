@@ -14,7 +14,7 @@ import { readLoweringGraph } from "../lowering/lower.js";
 import type { AnchorJev } from "./anchor.js";
 import { DEFAULT_MAX_PARTNERS, maxPartners } from "./cap.js";
 import { type PairQuestions, pairQuestions } from "./questions.js";
-import { countVerdicts, renderMarkdown } from "./report.js";
+import { countVerdicts, renderMarkdown, shownCounts } from "./report.js";
 import {
   type Bodies,
   type PairsJev,
@@ -188,7 +188,7 @@ export async function pairsCommand(
   writeFileSync(reportPath, renderMarkdown(rows, skipped));
   for (const { scope } of targets) {
     log(
-      `${scope} ${JSON.stringify(countVerdicts(rows.filter((r) => r.scope === scope)))}`,
+      `${scope} ${JSON.stringify(Object.fromEntries(shownCounts(countVerdicts(rows.filter((r) => r.scope === scope)))))}`,
     );
   }
   log(

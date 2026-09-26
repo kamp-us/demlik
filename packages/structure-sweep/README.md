@@ -336,17 +336,27 @@ encodes the same business rule as the anchor, or `none`. The same call asks `bus
 the anchor.
 
 `pairs.json` still holds one row per pair, with the same fields a pairwise row has, so `inventory`
-and `consolidate` read it unchanged. A row's `answers` records what the anchor's one answer means
+and `consolidate` read both the same way. A row's `answers` records what the anchor's one answer means
 for that pair:
 
 - the candidate Jev picked is `same_decision`, at the probability Jev gave its ref;
 - every other candidate, including all of them when Jev answered `none`, is `look_alike`, at one
   minus its ref's probability. Anchor mode never records `shared_helper`: `none` does not tell
   plumbing from a look-alike, so shared helpers are found with `--pairwise` only;
+- a candidate whose ref Jev's answer gives no probability, picked or not, is `unanswered`: its
+  verdict is `{ "choice": "unanswered" }`, with no confidence, and its `partner` has no
+  `probability`. `pairs.md` counts it on an `unanswered` line, no group or `inventory` lever reads
+  it as a verdict, and it is never served from the ledger, so the next run asks its anchor's menu
+  again;
 - `business_rule` is the anchor's, the same on every row of its menu;
 - `partner` carries which side is the anchor, the candidate's `ref`, its `probability`, the ref
   Jev `chosen` for the anchor, and a `menu` hash of the whole state the anchor was asked about;
 - `usage` is the one call's, repeated on every row of the anchor's menu.
+
+Every row, in either mode, carries `id`, `scope`, its two functions `a` and `b`, the graph's
+`signals` and `graphConfidence`, `answers`, `model` and `usage`, and two optional fields that are
+part of its cache key: `redacted` (`true` on a row asked under `--redact`) and `lowered` (a hash of
+the lowered bodies sent, on a row asked under `--graph` where at least one side went out lowered).
 
 `--pairwise` asks the older question instead, once per pair: the three-way `same_decision`,
 `look_alike` or `shared_helper` verdict plus `business_rule`, for gold-set evaluation. Anchor and
@@ -431,6 +441,7 @@ or for a whole-tree run capped with `--max-partners` and priced with `--plan` fi
 | `same_decision` | Both encode the same business rule. | collapse into one function |
 | `look_alike` | Similar shape, different decision. In anchor mode, any candidate Jev did not pick. | keep apart |
 | `shared_helper` | Plumbing with no rule. `--pairwise` only. | extract a shared helper |
+| `unanswered` | Jev's anchor answer gave the candidate's ref no probability. Listed only when a row is. | run pairs again to ask Jev |
 
 ### `structure-sweep move plan --scope <folder> --feature <key>...`
 

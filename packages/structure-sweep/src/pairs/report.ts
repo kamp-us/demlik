@@ -1,6 +1,6 @@
 import type { JevUsage } from "@demlik/tea/jev";
 import { absurd } from "../absurd.js";
-import type { AnchorAnswers } from "./anchor.js";
+import { type AnchorAnswers, UNANSWERED } from "./anchor.js";
 import type { GraphSignal, PairFunction } from "./collapse.js";
 import {
   PAIR_VERDICTS,
@@ -39,12 +39,43 @@ export interface PairRow {
   readonly usage: JevUsage;
 }
 
+/** What a `pairs.json` row can record: a verdict Jev gave, or `unanswered` where it gave none. */
+export type RowVerdict = PairVerdict | typeof UNANSWERED;
+
+/** Every row verdict, in the order `pairs.md` counts them. */
+export const ROW_VERDICTS: readonly RowVerdict[] = [
+  ...PAIR_VERDICTS,
+  UNANSWERED,
+];
+
 /** The slice of a pair row `pairGroups` reads: its two functions and the verdict. */
 export interface GroupablePair {
   readonly a: Pick<JudgedFunction, "path" | "function">;
   readonly b: Pick<JudgedFunction, "path" | "function">;
-  readonly answers: { readonly verdict: { readonly choice: PairVerdict } };
+  readonly answers: { readonly verdict: { readonly choice: RowVerdict } };
 }
+
+/** A verdict Jev gave, at the confidence it gave it. */
+interface GivenVerdict {
+  readonly choice: PairVerdict;
+  readonly confidence: number;
+}
+
+/** A row whose verdict is either one Jev gave or `unanswered`. */
+export interface VerdictRow {
+  readonly answers: {
+    readonly verdict: GivenVerdict | { readonly choice: typeof UNANSWERED };
+  };
+}
+
+/** A row carrying a verdict Jev gave. */
+export type Answered<R extends VerdictRow> = R & {
+  readonly answers: { readonly verdict: GivenVerdict };
+};
+
+/** Whether Jev answered the row. An `unanswered` row is never counted as, or served as, a verdict. */
+export const isAnswered = <R extends VerdictRow>(row: R): row is Answered<R> =>
+  row.answers.verdict.choice !== UNANSWERED;
 
 /** Functions (`path:function`) joined by pairs that share one, and the pairs that joined them. */
 export interface PairGroup<R extends GroupablePair = PairRow> {
@@ -52,13 +83,13 @@ export interface PairGroup<R extends GroupablePair = PairRow> {
   readonly pairs: readonly R[];
 }
 
-export type DecisionGroup = PairGroup<PairRow>;
+export type DecisionGroup = PairGroup<Answered<PairRow>>;
 
 const key = (fn: Pick<JudgedFunction, "path" | "function">) =>
   `${fn.path}:${fn.function}`;
 
 /** What a human does about a pair Jev judged this way. Exhaustive: a new verdict fails to compile here. */
-export function actionFor(verdict: PairVerdict): string {
+export function actionFor(verdict: RowVerdict): string {
   switch (verdict) {
     case "same_decision":
       return "collapse into one function";
@@ -66,6 +97,8 @@ export function actionFor(verdict: PairVerdict): string {
       return "keep apart";
     case "shared_helper":
       return "extract a shared helper";
+    case UNANSWERED:
+      return "run pairs again to ask Jev";
     default:
       return absurd(verdict);
   }
@@ -73,14 +106,27 @@ export function actionFor(verdict: PairVerdict): string {
 
 export function countVerdicts(
   rows: readonly PairRow[],
-): Record<PairVerdict, number> {
-  const counts: Record<PairVerdict, number> = {
+): Record<RowVerdict, number> {
+  const counts: Record<RowVerdict, number> = {
     same_decision: 0,
     look_alike: 0,
     shared_helper: 0,
+    unanswered: 0,
   };
   for (const row of rows) counts[row.answers.verdict.choice] += 1;
   return counts;
+}
+
+/**
+ * The counts a report prints: every verdict Jev can give, and `unanswered` only where a row is.
+ * A run in which Jev answered every row prints what it printed before the state existed.
+ */
+export function shownCounts(
+  counts: Record<RowVerdict, number>,
+): [RowVerdict, number][] {
+  return ROW_VERDICTS.filter((v) => v !== UNANSWERED || counts[v] > 0).map(
+    (v) => [v, counts[v]],
+  );
 }
 
 /**
@@ -116,7 +162,7 @@ export function pairGroups<R extends GroupablePair>(
 }
 
 export function decisionGroups(rows: readonly PairRow[]): DecisionGroup[] {
-  return pairGroups(rows, "same_decision").sort(
+  return pairGroups(rows.filter(isAnswered), "same_decision").sort(
     (x, y) =>
       y.members.length - x.members.length || y.pairs.length - x.pairs.length,
   );
@@ -165,8 +211,8 @@ export function renderMarkdown(
       "| verdict | pairs | action |",
       "|---|---|---|",
     );
-    for (const verdict of PAIR_VERDICTS) {
-      lines.push(`| ${verdict} | ${counts[verdict]} | ${actionFor(verdict)} |`);
+    for (const [verdict, count] of shownCounts(counts)) {
+      lines.push(`| ${verdict} | ${count} | ${actionFor(verdict)} |`);
     }
     lines.push("", "### same_decision groups", "");
     const groups = decisionGroups(scoped);
