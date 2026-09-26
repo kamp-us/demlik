@@ -97,8 +97,11 @@ export interface MergeCandidate {
 }
 
 /**
- * A feature whose files do not change together. `cohesion` is its precision: of the same-scope file
- * pairs inside it, the share some commit changed together.
+ * A feature whose files do not change together. A kept change set is a commit cut to its labelled
+ * files, kept when it holds 2..`maxFiles` of them. `cohesion` takes the feature's files that at
+ * least one kept change set touched and, of the same-scope pairs among them, gives the share some
+ * kept change set changed together; a feature file no kept change set touched is left out. It
+ * equals the feature's per-feature `precision` in `refine.json` (its `features` entry).
  */
 export interface SplitCandidate {
   readonly feature: string;
