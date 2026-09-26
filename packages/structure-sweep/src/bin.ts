@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { CONSOLIDATE_USAGE, consolidateCommand } from "./consolidate/cli.js";
+import { GROUPS_USAGE, groupsCommand } from "./groups/cli.js";
 import { MOVE_USAGE, moveCommand } from "./move/cli.js";
 import { PAIRS_USAGE, pairsCommand } from "./pairs/cli.js";
 import { PROPOSE_USAGE, proposeCommand } from "./propose/cli.js";
@@ -13,6 +14,7 @@ const USAGE = [
   MOVE_USAGE,
   SCORE_USAGE,
   CONSOLIDATE_USAGE,
+  GROUPS_USAGE,
 ].join("\n\n");
 
 async function main(argv: readonly string[]): Promise<void> {
@@ -30,6 +32,8 @@ async function main(argv: readonly string[]): Promise<void> {
       return scoreCommand(rest, process.cwd());
     case "consolidate":
       return consolidateCommand(rest, process.cwd());
+    case "groups":
+      return groupsCommand(rest, process.cwd());
     case undefined:
     case "help":
     case "--help":

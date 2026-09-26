@@ -17,6 +17,23 @@ export {
   type SmallFile,
 } from "./consolidate/plan.js";
 export {
+  GroupsFile,
+  GroupsFileError,
+  groupsFileOf,
+  readGroupsFile,
+  writeGroupsFile,
+} from "./groups/file.js";
+export {
+  type GroupList,
+  type GroupListRow,
+  type GroupView,
+  listGroups,
+  type OwnerView,
+  type QuestionView,
+  showGroup,
+  UnknownGroupError,
+} from "./groups/query.js";
+export {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,
