@@ -424,4 +424,53 @@ describe("stage 8 over an embedding-basis group", () => {
       new Set([ADULT_FN]),
     );
   });
+
+  /** Re-measure `spec` over `ADULT` with `file` rewritten to `lines`. */
+  const rewritten = (
+    s: Stores,
+    port: EmbeddingPort,
+    spec: Parameters<typeof remeasure>[0],
+    file: string,
+    lines: readonly string[],
+  ) => {
+    const sources = { ...ADULT, [file]: lines.join("\n") };
+    return remeasure(spec, {
+      ...after(s),
+      sources,
+      functions: functionsOf(sources),
+      embedding: { port, store: memoryArtifactStore() },
+    });
+  };
+
+  it("still clusters when the owner's text changed and the duplicate stayed", async () => {
+    const s = stores();
+    const { spec, port } = await embeddingSpec(s);
+    const result = await rewritten(s, port, spec, "src/checkout/alcohol.ts", [
+      "export function canBuyAlcohol(customer) {",
+      "  if (customer.age < 18) return false;",
+      "  return true;",
+      "}",
+    ]);
+    expect(result.verdict._tag).toBe("still-clustered");
+    if (result.verdict._tag !== "still-clustered") return;
+    expect(new Set(result.verdict.members.map((m) => m.function))).toEqual(
+      new Set([ADULT_FN]),
+    );
+  });
+
+  it("reads collapsed once the duplicate defers to the owner", async () => {
+    const s = stores();
+    const { spec, port } = await embeddingSpec(s);
+    const result = await rewritten(s, port, spec, "src/signup/adult.ts", [
+      "export function assertAdult(person) {",
+      "  if (!canBuyAlcohol(person)) throw new Underage();",
+      "  return person;",
+      "}",
+    ]);
+    expect(result.verdict).toEqual({
+      _tag: "collapsed",
+      group: spec.group,
+      basis: spec.basis,
+    });
+  });
 });

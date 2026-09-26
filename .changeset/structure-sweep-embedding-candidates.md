@@ -16,4 +16,4 @@ consumer supplies (#395).
   (`DEFAULT_SIMILARITY_THRESHOLD`, 0.9) becomes an `embedding`-basis candidate, and Jev confirms it
   through the existing confirm stage.
 - **Nothing changes without a port.** Stage 6's input, key, clusters and ids stay the same.
-- **Re-measure.** `remeasure` takes the same port as `after.embedding`.
+- **Re-measure.** `remeasure` takes the same port as `after.embedding`. An embedding-basis spec reads `still-clustered` while a function it expects to leave shares an embedding cluster with another of the group's functions, even after the owner's text changed.

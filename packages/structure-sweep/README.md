@@ -852,7 +852,10 @@ left to the condition signal. Every embedding candidate goes through `confirmSta
 so Jev still confirms every proposal. Its `shared` reads `{ signal: "embedding", similarity }`.
 Without the third argument, stage 6's input, key, clusters and ids are the same as they were before
 this source existed. `remeasure` takes the same port as `after.embedding: { port, store, threshold? }`,
-and refuses an embedding-basis spec without it.
+and refuses an embedding-basis spec without it. An embedding key names texts, and a collapse edits
+the owner's, so the re-measure reads it by membership: the spec still clusters while a function it
+expects to leave shares any embedding cluster with another of the group's functions, whatever texts
+that cluster now carries.
 
 **Stage 7, owner selection** (`ownerStage`, `ownerInput(confirmed, { graph, layerOf, policy })`).
 One owner per rule group. `layerOf(file)` is injected and returns `{ name, rank } | null`, the shape
