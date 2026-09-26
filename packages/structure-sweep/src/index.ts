@@ -386,6 +386,13 @@ export {
   planManifest,
 } from "./move/plan.js";
 export {
+  type AnchorAnswers,
+  type AnchorJev,
+  type AnchorQuestions,
+  anchorQuestions,
+} from "./pairs/anchor.js";
+export { DEFAULT_MAX_PARTNERS } from "./pairs/cap.js";
+export {
   PAIR_VERDICTS,
   type PairAnswers,
   type PairQuestions,
@@ -397,12 +404,21 @@ export {
   countVerdicts,
   type PairRow,
   renderMarkdown,
+  type SkippedPair,
 } from "./pairs/report.js";
 export {
+  type Bodies,
+  DEFAULT_PAIRS_MODE,
+  type PairsJev,
+  type PairsMode,
   type PairsOptions,
+  type PairsPlan,
   type PairsResult,
+  type PairsSelection,
   type PairTarget,
+  planPairs,
   runPairs,
+  type ScopePlan,
 } from "./pairs/run.js";
 export { renderScoreTable } from "./score/cli.js";
 export { type HistoryOptions, readChangeSets } from "./score/history.js";

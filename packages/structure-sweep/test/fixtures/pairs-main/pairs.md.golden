@@ -1,0 +1,15 @@
+# Collapse candidates judged by Jev
+
+## svc
+
+| verdict | pairs | action |
+|---|---|---|
+| same_decision | 1 | collapse into one function |
+| look_alike | 1 | keep apart |
+| shared_helper | 1 | extract a shared helper |
+
+### same_decision groups
+
+1. **2 functions**, 1 pairs judged same, confidence 90%–90%, business rule 90%
+   - `svc/src/a.ts:canEdit`
+   - `svc/src/b.ts:mayEdit`

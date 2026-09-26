@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { git, ignoredPaths } from "../git.js";
+import type { LoweringGraph } from "../lowering/lower.js";
+import { loweredBodies } from "./lowered.js";
 
 const Signal = z.object({
   signal: z.enum(["shape", "callees", "callers", "name"]),
@@ -35,6 +37,8 @@ export interface PairFunction {
   readonly function: string;
   readonly lines: readonly [number, number];
   readonly source: string;
+  /** Stage 2's lowered body, sent in place of `source`; present only under a graph that lowered the whole function. */
+  readonly lowered?: string;
 }
 
 export interface Pair {
@@ -66,6 +70,7 @@ export function loadPairs(
   scope: string,
   reportPath: string,
   log: (line: string) => void = () => {},
+  graph?: LoweringGraph,
 ): Pair[] {
   const report = CollapseReport.parse(
     JSON.parse(readFileSync(reportPath, "utf8")),
@@ -84,6 +89,10 @@ export function loadPairs(
     texts.set(path, text);
     return text;
   };
+  const loweredOf =
+    graph === undefined
+      ? () => undefined
+      : loweredBodies(graph, (file) => textOf(repoPath(file)));
   const side = (
     id: string,
     file: string,
@@ -100,7 +109,14 @@ export function loadPairs(
       );
       return undefined;
     }
-    return { path, function: name, lines: [start, end], source };
+    const lowered = loweredOf(id);
+    return {
+      path,
+      function: name,
+      lines: [start, end],
+      source,
+      ...(lowered === undefined ? {} : { lowered }),
+    };
   };
   return report.candidates.flatMap((c) => {
     if (ignored.has(repoPath(c.aFile)) || ignored.has(repoPath(c.bFile)))

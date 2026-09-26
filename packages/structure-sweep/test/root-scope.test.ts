@@ -122,7 +122,7 @@ describe("pairs over the whole tree", () => {
       root,
       ref: "HEAD",
       targets: [parsePairsTarget(root, root, `.=${wholeTree()}`)],
-      jev,
+      jev: { mode: "pairwise", ask: jev },
       outPath,
     });
 
@@ -148,7 +148,7 @@ describe("pairs over the whole tree", () => {
       root,
       ref: "HEAD",
       targets: [parsePairsTarget(root, root, `svc=${svcOnly}`)],
-      jev: pairsJev(),
+      jev: { mode: "pairwise", ask: pairsJev() },
       outPath,
     });
     const svcRows = readLedger(outPath);
@@ -158,7 +158,7 @@ describe("pairs over the whole tree", () => {
       root,
       ref: "HEAD",
       targets: [rootTarget],
-      jev: pairsJev(),
+      jev: { mode: "pairwise", ask: pairsJev() },
       outPath,
     });
     const narrower = collapseReport([
@@ -168,7 +168,7 @@ describe("pairs over the whole tree", () => {
       root,
       ref: "HEAD",
       targets: [parsePairsTarget(root, root, `.=${narrower}`)],
-      jev: pairsJev(),
+      jev: { mode: "pairwise", ask: pairsJev() },
       outPath,
     });
 
