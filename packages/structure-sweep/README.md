@@ -462,7 +462,8 @@ owner answer's distribution cut):
 - `members`: each member branch with its `SourceSpan`, its lowered atoms and outcome, and
   `callers`, the member function's `edges.calledBy` from the `--graph` JSON.
 - `owner`: every candidate stage 7 narrowed to (not only the winner), what settled it (`layer`,
-  `fan-in` or `jev`) and the owner, or `unknown`. `null` for a cluster that is not a group, or before
+  `fan-in` or `jev`, or `none` when no step could and nothing was asked) and the owner, or
+  `unknown`. `null` for a cluster that is not a group, or before
   stage 7 ran.
 - `evidence`: stage 6's confirm evidence: the differences Jev was shown and the answer the gate
   settled on, with Jev's whole distribution.
@@ -729,8 +730,10 @@ members in the lowest layer that every member's callers reach without an upward 
 caller constrains nothing. Ties are broken by fan-in, the member function's `edges.calledBy` count.
 Only a tie fan-in does not break, or a group with an unlayered member, is asked (`ownerQuestion()`,
 through `gateAll` under a stage-7 `gatePolicy`). An abstained owner is `unknown` plus an `ownerQueue`
-entry. A group no member of which every caller reaches without an upward edge is `unknown` too,
-unasked. `ownerFacts` gives one fact per group: its id, the owner member and the owner's span.
+entry. The question has one ref per candidate, `OWNER_REFS` (8), so a tie wider than 8 is not asked:
+its owner is `unknown`, with an `ownerQueue` entry whose `answer` is `null`. An unlayered member puts
+every member into the tie, so this cap reaches any group of 9 or more with one unlayered member. A
+group no member of which every caller reaches without an upward edge is `unknown` too, unasked. `ownerFacts` gives one fact per group: its id, the owner member and the owner's span.
 
 **`rederived`, derived** (`deriveRederived(groups, owners)`). A branch is `rederived` when it is a
 member of a confirmed rule group whose stage-7 owner is a different member; the owner's own branch

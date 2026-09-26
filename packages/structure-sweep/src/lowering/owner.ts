@@ -148,14 +148,15 @@ export type Owner = z.infer<typeof Owner>;
 
 /**
  * How one group's owner was chosen. `candidates` is every member the layer rule narrowed to (every
- * member when one is unlayered), not only the winner. `settledBy` names the step that decided it;
- * `asked` is the Jev tie-break, when there was one.
+ * member when one is unlayered), not only the winner. `settledBy` names the step that decided it,
+ * or `none` when no step could and nothing was asked (an unreachable group, or a tie wider than
+ * `OWNER_REFS`); `asked` is the Jev tie-break, when there was one.
  */
 export const OwnerRecord = z.strictObject({
   group: z.string().min(1),
   span: SourceSpanSchema,
   candidates: z.array(OwnerCandidate).min(1),
-  settledBy: z.enum(["layer", "fan-in", "jev"]),
+  settledBy: z.enum(["layer", "fan-in", "jev", "none"]),
   owner: factValueSchema(Owner),
   asked: z
     .strictObject({
@@ -268,9 +269,24 @@ function narrow(
       readonly tied: readonly OwnerCandidate[];
     }
   | {
+      /** A tie with more candidates than `OWNER_REFS`: the question has no ref for every one. */
+      readonly _tag: "too-wide";
+      readonly candidates: readonly OwnerCandidate[];
+      readonly tied: readonly OwnerCandidate[];
+    }
+  | {
       readonly _tag: "unreachable";
       readonly candidates: readonly OwnerCandidate[];
     } {
+  const tie = (
+    candidates: readonly OwnerCandidate[],
+    tied: readonly OwnerCandidate[],
+  ) =>
+    ({
+      _tag: tied.length <= OWNER_REFS.length ? "tied" : "too-wide",
+      candidates,
+      tied,
+    }) as const;
   const seen = new Set<string>();
   const all: OwnerCandidate[] = [];
   for (const member of group.members) {
@@ -288,8 +304,7 @@ function narrow(
   const layered = all.flatMap((c) =>
     c.layer === null ? [] : [{ ...c, layer: c.layer }],
   );
-  if (layered.length < all.length)
-    return { _tag: "tied", candidates: all, tied: all };
+  if (layered.length < all.length) return tie(all, all);
   // A caller → member edge is upward when the caller sits in a lower layer (a higher rank) than the
   // member. An unlayered caller's edge cannot be judged, so it constrains nothing.
   const callerRanks = all.flatMap((c) =>
@@ -315,7 +330,7 @@ function narrow(
   const [leader] = leaders;
   if (leaders.length === 1 && leader !== undefined)
     return { _tag: "settled", candidates, owner: leader, by: "fan-in" };
-  return { _tag: "tied", candidates, tied: leaders };
+  return tie(candidates, leaders);
 }
 
 const ownerOf = (group: string, c: OwnerCandidate): Owner => ({
@@ -358,7 +373,8 @@ function ownerQuestionState(
 /**
  * Stage 7: one owner per confirmed rule group. The lowest layer every member's callers reach
  * without an upward edge decides first, then fan-in; only a tie that survives both, or a group with
- * an unlayered member, is asked through `gateAll`. An abstained owner is `unknown`.
+ * an unlayered member, is asked through `gateAll`. An abstained owner is `unknown`. A tie wider
+ * than `OWNER_REFS` is not asked: its owner is `unknown`, with `asked.answer` `null`.
  */
 export function ownerStage(options: OwnerOptions): Stage<OwnerRecord> {
   return {
@@ -385,11 +401,7 @@ export function ownerStage(options: OwnerOptions): Stage<OwnerRecord> {
         group,
         narrowed: narrow(group, functions),
       }));
-      const askable = narrowed.filter(
-        (n) =>
-          n.narrowed._tag === "tied" &&
-          n.narrowed.tied.length <= OWNER_REFS.length,
-      );
+      const askable = narrowed.filter((n) => n.narrowed._tag === "tied");
       const items: GateItem[] = askable.map(({ fact, group, narrowed: n }) => ({
         id: group.id,
         span: fact.span,
@@ -429,24 +441,28 @@ export function ownerStage(options: OwnerOptions): Stage<OwnerRecord> {
             span: fact.span,
             value: derived({
               ...base,
-              settledBy: "layer",
+              settledBy: "none",
               owner: unknownValue("undetermined"),
               asked: null,
             }),
           };
         const tied = n.tied.map((c) => c.function);
-        const gatedOne = settledOf.get(group.id);
-        if (gatedOne?.fact === undefined || gatedOne.settled === undefined)
+        if (n._tag === "too-wide")
           return {
             id: group.id,
             span: fact.span,
             value: derived({
               ...base,
-              settledBy: "jev",
+              settledBy: "none",
               owner: unknownValue("undetermined"),
               asked: { tied, answer: null, rounds: 0 },
             }),
           };
+        const gatedOne = settledOf.get(group.id);
+        if (gatedOne?.fact === undefined || gatedOne.settled === undefined)
+          throw new RangeError(
+            `stage 7: gateAll returned no answer for the tied group ${group.id}`,
+          );
         const { fact: verdict, settled } = gatedOne;
         const rounds =
           settled._tag === "promoted" ? settled.round : settled.rounds;

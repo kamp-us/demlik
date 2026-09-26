@@ -302,6 +302,38 @@ describe("stage 7: owner selection", () => {
     });
   });
 
+  it("does not ask a tie wider than OWNER_REFS: the owner is unknown with an unanswered queue entry", async () => {
+    const wide = Array.from(
+      { length: OWNER_REFS.length + 1 },
+      (_, i) => `src/rules/r${i}.ts:check${i}`,
+    );
+    const { jev, run, records } = await owners({ wide }, {});
+    expect(jev.asked).toHaveLength(0);
+    const [record] = records;
+    expect(record?.settledBy).toBe("none");
+    expect(record?.owner).toEqual({ _tag: "unknown", reason: "undetermined" });
+    expect(record?.asked).toEqual({ tied: wide, answer: null, rounds: 0 });
+    const queue = ownerQueue(run.artifact.facts);
+    expect(queue.entries).toEqual([
+      expect.objectContaining({
+        id: "g-wide",
+        tied: wide,
+        answer: null,
+        rounds: 0,
+      }),
+    ]);
+  });
+
+  it("asks a tie exactly OWNER_REFS wide", async () => {
+    const full = Array.from(
+      { length: OWNER_REFS.length },
+      (_, i) => `src/rules/r${i}.ts:check${i}`,
+    );
+    const { jev, records } = await owners({ full }, {});
+    expect(jev.asked).toHaveLength(1);
+    expect(records[0]?.settledBy).toBe("jev");
+  });
+
   it("leaves a group no caller reaches without an upward edge unknown, unasked", async () => {
     const { jev, records } = await owners(
       { up: ["src/routes/a.ts:fromA", "src/services/b.ts:fromB"] },
@@ -311,6 +343,7 @@ describe("stage 7: owner selection", () => {
       },
     );
     expect(jev.asked).toHaveLength(0);
+    expect(records[0]?.settledBy).toBe("none");
     expect(records[0]?.owner).toEqual({
       _tag: "unknown",
       reason: "undetermined",

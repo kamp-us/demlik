@@ -157,7 +157,7 @@ export interface RemeasureInput {
   /** The post-change `--graph` JSON's function nodes. */
   readonly functions: readonly GraphFunction[];
   readonly lexicon: Lexicon;
-  /** The post-change graph's data edges, or `null` without `--data`. */
+  /** The post-change graph's data edges, or `null` without `--data`. A data-basis spec needs them. */
   readonly data?: GroupingGraph["data"];
   /** The post-change boundary crossings. */
   readonly boundaries: readonly BoundaryCrossing[];
@@ -200,12 +200,20 @@ export interface Remeasure {
  * Re-run stages 2, 3 and 6 over the post-change sources of the files `spec` names and check its
  * expected delta: `collapsed` when no member function it expects to leave still has a branch in a
  * cluster on the spec's key, otherwise `still-clustered`, naming those branches. Artifacts are
- * hash-keyed, so an unchanged file is answered from `after.stores`.
+ * hash-keyed, so an unchanged file is answered from `after.stores`. A data-basis spec needs
+ * `after.data`: without it the re-measure refuses rather than read a collapse it cannot see.
  */
 export async function remeasure(
   spec: TaskSpec,
   after: RemeasureInput,
 ): Promise<Remeasure> {
+  const data = after.data ?? null;
+  // Without data edges no data cluster can form, so a data-basis spec would read `collapsed`
+  // whether or not the collapse landed.
+  if (spec.basis._tag === "data" && data === null)
+    throw new RangeError(
+      `remeasure: the spec for ${spec.group} has a data basis, and the post-change graph carries no data edges`,
+    );
   const files = specFiles(spec);
   const runs: {
     file: string;
@@ -242,7 +250,7 @@ export async function remeasure(
   const clustered = await runStage(
     after.stores.cluster,
     clusterStage,
-    clusterInput(resolved, after.data ?? null),
+    clusterInput(resolved, data),
   );
   const leaving = new Set(spec.expectedDelta.leaves);
   const key = canonicalJson(spec.basis);

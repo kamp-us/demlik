@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Fact } from "../src/lowering/fact.js";
-import type { RuleGroup } from "../src/lowering/group.js";
+import {
+  type GroupingGraph,
+  type RuleGroup,
+  readGroupingGraph,
+} from "../src/lowering/group.js";
 import {
   type BoundaryCrossing,
   checkRatchet,
@@ -12,12 +16,15 @@ import {
   TaskSpec,
   taskSpecs,
 } from "../src/lowering/handoff.js";
+import { readLoweringGraph } from "../src/lowering/lower.js";
 import type { Owner } from "../src/lowering/owner.js";
 import {
   clusters,
   clustersOf,
+  dataGraphFile,
   emptyLexicon,
   functionsOf,
+  LEDGER,
   type Stores,
   stores,
 } from "./lowering-group-fixture.js";
@@ -112,6 +119,46 @@ async function groupAndOwner(s: Stores) {
     },
   ];
   return { groups, owners, deny };
+}
+
+/** The data-basis group over `LEDGER`'s one binding, owned by `loadInvoice`, as a spec. */
+async function dataSpecOf(s: Stores, data: GroupingGraph["data"]) {
+  const artifact = await clustersOf(LEDGER, data, { stores: s });
+  const group = clusters(artifact).find((c) => c.basis._tag === "data");
+  if (group === undefined) throw new Error("expected the data cluster");
+  const owner = group.members.find((m) => m.function.endsWith(":loadInvoice"));
+  if (owner === undefined) throw new Error("expected loadInvoice in it");
+  const [spec] = taskSpecs(
+    [
+      {
+        id: group.id,
+        span: owner.span,
+        value: {
+          _tag: "known",
+          value: { id: group.id, basis: group.basis, members: group.members },
+          basis: { _tag: "promoted", confidence: 0.95, floor: 0.9, round: 0 },
+        },
+      },
+    ],
+    [
+      {
+        id: group.id,
+        span: owner.span,
+        value: {
+          _tag: "known",
+          value: {
+            group: group.id,
+            member: owner.branch,
+            function: owner.function,
+            span: owner.span,
+          },
+          basis: { _tag: "derived" },
+        },
+      },
+    ],
+  );
+  if (spec === undefined) throw new Error("expected one data-basis spec");
+  return spec;
 }
 
 async function specOf(s: Stores, boundaries: readonly BoundaryCrossing[] = []) {
@@ -253,6 +300,47 @@ describe("stage 8: the re-measure", () => {
     const { [REFUND_FILE]: _dropped, ...rest } = BEFORE;
     await expect(remeasure(spec, afterOf(rest, s))).rejects.toThrow(
       /no post-change source for src\/api\/refund\.ts/,
+    );
+  });
+});
+
+describe("stage 8: the re-measure of a data-basis spec", () => {
+  const graph = readGroupingGraph(dataGraphFile);
+  const functions = readLoweringGraph(dataGraphFile).functions;
+  const dataAfter = (s: Stores) => ({
+    sources: LEDGER,
+    functions,
+    lexicon: emptyLexicon,
+    boundaries: [],
+    stores: s,
+  });
+
+  it("refuses when the post-change graph carries no data edges, null or absent", async () => {
+    const s = stores();
+    const spec = await dataSpecOf(s, graph.data);
+    expect(spec.basis._tag).toBe("data");
+    await expect(
+      remeasure(spec, { ...dataAfter(s), data: null }),
+    ).rejects.toThrow(
+      /has a data basis, and the post-change graph carries no data edges/,
+    );
+    await expect(remeasure(spec, dataAfter(s))).rejects.toThrow(
+      /has a data basis/,
+    );
+  });
+
+  it("re-measures it with data present: a member left in place still clusters on the binding", async () => {
+    const s = stores();
+    const spec = await dataSpecOf(s, graph.data);
+    const result = await remeasure(spec, {
+      ...dataAfter(s),
+      data: graph.data,
+    });
+    expect(result.verdict._tag).toBe("still-clustered");
+    if (result.verdict._tag !== "still-clustered") return;
+    expect(result.verdict.group).toBe(spec.group);
+    expect(new Set(result.verdict.members.map((m) => m.function))).toEqual(
+      new Set(["src/ledger/invoices.ts:voidInvoice"]),
     );
   });
 });
