@@ -54,7 +54,7 @@ file imports only the core, so it runs unchanged on either engine.
 - `@demlik/tea` — the core: `defineMachine`, `Cmd`, `replay` and the types. It
   imports no engine.
 - `@demlik/tea/promise` — the Promise engine. Handlers return Promises.
-- `@demlik/tea/effect` — the Effect engine (`experimental`, Effect v4). Handlers
+- `@demlik/tea/effect` — the Effect engine (`stable`, Effect v4). Handlers
   return Effects, services come from your Layers, the handle's verbs return
   Effects with typed errors, and closing the scope interrupts whatever is in
   flight.
