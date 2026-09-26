@@ -1,9 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import type { SourceFile } from "ts-morph";
 import { absurd } from "../absurd.js";
-import { git, trackedPaths } from "../git.js";
+import {
+  exactRenames,
+  git,
+  stagedPaths,
+  trackedPaths,
+  uncommittedPaths,
+} from "../git.js";
+import { canonicalJson, contentHash } from "../lowering/artifact.js";
 import {
   hasDangling,
   heal,
@@ -30,6 +37,12 @@ export function stateOf(repoRoot: string, row: MoveRow): RowState {
   return { kind: "absent", row };
 }
 
+/** The commits one apply made: the renames, then the import rewrites; `null` where it made none. */
+export type ApplyCommits = {
+  readonly rename: string | null;
+  readonly rewrite: string | null;
+};
+
 export type ApplyReport = {
   readonly pending: number;
   readonly done: number;
@@ -37,9 +50,11 @@ export type ApplyReport = {
   readonly moved: number;
   readonly healed: number;
   readonly specifiersRewritten: number;
+  /** Files the rewrite commit changed. */
   readonly filesTouched: number;
-  /** `untouched` when nothing needed doing, `no formatter` when the repo has no biome, else biome's verdict. */
+  /** `untouched` when nothing needed rewriting, `no formatter` when the repo has no biome, else biome's verdict. */
   readonly lint: string;
+  readonly commits: ApplyCommits;
   readonly staleStringRefs: readonly string[];
   readonly millis: number;
 };
@@ -117,42 +132,110 @@ function format(repoRoot: string, paths: readonly string[]): string {
   }
 }
 
-function moveAndMeasure(
+/** Names the manifest in both commit messages, so a re-run can tell its own rename commit at HEAD. */
+const MANIFEST_TRAILER = "Structure-Sweep-Manifest";
+const RENAME_TRAILER = "Structure-Sweep-Step: rename";
+
+const manifestId = (manifest: Manifest) => contentHash(canonicalJson(manifest));
+
+const renameMessage = (count: number, id: string) =>
+  `structure-sweep move: rename ${count} file${count === 1 ? "" : "s"} into feature folders
+
+Content unchanged, so git records each move as a 100% rename and history follows it.
+The import rewrites follow in the next commit.
+
+${RENAME_TRAILER}
+${MANIFEST_TRAILER}: ${id}
+`;
+
+const rewriteMessage = (id: string) =>
+  `structure-sweep move: rewrite imports after the renames
+
+Specifier rewrites, heals and formatting for the files the previous commit moved.
+
+${MANIFEST_TRAILER}: ${id}
+`;
+
+function commit(repoRoot: string, message: string): string {
+  git(repoRoot, ["commit", "-q", "-m", message]);
+  return git(repoRoot, ["rev-parse", "HEAD"]).trim();
+}
+
+/** One commit holding only the pending renames, each file byte-identical at its new path. */
+function commitRenames(
+  repoRoot: string,
+  pending: readonly MoveRow[],
+  id: string,
+): string {
+  for (const row of pending) {
+    mkdirSync(dirname(join(repoRoot, row.to)), { recursive: true });
+    git(repoRoot, ["mv", "--", row.from, row.to]);
+  }
+  return commit(repoRoot, renameMessage(pending.length, id));
+}
+
+/**
+ * The rows HEAD renamed, when HEAD is this manifest's rename commit — the renames whose import
+ * rewrites are still owed, whether this run just made that commit or an earlier one stopped after it.
+ */
+function renamedAtHead(
+  repoRoot: string,
+  manifest: Manifest,
+  id: string,
+): MoveRow[] {
+  const message = git(repoRoot, ["log", "-1", "--format=%B", "HEAD"]);
+  const lines = new Set(message.split("\n"));
+  if (!lines.has(RENAME_TRAILER) || !lines.has(`${MANIFEST_TRAILER}: ${id}`))
+    return [];
+  const destinations = new Set(
+    exactRenames(repoRoot, "HEAD").map(({ to }) => to),
+  );
+  return manifest.moves.filter((row) => destinations.has(row.to));
+}
+
+/**
+ * Rewrite the imports `renamed` owes over the renamed tree on disk. ts-morph reads the files back at
+ * their old paths in memory and moves them, so every specifier is rewritten from the directory it
+ * was written in; heal then fixes any relative specifier still left dangling. Only files whose text
+ * changed are written.
+ */
+function rewrite(
   repoRoot: string,
   scope: string,
-  pending: readonly MoveRow[],
+  renamed: readonly MoveRow[],
   moved: MovedModules,
 ) {
   const scopeRoot = join(repoRoot, scope);
   const project = loadMoveProject(scopeRoot, repoRoot);
+  for (const row of renamed) {
+    const at = project.getSourceFileOrThrow(join(repoRoot, row.to));
+    const text = at.getFullText();
+    project.removeSourceFile(at);
+    project.createSourceFile(join(repoRoot, row.from), text);
+  }
   const before = new Map(
     project.getSourceFiles().map((sf) => [sf, specifiersOf(sf)]),
   );
   applyMoves(
     project,
     scopeRoot,
-    pending.map((r) => [
+    renamed.map((r) => [
       relative(scopeRoot, join(repoRoot, r.from)),
       relative(scopeRoot, join(repoRoot, r.to)),
     ]),
   );
-  const touched = new Set(
-    project.getSourceFiles().filter((sf) => !sf.isSaved()),
-  );
-  project.saveSync();
   const healed = heal(project.getSourceFiles(), moved);
-  for (const sf of project.getSourceFiles()) if (!sf.isSaved()) touched.add(sf);
-  project.saveSync();
-  return {
-    healed,
-    specifiersRewritten: [...touched].reduce(
-      (n, sf) => n + differing(before.get(sf) ?? [], specifiersOf(sf)),
-      0,
-    ),
-    touchedPaths: [...touched].map((sf) =>
-      relative(repoRoot, sf.getFilePath()),
-    ),
-  };
+  const written: string[] = [];
+  let specifiersRewritten = 0;
+  for (const sf of project.getSourceFiles()) {
+    const path = sf.getFilePath();
+    const text = sf.getFullText();
+    if (existsSync(path) && readFileSync(path, "utf8") === text) continue;
+    writeFileSync(path, text);
+    written.push(relative(repoRoot, path));
+    specifiersRewritten += differing(before.get(sf) ?? [], specifiersOf(sf));
+  }
+  return { healed, specifiersRewritten, written };
 }
 
 function scopeSources(repoRoot: string, scope: string): string[] {
@@ -162,15 +245,24 @@ function scopeSources(repoRoot: string, scope: string): string[] {
 }
 
 /**
- * Carry out a manifest: move every pending row, rewrite the imports that named it, heal any
- * specifier a move left dangling, and stage the result. Idempotent — a row whose file already sits
- * at `to` is done, and a second run over a finished manifest touches nothing.
+ * Carry out a manifest over a clean tree in two commits. The first renames every pending row with
+ * its content unchanged, so git scores each as a 100% rename and `git log --follow` keeps its
+ * history; the second rewrites the imports that named the moved files, heals any specifier a move
+ * left dangling and formats what changed. A pure function of HEAD and the manifest: over the same
+ * HEAD it makes the same trees and messages. A re-run over a finished manifest commits nothing; one
+ * over this manifest's rename commit alone makes the rewrite commit.
  */
 export function applyManifest(
   repoRoot: string,
   manifest: Manifest,
 ): ApplyReport {
   const started = performance.now();
+  // Untracked files may stay: apply commits only the paths it moved or rewrote.
+  const dirty = uncommittedPaths(repoRoot);
+  if (dirty.length > 0)
+    throw new Error(
+      `uncommitted changes, refusing to apply over them; commit or discard them first:\n${dirty.map((d) => `  ${d}`).join("\n")}`,
+    );
   const { pending, conflicts, absent, done } = classify(
     repoRoot,
     manifest.moves,
@@ -179,50 +271,36 @@ export function applyManifest(
     throw new Error(
       `both ends exist, refusing to guess:\n${conflicts.map((r) => `  ${r.from} -> ${r.to}`).join("\n")}`,
     );
-  const report = (
-    moved: number,
-    healed: number,
-    specifiersRewritten: number,
-    filesTouched: number,
-    lint: string,
-  ): ApplyReport => ({
+  const id = manifestId(manifest);
+  const moved = movedModules(repoRoot, manifest.moves);
+
+  const rename =
+    pending.length > 0 ? commitRenames(repoRoot, pending, id) : null;
+  const renamed = renamedAtHead(repoRoot, manifest, id);
+  const owed =
+    renamed.length > 0 ||
+    hasDangling(scopeSources(repoRoot, manifest.scope), moved);
+  const { healed, specifiersRewritten, written } = owed
+    ? rewrite(repoRoot, manifest.scope, renamed, moved)
+    : { healed: 0, specifiersRewritten: 0, written: [] };
+
+  const lint = written.length > 0 ? format(repoRoot, written) : "untouched";
+  if (written.length > 0) git(repoRoot, ["add", "--", ...written]);
+  const changed = stagedPaths(repoRoot);
+  const rewriteSha =
+    changed.length > 0 ? commit(repoRoot, rewriteMessage(id)) : null;
+
+  return {
     pending: pending.length,
     done,
     absent,
-    moved,
+    moved: pending.length,
     healed,
     specifiersRewritten,
-    filesTouched,
+    filesTouched: changed.length,
     lint,
+    commits: { rename, rewrite: rewriteSha },
     staleStringRefs: staleRefs(repoRoot, manifest.moves),
     millis: Math.round(performance.now() - started),
-  });
-  const moved = movedModules(repoRoot, manifest.moves);
-  if (
-    pending.length === 0 &&
-    !hasDangling(scopeSources(repoRoot, manifest.scope), moved)
-  )
-    return report(0, 0, 0, 0, "untouched");
-
-  const { healed, specifiersRewritten, touchedPaths } = moveAndMeasure(
-    repoRoot,
-    manifest.scope,
-    pending,
-    moved,
-  );
-  const lint = format(repoRoot, touchedPaths);
-  git(repoRoot, [
-    "add",
-    "-A",
-    "--",
-    ...pending.map((r) => r.from),
-    ...touchedPaths,
-  ]);
-  return report(
-    pending.length,
-    healed,
-    specifiersRewritten,
-    touchedPaths.length,
-    lint,
-  );
+  };
 }
