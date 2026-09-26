@@ -187,8 +187,9 @@ const within = (path: string, owned: string) =>
 
 /**
  * Whether a working-tree change can move where a specifier resolves. A path appearing, vanishing
- * or changing type can: a specifier may name any path exactly. A content edit can only in a file
- * resolution reads as configuration — a `package.json`, or a member of the tsconfig `chain`. The
+ * or changing type can: a specifier may name any path exactly. So can a symlink pointing somewhere
+ * else, since resolution follows it to a real path. A content edit can only in a file resolution
+ * reads as configuration — a `package.json`, or a member of the tsconfig `chain`. The
  * run's own files (`owned`: repo-relative files, or directories taken whole) are neither a
  * destination nor configuration, so no change under them counts.
  */

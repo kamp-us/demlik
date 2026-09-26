@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
@@ -400,6 +400,26 @@ describe("sweep --redact resolves aliases only against a working tree that match
     rmSync(join(root, "src/tax/rate.ts"));
     const { run, jev } = await sweep(root, "HEAD");
     await expect(run).rejects.toThrow(/deleted src\/tax\/rate\.ts/);
+    expect(jev.asked).toEqual([]);
+  });
+
+  it("refuses, naming the symlink, when a tracked symlink the alias resolves through points elsewhere", async () => {
+    const root = repo({
+      "tsconfig.json": ALIASED["tsconfig.json"],
+      "src/billing/invoice.ts": ALIASED["src/billing/invoice.ts"],
+      "rates/a/rate.ts": "export const rate = 1;",
+      "rates/b/rate.ts": "export const rate = 2;",
+    });
+    // `@app/tax/rate` resolves through `src/tax`, which --ref points at `rates/a`.
+    symlinkSync("../rates/a", join(root, "src/tax"));
+    commit(root, "link the tax rates");
+    rmSync(join(root, "src/tax"));
+    symlinkSync("../rates/b", join(root, "src/tax"));
+    expect(gitIn(root, "diff", "--name-status", "HEAD")).toBe("M\tsrc/tax\n");
+    const { run, jev } = await sweep(root, "HEAD");
+    await expect(run).rejects.toThrow(
+      /in 1 path\(s\)[\s\S]*\n {2}retargeted src\/tax\n/,
+    );
     expect(jev.asked).toEqual([]);
   });
 

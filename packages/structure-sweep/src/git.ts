@@ -222,11 +222,11 @@ export function exactRenames(
 
 /**
  * How one path in the working tree differs from a tree: the working tree has it and the tree does
- * not (an untracked, unignored file included), the reverse, its content changed, or its type did
- * (a file become a symlink, say).
+ * not (an untracked, unignored file included), the reverse, its content changed, its type did (a
+ * file become a symlink, say), or it is a symlink on both sides that now points somewhere else.
  */
 export interface WorkingTreeChange {
-  readonly kind: "added" | "deleted" | "modified" | "retyped";
+  readonly kind: "added" | "deleted" | "modified" | "retyped" | "retargeted";
   readonly path: string;
 }
 
@@ -235,6 +235,22 @@ const CHANGE_KINDS: Readonly<Record<string, WorkingTreeChange["kind"]>> = {
   D: "deleted",
   T: "retyped",
 };
+
+const SYMLINK_MODE = "120000";
+
+/**
+ * One `git diff --raw` header, `:<old mode> <new mode> <old oid> <new oid> <status>`, as a change
+ * kind. A symlink's content is its target, so a content change with a symlink mode on both sides
+ * is a retarget, never an edit.
+ */
+function changeKind(header: string): WorkingTreeChange["kind"] {
+  const [oldMode, newMode, , , status = ""] = header.slice(1).split(" ");
+  const kind = CHANGE_KINDS[status.charAt(0)];
+  if (kind !== undefined) return kind;
+  return oldMode === SYMLINK_MODE && newMode === SYMLINK_MODE
+    ? "retargeted"
+    : "modified";
+}
 
 /**
  * Every path whose working-tree state differs from the tree `ref` names, ignored files left out,
@@ -247,17 +263,17 @@ export function workingTreeChanges(
   const fields = git(cwd, [
     "diff",
     "--no-renames",
-    "--name-status",
+    "--raw",
     "-z",
     ref,
     "--",
   ]).split("\0");
   const changes: WorkingTreeChange[] = [];
   for (let i = 0; i + 1 < fields.length; i += 2) {
-    const status = fields[i];
+    const header = fields[i];
     const path = fields[i + 1];
-    if (!status || path === undefined) continue;
-    changes.push({ kind: CHANGE_KINDS[status] ?? "modified", path });
+    if (!header || path === undefined) continue;
+    changes.push({ kind: changeKind(header), path });
   }
   const untracked = git(cwd, [
     "ls-files",
