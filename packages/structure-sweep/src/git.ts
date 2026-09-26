@@ -61,9 +61,11 @@ const BLOB_HEADER = /^[0-9a-f]+ blob (\d+)$/;
 
 /**
  * The text of every `paths` entry in the tree `ref` names, keyed by path in the order given, read in one
- * `git cat-file --batch` subprocess however many paths there are. `-z` takes the names
- * NUL-separated, so a space, a newline or a non-ASCII byte in a path is read as itself. A path the
- * tree does not hold, or one that is not a file, throws naming it: it never reads as empty text.
+ * `git cat-file --batch` subprocess however many paths there are. Names go in one per line, not
+ * NUL-separated: `--batch -z` needs git 2.38, and every other read here runs on any git. A space or
+ * a non-ASCII byte in a path is read as itself; a path holding a newline cannot be, so it throws
+ * naming it before git runs. A path the tree does not hold, or one that is not a file, throws naming
+ * it too: it never reads as empty text.
  */
 export function blobsAt(
   cwd: string,
@@ -73,9 +75,14 @@ export function blobsAt(
   const blobs = new Map<string, string>();
   const unique = [...new Set(paths)];
   if (unique.length === 0) return blobs;
-  const result = spawnSync("git", ["cat-file", "--batch", "-z"], {
+  const unreadable = unique.find((path) => path.includes("\n"));
+  if (unreadable !== undefined)
+    throw new Error(
+      `${ref}:${JSON.stringify(unreadable)} holds a newline, which git cat-file --batch cannot read without -z (git 2.38+); rename it to sweep ${cwd}`,
+    );
+  const result = spawnSync("git", ["cat-file", "--batch"], {
     cwd,
-    input: unique.map((path) => `${ref}:${path}\0`).join(""),
+    input: unique.map((path) => `${ref}:${path}\n`).join(""),
     maxBuffer: 1024 * 1024 * 1024,
   });
   if (result.error !== undefined || result.status !== 0) {

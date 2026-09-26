@@ -50,7 +50,10 @@ describe("propose's git reads", () => {
     });
 
     expect(signals.content.files).toBe(n);
-    expect(spawned.filter((args) => args[0] === "cat-file")).toHaveLength(1);
+    // `--batch -z` needs git 2.38; plain `--batch` reads on any git propose otherwise runs on.
+    expect(spawned.filter((args) => args[0] === "cat-file")).toEqual([
+      ["cat-file", "--batch"],
+    ]);
     expect(spawned.filter((args) => args[0] === "show")).toEqual([]);
   });
 });

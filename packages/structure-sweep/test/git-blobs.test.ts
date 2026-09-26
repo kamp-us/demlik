@@ -41,6 +41,16 @@ describe("blobsAt", () => {
     expect(() => blobsAt(root, "HEAD", ["src/çay"])).toThrow("HEAD:src/çay");
   });
 
+  it("throws naming a path that holds a newline, which one-per-line input cannot carry", () => {
+    const root = repo({
+      ...FILES,
+      "src/two\nlines.ts": "export const x = 1;\n",
+    });
+    expect(() =>
+      blobsAt(root, "HEAD", ["src/body.ts", "src/two\nlines.ts"]),
+    ).toThrow('HEAD:"src/two\\nlines.ts" holds a newline');
+  });
+
   it("spawns nothing for no paths", () => {
     expect(blobsAt("/nonexistent", "HEAD", [])).toEqual(new Map());
   });
