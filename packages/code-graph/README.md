@@ -50,7 +50,9 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Writes reachable from an entry with no auth on the path | `code-graph X --unguarded` |
 | Imports pointing UP the declared layer stack (a gate) | `code-graph . --layers` |
 | Imports crossing a declared feature boundary | `code-graph X --boundaries` |
-| Gate feature-boundary crossings against `boundary-ceilings.json` | `code-graph . --boundaries --ci` |
+| Gate feature-boundary crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
+| Record the current crossings, with why they stay | `code-graph . --boundaries --accept-crossings --reason "<why>"` |
+| Move off a `boundary-ceilings.json` once | `code-graph . --boundaries --migrate-ceilings` |
 | Ranked collapse candidates + partial twins | `code-graph X --collapse` |
 | Gate the partial twins against their recorded ceiling | `code-graph . --collapse --ci` |
 | Re-record one scope's partial-twin ceiling | `code-graph X --collapse --write-ceilings` |
@@ -59,6 +61,7 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Packages ranked by export count, zero-external-consumer exports called out | `code-graph X --interface-width` |
 | Module-import cycles, as their participating files | `code-graph X --cycles` |
 | Env-var keys declared but never read, and read but never declared | `code-graph X --env-keys` |
+| Which functions read or write which D1 / DO / KV / R2 / queue binding | `code-graph X --data` |
 | How much of the tree is comment, of what kind, and where | `code-graph X --comments` |
 | Comment ratio ratchet — gate the tree against `comment-ceilings.json` | `code-graph . --comments --ci` |
 | Re-record every ceiling after a comment cleanup | `code-graph . --comments --write-ceilings` |
@@ -92,7 +95,9 @@ cross-package callers; re-run with `--deep`.
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no tsconfig, no Graph |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
 | `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges`: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`; **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`. `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
-| `--boundaries --ci` | Boundary ratchet: each declared scope's violation count against `boundary-ceilings.json`. Fails both ways, like `--collapse --ci`. `--write-ceilings` records the counts |
+| `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
+| `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
+| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope crosses more than its recorded count |
 | `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …] }`. An override REPLACES each key wholesale |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
@@ -102,6 +107,7 @@ cross-package callers; re-run with `--deep`.
 | `--comments` | Comment CENSUS: every comment line lands in exactly one of nine buckets, and each bucket in exactly one CLASS — **`mechanical`** (`banner`, `commented-out-code`: removable with no judgment), **`protected`** (`pragma`, `license`, `marker`: never touch), **`prose`** (`file-header`, `docblock`, `block`, `inline`: the volume, judgment required). Rolled up by bucket, by package scope, and by file, ranked by comment lines. Human view caps files and scopes at 20; `--json` emits every row. A count, not a verdict. Standalone: no Graph, no edge pass |
 | `--comments --ci` | Comment RATCHET: gate each scope's ratio against `comment-ceilings.json` at the repo root. **Exits 1** on any violation, 2 on a malformed ceilings file |
 | `--comments --write-ceilings` | Rewrite `comment-ceilings.json` from the current measurement (ceilings rounded UP to 1 dp; `default`/`slackPoints` carried forward) |
+| `--data` | Data edges: every call site on a D1 / Durable Object / KV / R2 / queue binding, per function, with the binding kind, name and access (`read` / `write` / `unknown`). `--json` emits the `DataReport`; `--graph --data` puts it on the graph as `data`. Runs on either pass — syntax only, no edge pass needed. See [Data edges](#data-edges---data) |
 | `--env-keys` | Env-var keys declared in wrangler `vars`/`secrets.required`/`.dev.vars` with no recognized read, and reads with no declaration, plus the withheld count. Standalone: no Graph, no edge pass |
 | `--hotspots [--hotspots-days <n>] [--hotspots-since <iso>] [--hotspots-limit <n>]` | Churn (git commits touching a file) × complexity (sum of its functions' complexity), ranked by the product. `--hotspots-days` sets the window in days ending now (default 90); `--hotspots-since` pins an explicit ISO start instead (reproducible across runs); `--hotspots-limit` caps the human view (default 20; `--json` emits every row) |
 | `--html` | Self-contained HTML report (human view; implies the edge pass). Pair with `--out` to write it banner-safe |
@@ -139,6 +145,57 @@ loaded set, so run the pass at a root that contains both sides —
 A single-service root reports every edge as `target-not-loaded` (still naming the
 target service, class and method). `--deep` over the whole monorepo does not finish
 in a usable time on this repo; `services` is the working root.
+
+## Data edges (`--data`)
+
+Two functions reading the same D1 database are strong evidence that they serve the same
+responsibility, and a call graph cannot see it: they may never call each other. This pass records
+which **storage** each function touches. Every call site on an env binding whose wrangler kind is
+D1, Durable Object, KV, R2 or a queue producer becomes one edge:
+
+```ts
+type DataEdge = {
+  functionId: string;            // the FunctionNode that holds the call site
+  line: number;
+  ownerService: string;          // the worker whose wrangler config declares the binding
+  binding: string;               // "DB"
+  bindingKind: "d1" | "durable-object" | "kv" | "queue" | "r2";
+  method: string | null;         // "prepare"; null when the binding is handed on whole
+  access: "read" | "write" | "unknown";
+};
+type DataReport = { configFiles: string[]; unparsedConfigs: string[]; edges: DataEdge[] };
+```
+
+**Where it lives: a top-level table, `Graph.data`.** It is `null` unless `--data` ran, the same
+shape as `crossRuntime`, so no existing field changes and a consumer that ignores it reads the
+graph exactly as before. A per-function field was the alternative; the table keeps
+`FunctionNode` untouched and puts every edge in one sorted array a consumer can group by binding.
+There is no schema version to bump.
+
+**Kinds come from the config, not the code.** `d1_databases[]`, `kv_namespaces[]`,
+`r2_buckets[]`, `queues.producers[]` and `durable_objects.bindings[]` in each
+`wrangler.{json,jsonc,toml}` (top-level environment only) type each binding name. A call site is
+matched against the bindings of the worker that owns its file. The edge names the binding, not the
+database, namespace or bucket behind it: `env.DB` in two workers is the same resource only if both
+configs point `DB` at it.
+
+**The call sites** are found on oxc's tree: `env.X`, `this.env.X` and `c.env.X`, plus one level
+of aliasing (`const db = env.DB`, `const { DB } = env`). A site inside an anonymous callback
+belongs to the named function around it; a nested named function owns its own sites.
+
+**`unknown` is an answer.** The access is decided from the method, and only where the method
+decides it:
+
+| Kind | `read` | `write` | everything else |
+|---|---|---|---|
+| D1 | `prepare`/`exec` over a literal SQL that starts with `SELECT`; `dump` | `prepare`/`exec` over a literal starting `INSERT`/`UPDATE`/`DELETE`/`REPLACE`/`CREATE`/`DROP`/`ALTER` | `unknown` — non-literal SQL, `WITH`, `batch`, … |
+| KV | `get`, `getWithMetadata`, `list` | `put`, `delete` | `unknown` |
+| R2 | `get`, `head`, `list` | `put`, `delete`, `createMultipartUpload`, `resumeMultipartUpload` | `unknown` |
+| Queue | — | `send`, `sendBatch` | `unknown` |
+| Durable Object | — | — | always `unknown`: the namespace hands back a stub, and what the stub does is not at this site |
+
+A binding passed on whole (`new Repository(env.DB)`) is an edge with `method: null` and
+`unknown` access.
 
 ## Node kinds and the two path queries
 
@@ -380,6 +437,81 @@ once per promotion, catches the same drift before it reaches `prod`, and the
 response ("point the dependency down, or declare it") is one a promoting human can
 actually take. It cannot live in a pre-commit hook: the gate needs the whole repo
 loaded, and a hook that reads 2114 files is a hook people disable.
+
+## The boundary ledger (`--boundaries --ci`)
+
+`boundary-ledger.json` at the repo root names every boundary crossing a declared scope still
+carries, one entry per crossing import:
+
+```json
+{
+  "entries": [
+    {
+      "scope": "apps/web",
+      "kind": "cross-feature",
+      "from": "apps/web/src/billing/flows/charge.ts",
+      "to": "apps/web/src/users/store/db.ts",
+      "specifier": "../../users/store/db.js",
+      "reason": "until users exports a reader"
+    }
+  ]
+}
+```
+
+`kind` is the rule (`cross-feature` B1, `impure-rules` B2, `lib-imports-feature` B3,
+`outside-imports-feature-internal` B4), `from` the importer and `to` the target, both
+repo-relative. `to` is `null` only for a B2 bare import, where the specifier is the target.
+An entry's identity is `(scope, kind, from, to ?? specifier)`: the `specifier` as written is
+display only, so two imports of one target from one file are one entry, and a move that rewrites
+a relative specifier keeps its entry. `reason` is optional. The file is written sorted with
+sorted keys, so a diff shows exactly which crossings came and went.
+
+A count could not tell "one crossing fixed, a different one added" from "nothing changed". The
+ledger can, and it moves one way on its own:
+
+| Run | What it does |
+|---|---|
+| `--boundaries --ci` | **Exits 1** when a measured crossing has no entry, listing each one (scope, rule, importer, target, specifier). Never fails because an entry has no crossing: it rewrites the ledger without those entries and prints what it pruned. Entries for scopes outside the analyzed path are left alone |
+| `--boundaries --accept-crossings --reason "<why>"` | Adds every crossing the ledger does not name yet, each carrying the reason. Without a non-empty `--reason` it exits 2 and writes nothing. This is the only way the ledger grows |
+| `--boundaries --migrate-ceilings` | One-time move off `boundary-ceilings.json`, below |
+
+Pruning is how the gate tightens, the way [Betterer](https://phenomnomnominal.github.io/betterer/)
+writes improvements back to its results file and fails only on regressions: commit the rewritten
+ledger with the fix that removed the crossing. `--boundaries --write-ceilings` exits 2 naming
+`--accept-crossings`; `--comments` and `--collapse` keep their `--write-ceilings`.
+
+### Migrating from `boundary-ceilings.json`
+
+The count file this replaced stored one number per scope and no edges, so it cannot be
+converted. `code-graph . --boundaries --migrate-ceilings` measures every declared scope and seeds
+`boundary-ledger.json` with one entry per crossing measured now (reason
+`grandfathered from boundary-ceilings.json`), then deletes `boundary-ceilings.json`. It refuses,
+exit 2 and nothing written, when any scope crosses more than its recorded count, because seeding
+from that would loosen the gate. Until it runs, `--boundaries --ci` with a
+`boundary-ceilings.json` and no ledger exits 2 naming `--migrate-ceilings` rather than gate against
+an empty ledger.
+
+### Moving files: `@demlik/code-graph/boundaries`
+
+A tool that moves files updates the ledger in the same commit, so an entry follows its importer
+or target instead of reading as one crossing gone and another new:
+
+```ts
+import { rekeyBoundaryLedgerFile } from "@demlik/code-graph/boundaries";
+
+rekeyBoundaryLedgerFile(path.join(repoRoot, "boundary-ledger.json"), [
+  { from: "apps/web/src/billing/flows/charge.ts", to: "apps/web/src/billing/charge.ts" },
+]);
+// { kind: "rekeyed", entries: 1 }, or { kind: "absent" } / { kind: "invalid", message }
+```
+
+Moves are repo-relative file paths. Every entry whose `from` or `to` names a moved file is
+re-keyed; the scope stays. Whether a moved import still crosses is the next gate run's call, and
+one that no longer does is pruned there. The subpath also exports the pieces:
+`BoundaryLedgerSchema`, `parseBoundaryLedger` / `readBoundaryLedger` (answering `absent`, `read`
+or `invalid`), `writeBoundaryLedger` / `serializeBoundaryLedger`, `rekeyBoundaryLedger` over a
+parsed ledger, `boundaryLedgerOf` (sort and dedupe), `ledgerKey`, `ledgerTargetOf` and
+`LEDGER_FILENAME`.
 
 ## Collapse candidates (`--collapse`)
 

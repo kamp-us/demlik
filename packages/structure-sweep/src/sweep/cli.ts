@@ -10,8 +10,9 @@ import {
 } from "../jev.js";
 import { loadVocabulary } from "../vocabulary.js";
 import { loadGraphFacts } from "./graph.js";
+import { graphNominator } from "./nominate.js";
 import { sweepQuestions } from "./questions.js";
-import { runSweep, type SweepSelection } from "./run.js";
+import { runSweep, type SweepResult, type SweepSelection } from "./run.js";
 
 export const SWEEP_USAGE = `structure-sweep sweep <folder>... [options]
 structure-sweep sweep --files <path> [options]
@@ -28,6 +29,9 @@ structure-sweep sweep --files <path> [options]
   --graph <file>        code-graph --graph JSON to pass as evidence (repeatable)
   --redact              show Jev opaque ids, not paths, relative imports or sibling names
                         (default: off; redacted and plain runs never share cached answers)
+  --nominated           ask only about files whose import-graph pull disagrees with the
+                        feature folder they sit in now, and report the calls skipped
+                        (default: off; the graph is read from the checkout, not --ref)
   --model <id>          Jev model (default: ${DEFAULT_MODEL})
   --concurrency <n>     calls in flight (default: 6)`;
 
@@ -43,6 +47,7 @@ export const parseSweepArgs = (argv: readonly string[]) =>
       out: { type: "string", default: DEFAULTS.verdicts },
       graph: { type: "string", multiple: true, default: [] },
       redact: { type: "boolean", default: false },
+      nominated: { type: "boolean", default: false },
       model: { type: "string", default: DEFAULT_MODEL },
       concurrency: { type: "string", default: "6" },
     },
@@ -86,6 +91,21 @@ export function sweepSelection(
   return { files: parseFileList(text) };
 }
 
+/**
+ * The run's closing line. A nominated run — one whose scopes carry `skipped` — adds how many Jev
+ * calls nomination saved; a default run's line is unchanged.
+ */
+export function summaryLine(result: SweepResult, verdictsPath: string): string {
+  const input = result.rows.reduce((n, r) => n + r.usage.input_tokens, 0);
+  const line = `${result.rows.length} files judged, input tokens ${input} → ${verdictsPath}`;
+  const skipped = result.scopes.flatMap((s) =>
+    s.skipped === undefined ? [] : [s.skipped],
+  );
+  if (skipped.length === 0) return line;
+  const total = skipped.reduce((n, s) => n + s, 0);
+  return `${line}; ${total} Jev calls skipped (not nominated)`;
+}
+
 export async function sweepCommand(
   argv: readonly string[],
   cwd: string,
@@ -117,14 +137,14 @@ export async function sweepCommand(
     verdictsPath,
     graph,
     redact: values.redact,
+    ...(values.nominated
+      ? { nominate: graphNominator(root, vocabulary, selection) }
+      : {}),
     concurrency: Number(values.concurrency),
     log,
   });
-  const input = result.rows.reduce((n, r) => n + r.usage.input_tokens, 0);
   const failed = result.scopes.flatMap((s) => s.failed);
-  log(
-    `${result.rows.length} files judged, input tokens ${input} → ${verdictsPath}`,
-  );
+  log(summaryLine(result, verdictsPath));
   if (failed.length > 0) {
     log(
       `${failed.length} files failed and were not recorded; re-run to ask them again`,

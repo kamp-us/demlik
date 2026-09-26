@@ -37,8 +37,12 @@ export type Opts = {
   hotspotsLimit?: string;
   cycles?: boolean;
   envKeys?: boolean;
+  data?: boolean;
   comments?: boolean;
   writeCeilings?: boolean;
+  acceptCrossings?: boolean;
+  reason?: string;
+  migrateCeilings?: boolean;
 };
 
 export function cleanExit(message: string): void {
@@ -81,6 +85,10 @@ function analysisOptions(command: Command): Command {
       "--interface-width",
       "exports per package + external (outside-package) consumer counts; implies the edge pass",
     )
+    .option(
+      "--data",
+      "data edges: which function reads or writes which D1 / Durable Object / KV / R2 / queue binding",
+    )
     .option("--cycles", "module-import cycles, reported as participating files (implies --edges)")
     .option("--node-kinds <file>", "JSON file of node-kind rule overrides merged over defaults");
 }
@@ -94,7 +102,16 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--boundaries",
-      "feature boundaries: cross-feature imports not through <feature>/index.ts, rules/ importing beyond itself and contracts, lib/ importing a feature (gateable via --ci)",
+      "feature boundaries: cross-feature imports not through <feature>/index.ts, rules/ importing beyond itself and contracts, lib/ importing a feature (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
+    )
+    .option(
+      "--accept-crossings",
+      'with --boundaries: add every crossing boundary-ledger.json does not name yet, each carrying --reason "<why>" (required)',
+    )
+    .option("--reason <text>", "with --boundaries --accept-crossings: why these crossings stay")
+    .option(
+      "--migrate-ceilings",
+      "with --boundaries: seed boundary-ledger.json from today's crossings and delete boundary-ceilings.json; refuses if any scope crosses more than its recorded count",
     )
     .option(
       "--boundary-rules <file>",
@@ -122,7 +139,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--write-ceilings",
-      "with --comments: rewrite comment-ceilings.json; with --collapse: record this scope's partial-twin count in collapse-ceilings.json; with --boundaries: record each declared scope's violation count in boundary-ceilings.json",
+      "with --comments: rewrite comment-ceilings.json; with --collapse: record this scope's partial-twin count in collapse-ceilings.json. Not for --boundaries, whose crossings live one per entry in boundary-ledger.json: use --accept-crossings --reason, or --migrate-ceilings once from boundary-ceilings.json",
     );
 }
 

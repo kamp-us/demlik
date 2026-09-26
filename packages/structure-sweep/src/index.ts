@@ -98,10 +98,15 @@ export {
   shipVerdict,
   type Thresholds,
 } from "./lowering/harness.js";
-export { type ApplyReport, applyManifest } from "./move/apply.js";
+export {
+  type ApplyCommits,
+  type ApplyReport,
+  applyManifest,
+} from "./move/apply.js";
 export { planScope } from "./move/cli.js";
 export { entryFiles } from "./move/entries.js";
 export {
+  GraphPull,
   Manifest,
   MoveRow,
   PinnedRow,
@@ -109,7 +114,12 @@ export {
   VerdictRow,
 } from "./move/manifest.js";
 export { applyMoves, type Move } from "./move/mover.js";
-export { CONFIDENCE_FLOOR, type PlanInput, planManifest } from "./move/plan.js";
+export {
+  CONFIDENCE_FLOOR,
+  type ImportEdge,
+  type PlanInput,
+  planManifest,
+} from "./move/plan.js";
 export {
   PAIR_VERDICTS,
   type PairAnswers,
@@ -148,6 +158,7 @@ export {
   sweepQuestions,
 } from "./sweep/questions.js";
 export {
+  type Nominate,
   runSweep,
   type SweepOptions,
   type SweepResult,

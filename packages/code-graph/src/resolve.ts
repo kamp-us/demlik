@@ -8,8 +8,11 @@ export interface ExportOrigin {
   readonly name: string;
 }
 
+// The graph holds one tsgo process from its first lookup until `dispose()`, so a long-lived caller
+// disposes the graph when it is done with it. A lookup after `dispose()` throws.
 export interface InProcessGraph {
   resolveExportOrigin(fromFile: string, specifier: string, exportName: string): ExportOrigin | null;
+  dispose(): void;
 }
 
 export interface InProcessGraphOptions {
@@ -54,8 +57,13 @@ function exportOrigin(
   return { file: decl.getSourceFile().fileName, name: declaredName(decl) ?? exportName };
 }
 
-// Each lookup opens tsgo over the importing file alone and closes it again: the interface carries no
-// lifecycle, and a checker left running would hold the caller's process open.
+type SessionState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "open"; readonly session: ts.TypeSession }
+  | { readonly kind: "disposed" };
+
+// Each lookup opens a program over the importing file alone, so its answer does not depend on which
+// files earlier lookups named; the programs share one tsgo session, opened on the first lookup.
 export function loadInProcessGraph(
   root: string,
   options: InProcessGraphOptions = {},
@@ -71,20 +79,37 @@ export function loadInProcessGraph(
     return null;
   }
 
+  let state: SessionState = { kind: "idle" };
+  const session = (): ts.TypeSession => {
+    switch (state.kind) {
+      case "open":
+        return state.session;
+      case "idle":
+        state = { kind: "open", session: ts.openTypeSession(tsConfigPath) };
+        return state.session;
+      case "disposed":
+        throw new Error("code-graph: resolveExportOrigin called on a disposed InProcessGraph");
+      default: {
+        const exhaustive: never = state;
+        return exhaustive;
+      }
+    }
+  };
+
   return {
     resolveExportOrigin(fromFile, specifier, exportName) {
       const absFrom = path.resolve(fromFile);
       if (!fs.existsSync(absFrom)) return null;
-      const program = ts.openTypeProgram({
-        tsConfigPath,
-        rootFiles: [absFrom],
-        includeConfigFiles: false,
-      });
+      const program = session().program({ rootFiles: [absFrom], includeConfigFiles: false });
       try {
         return exportOrigin(program, absFrom, specifier, exportName);
       } finally {
         program.close();
       }
+    },
+    dispose() {
+      if (state.kind === "open") state.session.close();
+      state = { kind: "disposed" };
     },
   };
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
-import type { BindingKind } from "../schema.js";
+import type { BindingKind, DataBindingKind } from "../schema.js";
 import { listVisibleFiles } from "./project.js";
 
 const ServiceBindingSchema = z.object({
@@ -24,6 +24,11 @@ const WorkflowBindingSchema = z.object({
   script_name: z.string().optional(),
 });
 
+// D1, KV, R2 and queue producers are typed for their binding name alone: the data pass needs which
+// kind a name is, never which database, namespace or bucket it points at.
+const NamedBindingSchema = z.object({ binding: z.string() });
+const NamedBindingsSchema = z.array(NamedBindingSchema).catch([]).default([]);
+
 const WranglerConfigSchema = z.object({
   name: z.string().optional(),
   main: z.string().optional(),
@@ -33,6 +38,13 @@ const WranglerConfigSchema = z.object({
     .object({ bindings: z.array(DurableObjectBindingSchema).catch([]).default([]) })
     .catch({ bindings: [] })
     .default({ bindings: [] }),
+  d1_databases: NamedBindingsSchema,
+  kv_namespaces: NamedBindingsSchema,
+  r2_buckets: NamedBindingsSchema,
+  queues: z
+    .object({ producers: NamedBindingsSchema })
+    .catch({ producers: [] })
+    .default({ producers: [] }),
   vars: z.record(z.string(), z.unknown()).catch({}).default({}),
   secrets: z
     .object({ required: z.array(z.string()).catch([]).default([]) })
@@ -47,12 +59,15 @@ export type BindingDecl = {
   targetClass: string;
 };
 
+export type DataBindingDecl = { kind: DataBindingKind; binding: string };
+
 export type ServiceManifest = {
   service: string;
   dir: string;
   configFile: string;
   main: string | null;
   bindings: BindingDecl[];
+  dataBindings: DataBindingDecl[];
   envKeys: string[];
   bindingNames: string[];
   devVarsKeys: string[];
@@ -129,6 +144,22 @@ function declaredBindings(
   return out.sort(compareBindings);
 }
 
+function dataBindings(config: z.infer<typeof WranglerConfigSchema>): DataBindingDecl[] {
+  const named = (kind: DataBindingKind, rows: readonly { binding: string }[]): DataBindingDecl[] =>
+    rows.map((r) => ({ kind, binding: r.binding }));
+  const out = [
+    ...named("d1", config.d1_databases),
+    ...named("kv", config.kv_namespaces),
+    ...named("r2", config.r2_buckets),
+    ...named("queue", config.queues.producers),
+    ...config.durable_objects.bindings.map((d) => ({
+      kind: "durable-object" as const,
+      binding: d.name,
+    })),
+  ];
+  return out.sort((a, b) => a.binding.localeCompare(b.binding) || a.kind.localeCompare(b.kind));
+}
+
 function collectBindingNames(value: unknown, topLevel = true): string[] {
   if (Array.isArray(value)) return value.flatMap((v) => collectBindingNames(v, false));
   if (value === null || typeof value !== "object") return [];
@@ -198,6 +229,7 @@ export function loadBindingCatalog(repoRoot: string): BindingCatalog {
       configFile,
       main: main === null ? null : rel(repoRoot, path.resolve(path.dirname(absolute), main)),
       bindings: declaredBindings(parsed.data, service),
+      dataBindings: dataBindings(parsed.data),
       envKeys: sortedUnique([...Object.keys(parsed.data.vars), ...parsed.data.secrets.required]),
       bindingNames: sortedUnique(collectBindingNames(document)),
       devVarsKeys,

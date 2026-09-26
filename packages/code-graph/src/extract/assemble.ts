@@ -1,5 +1,6 @@
 import path from "node:path";
 import { TypeContext } from "../checker/context.js";
+import { loadDataReport } from "../data/extract.js";
 import {
   type DirectoryNode,
   type FunctionNode,
@@ -175,12 +176,16 @@ function buildSummary(
   };
 }
 
+// The data pass reads syntax and the wrangler configs only, so it rides either pass.
+export type DataOptions = { repoRoot: string };
+
 function build(
   loaded: LoadedProject,
   thresholds: Thresholds,
   edges: EdgeBundle | null,
   discovered: DiscoveredFunction[] | null,
   analysis: AnalysisBundle | null,
+  data: DataOptions | null,
 ): Graph {
   const { rootAbsolute, sourceFiles, parseFailures } = loaded;
   const root = path.relative(process.cwd(), rootAbsolute) || ".";
@@ -211,6 +216,7 @@ function build(
     reachability: analysis?.reachability?.(functions, modules) ?? null,
     clusters: analysis?.clusters?.(functions, modules) ?? null,
     interfaceWidth: analysis?.interfaceWidth?.(functions, modules) ?? null,
+    data: data === null ? null : loadDataReport(fns, rootAbsolute, data.repoRoot),
     functions,
     modules,
     directories,
@@ -228,8 +234,12 @@ function build(
   return GraphSchema.parse(graph);
 }
 
-export function assembleGraph(loaded: LoadedProject, thresholds: Thresholds): Graph {
-  return build(loaded, thresholds, null, null, null);
+export function assembleGraph(
+  loaded: LoadedProject,
+  thresholds: Thresholds,
+  data: DataOptions | null = null,
+): Graph {
+  return build(loaded, thresholds, null, null, null, data);
 }
 
 function reportUnjoined(unjoined: readonly string[]): void {
@@ -247,6 +257,7 @@ export function assembleGraphWithEdges(
   scope: EdgeScope,
   tsConfig: string,
   options: AnalysisOptions | null = null,
+  data: DataOptions | null = null,
 ): Graph {
   const { rootAbsolute, sourceFiles } = loaded;
   const { functions } = discoverFunctions(sourceFiles);
@@ -262,7 +273,7 @@ export function assembleGraphWithEdges(
       options === null || prep === null
         ? null
         : completeAnalysis({ options, prep, rootAbsolute, ctx, ...analysisInputs(functions) });
-    return build(loaded, thresholds, { result, scope, tsConfig }, functions, analysis);
+    return build(loaded, thresholds, { result, scope, tsConfig }, functions, analysis, data);
   } finally {
     ctx.close();
   }

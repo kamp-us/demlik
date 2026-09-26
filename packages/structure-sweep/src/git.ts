@@ -165,3 +165,57 @@ export function repoRootOf(cwd: string): string {
     );
   }
 }
+
+/**
+ * Every tracked path with a staged or unstaged change, exactly as git stores it; untracked files
+ * are left out. A rename or copy is named by its destination; its source follows as a field of its
+ * own, which is skipped.
+ */
+export function uncommittedPaths(cwd: string): string[] {
+  const fields = git(cwd, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=no",
+  ]).split("\0");
+  const paths: string[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field) continue;
+    paths.push(field.slice(3));
+    if (/^[RC]|^.[RC]/.test(field)) i += 1;
+  }
+  return paths;
+}
+
+/** Every path the index changes against HEAD. */
+export function stagedPaths(cwd: string): string[] {
+  return git(cwd, ["diff", "--cached", "--name-only", "-z"])
+    .split("\0")
+    .filter(Boolean);
+}
+
+/** The renames `commit` made from its parent with content unchanged. */
+export function exactRenames(
+  cwd: string,
+  commit: string,
+): { readonly from: string; readonly to: string }[] {
+  const fields = git(cwd, [
+    "diff-tree",
+    "-r",
+    "-z",
+    "--no-commit-id",
+    "--name-status",
+    "-M100%",
+    commit,
+  ]).split("\0");
+  const renames: { from: string; to: string }[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    if (!fields[i]?.startsWith("R")) continue;
+    const from = fields[i + 1];
+    const to = fields[i + 2];
+    if (from !== undefined && to !== undefined) renames.push({ from, to });
+    i += 2;
+  }
+  return renames;
+}

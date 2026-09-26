@@ -1,14 +1,38 @@
 exit 1
 {
   "passed": false,
-  "scopesChecked": 1,
-  "violations": [
+  "pruned": [
     {
-      "ceiling": 3,
-      "delta": 3,
-      "direction": "EXCEEDED",
-      "measured": 6,
-      "scope": "services/svc"
+      "from": "services/svc/src/findings/flows/gone.ts",
+      "kind": "cross-feature",
+      "reason": "a crossing the tree no longer has, pruned by the gate",
+      "scope": "services/svc",
+      "specifier": "../../audit-runs/store/db.js",
+      "to": "services/svc/src/audit-runs/store/db.ts"
+    }
+  ],
+  "scopesChecked": 1,
+  "unrecorded": [
+    {
+      "from": "services/svc/src/findings/flows/run.ts",
+      "kind": "cross-feature",
+      "scope": "services/svc",
+      "specifier": "../../audit-runs/store/db.js",
+      "to": "services/svc/src/audit-runs/store/db.ts"
+    },
+    {
+      "from": "services/svc/src/findings/rules/score.ts",
+      "kind": "impure-rules",
+      "scope": "services/svc",
+      "specifier": "../store/repo.js",
+      "to": "services/svc/src/findings/store/repo.ts"
+    },
+    {
+      "from": "services/svc/src/index.ts",
+      "kind": "outside-imports-feature-internal",
+      "scope": "services/svc",
+      "specifier": "./findings/store/repo.js",
+      "to": "services/svc/src/findings/store/repo.ts"
     }
   ]
 }

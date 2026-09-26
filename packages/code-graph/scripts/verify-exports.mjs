@@ -12,6 +12,17 @@ const expected = {
     "findRepoRoot",
   ],
   "@demlik/code-graph/resolve": ["loadInProcessGraph"],
+  "@demlik/code-graph/boundaries": [
+    "boundaryLedgerOf",
+    "ledgerKey",
+    "ledgerTargetOf",
+    "parseBoundaryLedger",
+    "readBoundaryLedger",
+    "serializeBoundaryLedger",
+    "writeBoundaryLedger",
+    "rekeyBoundaryLedger",
+    "rekeyBoundaryLedgerFile",
+  ],
 };
 
 // Removed from ./project in #397 with ts-morph: the loaders returned ts-morph's Project.

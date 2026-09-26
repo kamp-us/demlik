@@ -36,6 +36,7 @@ function graphOf(functions: FunctionNode[]): Graph {
     reachability: null,
     clusters: null,
     interfaceWidth: null,
+    data: null,
     thresholds,
     summary: {
       health: "healthy",

@@ -57,6 +57,8 @@ describe("entry files pinned by Next.js convention", () => {
       ...Object.fromEntries(
         [...NEXT_ENTRIES, ...ORDINARY].map((p) => [p, tsx]),
       ),
+      // An import between the two ordinary files, so the graph pulls them where Jev puts them.
+      [ORDINARY[0] as string]: `import "../../../lib/format";\n${tsx}`,
     });
     const manifest = planAll(root, "apps/web");
 
@@ -95,7 +97,9 @@ describe("entry files mapped back from dist/ to src/", () => {
         bin: { cli: "./dist/index.js" },
         main: "./dist/index.js",
       }),
-      "packages/cli/src/index.ts": "export const run = () => {};\n",
+      "packages/cli/tsconfig.json": JSON.stringify({ include: ["src"] }),
+      "packages/cli/src/index.ts":
+        'import { commands } from "./commands";\nexport const run = () => commands;\n',
       "packages/cli/src/commands.ts": "export const commands = [];\n",
     });
     const manifest = planAll(root, "packages/cli");

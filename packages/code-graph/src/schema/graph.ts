@@ -10,6 +10,7 @@ import {
   ThresholdsSchema,
 } from "./core.js";
 import { CrossRuntimeReportSchema } from "./cross-runtime.js";
+import { DataReportSchema } from "./data.js";
 import { InterfaceWidthReportSchema } from "./interface-width.js";
 import { ReachabilityReportSchema } from "./reachability.js";
 
@@ -22,6 +23,7 @@ export const GraphSchema = z.object({
   reachability: ReachabilityReportSchema.nullable(),
   clusters: ClusterReportSchema.nullable(),
   interfaceWidth: InterfaceWidthReportSchema.nullable(),
+  data: DataReportSchema.nullable(),
   functions: z.array(FunctionNodeSchema),
   modules: z.array(ModuleNodeSchema),
   directories: z.array(DirectoryNodeSchema),
