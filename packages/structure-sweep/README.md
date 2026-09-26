@@ -171,7 +171,8 @@ Reads each folder's `.ts`/`.tsx` sources (tests, stories and `.d.ts` excluded) f
 that was never swept is simply all misses: the verdict file is created if absent and a new folder's
 rows are added beside the others. `--graph <file>` (repeatable) passes a `code-graph --graph` JSON
 as extra evidence. A file whose call fails is left out and asked again on the next run; the command
-then exits 1.
+then exits 1. `.` sweeps the whole tree, root-level sources included, and its rows record
+`"scope": "."`. A folder outside the repository is refused.
 
 `--files <path>` judges a chosen set of files instead of whole folders — a stratified sample, say:
 
@@ -200,8 +201,13 @@ only the extension (`f3.tsx`); every relative specifier — in `import … from`
 import list or left in the source — becomes the same kind of id (`./f3`); the files that import
 it are listed by their ids; and the `--graph` caller and callee file names become `g<n>` ids that
 keep their `×n` counts. The ids are fixed by the input, so the same files give the same payload.
-Package specifiers (`zod`, `@scope/pkg`) and path aliases are kept, as are exported names,
-comments and string literals. `verdicts.json` still records each file's real path. A redacted row
+A path alias (a tsconfig `paths` entry such as `@app/billing`) is resolved the way the folder's own
+build would resolve it, and becomes an id too. An alias that resolves to a file at `--ref` gets that
+file's id, the same one a relative import of it gets. An alias with no such answer (it resolves to
+nothing, or to a file that is ignored, untracked or not at `--ref`) gets an id of its own, so its
+text is still hidden. Only a specifier that resolves into `node_modules` or to a Node builtin is
+kept as written: package specifiers (`zod`, `@scope/pkg`), and an alias that points into
+`node_modules`. Exported names, comments and string literals are kept too. `verdicts.json` still records each file's real path. A redacted row
 is marked `"redacted": true`, and redacted and unredacted runs never share cached answers: each
 asks Jev again about a file the other answered.
 
@@ -233,13 +239,22 @@ nominated row caches like any other.
 ### `structure-sweep pairs <folder>=<collapse.json>...`
 
 ```sh
-code-graph services/api --collapse --json > api-collapse.json
-structure-sweep pairs services/api=api-collapse.json
+code-graph . --collapse --json > collapse.json
+structure-sweep pairs .=collapse.json
 ```
 
 Asks about every collapse candidate and writes `.structure-sweep/pairs.json` plus a markdown
 summary `.structure-sweep/pairs.md`, which groups `same_decision` pairs into the functions that
 should become one. A pair whose two bodies were judged before keeps its answer.
+
+Judge the whole-tree report. A pair whose two functions sit in different top-level folders (the
+same helper copied into two services, say) appears only in a report taken over the repository root,
+so per-folder runs (`code-graph services/api --collapse` with `pairs services/api=…`) miss it. The
+folder is `.` from the repository root, or any path that resolves to it (`..` from `packages/`). Its
+rows record `"scope": "."` and each side's repo-relative path. A folder outside the repository is
+refused. Rows are replaced per scope: a second `.` run replaces the `.` rows and leaves every other
+scope's rows as they were, and a `.` run reuses answers a per-folder run already gave on the same
+two bodies.
 
 `--redact` (off by default) shows Jev each function's name and source only, never its file path,
 so moving a file cannot move the answer on byte-identical bodies. `pairs.json` still records both

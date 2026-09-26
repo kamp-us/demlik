@@ -25,11 +25,34 @@ export const DEFAULTS = {
 export const underRoot = (root: string, path: string) =>
   isAbsolute(path) ? path : resolve(root, path);
 
-/** A folder argument, as the caller typed it from `cwd`, turned repo-relative with no trailing slash. */
-export function scopeOf(root: string, cwd: string, arg: string): string {
+/** The scope a folder argument naming the repository root itself is recorded under. */
+export const ROOT_SCOPE = ".";
+
+/** A folder argument, as the caller typed it from `cwd`, repo-relative with no trailing slash; `undefined` outside the repository. */
+function repoRelative(root: string, cwd: string, arg: string) {
   const scope = relative(root, resolve(cwd, arg)).split("\\").join("/");
-  if (scope === "" || scope.startsWith("..")) {
-    throw new Error(`${arg} is not a folder inside the repository at ${root}`);
-  }
+  return scope.startsWith("..") ? undefined : scope;
+}
+
+const notInside = (root: string, arg: string) =>
+  new Error(`${arg} is not a folder inside the repository at ${root}`);
+
+/**
+ * A folder argument, as the caller typed it from `cwd`, turned repo-relative with no trailing slash.
+ * The repository root is refused: `move` and `propose` plan over one folder, never the whole tree.
+ */
+export function scopeOf(root: string, cwd: string, arg: string): string {
+  const scope = repoRelative(root, cwd, arg);
+  if (scope === undefined || scope === "") throw notInside(root, arg);
   return scope;
+}
+
+/**
+ * `scopeOf` for a command that reads the whole tree — `pairs` and `sweep`: the repository root is a
+ * scope too, recorded as `ROOT_SCOPE`. A path outside the repository is refused just the same.
+ */
+export function treeScopeOf(root: string, cwd: string, arg: string): string {
+  const scope = repoRelative(root, cwd, arg);
+  if (scope === undefined) throw notInside(root, arg);
+  return scope === "" ? ROOT_SCOPE : scope;
 }
