@@ -1,0 +1,12 @@
+{
+  // Committed under another name so the repo's own wrangler scans do not read it; the test
+  // renames it to wrangler.jsonc in a temp copy.
+  "name": "api",
+  "main": "src/orgs.ts",
+  "d1_databases": [{ "binding": "DB", "database_name": "app", "database_id": "00000000" }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "00000001" }],
+  "r2_buckets": [{ "binding": "ASSETS", "bucket_name": "assets" }],
+  "queues": { "producers": [{ "binding": "EVENTS", "queue": "events" }] },
+  "durable_objects": { "bindings": [{ "name": "COUNTER", "class_name": "Counter" }] },
+  "vars": { "API_TOKEN": "dev" }
+}

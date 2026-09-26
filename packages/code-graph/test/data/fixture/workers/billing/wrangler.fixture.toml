@@ -1,0 +1,13 @@
+# Committed under another name so the repo's own wrangler scans do not read it; the test renames
+# it to wrangler.toml in a temp copy.
+name = "billing"
+main = "src/invoices.ts"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "app"
+database_id = "00000000"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "00000002"

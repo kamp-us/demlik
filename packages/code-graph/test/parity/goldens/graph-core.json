@@ -250,6 +250,7 @@ exit 0
     "edges": [],
     "unparsedConfigs": []
   },
+  "data": null,
   "directories": [
     {
       "dir": "src/cg",

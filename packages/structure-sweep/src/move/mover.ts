@@ -111,10 +111,12 @@ export function applyMoves(
     );
   }
 
+  // `overwrite`: apply renames on disk first, so the destination already exists there when the
+  // project, holding the file at its old path in memory, moves it.
   for (const [from, to] of moves) {
     project
       .getSourceFileOrThrow(path.join(root, from))
-      .move(path.join(root, to));
+      .move(path.join(root, to), { overwrite: true });
   }
 
   return remapMockSpecifiers(project, dirBeforeMove, movedModules);

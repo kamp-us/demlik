@@ -1,6 +1,14 @@
-import { hasDirection, ratchetTableLines, type ScopeCountVerdict } from "../ratchet/scope-count.js";
 import { stableStringify } from "../render/json.js";
 import type { BoundaryKind, BoundaryViolation, ScopeBoundaryReport } from "./analyze.js";
+import {
+  type BoundaryLedger,
+  type BoundaryLedgerEntry,
+  LEDGER_FILENAME,
+  ledgerTargetOf,
+} from "./ledger.js";
+import type { CeilingBreach } from "./migrate.js";
+import type { Reconciliation } from "./reconcile.js";
+import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
@@ -65,36 +73,95 @@ export function renderBoundaries(
   return reports.flatMap(scopeLines).join("\n");
 }
 
-function failureLines(verdict: ScopeCountVerdict): string[] {
-  const lines = ratchetTableLines(verdict, "BOUNDARY");
-  if (hasDirection(verdict, "EXCEEDED")) {
-    lines.push(
-      "  EXCEEDED: a new import crosses a feature boundary. Import a feature from outside it",
-      "  through its index.ts, keep rules/ on contracts only, and keep lib/ out of features.",
-      "  `pnpm code-graph <scope> --boundaries` lists the edges.",
-    );
-  }
-  if (hasDirection(verdict, "SLACK")) {
-    lines.push(
-      "  SLACK: the ceiling sits above reality, so it is no longer a ceiling. Re-record:",
-      "  `pnpm code-graph <scope> --boundaries --write-ceilings`.",
-    );
-  }
-  return lines;
+function entryLine(entry: BoundaryLedgerEntry): string {
+  const reason = entry.reason === undefined ? "" : `  — ${entry.reason}`;
+  return (
+    `  ${entry.scope}  ${ruleOf(entry.kind)} ${entry.kind}  ${entry.from} -> ` +
+    `${ledgerTargetOf(entry)}  ("${entry.specifier}")${reason}`
+  );
 }
 
-export function renderBoundaryRatchet(
-  verdict: ScopeCountVerdict,
+function prunedLines(pruned: readonly BoundaryLedgerEntry[]): string[] {
+  if (pruned.length === 0) return [];
+  return [
+    `pruned ${pruned.length} ${LEDGER_FILENAME} entr${pruned.length === 1 ? "y" : "ies"} whose crossing is gone:`,
+    ...pruned.map(entryLine),
+  ];
+}
+
+const FIX_LINES = [
+  "  Import a feature from outside it through its index.ts, keep rules/ on contracts only, and",
+  "  keep lib/ out of features. A crossing that has to stay is added by name and with a reason:",
+  '  `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
+];
+
+export function renderLedgerGate(
+  result: Reconciliation,
   json: boolean,
   pretty: boolean,
 ): BoundaryRender {
-  const exitCode = verdict.passed ? 0 : 1;
-  if (json) return { stdout: stableStringify(verdict, pretty), exitCode };
-  if (verdict.passed) {
+  const passed = result.unrecorded.length === 0;
+  const exitCode = passed ? 0 : 1;
+  if (json) {
+    const { scopesChecked, unrecorded, pruned } = result;
     return {
-      stdout: `boundary ratchet: PASS — ${verdict.scopesChecked} scope(s) on their ceiling.`,
+      stdout: stableStringify({ passed, scopesChecked, unrecorded, pruned }, pretty),
       exitCode,
     };
   }
-  return { stdout: failureLines(verdict).join("\n"), exitCode };
+  const head = passed
+    ? [
+        `boundary ledger: PASS — ${result.scopesChecked} scope(s), ` +
+          `${result.kept.entries.length} recorded crossing(s), none new.`,
+      ]
+    : [
+        `BOUNDARY LEDGER FAILED — ${result.unrecorded.length} crossing(s) not in ${LEDGER_FILENAME}:`,
+        ...result.unrecorded.map(entryLine),
+        ...FIX_LINES,
+      ];
+  return { stdout: [...head, ...prunedLines(result.pruned)].join("\n"), exitCode };
+}
+
+export function renderAccepted(
+  result: Reconciliation,
+  reason: string,
+  json: boolean,
+  pretty: boolean,
+): string {
+  if (json) {
+    return stableStringify({ accepted: result.unrecorded, pruned: result.pruned, reason }, pretty);
+  }
+  const accepted =
+    result.unrecorded.length === 0
+      ? ["accept-crossings: no unrecorded crossing — nothing to add."]
+      : [
+          `accepted ${result.unrecorded.length} crossing(s) into ${LEDGER_FILENAME}, reason "${reason}":`,
+          ...result.unrecorded.map(entryLine),
+        ];
+  return [...accepted, ...prunedLines(result.pruned)].join("\n");
+}
+
+export function renderMigrated(
+  ledger: BoundaryLedger,
+  scopes: number,
+  json: boolean,
+  pretty: boolean,
+): string {
+  if (json) return stableStringify({ migrated: ledger.entries.length, scopes }, pretty);
+  return (
+    `migrated ${scopes} scope(s): seeded ${LEDGER_FILENAME} with ${ledger.entries.length} ` +
+    `crossing(s) and removed ${LEGACY_CEILINGS_FILENAME}.`
+  );
+}
+
+export function renderMigrationRefused(breaches: readonly CeilingBreach[]): string {
+  const lines = breaches.map(
+    (b) => `  ${b.scope}: ${b.measured} crossing(s) against a recorded ceiling of ${b.ceiling}`,
+  );
+  return [
+    `--migrate-ceilings refused, nothing written: ${breaches.length} scope(s) cross more than ` +
+      `${LEGACY_CEILINGS_FILENAME} allows, and seeding the ledger from them would loosen it.`,
+    ...lines,
+    "  Remove the new crossings, then migrate.",
+  ].join("\n");
 }

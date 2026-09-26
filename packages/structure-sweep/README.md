@@ -9,8 +9,8 @@ structure; `structure-sweep` asks TypeSafe **Jev** what the code _means_, then m
   and whether a business rule sits inside an API file.
 - `pairs` — for every code-graph collapse pair, whether the two functions are the same decision,
   a look-alike, or a shared helper.
-- `move plan | apply` — move confidently-judged files into feature folders with their imports
-  rewritten, never moving an entry file.
+- `move plan | apply` — move files into feature folders where Jev's verdict and the import graph
+  agree, committing the renames apart from the import rewrites and never moving an entry file.
 
 ```sh
 npm install -D @demlik/structure-sweep
@@ -203,6 +203,31 @@ comments and string literals. `verdicts.json` still records each file's real pat
 is marked `"redacted": true`, and redacted and unredacted runs never share cached answers: each
 asks Jev again about a file the other answered.
 
+`--nominated` (off by default) asks Jev only about the files the import graph says may be
+misplaced, instead of every file:
+
+- **Current feature.** A file's current feature is the vocabulary feature whose folder name
+  (the key with `_` turned into `-`, as `move plan` names a feature's home) matches a directory
+  segment of its path. The deepest matching segment wins; with no match the file has no current
+  feature. The file's own name never counts.
+- **Nomination.** The run reads the import graph the way `move plan` does (resolved relative
+  imports and re-exports between tracked sources, through the nearest `tsconfig.json`) and takes
+  each file's pull: the current feature holding a strict majority of its import edges, both
+  directions, to files that have one. A file is asked when its pull and its current feature
+  disagree: they name different features, or only one of them names a feature. A file whose pull
+  matches its folder, or that has neither, is skipped. A folder run reads that folder's graph;
+  under `--files` the graph spans the nearest folder at or above each listed file that holds a
+  `tsconfig.json`, so neighbours outside the file's own folder count.
+- **Skipped count.** Each folder's progress line and the closing summary line add how many Jev
+  calls were skipped: files that were neither nominated nor already cached. A cached file is
+  never asked either way, so it is not counted.
+
+The graph is read from the checkout on disk, not from `--ref`. Nomination only works in a tree
+that already has some feature folders: where no file sits in one, no file has a current feature,
+no file has a pull, and `--nominated` asks nothing. `--nominated` changes which files are asked,
+never what a file is shown, so it combines with `--files` and `--redact` unchanged, and a
+nominated row caches like any other.
+
 ### `structure-sweep pairs <folder>=<collapse.json>...`
 
 ```sh
@@ -227,10 +252,23 @@ share cached answers: each asks Jev again about a pair the other answered.
 
 ### `structure-sweep move plan --scope <folder> --feature <key>...`
 
-Reads the sweep verdicts and writes `.structure-sweep/move-manifest.json`: each file under
-`<scope>/src` judged to one of the named features at or above `--floor` (default `0.8`) moves to
-`<scope>/src/<feature>/<role dir>/`, carrying its colocated tests; a file below the floor is listed
-for review. These files are **pinned** — listed, never moved:
+Reads the sweep verdicts and the scope's import graph, and writes
+`.structure-sweep/move-manifest.json`. A file moves only when two opinions agree:
+
+- **Jev** says move when it put the file in one of the named features at or above `--floor`
+  (default `0.8`).
+- **The graph** says move when the file has a pull: count its relative imports, in both directions,
+  to other files Jev put in a named feature, grouped by that neighbour's feature. The feature
+  holding a strict majority of those edges is the pull; a tie, or no such edge, is no pull. The
+  graph is every resolved relative import or re-export between two tracked sources under the scope,
+  read through the scope's `tsconfig.json`, so `plan` needs one.
+
+When both name the same feature, the file moves to `<scope>/src/<feature>/<role dir>/`, carrying
+its colocated tests. When only one says move, or they name different features, the file is a
+`review` row carrying both opinions — Jev's `feature`, `role` and `confidence`, and
+`graph: { feature, share, edges }`, the pull's feature (`null` for none), the share of the counted
+edges it holds (absent with no pull) and how many edges were counted. When neither says move, the
+file is not listed. These files are **pinned** — listed, never moved:
 
 - `package.json` `main`, `module`, `types`, `bin` and `exports` targets, and a wrangler `main`. A
   target inside the build output is traced back to the source that builds it: tsup's `entry` map,
@@ -242,12 +280,29 @@ for review. These files are **pinned** — listed, never moved:
 
 ### `structure-sweep move apply`
 
-Moves every pending manifest row with ts-morph, rewrites the imports and `vi.mock`-style specifiers
-that named it, heals any relative specifier a move left dangling, formats the touched files with
-the repository's biome when it has one, and stages the result with `git add`. It prints a JSON
-report, including `staleStringRefs` — old paths still written as plain text somewhere. A row whose
-source and destination both exist stops the run. A second `apply` over the same manifest changes
-nothing.
+Carries out the manifest in two commits, so a moved file keeps its `git log --follow` and `blame`
+history:
+
+1. **Renames.** Every pending row, and each colocated test it carries, is moved with `git mv` and
+   its content unchanged, so git scores each as a 100% rename.
+2. **Rewrites.** ts-morph rewrites the imports and `vi.mock`-style specifiers that named a moved
+   file, reading each file from the folder it was written in; any relative specifier still dangling
+   is healed, and the changed files are formatted with the repository's biome when it has one. When
+   none of that changes a file, there is no second commit.
+
+Apply works out every file the rewrite will change before it commits anything. It refuses to start,
+naming the paths and writing nothing, while a tracked file has staged or unstaged changes, or while
+any file the rewrite would change is not tracked by git. That covers an untracked or gitignored
+importer of a moved file, whatever its extension (`.mts`, `.cts`, a `.js` under `allowJs`) and
+however the rewrite loaded it, including through the scope's `tsconfig.json` `include`: neither
+commit could carry it. Commit, move or delete such a file, then apply again. An untracked
+file the rewrite does not change is left alone and stays out of both commits. The commits are a function of `HEAD` and the manifest: two applies
+of one manifest over one `HEAD` make the same trees and messages. A run that stopped after the
+rename commit resumes with the rewrite commit alone, and a second `apply` over a finished manifest
+commits nothing and reports `lint: "untouched"`. It prints a JSON report, including `commits`
+(`{ rename, rewrite }`, the SHAs it made, `null` for one it did not) and `staleStringRefs` — old
+paths still written as plain text somewhere. A row whose source and destination both exist stops
+the run.
 
 ### `structure-sweep score`
 

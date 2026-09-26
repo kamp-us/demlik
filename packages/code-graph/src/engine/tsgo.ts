@@ -6,6 +6,7 @@ import type { Node, SourceFile } from "@typescript/native-preview/unstable/ast";
 import {
   API,
   type Project,
+  type Snapshot,
   SymbolFlags,
   type Symbol as TsSymbol,
 } from "@typescript/native-preview/unstable/sync";
@@ -51,40 +52,81 @@ export type TypeProgramInput = {
   readonly includeConfigFiles: boolean;
 };
 
-function virtualConfigPath(tsConfigPath: string): string {
-  return path.join(path.dirname(tsConfigPath), `.code-graph-${process.pid}.tsconfig.json`);
+function virtualConfigPath(tsConfigPath: string, ordinal: number): string {
+  return path.join(
+    path.dirname(tsConfigPath),
+    `.code-graph-${process.pid}-${ordinal}.tsconfig.json`,
+  );
 }
+
+type OpenedProject = { readonly project: Project; readonly snapshot: Snapshot };
 
 function openProject(
   api: API,
   input: TypeProgramInput,
+  configPath: string,
   virtualFiles: Map<string, string>,
-): Project {
+): OpenedProject {
   const own = input.includeConfigFiles ? api.parseConfigFile(input.tsConfigPath).fileNames : [];
   const files = [...new Set([...own, ...input.rootFiles])].sort();
-  const configPath = virtualConfigPath(input.tsConfigPath);
   const body = JSON.stringify({ extends: input.tsConfigPath, files, include: [] });
   virtualFiles.set(configPath, body);
   const snapshot = api.updateSnapshot({ openProjects: [configPath] });
   const project = snapshot.getProject(configPath);
-  if (project === undefined)
+  if (project === undefined) {
+    snapshot.dispose();
     throw new Error(`code-graph: tsgo opened no project for ${configPath}`);
-  return project;
+  }
+  return { project, snapshot };
+}
+
+// One tsgo process that opens many programs over one tsconfig. Each program is its own project, so
+// it answers exactly what a fresh `openTypeProgram` over the same roots answers; closing it releases
+// that project and keeps the process; closing the session ends it.
+export type TypeSession = {
+  readonly program: (input: SessionProgramInput) => TypeProgram;
+  readonly close: () => void;
+};
+
+export type SessionProgramInput = Omit<TypeProgramInput, "tsConfigPath">;
+
+export function openTypeSession(tsConfigPath: string): TypeSession {
+  const virtualFiles = new Map<string, string>();
+  const api = new API({
+    cwd: path.dirname(tsConfigPath),
+    fs: { readFile: (fileName) => virtualFiles.get(fileName) },
+  });
+  let opened = 0;
+  return {
+    program: (input) => {
+      const configPath = virtualConfigPath(tsConfigPath, opened++);
+      const { project, snapshot } = openProject(
+        api,
+        { tsConfigPath, ...input },
+        configPath,
+        virtualFiles,
+      );
+      return typeProgramOf(project, () => {
+        snapshot.dispose();
+        api.updateSnapshot({ closeProjects: [configPath] }).dispose();
+        virtualFiles.delete(configPath);
+      });
+    },
+    close: () => api.close(),
+  };
 }
 
 export function openTypeProgram(input: TypeProgramInput): TypeProgram {
-  const virtualFiles = new Map<string, string>();
-  const api = new API({
-    cwd: path.dirname(input.tsConfigPath),
-    fs: { readFile: (fileName) => virtualFiles.get(fileName) },
-  });
-  let project: Project;
+  const session = openTypeSession(input.tsConfigPath);
   try {
-    project = openProject(api, input, virtualFiles);
+    return { ...session.program(input), close: session.close };
   } catch (error) {
-    api.close();
+    session.close();
     throw error;
   }
+}
+
+function typeProgramOf(project: Project, close: () => void): TypeProgram {
   const { checker, program } = project;
   const roots = rootLibraries(program);
   const declarationCache = new Map<TsSymbol, readonly Node[]>();
@@ -115,7 +157,7 @@ export function openTypeProgram(input: TypeProgramInput): TypeProgram {
       if (!program.isSourceFileDefaultLibrary(sourceFile)) return null;
       return roots.has(path.basename(sourceFile.fileName).toLowerCase()) ? "root" : "referenced";
     },
-    close: () => api.close(),
+    close,
   };
 }
 

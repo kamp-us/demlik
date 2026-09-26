@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import { agreementOf, graphPulls, type ImportEdge } from "../graph-pull.js";
 import { type RoleConfig, roleOf, type Vocabulary } from "../vocabulary.js";
 import type {
   Manifest,
@@ -7,6 +8,8 @@ import type {
   ReviewRow,
   VerdictRow,
 } from "./manifest.js";
+
+export { agreementOf, graphPulls, type ImportEdge } from "../graph-pull.js";
 
 export const CONFIDENCE_FLOOR = 0.8;
 
@@ -20,6 +23,8 @@ export type PlanInput = {
   readonly tree: readonly string[];
   /** Files that must not move, keyed by repo-relative path, valued by the reason. */
   readonly entries: ReadonlyMap<string, string>;
+  /** The scope's import graph; a file moves only where its pull agrees with Jev. */
+  readonly edges: readonly ImportEdge[];
 };
 
 const kebab = (feature: string) => feature.replaceAll("_", "-");
@@ -109,37 +114,50 @@ function roleFor(vocabulary: Vocabulary, row: VerdictRow): RoleConfig {
 }
 
 /**
- * Turn sweep verdicts into a move manifest: each confident file in a wanted feature moves to its
- * feature and role folder, carrying its colocated tests; an entry file is pinned; anything under the
- * floor goes to review. Pure — the tree, verdicts and entries are all handed in.
+ * Turn sweep verdicts and the import graph into a move manifest. A file moves to its feature and
+ * role folder, carrying its colocated tests, only when Jev and the graph agree on the feature (see
+ * `agreementOf`); a disagreement goes to review with both opinions; an entry file is pinned. Pure —
+ * the tree, verdicts, entries and edges are all handed in.
  */
 export function planManifest(input: PlanInput): Manifest {
   checkFeatures(input.vocabulary, input.features);
   const tree = new Set(input.tree);
   const wanted = new Set<string>(input.features);
-  const inScope = input.verdicts
-    .filter(
-      (v) =>
-        v.path.startsWith(`${input.scope}/src/`) &&
-        wanted.has(v.answers.feature.choice),
-    )
+  const judged = input.verdicts
+    .filter((v) => v.path.startsWith(`${input.scope}/src/`))
     .filter((v) => tree.has(v.path))
     .sort((a, b) => a.path.localeCompare(b.path));
+  const pullOf = graphPulls(
+    input.edges,
+    new Map(
+      judged
+        .filter((v) => wanted.has(v.answers.feature.choice))
+        .map((v) => [v.path, v.answers.feature.choice]),
+    ),
+  );
 
   const pinned: PinnedRow[] = [];
   const review: ReviewRow[] = [];
   const placed: Placed[] = [];
-  for (const row of inScope) {
-    const feature = row.answers.feature.choice;
-    const entry = input.entries.get(row.path);
+  for (const row of judged) {
+    const { choice: feature, confidence } = row.answers.feature;
+    const graph = pullOf(row.path);
+    const verdict = agreementOf(
+      wanted.has(feature) && confidence >= input.floor ? feature : null,
+      graph.feature,
+    );
+    // An entry file is pinned whenever either side would list it, and — as before the graph had a
+    // say — whenever Jev put it in a named feature at all.
+    const listed = verdict !== "unlisted" || wanted.has(feature);
+    const entry = listed ? input.entries.get(row.path) : undefined;
     if (entry !== undefined) {
       pinned.push({ path: row.path, entry });
       continue;
     }
     const role = row.answers.role.choice;
-    const { confidence } = row.answers.feature;
-    if (confidence < input.floor) {
-      review.push({ path: row.path, feature, role, confidence });
+    if (verdict === "unlisted") continue;
+    if (verdict === "review") {
+      review.push({ path: row.path, feature, role, confidence, graph });
       continue;
     }
     placed.push({

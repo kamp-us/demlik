@@ -86,12 +86,13 @@ describe("a folder run (no --files)", () => {
       jev,
       verdictsPath,
     });
-    // Digests recorded by running this test against the code before --files existed.
+    // Digests recorded by running this test against the code before --files existed. The
+    // verdicts digest moved once, when every row gained its `extractor` (#441); the states did not.
     expect(sha(JSON.stringify(jev.asked))).toMatchInlineSnapshot(
       `"e99510197fd1bded296072f585e457b2205825253003d94ab45a2634860b897b"`,
     );
     expect(sha(readFileSync(verdictsPath, "utf8"))).toMatchInlineSnapshot(
-      `"ea7113435ae59327dad5db5d226efc6f762389b257b834aaec30c12bb6c5edde"`,
+      `"bf37135cbb15215d68904e9c8fc7365481bd95ff78853dbd6d89730adbfba909"`,
     );
   });
 });

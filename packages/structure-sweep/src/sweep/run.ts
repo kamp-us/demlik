@@ -3,6 +3,7 @@ import { dirname, posix } from "node:path";
 import type { JevUsage } from "@demlik/tea/jev";
 import { trackedPaths } from "../git.js";
 import { type JevClient, pool } from "../jev.js";
+import { specifierResolver } from "../module-syntax.js";
 import type { Vocabulary } from "../vocabulary.js";
 import {
   type FileEvidence,
@@ -15,14 +16,23 @@ import type { GraphFacts } from "./graph.js";
 import type { SweepAnswers, SweepQuestions } from "./questions.js";
 
 /**
- * One judged file. `hash`, `vocabulary` and `redacted` together are the cache key: all must match
- * to skip. `path` is always the real repo path, whatever Jev was shown.
+ * Which reader built the evidence a verdict was judged on. Bump it whenever the evidence a file
+ * gives changes shape, so no verdict judged on the old evidence is served again: 1 was the regex
+ * reader, 2 is oxc-parser.
+ */
+export const EVIDENCE_EXTRACTOR = 2;
+
+/**
+ * One judged file. `hash`, `vocabulary`, `extractor` and `redacted` together are the cache key:
+ * all must match to skip. `path` is always the real repo path, whatever Jev was shown.
  */
 export interface SweepRow {
   readonly path: string;
   readonly scope: string;
   readonly hash: string;
   readonly vocabulary: string;
+  /** `EVIDENCE_EXTRACTOR` when the row was judged; absent on a row written before it existed (1). */
+  readonly extractor?: number;
   /** Present only on a row Jev answered from redacted evidence; a default row has no such field. */
   readonly redacted?: true;
   readonly answers: SweepAnswers;
@@ -38,6 +48,9 @@ export type SweepSelection =
   | { readonly scopes: readonly string[]; readonly files?: never }
   | { readonly files: readonly string[]; readonly scopes?: never };
 
+/** Given a batch's folder, whether Jev is asked about the file at `path` in it. */
+export type Nominate = (scope: string) => (path: string) => boolean;
+
 export type SweepOptions = SweepSelection & {
   readonly root: string;
   readonly ref: string;
@@ -48,6 +61,8 @@ export type SweepOptions = SweepSelection & {
   readonly graph?: ReadonlyMap<string, GraphFacts>;
   /** Show Jev opaque ids instead of paths, relative specifiers and sibling names. */
   readonly redact?: boolean;
+  /** Ask only about the files this says yes to; absent, every uncached file is asked. */
+  readonly nominate?: Nominate;
   readonly concurrency?: number;
   readonly log?: (line: string) => void;
 };
@@ -58,6 +73,8 @@ export interface SweepScopeResult {
   readonly cached: number;
   readonly asked: number;
   readonly failed: readonly string[];
+  /** On a nominated run only: files neither cached nor nominated, so never asked. */
+  readonly skipped?: number;
 }
 
 export interface SweepResult {
@@ -94,6 +111,7 @@ const isCached = (
   row !== undefined &&
   row.hash === file.hash &&
   row.vocabulary === options.vocabulary.fingerprint &&
+  (row.extractor ?? 1) === EVIDENCE_EXTRACTOR &&
   (row.redacted === true) === (options.redact === true);
 
 async function judgeScope(
@@ -102,11 +120,19 @@ async function judgeScope(
   scope: string,
   files: readonly SourceFile[],
   evidence: ReadonlyMap<string, FileEvidence>,
+  nominated: ((path: string) => boolean) | undefined,
 ): Promise<SweepScopeResult> {
-  const todo = files.filter(
+  const uncached = files.filter(
     (f) => !isCached(verdicts.done.get(f.path), f, options),
   );
-  options.log?.(`${scope}: ${files.length} files, ${todo.length} to ask`);
+  const todo =
+    nominated === undefined
+      ? uncached
+      : uncached.filter((f) => nominated(f.path));
+  const skipped = uncached.length - todo.length;
+  options.log?.(
+    `${scope}: ${files.length} files, ${todo.length} to ask${nominated === undefined ? "" : `, ${skipped} skipped (not nominated)`}`,
+  );
   const failed: string[] = [];
   await pool(todo, options.concurrency ?? 6, async (file) => {
     const state = evidence.get(file.path);
@@ -118,6 +144,7 @@ async function judgeScope(
         scope,
         hash: file.hash,
         vocabulary: options.vocabulary.fingerprint,
+        extractor: EVIDENCE_EXTRACTOR,
         ...(options.redact === true ? { redacted: true as const } : {}),
         answers: ok.answers,
         model: ok.model,
@@ -134,9 +161,10 @@ async function judgeScope(
   return {
     scope,
     files: files.length,
-    cached: files.length - todo.length,
+    cached: files.length - uncached.length,
     asked: todo.length - failed.length,
     failed,
+    ...(nominated === undefined ? {} : { skipped }),
   };
 }
 
@@ -199,14 +227,30 @@ export async function runSweep(options: SweepOptions): Promise<SweepResult> {
   const scopes: SweepScopeResult[] = [];
   for (const { scope, listed } of batches) {
     const sources = listSources(options.root, options.ref, scope);
-    const evidence = gatherEvidence(sources, options.graph, {
-      redact: options.redact,
-    });
+    const evidence = gatherEvidence(
+      sources,
+      options.graph,
+      options.redact === true
+        ? {
+            redact: true,
+            resolve: specifierResolver(options.root, scope),
+          }
+        : {},
+    );
     const judged =
       listed === undefined
         ? sources
         : sources.filter((f) => listed.has(f.path));
-    scopes.push(await judgeScope(options, verdicts, scope, judged, evidence));
+    scopes.push(
+      await judgeScope(
+        options,
+        verdicts,
+        scope,
+        judged,
+        evidence,
+        options.nominate?.(scope),
+      ),
+    );
   }
   verdicts.save();
   return { scopes, rows: [...verdicts.done.values()] };

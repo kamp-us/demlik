@@ -9,18 +9,21 @@ import { applyManifest } from "./apply.js";
 import { entryFiles } from "./entries.js";
 import { Manifest, VerdictRow } from "./manifest.js";
 import { CONFIDENCE_FLOOR, planManifest } from "./plan.js";
+import { importEdges } from "./project.js";
 
 export const MOVE_USAGE = `structure-sweep move plan --scope <folder> --feature <key>... [options]
 structure-sweep move apply [--manifest <file>]
 
-  plan   Write a manifest moving every confidently-judged file of the named features into
-         <folder>/src/<feature>/<role dir>. Entry files are pinned and never moved.
-  apply  Move the manifest's files, rewrite their imports and stage the result. A second
-         apply over the same manifest changes nothing.
+  plan   Write a manifest moving each file of the named features into
+         <folder>/src/<feature>/<role dir> when Jev's confident verdict and the import graph's
+         pull agree on the feature; a disagreement goes to review with both opinions. Entry
+         files are pinned and never moved.
+  apply  Over a clean tree, commit the manifest's renames with content unchanged, then commit
+         the import rewrites on top. A second apply over the same manifest changes nothing.
 
   --config <file>       vocabulary (default: ${DEFAULTS.config})
   --verdicts <file>     sweep output (default: ${DEFAULTS.verdicts})
-  --floor <0..1>        below this feature confidence a file goes to review (default: ${CONFIDENCE_FLOOR})
+  --floor <0..1>        below this feature confidence Jev does not say move (default: ${CONFIDENCE_FLOOR})
   --manifest <file>     manifest to write or apply (default: ${DEFAULTS.manifest})`;
 
 export interface PlanScopeInput {
@@ -32,7 +35,10 @@ export interface PlanScopeInput {
   readonly verdicts: readonly VerdictRow[];
 }
 
-/** `planManifest` over the scope as git tracks it, with its entry files read from the disk. */
+/**
+ * `planManifest` over the scope as git tracks it, with its entry files read from the disk and its
+ * import graph from the move project.
+ */
 export function planScope(input: PlanScopeInput): Manifest {
   const tree = trackedPaths(input.root, "index", input.scope);
   return Manifest.parse(
@@ -40,6 +46,7 @@ export function planScope(input: PlanScopeInput): Manifest {
       ...input,
       tree,
       entries: entryFiles(input.root, input.scope, tree),
+      edges: importEdges(input.root, input.scope, tree),
     }),
   );
 }

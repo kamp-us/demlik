@@ -1,0 +1,35 @@
+{
+  "entries": [
+    {
+      "from": "services/svc/src/findings/flows/gone.ts",
+      "kind": "cross-feature",
+      "reason": "a crossing the tree no longer has, pruned by the gate",
+      "scope": "services/svc",
+      "specifier": "../../audit-runs/store/db.js",
+      "to": "services/svc/src/audit-runs/store/db.ts"
+    },
+    {
+      "from": "services/svc/src/findings/flows/lazy.ts",
+      "kind": "cross-feature",
+      "reason": "recorded debt",
+      "scope": "services/svc",
+      "specifier": "../../audit-runs/store/db.js",
+      "to": "services/svc/src/audit-runs/store/db.ts"
+    },
+    {
+      "from": "services/svc/src/findings/rules/score.ts",
+      "kind": "impure-rules",
+      "scope": "services/svc",
+      "specifier": "zod",
+      "to": null
+    },
+    {
+      "from": "services/svc/src/lib/util.ts",
+      "kind": "lib-imports-feature",
+      "reason": "recorded debt",
+      "scope": "services/svc",
+      "specifier": "../findings/index.js",
+      "to": "services/svc/src/findings/index.ts"
+    }
+  ]
+}
