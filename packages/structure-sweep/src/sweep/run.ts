@@ -233,7 +233,7 @@ export async function runSweep(options: SweepOptions): Promise<SweepResult> {
       options.redact === true
         ? {
             redact: true,
-            resolve: specifierResolver(options.root, scope),
+            resolve: specifierResolver(options.root, scope, options.ref),
           }
         : {},
     );

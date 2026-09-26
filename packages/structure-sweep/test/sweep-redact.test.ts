@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
@@ -17,7 +17,15 @@ import {
   type SweepRow,
 } from "../src/sweep/run.js";
 import type { Vocabulary } from "../src/vocabulary.js";
-import { choice, fixtureVocabulary, repo, stubJev } from "./helpers.js";
+import {
+  choice,
+  commit,
+  fixtureVocabulary,
+  gitIn,
+  repo,
+  stubJev,
+  write,
+} from "./helpers.js";
 
 function jevFor(vocabulary: Vocabulary) {
   const features = Object.keys(vocabulary.features);
@@ -322,5 +330,75 @@ describe("sweep cache across redaction modes", () => {
         1,
       )}\n`,
     );
+  });
+});
+
+describe("sweep --redact resolves aliases only against a working tree that matches --ref", () => {
+  const ALIASED = {
+    "tsconfig.json": JSON.stringify({
+      compilerOptions: { baseUrl: ".", paths: { "@app/*": ["src/*"] } },
+    }),
+    "src/billing/invoice.ts": [
+      'import { rate } from "@app/tax/rate";',
+      "export const invoice = rate;",
+    ].join("\n"),
+    "src/tax/rate.ts": "export const rate = 1;",
+  };
+
+  const sweep = async (root: string, ref: string) => {
+    const vocabulary = fixtureVocabulary();
+    const jev = jevFor(vocabulary);
+    const run = runSweep({
+      root,
+      ref,
+      scopes: ["src"],
+      vocabulary,
+      jev,
+      verdictsPath: verdictsIn(),
+      redact: true,
+    });
+    return { run, jev };
+  };
+
+  it("resolves the alias to the swept file's id when the working tree matches --ref", async () => {
+    const root = repo(ALIASED);
+    // A source edit moves no resolution, so it does not count as a divergence.
+    write(root, {
+      "src/billing/invoice.ts": `${ALIASED["src/billing/invoice.ts"]}\nexport const total = 2;`,
+    });
+    const { run, jev } = await sweep(root, "HEAD");
+    await run;
+    const files = jev.asked.map(fileOf);
+    const rate = files.find((f) => f.exports.includes("rate"));
+    const invoice = files.find((f) => f.exports.includes("invoice"));
+    expect(rate?.path).toMatch(/^f\d+\.ts$/);
+    expect(invoice?.imports).toEqual([`./${rate?.path.replace(/\.ts$/, "")}`]);
+  });
+
+  it("refuses, naming the tsconfig, when --ref maps the alias differently", async () => {
+    const root = repo(ALIASED);
+    const ref = gitIn(root, "rev-parse", "HEAD").trim();
+    write(root, {
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { "@app/*": ["lib/*"] } },
+      }),
+      "lib/tax/rate.ts": "export const rate = 2;",
+    });
+    commit(root, "move the alias");
+    const { run, jev } = await sweep(root, ref);
+    await expect(run).rejects.toThrow(
+      new RegExp(
+        `differs from ${ref} in 2 path\\(s\\)[^]*added lib/tax/rate\\.ts\\n  modified tsconfig\\.json`,
+      ),
+    );
+    expect(jev.asked).toEqual([]);
+  });
+
+  it("refuses, naming the file, when the aliased file exists at --ref but not on disk", async () => {
+    const root = repo(ALIASED);
+    rmSync(join(root, "src/tax/rate.ts"));
+    const { run, jev } = await sweep(root, "HEAD");
+    await expect(run).rejects.toThrow(/deleted src\/tax\/rate\.ts/);
+    expect(jev.asked).toEqual([]);
   });
 });

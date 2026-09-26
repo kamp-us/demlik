@@ -219,3 +219,56 @@ export function exactRenames(
   }
   return renames;
 }
+
+/**
+ * How one path in the working tree differs from a tree: the working tree has it and the tree does
+ * not (an untracked, unignored file included), the reverse, its content changed, or its type did
+ * (a file become a symlink, say).
+ */
+export interface WorkingTreeChange {
+  readonly kind: "added" | "deleted" | "modified" | "retyped";
+  readonly path: string;
+}
+
+const CHANGE_KINDS: Readonly<Record<string, WorkingTreeChange["kind"]>> = {
+  A: "added",
+  D: "deleted",
+  T: "retyped",
+};
+
+/**
+ * Every path whose working-tree state differs from the tree `ref` names, ignored files left out,
+ * sorted by path. Staged and unstaged edits both count: this is the checkout on disk, not the index.
+ */
+export function workingTreeChanges(
+  cwd: string,
+  ref: string,
+): WorkingTreeChange[] {
+  const fields = git(cwd, [
+    "diff",
+    "--no-renames",
+    "--name-status",
+    "-z",
+    ref,
+    "--",
+  ]).split("\0");
+  const changes: WorkingTreeChange[] = [];
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const status = fields[i];
+    const path = fields[i + 1];
+    if (!status || path === undefined) continue;
+    changes.push({ kind: CHANGE_KINDS[status] ?? "modified", path });
+  }
+  const untracked = git(cwd, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "--full-name",
+    "-z",
+  ]);
+  for (const path of untracked.split("\0").filter(Boolean))
+    changes.push({ kind: "added", path });
+  return changes.sort((a, b) =>
+    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+  );
+}

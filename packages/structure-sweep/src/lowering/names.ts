@@ -58,7 +58,6 @@ const BLOCK_SCOPES = new Set([
   "ForStatement",
   "ForInStatement",
   "ForOfStatement",
-  "SwitchStatement",
 ]);
 
 /** Whether the identifier at `parent[key]` is a name — a property, key or label — never a reference. */
@@ -160,6 +159,15 @@ export function neutralNames(fn: Node): ReadonlyMap<Node, string> {
         pattern(child(node, "param"), inner);
         const body = child(node, "body");
         if (body !== null) visit(body, inner);
+        return;
+      }
+      case "SwitchStatement": {
+        // The discriminant is evaluated before the case block's lexical scope exists.
+        const discriminant = child(node, "discriminant");
+        if (discriminant !== null) visit(discriminant, scope);
+        const block = new Scope(scope, false);
+        for (const switchCase of children(node, "cases"))
+          visit(switchCase, block);
         return;
       }
     }

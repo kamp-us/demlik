@@ -9,6 +9,7 @@ import {
   Visitor,
 } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
+import { type WorkingTreeChange, workingTreeChanges } from "./git.js";
 
 /**
  * One `import … from` / `import "…"` statement, or one `export … from` re-export: the module it
@@ -158,14 +159,35 @@ const inNodeModules = (path: string) =>
   path.split(sep).includes("node_modules");
 
 /**
- * Resolve specifiers from the checkout at `root` the way the scope's own build would: oxc-resolver
- * under the tsconfig `resolveEdgeTsConfig` picks for `scope`, so a `paths` alias resolves to the
- * file it names. With no tsconfig at or above the scope, aliases stay `unknown`.
+ * Whether a working-tree change can move where a specifier resolves: a path appearing, vanishing
+ * or changing type, or an edit to any JSON file — the tsconfig chain `extends` may name and every
+ * `package.json` are JSON. An edit to a source file's content leaves every resolution where it was.
+ */
+const movesResolution = (change: WorkingTreeChange): boolean =>
+  change.kind !== "modified" || change.path.endsWith(".json");
+
+/**
+ * Resolve specifiers written in the tree `ref` names the way the scope's own build would:
+ * oxc-resolver under the tsconfig `resolveEdgeTsConfig` picks for `scope`, so a `paths` alias
+ * resolves to the file it names. With no tsconfig at or above the scope, aliases stay `unknown`.
+ * oxc-resolver reads the checkout on disk, so this throws, naming every path, when the working tree
+ * at `root` differs from `ref` in anything resolution reads: an answer read off the working tree
+ * would then be an answer about a tree the sweep never read.
  */
 export function specifierResolver(
   root: string,
   scope: string,
+  ref: string,
 ): SpecifierResolver {
+  const diverging = workingTreeChanges(root, ref).filter(movesResolution);
+  if (diverging.length > 0)
+    throw new Error(
+      `--redact resolves module aliases from the working tree, which differs from ${ref} in ${diverging.length} path(s) that decide where a specifier resolves:\n${diverging
+        .map((change) => `  ${change.kind} ${change.path}`)
+        .join(
+          "\n",
+        )}\nsweep --ref at a commit the working tree matches, or check out ${ref} first`,
+    );
   let configFile: string | undefined;
   try {
     configFile = resolveEdgeTsConfig(join(root, scope), "package", root);
