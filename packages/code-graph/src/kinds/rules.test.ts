@@ -60,6 +60,8 @@ describe("NodeKindRulesSchema defaults", () => {
             "^(WorkerEntrypoint|DurableObject)$",
           ],
         },
+        "entryExportConventions": {},
+        "entryExportPresets": [],
         "entryFilePatterns": {
           "cli-command": [
             "(^|/)src/commands/",

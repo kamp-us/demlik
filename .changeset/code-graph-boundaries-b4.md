@@ -13,8 +13,8 @@ other file of the feature, `rules/` included, is a B4
 `outside-imports-feature-internal` violation. `lib` importers stay with B3, and
 B1–B3 verdicts are unchanged.
 
-B4 violations join each scope's existing count in `boundary-ceilings.json`, so a
-scope with outside-to-internal imports today reports `EXCEEDED` under
-`--boundaries --ci` after upgrading. Re-record the ceilings once with
-`code-graph <scope> --boundaries --write-ceilings` to freeze that debt, then
-ratchet it down.
+Each B4 crossing is its own entry in `boundary-ledger.json`, so a scope with
+outside-to-internal imports today fails `--boundaries --ci` on every one the
+ledger does not name after upgrading. Record the ones that stay with
+`code-graph <scope> --boundaries --accept-crossings --reason "<why>"`, then
+remove them one crossing at a time.

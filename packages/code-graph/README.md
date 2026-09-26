@@ -92,6 +92,7 @@ cross-package callers; re-run with `--deep`.
 | `--clusters` | Community detection over the call + import graph, compared against the directory tree: directories spanning several clusters, and clusters scattered across directories. Report, never a gate. Implies `--cross-runtime` |
 | `--interface-width` | Every exported symbol, grouped by its declaring package, ranked by export count; each export's consumer count OUTSIDE the package, and the zero-consumer ones called out as free deletions. Implies the edge pass (does NOT imply `--kinds`) |
 | `--node-kinds <file>` | JSON file of node-kind rule overrides, same boundary discipline as `--thresholds`. An override REPLACES a whole pattern group |
+| `--entry-preset <name>` | Turn on a built-in [entrypoint-export preset](#entrypoint-export-conventions) (`nextjs`) for every package, including one whose `package.json` does not depend on the framework. Repeatable; adds to any `entryExportPresets` the rules file names. An unknown name exits 2 |
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no tsconfig, no Graph |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
 | `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges`: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`; **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`. `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
@@ -220,7 +221,7 @@ so an added kind fails to compile at every consumer:
 
 | Kind | Meaning |
 |---|---|
-| `entry` | A place a real run starts: a `fetch`/`email` handler, a `scheduled`/`queue`/`tail` handler, a GraphQL resolver, a registered CLI command, any method of a class a wrangler config declares as a **Durable Object**, any public instance method of a class extending `WorkerEntrypoint` or `DurableObject` (`worker-entrypoint-method`), or an RPC method with at least one **real** cross-service caller (Feature A establishes that as a fact, not a guess). A Workflow's `run` is not an entry: only its own worker starts it, so it is reached through the `create` call-site's edge |
+| `entry` | A place a real run starts: a `fetch`/`email` handler, a `scheduled`/`queue`/`tail` handler, a GraphQL resolver, a registered CLI command, any method of a class a wrangler config declares as a **Durable Object**, any public instance method of a class extending `WorkerEntrypoint` or `DurableObject` (`worker-entrypoint-method`), or an RPC method with at least one **real** cross-service caller (Feature A establishes that as a fact, not a guess). Also any export a framework calls by file convention, per the [entrypoint-export conventions](#entrypoint-export-conventions) in force. A Workflow's `run` is not an entry: only its own worker starts it, so it is reached through the `create` call-site's edge |
 | `auth` | An authorization check |
 | `effect` | A DB write, an object-store write, a network call, a queue send, a workflow spawn — matched on where the callee is **declared**, not on its name (see below); a repo function outside the scope gets a `workspace:<file>:<name>` id and is never an effect |
 | `plain` | Nothing matched — reported as **unclassified**, never as a positive finding |
@@ -299,6 +300,63 @@ whose receiver the checker cannot type has no declaration and is never an effect
 The Cloudflare rules (`R2Bucket`, `KVNamespace`, `Queue`, `Workflow`, `D1Database`,
 `fetch`) match on the owner under any origin, because the runtime types arrive either
 from `@cloudflare/workers-types` or from a wrangler-generated `worker-configuration.d.ts`.
+
+### Entrypoint-export conventions
+
+A file-convention framework calls some exports by where they live, not through any call
+the graph can see: a Next.js page's default export, a route handler's `GET`. An
+**entrypoint-export convention** declares that: a file glob plus the export names that
+count as entries in files it matches. Only the listed names become entries, so a helper
+exported beside them is still judged normally and an unreferenced one still reports
+`dead`. Each matched export is `entry` under `--kinds`, with the convention's name as its
+evidence, and is a root of the `--unreachable` walk.
+
+| Field | Meaning |
+|---|---|
+| `files` | A glob over the file's path **relative to the package that owns it** (the nearest `package.json` at or above the file, no higher than the repo root; the analyzed root when there is none). `**/` is zero or more directories, `*` any run but `/`, `?` one character but `/`, `{a,b}` one alternative (`{,src/}` makes a prefix optional). Every other character is literal, so `[id]` and `(group)` path segments are matched by `**` |
+| `exports` | The export names that are entries. `default` names the default export whatever its local name, so `export default function HomePage()`, `export default HomePage` and `export { handler as default }` all match it; `export { write as PUT }` matches `PUT` |
+
+Only functions are judged: a non-function export such as `export const metadata = {…}`
+or `export const dynamic = "force-dynamic"` is not a graph node, so it never reaches the
+`--unreachable` output with or without a convention.
+
+**The `nextjs` preset** ships built in, default `pageExtensions` only (`js`, `jsx`,
+`ts`, `tsx`; code-graph reads the `ts`/`tsx` ones). It activates for a package whose
+`package.json` lists `next` in `dependencies` or `devDependencies`, and anywhere on
+opt-in: `--entry-preset nextjs`, or `"entryExportPresets": ["nextjs"]` in the rules file.
+With neither, a `page.tsx` default export is judged like any other export. Its conventions,
+each rooted at the package or under `src/`:
+
+| Convention | Files | Exports |
+|---|---|---|
+| `nextjs/app-file` | `app/**/{page,layout,route,loading,error,global-error,not-found,template,default}` | `default` |
+| `nextjs/app-metadata` | `app/**/{page,layout}` | `generateMetadata`, `metadata`, `generateViewport`, `viewport` |
+| `nextjs/app-static-params` | `app/**/{page,layout,route}` | `generateStaticParams` |
+| `nextjs/app-segment-config` | `app/**/{page,layout,route}` | `dynamic`, `dynamicParams`, `revalidate`, `fetchCache`, `runtime`, `preferredRegion`, `maxDuration` |
+| `nextjs/app-route-handler` | `app/**/route` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS` |
+| `nextjs/app-metadata-file` | `app/**/{opengraph-image,twitter-image,icon,apple-icon,sitemap,robots,manifest}` | `default`, `generateImageMetadata`, `generateSitemaps` |
+| `nextjs/pages` | `pages/**/*` (API routes, `_app`, `_document` included) | `default`, `getServerSideProps`, `getStaticProps`, `getStaticPaths`, `config` |
+| `nextjs/middleware` | `middleware`, `proxy` (Next.js 16) | `middleware`, `proxy`, `default`, `config` |
+| `nextjs/instrumentation` | `instrumentation` | `register`, `onRequestError`, `default`, `config` |
+
+Route groups, dynamic segments and parallel-route slots sit under `app/**`, so they are
+covered. `pageExtensions` and `distDir` from `next.config` are not read.
+
+**A custom convention** goes under `entryExportConventions` in the `--node-kinds` file,
+keyed by the name its evidence will carry. Unlike every other group there, it **adds**:
+your conventions apply beside every active preset, and on their own when none is active.
+
+```json
+{
+  "entryExportConventions": {
+    "job-runner": { "files": "{,src/}jobs/*.ts", "exports": ["run"] }
+  },
+  "entryExportPresets": ["nextjs"]
+}
+```
+
+An unbalanced glob, an empty `exports` list or an unknown preset name exits 2 with a
+one-line message.
 
 ### `--unreachable` fails toward silence
 

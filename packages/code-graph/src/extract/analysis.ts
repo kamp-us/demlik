@@ -23,11 +23,13 @@ import type {
   NodeKind,
   ReachabilityReport,
 } from "../schema.js";
+import { conventionEntries } from "./conventions/entries.js";
 import {
   type CrossRuntimeResolver,
   createCrossRuntimeResolver,
   methodIdsOfClasses,
 } from "./cross-runtime.js";
+import type { DiscoveredFunction } from "./functions.js";
 import { publicExportPatterns } from "./package-exports.js";
 import { discoverPackageRoots, toRelative } from "./project.js";
 import { type ReferenceResult, resolveReferences } from "./references.js";
@@ -138,6 +140,7 @@ export type CompleteInput = {
   ctx: TypeContext;
   names: Set<string>;
   exportsByFile: Map<string, string[]>;
+  functions: readonly DiscoveredFunction[];
 };
 
 function crossRuntimeReport(input: CompleteInput): CrossRuntimeReport | null {
@@ -221,7 +224,7 @@ function buildInterfaceWidth(
 }
 
 export function completeAnalysis(input: CompleteInput): AnalysisBundle {
-  const { options, prep, rootAbsolute, ctx, names, exportsByFile } = input;
+  const { options, prep, rootAbsolute, ctx, names, exportsByFile, functions } = input;
   const report = crossRuntimeReport(input);
 
   const compiled = compileKindRules(options.kindRules);
@@ -233,6 +236,9 @@ export function completeAnalysis(input: CompleteInput): AnalysisBundle {
       siblingPropertyRules(ctx, compiled.entryGuardProperties),
       typeScopeRules(ctx, compiled.entryGuardProperties),
     ),
+    conventionEntries: options.kinds
+      ? conventionEntries(functions, options.kindRules, rootAbsolute, options.repoRoot)
+      : new Map(),
   };
   const classify = options.kinds
     ? (fn: FunctionNode): NodeKind => classifyFunction(fn, compiled, context)

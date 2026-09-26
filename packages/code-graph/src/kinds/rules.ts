@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { EntryExportConventionSchema } from "./conventions.js";
+import { EntryExportPresetNameSchema } from "./presets.js";
 
 const PatternGroupSchema = z.record(z.string(), z.array(z.string()));
 export type PatternGroup = z.infer<typeof PatternGroupSchema>;
@@ -29,6 +31,8 @@ export const NodeKindRulesSchema = z
     entryFilePatterns: PatternGroupSchema.default({
       "cli-command": ["(^|/)src/commands/"],
     }),
+    entryExportConventions: z.record(z.string(), EntryExportConventionSchema).default({}),
+    entryExportPresets: z.array(EntryExportPresetNameSchema).default([]),
     testSupportFilePatterns: PatternGroupSchema.default({
       "test-directory": ["(^|/)tests?/", "(^|/)__tests__/", "(^|/)e2e[^/]*/"],
       "test-helper-module": [
@@ -72,6 +76,22 @@ export const NodeKindRulesSchema = z
   .strict();
 
 export type NodeKindRules = z.infer<typeof NodeKindRulesSchema>;
+
+// Every regular-expression source the rules carry, for validation before anything compiles them.
+export function regexSources(rules: NodeKindRules): string[] {
+  const groups: PatternGroup[] = [
+    rules.entryNames,
+    rules.entryBaseClasses,
+    rules.entryReach,
+    rules.entryGuardProperties,
+    rules.entryFilePatterns,
+    rules.testSupportFilePatterns,
+    rules.authNames,
+    rules.authCallees,
+    rules.effectDeclarations,
+  ];
+  return groups.flatMap((group) => Object.values(group).flat());
+}
 
 export type CompiledRule = { readonly key: string; readonly patterns: readonly RegExp[] };
 

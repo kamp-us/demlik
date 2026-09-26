@@ -3,8 +3,8 @@
 ---
 
 Bring code-graph level with the copy Binclusive runs. New `--boundaries` pass
-(configured by `--boundary-rules`, gated by `boundary-ceilings.json`) sharing one
-per-scope count ratchet with `--collapse`; one gitignore-aware file lister behind
+(configured by `--boundary-rules`, gated per crossing by `boundary-ledger.json`,
+which grows only through `--accept-crossings`); one gitignore-aware file lister behind
 every pass; `--kinds` entries for `WorkerEntrypoint` / `DurableObject` public
 methods, each carrying `reach` and `guards` (Pothos `authScopes` counts);
 effects matched on the callee's declaration rather than its name; `--graph`

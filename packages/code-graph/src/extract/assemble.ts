@@ -272,7 +272,14 @@ export function assembleGraphWithEdges(
     const analysis =
       options === null || prep === null
         ? null
-        : completeAnalysis({ options, prep, rootAbsolute, ctx, ...analysisInputs(functions) });
+        : completeAnalysis({
+            options,
+            prep,
+            rootAbsolute,
+            ctx,
+            functions,
+            ...analysisInputs(functions),
+          });
     return build(loaded, thresholds, { result, scope, tsConfig }, functions, analysis, data);
   } finally {
     ctx.close();
