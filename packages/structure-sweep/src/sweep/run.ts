@@ -182,7 +182,7 @@ function refusal(path: string, ref: string, tracked: ReadonlySet<string>) {
   if (!isSweptSource(path))
     return "not a swept source (.ts/.tsx, not a test, story or .d.ts)";
   if (posix.dirname(path) === ".")
-    return "at the repository root, which no folder sweep covers";
+    return "at the repository root, which --files does not batch; `sweep .` judges it";
   return undefined;
 }
 

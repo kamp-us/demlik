@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
-import { DEFAULTS, scopeOf, underRoot } from "../cli-paths.js";
+import { DEFAULTS, treeScopeOf, underRoot } from "../cli-paths.js";
 import { repoRootOf } from "../git.js";
 import {
   DEFAULT_MODEL,
@@ -17,6 +17,8 @@ export const PAIRS_USAGE = `structure-sweep pairs <folder>=<collapse.json>... [o
 
   Ask Jev what each code-graph collapse pair means: same_decision, look_alike or shared_helper.
   <collapse.json> is the output of \`code-graph <folder> --collapse --json\`.
+  <folder> may be ., the whole tree: only its report holds a pair whose two functions
+  sit in different top-level folders.
 
   --ref <ref>           git tree the collapse report was taken from (default: HEAD)
   --out <file>          judged pairs (default: ${DEFAULTS.pairs})
@@ -26,11 +28,16 @@ export const PAIRS_USAGE = `structure-sweep pairs <folder>=<collapse.json>... [o
   --model <id>          Jev model (default: ${DEFAULT_MODEL})
   --concurrency <n>     calls in flight (default: 6)`;
 
-function parseTarget(root: string, cwd: string, arg: string): PairTarget {
+/** One `<folder>=<collapse.json>` argument; `.` (or any folder resolving to the root) is the whole tree. */
+export function parsePairsTarget(
+  root: string,
+  cwd: string,
+  arg: string,
+): PairTarget {
   const at = arg.indexOf("=");
   if (at <= 0) throw new Error(`expected <folder>=<collapse.json>, got ${arg}`);
   return {
-    scope: scopeOf(root, cwd, arg.slice(0, at)),
+    scope: treeScopeOf(root, cwd, arg.slice(0, at)),
     collapsePath: underRoot(cwd, arg.slice(at + 1)),
   };
 }
@@ -58,7 +65,7 @@ export async function pairsCommand(
   if (positionals.length === 0)
     throw new Error(`pass <folder>=<collapse.json>\n\n${PAIRS_USAGE}`);
   const root = repoRootOf(cwd);
-  const targets = positionals.map((p) => parseTarget(root, cwd, p));
+  const targets = positionals.map((p) => parsePairsTarget(root, cwd, p));
   const apiKey = requireApiKey();
   const outPath = underRoot(root, values.out);
   const reportPath = underRoot(root, values.report);

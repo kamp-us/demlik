@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { DEFAULTS, scopeOf, underRoot } from "../cli-paths.js";
+import { DEFAULTS, treeScopeOf, underRoot } from "../cli-paths.js";
 import { repoRootOf } from "../git.js";
 import {
   DEFAULT_MODEL,
@@ -18,6 +18,7 @@ export const SWEEP_USAGE = `structure-sweep sweep <folder>... [options]
 structure-sweep sweep --files <path> [options]
 
   Ask Jev which feature and which role every source file under each folder belongs to.
+  A folder may be ., the whole tree.
   Files whose content and vocabulary are unchanged since the last run are not asked again.
 
   --files <path>        judge only the repo-relative paths listed one per line in <path>
@@ -84,7 +85,9 @@ export function sweepSelection(
         `pass one or more folders, or --files <path>\n\n${SWEEP_USAGE}`,
       );
     }
-    return { scopes: folders.map((f) => scopeOf(where.root, where.cwd, f)) };
+    return {
+      scopes: folders.map((f) => treeScopeOf(where.root, where.cwd, f)),
+    };
   }
   const text =
     files === "-" ? stdin() : readFileSync(underRoot(where.cwd, files), "utf8");
