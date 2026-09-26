@@ -1,0 +1,945 @@
+{
+  "stage": "group-confirm",
+  "rewordings": [
+    "Each state is a candidate group of branches from different functions, put together because they share state.shared; state.differences says what each member has that the others lack. Answer same-rule when the members are one decision about one subject written in different ways, related-different when they decide different things about related data or conditions, and unrelated when they only look alike."
+  ],
+  "items": [
+    {
+      "id": "admin-edit-throw-vs-false",
+      "span": {
+        "file": "src/docs/edit.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000001",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["¬(v0.isAdmin)"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "guardDocEdit",
+            "atoms": ["¬(v0.isAdmin)"],
+            "outcome": "throw new Forbidden()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "canEditDoc",
+            "atoms": ["¬(v0.isAdmin)"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new Forbidden()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "seat-cap-two-guards",
+      "span": {
+        "file": "src/seats/invite.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000002",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0.seatCount >= v0.maxSeats"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "assertSeatAvailable",
+            "atoms": ["v0.seatCount >= v0.maxSeats"],
+            "outcome": "throw new SeatLimitReached(v0.id)",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "hasFreeSeat",
+            "atoms": ["v0.seatCount >= v0.maxSeats"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new SeatLimitReached(v0.id)"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "trial-over-two-errors",
+      "span": {
+        "file": "src/billing/trial.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000003",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v1 > v0.trialEndsAt"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "requireActiveTrial",
+            "atoms": ["v1 > v0.trialEndsAt"],
+            "outcome": "throw new TrialExpired()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "checkTrial",
+            "atoms": ["v1 > v0.trialEndsAt"],
+            "outcome": "throw new Error(\"trial over\")",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new TrialExpired()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "throw new Error(\"trial over\")"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "pick-enabled-flags",
+      "span": {
+        "file": "src/flags/pick.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000004",
+        "shared": {
+          "signal": "condition",
+          "atoms": [],
+          "outcome": "return v1.filter((v2) => v0.has(v2))"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "enabledFlagsIn",
+            "atoms": [],
+            "outcome": "return v1.filter((v2) => v0.has(v2))",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "activeSwitchesOf",
+            "atoms": [],
+            "outcome": "return v1.filter((v2) => v0.has(v2))",
+            "bindings": []
+          }
+        ],
+        "differences": []
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "owner-delete-three-surfaces",
+      "span": {
+        "file": "src/projects/delete.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000005",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["¬(v0.role === \"owner\")"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "guardProjectDelete",
+            "atoms": ["¬(v0.role === \"owner\")"],
+            "outcome": "throw new Forbidden()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "mayDeleteProject",
+            "atoms": ["¬(v0.role === \"owner\")"],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m2",
+            "function": "projectDeleteCheck",
+            "atoms": ["¬(v0.role === \"owner\")"],
+            "outcome": "throw new HttpError(403, \"owners only\")",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new Forbidden()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          },
+          {
+            "ref": "m2",
+            "atoms": [],
+            "outcome": "throw new HttpError(403, \"owners only\")"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "rate-window",
+      "span": {
+        "file": "src/api/limits.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000006",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v1.count > 100"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "underRequestLimit",
+            "atoms": ["v1.count > 100"],
+            "outcome": "return false",
+            "bindings": ["v1 = window.of(v0)"]
+          },
+          {
+            "ref": "m1",
+            "function": "enforceRequestLimit",
+            "atoms": ["v1.count > 100"],
+            "outcome": "throw new TooManyRequests()",
+            "bindings": ["v1 = window.of(v0)"]
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "return false"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "throw new TooManyRequests()"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "suspended-account",
+      "span": {
+        "file": "src/accounts/status.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000007",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0.status === \"suspended\""],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "assertAccountActive",
+            "atoms": ["v0.status === \"suspended\""],
+            "outcome": "throw new AccountSuspended()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "accountCanAct",
+            "atoms": ["v0.status === \"suspended\""],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m2",
+            "function": "rejectSuspended",
+            "atoms": ["v0.status === \"suspended\""],
+            "outcome": "throw new Forbidden()",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new AccountSuspended()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          },
+          {
+            "ref": "m2",
+            "atoms": [],
+            "outcome": "throw new Forbidden()"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "email-verified",
+      "span": {
+        "file": "src/accounts/verify.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000008",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["¬(v0.emailVerified)"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "requireVerifiedEmail",
+            "atoms": ["¬(v0.emailVerified)"],
+            "outcome": "throw new Unverified()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "isVerifiedSender",
+            "atoms": ["¬(v0.emailVerified)"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new Unverified()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "export-on-paid-plan",
+      "span": {
+        "file": "src/exports/access.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000009",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0.plan === \"free\""],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "guardExport",
+            "atoms": ["v0.plan === \"free\""],
+            "outcome": "throw new UpgradeRequired()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "canExport",
+            "atoms": ["v0.plan === \"free\""],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new UpgradeRequired()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "tier-seat-table-row",
+      "span": {
+        "file": "src/billing/tiers.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000010",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0 === \"team\""],
+          "outcome": "return 25"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "seatsForTier",
+            "atoms": ["v0 === \"team\""],
+            "outcome": "return 25",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "tierSeatCount",
+            "atoms": ["v0 === \"team\""],
+            "outcome": "return 25",
+            "bindings": []
+          }
+        ],
+        "differences": []
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "archived-read-only",
+      "span": {
+        "file": "src/boards/write.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000011",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["¬(v0.archivedAt === null)"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "assertBoardWritable",
+            "atoms": ["¬(v0.archivedAt === null)"],
+            "outcome": "throw new ReadOnly()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "boardAcceptsWrites",
+            "atoms": ["¬(v0.archivedAt === null)"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "throw new ReadOnly()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "audit-insert-twice",
+      "span": {
+        "file": "src/audit/write.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000012",
+        "shared": {
+          "signal": "data",
+          "binding": "d1 DB (service api)"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "recordLogin",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"INSERT INTO audit (actor, action) VALUES (?, ?)\").bind(v0, \"login\").run()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "logSignIn",
+            "atoms": ["¬(v0.id === undefined)"],
+            "outcome": "return env.DB.prepare(\"INSERT INTO audit (actor, action) VALUES (?, ?)\").bind(v0, \"login\").run()",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m1",
+            "atoms": ["¬(v0.id === undefined)"],
+            "outcome": null
+          }
+        ]
+      },
+      "gold": "same-rule"
+    },
+    {
+      "id": "owner-delete-vs-owner-billing",
+      "span": {
+        "file": "src/org/owner.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000013",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["¬(v0.role === \"owner\")"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "canDeleteProject",
+            "atoms": ["¬(v0.role === \"owner\")"],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "canTransferBilling",
+            "atoms": ["¬(v0.role === \"owner\")"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": []
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "free-plan-exports-vs-guests",
+      "span": {
+        "file": "src/plans/limits.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000014",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0.plan === \"free\""],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "canScheduleExports",
+            "atoms": ["v0.plan === \"free\""],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "canInviteGuests",
+            "atoms": ["v0.plan === \"free\""],
+            "outcome": "throw new UpgradeRequired()",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "return false"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "throw new UpgradeRequired()"
+          }
+        ]
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "age-purchase-vs-account",
+      "span": {
+        "file": "src/compliance/age.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000015",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0.age < 18"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "mayBuyRestricted",
+            "atoms": ["v0.age < 18"],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "mayOpenAccount",
+            "atoms": ["v0.age < 18"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": []
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "org-row-read-vs-delete",
+      "span": {
+        "file": "src/org/store.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000016",
+        "shared": {
+          "signal": "data",
+          "binding": "d1 DB (service api)"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "loadOrg",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"SELECT * FROM orgs WHERE id = ?\").bind(v0).first()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "purgeOrg",
+            "atoms": ["v1.role === \"owner\""],
+            "outcome": "call env.DB.prepare(\"DELETE FROM orgs WHERE id = ?\").bind(v0).run()",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"SELECT * FROM orgs WHERE id = ?\").bind(v0).first()"
+          },
+          {
+            "ref": "m1",
+            "atoms": ["v1.role === \"owner\""],
+            "outcome": "call env.DB.prepare(\"DELETE FROM orgs WHERE id = ?\").bind(v0).run()"
+          }
+        ]
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "flag-read-vs-override",
+      "span": {
+        "file": "src/flags/store.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000017",
+        "shared": {
+          "signal": "data",
+          "binding": "kv FLAGS (service api)"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "flagValue",
+            "atoms": [],
+            "outcome": "return env.FLAGS.get(v0)",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "overrideFlag",
+            "atoms": ["v2.isStaff"],
+            "outcome": "call env.FLAGS.put(v0, v1)",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "return env.FLAGS.get(v0)"
+          },
+          {
+            "ref": "m1",
+            "atoms": ["v2.isStaff"],
+            "outcome": "call env.FLAGS.put(v0, v1)"
+          }
+        ]
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "pro-vs-free-query",
+      "span": {
+        "file": "src/billing/report.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000018",
+        "shared": {
+          "signal": "data",
+          "binding": "d1 DB (service billing)"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "proAccounts",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"SELECT id FROM accounts WHERE plan = 'pro'\").all()",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "freeAccounts",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"SELECT id FROM accounts WHERE plan = 'free'\").all()",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"SELECT id FROM accounts WHERE plan = 'pro'\").all()"
+          },
+          {
+            "ref": "m1",
+            "atoms": [],
+            "outcome": "return env.DB.prepare(\"SELECT id FROM accounts WHERE plan = 'free'\").all()"
+          }
+        ]
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "welcome-vs-reset-mail",
+      "span": {
+        "file": "src/mail/send.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000019",
+        "shared": {
+          "signal": "data",
+          "binding": "queue EMAILS (service api)"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "queueWelcome",
+            "atoms": [],
+            "outcome": "call env.EMAILS.send({ kind: \"welcome\", to: v0 })",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "queuePasswordReset",
+            "atoms": ["v1.expiresAt > v2"],
+            "outcome": "call env.EMAILS.send({ kind: \"reset\", to: v0 })",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "call env.EMAILS.send({ kind: \"welcome\", to: v0 })"
+          },
+          {
+            "ref": "m1",
+            "atoms": ["v1.expiresAt > v2"],
+            "outcome": "call env.EMAILS.send({ kind: \"reset\", to: v0 })"
+          }
+        ]
+      },
+      "gold": "related-different"
+    },
+    {
+      "id": "empty-list-vs-signed-in",
+      "span": {
+        "file": "src/util/checks.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000020",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["¬(v0)"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "hasItems",
+            "atoms": ["¬(v0)"],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "isSignedIn",
+            "atoms": ["¬(v0)"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": []
+      },
+      "gold": "unrelated"
+    },
+    {
+      "id": "short-name-vs-one-page",
+      "span": {
+        "file": "src/util/sizes.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000021",
+        "shared": {
+          "signal": "condition",
+          "atoms": ["v0.length > 10"],
+          "outcome": "deny"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "isShortName",
+            "atoms": ["v0.length > 10"],
+            "outcome": "return false",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "fitsOnePage",
+            "atoms": ["v0.length > 10"],
+            "outcome": "return false",
+            "bindings": []
+          }
+        ],
+        "differences": []
+      },
+      "gold": "unrelated"
+    },
+    {
+      "id": "avatar-vs-export-archive",
+      "span": {
+        "file": "src/files/bucket.ts",
+        "startLine": 3,
+        "endLine": 3
+      },
+      "state": {
+        "cluster": "g-000000000022",
+        "shared": {
+          "signal": "data",
+          "binding": "r2 ASSETS (service api)"
+        },
+        "members": [
+          {
+            "ref": "m0",
+            "function": "storeAvatar",
+            "atoms": [],
+            "outcome": "return env.ASSETS.put(`avatars/${v0}`, v1)",
+            "bindings": []
+          },
+          {
+            "ref": "m1",
+            "function": "dropExportArchive",
+            "atoms": ["v1 < v0.createdAt"],
+            "outcome": "call env.ASSETS.delete(v0.key)",
+            "bindings": []
+          }
+        ],
+        "differences": [
+          {
+            "ref": "m0",
+            "atoms": [],
+            "outcome": "return env.ASSETS.put(`avatars/${v0}`, v1)"
+          },
+          {
+            "ref": "m1",
+            "atoms": ["v1 < v0.createdAt"],
+            "outcome": "call env.ASSETS.delete(v0.key)"
+          }
+        ]
+      },
+      "gold": "unrelated"
+    }
+  ]
+}

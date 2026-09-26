@@ -1,0 +1,273 @@
+{
+  "stage": "owner",
+  "rewordings": [
+    "Each state is a rule group whose candidates tie on layer and fan-in. Say which candidate the others should call so the rule lives in one place, by its ref."
+  ],
+  "items": [
+    {
+      "id": "seat-check-in-rules-file",
+      "span": { "file": "src/seats/rules.ts", "startLine": 2, "endLine": 2 },
+      "state": {
+        "group": "g-owner-000001",
+        "rule": { "atoms": ["v0.seatCount >= v0.maxSeats"], "outcome": "deny" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "inviteHandler",
+            "file": "src/seats/invite.ts",
+            "layer": "services",
+            "fanIn": 2,
+            "atoms": ["v0.seatCount >= v0.maxSeats"],
+            "outcome": "throw new SeatLimitReached()"
+          },
+          {
+            "ref": "c1",
+            "function": "hasFreeSeat",
+            "file": "src/seats/rules.ts",
+            "layer": "services",
+            "fanIn": 2,
+            "atoms": ["v0.seatCount >= v0.maxSeats"],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "c1"
+    },
+    {
+      "id": "admin-predicate",
+      "span": {
+        "file": "src/access/is-admin.ts",
+        "startLine": 2,
+        "endLine": 2
+      },
+      "state": {
+        "group": "g-owner-000002",
+        "rule": { "atoms": ["¬(v0.isAdmin)"], "outcome": "deny" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "canManageAdmins",
+            "file": "src/access/is-admin.ts",
+            "layer": "rules",
+            "fanIn": 1,
+            "atoms": ["¬(v0.isAdmin)"],
+            "outcome": "return false"
+          },
+          {
+            "ref": "c1",
+            "function": "renderAdminPanel",
+            "file": "src/access/panel.ts",
+            "layer": "rules",
+            "fanIn": 1,
+            "atoms": ["¬(v0.isAdmin)"],
+            "outcome": "return null"
+          }
+        ]
+      },
+      "gold": "c0"
+    },
+    {
+      "id": "trial-guard",
+      "span": { "file": "src/billing/trial.ts", "startLine": 3, "endLine": 3 },
+      "state": {
+        "group": "g-owner-000003",
+        "rule": { "atoms": ["v1 > v0.trialEndsAt"], "outcome": "deny" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "exportReport",
+            "file": "src/reports/export.ts",
+            "layer": null,
+            "fanIn": 0,
+            "atoms": ["v1 > v0.trialEndsAt"],
+            "outcome": "throw new TrialExpired()"
+          },
+          {
+            "ref": "c1",
+            "function": "startJob",
+            "file": "src/jobs/start.ts",
+            "layer": null,
+            "fanIn": 1,
+            "atoms": ["v1 > v0.trialEndsAt"],
+            "outcome": "throw new TrialExpired()"
+          },
+          {
+            "ref": "c2",
+            "function": "requireActiveTrial",
+            "file": "src/billing/trial.ts",
+            "layer": null,
+            "fanIn": 1,
+            "atoms": ["v1 > v0.trialEndsAt"],
+            "outcome": "throw new TrialExpired()"
+          }
+        ]
+      },
+      "gold": "c2"
+    },
+    {
+      "id": "flag-picker",
+      "span": { "file": "src/flags/enabled.ts", "startLine": 2, "endLine": 2 },
+      "state": {
+        "group": "g-owner-000004",
+        "rule": {
+          "atoms": [],
+          "outcome": "return v1.filter((v2) => v0.has(v2))"
+        },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "switchesForPage",
+            "file": "src/pages/switches.ts",
+            "layer": "flags",
+            "fanIn": 1,
+            "atoms": [],
+            "outcome": "return v1.filter((v2) => v0.has(v2))"
+          },
+          {
+            "ref": "c1",
+            "function": "enabledFlagsOf",
+            "file": "src/flags/enabled.ts",
+            "layer": "flags",
+            "fanIn": 1,
+            "atoms": [],
+            "outcome": "return v1.filter((v2) => v0.has(v2))"
+          }
+        ]
+      },
+      "gold": "c1"
+    },
+    {
+      "id": "suspended-account",
+      "span": {
+        "file": "src/accounts/status.ts",
+        "startLine": 2,
+        "endLine": 2
+      },
+      "state": {
+        "group": "g-owner-000005",
+        "rule": { "atoms": ["v0.status === \"suspended\""], "outcome": "deny" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "assertAccountActive",
+            "file": "src/accounts/status.ts",
+            "layer": "rules",
+            "fanIn": 3,
+            "atoms": ["v0.status === \"suspended\""],
+            "outcome": "throw new AccountSuspended()"
+          },
+          {
+            "ref": "c1",
+            "function": "sendDigest",
+            "file": "src/mail/digest.ts",
+            "layer": "rules",
+            "fanIn": 3,
+            "atoms": ["v0.status === \"suspended\""],
+            "outcome": "return"
+          }
+        ]
+      },
+      "gold": "c0"
+    },
+    {
+      "id": "tier-table",
+      "span": { "file": "src/billing/tiers.ts", "startLine": 3, "endLine": 3 },
+      "state": {
+        "group": "g-owner-000006",
+        "rule": { "atoms": ["v0 === \"team\""], "outcome": "return 25" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "invoiceLines",
+            "file": "src/billing/invoice.ts",
+            "layer": "billing",
+            "fanIn": 1,
+            "atoms": ["v0 === \"team\""],
+            "outcome": "return 25"
+          },
+          {
+            "ref": "c1",
+            "function": "seatsForTier",
+            "file": "src/billing/tiers.ts",
+            "layer": "billing",
+            "fanIn": 1,
+            "atoms": ["v0 === \"team\""],
+            "outcome": "return 25"
+          }
+        ]
+      },
+      "gold": "c1"
+    },
+    {
+      "id": "email-verified",
+      "span": {
+        "file": "src/accounts/verify.ts",
+        "startLine": 2,
+        "endLine": 2
+      },
+      "state": {
+        "group": "g-owner-000007",
+        "rule": { "atoms": ["¬(v0.emailVerified)"], "outcome": "deny" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "requireVerifiedEmail",
+            "file": "src/accounts/verify.ts",
+            "layer": null,
+            "fanIn": 2,
+            "atoms": ["¬(v0.emailVerified)"],
+            "outcome": "throw new Unverified()"
+          },
+          {
+            "ref": "c1",
+            "function": "postComment",
+            "file": "src/comments/post.ts",
+            "layer": "services",
+            "fanIn": 2,
+            "atoms": ["¬(v0.emailVerified)"],
+            "outcome": "throw new Unverified()"
+          }
+        ]
+      },
+      "gold": "c0"
+    },
+    {
+      "id": "archived-board",
+      "span": { "file": "src/boards/rules.ts", "startLine": 2, "endLine": 2 },
+      "state": {
+        "group": "g-owner-000008",
+        "rule": { "atoms": ["¬(v0.archivedAt === null)"], "outcome": "deny" },
+        "candidates": [
+          {
+            "ref": "c0",
+            "function": "moveCard",
+            "file": "src/boards/cards.ts",
+            "layer": "rules",
+            "fanIn": 1,
+            "atoms": ["¬(v0.archivedAt === null)"],
+            "outcome": "throw new ReadOnly()"
+          },
+          {
+            "ref": "c1",
+            "function": "renameList",
+            "file": "src/boards/lists.ts",
+            "layer": "rules",
+            "fanIn": 1,
+            "atoms": ["¬(v0.archivedAt === null)"],
+            "outcome": "throw new ReadOnly()"
+          },
+          {
+            "ref": "c2",
+            "function": "boardAcceptsWrites",
+            "file": "src/boards/rules.ts",
+            "layer": "rules",
+            "fanIn": 1,
+            "atoms": ["¬(v0.archivedAt === null)"],
+            "outcome": "return false"
+          }
+        ]
+      },
+      "gold": "c2"
+    }
+  ]
+}

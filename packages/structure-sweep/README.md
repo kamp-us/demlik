@@ -11,6 +11,8 @@ structure; `structure-sweep` asks TypeSafe **Jev** what the code _means_, then m
   a look-alike, or a shared helper.
 - `move plan | apply` — move files into feature folders where Jev's verdict and the import graph
   agree, committing the renames apart from the import rewrites and never moving an entry file.
+- `groups list | show` — read the lowering pipeline's rule groups, owners and collapse specs back
+  as JSON, with the evidence behind each group.
 
 ```sh
 npm install -D @demlik/structure-sweep
@@ -20,8 +22,8 @@ npm install -D @demlik/structure-sweep
 
 Calls go to Jev's endpoint through [`@demlik/tea/jev`](../tea/docs/how-to/ask-jev-a-typed-question.md),
 which decodes each reply; `@demlik/tea/retry-backoff` retries 429/529 and dropped connections. The
-key is read from `TYPESAFE_API_KEY` — `sweep` and `pairs` refuse to start without it. `propose`
-and `move` never call Jev.
+key is read from `TYPESAFE_API_KEY` — `sweep` and `pairs` refuse to start without it. `propose`,
+`move` and `groups` never call Jev.
 
 ## The vocabulary file
 
@@ -381,13 +383,106 @@ Merge proposals are sorted by file count, extract candidates by member count, th
 | `--out <file>` | `.structure-sweep/consolidate.json` | JSON plan |
 | `--report <file>` | `.structure-sweep/consolidate.md` | markdown summary |
 
+### `structure-sweep groups`
+
+```sh
+structure-sweep groups list
+structure-sweep groups show g-3f0c9a1b2d4e --graph graph.json
+```
+
+Reads the [lowering pipeline's stage 6 to 8 artifacts](#lowering-stages-68-rule-groups-owners-and-the-collapse-handoff)
+back as JSON on stdout, so an agent resolving a group can pull the evidence behind it without
+re-running the pipeline or reading its internals. It reads the artifacts file only: no Jev call, no
+network, no `TYPESAFE_API_KEY`, and the same artifacts print byte-identical output. It never writes
+source and never asks Jev anything. `unknown` stays `unknown`.
+
+The artifacts file is what `writeGroupsFile(path, groupsFileOf({ confirmed, owners, specs }))`
+writes after a run of stages 6 to 8: the stage-6 confirm artifact, the stage-7 owner artifact (or
+`null` before stage 7 ran) and the stage-8 task specs, each artifact with the key and digest it was
+stored under. `readGroupsFile` refuses a file that does not parse, listing every problem.
+
+`list` prints every rule group and every candidate cluster that did not become one. `state` is
+`confirmed` (a rule group), `rejected` (Jev said the members are not one rule) or `abstained`
+(below the floor after every round). `owner` is set only on a confirmed group once stage 7 has run.
+
+```json
+{
+  "groups": [
+    { "id": "g-3f0c9a1b2d4e", "state": "confirmed", "signal": "condition", "members": 3,
+      "owner": { "group": "g-3f0c9a1b2d4e", "member": "src/archive/guard.ts:guardArchive@3",
+        "function": "src/archive/guard.ts:guardArchive",
+        "span": { "file": "src/archive/guard.ts", "startLine": 4, "endLine": 4 } },
+      "spec": true },
+    { "id": "g-8d21e07c55a0", "state": "confirmed", "signal": "condition", "members": 3,
+      "owner": "unknown", "spec": false },
+    { "id": "g-c4b7f2e9a013", "state": "rejected", "signal": "condition", "members": 2,
+      "owner": null, "spec": false }
+  ]
+}
+```
+
+`show <id>` prints one group or cluster (abbreviated here to one member and one candidate, with the
+owner answer's distribution cut):
+
+```json
+{
+  "id": "g-8d21e07c55a0",
+  "state": "confirmed",
+  "basis": { "_tag": "condition", "key": { "atoms": ["v0", "¬(v0.canArchive)"], "outcome": "deny" } },
+  "members": [
+    { "branch": "src/archive/check.ts:archiveIsAllowed@1", "function": "src/archive/check.ts:archiveIsAllowed",
+      "span": { "file": "src/archive/check.ts", "startLine": 3, "endLine": 3 },
+      "atoms": ["v0", "¬(v0.canArchive)"], "outcome": "return false", "bindings": [],
+      "callers": ["src/ui/menu.ts:items"] }
+  ],
+  "owner": {
+    "candidates": [
+      { "function": "src/archive/check.ts:archiveIsAllowed", "member": "src/archive/check.ts:archiveIsAllowed@1",
+        "span": { "file": "src/archive/check.ts", "startLine": 3, "endLine": 3 }, "layer": null, "fanIn": 1 }
+    ],
+    "settledBy": "jev",
+    "owner": "unknown"
+  },
+  "evidence": {
+    "differences": [{ "ref": "m0", "atoms": [], "outcome": "return false" }],
+    "answer": { "label": "same-rule", "confidence": 0.95,
+      "probabilities": { "same-rule": 0.95, "related-different": 0.025, "unrelated": 0.025 } },
+    "rounds": 0
+  },
+  "questions": [
+    { "stage": "owner", "span": { "file": "src/archive/check.ts", "startLine": 3, "endLine": 3 },
+      "tied": ["src/archive/check.ts:archiveIsAllowed", "src/archive/guard.ts:guardArchive"],
+      "answer": { "label": "c0", "confidence": 0.1, "probabilities": { "c0": 0.1, "…": 0.1 } },
+      "rounds": 1 }
+  ],
+  "spec": null
+}
+```
+
+- `members`: each member branch with its `SourceSpan`, its lowered atoms and outcome, and
+  `callers`, the member function's `edges.calledBy` from the `--graph` JSON.
+- `owner`: every candidate stage 7 narrowed to (not only the winner), what settled it (`layer`,
+  `fan-in` or `jev`, or `none` when no step could and nothing was asked) and the owner, or
+  `unknown`. `null` for a cluster that is not a group, or before
+  stage 7 ran.
+- `evidence`: stage 6's confirm evidence: the differences Jev was shown and the answer the gate
+  settled on, with Jev's whole distribution.
+- `questions`: the human-queue entries stage 6 (`group-confirm`: a rejected or abstained cluster)
+  or stage 7 (`owner`: an owner that is `unknown`) wrote for this group.
+- `spec`: the stage-8 task spec, or `null` when the group has none.
+
+| Flag | Default | |
+|---|---|---|
+| `--artifacts <file>` | `.structure-sweep/groups.json` | the groups file |
+| `--graph <file>` | (required for `show`) | code-graph `--graph` JSON, for each member's callers |
+
 ## As a library
 
 Every command except `propose` is also a function — `runSweep`, `runPairs`, `planScope` /
 `planManifest`, `applyManifest`, `scoreCoChange` over rows and change sets with `readChangeSets` as
-its git reader, and `mergeProposals` / `extractProposals` / `renderConsolidation` for
-`consolidate` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
-hand it a stub.
+its git reader, `mergeProposals` / `extractProposals` / `renderConsolidation` for
+`consolidate`, and `readGroupsFile` / `listGroups` / `showGroup` for `groups` — and each
+Jev-calling one takes its `JevClient` as an argument, so a caller can hand it a stub.
 
 ## Lowering: stage artifacts, the evaluation harness and the confidence gate
 
@@ -590,3 +685,79 @@ do not (`doesNotServe`), and the ones that are `unknown`. `unknown` is never cou
 answer. A folder's counts are the sums over every file beneath it, and `.` is the root. Rows come out
 in path order and features in key order, so the same facts give byte-identical output in any input
 order. A (function, feature) pair that appears twice is refused.
+
+## Lowering stages 6–8: rule groups, owners and the collapse handoff
+
+Three stages on top of stages 2 and 3, each a library export. `structure-sweep groups` reads their
+artifacts back; nothing here writes source.
+
+**Stage 6, rule grouping** (`group.ts`). Duplicate logic used to be found only as pairs of whole
+functions. Stage 6 finds N branches, in differently named functions, that encode one rule. It works
+in two halves.
+
+1. **Deterministic candidates** (`clusterStage`, `clusterInput(resolved, graph.data)`). Each
+   stage-3-resolved branch reduces to a canonical key (`conditionKey`): its atoms as a sorted,
+   order-independent set, and its normalized outcome. Stage 2's neutral names already remove local
+   and parameter names, and an identifier the lexicon resolved reads as its concept
+   (`⟨flag project-caps⟩`). Branches with equal keys form one candidate cluster. With the `--graph`
+   JSON's `data` (`readGroupingGraph`; code-graph's `--data`), the branches of every function whose
+   data edges touch one binding, keyed by `ownerService`, `bindingKind` and `binding`, form one
+   candidate too, whatever their atoms. `method` and `access` do not narrow that key, so a read and a
+   write of one binding are one candidate for Jev to judge. `unattributed` sites name no function
+   and are never read. With no `data` (null, or absent) the clusters are exactly the condition-key
+   ones. A cluster needs at least two branches from at least two functions, its id is a hash of its
+   basis (`clusterId`), and this half makes no Jev call.
+2. **Jev confirms each cluster** (`confirmStage`). `groupConfirmQuestion()` is a `ChoiceQuestion`
+   over `same-rule`, `related-different` and `unrelated`, asked per cluster through `gateAll` under a
+   `gatePolicy` built from stage 6's calibration. Jev is shown the members' lowered branches and the
+   differences between them (`clusterQuestionState`), never raw source. The criteria name what
+   counts as a surface (a thrown error against a returned `false`, an error type, names, a
+   parameter-default value) and what makes a different rule (a subject, threshold, permission,
+   consequence, or a read against a write). The question was designed against a hand-labelled,
+   synthetic gold set of 22 candidate groups (`test/fixtures/lowering/group-confirm.gold.json`):
+   same-rule positives on different surfaces, and related-but-different negatives.
+
+Only a cluster confirmed `same-rule` becomes a **rule group** (`ruleGroups`): one fact with the
+group id and every member branch's `SourceSpan`, never a pair. A rejected or abstained cluster makes
+no group and becomes a `groupQueue` entry. Stage 6 adds one named resolver rule to the key,
+`deny-outcome` (in `GROUPING_RULES`): a `throw` and a `return false` normalize to one outcome,
+`deny`, so a guard that throws on the denied case and one that returns `false` key alike.
+
+**Stage 7, owner selection** (`ownerStage`, `ownerInput(confirmed, { graph, layerOf, policy })`).
+One owner per rule group. `layerOf(file)` is injected and returns `{ name, rank } | null`, the shape
+of code-graph's `LayerRank`, where a higher rank is a lower layer. The owner candidates are the
+members in the lowest layer that every member's callers reach without an upward edge; an unlayered
+caller constrains nothing. Ties are broken by fan-in, the member function's `edges.calledBy` count.
+Only a tie fan-in does not break, or a group with an unlayered member, is asked (`ownerQuestion()`,
+through `gateAll` under a stage-7 `gatePolicy`). An abstained owner is `unknown` plus an `ownerQueue`
+entry. The question has one ref per candidate, `OWNER_REFS` (8), so a tie wider than 8 is not asked:
+its owner is `unknown`, with an `ownerQueue` entry whose `answer` is `null`. An unlayered member puts
+every member into the tie, so this cap reaches any group of 9 or more with one unlayered member. A
+group no member of which every caller reaches without an upward edge is `unknown` too, unasked. `ownerFacts` gives one fact per group: its id, the owner member and the owner's span.
+
+**`rederived`, derived** (`deriveRederived(groups, owners)`). A branch is `rederived` when it is a
+member of a confirmed rule group whose stage-7 owner is a different member; the owner's own branch
+is not. Members of a group whose owner is `unknown` read `unknown`. No Jev call makes it, and it is
+not a label of stage 5's question or gold set.
+
+**Stage 8, the collapse handoff** (`handoff.ts`).
+
+- **Task spec** (`taskSpecs(groups, owners, boundaries)`). Each group with a settled owner becomes
+  a `TaskSpec`, a zod-schema'd JSON object for an operator lane: the group id and its basis, the
+  owner's span, every other member's span, and the expected delta (`leaves`: the member functions
+  whose branches no longer cluster with the owner once the collapse lands). The collapse edits
+  source through the spans, never the lowered form. A group whose owner is `unknown` produces no
+  spec.
+- **Re-measure** (`remeasure(spec, after)`). Re-runs stages 2, 3 and 6 over the post-change source
+  of the files the spec names, reusing hash-keyed artifacts, so an unchanged file is a `hit`. It
+  returns `collapsed`, or `still-clustered` naming the member spans that still cluster on the
+  spec's key. It also reports the boundary crossings on those files that the collapse added or
+  removed. A crossing is a `@demlik/code-graph/boundaries` ledger entry,
+  `{ scope, kind, from, to, specifier, reason? }`, and the spec carries the before-crossings as a
+  ledger.
+- **Ratchet.** `recordCollapse(ledger, collapsed, reason?)` records a collapsed group in a
+  `RuleGroupLedger`. `checkRatchet(ledger, clusters)` fails a later measure whose cluster matches a
+  recorded group's key, unless that entry carries a non-empty reason.
+
+`groupsFileOf({ confirmed, owners, specs })` and `writeGroupsFile` store a run for
+[`structure-sweep groups`](#structure-sweep-groups).

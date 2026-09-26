@@ -9,10 +9,11 @@ export default defineConfig({
     alias: {
       "@demlik/tea/jev": source("../tea/src/jev/index.ts"),
       "@demlik/tea/retry-backoff": source("../tea/src/retry-backoff/index.ts"),
-      "@demlik/code-graph/project": source(
-        "../code-graph/src/project.ts",
-      ),
+      "@demlik/code-graph/project": source("../code-graph/src/project.ts"),
       "@demlik/code-graph/scc": source("../code-graph/src/scc.ts"),
+      "@demlik/code-graph/boundaries": source(
+        "../code-graph/src/boundaries/ledger.ts",
+      ),
     },
   },
   test: {
