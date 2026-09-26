@@ -12,6 +12,7 @@ export default defineConfig({
       "@demlik/code-graph/project": source(
         "../code-graph/src/project.ts",
       ),
+      "@demlik/code-graph/scc": source("../code-graph/src/scc.ts"),
     },
   },
   test: {

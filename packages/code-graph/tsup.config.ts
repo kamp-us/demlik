@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     resolve: "src/resolve.ts",
     project: "src/project.ts",
+    scc: "src/scc.ts",
     boundaries: "src/boundaries/ledger.ts",
   },
   format: ["esm"],

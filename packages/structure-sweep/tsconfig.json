@@ -20,7 +20,8 @@
     "paths": {
       "@demlik/tea/jev": ["../tea/src/jev/index.ts"],
       "@demlik/tea/retry-backoff": ["../tea/src/retry-backoff/index.ts"],
-      "@demlik/code-graph/project": ["../code-graph/src/project.ts"]
+      "@demlik/code-graph/project": ["../code-graph/src/project.ts"],
+      "@demlik/code-graph/scc": ["../code-graph/src/scc.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*"],

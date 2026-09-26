@@ -26,6 +26,10 @@
       "types": "./dist/resolve.d.ts",
       "import": "./dist/resolve.js"
     },
+    "./scc": {
+      "types": "./dist/scc.d.ts",
+      "import": "./dist/scc.js"
+    },
     "./boundaries": {
       "types": "./dist/boundaries.d.ts",
       "import": "./dist/boundaries.js"
