@@ -875,7 +875,8 @@ in two halves.
    write of one binding are one candidate for Jev to judge. `unattributed` sites name no function
    and are never read. With no `data` (null, or absent) the clusters are exactly the condition-key
    ones. A cluster needs at least two branches from at least two functions, its id is a hash of its
-   basis (`clusterId`), and this half makes no Jev call.
+   basis (`clusterId`), and this half makes no Jev call. An optional third signal, embeddings, is
+   below.
 2. **Jev confirms each cluster** (`confirmStage`). `groupConfirmQuestion()` is a `ChoiceQuestion`
    over `same-rule`, `related-different` and `unrelated`, asked per cluster through `gateAll` under a
    `gatePolicy` built from stage 6's calibration. Jev is shown the members' lowered branches and the
@@ -891,6 +892,42 @@ group id and every member branch's `SourceSpan`, never a pair. A rejected or abs
 no group and becomes a `groupQueue` entry. Stage 6 adds one named resolver rule to the key,
 `deny-outcome` (in `GROUPING_RULES`): a `throw` and a `return false` normalize to one outcome,
 `deny`, so a guard that throws on the denied case and one that returns `false` key alike.
+
+**The embedding candidate source** (`embed.ts`). Two functions can implement one rule under
+different names and a different structure, so neither signal above puts them together. The
+consumer can add an embedding port:
+
+```ts
+type Embed = (texts: string[]) => Promise<number[][]>;
+interface EmbeddingPort {
+  readonly model: string; // names the vector space; part of the cache key
+  readonly embed: Embed; // one vector per text, in order, all the same length
+}
+```
+
+structure-sweep bundles no provider, has no provider dependency and makes no network call itself.
+Whatever `embed` calls is the consumer's. Per file, `embeddingStage(port)` over
+`embeddingInput(port, loweredArtifact)` embeds each branch's lowered text (`embeddingText`: its
+bindings, atoms and outcome as stage 2 renders them, with neutral names). It never embeds the
+source or the function's name. Equal texts are sent once, in one `embed` call per file. The vectors
+are cached through the lowering artifact store: the key is the stage-2 artifact's content hash plus
+`model`. A second run over the same lowered input under the same model is a `hit` and calls `embed`
+for nothing. A different model never reads another model's vectors.
+
+Pass the vector artifacts to stage 6 with
+`clusterInput(resolved, graph.data, { vectors, threshold })`. Each branch is paired with its
+nearest neighbour in a different function, by cosine similarity. The pair becomes an
+`embedding`-basis candidate when the similarity is at or above the threshold,
+`DEFAULT_SIMILARITY_THRESHOLD` (0.9), which `threshold` overrides. The basis names the content
+hashes of the members' texts and their similarity. A pair whose condition keys are already equal is
+left to the condition signal. Every embedding candidate goes through `confirmStage` like any other,
+so Jev still confirms every proposal. Its `shared` reads `{ signal: "embedding", similarity }`.
+Without the third argument, stage 6's input, key, clusters and ids are the same as they were before
+this source existed. `remeasure` takes the same port as `after.embedding: { port, store, threshold? }`,
+and refuses an embedding-basis spec without it. An embedding key names texts, and a collapse edits
+the owner's, so the re-measure reads it by membership: the spec still clusters while a function it
+expects to leave shares any embedding cluster with another of the group's functions, whatever texts
+that cluster now carries.
 
 **Stage 7, owner selection** (`ownerStage`, `ownerInput(confirmed, { graph, layerOf, policy })`).
 One owner per rule group. `layerOf(file)` is injected and returns `{ name, rank } | null`, the shape

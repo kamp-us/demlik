@@ -340,6 +340,23 @@ const ownerOf = (group: string, c: OwnerCandidate): Owner => ({
   span: c.span,
 });
 
+function ruleOf(basis: RuleGroup["basis"]): OwnerQuestionState["rule"] {
+  switch (basis._tag) {
+    case "condition":
+      return basis.key;
+    case "data":
+      return {
+        atoms: [],
+        outcome: `touches ${basis.binding.bindingKind} ${basis.binding.binding} (service ${basis.binding.ownerService})`,
+      };
+    case "embedding":
+      return {
+        atoms: [],
+        outcome: `embedded lowered texts ${basis.similarity} similar`,
+      };
+  }
+}
+
 function ownerQuestionState(
   group: RuleGroup,
   tied: readonly OwnerCandidate[],
@@ -348,13 +365,7 @@ function ownerQuestionState(
   const { basis } = group;
   return {
     group: group.id,
-    rule:
-      basis._tag === "condition"
-        ? basis.key
-        : {
-            atoms: [],
-            outcome: `touches ${basis.binding.bindingKind} ${basis.binding.binding} (service ${basis.binding.ownerService})`,
-          },
+    rule: ruleOf(basis),
     candidates: tied.map((c, i) => {
       const member = group.members.find((m) => m.branch === c.member);
       return {
