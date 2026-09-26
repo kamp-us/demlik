@@ -5,7 +5,7 @@ import `run` from `@demlik/tea/effect`. The machine file is the one the Promise
 engine runs, unchanged: see
 [Run a machine on the Promise engine](./run-on-the-promise-engine.md).
 
-`@demlik/tea/effect` is `experimental` and targets Effect v4 (still a release
+`@demlik/tea/effect` is `stable` and targets Effect v4 (still a release
 candidate). `effect` is an optional peer dependency, so install it yourself:
 
 ```sh
