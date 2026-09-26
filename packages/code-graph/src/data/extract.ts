@@ -9,6 +9,7 @@ import {
 import type { DataEdge, DataReport, DataSite, UnattributedDataSite } from "../schema.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import { accessOf } from "./access.js";
+import { AliasScope } from "./alias-scope.js";
 
 type Bindings = ReadonlyMap<string, DataBindingDecl>;
 type Site = {
@@ -52,174 +53,6 @@ function envBinding(node: SyntaxNode, bindings: Bindings): DataBindingDecl | nul
 function localName(value: SyntaxNode | null): string | null {
   const target = value?.type === "AssignmentPattern" ? nodeField(value, "left") : value;
   return target?.type === "Identifier" ? String(field(target, "name")) : null;
-}
-
-const FUNCTION_LIKE = new Set([
-  "ArrowFunctionExpression",
-  "FunctionExpression",
-  "FunctionDeclaration",
-]);
-
-function isFunctionLike(node: SyntaxNode): boolean {
-  return FUNCTION_LIKE.has(node.type);
-}
-
-// Every local a binding pattern introduces: `db`, `db = x`, `...db`, `{ db }`, `[db]`, and a
-// TypeScript parameter property's `private db`.
-function patternNames(pattern: SyntaxNode | null): string[] {
-  if (pattern === null) return [];
-  switch (pattern.type) {
-    case "Identifier":
-      return [String(field(pattern, "name"))];
-    case "AssignmentPattern":
-      return patternNames(nodeField(pattern, "left"));
-    case "RestElement":
-      return patternNames(nodeField(pattern, "argument"));
-    case "TSParameterProperty":
-      return patternNames(nodeField(pattern, "parameter"));
-    case "Property":
-      return patternNames(nodeField(pattern, "value"));
-    case "ObjectPattern":
-      return (field(pattern, "properties") as SyntaxNode[]).flatMap(patternNames);
-    case "ArrayPattern":
-      return (field(pattern, "elements") as (SyntaxNode | null)[]).flatMap(patternNames);
-    default:
-      return [];
-  }
-}
-
-// A function-like node or a class static block: each owns every `var` below it.
-function isVarScope(node: SyntaxNode): boolean {
-  return isFunctionLike(node) || node.type === "StaticBlock";
-}
-
-function declaratorNames(declaration: SyntaxNode): string[] {
-  return (field(declaration, "declarations") as SyntaxNode[]).flatMap((d) =>
-    patternNames(nodeField(d, "id")),
-  );
-}
-
-// Every `var` a scope owns: the ones below `root`, short of a nested var scope.
-function varNames(syntax: SyntaxFile, root: SyntaxNode): string[] {
-  const names: string[] = [];
-  const visit = (node: SyntaxNode): void => {
-    if (node.type === "VariableDeclaration" && field(node, "kind") === "var") {
-      names.push(...declaratorNames(node));
-    }
-    for (const child of syntax.children(node)) if (!isVarScope(child)) visit(child);
-  };
-  visit(root);
-  return names;
-}
-
-// The lexical names a statement list declares, looking through `export`: `let`/`const`/`using`,
-// and the class and function declarations it holds, which module code (always strict) scopes to
-// the block.
-function lexicalNames(statements: readonly SyntaxNode[]): string[] {
-  return statements.flatMap((statement) => {
-    const node = statement.type.startsWith("Export")
-      ? (nodeField(statement, "declaration") ?? statement)
-      : statement;
-    if (node.type === "VariableDeclaration") {
-      return field(node, "kind") === "var" ? [] : declaratorNames(node);
-    }
-    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
-      return patternNames(nodeField(node, "id"));
-    }
-    return [];
-  });
-}
-
-function statementsOf(node: SyntaxNode): SyntaxNode[] {
-  return field(node, "body") as SyntaxNode[];
-}
-
-// A `for` head's `let`/`const`, scoped to the loop.
-function headNames(head: SyntaxNode | null): string[] {
-  return head === null ? [] : lexicalNames([head]);
-}
-
-// A function's own names: its parameters, a named expression's name, and its body's `var`s and
-// top-level lexical declarations. The body block is the function's scope, not a second one.
-function functionNames(syntax: SyntaxFile, fn: SyntaxNode): string[] {
-  const names = (field(fn, "params") as SyntaxNode[]).flatMap(patternNames);
-  if (fn.type === "FunctionExpression") names.push(...patternNames(nodeField(fn, "id")));
-  const body = nodeField(fn, "body");
-  if (body?.type !== "BlockStatement") return names;
-  return [...names, ...lexicalNames(statementsOf(body)), ...varNames(syntax, body)];
-}
-
-function isFunctionBody(syntax: SyntaxFile, block: SyntaxNode): boolean {
-  const parent = syntax.parentOf(block);
-  return parent !== undefined && isFunctionLike(parent) && nodeField(parent, "body") === block;
-}
-
-// The names a scope-opening node declares, or null when the node opens no scope. The split is
-// ECMAScript's, as eslint-scope models it: the module, a function and a class static block own
-// their parameters and every `var` below them; a block, a `for` head, a `switch` and a `catch`
-// own only the `let`/`const`/class/function declarations directly inside them.
-function scopeDeclarations(syntax: SyntaxFile, node: SyntaxNode): string[] | null {
-  switch (node.type) {
-    case "Program":
-    case "StaticBlock":
-      return [...lexicalNames(statementsOf(node)), ...varNames(syntax, node)];
-    case "ArrowFunctionExpression":
-    case "FunctionExpression":
-    case "FunctionDeclaration":
-      return functionNames(syntax, node);
-    case "BlockStatement":
-      return isFunctionBody(syntax, node) ? null : lexicalNames(statementsOf(node));
-    case "ForStatement":
-      return headNames(nodeField(node, "init"));
-    case "ForInStatement":
-    case "ForOfStatement":
-      return headNames(nodeField(node, "left"));
-    case "SwitchStatement":
-      return lexicalNames(
-        (field(node, "cases") as SyntaxNode[]).flatMap(
-          (c) => field(c, "consequent") as SyntaxNode[],
-        ),
-      );
-    case "CatchClause":
-      return patternNames(nodeField(node, "param"));
-    default:
-      return null;
-  }
-}
-
-// One lexical alias scope per scope-opening node. A name the scope declares starts out shadowing
-// any outer alias of that name, and becomes an alias only where its own declaration reads a
-// binding; a name it does not declare resolves through the enclosing scopes.
-class AliasScope {
-  private readonly own = new Map<string, DataBindingDecl | null>();
-
-  private constructor(private readonly parent: AliasScope | null) {}
-
-  static root(): AliasScope {
-    return new AliasScope(null);
-  }
-
-  child(names: readonly string[]): AliasScope {
-    const scope = new AliasScope(this);
-    for (const name of names) scope.own.set(name, null);
-    return scope;
-  }
-
-  // Binds in the scope that declares the name, so a `var` inside a block lands on its function.
-  bind(name: string, decl: DataBindingDecl): void {
-    this.declaring(name).own.set(name, decl);
-  }
-
-  resolve(name: string): DataBindingDecl | null {
-    return this.declaring(name).own.get(name) ?? null;
-  }
-
-  private declaring(name: string): AliasScope {
-    for (let scope: AliasScope | null = this; scope !== null; scope = scope.parent) {
-      if (scope.own.has(name)) return scope;
-    }
-    return this;
-  }
 }
 
 // `const { DB, KV: kv } = env`.
@@ -325,8 +158,7 @@ function sitesOf(
   const held: Held[] = [];
   const enter = (node: SyntaxNode, outer: DiscoveredFunction | null, around: AliasScope): void => {
     const holder = holders.get(node) ?? outer;
-    const names = scopeDeclarations(syntax, node);
-    const aliases = names === null ? around : around.child(names);
+    const aliases = around.enter(syntax, node);
     declareAliases(node, bindings, aliases);
     const decl = referencedBinding(syntax, node, bindings, aliases);
     if (decl !== null) held.push({ holder, site: siteAt(syntax, node, decl) });
