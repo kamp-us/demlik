@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, posix } from "node:path";
 import type { JevUsage } from "@demlik/tea/jev";
+import { trackedPaths } from "../git.js";
 import { type JevClient, pool } from "../jev.js";
 import type { Vocabulary } from "../vocabulary.js";
 import {
   type FileEvidence,
   gatherEvidence,
+  isSweptSource,
   listSources,
   type SourceFile,
 } from "./evidence.js";
@@ -28,10 +30,17 @@ export interface SweepRow {
   readonly usage: JevUsage;
 }
 
-export interface SweepOptions {
+/**
+ * What a run judges: every source under each folder in `scopes`, or exactly the repo-relative
+ * paths in `files`. A run is told one or the other, never both.
+ */
+export type SweepSelection =
+  | { readonly scopes: readonly string[]; readonly files?: never }
+  | { readonly files: readonly string[]; readonly scopes?: never };
+
+export type SweepOptions = SweepSelection & {
   readonly root: string;
   readonly ref: string;
-  readonly scopes: readonly string[];
   readonly vocabulary: Vocabulary;
   readonly jev: JevClient<SweepQuestions>;
   /** The verdict file. Read when it exists, created when it does not. */
@@ -41,7 +50,7 @@ export interface SweepOptions {
   readonly redact?: boolean;
   readonly concurrency?: number;
   readonly log?: (line: string) => void;
-}
+};
 
 export interface SweepScopeResult {
   readonly scope: string;
@@ -131,24 +140,73 @@ async function judgeScope(
   };
 }
 
+/** One folder to read: its sources are the evidence batch, and `listed` narrows who is asked. */
+interface Batch {
+  readonly scope: string;
+  readonly listed?: ReadonlySet<string>;
+}
+
+function refusal(path: string, ref: string, tracked: ReadonlySet<string>) {
+  if (!tracked.has(path)) return `not tracked at ${ref}`;
+  if (!isSweptSource(path))
+    return "not a swept source (.ts/.tsx, not a test, story or .d.ts)";
+  if (posix.dirname(path) === ".")
+    return "at the repository root, which no folder sweep covers";
+  return undefined;
+}
+
 /**
- * Judge every source file under each scope, asking Jev only about files whose content or vocabulary
- * changed since the verdict file last saw them. A scope nobody swept before is simply all misses.
+ * A file list as batches, one per parent folder, so each listed file is judged over the same
+ * evidence a sweep of that folder gives it. Throws naming every path it cannot judge.
+ */
+function listedBatches(
+  root: string,
+  ref: string,
+  files: readonly string[],
+): Batch[] {
+  const tracked = new Set(trackedPaths(root, { ref }));
+  const unique = [...new Set(files)];
+  const refused = unique.flatMap((path) => {
+    const reason = refusal(path, ref, tracked);
+    return reason === undefined ? [] : [`  ${path}: ${reason}`];
+  });
+  if (refused.length > 0) {
+    throw new Error(
+      `the file list names ${refused.length} path(s) sweep cannot judge:\n${refused.join("\n")}`,
+    );
+  }
+  const byFolder = new Map<string, Set<string>>();
+  for (const path of unique) {
+    const folder = posix.dirname(path);
+    byFolder.set(folder, (byFolder.get(folder) ?? new Set()).add(path));
+  }
+  return [...byFolder]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([scope, listed]) => ({ scope, listed }));
+}
+
+/**
+ * Judge every source file under each scope — or, given `files`, exactly those files — asking Jev
+ * only about files whose content or vocabulary changed since the verdict file last saw them. A
+ * scope nobody swept before is simply all misses.
  */
 export async function runSweep(options: SweepOptions): Promise<SweepResult> {
+  const batches: readonly Batch[] =
+    options.files !== undefined
+      ? listedBatches(options.root, options.ref, options.files)
+      : options.scopes.map((scope) => ({ scope }));
   const verdicts = openVerdicts(options.verdictsPath);
   const scopes: SweepScopeResult[] = [];
-  for (const scope of options.scopes) {
-    const files = listSources(options.root, options.ref, scope);
-    scopes.push(
-      await judgeScope(
-        options,
-        verdicts,
-        scope,
-        files,
-        gatherEvidence(files, options.graph, { redact: options.redact }),
-      ),
-    );
+  for (const { scope, listed } of batches) {
+    const sources = listSources(options.root, options.ref, scope);
+    const evidence = gatherEvidence(sources, options.graph, {
+      redact: options.redact,
+    });
+    const judged =
+      listed === undefined
+        ? sources
+        : sources.filter((f) => listed.has(f.path));
+    scopes.push(await judgeScope(options, verdicts, scope, judged, evidence));
   }
   verdicts.save();
   return { scopes, rows: [...verdicts.done.values()] };
