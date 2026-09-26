@@ -236,6 +236,133 @@ describe("neutral names", () => {
   });
 });
 
+describe("neutral names follow scope", () => {
+  const file = "src/scopes.ts";
+  const source = [
+    "export function outerFlags(items) {",
+    "  if (flags.isOn('x')) return items.map((flags) => flags.id);",
+    "  return [];",
+    "}",
+    "export function blockScoped(user) {",
+    "  if (user.admin) {",
+    "    const plan = user.plan;",
+    "    if (plan === 'free') return false;",
+    "  }",
+    "  return plan.allows(user);",
+    "}",
+  ].join("\n");
+
+  it("leaves a free identifier free when only a nested callback declares its name", async () => {
+    const facts = await lower(file, source);
+    const [guarded] = facts.filter(
+      (f) => known(f).function === `${file}:outerFlags`,
+    );
+    const branch = known(guarded);
+    expect(shape(branch)).toEqual({
+      path: ['flags.isOn("x")'],
+      outcome: "return v0.map((v1) => v1.id)",
+    });
+    expect(branch.path[0]).toMatchObject({
+      kind: "predicate",
+      call: { callee: { kind: "free", path: "flags.isOn" } },
+    });
+  });
+
+  it("leaves a free identifier free when only an inner block declares its name", async () => {
+    const facts = await lower(file, source);
+    expect(
+      facts
+        .filter((f) => known(f).function === `${file}:blockScoped`)
+        .map((f) => shape(known(f))),
+    ).toEqual([
+      { path: ["v0.admin", 'v1 === "free"'], outcome: "return false" },
+      { path: [], outcome: "return plan.allows(v0)" },
+    ]);
+  });
+});
+
+describe("switch", () => {
+  const file = "src/plans/tiers.ts";
+  const source = [
+    "export function emptyIntoDefault(tier) {",
+    "  switch (tier) {",
+    "    case 'a':",
+    "    default:",
+    "      return 1;",
+    "  }",
+    "}",
+    "export function defaultFirst(tier) {",
+    "  switch (tier) {",
+    "    default:",
+    "      return 0;",
+    "    case 'a':",
+    "      return 1;",
+    "    case 'b':",
+    "      return 2;",
+    "  }",
+    "}",
+    "export function fallThrough(tier) {",
+    "  switch (tier) {",
+    "    case 'a':",
+    "      audit(tier);",
+    "    case 'b':",
+    "      return grant(tier);",
+    "    case 'c':",
+    "      track(tier);",
+    "      break;",
+    "    case 'd':",
+    "      return 4;",
+    "  }",
+    "}",
+    "export function exitThenFall(tier, strict) {",
+    "  switch (tier) {",
+    "    case 'a':",
+    "      if (strict) return 0;",
+    "    case 'b':",
+    "      return 1;",
+    "  }",
+    "}",
+  ].join("\n");
+
+  const of = async (name: string) =>
+    (await lower(file, source))
+      .filter((f) => known(f).function === `${file}:${name}`)
+      .map((f) => shape(known(f)));
+
+  it("admits an empty case's value into the default it falls through to", async () => {
+    expect(await of("emptyIntoDefault")).toEqual([
+      { path: ['(v0 === "a" ∨ ¬(v0 === "a"))'], outcome: "return 1" },
+    ]);
+  });
+
+  it("negates every case in a default, the ones after it included", async () => {
+    expect(await of("defaultFirst")).toEqual([
+      { path: ['¬(v0 === "a")', '¬(v0 === "b")'], outcome: "return 0" },
+      { path: ['v0 === "a"'], outcome: "return 1" },
+      { path: ['v0 === "b"'], outcome: "return 2" },
+    ]);
+  });
+
+  it("carries a non-empty case into the one it falls through to, and stops at break", async () => {
+    expect(await of("fallThrough")).toEqual([
+      { path: ['v0 === "a"'], outcome: "call audit(v0)" },
+      { path: ['(v0 === "a" ∨ v0 === "b")'], outcome: "return grant(v0)" },
+      { path: ['v0 === "c"'], outcome: "call track(v0)" },
+      { path: ['v0 === "d"'], outcome: "return 4" },
+    ]);
+  });
+
+  it("falls through under the negation of the early exits it passed", async () => {
+    expect(await of("exitThenFall")).toEqual([
+      { path: ['v0 === "a"', "v1"], outcome: "return 0" },
+      {
+        path: ['(v0 === "a" ∧ ¬(v1) ∨ v0 === "b")'],
+        outcome: "return 1",
+      },
+    ]);
+  });
+});
+
 describe("logging", () => {
   const file = "src/audit.ts";
   const source = [

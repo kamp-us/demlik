@@ -3,11 +3,21 @@ import { parseSync } from "oxc-parser";
 import { z } from "zod";
 import { canonicalJson, type Stage, type StageInput } from "./artifact.js";
 import {
+  child,
+  children,
+  FUNCTION_TYPES,
+  isNode,
+  type Node,
+  nodeChildren,
+  TYPE_KEYS,
+} from "./ast.js";
+import {
   type Fact,
   type SourceSpan,
   sourceSpan,
   unknownValue,
 } from "./fact.js";
+import { neutralNames } from "./names.js";
 
 // ── the graph input ───────────────────────────────────────────────────────
 
@@ -330,51 +340,6 @@ export const lowerStage: Stage<LoweredBranch> = {
   },
 };
 
-type Node = {
-  readonly type: string;
-  readonly start: number;
-  readonly end: number;
-} & Readonly<Record<string, unknown>>;
-
-const isNode = (value: unknown): value is Node =>
-  value !== null &&
-  typeof value === "object" &&
-  typeof (value as { type?: unknown }).type === "string";
-
-const child = (node: Node, key: string): Node | null => {
-  const value = node[key];
-  return isNode(value) ? value : null;
-};
-
-const children = (node: Node, key: string): readonly Node[] => {
-  const value = node[key];
-  return Array.isArray(value) ? value.filter(isNode) : [];
-};
-
-const FUNCTION_TYPES = new Set([
-  "FunctionDeclaration",
-  "FunctionExpression",
-  "ArrowFunctionExpression",
-]);
-
-const TYPE_KEYS = new Set([
-  "typeAnnotation",
-  "typeArguments",
-  "typeParameters",
-  "returnType",
-  "decorators",
-]);
-
-function nodeChildren(node: Node): readonly Node[] {
-  const out: Node[] = [];
-  for (const [key, value] of Object.entries(node)) {
-    if (TYPE_KEYS.has(key)) continue;
-    if (isNode(value)) out.push(value);
-    else if (Array.isArray(value)) out.push(...value.filter(isNode));
-  }
-  return out;
-}
-
 class Lines {
   private readonly starts: number[] = [0];
   constructor(text: string) {
@@ -481,7 +446,8 @@ export function lowerFile(
       lines,
       fn,
       logging,
-    ).lower(found.node);
+      found.node,
+    ).lower();
     branches.forEach((branch, n) => {
       facts.push({
         id: `${fn.id}@${n}`,
@@ -534,7 +500,11 @@ const EQUALITY: Readonly<Record<string, [EqualityOperator, boolean]>> = {
 
 const RELATIONAL = new Set(["<", "<=", ">", ">="]);
 
-type Terminates = boolean;
+/**
+ * Where control goes after a statement: on to the next one under a path, or nowhere — a `return`,
+ * `throw`, `break` or `continue` ends the straight line it is on.
+ */
+type Flow = readonly Atom[] | "terminates";
 
 interface EmittedBranch {
   readonly branch: LoweredBranch;
@@ -543,7 +513,7 @@ interface EmittedBranch {
 
 /** One function's lowering: its neutral names, its bindings and the branches its body walks to. */
 class FunctionLowering {
-  private readonly names = new Map<string, string>();
+  private readonly names: ReadonlyMap<Node, string>;
   private readonly bindings = new Map<string, Term>();
   private readonly branches: EmittedBranch[] = [];
 
@@ -552,11 +522,13 @@ class FunctionLowering {
     private readonly lines: Lines,
     private readonly fn: GraphFunction,
     private readonly logging: ReadonlySet<string>,
-  ) {}
+    private readonly node: Node,
+  ) {
+    this.names = neutralNames(node);
+  }
 
-  lower(node: Node): readonly EmittedBranch[] {
-    this.collectNames(node);
-    const body = child(node, "body");
+  lower(): readonly EmittedBranch[] {
+    const body = child(this.node, "body");
     if (body === null) return [];
     if (body.type === "BlockStatement") this.walk(children(body, "body"), []);
     else this.emit(body, [], { kind: "return", value: this.term(body) });
@@ -569,68 +541,6 @@ class FunctionLowering {
       this.lines.of(node.start),
       this.lines.of(Math.max(node.start, node.end - 1)),
     );
-  }
-
-  /**
-   * Neutral names in first-occurrence order: the parameters, then every name the body declares,
-   * nested functions' included so a callback's parameter renames too. A parameter's default value
-   * is not visited (`parameter-defaults-ignored`).
-   */
-  private collectNames(fn: Node): void {
-    const declare = (name: string) => {
-      if (!this.names.has(name)) this.names.set(name, `v${this.names.size}`);
-    };
-    const pattern = (node: Node | null): void => {
-      if (node === null) return;
-      switch (node.type) {
-        case "Identifier":
-          declare(String(node.name));
-          return;
-        case "AssignmentPattern":
-          pattern(child(node, "left"));
-          return;
-        case "RestElement":
-          pattern(child(node, "argument"));
-          return;
-        case "ArrayPattern":
-          for (const element of children(node, "elements")) pattern(element);
-          return;
-        case "ObjectPattern":
-          for (const property of children(node, "properties"))
-            pattern(
-              property.type === "RestElement"
-                ? property
-                : child(property, "value"),
-            );
-          return;
-        case "TSParameterProperty":
-          pattern(child(node, "parameter"));
-          return;
-      }
-    };
-    const visit = (node: Node): void => {
-      if (FUNCTION_TYPES.has(node.type)) {
-        if (node !== fn && node.type === "FunctionDeclaration")
-          pattern(child(node, "id"));
-        for (const param of children(node, "params")) pattern(param);
-        const body = child(node, "body");
-        if (body !== null) visit(body);
-        return;
-      }
-      switch (node.type) {
-        case "VariableDeclarator":
-          pattern(child(node, "id"));
-          break;
-        case "CatchClause":
-          pattern(child(node, "param"));
-          break;
-        case "ClassDeclaration":
-          pattern(child(node, "id"));
-          break;
-      }
-      for (const c of nodeChildren(node)) visit(c);
-    };
-    visit(fn);
   }
 
   private emit(at: Node, path: readonly Atom[], outcome: Outcome): void {
@@ -646,24 +556,22 @@ class FunctionLowering {
     });
   }
 
-  private walk(
-    statements: readonly Node[],
-    start: readonly Atom[],
-  ): Terminates {
-    let path = start;
+  /** Walk statements in order; answer the path control leaves them under, or that it does not. */
+  private walk(statements: readonly Node[], start: readonly Atom[]): Flow {
+    let flow: Flow = start;
     for (const statement of statements) {
-      const next = this.statement(statement, path);
-      if (next === "terminates") return true;
-      path = next;
+      if (flow === "terminates") break;
+      flow = this.statement(statement, flow);
     }
-    return false;
+    return flow;
+  }
+
+  private exits(statements: readonly Node[], start: readonly Atom[]): boolean {
+    return this.walk(statements, start) === "terminates";
   }
 
   /** Walk one statement; answer the path the statements after it run under, or that none do. */
-  private statement(
-    node: Node,
-    path: readonly Atom[],
-  ): readonly Atom[] | "terminates" {
+  private statement(node: Node, path: readonly Atom[]): Flow {
     switch (node.type) {
       case "ReturnStatement": {
         const argument = child(node, "argument");
@@ -684,8 +592,11 @@ class FunctionLowering {
         });
         return "terminates";
       }
+      case "BreakStatement":
+      case "ContinueStatement":
+        return "terminates";
       case "BlockStatement":
-        return this.walk(children(node, "body"), path) ? "terminates" : path;
+        return this.walk(children(node, "body"), path);
       case "IfStatement": {
         const test = child(node, "test");
         const consequent = child(node, "consequent");
@@ -693,9 +604,9 @@ class FunctionLowering {
         if (test === null || consequent === null) return path;
         const holds = this.condition(test, true);
         const fails = this.condition(test, false);
-        const thenExits = this.walk([consequent], [...path, ...holds]);
+        const thenExits = this.exits([consequent], [...path, ...holds]);
         const elseExits =
-          alternate !== null && this.walk([alternate], [...path, ...fails]);
+          alternate !== null && this.exits([alternate], [...path, ...fails]);
         if (thenExits && elseExits) return "terminates";
         if (thenExits) return [...path, ...fails];
         if (elseExits) return [...path, ...holds];
@@ -712,7 +623,7 @@ class FunctionLowering {
             const id = child(declarator, "id");
             const init = child(declarator, "init");
             if (id?.type === "Identifier" && init !== null) {
-              const local = this.names.get(String(id.name));
+              const local = this.names.get(id);
               if (local !== undefined)
                 this.bindings.set(local, this.term(init));
             }
@@ -745,10 +656,10 @@ class FunctionLowering {
         const block = child(node, "block");
         const handler = child(node, "handler");
         const finalizer = child(node, "finalizer");
-        const blockExits = block !== null && this.walk([block], path);
+        const blockExits = block !== null && this.exits([block], path);
         const handlerBody = handler === null ? null : child(handler, "body");
         const handlerExits =
-          handlerBody === null || this.walk([handlerBody], path);
+          handlerBody === null || this.exits([handlerBody], path);
         if (finalizer !== null) this.walk([finalizer], path);
         return blockExits && handlerExits ? "terminates" : path;
       }
@@ -786,39 +697,57 @@ class FunctionLowering {
     }
   }
 
+  /**
+   * A `switch`, dispatched the way JavaScript dispatches one: a `case` is entered when its test
+   * matches; a `default`, wherever it sits, only when no case's test anywhere in the switch does;
+   * and a body that does not end in `break`, `continue`, `return` or `throw` falls through into the
+   * next. So each body runs under any one of the entries that reach it — its own, and every entry
+   * falling through from above, carrying the atoms the bodies it passed through added.
+   */
   private switchStatement(node: Node, path: readonly Atom[]): void {
     const discriminant = child(node, "discriminant");
     if (discriminant === null) return;
     const subject = this.term(discriminant);
-    const tested: Atom[] = [];
-    let pending: Atom[] = [];
-    let hasDefault = false;
-    const cases = children(node, "cases");
-    for (const switchCase of cases) {
+    const cases = children(node, "cases").map((switchCase) => {
       const test = child(switchCase, "test");
-      if (test === null) hasDefault = true;
-      else {
-        const atom = this.equality(switchCase, subject, this.term(test), true);
-        pending.push(atom);
-        tested.push(atom);
-      }
+      return {
+        node: switchCase,
+        entry:
+          test === null
+            ? null
+            : this.equality(switchCase, subject, this.term(test), true),
+      };
+    });
+    const noCaseMatches = cases.flatMap(({ entry }) =>
+      entry === null ? [] : negate(entry),
+    );
+    let falling: readonly (readonly Atom[])[] = [];
+    for (const { node: switchCase, entry } of cases) {
+      const reaching = [...falling, entry === null ? noCaseMatches : [entry]];
       const consequent = children(switchCase, "consequent");
-      if (consequent.length === 0) continue;
-      const guard: Atom[] =
-        hasDefault && test === null
-          ? tested.flatMap((atom) => negate(atom))
-          : pending.length === 1 && pending[0] !== undefined
-            ? [pending[0]]
-            : [
-                {
-                  kind: "any",
-                  disjuncts: pending.map((a) => [a]),
-                  span: this.span(switchCase),
-                },
-              ];
-      this.walk(consequent, [...path, ...guard]);
-      pending = [];
+      if (consequent.length === 0) {
+        falling = reaching;
+        continue;
+      }
+      const guard = this.anyOf(reaching, switchCase);
+      const flow = this.walk(consequent, [...path, ...guard]);
+      if (flow === "terminates") falling = [];
+      else {
+        const added = flow.slice(path.length + guard.length);
+        falling = reaching.map((disjunct) => [...disjunct, ...added]);
+      }
     }
+  }
+
+  /** A disjunction as a path: nothing when a disjunct is empty, the conjunction when it is alone. */
+  private anyOf(
+    disjuncts: readonly (readonly Atom[])[],
+    at: Node,
+  ): readonly Atom[] {
+    if (disjuncts.some((disjunct) => disjunct.length === 0)) return [];
+    const [only] = disjuncts;
+    if (disjuncts.length === 1 && only !== undefined) return only;
+    return [{ kind: "any", disjuncts, span: this.span(at) }];
   }
 
   private isLogging(call: CallTerm): boolean {
@@ -940,7 +869,7 @@ class FunctionLowering {
       case "Identifier": {
         const name = String(node.name);
         if (name === "undefined") return { kind: "literal", raw: "undefined" };
-        const local = this.names.get(name);
+        const local = this.names.get(node);
         return local === undefined
           ? { kind: "free", path: name }
           : { kind: "local", name: local };

@@ -425,9 +425,13 @@ carries:
   predicate call, one `in` / `instanceof`, or one truthiness test. `&&` is flattened into the
   conjunction, `!` is the atom's polarity (`!==` is a negated `===`), and `||` stays one `any` atom
   over its disjuncts. An early exit carries its negation into every later branch, so in
-  `if (a) return; if (b) throw …` the throw runs under `¬a ∧ b`.
+  `if (a) return; if (b) throw …` the throw runs under `¬a ∧ b`. A `switch` dispatches as
+  JavaScript does: a `default` runs when no case anywhere in the switch matches, and a body that
+  falls through carries the conditions of every case that reaches it, so `case "a": default:`
+  admits `"a"`.
 - **An outcome** from the closed union `return` / `throw` / `call`.
-- **Neutral names.** Parameters and locals are renamed `v0`, `v1`, … in first-occurrence order.
+- **Neutral names.** Parameters and locals are renamed `v0`, `v1`, … in declaration order,
+  resolved by scope: a name declared only inside a callback or block renames nothing outside it.
   Free identifiers (imports, globals, member paths rooted at them, and callee names) keep their
   names. A call is bound to its code-graph `calleeId` when exactly one call edge on its line names
   it. Parentheses, type assertions, optional chaining and `await` are dropped, because none of them
