@@ -330,6 +330,7 @@ describe("a config drafted from the prompt", () => {
     for (const row of result.rows)
       expect(Object.keys(row).sort()).toEqual([
         "answers",
+        "extractor",
         "hash",
         "model",
         "path",

@@ -11,7 +11,11 @@ import {
 } from "../src/sweep/evidence.js";
 import type { GraphFacts } from "../src/sweep/graph.js";
 import type { SweepQuestions } from "../src/sweep/questions.js";
-import { runSweep, type SweepRow } from "../src/sweep/run.js";
+import {
+  EVIDENCE_EXTRACTOR,
+  runSweep,
+  type SweepRow,
+} from "../src/sweep/run.js";
 import type { Vocabulary } from "../src/vocabulary.js";
 import { choice, fixtureVocabulary, repo, stubJev } from "./helpers.js";
 
@@ -54,6 +58,9 @@ const TELLING = {
     'import { alpha } from "../billing/rules/tax-bands";',
     "export const theta = alpha;",
   ].join("\n"),
+  // An installed package: the one specifier `--redact` leaves as written.
+  "node_modules/zod/package.json": '{ "name": "zod", "main": "index.js" }',
+  "node_modules/zod/index.js": "module.exports = {};",
 };
 
 const LEAKS = [
@@ -132,6 +139,8 @@ describe("sweep --redact", () => {
       "zod",
       `./${id(bands)}`,
       `./${id(ledger)}`,
+      `./${id(policy)}`,
+      `./${id(bands)}`,
     ]);
     expect(limits?.source).toContain(`from "./${id(policy)}";`);
     expect(limits?.source).toContain(`export * from "./${id(bands)}";`);
@@ -139,7 +148,7 @@ describe("sweep --redact", () => {
     expect(limits?.source).toContain(`require("./${id(policy)}")`);
     const bandsFile = jev.asked.map(fileOf).find((f) => f.path === bands);
     expect([...(bandsFile?.importedBySiblings ?? [])].sort()).toEqual(
-      [limits?.path, ledger].sort(),
+      [limits?.path, limits?.path, ledger].sort(),
     );
   });
 
@@ -182,7 +191,7 @@ describe("sweep --redact", () => {
 });
 
 describe("sweep evidence imports", () => {
-  it("reads a bare import as its own statement, so the re-export after it stays in the source", () => {
+  it("reads a bare import as its own statement, and a re-export as an import that stays in the source", () => {
     const path = "zephyr/billing/rules/invoice-limits.ts";
     const text = TELLING[path];
     const file = gatherEvidence([{ path, text, hash: contentHash(text) }]).get(
@@ -192,8 +201,9 @@ describe("sweep evidence imports", () => {
       "zod",
       "./tax-bands",
       "../../ledger/payout-ledger",
+      "../dunning/retry-policy",
+      "./tax-bands",
     ]);
-    expect(file?.imports).not.toContain("../dunning/retry-policy");
     expect(file?.source).toContain(
       'export { beta } from "../dunning/retry-policy";',
     );
@@ -297,6 +307,7 @@ describe("sweep cache across redaction modes", () => {
       scope: "svc",
       hash,
       vocabulary: vocabulary.fingerprint,
+      extractor: EVIDENCE_EXTRACTOR,
       answers,
       model: "jev-stub",
       usage: { input_tokens: 10, output_tokens: 1 },
