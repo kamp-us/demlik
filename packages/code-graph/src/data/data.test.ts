@@ -91,6 +91,9 @@ describe("--data: which function reads or writes which binding", () => {
       [`${api}/orgs.ts:renameOrganization`, 12, "api", "kv", "CACHE", "delete", "write"],
       [`${api}/orgs.ts:repository`, 33, "api", "d1", "DB", null, "unknown"],
       [`${api}/orgs.ts:runQuery`, 25, "api", "d1", "DB", "prepare", "unknown"],
+      [`${api}/routes.ts:purgeOrganizations`, 20, "api", "d1", "DB", "batch", "unknown"],
+      [`${api}/routes.ts:purgeOrganizations`, 20, "api", "d1", "DB", "prepare", "read"],
+      [`${api}/routes.ts:purgeOrganizations`, 20, "api", "d1", "DB", "prepare", "write"],
       [`${api}/storage.ts:archive`, 14, "api", "r2", "ASSETS", "put", "write"],
       [`${api}/storage.ts:archive`, 15, "api", "queue", "EVENTS", "send", "write"],
       [`${api}/storage.ts:bump`, 9, "api", "durable-object", "COUNTER", "get", "unknown"],
@@ -100,6 +103,40 @@ describe("--data: which function reads or writes which binding", () => {
       [`${billing}/invoices.ts:exportAll`, 16, "billing", "d1", "DB", "dump", "read"],
       [`${billing}/invoices.ts:listInvoices`, 8, "billing", "d1", "DB", "prepare", "read"],
     ]);
+  });
+
+  it("keeps two same-method calls on one line apart by their column", () => {
+    const purge = report.edges
+      .filter((e) => e.functionId === `${api}/routes.ts:purgeOrganizations`)
+      .map((e) => [e.line, e.column, e.method, e.access]);
+    expect(purge).toEqual([
+      [20, 10, "batch", "unknown"],
+      [20, 20, "prepare", "read"],
+      [20, 55, "prepare", "write"],
+    ]);
+  });
+
+  it("lists a site no named function holds as unattributed, by file, never dropping it", () => {
+    const rows = report.unattributed.map((s) => [
+      s.file,
+      s.line,
+      s.column,
+      s.ownerService,
+      s.bindingKind,
+      s.binding,
+      s.method,
+      s.access,
+    ]);
+    expect(rows).toEqual([
+      [`${api}/routes.ts`, 10, 25, "api", "d1", "DB", "prepare", "read"],
+      [`${api}/routes.ts`, 14, 9, "api", "kv", "CACHE", "delete", "write"],
+    ]);
+  });
+
+  it("counts the unattributed sites in the human report", () => {
+    const text = cli("--data");
+    expect(text.split("\n")[0]).toContain("2 unattributed");
+    expect(text).toContain(`UNATTRIBUTED  ${api}/routes.ts:10:25  api.env.DB.prepare() [d1] read`);
   });
 
   it("names the configs it read and none it could not", () => {
