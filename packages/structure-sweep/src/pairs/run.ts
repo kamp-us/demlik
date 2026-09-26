@@ -18,6 +18,8 @@ export interface PairsOptions {
   readonly targets: readonly PairTarget[];
   readonly jev: JevClient<PairQuestions>;
   readonly outPath: string;
+  /** Show Jev each function's name and source only, never its file path. */
+  readonly redact?: boolean;
   readonly concurrency?: number;
   readonly log?: (line: string) => void;
 }
@@ -42,11 +44,24 @@ const located = ({
   lines,
 });
 
-const stateOf = (pair: Pair) => ({
-  a: { path: pair.a.path, function: pair.a.function, source: pair.a.source },
-  b: { path: pair.b.path, function: pair.b.function, source: pair.b.source },
+/** One side of a pair as Jev sees it: redacted, the path is gone and only the code is left to judge. */
+const shown = (fn: PairFunction, redact: boolean) =>
+  redact
+    ? { function: fn.function, source: fn.source }
+    : { path: fn.path, function: fn.function, source: fn.source };
+
+const stateOf = (pair: Pair, redact: boolean) => ({
+  a: shown(pair.a, redact),
+  b: shown(pair.b, redact),
   signals: pair.signals,
 });
+
+/**
+ * A cached answer serves a pair only when both bodies and the redaction mode match, so a redacted
+ * run never reuses a plain answer nor the other way round. A plain row keeps its bare `id` key.
+ */
+const cacheKey = (id: string, redacted: boolean) =>
+  redacted ? `${id} redacted` : id;
 
 interface Ledger {
   readonly cache: ReadonlyMap<string, PairRow>;
@@ -66,7 +81,9 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
       (x, y) => x.scope.localeCompare(y.scope) || x.id.localeCompare(y.id),
     );
   return {
-    cache: new Map(previous.map((r) => [r.id, r])),
+    cache: new Map(
+      previous.map((r) => [cacheKey(r.id, r.redacted === true), r]),
+    ),
     judged,
     rows,
     save: () => {
@@ -76,14 +93,15 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
   };
 }
 
-/** Pairs whose two bodies were judged before keep their answer; only the rest are asked. */
+/** Pairs whose two bodies were judged before, in the same redaction mode, keep their answer; only the rest are asked. */
 function pairsToAsk(
   ledger: Ledger,
   scope: string,
   pairs: readonly Pair[],
+  redact: boolean,
 ): Pair[] {
   return pairs.filter((p) => {
-    const hit = ledger.cache.get(p.id);
+    const hit = ledger.cache.get(cacheKey(p.id, redact));
     if (hit === undefined) return true;
     ledger.judged.set(p.id, {
       ...hit,
@@ -102,12 +120,13 @@ async function judgeScope(
   scope: string,
   pairs: readonly Pair[],
 ): Promise<Spent> {
-  const todo = pairsToAsk(ledger, scope, pairs);
+  const redact = options.redact === true;
+  const todo = pairsToAsk(ledger, scope, pairs, redact);
   options.log?.(`${scope}: ${pairs.length} pairs, ${todo.length} to ask`);
   let spent: Spent = { input: 0, output: 0 };
   await pool(todo, options.concurrency ?? 6, async (pair) => {
     try {
-      const ok = await options.jev(stateOf(pair));
+      const ok = await options.jev(stateOf(pair, redact));
       ledger.judged.set(pair.id, {
         id: pair.id,
         scope,
@@ -115,6 +134,7 @@ async function judgeScope(
         b: located(pair.b),
         signals: pair.signals,
         graphConfidence: pair.graphConfidence,
+        ...(redact ? { redacted: true as const } : {}),
         answers: ok.answers,
         model: ok.model,
         usage: ok.usage,

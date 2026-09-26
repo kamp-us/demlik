@@ -21,6 +21,8 @@ export const PAIRS_USAGE = `structure-sweep pairs <folder>=<collapse.json>... [o
   --ref <ref>           git tree the collapse report was taken from (default: HEAD)
   --out <file>          judged pairs (default: ${DEFAULTS.pairs})
   --report <file>       markdown summary (default: ${DEFAULTS.pairsReport})
+  --redact              show Jev each function's name and source, not its file path
+                        (default: off; redacted and plain runs never share cached answers)
   --model <id>          Jev model (default: ${DEFAULT_MODEL})
   --concurrency <n>     calls in flight (default: 6)`;
 
@@ -33,21 +35,26 @@ function parseTarget(root: string, cwd: string, arg: string): PairTarget {
   };
 }
 
-export async function pairsCommand(
-  argv: readonly string[],
-  cwd: string,
-): Promise<void> {
-  const { values, positionals } = parseArgs({
+/** `pairs`' flags and targets, defaults applied. */
+export const parsePairsArgs = (argv: readonly string[]) =>
+  parseArgs({
     args: [...argv],
     allowPositionals: true,
     options: {
       ref: { type: "string", default: "HEAD" },
       out: { type: "string", default: DEFAULTS.pairs },
       report: { type: "string", default: DEFAULTS.pairsReport },
+      redact: { type: "boolean", default: false },
       model: { type: "string", default: DEFAULT_MODEL },
       concurrency: { type: "string", default: "6" },
     },
   });
+
+export async function pairsCommand(
+  argv: readonly string[],
+  cwd: string,
+): Promise<void> {
+  const { values, positionals } = parsePairsArgs(argv);
   if (positionals.length === 0)
     throw new Error(`pass <folder>=<collapse.json>\n\n${PAIRS_USAGE}`);
   const root = repoRootOf(cwd);
@@ -67,6 +74,7 @@ export async function pairsCommand(
       post: fetchPost(apiKey),
     }),
     outPath,
+    redact: values.redact,
     concurrency: Number(values.concurrency),
     log,
   });

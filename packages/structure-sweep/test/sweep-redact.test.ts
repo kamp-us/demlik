@@ -4,7 +4,11 @@ import { join } from "node:path";
 import type { JevState } from "@demlik/tea/jev";
 import { describe, expect, it } from "vitest";
 import { parseSweepArgs, SWEEP_USAGE } from "../src/sweep/cli.js";
-import type { FileEvidence } from "../src/sweep/evidence.js";
+import {
+  contentHash,
+  type FileEvidence,
+  gatherEvidence,
+} from "../src/sweep/evidence.js";
 import type { GraphFacts } from "../src/sweep/graph.js";
 import type { SweepQuestions } from "../src/sweep/questions.js";
 import { runSweep, type SweepRow } from "../src/sweep/run.js";
@@ -37,9 +41,9 @@ const TELLING = {
   "zephyr/billing/rules/invoice-limits.ts": [
     'import { z } from "zod";',
     'import { alpha } from "./tax-bands";',
+    'import "../../ledger/payout-ledger";',
     'export { beta } from "../dunning/retry-policy";',
     'export * from "./tax-bands";',
-    'import "../../ledger/payout-ledger";',
     "export const gamma = z.number();",
     'export const delta = () => import("../../ledger/payout-ledger");',
     'const epsilon = require("../dunning/retry-policy");',
@@ -124,8 +128,11 @@ describe("sweep --redact", () => {
         jev.asked.map(fileOf).find((f) => f.exports.includes(name))?.path,
     );
     const id = (path = "") => path.replace(/\.tsx?$/, "");
-    expect(limits?.imports).toEqual(["zod", `./${id(bands)}`]);
-    expect(limits?.source).toContain(`import "./${id(ledger)}";`);
+    expect(limits?.imports).toEqual([
+      "zod",
+      `./${id(bands)}`,
+      `./${id(ledger)}`,
+    ]);
     expect(limits?.source).toContain(`from "./${id(policy)}";`);
     expect(limits?.source).toContain(`export * from "./${id(bands)}";`);
     expect(limits?.source).toContain(`import("./${id(ledger)}")`);
@@ -171,6 +178,38 @@ describe("sweep --redact", () => {
       ["zephyr/billing/rules/tax-bands.ts", true],
       ["zephyr/ledger/payout-ledger.tsx", true],
     ]);
+  });
+});
+
+describe("sweep evidence imports", () => {
+  it("reads a bare import as its own statement, so the re-export after it stays in the source", () => {
+    const path = "zephyr/billing/rules/invoice-limits.ts";
+    const text = TELLING[path];
+    const file = gatherEvidence([{ path, text, hash: contentHash(text) }]).get(
+      path,
+    )?.file;
+    expect(file?.imports).toEqual([
+      "zod",
+      "./tax-bands",
+      "../../ledger/payout-ledger",
+    ]);
+    expect(file?.imports).not.toContain("../dunning/retry-policy");
+    expect(file?.source).toContain(
+      'export { beta } from "../dunning/retry-policy";',
+    );
+  });
+});
+
+describe("sweep --redact id order", () => {
+  it("numbers files by code-unit order, never the host locale's collation", () => {
+    const files = ["svc/a.ts", "svc/B.ts"].map((path) => {
+      const text = "export const x = 1;";
+      return { path, text, hash: contentHash(text) };
+    });
+    const evidence = gatherEvidence(files, new Map(), { redact: true });
+    expect("a".localeCompare("B", "en")).toBeLessThan(0);
+    expect(evidence.get("svc/B.ts")?.file.path).toBe("f1.ts");
+    expect(evidence.get("svc/a.ts")?.file.path).toBe("f2.ts");
   });
 });
 

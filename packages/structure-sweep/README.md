@@ -162,6 +162,11 @@ Asks about every collapse candidate and writes `.structure-sweep/pairs.json` plu
 summary `.structure-sweep/pairs.md`, which groups `same_decision` pairs into the functions that
 should become one. A pair whose two bodies were judged before keeps its answer.
 
+`--redact` (off by default) shows Jev each function's name and source only, never its file path,
+so moving a file cannot move the answer on byte-identical bodies. `pairs.json` still records both
+real paths. A redacted row is marked `"redacted": true`, and redacted and unredacted runs never
+share cached answers: each asks Jev again about a pair the other answered.
+
 | Verdict | Means | Action |
 |---|---|---|
 | `same_decision` | Both encode the same business rule. | collapse into one function |
