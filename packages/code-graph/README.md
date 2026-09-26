@@ -61,6 +61,7 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Packages ranked by export count, zero-external-consumer exports called out | `code-graph X --interface-width` |
 | Module-import cycles, as their participating files | `code-graph X --cycles` |
 | Env-var keys declared but never read, and read but never declared | `code-graph X --env-keys` |
+| Which functions read or write which D1 / DO / KV / R2 / queue binding | `code-graph X --data` |
 | How much of the tree is comment, of what kind, and where | `code-graph X --comments` |
 | Comment ratio ratchet — gate the tree against `comment-ceilings.json` | `code-graph . --comments --ci` |
 | Re-record every ceiling after a comment cleanup | `code-graph . --comments --write-ceilings` |
@@ -106,6 +107,7 @@ cross-package callers; re-run with `--deep`.
 | `--comments` | Comment CENSUS: every comment line lands in exactly one of nine buckets, and each bucket in exactly one CLASS — **`mechanical`** (`banner`, `commented-out-code`: removable with no judgment), **`protected`** (`pragma`, `license`, `marker`: never touch), **`prose`** (`file-header`, `docblock`, `block`, `inline`: the volume, judgment required). Rolled up by bucket, by package scope, and by file, ranked by comment lines. Human view caps files and scopes at 20; `--json` emits every row. A count, not a verdict. Standalone: no Graph, no edge pass |
 | `--comments --ci` | Comment RATCHET: gate each scope's ratio against `comment-ceilings.json` at the repo root. **Exits 1** on any violation, 2 on a malformed ceilings file |
 | `--comments --write-ceilings` | Rewrite `comment-ceilings.json` from the current measurement (ceilings rounded UP to 1 dp; `default`/`slackPoints` carried forward) |
+| `--data` | Data edges: every call site on a D1 / Durable Object / KV / R2 / queue binding, per function, with the binding kind, name and access (`read` / `write` / `unknown`). `--json` emits the `DataReport`; `--graph --data` puts it on the graph as `data`. Runs on either pass — syntax only, no edge pass needed. See [Data edges](#data-edges---data) |
 | `--env-keys` | Env-var keys declared in wrangler `vars`/`secrets.required`/`.dev.vars` with no recognized read, and reads with no declaration, plus the withheld count. Standalone: no Graph, no edge pass |
 | `--hotspots [--hotspots-days <n>] [--hotspots-since <iso>] [--hotspots-limit <n>]` | Churn (git commits touching a file) × complexity (sum of its functions' complexity), ranked by the product. `--hotspots-days` sets the window in days ending now (default 90); `--hotspots-since` pins an explicit ISO start instead (reproducible across runs); `--hotspots-limit` caps the human view (default 20; `--json` emits every row) |
 | `--html` | Self-contained HTML report (human view; implies the edge pass). Pair with `--out` to write it banner-safe |
@@ -143,6 +145,57 @@ loaded set, so run the pass at a root that contains both sides —
 A single-service root reports every edge as `target-not-loaded` (still naming the
 target service, class and method). `--deep` over the whole monorepo does not finish
 in a usable time on this repo; `services` is the working root.
+
+## Data edges (`--data`)
+
+Two functions reading the same D1 database are strong evidence that they serve the same
+responsibility, and a call graph cannot see it: they may never call each other. This pass records
+which **storage** each function touches. Every call site on an env binding whose wrangler kind is
+D1, Durable Object, KV, R2 or a queue producer becomes one edge:
+
+```ts
+type DataEdge = {
+  functionId: string;            // the FunctionNode that holds the call site
+  line: number;
+  ownerService: string;          // the worker whose wrangler config declares the binding
+  binding: string;               // "DB"
+  bindingKind: "d1" | "durable-object" | "kv" | "queue" | "r2";
+  method: string | null;         // "prepare"; null when the binding is handed on whole
+  access: "read" | "write" | "unknown";
+};
+type DataReport = { configFiles: string[]; unparsedConfigs: string[]; edges: DataEdge[] };
+```
+
+**Where it lives: a top-level table, `Graph.data`.** It is `null` unless `--data` ran, the same
+shape as `crossRuntime`, so no existing field changes and a consumer that ignores it reads the
+graph exactly as before. A per-function field was the alternative; the table keeps
+`FunctionNode` untouched and puts every edge in one sorted array a consumer can group by binding.
+There is no schema version to bump.
+
+**Kinds come from the config, not the code.** `d1_databases[]`, `kv_namespaces[]`,
+`r2_buckets[]`, `queues.producers[]` and `durable_objects.bindings[]` in each
+`wrangler.{json,jsonc,toml}` (top-level environment only) type each binding name. A call site is
+matched against the bindings of the worker that owns its file. The edge names the binding, not the
+database, namespace or bucket behind it: `env.DB` in two workers is the same resource only if both
+configs point `DB` at it.
+
+**The call sites** are found on oxc's tree: `env.X`, `this.env.X` and `c.env.X`, plus one level
+of aliasing (`const db = env.DB`, `const { DB } = env`). A site inside an anonymous callback
+belongs to the named function around it; a nested named function owns its own sites.
+
+**`unknown` is an answer.** The access is decided from the method, and only where the method
+decides it:
+
+| Kind | `read` | `write` | everything else |
+|---|---|---|---|
+| D1 | `prepare`/`exec` over a literal SQL that starts with `SELECT`; `dump` | `prepare`/`exec` over a literal starting `INSERT`/`UPDATE`/`DELETE`/`REPLACE`/`CREATE`/`DROP`/`ALTER` | `unknown` — non-literal SQL, `WITH`, `batch`, … |
+| KV | `get`, `getWithMetadata`, `list` | `put`, `delete` | `unknown` |
+| R2 | `get`, `head`, `list` | `put`, `delete`, `createMultipartUpload`, `resumeMultipartUpload` | `unknown` |
+| Queue | — | `send`, `sendBatch` | `unknown` |
+| Durable Object | — | — | always `unknown`: the namespace hands back a stub, and what the stub does is not at this site |
+
+A binding passed on whole (`new Repository(env.DB)`) is an edge with `method: null` and
+`unknown` access.
 
 ## Node kinds and the two path queries
 

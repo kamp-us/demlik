@@ -37,6 +37,7 @@ export type Opts = {
   hotspotsLimit?: string;
   cycles?: boolean;
   envKeys?: boolean;
+  data?: boolean;
   comments?: boolean;
   writeCeilings?: boolean;
   acceptCrossings?: boolean;
@@ -83,6 +84,10 @@ function analysisOptions(command: Command): Command {
     .option(
       "--interface-width",
       "exports per package + external (outside-package) consumer counts; implies the edge pass",
+    )
+    .option(
+      "--data",
+      "data edges: which function reads or writes which D1 / Durable Object / KV / R2 / queue binding",
     )
     .option("--cycles", "module-import cycles, reported as participating files (implies --edges)")
     .option("--node-kinds <file>", "JSON file of node-kind rule overrides merged over defaults");

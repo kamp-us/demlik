@@ -54,6 +54,7 @@ packages/code-graph/
       core.ts             the cross-referencing contract (§5). OWNS threshold defaults + SmellKind.
       cross-runtime.ts    Feature A       reachability.ts     Feature B queries
       clusters.ts         Feature D       interface-width.ts  Feature G
+      data.ts             --data: DataEdge + DataReport
       graph.ts            the ONE composition of all of them into `Graph`
     extract/
       project.ts          load folder (cheap vs tsconfig pass), file filters (A3), parse-failure detection (§11)
@@ -75,6 +76,7 @@ packages/code-graph/
       analysis.ts           the opt-in views: --cross-runtime/--kinds/--unreachable/--unguarded/--clusters/--interface-width/--cycles/--env-keys
     layers/     Feature E — the --layers gate          collapse/   Feature C — --collapse
     hotspots/   Feature F — churn.ts + render.ts       env-keys/   Feature H2 — extract.ts + query.ts
+    data/       --data — access.ts (read/write per binding method) + extract.ts (call sites) + render.ts
     comments/   Feature I — classify.ts + census.ts + render.ts + ceilings.ts + ratchet.ts + gate.ts
 ```
 
@@ -203,6 +205,10 @@ type Graph = {
   provenance: Provenance;
   thresholds: Thresholds;
   summary: Summary;
+  // The opt-in reports (crossRuntime, reachability, clusters, interfaceWidth, data) sit here too,
+  // each `null` unless its pass ran. `data` is the --data table: one DataEdge per call site on a
+  // D1 / Durable Object / KV / R2 / queue binding (README "Data edges").
+  data: DataReport | null;
   functions: FunctionNode[];
   modules: ModuleNode[];
   directories: DirectoryNode[];
@@ -313,6 +319,7 @@ code-graph <path> [flags]
 | `--boundaries --ci` | Boundary LEDGER gate (`boundaries/gate.ts`). `boundary-ledger.json` at the repo root holds one entry per crossing import, `{ scope, kind, from, to, specifier, reason? }` with `to` null only for a B2 bare import, keyed by `(scope, kind, from, to ?? specifier)` and written sorted with sorted keys (`boundaries/ledger.ts`). **Exits 1** when a measured crossing has no entry, listing each (scope, rule, importer, target, specifier). It never fails because an entry has no crossing: every run rewrites the ledger without the entries whose crossing is gone, among the scopes it measured, and prints them. Improvements are written back; only growth fails. Exits 2 on a malformed ledger, and when `boundary-ceilings.json` exists with no ledger (naming `--migrate-ceilings`). `--json` emits `{ passed, scopesChecked, unrecorded, pruned }` |
 | `--boundaries --accept-crossings --reason "<text>"` | The only way the ledger grows: adds every unrecorded crossing, each carrying the reason, and prunes as `--ci` does. With no non-empty `--reason` it exits 2 and writes nothing. `--boundaries --write-ceilings` exits 2 naming `--accept-crossings`; `--comments` and `--collapse` keep `--write-ceilings` |
 | `--boundaries --migrate-ceilings` | One-time move off the per-scope count file. Measures every declared scope; if any scope's crossing count exceeds its `boundary-ceilings.json` ceiling it refuses (exit 2, nothing written), else it writes one ledger entry per current crossing (reason `grandfathered from boundary-ceilings.json`) and deletes `boundary-ceilings.json`. Exit 2 with no count file, or with a ledger already present |
+| `--data` | Data edges (`Graph.data`, a `DataReport`): one edge per call site on a D1 / Durable Object / KV / R2 / queue binding, kind from the owning worker's wrangler config, access `read` / `write` / `unknown`. Syntax only, so it rides the cheap pass or the edge pass. `--json` emits the report; `--graph --data` carries it on the graph |
 | `--thresholds <file>` | Merge partial overrides parsed through `ThresholdsSchema.partial()` |
 | `--pretty` | Pretty-print JSON output |
 | `--json` | Force JSON output on a view command |
