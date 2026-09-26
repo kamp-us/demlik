@@ -7,7 +7,15 @@ import {
   type PairVerdict,
 } from "./questions.js";
 
-export type JudgedFunction = Omit<PairFunction, "source">;
+export type JudgedFunction = Omit<PairFunction, "source" | "lowered">;
+
+/** A collapse pair the partner cap left unasked: both its functions and the score it was ranked by. */
+export interface SkippedPair {
+  readonly scope: string;
+  readonly a: JudgedFunction;
+  readonly b: JudgedFunction;
+  readonly graphConfidence: number;
+}
 
 export interface PairRow {
   readonly id: string;
@@ -18,6 +26,11 @@ export interface PairRow {
   readonly graphConfidence: number;
   /** Present only on a row Jev answered without file paths; a default row has no such field. Part of the cache key. */
   readonly redacted?: true;
+  /**
+   * Present only on a row where Jev was sent at least one side's stage-2 lowered body in place of its
+   * source: a hash of the bodies sent. Part of the cache key, so lowered and raw sends never share an answer.
+   */
+  readonly lowered?: string;
   readonly answers: PairAnswers;
   readonly model: string;
   readonly usage: JevUsage;
@@ -119,8 +132,26 @@ function groupLines(group: DecisionGroup, index: number): string[] {
   ];
 }
 
-export function renderMarkdown(rows: readonly PairRow[]): string {
-  const scopes = [...new Set(rows.map((r) => r.scope))].sort();
+function skippedLines(skipped: readonly SkippedPair[]): string[] {
+  if (skipped.length === 0) return [];
+  return [
+    "### skipped over the partner cap",
+    "",
+    `${skipped.length} pairs not asked: each is outside the top \`--max-partners\` of one of its functions by graph confidence.`,
+    "",
+    ...skipped.map(
+      (p) =>
+        `- \`${key(p.a)}\` × \`${key(p.b)}\`, graph confidence ${pct(p.graphConfidence)}`,
+    ),
+    "",
+  ];
+}
+
+export function renderMarkdown(
+  rows: readonly PairRow[],
+  skipped: readonly SkippedPair[] = [],
+): string {
+  const scopes = [...new Set([...rows, ...skipped].map((r) => r.scope))].sort();
   const lines = ["# Collapse candidates judged by Jev", ""];
   for (const scope of scopes) {
     const scoped = rows.filter((r) => r.scope === scope);
@@ -139,6 +170,7 @@ export function renderMarkdown(rows: readonly PairRow[]): string {
     if (groups.length === 0) lines.push("none", "");
     for (const [i, group] of groups.entries())
       lines.push(...groupLines(group, i), "");
+    lines.push(...skippedLines(skipped.filter((p) => p.scope === scope)));
   }
   return lines.join("\n");
 }

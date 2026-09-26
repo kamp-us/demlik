@@ -23,7 +23,7 @@ npm install -D @demlik/structure-sweep
 Calls go to Jev's endpoint through [`@demlik/tea/jev`](../tea/docs/how-to/ask-jev-a-typed-question.md),
 which decodes each reply; `@demlik/tea/retry-backoff` retries 429/529 and dropped connections. The
 key is read from `TYPESAFE_API_KEY` — `sweep` and `pairs` refuse to start without it. `propose`,
-`move` and `groups` never call Jev.
+`move`, `groups` and `pairs --plan` never call Jev.
 
 ## The vocabulary file
 
@@ -339,6 +339,61 @@ two bodies.
 so moving a file cannot move the answer on byte-identical bodies. `pairs.json` still records both
 real paths. A redacted row is marked `"redacted": true`, and redacted and unredacted runs never
 share cached answers: each asks Jev again about a pair the other answered.
+
+#### What a run costs, and the three levers on it
+
+`pairs` asks Jev once per pair and sends both functions each time, so its cost grows with the
+number of pairs, which grows roughly with the square of a cluster of similar functions. A whole-tree
+run over a large monorepo came to 9,140 pairs and about 9.7M tokens.
+
+`--plan` prices a run before it spends anything:
+
+```sh
+structure-sweep pairs .=collapse.json --plan
+```
+
+It prints, per folder and in total, the candidate pairs, the distinct functions in them, the pairs
+skipped over the partner cap, the pairs left to ask (a pair a cached answer serves costs nothing)
+and an estimate of their input tokens, then exits 0. It makes no Jev call, does not read
+`TYPESAFE_API_KEY`, and writes nothing. The estimate is the JSON of the exact request each pair
+would send (state, model and questions, after the cap and the body choice below) at four
+characters per token. It is a deterministic stand-in, not the provider's own count.
+
+`--max-partners <n>` (default `10`) judges each function against at most its `n` best partners,
+ranked by the collapse report's `confidence` (`graphConfidence` in `pairs.json`), a tie going to the
+lower pair id. A pair is asked only when it is within the top `n` of both its functions. Every
+other pair is skipped, never dropped: stderr counts them, and `pairs.md` lists each one with both
+functions and its confidence under **skipped over the partner cap**. A run with no pair over the cap
+writes the same `pairs.json` and `pairs.md` it always did.
+
+`--graph <graph.json>` (off by default) takes the `code-graph <folder> --graph --json` output for
+the one `<folder>=<collapse.json>` target, and sends each function's lowered body instead of its
+source. `pairs` runs [stage-2 lowering](#lowering-stages-25-branches-the-lexicon-callee-summaries-and-the-branch-label)
+in process over each side's file at `--ref`, with no Jev call. A lowered body is the function's
+branches rendered as the embedding stage renders them: one paragraph per branch, `condition ⇒
+outcome`, with neutral names for its parameters and locals and no source. A side the graph has no
+node for, or that stage 2 leaves `unknown` or writes no branch for, is sent as its source. A row Jev
+answered with a lowered body carries a `"lowered"` hash of the bodies sent, and lowered and raw sends
+never share cached answers.
+
+| Flag | Default | |
+|---|---|---|
+| `--plan` | off | print pairs, functions and estimated tokens, then exit without calling Jev |
+| `--max-partners <n>` | `10` | most partners any one function is judged against; the rest are skipped and listed |
+| `--graph <graph.json>` | none | send stage-2 lowered bodies instead of source; one target only |
+| `--redact` | off | no file paths in what Jev sees |
+| `--ref <ref>` | `HEAD` | git tree the collapse report was taken from |
+| `--out <file>` | `.structure-sweep/pairs.json` | judged pairs |
+| `--report <file>` | `.structure-sweep/pairs.md` | markdown summary |
+| `--model <id>` | `jev-1.13.0` | Jev model |
+| `--concurrency <n>` | `6` | calls in flight |
+
+For a whole tree, the cheaper route is per function, not per pair: the
+[lowering rule-groups path](#lowering-stages-68-rule-groups-owners-and-the-collapse-handoff) lowers
+every function once (stage 2), groups branches that encode one rule deterministically (stage 6),
+asks Jev once per candidate cluster rather than once per pair, and hands off owners and collapse
+specs (stages 7 and 8), all read back through `structure-sweep groups`. Keep `pairs` for a folder,
+or for a whole-tree run capped with `--max-partners` and priced with `--plan` first.
 
 | Verdict | Means | Action |
 |---|---|---|
