@@ -129,6 +129,24 @@ export {
   ruleGroups,
 } from "./lowering/group.js";
 export {
+  type BoundaryCrossing,
+  checkRatchet,
+  emptyRuleGroupLedger,
+  type RatchetVerdict,
+  type Remeasure,
+  type RemeasureInput,
+  type RemeasureStores,
+  type RemeasureVerdict,
+  RuleGroupLedger,
+  RuleGroupLedgerEntry,
+  recordCollapse,
+  remeasure,
+  type SpecMember,
+  specFiles,
+  TaskSpec,
+  taskSpecs,
+} from "./lowering/handoff.js";
+export {
   type EvaluateOptions,
   type Evaluation,
   type Exceeded,
