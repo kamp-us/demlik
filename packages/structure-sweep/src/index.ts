@@ -385,6 +385,12 @@ export {
   type PlanInput,
   planManifest,
 } from "./move/plan.js";
+export {
+  type AnchorAnswers,
+  type AnchorJev,
+  type AnchorQuestions,
+  anchorQuestions,
+} from "./pairs/anchor.js";
 export { DEFAULT_MAX_PARTNERS } from "./pairs/cap.js";
 export {
   PAIR_VERDICTS,
@@ -402,6 +408,9 @@ export {
 } from "./pairs/report.js";
 export {
   type Bodies,
+  DEFAULT_PAIRS_MODE,
+  type PairsJev,
+  type PairsMode,
   type PairsOptions,
   type PairsPlan,
   type PairsResult,

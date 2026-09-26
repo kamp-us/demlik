@@ -7,8 +7,9 @@ structure; `structure-sweep` asks TypeSafe **Jev** what the code _means_, then m
   reads, with you or your coding agent doing the drafting.
 - `sweep` — for every source file under a folder, which feature it belongs to, which role it plays,
   and whether a business rule sits inside an API file.
-- `pairs` — for every code-graph collapse pair, whether the two functions are the same decision,
-  a look-alike, or a shared helper.
+- `pairs` — for every code-graph collapse pair, whether the two functions are the same decision:
+  one question per anchor function over its candidate partners by default, or the three-way
+  same decision / look-alike / shared helper verdict per pair under `--pairwise`.
 - `move plan | apply` — move files into feature folders where Jev's verdict and the import graph
   agree, committing the renames apart from the import rewrites and never moving an entry file.
 - `groups list | show` — read the lowering pipeline's rule groups, owners and collapse specs back
@@ -324,7 +325,33 @@ structure-sweep pairs .=collapse.json
 
 Asks about every collapse candidate and writes `.structure-sweep/pairs.json` plus a markdown
 summary `.structure-sweep/pairs.md`, which groups `same_decision` pairs into the functions that
-should become one. A pair whose two bodies were judged before keeps its answer.
+should become one. A pair already answered the same way keeps its answer.
+
+**Anchor mode is the default.** Each pair is dealt to one of its two functions, the **anchor**, and
+Jev is asked once per anchor rather than once per pair. Functions are taken in order of how many
+pairs they appear in, most first, a tie going to the lower `path:function`. Each takes every pair
+not already dealt to an earlier anchor, so no pair is asked twice. The anchor's question sends its
+body once, then each candidate partner under a ref (`c0`, `c1`, …), and asks which candidate
+encodes the same business rule as the anchor, or `none`. The same call asks `business_rule` about
+the anchor.
+
+`pairs.json` still holds one row per pair, with the same fields a pairwise row has, so `inventory`
+and `consolidate` read it unchanged. A row's `answers` records what the anchor's one answer means
+for that pair:
+
+- the candidate Jev picked is `same_decision`, at the probability Jev gave its ref;
+- every other candidate, including all of them when Jev answered `none`, is `look_alike`, at one
+  minus its ref's probability. Anchor mode never records `shared_helper`: `none` does not tell
+  plumbing from a look-alike, so shared helpers are found with `--pairwise` only;
+- `business_rule` is the anchor's, the same on every row of its menu;
+- `partner` carries which side is the anchor, the candidate's `ref`, its `probability`, the ref
+  Jev `chosen` for the anchor, and a `menu` hash of the whole state the anchor was asked about;
+- `usage` is the one call's, repeated on every row of the anchor's menu.
+
+`--pairwise` asks the older question instead, once per pair: the three-way `same_decision`,
+`look_alike` or `shared_helper` verdict plus `business_rule`, for gold-set evaluation. Anchor and
+pairwise answers never share cached rows, so the first anchor-mode run over a ledger written by an
+earlier version asks Jev again. A `--pairwise` run still reuses those earlier rows.
 
 Judge the whole-tree report. A pair whose two functions sit in different top-level folders (the
 same helper copied into two services, say) appears only in a report taken over the repository root,
@@ -340,46 +367,50 @@ so moving a file cannot move the answer on byte-identical bodies. `pairs.json` s
 real paths. A redacted row is marked `"redacted": true`, and redacted and unredacted runs never
 share cached answers: each asks Jev again about a pair the other answered.
 
-#### What a run costs, and the three levers on it
+#### What a run costs, and the levers on it
 
-`pairs` asks Jev once per pair and sends both functions each time, so its cost grows with the
-number of pairs, which grows roughly with the square of a cluster of similar functions. A whole-tree
-run over a large monorepo came to 9,140 pairs and about 9.7M tokens.
-
-`--plan` prices a run before it spends anything:
+In `--pairwise` mode Jev is asked once per pair and both functions are sent each time, so cost grows
+with the number of pairs, which grows roughly with the square of a cluster of similar functions. A
+whole-tree pairwise run over a large monorepo came to 9,140 pairs and about 9.7M tokens. Anchor
+mode sends each anchor once and makes one call per anchor. `--plan` prices either mode before it
+spends anything:
 
 ```sh
 structure-sweep pairs .=collapse.json --plan
+structure-sweep pairs .=collapse.json --plan --pairwise
 ```
 
-It prints, per folder and in total, the candidate pairs, the distinct functions in them, the pairs
-skipped over the partner cap, the pairs left to ask (a pair a cached answer serves costs nothing)
-and an estimate of their input tokens, then exits 0. It makes no Jev call, does not read
-`TYPESAFE_API_KEY`, and writes nothing. The estimate is the JSON of the exact request each pair
-would send (state, model and questions, after the cap and the body choice below) at four
-characters per token. It is a deterministic stand-in, not the provider's own count.
+It prints, per folder and in total, the candidate pairs, the distinct functions in them, the
+anchors they were dealt to, the pairs skipped over the partner cap, the Jev calls left to make (a
+call whose answers are all cached costs nothing) and an estimate of their input tokens, then exits
+0. It makes no Jev call, does not read `TYPESAFE_API_KEY`, and writes nothing. The estimate is the
+JSON of the exact request each call would send (state, model and questions, after the cap and the
+body choice below) at four characters per token. It is a deterministic stand-in, not the provider's
+own count.
 
-`--max-partners <n>` (default `10`) judges each function against at most its `n` best partners,
-ranked by the collapse report's `confidence` (`graphConfidence` in `pairs.json`), a tie going to the
-lower pair id. A pair is asked only when it is within the top `n` of both its functions. Every
-other pair is skipped, never dropped: stderr counts them, and `pairs.md` lists each one with both
-functions and its confidence under **skipped over the partner cap**. A run with no pair over the cap
-writes the same `pairs.json` and `pairs.md` it always did.
+`--max-partners <n>` (default `10`) judges each anchor against at most its `n` best candidate
+partners, ranked by the collapse report's `confidence` (`graphConfidence` in `pairs.json`), a tie
+going to the lower pair id. Every other pair dealt to that anchor is skipped, never dropped: stderr
+counts them, and `pairs.md` lists each one with both functions and its confidence under **skipped
+over the partner cap**. `--pairwise` uses the same cap, asking each kept pair on its own. A
+`--pairwise` run with no pair over the cap writes the same `pairs.json` and `pairs.md` it always
+did.
 
 `--graph <graph.json>` (off by default) takes the `code-graph <folder> --graph --json` output for
-the one `<folder>=<collapse.json>` target, and sends each function's lowered body instead of its
-source. `pairs` runs [stage-2 lowering](#lowering-stages-25-branches-the-lexicon-callee-summaries-and-the-branch-label)
-in process over each side's file at `--ref`, with no Jev call. A lowered body is the function's
+the one `<folder>=<collapse.json>` target, and in either mode sends each function's lowered body
+instead of its source. `pairs` runs [stage-2 lowering](#lowering-stages-25-branches-the-lexicon-callee-summaries-and-the-branch-label)
+in process over each function's file at `--ref`, with no Jev call. A lowered body is the function's
 branches rendered as the embedding stage renders them: one paragraph per branch, `condition ⇒
-outcome`, with neutral names for its parameters and locals and no source. A side the graph has no
-node for, or that stage 2 leaves `unknown` or writes no branch for, is sent as its source. A row Jev
-answered with a lowered body carries a `"lowered"` hash of the bodies sent, and lowered and raw sends
-never share cached answers.
+outcome`, with neutral names for its parameters and locals and no source. A function the graph has
+no node for, or that stage 2 leaves `unknown` or writes no branch for, is sent as its source. A row
+Jev answered with a lowered body carries a `"lowered"` hash of the bodies sent, and lowered and raw
+sends never share cached answers.
 
 | Flag | Default | |
 |---|---|---|
-| `--plan` | off | print pairs, functions and estimated tokens, then exit without calling Jev |
-| `--max-partners <n>` | `10` | most partners any one function is judged against; the rest are skipped and listed |
+| `--pairwise` | off | one three-way question per pair instead of one anchor question per anchor |
+| `--plan` | off | print pairs, anchors, functions and estimated tokens for the mode, then exit without calling Jev |
+| `--max-partners <n>` | `10` | most candidate partners any one anchor is judged against; the rest are skipped and listed |
 | `--graph <graph.json>` | none | send stage-2 lowered bodies instead of source; one target only |
 | `--redact` | off | no file paths in what Jev sees |
 | `--ref <ref>` | `HEAD` | git tree the collapse report was taken from |
@@ -398,8 +429,8 @@ or for a whole-tree run capped with `--max-partners` and priced with `--plan` fi
 | Verdict | Means | Action |
 |---|---|---|
 | `same_decision` | Both encode the same business rule. | collapse into one function |
-| `look_alike` | Similar shape, different decision. | keep apart |
-| `shared_helper` | Plumbing with no rule. | extract a shared helper |
+| `look_alike` | Similar shape, different decision. In anchor mode, any candidate Jev did not pick. | keep apart |
+| `shared_helper` | Plumbing with no rule. `--pairwise` only. | extract a shared helper |
 
 ### `structure-sweep move plan --scope <folder> --feature <key>...`
 

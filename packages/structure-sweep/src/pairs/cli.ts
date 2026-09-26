@@ -11,11 +11,14 @@ import {
   requireApiKey,
 } from "../jev.js";
 import { readLoweringGraph } from "../lowering/lower.js";
+import type { AnchorJev } from "./anchor.js";
 import { DEFAULT_MAX_PARTNERS, maxPartners } from "./cap.js";
 import { type PairQuestions, pairQuestions } from "./questions.js";
 import { countVerdicts, renderMarkdown } from "./report.js";
 import {
   type Bodies,
+  type PairsJev,
+  type PairsMode,
   type PairsPlan,
   type PairTarget,
   planPairs,
@@ -24,14 +27,20 @@ import {
 
 export const PAIRS_USAGE = `structure-sweep pairs <folder>=<collapse.json>... [options]
 
-  Ask Jev what each code-graph collapse pair means: same_decision, look_alike or shared_helper.
+  Ask Jev what each code-graph collapse pair means. By default each pair is dealt to one anchor
+  function, and each anchor is asked once which of its candidate partners encodes the same
+  business rule, or none: the chosen one is same_decision, every other one look_alike.
   <collapse.json> is the output of \`code-graph <folder> --collapse --json\`.
   <folder> may be ., the whole tree: only its report holds a pair whose two functions
   sit in different top-level folders.
 
-  --plan                print the pairs, functions and estimated tokens a run would spend, then
-                        exit: no Jev call, no TYPESAFE_API_KEY, nothing written
-  --max-partners <n>    judge each function against at most its n best partners by graph
+  --pairwise            ask once per pair instead, the three-way same_decision, look_alike or
+                        shared_helper verdict plus business_rule, for gold-set evaluation
+                        (default: off; anchor and pairwise answers never share cached rows)
+  --plan                print the pairs, anchors, functions and estimated tokens a run in the
+                        selected mode would spend, then exit: no Jev call, no TYPESAFE_API_KEY,
+                        nothing written
+  --max-partners <n>    judge each anchor against at most its n best partners by graph
                         confidence; the rest are reported as skipped (default: ${DEFAULT_MAX_PARTNERS})
   --graph <graph.json>  the \`code-graph <folder> --graph --json\` output for the one target: send each
                         function's stage-2 lowered body instead of its source where stage 2 lowers it
@@ -64,6 +73,7 @@ export const parsePairsArgs = (argv: readonly string[]) =>
     args: [...argv],
     allowPositionals: true,
     options: {
+      pairwise: { type: "boolean", default: false },
       plan: { type: "boolean", default: false },
       "max-partners": { type: "string", default: String(DEFAULT_MAX_PARTNERS) },
       graph: { type: "string" },
@@ -76,9 +86,9 @@ export const parsePairsArgs = (argv: readonly string[]) =>
     },
   });
 
-/** The line a `--graph` run adds: how many sides went out lowered. */
+/** The line a `--graph` run adds: how many functions sent went out lowered. */
 const bodiesLine = ({ lowered, sides }: Bodies) =>
-  `${lowered} of ${sides} sides sent as their stage-2 lowered body, the rest as source`;
+  `${lowered} of ${sides} functions sent as their stage-2 lowered body, the rest as source`;
 
 /** `--plan`'s answer: one line per scope, then the total. */
 export function renderPlan(
@@ -89,26 +99,48 @@ export function renderPlan(
   return [
     ...plan.scopes.map(
       (s) =>
-        `${s.scope}: ${s.candidates} candidate pairs over ${s.functions} functions, ${s.skipped} skipped over --max-partners ${cap}, ${s.toAsk} to ask, ~${s.tokens} input tokens`,
+        `${s.scope}: ${s.candidates} candidate pairs over ${s.functions} functions, ${s.anchors} anchors, ${s.skipped} skipped over --max-partners ${cap}, ${s.toAsk} Jev calls to make, ~${s.tokens} input tokens`,
     ),
     ...(lowering ? [bodiesLine(plan.bodies)] : []),
-    `plan: ${plan.candidates} candidate pairs, ${plan.functions} functions, ${plan.skipped} skipped, ${plan.toAsk} to ask, ~${plan.tokens} input tokens (request JSON at 4 characters per token); no Jev call made`,
+    `plan (${plan.mode} mode): ${plan.candidates} candidate pairs, ${plan.anchors} anchors, ${plan.functions} functions, ${plan.skipped} skipped, ${plan.toAsk} Jev calls to make, ~${plan.tokens} input tokens (request JSON at 4 characters per token); no Jev call made`,
   ];
 }
 
-/** The Jev client a real run asks through; reading `TYPESAFE_API_KEY` happens here and nowhere earlier. */
-const httpPairsJev = (model: string): JevClient<PairQuestions> =>
-  httpJevClient({
-    questions: pairQuestions,
-    model,
-    post: fetchPost(requireApiKey()),
-  });
+/** The client factories a run builds its one client from, per mode. */
+export interface PairsJevs {
+  readonly anchor: (model: string) => AnchorJev;
+  readonly pairwise: (model: string) => JevClient<PairQuestions>;
+}
 
-/** `jevFor` builds the client for `--model`; `--plan` returns before it is called. */
+/** The Jev clients a real run asks through; reading `TYPESAFE_API_KEY` happens here and nowhere earlier. */
+const httpPairsJevs: PairsJevs = {
+  anchor: (model) => {
+    const post = fetchPost(requireApiKey());
+    return (questions, state) =>
+      httpJevClient({ questions, model, post })(state);
+  },
+  pairwise: (model) =>
+    httpJevClient({
+      questions: pairQuestions,
+      model,
+      post: fetchPost(requireApiKey()),
+    }),
+};
+
+const clientFor = (
+  mode: PairsMode,
+  jevs: PairsJevs,
+  model: string,
+): PairsJev =>
+  mode === "pairwise"
+    ? { mode, ask: jevs.pairwise(model) }
+    : { mode, ask: jevs.anchor(model) };
+
+/** `jevs` builds the client for the mode and `--model`; `--plan` returns before either is called. */
 export async function pairsCommand(
   argv: readonly string[],
   cwd: string,
-  jevFor: (model: string) => JevClient<PairQuestions> = httpPairsJev,
+  jevs: PairsJevs = httpPairsJevs,
 ): Promise<void> {
   const { values, positionals } = parsePairsArgs(argv);
   if (positionals.length === 0)
@@ -120,6 +152,7 @@ export async function pairsCommand(
       `--graph names one code-graph run's functions, so it takes exactly one <folder>=<collapse.json>, not ${targets.length}`,
     );
   const cap = maxPartners(Number(values["max-partners"]));
+  const mode: PairsMode = values.pairwise ? "pairwise" : "anchor";
   const graph =
     values.graph === undefined
       ? undefined
@@ -138,13 +171,13 @@ export async function pairsCommand(
   };
 
   if (values.plan) {
-    const plan = planPairs({ ...selection, model: values.model });
+    const plan = planPairs({ ...selection, mode, model: values.model });
     for (const line of renderPlan(plan, cap, graph !== undefined))
       console.log(line);
     return;
   }
 
-  const jev = jevFor(values.model);
+  const jev = clientFor(mode, jevs, values.model);
   const reportPath = underRoot(root, values.report);
   const { rows, spent, skipped, bodies } = await runPairs({
     ...selection,

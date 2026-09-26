@@ -1,13 +1,39 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { JevRequest } from "@demlik/tea/jev";
+import type { JevRequest, JevUsage } from "@demlik/tea/jev";
 import { type JevClient, pool } from "../jev.js";
 import type { LoweringGraph } from "../lowering/lower.js";
-import { capPartners, DEFAULT_MAX_PARTNERS, functionKey } from "./cap.js";
+import {
+  type AnchorJev,
+  anchorAnswers,
+  anchorQuestions,
+  anchorRef,
+  isAnchorAnswers,
+} from "./anchor.js";
+import {
+  anchorMenus,
+  DEFAULT_MAX_PARTNERS,
+  functionKey,
+  type Menu,
+  partnerOf,
+} from "./cap.js";
 import { loadPairs, type Pair, type PairFunction } from "./collapse.js";
 import { type PairQuestions, pairQuestions } from "./questions.js";
 import type { JudgedFunction, PairRow, SkippedPair } from "./report.js";
+
+/**
+ * `anchor` asks one question per anchor function over its capped partners plus `none`; `pairwise`
+ * asks the three-way verdict once per pair, for gold-set evaluation.
+ */
+export type PairsMode = "anchor" | "pairwise";
+
+export const DEFAULT_PAIRS_MODE: PairsMode = "anchor";
+
+/** The client a run asks through, which is also what picks its mode. */
+export type PairsJev =
+  | { readonly mode: "anchor"; readonly ask: AnchorJev }
+  | { readonly mode: "pairwise"; readonly ask: JevClient<PairQuestions> };
 
 export interface PairTarget {
   /** The folder code-graph ran on, repo-relative; the collapse report's paths are relative to it. */
@@ -16,7 +42,7 @@ export interface PairTarget {
   readonly collapsePath: string;
 }
 
-/** What decides which pairs are asked and what each is shown: every option but the Jev client. */
+/** What decides which pairs are asked and what each is shown: every option but the mode and client. */
 export interface PairsSelection {
   readonly root: string;
   readonly ref: string;
@@ -24,10 +50,10 @@ export interface PairsSelection {
   readonly outPath: string;
   /** Show Jev each function's name and source only, never its file path. */
   readonly redact?: boolean;
-  /** The most partners any one function is judged against (default `DEFAULT_MAX_PARTNERS`). */
+  /** The most partners any one anchor is judged against (default `DEFAULT_MAX_PARTNERS`). */
   readonly maxPartners?: number;
   /**
-   * The code-graph `--graph` nodes for the targets' scope. With them, each side is sent as its
+   * The code-graph `--graph` nodes for the targets' scope. With them, each function is sent as its
    * stage-2 lowered body where stage 2 lowers the whole function, and as its source otherwise.
    */
   readonly graph?: LoweringGraph;
@@ -35,7 +61,7 @@ export interface PairsSelection {
 }
 
 export interface PairsOptions extends PairsSelection {
-  readonly jev: JevClient<PairQuestions>;
+  readonly jev: PairsJev;
   readonly concurrency?: number;
 }
 
@@ -44,7 +70,7 @@ export interface Spent {
   readonly output: number;
 }
 
-/** How many sides of the asked-about pairs went out as a lowered body, of all sides. */
+/** How many functions sent to Jev went out as a lowered body, of all functions sent. */
 export interface Bodies {
   readonly lowered: number;
   readonly sides: number;
@@ -68,7 +94,7 @@ const located = ({
   lines,
 });
 
-/** One side of a pair as Jev sees it: redacted, the path is gone and only the code is left to judge. */
+/** One function as Jev sees it: redacted, the path is gone and only the code is left to judge. */
 const shown = (fn: PairFunction, redact: boolean) => {
   const body =
     fn.lowered === undefined ? { source: fn.source } : { lowered: fn.lowered };
@@ -77,31 +103,65 @@ const shown = (fn: PairFunction, redact: boolean) => {
     : { path: fn.path, function: fn.function, ...body };
 };
 
-const stateOf = (pair: Pair, redact: boolean) => ({
+const pairState = (pair: Pair, redact: boolean) => ({
   a: shown(pair.a, redact),
   b: shown(pair.b, redact),
   signals: pair.signals,
 });
 
+/** An anchor's question state: the anchor sent once, then each candidate partner under its ref. */
+const anchorState = (menu: Menu, redact: boolean) => ({
+  anchor: shown(menu.anchor, redact),
+  candidates: menu.candidates.map((candidate, i) => ({
+    ref: anchorRef(i),
+    ...shown(partnerOf(candidate), redact),
+    signals: candidate.pair.signals,
+  })),
+});
+
+const hash = (value: unknown) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+
 /** A hash of the lowered bodies a pair sends; `undefined` when both sides go out as source. */
 function loweredHash(pair: Pair): string | undefined {
   if (pair.a.lowered === undefined && pair.b.lowered === undefined)
     return undefined;
-  return createHash("sha256")
-    .update(JSON.stringify([pair.a.lowered ?? null, pair.b.lowered ?? null]))
-    .digest("hex")
-    .slice(0, 16);
+  return hash([pair.a.lowered ?? null, pair.b.lowered ?? null]);
 }
 
 /**
- * A cached answer serves a pair only when both bodies, the redaction mode and the lowered bodies sent
- * all match, so a redacted run never reuses a plain answer, nor a lowered send a raw one, nor the
- * other way round. A plain raw row keeps its bare `id` key.
+ * How one row's answer was asked: the question (mode, and for an anchor the whole menu it was
+ * asked over), the redaction and the lowered bodies. Every field is part of the cache key.
  */
-const cacheKey = (id: string, redacted: boolean, lowered?: string) =>
-  [id, redacted ? "redacted" : "", lowered ? `lowered ${lowered}` : ""]
+type Send = {
+  readonly redacted: boolean;
+  readonly lowered: string | undefined;
+} & (
+  | { readonly mode: "pairwise" }
+  | { readonly mode: "anchor"; readonly menu: string }
+);
+
+/**
+ * A cached answer serves a pair only when it was asked the same way, so no answer crosses between
+ * modes, anchor menus, redacted and plain runs, or lowered and raw sends. A plain raw pairwise row
+ * keeps its bare `id` key.
+ */
+const cacheKey = (id: string, send: Send) =>
+  [
+    id,
+    send.mode === "anchor" ? `anchor ${send.menu}` : "",
+    send.redacted ? "redacted" : "",
+    send.lowered ? `lowered ${send.lowered}` : "",
+  ]
     .filter((part) => part !== "")
     .join(" ");
+
+const sendOf = (row: PairRow): Send => {
+  const base = { redacted: row.redacted === true, lowered: row.lowered };
+  return isAnchorAnswers(row.answers)
+    ? { ...base, mode: "anchor", menu: row.answers.partner.menu }
+    : { ...base, mode: "pairwise" };
+};
 
 interface Ledger {
   readonly cache: ReadonlyMap<string, PairRow>;
@@ -121,9 +181,7 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
       (x, y) => x.scope.localeCompare(y.scope) || x.id.localeCompare(y.id),
     );
   return {
-    cache: new Map(
-      previous.map((r) => [cacheKey(r.id, r.redacted === true, r.lowered), r]),
-    ),
+    cache: new Map(previous.map((r) => [cacheKey(r.id, sendOf(r)), r])),
     judged,
     rows,
     save: () => {
@@ -133,39 +191,156 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
   };
 }
 
-/** Pairs whose two bodies were judged before, sent the same way, keep their answer; only the rest are asked. */
-function pairsToAsk(
+/** A cached row moved onto the pair as this run read it: its scope, locations and signals. */
+const relocated = (hit: PairRow, scope: string, pair: Pair): PairRow => ({
+  ...hit,
+  scope,
+  a: located(pair.a),
+  b: located(pair.b),
+  signals: pair.signals,
+});
+
+// ── the questions a run asks ──────────────────────────────────────────────
+
+/**
+ * One Jev call a run would make, in either mode: the pairs it answers, the request it sends, and
+ * the rows those pairs get from its answer. `cached` holds those rows already on file when every
+ * pair has one, and then the call is not made.
+ */
+interface Question {
+  readonly pairs: readonly Pair[];
+  readonly request: (model: string) => JevRequest;
+  readonly cached: readonly PairRow[] | undefined;
+  readonly ask: (
+    jev: PairsJev,
+  ) => Promise<{ rows: PairRow[]; usage: JevUsage }>;
+}
+
+function rowOf(
+  scope: string,
+  pair: Pair,
+  send: Send,
+  { answers, model, usage }: Pick<PairRow, "answers" | "model" | "usage">,
+): PairRow {
+  return {
+    id: pair.id,
+    scope,
+    a: located(pair.a),
+    b: located(pair.b),
+    signals: pair.signals,
+    graphConfidence: pair.graphConfidence,
+    ...(send.redacted ? { redacted: true as const } : {}),
+    ...(send.lowered === undefined ? {} : { lowered: send.lowered }),
+    answers,
+    model,
+    usage,
+  };
+}
+
+function pairwiseQuestion(
   ledger: Ledger,
   scope: string,
-  pairs: readonly Pair[],
+  pair: Pair,
   redact: boolean,
-): Pair[] {
-  return pairs.filter((p) => {
-    const hit = ledger.cache.get(cacheKey(p.id, redact, loweredHash(p)));
-    if (hit === undefined) return true;
-    ledger.judged.set(p.id, {
-      ...hit,
-      scope,
-      a: located(p.a),
-      b: located(p.b),
-      signals: p.signals,
-    });
-    return false;
-  });
+): Question {
+  const send: Send = {
+    mode: "pairwise",
+    redacted: redact,
+    lowered: loweredHash(pair),
+  };
+  const state = pairState(pair, redact);
+  const hit = ledger.cache.get(cacheKey(pair.id, send));
+  return {
+    pairs: [pair],
+    request: (model) => ({ state, model, questions: pairQuestions }),
+    cached: hit === undefined ? undefined : [relocated(hit, scope, pair)],
+    ask: async (jev) => {
+      if (jev.mode !== "pairwise") throw new TypeError("not a pairwise client");
+      const ok = await jev.ask(state);
+      return {
+        rows: [rowOf(scope, pair, send, ok)],
+        usage: ok.usage,
+      };
+    },
+  };
 }
 
-/** One scope's collapse pairs, split by the partner cap into the ones to judge and the ones skipped. */
-interface ScopePairs {
+function anchorQuestion(
+  ledger: Ledger,
+  scope: string,
+  menu: Menu,
+  redact: boolean,
+): Question {
+  const state = anchorState(menu, redact);
+  const questions = anchorQuestions(menu.candidates.length);
+  const menuHash = hash(state);
+  const sent = menu.candidates.map((candidate, i) => ({
+    candidate,
+    ref: anchorRef(i),
+    send: {
+      mode: "anchor",
+      menu: menuHash,
+      redacted: redact,
+      lowered: loweredHash(candidate.pair),
+    } satisfies Send,
+  }));
+  const hits = sent.map(({ candidate, send }) => {
+    const hit = ledger.cache.get(cacheKey(candidate.pair.id, send));
+    if (hit === undefined || !isAnchorAnswers(hit.answers)) return undefined;
+    // The pair's sides can come back swapped; the anchor is whichever side this menu's anchor is.
+    return {
+      ...relocated(hit, scope, candidate.pair),
+      answers: {
+        ...hit.answers,
+        partner: { ...hit.answers.partner, anchor: candidate.anchor },
+      },
+    };
+  });
+  const cached = hits.every((row) => row !== undefined)
+    ? (hits as PairRow[])
+    : undefined;
+  return {
+    pairs: menu.candidates.map((c) => c.pair),
+    request: (model) => ({ state, model, questions }),
+    cached,
+    ask: async (jev) => {
+      if (jev.mode !== "anchor") throw new TypeError("not an anchor client");
+      const ok = await jev.ask(questions, state);
+      return {
+        rows: sent.map(({ candidate, ref, send }) =>
+          rowOf(scope, candidate.pair, send, {
+            answers: anchorAnswers(ok.answers, {
+              anchor: candidate.anchor,
+              ref,
+              menu: menuHash,
+            }),
+            model: ok.model,
+            usage: ok.usage,
+          }),
+        ),
+        usage: ok.usage,
+      };
+    },
+  };
+}
+
+/** One scope's collapse pairs, dealt to anchors under the partner cap, and the questions to ask. */
+interface ScopeQuestions {
   readonly scope: string;
   readonly candidates: readonly Pair[];
-  readonly kept: readonly Pair[];
+  readonly anchors: number;
   readonly skipped: readonly Pair[];
+  readonly questions: readonly Question[];
+  readonly bodies: Bodies;
 }
 
-function selectPairs(
+function questionsFor(
   options: PairsSelection,
+  mode: PairsMode,
+  ledger: Ledger,
   { scope, collapsePath }: PairTarget,
-): ScopePairs {
+): ScopeQuestions {
+  const redact = options.redact === true;
   const candidates = loadPairs(
     options.root,
     options.ref,
@@ -174,14 +349,36 @@ function selectPairs(
     options.log,
     options.graph,
   );
-  const { kept, skipped } = capPartners(
+  const { menus, skipped } = anchorMenus(
     candidates,
     options.maxPartners ?? DEFAULT_MAX_PARTNERS,
   );
-  return { scope, candidates, kept, skipped };
+  const sent: PairFunction[] =
+    mode === "anchor"
+      ? menus.flatMap((m) => [m.anchor, ...m.candidates.map(partnerOf)])
+      : menus.flatMap((m) => m.candidates.flatMap((c) => [c.pair.a, c.pair.b]));
+  // Pairwise asks the kept pairs in the order the collapse report lists them.
+  const kept = new Set(menus.flatMap((m) => m.candidates.map((c) => c.pair)));
+  const questions =
+    mode === "anchor"
+      ? menus.map((menu) => anchorQuestion(ledger, scope, menu, redact))
+      : candidates
+          .filter((pair) => kept.has(pair))
+          .map((pair) => pairwiseQuestion(ledger, scope, pair, redact));
+  return {
+    scope,
+    candidates,
+    anchors: menus.length,
+    skipped,
+    questions,
+    bodies: {
+      lowered: sent.filter((fn) => fn.lowered !== undefined).length,
+      sides: sent.length,
+    },
+  };
 }
 
-const skippedOf = ({ scope, skipped }: ScopePairs): SkippedPair[] =>
+const skippedOf = ({ scope, skipped }: ScopeQuestions): SkippedPair[] =>
   skipped.map((p) => ({
     scope,
     a: located(p.a),
@@ -189,48 +386,49 @@ const skippedOf = ({ scope, skipped }: ScopePairs): SkippedPair[] =>
     graphConfidence: p.graphConfidence,
   }));
 
-const bodiesOf = (pairs: readonly Pair[]): Bodies => ({
-  lowered: pairs
-    .flatMap((p) => [p.a, p.b])
-    .filter((fn) => fn.lowered !== undefined).length,
-  sides: pairs.length * 2,
+const addBodies = (x: Bodies, y: Bodies): Bodies => ({
+  lowered: x.lowered + y.lowered,
+  sides: x.sides + y.sides,
 });
+
+const pairCount = (questions: readonly Question[]) =>
+  questions.reduce((sum, q) => sum + q.pairs.length, 0);
 
 async function judgeScope(
   options: PairsOptions,
   ledger: Ledger,
-  scope: string,
-  pairs: readonly Pair[],
+  scoped: ScopeQuestions,
 ): Promise<Spent> {
-  const redact = options.redact === true;
-  const todo = pairsToAsk(ledger, scope, pairs, redact);
-  options.log?.(`${scope}: ${pairs.length} pairs, ${todo.length} to ask`);
+  const todo = scoped.questions.filter((q) => {
+    if (q.cached === undefined) return true;
+    for (const row of q.cached) ledger.judged.set(row.id, row);
+    return false;
+  });
+  options.log?.(
+    options.jev.mode === "pairwise"
+      ? `${scoped.scope}: ${pairCount(scoped.questions)} pairs, ${todo.length} to ask`
+      : `${scoped.scope}: ${pairCount(scoped.questions)} pairs on ${scoped.anchors} anchors, ${todo.length} anchors to ask`,
+  );
   let spent: Spent = { input: 0, output: 0 };
-  await pool(todo, options.concurrency ?? 6, async (pair) => {
+  await pool(todo, options.concurrency ?? 6, async (question) => {
     try {
-      const ok = await options.jev(stateOf(pair, redact));
-      const lowered = loweredHash(pair);
-      ledger.judged.set(pair.id, {
-        id: pair.id,
-        scope,
-        a: located(pair.a),
-        b: located(pair.b),
-        signals: pair.signals,
-        graphConfidence: pair.graphConfidence,
-        ...(redact ? { redacted: true as const } : {}),
-        ...(lowered === undefined ? {} : { lowered }),
-        answers: ok.answers,
-        model: ok.model,
-        usage: ok.usage,
-      });
+      const { rows, usage } = await question.ask(options.jev);
+      for (const row of rows) ledger.judged.set(row.id, row);
       spent = {
-        input: spent.input + ok.usage.input_tokens,
-        output: spent.output + ok.usage.output_tokens,
+        input: spent.input + usage.input_tokens,
+        output: spent.output + usage.output_tokens,
       };
       ledger.save();
     } catch (error) {
+      const [first] = question.pairs;
+      const what =
+        first === undefined
+          ? "a question"
+          : question.pairs.length === 1
+            ? `${functionKey(first.a)} × ${functionKey(first.b)}`
+            : `the anchor over ${question.pairs.length} pairs from ${functionKey(first.a)} × ${functionKey(first.b)}`;
       options.log?.(
-        `${pair.a.path}:${pair.a.function} × ${pair.b.path}:${pair.b.function} failed: ${error instanceof Error ? error.message : error}`,
+        `${what} failed: ${error instanceof Error ? error.message : error}`,
       );
     }
   });
@@ -238,32 +436,27 @@ async function judgeScope(
 }
 
 /**
- * Ask Jev what each code-graph collapse pair within the partner cap means, reusing any answer already
- * on file for the same two bodies sent the same way.
+ * Ask Jev about each code-graph collapse pair within the partner cap, in the client's mode, reusing
+ * any answer already on file for the same question sent the same way.
  */
 export async function runPairs(options: PairsOptions): Promise<PairsResult> {
   const rerun = new Set(options.targets.map((t) => t.scope));
   const ledger = openLedger(options.outPath, rerun);
   let spent: Spent = { input: 0, output: 0 };
+  let bodies: Bodies = { lowered: 0, sides: 0 };
   const skipped: SkippedPair[] = [];
-  const asked: Pair[] = [];
   for (const target of options.targets) {
-    const selected = selectPairs(options, target);
-    skipped.push(...skippedOf(selected));
-    asked.push(...selected.kept);
-    const run = await judgeScope(
-      options,
-      ledger,
-      selected.scope,
-      selected.kept,
-    );
+    const scoped = questionsFor(options, options.jev.mode, ledger, target);
+    skipped.push(...skippedOf(scoped));
+    bodies = addBodies(bodies, scoped.bodies);
+    const run = await judgeScope(options, ledger, scoped);
     spent = {
       input: spent.input + run.input,
       output: spent.output + run.output,
     };
   }
   ledger.save();
-  return { rows: ledger.rows(), spent, skipped, bodies: bodiesOf(asked) };
+  return { rows: ledger.rows(), spent, skipped, bodies };
 }
 
 // ── the dry run ───────────────────────────────────────────────────────────
@@ -272,25 +465,29 @@ export async function runPairs(options: PairsOptions): Promise<PairsResult> {
  * A request's estimated input tokens: its JSON at about four characters per token. No tokenizer is
  * bundled, so this is a deterministic stand-in, not the provider's count.
  */
-export const estimatedTokens = (request: JevRequest<PairQuestions>): number =>
+export const estimatedTokens = (request: JevRequest): number =>
   Math.ceil(JSON.stringify(request).length / 4);
 
 export interface ScopePlan {
   readonly scope: string;
   /** Collapse pairs whose two functions were read at `--ref`. */
   readonly candidates: number;
+  /** Functions the pairs were dealt to as anchors. */
+  readonly anchors: number;
   /** Distinct functions across those pairs. */
   readonly functions: number;
   readonly skipped: number;
-  /** Pairs within the cap that no cached answer serves. */
+  /** Jev calls no cached answer serves: one per pair in pairwise mode, one per anchor in anchor mode. */
   readonly toAsk: number;
-  /** `estimatedTokens` summed over the request each pair to ask would send. */
+  /** `estimatedTokens` summed over the request each call to make would send. */
   readonly tokens: number;
 }
 
 export interface PairsPlan {
+  readonly mode: PairsMode;
   readonly scopes: readonly ScopePlan[];
   readonly candidates: number;
+  readonly anchors: number;
   readonly functions: number;
   readonly skipped: number;
   readonly toAsk: number;
@@ -302,50 +499,51 @@ const functionsOf = (pairs: readonly Pair[]) =>
   new Set(pairs.flatMap((p) => [functionKey(p.a), functionKey(p.b)]));
 
 /**
- * What `runPairs` would ask, priced before any Jev call: the same pairs after the same cap, cache and
- * body choice, each estimated over the exact request it would send under `model`. Writes nothing.
+ * What `runPairs` would ask in `mode`, priced before any Jev call: the same questions after the
+ * same cap, cache and body choice, each estimated over the exact request it would send under
+ * `model`. Writes nothing.
  */
 export function planPairs(
-  options: PairsSelection & { readonly model: string },
+  options: PairsSelection & {
+    readonly mode: PairsMode;
+    readonly model: string;
+  },
 ): PairsPlan {
   const rerun = new Set(options.targets.map((t) => t.scope));
   const ledger = openLedger(options.outPath, rerun);
-  const redact = options.redact === true;
   const scopes: ScopePlan[] = [];
   const candidates: Pair[] = [];
-  const asked: Pair[] = [];
+  let bodies: Bodies = { lowered: 0, sides: 0 };
   for (const target of options.targets) {
-    const selected = selectPairs(options, target);
-    const todo = pairsToAsk(ledger, selected.scope, selected.kept, redact);
-    candidates.push(...selected.candidates);
-    asked.push(...selected.kept);
+    const scoped = questionsFor(options, options.mode, ledger, target);
+    const todo = scoped.questions.filter((q) => q.cached === undefined);
+    candidates.push(...scoped.candidates);
+    bodies = addBodies(bodies, scoped.bodies);
     scopes.push({
-      scope: selected.scope,
-      candidates: selected.candidates.length,
-      functions: functionsOf(selected.candidates).size,
-      skipped: selected.skipped.length,
+      scope: scoped.scope,
+      candidates: scoped.candidates.length,
+      anchors: scoped.anchors,
+      functions: functionsOf(scoped.candidates).size,
+      skipped: scoped.skipped.length,
       toAsk: todo.length,
       tokens: todo.reduce(
-        (sum, pair) =>
-          sum +
-          estimatedTokens({
-            state: stateOf(pair, redact),
-            model: options.model,
-            questions: pairQuestions,
-          }),
+        (sum, q) => sum + estimatedTokens(q.request(options.model)),
         0,
       ),
     });
   }
-  const total = (field: "candidates" | "skipped" | "toAsk" | "tokens") =>
-    scopes.reduce((sum, s) => sum + s[field], 0);
+  const total = (
+    field: "candidates" | "anchors" | "skipped" | "toAsk" | "tokens",
+  ) => scopes.reduce((sum, s) => sum + s[field], 0);
   return {
+    mode: options.mode,
     scopes,
     candidates: total("candidates"),
+    anchors: total("anchors"),
     functions: functionsOf(candidates).size,
     skipped: total("skipped"),
     toAsk: total("toAsk"),
     tokens: total("tokens"),
-    bodies: bodiesOf(asked),
+    bodies,
   };
 }

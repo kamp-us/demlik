@@ -1,6 +1,6 @@
 import type { Pair, PairFunction } from "./collapse.js";
 
-/** How many partners each function is judged against unless `--max-partners` names another count. */
+/** How many partners each anchor is judged against unless `--max-partners` names another count. */
 export const DEFAULT_MAX_PARTNERS = 10;
 
 /** A partner cap is a whole number of partners, at least one. */
@@ -12,13 +12,32 @@ export function maxPartners(n: number): number {
   return n;
 }
 
-/** The pairs a cap keeps, in the order they came in, and every pair it skipped. Together they are all of them. */
-export interface CappedPairs {
-  readonly kept: readonly Pair[];
-  readonly skipped: readonly Pair[];
+export const functionKey = (fn: PairFunction) => `${fn.path}:${fn.function}`;
+
+/** One pair on an anchor's menu, and which of its sides is the anchor. */
+export interface Candidate {
+  readonly pair: Pair;
+  readonly anchor: "a" | "b";
 }
 
-export const functionKey = (fn: PairFunction) => `${fn.path}:${fn.function}`;
+export const anchorOf = ({ pair, anchor }: Candidate) => pair[anchor];
+export const partnerOf = ({ pair, anchor }: Candidate) =>
+  anchor === "a" ? pair.b : pair.a;
+
+/** One anchor function and the candidate pairs it is judged against, best first. */
+export interface Menu {
+  readonly anchor: PairFunction;
+  readonly candidates: readonly Candidate[];
+}
+
+/**
+ * Every pair, each either on exactly one anchor's menu or skipped. `skipped` keeps the order the
+ * pairs came in.
+ */
+export interface Menus {
+  readonly menus: readonly Menu[];
+  readonly skipped: readonly Pair[];
+}
 
 const byText = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
 
@@ -35,24 +54,41 @@ const byRank = (x: Pair, y: Pair) =>
   );
 
 /**
- * The top-`max` partners of every function. Each function ranks its pairs by `byRank`; a pair is
- * kept when it is within the top `max` of both its functions, so no function is judged against more
- * than `max` partners. Every other pair is skipped, never dropped.
+ * Deal the pairs out to anchors. Functions are taken in order of how many pairs they appear in,
+ * most first, a tie going to the lower `path:function`. Each takes every pair not already on an
+ * earlier anchor's menu, so no pair is asked twice. It keeps its top `max` by `byRank` and the rest
+ * are skipped, never dropped. A function left with no pair is no anchor.
  */
-export function capPartners(pairs: readonly Pair[], max: number): CappedPairs {
+export function anchorMenus(pairs: readonly Pair[], max: number): Menus {
   const cap = maxPartners(max);
-  const ranked = [...pairs].sort(byRank);
-  const taken = new Map<string, number>();
-  const within = new Set<Pair>();
+  const byFunction = new Map<string, Pair[]>();
+  for (const pair of pairs)
+    for (const key of new Set([functionKey(pair.a), functionKey(pair.b)]))
+      byFunction.set(key, [...(byFunction.get(key) ?? []), pair]);
+  const order = [...byFunction.keys()].sort(
+    (x, y) =>
+      (byFunction.get(y)?.length ?? 0) - (byFunction.get(x)?.length ?? 0) ||
+      byText(x, y),
+  );
+  const dealt = new Set<Pair>();
   const outside = new Set<Pair>();
-  for (const pair of ranked) {
-    const keys = [...new Set([functionKey(pair.a), functionKey(pair.b)])];
-    const fits = keys.every((key) => (taken.get(key) ?? 0) < cap);
-    for (const key of keys) taken.set(key, (taken.get(key) ?? 0) + 1);
-    (fits ? within : outside).add(pair);
+  const menus: Menu[] = [];
+  for (const key of order) {
+    const own = (byFunction.get(key) ?? [])
+      .filter((pair) => !dealt.has(pair))
+      .sort(byRank);
+    if (own.length === 0) continue;
+    for (const pair of own) dealt.add(pair);
+    for (const pair of own.slice(cap)) outside.add(pair);
+    const candidates = own.slice(0, cap).map(
+      (pair): Candidate => ({
+        pair,
+        anchor: functionKey(pair.a) === key ? "a" : "b",
+      }),
+    );
+    const [first] = candidates;
+    if (first !== undefined)
+      menus.push({ anchor: anchorOf(first), candidates });
   }
-  return {
-    kept: pairs.filter((p) => within.has(p)),
-    skipped: pairs.filter((p) => outside.has(p)),
-  };
+  return { menus, skipped: pairs.filter((pair) => outside.has(pair)) };
 }

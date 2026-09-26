@@ -1,5 +1,6 @@
 import type { JevUsage } from "@demlik/tea/jev";
 import { absurd } from "../absurd.js";
+import type { AnchorAnswers } from "./anchor.js";
 import type { GraphSignal, PairFunction } from "./collapse.js";
 import {
   PAIR_VERDICTS,
@@ -31,8 +32,10 @@ export interface PairRow {
    * source: a hash of the bodies sent. Part of the cache key, so lowered and raw sends never share an answer.
    */
   readonly lowered?: string;
-  readonly answers: PairAnswers;
+  /** The pairwise three-way verdict, or an anchor-mode row's reading of its anchor's one answer. */
+  readonly answers: PairAnswers | AnchorAnswers;
   readonly model: string;
+  /** The call that answered the row; on an anchor-mode row, the one call over its anchor's whole menu. */
   readonly usage: JevUsage;
 }
 
@@ -137,7 +140,7 @@ function skippedLines(skipped: readonly SkippedPair[]): string[] {
   return [
     "### skipped over the partner cap",
     "",
-    `${skipped.length} pairs not asked: each is outside the top \`--max-partners\` of one of its functions by graph confidence.`,
+    `${skipped.length} pairs not asked: each is outside the top \`--max-partners\` by graph confidence of the anchor it was dealt to.`,
     "",
     ...skipped.map(
       (p) =>
