@@ -32,11 +32,16 @@ const VERDICTS = ".structure-sweep/verdicts.json";
  * the machine's global config says.
  */
 function fixture(): string {
-  const root = repo({ "README.md": "hi\n" });
+  // The move plan reads its import graph through the scope's tsconfig.
+  const root = repo({
+    "README.md": "hi\n",
+    "svc/tsconfig.json": JSON.stringify({ include: ["src"] }),
+  });
   gitIn(root, "config", "core.quotePath", "true");
   write(root, {
     [CAY]: "export const cay = 1;\nexport const demlik = 2;\n",
-    [ASCII]: "export const run = 1;\n",
+    // One line, so consolidate's line counts hold; the import gives the move plan a graph pull.
+    [ASCII]: 'import { cay } from "./çay"; export const run = cay;\n',
   });
   commit(root, "sources (#1)");
   return root;
