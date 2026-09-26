@@ -290,7 +290,9 @@ export interface UntrackedFile {
 /**
  * Every file on disk the index does not track that one of `pathspecs` matches, ignored files
  * included, sorted by path. Pathspec magic (`:(glob)`, `:(exclude)`) applies, so a caller can
- * keep git out of a directory it would otherwise walk file by file.
+ * keep git out of a directory it would otherwise walk file by file. git does not descend into a
+ * nested repository or linked worktree: it lists that directory as `<dir>/` whatever the pathspec,
+ * so an entry with a trailing slash is a checkout of its own, never a file, and is left out.
  */
 export function untrackedFiles(
   cwd: string,
@@ -308,7 +310,7 @@ export function untrackedFiles(
       ...pathspecs,
     ])
       .split("\0")
-      .filter(Boolean);
+      .filter((path) => path !== "" && !path.endsWith("/"));
   const files: UntrackedFile[] = [
     ...list(false).map((path) => ({ kind: "untracked" as const, path })),
     ...list(true).map((path) => ({ kind: "ignored" as const, path })),

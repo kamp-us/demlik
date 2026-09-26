@@ -674,4 +674,27 @@ describe("sweep --redact gives an id only to a file the tree --ref names", () =>
       `./${rate?.path.replace(/\.ts$/, "")}`,
     );
   });
+
+  it("runs over an ignored linked worktree and an ignored nested repository", async () => {
+    const root = repo({
+      ".gitignore": "/.claude/worktrees/\n",
+      "package.json": '{ "name": "root" }',
+      "tsconfig.json": ALIAS(["src/*"]),
+      "src/billing/invoice.ts": [
+        'import { rate } from "@app/tax/rate";',
+        "export const invoice = rate;",
+      ].join("\n"),
+      "src/tax/rate.ts": "export const rate = 1;",
+    });
+    // `ls-files --others --ignored` lists each as `<dir>/` whatever the pathspec: a linked
+    // worktree checking out the root's own package.json, and a nested repository holding none.
+    gitIn(root, "worktree", "add", "-q", ".claude/worktrees/agent", "HEAD");
+    gitIn(root, "init", "-q", ".claude/worktrees/nested");
+    const { run, jev } = sweep(root);
+    await run;
+    const rate = jev.asked.map(fileOf).find((f) => f.exports.includes("rate"));
+    expect(importOf(jev, "invoice")).toBe(
+      `./${rate?.path.replace(/\.ts$/, "")}`,
+    );
+  });
 });

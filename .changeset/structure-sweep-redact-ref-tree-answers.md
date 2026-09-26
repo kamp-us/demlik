@@ -14,8 +14,11 @@
 - **Off-ref configuration refuses.** A tsconfig-chain member or a
   `package.json` outside `node_modules` that is on disk but not at `--ref`,
   ignored or untracked, stops the run and is named as `ignored <path>` or
-  `untracked <path>`.
+  `untracked <path>`. A tsconfig-chain member extended from outside the
+  repository stops it too, named as `outside <path>`.
 - **An untracked source file no longer refuses.** Any other untracked file
-  cannot move an answer onto a file at `--ref`, so the run goes ahead. Tracked
+  cannot move an answer onto a file at `--ref`, so the run goes ahead. Neither
+  does a nested repository or linked worktree under the root, such as an
+  ignored agent checkout: nothing inside one is a file at `--ref`. Tracked
   additions, deletions, retypes, retargeted symlinks and edits to a
   `package.json` or tsconfig-chain member still refuse, as before.
