@@ -3,6 +3,7 @@ import { dirname, posix } from "node:path";
 import type { JevUsage } from "@demlik/tea/jev";
 import { trackedPaths } from "../git.js";
 import { type JevClient, pool } from "../jev.js";
+import { specifierResolver } from "../module-syntax.js";
 import type { Vocabulary } from "../vocabulary.js";
 import {
   type FileEvidence,
@@ -15,14 +16,23 @@ import type { GraphFacts } from "./graph.js";
 import type { SweepAnswers, SweepQuestions } from "./questions.js";
 
 /**
- * One judged file. `hash`, `vocabulary` and `redacted` together are the cache key: all must match
- * to skip. `path` is always the real repo path, whatever Jev was shown.
+ * Which reader built the evidence a verdict was judged on. Bump it whenever the evidence a file
+ * gives changes shape, so no verdict judged on the old evidence is served again: 1 was the regex
+ * reader, 2 is oxc-parser.
+ */
+export const EVIDENCE_EXTRACTOR = 2;
+
+/**
+ * One judged file. `hash`, `vocabulary`, `extractor` and `redacted` together are the cache key:
+ * all must match to skip. `path` is always the real repo path, whatever Jev was shown.
  */
 export interface SweepRow {
   readonly path: string;
   readonly scope: string;
   readonly hash: string;
   readonly vocabulary: string;
+  /** `EVIDENCE_EXTRACTOR` when the row was judged; absent on a row written before it existed (1). */
+  readonly extractor?: number;
   /** Present only on a row Jev answered from redacted evidence; a default row has no such field. */
   readonly redacted?: true;
   readonly answers: SweepAnswers;
@@ -101,6 +111,7 @@ const isCached = (
   row !== undefined &&
   row.hash === file.hash &&
   row.vocabulary === options.vocabulary.fingerprint &&
+  (row.extractor ?? 1) === EVIDENCE_EXTRACTOR &&
   (row.redacted === true) === (options.redact === true);
 
 async function judgeScope(
@@ -133,6 +144,7 @@ async function judgeScope(
         scope,
         hash: file.hash,
         vocabulary: options.vocabulary.fingerprint,
+        extractor: EVIDENCE_EXTRACTOR,
         ...(options.redact === true ? { redacted: true as const } : {}),
         answers: ok.answers,
         model: ok.model,
@@ -215,9 +227,16 @@ export async function runSweep(options: SweepOptions): Promise<SweepResult> {
   const scopes: SweepScopeResult[] = [];
   for (const { scope, listed } of batches) {
     const sources = listSources(options.root, options.ref, scope);
-    const evidence = gatherEvidence(sources, options.graph, {
-      redact: options.redact,
-    });
+    const evidence = gatherEvidence(
+      sources,
+      options.graph,
+      options.redact === true
+        ? {
+            redact: true,
+            resolve: specifierResolver(options.root, scope),
+          }
+        : {},
+    );
     const judged =
       listed === undefined
         ? sources

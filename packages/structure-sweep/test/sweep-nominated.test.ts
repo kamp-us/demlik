@@ -110,13 +110,15 @@ describe("a default run (no --nominated)", () => {
     const { jev, verdictsPath, log } = await sweep(root, {
       scopes: ["svc/src/billing", "svc/src/lib"],
     });
-    // Digests recorded by running this test against the code before --nominated existed.
+    // Digests recorded by running this test against the code before --nominated existed. The
+    // verdicts digest was re-recorded once when rows gained `"extractor": 2` (#441); with those
+    // lines stripped the bytes hash to the original 55ee277b….
     expect(jev.asked).toHaveLength(5);
     expect(sha(JSON.stringify(jev.asked))).toMatchInlineSnapshot(
       `"c6fed2b2a04db60661860acf42fe02a4c31e0e1e4ad5640ce755ac7e64979cc4"`,
     );
     expect(sha(readFileSync(verdictsPath, "utf8"))).toMatchInlineSnapshot(
-      `"55ee277b846c73bd19df94312858846390da4884cd72915c887ff7e2729f6b4f"`,
+      `"99b05c6f0a0397aa9401390b45c8d947013ab1365fc6c15e7339c51771b5f4c6"`,
     );
     expect(log).toMatchInlineSnapshot(`
       [

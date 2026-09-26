@@ -1,4 +1,5 @@
 import { dirname, extname, join, normalize } from "node:path";
+import { readModule, staticDependencies } from "../module-syntax.js";
 import type { SourceFile } from "../sweep/evidence.js";
 
 /** How many terms the whole-scope term list keeps, most widespread first. */
@@ -42,21 +43,6 @@ export interface ContentSignals {
     readonly listed: readonly ImportClusterSignal[];
   };
 }
-
-/** A declaration's exported name, in whatever script it is written: an ECMAScript identifier. */
-const EXPORT =
-  /^export\s+(?:default\s+)?(?:async\s+)?(?:function\*?|const|let|class|type|interface|enum)\s+([\p{ID_Start}$_][\p{ID_Continue}$‌‍]*)/gmu;
-
-/**
- * Where one module names another: an `import … from`, or a re-export (`export * from`,
- * `export * as ns from`, `export { a } from`, `export type { T } from`), which ties a barrel to the
- * files behind it exactly as an import does.
- */
-const SPECIFIER =
-  /^\s*(?:import[\s\S]*?|export\s+(?:type\s+)?(?:\*(?:\s+as\s+[\p{ID_Start}$_][\p{ID_Continue}$‌‍]*)?|\{[^}]*\})\s*)from\s+["']([^"']+)["'];?\s*$/gmu;
-
-const captures = (text: string, pattern: RegExp): string[] =>
-  [...text.matchAll(pattern)].map((m) => m[1] ?? "").filter(Boolean);
 
 /** Code-unit order: the same on every machine and locale, unlike `localeCompare`. */
 export const byCodeUnit = (a: string, b: string) =>
@@ -168,8 +154,10 @@ export function contentSignals(
   const terms = new Map<string, Set<string>>();
   const edges = new Map<string, string[]>();
   for (const { path, text } of files) {
-    terms.set(path, new Set(captures(text, EXPORT).flatMap(identifierWords)));
-    const targets = captures(text, SPECIFIER).flatMap((spec) => {
+    const syntax = readModule(path, text);
+    terms.set(path, new Set(syntax.exports.flatMap(identifierWords)));
+    // A re-export ties a barrel to the files behind it exactly as an import does.
+    const targets = staticDependencies(syntax).flatMap((spec) => {
       if (!spec.startsWith(".")) return [];
       const target = byKey.get(moduleKey(join(dirname(path), spec)));
       return target === undefined || target === path ? [] : [target];
