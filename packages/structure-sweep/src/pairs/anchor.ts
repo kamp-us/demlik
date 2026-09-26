@@ -58,31 +58,50 @@ export type AnchorJev = (
 ) => Promise<JevOk<AnchorQuestions>>;
 
 /**
+ * The verdict of a row Jev's answer does not cover: the candidate's ref has no probability in it.
+ * It carries no confidence, and the ledger never serves it as an answer, so the next run asks the
+ * anchor's menu again.
+ */
+export const UNANSWERED = "unanswered";
+
+/** Where a row sits in its anchor's menu, and what Jev picked for the anchor. */
+interface AnchorPlace {
+  /** Which side of the row is the anchor. */
+  readonly anchor: "a" | "b";
+  /** This candidate's ref in the anchor's menu. */
+  readonly ref: string;
+  /** What Jev picked for the anchor: one candidate's ref, or `none`. */
+  readonly chosen: string;
+  /** A hash of the whole state the anchor was asked about. Part of the cache key. */
+  readonly menu: string;
+}
+
+/**
  * What anchor mode records on one candidate's row. Only the candidate Jev picked is
  * `same_decision`, at the probability Jev gave its ref; every other candidate, `none` included, is
- * `look_alike` at one minus its ref's probability. Anchor mode never records `shared_helper`: its
- * `none` does not separate plumbing from a look-alike, so a shared helper is found in pairwise mode
- * only. `business_rule` is the anchor's own, the same on every row of its menu.
+ * `look_alike` at one minus its ref's probability. A candidate whose ref Jev gave no probability,
+ * picked or not, is `unanswered` and records no probability. Anchor mode never records
+ * `shared_helper`: its `none` does not separate plumbing from a look-alike, so a shared helper is
+ * found in pairwise mode only. `business_rule` is the anchor's own, the same on every row of its
+ * menu.
  */
-export interface AnchorAnswers {
-  readonly verdict: {
-    readonly choice: "same_decision" | "look_alike";
-    readonly confidence: number;
-  };
-  readonly business_rule: JevNoulAnswer;
-  readonly partner: {
-    /** Which side of the row is the anchor. */
-    readonly anchor: "a" | "b";
-    /** This candidate's ref in the anchor's menu. */
-    readonly ref: string;
-    /** The probability Jev gave this candidate's ref. */
-    readonly probability: number;
-    /** What Jev picked for the anchor: one candidate's ref, or `none`. */
-    readonly chosen: string;
-    /** A hash of the whole state the anchor was asked about. Part of the cache key. */
-    readonly menu: string;
-  };
-}
+export type AnchorAnswers =
+  | {
+      readonly verdict: {
+        readonly choice: "same_decision" | "look_alike";
+        readonly confidence: number;
+      };
+      readonly business_rule: JevNoulAnswer;
+      readonly partner: AnchorPlace & {
+        /** The probability Jev gave this candidate's ref. */
+        readonly probability: number;
+      };
+    }
+  | {
+      readonly verdict: { readonly choice: typeof UNANSWERED };
+      readonly business_rule: JevNoulAnswer;
+      readonly partner: AnchorPlace;
+    };
 
 export function anchorAnswers(
   answers: JevOk<AnchorQuestions>["answers"],
@@ -93,14 +112,17 @@ export function anchorAnswers(
   },
 ): AnchorAnswers {
   const { partner, business_rule } = answers;
-  const probability = partner.probabilities[candidate.ref] ?? 0;
-  const picked = partner.choice === candidate.ref;
+  const place = { ...candidate, chosen: partner.choice };
+  const probability = partner.probabilities[candidate.ref];
+  if (probability === undefined)
+    return { verdict: { choice: UNANSWERED }, business_rule, partner: place };
   return {
-    verdict: picked
-      ? { choice: "same_decision", confidence: probability }
-      : { choice: "look_alike", confidence: 1 - probability },
+    verdict:
+      partner.choice === candidate.ref
+        ? { choice: "same_decision", confidence: probability }
+        : { choice: "look_alike", confidence: 1 - probability },
     business_rule,
-    partner: { ...candidate, probability, chosen: partner.choice },
+    partner: { ...place, probability },
   };
 }
 

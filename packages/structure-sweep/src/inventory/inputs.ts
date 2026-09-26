@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
+import { UNANSWERED } from "../pairs/anchor.js";
 import { PAIR_VERDICTS, type PairVerdict } from "../pairs/questions.js";
 import type { InputName } from "./levers.js";
 
@@ -92,10 +93,13 @@ export const PairInput = z.object({
   a: PairSide,
   b: PairSide,
   answers: z.object({
-    verdict: z.object({
-      choice: z.enum(PAIR_VERDICTS as [PairVerdict, ...PairVerdict[]]),
-      confidence: z.number().min(0).max(1),
-    }),
+    verdict: z.union([
+      z.object({
+        choice: z.enum(PAIR_VERDICTS as [PairVerdict, ...PairVerdict[]]),
+        confidence: z.number().min(0).max(1),
+      }),
+      z.object({ choice: z.literal(UNANSWERED) }),
+    ]),
   }),
 });
 export type PairInput = z.infer<typeof PairInput>;

@@ -390,6 +390,7 @@ export {
   type AnchorJev,
   type AnchorQuestions,
   anchorQuestions,
+  UNANSWERED,
 } from "./pairs/anchor.js";
 export { DEFAULT_MAX_PARTNERS } from "./pairs/cap.js";
 export {
@@ -402,7 +403,9 @@ export {
 export {
   actionFor,
   countVerdicts,
+  isAnswered,
   type PairRow,
+  type RowVerdict,
   renderMarkdown,
   type SkippedPair,
 } from "./pairs/report.js";

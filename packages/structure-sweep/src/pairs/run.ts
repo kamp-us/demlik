@@ -20,7 +20,12 @@ import {
 } from "./cap.js";
 import { loadPairs, type Pair, type PairFunction } from "./collapse.js";
 import { type PairQuestions, pairQuestions } from "./questions.js";
-import type { JudgedFunction, PairRow, SkippedPair } from "./report.js";
+import {
+  isAnswered,
+  type JudgedFunction,
+  type PairRow,
+  type SkippedPair,
+} from "./report.js";
 
 /**
  * `anchor` asks one question per anchor function over its capped partners plus `none`; `pairwise`
@@ -164,6 +169,7 @@ const sendOf = (row: PairRow): Send => {
 };
 
 interface Ledger {
+  /** Every answered row on file, under its cache key. An unanswered row is asked again. */
   readonly cache: ReadonlyMap<string, PairRow>;
   readonly judged: Map<string, PairRow>;
   rows(): PairRow[];
@@ -181,7 +187,9 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
       (x, y) => x.scope.localeCompare(y.scope) || x.id.localeCompare(y.id),
     );
   return {
-    cache: new Map(previous.map((r) => [cacheKey(r.id, sendOf(r)), r])),
+    cache: new Map(
+      previous.filter(isAnswered).map((r) => [cacheKey(r.id, sendOf(r)), r]),
+    ),
     judged,
     rows,
     save: () => {
