@@ -20,6 +20,14 @@ const expected = {
     "mergeProposals",
     "extractProposals",
     "renderConsolidation",
+    "runStage",
+    "memoryArtifactStore",
+    "evaluate",
+    "loadGoldSet",
+    "calibrate",
+    "gate",
+    "gateAll",
+    "gatePolicy",
   ],
 };
 

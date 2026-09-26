@@ -333,3 +333,75 @@ Every command except `propose` is also a function — `runSweep`, `runPairs`, `p
 its git reader, and `mergeProposals` / `extractProposals` / `renderConsolidation` for
 `consolidate` — and each Jev-calling one takes its `JevClient` as an argument, so a caller can
 hand it a stub.
+
+## Lowering: stage artifacts, the evaluation harness and the confidence gate
+
+The foundation the staged lowering pipeline builds against. No command uses it yet: each piece is a
+library function, and each Jev-calling one takes its client as an argument.
+
+**Stage artifacts.** A `Stage<V>` has a `name`, a `version` and a `run` that writes `Fact<V>`s. Every
+fact carries a `SourceSpan` (file plus 1-based inclusive lines), and its value is either `known`,
+with the basis it is known on (`derived` from source, or `promoted` by the gate), or `unknown`, with
+a reason. There is no arm for a guess, and `unknown` carries no answer. `runStage(store, stage,
+input)` keys the run on the stage name, its version, the hash of `input.content` and the `digest`
+of every input artifact, in order. An unchanged key is a `hit` answered from the store without
+running the stage; changing any part is `computed`. `memoryArtifactStore()` is the store.
+
+**Evaluation harness.** `evaluate({ question, gold, connect, thresholds, target })` asks every
+gold item under the question's own `instructions` and under each rewording, through the client
+`connect` builds for that wording. It reports:
+
+- `accuracy`: the share of all answers, under every wording, that match the gold label.
+- `flipRate`: the share of items whose label is not the same under every wording.
+- `ece`: the expected calibration error over all answers, in equal-width confidence bins (`bins`,
+  10 by default).
+- `calibration`: accuracy per non-empty confidence band, and the stage's floor derived from it
+  (below).
+- `coverage`: the share of items whose answer under the question's own wording clears that floor,
+  so the gate would promote them on the first ask. `abstainRate` is the rest.
+- `verdict`: `shippable` only when ECE and flip rate are both strictly under their thresholds, else
+  `not-shippable` naming each metric that is not.
+
+`bins` must be a positive whole number and every confidence Jev returns must be in [0, 1]. Anything
+else is a `RangeError`, never a skipped answer, so a bad input cannot pull ECE down to 0 and read
+`shippable`. `expectedCalibrationError` refuses the same inputs. `evaluate` also refuses a gold set
+with no items or no rewording with a `GoldSetError`, before it asks Jev anything: no items would score
+ECE and flip rate 0 on no answers, and one wording alone can never flip. `GoldSet` types both arrays
+as non-empty, and `evaluate` checks again for a set built outside the type system.
+
+**The floor is derived, per stage.** `calibrate(scored, { target, bins })` bins scored answers by
+confidence and walks down from the top band. The floor is the lower edge of the lowest band such that
+it and every non-empty band above it are at least `target` accurate, with empty bands skipped. That
+is `{ _tag: "derived", floor, target, bands }`. When even the top band misses the target, the result
+is `{ _tag: "unreachable" }` and no answer from that stage can be promoted. `evaluate` returns this as
+`calibration`, and `calibrate` is the only way to build a `derived` one.
+
+**Gold-set format.** A gold set is a JSON file read by `loadGoldSet(file, labels)`:
+
+```json
+{
+  "stage": "branch-label",
+  "rewordings": ["Does this branch decide who may do something, or only move data?"],
+  "items": [
+    {
+      "id": "a",
+      "span": { "file": "src/access/can-edit.ts", "startLine": 12, "endLine": 18 },
+      "state": { "source": "if (user.role !== \"owner\") return deny();" },
+      "gold": "gate"
+    }
+  ]
+}
+```
+
+`rewordings` holds at least one alternative to the question's `instructions`. Each item's `state`
+is what Jev is shown, and `gold` must be one of the question's criteria keys. An unknown label or a
+repeated `id` is refused with every problem listed.
+
+**Confidence gate.** `gatePolicy({ calibration, maxRounds })` sets one stage's rule. It takes the
+stage's `derived` calibration and reads the floor off it: there is no default floor and no way to pass
+a bare number. `gate(item, { policy, ask, enrich })` promotes an answer at or above the floor. A below-floor item is passed to `enrich`
+for more context and asked again, for at most `maxRounds` rounds, and then it abstains. `decide`
+is the pure step, and its outcome is `promoted`, `retrying` (with the round about to run) or
+`abstained`. `gateAll(stage, items, options)` returns the facts for the next stage and a
+`HumanQueue` holding each abstained item's span, final answer and round count. An abstained item's
+fact is `unknown`, so no downstream stage reads it as an answer.
