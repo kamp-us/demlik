@@ -158,6 +158,7 @@ export {
   sweepQuestions,
 } from "./sweep/questions.js";
 export {
+  type Nominate,
   runSweep,
   type SweepOptions,
   type SweepResult,

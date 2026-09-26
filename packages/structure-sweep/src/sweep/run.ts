@@ -38,6 +38,9 @@ export type SweepSelection =
   | { readonly scopes: readonly string[]; readonly files?: never }
   | { readonly files: readonly string[]; readonly scopes?: never };
 
+/** Given a batch's folder, whether Jev is asked about the file at `path` in it. */
+export type Nominate = (scope: string) => (path: string) => boolean;
+
 export type SweepOptions = SweepSelection & {
   readonly root: string;
   readonly ref: string;
@@ -48,6 +51,8 @@ export type SweepOptions = SweepSelection & {
   readonly graph?: ReadonlyMap<string, GraphFacts>;
   /** Show Jev opaque ids instead of paths, relative specifiers and sibling names. */
   readonly redact?: boolean;
+  /** Ask only about the files this says yes to; absent, every uncached file is asked. */
+  readonly nominate?: Nominate;
   readonly concurrency?: number;
   readonly log?: (line: string) => void;
 };
@@ -58,6 +63,8 @@ export interface SweepScopeResult {
   readonly cached: number;
   readonly asked: number;
   readonly failed: readonly string[];
+  /** On a nominated run only: files neither cached nor nominated, so never asked. */
+  readonly skipped?: number;
 }
 
 export interface SweepResult {
@@ -102,11 +109,19 @@ async function judgeScope(
   scope: string,
   files: readonly SourceFile[],
   evidence: ReadonlyMap<string, FileEvidence>,
+  nominated: ((path: string) => boolean) | undefined,
 ): Promise<SweepScopeResult> {
-  const todo = files.filter(
+  const uncached = files.filter(
     (f) => !isCached(verdicts.done.get(f.path), f, options),
   );
-  options.log?.(`${scope}: ${files.length} files, ${todo.length} to ask`);
+  const todo =
+    nominated === undefined
+      ? uncached
+      : uncached.filter((f) => nominated(f.path));
+  const skipped = uncached.length - todo.length;
+  options.log?.(
+    `${scope}: ${files.length} files, ${todo.length} to ask${nominated === undefined ? "" : `, ${skipped} skipped (not nominated)`}`,
+  );
   const failed: string[] = [];
   await pool(todo, options.concurrency ?? 6, async (file) => {
     const state = evidence.get(file.path);
@@ -134,9 +149,10 @@ async function judgeScope(
   return {
     scope,
     files: files.length,
-    cached: files.length - todo.length,
+    cached: files.length - uncached.length,
     asked: todo.length - failed.length,
     failed,
+    ...(nominated === undefined ? {} : { skipped }),
   };
 }
 
@@ -206,7 +222,16 @@ export async function runSweep(options: SweepOptions): Promise<SweepResult> {
       listed === undefined
         ? sources
         : sources.filter((f) => listed.has(f.path));
-    scopes.push(await judgeScope(options, verdicts, scope, judged, evidence));
+    scopes.push(
+      await judgeScope(
+        options,
+        verdicts,
+        scope,
+        judged,
+        evidence,
+        options.nominate?.(scope),
+      ),
+    );
   }
   verdicts.save();
   return { scopes, rows: [...verdicts.done.values()] };
