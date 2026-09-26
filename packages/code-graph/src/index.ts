@@ -7,9 +7,10 @@ import { runCollapseGate } from "./collapse/gate.js";
 import { renderCollapse } from "./collapse/render.js";
 import { runCommentGate } from "./comments/gate.js";
 import { resolveCollapseSettings, resolveNodeKindRules, resolveThresholds } from "./config.js";
+import { renderData } from "./data/render.js";
 import { loadEnvKeyReport } from "./env-keys/query.js";
 import type { AnalysisOptions } from "./extract/analysis.js";
-import { assembleGraph, assembleGraphWithEdges } from "./extract/assemble.js";
+import { assembleGraph, assembleGraphWithEdges, type DataOptions } from "./extract/assemble.js";
 import {
   type EdgeScope,
   findRepoRoot,
@@ -171,6 +172,9 @@ defineProgram()
       process.stderr.write(`warning: --by ${opts.by} has no effect without --plan.\n`);
     }
 
+    const data: DataOptions | null =
+      opts.data === true ? { repoRoot: findRepoRoot(rootAbsolute) } : null;
+
     let graph: Graph;
     if (wantEdges) {
       const repoRoot = findRepoRoot(rootAbsolute);
@@ -193,9 +197,16 @@ defineProgram()
               repoRoot,
             }
           : null;
-      graph = assembleGraphWithEdges(loaded, thresholds, scope, loaded.tsConfigPath, analysis);
+      graph = assembleGraphWithEdges(
+        loaded,
+        thresholds,
+        scope,
+        loaded.tsConfigPath,
+        analysis,
+        data,
+      );
     } else {
-      graph = assembleGraph(loadCheapProject(rootAbsolute), thresholds);
+      graph = assembleGraph(loadCheapProject(rootAbsolute), thresholds, data);
     }
 
     if (opts.ci === true) {
@@ -271,6 +282,11 @@ defineProgram()
 
     if (opts.crossRuntime === true) {
       emit(`${renderCrossRuntime(graph, json, pretty)}\n`);
+      return;
+    }
+
+    if (opts.data === true) {
+      emit(`${renderData(graph, json, pretty)}\n`);
       return;
     }
 

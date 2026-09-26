@@ -2,6 +2,7 @@ exit 0
 {
   "clusters": null,
   "crossRuntime": null,
+  "data": null,
   "directories": [
     {
       "dir": "src/cg",
