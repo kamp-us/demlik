@@ -225,6 +225,30 @@ export {
   type Term,
 } from "./lowering/lower.js";
 export {
+  askOwner,
+  type LayerLookup,
+  type LayerRank,
+  OWNER_INSTRUCTIONS,
+  OWNER_REFS,
+  OWNER_STAGE,
+  Owner,
+  OwnerCandidate,
+  type OwnerJudgement,
+  OwnerJudgementSchema,
+  type OwnerOptions,
+  type OwnerQuestionState,
+  type OwnerQueue,
+  type OwnerQueueEntry,
+  OwnerRecord,
+  type OwnerRef,
+  ownerFacts,
+  ownerInput,
+  ownerQuestion,
+  ownerQueue,
+  ownerStage,
+} from "./lowering/owner.js";
+export { deriveRederived, REDERIVED } from "./lowering/rederived.js";
+export {
   type FunctionSummary,
   type Labeller,
   type LabelRecord,
