@@ -154,6 +154,12 @@ export class SyntaxFile {
     return this.lineOf(this.tsStart(node));
   }
 
+  // 1-based, in UTF-16 code units: the column an editor's `file:line:col` jump lands on.
+  startColumn(node: Node): number {
+    const start = this.tsStart(node);
+    return start - (this.lineStarts[this.lineOf(start) - 1] ?? 0) + 1;
+  }
+
   endLine(node: Node): number {
     return this.lineOf(node.end);
   }

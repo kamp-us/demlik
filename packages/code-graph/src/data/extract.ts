@@ -1,18 +1,23 @@
-import path from "node:path";
 import { ownerOf } from "../extract/cross-runtime.js";
 import type { DiscoveredFunction } from "../extract/functions.js";
-import { toRelative } from "../extract/project.js";
+import { type SourceUnit, toRelative } from "../extract/project.js";
 import {
   type BindingCatalog,
   type DataBindingDecl,
   loadBindingCatalog,
 } from "../extract/wrangler-config.js";
-import type { DataEdge, DataReport } from "../schema.js";
+import type { DataEdge, DataReport, DataSite, UnattributedDataSite } from "../schema.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import { accessOf } from "./access.js";
 
 type Bindings = ReadonlyMap<string, DataBindingDecl>;
-type Site = { decl: DataBindingDecl; method: string | null; sql: string | null; line: number };
+type Site = {
+  decl: DataBindingDecl;
+  method: string | null;
+  sql: string | null;
+  line: number;
+  column: number;
+};
 
 // `env`, `this.env`, `c.env`: the receiver a Workers binding is read off.
 function isEnvReceiver(node: SyntaxNode): boolean {
@@ -134,82 +139,109 @@ function siteAt(syntax: SyntaxFile, ref: SyntaxNode, decl: DataBindingDecl): Sit
     method: member === null ? null : memberName(member),
     sql: member === null ? null : firstArgumentText(syntax, member),
     line: syntax.startLine(ref),
+    column: syntax.startColumn(ref),
   };
 }
 
-// The sites inside one function, stopping at every nested function that owns its own.
-function sitesOf(fn: DiscoveredFunction, owned: ReadonlySet<SyntaxNode>, bindings: Bindings) {
-  const { syntax } = fn.unit;
-  const aliases: Aliases = new Map();
-  const sites: Site[] = [];
-  const visit = (node: SyntaxNode): void => {
+// A site and whoever holds it: the nearest discovered function around it, or null when only
+// anonymous callbacks stand between the site and the module's top level.
+type Held = { holder: DiscoveredFunction | null; site: Site };
+
+// One preorder walk of a file. Entering a discovered function hands every site below it to that
+// function, under a fresh alias scope; an anonymous callback stays with whoever holds it.
+function sitesOf(
+  unit: SourceUnit,
+  holders: ReadonlyMap<SyntaxNode, DiscoveredFunction>,
+  bindings: Bindings,
+): Held[] {
+  const { syntax } = unit;
+  const held: Held[] = [];
+  const enter = (node: SyntaxNode, holder: DiscoveredFunction | null, aliases: Aliases): void => {
+    const own = holders.get(node);
+    if (own !== undefined) {
+      const scope: Aliases = new Map();
+      for (const child of syntax.children(node)) enter(child, own, scope);
+      return;
+    }
     declareAliases(node, bindings, aliases);
     const decl = referencedBinding(syntax, node, bindings, aliases);
-    if (decl !== null) sites.push(siteAt(syntax, node, decl));
-    for (const child of syntax.children(node)) if (!owned.has(child)) visit(child);
+    if (decl !== null) held.push({ holder, site: siteAt(syntax, node, decl) });
+    for (const child of syntax.children(node)) enter(child, holder, aliases);
   };
-  for (const child of syntax.children(fn.node)) if (!owned.has(child)) visit(child);
-  return sites;
+  enter(syntax.program, null, new Map());
+  return held;
 }
 
-function compareEdges(a: DataEdge, b: DataEdge): number {
+function compareSites(a: DataSite, b: DataSite): number {
   return (
-    a.functionId.localeCompare(b.functionId) ||
     a.line - b.line ||
+    a.column - b.column ||
     a.binding.localeCompare(b.binding) ||
     (a.method ?? "").localeCompare(b.method ?? "") ||
     a.access.localeCompare(b.access)
   );
 }
 
-function distinct(edges: readonly DataEdge[]): DataEdge[] {
-  const seen = new Map<string, DataEdge>();
-  for (const e of edges) seen.set(JSON.stringify([e.functionId, e.line, e.binding, e.method]), e);
-  return [...seen.values()].sort(compareEdges);
+// The column is in the key, so two calls on one line — a read beside a write in one
+// `batch([...])` — stay two rows.
+function distinct<T extends DataSite>(rows: readonly T[], holder: (row: T) => string): T[] {
+  const seen = new Map<string, T>();
+  for (const r of rows) {
+    seen.set(JSON.stringify([holder(r), r.line, r.column, r.binding, r.method]), r);
+  }
+  return [...seen.values()].sort(
+    (a, b) => holder(a).localeCompare(holder(b)) || compareSites(a, b),
+  );
 }
 
+export type DataScan = Pick<DataReport, "edges" | "unattributed">;
+
 export type DataScanInput = {
+  units: readonly SourceUnit[];
   functions: readonly DiscoveredFunction[];
   catalog: BindingCatalog;
-  rootAbsolute: string;
   repoRoot: string;
 };
 
-export function scanDataEdges(input: DataScanInput): DataEdge[] {
-  const { functions, catalog, rootAbsolute, repoRoot } = input;
-  const owned = new Set(functions.map((f) => f.node));
+export function scanDataSites(input: DataScanInput): DataScan {
+  const { units, functions, catalog, repoRoot } = input;
+  const holders = new Map(functions.map((f) => [f.node, f]));
   const edges: DataEdge[] = [];
-  for (const fn of functions) {
-    const owner = ownerOf(
-      catalog.manifests,
-      toRelative(repoRoot, path.join(rootAbsolute, fn.file)),
-    );
+  const unattributed: UnattributedDataSite[] = [];
+  for (const unit of units) {
+    const owner = ownerOf(catalog.manifests, toRelative(repoRoot, unit.absolutePath));
     if (owner === null || owner.dataBindings.length === 0) continue;
     const bindings: Bindings = new Map(owner.dataBindings.map((d) => [d.binding, d]));
-    for (const { decl, method, sql, line } of sitesOf(fn, owned, bindings)) {
-      edges.push({
-        functionId: fn.id,
+    for (const { holder, site } of sitesOf(unit, holders, bindings)) {
+      const { decl, method, sql, line, column } = site;
+      const row: DataSite = {
         line,
+        column,
         ownerService: owner.service,
         binding: decl.binding,
         bindingKind: decl.kind,
         method,
         access: accessOf(decl.kind, method, sql),
-      });
+      };
+      if (holder === null) unattributed.push({ file: unit.file, ...row });
+      else edges.push({ functionId: holder.id, ...row });
     }
   }
-  return distinct(edges);
+  return {
+    edges: distinct(edges, (e) => e.functionId),
+    unattributed: distinct(unattributed, (s) => s.file),
+  };
 }
 
 export function loadDataReport(
+  units: readonly SourceUnit[],
   functions: readonly DiscoveredFunction[],
-  rootAbsolute: string,
   repoRoot: string,
 ): DataReport {
   const catalog = loadBindingCatalog(repoRoot);
   return {
     configFiles: catalog.manifests.map((m) => m.configFile).sort((a, b) => a.localeCompare(b)),
     unparsedConfigs: catalog.unparsedConfigs,
-    edges: scanDataEdges({ functions, catalog, rootAbsolute, repoRoot }),
+    ...scanDataSites({ units, functions, catalog, repoRoot }),
   };
 }

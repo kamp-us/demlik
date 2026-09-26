@@ -154,16 +154,23 @@ which **storage** each function touches. Every call site on an env binding whose
 D1, Durable Object, KV, R2 or a queue producer becomes one edge:
 
 ```ts
-type DataEdge = {
-  functionId: string;            // the FunctionNode that holds the call site
+type DataSite = {
   line: number;
+  column: number;                // 1-based; two calls on one line are two sites
   ownerService: string;          // the worker whose wrangler config declares the binding
   binding: string;               // "DB"
   bindingKind: "d1" | "durable-object" | "kv" | "queue" | "r2";
   method: string | null;         // "prepare"; null when the binding is handed on whole
   access: "read" | "write" | "unknown";
 };
-type DataReport = { configFiles: string[]; unparsedConfigs: string[]; edges: DataEdge[] };
+type DataEdge = DataSite & { functionId: string };        // the FunctionNode that holds the site
+type UnattributedDataSite = DataSite & { file: string };  // no named function holds the site
+type DataReport = {
+  configFiles: string[];
+  unparsedConfigs: string[];
+  edges: DataEdge[];
+  unattributed: UnattributedDataSite[];
+};
 ```
 
 **Where it lives: a top-level table, `Graph.data`.** It is `null` unless `--data` ran, the same
@@ -181,7 +188,11 @@ configs point `DB` at it.
 
 **The call sites** are found on oxc's tree: `env.X`, `this.env.X` and `c.env.X`, plus one level
 of aliasing (`const db = env.DB`, `const { DB } = env`). A site inside an anonymous callback
-belongs to the named function around it; a nested named function owns its own sites.
+belongs to the named function around it; a nested named function owns its own sites. A site with
+no named function around it at all — a module-scope Hono handler,
+`app.get("/", (c) => c.env.DB.prepare(...))` — is not an edge, since there is no `FunctionNode`
+to hang it on: it goes to `unattributed`, with its file, line and column, so the report never
+reads complete when it is not.
 
 **`unknown` is an answer.** The access is decided from the method, and only where the method
 decides it:

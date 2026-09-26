@@ -216,7 +216,7 @@ function build(
     reachability: analysis?.reachability?.(functions, modules) ?? null,
     clusters: analysis?.clusters?.(functions, modules) ?? null,
     interfaceWidth: analysis?.interfaceWidth?.(functions, modules) ?? null,
-    data: data === null ? null : loadDataReport(fns, rootAbsolute, data.repoRoot),
+    data: data === null ? null : loadDataReport(sourceFiles, fns, data.repoRoot),
     functions,
     modules,
     directories,
