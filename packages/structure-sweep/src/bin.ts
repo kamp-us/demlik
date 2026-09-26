@@ -5,6 +5,7 @@ import { INVENTORY_USAGE, inventoryCommand } from "./inventory/cli.js";
 import { MOVE_USAGE, moveCommand } from "./move/cli.js";
 import { PAIRS_USAGE, pairsCommand } from "./pairs/cli.js";
 import { PROPOSE_USAGE, proposeCommand } from "./propose/cli.js";
+import { refineCommand } from "./propose/refine-cli.js";
 import { SCORE_USAGE, scoreCommand } from "./score/cli.js";
 import { SWEEP_USAGE, sweepCommand } from "./sweep/cli.js";
 
@@ -23,7 +24,9 @@ async function main(argv: readonly string[]): Promise<void> {
   const [command, ...rest] = argv;
   switch (command) {
     case "propose":
-      return proposeCommand(rest, process.cwd());
+      return rest[0] === "refine"
+        ? refineCommand(rest.slice(1), process.cwd())
+        : proposeCommand(rest, process.cwd());
     case "sweep":
       return sweepCommand(rest, process.cwd());
     case "pairs":

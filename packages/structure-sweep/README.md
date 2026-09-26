@@ -139,8 +139,8 @@ The loop, by hand or by an agent reading the prompt:
    `.structure-sweep/proposed.config.json`.
 3. **sweep** — `structure-sweep sweep <folder>... --config .structure-sweep/proposed.config.json`.
 4. **score** — `structure-sweep score`.
-5. **adjust** — merge or sharpen features with a low `confident` share, split features with low
-   precision, and go back to 3 until the score stops improving.
+5. **refine** — `structure-sweep propose refine`, below, turns the adjusting into a loop an agent
+   can run until the score plateaus.
 
 With no `--config`, the prompt hands over five built-in roles: `business_rule` (`rules/`),
 `api_surface` (`api/`), `flows` (`flows/`: code that orchestrates a multi-step user or system flow —
@@ -159,6 +159,78 @@ shared) — the ones in the example above. With `--config`, it takes that vocabu
 | `--out <file>` | `.structure-sweep/signals.json` | signals JSON |
 | `--prompt <file>` | `.structure-sweep/propose-prompt.md` | prompt |
 | `--force` | off | overwrite `--out` and `--prompt` |
+
+#### `structure-sweep propose refine`
+
+```sh
+structure-sweep propose refine --config .structure-sweep/proposed.config.json
+```
+
+One step of the refine loop over a drafted vocabulary. Like `propose`, it calls no model and no
+network and reads no API key: it diagnoses, and the editing is left to you or your coding agent.
+`sweep` is the only paid step in the loop, and `refine` never runs it: it writes the files to sweep
+and reads the sweep back.
+
+Each call:
+
+1. **scores** the assignment with the same scorer as `score`: the `--verdicts` rows, with every
+   `--sweep` row laid over the row for its path. A swept row brings its judgement and keeps the
+   verdict row's `scope`, since `sweep --files` records a file's parent folder and the score only
+   pairs files within one scope. A row whose feature is no longer in the vocabulary is **orphaned**
+   and not scored; a row judged under another vocabulary fingerprint is **stale**, scored, and
+   flagged.
+2. **writes the report** (`refine.json`): overall F1 and confident share, per-feature cohesion (F1,
+   precision, recall, files and confident share for every feature in the vocabulary), the stale and
+   orphaned rows, and:
+   - **merge candidates** — feature pairs ranked by **coupling**: of the co-changed file pairs
+     touching either feature, the share with one file in each. 1 means the two only ever change
+     together.
+   - **split candidates** — features of at least 4 files ranked by **cohesion**, lowest first: of
+     the same-scope file pairs inside the feature, the share some commit changed together.
+   - with `--sweep`, **Jev signals** from the swept rows judged under this vocabulary: the confident
+     share per feature, and the **top-2 confusion** pairs, the features that were a row's two most
+     probable answers, counted over rows. Without it, the report's `signals.basis` is `co-change`
+     and the prompt says the diagnostics are co-change only.
+   - **plateau status**.
+3. **records the run** in the history file: one entry per vocabulary fingerprint with its overall
+   F1. A call under the same fingerprint as the last entry replaces it, so re-running over
+   unchanged inputs changes nothing. The loop has **plateaued** when `|ΔF1|` against the run before
+   stayed under `--threshold` for `--patience` consecutive runs.
+4. **writes the sample list** (`refine-sample.txt`), repo-relative paths one per line: every
+   orphaned file, then for each feature a slice of `⌊--sample / features⌋` files (at least one),
+   stale ones before current ones, each group in the order of a hash of the path. Only paths
+   `sweep --files` accepts at `--ref` are listed.
+5. **writes the prompt** (`refine-prompt.md`): the score and its delta, the top five merge and
+   split candidates and Jev confusion pairs with their evidence, the stale and orphaned files, and
+   either the next edit-and-resweep step or an explicit stop.
+
+The same vocabulary, verdicts, sweep file, history, git history and flags give byte-identical
+report, prompt and sample list.
+
+The loop, run by an agent reading the prompt:
+
+1. **refine** — `structure-sweep propose refine`.
+2. **edit** — change `.structure-sweep/proposed.config.json` as `refine-prompt.md` says.
+3. **sweep the sample** — `structure-sweep sweep --files .structure-sweep/refine-sample.txt --config .structure-sweep/proposed.config.json --out .structure-sweep/refine-sweep.json`.
+4. **refine with the sweep** — `structure-sweep propose refine --sweep .structure-sweep/refine-sweep.json`,
+   then back to 2, until the prompt says stop.
+
+| Flag | Default | |
+|---|---|---|
+| `--config <file>` | `.structure-sweep/proposed.config.json` | vocabulary being refined |
+| `--verdicts <file>` | `.structure-sweep/verdicts.json` | sweep output to score |
+| `--sweep <file>` | none | sweep over the sample list; re-judges those rows and adds Jev's signals |
+| `--ref <ref>` | `HEAD` | read history back from here, and list the sample from the files tracked here |
+| `--since <date>` | none | only commits after this date |
+| `--pr-only` | off | only commits whose subject ends in `(#N)` |
+| `--max-files <n>` | `40` | drop commits touching more labelled files than this |
+| `--threshold <x>` | `0.005` | `\|ΔF1\|` under this counts toward a plateau |
+| `--patience <n>` | `2` | consecutive runs under the threshold that plateau |
+| `--sample <n>` | `64` | files spread over the features in the sample list, on top of the orphaned ones |
+| `--out <file>` | `.structure-sweep/refine.json` | report JSON |
+| `--prompt <file>` | `.structure-sweep/refine-prompt.md` | prompt |
+| `--history <file>` | `.structure-sweep/refine-history.json` | one entry per vocabulary, read and rewritten |
+| `--sample-list <file>` | `.structure-sweep/refine-sample.txt` | paths to sweep next |
 
 ### `structure-sweep sweep <folder>...`
 
