@@ -2,17 +2,22 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { JevRequest, JevUsage } from "@demlik/tea/jev";
-import { type JevClient, pool } from "../jev.js";
+import { JEV_MAX_QUESTIONS, type JevClient, pool } from "../jev.js";
 import type { LoweringGraph } from "../lowering/lower.js";
 import {
+  ANCHOR_QUESTION_VERSION,
   type AnchorJev,
+  type AnchorRef,
   anchorAnswers,
+  anchorChunks,
   anchorQuestions,
   anchorRef,
   isAnchorAnswers,
+  questionVersionOf,
 } from "./anchor.js";
 import {
   anchorMenus,
+  type Candidate,
   DEFAULT_MAX_PARTNERS,
   functionKey,
   type Menu,
@@ -28,8 +33,9 @@ import {
 } from "./report.js";
 
 /**
- * `anchor` asks one question per anchor function over its capped partners plus `none`; `pairwise`
- * asks the three-way verdict once per pair, for gold-set evaluation.
+ * `anchor` asks one request per anchor function, with one yes/no question per capped partner, split
+ * into more requests only past the per-request question cap; `pairwise` asks the three-way verdict
+ * once per pair, for gold-set evaluation.
  */
 export type PairsMode = "anchor" | "pairwise";
 
@@ -57,6 +63,12 @@ export interface PairsSelection {
   readonly redact?: boolean;
   /** The most partners any one anchor is judged against (default `DEFAULT_MAX_PARTNERS`). */
   readonly maxPartners?: number;
+  /**
+   * The most questions one anchor-mode request carries, `business_rule` included (default
+   * `JEV_MAX_QUESTIONS`). A menu past it is asked in one request per chunk. Pairwise mode asks a
+   * fixed two questions per pair and ignores it.
+   */
+  readonly maxQuestions?: number;
   /**
    * The code-graph `--graph` nodes for the targets' scope. With them, each function is sent as its
    * stage-2 lowered body where stage 2 lowers the whole function, and as its source otherwise.
@@ -114,11 +126,21 @@ const pairState = (pair: Pair, redact: boolean) => ({
   signals: pair.signals,
 });
 
-/** An anchor's question state: the anchor sent once, then each candidate partner under its ref. */
-const anchorState = (menu: Menu, redact: boolean) => ({
-  anchor: shown(menu.anchor, redact),
-  candidates: menu.candidates.map((candidate, i) => ({
-    ref: anchorRef(i),
+/** One candidate on an anchor's menu, under the ref its place in the menu gives it. */
+interface Offered {
+  readonly candidate: Candidate;
+  readonly ref: AnchorRef;
+}
+
+/** A chunk's question state: the anchor sent once, then each of the chunk's candidates under its ref. */
+const anchorState = (
+  anchor: PairFunction,
+  chunk: readonly Offered[],
+  redact: boolean,
+) => ({
+  anchor: shown(anchor, redact),
+  candidates: chunk.map(({ candidate, ref }) => ({
+    ref,
     ...shown(partnerOf(candidate), redact),
     signals: candidate.pair.signals,
   })),
@@ -135,26 +157,36 @@ function loweredHash(pair: Pair): string | undefined {
 }
 
 /**
- * How one row's answer was asked: the question (mode, and for an anchor the whole menu it was
- * asked over), the redaction and the lowered bodies. Every field is part of the cache key.
+ * How one row's answer was asked: the question (mode, and for an anchor the question version, the
+ * whole chunk it was asked over and the candidate's ref in it), the redaction and the lowered
+ * bodies. Every field is part of the cache key.
  */
 type Send = {
   readonly redacted: boolean;
   readonly lowered: string | undefined;
 } & (
   | { readonly mode: "pairwise" }
-  | { readonly mode: "anchor"; readonly menu: string }
+  | {
+      readonly mode: "anchor";
+      readonly version: number;
+      readonly menu: string;
+      readonly ref: AnchorRef;
+    }
 );
 
 /**
  * A cached answer serves a pair only when it was asked the same way, so no answer crosses between
- * modes, anchor menus, redacted and plain runs, or lowered and raw sends. A plain raw pairwise row
- * keeps its bare `id` key.
+ * modes, anchor question versions, anchor chunks, redacted and plain runs, or lowered and raw
+ * sends. An anchor row is keyed on its candidate's ref as well, because two byte-identical copies
+ * on one menu share an `id` but each was asked its own question. A plain raw pairwise row keeps
+ * its bare `id` key.
  */
 const cacheKey = (id: string, send: Send) =>
   [
     id,
-    send.mode === "anchor" ? `anchor ${send.menu}` : "",
+    send.mode === "anchor"
+      ? `anchor v${send.version} ${send.menu} ${send.ref}`
+      : "",
     send.redacted ? "redacted" : "",
     send.lowered ? `lowered ${send.lowered}` : "",
   ]
@@ -164,13 +196,32 @@ const cacheKey = (id: string, send: Send) =>
 const sendOf = (row: PairRow): Send => {
   const base = { redacted: row.redacted === true, lowered: row.lowered };
   return isAnchorAnswers(row.answers)
-    ? { ...base, mode: "anchor", menu: row.answers.partner.menu }
+    ? {
+        ...base,
+        mode: "anchor",
+        version: questionVersionOf(row.answers),
+        menu: row.answers.partner.menu,
+        ref: row.answers.partner.ref,
+      }
     : { ...base, mode: "pairwise" };
 };
+
+/**
+ * Which pair a row is about: its scope and its two functions. A row's `id` hashes the two bodies,
+ * so byte-identical copies share one; this does not, so every copy of a pasted function keeps its
+ * own row and joins its family.
+ */
+const placeOf = (row: Pick<PairRow, "scope" | "a" | "b">) =>
+  [
+    row.scope,
+    `${row.a.path}:${row.a.function}`,
+    `${row.b.path}:${row.b.function}`,
+  ].join("\u0000");
 
 interface Ledger {
   /** Every answered row on file, under its cache key. An unanswered row is asked again. */
   readonly cache: ReadonlyMap<string, PairRow>;
+  /** This run's rows, one per pair under `placeOf`. */
   readonly judged: Map<string, PairRow>;
   rows(): PairRow[];
   save(): void;
@@ -184,7 +235,10 @@ function openLedger(outPath: string, rerun: ReadonlySet<string>): Ledger {
   const judged = new Map<string, PairRow>();
   const rows = () =>
     [...kept, ...judged.values()].sort(
-      (x, y) => x.scope.localeCompare(y.scope) || x.id.localeCompare(y.id),
+      (x, y) =>
+        x.scope.localeCompare(y.scope) ||
+        x.id.localeCompare(y.id) ||
+        placeOf(x).localeCompare(placeOf(y)),
     );
   return {
     cache: new Map(
@@ -273,21 +327,25 @@ function pairwiseQuestion(
   };
 }
 
+/** One request over one chunk of an anchor's menu: every candidate in it gets its own question. */
 function anchorQuestion(
   ledger: Ledger,
   scope: string,
-  menu: Menu,
+  anchor: PairFunction,
+  chunk: readonly Offered[],
   redact: boolean,
 ): Question {
-  const state = anchorState(menu, redact);
-  const questions = anchorQuestions(menu.candidates.length);
+  const state = anchorState(anchor, chunk, redact);
+  const questions = anchorQuestions(chunk.map(({ ref }) => ref));
   const menuHash = hash(state);
-  const sent = menu.candidates.map((candidate, i) => ({
+  const sent = chunk.map(({ candidate, ref }) => ({
     candidate,
-    ref: anchorRef(i),
+    ref,
     send: {
       mode: "anchor",
+      version: ANCHOR_QUESTION_VERSION,
       menu: menuHash,
+      ref,
       redacted: redact,
       lowered: loweredHash(candidate.pair),
     } satisfies Send,
@@ -308,7 +366,7 @@ function anchorQuestion(
     ? (hits as PairRow[])
     : undefined;
   return {
-    pairs: menu.candidates.map((c) => c.pair),
+    pairs: chunk.map(({ candidate }) => candidate.pair),
     request: (model) => ({ state, model, questions }),
     cached,
     ask: async (jev) => {
@@ -331,6 +389,19 @@ function anchorQuestion(
     },
   };
 }
+
+/** One request per chunk of the anchor's menu, each chunk within the per-request question cap. */
+const anchorRequests = (
+  ledger: Ledger,
+  scope: string,
+  menu: Menu,
+  redact: boolean,
+  maxQuestions: number,
+): Question[] =>
+  anchorChunks(
+    menu.candidates.map((candidate, i) => ({ candidate, ref: anchorRef(i) })),
+    maxQuestions,
+  ).map((chunk) => anchorQuestion(ledger, scope, menu.anchor, chunk, redact));
 
 /** One scope's collapse pairs, dealt to anchors under the partner cap, and the questions to ask. */
 interface ScopeQuestions {
@@ -369,7 +440,15 @@ function questionsFor(
   const kept = new Set(menus.flatMap((m) => m.candidates.map((c) => c.pair)));
   const questions =
     mode === "anchor"
-      ? menus.map((menu) => anchorQuestion(ledger, scope, menu, redact))
+      ? menus.flatMap((menu) =>
+          anchorRequests(
+            ledger,
+            scope,
+            menu,
+            redact,
+            options.maxQuestions ?? JEV_MAX_QUESTIONS,
+          ),
+        )
       : candidates
           .filter((pair) => kept.has(pair))
           .map((pair) => pairwiseQuestion(ledger, scope, pair, redact));
@@ -409,19 +488,19 @@ async function judgeScope(
 ): Promise<Spent> {
   const todo = scoped.questions.filter((q) => {
     if (q.cached === undefined) return true;
-    for (const row of q.cached) ledger.judged.set(row.id, row);
+    for (const row of q.cached) ledger.judged.set(placeOf(row), row);
     return false;
   });
   options.log?.(
     options.jev.mode === "pairwise"
       ? `${scoped.scope}: ${pairCount(scoped.questions)} pairs, ${todo.length} to ask`
-      : `${scoped.scope}: ${pairCount(scoped.questions)} pairs on ${scoped.anchors} anchors, ${todo.length} anchors to ask`,
+      : `${scoped.scope}: ${pairCount(scoped.questions)} pairs on ${scoped.anchors} anchors, ${todo.length} requests to ask`,
   );
   let spent: Spent = { input: 0, output: 0 };
   await pool(todo, options.concurrency ?? 6, async (question) => {
     try {
       const { rows, usage } = await question.ask(options.jev);
-      for (const row of rows) ledger.judged.set(row.id, row);
+      for (const row of rows) ledger.judged.set(placeOf(row), row);
       spent = {
         input: spent.input + usage.input_tokens,
         output: spent.output + usage.output_tokens,
@@ -485,7 +564,10 @@ export interface ScopePlan {
   /** Distinct functions across those pairs. */
   readonly functions: number;
   readonly skipped: number;
-  /** Jev calls no cached answer serves: one per pair in pairwise mode, one per anchor in anchor mode. */
+  /**
+   * Jev calls no cached answer serves: one per pair in pairwise mode; in anchor mode one per anchor,
+   * or one per chunk of an anchor whose candidates exceed the per-request question cap.
+   */
   readonly toAsk: number;
   /** `estimatedTokens` summed over the request each call to make would send. */
   readonly tokens: number;

@@ -32,10 +32,10 @@ export interface PairRow {
    * source: a hash of the bodies sent. Part of the cache key, so lowered and raw sends never share an answer.
    */
   readonly lowered?: string;
-  /** The pairwise three-way verdict, or an anchor-mode row's reading of its anchor's one answer. */
+  /** The pairwise three-way verdict, or an anchor-mode row's reading of its candidate's own `same_rule` answer. */
   readonly answers: PairAnswers | AnchorAnswers;
   readonly model: string;
-  /** The call that answered the row; on an anchor-mode row, the one call over its anchor's whole menu. */
+  /** The call that answered the row; on an anchor-mode row, the one request over its candidate's chunk of the anchor's menu. */
   readonly usage: JevUsage;
 }
 

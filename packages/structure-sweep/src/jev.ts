@@ -21,6 +21,15 @@ import {
 /** The model every command asks unless `--model` names another; pinned so a cached answer means one thing. */
 export const DEFAULT_MODEL = "jev-1.13.0";
 
+/**
+ * The most questions this package puts in one Jev request. TypeSafe's API reference
+ * (https://docs.typesafe.ai/api, read 2026-09-26) bounds a Choice at 255 options and a Score at 10
+ * levels, and states no bound on how many questions one request may carry. So this value is ours,
+ * not the API's. When the reference publishes a bound, this constant takes its value. It is the
+ * default only: `pairs --max-questions` (`maxQuestions` on `runPairs` / `planPairs`) names another.
+ */
+export const JEV_MAX_QUESTIONS = 32;
+
 export const DEFAULT_RETRY: RetryPolicy = {
   baseMs: 500,
   factor: 2,

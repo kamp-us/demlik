@@ -7,10 +7,15 @@
 export {
   type ClusterOptions,
   ClusterRow,
+  type CollapseOptions,
+  type CollapseProposal,
   type ConsolidationPlan,
+  collapseProposals,
+  DEFAULT_COLLAPSE_FLOOR,
   type ExtractProposal,
   extractProposals,
   HelperPairRow,
+  JudgedPairRow,
   type MergeProposal,
   mergeProposals,
   renderConsolidation,
@@ -55,6 +60,7 @@ export {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,
+  JEV_MAX_QUESTIONS,
   JevAskError,
   type JevClient,
 } from "./jev.js";
@@ -390,6 +396,7 @@ export {
   type AnchorJev,
   type AnchorQuestions,
   anchorQuestions,
+  maxQuestions,
   UNANSWERED,
 } from "./pairs/anchor.js";
 export { DEFAULT_MAX_PARTNERS } from "./pairs/cap.js";

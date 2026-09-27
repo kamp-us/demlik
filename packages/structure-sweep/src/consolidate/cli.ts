@@ -7,10 +7,13 @@ import { git, repoRootOf, trackedPaths } from "../git.js";
 import {
   ClusterRow,
   type ConsolidationPlan,
+  collapseFloor,
+  collapseProposals,
+  DEFAULT_COLLAPSE_FLOOR,
   DEFAULT_MAX_LINES,
   DEFAULT_MIN_CLUSTER,
   extractProposals,
-  HelperPairRow,
+  JudgedPairRow,
   mergeProposals,
   nonBlankLines,
   renderConsolidation,
@@ -19,14 +22,17 @@ import {
 export const CONSOLIDATE_USAGE = `structure-sweep consolidate [options]
 
   Propose consolidations from outputs already on disk: clusters of tiny files sharing scope,
-  feature and role to merge, and groups of shared_helper pairs to extract. Writes a plan and
-  changes no source file. No Jev call, no network.
+  feature and role to merge, groups of same_decision pairs (copies of one business rule) to
+  collapse, and groups of shared_helper pairs to extract. Writes a plan and changes no source
+  file. No Jev call, no network.
 
   --verdicts <file>     sweep output (default: ${DEFAULTS.verdicts})
   --pairs <file>        pairs output (default: ${DEFAULTS.pairs})
   --ref <ref>           git tree file sizes are read from (default: HEAD)
   --max-lines <n>       a file is small at or under this many non-blank lines (default: ${DEFAULT_MAX_LINES})
   --min-cluster <n>     small files a group needs to become a proposal (default: ${DEFAULT_MIN_CLUSTER})
+  --floor <0..1>        a same_decision pair joins a collapse group at or above this confidence
+                        (default: ${DEFAULT_COLLAPSE_FLOOR})
   --out <file>          JSON plan (default: ${DEFAULTS.consolidate})
   --report <file>       markdown summary (default: ${DEFAULTS.consolidateReport})`;
 
@@ -82,6 +88,7 @@ export function consolidateCommand(argv: readonly string[], cwd: string): void {
       ref: { type: "string", default: "HEAD" },
       "max-lines": { type: "string", default: String(DEFAULT_MAX_LINES) },
       "min-cluster": { type: "string", default: String(DEFAULT_MIN_CLUSTER) },
+      floor: { type: "string", default: String(DEFAULT_COLLAPSE_FLOOR) },
       out: { type: "string", default: DEFAULTS.consolidate },
       report: { type: "string", default: DEFAULTS.consolidateReport },
     },
@@ -90,13 +97,15 @@ export function consolidateCommand(argv: readonly string[], cwd: string): void {
   const root = repoRootOf(cwd);
   const maxLines = count("max-lines", values["max-lines"], 1);
   const minCluster = count("min-cluster", values["min-cluster"], 2);
+  const floor = collapseFloor(Number(values.floor));
   const verdicts = readRows(underRoot(root, values.verdicts), ClusterRow, log);
-  const pairs = readRows(underRoot(root, values.pairs), HelperPairRow, log);
+  const pairs = readRows(underRoot(root, values.pairs), JudgedPairRow, log);
 
   const plan: ConsolidationPlan = {
     ref: values.ref,
     maxLines,
     minCluster,
+    floor,
     merge:
       verdicts === null
         ? null
@@ -104,6 +113,7 @@ export function consolidateCommand(argv: readonly string[], cwd: string): void {
             maxLines,
             minCluster,
           }),
+    collapse: pairs === null ? null : collapseProposals(pairs, { floor }),
     extract: pairs === null ? null : extractProposals(pairs),
   };
 
@@ -114,6 +124,6 @@ export function consolidateCommand(argv: readonly string[], cwd: string): void {
   writeFileSync(outPath, `${JSON.stringify(plan, null, 1)}\n`);
   writeFileSync(reportPath, renderConsolidation(plan));
   log(
-    `${plan.merge?.length ?? "no"} merge, ${plan.extract?.length ?? "no"} extract proposals → ${outPath}, ${reportPath}`,
+    `${plan.merge?.length ?? "no"} merge, ${plan.collapse?.length ?? "no"} collapse, ${plan.extract?.length ?? "no"} extract proposals → ${outPath}, ${reportPath}`,
   );
 }
