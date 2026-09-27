@@ -58,6 +58,14 @@ repairing one PR — not the normal entry point:
 | Merge ONE verified PR | `ship` | **shipper** |
 | A PR that is green but going nowhere | `heal-ci` | — |
 
+### Acceptance criteria
+
+**The first criterion states the user's job as an observable outcome**, with an end-to-end fixture
+of the realistic case — N>2, repeat runs, large inputs — not the N=2 a mechanism test gets away
+with. Mechanism rows ("one Choice per anchor") come after it. The reviewer runs that fixture, then
+asks what a user would try first that still fails. Criteria that only describe the mechanism let a
+half-built feature pass build and review green.
+
 ### Setup an agent needs here
 
 - The plugin is enabled per-repo in [`.claude/settings.json`](./.claude/settings.json): the
