@@ -60,6 +60,7 @@ export {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,
+  JEV_MAX_QUESTIONS,
   JevAskError,
   type JevClient,
 } from "./jev.js";
@@ -395,6 +396,7 @@ export {
   type AnchorJev,
   type AnchorQuestions,
   anchorQuestions,
+  maxQuestions,
   UNANSWERED,
 } from "./pairs/anchor.js";
 export { DEFAULT_MAX_PARTNERS } from "./pairs/cap.js";

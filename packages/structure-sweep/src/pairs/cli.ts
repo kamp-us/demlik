@@ -7,11 +7,12 @@ import {
   DEFAULT_MODEL,
   fetchPost,
   httpJevClient,
+  JEV_MAX_QUESTIONS,
   type JevClient,
   requireApiKey,
 } from "../jev.js";
 import { readLoweringGraph } from "../lowering/lower.js";
-import type { AnchorJev } from "./anchor.js";
+import { type AnchorJev, maxQuestions } from "./anchor.js";
 import { DEFAULT_MAX_PARTNERS, maxPartners } from "./cap.js";
 import { type PairQuestions, pairQuestions } from "./questions.js";
 import { countVerdicts, renderMarkdown, shownCounts } from "./report.js";
@@ -43,6 +44,8 @@ export const PAIRS_USAGE = `structure-sweep pairs <folder>=<collapse.json>... [o
                         nothing written
   --max-partners <n>    judge each anchor against at most its n best partners by graph
                         confidence; the rest are reported as skipped (default: ${DEFAULT_MAX_PARTNERS})
+  --max-questions <n>   the most questions one anchor-mode request carries, business_rule included;
+                        a menu past it is asked in one request per chunk (default: ${JEV_MAX_QUESTIONS})
   --graph <graph.json>  the \`code-graph <folder> --graph --json\` output for the one target: send each
                         function's stage-2 lowered body instead of its source where stage 2 lowers it
                         (default: off; lowered and raw sends never share cached answers)
@@ -77,6 +80,7 @@ export const parsePairsArgs = (argv: readonly string[]) =>
       pairwise: { type: "boolean", default: false },
       plan: { type: "boolean", default: false },
       "max-partners": { type: "string", default: String(DEFAULT_MAX_PARTNERS) },
+      "max-questions": { type: "string", default: String(JEV_MAX_QUESTIONS) },
       graph: { type: "string" },
       ref: { type: "string", default: "HEAD" },
       out: { type: "string", default: DEFAULTS.pairs },
@@ -153,6 +157,7 @@ export async function pairsCommand(
       `--graph names one code-graph run's functions, so it takes exactly one <folder>=<collapse.json>, not ${targets.length}`,
     );
   const cap = maxPartners(Number(values["max-partners"]));
+  const questionCap = maxQuestions(Number(values["max-questions"]));
   const mode: PairsMode = values.pairwise ? "pairwise" : "anchor";
   const graph =
     values.graph === undefined
@@ -167,6 +172,7 @@ export async function pairsCommand(
     outPath,
     redact: values.redact,
     maxPartners: cap,
+    maxQuestions: questionCap,
     ...(graph === undefined ? {} : { graph }),
     log,
   };

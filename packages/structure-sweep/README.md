@@ -336,9 +336,10 @@ per candidate, `same_rule_c0`, `same_rule_c1`, …: does this candidate encode t
 as the anchor? Each candidate is judged on its own, so an anchor with two or more true duplicates
 confirms every one of them: `pairs.md` groups the whole family, and `consolidate` proposes it as
 one collapse group once every link clears its `--floor`. The same request asks
-`business_rule` about the anchor. One request carries at most 32 questions; an anchor with more
-candidates than fit beside `business_rule` is asked in one request per chunk, each candidate
-keeping its ref, and `--plan` counts every chunk as a Jev call.
+`business_rule` about the anchor. One request carries at most `--max-questions` questions (default
+32, `JEV_MAX_QUESTIONS`, `business_rule` included); an anchor with more candidates than fit beside
+`business_rule` is asked in one request per chunk, each candidate keeping its ref, and `--plan`
+counts every chunk as a Jev call.
 
 `pairs.json` still holds one row per pair, with the same fields a pairwise row has, so `inventory`
 and `consolidate` read both the same way. A row's `answers` records what its candidate's own
@@ -432,6 +433,7 @@ sends never share cached answers.
 | `--pairwise` | off | one three-way question per pair instead of one anchor question per anchor |
 | `--plan` | off | print pairs, anchors, functions and estimated tokens for the mode, then exit without calling Jev |
 | `--max-partners <n>` | `10` | most candidate partners any one anchor is judged against; the rest are skipped and listed |
+| `--max-questions <n>` | `32` | most questions one anchor-mode request carries, `business_rule` included; at least `2` |
 | `--graph <graph.json>` | none | send stage-2 lowered bodies instead of source; one target only |
 | `--redact` | off | no file paths in what Jev sees |
 | `--ref <ref>` | `HEAD` | git tree the collapse report was taken from |

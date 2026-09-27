@@ -1,6 +1,13 @@
 ---
-"@demlik/structure-sweep": patch
+"@demlik/structure-sweep": minor
 ---
+
+This is a minor bump because it changes exported shapes:
+
+- `anchorQuestions(count)` is now `anchorQuestions(refs)`: it takes the candidate refs, not a count.
+- `AnchorAnswers.partner` drops `chosen` and records `version` instead.
+- `HelperPairRow` is renamed `JudgedPairRow`; `HelperPairRow` stays as a deprecated alias.
+- `ConsolidationPlan` gains the required fields `floor` and `collapse`.
 
 `pairs` anchor mode asks one yes/no `same_rule` question per candidate instead of one single-choice
 question per anchor, so an anchor with two or more true duplicates confirms every one of them and
@@ -8,8 +15,10 @@ question per anchor, so an anchor with two or more true duplicates confirms ever
 could fall below a confidence floor and none was confirmed.
 
 Each anchor is still asked in one request. An anchor with more candidates than one request's
-question cap (32, beside `business_rule`) is asked in one request per chunk, and `pairs --plan`
-counts every chunk as a Jev call.
+question cap holds beside `business_rule` is asked in one request per chunk, and `pairs --plan`
+counts every chunk as a Jev call. The cap defaults to `JEV_MAX_QUESTIONS` (32), now exported; a
+caller names another with `pairs --max-questions <n>` or the `maxQuestions` option on `runPairs` /
+`planPairs`, validated by the exported `maxQuestions`.
 
 The pairs cache key now carries the anchor question version, bumped to 2, and the candidate's ref,
 so no row asked under the old single-choice question is served as a cache hit: the first

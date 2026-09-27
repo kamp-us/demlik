@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { JevRequest, JevUsage } from "@demlik/tea/jev";
-import { type JevClient, pool } from "../jev.js";
+import { JEV_MAX_QUESTIONS, type JevClient, pool } from "../jev.js";
 import type { LoweringGraph } from "../lowering/lower.js";
 import {
   ANCHOR_QUESTION_VERSION,
@@ -63,6 +63,12 @@ export interface PairsSelection {
   readonly redact?: boolean;
   /** The most partners any one anchor is judged against (default `DEFAULT_MAX_PARTNERS`). */
   readonly maxPartners?: number;
+  /**
+   * The most questions one anchor-mode request carries, `business_rule` included (default
+   * `JEV_MAX_QUESTIONS`). A menu past it is asked in one request per chunk. Pairwise mode asks a
+   * fixed two questions per pair and ignores it.
+   */
+  readonly maxQuestions?: number;
   /**
    * The code-graph `--graph` nodes for the targets' scope. With them, each function is sent as its
    * stage-2 lowered body where stage 2 lowers the whole function, and as its source otherwise.
@@ -390,9 +396,11 @@ const anchorRequests = (
   scope: string,
   menu: Menu,
   redact: boolean,
+  maxQuestions: number,
 ): Question[] =>
   anchorChunks(
     menu.candidates.map((candidate, i) => ({ candidate, ref: anchorRef(i) })),
+    maxQuestions,
   ).map((chunk) => anchorQuestion(ledger, scope, menu.anchor, chunk, redact));
 
 /** One scope's collapse pairs, dealt to anchors under the partner cap, and the questions to ask. */
@@ -432,7 +440,15 @@ function questionsFor(
   const kept = new Set(menus.flatMap((m) => m.candidates.map((c) => c.pair)));
   const questions =
     mode === "anchor"
-      ? menus.flatMap((menu) => anchorRequests(ledger, scope, menu, redact))
+      ? menus.flatMap((menu) =>
+          anchorRequests(
+            ledger,
+            scope,
+            menu,
+            redact,
+            options.maxQuestions ?? JEV_MAX_QUESTIONS,
+          ),
+        )
       : candidates
           .filter((pair) => kept.has(pair))
           .map((pair) => pairwiseQuestion(ledger, scope, pair, redact));

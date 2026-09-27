@@ -908,6 +908,53 @@ describe("pairs --plan", () => {
     ]);
   });
 
+  it("counts one Jev call per chunk under a non-default --max-questions", async () => {
+    const root = realpathSync(repo(HUB_SOURCES));
+    const collapsePath = collapseOf(HUB_CANDIDATES);
+    const calls = async (extra: string[]) => {
+      const { printed } = await plan(root, collapsePath, [
+        "--max-partners",
+        "4",
+        ...extra,
+      ]);
+      return printed.at(-1)?.match(/(\d+) Jev calls to make/)?.[1];
+    };
+    // Four candidates beside business_rule fit one request at the default cap.
+    expect(await calls([])).toBe("1");
+    expect(await calls(["--max-questions", "3"])).toBe("2");
+    expect(await calls(["--max-questions", "2"])).toBe("4");
+    await expect(calls(["--max-questions", "1"])).rejects.toThrow(
+      /--max-questions is a whole number of at least 2/,
+    );
+  });
+
+  it("threads maxQuestions through planPairs and runPairs to the requests asked", async () => {
+    const at = { ...selection(), maxPartners: 4, maxQuestions: 3 };
+    const priced = planPairs({ ...at, mode: "anchor", model: DEFAULT_MODEL });
+    expect(priced.toAsk).toBe(2);
+    expect(
+      planPairs({
+        ...at,
+        maxQuestions: undefined,
+        mode: "anchor",
+        model: DEFAULT_MODEL,
+      }).toAsk,
+    ).toBe(1);
+    const asked = anchorJev({});
+    await runPairs({ ...at, jev: { mode: "anchor", ask: asked } });
+    expect(asked.asked.map((a) => Object.keys(a.questions).length)).toEqual([
+      3, 3,
+    ]);
+  });
+
+  it("documents --max-questions with JEV_MAX_QUESTIONS as its default", () => {
+    expect(PAIRS_USAGE).toContain("--max-questions");
+    expect(PAIRS_USAGE).toContain(`(default: ${JEV_MAX_QUESTIONS})`);
+    expect(parsePairsArgs(["svc=c.json"]).values["max-questions"]).toBe(
+      String(JEV_MAX_QUESTIONS),
+    );
+  });
+
   const selection = () => ({
     root: repo(HUB_SOURCES),
     ref: "HEAD",

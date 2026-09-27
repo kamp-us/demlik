@@ -70,19 +70,27 @@ export function anchorQuestions(refs: readonly AnchorRef[]): AnchorQuestions {
 }
 
 /**
+ * A question cap is a whole number of at least 2: a request asks `business_rule` and at least one
+ * candidate.
+ */
+export function maxQuestions(n: number): number {
+  if (!Number.isInteger(n) || n < 2)
+    throw new RangeError(
+      `--max-questions is a whole number of at least 2 (business_rule and one candidate), not ${n}`,
+    );
+  return n;
+}
+
+/**
  * An anchor's candidates split into the chunks one request each asks about. A request carries one
  * question per candidate plus `business_rule`, so a chunk holds at most `maxQuestions - 1`
  * candidates. The chunks keep the candidates' order.
  */
 export function anchorChunks<T>(
   candidates: readonly T[],
-  maxQuestions: number = JEV_MAX_QUESTIONS,
+  cap: number = JEV_MAX_QUESTIONS,
 ): T[][] {
-  if (!Number.isInteger(maxQuestions) || maxQuestions < 2)
-    throw new RangeError(
-      `a request asks business_rule and at least one candidate, so its question cap is at least 2, not ${maxQuestions}`,
-    );
-  const size = maxQuestions - 1;
+  const size = maxQuestions(cap) - 1;
   const chunks: T[][] = [];
   for (let i = 0; i < candidates.length; i += size)
     chunks.push(candidates.slice(i, i + size));
