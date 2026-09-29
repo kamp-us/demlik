@@ -93,7 +93,7 @@ cross-package callers; re-run with `--deep`.
 | `--interface-width` | Every exported symbol, grouped by its declaring package, ranked by export count; each export's consumer count OUTSIDE the package, and the zero-consumer ones called out as free deletions. Implies the edge pass (does NOT imply `--kinds`) |
 | `--node-kinds <file>` | JSON file of node-kind rule overrides, same boundary discipline as `--thresholds`. An override REPLACES a whole pattern group |
 | `--entry-preset <name>` | Turn on a built-in [entrypoint-export preset](#entrypoint-export-conventions) (`nextjs`) for every package, including one whose `package.json` does not depend on the framework. Repeatable; adds to any `entryExportPresets` the rules file names. An unknown name exits 2 |
-| `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no tsconfig, no Graph |
+| `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no type-checker, no Graph. A tsconfig `paths` alias resolves through the importing file's nearest tsconfig, an alias naming no file is UNRESOLVED, and any other unresolvable specifier stays `external` |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
 | `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges`: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`; **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`. `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
@@ -510,7 +510,7 @@ better left undeclared than declared into findings it cannot fix.
 
 `--layers` reads **module specifiers** — static imports, `export … from`, and
 dynamic `import()` — from the parser's own import list, on the **cheap pass**. No
-tsconfig, no type-checker, no Graph. That is deliberate: the type-aware `--deep`
+type-checker, no Graph. That is deliberate: the type-aware `--deep`
 pass does not finish on this repo in a usable time, and a gate that cannot be run
 over the whole architecture is not a gate on the architecture. An import is also
 what the rule is about ("apps/web must not reach into the engine") and it carries
@@ -520,6 +520,16 @@ A `.d.ts`, `.json` or `.css` target is still an edge and is still judged; a
 relative specifier that names no file on disk is reported as **UNRESOLVED**, by
 name, so a systematic resolver bug shows up as a pattern rather than as
 acceptable noise.
+
+A bare specifier that is neither relative nor a workspace package name goes
+through the importing file's **nearest `tsconfig.json`**, `extends` followed, by
+the same native resolver the edge pass uses. Reading a tsconfig this way starts no
+type-checker, so the gate stays on the cheap pass. A tsconfig `paths` alias such
+as `@app/*` that lands on a file inside the repo is judged exactly like a relative
+import. An alias that matches a `paths` key but names no file on disk is
+**UNRESOLVED**, listed like a broken relative import. Everything else that does
+not resolve into the repo — an npm dependency, installed or not, a node builtin,
+a `cloudflare:` scheme import — stays `external`.
 
 ### The allowlist is a ratchet, in both directions
 
