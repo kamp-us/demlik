@@ -453,9 +453,53 @@ the schema boundary like any other malformed file. A layer name or a path patter
 declared twice is refused too. `allowed` may be omitted, which means no upward edge
 is tolerated.
 
-The most SPECIFIC pattern wins, so `services/*/src/domain` claims a file
-`services` would otherwise take, and a prefix ends at a path separator —
-`packages/core` never claims `packages/core-contract`.
+A pattern is a path prefix: it claims the file or folder it names and everything
+under it, and a prefix ends at a path separator — `packages/core` never claims
+`packages/core-contract`. Three wildcards widen it:
+
+| Form | Matches | Example |
+|---|---|---|
+| `*` as a whole segment | one segment of one or more characters | `services/*/src/domain` |
+| `*` inside a segment | zero or more characters, never `/` | `pkg/*-plumbing.ts` claims `pkg/billing-plumbing.ts`, not `pkg/a/billing-plumbing.ts` |
+| `**` as a whole segment | zero or more whole segments | `apps/**/y` claims `apps/y` and `apps/p/q/y` |
+
+Every other character is literal: `?`, `[...]`, `{a,b}` and a leading `!` match
+themselves, so there is no negation and no alternation.
+
+Together `**` and an in-segment `*` declare a layer by a file's **role** rather than
+its folder, for a repo that names roles in file names wherever they sit:
+
+```json
+{
+  "layers": [
+    { "name": "api-surface", "paths": ["**/*-api-surface.ts"] },
+    { "name": "plumbing", "paths": ["**/*-plumbing.ts"] },
+    { "name": "business-rule", "paths": ["**/*-business-rule.ts"] }
+  ]
+}
+```
+
+When several patterns claim one file, the most SPECIFIC wins. Specificity compares
+three keys in order, and the higher value wins at the first key that differs:
+
+1. **depth** — the number of segments other than `**`;
+2. **literal segments** — the number of segments with no `*` in them;
+3. **literal characters** — the number of characters other than `*` and `/`.
+
+So `services/*/src/domain` claims a file `services` would otherwise take (depth),
+`apps/web/**/*-business-rule.ts` beats `**/*-business-rule.ts` (depth), and
+`**/*-billing-plumbing.ts` beats `**/*-plumbing.ts` (literal characters). A
+directory layer outranks every role layer no deeper than it: for
+`services/x/billing-plumbing.ts`, `services` beats `**/*-plumbing.ts`, because both
+have depth 1 and only `services` is a literal segment. A stack declared purely by
+role never meets that case.
+
+When the most specific patterns for one file tie on all three keys and belong to
+different layers, `--layers` refuses rather than pick one: exit code 2, one line
+naming the file and both patterns, and no census or violations. Make one of the
+patterns more specific. A tie inside one layer cannot change the answer and is not
+refused, and equally specific patterns that never claim a common file, like
+`apps/web` and `apps/cli`, never tie.
 
 Paths not named are **outside the lattice**. Their edges are counted `unlayered`
 and never judged — the coverage gap is a number in every report, not a silence. A

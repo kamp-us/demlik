@@ -1,6 +1,7 @@
 import { type Reporter, resolveLayerRules } from "../config.js";
 import { loadCheapProject } from "../extract/project.js";
-import { analyzeLayers } from "./analyze.js";
+import { analyzeLayers, type LayerReport } from "./analyze.js";
+import { LayerTieError } from "./classify.js";
 import { renderLayers } from "./render.js";
 
 export function runLayerGate(args: {
@@ -14,7 +15,14 @@ export function runLayerGate(args: {
 }): number {
   const rules = resolveLayerRules(args.layerRulesFile, args.report);
   if (rules === null) return 2;
-  const analysis = analyzeLayers(loadCheapProject(args.rootAbsolute), args.repoRoot, rules);
+  let analysis: LayerReport;
+  try {
+    analysis = analyzeLayers(loadCheapProject(args.rootAbsolute), args.repoRoot, rules);
+  } catch (error) {
+    if (!(error instanceof LayerTieError)) throw error;
+    args.report(error.message);
+    return 2;
+  }
   const { stdout, exitCode } = renderLayers(analysis, rules.allowed, args.json, args.pretty);
   args.emit(`${stdout}\n`);
   return exitCode;
