@@ -1,8 +1,8 @@
 import path from "node:path";
-import { discoverPackageRoots, type LoadedProject, type SourceUnit } from "../extract/project.js";
+import type { LoadedProject, SourceUnit } from "../extract/project.js";
 import { importLiterals } from "../syntax/imports.js";
 import { compileMatchers, directionOf, layerOf } from "./classify.js";
-import { type ResolvedTarget, resolveTarget, workspacePackages } from "./resolve-target.js";
+import { createTargetResolver, type ResolvedTarget } from "./resolve-target.js";
 import type { LayerRules } from "./rules.js";
 
 export type LayerEdge = {
@@ -77,7 +77,7 @@ export function analyzeLayers(
   rules: LayerRules,
 ): LayerReport {
   const matchers = compileMatchers(rules.layers);
-  const packages = workspacePackages(repoRoot, discoverPackageRoots(repoRoot));
+  const resolveTarget = createTargetResolver(repoRoot);
   const census: LayerCensus = {
     down: 0,
     sideways: 0,
@@ -93,7 +93,7 @@ export function analyzeLayers(
     const from = path.relative(repoRoot, unit.absolutePath).split(path.sep).join("/");
     const fromLayer = layerOf(from, matchers);
     for (const spec of specifiersOf(unit)) {
-      const target = resolveTarget(repoRoot, from, spec.value, packages);
+      const target = resolveTarget(from, spec.value);
       if (target.kind === "external") {
         census.external++;
         continue;
