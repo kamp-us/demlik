@@ -4,7 +4,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { z } from "zod";
 import { createNearestTsconfigResolver, type NearestTsconfigResolver } from "../engine/oxc.js";
 import { packageName, packageSourceEntry, readManifest } from "../extract/package-exports.js";
-import { findNearestTsConfig } from "../extract/project.js";
+import { discoverPackageRoots, findNearestTsConfig } from "../extract/project.js";
 
 export type WorkspacePackage = {
   readonly name: string;
@@ -21,7 +21,7 @@ export type ResolvedTarget =
   /** A relative specifier or a tsconfig `paths` alias that names no file on disk — a real gap, counted. */
   | { readonly kind: "unresolved"; readonly specifier: string };
 
-export function workspacePackages(
+function workspacePackages(
   repoRoot: string,
   packageDirs: readonly string[],
 ): Map<string, WorkspacePackage> {
@@ -141,10 +141,8 @@ function inRepoFile(realRoot: string, resolved: string): ResolvedTarget {
 
 export type TargetResolver = (fromFile: string, specifier: string) => ResolvedTarget;
 
-export function createTargetResolver(
-  repoRoot: string,
-  packages: ReadonlyMap<string, WorkspacePackage>,
-): TargetResolver {
+export function createTargetResolver(repoRoot: string): TargetResolver {
+  const packages = workspacePackages(repoRoot, discoverPackageRoots(repoRoot));
   const nearest = createNearestTsconfigResolver();
   const aliasKeys = aliasKeysReader(nearest.locate);
   const realRoot = fs.realpathSync(repoRoot);
