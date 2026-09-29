@@ -156,7 +156,7 @@ export type LoadedEdgeProject = LoadedProject & {
   readonly scope: EdgeScope;
 };
 
-function findNearestTsConfig(start: string): string | null {
+export function findNearestTsConfig(start: string): string | null {
   let dir = start;
   for (;;) {
     const candidate = path.join(dir, "tsconfig.json");
