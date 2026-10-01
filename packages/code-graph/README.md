@@ -95,7 +95,7 @@ cross-package callers; re-run with `--deep`.
 | `--entry-preset <name>` | Turn on a built-in [entrypoint-export preset](#entrypoint-export-conventions) (`nextjs`) for every package, including one whose `package.json` does not depend on the framework. Repeatable; adds to any `entryExportPresets` the rules file names. An unknown name exits 2 |
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no type-checker, no Graph. A tsconfig `paths` alias resolves through the importing file's nearest tsconfig, an alias naming no file is UNRESOLVED, and any other unresolvable specifier stays `external` |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
-| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (`process.env`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners. `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
+| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (any `process.<member>`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners (a type-only import opens no door). `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
 | `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
 | `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries are seeded too and are not counted against it) |
@@ -631,23 +631,24 @@ Owners are exact scope-relative files, never a folder. The catalog, one row per 
 
 | Door | One use is |
 |---|---|
-| `process.env` | any runtime reference: `process.env.X`, `process["env"].X`, `process.env[k]`, `const { X } = process.env`, `const { env } = process`, a spread, an argument |
-| `process.argv`, `process.stdin`, `process.stdout`, `process.stderr`, `process.exit`, `process.cwd` | any runtime reference, per name |
+| `process.<member>` | any runtime reference to a static member of `process`, and each member is its own door (`process.env`, `process.hrtime`, `process.platform`, `process.on`, `process.versions`, …): `process.env.X`, `process["env"].X`, `process.env[k]`, `const { env } = process`, `process?.on?.("exit", f)`, a spread, an argument. `process.hrtime()` and `process.hrtime.bigint()` are two reads of one door, `process.hrtime`. A bare `process`, `process[k]` and `const p = process` name no member, so they are no use |
 | `Date.now`, `Math.random`, `crypto.randomUUID`, `crypto.getRandomValues`, `performance.now` | any runtime reference |
 | `new Date()` | `new Date` with no argument (`new Date(x)` and `Date.parse` are pure) |
 | `fetch`, `setTimeout`, `setInterval`, `globalThis` | any runtime reference |
 | `console` | any `console.*` reference |
-| `node:fs`, `node:child_process` | a runtime import of the module or a subpath, with or without `node:` (`fs`, `node:fs/promises`); a type-only import opens nothing |
+| `node:fs`, `node:child_process` | a runtime import of the module or a subpath, with or without `node:` (`fs`, `node:fs/promises`). A type-only import opens nothing, in every spelling: `import type`, `import { type Stats }`, `export type { … } from`, `export { type Stats } from`, `import type x = require()`, and `import("node:fs").Stats` or `typeof import("node:fs")` in a type. A file that names the types and also imports the module opens it once |
 
-A declaration may be narrower than a row, as a deeper static path under a member door
-(`process.stdin.isTTY` under `process.stdin`); a use belongs to the most specific declared door
-that is a path prefix of it. A chain rooted at `globalThis` is read without that root:
-`globalThis.process.env.CI` is a use of `process.env` and of `globalThis`.
+A declaration names one door: a member of `process` (`process.platform`), or a deeper static path
+under a door (`process.stdin.isTTY` under `process.stdin`, `process.hrtime.bigint` under
+`process.hrtime`); a use belongs to the most specific declared door that is a path prefix of it.
+The bare `process` is the whole family, not a door, and is refused. A chain rooted at `globalThis`
+is read without that root: `globalThis.process.env.CI` is a use of `process.env` and of
+`globalThis`.
 
-Not a use: a type position (`typeof process.env`), and a name the file binds itself (an import, a
-declaration or a parameter), so an injected `fetch` parameter is the pure pattern. That check is per
-file, not per scope, and fails open on a file that rebinds a name in one function and uses the real
-one in another. Nothing follows data flow: `const p = process`, `import process from "node:process"`
+Not a use: a type position (`typeof process.env`), a type-only import (above), and a name the file
+binds itself (an import, a declaration or a parameter), so an injected `fetch` parameter is the
+pure pattern. That check is per file, not per scope, and fails open on a file that rebinds a name in
+one function and uses the real one in another. Nothing follows data flow: `const p = process`, `import process from "node:process"`
 and `require()` are not tracked.
 
 Two checks read the one catalog:
@@ -658,16 +659,20 @@ Two checks read the one catalog:
 - **B2 `impure-rules`** on globals: inside `src/<feature>/rules/**` every use of any catalog door,
   declared or not, is one entry. A `rules/` zone is where no door has an owner, so a use there is
   reported once, as B2, never also as B5; a door module imported there is the edge B2 already
-  reports.
+  reports, a type-only import of it included, tagged `[type-only]` for `import type`.
 
 Adopting a door is declare, seed, shrink, empty: declare it, record today's uses with
 `--accept-crossings --reason "<why>"`, remove them PR by PR (the next `--ci` prunes each), until the
 ledger holds none. An entry is one file per door: a file already ledgered for `process.env` stays
-one entry however many reads it holds, so a new `process.env.NEW` in it passes `--ci`. The ledger
+one entry however many reads it holds, so a new `process.env.NEW` in it passes `--ci`, and
+`process.hrtime()` beside `process.hrtime.bigint()` is one entry, `process.hrtime`. The ledger
 names which files still depend on a door, not how often, so an edit to a ledgered file never churns
 it. A bad declaration exits 2 naming the problem and writing nothing: a door outside the catalog
-(a typo like `process.envv` would silently enforce nothing), a scope that does not declare
-`features`, an owner that names no file the scope loads, or an owner under `src/<feature>/rules/`.
+(a typo like `Math.randm` would silently enforce nothing), the bare `process`, a scope that does
+not declare `features`, an owner that names no file the scope loads, or an owner under
+`src/<feature>/rules/`. A member of `process` is checked against no list (that is what makes the
+family one row), so a misspelled one such as `process.envv` is accepted and polices nothing: read
+the first `--ci` for the files you expected.
 
 ### Migrating from `boundary-ceilings.json`
 

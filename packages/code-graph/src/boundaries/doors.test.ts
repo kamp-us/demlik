@@ -512,12 +512,24 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
   };
 
   it("refuses a door outside the catalog, so a typo cannot silently enforce nothing", () => {
-    expect(refused({ [SCOPE]: { "process.envv": ["src/env.ts"] } })).toContain(
-      'door "process.envv" in "packages/app" is not in the door catalog',
+    expect(refused({ [SCOPE]: { "Math.randm": ["src/env.ts"] } })).toContain(
+      'door "Math.randm" in "packages/app" is not in the door catalog',
     );
     expect(refused({ [SCOPE]: { "node:fs.readFileSync": ["src/env.ts"] } })).toContain(
       "not in the door catalog",
     );
+    expect(refused({ [SCOPE]: { "process.": ["src/env.ts"] } })).toContain(
+      "not in the door catalog",
+    );
+  });
+
+  it("refuses the bare `process`, naming the family instead of listing its members", () => {
+    const message = refused({ [SCOPE]: { process: ["src/env.ts"] } });
+    expect(message).toContain(
+      'door "process" in "packages/app" is the whole family process.<member>',
+    );
+    expect(message).not.toContain("process.env");
+    expect(message).not.toContain("not in the door catalog");
   });
 
   it("refuses a scope that does not declare features", () => {
@@ -539,14 +551,20 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
     );
   });
 
-  it("accepts a deeper static path under a member door", () => {
+  it("accepts a deeper static path under a door, and any member of process", () => {
     const file = path.join(repo.root, "ok.json");
     fs.writeFileSync(
       file,
       JSON.stringify({
         features: { [SCOPE]: ["billing"] },
         doors: {
-          [SCOPE]: { "process.env.CI": ["src/env.ts"], "process.stdin.isTTY": ["src/env.ts"] },
+          [SCOPE]: {
+            "process.env.CI": ["src/env.ts"],
+            "process.stdin.isTTY": ["src/env.ts"],
+            "process.platform": ["src/env.ts"],
+            "process.hrtime": ["src/env.ts"],
+            "process.hrtime.bigint": ["src/env.ts"],
+          },
         },
       }),
     );
@@ -597,6 +615,21 @@ describe("--migrate-ceilings counts import edges only and seeds the doors the co
     expect(green.stdout).toContain("3 recorded crossing(s), none new");
   });
 
+  it("seeds a process member beyond the old seven the same way, and the first --ci is green", () => {
+    recordCount(1);
+    repo.put("src/billing/rules/clock.ts", "export const t = () => process.hrtime.bigint();\n");
+    const { code, stdout } = repo.run({ migrateCeilings: true });
+    expect(code).toBe(0);
+    expect(stdout).toContain("seeded boundary-ledger.json with 4 crossing(s)");
+    const seeded = ledgerOf(repo).entries.filter((e) => e.specifier === "process.hrtime");
+    expect(seeded.map((e) => [e.kind, e.global === true, e.reason])).toEqual([
+      ["impure-rules", true, MIGRATED_REASON],
+    ]);
+    const green = repo.run({ ci: true });
+    expect(green.code).toBe(0);
+    expect(green.stdout).toContain("4 recorded crossing(s), none new");
+  });
+
   it("still refuses a scope whose import crossings exceed the count", () => {
     recordCount(0);
     const { code, errors } = repo.run({ migrateCeilings: true });
@@ -605,5 +638,339 @@ describe("--migrate-ceilings counts import edges only and seeds the doors the co
       "packages/app: 1 crossing(s) against a recorded ceiling of 0",
     );
     expect(fs.existsSync(repo.ledgerFile)).toBe(false);
+  });
+});
+
+describe("a team adopts the gate where rules/ reads any process member and files import node:fs for its types (#510)", () => {
+  const SCOPE = "packages/app";
+  const DOOR = "door-outside-owner";
+  const IMPURE = "impure-rules";
+  const FILES: Record<string, string> = {
+    "tsconfig.json": TSCONFIG,
+    "src/billing/rules/price.ts": [
+      "export const price = () => [",
+      "  process.env.DISCOUNT,",
+      "  process.env.TAX,",
+      "  process.hrtime(),",
+      "  process.hrtime.bigint(),",
+      "];",
+    ].join("\n"),
+    "src/billing/rules/tax.ts": "export const tax = () => process.platform;\n",
+    "src/orders/rules/id.ts": [
+      "const f = () => {};",
+      'export const id = () => { process.on("exit", f); return process.versions.node; };',
+    ].join("\n"),
+    "src/orders/rules/retry.ts": [
+      "export const retry = (key: string) => {",
+      "  const { arch } = process;",
+      "  return [process.env[key], arch];",
+      "};",
+    ].join("\n"),
+    "src/users/rules/session.ts": "export const session = () => globalThis.process.hrtime();\n",
+    "src/shipping/rules/total.ts": [
+      "type Env = typeof process.env;",
+      "export const total = (ts: number, process: { hrtime(): number }, env?: Env) =>",
+      "  [new Date(ts), process.hrtime(), env];",
+    ].join("\n"),
+    "src/credentials.ts":
+      'import { readFileSync } from "node:fs";\nexport const read = readFileSync;\n',
+    "src/users/store/mixed.ts":
+      'import { type Stats, readFileSync } from "node:fs";\nexport const m = (s: Stats) => readFileSync(s.toString());\n',
+    "src/users/flows/read.ts":
+      'import { readFile } from "node:fs/promises";\nexport const r = readFile;\n',
+    "src/lib/io.ts": 'export const load = () => import("node:fs");\n',
+    "src/billing/store/paths.ts": 'import { type Stats } from "node:fs";\nexport type P = Stats;\n',
+    "src/billing/store/mode.ts":
+      'import { type Stats, type Dirent } from "node:fs";\nexport type M = [Stats, Dirent];\n',
+    "src/orders/store/stat.ts": 'export type S = import("node:fs").Stats;\n',
+    "src/orders/flows/probe.ts": 'export type T = typeof import("node:fs");\n',
+    "src/shipping/store/reexport.ts": 'export { type Stats } from "node:fs";\n',
+    "src/shipping/store/eq.ts":
+      'import type fs = require("node:fs");\nexport type E = typeof fs;\n',
+    "src/shipping/flows/ship.ts": 'import type { Stats } from "node:fs";\nexport type X = Stats;\n',
+  };
+  const RULES = {
+    features: { [SCOPE]: ["billing", "orders", "users", "shipping"] },
+    lib: ["lib"],
+    doors: { [SCOPE]: { "node:fs": ["src/credentials.ts"] } },
+  };
+  const TWELVE = [
+    [DOOR, "lib/io.ts", "node:fs"],
+    [DOOR, "users/flows/read.ts", "node:fs"],
+    [DOOR, "users/store/mixed.ts", "node:fs"],
+    [IMPURE, "billing/rules/price.ts", "process.env"],
+    [IMPURE, "billing/rules/price.ts", "process.hrtime"],
+    [IMPURE, "billing/rules/tax.ts", "process.platform"],
+    [IMPURE, "orders/rules/id.ts", "process.on"],
+    [IMPURE, "orders/rules/id.ts", "process.versions"],
+    [IMPURE, "orders/rules/retry.ts", "process.arch"],
+    [IMPURE, "orders/rules/retry.ts", "process.env"],
+    [IMPURE, "users/rules/session.ts", "globalThis"],
+    [IMPURE, "users/rules/session.ts", "process.hrtime"],
+  ];
+  const TYPES_ONLY = /paths\.ts|mode\.ts|stat\.ts|probe\.ts|reexport\.ts|eq\.ts|ship\.ts/;
+
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(SCOPE, FILES, RULES);
+  });
+  afterEach(() => repo.dispose());
+
+  const entryLines = (run: GateRun) =>
+    run.stdout.split("\n").filter((line) => line.startsWith(`  ${SCOPE}  B`));
+
+  it("lists exactly the 12 real uses, none for a pure rules file, the owner or a file naming only types", () => {
+    const report = repo.run();
+    expect(report.code).toBe(0);
+    expect(report.stdout).toContain("12 violation(s)");
+    expect(report.stdout).not.toMatch(TYPES_ONLY);
+    expect(crossingsOf(SCOPE, repo.run({ json: true }))).toEqual(TWELVE);
+
+    const failed = repo.run({ ci: true });
+    expect(failed.code).toBe(1);
+    expect(failed.stdout).toContain("BOUNDARY LEDGER FAILED — 12 crossing(s)");
+    expect(entryLines(failed)).toHaveLength(12);
+    expect(failed.stdout).not.toMatch(TYPES_ONLY);
+    expect(failed.stdout).not.toMatch(/total\.ts|credentials\.ts/);
+    expect(fs.existsSync(repo.ledgerFile)).toBe(false);
+  });
+
+  it("adopts them, fails only a new member, and prunes only the one that closes", () => {
+    const reason = "rules reach the world today";
+    expect(repo.run({ acceptCrossings: true, reason }).code).toBe(0);
+    const { entries } = ledgerOf(repo);
+    expect(entries).toHaveLength(12);
+    expect(entries.every((e) => e.reason === reason)).toBe(true);
+    const seeded = ledgerText(repo);
+    const first = repo.run({ ci: true });
+    const second = repo.run({ ci: true });
+    expect([first.code, second.code]).toEqual([0, 0]);
+    expect(second.stdout).toBe(first.stdout);
+    expect(ledgerText(repo)).toBe(seeded);
+
+    repo.put(
+      "src/billing/rules/tax.ts",
+      "export const tax = () => [process.platform, process.uptime()];\n",
+    );
+    const grown = repo.run({ ci: true, json: true });
+    expect(grown.code).toBe(1);
+    const verdict: { unrecorded: { kind: string; from: string; specifier: string }[] } = JSON.parse(
+      grown.stdout,
+    );
+    expect(verdict.unrecorded.map((e) => [e.kind, e.from, e.specifier])).toEqual([
+      [IMPURE, `${SCOPE}/src/billing/rules/tax.ts`, "process.uptime"],
+    ]);
+    expect(ledgerText(repo)).toBe(seeded);
+
+    expect(repo.run({ acceptCrossings: true, reason: "uptime" }).code).toBe(0);
+    expect(ledgerOf(repo).entries).toHaveLength(13);
+    repo.put("src/billing/rules/tax.ts", "export const tax = () => process.uptime();\n");
+    const closed = repo.run({ ci: true });
+    expect(closed.code).toBe(0);
+    expect(closed.stdout).toContain("pruned 1 boundary-ledger.json entry whose crossing is gone:");
+    expect(pruneLines(closed.stdout)).toEqual([
+      `  ${SCOPE}  B2 ${IMPURE}  ${SCOPE}/src/billing/rules/tax.ts -> process.platform  — ${reason}`,
+    ]);
+    expect(ledgerOf(repo).entries).toHaveLength(12);
+
+    const settled = ledgerText(repo);
+    for (const _ of [1, 2]) {
+      const again = repo.run({ ci: true });
+      expect(again.code).toBe(0);
+      expect(again.stdout).not.toContain("pruned");
+      expect(ledgerText(repo)).toBe(settled);
+    }
+  });
+
+  it("keeps a type-only node:fs import in rules/ as the B2 import entry it always was", () => {
+    repo.put(
+      "src/shipping/rules/types.ts",
+      'import { type Stats } from "node:fs";\nimport type { Dirent } from "node:fs";\nexport type T = [Stats, Dirent];\n',
+    );
+    const found = violationsOf(repo.run({ json: true })).filter((v) =>
+      v.from.endsWith("shipping/rules/types.ts"),
+    );
+    expect(found.map((v) => [v.kind, v.specifier, v.typeOnly, "global" in v])).toEqual([
+      [IMPURE, "node:fs", false, false],
+      [IMPURE, "node:fs", true, false],
+    ]);
+  });
+});
+
+describe("a process member is one entry per file, and only rules/ polices one nobody declared", () => {
+  const SCOPE = "packages/app";
+  const IMPURE = "impure-rules";
+  const FILES: Record<string, string> = {
+    "tsconfig.json": TSCONFIG,
+    "src/billing/rules/clock.ts":
+      "export const t = () => [process.hrtime(), process.hrtime.bigint()];\n",
+    "src/billing/rules/two.ts": "export const t = () => [process.hrtime(), process.platform];\n",
+    "src/billing/rules/pure.ts": [
+      "export type P = typeof process.platform;",
+      "const p = process;",
+      "export const a = (k: string) => [p, process[k]];",
+    ].join("\n"),
+    "src/billing/index.ts": "export const i = [process.hrtime(), process.platform];\n",
+    "src/billing/flows/run.ts": "export const r = [process.hrtime(), process.platform];\n",
+    "src/lib/util.ts": "export const u = [process.hrtime(), process.platform];\n",
+    "src/other.ts": "export const o = [process.hrtime(), process.platform];\n",
+  };
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(SCOPE, FILES, { features: { [SCOPE]: ["billing"] } });
+  });
+  afterEach(() => repo.dispose());
+
+  it("records two members of one file as two entries and one member read twice as one", () => {
+    expect(crossingsOf(SCOPE, repo.run({ json: true }))).toEqual([
+      [IMPURE, "billing/rules/clock.ts", "process.hrtime"],
+      [IMPURE, "billing/rules/two.ts", "process.hrtime"],
+      [IMPURE, "billing/rules/two.ts", "process.platform"],
+    ]);
+  });
+
+  it("passes a second read of a member in a file that is already ledgered for it", () => {
+    expect(repo.run({ acceptCrossings: true, reason: "today" }).code).toBe(0);
+    const seeded = ledgerText(repo);
+    repo.put(
+      "src/billing/rules/two.ts",
+      "export const t = () => [process.hrtime(), process.hrtime.bigint(), process.platform];\n",
+    );
+    const run = repo.run({ ci: true });
+    expect(run.code).toBe(0);
+    expect(ledgerText(repo)).toBe(seeded);
+  });
+});
+
+describe("a ledger the previous release wrote still gates the seven names it listed", () => {
+  const SCOPE = "packages/app";
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(
+      SCOPE,
+      {
+        "tsconfig.json": TSCONFIG,
+        "src/billing/rules/cfg.ts": "export const c = [process.env.X, process.cwd()];\n",
+      },
+      { features: { [SCOPE]: ["billing"] } },
+    );
+  });
+  afterEach(() => repo.dispose());
+
+  it("passes with entries for process.env and process.cwd on a repo whose uses are unchanged", () => {
+    const entries = ["process.env", "process.cwd"].map((specifier) => ({
+      scope: SCOPE,
+      kind: "impure-rules",
+      from: `${SCOPE}/src/billing/rules/cfg.ts`,
+      to: null,
+      specifier,
+      global: true,
+      reason: "recorded by the previous release",
+    }));
+    fs.writeFileSync(repo.ledgerFile, JSON.stringify({ entries }));
+    const run = repo.run({ ci: true });
+    expect(run.code).toBe(0);
+    expect(run.stdout).toContain("2 recorded crossing(s), none new");
+  });
+});
+
+describe("a declared process member is a door with an owner, and the narrowest declaration wins", () => {
+  const SCOPE = "packages/app";
+  const DOOR = "door-outside-owner";
+  const FILES: Record<string, string> = {
+    "tsconfig.json": TSCONFIG,
+    "src/platform.ts": "export const os = process.platform;\n",
+    "src/clock.ts": "export const t = [process.hrtime(), process.hrtime.bigint()];\n",
+    "src/big.ts": "export const b = process.hrtime.bigint();\n",
+    "src/other.ts": "export const x = [process.platform, process.hrtime(), process.uptime()];\n",
+    "src/billing/index.ts": "export const i = 1;\n",
+  };
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(SCOPE, FILES, {
+      features: { [SCOPE]: ["billing"] },
+      doors: {
+        [SCOPE]: {
+          "process.platform": ["src/platform.ts"],
+          "process.hrtime": ["src/clock.ts"],
+          "process.hrtime.bigint": ["src/big.ts"],
+        },
+      },
+    });
+  });
+  afterEach(() => repo.dispose());
+
+  it("fails a non-owner for each declared member, and not for an undeclared one", () => {
+    expect(crossingsOf(SCOPE, repo.run({ json: true }))).toEqual([
+      [DOOR, "clock.ts", "process.hrtime.bigint"],
+      [DOOR, "other.ts", "process.hrtime"],
+      [DOOR, "other.ts", "process.platform"],
+    ]);
+  });
+});
+
+describe("a type-only import opens no door, in any spelling", () => {
+  const SCOPE = "packages/app";
+  const DOOR = "door-outside-owner";
+  const OPENS_NOTHING = [
+    'import type { Stats } from "node:fs";',
+    'import { type Stats } from "node:fs";',
+    'import { type Stats, type Dirent } from "node:fs";',
+    'export type { Stats } from "node:fs";',
+    'export { type Stats } from "node:fs";',
+    'import type fs = require("node:fs");',
+    'type S = import("node:fs").Stats;',
+    'type T = typeof import("node:fs");',
+    'type R = Awaited<ReturnType<typeof import("node:fs/promises").readFile>>;',
+    'import type { ChildProcess } from "node:child_process";',
+    'import { type ChildProcess } from "node:child_process";',
+    'declare module "x" { import fs from "node:fs"; }',
+  ];
+  const OPENS_ONE = [
+    ['import fs from "node:fs";', "node:fs"],
+    ['import * as fs from "node:fs";', "node:fs"],
+    ['import "node:fs";', "node:fs"],
+    ['import { type Stats, readFileSync } from "node:fs";', "node:fs"],
+    ['export { readFileSync } from "node:fs";', "node:fs"],
+    ['import fs = require("node:fs");', "node:fs"],
+    ['export const load = async () => await import("node:fs");', "node:fs"],
+    ['import { type Stats } from "node:fs";\nimport fs from "node:fs";', "node:fs"],
+    ['import { spawn } from "node:child_process";', "node:child_process"],
+    ['import { type ChildProcess, spawn } from "node:child_process";', "node:child_process"],
+  ] as const;
+
+  const FILES: Record<string, string> = {
+    "tsconfig.json": TSCONFIG,
+    "src/credentials.ts":
+      'import { readFileSync } from "node:fs";\nexport const read = readFileSync;\n',
+    "src/spawner.ts": 'import { spawn } from "node:child_process";\nexport const run = spawn;\n',
+    "src/billing/index.ts": "export const i = 1;\n",
+    ...Object.fromEntries(
+      OPENS_NOTHING.map((body, i) => [`src/billing/store/none${i}.ts`, `${body}\n`]),
+    ),
+    ...Object.fromEntries(
+      OPENS_ONE.map(([body], i) => [`src/billing/store/one${i}.ts`, `${body}\n`]),
+    ),
+  };
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(SCOPE, FILES, {
+      features: { [SCOPE]: ["billing"] },
+      doors: {
+        [SCOPE]: { "node:fs": ["src/credentials.ts"], "node:child_process": ["src/spawner.ts"] },
+      },
+    });
+  });
+  afterEach(() => repo.dispose());
+
+  it("reports one entry for each spelling that opens a module and none for the rest", () => {
+    expect(crossingsOf(SCOPE, repo.run({ json: true }))).toEqual(
+      OPENS_ONE.map(([, door], i) => [DOOR, `billing/store/one${i}.ts`, door]),
+    );
+  });
+
+  it("counts a file that names a module's types and also imports it as one use", () => {
+    const both = violationsOf(repo.run({ json: true })).filter((v) => v.from.endsWith("/one7.ts"));
+    expect(both.map((v) => v.specifier)).toEqual(["node:fs"]);
   });
 });

@@ -1,6 +1,6 @@
 import type { ImportEdge, ModuleNode } from "../schema.js";
 import type { DoorUse } from "./door-uses.js";
-import { declaredDoorOf, moduleDoorOf } from "./doors.js";
+import { declaredDoorOf, moduleDoorsOpened } from "./doors.js";
 import type { BoundaryRules } from "./rules.js";
 
 type Place =
@@ -64,6 +64,9 @@ export function isDoorUse(entry: { readonly kind: BoundaryKind; readonly global?
 
 export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> & {
   readonly doorUses: readonly DoorUse[];
+  // The specifiers the file opens when it runs. `importEdges` is the graph's and keeps a type-only
+  // `import { type Stats }` as a value import; a module door asks this.
+  readonly runtimeSpecifiers: ReadonlySet<string>;
 };
 
 export type ScopeBoundaryReport = {
@@ -195,7 +198,7 @@ function globalsInRules(ctx: ModuleContext, feature: string): BoundaryViolation[
 function outsideOwner(ctx: ModuleContext): BoundaryViolation[] {
   const declared = Object.keys(ctx.doors);
   if (declared.length === 0) return [];
-  const moduleDoors = ctx.module.importEdges.flatMap((edge) => moduleDoorOf(edge) ?? []);
+  const moduleDoors = moduleDoorsOpened(ctx.module.importEdges, ctx.module.runtimeSpecifiers);
   const paths = [
     ...ctx.module.doorUses.map((use) => use.path),
     ...moduleDoors.map((door) => [door]),

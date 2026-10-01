@@ -7,9 +7,17 @@ import { field, nodeField, type SyntaxFile, type SyntaxNode } from "./file.js";
 export type ImportLiteral = {
   readonly specifier: string;
   readonly kind: ImportEdge["kind"];
+  // What `ImportEdge.typeOnly` has always said: the declaration itself is `import type` or
+  // `export type … from`. The graph keeps exactly this.
   readonly typeOnly: boolean;
+  // Whether the file opens the module when it runs. Wider than `typeOnly`: `import { type Stats }`,
+  // `export { type Stats } from`, `import type x = require()`, a type-position `import("m")` and
+  // anything inside an ambient module emit nothing, and none of them is `typeOnly` to the graph.
+  readonly runtime: boolean;
   readonly start: number;
 };
+
+type Reach = Pick<ImportLiteral, "typeOnly" | "runtime">;
 
 function stringValue(node: SyntaxNode | null): string | null {
   if (node === null) return null;
@@ -35,13 +43,25 @@ function isRelativeName(name: string): boolean {
 function literalOf(
   source: SyntaxNode | null,
   kind: ImportEdge["kind"],
-  typeOnly: boolean,
+  reach: Reach,
   inAmbientModule: boolean,
 ): ImportLiteral[] {
   const specifier = stringValue(source);
   if (source === null || specifier === null || specifier === "") return [];
   if (inAmbientModule && isRelativeName(specifier)) return [];
-  return [{ specifier, kind, typeOnly, start: source.start }];
+  const runtime = reach.runtime && !inAmbientModule;
+  return [{ specifier, kind, typeOnly: reach.typeOnly, runtime, start: source.start }];
+}
+
+// Every specifier a declaration names says `type` (`import { type A, type B }`). A declaration that
+// names none (`import {} from "m"`, `export * from "m"`) is not this: it still opens the module.
+function namesOnlyTypes(statement: SyntaxNode, typeField: string): boolean {
+  const specifiers = field(statement, "specifiers");
+  return (
+    Array.isArray(specifiers) &&
+    specifiers.length > 0 &&
+    specifiers.every((specifier) => field(specifier as SyntaxNode, typeField) === "type")
+  );
 }
 
 function declarationLiterals(
@@ -51,13 +71,17 @@ function declarationLiterals(
   inAmbientModule: boolean,
 ): ImportLiteral[] {
   const typeOnly = field(statement, typeField) === "type";
-  return literalOf(nodeField(statement, "source"), kind, typeOnly, inAmbientModule);
+  const runtime = !typeOnly && !namesOnlyTypes(statement, typeField);
+  return literalOf(nodeField(statement, "source"), kind, { typeOnly, runtime }, inAmbientModule);
 }
 
+// `import type x = require("m")` is erased like `import type`, yet the graph has always called every
+// `import x = require()` value, so `typeOnly` stays false and only `runtime` says it.
 function importEqualsLiterals(statement: SyntaxNode, inAmbientModule: boolean): ImportLiteral[] {
   const reference = nodeField(statement, "moduleReference");
   if (reference?.type !== "TSExternalModuleReference") return [];
-  return literalOf(nodeField(reference, "expression"), "static", false, inAmbientModule);
+  const reach = { typeOnly: false, runtime: field(statement, "importKind") !== "type" };
+  return literalOf(nodeField(reference, "expression"), "static", reach, inAmbientModule);
 }
 
 // `declare module "x" { import … }`: TypeScript records the specifiers an ambient module's body
@@ -92,9 +116,11 @@ function expressionLiterals(syntax: SyntaxFile): ImportLiteral[] {
   const out: ImportLiteral[] = [];
   const visit = (node: SyntaxNode): void => {
     if (node.type === "ImportExpression") {
-      out.push(...literalOf(nodeField(node, "source"), "dynamic", false, false));
+      const reach = { typeOnly: false, runtime: true };
+      out.push(...literalOf(nodeField(node, "source"), "dynamic", reach, false));
     } else if (node.type === "TSImportType") {
-      out.push(...literalOf(nodeField(node, "source"), "static", false, false));
+      const reach = { typeOnly: false, runtime: false };
+      out.push(...literalOf(nodeField(node, "source"), "static", reach, false));
     }
     for (const child of syntax.children(node)) visit(child);
   };
@@ -108,6 +134,15 @@ function expressionLiterals(syntax: SyntaxFile): ImportLiteral[] {
 export function importLiterals(syntax: SyntaxFile): ImportLiteral[] {
   const statements = syntax.program.body.flatMap((s) => statementLiterals(s as SyntaxNode, false));
   return [...statements, ...expressionLiterals(syntax)];
+}
+
+// The specifiers a file opens when it runs, which the edge pass cannot say: it keeps one edge per
+// specifier and `typeOnly`, so `import { type Stats } from "m"` reads as a value import there. One
+// literal that survives emit is enough, so that import beside `import m from "m"` opens `m`, and
+// alone it opens nothing.
+export function runtimeSpecifiers(syntax: SyntaxFile): Set<string> {
+  const literals = importLiterals(syntax).filter((literal) => literal.runtime);
+  return new Set(literals.map((literal) => literal.specifier));
 }
 
 export function importDeclarationSpecifiers(syntax: SyntaxFile): string[] {

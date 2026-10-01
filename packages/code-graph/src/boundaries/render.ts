@@ -105,10 +105,10 @@ function prunedLines(pruned: readonly BoundaryLedgerEntry[]): string[] {
 
 const FIX_LINES = [
   "  Import a feature from outside it through its index.ts, keep rules/ on contracts only and free",
-  "  of world reads (process.env, fetch, the clock), and keep lib/ out of features. Open a world",
-  '  door only in the file its `doors` declaration names (`--boundary-rules`: { "doors": { "<scope>":',
-  '  { "<door>": ["<owner file>"] } } }). A crossing that has to stay is added by name and with a',
-  '  reason: `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
+  "  of world reads (any process.<member>, fetch, the clock), and keep lib/ out of features. Open a",
+  '  world door only in the file its `doors` declaration names (`--boundary-rules`: { "doors":',
+  '  { "<scope>": { "<door>": ["<owner file>"] } } }). A crossing that has to stay is added by name',
+  '  and with a reason: `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
 ];
 
 export function renderLedgerGate(

@@ -2,9 +2,9 @@ import { patternNames } from "../syntax/bindings.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import { bareNewDoorOf, type DoorName, GLOBAL_OBJECT, pathDoorOf } from "./doors.js";
 
-// One use of a world door by one file: the catalog door it falls under, and the static path it was
-// read through (`process.stdin.isTTY` falls under `process.stdin`). Module doors are not here: they
-// are import edges, and the edges are already read.
+// One use of a world door by one file: the door it falls under, and the static path it was read
+// through (`process.stdin.isTTY` falls under `process.stdin`, `process.hrtime.bigint` under
+// `process.hrtime`). Module doors are not here: they are import edges, and the edges are already read.
 export type DoorUse = { readonly door: DoorName; readonly path: readonly string[] };
 
 // This is not `env-keys/extract.ts`. `scanEnvKeys` answers "which keys does the code read from any
@@ -15,9 +15,10 @@ export type DoorUse = { readonly door: DoorName; readonly path: readonly string[
 //
 // What counts: a runtime reference to a catalog door, however it is spelled (`process.env.X`,
 // `process["env"].X`, `process.env[k]`, a spread, an argument, `const { X } = process.env`,
-// `const { env } = process`). What does not: a type position, a name the file binds itself (that
-// check is per file, so it fails open on a file that rebinds a name in one function and uses the
-// real one in another), and data flow (`const p = process`).
+// `const { env } = process`), and any static member of `process` is its own door. What does not: a
+// type position, a name the file binds itself (that check is per file, so it fails open on a file
+// that rebinds a name in one function and uses the real one in another), and data flow
+// (`const p = process`, a bare `process`, `process[k]`: no member is named, so no door is).
 export function detectDoorUses(syntax: SyntaxFile): DoorUse[] {
   const scan: Scan = { syntax, bound: boundNames(syntax), found: new Map() };
   for (const child of codeChildren(syntax, syntax.program)) visit(scan, child);
