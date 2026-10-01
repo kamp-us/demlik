@@ -11,4 +11,5 @@
 /biome.jsonc                        @kamp-us/control-plane
 /packages/code-graph/biome.jsonc    @kamp-us/control-plane
 
-# Not a governed root, but campaign state lives here and `campaignAuthors` is this same team.
+# `fabrika campaign` takes campaign authority from the control-plane team above (fabrika >= 0.8
+# retired `.fabrika.jsonc` `campaignAuthors`, phoenix#9852).
