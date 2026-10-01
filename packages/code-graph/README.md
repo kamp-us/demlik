@@ -668,17 +668,23 @@ one entry however many reads it holds, so a new `process.env.NEW` in it passes `
 `process.hrtime()` beside `process.hrtime.bigint()` is one entry, `process.hrtime`. The ledger
 names which files still depend on a door, not how often, so an edit to a ledgered file never churns
 it. A bad declaration exits 2 naming the problem and writing nothing: a door outside the catalog
-(a typo like `Math.randm` would silently enforce nothing), the bare `process`, a member Node's
-`process` does not have, a scope that does not declare `features`, an owner that names no file the
-scope loads, or an owner under `src/<feature>/rules/`.
+(a typo like `Math.randm` would silently enforce nothing), the bare `process`, a member the
+running `process` does not have, a scope that does not declare `features`, an owner that names no
+file the scope loads, or an owner under `src/<feature>/rules/`.
 
-A member of `process` is judged against Node's own `process`, so the family stays one catalog row
-and no list of members is kept here. The names are read once, off the Node that runs the CLI, by
+A member of `process` is judged against the running `process`, so the family stays one catalog row
+and no list of members is kept here. The names are read once, off the process that runs the CLI, by
 name only (reading `process.stdin` would open a stream), and every one counts, inherited
-EventEmitter methods such as `process.on` included. A typo such as `process.envv` exits 2 naming
-the door, the Node that judged it and the nearest member that Node has (`process.env`), compared
-without case and tie-broken by name, and a member with nothing near is refused without a guess. The
-check ends at the member. What lies below one is the runtime's, not Node's static shape:
+EventEmitter methods such as `process.on` included. Which members that process has depends on the
+Node version, the platform and how it was launched: `process.getuid` is POSIX-only, and
+`process.send` exists only when the process has an IPC channel. A typo such as `process.envv` exits
+2 naming the door, the Node version and platform that judged it and the nearest member that process
+has (`process.env`), compared without case and tie-broken by name, and a member with nothing near is
+refused without a guess. The same refusal tells a team on more than one host why a door passes on
+one and fails on another: `door "process.getuid" in "packages/app" is not a member of process on
+Node v22.1.0 (win32).` names the host that refused. The CLI does not read the launch mode, so a
+`process.send` refused for want of an IPC channel reads the same way, as a member that host lacks.
+The check ends at the member. What lies below one is the runtime's, not Node's static shape:
 `process.stdin.isTTY` is not a property at all when stdin is a pipe, and `process.env` holds
 whatever keys the shell gave it, so the segments after the member are checked only as identifiers.
 
@@ -1000,9 +1006,11 @@ for that), but `git log` itself is not a pure function of the source tree — hi
 changes as commits land, so an un-pinned `--hotspots-days` run legitimately differs
 from one taken later even against unchanged code.
 
-`--boundaries` gives the same ledger and report on every supported Node, and only the verdict on a
-declared `process` member the running Node lacks (`process.loadEnvFile` before Node 20.12) can
-differ by version, as a refusal that names that Node.
+`--boundaries` gives the same ledger and report on every host. Only the verdict on a declared
+`process` member can differ by host, because the member set is the running process's, so it depends
+on the Node version (`process.loadEnvFile` before Node 20.12), the platform (`process.getuid` is
+POSIX-only) and the launch mode (`process.send` needs an IPC channel). A host that lacks a declared
+member refuses it with a message naming its Node version and platform.
 
 ## Self-gate
 

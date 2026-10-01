@@ -5,6 +5,7 @@ import { type BoundaryRepo, boundaryRepo, type GateRun } from "../test-helpers/b
 import type { BoundaryViolation } from "./analyze.js";
 import { type BoundaryLedger, readBoundaryLedger } from "./ledger.js";
 import { MIGRATED_REASON } from "./migrate.js";
+import type { ProcessMembers } from "./process-members.js";
 
 const TSCONFIG = JSON.stringify({
   compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true },
@@ -551,10 +552,10 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
     );
   });
 
-  it("refuses a member Node's process lacks and names no far-fetched one", () => {
+  it("refuses a member the running process lacks and names no far-fetched one", () => {
     const message = refused({ [SCOPE]: { "process.zzzzzzzz": ["src/env.ts"] } });
     expect(message).toContain(
-      `door "process.zzzzzzzz" in "packages/app" is not a member of process on Node ${process.version}.`,
+      `door "process.zzzzzzzz" in "packages/app" is not a member of process on Node ${process.version} (${process.platform}).`,
     );
     expect(message).not.toContain("Did you mean");
   });
@@ -630,7 +631,7 @@ describe("a package owner who mistypes one door among several is told which, and
           expect(code).toBe(2);
           expect(stdout).toBe("");
           expect(errors).toEqual([
-            `door "${door}" in "${SCOPE}" is not a member of process on Node ${process.version}. ` +
+            `door "${door}" in "${SCOPE}" is not a member of process on Node ${process.version} (${process.platform}). ` +
               `Did you mean ${nearest}?`,
           ]);
         }
@@ -696,6 +697,122 @@ describe("a package owner who mistypes one door among several is told which, and
       expect(again.code).toBe(0);
       expect(again.stdout).not.toContain("pruned");
       expect(ledgerText(repo)).toBe(settled);
+    }
+  });
+});
+
+describe("a team whose CI runs on more than one host learns from the refusal which host refused a process door (#518)", () => {
+  const SCOPE = "packages/app";
+  const DOOR = "door-outside-owner";
+  const FILES: Record<string, string> = {
+    "tsconfig.json": TSCONFIG,
+    "src/env.ts": "export const ci = process.env.CI;\n",
+    "src/billing/flows/charge.ts": "export const charge = process.env.CI;\n",
+    "src/users/flows/login.ts": "export const login = process.env.HOME;\n",
+    "src/users/store/session.ts": "export const session = process.env.USER;\n",
+    "src/reports/flows/export.ts": "export const out = process.env.PATH;\n",
+    "src/lib/timer.ts": "export const timer = process.env.TZ;\n",
+  };
+  const FIVE_READS = [
+    [DOOR, "billing/flows/charge.ts", "process.env"],
+    [DOOR, "lib/timer.ts", "process.env"],
+    [DOOR, "reports/flows/export.ts", "process.env"],
+    [DOOR, "users/flows/login.ts", "process.env"],
+    [DOOR, "users/store/session.ts", "process.env"],
+  ];
+
+  // A stand-in for the `process` a host has: which Node, which platform, which members.
+  type HostName = "POSIX with IPC" | "POSIX without IPC" | "Windows";
+  const HOSTS: Record<HostName, ProcessMembers> = {
+    "POSIX with IPC": {
+      node: "v22.1.0",
+      platform: "linux",
+      names: new Set(["env", "getuid", "send"]),
+    },
+    "POSIX without IPC": {
+      node: "v20.18.0",
+      platform: "linux",
+      names: new Set(["env", "getuid"]),
+    },
+    Windows: { node: "v24.2.0", platform: "win32", names: new Set(["env"]) },
+  };
+  const hostNames = Object.keys(HOSTS) as HostName[];
+
+  // One declared door per config that some host lacks, because the first problem found is the only
+  // one named. `refused` says, per host, which door that host lacks.
+  const CONFIGS: {
+    name: string;
+    doors: string[];
+    refused: Partial<Record<HostName, string>>;
+  }[] = [
+    { name: "A", doors: ["process.env"], refused: {} },
+    {
+      name: "B",
+      doors: ["process.env", "process.getuid"],
+      refused: { Windows: "process.getuid" },
+    },
+    {
+      name: "C",
+      doors: ["process.env", "process.send"],
+      refused: { "POSIX without IPC": "process.send", Windows: "process.send" },
+    },
+  ];
+
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(SCOPE, FILES, {});
+  });
+  afterEach(() => repo.dispose());
+
+  // Adopt the doors under one host: the report, the ledger writer, then the gate.
+  const adopt = (rules: string, members: ProcessMembers) => {
+    fs.rmSync(repo.ledgerFile, { force: true });
+    const report = repo.run({ json: true, rules, members });
+    const accepted = repo.run({ acceptCrossings: true, reason: "x", rules, members });
+    const ledger = ledgerText(repo);
+    const gated = repo.run({ ci: true, rules, members });
+    expect([report.code, accepted.code, gated.code]).toEqual([0, 0, 0]);
+    expect(crossingsOf(SCOPE, report)).toEqual(FIVE_READS);
+    expect(ledgerOf(repo).entries).toHaveLength(5);
+    fs.rmSync(repo.ledgerFile);
+    return { report: report.stdout, accepted: accepted.stdout, ledger, gated: gated.stdout };
+  };
+
+  it("names the door, Node version and platform of the host that refuses, and every host that accepts writes the same bytes", () => {
+    for (const { name, doors, refused } of CONFIGS) {
+      const rules = path.join(repo.root, `${name}.json`);
+      fs.writeFileSync(
+        rules,
+        JSON.stringify({
+          features: { [SCOPE]: ["billing", "users", "reports"] },
+          lib: ["lib"],
+          doors: { [SCOPE]: Object.fromEntries(doors.map((door) => [door, ["src/env.ts"]])) },
+        }),
+      );
+      const written = [];
+      for (const host of hostNames) {
+        const members = HOSTS[host];
+        const lacking = refused[host];
+        if (lacking === undefined) {
+          const first = adopt(rules, members);
+          expect(adopt(rules, members), `config ${name} on ${host}, second run`).toEqual(first);
+          written.push(first);
+          continue;
+        }
+        for (const flags of [{ json: true }, { acceptCrossings: true, reason: "x" }]) {
+          const { code, stdout, errors } = repo.run({ ...flags, rules, members });
+          expect(code, `config ${name} on ${host}`).toBe(2);
+          expect(stdout).toBe("");
+          expect(errors).toHaveLength(1);
+          expect(errors[0]).toContain(
+            `door "${lacking}" in "${SCOPE}" is not a member of process on ` +
+              `Node ${members.node} (${members.platform}).`,
+          );
+        }
+        expect(fs.existsSync(repo.ledgerFile)).toBe(false);
+      }
+      expect(written.length, `config ${name} is accepted somewhere`).toBeGreaterThan(0);
+      for (const bytes of written) expect(bytes).toEqual(written[0]);
     }
   });
 });

@@ -14,6 +14,7 @@ import {
   writeBoundaryLedger,
 } from "./ledger.js";
 import { migratedLedger } from "./migrate.js";
+import type { ProcessMembers } from "./process-members.js";
 import { reconcile, withAccepted } from "./reconcile.js";
 import {
   renderAccepted,
@@ -36,6 +37,7 @@ export type BoundaryGateArgs = BoundaryFlags & {
   readonly rootAbsolute: string;
   readonly repoRoot: string;
   readonly boundaryRulesFile: string | undefined;
+  readonly members?: ProcessMembers;
   readonly emit: (payload: string) => void;
   readonly report: Reporter;
   readonly json: boolean;
@@ -208,7 +210,7 @@ function runMigrate(
 export function runBoundaryGate(args: BoundaryGateArgs): number {
   const mode = modeOf(args, args.report);
   if (mode === null) return 2;
-  const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report);
+  const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report, args.members);
   if (rules === null) return 2;
 
   const files: Files = {
