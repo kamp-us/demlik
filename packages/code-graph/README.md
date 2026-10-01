@@ -648,8 +648,8 @@ is read without that root: `globalThis.process.env.CI` is a use of `process.env`
 Not a use: a type position (`typeof process.env`), a type-only import (above), and a name the file
 binds itself (an import, a declaration or a parameter), so an injected `fetch` parameter is the
 pure pattern. That check is per file, not per scope, and fails open on a file that rebinds a name in
-one function and uses the real one in another. Nothing follows data flow: `const p = process`, `import process from "node:process"`
-and `require()` are not tracked.
+one function and uses the real one in another. Nothing follows data flow: `const p = process`,
+`import process from "node:process"` and `require()` are not tracked.
 
 Two checks read the one catalog:
 
@@ -668,11 +668,19 @@ one entry however many reads it holds, so a new `process.env.NEW` in it passes `
 `process.hrtime()` beside `process.hrtime.bigint()` is one entry, `process.hrtime`. The ledger
 names which files still depend on a door, not how often, so an edit to a ledgered file never churns
 it. A bad declaration exits 2 naming the problem and writing nothing: a door outside the catalog
-(a typo like `Math.randm` would silently enforce nothing), the bare `process`, a scope that does
-not declare `features`, an owner that names no file the scope loads, or an owner under
-`src/<feature>/rules/`. A member of `process` is checked against no list (that is what makes the
-family one row), so a misspelled one such as `process.envv` is accepted and polices nothing: read
-the first `--ci` for the files you expected.
+(a typo like `Math.randm` would silently enforce nothing), the bare `process`, a member Node's
+`process` does not have, a scope that does not declare `features`, an owner that names no file the
+scope loads, or an owner under `src/<feature>/rules/`.
+
+A member of `process` is judged against Node's own `process`, so the family stays one catalog row
+and no list of members is kept here. The names are read once, off the Node that runs the CLI, by
+name only (reading `process.stdin` would open a stream), and every one counts, inherited
+EventEmitter methods such as `process.on` included. A typo such as `process.envv` exits 2 naming
+the door, the Node that judged it and the nearest member that Node has (`process.env`), compared
+without case and tie-broken by name, and a member with nothing near is refused without a guess. The
+check ends at the member. What lies below one is the runtime's, not Node's static shape:
+`process.stdin.isTTY` is not a property at all when stdin is a pipe, and `process.env` holds
+whatever keys the shell gave it, so the segments after the member are checked only as identifiers.
 
 ### Migrating from `boundary-ceilings.json`
 
@@ -991,6 +999,10 @@ byte-identical for the SAME repo state and the SAME window (pin `--hotspots-sinc
 for that), but `git log` itself is not a pure function of the source tree — history
 changes as commits land, so an un-pinned `--hotspots-days` run legitimately differs
 from one taken later even against unchanged code.
+
+`--boundaries` gives the same ledger and report on every supported Node, and only the verdict on a
+declared `process` member the running Node lacks (`process.loadEnvFile` before Node 20.12) can
+differ by version, as a refusal that names that Node.
 
 ## Self-gate
 

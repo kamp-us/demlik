@@ -551,7 +551,15 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
     );
   });
 
-  it("accepts a deeper static path under a door, and any member of process", () => {
+  it("refuses a member Node's process lacks and names no far-fetched one", () => {
+    const message = refused({ [SCOPE]: { "process.zzzzzzzz": ["src/env.ts"] } });
+    expect(message).toContain(
+      `door "process.zzzzzzzz" in "packages/app" is not a member of process on Node ${process.version}.`,
+    );
+    expect(message).not.toContain("Did you mean");
+  });
+
+  it("accepts a deeper static path under a door, and a member Node's process has", () => {
     const file = path.join(repo.root, "ok.json");
     fs.writeFileSync(
       file,
@@ -569,6 +577,126 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
       }),
     );
     expect(repo.run({ rules: file }).code).toBe(0);
+  });
+});
+
+describe("a package owner who mistypes one door among several is told which, and the real ones keep working (#516)", () => {
+  const SCOPE = "packages/app";
+  const DOOR = "door-outside-owner";
+  const FILES: Record<string, string> = {
+    "tsconfig.json": TSCONFIG,
+    "src/env.ts": "export const ci = process.env.CI;\n",
+    "src/terminal.ts": "export const tty = process.stdin.isTTY;\n",
+    "src/signals.ts": 'export const watch = () => process.on("exit", () => {});\n',
+    "src/clock.ts": "export const tick = () => process.hrtime.bigint();\n",
+    "src/billing/flows/charge.ts": "export const charge = process.env.CI;\n",
+    "src/users/flows/login.ts": "export const login = process.stdin.isTTY;\n",
+    "src/users/store/session.ts": "export const session = process.env.HOME;\n",
+    "src/reports/flows/export.ts": 'export const out = () => process.on("exit", () => {});\n',
+    "src/lib/timer.ts": "export const timer = () => process.hrtime.bigint();\n",
+  };
+  const REAL_DOORS = {
+    "process.env": ["src/env.ts"],
+    "process.stdin.isTTY": ["src/terminal.ts"],
+    "process.on": ["src/signals.ts"],
+    "process.hrtime.bigint": ["src/clock.ts"],
+  };
+  const rulesWith = (doors: Record<string, string[]>) => ({
+    features: { [SCOPE]: ["billing", "users", "reports"] },
+    lib: ["lib"],
+    doors: { [SCOPE]: doors },
+  });
+  const MISTYPED: [door: string, nearest: string][] = [
+    ["process.envv", "process.env"],
+    ["process.ENV", "process.env"],
+    ["process.stdinn.isTTY", "process.stdin"],
+  ];
+
+  let repo: BoundaryRepo;
+  beforeEach(() => {
+    repo = boundaryRepo(SCOPE, FILES, rulesWith(REAL_DOORS));
+  });
+  afterEach(() => repo.dispose());
+
+  it("refuses each mistyped door in every mode, names it and the nearest member, and writes nothing", () => {
+    for (const [door, nearest] of MISTYPED) {
+      const file = path.join(repo.root, "mistyped.json");
+      fs.writeFileSync(file, JSON.stringify(rulesWith({ ...REAL_DOORS, [door]: ["src/env.ts"] })));
+      for (const seeded of [false, true]) {
+        if (seeded) expect(repo.run({ acceptCrossings: true, reason: "adopting" }).code).toBe(0);
+        const before = seeded ? ledgerText(repo) : null;
+        for (const flags of [{}, { ci: true }, { acceptCrossings: true, reason: "x" }]) {
+          const { code, stdout, errors } = repo.run({ ...flags, rules: file });
+          expect(code).toBe(2);
+          expect(stdout).toBe("");
+          expect(errors).toEqual([
+            `door "${door}" in "${SCOPE}" is not a member of process on Node ${process.version}. ` +
+              `Did you mean ${nearest}?`,
+          ]);
+        }
+        expect(fs.existsSync(repo.ledgerFile)).toBe(seeded);
+        if (before !== null) expect(ledgerText(repo)).toBe(before);
+      }
+      fs.rmSync(repo.ledgerFile, { force: true });
+    }
+  });
+
+  it("runs the whole adopt, fail, prune sequence over the all-real declaration", () => {
+    const entry = (file: string, specifier: string) => [DOOR, file, specifier];
+    const reads = [
+      entry("billing/flows/charge.ts", "process.env"),
+      entry("lib/timer.ts", "process.hrtime.bigint"),
+      entry("reports/flows/export.ts", "process.on"),
+      entry("users/flows/login.ts", "process.stdin.isTTY"),
+      entry("users/store/session.ts", "process.env"),
+    ];
+    const report = repo.run({ json: true });
+    expect(report.code).toBe(0);
+    expect(crossingsOf(SCOPE, report)).toEqual(reads);
+
+    const reason = "adopting doors";
+    expect(repo.run({ acceptCrossings: true, reason }).code).toBe(0);
+    expect(ledgerOf(repo).entries).toHaveLength(5);
+    expect(new Set(ledgerOf(repo).entries.map((e) => e.reason))).toEqual(new Set([reason]));
+    const seeded = ledgerText(repo);
+    const green = repo.run({ ci: true });
+    expect(green.code).toBe(0);
+    expect(green.stdout).toContain("5 recorded crossing(s), none new");
+    expect(ledgerText(repo)).toBe(seeded);
+
+    repo.put("src/billing/store/audit.ts", "export const audit = () => process.hrtime.bigint();\n");
+    const failed = repo.run({ ci: true, json: true });
+    expect(failed.code).toBe(1);
+    const verdict: { unrecorded: { kind: string; from: string; specifier: string }[] } = JSON.parse(
+      failed.stdout,
+    );
+    expect(
+      verdict.unrecorded.map((e) => [e.kind, e.from.replace(`${SCOPE}/src/`, ""), e.specifier]),
+    ).toEqual([entry("billing/store/audit.ts", "process.hrtime.bigint")]);
+    expect(ledgerText(repo)).toBe(seeded);
+
+    expect(repo.run({ acceptCrossings: true, reason: "the audit trail" }).code).toBe(0);
+    expect(ledgerOf(repo).entries).toHaveLength(6);
+    repo.put("src/billing/flows/charge.ts", "export const charge = 1;\n");
+    repo.put("src/lib/timer.ts", "export const timer = 1;\n");
+    const pruned = repo.run({ ci: true });
+    expect(pruned.code).toBe(0);
+    expect(pruned.stdout).toContain(
+      "pruned 2 boundary-ledger.json entries whose crossing is gone:",
+    );
+    expect(pruneLines(pruned.stdout)).toEqual([
+      `  ${SCOPE}  B5 ${DOOR}  ${SCOPE}/src/billing/flows/charge.ts -> process.env  — ${reason}`,
+      `  ${SCOPE}  B5 ${DOOR}  ${SCOPE}/src/lib/timer.ts -> process.hrtime.bigint  — ${reason}`,
+    ]);
+    expect(ledgerOf(repo).entries).toHaveLength(4);
+
+    const settled = ledgerText(repo);
+    for (const _ of [1, 2]) {
+      const again = repo.run({ ci: true });
+      expect(again.code).toBe(0);
+      expect(again.stdout).not.toContain("pruned");
+      expect(ledgerText(repo)).toBe(settled);
+    }
   });
 });
 

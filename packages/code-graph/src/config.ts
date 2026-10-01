@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { z } from "zod";
 import { doorDeclarationIssue } from "./boundaries/doors.js";
+import { type ProcessMembers, runningProcessMembers } from "./boundaries/process-members.js";
 import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
@@ -152,6 +153,7 @@ export function resolveCommentCeilings(
 export function resolveBoundaryRules(
   file: string | undefined,
   report: Reporter,
+  members: ProcessMembers = runningProcessMembers(),
 ): BoundaryRules | null {
   const defaults = BoundaryRulesSchema.parse({});
   const rules =
@@ -174,7 +176,7 @@ export function resolveBoundaryRules(
       seen.add(feature);
     }
   }
-  const doorIssue = doorDeclarationIssue(rules);
+  const doorIssue = doorDeclarationIssue(rules, members);
   if (doorIssue !== null) {
     report(doorIssue);
     return null;
