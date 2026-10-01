@@ -1,5 +1,10 @@
 import { stableStringify } from "../render/json.js";
-import type { BoundaryKind, BoundaryViolation, ScopeBoundaryReport } from "./analyze.js";
+import {
+  type BoundaryKind,
+  type BoundaryViolation,
+  isDoorUse,
+  type ScopeBoundaryReport,
+} from "./analyze.js";
 import {
   type BoundaryLedger,
   type BoundaryLedgerEntry,
@@ -22,6 +27,8 @@ function ruleOf(kind: BoundaryKind): string {
       return "B3";
     case "outside-imports-feature-internal":
       return "B4";
+    case "door-outside-owner":
+      return "B5";
     default: {
       const exhaustive: never = kind;
       return exhaustive;
@@ -37,6 +44,8 @@ function targetOf(violation: BoundaryViolation): string {
       return violation.to;
     case "impure-rules":
       return violation.to ?? violation.specifier;
+    case "door-outside-owner":
+      return violation.specifier;
     default: {
       const exhaustive: never = violation;
       return exhaustive;
@@ -44,11 +53,16 @@ function targetOf(violation: BoundaryViolation): string {
   }
 }
 
+// A door is its own target: the import specifier an edge was written with has no counterpart.
+function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier" | "global">): string {
+  return isDoorUse(entry) ? "" : `  ("${entry.specifier}")`;
+}
+
 function violationLine(violation: BoundaryViolation): string {
   const tag = violation.typeOnly ? "  [type-only]" : "";
   return (
     `  ${ruleOf(violation.kind)} ${violation.kind.padEnd(19)} ${violation.from} -> ` +
-    `${targetOf(violation)}  ("${violation.specifier}")${tag}`
+    `${targetOf(violation)}${writtenAs(violation)}${tag}`
   );
 }
 
@@ -77,7 +91,7 @@ function entryLine(entry: BoundaryLedgerEntry): string {
   const reason = entry.reason === undefined ? "" : `  — ${entry.reason}`;
   return (
     `  ${entry.scope}  ${ruleOf(entry.kind)} ${entry.kind}  ${entry.from} -> ` +
-    `${ledgerTargetOf(entry)}  ("${entry.specifier}")${reason}`
+    `${ledgerTargetOf(entry)}${writtenAs(entry)}${reason}`
   );
 }
 
@@ -90,9 +104,11 @@ function prunedLines(pruned: readonly BoundaryLedgerEntry[]): string[] {
 }
 
 const FIX_LINES = [
-  "  Import a feature from outside it through its index.ts, keep rules/ on contracts only, and",
-  "  keep lib/ out of features. A crossing that has to stay is added by name and with a reason:",
-  '  `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
+  "  Import a feature from outside it through its index.ts, keep rules/ on contracts only and free",
+  "  of world reads (process.env, fetch, the clock), and keep lib/ out of features. Open a world",
+  '  door only in the file its `doors` declaration names (`--boundary-rules`: { "doors": { "<scope>":',
+  '  { "<door>": ["<owner file>"] } } }). A crossing that has to stay is added by name and with a',
+  '  reason: `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
 ];
 
 export function renderLedgerGate(

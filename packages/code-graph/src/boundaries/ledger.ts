@@ -10,6 +10,7 @@ export const LEDGER_FILENAME = "boundary-ledger.json";
 
 export const BOUNDARY_KINDS = [
   "cross-feature",
+  "door-outside-owner",
   "impure-rules",
   "lib-imports-feature",
   "outside-imports-feature-internal",
@@ -21,6 +22,16 @@ const everyKindListed: Exclude<BoundaryKind, (typeof BOUNDARY_KINDS)[number]> ex
   : never = true;
 void everyKindListed;
 
+// Whether a kind can cross to something that is not a file of the scope: a bare import
+// (`impure-rules`) or a world door (`door-outside-owner`). Every other kind names its target file.
+const MAY_HAVE_NO_FILE = {
+  "cross-feature": false,
+  "door-outside-owner": true,
+  "impure-rules": true,
+  "lib-imports-feature": false,
+  "outside-imports-feature-internal": false,
+} as const satisfies Record<BoundaryKind, boolean>;
+
 const EntrySchema = z
   .object({
     scope: z.string().min(1),
@@ -28,13 +39,24 @@ const EntrySchema = z
     from: z.string().min(1),
     to: z.string().min(1).nullable(),
     specifier: z.string().min(1),
+    global: z.literal(true).optional(),
     reason: z.string().min(1).optional(),
   })
   .strict()
-  .refine((entry) => entry.to !== null || entry.kind === "impure-rules", {
-    message: "only an impure-rules entry may have a null `to` (a bare-specifier import)",
+  .refine((entry) => entry.to !== null || MAY_HAVE_NO_FILE[entry.kind], {
+    message:
+      "only an impure-rules or door-outside-owner entry may have a null `to` " +
+      "(a bare-specifier import, or a world door)",
     path: ["to"],
-  });
+  })
+  .refine(
+    (entry) => entry.global !== true || (entry.kind === "impure-rules" && entry.to === null),
+    {
+      message:
+        "`global` marks an impure-rules entry for a world door read by name, with a null `to`",
+      path: ["global"],
+    },
+  );
 
 export const BoundaryLedgerSchema = z
   .object({ entries: z.array(EntrySchema).default([]) })
@@ -54,9 +76,12 @@ export const BoundaryLedgerSchema = z
     });
   });
 
-// `to` is the resolved target file, or null for a bare import (`impure-rules` only), in which case
-// the target is the specifier itself. `specifier` is how the import was written and is display
-// only: it is not part of the identity, so a move that rewrites a relative specifier keeps it.
+// `to` is the resolved target file, or null for a bare import (`impure-rules`) or a world door
+// (`door-outside-owner`, or `impure-rules` with `global`), in which case the target is the
+// specifier itself. `specifier` is how an import was written, or the door's name, and is display
+// only for a file target: it is not part of the identity, so a move that rewrites a relative
+// specifier keeps it. `global` is part of the identity: a global `fetch` and a bare `import "fetch"`
+// from one file are two crossings, and the flag is all that tells them apart.
 export type BoundaryLedgerEntry = z.infer<typeof EntrySchema>;
 export type BoundaryLedger = { readonly entries: readonly BoundaryLedgerEntry[] };
 
@@ -71,10 +96,11 @@ export function ledgerTargetOf(entry: Pick<BoundaryLedgerEntry, "to" | "specifie
   return entry.to ?? entry.specifier;
 }
 
-// The identity: `(scope, kind, from, to ?? specifier)`. Two imports of one target from one file
-// are one crossing.
+// The identity: `(scope, kind, from, to ?? specifier)`, and whether the target is a global. Two
+// imports of one target from one file are one crossing, and so are two reads of one door.
 export function ledgerKey(entry: Omit<BoundaryLedgerEntry, "reason">): string {
-  return JSON.stringify([entry.scope, entry.kind, entry.from, ledgerTargetOf(entry)]);
+  const key = [entry.scope, entry.kind, entry.from, ledgerTargetOf(entry)];
+  return JSON.stringify(entry.global === true ? [...key, "global"] : key);
 }
 
 function compareEntries(a: BoundaryLedgerEntry, b: BoundaryLedgerEntry): number {
@@ -83,7 +109,8 @@ function compareEntries(a: BoundaryLedgerEntry, b: BoundaryLedgerEntry): number 
     a.kind.localeCompare(b.kind) ||
     a.from.localeCompare(b.from) ||
     ledgerTargetOf(a).localeCompare(ledgerTargetOf(b)) ||
-    a.specifier.localeCompare(b.specifier)
+    a.specifier.localeCompare(b.specifier) ||
+    Number(a.global === true) - Number(b.global === true)
   );
 }
 
