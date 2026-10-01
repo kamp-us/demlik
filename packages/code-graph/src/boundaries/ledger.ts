@@ -91,11 +91,12 @@ export const BoundaryLedgerSchema = z
   });
 
 // `to` is the resolved target file, or null for a bare import (`impure-rules`), a world door
-// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, or `impure-rules` with
-// `global`) or a feature's entry (`unknown-zone`), in which case the target is the specifier itself. `specifier` is how an import was written, or the door's name, and is display
-// only for a file target: it is not part of the identity, so a move that rewrites a relative
-// specifier keeps it. `global` is part of the identity: a global `fetch` and a bare `import "fetch"`
-// from one file are two crossings, and the flag is all that tells them apart.
+// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, or `impure-rules`
+// with `global`) or a feature's entry (`unknown-zone`), in which case the target is the specifier
+// itself. `specifier` is how an import was written, or the door's name, and is display only for a
+// file target: it is not part of the identity, so a move that rewrites a relative specifier keeps
+// it. `global` is part of the identity: a global `fetch` and a bare `import "fetch"` from one file
+// are two crossings, and the flag is all that tells them apart.
 export type BoundaryLedgerEntry = z.infer<typeof EntrySchema>;
 export type BoundaryLedger = { readonly entries: readonly BoundaryLedgerEntry[] };
 

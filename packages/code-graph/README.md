@@ -98,7 +98,7 @@ cross-package callers; re-run with `--deep`.
 | `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (any `process.<member>`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners (a type-only import opens no door). `lib` importers are judged by B3, not B4. A scope whose `layout` is `hexagonal` lays its features out in Cockburn's zones instead of `rules/` and adds **B6** `application-imports-adapter`, **B7** `impure-application`, **B8** `driving-reaches-driven`, **B9** `door-outside-driven-adapter` and **B10** `unknown-zone`; see [Hexagonal features](#hexagonal-features-layout). A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
 | `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
-| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries are seeded too and are not counted against it) |
+| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries, B5, B7, B9 and a door used by name in `rules/`, and `unknown-zone` entries are seeded too and are not counted against it) |
 | `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" } }`. An override REPLACES each key wholesale. `doors` and `layout` ride a scope that declares `features`; see [World doors](#world-doors-doors) and [Hexagonal features](#hexagonal-features-layout) |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
@@ -564,7 +564,8 @@ loaded, and a hook that reads 2114 files is a hook people disable.
 ## The boundary ledger (`--boundaries --ci`)
 
 `boundary-ledger.json` at the repo root names every boundary crossing a declared scope still
-carries, one entry per crossing import or world-door use:
+carries: one entry per crossing import, per world-door use (B5, B7, B9, and a door used by name in
+`rules/`), and per feature entry in no zone (B10):
 
 ```json
 {
@@ -724,8 +725,11 @@ src/<feature>/
 Any other entry is in no zone: a top-level entry other than these (`domain/`, `helpers.ts`,
 `rules/`, a colocated `billing.test.ts`) and any entry under `adapters/` other than `driving/` and
 `driven/` (`adapters/shared/`, `adapters/http.ts`). Only loaded source files count, so a folder
-holding no `.ts`/`.tsx` file is invisible. B1–B5 judge a hexagonal scope as they judge any other,
-and five kinds judge inside its features:
+holding no `.ts`/`.tsx` file is invisible. B1 and B3 judge a hexagonal scope as they judge any
+other. B2 never fires, because a hexagonal feature has no `rules/` zone. B4 has one exception, the
+composition root below. B7 and B9 take B5's place in `application/`, `index.ts`, `ports.ts` and
+`adapters/driving/`, so B5 judges only the rest of the scope (which rule claims a door, below).
+Five kinds judge inside its features:
 
 | Rule | Kind | Fires on | Allowed |
 |---|---|---|---|
@@ -758,9 +762,9 @@ converted. `code-graph . --boundaries --migrate-ceilings` measures every declare
 `boundary-ledger.json` with one entry per crossing measured now (reason
 `grandfathered from boundary-ceilings.json`), then deletes `boundary-ceilings.json`. It refuses,
 exit 2 and nothing written, when any scope's import crossings exceed its recorded count, because
-seeding from that would loosen the gate. The count only ever measured import edges, so the
-world-door entries (B5, and a global in `rules/`) are seeded with the same reason and are not
-held against it: a repo that predates the doors still migrates, and its first `--ci` is green.
+seeding from that would loosen the gate. The count only ever measured import edges (B1–B4, B6
+and B8), so the world-door entries (B5, B7, B9, and a global in `rules/`) and the `unknown-zone`
+entries (B10) are seeded with the same reason and are not held against it: a repo that predates the doors still migrates, and its first `--ci` is green.
 Until it runs, `--boundaries --ci` with a
 `boundary-ceilings.json` and no ledger exits 2 naming `--migrate-ceilings` rather than gate against
 an empty ledger.
