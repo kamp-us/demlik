@@ -32,8 +32,8 @@ catalogs:
       specifier: 4.20260312.1
       version: 4.20260312.1
     '@kampus/fabrika-cli':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.9.0
+      version: 0.9.0
     '@langfuse/otel':
       specifier: 5.11.1
       version: 5.11.1
@@ -140,7 +140,7 @@ importers:
         version: 2.31.1(@types/node@22.20.1)
       '@kampus/fabrika-cli':
         specifier: 'catalog:'
-        version: 0.7.1(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
+        version: 0.9.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
       vitest:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
@@ -452,15 +452,21 @@ packages:
   '@cloudflare/workers-types@4.20260312.1':
     resolution: {integrity: sha512-ySoTKc2ZKpwHll4H6byPWkxI/vmCc86B4h+hKo077zSTmBqIcxvbFozmOcEY7dhudMMDBnCgwZ9FknRrJxyqiQ==}
 
-  '@demlik/tea@0.12.0':
-    resolution: {integrity: sha512-INZW0hjrcEHCnMBYK+uwLJVxeS0BxMiRnhkfRyehcljH97+rPtRCDMyxPLyIzRPD6kI9t8KtDsOcOaXMKmUxqQ==}
+  '@demlik/tea@0.19.0':
+    resolution: {integrity: sha512-7pJGvSoYV4xcWvJWA41y6iEKnxrMkOjrMIa5G2E04EcdA1Nr9UE6ldFgPCvvvtg0NuowGUhdlq7N2dK67F0v+A==}
     peerDependencies:
+      '@opentelemetry/api': ^1.9.0
+      effect: ^4.0.0-rc.0
       fast-check: ^3 || ^4
       react: ^18 || ^19
       react-dom: ^18 || ^19
-      vitest: ^2 || ^3
+      vitest: ^2 || ^3 || ^4 || ^5
       ws: ^8
     peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      effect:
+        optional: true
       fast-check:
         optional: true
       react:
@@ -831,8 +837,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@kampus/fabrika-cli@0.7.1':
-    resolution: {integrity: sha512-A93ea2uXoC1xZzvxS+2slInyMaLMiLZLs3uW0QWn5myRf8kB+BCY17w41TP4pv63P0bmGp32QRT9wlrC7y12zA==}
+  '@kampus/fabrika-cli@0.9.0':
+    resolution: {integrity: sha512-rB5X7N7N2VCNzKGi1yeAfj9YjFlUyk8vPd+oVyjqmvanySa14Z3UcvhU5ffByM9qCN13dzwE6rJUkVzgb55rhw==}
     engines: {node: '>=22.12'}
     hasBin: true
 
@@ -1632,9 +1638,6 @@ packages:
   better-path-resolve@1.0.0:
     resolution: {integrity: sha512-pbnl5XzGBdrFU/wT4jqmJVPn2B6UHPBOhzMQkY/SPUPB6QtUXtmBHBIwCbXJol93mOpGMnQyP/+BB19q04xj7g==}
     engines: {node: '>=4'}
-
-  better-result@2.10.0:
-    resolution: {integrity: sha512-oQhh0y1qo2/ZKdAAEvHZAqKKiHOFU5k/bW96fE2ScgQOVkJRiHwB+nOS1SgFsYqRlxMDWvefXi9Q3px7QvgNDw==}
 
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
@@ -2758,10 +2761,12 @@ snapshots:
 
   '@cloudflare/workers-types@4.20260312.1': {}
 
-  '@demlik/tea@0.12.0(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
+  '@demlik/tea@0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
     dependencies:
-      better-result: 2.10.0
+      '@standard-schema/spec': 1.1.0
     optionalDependencies:
+      '@opentelemetry/api': 1.9.1
+      effect: 4.0.0-rc.112
       fast-check: 4.9.0
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
@@ -2989,9 +2994,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@kampus/fabrika-cli@0.7.1(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
+  '@kampus/fabrika-cli@0.9.0(@opentelemetry/api@1.9.1)(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)':
     dependencies:
-      '@demlik/tea': 0.12.0(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
+      '@demlik/tea': 0.19.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(fast-check@4.9.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(happy-dom@20.11.2)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0)))(ws@8.21.3)
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@playwright/test': 1.62.1
@@ -2999,6 +3004,7 @@ snapshots:
       fast-xml-parser: 5.8.0
       yaml: 2.9.0
     transitivePeerDependencies:
+      - '@opentelemetry/api'
       - bufferutil
       - fast-check
       - react
@@ -3582,8 +3588,6 @@ snapshots:
   better-path-resolve@1.0.0:
     dependencies:
       is-windows: 1.0.2
-
-  better-result@2.10.0: {}
 
   brace-expansion@5.0.9:
     dependencies:
