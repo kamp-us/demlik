@@ -1,4 +1,6 @@
 import type { ImportEdge, ModuleNode } from "../schema.js";
+import type { DoorUse } from "./door-uses.js";
+import { declaredDoorOf, moduleDoorOf } from "./doors.js";
 import type { BoundaryRules } from "./rules.js";
 
 type Place =
@@ -25,6 +27,9 @@ export type BoundaryViolation =
       readonly to: string | null;
       readonly specifier: string;
       readonly typeOnly: boolean;
+      // A world door read by name (`process.env`, `fetch`), not an import. `specifier` is then the
+      // door, which an import of a package of that name must not collide with.
+      readonly global?: true;
     }
   | {
       readonly kind: "lib-imports-feature";
@@ -41,9 +46,25 @@ export type BoundaryViolation =
       readonly toFeature: string;
       readonly specifier: string;
       readonly typeOnly: boolean;
+    }
+  | {
+      readonly kind: "door-outside-owner";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: false;
     };
 
 export type BoundaryKind = BoundaryViolation["kind"];
+
+// What `boundary-ceilings.json` never counted: a world door used by name, an import edge it is not.
+export function isDoorUse(entry: { readonly kind: BoundaryKind; readonly global?: true }): boolean {
+  return entry.kind === "door-outside-owner" || entry.global === true;
+}
+
+export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> & {
+  readonly doorUses: readonly DoorUse[];
+};
 
 export type ScopeBoundaryReport = {
   readonly scope: string;
@@ -147,13 +168,64 @@ function violationOf(ctx: EdgeContext): BoundaryViolation | null {
   return to.kind === "feature" ? crossingOf(ctx, edge.target, to) : null;
 }
 
+type ModuleContext = {
+  readonly scope: string;
+  readonly module: BoundaryModule;
+  readonly place: Place;
+  readonly doors: Readonly<Record<string, readonly string[]>>;
+};
+
+// Inside `rules/` no door has an owner, so every use of any catalog door is the zone's own
+// violation, once per door. A door module imported there is already an edge, judged above.
+function globalsInRules(ctx: ModuleContext, feature: string): BoundaryViolation[] {
+  const used = new Set(ctx.module.doorUses.map((use) => use.door));
+  return [...used].map((door) => ({
+    kind: "impure-rules",
+    from: inScope(ctx.scope, ctx.module.file),
+    feature,
+    to: null,
+    specifier: door,
+    typeOnly: false,
+    global: true,
+  }));
+}
+
+// Anywhere else only a declared door is policed: a use belongs to the most specific declared door
+// that is a path prefix of it, and is a violation unless this file is one of that door's owners.
+function outsideOwner(ctx: ModuleContext): BoundaryViolation[] {
+  const declared = Object.keys(ctx.doors);
+  if (declared.length === 0) return [];
+  const moduleDoors = ctx.module.importEdges.flatMap((edge) => moduleDoorOf(edge) ?? []);
+  const paths = [
+    ...ctx.module.doorUses.map((use) => use.path),
+    ...moduleDoors.map((door) => [door]),
+  ];
+  const doors = new Set(paths.flatMap((path) => declaredDoorOf(path, declared) ?? []));
+  return [...doors]
+    .filter((door) => !ctx.doors[door]?.includes(ctx.module.file))
+    .map((door) => ({
+      kind: "door-outside-owner",
+      from: inScope(ctx.scope, ctx.module.file),
+      to: null,
+      specifier: door,
+      typeOnly: false,
+    }));
+}
+
+function doorViolations(ctx: ModuleContext): BoundaryViolation[] {
+  const { place } = ctx;
+  if (place.kind === "feature" && place.zone === "rules") return globalsInRules(ctx, place.feature);
+  return outsideOwner(ctx);
+}
+
 export function analyzeBoundaries(
   scope: string,
-  modules: readonly Pick<ModuleNode, "file" | "importEdges">[],
+  modules: readonly BoundaryModule[],
   rules: BoundaryRules,
 ): ScopeBoundaryReport {
   const features = rules.features[scope] ?? [];
   const layout: Layout = { features: new Set(features), lib: new Set(rules.lib) };
+  const doors = rules.doors[scope] ?? {};
   const violations: BoundaryViolation[] = [];
   for (const module of modules) {
     const fromPlace = placeOf(module.file, layout);
@@ -168,12 +240,14 @@ export function analyzeBoundaries(
       });
       if (found !== null) violations.push(found);
     }
+    violations.push(...doorViolations({ scope, module, place: fromPlace, doors }));
   }
   violations.sort(
     (a, b) =>
       a.kind.localeCompare(b.kind) ||
       a.from.localeCompare(b.from) ||
-      a.specifier.localeCompare(b.specifier),
+      a.specifier.localeCompare(b.specifier) ||
+      Number(isDoorUse(a)) - Number(isDoorUse(b)),
   );
   return {
     scope,

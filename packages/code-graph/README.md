@@ -49,8 +49,8 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Exported symbols nothing reaches | `code-graph X --unreachable` |
 | Writes reachable from an entry with no auth on the path | `code-graph X --unguarded` |
 | Imports pointing UP the declared layer stack (a gate) | `code-graph . --layers` |
-| Imports crossing a declared feature boundary | `code-graph X --boundaries` |
-| Gate feature-boundary crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
+| Imports crossing a declared feature boundary, and world doors (`process.env`, `fetch`, the clock, `node:fs`) opened outside their owner | `code-graph X --boundaries` |
+| Gate feature-boundary and world-door crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
 | Record the current crossings, with why they stay | `code-graph . --boundaries --accept-crossings --reason "<why>"` |
 | Move off a `boundary-ceilings.json` once | `code-graph . --boundaries --migrate-ceilings` |
 | Ranked collapse candidates + partial twins | `code-graph X --collapse` |
@@ -95,11 +95,11 @@ cross-package callers; re-run with `--deep`.
 | `--entry-preset <name>` | Turn on a built-in [entrypoint-export preset](#entrypoint-export-conventions) (`nextjs`) for every package, including one whose `package.json` does not depend on the framework. Repeatable; adds to any `entryExportPresets` the rules file names. An unknown name exits 2 |
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no type-checker, no Graph. A tsconfig `paths` alias resolves through the importing file's nearest tsconfig, an alias naming no file is UNRESOLVED, and any other unresolvable specifier stays `external` |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
-| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges`: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`; **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`. `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
+| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (`process.env`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners. `lib` importers are judged by B3, not B4. A report, exit 0; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
 | `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
-| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope crosses more than its recorded count |
-| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …] }`. An override REPLACES each key wholesale |
+| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries are seeded too and are not counted against it) |
+| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } } }`. An override REPLACES each key wholesale. `doors` rides a scope that declares `features`; see [World doors](#world-doors-doors) |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
 | `--collapse --write-ceilings` | Record the analyzed path's partial-twin count in `collapse-ceilings.json`, leaving the other scopes as they are |
@@ -564,7 +564,7 @@ loaded, and a hook that reads 2114 files is a hook people disable.
 ## The boundary ledger (`--boundaries --ci`)
 
 `boundary-ledger.json` at the repo root names every boundary crossing a declared scope still
-carries, one entry per crossing import:
+carries, one entry per crossing import or world-door use:
 
 ```json
 {
@@ -582,11 +582,15 @@ carries, one entry per crossing import:
 ```
 
 `kind` is the rule (`cross-feature` B1, `impure-rules` B2, `lib-imports-feature` B3,
-`outside-imports-feature-internal` B4), `from` the importer and `to` the target, both
-repo-relative. `to` is `null` only for a B2 bare import, where the specifier is the target.
-An entry's identity is `(scope, kind, from, to ?? specifier)`: the `specifier` as written is
-display only, so two imports of one target from one file are one entry, and a move that rewrites
-a relative specifier keeps its entry. `reason` is optional. The file is written sorted with
+`outside-imports-feature-internal` B4, `door-outside-owner` B5), `from` the importer and `to`
+the target, both repo-relative. `to` is `null` for a B2 bare import, where the specifier is the
+target, and for a world door (`door-outside-owner`, or `impure-rules` with `"global": true`),
+where the specifier is the door's name. An entry's identity is `(scope, kind, from, to ??
+specifier)`, plus `global`: the `specifier` as written is display only for a file target, so two
+imports of one target from one file are one entry, and a move that rewrites a relative specifier
+keeps its entry. `global` is what keeps a global `fetch` and a bare `import "fetch"` (the npm
+package) from one rules file two entries, not one; it is only ever `true`, and only on an
+`impure-rules` entry with a null `to`. `reason` is optional. The file is written sorted with
 sorted keys, so a diff shows exactly which crossings came and went.
 
 A count could not tell "one crossing fixed, a different one added" from "nothing changed". The
@@ -603,14 +607,79 @@ writes improvements back to its results file and fails only on regressions: comm
 ledger with the fix that removed the crossing. `--boundaries --write-ceilings` exits 2 naming
 `--accept-crossings`; `--comments` and `--collapse` keep their `--write-ceilings`.
 
+### World doors (`doors`)
+
+A fact read from the outside world (an env var, the terminal, the clock, a credentials file)
+drifts once more than one file reads it. A **door** is one way a file reaches out, and one
+catalog names them all. A boundary rules file declares, per scope that declares `features`, which
+files may open each door:
+
+```json
+{
+  "features": { "packages/app": ["billing", "users"] },
+  "doors": {
+    "packages/app": {
+      "process.env": ["src/env.ts"],
+      "process.stdin.isTTY": ["src/terminal.ts"],
+      "node:fs": ["src/credentials.ts"]
+    }
+  }
+}
+```
+
+Owners are exact scope-relative files, never a folder. The catalog, one row per door:
+
+| Door | One use is |
+|---|---|
+| `process.env` | any runtime reference: `process.env.X`, `process["env"].X`, `process.env[k]`, `const { X } = process.env`, `const { env } = process`, a spread, an argument |
+| `process.argv`, `process.stdin`, `process.stdout`, `process.stderr`, `process.exit`, `process.cwd` | any runtime reference, per name |
+| `Date.now`, `Math.random`, `crypto.randomUUID`, `crypto.getRandomValues`, `performance.now` | any runtime reference |
+| `new Date()` | `new Date` with no argument (`new Date(x)` and `Date.parse` are pure) |
+| `fetch`, `setTimeout`, `setInterval`, `globalThis` | any runtime reference |
+| `console` | any `console.*` reference |
+| `node:fs`, `node:child_process` | a runtime import of the module or a subpath, with or without `node:` (`fs`, `node:fs/promises`); a type-only import opens nothing |
+
+A declaration may be narrower than a row, as a deeper static path under a member door
+(`process.stdin.isTTY` under `process.stdin`); a use belongs to the most specific declared door
+that is a path prefix of it. A chain rooted at `globalThis` is read without that root:
+`globalThis.process.env.CI` is a use of `process.env` and of `globalThis`.
+
+Not a use: a type position (`typeof process.env`), and a name the file binds itself (an import, a
+declaration or a parameter), so an injected `fetch` parameter is the pure pattern. That check is per
+file, not per scope, and fails open on a file that rebinds a name in one function and uses the real
+one in another. Nothing follows data flow: `const p = process`, `import process from "node:process"`
+and `require()` are not tracked.
+
+Two checks read the one catalog:
+
+- **B5 `door-outside-owner`**: a use of a declared door in a file that is not one of its owners,
+  anywhere in the scope (a feature, `lib/` or the rest of `src/`). A door nobody declared is not
+  policed outside `rules/`.
+- **B2 `impure-rules`** on globals: inside `src/<feature>/rules/**` every use of any catalog door,
+  declared or not, is one entry. A `rules/` zone is where no door has an owner, so a use there is
+  reported once, as B2, never also as B5; a door module imported there is the edge B2 already
+  reports.
+
+Adopting a door is declare, seed, shrink, empty: declare it, record today's uses with
+`--accept-crossings --reason "<why>"`, remove them PR by PR (the next `--ci` prunes each), until the
+ledger holds none. An entry is one file per door: a file already ledgered for `process.env` stays
+one entry however many reads it holds, so a new `process.env.NEW` in it passes `--ci`. The ledger
+names which files still depend on a door, not how often, so an edit to a ledgered file never churns
+it. A bad declaration exits 2 naming the problem and writing nothing: a door outside the catalog
+(a typo like `process.envv` would silently enforce nothing), a scope that does not declare
+`features`, an owner that names no file the scope loads, or an owner under `src/<feature>/rules/`.
+
 ### Migrating from `boundary-ceilings.json`
 
 The count file this replaced stored one number per scope and no edges, so it cannot be
 converted. `code-graph . --boundaries --migrate-ceilings` measures every declared scope and seeds
 `boundary-ledger.json` with one entry per crossing measured now (reason
 `grandfathered from boundary-ceilings.json`), then deletes `boundary-ceilings.json`. It refuses,
-exit 2 and nothing written, when any scope crosses more than its recorded count, because seeding
-from that would loosen the gate. Until it runs, `--boundaries --ci` with a
+exit 2 and nothing written, when any scope's import crossings exceed its recorded count, because
+seeding from that would loosen the gate. The count only ever measured import edges, so the
+world-door entries (B5, and a global in `rules/`) are seeded with the same reason and are not
+held against it: a repo that predates the doors still migrates, and its first `--ci` is green.
+Until it runs, `--boundaries --ci` with a
 `boundary-ceilings.json` and no ledger exits 2 naming `--migrate-ceilings` rather than gate against
 an empty ledger.
 

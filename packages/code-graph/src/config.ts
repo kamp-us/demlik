@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { z } from "zod";
+import { doorDeclarationIssue } from "./boundaries/doors.js";
 import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
@@ -172,6 +173,11 @@ export function resolveBoundaryRules(
       }
       seen.add(feature);
     }
+  }
+  const doorIssue = doorDeclarationIssue(rules);
+  if (doorIssue !== null) {
+    report(doorIssue);
+    return null;
   }
   return rules;
 }

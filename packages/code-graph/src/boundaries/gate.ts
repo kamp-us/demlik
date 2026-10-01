@@ -5,6 +5,8 @@ import { loadEdgeProject } from "../extract/project.js";
 import { readScopeCeilings, scopeOf, scopesUnder } from "../ratchet/scope-count.js";
 import { resolveImports } from "../syntax/imports.js";
 import { analyzeBoundaries, type ScopeBoundaryReport } from "./analyze.js";
+import { detectDoorUses } from "./door-uses.js";
+import { unknownOwners } from "./doors.js";
 import {
   type BoundaryLedger,
   LEDGER_FILENAME,
@@ -87,10 +89,21 @@ function analyzeScope(
     loaded.sourceFiles,
     loaded.tsConfigPath,
   );
-  const modules = loaded.sourceFiles.map(({ file }) => ({
+  const modules = loaded.sourceFiles.map(({ file, syntax }) => ({
     file,
     importEdges: importEdgesByFile.get(file) ?? [],
+    doorUses: detectDoorUses(syntax),
   }));
+  const unknown = unknownOwners(
+    rules.doors[scope] ?? {},
+    new Set(modules.map((module) => module.file)),
+  );
+  if (unknown.length > 0) {
+    throw new Error(
+      `door owner(s) in "${scope}" name no file the scope loads: ${unknown.join("; ")}. ` +
+        "An owner is an exact scope-relative .ts/.tsx path, such as src/env.ts.",
+    );
+  }
   return analyzeBoundaries(scope, modules, rules);
 }
 
