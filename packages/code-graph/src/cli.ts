@@ -110,7 +110,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--boundaries",
-      "feature boundaries: cross-feature imports not through <feature>/index.ts (B1), rules/ importing beyond itself and contracts or using a world door by name such as any process.<member> (process.env, process.hrtime, process.platform, …), fetch or the clock (B2), lib/ importing a feature (B3), a file in no feature importing a feature's internals (B4), a declared world door used outside its owner files (B5, from the doors key of --boundary-rules; a type-only import of node:fs or node:child_process opens no door) (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
+      "feature boundaries: cross-feature imports not through <feature>/index.ts (B1), rules/ importing beyond itself and contracts or using a world door by name such as any process.<member> (process.env, process.hrtime, process.platform, …), fetch or the clock (B2), lib/ importing a feature (B3), a file in no feature importing a feature's internals (B4), a declared world door used outside its owner files (B5, from the doors key of --boundary-rules; a type-only import of node:fs or node:child_process opens no door); a scope the layout key of --boundary-rules sets to hexagonal lays its features out as index.ts, ports.ts, application/, adapters/driving/ and adapters/driven/ instead of rules/, and adds application/ importing its own adapters/ (B6 application-imports-adapter), any world door used or opened in application/ (B7 impure-application), adapters/driving/ importing its own application/ or adapters/driven/ (B8 driving-reaches-driven), a declared door used in index.ts, ports.ts or adapters/driving/ (B9 door-outside-driven-adapter) and a feature entry no zone names (B10 unknown-zone) (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
     )
     .option(
       "--accept-crossings",
@@ -123,7 +123,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--boundary-rules <file>",
-      "JSON file of boundary-declaration overrides (features per scope, lib, contracts, and doors: per scope, each world door and the scope-relative files that may open it) merged over defaults",
+      'JSON file of boundary-declaration overrides (features per scope, lib, contracts, doors: per scope, each world door and the scope-relative files that may open it, and layout: per scope, "rules" or "hexagonal", default "rules") merged over defaults',
     )
     .option(
       "--collapse",

@@ -1,7 +1,13 @@
 import type { ImportEdge } from "../schema.js";
 import { nearestName } from "./nearest.js";
 import type { ProcessMembers } from "./process-members.js";
-import type { BoundaryRules } from "./rules.js";
+import {
+  type BoundaryRules,
+  type DoorRule,
+  featureFileOf,
+  type ScopeZoning,
+  scopeZoning,
+} from "./rules.js";
 
 // A world door is a way a file reaches outside itself: an env var, the terminal, the clock, the
 // network, a module that touches the disk. This table is the whole vocabulary, one row per door
@@ -215,21 +221,39 @@ function doorProblem(scope: string, door: string, members: ProcessMembers): stri
   return `door "${door}" in "${scope}" is not a member of ${named.root} on ${host}.${hint}`;
 }
 
+// A zone that judges every door used in it by its own kind has no owner to declare: an owner there
+// would be told it may open a door the zone reports anyway.
+const OWNERLESS = {
+  "door-outside-owner": null,
+  "impure-rules": "where no door has an owner",
+  "impure-application":
+    "where no door has an owner: a hexagonal feature opens a door only in adapters/driven/",
+  "door-outside-driven-adapter":
+    "where no door has an owner: a hexagonal feature opens a door only in adapters/driven/",
+} as const satisfies Record<DoorRule, string | null>;
+
+function ownerProblem(owner: string, zoning: ScopeZoning): string | null {
+  const inFeature = featureFileOf(owner, zoning);
+  if (inFeature === null) return null;
+  const why = OWNERLESS[inFeature.zone.rule.doors];
+  if (why === null) return null;
+  const root = `src/${inFeature.feature}/${inFeature.zone.entry}`;
+  return `is ${owner === root ? root : `under ${root}/`}, ${why}.`;
+}
+
 // The doors a rules file may declare, parsed once at the config edge. The first problem, or null.
 export function doorDeclarationIssue(rules: BoundaryRules, members: ProcessMembers): string | null {
   for (const [scope, doors] of Object.entries(rules.doors)) {
-    const features = rules.features[scope];
-    if (features === undefined) {
+    if (rules.features[scope] === undefined) {
       return `"doors" declares scope "${scope}", which declares no "features": doors ride a scope that declares features.`;
     }
+    const zoning = scopeZoning(rules, scope);
     for (const [door, owners] of Object.entries(doors)) {
       const problem = doorProblem(scope, door, members);
       if (problem !== null) return problem;
       for (const owner of owners) {
-        const zone = features.find((feature) => owner.startsWith(`src/${feature}/rules/`));
-        if (zone !== undefined) {
-          return `owner "${owner}" of door "${door}" in "${scope}" is under src/${zone}/rules/, where no door has an owner.`;
-        }
+        const where = ownerProblem(owner, zoning);
+        if (where !== null) return `owner "${owner}" of door "${door}" in "${scope}" ${where}`;
       }
     }
   }

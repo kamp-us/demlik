@@ -2,7 +2,7 @@ import { stableStringify } from "../render/json.js";
 import {
   type BoundaryKind,
   type BoundaryViolation,
-  isDoorUse,
+  crossingOf,
   type ScopeBoundaryReport,
 } from "./analyze.js";
 import {
@@ -17,52 +17,30 @@ import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
-function ruleOf(kind: BoundaryKind): string {
-  switch (kind) {
-    case "cross-feature":
-      return "B1";
-    case "impure-rules":
-      return "B2";
-    case "lib-imports-feature":
-      return "B3";
-    case "outside-imports-feature-internal":
-      return "B4";
-    case "door-outside-owner":
-      return "B5";
-    default: {
-      const exhaustive: never = kind;
-      return exhaustive;
-    }
-  }
-}
+// Each kind's rule label, and whether only a hexagonal feature layout produces it.
+const KINDS = {
+  "cross-feature": { rule: "B1", hexagonal: false },
+  "impure-rules": { rule: "B2", hexagonal: false },
+  "lib-imports-feature": { rule: "B3", hexagonal: false },
+  "outside-imports-feature-internal": { rule: "B4", hexagonal: false },
+  "door-outside-owner": { rule: "B5", hexagonal: false },
+  "application-imports-adapter": { rule: "B6", hexagonal: true },
+  "impure-application": { rule: "B7", hexagonal: true },
+  "driving-reaches-driven": { rule: "B8", hexagonal: true },
+  "door-outside-driven-adapter": { rule: "B9", hexagonal: true },
+  "unknown-zone": { rule: "B10", hexagonal: true },
+} as const satisfies Record<BoundaryKind, { rule: string; hexagonal: boolean }>;
 
-function targetOf(violation: BoundaryViolation): string {
-  switch (violation.kind) {
-    case "cross-feature":
-    case "lib-imports-feature":
-    case "outside-imports-feature-internal":
-      return violation.to;
-    case "impure-rules":
-      return violation.to ?? violation.specifier;
-    case "door-outside-owner":
-      return violation.specifier;
-    default: {
-      const exhaustive: never = violation;
-      return exhaustive;
-    }
-  }
-}
-
-// A door is its own target: the import specifier an edge was written with has no counterpart.
+// A door, and a feature's entry, is its own target: no import specifier was written for it.
 function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier" | "global">): string {
-  return isDoorUse(entry) ? "" : `  ("${entry.specifier}")`;
+  return crossingOf(entry) === "import" ? `  ("${entry.specifier}")` : "";
 }
 
 function violationLine(violation: BoundaryViolation): string {
   const tag = violation.typeOnly ? "  [type-only]" : "";
   return (
-    `  ${ruleOf(violation.kind)} ${violation.kind.padEnd(19)} ${violation.from} -> ` +
-    `${targetOf(violation)}${writtenAs(violation)}${tag}`
+    `  ${KINDS[violation.kind].rule} ${violation.kind.padEnd(19)} ${violation.from} -> ` +
+    `${ledgerTargetOf(violation)}${writtenAs(violation)}${tag}`
   );
 }
 
@@ -90,7 +68,7 @@ export function renderBoundaries(
 function entryLine(entry: BoundaryLedgerEntry): string {
   const reason = entry.reason === undefined ? "" : `  — ${entry.reason}`;
   return (
-    `  ${entry.scope}  ${ruleOf(entry.kind)} ${entry.kind}  ${entry.from} -> ` +
+    `  ${entry.scope}  ${KINDS[entry.kind].rule} ${entry.kind}  ${entry.from} -> ` +
     `${ledgerTargetOf(entry)}${writtenAs(entry)}${reason}`
   );
 }
@@ -110,6 +88,18 @@ const FIX_LINES = [
   '  { "<scope>": { "<door>": ["<owner file>"] } } }). A crossing that has to stay is added by name',
   '  and with a reason: `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
 ];
+
+const HEXAGONAL_FIX_LINES = [
+  "  In a hexagonal feature, keep application/ off its own adapters/ and free of every world door,",
+  "  let adapters/driving/ reach the core only through ports.ts and index.ts, open a declared door",
+  "  only in adapters/driven/, and keep the feature to index.ts, ports.ts, application/,",
+  "  adapters/driving/ and adapters/driven/.",
+];
+
+function fixLines(unrecorded: readonly BoundaryLedgerEntry[]): readonly string[] {
+  const hexagonal = unrecorded.some((entry) => KINDS[entry.kind].hexagonal);
+  return hexagonal ? [...FIX_LINES, ...HEXAGONAL_FIX_LINES] : FIX_LINES;
+}
 
 export function renderLedgerGate(
   result: Reconciliation,
@@ -133,7 +123,7 @@ export function renderLedgerGate(
     : [
         `BOUNDARY LEDGER FAILED — ${result.unrecorded.length} crossing(s) not in ${LEDGER_FILENAME}:`,
         ...result.unrecorded.map(entryLine),
-        ...FIX_LINES,
+        ...fixLines(result.unrecorded),
       ];
   return { stdout: [...head, ...prunedLines(result.pruned)].join("\n"), exitCode };
 }
