@@ -7,15 +7,16 @@ type-only import as a door use.
 
 - **Every `process.<member>` is a B2 door in `rules/`.** The catalog's seven `process` rows become
   one family row, and each member is its own door. A rules file that calls `process.hrtime()`, reads
-  `process.platform` or `process.versions`, or calls `process.on(...)` passed as pure and is now an
-  `impure-rules` entry named for the member (`process.hrtime`), one per file per member:
+  `process.platform` or `process.versions`, or calls `process.on(...)` passed as pure before and is
+  now an `impure-rules` entry named for the member (`process.hrtime`), one per file per member:
   `process.hrtime()` beside `process.hrtime.bigint()` is one entry. The seven names the catalog
   listed before (`env`, `argv`, `stdin`, `stdout`, `stderr`, `exit`, `cwd`) keep their spelling, so a
   `boundary-ledger.json` written by the previous release gates unchanged for them. A repo's first
   `--ci` after upgrading lists the current uses of every member beyond those seven until
   `--accept-crossings --reason "<why>"` records them. A `doors` declaration may now name any member
   (`process.platform`, `process.hrtime.bigint`); the bare `process` is the whole family and exits 2,
-  and a misspelled member is a valid door nobody uses.
+  and so does a member Node's own `process` does not have, naming the nearest one it does
+  (`process.envv` names `process.env`).
 - **A type-only import opens no door.** `import { type Stats } from "node:fs"`,
   `export { type Stats } from`, `import type x = require("node:fs")`, `import("node:fs").Stats` and
   `typeof import("node:fs")` in a type no longer count as B5 `door-outside-owner` uses of `node:fs`

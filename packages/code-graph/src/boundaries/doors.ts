@@ -1,4 +1,6 @@
 import type { ImportEdge } from "../schema.js";
+import { nearestName } from "./nearest.js";
+import type { ProcessMembers } from "./process-members.js";
 import type { BoundaryRules } from "./rules.js";
 
 // A world door is a way a file reaches outside itself: an env var, the terminal, the clock, the
@@ -11,7 +13,8 @@ import type { BoundaryRules } from "./rules.js";
 //    to the path, or to anything below it, is one use.
 //  - `members`: a global whose every static member is its own door (`process.<member>`). The row
 //    names the family and a use names the member it read, so `process.hrtime()` and
-//    `process.hrtime.bigint()` are two reads of one door, `process.hrtime`.
+//    `process.hrtime.bigint()` are two reads of one door, `process.hrtime`. Which members exist is
+//    Node's to say: a declaration is judged against the running Node's `process`, not a list here.
 //  - `bare-new`: `new <ctor>` with no argument (`new Date()` reads the clock; `new Date(x)` does not).
 //  - `module`: a runtime import edge naming the module or a subpath of it, with or without `node:`.
 type DoorRow =
@@ -154,7 +157,7 @@ const SINGLE_DOORS: ReadonlySet<string> = new Set(
 );
 
 // A catalog door, a member of a `members` row (`process.platform`), or a deeper static path under
-// either (`process.stdin.isTTY`, `process.hrtime.bigint`).
+// either (`process.stdin.isTTY`, `process.hrtime.bigint`), spelled as identifiers.
 function isDeclarableDoor(name: string): boolean {
   if (SINGLE_DOORS.has(name)) return true;
   const segments = name.split(".");
@@ -186,15 +189,41 @@ function notADoor(scope: string, door: string): string {
   );
 }
 
+// The family and member a declared door names: `process` and `stdin` for `process.stdin.isTTY`. The
+// check ends at the member, because what lies below one is the runtime's, not Node's static shape
+// (`process.env` has whatever keys the shell gave it).
+function familyMemberOf(door: string): { readonly root: string; readonly member: string } | null {
+  const segments = door.split(".");
+  for (const { prefix, members } of PATH_DOORS) {
+    const member = segments[prefix.length];
+    if (members === 1 && member !== undefined && startsWith(segments, prefix)) {
+      return { root: prefix.join("."), member };
+    }
+  }
+  return null;
+}
+
+// Why a declared door is not one, or null when it is. A member is judged against the `process` of
+// the Node that runs the CLI, and the refusal names that Node.
+function doorProblem(scope: string, door: string, members: ProcessMembers): string | null {
+  if (!isDeclarableDoor(door)) return notADoor(scope, door);
+  const named = familyMemberOf(door);
+  if (named === null || members.names.has(named.member)) return null;
+  const near = nearestName(named.member, members.names);
+  const hint = near === null ? "" : ` Did you mean ${named.root}.${near}?`;
+  return `door "${door}" in "${scope}" is not a member of ${named.root} on Node ${members.node}.${hint}`;
+}
+
 // The doors a rules file may declare, parsed once at the config edge. The first problem, or null.
-export function doorDeclarationIssue(rules: BoundaryRules): string | null {
+export function doorDeclarationIssue(rules: BoundaryRules, members: ProcessMembers): string | null {
   for (const [scope, doors] of Object.entries(rules.doors)) {
     const features = rules.features[scope];
     if (features === undefined) {
       return `"doors" declares scope "${scope}", which declares no "features": doors ride a scope that declares features.`;
     }
     for (const [door, owners] of Object.entries(doors)) {
-      if (!isDeclarableDoor(door)) return notADoor(scope, door);
+      const problem = doorProblem(scope, door, members);
+      if (problem !== null) return problem;
       for (const owner of owners) {
         const zone = features.find((feature) => owner.startsWith(`src/${feature}/rules/`));
         if (zone !== undefined) {
