@@ -12,7 +12,7 @@ catalog:
   "@biomejs/biome": 2.3.14
   "@changesets/cli": ^2.27.11
   "@cloudflare/workers-types": 4.20260312.1
-  "@kampus/fabrika-cli": 0.7.1
+  "@kampus/fabrika-cli": 0.9.0
   "@langfuse/otel": 5.11.1
   "@opentelemetry/api": 1.9.1
   "@opentelemetry/sdk-trace-base": 2.11.0
