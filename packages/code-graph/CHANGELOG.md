@@ -1,5 +1,103 @@
 # @demlik/code-graph
 
+## 0.3.0
+
+### Minor Changes
+
+- a7d1f46: `--boundaries` now understands a second feature layout, Alistair Cockburn's hexagonal zones, one
+  scope at a time. A `layout` key in the `--boundary-rules` file opts a scope in:
+  `"layout": { "services/api": "hexagonal" }`. That scope's features are laid out as `index.ts`,
+  `ports.ts`, `application/`, `adapters/driving/` and `adapters/driven/`, and five new kinds judge
+  inside them, each a `boundary-ledger.json` entry recorded with `--accept-crossings --reason` and
+  pruned as it is fixed:
+
+  - **B6 `application-imports-adapter`**: `application/` importing its own feature's `adapters/`.
+  - **B7 `impure-application`**: any world door used by name or module door opened in
+    `application/`, declared or not.
+  - **B8 `driving-reaches-driven`**: `adapters/driving/` importing its own `application/` or
+    `adapters/driven/` instead of going through `ports.ts` and `index.ts`.
+  - **B9 `door-outside-driven-adapter`**: a declared door used in `index.ts`, `ports.ts` or
+    `adapters/driving/`.
+  - **B10 `unknown-zone`**: a feature entry outside those zones (`domain/`, `helpers.ts`,
+    `adapters/shared/`), once per entry.
+
+  A file outside every feature may import any feature's adapters (the composition root). A `layout`
+  for a scope with no `features`, a value other than `rules` or `hexagonal`, and a door owner in a
+  hexagonal `index.ts`, `ports.ts`, `application/` or `adapters/driving/` exit 2 and write nothing.
+
+  A scope without `layout` keeps the `rules/` layout and is unchanged: its report, its ledger entries
+  and a ledger written before this release read and gate exactly as they did.
+
+- 35c7028: `--boundaries` now holds every `process` member to the purity of `rules/`, and stops counting a
+  type-only import as a door use.
+
+  - **Every `process.<member>` is a B2 door in `rules/`.** The catalog's seven `process` rows become
+    one family row, and each member is its own door. A rules file that calls `process.hrtime()`, reads
+    `process.platform` or `process.versions`, or calls `process.on(...)` passed as pure before and is
+    now an `impure-rules` entry named for the member (`process.hrtime`), one per file per member:
+    `process.hrtime()` beside `process.hrtime.bigint()` is one entry. The seven names the catalog
+    listed before (`env`, `argv`, `stdin`, `stdout`, `stderr`, `exit`, `cwd`) keep their spelling, so a
+    `boundary-ledger.json` written by the previous release gates unchanged for them. A repo's first
+    `--ci` after upgrading lists the current uses of every member beyond those seven until
+    `--accept-crossings --reason "<why>"` records them. A `doors` declaration may now name any member
+    (`process.platform`, `process.hrtime.bigint`); the bare `process` is the whole family and exits 2,
+    and so does a member Node's own `process` does not have, naming the nearest one it does
+    (`process.envv` names `process.env`).
+  - **A type-only import opens no door.** `import { type Stats } from "node:fs"`,
+    `export { type Stats } from`, `import type x = require("node:fs")`, `import("node:fs").Stats` and
+    `typeof import("node:fs")` in a type no longer count as B5 `door-outside-owner` uses of `node:fs`
+    or `node:child_process`, so entries already ledgered for them are pruned on the next `--ci`. A
+    file that also imports the module at run time is still one use, and inside `rules/` a type-only
+    import is still the B2 import entry it was.
+
+  The graph JSON, `ModuleNode` and `ImportEdge.typeOnly` are unchanged.
+
+- 57f9037: `--boundaries` now sees the outside world, not only imports. One catalog names the world doors a
+  file can open (`process.env`, `process.argv`, `process.stdin`/`stdout`/`stderr`/`exit`/`cwd`,
+  `Date.now`, `new Date()` with no argument, `Math.random`, `crypto.randomUUID`,
+  `crypto.getRandomValues`, `performance.now`, `fetch`, `setTimeout`, `setInterval`, `globalThis`,
+  `console`, and the modules `node:fs` and `node:child_process`), and two checks read it:
+
+  - **B5 `door-outside-owner`**: a `doors` key in the `--boundary-rules` file,
+    `{ "<scope>": { "<door>": ["<scope-relative owner file>", …] } }`, declares who may open a door.
+    A use of a declared door in any other file is a ledger entry. A declaration may be narrower than a
+    catalog row (`process.stdin.isTTY` under `process.stdin`). A bad declaration (a door outside the
+    catalog, a scope that declares no `features`, an owner that names no loaded file, an owner under
+    `src/<feature>/rules/`) exits 2 and writes nothing.
+  - **B2 `impure-rules` on globals**: inside `src/<feature>/rules/**` every use of any catalog door,
+    declared or not, is now a B2 entry. Before, a rules file that read `process.env`, called `fetch`
+    or asked the clock for the time passed as pure because B2 read import edges only. A repo's first
+    `--ci` after upgrading lists its current uses until `--accept-crossings --reason "<why>"` records
+    them.
+
+  An entry is one file per door, so the ledger names which files still depend on a door, not how
+  often. `boundary-ledger.json` gains the kind `door-outside-owner` (its `to` is `null`, as for a B2
+  bare import) and an optional `"global": true` on an `impure-rules` entry for a global read by name,
+  which keeps a global `fetch` and a bare `import "fetch"` from one file two entries. A ledger written
+  before this change reads and gates exactly as it did. `--boundaries --migrate-ceilings` compares
+  only import crossings against the recorded count and seeds the door and global entries into the
+  ledger with the same reason, so a repo that predates the doors still migrates.
+
+### Patch Changes
+
+- 73b3187: A `doors` declaration of a mistyped `process` member is refused again. Since the `process` rows
+  became one family, `process.envv` was accepted and policed nothing; it now exits 2 naming the
+  door, the Node that judged it and the nearest member that Node has (`process.env`), and writes
+  nothing. The members come from the running Node's own `process`, read by name at the config edge,
+  so every real member stays declarable (`process.on`, `process.hrtime.bigint`, `process.stdin.isTTY`)
+  and no list is kept in the catalog. The check ends at the member: what lies below it is the
+  runtime's. Door detection, ledger entries and reports never consult it, so a repo gives the same
+  ledger and report on every supported Node, and a member only some Nodes have
+  (`process.loadEnvFile`) is refused with the Node named where the running one lacks it.
+- c3eb502: A `doors` declaration of a `process` member the running process lacks is refused naming the
+  platform as well as the Node version, for example `door "process.getuid" in "packages/app" is not a
+member of process on Node v22.1.0 (win32).`, so a team whose CI runs on more than one host can see
+  which host refused. The member set is the running process's, so it depends on the Node version, the
+  platform (`process.getuid` is POSIX-only) and the launch mode (`process.send` needs an IPC channel),
+  not the version alone; the README, `SPEC.md` and ADR 0023 now say so. Which declarations are
+  accepted and refused does not change, and door detection, ledger entries and reports never read the
+  platform, so every host still writes the same ledger and report.
+
 ## 0.2.1
 
 ### Patch Changes
