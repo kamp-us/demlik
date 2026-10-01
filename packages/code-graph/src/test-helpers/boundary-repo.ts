@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { type BoundaryFlags, runBoundaryGate } from "../boundaries/gate.js";
 import { LEDGER_FILENAME } from "../boundaries/ledger.js";
+import type { ProcessMembers } from "../boundaries/process-members.js";
 import { LEGACY_CEILINGS_FILENAME } from "../boundaries/rules.js";
 
 export type GateRun = { readonly code: number; readonly stdout: string; readonly errors: string[] };
@@ -10,6 +11,7 @@ export type GateRun = { readonly code: number; readonly stdout: string; readonly
 export type GateOptions = Partial<BoundaryFlags> & {
   readonly json?: boolean;
   readonly rules?: string;
+  readonly members?: ProcessMembers;
 };
 
 // A throwaway repo with one declared boundary scope, driven through the same gate the CLI calls.
@@ -46,6 +48,7 @@ export function boundaryRepo(
       rootAbsolute: path.join(root, scope),
       repoRoot: root,
       boundaryRulesFile: options.rules ?? rulesFile,
+      members: options.members,
       ci: options.ci === true,
       writeCeilings: options.writeCeilings === true,
       acceptCrossings: options.acceptCrossings === true,

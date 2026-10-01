@@ -14,8 +14,10 @@ describe("the members of process come from the running Node, read by name", () =
     }
   });
 
-  it("names the Node it read, so a refusal can say which one judged it", () => {
-    expect(runningProcessMembers().node).toBe(process.version);
+  it("names the Node version and platform it read, so a refusal can say which host judged it", () => {
+    const { node, platform } = runningProcessMembers();
+    expect(node).toBe(process.version);
+    expect(platform).toBe(process.platform);
   });
 
   it("runs no getter: reading process.stdin would open a stream", () => {
@@ -37,7 +39,7 @@ describe("the members of process come from the running Node, read by name", () =
   });
 });
 
-describe("a member only some supported Nodes have is judged against the Node that runs", () => {
+describe("a member only some supported Nodes have is judged against the host that runs", () => {
   const SCOPE = "packages/app";
   let dir: string;
   beforeEach(() => {
@@ -55,6 +57,7 @@ describe("a member only some supported Nodes have is judged against the Node tha
   };
   const node = (version: string, ...names: string[]): ProcessMembers => ({
     node: version,
+    platform: "linux",
     names: new Set(["env", "stdin", ...names]),
   });
 
@@ -69,7 +72,7 @@ describe("a member only some supported Nodes have is judged against the Node tha
     expect(errors).toEqual([]);
   });
 
-  it("refuses it, naming the Node, where the Node lacks it", () => {
+  it("refuses it, naming the Node version and platform, where the host lacks it", () => {
     const errors: string[] = [];
     const rules = resolveBoundaryRules(
       declare("process.loadEnvFile"),
@@ -78,7 +81,7 @@ describe("a member only some supported Nodes have is judged against the Node tha
     );
     expect(rules).toBeNull();
     expect(errors).toEqual([
-      `door "process.loadEnvFile" in "${SCOPE}" is not a member of process on Node v20.11.0.`,
+      `door "process.loadEnvFile" in "${SCOPE}" is not a member of process on Node v20.11.0 (linux).`,
     ]);
   });
 });

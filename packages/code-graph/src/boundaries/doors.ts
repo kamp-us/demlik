@@ -14,7 +14,7 @@ import type { BoundaryRules } from "./rules.js";
 //  - `members`: a global whose every static member is its own door (`process.<member>`). The row
 //    names the family and a use names the member it read, so `process.hrtime()` and
 //    `process.hrtime.bigint()` are two reads of one door, `process.hrtime`. Which members exist is
-//    Node's to say: a declaration is judged against the running Node's `process`, not a list here.
+//    Node's to say: a declaration is judged against the running `process`, not a list here.
 //  - `bare-new`: `new <ctor>` with no argument (`new Date()` reads the clock; `new Date(x)` does not).
 //  - `module`: a runtime import edge naming the module or a subpath of it, with or without `node:`.
 type DoorRow =
@@ -203,15 +203,16 @@ function familyMemberOf(door: string): { readonly root: string; readonly member:
   return null;
 }
 
-// Why a declared door is not one, or null when it is. A member is judged against the `process` of
-// the Node that runs the CLI, and the refusal names that Node.
+// Why a declared door is not one, or null when it is. A member is judged against the `process` the
+// CLI runs in, and the refusal names that host's Node version and platform.
 function doorProblem(scope: string, door: string, members: ProcessMembers): string | null {
   if (!isDeclarableDoor(door)) return notADoor(scope, door);
   const named = familyMemberOf(door);
   if (named === null || members.names.has(named.member)) return null;
   const near = nearestName(named.member, members.names);
   const hint = near === null ? "" : ` Did you mean ${named.root}.${near}?`;
-  return `door "${door}" in "${scope}" is not a member of ${named.root} on Node ${members.node}.${hint}`;
+  const host = `Node ${members.node} (${members.platform})`;
+  return `door "${door}" in "${scope}" is not a member of ${named.root} on ${host}.${hint}`;
 }
 
 // The doors a rules file may declare, parsed once at the config edge. The first problem, or null.
