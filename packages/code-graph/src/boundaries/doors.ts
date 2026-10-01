@@ -2,28 +2,26 @@ import type { ImportEdge } from "../schema.js";
 import type { BoundaryRules } from "./rules.js";
 
 // A world door is a way a file reaches outside itself: an env var, the terminal, the clock, the
-// network, a module that touches the disk. This table is the whole vocabulary, one row per door,
-// and it is the only place a door is named. The detector, the B5 owner check and the `rules/`
-// purity check all read it, so adding a door is adding a row here and a fixture case beside the
-// detector's test, which the compiler demands.
+// network, a module that touches the disk. This table is the whole vocabulary, one row per door
+// (or per family of doors), and it is the only place a door is named. The detector, the B5 owner
+// check and the `rules/` purity check all read it, so adding a door is adding a row here and a
+// fixture case beside the detector's test, which the compiler demands.
 //
-//  - `path`: a static property path read off a global (`process.env`, `Date.now`, `fetch`). Any
-//    runtime reference to the path, or to anything below it, is one use.
+//  - `path`: a static property path read off a global (`Date.now`, `fetch`). Any runtime reference
+//    to the path, or to anything below it, is one use.
+//  - `members`: a global whose every static member is its own door (`process.<member>`). The row
+//    names the family and a use names the member it read, so `process.hrtime()` and
+//    `process.hrtime.bigint()` are two reads of one door, `process.hrtime`.
 //  - `bare-new`: `new <ctor>` with no argument (`new Date()` reads the clock; `new Date(x)` does not).
 //  - `module`: a runtime import edge naming the module or a subpath of it, with or without `node:`.
 type DoorRow =
   | { readonly shape: "path" }
+  | { readonly shape: "members"; readonly of: string }
   | { readonly shape: "bare-new"; readonly ctor: string }
   | { readonly shape: "module" };
 
 export const DOORS = {
-  "process.env": { shape: "path" },
-  "process.argv": { shape: "path" },
-  "process.stdin": { shape: "path" },
-  "process.stdout": { shape: "path" },
-  "process.stderr": { shape: "path" },
-  "process.exit": { shape: "path" },
-  "process.cwd": { shape: "path" },
+  "process.<member>": { shape: "members", of: "process" },
   "Date.now": { shape: "path" },
   "Math.random": { shape: "path" },
   "crypto.randomUUID": { shape: "path" },
@@ -39,29 +37,40 @@ export const DOORS = {
   "node:child_process": { shape: "module" },
 } as const satisfies Record<string, DoorRow>;
 
-export type DoorName = keyof typeof DOORS;
+// A row of the catalog: `Date.now`, `node:fs`, or the family `process.<member>`.
+export type DoorRowName = keyof typeof DOORS;
 
-const ROWS: Readonly<Record<DoorName, DoorRow>> = DOORS;
+// A door as a ledger entry and a `doors` declaration spell it: a row's own name, or for a `members`
+// row the member a use read (`process.hrtime`). The seven `process` names the catalog once listed
+// row by row (`process.env`, `process.cwd`, …) are spelled as they were.
+export type DoorName = string;
 
-export const DOOR_NAMES = Object.keys(ROWS) as DoorName[];
+const ROWS: Readonly<Record<DoorRowName, DoorRow>> = DOORS;
+
+export const DOOR_ROWS = Object.keys(ROWS) as DoorRowName[];
 
 // A chain rooted here is read without the root: `globalThis.process.env.CI` is `process.env.CI`.
 export const GLOBAL_OBJECT = "globalThis";
 
-type PathDoor = { readonly door: DoorName; readonly segments: readonly string[] };
+// A door read off a static path: its name is the path's first `prefix.length + members` segments,
+// so a `path` row (`members: 0`) is its own prefix and a `members` row adds the member after it.
+type PathDoor = { readonly prefix: readonly string[]; readonly members: 0 | 1 };
 
-// Each shape is indexed the way it is looked up: path doors by prefix, `new` doors by constructor
-// name, module doors by the specifier without `node:`. The switch is exhaustive, so a new shape
-// does not compile until it says how it is found.
+// Each shape is indexed the way it is looked up: path and member doors by prefix, `new` doors by
+// constructor name, module doors by the specifier without `node:`. The switch is exhaustive, so a
+// new shape does not compile until it says how it is found.
 function indexDoors() {
   const paths: PathDoor[] = [];
   const news = new Map<string, DoorName>();
   const modules = new Map<string, DoorName>();
-  for (const door of DOOR_NAMES) {
+  for (const door of DOOR_ROWS) {
     const row = ROWS[door];
     switch (row.shape) {
       case "path":
-        paths.push({ door, segments: door.split(".") });
+        paths.push({ prefix: door.split("."), members: 0 });
+        break;
+      case "members":
+        paths.push({ prefix: [row.of], members: 1 });
         break;
       case "bare-new":
         news.set(row.ctor, door);
@@ -84,10 +93,14 @@ function startsWith(path: readonly string[], prefix: readonly string[]): boolean
   return prefix.length <= path.length && prefix.every((segment, index) => path[index] === segment);
 }
 
-// The catalog door a static path falls under, or null. No door is a path prefix of another, so
-// there is at most one.
+// The door a static path falls under, or null: `process.stdin.isTTY` falls under `process.stdin`,
+// and a bare `process` under none. No row's prefix is a prefix of another's, so there is at most one.
 export function pathDoorOf(path: readonly string[]): DoorName | null {
-  return PATH_DOORS.find(({ segments }) => startsWith(path, segments))?.door ?? null;
+  for (const { prefix, members } of PATH_DOORS) {
+    const named = prefix.length + members;
+    if (path.length >= named && startsWith(path, prefix)) return path.slice(0, named).join(".");
+  }
+  return null;
 }
 
 export function bareNewDoorOf(ctor: string): DoorName | null {
@@ -102,6 +115,18 @@ export function moduleDoorOf(
   if (edge.target !== null || edge.typeOnly) return null;
   const [head = ""] = edge.specifier.replace(/^node:/, "").split("/");
   return MODULE_DOORS.get(head) ?? null;
+}
+
+// The module doors a file opens when it runs. The edge pass folds `import { type Stats } from "m"`
+// into a value import and keeps one edge per specifier, so whether the file runs the module is the
+// syntax's answer (`runtime`), and the edge only says where the specifier resolves.
+export function moduleDoorsOpened(
+  edges: readonly Pick<ImportEdge, "specifier" | "target" | "typeOnly">[],
+  runtime: ReadonlySet<string>,
+): DoorName[] {
+  return edges
+    .filter((edge) => runtime.has(edge.specifier))
+    .flatMap((edge) => moduleDoorOf(edge) ?? []);
 }
 
 // The most specific declared door that is a path prefix of a use: `process.stdin.isTTY` beats
@@ -123,15 +148,41 @@ export function declaredDoorOf(
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
-// A catalog door, or a deeper static path under a `path` door (`process.stdin.isTTY`).
+// The rows that name exactly one door. A `members` row names a family, not a door to declare.
+const SINGLE_DOORS: ReadonlySet<string> = new Set(
+  DOOR_ROWS.filter((row) => ROWS[row].shape !== "members"),
+);
+
+// A catalog door, a member of a `members` row (`process.platform`), or a deeper static path under
+// either (`process.stdin.isTTY`, `process.hrtime.bigint`).
 function isDeclarableDoor(name: string): boolean {
-  if (Object.hasOwn(ROWS, name)) return true;
+  if (SINGLE_DOORS.has(name)) return true;
   const segments = name.split(".");
   const under = PATH_DOORS.find(
-    (door) => segments.length > door.segments.length && startsWith(segments, door.segments),
+    ({ prefix, members }) =>
+      segments.length >= prefix.length + members && startsWith(segments, prefix),
   );
   return (
-    under !== undefined && segments.slice(under.segments.length).every((s) => IDENTIFIER.test(s))
+    under !== undefined && segments.slice(under.prefix.length).every((s) => IDENTIFIER.test(s))
+  );
+}
+
+// Why a declared door is not one. The root of a `members` family is the near miss worth naming: it
+// is the whole family, and an owner names the member it means.
+function notADoor(scope: string, door: string): string {
+  const family = DOOR_ROWS.find((row) => {
+    const shape = ROWS[row];
+    return shape.shape === "members" && shape.of === door;
+  });
+  if (family !== undefined) {
+    return (
+      `door "${door}" in "${scope}" is the whole family ${family}, not one door: declare the ` +
+      "member you mean, or a deeper path under one."
+    );
+  }
+  return (
+    `door "${door}" in "${scope}" is not in the door catalog (${DOOR_ROWS.join(", ")}), a member ` +
+    "of one of its families, nor a deeper path under a door; a typo would silently enforce nothing."
   );
 }
 
@@ -143,12 +194,7 @@ export function doorDeclarationIssue(rules: BoundaryRules): string | null {
       return `"doors" declares scope "${scope}", which declares no "features": doors ride a scope that declares features.`;
     }
     for (const [door, owners] of Object.entries(doors)) {
-      if (!isDeclarableDoor(door)) {
-        return (
-          `door "${door}" in "${scope}" is not in the door catalog (${DOOR_NAMES.join(", ")}) ` +
-          "nor a deeper path under one of its member doors; a typo would silently enforce nothing."
-        );
-      }
+      if (!isDeclarableDoor(door)) return notADoor(scope, door);
       for (const owner of owners) {
         const zone = features.find((feature) => owner.startsWith(`src/${feature}/rules/`));
         if (zone !== undefined) {

@@ -110,7 +110,7 @@ function featureOptions(command: Command): Command {
     )
     .option(
       "--boundaries",
-      "feature boundaries: cross-feature imports not through <feature>/index.ts (B1), rules/ importing beyond itself and contracts or using a world door by name such as process.env, fetch or the clock (B2), lib/ importing a feature (B3), a file in no feature importing a feature's internals (B4), a declared world door used outside its owner files (B5, from the doors key of --boundary-rules) (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
+      "feature boundaries: cross-feature imports not through <feature>/index.ts (B1), rules/ importing beyond itself and contracts or using a world door by name such as any process.<member> (process.env, process.hrtime, process.platform, …), fetch or the clock (B2), lib/ importing a feature (B3), a file in no feature importing a feature's internals (B4), a declared world door used outside its owner files (B5, from the doors key of --boundary-rules; a type-only import of node:fs or node:child_process opens no door) (gateable via --ci against boundary-ledger.json: fails on a crossing the ledger does not name, prunes entries whose crossing is gone)",
     )
     .option(
       "--accept-crossings",

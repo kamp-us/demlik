@@ -3,7 +3,7 @@ import path from "node:path";
 import { type Reporter, resolveBoundaryRules } from "../config.js";
 import { loadEdgeProject } from "../extract/project.js";
 import { readScopeCeilings, scopeOf, scopesUnder } from "../ratchet/scope-count.js";
-import { resolveImports } from "../syntax/imports.js";
+import { resolveImports, runtimeSpecifiers } from "../syntax/imports.js";
 import { analyzeBoundaries, type ScopeBoundaryReport } from "./analyze.js";
 import { detectDoorUses } from "./door-uses.js";
 import { unknownOwners } from "./doors.js";
@@ -93,6 +93,7 @@ function analyzeScope(
     file,
     importEdges: importEdgesByFile.get(file) ?? [],
     doorUses: detectDoorUses(syntax),
+    runtimeSpecifiers: runtimeSpecifiers(syntax),
   }));
   const unknown = unknownOwners(
     rules.doors[scope] ?? {},

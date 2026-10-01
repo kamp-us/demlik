@@ -2,77 +2,91 @@ import { describe, expect, it } from "vitest";
 import { sourceUnit } from "../test-helpers/source-unit.js";
 import { type DoorUse, detectDoorUses } from "./door-uses.js";
 import {
-  DOOR_NAMES,
+  DOOR_ROWS,
   DOORS,
   type DoorName,
+  type DoorRowName,
   declaredDoorOf,
   moduleDoorOf,
+  moduleDoorsOpened,
   pathDoorOf,
 } from "./doors.js";
 
 const usesOf = (source: string): DoorUse[] => detectDoorUses(sourceUnit(source).syntax);
 const doorsOf = (source: string): DoorName[] => [...new Set(usesOf(source).map((u) => u.door))];
 
-// One case per catalog door. `satisfies Record<DoorName, …>` makes a new row in `DOORS` fail to
+// One case per catalog row. `satisfies Record<DoorRowName, …>` makes a new row in `DOORS` fail to
 // compile until it has a case here, and the shape check below keeps a case honest about how its
-// door is read: from the syntax tree, or from an import edge.
+// door is read: from the syntax tree, from an import edge, or, for a family row, from the syntax
+// tree with each use naming the member door it falls under.
 type DoorCase =
   | { readonly via: "syntax"; readonly uses: readonly string[]; readonly pure: readonly string[] }
+  | {
+      readonly via: "members";
+      // Every door a source reads: `globalThis.process.platform` is a use of `globalThis` too.
+      readonly uses: Readonly<Record<string, readonly string[]>>;
+      readonly pure: readonly string[];
+    }
   | { readonly via: "edge"; readonly uses: readonly string[]; readonly pure: readonly string[] };
 
 const CASES = {
-  "process.env": {
-    via: "syntax",
-    uses: [
-      "process.env.X;",
-      'process.env["X"];',
-      "process.env[k];",
-      'process["env"].X;',
-      "const { X } = process.env;",
-      "const { env } = process;",
-      "const all = { ...process.env };",
-      "load(process.env);",
-      "const { X = 1, Y: renamed, ...rest } = process.env;",
-      "process?.env?.X;",
-      "(process as NodeJS.Process).env;",
-      "process.env!.X;",
-      "`" + "$" + "{process.env.X}`;",
+  "process.<member>": {
+    via: "members",
+    uses: {
+      "process.env.X;": ["process.env"],
+      'process.env["X"];': ["process.env"],
+      "process.env[k];": ["process.env"],
+      'process["env"].X;': ["process.env"],
+      "const { X } = process.env;": ["process.env"],
+      "const { env } = process;": ["process.env"],
+      "const all = { ...process.env };": ["process.env"],
+      "load(process.env);": ["process.env"],
+      "const { X = 1, Y: renamed, ...rest } = process.env;": ["process.env"],
+      "process?.env?.X;": ["process.env"],
+      "(process as NodeJS.Process).env;": ["process.env"],
+      "process.env!.X;": ["process.env"],
+      ["`" + "$" + "{process.env.X}`;"]: ["process.env"],
+      "process.argv.slice(2);": ["process.argv"],
+      "const [, , first] = process.argv;": ["process.argv"],
+      "process.stdin.isTTY;": ["process.stdin"],
+      "process.stdin.on('data', f);": ["process.stdin"],
+      "const { stdin } = process;": ["process.stdin"],
+      "process.stdout.write('x');": ["process.stdout"],
+      "const { stdout: { isTTY } } = process;": ["process.stdout"],
+      "process.stderr.write('x');": ["process.stderr"],
+      "process.exit(1);": ["process.exit"],
+      "run(process.exit);": ["process.exit"],
+      "process.cwd();": ["process.cwd"],
+      "const { cwd } = process;": ["process.cwd"],
+      "process.hrtime();": ["process.hrtime"],
+      'process["hrtime"]();': ["process.hrtime"],
+      "process.hrtime.bigint();": ["process.hrtime"],
+      "const { hrtime } = process;": ["process.hrtime"],
+      "const { memoryUsage: mem } = process;": ["process.memoryUsage"],
+      "process.platform;": ["process.platform"],
+      "globalThis.process.platform;": ["globalThis", "process.platform"],
+      'process?.on?.("exit", f);': ["process.on"],
+      "process.versions.node;": ["process.versions"],
+      "const { arch } = process;": ["process.arch"],
+      "process.uptime();": ["process.uptime"],
+    },
+    pure: [
+      "const p = process;",
+      "type Env = typeof process.env;",
+      "type P = typeof process.platform;",
+      "let p: typeof process.hrtime;",
+      "process;",
+      "process[k];",
+      "const { ...rest } = process;",
+      "const { [k]: v } = process;",
+      "const argv = [];",
+      "stdin.isTTY;",
+      "exit(1);",
+      "o.process.hrtime();",
+      "const process = inject(); process.platform;",
+      "function run(process: P) { return process.hrtime(); }",
+      "import process from './world.js'; process.platform;",
     ],
-    pure: ["const p = process;", "type Env = typeof process.env;", "process;", "process.platform;"],
-  },
-  "process.argv": {
-    via: "syntax",
-    uses: [
-      "process.argv.slice(2);",
-      "const [, , first] = process.argv;",
-      "const { argv } = process;",
-    ],
-    pure: ["const argv = [];"],
-  },
-  "process.stdin": {
-    via: "syntax",
-    uses: ["process.stdin.isTTY;", "process.stdin.on('data', f);", "const { stdin } = process;"],
-    pure: ["stdin.isTTY;"],
-  },
-  "process.stdout": {
-    via: "syntax",
-    uses: ["process.stdout.write('x');", "const { stdout: { isTTY } } = process;"],
-    pure: ["stdout.write('x');"],
-  },
-  "process.stderr": {
-    via: "syntax",
-    uses: ["process.stderr.write('x');", "const { stderr } = process;"],
-    pure: ["stderr.write('x');"],
-  },
-  "process.exit": {
-    via: "syntax",
-    uses: ["process.exit(1);", "const { exit } = process;", "run(process.exit);"],
-    pure: ["exit(1);"],
-  },
-  "process.cwd": {
-    via: "syntax",
-    uses: ["process.cwd();", "const { cwd } = process;"],
-    pure: ["cwd();"],
   },
   "Date.now": {
     via: "syntax",
@@ -154,7 +168,7 @@ const CASES = {
     uses: ["node:child_process", "child_process", "node:child_process/foo"],
     pure: ["child_process_x", "execa"],
   },
-} as const satisfies Record<DoorName, DoorCase>;
+} as const satisfies Record<DoorRowName, DoorCase>;
 
 const edge = (specifier: string, over: { target?: string | null; typeOnly?: boolean } = {}) => ({
   specifier,
@@ -162,21 +176,28 @@ const edge = (specifier: string, over: { target?: string | null; typeOnly?: bool
   typeOnly: over.typeOnly ?? false,
 });
 
+const VIA = { path: "syntax", "bare-new": "syntax", members: "members", module: "edge" } as const;
+
 describe("the door catalog is one table that every consumer reads", () => {
-  it("has a case for every door, and each case reads its door the way the table says", () => {
-    expect(Object.keys(CASES).sort()).toEqual([...DOOR_NAMES].sort());
-    for (const name of DOOR_NAMES) {
-      const via = DOORS[name].shape === "module" ? "edge" : "syntax";
-      expect(CASES[name].via, name).toBe(via);
+  it("has a case for every row, and each case reads its door the way the table says", () => {
+    expect(Object.keys(CASES).sort()).toEqual([...DOOR_ROWS].sort());
+    for (const name of DOOR_ROWS) {
+      expect(CASES[name].via, name).toBe(VIA[DOORS[name].shape]);
     }
   });
 
-  it("holds no door that is a path prefix of another, so a use falls under exactly one", () => {
-    const paths = DOOR_NAMES.filter((name) => DOORS[name].shape === "path").map((n) =>
-      n.split("."),
-    );
-    for (const a of paths) {
-      for (const b of paths) {
+  it("holds one row for `process.<member>`, not a row per member", () => {
+    expect(DOOR_ROWS.filter((name) => name.startsWith("process."))).toEqual(["process.<member>"]);
+  });
+
+  it("holds no row whose prefix is a prefix of another's, so a use falls under exactly one", () => {
+    const prefixes = DOOR_ROWS.flatMap((name) => {
+      const row = DOORS[name];
+      if (row.shape === "path") return [name.split(".")];
+      return row.shape === "members" ? [[row.of]] : [];
+    });
+    for (const a of prefixes) {
+      for (const b of prefixes) {
         if (a === b) continue;
         const prefix = a.length <= b.length && a.every((segment, i) => b[i] === segment);
         expect(prefix, `${a.join(".")} / ${b.join(".")}`).toBe(false);
@@ -184,18 +205,60 @@ describe("the door catalog is one table that every consumer reads", () => {
     }
   });
 
-  for (const name of DOOR_NAMES) {
+  for (const name of DOOR_ROWS) {
     const row = CASES[name];
     it(`reads ${name} and only ${name}`, () => {
-      if (row.via === "syntax") {
-        for (const source of row.uses) expect(doorsOf(source), source).toEqual([name]);
-        for (const source of row.pure) expect(doorsOf(source), source).toEqual([]);
-        return;
+      switch (row.via) {
+        case "syntax":
+          for (const source of row.uses) expect(doorsOf(source), source).toEqual([name]);
+          for (const source of row.pure) expect(doorsOf(source), source).toEqual([]);
+          return;
+        case "members":
+          for (const [source, doors] of Object.entries(row.uses)) {
+            expect(doorsOf(source).sort(), source).toEqual([...doors].sort());
+          }
+          for (const source of row.pure) expect(doorsOf(source), source).toEqual([]);
+          return;
+        case "edge":
+          for (const specifier of row.uses) {
+            expect(moduleDoorOf(edge(specifier)), specifier).toBe(name);
+          }
+          for (const specifier of row.pure) {
+            expect(moduleDoorOf(edge(specifier)), specifier).toBeNull();
+          }
+          return;
+        default: {
+          const exhaustive: never = row;
+          return exhaustive;
+        }
       }
-      for (const specifier of row.uses) expect(moduleDoorOf(edge(specifier)), specifier).toBe(name);
-      for (const specifier of row.pure) expect(moduleDoorOf(edge(specifier)), specifier).toBeNull();
     });
   }
+});
+
+describe("every member of process is a door, named by the member", () => {
+  it("keeps the seven names the catalog once listed row by row, so an old ledger gates unchanged", () => {
+    for (const member of ["env", "argv", "stdin", "stdout", "stderr", "exit", "cwd"]) {
+      expect(doorsOf(`process.${member};`), member).toEqual([`process.${member}`]);
+    }
+  });
+
+  it("is one door per member however deep the read goes, and two for two members", () => {
+    expect(doorsOf("process.hrtime(); process.hrtime.bigint();")).toEqual(["process.hrtime"]);
+    expect(
+      usesOf("process.hrtime(); process.hrtime.bigint();").map((u) => u.path.join(".")),
+    ).toEqual(["process.hrtime", "process.hrtime.bigint"]);
+    expect(doorsOf("process.hrtime(); process.platform;").sort()).toEqual([
+      "process.hrtime",
+      "process.platform",
+    ]);
+  });
+
+  it("names a member only when the file does: a bare `process` or `process[k]` is no door", () => {
+    expect(pathDoorOf(["process"])).toBeNull();
+    expect(pathDoorOf(["process", "hrtime", "bigint"])).toBe("process.hrtime");
+    expect(doorsOf("run(process); const p = process; process[k]();")).toEqual([]);
+  });
 });
 
 describe("what process.env is", () => {
@@ -341,6 +404,16 @@ describe("a module door is an import edge that opens something", () => {
     expect(moduleDoorOf(edge("fs", { target: "src/fs.ts" }))).toBeNull();
     expect(moduleDoorOf(edge("node:fs"))).toBe("node:fs");
   });
+
+  it("opens only what a runtime import names, because one edge stands for every literal of a specifier", () => {
+    const edges = [
+      edge("node:fs"),
+      edge("node:child_process"),
+      edge("fs", { target: "src/fs.ts" }),
+    ];
+    expect(moduleDoorsOpened(edges, new Set())).toEqual([]);
+    expect(moduleDoorsOpened(edges, new Set(["node:fs", "fs"]))).toEqual(["node:fs"]);
+  });
 });
 
 describe("a use belongs to the most specific declared door that is a path prefix of it", () => {
@@ -359,7 +432,7 @@ describe("a use belongs to the most specific declared door that is a path prefix
 
   it("falls under the catalog door whose path is its prefix", () => {
     expect(pathDoorOf(stdin)).toBe("process.stdin");
-    expect(pathDoorOf(["process", "platform"])).toBeNull();
+    expect(pathDoorOf(["process", "platform"])).toBe("process.platform");
     expect(pathDoorOf(["Date"])).toBeNull();
   });
 });
