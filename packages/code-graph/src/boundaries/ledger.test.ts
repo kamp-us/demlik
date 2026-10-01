@@ -98,8 +98,9 @@ describe("the ledger file", () => {
     expect(parseBoundaryLedger(JSON.stringify({ entries: [{ ...crossing, to: null }] }))).toEqual({
       kind: "invalid",
       message:
-        "entries.0.to: only an impure-rules or door-outside-owner entry may have a null `to` " +
-        "(a bare-specifier import, or a world door)",
+        "entries.0.to: only a bare-specifier import, a world door or a feature's entry may have " +
+        "a null `to` (kinds door-outside-driven-adapter, door-outside-owner, impure-application, " +
+        "impure-rules, unknown-zone)",
     });
     expect(parseBoundaryLedger(JSON.stringify({ entries: [crossing], extra: 1 })).kind).toBe(
       "invalid",
@@ -152,10 +153,15 @@ describe("a world door is a ledger entry with no target file", () => {
   it("lists the kind, accepts a null `to` on it, and refuses one on every kind naming a file", () => {
     expect(BOUNDARY_KINDS).toContain("door-outside-owner");
     expect(parseBoundaryLedger(JSON.stringify({ entries: [door] })).kind).toBe("read");
-    const namesAFile = BOUNDARY_KINDS.filter(
-      (kind) => kind !== "impure-rules" && kind !== "door-outside-owner",
-    );
-    expect(namesAFile).toHaveLength(3);
+    const mayHaveNoFile: readonly string[] = [
+      "door-outside-driven-adapter",
+      "door-outside-owner",
+      "impure-application",
+      "impure-rules",
+      "unknown-zone",
+    ];
+    const namesAFile = BOUNDARY_KINDS.filter((kind) => !mayHaveNoFile.includes(kind));
+    expect(namesAFile).toHaveLength(5);
     for (const kind of namesAFile) {
       const entry = { ...crossing, kind, to: null };
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");
@@ -192,5 +198,67 @@ describe("a world door is a ledger entry with no target file", () => {
     for (const entry of refused) {
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");
     }
+  });
+});
+
+describe("the hexagonal kinds are ledger entries", () => {
+  const edge = (kind: BoundaryLedgerEntry["kind"]): BoundaryLedgerEntry => ({
+    scope: S,
+    kind,
+    from: "apps/web/src/billing/application/charge.ts",
+    to: "apps/web/src/billing/adapters/driven/stripe.ts",
+    specifier: "../adapters/driven/stripe.js",
+  });
+  const noFile = (kind: BoundaryLedgerEntry["kind"], specifier: string): BoundaryLedgerEntry => ({
+    scope: S,
+    kind,
+    from: "apps/web/src/billing/application/charge.ts",
+    to: null,
+    specifier,
+  });
+  const parses = (entry: unknown) => parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind;
+  const DOOR_OR_ENTRY = [
+    "impure-application",
+    "door-outside-driven-adapter",
+    "unknown-zone",
+  ] as const;
+  const FILE_EDGES = ["application-imports-adapter", "driving-reaches-driven"] as const;
+
+  it("lists all five", () => {
+    expect(BOUNDARY_KINDS).toEqual(expect.arrayContaining([...DOOR_OR_ENTRY, ...FILE_EDGES]));
+  });
+
+  it("accepts a null `to` on a door or an entry, and refuses one on an import of a file", () => {
+    for (const kind of DOOR_OR_ENTRY) expect(parses(noFile(kind, "process.env"))).toBe("read");
+    for (const kind of FILE_EDGES) {
+      expect(parses(edge(kind))).toBe("read");
+      expect(parses({ ...edge(kind), to: null })).toBe("invalid");
+    }
+  });
+
+  it("keeps `global` to impure-rules", () => {
+    for (const kind of DOOR_OR_ENTRY) {
+      expect(parses({ ...noFile(kind, "fetch"), global: true })).toBe("invalid");
+    }
+  });
+
+  it("re-keys a moved file in a new-kind entry", () => {
+    const zoneEdge = edge("application-imports-adapter");
+    const door = noFile("impure-application", "Date.now");
+    const moved = rekeyBoundaryLedger(boundaryLedgerOf([zoneEdge, door]), [
+      { from: zoneEdge.from, to: "apps/web/src/billing/application/pay.ts" },
+      {
+        from: "apps/web/src/billing/adapters/driven/stripe.ts",
+        to: "apps/web/src/billing/adapters/driven/card.ts",
+      },
+    ]);
+    expect(moved.entries).toEqual([
+      {
+        ...zoneEdge,
+        from: "apps/web/src/billing/application/pay.ts",
+        to: "apps/web/src/billing/adapters/driven/card.ts",
+      },
+      { ...door, from: "apps/web/src/billing/application/pay.ts" },
+    ]);
   });
 });

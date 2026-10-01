@@ -9,11 +9,16 @@ import type { BoundaryKind } from "./analyze.js";
 export const LEDGER_FILENAME = "boundary-ledger.json";
 
 export const BOUNDARY_KINDS = [
+  "application-imports-adapter",
   "cross-feature",
+  "door-outside-driven-adapter",
   "door-outside-owner",
+  "driving-reaches-driven",
+  "impure-application",
   "impure-rules",
   "lib-imports-feature",
   "outside-imports-feature-internal",
+  "unknown-zone",
 ] as const satisfies readonly BoundaryKind[];
 
 // Fails to compile when analyze.ts grows a kind this list does not name.
@@ -23,14 +28,23 @@ const everyKindListed: Exclude<BoundaryKind, (typeof BOUNDARY_KINDS)[number]> ex
 void everyKindListed;
 
 // Whether a kind can cross to something that is not a file of the scope: a bare import
-// (`impure-rules`) or a world door (`door-outside-owner`). Every other kind names its target file.
+// (`impure-rules`), a world door (`door-outside-owner`, `impure-application`,
+// `door-outside-driven-adapter`) or a feature's own entry (`unknown-zone`). Every other kind names
+// its target file.
 const MAY_HAVE_NO_FILE = {
+  "application-imports-adapter": false,
   "cross-feature": false,
+  "door-outside-driven-adapter": true,
   "door-outside-owner": true,
+  "driving-reaches-driven": false,
+  "impure-application": true,
   "impure-rules": true,
   "lib-imports-feature": false,
   "outside-imports-feature-internal": false,
+  "unknown-zone": true,
 } as const satisfies Record<BoundaryKind, boolean>;
+
+const NO_FILE_KINDS = BOUNDARY_KINDS.filter((kind) => MAY_HAVE_NO_FILE[kind]).join(", ");
 
 const EntrySchema = z
   .object({
@@ -45,8 +59,8 @@ const EntrySchema = z
   .strict()
   .refine((entry) => entry.to !== null || MAY_HAVE_NO_FILE[entry.kind], {
     message:
-      "only an impure-rules or door-outside-owner entry may have a null `to` " +
-      "(a bare-specifier import, or a world door)",
+      "only a bare-specifier import, a world door or a feature's entry may have a null `to` " +
+      `(kinds ${NO_FILE_KINDS})`,
     path: ["to"],
   })
   .refine(
@@ -76,9 +90,9 @@ export const BoundaryLedgerSchema = z
     });
   });
 
-// `to` is the resolved target file, or null for a bare import (`impure-rules`) or a world door
-// (`door-outside-owner`, or `impure-rules` with `global`), in which case the target is the
-// specifier itself. `specifier` is how an import was written, or the door's name, and is display
+// `to` is the resolved target file, or null for a bare import (`impure-rules`), a world door
+// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, or `impure-rules` with
+// `global`) or a feature's entry (`unknown-zone`), in which case the target is the specifier itself. `specifier` is how an import was written, or the door's name, and is display
 // only for a file target: it is not part of the identity, so a move that rewrites a relative
 // specifier keeps it. `global` is part of the identity: a global `fetch` and a bare `import "fetch"`
 // from one file are two crossings, and the flag is all that tells them apart.

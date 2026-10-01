@@ -176,6 +176,14 @@ export function resolveBoundaryRules(
       seen.add(feature);
     }
   }
+  for (const scope of Object.keys(rules.layout)) {
+    if (rules.features[scope] === undefined) {
+      report(
+        `"layout" declares scope "${scope}", which declares no "features": a layout rides a scope that declares features.`,
+      );
+      return null;
+    }
+  }
   const doorIssue = doorDeclarationIssue(rules, members);
   if (doorIssue !== null) {
     report(doorIssue);

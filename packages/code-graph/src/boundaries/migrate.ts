@@ -1,5 +1,5 @@
 import type { ScopeCountCeilings } from "../ratchet/scope-count.js";
-import { isDoorUse, type ScopeBoundaryReport } from "./analyze.js";
+import { crossingOf, type ScopeBoundaryReport } from "./analyze.js";
 import { type BoundaryLedger, boundaryLedgerOf } from "./ledger.js";
 import { measuredEntries } from "./reconcile.js";
 import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
@@ -19,8 +19,9 @@ export const MIGRATED_REASON = `grandfathered from ${LEGACY_CEILINGS_FILENAME}`;
 // Counts carry no edges, so the ledger is seeded from the crossings measured now. The recorded
 // counts gate that seed: a scope above its ceiling would carry a crossing the count never allowed,
 // so the migration refuses rather than loosen. The count only ever measured import edges, so a
-// world door used by name is not held against it, and is seeded like the rest: a repo that
-// predates the doors would otherwise be refused for uses its count could not have recorded.
+// world door used by name, or a feature's unknown entry, is not held against it, and is seeded like
+// the rest: a repo that predates the doors would otherwise be refused for uses its count could not
+// have recorded.
 export function migratedLedger(
   reports: readonly ScopeBoundaryReport[],
   ceilings: ScopeCountCeilings,
@@ -28,7 +29,7 @@ export function migratedLedger(
   const breaches = reports
     .map((r) => ({
       scope: r.scope,
-      measured: r.violations.filter((v) => !isDoorUse(v)).length,
+      measured: r.violations.filter((v) => crossingOf(v) === "import").length,
       ceiling: ceilings.scopes[r.scope] ?? ceilings.default,
     }))
     .filter((b) => b.measured > b.ceiling);
