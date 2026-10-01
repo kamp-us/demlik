@@ -762,12 +762,12 @@ converted. `code-graph . --boundaries --migrate-ceilings` measures every declare
 `boundary-ledger.json` with one entry per crossing measured now (reason
 `grandfathered from boundary-ceilings.json`), then deletes `boundary-ceilings.json`. It refuses,
 exit 2 and nothing written, when any scope's import crossings exceed its recorded count, because
-seeding from that would loosen the gate. The count only ever measured import edges (B1–B4, B6
-and B8), so the world-door entries (B5, B7, B9, and a global in `rules/`) and the `unknown-zone`
-entries (B10) are seeded with the same reason and are not held against it: a repo that predates the doors still migrates, and its first `--ci` is green.
-Until it runs, `--boundaries --ci` with a
-`boundary-ceilings.json` and no ledger exits 2 naming `--migrate-ceilings` rather than gate against
-an empty ledger.
+seeding from that would loosen the gate. The legacy count measured imports only, so the migration
+holds only the import crossings measured now (B1–B4, B6 and B8) against it. The world-door entries
+(B5, B7, B9, and a global in `rules/`) and the `unknown-zone` entries (B10) are seeded with the
+same reason and are not held against it: a repo that predates the doors still migrates, and its
+first `--ci` is green. Until it runs, `--boundaries --ci` with a `boundary-ceilings.json` and no
+ledger exits 2 naming `--migrate-ceilings` rather than gate against an empty ledger.
 
 ### Moving files: `@demlik/code-graph/boundaries`
 
