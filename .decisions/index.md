@@ -25,6 +25,7 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0021](./0021-handler-outcome-becomes-the-msg.md) | A Cmd handler returns its outcome and the engine mints the Msg, never the handler | Accepted | 2026-09-23 |
 | [0022](./0022-no-battery-layer-plain-functions.md) | Reusable logic ships as plain functions and Cmds called from update, never a battery layer | Accepted | 2026-09-23 |
 | [0023](./0023-door-identity-and-process-members.md) | A world door is named for what a use read, and Node's own process judges a declaration | Accepted | 2026-10-01 |
+| [0024](./0024-admins-bypass-code-owner-review.md) | A repo admin may merge a governed-root PR without a second reviewer, never bypass the PR itself | Accepted | 2026-10-01 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR
