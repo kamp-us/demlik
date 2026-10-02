@@ -1,4 +1,4 @@
-// What a boundary verdict is: one variant per rule B1-B14, and the two tables that say what kind of
+// What a boundary verdict is: one variant per rule B1-B19, and the two tables that say what kind of
 // crossing each is. `analyze.ts` judges a scope into these; the ledger, the report and the
 // migration read them.
 
@@ -113,17 +113,49 @@ export type BoundaryViolation =
       readonly to: string;
       readonly specifier: string;
       readonly typeOnly: boolean;
+    }
+  | {
+      // A worker binding its owning worker declares, used in a file outside a hexagonal feature's
+      // `adapters/driven/`: `specifier` is the binding's name in the config, one entry per file per
+      // binding.
+      readonly kind: "binding-outside-driven-adapter";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: false;
+    }
+  | {
+      // Two or more workers that bind each other in a loop: `from` the workers, sorted and joined
+      // with `, `, and `specifier` the service-binding edges inside the component, one entry per
+      // component. A cycle belongs to no one worker, so its scope is the repo's.
+      readonly kind: "worker-call-cycle";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: false;
+    }
+  | {
+      // A relative import whose target sits in another workspace than the importer. `to` is the
+      // target's workspace directory, so however many files of it the importer reaches it is one
+      // entry; `specifier` is the first one written.
+      readonly kind: "relative-import-crosses-workspace";
+      readonly from: string;
+      readonly to: string;
+      readonly specifier: string;
+      readonly typeOnly: boolean;
     };
 
 export type BoundaryKind = BoundaryViolation["kind"];
 
-// What a crossing is: an import edge, a world door used by name or opened, or an entry (a
-// feature's, or a package under a library root) that no rule places.
+// What a crossing is: an import edge, a world door used by name or opened (a worker binding used is
+// one too), or an entry (a feature's, a package under a library root, a loop of workers) that no
+// rule places.
 type Crossing = "import" | "door" | "entry";
 
 const CROSSINGS = {
   "adapter-library-imported-outside-driven": "import",
   "application-imports-adapter": "import",
+  "binding-outside-driven-adapter": "door",
   "cross-feature": "import",
   "door-outside-driven-adapter": "door",
   "door-outside-owner": "door",
@@ -135,7 +167,9 @@ const CROSSINGS = {
   "library-imports-up": "import",
   "library-undeclared": "entry",
   "outside-imports-feature-internal": "import",
+  "relative-import-crosses-workspace": "import",
   "unknown-zone": "entry",
+  "worker-call-cycle": "entry",
 } as const satisfies Record<BoundaryKind, Crossing>;
 
 // A `global` impure-rules entry is a door read by name, not the import its kind otherwise is.

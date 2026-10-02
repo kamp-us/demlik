@@ -11,9 +11,11 @@ import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/fi
 import { accessOf } from "./access.js";
 import { AliasScope } from "./alias-scope.js";
 
-type Bindings = ReadonlyMap<string, DataBindingDecl>;
-type Site = {
-  decl: DataBindingDecl;
+// The bindings a worker declares, by name. The finder reads names off `env` and hands back whatever
+// `D` the caller declared for each: `--data` its data bindings, the boundary gate its own set.
+type Bindings<D> = ReadonlyMap<string, D>;
+export type Site<D> = {
+  decl: D;
   method: string | null;
   sql: string | null;
   line: number;
@@ -42,7 +44,7 @@ function memberName(member: SyntaxNode): string | null {
   return keyName(member, nodeField(member, "property"));
 }
 
-function envBinding(node: SyntaxNode, bindings: Bindings): DataBindingDecl | null {
+function envBinding<D>(node: SyntaxNode, bindings: Bindings<D>): D | null {
   if (node.type !== "MemberExpression") return null;
   const object = nodeField(node, "object");
   const name = memberName(node);
@@ -56,7 +58,11 @@ function localName(value: SyntaxNode | null): string | null {
 }
 
 // `const { DB, KV: kv } = env`.
-function declareDestructured(pattern: SyntaxNode, bindings: Bindings, aliases: AliasScope): void {
+function declareDestructured<D>(
+  pattern: SyntaxNode,
+  bindings: Bindings<D>,
+  aliases: AliasScope<D>,
+): void {
   for (const property of field(pattern, "properties") as SyntaxNode[]) {
     if (property.type !== "Property") continue;
     const key = keyName(property, nodeField(property, "key"));
@@ -67,7 +73,7 @@ function declareDestructured(pattern: SyntaxNode, bindings: Bindings, aliases: A
 }
 
 // One level of aliasing: `const db = env.DB`, or a destructure off `env`.
-function declareAliases(node: SyntaxNode, bindings: Bindings, aliases: AliasScope): void {
+function declareAliases<D>(node: SyntaxNode, bindings: Bindings<D>, aliases: AliasScope<D>): void {
   if (node.type !== "VariableDeclarator") return;
   const id = nodeField(node, "id");
   const init = nodeField(node, "init");
@@ -96,12 +102,12 @@ function isAliasUse(node: SyntaxNode, parent: SyntaxNode | undefined): boolean {
   return (field(parent, "arguments") as SyntaxNode[]).includes(node);
 }
 
-function referencedBinding(
+function referencedBinding<D>(
   syntax: SyntaxFile,
   node: SyntaxNode,
-  bindings: Bindings,
-  aliases: AliasScope,
-): DataBindingDecl | null {
+  bindings: Bindings<D>,
+  aliases: AliasScope<D>,
+): D | null {
   const parent = syntax.parentOf(node);
   if (node.type === "MemberExpression") {
     const decl = envBinding(node, bindings);
@@ -129,7 +135,7 @@ function firstArgumentText(syntax: SyntaxFile, member: SyntaxNode): string | nul
   return literalText((field(call, "arguments") as SyntaxNode[])[0]);
 }
 
-function siteAt(syntax: SyntaxFile, ref: SyntaxNode, decl: DataBindingDecl): Site {
+function siteAt<D>(syntax: SyntaxFile, ref: SyntaxNode, decl: D): Site<D> {
   const parent = syntax.parentOf(ref);
   const member =
     parent?.type === "MemberExpression" && nodeField(parent, "object") === ref ? parent : null;
@@ -144,19 +150,22 @@ function siteAt(syntax: SyntaxFile, ref: SyntaxNode, decl: DataBindingDecl): Sit
 
 // A site and whoever holds it: the nearest discovered function around it, or null when only
 // anonymous callbacks stand between the site and the module's top level.
-type Held = { holder: DiscoveredFunction | null; site: Site };
+type Held<D> = { holder: DiscoveredFunction | null; site: Site<D> };
 
 // One preorder walk of a file. Entering a discovered function hands every site below it to that
 // function; an anonymous callback stays with whoever holds it. Alias scope is a separate axis:
 // every scope-opening node, a named function or not, opens a child of the scope around it.
-function sitesOf(
-  unit: SourceUnit,
+function sitesOf<D>(
+  syntax: SyntaxFile,
   holders: ReadonlyMap<SyntaxNode, DiscoveredFunction>,
-  bindings: Bindings,
-): Held[] {
-  const { syntax } = unit;
-  const held: Held[] = [];
-  const enter = (node: SyntaxNode, outer: DiscoveredFunction | null, around: AliasScope): void => {
+  bindings: Bindings<D>,
+): Held<D>[] {
+  const held: Held<D>[] = [];
+  const enter = (
+    node: SyntaxNode,
+    outer: DiscoveredFunction | null,
+    around: AliasScope<D>,
+  ): void => {
     const holder = holders.get(node) ?? outer;
     const aliases = around.enter(syntax, node);
     declareAliases(node, bindings, aliases);
@@ -164,8 +173,14 @@ function sitesOf(
     if (decl !== null) held.push({ holder, site: siteAt(syntax, node, decl) });
     for (const child of syntax.children(node)) enter(child, holder, aliases);
   };
-  enter(syntax.program, null, AliasScope.root());
+  enter(syntax.program, null, AliasScope.root<D>());
   return held;
+}
+
+// Every reference a file makes to a binding it reads off `env`, held by no function: the finder
+// `--data` runs, over the bindings the caller names. Syntax only, so it runs on the cheap pass.
+export function bindingSites<D>(syntax: SyntaxFile, bindings: Bindings<D>): Site<D>[] {
+  return sitesOf(syntax, new Map(), bindings).map((held) => held.site);
 }
 
 function compareSites(a: DataSite, b: DataSite): number {
@@ -207,8 +222,10 @@ export function scanDataSites(input: DataScanInput): DataScan {
   for (const unit of units) {
     const owner = ownerOf(catalog.manifests, toRelative(repoRoot, unit.absolutePath));
     if (owner === null || owner.dataBindings.length === 0) continue;
-    const bindings: Bindings = new Map(owner.dataBindings.map((d) => [d.binding, d]));
-    for (const { holder, site } of sitesOf(unit, holders, bindings)) {
+    const bindings: Bindings<DataBindingDecl> = new Map(
+      owner.dataBindings.map((d) => [d.binding, d]),
+    );
+    for (const { holder, site } of sitesOf(unit.syntax, holders, bindings)) {
       const { decl, method, sql, line, column } = site;
       const row: DataSite = {
         line,

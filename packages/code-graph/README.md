@@ -49,8 +49,8 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Exported symbols nothing reaches | `code-graph X --unreachable` |
 | Writes reachable from an entry with no auth on the path | `code-graph X --unguarded` |
 | Imports pointing UP the declared layer stack (a gate) | `code-graph . --layers` |
-| Imports crossing a declared feature boundary, world doors (`process.env`, `fetch`, the clock, `node:fs`) opened outside their owner, and libraries of declared types importing upward or using the world | `code-graph X --boundaries` |
-| Gate feature-boundary, world-door and library crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
+| Imports crossing a declared feature boundary, world doors (`process.env`, `fetch`, the clock, `node:fs`) opened outside their owner, libraries of declared types importing upward or using the world, and, across deployables, worker bindings used outside a driven adapter, workers that call each other in a loop and relative imports between workspaces | `code-graph X --boundaries` |
+| Gate feature-boundary, world-door, library and deployable crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
 | Record the current crossings, with why they stay | `code-graph . --boundaries --accept-crossings --reason "<why>"` |
 | Move off a `boundary-ceilings.json` once | `code-graph . --boundaries --migrate-ceilings` |
 | Ranked collapse candidates + partial twins | `code-graph X --collapse` |
@@ -95,11 +95,11 @@ cross-package callers; re-run with `--deep`.
 | `--entry-preset <name>` | Turn on a built-in [entrypoint-export preset](#entrypoint-export-conventions) (`nextjs`) for every package, including one whose `package.json` does not depend on the framework. Repeatable; adds to any `entryExportPresets` the rules file names. An unknown name exits 2 |
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no type-checker, no Graph. A tsconfig `paths` alias resolves through the importing file's nearest tsconfig, an alias naming no file is UNRESOLVED, and any other unresolvable specifier stays `external` |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
-| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (any `process.<member>`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners (a type-only import opens no door). `lib` importers are judged by B3, not B4. A scope whose `layout` is `hexagonal` lays its features out in Cockburn's zones instead of `rules/` and adds **B6** `application-imports-adapter`, **B7** `impure-application`, **B8** `driving-reaches-driven`, **B9** `door-outside-driven-adapter` and **B10** `unknown-zone`; see [Hexagonal features](#hexagonal-features-layout). A rules file that declares libraries judges the package level too, one scope per declared library, and adds **B11** `library-undeclared`, **B12** `library-imports-up`, **B13** `impure-library` and **B14** `adapter-library-imported-outside-driven`; see [Library types](#library-types-librarytypes). A report, exit 0, with a census of the libraries when a library key is declared; nothing declared means nothing reported. Implies the edge pass |
+| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (any `process.<member>`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners (a type-only import opens no door). `lib` importers are judged by B3, not B4. A scope whose `layout` is `hexagonal` lays its features out in Cockburn's zones instead of `rules/` and adds **B6** `application-imports-adapter`, **B7** `impure-application`, **B8** `driving-reaches-driven`, **B9** `door-outside-driven-adapter` and **B10** `unknown-zone`; see [Hexagonal features](#hexagonal-features-layout). A rules file that declares libraries judges the package level too, one scope per declared library, and adds **B11** `library-undeclared`, **B12** `library-imports-up`, **B13** `impure-library` and **B14** `adapter-library-imported-outside-driven`; see [Library types](#library-types-librarytypes). Across deployables, three more rules run only when `acrossDeployables` lists them: **B17** `binding-outside-driven-adapter` (a worker binding used outside a hexagonal feature's `adapters/driven/`), **B18** `worker-call-cycle` (workers that bind each other in a loop) and **B19** `relative-import-crosses-workspace` (a relative import into another workspace); see [Across deployables](#across-deployables-acrossdeployables). A report, exit 0, with a census of the libraries when a library key is declared and a census of the deployables when a kind is listed; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
 | `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
-| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries, B5, B7, B9 and a door used by name in `rules/`, `unknown-zone` entries, and the library kinds B11-B14 are seeded too and are not counted against it; library scopes are measured like any other) |
-| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" }, libraryTypes: { "<type>": { imports: ["<type>", …], pure: true \| false, importedFrom: ["driven" \| "configurator" \| "any", …] } }, libraries: { "<package directory>": "<type>" }, libraryRoots: ["<directory>", …], worldLibraries: ["<package>", …] }`. An override REPLACES each key wholesale. `doors` and `layout` ride a scope that declares `features`; the four library keys ride none; see [World doors](#world-doors-doors), [Hexagonal features](#hexagonal-features-layout) and [Library types](#library-types-librarytypes) |
+| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries, B5, B7, B9 and a door used by name in `rules/`, `unknown-zone` entries, the library kinds B11-B14 and the deployable kinds B17-B19 are seeded too and are not counted against it; library scopes are measured like any other, and so is the repo's worker call graph, scope `.`) |
+| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" }, libraryTypes: { "<type>": { imports: ["<type>", …], pure: true \| false, importedFrom: ["driven" \| "configurator" \| "any", …] } }, libraries: { "<package directory>": "<type>" }, libraryRoots: ["<directory>", …], worldLibraries: ["<package>", …], acrossDeployables: ["binding-outside-driven-adapter" \| "worker-call-cycle" \| "relative-import-crosses-workspace", …], bindingOwners: { "<scope>": { "<binding>": ["<owner file>", …] } } }`. An override REPLACES each key wholesale. `doors`, `layout` and `bindingOwners` ride a scope that declares `features`; the four library keys ride none; `acrossDeployables` lists the deployable rules that run, none by default; see [World doors](#world-doors-doors), [Hexagonal features](#hexagonal-features-layout), [Library types](#library-types-librarytypes) and [Across deployables](#across-deployables-acrossdeployables) |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
 | `--collapse --write-ceilings` | Record the analyzed path's partial-twin count in `collapse-ceilings.json`, leaving the other scopes as they are |
@@ -564,10 +564,11 @@ loaded, and a hook that reads 2114 files is a hook people disable.
 ## The boundary ledger (`--boundaries --ci`)
 
 `boundary-ledger.json` at the repo root names every boundary crossing a declared scope still
-carries: one entry per crossing import (B1-B4, B6, B8, and B12 and B14 between libraries), per
-world-door use (B5, B7, B9, a door used by name in `rules/`, and B13, a pure library's door or world
-library), and per entry no rule places (B10, a feature's entry in no zone, and B11, a package under
-a library root that no library names):
+carries: one entry per crossing import (B1-B4, B6, B8, B12 and B14 between libraries, and B19
+between workspaces), per world-door use (B5, B7, B9, a door used by name in `rules/`, B13, a pure
+library's door or world library, and B17, a worker binding used outside a driven adapter), and per
+entry no rule places (B10, a feature's entry in no zone, B11, a package under a library root that
+no library names, and B18, a loop of workers that bind each other):
 
 ```json
 {
@@ -589,22 +590,28 @@ a library root that no library names):
 [hexagonal](#hexagonal-features-layout) scope `application-imports-adapter` B6,
 `impure-application` B7, `driving-reaches-driven` B8, `door-outside-driven-adapter` B9,
 `unknown-zone` B10, and for [libraries](#library-types-librarytypes) `library-undeclared` B11,
-`library-imports-up` B12, `impure-library` B13, `adapter-library-imported-outside-driven` B14),
+`library-imports-up` B12, `impure-library` B13, `adapter-library-imported-outside-driven` B14, and
+for [deployables](#across-deployables-acrossdeployables) `binding-outside-driven-adapter` B17,
+`worker-call-cycle` B18, `relative-import-crosses-workspace` B19),
 `from` the importer and `to` the target, both repo-relative. `to` is `null` for a B2 bare import,
 where the specifier is the target, for a world door (`door-outside-owner`, `impure-application`,
 `door-outside-driven-adapter`, `impure-library`, or `impure-rules` with `"global": true`), where
 the specifier is the door's name, for a world library (`impure-library`), where it is the library
-as the import wrote it, for `unknown-zone`, where `from` is the entry's path and the specifier the
-entry below its feature, and for `library-undeclared`, where `from` is the package's directory and
-the specifier that directory below its library root. `to` is a library's directory, not a file,
-for B12 and B14: the import resolves to a package. An entry's identity is `(scope, kind, from, to ??
+as the import wrote it, for a worker binding (`binding-outside-driven-adapter`), where the
+specifier is the binding's name in the worker's config, for `unknown-zone`, where `from` is the
+entry's path and the specifier the entry below its feature, for `library-undeclared`, where `from`
+is the package's directory and the specifier that directory below its library root, and for
+`worker-call-cycle`, where `from` is the workers of the loop and the specifier the edges between
+them. `to` is a library's directory, not a file, for B12 and B14: the import resolves to a
+package; and it is a workspace's directory for B19. An entry's identity is `(scope, kind, from, to ??
 specifier)`, plus `global`: the `specifier` as written is display only for a file target, so two
 imports of one target from one file are one entry, and a move that rewrites a relative specifier
 keeps its entry. `global` is what keeps a global `fetch` and a bare `import "fetch"` (the npm
 package) from one rules file two entries, not one; it is only ever `true`, and only on an
 `impure-rules` entry with a null `to`. `reason` is optional. The file is written sorted with
 sorted keys, so a diff shows exactly which crossings came and went. A release before the library
-kinds refuses a ledger that holds them, so upgrade the tool before committing one.
+kinds, or before the deployable kinds, refuses a ledger that holds them, so upgrade the tool before
+committing one.
 
 A count could not tell "one crossing fixed, a different one added" from "nothing changed". The
 ledger can, and it moves one way on its own:
@@ -802,7 +809,8 @@ here knows `contract` from `ui`.
 A specifier names a library **by package name**: a bare specifier, or a subpath of one
 (`@shop/pkg/sub`, `pkg/sub`), resolves to the workspace package of that name, from the `name` in its
 `package.json`, never through the package's `exports` and never through tsgo. A relative import
-that crosses into another package is not judged here.
+that crosses into another package is not judged here: that is B19, once
+[`acrossDeployables`](#across-deployables-acrossdeployables) lists it.
 
 | Rule | Kind | Fires on | Allowed |
 |---|---|---|---|
@@ -853,6 +861,105 @@ libraries and no `features` is judged all the same. The run lists the repo's fil
 scope reads its own from that list, so a repo of dozens of libraries costs one listing, not one per
 library. It is the cheap pass: oxc for imports and syntax, never tsgo.
 
+### Across deployables (`acrossDeployables`)
+
+A repo of several workers and shared packages has three rules left that a review holds alone: a
+worker binding (another worker, a database, a bucket, a queue) used from a use case, two workers
+that call each other in a loop, and a relative import that walks out of one package into another.
+`acrossDeployables` turns each on, by name. **A kind the rules file does not list does not run**, so
+a release that adds a kind never fails the merge gate of a repo that did not ask for it, and a rules
+file that lists none is judged, reported and written exactly as before: no wrangler config is read,
+and `--json` gains no key.
+
+```json
+{
+  "features": { "services/api": ["orders", "billing"] },
+  "layout": { "services/api": "hexagonal" },
+  "acrossDeployables": [
+    "binding-outside-driven-adapter",
+    "worker-call-cycle",
+    "relative-import-crosses-workspace"
+  ],
+  "bindingOwners": { "services/api": { "DB": ["src/orders/adapters/driven/orders-db.ts"] } }
+}
+```
+
+- `acrossDeployables`: the kinds that run, any of the three names below, none by default.
+- `bindingOwners`: optional, B17 only. Per scope, a binding narrowed to exact scope-relative files,
+  as `doors` does. It narrows within the driven adapters and never exempts a file from them: with an
+  owner list, a binding is clean only in a listed file that is also under a feature's
+  `adapters/driven/`.
+
+| Rule | Kind | Fires on | Allowed |
+|---|---|---|---|
+| B17 | `binding-outside-driven-adapter` | a reference to a binding the owning worker's deploy config declares (a service binding, or a D1, Durable Object, KV, R2 or queue binding), in a file of a judged scope that is not under a hexagonal feature's `adapters/driven/`, one entry per file per binding: `from` is the file and the specifier the binding's name in the config (`DB`) | a driven adapter, and with `bindingOwners` a listed one. A Workflow binding, a var, a name the config does not declare and a binding of another worker are not judged |
+| B18 | `worker-call-cycle` | a strongly connected component of two or more workers over the service-binding graph the wrangler configs declare, one entry per component: the scope is `.`, `from` the workers sorted and joined with `, `, and the specifier the edges inside the component, each written `<worker>.<BINDING> -> <worker>`, sorted and joined with `; ` | a one-way chain, a worker that binds itself, a service binding to a worker with no config in the repo (counted, not an edge), a Durable Object or Workflow binding with a `script_name` (not an edge) |
+| B19 | `relative-import-crosses-workspace` | a relative import (`./x`, `../x`, `.`, `..`; static, `export … from`, dynamic and type-only) whose target path sits in another workspace than the importer's, one entry per importer and other workspace: `from` is the importer, `to` the target's workspace directory, the specifier the first one written, `[type-only]` only when every import of that workspace is | an import inside one workspace through `../`, a bare specifier and a path alias (B12 and B14 judge a bare specifier that names a declared library) |
+
+**B17 reads syntax, not types.** It runs the call-site finder `--data` runs, on the cheap pass: a
+binding read off `env`, `this.env` or `c.env` (`env.DB`, `env["DB"]`), through one level of alias
+(`const db = env.DB`), through a destructure off `env` (`const { DB } = env`), or handed on whole as
+an argument (`register(env.DB)`). A file is judged against the bindings of the worker that owns it,
+the nearest `wrangler.json`, `wrangler.jsonc` or `wrangler.toml` above it, top-level environment
+only: an `env.<name>` block of the config is not read, as `--cross-runtime` does not read it. Every
+scope the pass reads is judged, a feature scope's and a declared library's; a file outside every
+feature is judged too, because the rule is that only a driven adapter touches a binding, and a test
+file is judged like source. **What B17 cannot see:** a binding reached through an object not named
+`env` (`bindings.DB`, a context handed in), more than one level of aliasing, an `env.<name>` block
+of the config, and Hyperdrive and connection use, which is not a call on a binding. A feature of a
+scope laid out as `rules/` has no driven adapter, so every use in it is B17.
+
+**B18 reads the declared graph, on purpose.** It is cheap (no type checker, where observed calls
+through `--cross-runtime` take about 80 s on a services root), and a binding declared and never used is
+itself drift the rule should surface. The nodes are every worker config in the repo, named by the
+config's `name`, else its directory's, so a worker no scope names is still a node. A component of
+two overlapping cycles (a ring with a chord, two pairs sharing a worker) is one component and so one
+entry; a cycle that gains a worker or an edge is a new entry, and the old one is pruned. A cycle
+belongs to no one worker, so its scope is `.`, and only a run whose analyzed path is the repo root
+measures it: a run pointed at one scope leaves B18 entries as they are.
+
+**B19 reads paths, not files.** It joins the specifier onto the importer's directory and takes the
+nearest ancestor directory that holds a `package.json`, for the importer and for the target, so an
+import of a path that does not exist is judged too. The repo root is a workspace only when it holds
+a `package.json`; a file, or a target, in no workspace is placed in the scope root. B19 leaves a
+bare specifier to the rules for libraries (B12 and B14 judge one that names a declared library), and
+a path alias that lands in another workspace is out of scope: no rule judges it. Only `.ts` and `.tsx`
+files are loaded, so a `.js` importer is not judged. A file under a library nested in a feature
+scope is judged in the library's own scope only, as for B12-B14.
+
+**The census.** With a kind listed, `--boundaries` ends its report with what the finder read, per
+worker that holds a binding site: the sites (clean or not), the files holding them and the bindings
+referenced with their site counts, and the service bindings in the repo that point at a worker with
+no config in it. `--json` carries it as `deployables`:
+`{ "workers": [{ "worker": "api", "files": […], "bindings": { "DB": 2, … },
+"sites": [{ "file": "…", "line": 3, "binding": "DB" }, …] }], "unresolvedServiceBindings": <n> }`.
+`--cross-runtime` accepts any receiver (`<receiver>.<BINDING>.<method>(...)`) and resolves it with
+the type checker; the census reads only `env`, a `.env` member and one level of alias, and counts
+every reference, so an alias, a destructure and a binding handed on whole are sites and not calls.
+Every service-binding call `--cross-runtime` reports has a census site on the same file, line and
+binding, and the census may hold more. The B18 scope lists the workers it read.
+
+A bad declaration exits 2 with one line and writes nothing: a kind outside the three, `bindingOwners`
+while `binding-outside-driven-adapter` is not listed, a `bindingOwners` scope that declares no
+`features`, an owner file the scope does not load, an owner file that is not under a feature's
+`adapters/driven/`, and a binding the worker owning that file does not declare (or a file under no
+worker).
+
+A wrangler config the run cannot parse exits 2 the same way, never a silent skip: with
+`binding-outside-driven-adapter` or `worker-call-cycle` listed, the report, `--ci`,
+`--accept-crossings` and `--migrate-ceilings` refuse with one line naming each such file and write
+nothing, because a worker whose config is not read would have its bindings unjudged and be missing
+from the call graph. (`--data` and `--cross-runtime` print the same files as `UNPARSED CONFIG`.) A
+rules file that lists neither kind, or only `relative-import-crosses-workspace`, is not refused for
+one.
+
+Adopting a kind is declare, seed, shrink, empty, as for doors: list it, record today's crossings
+with `--accept-crossings --reason "<why>"`, fix them PR by PR (each `--ci` prunes one), until the
+ledger holds none. Dropping a kind from the list stops measuring it, so the next `--ci` prunes its
+entries. The run lists the repo's files once for the wrangler configs, the package roots and every
+scope. It is the cheap pass: oxc for imports and syntax, a JSON parser for the configs, never tsgo.
+`bench/worker-boundaries.mjs` times it on a generated repo of 14 workers and 2,000 source files.
+
 ### Migrating from `boundary-ceilings.json`
 
 The count file this replaced stored one number per scope and no edges, so it cannot be
@@ -863,11 +970,14 @@ exit 2 and nothing written, when any scope's import crossings exceed its recorde
 seeding from that would loosen the gate. The legacy count measured imports only, so the migration
 holds only the import crossings measured now (B1–B4, B6 and B8) against it. The world-door entries
 (B5, B7, B9, and a global in `rules/`), the `unknown-zone` entries (B10) and the library entries
-(B11-B14, which the count never measured: it knew no library scope) are seeded with the same reason
-and are not held against it: a repo that predates the doors and the libraries still migrates, and
-its first `--ci` is green. Library scopes are measured like any other, so a library holding a B12
-migrates where a ceiling of 0 would refuse a B1. Until it runs, `--boundaries --ci` with a `boundary-ceilings.json` and no
-ledger exits 2 naming `--migrate-ceilings` rather than gate against an empty ledger.
+(B11-B14, which the count never measured: it knew no library scope) and the deployable entries
+(B17-B19, which it never measured either) are seeded with the same reason and are not held against
+it: a repo that predates the doors, the libraries and the deployables still migrates, and its first
+`--ci` is green. Library scopes are measured like any other, so a library holding a B12 migrates
+where a ceiling of 0 would refuse a B1, and so is the repo's worker call graph, scope `.`, when
+`worker-call-cycle` is listed, whatever path the run is pointed at. Until it runs, `--boundaries --ci` with a
+`boundary-ceilings.json` and no ledger exits 2 naming `--migrate-ceilings` rather than gate against
+an empty ledger.
 
 ### Moving files: `@demlik/code-graph/boundaries`
 
@@ -884,8 +994,10 @@ rekeyBoundaryLedgerFile(path.join(repoRoot, "boundary-ledger.json"), [
 ```
 
 Moves are repo-relative file paths. Every entry whose `from` or `to` names a moved file is
-re-keyed; the scope stays. Whether a moved import still crosses is the next gate run's call, and
-one that no longer does is pruned there. The subpath also exports the pieces:
+re-keyed; the scope stays. That follows the importer of a B17 and a B19 entry, and leaves a B18
+entry, which names workers and no file, and the workspace directory a B19 entry reaches, as they
+are. Whether a moved import still crosses is the next gate run's call, and one that no longer does
+is pruned there. The subpath also exports the pieces:
 `BoundaryLedgerSchema`, `parseBoundaryLedger` / `readBoundaryLedger` (answering `absent`, `read`
 or `invalid`), `writeBoundaryLedger` / `serializeBoundaryLedger`, `rekeyBoundaryLedger` over a
 parsed ledger, `boundaryLedgerOf` (sort and dedupe), `ledgerKey`, `ledgerTargetOf` and
