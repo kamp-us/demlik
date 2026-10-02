@@ -109,7 +109,7 @@ cross-package callers; re-run with `--deep`.
 | `--comments --ci` | Comment RATCHET: gate each scope's ratio against `comment-ceilings.json` at the repo root. **Exits 1** on any violation, 2 on a malformed ceilings file |
 | `--comments --write-ceilings` | Rewrite `comment-ceilings.json` from the current measurement (ceilings rounded UP to 1 dp; `default`/`slackPoints` carried forward) |
 | `--data` | Data edges: every call site on a D1 / Durable Object / KV / R2 / queue binding, per function, with the binding kind, name and access (`read` / `write` / `unknown`). `--json` emits the `DataReport`; `--graph --data` puts it on the graph as `data`. Runs on either pass — syntax only, no edge pass needed. See [Data edges](#data-edges---data) |
-| `--env-keys` | Env-var keys declared in wrangler `vars`/`secrets.required`/`.dev.vars` with no recognized read, and reads with no declaration, plus the withheld count. Standalone: no Graph, no edge pass |
+| `--env-keys` | Env-var keys declared in wrangler `vars`/`secrets.required`/`.dev.vars` with no recognized read, and reads with no declaration, plus the withheld count. A wrangler config the run cannot parse is printed as `UNPARSED CONFIG` (`unparsedConfigs` in `--json`), and the reads under it are withheld as `read-site-owner-unparsed`. Standalone: no Graph, no edge pass |
 | `--hotspots [--hotspots-days <n>] [--hotspots-since <iso>] [--hotspots-limit <n>]` | Churn (git commits touching a file) × complexity (sum of its functions' complexity), ranked by the product. `--hotspots-days` sets the window in days ending now (default 90); `--hotspots-since` pins an explicit ISO start instead (reproducible across runs); `--hotspots-limit` caps the human view (default 20; `--json` emits every row) |
 | `--html` | Self-contained HTML report (human view; implies the edge pass). Pair with `--out` to write it banner-safe |
 | `--out <file>` | Write the view payload straight to `<file>` instead of stdout — the banner-safe artifact path (the `pnpm code-graph` wrapper prints its run banner to stdout, so a bare `… > file.html` redirect corrupts the file; `--out` sidesteps stdout entirely). The `wrote N bytes` confirmation goes to stderr |
@@ -968,9 +968,10 @@ nothing, because a worker whose config is not read would have its bindings unjud
 from the call graph. A `.json` or `.jsonc` config cannot be parsed when it has any syntax error,
 read as wrangler reads it (comments, trailing commas and a leading byte-order mark are fine), and a
 `.toml` config when it has a syntax error; a config that is not an object is unread too. A mistake
-in the middle of a file counts, though a parser could repair it into an object. (`--data` and
-`--cross-runtime` print the same files as `UNPARSED CONFIG`.) A rules file that lists neither kind,
-or only `relative-import-crosses-workspace`, is not refused for one.
+in the middle of a file counts, though a parser could repair it into an object. (`--data`,
+`--cross-runtime` and `--env-keys` print the same files as `UNPARSED CONFIG`, and `--env-keys`
+withholds the reads under one.) A rules file that lists neither kind, or only
+`relative-import-crosses-workspace`, is not refused for one.
 
 Adopting a kind is declare, seed, shrink, empty, as for doors: list it, record today's crossings
 with `--accept-crossings --reason "<why>"`, fix them PR by PR (each `--ci` prunes one), until the
