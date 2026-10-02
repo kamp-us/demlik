@@ -12,6 +12,9 @@ export type GateOptions = Partial<BoundaryFlags> & {
   readonly json?: boolean;
   readonly rules?: string;
   readonly members?: ProcessMembers;
+  // The repo-relative path the run is pointed at, where the CLI would be given one: the repo's own
+  // scope when absent.
+  readonly at?: string;
 };
 
 // A throwaway repo with one declared boundary scope, driven through the same gate the CLI calls.
@@ -45,7 +48,7 @@ export function boundaryRepo(
     const out: string[] = [];
     const errors: string[] = [];
     const code = runBoundaryGate({
-      rootAbsolute: path.join(root, scope),
+      rootAbsolute: path.join(root, options.at ?? scope),
       repoRoot: root,
       boundaryRulesFile: options.rules ?? rulesFile,
       members: options.members,

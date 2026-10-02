@@ -3,9 +3,9 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { resolveBoundaryRules } from "../config.js";
 import { type BoundaryRepo, boundaryRepo, type GateRun } from "../test-helpers/boundary-repo.js";
-import { type BoundaryViolation, isDoorUse } from "./analyze.js";
 import { type BoundaryLedger, ledgerTargetOf, readBoundaryLedger } from "./ledger.js";
 import { MIGRATED_REASON } from "./migrate.js";
+import { type BoundaryViolation, isDoorUse } from "./violation.js";
 
 const SCOPE = "services/svc";
 

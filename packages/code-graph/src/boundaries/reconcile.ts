@@ -1,11 +1,12 @@
 import { scopesUnder } from "../ratchet/scope-count.js";
-import type { BoundaryViolation, ScopeBoundaryReport } from "./analyze.js";
+import type { ScopeBoundaryReport } from "./analyze.js";
 import {
   type BoundaryLedger,
   type BoundaryLedgerEntry,
   boundaryLedgerOf,
   ledgerKey,
 } from "./ledger.js";
+import type { BoundaryViolation } from "./violation.js";
 
 export function entryOf(scope: string, violation: BoundaryViolation): BoundaryLedgerEntry {
   return {

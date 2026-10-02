@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type ImportedFrom, LIBRARY_KEYS } from "./libraries/schema.js";
 
 // The per-scope count file the ledger replaced. `--boundaries --migrate-ceilings` reads it once,
 // and the gate refuses to run while it stands without a ledger.
@@ -28,6 +29,7 @@ export const BoundaryRulesSchema = z
     contracts: z.array(z.string().min(1)).default([]),
     doors: DoorsSchema.default({}),
     layout: z.record(z.string().min(1), FeatureLayoutSchema).default({}),
+    ...LIBRARY_KEYS,
   })
   .strict();
 export type BoundaryRules = z.infer<typeof BoundaryRulesSchema>;
@@ -50,6 +52,9 @@ type ZoneRule = {
   // Whether another feature, and a file in no feature and no `lib` folder, may import a file here.
   readonly openToFeatures: boolean;
   readonly openToOutside: boolean;
+  // The `importedFrom` zone a file here satisfies, for the libraries that name where they may be
+  // imported from (B14): only `adapters/driven/` is one.
+  readonly libraryZone: ImportedFrom | null;
 };
 
 const FRONT_DOOR = {
@@ -57,6 +62,7 @@ const FRONT_DOOR = {
   doors: "door-outside-owner",
   openToFeatures: true,
   openToOutside: true,
+  libraryZone: null,
 } as const satisfies ZoneRule;
 
 const CLOSED = {
@@ -64,6 +70,7 @@ const CLOSED = {
   doors: "door-outside-owner",
   openToFeatures: false,
   openToOutside: false,
+  libraryZone: null,
 } as const satisfies ZoneRule;
 
 const RULES_ZONES = {
@@ -83,7 +90,7 @@ const HEXAGONAL_ZONES = {
     doors: "door-outside-driven-adapter",
     openToOutside: true,
   },
-  driven: { ...CLOSED, openToOutside: true },
+  driven: { ...CLOSED, openToOutside: true, libraryZone: "driven" },
   unknown: CLOSED,
 } as const satisfies Record<string, ZoneRule>;
 
