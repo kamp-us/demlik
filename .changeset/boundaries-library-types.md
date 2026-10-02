@@ -27,6 +27,10 @@ libraries of declared types (contract, kernel, util, adapter, ui) declares them 
 imports left unjudged. `--migrate-ceilings` seeds the four kinds without counting them against a
 ceiling. A bad declaration, and the key `pureDependencies`, exit 2 and write nothing.
 
+`discoverPackageRoots` and `listVisibleFiles` of `@demlik/code-graph/project` take an optional
+trailing `listing` (a repo's files listed once, which a run over many scopes shares); called without
+it they behave as before.
+
 A rules file that declares none of the four keys is unchanged: its report, its ledger entries and a
 ledger written before this release read and gate exactly as they did. An older release refuses a
 ledger that holds the new kinds, so upgrade the tool before committing one.
