@@ -244,6 +244,7 @@ function renderEnvKeysHuman(report: EnvKeyReport): string {
   const lines: string[] = [
     `env-keys: ${report.declaredCount} declared, ${report.readCount} recognized reads`,
   ];
+  for (const c of report.unparsedConfigs) lines.push(`  UNPARSED CONFIG  ${c}`);
   lines.push(`declared, never read (${report.declaredUnreferenced.length}):`);
   for (const f of report.declaredUnreferenced) {
     lines.push(`  ${f.key}  ${f.service}  ${f.configFile}`);

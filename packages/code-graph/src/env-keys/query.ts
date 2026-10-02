@@ -1,5 +1,4 @@
 import path from "node:path";
-import { ownerOf } from "../extract/cross-runtime.js";
 import { loadCheapProject } from "../extract/project.js";
 import {
   type BindingCatalog,
@@ -7,10 +6,14 @@ import {
   type ServiceManifest,
 } from "../extract/wrangler-config.js";
 import { type EnvKeyScan, scanEnvKeys } from "./extract.js";
+import { type ReadSiteOwner, readSiteOwner } from "./read-site-owner.js";
 
 export type EnvKeyFinding = { key: string; service: string; configFile: string };
 export type UndeclaredEnvRead = { key: string; file: string; line: number; service: string };
-export type WithheldEnvKeyReason = "occurs-elsewhere-in-source" | "read-site-owner-unknown";
+export type WithheldEnvKeyReason =
+  | "occurs-elsewhere-in-source"
+  | "read-site-owner-unknown"
+  | "read-site-owner-unparsed";
 export type WithheldEnvKey = { key: string; reason: WithheldEnvKeyReason };
 
 export type EnvKeyReport = {
@@ -19,7 +22,17 @@ export type EnvKeyReport = {
   withheld: WithheldEnvKey[];
   declaredCount: number;
   readCount: number;
+  unparsedConfigs: string[];
 };
+
+const WITHHELD_REASON_BY_OWNER_KIND = {
+  none: "read-site-owner-unknown",
+  "unparsed-config": "read-site-owner-unparsed",
+} satisfies Record<Exclude<ReadSiteOwner["kind"], "worker">, WithheldEnvKeyReason>;
+
+function byKeyThenReason(a: WithheldEnvKey, b: WithheldEnvKey): number {
+  return a.key.localeCompare(b.key) || a.reason.localeCompare(b.reason);
+}
 
 function declaredKeysOf(m: ServiceManifest): string[] {
   return [...new Set([...m.envKeys, ...m.devVarsKeys])].sort((a, b) => a.localeCompare(b));
@@ -78,20 +91,21 @@ function judgeReads(
   for (const r of scan.reads) {
     if (r.via !== "env") continue;
     if (known.has(r.name)) continue;
-    const owner = ownerOf(catalog.manifests, r.file);
-    if (owner === null) {
-      if (!seenWithheld.has(r.name)) {
-        seenWithheld.add(r.name);
-        withheld.push({ key: r.name, reason: "read-site-owner-unknown" });
-      }
+    const owner = readSiteOwner(catalog, r.file);
+    if (owner.kind === "worker") {
+      findings.push({ key: r.name, file: r.file, line: r.line, service: owner.service });
       continue;
     }
-    findings.push({ key: r.name, file: r.file, line: r.line, service: owner.service });
+    const reason = WITHHELD_REASON_BY_OWNER_KIND[owner.kind];
+    const dedupeKey = `${reason}\t${r.name}`;
+    if (seenWithheld.has(dedupeKey)) continue;
+    seenWithheld.add(dedupeKey);
+    withheld.push({ key: r.name, reason });
   }
   findings.sort(
     (a, b) => a.key.localeCompare(b.key) || a.file.localeCompare(b.file) || a.line - b.line,
   );
-  withheld.sort((a, b) => a.key.localeCompare(b.key));
+  withheld.sort(byKeyThenReason);
   return { findings, withheld };
 }
 
@@ -101,9 +115,10 @@ export function findEnvKeyMismatches(catalog: BindingCatalog, scan: EnvKeyScan):
   return {
     declaredUnreferenced: declared.findings,
     readNotDeclared: reads.findings,
-    withheld: [...declared.withheld, ...reads.withheld].sort((a, b) => a.key.localeCompare(b.key)),
+    withheld: [...declared.withheld, ...reads.withheld].sort(byKeyThenReason),
     declaredCount: declared.declaredCount,
     readCount: scan.reads.length,
+    unparsedConfigs: catalog.unparsedConfigs,
   };
 }
 
