@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadBindingCatalog } from "../extract/wrangler-config.js";
 import { type DataReport, DataReportSchema, GraphSchema } from "../schema.js";
+import { AUTH_UNCLOSED } from "../test-helpers/wrangler-configs.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = path.resolve(here, "..", "..");
@@ -14,13 +15,17 @@ const CLI = path.join(PACKAGE_DIR, "src", "index.ts");
 
 let root = "";
 
-function cli(...args: string[]): string {
-  return execFileSync(process.execPath, ["--import", "tsx", CLI, root, ...args], {
+function cliIn(dir: string, ...args: string[]): string {
+  return execFileSync(process.execPath, ["--import", "tsx", CLI, dir, ...args], {
     cwd: PACKAGE_DIR,
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
     stdio: ["ignore", "pipe", "ignore"],
   });
+}
+
+function cli(...args: string[]): string {
+  return cliIn(root, ...args);
 }
 
 beforeAll(() => {
@@ -156,5 +161,45 @@ describe("--data: which function reads or writes which binding", () => {
 
   it("leaves the graph's data null without --data", () => {
     expect(GraphSchema.parse(JSON.parse(cli("--graph"))).data).toBeNull();
+  });
+});
+
+// A third worker whose config leaves its first entry unclosed, and whose source uses `DB`: read as
+// a manifest it would declare `DB` and put an edge on the report.
+const BROKEN_CONFIG = "workers/auth/wrangler.jsonc";
+
+describe("--data lists a wrangler config with a syntax error as unparsed and reads nothing from it", () => {
+  let broken = "";
+
+  beforeAll(() => {
+    broken = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "code-graph-data-broken-")));
+    fs.cpSync(root, broken, { recursive: true });
+    const auth = path.join(broken, "workers", "auth");
+    fs.mkdirSync(path.join(auth, "src"), { recursive: true });
+    fs.writeFileSync(path.join(broken, BROKEN_CONFIG), AUTH_UNCLOSED);
+    fs.writeFileSync(
+      path.join(auth, "src", "sessions.ts"),
+      'export const read = (env: Env) => env.DB.prepare("select 1");\n',
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(broken, { recursive: true, force: true });
+  });
+
+  it("puts the config in unparsedConfigs and not in manifests", () => {
+    const catalog = loadBindingCatalog(broken);
+    expect(catalog.unparsedConfigs).toEqual([BROKEN_CONFIG]);
+    expect(catalog.manifests.map((m) => m.configFile)).toEqual([
+      "workers/api/wrangler.jsonc",
+      "workers/billing/wrangler.toml",
+    ]);
+  });
+
+  it("prints it as UNPARSED CONFIG and reports what it reports without the worker", () => {
+    const without = DataReportSchema.parse(JSON.parse(cli("--data", "--json")));
+    const report = DataReportSchema.parse(JSON.parse(cliIn(broken, "--data", "--json")));
+    expect(report).toEqual({ ...without, unparsedConfigs: [BROKEN_CONFIG] });
+    expect(cliIn(broken, "--data")).toContain(`UNPARSED CONFIG  ${BROKEN_CONFIG}`);
   });
 });

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parse as parseJsonc } from "jsonc-parser";
+import { type ParseError, parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import type { BindingKind, DataBindingKind } from "../schema.js";
@@ -93,18 +93,26 @@ export function findWranglerConfigs(repoRoot: string, listing?: RepoListing): st
   ).map((f) => path.join(repoRoot, f));
 }
 
+// Mirrors wrangler's `parseJSONC`: comments, trailing commas and a leading BOM pass; any other syntax error is unparsed.
 function readConfigDocument(absolute: string): unknown {
   let raw: string;
   try {
-    raw = fs.readFileSync(absolute, "utf8");
+    const text = fs.readFileSync(absolute, "utf8");
+    raw = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   } catch {
     return null;
   }
   try {
-    return absolute.endsWith(".toml") ? parseToml(raw) : parseJsonc(raw);
+    return absolute.endsWith(".toml") ? parseToml(raw) : parseWranglerJsonc(raw);
   } catch {
     return null;
   }
+}
+
+function parseWranglerJsonc(raw: string): unknown {
+  const errors: ParseError[] = [];
+  const document = parseJsonc(raw, errors, { allowTrailingComma: true });
+  return errors.length === 0 ? document : null;
 }
 
 function compareBindings(a: BindingDecl, b: BindingDecl): number {
