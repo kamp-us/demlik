@@ -1,5 +1,12 @@
 # @demlik/structure-sweep
 
+## 0.3.5
+
+### Patch Changes
+
+- Updated dependencies [143392a]
+  - @demlik/code-graph@0.5.0
+
 ## 0.3.4
 
 ### Patch Changes
