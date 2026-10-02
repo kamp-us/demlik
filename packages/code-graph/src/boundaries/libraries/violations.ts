@@ -2,6 +2,7 @@ import type { ImportEdge } from "../../schema.js";
 import { type DoorUse, doorsOf } from "../door-uses.js";
 import type { BoundaryViolation } from "../violation.js";
 import {
+  importedFromOutside,
   importTargetOf,
   isWorldLibrary,
   type Libraries,
@@ -76,9 +77,7 @@ function reachViolation(ctx: Context, reach: Reach): BoundaryViolation | null {
   if (importerType !== null && !importerType.imports.includes(reach.type)) {
     return { kind: "library-imports-up", ...edge };
   }
-  const zones = libraryTypeOf(ctx.libraries, reach.dir)?.importedFrom;
-  if (zones === undefined || zones.includes("any")) return null;
-  if (ctx.zone !== null && zones.includes(ctx.zone)) return null;
+  if (!importedFromOutside(ctx.libraries, reach.dir, ctx.zone)) return null;
   return { kind: "adapter-library-imported-outside-driven", ...edge };
 }
 

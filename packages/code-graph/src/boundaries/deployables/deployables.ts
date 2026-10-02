@@ -2,11 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ownerOf } from "../../extract/cross-runtime.js";
 import { discoverPackageRoots, listRepo, type RepoListing } from "../../extract/project.js";
-import {
-  type BindingCatalog,
-  loadBindingCatalog,
-  type ServiceManifest,
-} from "../../extract/wrangler-config.js";
+import type { BindingCatalog, ServiceManifest } from "../../extract/wrangler-config.js";
 import type { BindingKind, DataBindingKind, ImportEdge } from "../../schema.js";
 import { NO_GRAPH, type WorkerGraph, workerGraph } from "./cycles.js";
 import { type DeployableKind, type DeployableRules, declaresDeployables } from "./schema.js";
@@ -68,7 +64,8 @@ export type DeployableFile = {
   readonly owners: Readonly<Record<string, readonly string[]>>;
 };
 
-const NO_CATALOG: BindingCatalog = { manifests: [], unparsedConfigs: [] };
+// What a run that needs no wrangler config reads as: no worker.
+export const NO_CATALOG: BindingCatalog = { manifests: [], unparsedConfigs: [] };
 
 // What a rules file that lists no kind reads as: nothing is read, no wrangler config and no
 // package root, so every question below answers "none" without the repo being touched.
@@ -116,16 +113,17 @@ function unreadableConfigsIssue(
 }
 
 // Reads the repo for the listed kinds, or says in one line why it cannot. A declaration that lists
-// none costs nothing: the repo is not read. `listing` is the repo's files, listed once for the run.
+// none costs nothing: the repo is not read. `listing` is the repo's files, listed once for the run,
+// and `catalog` the wrangler configs, read once for the run beside whoever else needs them.
 export function readDeployables(
   rules: DeployableRules,
   repoRoot: string,
   listing: RepoListing | undefined,
+  catalog: BindingCatalog,
 ): DeployablesRead {
   if (!declaresDeployables(rules)) return { kind: "read", deployables: NO_DEPLOYABLES };
   const files = listing ?? listRepo(repoRoot);
   const kinds = new Set(rules.acrossDeployables);
-  const catalog = loadBindingCatalog(repoRoot, files);
   const message = unreadableConfigsIssue(kinds, catalog);
   if (message !== null) return { kind: "refused", message };
   return {

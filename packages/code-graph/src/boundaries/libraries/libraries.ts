@@ -7,7 +7,12 @@ import {
   type WorkspacePackage,
   workspacePackages,
 } from "../../layers/resolve-target.js";
-import { declaresLibraries, type LibraryRules, type LibraryType } from "./schema.js";
+import {
+  declaresLibraries,
+  type ImportedFrom,
+  type LibraryRules,
+  type LibraryType,
+} from "./schema.js";
 
 // The libraries a repo declares, read once: the rules file's four keys beside what the repo says
 // about itself (which directories are packages, and what each is named). Every question the
@@ -140,16 +145,35 @@ export function importTargetOf(libraries: Libraries, specifier: string): ImportT
     : { kind: "library", dir: pkg.dir, type };
 }
 
-// A world library is named by package: an entry matches the specifier's name and any subpath of it,
-// so `@sentry/*` matches `@sentry/node` and `@sentry/node/integrations`, never `@sentryx/node`. A
-// relative specifier names a file, not a package.
-export function isWorldLibrary(libraries: Libraries, specifier: string): boolean {
+// Whether a specifier names a package one of the globs matches: a glob matches the specifier's name
+// and any subpath of it, so `@sentry/*` matches `@sentry/node` and `@sentry/node/integrations`,
+// never `@sentryx/node`. A relative specifier names a file, not a package. The one matcher for
+// `worldLibraries` (B13) and `pureDependencies` (B16).
+export function inPackageGlobs(globs: readonly RegExp[], specifier: string): boolean {
   if (specifier.startsWith(".") || specifier.startsWith("/")) return false;
   const segments = specifier.split("/");
   return segments.some((_, index) => {
     const head = segments.slice(0, index + 1).join("/");
-    return libraries.world.some((entry) => entry.test(head));
+    return globs.some((entry) => entry.test(head));
   });
+}
+
+// A world library is named by package: see `inPackageGlobs`.
+export function isWorldLibrary(libraries: Libraries, specifier: string): boolean {
+  return inPackageGlobs(libraries.world, specifier);
+}
+
+// Whether a file in `zone` may not import the declared library `dir`: its type names where it may
+// be imported from, and `zone` is not one of them (B14). A `null` zone is a place no `importedFrom`
+// names: a hexagonal feature's `application/`, `adapters/driving/`, `index.ts` and `ports.ts`.
+export function importedFromOutside(
+  libraries: Libraries,
+  dir: string,
+  zone: ImportedFrom | null,
+): boolean {
+  const zones = libraryTypeOf(libraries, dir)?.importedFrom;
+  if (zones === undefined || zones.includes("any")) return false;
+  return zone === null || !zones.includes(zone);
 }
 
 function depthOf(root: string): number {

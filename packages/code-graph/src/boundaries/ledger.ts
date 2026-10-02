@@ -10,6 +10,7 @@ export const LEDGER_FILENAME = "boundary-ledger.json";
 
 export const BOUNDARY_KINDS = [
   "adapter-library-imported-outside-driven",
+  "application-import-outside-allowlist",
   "application-imports-adapter",
   "binding-outside-driven-adapter",
   "cross-feature",
@@ -19,6 +20,7 @@ export const BOUNDARY_KINDS = [
   "impure-application",
   "impure-library",
   "impure-rules",
+  "index-not-exports-only",
   "lib-imports-feature",
   "library-imports-up",
   "library-undeclared",
@@ -35,14 +37,16 @@ const everyKindListed: Exclude<BoundaryKind, (typeof BOUNDARY_KINDS)[number]> ex
 void everyKindListed;
 
 // Whether a kind can cross to something that is not a file of the scope: a bare import
-// (`impure-rules`), a world door or world library (`door-outside-owner`, `impure-application`,
-// `door-outside-driven-adapter`, `impure-library`), a worker binding (`binding-outside-driven-
-// adapter`) or an entry (`unknown-zone` of a feature, `library-undeclared` of a package,
-// `worker-call-cycle` of workers). Every other kind names its target file, or for an import of a
-// library (`library-imports-up`, `adapter-library-imported-outside-driven`) or of another workspace
+// (`impure-rules`, `application-import-outside-allowlist`), a world door or world library
+// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, `impure-library`), a
+// worker binding (`binding-outside-driven-adapter`) or an entry (`unknown-zone` of a feature,
+// `index-not-exports-only` of an entry file, `library-undeclared` of a package, `worker-call-cycle`
+// of workers). Every other kind names its target file, or for an import of a library
+// (`library-imports-up`, `adapter-library-imported-outside-driven`) or of another workspace
 // (`relative-import-crosses-workspace`) its directory.
 const MAY_HAVE_NO_FILE = {
   "adapter-library-imported-outside-driven": false,
+  "application-import-outside-allowlist": true,
   "application-imports-adapter": false,
   "binding-outside-driven-adapter": true,
   "cross-feature": false,
@@ -52,6 +56,7 @@ const MAY_HAVE_NO_FILE = {
   "impure-application": true,
   "impure-library": true,
   "impure-rules": true,
+  "index-not-exports-only": true,
   "lib-imports-feature": false,
   "library-imports-up": false,
   "library-undeclared": true,
@@ -108,11 +113,11 @@ export const BoundaryLedgerSchema = z
   });
 
 // `to` is the resolved target file (for an import of a library or of another workspace, its
-// directory), or null for a bare import (`impure-rules`), a world door
-// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, `impure-library`, or
-// `impure-rules` with `global`), a world library (`impure-library`), a worker binding
-// (`binding-outside-driven-adapter`) or an entry (`unknown-zone`, `library-undeclared`,
-// `worker-call-cycle`), in which case the target is the specifier itself. `specifier` is how an
+// directory), or null for a bare import (`impure-rules`, `application-import-outside-allowlist`), a
+// world door (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`,
+// `impure-library`, or `impure-rules` with `global`), a world library (`impure-library`), a worker
+// binding (`binding-outside-driven-adapter`) or an entry (`unknown-zone`, `index-not-exports-only`,
+// `library-undeclared`, `worker-call-cycle`), in which case the target is the specifier itself. `specifier` is how an
 // import was written, or the door's name, and is display only for a file target: it is not part of
 // the identity, so a move that rewrites a relative specifier keeps it. `global` is part of the
 // identity: a global `fetch` and a bare `import "fetch"` from one file are two crossings, and the

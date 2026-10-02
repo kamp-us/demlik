@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { type Reporter, resolveBoundaryRules } from "../config.js";
 import { listRepo, loadEdgeProject, type RepoListing } from "../extract/project.js";
+import { loadBindingCatalog } from "../extract/wrangler-config.js";
 import { readScopeCeilings, scopeOf, scopesUnder } from "../ratchet/scope-count.js";
 import { resolveImports, runtimeSpecifiers } from "../syntax/imports.js";
 import {
@@ -9,11 +10,12 @@ import {
   type BoundaryModule,
   type ScopeAnalysis,
   type ScopeBoundaryReport,
+  type ScopeInputs,
 } from "./analyze.js";
 import { bindingOwnerIssue, bindingSitesOf } from "./deployables/bindings.js";
 import { deployableCensus, type SiteRow } from "./deployables/census.js";
 import { workerCycles } from "./deployables/cycles.js";
-import { type Deployables, readDeployables } from "./deployables/deployables.js";
+import { type Deployables, NO_CATALOG, readDeployables } from "./deployables/deployables.js";
 import { declaresDeployables } from "./deployables/schema.js";
 import { detectDoorUses } from "./door-uses.js";
 import { unknownOwners } from "./doors.js";
@@ -37,7 +39,10 @@ import {
   renderMigrated,
   renderMigrationRefused,
 } from "./render.js";
-import { type BoundaryRules, LEGACY_CEILINGS_FILENAME } from "./rules.js";
+import { type BoundaryRules, inScope, LEGACY_CEILINGS_FILENAME } from "./rules.js";
+import { declaresReadAllowance } from "./shape/schema.js";
+import { readShape, shapeFactsOf } from "./shape/shape.js";
+import { unknownDriven } from "./zones/reads.js";
 
 export type BoundaryFlags = {
   readonly ci: boolean;
@@ -93,14 +98,10 @@ function modeOf(flags: BoundaryFlags, report: Reporter): BoundaryMode | null {
   return flags.ci ? { kind: "gate" } : { kind: "report" };
 }
 
-// What a run reads once, before any scope is judged: the libraries and the deployables the rules
-// file declares, and the repo's files listed once for both. A rules file that declares neither
-// lists nothing, and each scope lists its own.
-type Reads = {
-  readonly libraries: Libraries;
-  readonly deployables: Deployables;
-  readonly listing: RepoListing | undefined;
-};
+// What a run reads once, before any scope is judged: the libraries, the deployables and the shape
+// the rules file declares, and the repo's files listed once for them. A rules file that declares no
+// library key, no deployable kind and no read allowance lists nothing, and each scope lists its own.
+type Reads = ScopeInputs & { readonly listing: RepoListing | undefined };
 
 // A scope's files are read when it declares features or is a declared library. A library root has
 // none to judge: it holds the packages beneath it that no library names.
@@ -121,11 +122,8 @@ function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): Bound
     importEdges: importEdgesByFile.get(file) ?? [],
     doorUses: detectDoorUses(syntax),
     runtimeSpecifiers: runtimeSpecifiers(syntax),
-    bindingSites: bindingSitesOf(
-      reads.deployables,
-      scope === "." ? file : `${scope}/${file}`,
-      syntax,
-    ),
+    bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
+    ...shapeFactsOf(reads.shape, scope, file, syntax),
   }));
 }
 
@@ -147,7 +145,14 @@ function analyzeScope(
   const owners = rules.bindingOwners[scope] ?? {};
   const issue = bindingOwnerIssue(scope, owners, files, reads.deployables);
   if (issue !== null) throw new Error(issue);
-  return analyzeBoundaries(scope, modules, rules, reads.libraries, reads.deployables);
+  const unread = unknownDriven(reads.shape.allowance, scope, files);
+  if (unread.length > 0) {
+    throw new Error(
+      `driven file(s) of "readAllowance" in "${scope}" name no file the scope loads: ${unread.join("; ")}. ` +
+        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+    );
+  }
+  return analyzeBoundaries(scope, modules, rules, reads);
 }
 
 // The worker call graph is the repo's, not any scope's: its report is scope `.`, measured only by a
@@ -275,23 +280,36 @@ function runMigrate(
   return 0;
 }
 
-// Reads the libraries and the deployables the rules file declares, or says in one line why it
-// cannot: a declaration the repo cannot honour, or a wrangler config the listed kinds need and the
-// run cannot parse. The repo's files are listed once, and only when one of the two is declared.
+// Reads the libraries, the deployables and the shape the rules file declares, or says in one line
+// why it cannot: a declaration the repo cannot honour, or a wrangler config the listed kinds or a
+// read allowance need and the run cannot parse. The repo's files are listed once, and only when a
+// library key, a deployable kind or a read allowance is declared; the wrangler configs are read
+// once, and only for the last two.
 function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
-  const declares = declaresLibraries(rules) || declaresDeployables(rules);
-  const listing = declares ? listRepo(args.repoRoot) : undefined;
+  const configs = declaresDeployables(rules) || declaresReadAllowance(rules);
+  const listing = configs || declaresLibraries(rules) ? listRepo(args.repoRoot) : undefined;
+  const catalog = configs ? loadBindingCatalog(args.repoRoot, listing) : NO_CATALOG;
   const read = readLibraries(rules, args.repoRoot, listing);
   if (read.kind === "refused") {
     args.report(read.message);
     return null;
   }
-  const deployables = readDeployables(rules, args.repoRoot, listing);
+  const deployables = readDeployables(rules, args.repoRoot, listing, catalog);
   if (deployables.kind === "refused") {
     args.report(deployables.message);
     return null;
   }
-  return { libraries: read.libraries, deployables: deployables.deployables, listing };
+  const shape = readShape(rules, catalog);
+  if (shape.kind === "refused") {
+    args.report(shape.message);
+    return null;
+  }
+  return {
+    libraries: read.libraries,
+    deployables: deployables.deployables,
+    shape: shape.shape,
+    listing,
+  };
 }
 
 // What the report says beside its violations, per key family: nothing for a family the rules file
