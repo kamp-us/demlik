@@ -26,6 +26,15 @@ const JUDGED = {
   workflow: false,
 } as const satisfies Record<CatalogKind, boolean>;
 
+// Which kinds judge by what the worker configs declare, one row per kind. A config the run cannot
+// parse is a worker these kinds never see, so with one listed the run refuses rather than answer
+// without it. B19 reads paths and package roots, and no config.
+const READS_WORKER_CONFIGS = {
+  "binding-outside-driven-adapter": true,
+  "worker-call-cycle": true,
+  "relative-import-crosses-workspace": false,
+} as const satisfies Record<DeployableKind, boolean>;
+
 export type JudgedBinding = { readonly kind: CatalogKind; readonly binding: string };
 
 // The deployables a rules file turns on, read once for the run: the worker configs of the whole
@@ -87,25 +96,49 @@ function workspaceRoots(repoRoot: string, listing: RepoListing): Set<string> {
   return new Set(hasRootManifest ? [".", ...dirs] : dirs);
 }
 
-// Reads the repo for the listed kinds. A declaration that lists none costs nothing: the repo is
-// not read. `listing` is the repo's files, listed once for the run.
+export type DeployablesRead =
+  | { readonly kind: "read"; readonly deployables: Deployables }
+  | { readonly kind: "refused"; readonly message: string };
+
+// The one line that names the wrangler configs the listed kinds cannot do without, or null when
+// every config parsed or no listed kind reads one.
+function unreadableConfigsIssue(
+  kinds: ReadonlySet<DeployableKind>,
+  { unparsedConfigs }: BindingCatalog,
+): string | null {
+  const reading = [...kinds].filter((kind) => READS_WORKER_CONFIGS[kind]);
+  if (reading.length === 0 || unparsedConfigs.length === 0) return null;
+  return (
+    `a wrangler config cannot be parsed: ${unparsedConfigs.join(", ")}. With ` +
+    `${reading.map((kind) => `"${kind}"`).join(" and ")} listed, a worker whose config is not read ` +
+    "is never judged: fix the file (JSON with comments, or TOML) and run again."
+  );
+}
+
+// Reads the repo for the listed kinds, or says in one line why it cannot. A declaration that lists
+// none costs nothing: the repo is not read. `listing` is the repo's files, listed once for the run.
 export function readDeployables(
   rules: DeployableRules,
   repoRoot: string,
   listing: RepoListing | undefined,
-): Deployables {
-  if (!declaresDeployables(rules)) return NO_DEPLOYABLES;
+): DeployablesRead {
+  if (!declaresDeployables(rules)) return { kind: "read", deployables: NO_DEPLOYABLES };
   const files = listing ?? listRepo(repoRoot);
   const kinds = new Set(rules.acrossDeployables);
   const catalog = loadBindingCatalog(repoRoot, files);
+  const message = unreadableConfigsIssue(kinds, catalog);
+  if (message !== null) return { kind: "refused", message };
   return {
-    kinds,
-    catalog,
-    graph: workerGraph(catalog),
-    workspaces: kinds.has("relative-import-crosses-workspace")
-      ? workspaceRoots(repoRoot, files)
-      : new Set(),
-    judged: new Map(catalog.manifests.map((m) => [m, judgedBindings(m)])),
+    kind: "read",
+    deployables: {
+      kinds,
+      catalog,
+      graph: workerGraph(catalog),
+      workspaces: kinds.has("relative-import-crosses-workspace")
+        ? workspaceRoots(repoRoot, files)
+        : new Set(),
+      judged: new Map(catalog.manifests.map((m) => [m, judgedBindings(m)])),
+    },
   };
 }
 

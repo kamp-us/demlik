@@ -165,3 +165,93 @@ describe("a repo of workers and shared packages puts the deployable rules behind
     }
   });
 });
+
+// A config the run cannot parse: not an object, so no worker is read from it.
+const UNREADABLE = "not a wrangler config\n";
+const BILLING = "services/billing-worker/wrangler.jsonc";
+const MAILER = "services/mailer/wrangler.jsonc";
+
+describe("a wrangler config the run cannot parse is never skipped silently", () => {
+  // The run refuses before it measures anything, so every mode answers alike: exit 2, one line, no
+  // stdout, and nothing written.
+  function refusal(repo: ReturnType<typeof shopRepo>, options: Parameters<typeof repo.run>[0]) {
+    const run = repo.run(options);
+    expect(run.code).toBe(2);
+    expect(run.stdout).toBe("");
+    expect(run.errors).toHaveLength(1);
+    expect(fs.existsSync(repo.ledgerFile)).toBe(false);
+    return run.errors[0] ?? "";
+  }
+
+  it("refuses the report, --ci, --accept-crossings and --migrate-ceilings, naming the file", () => {
+    const repo = shopRepo();
+    try {
+      repo.put(BILLING, UNREADABLE);
+      fs.writeFileSync(repo.legacyFile, JSON.stringify({ default: 0, scopes: {} }));
+      const modes = [
+        {},
+        { json: true },
+        { ci: true },
+        { acceptCrossings: true, reason: "legacy" },
+        { migrateCeilings: true },
+      ];
+      for (const mode of modes) {
+        const message = refusal(repo, mode);
+        expect(message).toContain(BILLING);
+        expect(message).toContain("binding-outside-driven-adapter");
+        expect(message).toContain("worker-call-cycle");
+      }
+      expect(fs.existsSync(repo.legacyFile)).toBe(true);
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it("names every such file in the one line, and runs once they parse", () => {
+    const repo = shopRepo();
+    try {
+      repo.put(BILLING, UNREADABLE);
+      repo.put(MAILER, UNREADABLE);
+      const message = refusal(repo, { ci: true });
+      expect(message).toContain(BILLING);
+      expect(message).toContain(MAILER);
+
+      repo.put(BILLING, JSON.stringify({ name: "billing-worker" }));
+      repo.put(MAILER, JSON.stringify({ name: "mailer" }));
+      expect(repo.run({ ci: true }).code).toBe(1);
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it.each([
+    ["binding-outside-driven-adapter", true],
+    ["worker-call-cycle", true],
+    ["relative-import-crosses-workspace", false],
+  ])("with %s listed alone, refuses: %s", (kind, refused) => {
+    const repo = boundaryRepo(".", SHOP_WORKER_FILES, {
+      ...SHOP_WORKER_RULES,
+      acrossDeployables: [kind],
+    });
+    try {
+      repo.put(BILLING, UNREADABLE);
+      const run = repo.run({ ci: true });
+      expect(run.code).toBe(refused ? 2 : 1);
+      expect(run.errors).toHaveLength(refused ? 1 : 0);
+    } finally {
+      repo.dispose();
+    }
+  });
+
+  it("leaves a rules file that lists none of the kinds as it was", () => {
+    const { acrossDeployables: _listed, ...unlisted } = SHOP_WORKER_RULES;
+    const repo = boundaryRepo(".", SHOP_WORKER_FILES, unlisted);
+    try {
+      repo.put(BILLING, UNREADABLE);
+      const run = repo.run({ ci: true });
+      expect([run.code, run.errors]).toEqual([0, []]);
+    } finally {
+      repo.dispose();
+    }
+  });
+});

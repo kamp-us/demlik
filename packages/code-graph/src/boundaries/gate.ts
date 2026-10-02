@@ -276,7 +276,8 @@ function runMigrate(
 }
 
 // Reads the libraries and the deployables the rules file declares, or says in one line why it
-// cannot. The repo's files are listed once, and only when one of the two is declared.
+// cannot: a declaration the repo cannot honour, or a wrangler config the listed kinds need and the
+// run cannot parse. The repo's files are listed once, and only when one of the two is declared.
 function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
   const declares = declaresLibraries(rules) || declaresDeployables(rules);
   const listing = declares ? listRepo(args.repoRoot) : undefined;
@@ -286,7 +287,11 @@ function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
     return null;
   }
   const deployables = readDeployables(rules, args.repoRoot, listing);
-  return { libraries: read.libraries, deployables, listing };
+  if (deployables.kind === "refused") {
+    args.report(deployables.message);
+    return null;
+  }
+  return { libraries: read.libraries, deployables: deployables.deployables, listing };
 }
 
 // What the report says beside its violations, per key family: nothing for a family the rules file

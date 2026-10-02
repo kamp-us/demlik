@@ -26,7 +26,8 @@ are exactly what they were, no wrangler config is read, and no further repo list
 kind listed, `--boundaries` ends its report with a census of the worker bindings it read (`deployables`
 in `--json`). `--migrate-ceilings` seeds the three kinds without counting them against a ceiling. A
 bad declaration (a kind outside the three, or a `bindingOwners` that cannot be honoured) exits 2 and
-writes nothing.
+writes nothing, and so does a wrangler config it cannot parse while B17 or B18 is listed, so a worker
+is never dropped from the judgment silently.
 
 The `@demlik/code-graph/boundaries` subpath accepts the three new kinds in a ledger, so its
 published schema widens. An older release refuses a ledger that holds them, so upgrade the tool

@@ -910,7 +910,7 @@ of the config, and Hyperdrive and connection use, which is not a call on a bindi
 scope laid out as `rules/` has no driven adapter, so every use in it is B17.
 
 **B18 reads the declared graph, on purpose.** It is cheap (no type checker, where observed calls
-through `--cross-runtime` cost minutes on a services root), and a binding declared and never used is
+through `--cross-runtime` take about 80 s on a services root), and a binding declared and never used is
 itself drift the rule should surface. The nodes are every worker config in the repo, named by the
 config's `name`, else its directory's, so a worker no scope names is still a node. A component of
 two overlapping cycles (a ring with a chord, two pairs sharing a worker) is one component and so one
@@ -944,6 +944,14 @@ while `binding-outside-driven-adapter` is not listed, a `bindingOwners` scope th
 `features`, an owner file the scope does not load, an owner file that is not under a feature's
 `adapters/driven/`, and a binding the worker owning that file does not declare (or a file under no
 worker).
+
+A wrangler config the run cannot parse exits 2 the same way, never a silent skip: with
+`binding-outside-driven-adapter` or `worker-call-cycle` listed, the report, `--ci`,
+`--accept-crossings` and `--migrate-ceilings` refuse with one line naming each such file and write
+nothing, because a worker whose config is not read would have its bindings unjudged and be missing
+from the call graph. (`--data` and `--cross-runtime` print the same files as `UNPARSED CONFIG`.) A
+rules file that lists neither kind, or only `relative-import-crosses-workspace`, is not refused for
+one.
 
 Adopting a kind is declare, seed, shrink, empty, as for doors: list it, record today's crossings
 with `--accept-crossings --reason "<why>"`, fix them PR by PR (each `--ci` prunes one), until the
