@@ -965,9 +965,12 @@ A wrangler config the run cannot parse exits 2 the same way, never a silent skip
 `binding-outside-driven-adapter` or `worker-call-cycle` listed, the report, `--ci`,
 `--accept-crossings` and `--migrate-ceilings` refuse with one line naming each such file and write
 nothing, because a worker whose config is not read would have its bindings unjudged and be missing
-from the call graph. (`--data` and `--cross-runtime` print the same files as `UNPARSED CONFIG`.) A
-rules file that lists neither kind, or only `relative-import-crosses-workspace`, is not refused for
-one.
+from the call graph. A `.json` or `.jsonc` config cannot be parsed when it has any syntax error,
+read as wrangler reads it (comments, trailing commas and a leading byte-order mark are fine), and a
+`.toml` config when it has a syntax error; a config that is not an object is unread too. A mistake
+in the middle of a file counts, though a parser could repair it into an object. (`--data` and
+`--cross-runtime` print the same files as `UNPARSED CONFIG`.) A rules file that lists neither kind,
+or only `relative-import-crosses-workspace`, is not refused for one.
 
 Adopting a kind is declare, seed, shrink, empty, as for doors: list it, record today's crossings
 with `--accept-crossings --reason "<why>"`, fix them PR by PR (each `--ci` prunes one), until the
