@@ -1,6 +1,13 @@
+import type { ImportEdge } from "../schema.js";
 import { patternNames } from "../syntax/bindings.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
-import { bareNewDoorOf, type DoorName, GLOBAL_OBJECT, pathDoorOf } from "./doors.js";
+import {
+  bareNewDoorOf,
+  type DoorName,
+  GLOBAL_OBJECT,
+  moduleDoorsOpened,
+  pathDoorOf,
+} from "./doors.js";
 
 // One use of a world door by one file: the door it falls under, and the static path it was read
 // through (`process.stdin.isTTY` falls under `process.stdin`, `process.hrtime.bigint` under
@@ -25,6 +32,17 @@ export function detectDoorUses(syntax: SyntaxFile): DoorUse[] {
   return [...scan.found.values()].sort(
     (a, b) => a.door.localeCompare(b.door) || a.path.join(".").localeCompare(b.path.join(".")),
   );
+}
+
+// Every catalog door a file uses by name or opens as a module, declared or not, once each: what a
+// place that judges every door reads (B7 in `application/`, B13 in a pure library).
+export function doorsOf(file: {
+  readonly doorUses: readonly DoorUse[];
+  readonly importEdges: readonly Pick<ImportEdge, "specifier" | "target" | "typeOnly">[];
+  readonly runtimeSpecifiers: ReadonlySet<string>;
+}): DoorName[] {
+  const opened = moduleDoorsOpened(file.importEdges, file.runtimeSpecifiers);
+  return [...new Set([...file.doorUses.map((use) => use.door), ...opened])];
 }
 
 type Scan = {

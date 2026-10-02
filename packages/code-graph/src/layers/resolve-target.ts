@@ -21,7 +21,7 @@ export type ResolvedTarget =
   /** A relative specifier or a tsconfig `paths` alias that names no file on disk — a real gap, counted. */
   | { readonly kind: "unresolved"; readonly specifier: string };
 
-function workspacePackages(
+export function workspacePackages(
   repoRoot: string,
   packageDirs: readonly string[],
 ): Map<string, WorkspacePackage> {
@@ -52,7 +52,7 @@ function resolveRelative(repoRoot: string, fromFile: string, specifier: string):
   return { kind: "unresolved", specifier };
 }
 
-function matchPackage(
+export function matchPackage(
   specifier: string,
   packages: ReadonlyMap<string, WorkspacePackage>,
 ): WorkspacePackage | undefined {

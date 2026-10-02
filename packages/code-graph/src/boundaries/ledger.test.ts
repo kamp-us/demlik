@@ -100,7 +100,7 @@ describe("the ledger file", () => {
       message:
         "entries.0.to: only a bare-specifier import, a world door or a feature's entry may have " +
         "a null `to` (kinds door-outside-driven-adapter, door-outside-owner, impure-application, " +
-        "impure-rules, unknown-zone)",
+        "impure-library, impure-rules, library-undeclared, unknown-zone)",
     });
     expect(parseBoundaryLedger(JSON.stringify({ entries: [crossing], extra: 1 })).kind).toBe(
       "invalid",
@@ -157,11 +157,13 @@ describe("a world door is a ledger entry with no target file", () => {
       "door-outside-driven-adapter",
       "door-outside-owner",
       "impure-application",
+      "impure-library",
       "impure-rules",
+      "library-undeclared",
       "unknown-zone",
     ];
     const namesAFile = BOUNDARY_KINDS.filter((kind) => !mayHaveNoFile.includes(kind));
-    expect(namesAFile).toHaveLength(5);
+    expect(namesAFile).toHaveLength(7);
     for (const kind of namesAFile) {
       const entry = { ...crossing, kind, to: null };
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");
@@ -260,5 +262,65 @@ describe("the hexagonal kinds are ledger entries", () => {
       },
       { ...door, from: "apps/web/src/billing/application/pay.ts" },
     ]);
+  });
+});
+
+describe("the library kinds are ledger entries", () => {
+  const LIB = "packages/string-util";
+  const up: BoundaryLedgerEntry = {
+    scope: LIB,
+    kind: "library-imports-up",
+    from: `${LIB}/src/x.ts`,
+    to: "packages/orders-contract",
+    specifier: "@shop/orders-contract/schema",
+  };
+  const impure: BoundaryLedgerEntry = {
+    scope: LIB,
+    kind: "impure-library",
+    from: `${LIB}/src/log.ts`,
+    to: null,
+    specifier: "@sentry/node",
+  };
+  const outside: BoundaryLedgerEntry = {
+    scope: "services/api",
+    kind: "adapter-library-imported-outside-driven",
+    from: "services/api/src/main.ts",
+    to: "packages/clock-adapter",
+    specifier: "@shop/clock-adapter",
+  };
+  const undeclared: BoundaryLedgerEntry = {
+    scope: "packages",
+    kind: "library-undeclared",
+    from: "packages/scratch",
+    to: null,
+    specifier: "scratch",
+  };
+  const parses = (entry: unknown) => parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind;
+
+  it("accepts a null `to` on B11 and B13, and refuses one on B12 and B14, which name a directory", () => {
+    for (const entry of [impure, undeclared, up, outside]) expect(parses(entry)).toBe("read");
+    for (const entry of [up, outside]) expect(parses({ ...entry, to: null })).toBe("invalid");
+  });
+
+  it("keeps `global` to impure-rules", () => {
+    for (const entry of [impure, undeclared]) {
+      expect(parses({ ...entry, global: true })).toBe("invalid");
+    }
+  });
+
+  it("re-keys a moved importer file in a B12, B13 and B14 entry, and leaves a library directory", () => {
+    const moved = rekeyBoundaryLedger(boundaryLedgerOf([up, impure, outside, undeclared]), [
+      { from: up.from, to: `${LIB}/src/y.ts` },
+      { from: impure.from, to: `${LIB}/src/trace.ts` },
+      { from: outside.from, to: "services/api/src/boot.ts" },
+    ]);
+    expect(moved.entries).toEqual(
+      boundaryLedgerOf([
+        { ...up, from: `${LIB}/src/y.ts` },
+        { ...impure, from: `${LIB}/src/trace.ts` },
+        { ...outside, from: "services/api/src/boot.ts" },
+        undeclared,
+      ]).entries,
+    );
   });
 });

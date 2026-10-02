@@ -3,8 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveBoundaryRules } from "../config.js";
-import { nearestName } from "./nearest.js";
-import { type ProcessMembers, runningProcessMembers } from "./process-members.js";
+import { nearestName, type ProcessMembers, runningProcessMembers } from "./process-members.js";
 
 describe("the members of process come from the running Node, read by name", () => {
   it("holds the seven names the catalog once listed row by row, and an inherited `on`", () => {

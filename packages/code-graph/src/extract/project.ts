@@ -62,11 +62,32 @@ function isRegularFile(absolute: string): boolean {
   }
 }
 
+// A repo's visible files, listed once. A pass that reads many scopes under one repo root hands this
+// to each read instead of every read listing its own scope: that is one listing process per scope,
+// and a repo of libraries has dozens.
+export type RepoListing = { readonly root: string; readonly files: readonly string[] };
+
+export function listRepo(root: string): RepoListing {
+  return { root, files: gitVisibleFiles(root) ?? walkedFiles(root) };
+}
+
+// The listed files below `rootAbsolute`, as paths relative to it.
+function listedUnder(listing: RepoListing, rootAbsolute: string): string[] {
+  const prefix = toRelative(listing.root, rootAbsolute);
+  if (prefix === "") return [...listing.files];
+  const below = `${prefix}/`;
+  return listing.files.filter((rel) => rel.startsWith(below)).map((rel) => rel.slice(below.length));
+}
+
 export function listVisibleFiles(
   rootAbsolute: string,
   keep: (relPosix: string) => boolean,
+  listing?: RepoListing,
 ): string[] {
-  const candidates = gitVisibleFiles(rootAbsolute) ?? walkedFiles(rootAbsolute);
+  const candidates =
+    listing === undefined
+      ? (gitVisibleFiles(rootAbsolute) ?? walkedFiles(rootAbsolute))
+      : listedUnder(listing, rootAbsolute);
   return candidates
     .filter((rel) => keep(rel) && isRegularFile(path.join(rootAbsolute, rel)))
     .sort((a, b) => a.localeCompare(b));
@@ -98,11 +119,12 @@ export function toRelative(rootAbsolute: string, absolutePath: string): string {
   return rel.split(path.sep).join("/");
 }
 
-export function discoverPackageRoots(rootAbsolute: string): string[] {
+export function discoverPackageRoots(rootAbsolute: string, listing?: RepoListing): string[] {
   const roots = new Set<string>([""]);
   for (const rel of listVisibleFiles(
     rootAbsolute,
     (f) => path.posix.basename(f) === "package.json",
+    listing,
   )) {
     if (rel.split("/").some((segment) => EXCLUDED_SEGMENTS.has(segment))) continue;
     const dir = path.posix.dirname(rel);
@@ -137,10 +159,10 @@ function parseUnit(rootAbsolute: string, rel: string): SourceUnit | null {
   };
 }
 
-export function loadCheapProject(rootAbsolute: string): LoadedProject {
+export function loadCheapProject(rootAbsolute: string, listing?: RepoListing): LoadedProject {
   const sourceFiles: SourceUnit[] = [];
   const parseFailures: string[] = [];
-  for (const rel of listVisibleFiles(rootAbsolute, isSourceFile)) {
+  for (const rel of listVisibleFiles(rootAbsolute, isSourceFile, listing)) {
     const unit = parseUnit(rootAbsolute, rel);
     if (unit === null) parseFailures.push(rel);
     else sourceFiles.push(unit);
@@ -186,9 +208,10 @@ export function loadEdgeProject(
   rootAbsolute: string,
   scope: EdgeScope,
   repoRoot: string,
+  listing?: RepoListing,
 ): LoadedEdgeProject {
   const tsConfigPath = resolveEdgeTsConfig(rootAbsolute, scope, repoRoot);
-  return { ...loadCheapProject(rootAbsolute), tsConfigPath, scope };
+  return { ...loadCheapProject(rootAbsolute, listing), tsConfigPath, scope };
 }
 
 export function findRepoRoot(start: string): string {

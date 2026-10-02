@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { z } from "zod";
 import { doorDeclarationIssue } from "./boundaries/doors.js";
+import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
 import { type ProcessMembers, runningProcessMembers } from "./boundaries/process-members.js";
 import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
@@ -150,6 +151,27 @@ export function resolveCommentCeilings(
   return loadOverrides(file, CommentCeilingsSchema.partial(), defaults, report);
 }
 
+// The first problem in the features and layouts a rules file declares, or null.
+function featureDeclarationIssue(rules: BoundaryRules): string | null {
+  const lib = new Set(rules.lib);
+  for (const [scope, features] of Object.entries(rules.features)) {
+    const seen = new Set<string>();
+    for (const feature of features) {
+      if (seen.has(feature)) return `feature "${feature}" is declared twice in "${scope}".`;
+      if (lib.has(feature)) {
+        return `"${feature}" in "${scope}" is declared as both a feature and lib.`;
+      }
+      seen.add(feature);
+    }
+  }
+  for (const scope of Object.keys(rules.layout)) {
+    if (rules.features[scope] === undefined) {
+      return `"layout" declares scope "${scope}", which declares no "features": a layout rides a scope that declares features.`;
+    }
+  }
+  return null;
+}
+
 export function resolveBoundaryRules(
   file: string | undefined,
   report: Reporter,
@@ -161,32 +183,12 @@ export function resolveBoundaryRules(
       ? defaults
       : loadOverrides(file, BoundaryRulesSchema.partial(), defaults, report);
   if (rules === null) return null;
-  const lib = new Set(rules.lib);
-  for (const [scope, features] of Object.entries(rules.features)) {
-    const seen = new Set<string>();
-    for (const feature of features) {
-      if (seen.has(feature)) {
-        report(`feature "${feature}" is declared twice in "${scope}".`);
-        return null;
-      }
-      if (lib.has(feature)) {
-        report(`"${feature}" in "${scope}" is declared as both a feature and lib.`);
-        return null;
-      }
-      seen.add(feature);
-    }
-  }
-  for (const scope of Object.keys(rules.layout)) {
-    if (rules.features[scope] === undefined) {
-      report(
-        `"layout" declares scope "${scope}", which declares no "features": a layout rides a scope that declares features.`,
-      );
-      return null;
-    }
-  }
-  const doorIssue = doorDeclarationIssue(rules, members);
-  if (doorIssue !== null) {
-    report(doorIssue);
+  const issue =
+    featureDeclarationIssue(rules) ??
+    doorDeclarationIssue(rules, members) ??
+    libraryDeclarationIssue(rules);
+  if (issue !== null) {
+    report(issue);
     return null;
   }
   return rules;

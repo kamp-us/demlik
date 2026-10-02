@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { z } from "zod";
 import { stableStringify } from "../render/json.js";
-import type { BoundaryKind } from "./analyze.js";
+import type { BoundaryKind } from "./violation.js";
 
 // `boundary-ledger.json` at the repo root: one entry per boundary crossing a scope still carries.
 // The gate fails only on a crossing the ledger does not name, and drops the entries whose crossing
@@ -9,37 +9,46 @@ import type { BoundaryKind } from "./analyze.js";
 export const LEDGER_FILENAME = "boundary-ledger.json";
 
 export const BOUNDARY_KINDS = [
+  "adapter-library-imported-outside-driven",
   "application-imports-adapter",
   "cross-feature",
   "door-outside-driven-adapter",
   "door-outside-owner",
   "driving-reaches-driven",
   "impure-application",
+  "impure-library",
   "impure-rules",
   "lib-imports-feature",
+  "library-imports-up",
+  "library-undeclared",
   "outside-imports-feature-internal",
   "unknown-zone",
 ] as const satisfies readonly BoundaryKind[];
 
-// Fails to compile when analyze.ts grows a kind this list does not name.
+// Fails to compile when violation.ts grows a kind this list does not name.
 const everyKindListed: Exclude<BoundaryKind, (typeof BOUNDARY_KINDS)[number]> extends never
   ? true
   : never = true;
 void everyKindListed;
 
 // Whether a kind can cross to something that is not a file of the scope: a bare import
-// (`impure-rules`), a world door (`door-outside-owner`, `impure-application`,
-// `door-outside-driven-adapter`) or a feature's own entry (`unknown-zone`). Every other kind names
-// its target file.
+// (`impure-rules`), a world door or world library (`door-outside-owner`, `impure-application`,
+// `door-outside-driven-adapter`, `impure-library`) or an entry (`unknown-zone` of a feature,
+// `library-undeclared` of a package). Every other kind names its target file, or for an import of
+// a library (`library-imports-up`, `adapter-library-imported-outside-driven`) its directory.
 const MAY_HAVE_NO_FILE = {
+  "adapter-library-imported-outside-driven": false,
   "application-imports-adapter": false,
   "cross-feature": false,
   "door-outside-driven-adapter": true,
   "door-outside-owner": true,
   "driving-reaches-driven": false,
   "impure-application": true,
+  "impure-library": true,
   "impure-rules": true,
   "lib-imports-feature": false,
+  "library-imports-up": false,
+  "library-undeclared": true,
   "outside-imports-feature-internal": false,
   "unknown-zone": true,
 } as const satisfies Record<BoundaryKind, boolean>;
@@ -90,10 +99,11 @@ export const BoundaryLedgerSchema = z
     });
   });
 
-// `to` is the resolved target file, or null for a bare import (`impure-rules`), a world door
-// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, or `impure-rules`
-// with `global`) or a feature's entry (`unknown-zone`), in which case the target is the specifier
-// itself. `specifier` is how an import was written, or the door's name, and is display only for a
+// `to` is the resolved target file (for an import of a library, its directory), or null for a bare
+// import (`impure-rules`), a world door (`door-outside-owner`, `impure-application`,
+// `door-outside-driven-adapter`, `impure-library`, or `impure-rules` with `global`), a world
+// library (`impure-library`) or an entry (`unknown-zone`, `library-undeclared`), in which case the
+// target is the specifier itself. `specifier` is how an import was written, or the door's name, and is display only for a
 // file target: it is not part of the identity, so a move that rewrites a relative specifier keeps
 // it. `global` is part of the identity: a global `fetch` and a bare `import "fetch"` from one file
 // are two crossings, and the flag is all that tells them apart.

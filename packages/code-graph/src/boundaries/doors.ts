@@ -1,6 +1,5 @@
 import type { ImportEdge } from "../schema.js";
-import { nearestName } from "./nearest.js";
-import type { ProcessMembers } from "./process-members.js";
+import { nearestName, type ProcessMembers } from "./process-members.js";
 import {
   type BoundaryRules,
   type DoorRule,

@@ -1,6 +1,9 @@
 import type { ImportEdge, ModuleNode } from "../schema.js";
-import type { DoorUse } from "./door-uses.js";
+import { type DoorUse, doorsOf } from "./door-uses.js";
 import { declaredDoorOf, moduleDoorsOpened } from "./doors.js";
+import type { Libraries } from "./libraries/libraries.js";
+import type { ImportedFrom } from "./libraries/schema.js";
+import { judgeLibraries, undeclaredLibraries } from "./libraries/violations.js";
 import {
   type BoundaryRules,
   type FeatureFile,
@@ -8,118 +11,11 @@ import {
   type ScopeZoning,
   scopeZoning,
 } from "./rules.js";
+import { type BoundaryViolation, isDoorUse, type ZoneDoor, type ZoneEdge } from "./violation.js";
 
 type FeaturePlace = { readonly kind: "feature" } & FeatureFile;
 
 type Place = FeaturePlace | { readonly kind: "lib" } | { readonly kind: "elsewhere" };
-
-// An import of a file of the importer's own feature, judged by the importer's zone.
-type ZoneEdge = {
-  readonly from: string;
-  readonly feature: string;
-  readonly to: string;
-  readonly specifier: string;
-  readonly typeOnly: boolean;
-};
-
-// A world door used in a zone that judges it itself: `specifier` is the door.
-type ZoneDoor = {
-  readonly from: string;
-  readonly feature: string;
-  readonly to: null;
-  readonly specifier: string;
-  readonly typeOnly: false;
-};
-
-export type BoundaryViolation =
-  | {
-      readonly kind: "cross-feature";
-      readonly from: string;
-      readonly fromFeature: string;
-      readonly to: string;
-      readonly toFeature: string;
-      readonly specifier: string;
-      readonly typeOnly: boolean;
-    }
-  | {
-      readonly kind: "impure-rules";
-      readonly from: string;
-      readonly feature: string;
-      readonly to: string | null;
-      readonly specifier: string;
-      readonly typeOnly: boolean;
-      // A world door read by name (`process.env`, `fetch`), not an import. `specifier` is then the
-      // door, which an import of a package of that name must not collide with.
-      readonly global?: true;
-    }
-  | {
-      readonly kind: "lib-imports-feature";
-      readonly from: string;
-      readonly to: string;
-      readonly toFeature: string;
-      readonly specifier: string;
-      readonly typeOnly: boolean;
-    }
-  | {
-      readonly kind: "outside-imports-feature-internal";
-      readonly from: string;
-      readonly to: string;
-      readonly toFeature: string;
-      readonly specifier: string;
-      readonly typeOnly: boolean;
-    }
-  | {
-      readonly kind: "door-outside-owner";
-      readonly from: string;
-      readonly to: null;
-      readonly specifier: string;
-      readonly typeOnly: false;
-    }
-  | ({ readonly kind: "application-imports-adapter" } & ZoneEdge)
-  | ({ readonly kind: "impure-application" } & ZoneDoor)
-  | ({ readonly kind: "driving-reaches-driven" } & ZoneEdge)
-  | ({ readonly kind: "door-outside-driven-adapter" } & ZoneDoor)
-  | {
-      // An entry of a hexagonal feature that no zone names: `from` is the entry's own path and
-      // `specifier` the entry below the feature (`domain`, `adapters/shared`, `helpers.ts`).
-      readonly kind: "unknown-zone";
-      readonly from: string;
-      readonly feature: string;
-      readonly to: null;
-      readonly specifier: string;
-      readonly typeOnly: false;
-    };
-
-export type BoundaryKind = BoundaryViolation["kind"];
-
-// What a crossing is: an import edge, a world door used by name or opened, or a feature's entry.
-type Crossing = "import" | "door" | "entry";
-
-const CROSSINGS = {
-  "application-imports-adapter": "import",
-  "cross-feature": "import",
-  "door-outside-driven-adapter": "door",
-  "door-outside-owner": "door",
-  "driving-reaches-driven": "import",
-  "impure-application": "door",
-  "impure-rules": "import",
-  "lib-imports-feature": "import",
-  "outside-imports-feature-internal": "import",
-  "unknown-zone": "entry",
-} as const satisfies Record<BoundaryKind, Crossing>;
-
-// A `global` impure-rules entry is a door read by name, not the import its kind otherwise is.
-export function crossingOf(entry: {
-  readonly kind: BoundaryKind;
-  readonly global?: true;
-}): Crossing {
-  return entry.global === true ? "door" : CROSSINGS[entry.kind];
-}
-
-// What `boundary-ceilings.json` never counted: a world door used by name, an import edge it is not.
-export function isDoorUse(entry: { readonly kind: BoundaryKind; readonly global?: true }): boolean {
-  return crossingOf(entry) === "door";
-}
 
 export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> & {
   readonly doorUses: readonly DoorUse[];
@@ -285,12 +181,10 @@ function globalsInRules(ctx: ModuleContext, feature: string): BoundaryViolation[
 // `application/` imports bare packages freely, so a door module it runs is judged here beside the
 // doors it uses by name: every catalog door, declared or not, once per door.
 function impureApplication(ctx: ModuleContext, feature: string): BoundaryViolation[] {
-  const { doorUses, importEdges, runtimeSpecifiers } = ctx.module;
-  const used = new Set([
-    ...doorUses.map((use) => use.door),
-    ...moduleDoorsOpened(importEdges, runtimeSpecifiers),
-  ]);
-  return [...used].map((door) => ({ kind: "impure-application", ...zoneDoor(ctx, feature, door) }));
+  return doorsOf(ctx.module).map((door) => ({
+    kind: "impure-application",
+    ...zoneDoor(ctx, feature, door),
+  }));
 }
 
 // The declared doors a file uses or opens: a use belongs to the most specific declared door that is
@@ -353,36 +247,74 @@ function unknownZone(scope: string, place: FeaturePlace): BoundaryViolation {
   };
 }
 
-export function analyzeBoundaries(
-  scope: string,
-  modules: readonly BoundaryModule[],
-  rules: BoundaryRules,
-): ScopeBoundaryReport {
-  const zoning = scopeZoning(rules, scope);
-  const doors = rules.doors[scope] ?? {};
-  const violations: BoundaryViolation[] = [];
-  // One per entry, however many files sit under it.
-  const unknownEntries = new Map<string, BoundaryViolation>();
-  for (const module of modules) {
-    const fromPlace = placeOf(module.file, zoning);
-    if (fromPlace.kind === "feature" && fromPlace.zone.name === "unknown") {
-      const entry = unknownZone(scope, fromPlace);
-      unknownEntries.set(entry.from, entry);
-    }
-    for (const edge of module.importEdges) {
-      const found = violationOf({
+// Which `importedFrom` zone a file satisfies: a hexagonal feature's `adapters/driven/` is `driven`,
+// and a file outside every feature is a `configurator`.
+function libraryZoneOf(place: Place): ImportedFrom | null {
+  return place.kind === "feature" ? place.zone.rule.libraryZone : "configurator";
+}
+
+type ScopeContext = {
+  readonly scope: string;
+  readonly rules: BoundaryRules;
+  readonly zoning: ScopeZoning;
+  readonly libraries: Libraries;
+};
+
+// What one file of a scope crosses, and how many imports of undeclared packages its library left
+// unjudged. The scope's own entries (an unknown zone, a package no library names) are the caller's.
+function analyzeModule(
+  ctx: ScopeContext,
+  module: BoundaryModule,
+  fromPlace: Place,
+): { readonly violations: BoundaryViolation[]; readonly unjudged: number } {
+  const { scope, rules, zoning, libraries } = ctx;
+  const edges = module.importEdges.flatMap(
+    (edge) =>
+      violationOf({
         scope,
         from: module.file,
         fromPlace,
         edge,
         zoning,
         contracts: rules.contracts,
-      });
-      if (found !== null) violations.push(found);
+      }) ?? [],
+  );
+  const doors = doorViolations({
+    scope,
+    module,
+    place: fromPlace,
+    doors: rules.doors[scope] ?? {},
+  });
+  const file = { ...module, file: inScope(scope, module.file) };
+  const judged = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
+  return { violations: [...edges, ...doors, ...judged.violations], unjudged: judged.unjudged };
+}
+
+// A scope's report, and the imports of undeclared packages its libraries left unjudged.
+export type ScopeAnalysis = { readonly report: ScopeBoundaryReport; readonly unjudged: number };
+
+export function analyzeBoundaries(
+  scope: string,
+  modules: readonly BoundaryModule[],
+  rules: BoundaryRules,
+  libraries: Libraries,
+): ScopeAnalysis {
+  const ctx: ScopeContext = { scope, rules, zoning: scopeZoning(rules, scope), libraries };
+  const violations: BoundaryViolation[] = [];
+  // One per entry, however many files sit under it.
+  const unknownEntries = new Map<string, BoundaryViolation>();
+  let unjudged = 0;
+  for (const module of modules) {
+    const fromPlace = placeOf(module.file, ctx.zoning);
+    if (fromPlace.kind === "feature" && fromPlace.zone.name === "unknown") {
+      const entry = unknownZone(scope, fromPlace);
+      unknownEntries.set(entry.from, entry);
     }
-    violations.push(...doorViolations({ scope, module, place: fromPlace, doors }));
+    const found = analyzeModule(ctx, module, fromPlace);
+    violations.push(...found.violations);
+    unjudged += found.unjudged;
   }
-  violations.push(...unknownEntries.values());
+  violations.push(...unknownEntries.values(), ...undeclaredLibraries(libraries, scope));
   violations.sort(
     (a, b) =>
       a.kind.localeCompare(b.kind) ||
@@ -390,10 +322,6 @@ export function analyzeBoundaries(
       a.specifier.localeCompare(b.specifier) ||
       Number(isDoorUse(a)) - Number(isDoorUse(b)),
   );
-  return {
-    scope,
-    features: [...zoning.features].sort((a, b) => a.localeCompare(b)),
-    filesScanned: modules.length,
-    violations,
-  };
+  const features = [...ctx.zoning.features].sort((a, b) => a.localeCompare(b));
+  return { report: { scope, features, filesScanned: modules.length, violations }, unjudged };
 }

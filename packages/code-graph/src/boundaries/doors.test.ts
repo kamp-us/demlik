@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type BoundaryRepo, boundaryRepo, type GateRun } from "../test-helpers/boundary-repo.js";
-import type { BoundaryViolation } from "./analyze.js";
 import { type BoundaryLedger, readBoundaryLedger } from "./ledger.js";
 import { MIGRATED_REASON } from "./migrate.js";
 import type { ProcessMembers } from "./process-members.js";
+import type { BoundaryViolation } from "./violation.js";
 
 const TSCONFIG = JSON.stringify({
   compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true },

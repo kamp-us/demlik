@@ -1,35 +1,40 @@
 import { stableStringify } from "../render/json.js";
-import {
-  type BoundaryKind,
-  type BoundaryViolation,
-  crossingOf,
-  type ScopeBoundaryReport,
-} from "./analyze.js";
+import type { ScopeBoundaryReport } from "./analyze.js";
 import {
   type BoundaryLedger,
   type BoundaryLedgerEntry,
   LEDGER_FILENAME,
   ledgerTargetOf,
 } from "./ledger.js";
+import { censusLines, type LibraryCensus } from "./libraries/census.js";
 import type { CeilingBreach } from "./migrate.js";
 import type { Reconciliation } from "./reconcile.js";
 import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
+import { type BoundaryKind, type BoundaryViolation, crossingOf } from "./violation.js";
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
-// Each kind's rule label, and whether only a hexagonal feature layout produces it.
+// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal and
+// library blocks only when a kind that needs them fails.
+type Advice = "feature" | "hexagonal" | "library";
+
+// Each kind's rule label, and the advice it adds.
 const KINDS = {
-  "cross-feature": { rule: "B1", hexagonal: false },
-  "impure-rules": { rule: "B2", hexagonal: false },
-  "lib-imports-feature": { rule: "B3", hexagonal: false },
-  "outside-imports-feature-internal": { rule: "B4", hexagonal: false },
-  "door-outside-owner": { rule: "B5", hexagonal: false },
-  "application-imports-adapter": { rule: "B6", hexagonal: true },
-  "impure-application": { rule: "B7", hexagonal: true },
-  "driving-reaches-driven": { rule: "B8", hexagonal: true },
-  "door-outside-driven-adapter": { rule: "B9", hexagonal: true },
-  "unknown-zone": { rule: "B10", hexagonal: true },
-} as const satisfies Record<BoundaryKind, { rule: string; hexagonal: boolean }>;
+  "cross-feature": { rule: "B1", advice: "feature" },
+  "impure-rules": { rule: "B2", advice: "feature" },
+  "lib-imports-feature": { rule: "B3", advice: "feature" },
+  "outside-imports-feature-internal": { rule: "B4", advice: "feature" },
+  "door-outside-owner": { rule: "B5", advice: "feature" },
+  "application-imports-adapter": { rule: "B6", advice: "hexagonal" },
+  "impure-application": { rule: "B7", advice: "hexagonal" },
+  "driving-reaches-driven": { rule: "B8", advice: "hexagonal" },
+  "door-outside-driven-adapter": { rule: "B9", advice: "hexagonal" },
+  "unknown-zone": { rule: "B10", advice: "hexagonal" },
+  "library-undeclared": { rule: "B11", advice: "library" },
+  "library-imports-up": { rule: "B12", advice: "library" },
+  "impure-library": { rule: "B13", advice: "library" },
+  "adapter-library-imported-outside-driven": { rule: "B14", advice: "library" },
+} as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
 // A door, and a feature's entry, is its own target: no import specifier was written for it.
 function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier" | "global">): string {
@@ -44,25 +49,43 @@ function violationLine(violation: BoundaryViolation): string {
   );
 }
 
+// A scope that declares features lists them; one without is a library scope: a declared library,
+// or a library root holding the packages no library names.
+function scopeHeader(report: ScopeBoundaryReport): string {
+  return report.features.length === 0
+    ? `${report.scope} — library scope`
+    : `${report.scope} — features: ${report.features.join(", ")}`;
+}
+
 function scopeLines(report: ScopeBoundaryReport): string[] {
   return [
-    `${report.scope} — features: ${report.features.join(", ")}`,
+    scopeHeader(report),
     `  scanned ${report.filesScanned} files — ${report.violations.length} violation(s)`,
     ...report.violations.map(violationLine),
   ];
 }
 
+// The census rides the report only when a library key is declared: `census` is null otherwise, and
+// the report is exactly what it was.
 export function renderBoundaries(
   reports: readonly ScopeBoundaryReport[],
   under: string,
+  census: LibraryCensus | null,
   json: boolean,
   pretty: boolean,
 ): string {
-  if (json) return stableStringify({ scopes: reports }, pretty);
+  if (json)
+    return stableStringify(
+      census === null ? { scopes: reports } : { scopes: reports, libraries: census },
+      pretty,
+    );
   if (reports.length === 0) {
-    return `boundaries: no feature scope declared at or under "${under}" — nothing to check.`;
+    const declared = census === null ? "feature scope" : "feature or library scope";
+    return `boundaries: no ${declared} declared at or under "${under}" — nothing to check.`;
   }
-  return reports.flatMap(scopeLines).join("\n");
+  return [...reports.flatMap(scopeLines), ...(census === null ? [] : censusLines(census))].join(
+    "\n",
+  );
 }
 
 function entryLine(entry: BoundaryLedgerEntry): string {
@@ -96,9 +119,23 @@ const HEXAGONAL_FIX_LINES = [
   "  adapters/driving/ and adapters/driven/.",
 ];
 
+const LIBRARY_FIX_LINES = [
+  "  Declare every package under a library root in `libraries`, import only the library types a",
+  "  type's `imports` lists, keep a pure library free of world doors and `worldLibraries`, and",
+  "  import a library that names `importedFrom` only from those zones.",
+];
+
+// What each advice adds to the lines every failure prints, in the order they print.
+const ADVICE_LINES = {
+  feature: [],
+  hexagonal: HEXAGONAL_FIX_LINES,
+  library: LIBRARY_FIX_LINES,
+} as const satisfies Record<Advice, readonly string[]>;
+
 function fixLines(unrecorded: readonly BoundaryLedgerEntry[]): readonly string[] {
-  const hexagonal = unrecorded.some((entry) => KINDS[entry.kind].hexagonal);
-  return hexagonal ? [...FIX_LINES, ...HEXAGONAL_FIX_LINES] : FIX_LINES;
+  const needed = new Set(unrecorded.map((entry) => KINDS[entry.kind].advice));
+  const added = (Object.keys(ADVICE_LINES) as Advice[]).filter((advice) => needed.has(advice));
+  return [...FIX_LINES, ...added.flatMap((advice) => ADVICE_LINES[advice])];
 }
 
 export function renderLedgerGate(

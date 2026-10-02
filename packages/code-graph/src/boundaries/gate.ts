@@ -4,7 +4,12 @@ import { type Reporter, resolveBoundaryRules } from "../config.js";
 import { loadEdgeProject } from "../extract/project.js";
 import { readScopeCeilings, scopeOf, scopesUnder } from "../ratchet/scope-count.js";
 import { resolveImports, runtimeSpecifiers } from "../syntax/imports.js";
-import { analyzeBoundaries, type ScopeBoundaryReport } from "./analyze.js";
+import {
+  analyzeBoundaries,
+  type BoundaryModule,
+  type ScopeAnalysis,
+  type ScopeBoundaryReport,
+} from "./analyze.js";
 import { detectDoorUses } from "./door-uses.js";
 import { unknownOwners } from "./doors.js";
 import {
@@ -13,6 +18,8 @@ import {
   readBoundaryLedger,
   writeBoundaryLedger,
 } from "./ledger.js";
+import { libraryCensus } from "./libraries/census.js";
+import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
 import { migratedLedger } from "./migrate.js";
 import type { ProcessMembers } from "./process-members.js";
 import { reconcile, withAccepted } from "./reconcile.js";
@@ -79,24 +86,39 @@ function modeOf(flags: BoundaryFlags, report: Reporter): BoundaryMode | null {
   return flags.ci ? { kind: "gate" } : { kind: "report" };
 }
 
-function analyzeScope(
+// A scope's files are read when it declares features or is a declared library. A library root has
+// none to judge: it holds the packages beneath it that no library names.
+function readsFiles(scope: string, rules: BoundaryRules, libraries: Libraries): boolean {
+  return rules.features[scope] !== undefined || libraries.typeOfDir.has(scope);
+}
+
+function loadModules(
   scope: string,
-  rules: BoundaryRules,
+  libraries: Libraries,
   args: BoundaryGateArgs,
-): ScopeBoundaryReport {
+): BoundaryModule[] {
   const scopeAbsolute = scope === "." ? args.repoRoot : path.join(args.repoRoot, scope);
-  const loaded = loadEdgeProject(scopeAbsolute, "package", args.repoRoot);
+  const loaded = loadEdgeProject(scopeAbsolute, "package", args.repoRoot, libraries.listing);
   const { importEdgesByFile } = resolveImports(
     loaded.rootAbsolute,
     loaded.sourceFiles,
     loaded.tsConfigPath,
   );
-  const modules = loaded.sourceFiles.map(({ file, syntax }) => ({
+  return loaded.sourceFiles.map(({ file, syntax }) => ({
     file,
     importEdges: importEdgesByFile.get(file) ?? [],
     doorUses: detectDoorUses(syntax),
     runtimeSpecifiers: runtimeSpecifiers(syntax),
   }));
+}
+
+function analyzeScope(
+  scope: string,
+  rules: BoundaryRules,
+  libraries: Libraries,
+  args: BoundaryGateArgs,
+): ScopeAnalysis {
+  const modules = readsFiles(scope, rules, libraries) ? loadModules(scope, libraries, args) : [];
   const unknown = unknownOwners(
     rules.doors[scope] ?? {},
     new Set(modules.map((module) => module.file)),
@@ -107,16 +129,25 @@ function analyzeScope(
         "An owner is an exact scope-relative .ts/.tsx path, such as src/env.ts.",
     );
   }
-  return analyzeBoundaries(scope, modules, rules);
+  return analyzeBoundaries(scope, modules, rules, libraries);
 }
+
+// What one run measured: each scope's report, and the imports of undeclared packages its libraries
+// left unjudged.
+type Analysis = { readonly reports: ScopeBoundaryReport[]; readonly unjudged: number };
 
 function analyzeAll(
   scopes: readonly string[],
   rules: BoundaryRules,
+  libraries: Libraries,
   args: BoundaryGateArgs,
-): ScopeBoundaryReport[] | null {
+): Analysis | null {
   try {
-    return scopes.map((scope) => analyzeScope(scope, rules, args));
+    const analyses = scopes.map((scope) => analyzeScope(scope, rules, libraries, args));
+    return {
+      reports: analyses.map((analysis) => analysis.report),
+      unjudged: analyses.reduce((sum, analysis) => sum + analysis.unjudged, 0),
+    };
   } catch (error) {
     args.report(error instanceof Error ? error.message : String(error));
     return null;
@@ -213,24 +244,44 @@ export function runBoundaryGate(args: BoundaryGateArgs): number {
   const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report, args.members);
   if (rules === null) return 2;
 
+  const read = readLibraries(rules, args.repoRoot);
+  if (read.kind === "refused") {
+    args.report(read.message);
+    return 2;
+  }
+  const { libraries } = read;
+
   const files: Files = {
     ledger: path.join(args.repoRoot, LEDGER_FILENAME),
     legacy: path.join(args.repoRoot, LEGACY_CEILINGS_FILENAME),
   };
-  const declared = Object.keys(rules.features);
+  const declared = [...new Set([...Object.keys(rules.features), ...libraryScopes(libraries)])];
   // The migration replaces the whole count file, so it measures every declared scope.
   if (mode.kind === "migrate") {
-    return runMigrate(args, files, () => analyzeAll(scopesUnder(declared, "."), rules, args));
+    return runMigrate(
+      args,
+      files,
+      () => analyzeAll(scopesUnder(declared, "."), rules, libraries, args)?.reports ?? null,
+    );
   }
 
   const under = scopeOf(args.repoRoot, args.rootAbsolute);
-  const reports = analyzeAll(scopesUnder(declared, under), rules, args);
-  if (reports === null) return 2;
+  const analysis = analyzeAll(scopesUnder(declared, under), rules, libraries, args);
+  if (analysis === null) return 2;
+  const { reports } = analysis;
   const measured: Measured = { args, files, under, reports };
   switch (mode.kind) {
-    case "report":
-      args.emit(`${renderBoundaries(reports, under, args.json, args.pretty)}\n`);
+    case "report": {
+      const census = libraryCensus(libraries, {
+        scopes: reports.map((report) => report.scope),
+        undeclared: reports.flatMap((report) =>
+          report.violations.filter((v) => v.kind === "library-undeclared").map((v) => v.from),
+        ),
+        unjudged: analysis.unjudged,
+      });
+      args.emit(`${renderBoundaries(reports, under, census, args.json, args.pretty)}\n`);
       return 0;
+    }
     case "gate":
       return runGate(measured);
     case "accept":
