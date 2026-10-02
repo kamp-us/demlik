@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { z } from "zod";
+import { deployableDeclarationIssue } from "./boundaries/deployables/declaration.js";
 import { doorDeclarationIssue } from "./boundaries/doors.js";
 import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
 import { type ProcessMembers, runningProcessMembers } from "./boundaries/process-members.js";
@@ -186,7 +187,8 @@ export function resolveBoundaryRules(
   const issue =
     featureDeclarationIssue(rules) ??
     doorDeclarationIssue(rules, members) ??
-    libraryDeclarationIssue(rules);
+    libraryDeclarationIssue(rules) ??
+    deployableDeclarationIssue(rules);
   if (issue !== null) {
     report(issue);
     return null;

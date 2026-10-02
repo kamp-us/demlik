@@ -23,9 +23,6 @@ export type Libraries = {
   // Every package root below the repo root, which is what a library root is checked against.
   readonly packageDirs: readonly string[];
   readonly world: readonly RegExp[];
-  // The repo's files, listed once for the many scopes a run of libraries reads. Absent when no
-  // library key is declared, and each scope then lists its own.
-  readonly listing?: RepoListing;
 };
 
 const NO_RULES: LibraryRules = {
@@ -78,11 +75,16 @@ function libraryIssues(dir: string, packageDirs: ReadonlySet<string>): string[] 
 }
 
 // Reads the repo for the declared libraries, or says in one line why the declaration cannot stand.
-// A declaration that names no library key costs nothing: the repo is not read.
-export function readLibraries(rules: LibraryRules, repoRoot: string): LibrariesRead {
+// A declaration that names no library key costs nothing: the repo is not read. `listing` is the
+// repo's files, listed once for the run.
+export function readLibraries(
+  rules: LibraryRules,
+  repoRoot: string,
+  listing: RepoListing | undefined,
+): LibrariesRead {
   if (!declaresLibraries(rules)) return { kind: "read", libraries: NO_LIBRARIES };
-  const listing = listRepo(repoRoot);
-  const packageDirs = discoverPackageRoots(repoRoot, listing).filter((dir) => dir !== "");
+  const files = listing ?? listRepo(repoRoot);
+  const packageDirs = discoverPackageRoots(repoRoot, files).filter((dir) => dir !== "");
   const known = new Set(packageDirs);
   const [message] = [
     ...rules.libraryRoots.flatMap((root) => rootIssues(root, repoRoot)),
@@ -99,7 +101,6 @@ export function readLibraries(rules: LibraryRules, repoRoot: string): LibrariesR
       packages: workspacePackages(repoRoot, packageDirs),
       packageDirs,
       world: rules.worldLibraries.map(globToRegExp),
-      listing,
     },
   };
 }

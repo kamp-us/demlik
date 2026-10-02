@@ -36,7 +36,8 @@ function stringValue(node: SyntaxNode | null): string | null {
   return null;
 }
 
-function isRelativeName(name: string): boolean {
+// `.`, `..`, `./x` and `../x`: a specifier that names a path, not a package.
+export function isRelativeName(name: string): boolean {
   return /^\.\.?($|[\\/])/.test(name);
 }
 

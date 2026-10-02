@@ -4,7 +4,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 import type { BindingKind, DataBindingKind } from "../schema.js";
-import { listVisibleFiles } from "./project.js";
+import { listVisibleFiles, type RepoListing } from "./project.js";
 
 const ServiceBindingSchema = z.object({
   binding: z.string(),
@@ -84,10 +84,13 @@ function rel(base: string, absolute: string): string {
   return path.relative(base, absolute).split(path.sep).join("/");
 }
 
-export function findWranglerConfigs(repoRoot: string): string[] {
-  return listVisibleFiles(repoRoot, (f) => CONFIG_BASENAMES.has(path.posix.basename(f))).map((f) =>
-    path.join(repoRoot, f),
-  );
+// `listing` is the repo's files when a pass that lists them once already holds it.
+export function findWranglerConfigs(repoRoot: string, listing?: RepoListing): string[] {
+  return listVisibleFiles(
+    repoRoot,
+    (f) => CONFIG_BASENAMES.has(path.posix.basename(f)),
+    listing,
+  ).map((f) => path.join(repoRoot, f));
 }
 
 function readConfigDocument(absolute: string): unknown {
@@ -207,11 +210,11 @@ function devVars(configDir: string): { keys: string[]; files: string[] } {
   return { keys: sortedUnique(keys), files: files.sort((a, b) => a.localeCompare(b)) };
 }
 
-export function loadBindingCatalog(repoRoot: string): BindingCatalog {
+export function loadBindingCatalog(repoRoot: string, listing?: RepoListing): BindingCatalog {
   const manifests: ServiceManifest[] = [];
   const unparsedConfigs: string[] = [];
 
-  for (const absolute of findWranglerConfigs(repoRoot)) {
+  for (const absolute of findWranglerConfigs(repoRoot, listing)) {
     const configFile = rel(repoRoot, absolute);
     const document = readConfigDocument(absolute);
     const parsed = document === null ? null : WranglerConfigSchema.safeParse(document);

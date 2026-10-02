@@ -1,7 +1,10 @@
 import type { ImportEdge, ModuleNode } from "../schema.js";
+import type { SiteRow } from "./deployables/census.js";
+import type { BindingSite, Deployables } from "./deployables/deployables.js";
+import { judgeDeployables } from "./deployables/judge.js";
 import { type DoorUse, doorsOf } from "./door-uses.js";
 import { declaredDoorOf, moduleDoorsOpened } from "./doors.js";
-import type { Libraries } from "./libraries/libraries.js";
+import { type Libraries, ownerOf } from "./libraries/libraries.js";
 import type { ImportedFrom } from "./libraries/schema.js";
 import { judgeLibraries, undeclaredLibraries } from "./libraries/violations.js";
 import {
@@ -22,6 +25,9 @@ export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> & {
   // The specifiers the file opens when it runs. `importEdges` is the graph's and keeps a type-only
   // `import { type Stats }` as a value import; a module door asks this.
   readonly runtimeSpecifiers: ReadonlySet<string>;
+  // The bindings of the worker that owns the file that it references, read only when the rules
+  // file lists a deployable kind.
+  readonly bindingSites: readonly BindingSite[];
 };
 
 export type ScopeBoundaryReport = {
@@ -29,6 +35,8 @@ export type ScopeBoundaryReport = {
   readonly features: readonly string[];
   readonly filesScanned: number;
   readonly violations: readonly BoundaryViolation[];
+  // The worker call graph's report only: the workers the deploy configs name.
+  readonly workers?: readonly string[];
 };
 
 function placeOf(file: string, zoning: ScopeZoning): Place {
@@ -258,15 +266,46 @@ type ScopeContext = {
   readonly rules: BoundaryRules;
   readonly zoning: ScopeZoning;
   readonly libraries: Libraries;
+  readonly deployables: Deployables;
 };
 
-// What one file of a scope crosses, and how many imports of undeclared packages its library left
-// unjudged. The scope's own entries (an unknown zone, a package no library names) are the caller's.
-function analyzeModule(
+// What one file of a scope crosses: its violations, how many imports of undeclared packages its
+// library left unjudged, and the binding sites the census counts. The scope's own entries (an
+// unknown zone, a package no library names) are the caller's.
+type Found = {
+  readonly violations: BoundaryViolation[];
+  readonly unjudged: number;
+  readonly sites: SiteRow[];
+};
+
+const NOT_JUDGED: Pick<Found, "violations" | "sites"> = { violations: [], sites: [] };
+
+// B17 and B19 for one file, and the sites it holds. A file inside a library nested in the scope
+// belongs to that library's own scope and is judged there, as for B12-B14.
+function acrossDeployables(
   ctx: ScopeContext,
   module: BoundaryModule,
-  fromPlace: Place,
-): { readonly violations: BoundaryViolation[]; readonly unjudged: number } {
+  place: Place,
+): Pick<Found, "violations" | "sites"> {
+  const { scope, libraries, deployables } = ctx;
+  if (deployables.kinds.size === 0) return NOT_JUDGED;
+  const from = inScope(scope, module.file);
+  const nested = ownerOf(libraries, from);
+  if (nested !== null && nested !== scope) return NOT_JUDGED;
+  const violations = judgeDeployables(deployables, {
+    scope,
+    file: module.file,
+    from,
+    importEdges: module.importEdges,
+    bindingSites: module.bindingSites,
+    driven: place.kind === "feature" && place.zone.rule.touchesBindings,
+    owners: ctx.rules.bindingOwners[scope] ?? {},
+  });
+  const sites = module.bindingSites.map((site) => ({ file: from, ...site }));
+  return { violations, sites };
+}
+
+function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Place): Found {
   const { scope, rules, zoning, libraries } = ctx;
   const edges = module.importEdges.flatMap(
     (edge) =>
@@ -287,20 +326,33 @@ function analyzeModule(
   });
   const file = { ...module, file: inScope(scope, module.file) };
   const judged = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
-  return { violations: [...edges, ...doors, ...judged.violations], unjudged: judged.unjudged };
+  const across = acrossDeployables(ctx, module, fromPlace);
+  return {
+    violations: [...edges, ...doors, ...judged.violations, ...across.violations],
+    unjudged: judged.unjudged,
+    sites: across.sites,
+  };
 }
 
-// A scope's report, and the imports of undeclared packages its libraries left unjudged.
-export type ScopeAnalysis = { readonly report: ScopeBoundaryReport; readonly unjudged: number };
+// A scope's report, the imports of undeclared packages its libraries left unjudged, and every
+// binding site its files hold.
+export type ScopeAnalysis = {
+  readonly report: ScopeBoundaryReport;
+  readonly unjudged: number;
+  readonly sites: readonly SiteRow[];
+};
 
 export function analyzeBoundaries(
   scope: string,
   modules: readonly BoundaryModule[],
   rules: BoundaryRules,
   libraries: Libraries,
+  deployables: Deployables,
 ): ScopeAnalysis {
-  const ctx: ScopeContext = { scope, rules, zoning: scopeZoning(rules, scope), libraries };
+  const zoning = scopeZoning(rules, scope);
+  const ctx: ScopeContext = { scope, rules, zoning, libraries, deployables };
   const violations: BoundaryViolation[] = [];
+  const sites: SiteRow[] = [];
   // One per entry, however many files sit under it.
   const unknownEntries = new Map<string, BoundaryViolation>();
   let unjudged = 0;
@@ -312,6 +364,7 @@ export function analyzeBoundaries(
     }
     const found = analyzeModule(ctx, module, fromPlace);
     violations.push(...found.violations);
+    sites.push(...found.sites);
     unjudged += found.unjudged;
   }
   violations.push(...unknownEntries.values(), ...undeclaredLibraries(libraries, scope));
@@ -323,5 +376,9 @@ export function analyzeBoundaries(
       Number(isDoorUse(a)) - Number(isDoorUse(b)),
   );
   const features = [...ctx.zoning.features].sort((a, b) => a.localeCompare(b));
-  return { report: { scope, features, filesScanned: modules.length, violations }, unjudged };
+  return {
+    report: { scope, features, filesScanned: modules.length, violations },
+    unjudged,
+    sites,
+  };
 }
