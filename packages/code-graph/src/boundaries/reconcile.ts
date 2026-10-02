@@ -6,7 +6,7 @@ import {
   boundaryLedgerOf,
   ledgerKey,
 } from "./ledger.js";
-import type { BoundaryViolation } from "./violation.js";
+import type { BoundaryViolation, WriteSite } from "./violation.js";
 
 export function entryOf(scope: string, violation: BoundaryViolation): BoundaryLedgerEntry {
   return {
@@ -25,14 +25,29 @@ export function measuredEntries(reports: readonly ScopeBoundaryReport[]): Bounda
   ).entries.slice();
 }
 
+// The write a B8 report row names, by the ledger key of the entry it becomes: what the run says
+// beside an unrecorded entry that the ledger never holds.
+function writesOf(reports: readonly ScopeBoundaryReport[]): Map<string, WriteSite> {
+  const writes = new Map<string, WriteSite>();
+  for (const report of reports) {
+    for (const violation of report.violations) {
+      if (violation.kind !== "driving-reaches-driven" || violation.write === undefined) continue;
+      writes.set(ledgerKey(entryOf(report.scope, violation)), violation.write);
+    }
+  }
+  return writes;
+}
+
 // What one run found against the ledger. `kept` is the ledger minus `pruned`: the entries whose
 // crossing is gone, among the scopes this run measured. An entry for a scope outside the analyzed
-// path is out of reach and kept as it is.
+// path is out of reach and kept as it is. `writes` says why an unrecorded B8 stays one though its
+// driven file is on a read allowance.
 export type Reconciliation = {
   readonly scopesChecked: number;
   readonly unrecorded: readonly BoundaryLedgerEntry[];
   readonly pruned: readonly BoundaryLedgerEntry[];
   readonly kept: BoundaryLedger;
+  readonly writes: ReadonlyMap<string, WriteSite>;
 };
 
 export function reconcile(
@@ -51,6 +66,7 @@ export function reconcile(
     unrecorded: measured.filter((entry) => !recordedKeys.has(ledgerKey(entry))),
     pruned: ledger.entries.filter(gone),
     kept: boundaryLedgerOf(ledger.entries.filter((entry) => !gone(entry))),
+    writes: writesOf(reports),
   };
 }
 

@@ -83,12 +83,6 @@ describe("the library keys are parsed at the config boundary", () => {
     }
   });
 
-  it("refuses `pureDependencies` as an unknown key: this part reads none", () => {
-    const message = refused({ libraryTypes: UTIL, pureDependencies: ["zod"] });
-    expect(message).toContain("Unrecognized key");
-    expect(message).toContain("pureDependencies");
-  });
-
   it("refuses a type with no `pure`, and a `worldLibraries` glob that does not compile", () => {
     expect(refused({ libraryTypes: { util: { imports: [] } } })).toContain(
       "libraryTypes.util.pure",

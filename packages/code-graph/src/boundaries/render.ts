@@ -5,19 +5,25 @@ import {
   type BoundaryLedger,
   type BoundaryLedgerEntry,
   LEDGER_FILENAME,
+  ledgerKey,
   ledgerTargetOf,
 } from "./ledger.js";
 import { censusLines, type LibraryCensus } from "./libraries/census.js";
 import type { CeilingBreach } from "./migrate.js";
 import type { Reconciliation } from "./reconcile.js";
 import { LEGACY_CEILINGS_FILENAME } from "./rules.js";
-import { type BoundaryKind, type BoundaryViolation, crossingOf } from "./violation.js";
+import {
+  type BoundaryKind,
+  type BoundaryViolation,
+  crossingOf,
+  type WriteSite,
+} from "./violation.js";
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
-// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, library
-// and deployable blocks only when a kind that needs them fails.
-type Advice = "feature" | "hexagonal" | "library" | "deployable";
+// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, library,
+// deployable and shape blocks only when a kind that needs them fails.
+type Advice = "feature" | "hexagonal" | "library" | "deployable" | "shape";
 
 // Each kind's rule label, and the advice it adds.
 const KINDS = {
@@ -35,6 +41,8 @@ const KINDS = {
   "library-imports-up": { rule: "B12", advice: "library" },
   "impure-library": { rule: "B13", advice: "library" },
   "adapter-library-imported-outside-driven": { rule: "B14", advice: "library" },
+  "index-not-exports-only": { rule: "B15", advice: "shape" },
+  "application-import-outside-allowlist": { rule: "B16", advice: "shape" },
   "binding-outside-driven-adapter": { rule: "B17", advice: "deployable" },
   "worker-call-cycle": { rule: "B18", advice: "deployable" },
   "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
@@ -45,11 +53,18 @@ function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier" | "glob
   return crossingOf(entry) === "import" ? `  ("${entry.specifier}")` : "";
 }
 
+// The data write that voids a read allowance: the one thing a B8 row says that its ledger entry
+// does not.
+function writeNote(write: WriteSite | undefined): string {
+  return write === undefined ? "" : `  [write: ${write.binding} at ${write.file}:${write.line}]`;
+}
+
 function violationLine(violation: BoundaryViolation): string {
   const tag = violation.typeOnly ? "  [type-only]" : "";
+  const write = violation.kind === "driving-reaches-driven" ? violation.write : undefined;
   return (
     `  ${KINDS[violation.kind].rule} ${violation.kind.padEnd(19)} ${violation.from} -> ` +
-    `${ledgerTargetOf(violation)}${writtenAs(violation)}${tag}`
+    `${ledgerTargetOf(violation)}${writtenAs(violation)}${tag}${writeNote(write)}`
   );
 }
 
@@ -112,19 +127,24 @@ export function renderBoundaries(
   ].join("\n");
 }
 
-function entryLine(entry: BoundaryLedgerEntry): string {
+function entryLine(entry: BoundaryLedgerEntry, write?: WriteSite): string {
   const reason = entry.reason === undefined ? "" : `  — ${entry.reason}`;
   return (
     `  ${entry.scope}  ${KINDS[entry.kind].rule} ${entry.kind}  ${entry.from} -> ` +
-    `${ledgerTargetOf(entry)}${writtenAs(entry)}${reason}`
+    `${ledgerTargetOf(entry)}${writtenAs(entry)}${writeNote(write)}${reason}`
   );
+}
+
+// The unrecorded entries a run lists, each with the write its report row named, if any.
+function unrecordedLines(result: Reconciliation): string[] {
+  return result.unrecorded.map((entry) => entryLine(entry, result.writes.get(ledgerKey(entry))));
 }
 
 function prunedLines(pruned: readonly BoundaryLedgerEntry[]): string[] {
   if (pruned.length === 0) return [];
   return [
     `pruned ${pruned.length} ${LEDGER_FILENAME} entr${pruned.length === 1 ? "y" : "ies"} whose crossing is gone:`,
-    ...pruned.map(entryLine),
+    ...pruned.map((entry) => entryLine(entry)),
   ];
 }
 
@@ -149,6 +169,12 @@ const LIBRARY_FIX_LINES = [
   "  import a library that names `importedFrom` only from those zones.",
 ];
 
+const SHAPE_FIX_LINES = [
+  "  Keep an entry file (a library's src/index.ts, a feature's index.ts) to named re-exports, and an",
+  "  application/ file to its own ports.ts and application/, another feature's index.ts, lib, a",
+  "  library whose type `applicationMayImport` lists and a `pureDependencies` package.",
+];
+
 const DEPLOYABLE_FIX_LINES = [
   "  Use a worker binding only in a feature's adapters/driven/ (`bindingOwners` narrows one to exact",
   "  files), break a loop of workers that bind each other, and reach another workspace by its",
@@ -161,6 +187,7 @@ const ADVICE_LINES = {
   hexagonal: HEXAGONAL_FIX_LINES,
   library: LIBRARY_FIX_LINES,
   deployable: DEPLOYABLE_FIX_LINES,
+  shape: SHAPE_FIX_LINES,
 } as const satisfies Record<Advice, readonly string[]>;
 
 function fixLines(unrecorded: readonly BoundaryLedgerEntry[]): readonly string[] {
@@ -190,7 +217,7 @@ export function renderLedgerGate(
       ]
     : [
         `BOUNDARY LEDGER FAILED — ${result.unrecorded.length} crossing(s) not in ${LEDGER_FILENAME}:`,
-        ...result.unrecorded.map(entryLine),
+        ...unrecordedLines(result),
         ...fixLines(result.unrecorded),
       ];
   return { stdout: [...head, ...prunedLines(result.pruned)].join("\n"), exitCode };
@@ -210,7 +237,7 @@ export function renderAccepted(
       ? ["accept-crossings: no unrecorded crossing — nothing to add."]
       : [
           `accepted ${result.unrecorded.length} crossing(s) into ${LEDGER_FILENAME}, reason "${reason}":`,
-          ...result.unrecorded.map(entryLine),
+          ...unrecordedLines(result),
         ];
   return [...accepted, ...prunedLines(result.pruned)].join("\n");
 }
