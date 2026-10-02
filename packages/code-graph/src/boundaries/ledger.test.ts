@@ -15,6 +15,7 @@ import {
   serializeBoundaryLedger,
   writeBoundaryLedger,
 } from "./ledger.js";
+import { crossingOf } from "./violation.js";
 
 const S = "apps/web";
 
@@ -99,8 +100,9 @@ describe("the ledger file", () => {
       kind: "invalid",
       message:
         "entries.0.to: only a bare-specifier import, a world door or a feature's entry may have " +
-        "a null `to` (kinds door-outside-driven-adapter, door-outside-owner, impure-application, " +
-        "impure-library, impure-rules, library-undeclared, unknown-zone)",
+        "a null `to` (kinds binding-outside-driven-adapter, door-outside-driven-adapter, " +
+        "door-outside-owner, impure-application, impure-library, impure-rules, " +
+        "library-undeclared, unknown-zone, worker-call-cycle)",
     });
     expect(parseBoundaryLedger(JSON.stringify({ entries: [crossing], extra: 1 })).kind).toBe(
       "invalid",
@@ -154,6 +156,7 @@ describe("a world door is a ledger entry with no target file", () => {
     expect(BOUNDARY_KINDS).toContain("door-outside-owner");
     expect(parseBoundaryLedger(JSON.stringify({ entries: [door] })).kind).toBe("read");
     const mayHaveNoFile: readonly string[] = [
+      "binding-outside-driven-adapter",
       "door-outside-driven-adapter",
       "door-outside-owner",
       "impure-application",
@@ -161,9 +164,10 @@ describe("a world door is a ledger entry with no target file", () => {
       "impure-rules",
       "library-undeclared",
       "unknown-zone",
+      "worker-call-cycle",
     ];
     const namesAFile = BOUNDARY_KINDS.filter((kind) => !mayHaveNoFile.includes(kind));
-    expect(namesAFile).toHaveLength(7);
+    expect(namesAFile).toHaveLength(8);
     for (const kind of namesAFile) {
       const entry = { ...crossing, kind, to: null };
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");
@@ -320,6 +324,71 @@ describe("the library kinds are ledger entries", () => {
         { ...impure, from: `${LIB}/src/trace.ts` },
         { ...outside, from: "services/api/src/boot.ts" },
         undeclared,
+      ]).entries,
+    );
+  });
+});
+
+describe("the deployable kinds are ledger entries", () => {
+  const API = "services/api";
+  const binding: BoundaryLedgerEntry = {
+    scope: API,
+    kind: "binding-outside-driven-adapter",
+    from: `${API}/src/orders/application/place.ts`,
+    to: null,
+    specifier: "DB",
+  };
+  const cycle: BoundaryLedgerEntry = {
+    scope: ".",
+    kind: "worker-call-cycle",
+    from: "api, auth",
+    to: null,
+    specifier: "api.AUTH -> auth; auth.API -> api",
+  };
+  const reach: BoundaryLedgerEntry = {
+    scope: API,
+    kind: "relative-import-crosses-workspace",
+    from: `${API}/src/main.ts`,
+    to: "packages/string-util",
+    specifier: "../../../packages/string-util/src/format",
+  };
+  const parses = (entry: unknown) => parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind;
+
+  it("accepts a null `to` on B17 and B18, and refuses one on B19, which names a workspace", () => {
+    for (const entry of [binding, cycle, reach]) expect(parses(entry)).toBe("read");
+    expect(parses({ ...reach, to: null })).toBe("invalid");
+    expect(parses({ ...binding, to: "packages/string-util" })).toBe("read");
+  });
+
+  it("keeps `global` to impure-rules", () => {
+    for (const entry of [binding, cycle, reach]) {
+      expect(parses({ ...entry, global: true })).toBe("invalid");
+    }
+  });
+
+  it("is a door crossing for B17, an entry for B18 and an import for B19", () => {
+    expect([binding, cycle, reach].map(crossingOf)).toEqual(["door", "entry", "import"]);
+  });
+
+  it("keys B17 by the file and binding, B18 by the workers and edges, B19 by the importer and workspace", () => {
+    expect(boundaryLedgerOf([binding, { ...binding, reason: "r" }]).entries).toHaveLength(1);
+    expect(ledgerKey(binding)).not.toBe(ledgerKey({ ...binding, specifier: "CACHE" }));
+    expect(ledgerKey(cycle)).not.toBe(ledgerKey({ ...cycle, specifier: "api.AUTH -> auth" }));
+    expect(ledgerKey(reach)).toBe(ledgerKey({ ...reach, specifier: "../../../other-spelling" }));
+    expect(ledgerKey(reach)).not.toBe(ledgerKey({ ...reach, to: "packages/other" }));
+  });
+
+  it("re-keys a moved importer file in a B17 and a B19 entry, and leaves a B18 entry as it is", () => {
+    const moved = rekeyBoundaryLedger(boundaryLedgerOf([binding, cycle, reach]), [
+      { from: binding.from, to: `${API}/src/orders/application/order.ts` },
+      { from: reach.from, to: `${API}/src/boot.ts` },
+      { from: "api", to: "elsewhere" },
+    ]);
+    expect(moved.entries).toEqual(
+      boundaryLedgerOf([
+        { ...binding, from: `${API}/src/orders/application/order.ts` },
+        cycle,
+        { ...reach, from: `${API}/src/boot.ts` },
       ]).entries,
     );
   });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { type Reporter, resolveBoundaryRules } from "../config.js";
-import { loadEdgeProject } from "../extract/project.js";
+import { listRepo, loadEdgeProject, type RepoListing } from "../extract/project.js";
 import { readScopeCeilings, scopeOf, scopesUnder } from "../ratchet/scope-count.js";
 import { resolveImports, runtimeSpecifiers } from "../syntax/imports.js";
 import {
@@ -10,6 +10,11 @@ import {
   type ScopeAnalysis,
   type ScopeBoundaryReport,
 } from "./analyze.js";
+import { bindingOwnerIssue, bindingSitesOf } from "./deployables/bindings.js";
+import { deployableCensus, type SiteRow } from "./deployables/census.js";
+import { workerCycles } from "./deployables/cycles.js";
+import { type Deployables, readDeployables } from "./deployables/deployables.js";
+import { declaresDeployables } from "./deployables/schema.js";
 import { detectDoorUses } from "./door-uses.js";
 import { unknownOwners } from "./doors.js";
 import {
@@ -20,10 +25,12 @@ import {
 } from "./ledger.js";
 import { libraryCensus } from "./libraries/census.js";
 import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
+import { declaresLibraries } from "./libraries/schema.js";
 import { migratedLedger } from "./migrate.js";
 import type { ProcessMembers } from "./process-members.js";
 import { reconcile, withAccepted } from "./reconcile.js";
 import {
+  type Censuses,
   renderAccepted,
   renderBoundaries,
   renderLedgerGate,
@@ -86,19 +93,24 @@ function modeOf(flags: BoundaryFlags, report: Reporter): BoundaryMode | null {
   return flags.ci ? { kind: "gate" } : { kind: "report" };
 }
 
+// What a run reads once, before any scope is judged: the libraries and the deployables the rules
+// file declares, and the repo's files listed once for both. A rules file that declares neither
+// lists nothing, and each scope lists its own.
+type Reads = {
+  readonly libraries: Libraries;
+  readonly deployables: Deployables;
+  readonly listing: RepoListing | undefined;
+};
+
 // A scope's files are read when it declares features or is a declared library. A library root has
 // none to judge: it holds the packages beneath it that no library names.
 function readsFiles(scope: string, rules: BoundaryRules, libraries: Libraries): boolean {
   return rules.features[scope] !== undefined || libraries.typeOfDir.has(scope);
 }
 
-function loadModules(
-  scope: string,
-  libraries: Libraries,
-  args: BoundaryGateArgs,
-): BoundaryModule[] {
+function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): BoundaryModule[] {
   const scopeAbsolute = scope === "." ? args.repoRoot : path.join(args.repoRoot, scope);
-  const loaded = loadEdgeProject(scopeAbsolute, "package", args.repoRoot, libraries.listing);
+  const loaded = loadEdgeProject(scopeAbsolute, "package", args.repoRoot, reads.listing);
   const { importEdgesByFile } = resolveImports(
     loaded.rootAbsolute,
     loaded.sourceFiles,
@@ -109,44 +121,69 @@ function loadModules(
     importEdges: importEdgesByFile.get(file) ?? [],
     doorUses: detectDoorUses(syntax),
     runtimeSpecifiers: runtimeSpecifiers(syntax),
+    bindingSites: bindingSitesOf(
+      reads.deployables,
+      scope === "." ? file : `${scope}/${file}`,
+      syntax,
+    ),
   }));
 }
 
 function analyzeScope(
   scope: string,
   rules: BoundaryRules,
-  libraries: Libraries,
+  reads: Reads,
   args: BoundaryGateArgs,
 ): ScopeAnalysis {
-  const modules = readsFiles(scope, rules, libraries) ? loadModules(scope, libraries, args) : [];
-  const unknown = unknownOwners(
-    rules.doors[scope] ?? {},
-    new Set(modules.map((module) => module.file)),
-  );
+  const modules = readsFiles(scope, rules, reads.libraries) ? loadModules(scope, reads, args) : [];
+  const files = new Set(modules.map((module) => module.file));
+  const unknown = unknownOwners(rules.doors[scope] ?? {}, files);
   if (unknown.length > 0) {
     throw new Error(
       `door owner(s) in "${scope}" name no file the scope loads: ${unknown.join("; ")}. ` +
         "An owner is an exact scope-relative .ts/.tsx path, such as src/env.ts.",
     );
   }
-  return analyzeBoundaries(scope, modules, rules, libraries);
+  const owners = rules.bindingOwners[scope] ?? {};
+  const issue = bindingOwnerIssue(scope, owners, files, reads.deployables);
+  if (issue !== null) throw new Error(issue);
+  return analyzeBoundaries(scope, modules, rules, reads.libraries, reads.deployables);
 }
 
-// What one run measured: each scope's report, and the imports of undeclared packages its libraries
-// left unjudged.
-type Analysis = { readonly reports: ScopeBoundaryReport[]; readonly unjudged: number };
+// The worker call graph is the repo's, not any scope's: its report is scope `.`, measured only by a
+// run whose analyzed path is the repo root, as every scope's entries outside the analyzed path are
+// left alone.
+function graphReports(deployables: Deployables, under: string): ScopeBoundaryReport[] {
+  if (!deployables.kinds.has("worker-call-cycle") || under !== ".") return [];
+  const { workers } = deployables.graph;
+  const violations = workerCycles(deployables.graph);
+  return [{ scope: ".", features: [], filesScanned: 0, violations, workers }];
+}
+
+// What one run measured: each scope's report, the imports of undeclared packages its libraries
+// left unjudged, and every binding site its scopes hold.
+type Analysis = {
+  readonly reports: ScopeBoundaryReport[];
+  readonly unjudged: number;
+  readonly sites: readonly SiteRow[];
+};
 
 function analyzeAll(
   scopes: readonly string[],
   rules: BoundaryRules,
-  libraries: Libraries,
+  reads: Reads,
+  under: string,
   args: BoundaryGateArgs,
 ): Analysis | null {
   try {
-    const analyses = scopes.map((scope) => analyzeScope(scope, rules, libraries, args));
+    const analyses = scopes.map((scope) => analyzeScope(scope, rules, reads, args));
     return {
-      reports: analyses.map((analysis) => analysis.report),
+      reports: [
+        ...analyses.map((analysis) => analysis.report),
+        ...graphReports(reads.deployables, under),
+      ],
       unjudged: analyses.reduce((sum, analysis) => sum + analysis.unjudged, 0),
+      sites: analyses.flatMap((analysis) => analysis.sites),
     };
   } catch (error) {
     args.report(error instanceof Error ? error.message : String(error));
@@ -238,48 +275,69 @@ function runMigrate(
   return 0;
 }
 
+// Reads the libraries and the deployables the rules file declares, or says in one line why it
+// cannot. The repo's files are listed once, and only when one of the two is declared.
+function readRun(rules: BoundaryRules, args: BoundaryGateArgs): Reads | null {
+  const declares = declaresLibraries(rules) || declaresDeployables(rules);
+  const listing = declares ? listRepo(args.repoRoot) : undefined;
+  const read = readLibraries(rules, args.repoRoot, listing);
+  if (read.kind === "refused") {
+    args.report(read.message);
+    return null;
+  }
+  const deployables = readDeployables(rules, args.repoRoot, listing);
+  return { libraries: read.libraries, deployables, listing };
+}
+
+// What the report says beside its violations, per key family: nothing for a family the rules file
+// declares no key of.
+function censusesOf(reads: Reads, analysis: Analysis): Censuses {
+  const { reports, unjudged, sites } = analysis;
+  return {
+    libraries: libraryCensus(reads.libraries, {
+      scopes: reports.map((report) => report.scope),
+      undeclared: reports.flatMap((report) =>
+        report.violations.filter((v) => v.kind === "library-undeclared").map((v) => v.from),
+      ),
+      unjudged,
+    }),
+    deployables: deployableCensus(reads.deployables, sites),
+  };
+}
+
 export function runBoundaryGate(args: BoundaryGateArgs): number {
   const mode = modeOf(args, args.report);
   if (mode === null) return 2;
   const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report, args.members);
   if (rules === null) return 2;
-
-  const read = readLibraries(rules, args.repoRoot);
-  if (read.kind === "refused") {
-    args.report(read.message);
-    return 2;
-  }
-  const { libraries } = read;
+  const reads = readRun(rules, args);
+  if (reads === null) return 2;
 
   const files: Files = {
     ledger: path.join(args.repoRoot, LEDGER_FILENAME),
     legacy: path.join(args.repoRoot, LEGACY_CEILINGS_FILENAME),
   };
-  const declared = [...new Set([...Object.keys(rules.features), ...libraryScopes(libraries)])];
+  const declared = [
+    ...new Set([...Object.keys(rules.features), ...libraryScopes(reads.libraries)]),
+  ];
   // The migration replaces the whole count file, so it measures every declared scope.
   if (mode.kind === "migrate") {
     return runMigrate(
       args,
       files,
-      () => analyzeAll(scopesUnder(declared, "."), rules, libraries, args)?.reports ?? null,
+      () => analyzeAll(scopesUnder(declared, "."), rules, reads, ".", args)?.reports ?? null,
     );
   }
 
   const under = scopeOf(args.repoRoot, args.rootAbsolute);
-  const analysis = analyzeAll(scopesUnder(declared, under), rules, libraries, args);
+  const analysis = analyzeAll(scopesUnder(declared, under), rules, reads, under, args);
   if (analysis === null) return 2;
   const { reports } = analysis;
   const measured: Measured = { args, files, under, reports };
   switch (mode.kind) {
     case "report": {
-      const census = libraryCensus(libraries, {
-        scopes: reports.map((report) => report.scope),
-        undeclared: reports.flatMap((report) =>
-          report.violations.filter((v) => v.kind === "library-undeclared").map((v) => v.from),
-        ),
-        unjudged: analysis.unjudged,
-      });
-      args.emit(`${renderBoundaries(reports, under, census, args.json, args.pretty)}\n`);
+      const censuses = censusesOf(reads, analysis);
+      args.emit(`${renderBoundaries(reports, under, censuses, args.json, args.pretty)}\n`);
       return 0;
     }
     case "gate":

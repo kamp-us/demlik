@@ -1,5 +1,6 @@
 import { stableStringify } from "../render/json.js";
 import type { ScopeBoundaryReport } from "./analyze.js";
+import { type DeployableCensus, deployableCensusLines } from "./deployables/census.js";
 import {
   type BoundaryLedger,
   type BoundaryLedgerEntry,
@@ -14,9 +15,9 @@ import { type BoundaryKind, type BoundaryViolation, crossingOf } from "./violati
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
-// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal and
-// library blocks only when a kind that needs them fails.
-type Advice = "feature" | "hexagonal" | "library";
+// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, library
+// and deployable blocks only when a kind that needs them fails.
+type Advice = "feature" | "hexagonal" | "library" | "deployable";
 
 // Each kind's rule label, and the advice it adds.
 const KINDS = {
@@ -34,9 +35,12 @@ const KINDS = {
   "library-imports-up": { rule: "B12", advice: "library" },
   "impure-library": { rule: "B13", advice: "library" },
   "adapter-library-imported-outside-driven": { rule: "B14", advice: "library" },
+  "binding-outside-driven-adapter": { rule: "B17", advice: "deployable" },
+  "worker-call-cycle": { rule: "B18", advice: "deployable" },
+  "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
-// A door, and a feature's entry, is its own target: no import specifier was written for it.
+// A door, a binding and an entry are their own target: no import specifier was written for them.
 function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier" | "global">): string {
   return crossingOf(entry) === "import" ? `  ("${entry.specifier}")` : "";
 }
@@ -57,35 +61,55 @@ function scopeHeader(report: ScopeBoundaryReport): string {
     : `${report.scope} — features: ${report.features.join(", ")}`;
 }
 
+// The worker call graph is read from the deploy configs, not from files: it lists its workers.
 function scopeLines(report: ScopeBoundaryReport): string[] {
+  const { workers, violations } = report;
   return [
-    scopeHeader(report),
-    `  scanned ${report.filesScanned} files — ${report.violations.length} violation(s)`,
-    ...report.violations.map(violationLine),
+    ...(workers === undefined
+      ? [
+          scopeHeader(report),
+          `  scanned ${report.filesScanned} files — ${violations.length} violation(s)`,
+        ]
+      : [
+          `${report.scope} — worker call graph`,
+          `  ${workers.length} worker(s) — ${violations.length} violation(s)`,
+        ]),
+    ...violations.map(violationLine),
   ];
 }
 
-// The census rides the report only when a library key is declared: `census` is null otherwise, and
-// the report is exactly what it was.
+// What a run says about the keys it was given, beside its violations: a census per key family,
+// each null when the rules file declares none of that family's keys, and then it says nothing.
+export type Censuses = {
+  readonly libraries: LibraryCensus | null;
+  readonly deployables: DeployableCensus | null;
+};
+
+function censusJson(censuses: Censuses): Record<string, unknown> {
+  const { libraries, deployables } = censuses;
+  return {
+    ...(libraries === null ? {} : { libraries }),
+    ...(deployables === null ? {} : { deployables }),
+  };
+}
+
 export function renderBoundaries(
   reports: readonly ScopeBoundaryReport[],
   under: string,
-  census: LibraryCensus | null,
+  censuses: Censuses,
   json: boolean,
   pretty: boolean,
 ): string {
-  if (json)
-    return stableStringify(
-      census === null ? { scopes: reports } : { scopes: reports, libraries: census },
-      pretty,
-    );
+  if (json) return stableStringify({ scopes: reports, ...censusJson(censuses) }, pretty);
   if (reports.length === 0) {
-    const declared = census === null ? "feature scope" : "feature or library scope";
+    const declared = censuses.libraries === null ? "feature scope" : "feature or library scope";
     return `boundaries: no ${declared} declared at or under "${under}" — nothing to check.`;
   }
-  return [...reports.flatMap(scopeLines), ...(census === null ? [] : censusLines(census))].join(
-    "\n",
-  );
+  return [
+    ...reports.flatMap(scopeLines),
+    ...(censuses.libraries === null ? [] : censusLines(censuses.libraries)),
+    ...(censuses.deployables === null ? [] : deployableCensusLines(censuses.deployables)),
+  ].join("\n");
 }
 
 function entryLine(entry: BoundaryLedgerEntry): string {
@@ -125,11 +149,18 @@ const LIBRARY_FIX_LINES = [
   "  import a library that names `importedFrom` only from those zones.",
 ];
 
+const DEPLOYABLE_FIX_LINES = [
+  "  Use a worker binding only in a feature's adapters/driven/ (`bindingOwners` narrows one to exact",
+  "  files), break a loop of workers that bind each other, and reach another workspace by its",
+  "  package name, never a relative path.",
+];
+
 // What each advice adds to the lines every failure prints, in the order they print.
 const ADVICE_LINES = {
   feature: [],
   hexagonal: HEXAGONAL_FIX_LINES,
   library: LIBRARY_FIX_LINES,
+  deployable: DEPLOYABLE_FIX_LINES,
 } as const satisfies Record<Advice, readonly string[]>;
 
 function fixLines(unrecorded: readonly BoundaryLedgerEntry[]): readonly string[] {

@@ -11,6 +11,7 @@ export const LEDGER_FILENAME = "boundary-ledger.json";
 export const BOUNDARY_KINDS = [
   "adapter-library-imported-outside-driven",
   "application-imports-adapter",
+  "binding-outside-driven-adapter",
   "cross-feature",
   "door-outside-driven-adapter",
   "door-outside-owner",
@@ -22,7 +23,9 @@ export const BOUNDARY_KINDS = [
   "library-imports-up",
   "library-undeclared",
   "outside-imports-feature-internal",
+  "relative-import-crosses-workspace",
   "unknown-zone",
+  "worker-call-cycle",
 ] as const satisfies readonly BoundaryKind[];
 
 // Fails to compile when violation.ts grows a kind this list does not name.
@@ -33,12 +36,15 @@ void everyKindListed;
 
 // Whether a kind can cross to something that is not a file of the scope: a bare import
 // (`impure-rules`), a world door or world library (`door-outside-owner`, `impure-application`,
-// `door-outside-driven-adapter`, `impure-library`) or an entry (`unknown-zone` of a feature,
-// `library-undeclared` of a package). Every other kind names its target file, or for an import of
-// a library (`library-imports-up`, `adapter-library-imported-outside-driven`) its directory.
+// `door-outside-driven-adapter`, `impure-library`), a worker binding (`binding-outside-driven-
+// adapter`) or an entry (`unknown-zone` of a feature, `library-undeclared` of a package,
+// `worker-call-cycle` of workers). Every other kind names its target file, or for an import of a
+// library (`library-imports-up`, `adapter-library-imported-outside-driven`) or of another workspace
+// (`relative-import-crosses-workspace`) its directory.
 const MAY_HAVE_NO_FILE = {
   "adapter-library-imported-outside-driven": false,
   "application-imports-adapter": false,
+  "binding-outside-driven-adapter": true,
   "cross-feature": false,
   "door-outside-driven-adapter": true,
   "door-outside-owner": true,
@@ -50,7 +56,9 @@ const MAY_HAVE_NO_FILE = {
   "library-imports-up": false,
   "library-undeclared": true,
   "outside-imports-feature-internal": false,
+  "relative-import-crosses-workspace": false,
   "unknown-zone": true,
+  "worker-call-cycle": true,
 } as const satisfies Record<BoundaryKind, boolean>;
 
 const NO_FILE_KINDS = BOUNDARY_KINDS.filter((kind) => MAY_HAVE_NO_FILE[kind]).join(", ");
@@ -99,14 +107,16 @@ export const BoundaryLedgerSchema = z
     });
   });
 
-// `to` is the resolved target file (for an import of a library, its directory), or null for a bare
-// import (`impure-rules`), a world door (`door-outside-owner`, `impure-application`,
-// `door-outside-driven-adapter`, `impure-library`, or `impure-rules` with `global`), a world
-// library (`impure-library`) or an entry (`unknown-zone`, `library-undeclared`), in which case the
-// target is the specifier itself. `specifier` is how an import was written, or the door's name, and is display only for a
-// file target: it is not part of the identity, so a move that rewrites a relative specifier keeps
-// it. `global` is part of the identity: a global `fetch` and a bare `import "fetch"` from one file
-// are two crossings, and the flag is all that tells them apart.
+// `to` is the resolved target file (for an import of a library or of another workspace, its
+// directory), or null for a bare import (`impure-rules`), a world door
+// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, `impure-library`, or
+// `impure-rules` with `global`), a world library (`impure-library`), a worker binding
+// (`binding-outside-driven-adapter`) or an entry (`unknown-zone`, `library-undeclared`,
+// `worker-call-cycle`), in which case the target is the specifier itself. `specifier` is how an
+// import was written, or the door's name, and is display only for a file target: it is not part of
+// the identity, so a move that rewrites a relative specifier keeps it. `global` is part of the
+// identity: a global `fetch` and a bare `import "fetch"` from one file are two crossings, and the
+// flag is all that tells them apart.
 export type BoundaryLedgerEntry = z.infer<typeof EntrySchema>;
 export type BoundaryLedger = { readonly entries: readonly BoundaryLedgerEntry[] };
 

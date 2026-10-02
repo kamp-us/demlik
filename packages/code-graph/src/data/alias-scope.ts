@@ -1,4 +1,3 @@
-import type { DataBindingDecl } from "../extract/wrangler-config.js";
 import { patternNames } from "../syntax/bindings.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 
@@ -114,37 +113,38 @@ const DECLARERS: ReadonlyMap<string, Declarer> = new Map<string, Declarer>([
 
 // One lexical alias scope per scope-opening node. A name the scope declares starts out shadowing
 // any outer alias of that name, and becomes an alias only where its own declaration reads a
-// binding; a name it does not declare resolves through the enclosing scopes.
-export class AliasScope {
-  private readonly own = new Map<string, DataBindingDecl | null>();
+// binding; a name it does not declare resolves through the enclosing scopes. `D` is whatever the
+// caller knows about a binding: the scope only carries it from the declaration to the use.
+export class AliasScope<D> {
+  private readonly own = new Map<string, D | null>();
 
-  private constructor(private readonly parent: AliasScope | null) {}
+  private constructor(private readonly parent: AliasScope<D> | null) {}
 
-  static root(): AliasScope {
-    return new AliasScope(null);
+  static root<D>(): AliasScope<D> {
+    return new AliasScope<D>(null);
   }
 
   // The scope in force inside `node`: a child declaring its names when `node` opens a scope,
   // else this one.
-  enter(syntax: SyntaxFile, node: SyntaxNode): AliasScope {
+  enter(syntax: SyntaxFile, node: SyntaxNode): AliasScope<D> {
     const names = DECLARERS.get(node.type)?.(syntax, node) ?? null;
     if (names === null) return this;
-    const scope = new AliasScope(this);
+    const scope = new AliasScope<D>(this);
     for (const name of names) scope.own.set(name, null);
     return scope;
   }
 
   // Binds in the scope that declares the name, so a `var` inside a block lands on its function.
-  bind(name: string, decl: DataBindingDecl): void {
+  bind(name: string, decl: D): void {
     this.declaring(name).own.set(name, decl);
   }
 
-  resolve(name: string): DataBindingDecl | null {
+  resolve(name: string): D | null {
     return this.declaring(name).own.get(name) ?? null;
   }
 
-  private declaring(name: string): AliasScope {
-    for (let scope: AliasScope | null = this; scope !== null; scope = scope.parent) {
+  private declaring(name: string): AliasScope<D> {
+    for (let scope: AliasScope<D> | null = this; scope !== null; scope = scope.parent) {
       if (scope.own.has(name)) return scope;
     }
     return this;
