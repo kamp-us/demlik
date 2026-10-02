@@ -5,6 +5,7 @@ import { doorDeclarationIssue } from "./boundaries/doors.js";
 import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
 import { type ProcessMembers, runningProcessMembers } from "./boundaries/process-members.js";
 import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
+import { shapeDeclarationIssue } from "./boundaries/shape/declaration.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
 import { type CommentCeilings, CommentCeilingsSchema } from "./comments/ceilings.js";
 import { GlobSyntaxError, globToRegExp } from "./kinds/glob.js";
@@ -188,7 +189,8 @@ export function resolveBoundaryRules(
     featureDeclarationIssue(rules) ??
     doorDeclarationIssue(rules, members) ??
     libraryDeclarationIssue(rules) ??
-    deployableDeclarationIssue(rules);
+    deployableDeclarationIssue(rules) ??
+    shapeDeclarationIssue(rules);
   if (issue !== null) {
     report(issue);
     return null;

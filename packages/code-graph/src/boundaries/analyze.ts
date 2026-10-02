@@ -2,33 +2,36 @@ import type { ImportEdge, ModuleNode } from "../schema.js";
 import type { SiteRow } from "./deployables/census.js";
 import type { BindingSite, Deployables } from "./deployables/deployables.js";
 import { judgeDeployables } from "./deployables/judge.js";
-import { type DoorUse, doorsOf } from "./door-uses.js";
-import { declaredDoorOf, moduleDoorsOpened } from "./doors.js";
+import type { DoorUse } from "./door-uses.js";
 import { type Libraries, ownerOf } from "./libraries/libraries.js";
 import type { ImportedFrom } from "./libraries/schema.js";
 import { judgeLibraries, undeclaredLibraries } from "./libraries/violations.js";
 import {
   type BoundaryRules,
-  type FeatureFile,
-  featureFileOf,
+  type FeaturePlace,
+  inScope,
+  type Place,
+  placeOf,
   type ScopeZoning,
   scopeZoning,
 } from "./rules.js";
-import { type BoundaryViolation, isDoorUse, type ZoneDoor, type ZoneEdge } from "./violation.js";
+import { judgeShape } from "./shape/judge.js";
+import type { Shape, ShapeFacts } from "./shape/shape.js";
+import { type BoundaryViolation, isDoorUse, type ZoneEdge } from "./violation.js";
+import { doorViolations } from "./zones/door-violations.js";
+import { type DrivenReads, drivenReadsOf, type ScopeReads, scopeReadsOf } from "./zones/reads.js";
+import { isTestFile, judgedInTestFile } from "./zones/test-role.js";
 
-type FeaturePlace = { readonly kind: "feature" } & FeatureFile;
-
-type Place = FeaturePlace | { readonly kind: "lib" } | { readonly kind: "elsewhere" };
-
-export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> & {
-  readonly doorUses: readonly DoorUse[];
-  // The specifiers the file opens when it runs. `importEdges` is the graph's and keeps a type-only
-  // `import { type Stats }` as a value import; a module door asks this.
-  readonly runtimeSpecifiers: ReadonlySet<string>;
-  // The bindings of the worker that owns the file that it references, read only when the rules
-  // file lists a deployable kind.
-  readonly bindingSites: readonly BindingSite[];
-};
+export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> &
+  ShapeFacts & {
+    readonly doorUses: readonly DoorUse[];
+    // The specifiers the file opens when it runs. `importEdges` is the graph's and keeps a type-only
+    // `import { type Stats }` as a value import; a module door asks this.
+    readonly runtimeSpecifiers: ReadonlySet<string>;
+    // The bindings of the worker that owns the file that it references, read only when the rules
+    // file lists a deployable kind.
+    readonly bindingSites: readonly BindingSite[];
+  };
 
 export type ScopeBoundaryReport = {
   readonly scope: string;
@@ -39,26 +42,12 @@ export type ScopeBoundaryReport = {
   readonly workers?: readonly string[];
 };
 
-function placeOf(file: string, zoning: ScopeZoning): Place {
-  const inFeature = featureFileOf(file, zoning);
-  if (inFeature !== null) return { kind: "feature", ...inFeature };
-  const [src, folder, ...rest] = file.split("/");
-  if (src === "src" && folder !== undefined && rest.length > 0 && zoning.lib.has(folder)) {
-    return { kind: "lib" };
-  }
-  return { kind: "elsewhere" };
-}
-
 function isContract(specifier: string, contracts: readonly string[]): boolean {
   return contracts.some((c) => specifier === c || specifier.startsWith(`${c}/`));
 }
 
 function isBare(specifier: string): boolean {
   return !specifier.startsWith(".") && !specifier.startsWith("/");
-}
-
-function inScope(scope: string, file: string): string {
-  return scope === "." ? file : `${scope}/${file}`;
 }
 
 type EdgeContext = {
@@ -68,6 +57,8 @@ type EdgeContext = {
   readonly edge: ImportEdge;
   readonly zoning: ScopeZoning;
   readonly contracts: readonly string[];
+  // Whether the scope's read allowance licenses a driving file's import of a driven file.
+  readonly reads: DrivenReads;
 };
 
 function rulesViolation(ctx: EdgeContext, feature: string): BoundaryViolation | null {
@@ -109,8 +100,13 @@ function withinFeature(
       return null;
     case "application-imports-adapter":
       return to.zone.entry.startsWith("adapters/") ? { kind, ...edge } : null;
-    case "driving-reaches-driven":
-      return to.zone.name === "application" || to.zone.name === "driven" ? { kind, ...edge } : null;
+    case "driving-reaches-driven": {
+      if (to.zone.name === "application") return { kind, ...edge };
+      if (to.zone.name !== "driven") return null;
+      const verdict = ctx.reads(target);
+      if (verdict.licensed) return null;
+      return { kind, ...edge, ...(verdict.write === undefined ? {} : { write: verdict.write }) };
+    }
     default: {
       const exhaustive: never = kind;
       return exhaustive;
@@ -158,92 +154,6 @@ function violationOf(ctx: EdgeContext): BoundaryViolation | null {
   return to.kind === "feature" ? crossingFrom(ctx, edge.target, to) : null;
 }
 
-type ModuleContext = {
-  readonly scope: string;
-  readonly module: BoundaryModule;
-  readonly place: Place;
-  readonly doors: Readonly<Record<string, readonly string[]>>;
-};
-
-function zoneDoor(ctx: ModuleContext, feature: string, door: string): ZoneDoor {
-  return {
-    from: inScope(ctx.scope, ctx.module.file),
-    feature,
-    to: null,
-    specifier: door,
-    typeOnly: false,
-  };
-}
-
-// Inside `rules/` no door has an owner, so every use of any catalog door is the zone's own
-// violation, once per door. A door module imported there is already an edge, judged above.
-function globalsInRules(ctx: ModuleContext, feature: string): BoundaryViolation[] {
-  const used = new Set(ctx.module.doorUses.map((use) => use.door));
-  return [...used].map((door) => ({
-    kind: "impure-rules",
-    ...zoneDoor(ctx, feature, door),
-    global: true,
-  }));
-}
-
-// `application/` imports bare packages freely, so a door module it runs is judged here beside the
-// doors it uses by name: every catalog door, declared or not, once per door.
-function impureApplication(ctx: ModuleContext, feature: string): BoundaryViolation[] {
-  return doorsOf(ctx.module).map((door) => ({
-    kind: "impure-application",
-    ...zoneDoor(ctx, feature, door),
-  }));
-}
-
-// The declared doors a file uses or opens: a use belongs to the most specific declared door that is
-// a path prefix of it.
-function declaredDoorsUsed(ctx: ModuleContext): string[] {
-  const declared = Object.keys(ctx.doors);
-  if (declared.length === 0) return [];
-  const moduleDoors = moduleDoorsOpened(ctx.module.importEdges, ctx.module.runtimeSpecifiers);
-  const paths = [
-    ...ctx.module.doorUses.map((use) => use.path),
-    ...moduleDoors.map((door) => [door]),
-  ];
-  return [...new Set(paths.flatMap((path) => declaredDoorOf(path, declared) ?? []))];
-}
-
-// A declared door's use is a violation unless this file is one of that door's owners.
-function outsideOwner(ctx: ModuleContext): BoundaryViolation[] {
-  return declaredDoorsUsed(ctx)
-    .filter((door) => !ctx.doors[door]?.includes(ctx.module.file))
-    .map((door) => ({
-      kind: "door-outside-owner",
-      from: inScope(ctx.scope, ctx.module.file),
-      to: null,
-      specifier: door,
-      typeOnly: false,
-    }));
-}
-
-function doorViolations(ctx: ModuleContext): BoundaryViolation[] {
-  const { place } = ctx;
-  if (place.kind !== "feature") return outsideOwner(ctx);
-  const rule = place.zone.rule.doors;
-  switch (rule) {
-    case "door-outside-owner":
-      return outsideOwner(ctx);
-    case "impure-rules":
-      return globalsInRules(ctx, place.feature);
-    case "impure-application":
-      return impureApplication(ctx, place.feature);
-    case "door-outside-driven-adapter":
-      return declaredDoorsUsed(ctx).map((door) => ({
-        kind: rule,
-        ...zoneDoor(ctx, place.feature, door),
-      }));
-    default: {
-      const exhaustive: never = rule;
-      return exhaustive;
-    }
-  }
-}
-
 function unknownZone(scope: string, place: FeaturePlace): BoundaryViolation {
   return {
     kind: "unknown-zone",
@@ -261,12 +171,19 @@ function libraryZoneOf(place: Place): ImportedFrom | null {
   return place.kind === "feature" ? place.zone.rule.libraryZone : "configurator";
 }
 
-type ScopeContext = {
+// What a run reads once, before any scope is judged, that every scope's judgment asks of.
+export type ScopeInputs = {
+  readonly libraries: Libraries;
+  readonly deployables: Deployables;
+  readonly shape: Shape;
+};
+
+type ScopeContext = ScopeInputs & {
   readonly scope: string;
   readonly rules: BoundaryRules;
   readonly zoning: ScopeZoning;
-  readonly libraries: Libraries;
-  readonly deployables: Deployables;
+  // The scope's read allowance and the writes of the files it lists, or null for a scope with none.
+  readonly allowance: ScopeReads | null;
 };
 
 // What one file of a scope crosses: its violations, how many imports of undeclared packages its
@@ -305,31 +222,45 @@ function acrossDeployables(
   return { violations, sites };
 }
 
+// One file's verdicts. Every kind judges it, and then the test role drops the kinds that do not
+// judge a test file (`zones/test-role.ts`). One verdict per import: the edges B1 and B6 judged are
+// left to them by B16.
 function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Place): Found {
-  const { scope, rules, zoning, libraries } = ctx;
-  const edges = module.importEdges.flatMap(
-    (edge) =>
-      violationOf({
-        scope,
-        from: module.file,
-        fromPlace,
-        edge,
-        zoning,
-        contracts: rules.contracts,
-      }) ?? [],
-  );
+  const { scope, rules, zoning, libraries, shape } = ctx;
+  const reads = drivenReadsOf(ctx.allowance, module, libraries);
+  const edges = module.importEdges.map((edge) => ({
+    edge,
+    violation: violationOf({
+      scope,
+      from: module.file,
+      fromPlace,
+      edge,
+      zoning,
+      contracts: rules.contracts,
+      reads,
+    }),
+  }));
+  const judged = new Set(edges.filter((e) => e.violation !== null).map((e) => e.edge));
   const doors = doorViolations({
     scope,
     module,
     place: fromPlace,
     doors: rules.doors[scope] ?? {},
+    strict: shape.strict.has(scope),
   });
   const file = { ...module, file: inScope(scope, module.file) };
-  const judged = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
+  const libs = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
   const across = acrossDeployables(ctx, module, fromPlace);
+  const violations = [
+    ...edges.flatMap((e) => e.violation ?? []),
+    ...doors,
+    ...libs.violations,
+    ...across.violations,
+    ...judgeShape(ctx, module, fromPlace, judged),
+  ];
   return {
-    violations: [...edges, ...doors, ...judged.violations, ...across.violations],
-    unjudged: judged.unjudged,
+    violations: isTestFile(shape.tests, module.file) ? judgedInTestFile(violations) : violations,
+    unjudged: libs.unjudged,
     sites: across.sites,
   };
 }
@@ -346,11 +277,11 @@ export function analyzeBoundaries(
   scope: string,
   modules: readonly BoundaryModule[],
   rules: BoundaryRules,
-  libraries: Libraries,
-  deployables: Deployables,
+  inputs: ScopeInputs,
 ): ScopeAnalysis {
   const zoning = scopeZoning(rules, scope);
-  const ctx: ScopeContext = { scope, rules, zoning, libraries, deployables };
+  const allowance = scopeReadsOf(inputs.shape.allowance, scope, modules);
+  const ctx: ScopeContext = { ...inputs, scope, rules, zoning, allowance };
   const violations: BoundaryViolation[] = [];
   const sites: SiteRow[] = [];
   // One per entry, however many files sit under it.
@@ -358,7 +289,9 @@ export function analyzeBoundaries(
   let unjudged = 0;
   for (const module of modules) {
     const fromPlace = placeOf(module.file, ctx.zoning);
-    if (fromPlace.kind === "feature" && fromPlace.zone.name === "unknown") {
+    // A test file sits in no zone, so an entry that holds only test files is no entry.
+    const isTest = isTestFile(inputs.shape.tests, module.file);
+    if (!isTest && fromPlace.kind === "feature" && fromPlace.zone.name === "unknown") {
       const entry = unknownZone(scope, fromPlace);
       unknownEntries.set(entry.from, entry);
     }
@@ -367,7 +300,7 @@ export function analyzeBoundaries(
     sites.push(...found.sites);
     unjudged += found.unjudged;
   }
-  violations.push(...unknownEntries.values(), ...undeclaredLibraries(libraries, scope));
+  violations.push(...unknownEntries.values(), ...undeclaredLibraries(inputs.libraries, scope));
   violations.sort(
     (a, b) =>
       a.kind.localeCompare(b.kind) ||

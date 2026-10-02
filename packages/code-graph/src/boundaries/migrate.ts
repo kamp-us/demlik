@@ -18,11 +18,12 @@ export type Migration =
 export const MIGRATED_REASON = `grandfathered from ${LEGACY_CEILINGS_FILENAME}`;
 
 // The import crossings the count file ever held: B1-B4, B6 and B8, edges between feature files. A
-// door, a feature's unknown entry and everything between packages (B11-B14) or across deployables
-// (B17-B19) were never counted, so a kind says here whether it was, and a new kind does not compile
-// until it does.
+// door, a feature's unknown entry and everything between packages (B11-B14), across deployables
+// (B17-B19) or about a feature's own shape (B15, B16) were never counted, so a kind says here
+// whether it was, and a new kind does not compile until it does.
 const COUNTED = {
   "adapter-library-imported-outside-driven": false,
+  "application-import-outside-allowlist": false,
   "application-imports-adapter": true,
   "binding-outside-driven-adapter": false,
   "cross-feature": true,
@@ -32,6 +33,7 @@ const COUNTED = {
   "impure-application": false,
   "impure-library": false,
   "impure-rules": true,
+  "index-not-exports-only": false,
   "lib-imports-feature": true,
   "library-imports-up": false,
   "library-undeclared": false,

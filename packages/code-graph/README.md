@@ -49,8 +49,8 @@ When sent to refactor folder `X`, the first moves are Bash calls, not Reads:
 | Exported symbols nothing reaches | `code-graph X --unreachable` |
 | Writes reachable from an entry with no auth on the path | `code-graph X --unguarded` |
 | Imports pointing UP the declared layer stack (a gate) | `code-graph . --layers` |
-| Imports crossing a declared feature boundary, world doors (`process.env`, `fetch`, the clock, `node:fs`) opened outside their owner, libraries of declared types importing upward or using the world, and, across deployables, worker bindings used outside a driven adapter, workers that call each other in a loop and relative imports between workspaces | `code-graph X --boundaries` |
-| Gate feature-boundary, world-door, library and deployable crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
+| Imports crossing a declared feature boundary, world doors (`process.env`, `fetch`, the clock, `node:fs`) opened outside their owner, libraries of declared types importing upward or using the world, a feature's entry file that holds more than re-exports or a use case that imports outside its allowlist, and, across deployables, worker bindings used outside a driven adapter, workers that call each other in a loop and relative imports between workspaces | `code-graph X --boundaries` |
+| Gate feature-boundary, world-door, library, shape and deployable crossings against `boundary-ledger.json` | `code-graph . --boundaries --ci` |
 | Record the current crossings, with why they stay | `code-graph . --boundaries --accept-crossings --reason "<why>"` |
 | Move off a `boundary-ceilings.json` once | `code-graph . --boundaries --migrate-ceilings` |
 | Ranked collapse candidates + partial twins | `code-graph X --collapse` |
@@ -95,11 +95,11 @@ cross-package callers; re-run with `--deep`.
 | `--entry-preset <name>` | Turn on a built-in [entrypoint-export preset](#entrypoint-export-conventions) (`nextjs`) for every package, including one whose `package.json` does not depend on the framework. Repeatable; adds to any `entryExportPresets` the rules file names. An unknown name exits 2 |
 | `--layers` | Layer gate: every import edge pointing UP the declared layer stack, plus the census and the allowlist verdict. **Exits 1** on any disagreement. No stack ships, so with no `--layer-rules` file declaring one it refuses: exit code 2, one-line message naming `--layer-rules`. Runs on the cheap pass — no type-checker, no Graph. A tsconfig `paths` alias resolves through the importing file's nearest tsconfig, an alias naming no file is UNRESOLVED, and any other unresolvable specifier stays `external` |
 | `--layer-rules <file>` | JSON file declaring the layer stack (`layers`, at least two) and its allowlist (`allowed`), same boundary discipline as `--thresholds`. Both default to empty; see [Declaring the stack](#declaring-the-stack---layer-rules) |
-| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (any `process.<member>`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners (a type-only import opens no door). `lib` importers are judged by B3, not B4. A scope whose `layout` is `hexagonal` lays its features out in Cockburn's zones instead of `rules/` and adds **B6** `application-imports-adapter`, **B7** `impure-application`, **B8** `driving-reaches-driven`, **B9** `door-outside-driven-adapter` and **B10** `unknown-zone`; see [Hexagonal features](#hexagonal-features-layout). A rules file that declares libraries judges the package level too, one scope per declared library, and adds **B11** `library-undeclared`, **B12** `library-imports-up`, **B13** `impure-library` and **B14** `adapter-library-imported-outside-driven`; see [Library types](#library-types-librarytypes). Across deployables, three more rules run only when `acrossDeployables` lists them: **B17** `binding-outside-driven-adapter` (a worker binding used outside a hexagonal feature's `adapters/driven/`), **B18** `worker-call-cycle` (workers that bind each other in a loop) and **B19** `relative-import-crosses-workspace` (a relative import into another workspace); see [Across deployables](#across-deployables-acrossdeployables). A report, exit 0, with a census of the libraries when a library key is declared and a census of the deployables when a kind is listed; nothing declared means nothing reported. Implies the edge pass |
+| `--boundaries` | Feature boundaries over each scope declared in the boundary rules at or under the analyzed path, on its `modules[].importEdges` and the world doors each file opens: **B1** a feature importing another feature anywhere but its `src/<feature>/index.ts`; **B2** a feature's `rules/` importing anything but its own `rules/` and the declared `contracts`, or using a world door by name (any `process.<member>`, `fetch`, `Date.now()`, `console`, … see [World doors](#world-doors-doors)); **B3** a `lib` folder importing a feature; **B4** a file in no declared feature and no `lib` folder (the rest of `src/`, and loaded files outside it) importing a feature anywhere but its `src/<feature>/index.ts`; **B5** a file using a declared world door that is not one of the door's owners (a type-only import opens no door). `lib` importers are judged by B3, not B4. A scope whose `layout` is `hexagonal` lays its features out in Cockburn's zones instead of `rules/` and adds **B6** `application-imports-adapter`, **B7** `impure-application`, **B8** `driving-reaches-driven`, **B9** `door-outside-driven-adapter` and **B10** `unknown-zone`; see [Hexagonal features](#hexagonal-features-layout). A rules file that declares libraries judges the package level too, one scope per declared library, and adds **B11** `library-undeclared`, **B12** `library-imports-up`, **B13** `impure-library` and **B14** `adapter-library-imported-outside-driven`; see [Library types](#library-types-librarytypes). Two more rules about a feature's own files run only when `applicationShape` lists them: **B15** `index-not-exports-only` (a declared library's `src/index.ts` or a hexagonal feature's `index.ts` that holds more than named re-exports) and **B16** `application-import-outside-allowlist` (an `application/` file importing outside its allowlist). Three more keys change what the rules above judge: `testFiles` takes a test file out of the zones (B6-B10, B13, B15, B16 and B17 stop judging it), `strictDriving` makes B9 judge every world door, and `readAllowance` lets a driving adapter read through a declared driven file (B8); see [Application shape](#application-shape-applicationshape). Across deployables, three more rules run only when `acrossDeployables` lists them: **B17** `binding-outside-driven-adapter` (a worker binding used outside a hexagonal feature's `adapters/driven/`), **B18** `worker-call-cycle` (workers that bind each other in a loop) and **B19** `relative-import-crosses-workspace` (a relative import into another workspace); see [Across deployables](#across-deployables-acrossdeployables). A report, exit 0, with a census of the libraries when a library key is declared and a census of the deployables when a kind is listed; nothing declared means nothing reported. Implies the edge pass |
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
 | `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
-| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries, B5, B7, B9 and a door used by name in `rules/`, `unknown-zone` entries, the library kinds B11-B14 and the deployable kinds B17-B19 are seeded too and are not counted against it; library scopes are measured like any other, and so is the repo's worker call graph, scope `.`) |
-| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" }, libraryTypes: { "<type>": { imports: ["<type>", …], pure: true \| false, importedFrom: ["driven" \| "configurator" \| "any", …] } }, libraries: { "<package directory>": "<type>" }, libraryRoots: ["<directory>", …], worldLibraries: ["<package>", …], acrossDeployables: ["binding-outside-driven-adapter" \| "worker-call-cycle" \| "relative-import-crosses-workspace", …], bindingOwners: { "<scope>": { "<binding>": ["<owner file>", …] } } }`. An override REPLACES each key wholesale. `doors`, `layout` and `bindingOwners` ride a scope that declares `features`; the four library keys ride none; `acrossDeployables` lists the deployable rules that run, none by default; see [World doors](#world-doors-doors), [Hexagonal features](#hexagonal-features-layout), [Library types](#library-types-librarytypes) and [Across deployables](#across-deployables-acrossdeployables) |
+| `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries, B5, B7, B9 and a door used by name in `rules/`, `unknown-zone` entries, the library kinds B11-B14, the shape kinds B15 and B16 and the deployable kinds B17-B19 are seeded too and are not counted against it; library scopes are measured like any other, and so is the repo's worker call graph, scope `.`) |
+| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" }, libraryTypes: { "<type>": { imports: ["<type>", …], pure: true \| false, importedFrom: ["driven" \| "configurator" \| "any", …] } }, libraries: { "<package directory>": "<type>" }, libraryRoots: ["<directory>", …], worldLibraries: ["<package>", …], acrossDeployables: ["binding-outside-driven-adapter" \| "worker-call-cycle" \| "relative-import-crosses-workspace", …], bindingOwners: { "<scope>": { "<binding>": ["<owner file>", …] } }, applicationShape: ["index-not-exports-only" \| "application-import-outside-allowlist", …], applicationMayImport: ["<library type>", …], pureDependencies: ["<package glob>", …], testFiles: ["<glob>", …], strictDriving: ["<scope>", …], readAllowance: { "<scope>": { driven: ["<driven file>", …], decidedBy: ["<library type>", …] } } }`. An override REPLACES each key wholesale. `doors`, `layout`, `bindingOwners`, `strictDriving` and `readAllowance` ride a scope that declares `features` (the last two a hexagonal one); the four library keys ride none; `acrossDeployables` and `applicationShape` list the rules that run, none by default; `applicationMayImport` and `pureDependencies` narrow B16 and need it listed; see [World doors](#world-doors-doors), [Hexagonal features](#hexagonal-features-layout), [Library types](#library-types-librarytypes), [Application shape](#application-shape-applicationshape) and [Across deployables](#across-deployables-acrossdeployables) |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
 | `--collapse --write-ceilings` | Record the analyzed path's partial-twin count in `collapse-ceilings.json`, leaving the other scopes as they are |
@@ -564,11 +564,12 @@ loaded, and a hook that reads 2114 files is a hook people disable.
 ## The boundary ledger (`--boundaries --ci`)
 
 `boundary-ledger.json` at the repo root names every boundary crossing a declared scope still
-carries: one entry per crossing import (B1-B4, B6, B8, B12 and B14 between libraries, and B19
-between workspaces), per world-door use (B5, B7, B9, a door used by name in `rules/`, B13, a pure
-library's door or world library, and B17, a worker binding used outside a driven adapter), and per
-entry no rule places (B10, a feature's entry in no zone, B11, a package under a library root that
-no library names, and B18, a loop of workers that bind each other):
+carries: one entry per crossing import (B1-B4, B6, B8, B12 and B14 between libraries, B16, an
+`application/` file importing outside its allowlist, and B19 between workspaces), per world-door use
+(B5, B7, B9, a door used by name in `rules/`, B13, a pure library's door or world library, and B17,
+a worker binding used outside a driven adapter), and per entry no rule places (B10, a feature's
+entry in no zone, B11, a package under a library root that no library names, B15, an entry file that
+holds more than named re-exports, and B18, a loop of workers that bind each other):
 
 ```json
 {
@@ -590,28 +591,32 @@ no library names, and B18, a loop of workers that bind each other):
 [hexagonal](#hexagonal-features-layout) scope `application-imports-adapter` B6,
 `impure-application` B7, `driving-reaches-driven` B8, `door-outside-driven-adapter` B9,
 `unknown-zone` B10, and for [libraries](#library-types-librarytypes) `library-undeclared` B11,
-`library-imports-up` B12, `impure-library` B13, `adapter-library-imported-outside-driven` B14, and
-for [deployables](#across-deployables-acrossdeployables) `binding-outside-driven-adapter` B17,
+`library-imports-up` B12, `impure-library` B13, `adapter-library-imported-outside-driven` B14, for
+[application shape](#application-shape-applicationshape) `index-not-exports-only` B15 and
+`application-import-outside-allowlist` B16, and for
+[deployables](#across-deployables-acrossdeployables) `binding-outside-driven-adapter` B17,
 `worker-call-cycle` B18, `relative-import-crosses-workspace` B19),
 `from` the importer and `to` the target, both repo-relative. `to` is `null` for a B2 bare import,
-where the specifier is the target, for a world door (`door-outside-owner`, `impure-application`,
-`door-outside-driven-adapter`, `impure-library`, or `impure-rules` with `"global": true`), where
-the specifier is the door's name, for a world library (`impure-library`), where it is the library
-as the import wrote it, for a worker binding (`binding-outside-driven-adapter`), where the
-specifier is the binding's name in the worker's config, for `unknown-zone`, where `from` is the
-entry's path and the specifier the entry below its feature, for `library-undeclared`, where `from`
-is the package's directory and the specifier that directory below its library root, and for
-`worker-call-cycle`, where `from` is the workers of the loop and the specifier the edges between
-them. `to` is a library's directory, not a file, for B12 and B14: the import resolves to a
-package; and it is a workspace's directory for B19. An entry's identity is `(scope, kind, from, to ??
-specifier)`, plus `global`: the `specifier` as written is display only for a file target, so two
-imports of one target from one file are one entry, and a move that rewrites a relative specifier
-keeps its entry. `global` is what keeps a global `fetch` and a bare `import "fetch"` (the npm
-package) from one rules file two entries, not one; it is only ever `true`, and only on an
-`impure-rules` entry with a null `to`. `reason` is optional. The file is written sorted with
-sorted keys, so a diff shows exactly which crossings came and went. A release before the library
-kinds, or before the deployable kinds, refuses a ledger that holds them, so upgrade the tool before
-committing one.
+where the specifier is the target, for a B16 import of a package or of a path the scope does not
+load, where it is the specifier as written, for a world door (`door-outside-owner`,
+`impure-application`, `door-outside-driven-adapter`, `impure-library`, or `impure-rules` with
+`"global": true`), where the specifier is the door's name, for a world library (`impure-library`),
+where it is the library as the import wrote it, for a worker binding
+(`binding-outside-driven-adapter`), where the specifier is the binding's name in the worker's
+config, for `unknown-zone`, where `from` is the entry's path and the specifier the entry below its
+feature, for `index-not-exports-only`, where `from` is the entry file and the specifier its first
+offending form, for `library-undeclared`, where `from` is the package's directory and the specifier
+that directory below its library root, and for `worker-call-cycle`, where `from` is the workers of
+the loop and the specifier the edges between them. `to` is a library's directory, not a file, for
+B12 and B14: the import resolves to a package; and it is a workspace's directory for B19. An
+entry's identity is `(scope, kind, from, to ?? specifier)`, plus `global`: the `specifier` as
+written is display only for a file target, so two imports of one target from one file are one
+entry, and a move that rewrites a relative specifier keeps its entry. `global` is what keeps a
+global `fetch` and a bare `import "fetch"` (the npm package) from one rules file two entries, not
+one; it is only ever `true`, and only on an `impure-rules` entry with a null `to`. `reason` is
+optional. The file is written sorted with sorted keys, so a diff shows exactly which crossings came
+and went. A release before the library kinds, the deployable kinds or the shape kinds refuses a
+ledger that holds them, so upgrade the tool before committing one.
 
 A count could not tell "one crossing fixed, a different one added" from "nothing changed". The
 ledger can, and it moves one way on its own:
@@ -738,9 +743,12 @@ src/<feature>/
 ```
 
 Any other entry is in no zone: a top-level entry other than these (`domain/`, `helpers.ts`,
-`rules/`, a colocated `billing.test.ts`) and any entry under `adapters/` other than `driving/` and
-`driven/` (`adapters/shared/`, `adapters/http.ts`). Only loaded source files count, so a folder
-holding no `.ts`/`.tsx` file is invisible. B1 and B3 judge a hexagonal scope as they judge any
+`rules/`) and any entry under `adapters/` other than `driving/` and `driven/` (`adapters/shared/`,
+`adapters/http.ts`). A test file sits in no zone, and a file the `testFiles` globs match is no entry
+to report: the [test role](#application-shape-applicationshape) takes it out of B10 and B6-B9, so a
+colocated `billing.test.ts` is clean once the rules file lists it, and an entry holding only such
+files is no entry. Without `testFiles` it is a B10 entry, as before. Only loaded source files
+count, so a folder holding no `.ts`/`.tsx` file is invisible. B1 and B3 judge a hexagonal scope as they judge any
 other. B2 never fires, because a hexagonal feature has no `rules/` zone. B4 has one exception, the
 composition root below. B7 and B9 take B5's place in `application/`, `index.ts`, `ports.ts` and
 `adapters/driving/`, so B5 judges only the rest of the scope (which rule claims a door, below).
@@ -750,9 +758,13 @@ Five kinds judge inside its features:
 |---|---|---|---|
 | B6 | `application-imports-adapter` | an `application/` file importing a file under its own feature's `adapters/` | its own `ports.ts`, `index.ts` and `application/`, another feature's `index.ts`, `lib`, bare packages. Another feature's `adapters/` is B1 alone |
 | B7 | `impure-application` | an `application/` file using any catalog door by name or opening a module door (`node:fs`), declared or not, one entry per file per door | nothing: a use case reaches the world through a port |
-| B8 | `driving-reaches-driven` | an `adapters/driving/` file importing its own feature's `application/` or `adapters/driven/` | its own `ports.ts` and `index.ts`, sibling driving files, `lib`, bare packages |
-| B9 | `door-outside-driven-adapter` | a declared door used or opened in `index.ts`, `ports.ts` or `adapters/driving/`, one entry per file per door | an undeclared door (`console` in a driving adapter is clean) |
+| B8 | `driving-reaches-driven` | an `adapters/driving/` file importing its own feature's `application/` or `adapters/driven/` | its own `ports.ts` and `index.ts`, sibling driving files, `lib`, bare packages, and a driven file a [read allowance](#read-allowance-readallowance) lists |
+| B9 | `door-outside-driven-adapter` | a declared door used or opened in `index.ts`, `ports.ts` or `adapters/driving/`, one entry per file per door; with [`strictDriving`](#strict-doors-strictdriving) every catalog door, declared or not | an undeclared door (`console` in a driving adapter is clean), unless `strictDriving` names the scope |
 | B10 | `unknown-zone` | an entry of a feature in no zone, one entry per entry however many files sit under it: `from` is the entry's path (`services/api/src/billing/domain`) and the specifier the entry (`domain`) | the five zones. Files inside the entry are otherwise judged as `rules/`-layout internal files |
+
+Two more rules about the same files, B15 on `index.ts` and B16 on what `application/` imports, run
+only when `applicationShape` lists them, and B16 allows less than B6 does: see
+[Application shape](#application-shape-applicationshape).
 
 **The composition root.** A file outside every feature and outside `lib` (Cockburn's
 configurator, the worker's wiring file) may import any feature's `adapters/driving/` and
@@ -834,15 +846,17 @@ that import neither each other nor `kernel` upward, which no total order can say
 **What B13 cannot see.** A pure library is judged by the doors it names: `Date.now()`,
 `process.env`, `import "node:fs"`. A call on an object it was handed (`deps.clock.now()`) names no
 door, so it is clean, which is the pattern a pure library should use. B13 also judges test files,
-as the pass loads and judges every file.
+unless the rules file names them in `testFiles` (the
+[test role](#application-shape-applicationshape)): a file the globs match may read the clock.
 
 A bad declaration exits 2 with one line and writes nothing: a type used in `libraries` that
 `libraryTypes` lacks, a type listed in an `imports` that it lacks, an `importedFrom` zone outside
 `driven`, `configurator` and `any` (or an empty list), a `libraries` path that is no package root, a
 `libraryRoots` entry that is no directory (written as a clean repo-relative path), a `worldLibraries`
 entry that is not a glob or that matches a catalog door (`fetch`, `console`, `node:fs`: a package and
-a door of one name would share one ledger entry), and any other key: `pureDependencies` is not
-accepted.
+a door of one name would share one ledger entry), and any key the rules file does not know.
+`pureDependencies` is a key of B16, not of the libraries: see
+[Application shape](#application-shape-applicationshape).
 
 `--boundaries` over a rules file that declares libraries ends its report with a census: the
 libraries per type (a declared type nobody uses is listed with none), the undeclared packages, and
@@ -904,7 +918,9 @@ the nearest `wrangler.json`, `wrangler.jsonc` or `wrangler.toml` above it, top-l
 only: an `env.<name>` block of the config is not read, as `--cross-runtime` does not read it. Every
 scope the pass reads is judged, a feature scope's and a declared library's; a file outside every
 feature is judged too, because the rule is that only a driven adapter touches a binding, and a test
-file is judged like source. **What B17 cannot see:** a binding reached through an object not named
+file is judged like source unless `testFiles` names it (the
+[test role](#application-shape-applicationshape): a matched test may use a binding, and B19 still
+judges its relative imports). **What B17 cannot see:** a binding reached through an object not named
 `env` (`bindings.DB`, a context handed in), more than one level of aliasing, an `env.<name>` block
 of the config, and Hyperdrive and connection use, which is not a call on a binding. A feature of a
 scope laid out as `rules/` has no driven adapter, so every use in it is B17.
@@ -960,6 +976,153 @@ entries. The run lists the repo's files once for the wrangler configs, the packa
 scope. It is the cheap pass: oxc for imports and syntax, a JSON parser for the configs, never tsgo.
 `bench/worker-boundaries.mjs` times it on a generated repo of 14 workers and 2,000 source files.
 
+### Application shape (`applicationShape`)
+
+A hexagonal feature's own files have a shape a review holds alone: an `index.ts` that is a list of
+re-exports and nothing else, a use case that imports no ORM, HTTP framework or SDK, a test that is
+not source, a driving adapter that says when it has to read. Two rules judge the first two, and
+three more keys change what the rules above judge. **B15 and B16 do not run until `applicationShape`
+lists them**, so a release that adds a kind never fails the merge gate of a repo that did not ask
+for it. A rules file with none of the six keys is judged, reported and written exactly as before:
+no wrangler config is read for the allowance, no further repo listing is made, and `--json` gains
+no key.
+
+```json
+{
+  "features": { "services/api": ["orders", "billing", "shipping"] },
+  "layout": { "services/api": "hexagonal" },
+  "applicationShape": ["index-not-exports-only", "application-import-outside-allowlist"],
+  "applicationMayImport": ["contract", "kernel", "util"],
+  "pureDependencies": ["zod"],
+  "testFiles": ["**/*.test.ts"],
+  "strictDriving": ["services/api"],
+  "readAllowance": {
+    "services/api": {
+      "driven": ["src/orders/adapters/driven/order-reads.ts"],
+      "decidedBy": ["kernel"]
+    }
+  }
+}
+```
+
+- `applicationShape`: the kinds that run, any of the two names below, none by default.
+- `applicationMayImport`: the library types an `application/` file may import, by the names
+  `libraryTypes` declares. There is no default: the type names are yours, and absent means no
+  library is allowed. Needs B16 listed.
+- `pureDependencies`: packages an `application/` file may import beside them, each a glob as in
+  `worldLibraries`: an entry names a package and matches it with its subpaths (`zod` matches `zod`
+  and `zod/v4`), and `*` stays within one segment of the name. Needs B16 listed.
+- `testFiles`: globs of the files that are tests, in the syntax of the
+  [entrypoint-export conventions](#entrypoint-export-conventions) (`**`, `*`, `?`, `{a,b}`), matched
+  against each file's scope-relative path in every scope the pass reads, a feature scope's and a
+  declared library's.
+- `strictDriving`: scopes where B9 judges every catalog door, declared or not.
+- `readAllowance`: per scope, the driven files a driving adapter may read through.
+
+| Rule | Kind | Fires on | Allowed |
+|---|---|---|---|
+| B15 | `index-not-exports-only` | the entry file of a declared library (`src/index.ts` below its directory) or of a hexagonal feature (`src/<feature>/index.ts`) that holds anything but named re-exports, one entry per file: `from` is the file, `to` is null and the specifier is the first offending form below | named re-exports in every spelling that has a `from` and names its members (`export { a } from`, `export type { A } from`, `export { type A, b } from`, `export { a as b } from`, `export { default as c } from`), and an empty file. An inner barrel (`src/schema/index.ts`), a file not named `index.ts` and a `rules`-layout feature's `index.ts` are not judged |
+| B16 | `application-import-outside-allowlist` | an import of an `application/` file of a hexagonal feature that is not on the allowlist, one entry per file and import target: `to` is the target file when the import lands in a file the scope loads and null for a package or a path it does not, and the specifier is as written, so two imports of one package from one file are one entry | its own `ports.ts`, its own `application/`, another feature's `index.ts`, a `lib` folder, a workspace library whose type `applicationMayImport` lists, and a package `pureDependencies` matches |
+
+**B15's identity is its first offending form**, in source order, one label of this table, and the
+specifier is the whole identity of the entry (its `to` is null). A file that fixes its first
+offending form and keeps another is a new entry, and the old one is pruned: one
+`--accept-crossings` records it.
+
+| Label | The first form that is |
+|---|---|
+| `export *` | `export * from "m"`, `export * as ns from "m"` and `export type * from "m"`: a namespace, not a named list |
+| `export default` | any default export |
+| `local export` | `export { a }` with no `from` |
+| `import` | any `import`, type-only included |
+| `declaration` | a `const`, `function`, `class`, `type`, `interface` or `enum`, exported or not |
+| `statement` | anything else: a call, a directive, `export {} from "m"` (it names no member), `export = x`, a `namespace` |
+
+**B16 is the complement, so one import gets one verdict.** What its allowlist leaves is every import
+of a package it does not name (an ORM, an HTTP framework, an SDK, any world library, an undeclared
+workspace package, a library of a type `applicationMayImport` does not list, a `node:` builtin that
+is no door), a generated file outside every feature and `lib`, its own feature's `index.ts` (B6
+allows it, the allowlist does not), an entry of its own feature that no zone names and a path the
+scope does not load. Type-only imports are judged too, because they name the technology, and print
+`[type-only]` when every import of the target is. An import another kind already judges is that
+kind's alone: another feature's internals are B1, its own `adapters/` are B6, an adapter library
+from outside a driven adapter is B14, and a module door opened at run time (`node:fs`) is B7. A
+type-only import of `node:fs` opens no door, so it is B16's. B16 never runs in a `rules`-layout
+feature, and never outside `application/`.
+
+#### The test role (`testFiles`)
+
+A file the `testFiles` globs match is a test, and a test sits in no zone: it may import any file of
+its own feature, read the clock and use the console. Which kinds still judge it is one table, a row
+per kind, so a kind added later does not compile until someone decides:
+
+| Kinds | Judge a matched file? |
+|---|---|
+| B1, B4 | yes: what a test imports across features is still B1, and a matched file outside every feature importing a feature's internals is B4 |
+| B2, B3 | yes: a `rules`-layout feature has no zone to be neutral in, so a test in `rules/` is still B2, and a test in `lib` still B3 |
+| B5 | yes: a declared door opened outside its owners |
+| B6, B7, B8, B9, B10 | no: a hexagonal feature's zone rules. A matched file at a feature's root is no B10 entry, and an entry in no zone that holds only matched files is none either |
+| B11, B18 | hold no file |
+| B12, B14, B19 | yes: a library test importing a library its type does not list, an adapter library imported from outside a driven adapter, and a relative path out of the workspace are what they are whatever the file is named |
+| B13 | no: a pure library's test may read the clock |
+| B15, B16 | no |
+| B17 | no: a matched test may use a binding |
+
+A rules file without `testFiles` behaves as before, so B13 and B17 still judge test files there. A
+file no glob matches (`orders.spec.ts` beside `**/*.test.ts`) is judged like source.
+
+#### Strict doors (`strictDriving`)
+
+B9 judges the doors a rules file declares, in `index.ts`, `ports.ts` and `adapters/driving/`. For a
+scope `strictDriving` names it judges **every catalog door**, declared or not: `console`, `fetch`,
+`Date.now()`, `process.env` and a module door (`node:fs`) opened at run time in a driving adapter
+flip from clean to B9, one entry per file per door. A type-only import of a module door and a name
+the file binds itself stay clean. A declared door is the same entry as before, named as it is
+declared, so a recorded B9 entry keeps its key. Without the key, or for a scope it does not name,
+the verdict is unchanged.
+
+#### Read allowance (`readAllowance`)
+
+B8 stays: a driving adapter may not import its own feature's `application/` or `adapters/driven/`.
+A repo may declare a standing allowance for a scope: B8 does not fire for a driving file importing a
+listed driven file when the file **also imports, when it runs, at least one library of a
+`decidedBy` type**, which is where the decision lives (an `import type` does not count, so a type
+cannot hold a decision). The allowance never licenses `application/` and never a file it does not
+list.
+
+**A write always goes through the application.** A listed file that holds a data site with `write`
+access is B8 for every driving file that imports it, as if undeclared. `write` is the access
+`--data` computes over the data bindings (D1, KV, R2, queue) the worker that owns the file
+declares: a D1 `prepare` or `exec` of a literal `INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `CREATE`,
+`DROP` or `ALTER`, a KV or R2 `put` or `delete`, a queue `send`. The plain report row, the `--json`
+row (a `write` object of `file`, `line` and `binding`) and the `--ci` failure line name the first
+such site, `[write: DB at services/api/src/shipping/adapters/driven/shipment-reads.ts:12]`, so a
+developer who listed the file and still sees B8 knows why. The ledger entry keeps the shape and key
+of any B8.
+
+**What the allowance cannot see.** ORM writes (`db.insert(...)`) are invisible to the tool: the
+declaration states the contract, and review holds that part. A site `--data` calls `unknown` (a
+non-literal SQL string, a Durable Object stub), and a binding read through an object not named
+`env`, are not writes the tool names, so they stay clean.
+
+A bad declaration exits 2 with one line and writes nothing, in the report, `--ci`,
+`--accept-crossings` and `--migrate-ceilings` alike: a kind in `applicationShape` outside the two,
+`applicationMayImport` or `pureDependencies` while `application-import-outside-allowlist` is not
+listed, an `applicationMayImport` or `decidedBy` type that `libraryTypes` lacks, a `pureDependencies`
+or `testFiles` entry that is not a valid glob, a `strictDriving` or `readAllowance` scope that
+declares no `features` or whose layout is not `hexagonal`, an empty `driven` or `decidedBy`, a
+`driven` file that is not under a feature's `adapters/driven/` or that the scope does not load, and,
+with `readAllowance` declared, a wrangler config in the repo that cannot be parsed, because a worker
+whose config is not read has no write site to see and the allowance would grant silently. A rules
+file without `readAllowance` is not refused for one.
+
+Adopting a kind is declare, seed, shrink, empty, as for doors: list it, record today's crossings
+with `--accept-crossings --reason "<why>"`, fix them PR by PR (each `--ci` prunes one), until the
+ledger holds none. Dropping a kind from the list stops measuring it, so the next `--ci` prunes its
+entries. The run lists the repo once when `readAllowance` is declared (for the wrangler configs,
+read once and shared with the deployable kinds), and each key reads syntax only: it is the cheap
+pass, never tsgo. `bench/shape-boundaries.mjs` times it on a generated repo of 2,000 source files.
+
 ### Migrating from `boundary-ceilings.json`
 
 The count file this replaced stored one number per scope and no edges, so it cannot be
@@ -970,10 +1133,12 @@ exit 2 and nothing written, when any scope's import crossings exceed its recorde
 seeding from that would loosen the gate. The legacy count measured imports only, so the migration
 holds only the import crossings measured now (B1–B4, B6 and B8) against it. The world-door entries
 (B5, B7, B9, and a global in `rules/`), the `unknown-zone` entries (B10) and the library entries
-(B11-B14, which the count never measured: it knew no library scope) and the deployable entries
-(B17-B19, which it never measured either) are seeded with the same reason and are not held against
-it: a repo that predates the doors, the libraries and the deployables still migrates, and its first
-`--ci` is green. Library scopes are measured like any other, so a library holding a B12 migrates
+(B11-B14, which the count never measured: it knew no library scope), the shape entries (B15 and
+B16, which it never measured either) and the deployable entries (B17-B19, likewise) are seeded with
+the same reason and are not held against it: a repo that predates the doors, the libraries, the
+shape rules and the deployables still migrates, and its first `--ci` is green. A B8 reported for a
+write through a read allowance is still a B8, so it is held against the count like any other.
+Library scopes are measured like any other, so a library holding a B12 migrates
 where a ceiling of 0 would refuse a B1, and so is the repo's worker call graph, scope `.`, when
 `worker-call-cycle` is listed, whatever path the run is pointed at. Until it runs, `--boundaries --ci` with a
 `boundary-ceilings.json` and no ledger exits 2 naming `--migrate-ceilings` rather than gate against
@@ -994,9 +1159,9 @@ rekeyBoundaryLedgerFile(path.join(repoRoot, "boundary-ledger.json"), [
 ```
 
 Moves are repo-relative file paths. Every entry whose `from` or `to` names a moved file is
-re-keyed; the scope stays. That follows the importer of a B17 and a B19 entry, and leaves a B18
-entry, which names workers and no file, and the workspace directory a B19 entry reaches, as they
-are. Whether a moved import still crosses is the next gate run's call, and one that no longer does
+re-keyed; the scope stays. That follows the entry file of a B15 entry, the importer of a B16, a B17
+and a B19 entry (and the file a B16 entry reaches, when it names one), and leaves a B18 entry, which
+names workers and no file, and the workspace directory a B19 entry reaches, as they are. Whether a moved import still crosses is the next gate run's call, and one that no longer does
 is pruned there. The subpath also exports the pieces:
 `BoundaryLedgerSchema`, `parseBoundaryLedger` / `readBoundaryLedger` (answering `absent`, `read`
 or `invalid`), `writeBoundaryLedger` / `serializeBoundaryLedger`, `rekeyBoundaryLedger` over a

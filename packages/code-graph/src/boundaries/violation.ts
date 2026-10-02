@@ -11,6 +11,14 @@ export type ZoneEdge = {
   readonly typeOnly: boolean;
 };
 
+// The data write that voids a read allowance: the first site of the listed driven file that writes
+// through a binding of its worker. `file` is repo-relative.
+export type WriteSite = {
+  readonly file: string;
+  readonly line: number;
+  readonly binding: string;
+};
+
 // A world door used in a zone that judges it itself: `specifier` is the door.
 export type ZoneDoor = {
   readonly from: string;
@@ -66,8 +74,34 @@ export type BoundaryViolation =
     }
   | ({ readonly kind: "application-imports-adapter" } & ZoneEdge)
   | ({ readonly kind: "impure-application" } & ZoneDoor)
-  | ({ readonly kind: "driving-reaches-driven" } & ZoneEdge)
+  | ({
+      readonly kind: "driving-reaches-driven";
+      // Set when the target is a file a read allowance lists and that file writes: the allowance
+      // does not hold, and this is the write. A diagnostic of the report; the ledger entry keeps
+      // the shape and key of any B8.
+      readonly write?: WriteSite;
+    } & ZoneEdge)
   | ({ readonly kind: "door-outside-driven-adapter" } & ZoneDoor)
+  | {
+      // An entry file (a declared library's `src/index.ts`, a hexagonal feature's
+      // `src/<feature>/index.ts`) that holds more than named re-exports. `specifier` is the first
+      // offending form in source order, and the whole identity: `export *`, `export default`,
+      // `local export`, `import`, `declaration` or `statement`.
+      readonly kind: "index-not-exports-only";
+      readonly from: string;
+      readonly to: null;
+      readonly specifier: string;
+      readonly typeOnly: false;
+    }
+  | {
+      // An import of an `application/` file outside its allowlist. `to` is the target file when
+      // the import lands in a file the scope loads, null for a package or a path it does not.
+      readonly kind: "application-import-outside-allowlist";
+      readonly from: string;
+      readonly to: string | null;
+      readonly specifier: string;
+      readonly typeOnly: boolean;
+    }
   | {
       // An entry of a hexagonal feature that no zone names: `from` is the entry's own path and
       // `specifier` the entry below the feature (`domain`, `adapters/shared`, `helpers.ts`).
@@ -148,12 +182,13 @@ export type BoundaryViolation =
 export type BoundaryKind = BoundaryViolation["kind"];
 
 // What a crossing is: an import edge, a world door used by name or opened (a worker binding used is
-// one too), or an entry (a feature's, a package under a library root, a loop of workers) that no
-// rule places.
+// one too), or an entry (a feature's, a package under a library root, a loop of workers, an entry
+// file that holds more than re-exports) that no rule places.
 type Crossing = "import" | "door" | "entry";
 
 const CROSSINGS = {
   "adapter-library-imported-outside-driven": "import",
+  "application-import-outside-allowlist": "import",
   "application-imports-adapter": "import",
   "binding-outside-driven-adapter": "door",
   "cross-feature": "import",
@@ -163,6 +198,7 @@ const CROSSINGS = {
   "impure-application": "door",
   "impure-library": "door",
   "impure-rules": "import",
+  "index-not-exports-only": "entry",
   "lib-imports-feature": "import",
   "library-imports-up": "import",
   "library-undeclared": "entry",
