@@ -1,5 +1,139 @@
 # @demlik/code-graph
 
+## 0.4.0
+
+### Minor Changes
+
+- 143392a: `--boundaries` now judges across deployables, beside the feature level (B1-B10) and the library
+  level (B11-B14). A repo of several workers and shared packages turns on three new kinds by naming
+  them in a new `--boundary-rules` key, `acrossDeployables`, and each fails the merge gate by name as a
+  `boundary-ledger.json` entry, recorded with `--accept-crossings --reason` and pruned as it is fixed:
+
+  - **B17 `binding-outside-driven-adapter`**: a worker binding (a service binding, or a D1, Durable
+    Object, KV, R2 or queue binding) its owning worker's deploy config declares, used in a file that is
+    not under a hexagonal feature's `adapters/driven/`. One entry per file per binding. It reuses the
+    syntax-only call-site finder `--data` runs (`env.X`, `this.env.X`, `c.env.X`, one level of aliasing,
+    a destructure off `env`), so it runs on the cheap pass and starts no type checker. An optional
+    second key, `bindingOwners`, narrows a binding to exact driven-adapter files, as `doors` does.
+  - **B18 `worker-call-cycle`**: two or more workers that bind each other in a loop, one entry per
+    strongly connected component of the service-binding graph the wrangler configs declare. Its scope
+    is `.`, and only a run at the repo root measures it.
+  - **B19 `relative-import-crosses-workspace`**: a relative import whose target sits in another
+    workspace than the importer, judged by nearest `package.json`. One entry per importer and other
+    workspace; a path alias and a bare specifier are not judged.
+
+  **The three kinds are off until listed**, so a minor release never fails the gate of a repo that did
+  not ask for them. A rules file that lists none is unchanged: its report, ledger entries and `--json`
+  are exactly what they were, no wrangler config is read, and no further repo listing is made. With a
+  kind listed, `--boundaries` ends its report with a census of the worker bindings it read (`deployables`
+  in `--json`). `--migrate-ceilings` seeds the three kinds without counting them against a ceiling. A
+  bad declaration (a kind outside the three, or a `bindingOwners` that cannot be honoured) exits 2 and
+  writes nothing, and so does a wrangler config it cannot parse while B17 or B18 is listed, so a worker
+  is never dropped from the judgment silently.
+
+  The `@demlik/code-graph/boundaries` subpath accepts the three new kinds in a ledger, so its
+  published schema widens. An older release refuses a ledger that holds them, so upgrade the tool
+  before committing one.
+
+- 21298eb: `--boundaries` now judges the shape of a hexagonal feature's own files, beside the feature level
+  (B1-B10), the library level (B11-B14) and the deployable level (B17-B19). Two new kinds fail the
+  merge gate by name, each a `boundary-ledger.json` entry recorded with `--accept-crossings --reason`
+  and pruned as it is fixed, and four more `--boundary-rules` keys change what the existing rules
+  judge. Six new keys in all:
+
+  - `applicationShape`: the kinds that run, none by default.
+  - **B15 `index-not-exports-only`**: the entry file of a declared library (`src/index.ts`) or of a
+    hexagonal feature (`src/<feature>/index.ts`) that holds anything but named re-exports. One entry
+    per file; the specifier is the first offending form in source order (`export *`,
+    `export default`, `local export`, `import`, `declaration` or `statement`) and the whole identity.
+  - **B16 `application-import-outside-allowlist`**: an `application/` import of anything but its own
+    `ports.ts` and `application/`, another feature's `index.ts`, a `lib` folder, a library whose type
+    `applicationMayImport` lists, or a package `pureDependencies` matches. Type-only imports are
+    judged. An import another kind judges (B1, B6, B7, B14) is that kind's alone.
+  - `applicationMayImport` and `pureDependencies`: what B16 allows beyond the zones. They need B16
+    listed, and there is no built-in type name.
+  - `testFiles`: globs of the files that are tests. A matched file sits in no zone, and one table (a
+    row per kind) says which kinds still judge it: B1-B5, B12, B14 and B19 do; B6-B10, B13, B15, B16
+    and B17 do not. A test beside a feature's `index.ts` is no B10 entry.
+  - `strictDriving`: scopes where B9 judges every catalog door in `index.ts`, `ports.ts` and
+    `adapters/driving/`, declared or not.
+  - `readAllowance`: per scope, the driven files a driving adapter may import when it also imports a
+    library of a `decidedBy` type when it runs. A listed file that writes through a data binding (the
+    access `--data` computes) is never licensed, and the report names the write; the ledger entry
+    keeps the shape and key of any B8.
+
+  **B15 and B16 are off until `applicationShape` lists them**, so a minor release never fails the gate
+  of a repo that did not ask for them. A repo that declares none of the six keys is unchanged: its
+  report, ledger entries and `--json` are exactly what they were, no wrangler config is read and no
+  further repo listing is made. A bad declaration (a kind outside the two, a key that needs B16 while
+  it is off, a type `libraryTypes` lacks, an invalid glob, a scope that is not hexagonal, a driven file
+  that is not under `adapters/driven/` or that the scope does not load) exits 2 and writes nothing, and
+  so does a wrangler config it cannot parse while `readAllowance` is declared. `--migrate-ceilings`
+  seeds the two kinds without counting them against a ceiling.
+
+  The `@demlik/code-graph/boundaries` subpath accepts the two new kinds in a ledger, so its published
+  schema widens. An older release refuses a ledger that holds them, so upgrade the tool before
+  committing one.
+
+- 006b1a3: `--boundaries` now judges the package level beside the feature level. A repo whose packages are
+  libraries of declared types (contract, kernel, util, adapter, ui) declares them in the
+  `--boundary-rules` file with four new keys, and four new kinds fail the merge gate by name, each a
+  `boundary-ledger.json` entry recorded with `--accept-crossings --reason` and pruned as it is fixed:
+
+  - `libraryTypes`: each type, the types it may import (a table, not `--layers`' total order), whether
+    it is `pure`, and optionally where a library of it may be imported from (`importedFrom`:
+    `driven`, `configurator` or `any`). The type names are the rules file's, not the tool's.
+  - `libraries`: a package's directory, to its type. Each is a scope named by its directory.
+  - `libraryRoots`: directories whose packages must each be declared.
+  - `worldLibraries`: package globs a pure library may not import (`@sentry/*` matches `@sentry/node`
+    and its subpaths).
+
+  - **B11 `library-undeclared`**: a package under a library root that `libraries` does not name.
+  - **B12 `library-imports-up`**: an import to a library whose type the importer's type does not
+    list, resolved by package name, subpaths included. Type-only imports are judged.
+  - **B13 `impure-library`**: in a pure library, any world door used by name or opened as a module,
+    and any import of a world library. A call on an injected object is not seen.
+  - **B14 `adapter-library-imported-outside-driven`**: an import of a library from outside the zones
+    its type's `importedFrom` names.
+
+  `--boundaries` ends its report with a census of the libraries, the undeclared packages and the
+  imports left unjudged. `--migrate-ceilings` seeds the four kinds without counting them against a
+  ceiling. A bad declaration, and the key `pureDependencies`, exit 2 and write nothing.
+
+  `discoverPackageRoots` and `listVisibleFiles` of `@demlik/code-graph/project` take an optional
+  trailing `listing` (a repo's files listed once, which a run over many scopes shares); called without
+  it they behave as before.
+
+  A rules file that declares none of the four keys is unchanged: its report, its ledger entries and a
+  ledger written before this release read and gate exactly as they did. An older release refuses a
+  ledger that holds the new kinds, so upgrade the tool before committing one.
+
+### Patch Changes
+
+- 602a7a4: `--env-keys` now lists every wrangler config it could not parse, as `UNPARSED CONFIG` lines under
+  its header and as a sorted `unparsedConfigs` array in `--json` (`[]` when every config parses),
+  as `--data` and `--cross-runtime` already do. A read is judged by the nearest wrangler config above
+  its file, parsed or not; when that config is an unparsed one the read is withheld as the new reason
+  `read-site-owner-unparsed`, where it used to be reported as `read, never declared` against the worker
+  above it or counted as `read-site-owner-unknown`. A config that cannot be parsed declares no key.
+
+  The exit code and flags are unchanged, and a workspace whose configs all parse prints what it
+  printed before, with `--json` gaining the one key.
+
+- c2b4cad: A wrangler config with a syntax error anywhere is now unparsed. The loader used to repair a mistake
+  in the middle of a `.json` or `.jsonc` file into an object and count it as read, so a worker whose
+  service binding the mistake lost escaped `--boundaries`, which could return green over input it
+  could not see. It now reads a config as wrangler's own reader does, and a config with a syntax error
+  is listed as unparsed:
+
+  - `--boundaries` refuses on it (exit 2, one line naming the file, nothing written) when
+    `binding-outside-driven-adapter` (B17), `worker-call-cycle` (B18) or a `readAllowance` is
+    declared, as it already did for a config that fails outright.
+  - `--data` and `--cross-runtime` print it as `UNPARSED CONFIG` and read no binding from it.
+
+  Comments, trailing commas and a leading byte-order mark stay accepted, so a config wrangler deploys
+  is never refused. Output shapes, flags and exports are unchanged.
+
 ## 0.3.0
 
 ### Minor Changes
