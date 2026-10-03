@@ -47,11 +47,19 @@ workspace: `@demlik/code-graph` syncs with the passes built after its snapshot (
 `@demlik/structure-sweep` and `@demlik/backlog-sweep` land as packages over `@demlik/tea/jev` (#345).
 It ends when both ship and Binclusive consumes the published packages. Declared and started 2026-09-24.
 
+**tea docs sweep** (#5). `@demlik/tea` has more consumers than its docs were written for. A sweep
+read every page as four readers — a newcomer from npm, an app developer on the Promise engine, an
+Effect-fluent agent builder, and someone looking up an API fact — and checked each page against the
+Diátaxis modes. This campaign fixes what it found: the README's dead links (#537), then the pages
+that contradict the source, the tasks no page covers, and a generated reference that cannot answer
+"what does this take" (#538). It ends when #538's children ship. Declared and started 2026-10-03.
+
 | Campaign | Milestone | State |
 |---|---|---|
 | Tuval on tea | #2 | done |
 | Binclusive agent migration | #3 | active |
 | Code coordinates | #4 | active |
+| tea docs sweep | #5 | active |
 
 ## Dependencies
 
