@@ -166,19 +166,26 @@ Reference: [`replay`](./reference/tea.md#replay). Why:
 ## run
 
 The function that starts a machine on an engine. It takes the machine and the
-`ctx`, `interpret`, `subscribe` and `store` the machine needs, and returns the
-runtime. Each engine exports its own: `run` from `@demlik/tea/promise` and
-`run` from `@demlik/tea/effect`.
-Reference: [`run` on the Promise engine](./reference/promise.md#run) and
-[`run` on the Effect engine](./reference/effect.md#run). Why:
+`ctx`, `interpret`, `subscribe` and `store` the machine needs, and returns a
+handle that is still booting. Each engine exports its own. `run` from
+`@demlik/tea/promise` returns a `BootingRuntime`; `run` from
+`@demlik/tea/effect` returns an Effect that yields an `EffectBootingRuntime`.
+On both, the handle has `dispatch` and `stop`, and its `ready` gives the
+runtime.
+Reference: [`run` on the Promise engine](./reference/promise.md#run),
+[`run` on the Effect engine](./reference/effect.md#run),
+[`BootingRuntime`](./reference/tea.md#BootingRuntime) and
+[`EffectBootingRuntime`](./reference/effect.md#EffectBootingRuntime). Why:
 [what durability actually promises](./explanation/durability-model.md).
 
 ## runtime
 
-The handle `run` returns for one running machine. It has `dispatch`,
-`getState`, `stop` and the methods that wait for the machine to go idle or
-finish. On the Promise engine its type is `Runtime` in `@demlik/tea`; on the
-Effect engine it is `EffectRuntime` in `@demlik/tea/effect`.
+The booted handle for one running machine. `run` does not return it: you get
+it from `ready` on the handle `run` returns, once `init` has run. It keeps that
+handle's `dispatch` and `stop` and adds `getState`, plus `idle` and `done` to
+wait for the machine to go idle or finish. On the Promise engine `ready` is a
+Promise of a `Runtime`, typed in `@demlik/tea`; on the Effect engine it is an
+Effect of an `EffectRuntime`, typed in `@demlik/tea/effect`.
 Reference: [`Runtime`](./reference/tea.md#Runtime) and
 [`EffectRuntime`](./reference/effect.md#EffectRuntime). Why:
 [what durability actually promises](./explanation/durability-model.md).
