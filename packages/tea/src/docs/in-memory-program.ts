@@ -48,3 +48,24 @@ export function inMemoryProgram(
   };
   return ts.createProgram([...files.keys()], config.options, host);
 }
+
+/**
+ * The compiler's diagnostics for a program served from `dir` (file name →
+ * text), one formatted line each: `<file>:<line> <message>`.
+ */
+export function programDiagnostics(
+  dir: string,
+  program: ReadonlyMap<string, string>,
+  overrides: ts.CompilerOptions = {},
+): string[] {
+  const files = new Map(
+    [...program].map(([name, body]) => [join(dir, name), body]),
+  );
+  const compiled = inMemoryProgram(dir, files, overrides);
+  return ts.getPreEmitDiagnostics(compiled).map((d) => {
+    const text = ts.flattenDiagnosticMessageText(d.messageText, "\n");
+    if (d.file === undefined || d.start === undefined) return text;
+    const { line } = d.file.getLineAndCharacterOfPosition(d.start);
+    return `${d.file.fileName.replace(`${dir}/`, "")}:${line + 1} ${text}`;
+  });
+}

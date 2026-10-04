@@ -16,21 +16,21 @@ import { fileURLToPath } from "node:url";
 /** packages/tea — this file lives at src/docs/, two levels down. */
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** A fenced ```ts block, group 1 its body. */
-const TS_BLOCK = /```ts\n([\s\S]*?)```/g;
+/** A fenced ```ts or ```tsx block, group 1 its body. */
+const TS_BLOCK = /```tsx?\n([\s\S]*?)```/g;
 
-/** Every fenced ```ts block's body on the page, in page order, untrimmed. */
+/** Every fenced ```ts or ```tsx block's body on the page, in page order, untrimmed. */
 export function tsBlocksOf(markdown: string): string[] {
   return blocksOf(markdown).map((block) => block.body);
 }
 
-/** One ```ts block and the page line its body starts on. */
+/** One ```ts or ```tsx block and the page line its body starts on. */
 export interface Block {
   readonly body: string;
   readonly line: number;
 }
 
-/** Every fenced ```ts block on the page, with the line its body starts on. */
+/** Every fenced ```ts or ```tsx block on the page, with the line its body starts on. */
 export function blocksOf(markdown: string): Block[] {
   return [...markdown.matchAll(TS_BLOCK)].map((m) => ({
     body: m[1] ?? "",
@@ -70,26 +70,41 @@ export async function fileMirror(path: Path): Promise<Mirror> {
   };
 }
 
+/** `text` with the indentation every non-blank line shares removed. */
+function dedent(text: string): string {
+  const lines = text.split("\n");
+  const depth = Math.min(
+    ...lines
+      .filter((line) => line.trim() !== "")
+      .map((line) => line.length - line.trimStart().length),
+  );
+  return lines.map((line) => line.slice(depth)).join("\n");
+}
+
 /**
  * The text between a file's `// #region <name>` and `// #endregion <name>`
- * lines. By default the page shows it as one block; `within` finds it inside
- * a larger one.
+ * lines. By default the page shows it as one block, exactly as written.
+ * `flush` is one block too, without the indentation its lines share, for a
+ * region inside a function body or an object literal. `within` finds the text
+ * inside a larger block, exactly as written.
  */
 export async function regionMirror(
   path: Path,
   name: string,
-  fit: Mirror["fit"] = "block",
+  shown: Mirror["fit"] | "flush" = "block",
 ): Promise<Mirror> {
-  const source = await readFile(pathOf(path), "utf8");
-  const body = source
+  const file = await readFile(pathOf(path), "utf8");
+  const body = file
     .split(`// #region ${name}\n`)[1]
     ?.split(`// #endregion ${name}\n`)[0];
   if (body === undefined)
     throw new Error(`the ${name} region markers are gone from ${label(path)}`);
+  const source = `${label(path)} #region ${name}`;
+  if (shown === "within") return { source, text: body, fit: "within" };
   return {
-    source: `${label(path)} #region ${name}`,
-    text: fit === "block" ? body.trimEnd() : body,
-    fit,
+    source,
+    text: (shown === "flush" ? dedent(body) : body).trimEnd(),
+    fit: "block",
   };
 }
 
@@ -288,4 +303,108 @@ export async function expectPageMirrors(
       );
   }
   if (drifts.length > 0) throw new Error(drifts.join("\n\n"));
+}
+
+/**
+ * One source a page shows as a block of its own: a whole file, or one
+ * `#region` of it, flush left. `file` is package-relative.
+ */
+export interface Shown {
+  readonly file: string;
+  readonly region?: string;
+}
+
+/**
+ * A page whose code this gate holds, and the sources it shows. Each source is
+ * one block on the page. `only` says the list is the page's every block, in
+ * page order.
+ */
+export interface PageRow {
+  /** The page, package-relative. */
+  readonly page: string;
+  readonly shows: readonly Shown[];
+  readonly only?: boolean;
+}
+
+/** The named regions of one file, in the order given. */
+const regions = (file: string, ...names: string[]): Shown[] =>
+  names.map((region) => ({ file, region }));
+
+/**
+ * The pages checked from here, one row each; `page-mirrors.test.ts` runs every
+ * row. A page whose own test file calls {@link expectPageMirrors} has no row.
+ */
+export const PAGE_MIRRORS: readonly PageRow[] = [
+  {
+    page: "docs/how-to/add-resilience.md",
+    shows: regions(
+      "src/docs/how-to/add-resilience.test.ts",
+      "model",
+      "cmd",
+      "attempt",
+      "backoff-ops",
+      "failure",
+      "run",
+      "outage-policy",
+      "outage-failure",
+    ),
+  },
+  {
+    page: "docs/how-to/drive-from-react.md",
+    shows: regions(
+      "src/docs/how-to/drive-from-react.test.tsx",
+      "component",
+      "handlers",
+      "subscribe",
+      "store",
+      "use-runtime",
+    ),
+    only: true,
+  },
+  {
+    page: "docs/how-to/make-durable.md",
+    shows: [
+      { file: "examples/downloader.ts" },
+      ...regions(
+        "src/docs/how-to/make-durable.test.ts",
+        "store",
+        "boot",
+        "resume",
+        "fence",
+        "second-writer",
+        "guard",
+      ),
+    ],
+    only: true,
+  },
+  {
+    page: "docs/how-to/replay-in-a-test.md",
+    shows: regions(
+      "src/docs/how-to/replay-in-a-test.test.ts",
+      "replay",
+      "assertions",
+    ),
+    only: true,
+  },
+  {
+    page: "docs/how-to/run-on-the-effect-engine.md",
+    shows: [
+      { file: "examples/profile-lookup-effect-main.ts" },
+      { file: "examples/profile-lookup-effect-timer.ts" },
+    ],
+  },
+];
+
+/** Assert one row: the page shows every source the row lists. */
+export function expectPageRow(row: PageRow): Promise<void> {
+  const at = (path: string) => join(PKG_ROOT, path);
+  return expectPageMirrors(
+    at(row.page),
+    row.shows.map(({ file, region }) =>
+      region === undefined
+        ? fileMirror(at(file))
+        : regionMirror(at(file), region, "flush"),
+    ),
+    { only: row.only ?? false },
+  );
 }

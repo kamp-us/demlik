@@ -36,13 +36,15 @@ over `src/internal/`, so nothing about a battery moves when its door opens:
 | `@demlik/tea/paginate` | the cursor walk, and the resumable end-to-end traversal over it |
 | `@demlik/tea/work-queue` | the queue lifecycle over `Store<S>`: adapter, pure ops, verb seam |
 | `@demlik/tea/retry-backoff` | exponential backoff with jitter and a cap, plus the retry-attempt state |
+| `@demlik/tea/jev` | a typed question to Jev: the wire contract, the one `ask` Cmd over it, and the batching composition |
 
 Grouped rather than one door per module on purpose: a door is a permanent
-promise and a maintenance cost, so seven of them is a bill this library can pay
+promise and a maintenance cost, so a few of them is a bill this library can pay
 where forty was not. Within a door, the whole group moves at the group's tier.
 
-**`experimental` — no stability promise.** Today `./agent`. It may change or
-disappear in **any** release. It carries the highest strategic weight and the
+**`experimental` — no stability promise.** Today `./agent`, and `./otel`, which
+reads the agent's events and graduates with it. Either may change or disappear
+in **any** release. The agent layer carries the highest strategic weight and the
 least mileage, which is exactly the combination that must not be dressed up as
 stable. Moving to `battery` or `stable` is a deliberate re-stamp, not something
 that happens by drift.

@@ -19,10 +19,16 @@ function Downloader() {
       <p>
         {state.phase}: {state.received}/{state.total}
       </p>
-      <button onClick={() => dispatch({ type: "start", total: 3 })}>
+      <button
+        type="button"
+        onClick={() => dispatch({ type: "start", total: 3 })}
+      >
         Start
       </button>
-      <button onClick={() => dispatch({ type: "chunk", size: 1 })}>
+      <button
+        type="button"
+        onClick={() => dispatch({ type: "chunk", size: 1 })}
+      >
         Receive chunk
       </button>
     </div>
@@ -47,7 +53,10 @@ rebuilds the runtime whenever the machine, `run`, `ctx`, or `store` identity
 changes:
 
 ```tsx
-const ctx = useMemo(() => ({ http: (url: string) => fetch(url).then((r) => r.text()) }), []);
+const ctx = useMemo(
+  () => ({ http: (url: string) => fetch(url).then((r) => r.text()) }),
+  [],
+);
 const [state, dispatch] = useMachine(resilientFetch, {
   run,
   ctx,
@@ -87,9 +96,41 @@ Pass a `store` in the same options object to make the component's machine durabl
 as in "Make a machine durable and crash-recoverable":
 
 ```tsx
-const [state, dispatch] = useMachine(downloader, { run, ctx: undefined, store });
+const [state, dispatch] = useMachine(downloader, {
+  run,
+  ctx: undefined,
+  store,
+});
 ```
 
-When you need the runtime handle itself (to call `done()`, attach an `observe`
-listener, or read `result()`) rather than just `[state, dispatch]`, use
-`useRuntime` from the same module.
+## 4. Render a run the component does not own
+
+`useMachine` builds the run and stops it on unmount, and it hands back no
+handle. When you need the handle itself (to call `done()`, attach an `observe`
+listener, or read `result()`), build the run yourself with `run(...)`, await
+its `ready`, and pass the booted handle to `useRuntime` from the same module.
+It returns the same `[state, dispatch]` pair:
+
+```tsx
+import { useRuntime } from "@demlik/tea/react";
+
+const runtime = await run(downloader, {
+  ctx: undefined,
+  terminal: (s) => s.phase === "done",
+}).ready;
+
+function Progress() {
+  const [state] = useRuntime(runtime);
+
+  return (
+    <p>
+      {state.received}/{state.total}
+    </p>
+  );
+}
+
+// Elsewhere, the owner of the handle awaits the run and stops it.
+const finished = runtime.done().finally(() => runtime.stop());
+```
+
+`useRuntime` never calls `stop()`. Whoever built the run stops it.

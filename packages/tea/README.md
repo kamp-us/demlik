@@ -15,7 +15,8 @@ library you already use (zod, or Effect Schema through
 testing adapters ride on optional peers you add only for the surface you use:
 `react` / `react-dom` (the `./react` hooks), `ws` (Node WebSocket subs),
 `fast-check` (the `./pbt` property-testing helpers), `vitest` (the testing
-utilities), and `effect` (the `./effect` engine).
+utilities), `effect` (the `./effect` engine), and `@opentelemetry/api` (the
+`./otel` spans).
 
 ## Quickstart
 
@@ -41,7 +42,7 @@ const counter = defineMachine({
   },
 });
 
-const runtime = await run(counter, { ctx: {} }).ready;
+const runtime = await run(counter, {}).ready;
 await runtime.dispatch({ type: "increment" });
 runtime.getState(); // { count: 1 }
 ```

@@ -107,11 +107,14 @@ export const lookUp = (id: string) =>
 Then provide the service and run it:
 
 ```ts
-const DirectoryLive = Layer.succeed(Directory, {
+import { Effect, Layer } from "effect";
+import { Directory, lookUp } from "./profile-lookup-effect";
+
+export const DirectoryLive = Layer.succeed(Directory, {
   nameOf: (id) => Effect.succeed(id === "u1" ? "Ada" : undefined),
 });
 
-const state = await Effect.runPromise(
+export const state = await Effect.runPromise(
   lookUp("u1").pipe(Effect.provide(DirectoryLive)),
 );
 // { status: "loaded", name: "Ada" }
@@ -148,8 +151,15 @@ A Sub runner returns a `Stream` of Msgs. A `subscribe` entry with a built-in's
 name replaces it, so a test can fire the `timer` Msg at once:
 
 ```ts
-run(profile, {
-  interpret,
+import { run } from "@demlik/tea/effect";
+import { Effect, Stream } from "effect";
+import { profile } from "./profile-lookup";
+
+/** The profile machine with every lookup a miss, and a `timer` that fires at once. */
+export const runProfileInTest = run(profile, {
+  interpret: {
+    fetch_user: () => Effect.fail({ _tag: "not_found" as const }),
+  },
   subscribe: { timer: (sub) => Stream.make(sub.deps.msg) },
 });
 ```

@@ -32,11 +32,19 @@ The attempt does not perform the call; it emits it as data and lets `interpret`
 run it:
 
 ```ts
-import { type Cmd, defineMachine, type Interpret, tryInterpret } from "@demlik/tea";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  tryInterpret,
+} from "@demlik/tea";
 
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
+```
 
-// inside update:
+Inside `update`, the attempt's cell is:
+
+```ts
 fetch: (s, m) => [
   { ...s, phase: "fetching", body: null },
   [{ type: "do_fetch", url: m.url }],
@@ -56,8 +64,11 @@ import {
   recordFailure,
   shouldRetry,
 } from "@demlik/tea/retry-backoff";
+```
 
-// inside update:
+Inside `update`, the failure's cell is:
+
+```ts
 fetch_err: (s, m) => {
   const retry = recordFailure(s.retry, m.error);
   if (!shouldRetry(retry, defaultRetryPolicy)) {
@@ -82,6 +93,8 @@ thrown request becomes a `fetch_err` your reducer already handles. The handler
 sits beside the machine, not on it — hand it to `run`:
 
 ```ts
+import { run } from "@demlik/tea/promise";
+
 const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
@@ -105,9 +118,7 @@ unreachable, however many attempts that takes:
 ```ts
 import {
   type DurationRetryPolicy,
-  recordFailure,
   retryElapsedMs,
-  shouldRetry,
 } from "@demlik/tea/retry-backoff";
 
 // Derive the budget from the peer's own give-up window — never restate a guess.
@@ -118,14 +129,27 @@ const policy: DurationRetryPolicy = {
   maxElapsedMs: PEER_GIVE_UP_MS,
   jitter: "full",
 };
+```
 
-// inside update:
+The failure's cell then reads the clock off the Msg in both calls, and schedules
+the next attempt as step 3 does:
+
+```ts
 fetch_err: (s, m) => {
   const retry = recordFailure(s.retry, m.error, m.at); // `m.at` starts the streak clock
   if (!shouldRetry(retry, policy, m.at)) {
-    return [{ ...s, retry, phase: "failed", outageMs: retryElapsedMs(retry, m.at) }, []];
+    const outageMs = retryElapsedMs(retry, m.at);
+    return [{ ...s, retry, phase: "failed", outageMs }, []];
   }
-  // …schedule the next attempt exactly as in step 3.
+  return [
+    {
+      ...s,
+      retry,
+      phase: "waiting_retry",
+      retryAtMs: m.at + nextDelayMs(retry, policy),
+    },
+    [],
+  ];
 },
 ```
 

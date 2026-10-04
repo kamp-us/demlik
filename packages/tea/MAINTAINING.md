@@ -151,7 +151,7 @@ deprecated re-export is published first
 
 1. The removal, every internal import rewrite and a changeset land together. The
    changeset is `minor` for a `stable` or `battery` subpath and its breaking-change note
-   names where each thing went (`./retry-backoff` → `./resilience` `{ retryBackoff }`).
+   names where each thing went (`drive` from `./testing` → `./testing/promise`).
    `experimental` removes silently, as its tier allows.
 2. A collapse **moves parts, never drops them**: the grouped door re-exports every
    primitive of the doors it replaces. Only a genuinely dead twin — a superseded
