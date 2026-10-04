@@ -1,6 +1,7 @@
 /**
- * The relative-link gate (#356): every relative link in the package's
- * published markdown resolves to a file on disk.
+ * The link gate (#356, #537): every relative link in the package's published
+ * markdown, and every GitHub URL into this repo's own tree, resolves to a file
+ * on disk.
  *
  * The pure core is asserted to FIRE on synthetic text as well as to pass on the
  * committed tree, so the gate cannot degenerate into a trivial exit-0.
@@ -14,9 +15,11 @@ import {
   formatBrokenLinks,
   inlineTargets,
   linkedPages,
+  repoPathOf,
 } from "./doc-links";
 
-describe("published markdown — relative link gate", () => {
+describe("published markdown — link gate", () => {
+  const repoRoot = "/repo";
   const present = new Set(["/pkg/docs/how-to/a.md", "/pkg/README.md"]);
   const exists = (path: string) => present.has(path);
 
@@ -27,7 +30,9 @@ describe("published markdown — relative link gate", () => {
       "[ref]: ./also-missing.md",
     ].join("\n");
 
-    expect(brokenLinksIn("/pkg/docs/how-to/x.md", page, exists)).toEqual([
+    expect(
+      brokenLinksIn("/pkg/docs/how-to/x.md", page, exists, repoRoot),
+    ).toEqual([
       {
         file: "/pkg/docs/how-to/x.md",
         line: 2,
@@ -51,7 +56,12 @@ describe("published markdown — relative link gate", () => {
     const present = new Set(["/pkg/docs/how-to/a_(b).md"]);
     const page = "[kept](./a_(b).md) and [gone](./gone_(v2).md#top)";
     expect(
-      brokenLinksIn("/pkg/docs/how-to/x.md", page, (p) => present.has(p)),
+      brokenLinksIn(
+        "/pkg/docs/how-to/x.md",
+        page,
+        (p) => present.has(p),
+        repoRoot,
+      ),
     ).toEqual([
       { file: "/pkg/docs/how-to/x.md", line: 1, target: "./gone_(v2).md#top" },
     ]);
@@ -66,9 +76,55 @@ describe("published markdown — relative link gate", () => {
       "[mail](mailto:a@b.c) [root](/docs/x.md)",
     ].join("\n");
 
-    expect(brokenLinksIn("/pkg/docs/how-to/x.md", page, exists)).toEqual([]);
+    expect(
+      brokenLinksIn("/pkg/docs/how-to/x.md", page, exists, repoRoot),
+    ).toEqual([]);
     expect(filePathOf("./a.md#b")).toBe("./a.md");
     expect(filePathOf("#b")).toBeUndefined();
+  });
+
+  it("fires on a URL into this repo's tree that names a missing file, and passes one that resolves", () => {
+    const gone = "https://github.com/kamp-us/demlik/blob/main/docs/how-to/x.md";
+    const kept =
+      "https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/x.md#run";
+    const folder = "https://github.com/kamp-us/demlik/tree/main/.patterns";
+    const inRepo = new Set([
+      "/repo/packages/tea/docs/how-to/x.md",
+      "/repo/.patterns",
+    ]);
+    const page = `[gone](${gone})\n[kept](${kept}) [folder](${folder})`;
+
+    expect(
+      brokenLinksIn(
+        "/repo/packages/tea/README.md",
+        page,
+        (p) => inRepo.has(p),
+        repoRoot,
+      ),
+    ).toEqual([
+      { file: "/repo/packages/tea/README.md", line: 1, target: gone },
+    ]);
+  });
+
+  it("checks no link to another host, another repo or another ref", () => {
+    const page = [
+      "[host](https://gitlab.com/kamp-us/demlik/blob/main/docs/gone.md)",
+      "[repo](https://github.com/kamp-us/phoenix/blob/main/docs/gone.md)",
+      "[ref](https://github.com/kamp-us/demlik/blob/v1/docs/gone.md)",
+      "[issue](https://github.com/kamp-us/demlik/issues/537)",
+    ].join("\n");
+
+    expect(
+      brokenLinksIn(
+        "/repo/packages/tea/README.md",
+        page,
+        () => false,
+        repoRoot,
+      ),
+    ).toEqual([]);
+    expect(
+      repoPathOf("https://github.com/kamp-us/demlik/blob/main/a/b.md#c"),
+    ).toBe("a/b.md");
   });
 
   it("reads the package-root pages and every page under docs/", async () => {
@@ -80,7 +136,7 @@ describe("published markdown — relative link gate", () => {
     expect(pages.some((p) => p.includes("/docs/reference/"))).toBe(true);
   });
 
-  it("every relative link in the committed pages resolves", async () => {
+  it("every link in the committed pages resolves", async () => {
     expect(formatBrokenLinks(await collectBrokenLinks())).toBe("");
   });
 });

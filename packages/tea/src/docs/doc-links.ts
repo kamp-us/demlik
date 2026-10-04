@@ -1,11 +1,13 @@
 /**
- * The relative-link gate (#356).
+ * The link gate (#356, #537).
  *
- * The package's published markdown links to its own files by relative path,
- * and nothing renders those paths before a reader clicks one. This module reads
- * every relative link out of that markdown and answers which ones name a file
- * that is not there. External links (`https:`, `mailto:`, …), site-rooted
- * paths and in-page anchors are not its business.
+ * The package's published markdown links to files in this repo two ways: by
+ * relative path, and by a GitHub URL into this repo's own `main` tree, which is
+ * the only form that works from the npm page. Nothing renders either before a
+ * reader clicks one. This module reads every such link out of that markdown and
+ * answers which ones name a file that is not there. Every other external link
+ * (`https:`, `mailto:`, …), site-rooted paths and in-page anchors are not its
+ * business, and it reads the disk only, never the network.
  */
 
 import { existsSync } from "node:fs";
@@ -15,6 +17,8 @@ import { fileURLToPath } from "node:url";
 
 /** packages/tea — this file lives at src/docs/, two levels down. */
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** The repo root — packages/tea sits two levels below it. */
+const REPO_ROOT = join(PKG_ROOT, "..", "..");
 
 /** The package-root pages a reader meets on npm and GitHub. */
 const ROOT_PAGES = ["CHANGELOG.md", "README.md", "MAINTAINING.md"];
@@ -28,12 +32,15 @@ const ESCAPE = /\\([!-/:-@[-`{-~])/g;
 const REFERENCE_DEF = /^ {0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?/;
 /** A target that names a scheme (`https:`, `mailto:`) is not a file path. */
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+/** A GitHub URL into this repo's `main` tree; the capture is the path from the repo root. */
+const REPO_TREE =
+  /^https:\/\/github\.com\/kamp-us\/demlik\/(?:blob|tree)\/main\/(.+)$/i;
 /** A fence opener or closer: three or more backticks or tildes. */
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 /** An inline code span, which may wrap lines but never crosses a blank one. */
 const CODE_SPAN = /(`+)(?:(?!\n\s*\n)[\s\S])*?\1/g;
 
-/** One relative link that resolves to nothing on disk. */
+/** One link that resolves to nothing on disk. */
 export interface LinkHit {
   /** Package-relative path of the page carrying the link. */
   readonly file: string;
@@ -49,19 +56,48 @@ export interface LinkHit {
  */
 export function filePathOf(target: string): string | undefined {
   if (SCHEME.test(target) || target.startsWith("/")) return undefined;
+  return pathPart(target);
+}
+
+/**
+ * The path, from the repo root, that a GitHub URL into this repo's `main` tree
+ * names (`blob/main/<path>` or `tree/main/<path>`), or `undefined` for any
+ * other target: another host, another repo, another ref.
+ */
+export function repoPathOf(target: string): string | undefined {
+  const path = REPO_TREE.exec(target)?.[1];
+  return path === undefined ? undefined : pathPart(path);
+}
+
+/** A target without its fragment and query, unescaped; `undefined` when nothing is left. */
+function pathPart(target: string): string | undefined {
   const path = target.split("#")[0]?.split("?")[0] ?? "";
   return path === "" ? undefined : decodeURI(path.replace(ESCAPE, "$1"));
 }
 
+/** Where on disk a target points: from `repoRoot` for a repo URL, else from the page. */
+function resolvedFileOf(
+  target: string,
+  file: string,
+  repoRoot: string,
+): string | undefined {
+  const fromRepo = repoPathOf(target);
+  if (fromRepo !== undefined) return resolve(repoRoot, fromRepo);
+  const fromPage = filePathOf(target);
+  return fromPage === undefined ? undefined : resolve(dirname(file), fromPage);
+}
+
 /**
- * Pure core: the relative links in `source` that `exists` says resolve to
- * nothing. `file` is the page's own path, which relative targets resolve from.
- * Links inside fenced code and inline code spans are code, not links.
+ * Pure core: the links in `source` that `exists` says resolve to nothing.
+ * `file` is the page's own path, which relative targets resolve from;
+ * `repoRoot` is where a URL into this repo's tree resolves from. Links inside
+ * fenced code and inline code spans are code, not links.
  */
 export function brokenLinksIn(
   file: string,
   source: string,
   exists: (path: string) => boolean,
+  repoRoot: string,
 ): readonly LinkHit[] {
   const hits: LinkHit[] = [];
   proseLines(source).forEach((text, index) => {
@@ -69,8 +105,8 @@ export function brokenLinksIn(
     const definition = REFERENCE_DEF.exec(text)?.[1];
     if (definition !== undefined) targets.push(definition);
     for (const target of targets) {
-      const path = filePathOf(target);
-      if (path !== undefined && !exists(resolve(dirname(file), path)))
+      const path = resolvedFileOf(target, file, repoRoot);
+      if (path !== undefined && !exists(path))
         hits.push({ file, line: index + 1, target });
     }
   });
@@ -154,12 +190,12 @@ export async function linkedPages(): Promise<readonly string[]> {
   return found.sort();
 }
 
-/** Every relative link in the gated pages that names a missing file. */
+/** Every link in the gated pages that names a missing file. */
 export async function collectBrokenLinks(): Promise<readonly LinkHit[]> {
   const hits: LinkHit[] = [];
   for (const page of await linkedPages()) {
     const source = await readFile(page, "utf8");
-    for (const hit of brokenLinksIn(page, source, existsSync))
+    for (const hit of brokenLinksIn(page, source, existsSync, REPO_ROOT))
       hits.push({ ...hit, file: relative(PKG_ROOT, hit.file) });
   }
   return hits;
