@@ -416,6 +416,27 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
     ],
   },
   {
+    page: "docs/how-to/test-a-machine-with-drive.md",
+    // The Effect file's `success` and `failure` are the Promise file's, word
+    // for word: the page shows them once and says they run on both engines.
+    shows: [
+      { file: "examples/order.ts" },
+      ...regions(
+        "src/docs/how-to/test-a-machine-with-drive.test.ts",
+        "drive",
+        "success",
+        "failure",
+      ),
+      { file: "examples/order-effect.ts" },
+      ...regions(
+        "src/testing/effect/drive-how-to.test.ts",
+        "drive",
+        "success",
+        "failure",
+      ),
+    ],
+  },
+  {
     page: "docs/how-to/wrap-one-tool-cell.md",
     shows: regions(
       "src/docs/how-to/wrap-one-tool-cell.test.ts",

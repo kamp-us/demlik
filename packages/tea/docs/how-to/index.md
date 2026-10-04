@@ -69,6 +69,10 @@ guides use are each defined in the [glossary](../glossary.md).
 - [Replay a recorded run in a test](./replay-in-a-test.md) — assert what a machine
   did by [re-folding](../glossary.md#fold) its messages with [`replay`](../glossary.md#replay) and the `@demlik/tea/testing`
   assertions — pure, synchronous, no effects.
+- [Test a machine with `drive`](./test-a-machine-with-drive.md) — hand `drive`
+  from `@demlik/tea/testing/promise` or `@demlik/tea/testing/effect` fake
+  [handlers](../glossary.md#handler), then assert on the final Model, on the
+  order of the [Cmds](../glossary.md#cmd) that ran, and on a failure path.
 - [Gate a refactor on a parity check](./gate-a-refactor-on-parity.md) — record a run
   with `@demlik/tea/parity`'s `recordRun`, re-fold it through the new machine with
   `goldenReplay`, and take a normalized GO/NO-GO verdict from `parityEqual`.
