@@ -3,9 +3,10 @@ import {
   type EffectRuntime,
   run,
   spawn,
+  stop,
   tell,
 } from "@demlik/tea/effect";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import {
   type ParentMsg,
   type ParentState,
@@ -26,8 +27,8 @@ export type Children = Map<string, Child>;
 
 /**
  * Start a worker in a child scope of `parentScope` and enrol it in
- * `children`. Closing the child's scope stops that worker. Closing the
- * parent's scope stops every worker spawned under it.
+ * `children`. `stopWorker` stops that worker. Closing the parent's scope
+ * stops every worker spawned under it.
  */
 export const spawnWorker = (
   parentScope: Scope.Scope,
@@ -43,11 +44,12 @@ export const spawnWorker = (
     notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
-/** Stop one worker by closing its scope. An id not in the table is a no-op. */
-export const stop = (children: Children, id: string): Effect.Effect<void> =>
+/** Stop one worker. An id not in the table is a no-op. */
+export const stopWorker = (
+  children: Children,
+  id: string,
+): Effect.Effect<void> =>
   Effect.suspend(() => {
     const child = children.get(id);
-    return child === undefined
-      ? Effect.void
-      : Scope.close(child.scope, Exit.void);
+    return child === undefined ? Effect.void : stop(child.scope);
   });

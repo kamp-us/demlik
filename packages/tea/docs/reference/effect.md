@@ -1,6 +1,6 @@
 # @demlik/tea/effect
 
-> the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises. `spawn` and `tell` are for a host that runs child machines under a parent: it keeps its own table of children, and they run the steps that race.
+> the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises. `spawn`, `stop` and `tell` are for a host that runs child machines under a parent: it keeps its own table of children, and they run the steps that race.
 
 Tier: `stable`
 
@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (16)
+## Exports (17)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -24,6 +24,7 @@ import { … } from "@demlik/tea/effect";
 | [`run`](#run) | Function | stable | Run `machine` on the Effect engine. |
 | [`spawn`](#spawn) | Function | stable | Start a child in a scope forked from `parentScope` and enrol it in the host's table, as one uninterruptible step. |
 | [`SpawnSteps`](#SpawnSteps) | Interface | stable | The host's own steps of a spawn. |
+| [`stop`](#stop) | Function | stable | Stop one child that `spawn` started. |
 | [`Stopped`](#Stopped) | Class | stable | A dispatch the run refused because it is stopping or has stopped. |
 | [`StoreFailed`](#StoreFailed) | Class | stable | The run's store failed. |
 | [`SubscribeServices`](#SubscribeServices) | Type | stable | The services every runner of a `subscribe` map reads. |
@@ -77,7 +78,10 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   onBoot(handler: (state: S) => void): () => void;
   /**
    * Stop the run: drain in-flight work, stop its Subs, flush the final State.
-   * Closing the run's Scope does the same.
+   * Closing the run's Scope stops the run the same way, and `stop()` leaves
+   * that Scope open. So for a child under `spawn` the two differ: `stop()`
+   * does not take the child out of the host's table or tell the parent. Stop
+   * such a child with the `stop` helper.
    */
   stop(): Effect<void>;
   /** A zero-arg change notifier, fired after each applied transition. */
@@ -238,11 +242,19 @@ interface SpawnSteps<A, E = never, R = never> {
    * Start the child and return what the host keeps for it. It runs with the
    * child's scope provided, so a `run(machine, opts)` in it belongs to that
    * scope, and so does anything else it acquires. `scope` is the same scope,
-   * for a host that keeps it to stop the child with `Scope.close`. A failure
+   * for a host that keeps it to stop the child with `stop`. A failure
    * closes the child's scope, which runs `remove` and `notify`.
    */
   readonly start: (scope: Closeable) => Effect<A, E, R>;
 }
+```
+
+<a id="stop"></a>
+
+### `stop`
+
+```ts
+function stop(scope: Closeable): Effect<void>
 ```
 
 <a id="Stopped"></a>

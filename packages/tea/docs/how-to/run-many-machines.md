@@ -2,9 +2,10 @@
 
 tea runs one machine per `run`. It has no supervisor and no registry of runs,
 and Elm has none either. A tree of machines is built from Effect scopes, `run`
-from `@demlik/tea/effect`, and two helpers from the same entry:
+from `@demlik/tea/effect`, and three helpers from the same entry:
 [`spawn`](../reference/effect.md#spawn) starts a child in a scope of its own,
-and [`tell`](../reference/effect.md#tell) sends the parent a notice.
+[`stop`](../reference/effect.md#stop) stops one child, and
+[`tell`](../reference/effect.md#tell) sends the parent a notice.
 
 This page starts workers under a parent. Each worker runs in a child scope of
 the parent's scope, the host keeps a table of live workers by id, and the
@@ -60,7 +61,7 @@ export const parent = defineMachine({
 });
 ```
 
-## 2. Start each worker with `spawn`
+## 2. Start each worker with `spawn`, and stop it with `stop`
 
 This is host code, and it is yours to change.
 
@@ -70,9 +71,10 @@ import {
   type EffectRuntime,
   run,
   spawn,
+  stop,
   tell,
 } from "@demlik/tea/effect";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import {
   type ParentMsg,
   type ParentState,
@@ -93,8 +95,8 @@ export type Children = Map<string, Child>;
 
 /**
  * Start a worker in a child scope of `parentScope` and enrol it in
- * `children`. Closing the child's scope stops that worker. Closing the
- * parent's scope stops every worker spawned under it.
+ * `children`. `stopWorker` stops that worker. Closing the parent's scope
+ * stops every worker spawned under it.
  */
 export const spawnWorker = (
   parentScope: Scope.Scope,
@@ -110,13 +112,14 @@ export const spawnWorker = (
     notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
-/** Stop one worker by closing its scope. An id not in the table is a no-op. */
-export const stop = (children: Children, id: string): Effect.Effect<void> =>
+/** Stop one worker. An id not in the table is a no-op. */
+export const stopWorker = (
+  children: Children,
+  id: string,
+): Effect.Effect<void> =>
   Effect.suspend(() => {
     const child = children.get(id);
-    return child === undefined
-      ? Effect.void
-      : Scope.close(child.scope, Exit.void);
+    return child === undefined ? Effect.void : stop(child.scope);
   });
 ```
 
@@ -124,15 +127,18 @@ export const stop = (children: Children, id: string): Effect.Effect<void> =>
 
 - **`start`** starts the child and returns what you keep for it. It runs with
   the child's scope provided, so `run(worker, {})` belongs to that scope and
-  stops when it closes. `start` is also handed the scope, to keep for `stop`.
+  stops when it closes. `start` is also handed the scope. Keep it: it is what
+  you hand to `stop`.
 - **`enrol`** writes the child to your table.
 - **`remove`** takes it out again. It runs when the child's scope closes,
   after the worker has stopped.
 - **`notify`** runs after `remove`. Here it is `tell(parent, parentRun, msg)`,
   which dispatches `msg` only when the parent's State has a cell for it.
 
-Closing the child's scope stops that one worker. Closing the parent's scope
-closes every child forked from it, so the whole tree stops with it.
+`stop(child.scope)` stops that one worker: its run stops, `remove` takes its
+entry out and `notify` tells the parent. The table lookup is yours, so
+`stopWorker` does it and then calls `stop`. Closing the parent's scope closes
+every child forked from it, so the whole tree stops with it.
 
 ## 3. Use it
 
@@ -149,7 +155,7 @@ const program = Effect.gen(function* () {
   yield* (yield* a.run.ready).dispatch({ type: "job" });
 
   // Stops worker "a". The parent soon reads { type: "open", stopped: ["a"] }.
-  yield* stop(children, "a");
+  yield* stopWorker(children, "a");
 
   // Stops worker "b", then the parent.
   yield* Scope.close(parentScope, Exit.void);
@@ -164,8 +170,8 @@ A host often does more than start a run. This one gives every process its own
 
 ```ts
 import { Cmd, defineMachine } from "@demlik/tea";
-import { type EffectRuntime, run, spawn, tell } from "@demlik/tea/effect";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { type EffectRuntime, run, spawn, stop, tell } from "@demlik/tea/effect";
+import { Context, Effect, Layer, type Scope } from "effect";
 import { z } from "zod";
 import { type ParentMsg, type ParentState, parent } from "./parent-and-workers";
 
@@ -256,16 +262,14 @@ export const spawnProcess = <E>(
     notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
-/** Stop one process by closing its scope. Any other id is a no-op. */
+/** Stop one running process. Any other id is a no-op. */
 export const stopProcess = (
   processes: Processes,
   id: string,
 ): Effect.Effect<void> =>
   Effect.suspend(() => {
     const process = processes.get(id);
-    return process?.lifecycle === "running"
-      ? Scope.close(process.scope, Exit.void)
-      : Effect.void;
+    return process?.lifecycle === "running" ? stop(process.scope) : Effect.void;
   });
 ```
 
@@ -279,17 +283,18 @@ and `notify` tells the parent.
 
 You do not guard any of these in host code.
 
-- **The table never holds a child that is not running.** `spawn` runs the
+- **The table never holds a child whose scope has closed.** `spawn` runs the
   fork, the removal finalizer, `start` and `enrol` as one uninterruptible
   step. An interrupt waits for the step to finish, unless your own `start`
   marks a part of itself interruptible. A child whose scope closed before
   `enrol` is removed again. Tuval wrote these as separate steps and looked up
   dead children
   ([phoenix #7898](https://github.com/kamp-us/phoenix/issues/7898)).
-- **Closing a child never waits for the parent.** `notify` runs on a fiber of
+- **Stopping a child never waits for the parent.** `notify` runs on a fiber of
   its own that the closing scope does not wait for. So a parent's Cmd handler
-  can close a child's scope, even though the parent's `dispatch` waits for
-  that handler.
+  can call `stop`, even though the parent's `dispatch` waits for that handler.
+- **Stopping a child twice is safe.** The second `stop` succeeds and sends no
+  second notice.
 - **A notice the parent no longer takes is dropped.** `tell` sends nothing
   when the parent's State has no cell for the Msg. It also drops the
   `NoCellError` of a State that changed after the check, and the `Stopped` of
@@ -297,6 +302,10 @@ You do not guard any of these in host code.
   spawn ([phoenix #8927](https://github.com/kamp-us/phoenix/issues/8927)).
 - **A failed save is still a failure.** `tell` fails with `StoreFailed` when
   the parent's save fails.
+
+Stop a child with `stop`, or by closing its scope. `child.run.stop()` is not
+one of them: it stops the run and leaves the scope open, so the entry stays in
+your table and the parent is not told.
 
 `remove` also runs for a child that never reached `enrol`, so write it to be
 safe on an id the table does not hold. `Map.delete` is.

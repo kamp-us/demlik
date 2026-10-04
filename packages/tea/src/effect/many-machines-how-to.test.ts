@@ -21,7 +21,7 @@ import { parent } from "../../examples/parent-and-workers";
 import {
   type Children,
   spawnWorker,
-  stop,
+  stopWorker,
 } from "../../examples/parent-and-workers-effect";
 import {
   type Processes,
@@ -68,7 +68,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
         yield* spawnWorker(parentScope, parentRun, children, "b");
         const worker = yield* a.run.ready;
 
-        yield* stop(children, "a");
+        yield* stopWorker(children, "a");
 
         expect([...children.keys()]).toEqual(["b"]);
         const refused = yield* Effect.flip(worker.dispatch({ type: "job" }));
@@ -91,7 +91,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
       Effect.gen(function* () {
         const { parentScope, parentRun, children } = yield* openParent;
         yield* spawnWorker(parentScope, parentRun, children, "a");
-        yield* stop(children, "nope");
+        yield* stopWorker(children, "nope");
         expect([...children.keys()]).toEqual(["a"]);
         yield* Scope.close(parentScope, Exit.void);
       }),
@@ -124,7 +124,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
         yield* spawnWorker(parentScope, parentRun, children, "a");
         yield* parentRun.dispatch({ type: "close" });
 
-        yield* stop(children, "a");
+        yield* stopWorker(children, "a");
         yield* parentRun.idle();
 
         expect(children.size).toBe(0);
@@ -144,7 +144,7 @@ describe("examples/parent-and-workers-effect.ts", () => {
           if (msg.type === "child_stopped") delivered = true;
         });
 
-        yield* stop(children, "a");
+        yield* stopWorker(children, "a");
 
         // The close returned before the forked notice was folded.
         expect(delivered).toBe(false);

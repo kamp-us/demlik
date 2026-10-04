@@ -62,7 +62,10 @@ export interface EffectBootingRuntime<
   readonly ready: Effect.Effect<EffectRuntime<S, M, E, Err>, Err | StoreFailed>;
   /**
    * Stop the run: drain in-flight work, stop its Subs, flush the final State.
-   * Closing the run's Scope does the same.
+   * Closing the run's Scope stops the run the same way, and `stop()` leaves
+   * that Scope open. So for a child under `spawn` the two differ: `stop()`
+   * does not take the child out of the host's table or tell the parent. Stop
+   * such a child with the `stop` helper.
    */
   stop(): Effect.Effect<void>;
 }

@@ -1,10 +1,11 @@
 /**
- * `spawn` and `tell`: the helpers a host runs child machines under a parent
- * with (#556).
+ * `spawn`, `stop` and `tell`: the helpers a host runs child machines under a
+ * parent with (#556, #567).
  *
- * The host here keeps a table of children and hands `spawn` its four steps.
- * It holds no `Effect.uninterruptible`, no `forkDetach` and no `NoCellError`
- * handling of its own, so every guarantee below is the helpers'.
+ * The host here keeps a table of children, hands `spawn` its four steps and
+ * stops a child with `stop`. It holds no `Effect.uninterruptible`, no
+ * `forkDetach`, no `NoCellError` handling and no `Scope.close` on a child's
+ * scope of its own, so every guarantee below is the helpers'.
  */
 
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
@@ -23,6 +24,7 @@ import {
   run,
   StoreFailed,
   spawn,
+  stop,
   tell,
 } from "./index";
 
@@ -71,14 +73,12 @@ function hostOf(
         Effect.map((exit) => notices.push({ id, exit })),
       ),
     });
-  const stop = (id: string) =>
+  const stopById = (id: string) =>
     Effect.suspend(() => {
       const child = table.get(id);
-      return child === undefined
-        ? Effect.void
-        : Scope.close(child.scope, Exit.void);
+      return child === undefined ? Effect.void : stop(child.scope);
     });
-  return { table, notices, start, stop };
+  return { table, notices, start, stopById };
 }
 
 /** The ids whose worker still takes a job, out of `children`. */
@@ -117,6 +117,25 @@ const openParent = (store?: Store<ParentState>) =>
   });
 
 const stopped = (id: string) => ({ type: "child_stopped", id }) as const;
+
+/** A parent whose `kill` Msg stops a child from its own Cmd handler. */
+type BossState = { readonly stopped: readonly string[] };
+type BossMsg =
+  | { readonly type: "kill"; readonly id: string }
+  | { readonly type: "child_stopped"; readonly id: string };
+type BossCmd = { readonly type: "close_child"; readonly id: string };
+const boss = defineMachine({
+  types: {
+    model: {} as BossState,
+    msg: {} as BossMsg,
+    cmd: {} as BossCmd,
+  },
+  init: (loaded) => [loaded ?? { stopped: [] }, []],
+  update: {
+    kill: (s, m) => [s, [{ type: "close_child", id: m.id }]],
+    child_stopped: (s, m) => [{ stopped: [...s.stopped, m.id] }, []],
+  },
+});
 
 // === tell ===
 
@@ -327,26 +346,12 @@ describe("spawn", () => {
       }),
     );
   });
+});
 
-  it("a parent Cmd handler can stop a child: the close does not wait for the notice", async () => {
-    type BossState = { readonly stopped: readonly string[] };
-    type BossMsg =
-      | { readonly type: "kill"; readonly id: string }
-      | { readonly type: "child_stopped"; readonly id: string };
-    type BossCmd = { readonly type: "close_child"; readonly id: string };
-    const boss = defineMachine({
-      types: {
-        model: {} as BossState,
-        msg: {} as BossMsg,
-        cmd: {} as BossCmd,
-      },
-      init: (loaded) => [loaded ?? { stopped: [] }, []],
-      update: {
-        kill: (s, m) => [s, [{ type: "close_child", id: m.id }]],
-        child_stopped: (s, m) => [{ stopped: [...s.stopped, m.id] }, []],
-      },
-    });
+// === stop ===
 
+describe("stop", () => {
+  it("a parent and six children: three are stopped one by one, one from a parent Cmd handler and one twice, and the table and the parent follow each stop", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const parentScope = yield* Scope.make();
@@ -355,18 +360,76 @@ describe("spawn", () => {
           tell(boss, bossRun, { type: "child_stopped", id }),
         );
         const bossRun = yield* (yield* run(boss, {
-          interpret: { close_child: (cmd) => host.stop(cmd.id) },
+          interpret: { close_child: (cmd) => host.stopById(cmd.id) },
         }).pipe(Scope.provide(parentScope))).ready;
-        yield* host.start("a");
-        yield* host.start("b");
+        const ids = ["a", "b", "c", "d", "e", "f"];
+        for (const id of ids) yield* host.start(id);
+        const all = new Map(host.table);
+        const scopeOf = (id: string) => (all.get(id) as Child).scope;
 
-        // Folds `kill`, runs the handler, and returns once the child closed.
-        yield* bossRun.dispatch({ type: "kill", id: "a" });
+        const stops: ReadonlyArray<readonly [string, Effect.Effect<unknown>]> =
+          [
+            ["b", stop(scopeOf("b"))],
+            // Folds `kill`, runs the handler, and returns once the child
+            // stopped: the stop did not wait for the boss to take the notice.
+            ["e", Effect.orDie(bossRun.dispatch({ type: "kill", id: "e" }))],
+            ["a", Effect.andThen(stop(scopeOf("a")), stop(scopeOf("a")))],
+          ];
+        const gone: string[] = [];
+        for (const [id, stopping] of stops) {
+          yield* stopping;
+          gone.push(id);
+          const left = ids.filter((each) => !gone.includes(each));
+          expect([...host.table.keys()]).toEqual(left);
+          expect(yield* live(all)).toEqual(left);
+          yield* settled(() =>
+            expect(bossRun.getState()).toEqual({ stopped: gone }),
+          );
+          yield* settled(() =>
+            expect(host.notices.map((n) => n.id)).toEqual(gone),
+          );
+        }
 
-        expect([...host.table.keys()]).toEqual(["b"]);
-        yield* settled(() =>
-          expect(bossRun.getState()).toEqual({ stopped: ["a"] }),
+        // A stop long after the first one: still one notice for that child.
+        yield* stop(scopeOf("a"));
+        yield* Scope.close(parentScope, Exit.void);
+
+        expect(host.table.size).toBe(0);
+        yield* settled(() => expect(host.notices).toHaveLength(ids.length));
+        expect(host.notices.map((n) => n.id).sort()).toEqual(ids);
+        expect(host.notices.filter((n) => Exit.isFailure(n.exit))).toEqual([]);
+      }),
+    );
+  });
+
+  it("`child.run.stop()` is not a stop of the child: the run stops, the entry stays and the parent is not told until `stop`", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { parentScope, parentRun } = yield* openParent();
+        const { table, notices, start } = hostOf(parentScope, (id) =>
+          tell(parent, parentRun, stopped(id)),
         );
+        const a = yield* start("a");
+        yield* start("b");
+
+        yield* a.run.stop();
+
+        expect(yield* live(table)).toEqual(["b"]);
+        expect([...table.keys()]).toEqual(["a", "b"]);
+        yield* parentRun.idle();
+        expect(notices).toEqual([]);
+        expect(parentRun.getState()).toEqual({ type: "open", stopped: [] });
+
+        yield* stop(a.scope);
+
+        expect([...table.keys()]).toEqual(["b"]);
+        yield* settled(() =>
+          expect(parentRun.getState()).toEqual({
+            type: "open",
+            stopped: ["a"],
+          }),
+        );
+        expect(notices.map((n) => n.id)).toEqual(["a"]);
         yield* Scope.close(parentScope, Exit.void);
       }),
     );
@@ -380,7 +443,7 @@ describe("a parent and six children on the helpers", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const { parentScope, parentRun, reports } = yield* openParent();
-        const { table, notices, start, stop } = hostOf(parentScope, (id) =>
+        const { table, notices, start, stopById } = hostOf(parentScope, (id) =>
           tell(parent, parentRun, stopped(id)),
         );
         const ids = ["a", "b", "c", "d", "e", "f"];
@@ -390,7 +453,7 @@ describe("a parent and six children on the helpers", () => {
 
         const gone: string[] = [];
         for (const id of ["b", "e", "a"]) {
-          yield* stop(id);
+          yield* stopById(id);
           gone.push(id);
           const left = ids.filter((each) => !gone.includes(each));
           expect([...table.keys()]).toEqual(left);
@@ -423,14 +486,15 @@ describe("a parent and six children on the helpers", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const { parentScope, parentRun, reports, seen } = yield* openParent();
-          const { table, notices, start, stop } = hostOf(parentScope, (id) =>
-            tell(parent, parentRun, stopped(id)),
+          const { table, notices, start, stopById } = hostOf(
+            parentScope,
+            (id) => tell(parent, parentRun, stopped(id)),
           );
           yield* start("a");
           yield* start("b");
           yield* parentRun.dispatch({ type: "close" });
 
-          yield* stop("a");
+          yield* stopById("a");
 
           expect([...table.keys()]).toEqual(["b"]);
           yield* settled(() => expect(notices).toHaveLength(1));
