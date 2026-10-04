@@ -8,10 +8,10 @@
  * blocks in page order, as one module, importing tea only through the
  * `@demlik/tea` specifiers. Any diagnostic fails the page. Nothing runs it.
  *
- * Three how-to pages are under the mirror gate as well. They are here because
- * the mirror gate compares a block with a region of a test file, and that file
- * can define a name outside the region: the block then matches and still does
- * not compile when pasted.
+ * Four how-to pages are under the mirror gate as well. They are here because
+ * the mirror gate compares a block with a region of a source file, and that
+ * file can define a name outside the region: the block then matches and still
+ * does not compile when pasted.
  *
  * The options are the test program's with one loosened: a page shows what a
  * call returns by binding it, so `noUnusedLocals` is off.
@@ -52,6 +52,15 @@ const PAGES: readonly Page[] = [
     skip: [
       "## 2. Hand it the handlers, and a `ctx` when they need one",
       "## 3. Persist across mounts with a `store`",
+    ],
+  },
+  {
+    path: "docs/how-to/handle-a-tool-failure.md",
+    skip: [
+      // The agent's `model` is the reader's own.
+      "## Branch on the failure in your own code",
+      // One arm of the tutorial adapter's `switch`.
+      "## Render it for your provider",
     ],
   },
   { path: "docs/how-to/make-durable.md" },
@@ -117,6 +126,37 @@ describe("pages typecheck from their own text", () => {
 
     expect(diagnostics.join("\n")).toContain("Property 'ok' does not exist");
   });
+
+  // #543: `tool()` calls a handler with `(args, ctx, { ok, fail })`. The call's
+  // id and an abort signal are not among them, so a page must not show a
+  // handler that takes either.
+  it.each([
+    { takes: "`callId` as a fourth argument", edit: ", callId: string) =>" },
+    {
+      takes: "an `AbortSignal` as a fourth argument",
+      edit: ", signal: AbortSignal) =>",
+    },
+  ])("fails every tool handler on handle-a-tool-failure.md edited to take $takes", async ({
+    edit,
+  }) => {
+    const page = pageOf("docs/how-to/handle-a-tool-failure.md");
+    const markdown = await read(page);
+    const handlers = [
+      "async ({ key }, _ctx, { ok, fail }) =>",
+      "async ({ pair }, _ctx, { ok, fail }) =>",
+    ];
+    for (const handler of handlers) expect(markdown).toContain(handler);
+
+    const edited = handlers.reduce(
+      (text, handler) => text.replace(handler, handler.replace(") =>", edit)),
+      markdown,
+    );
+
+    const refused = diagnosticsOf(page, edited).filter((d) =>
+      d.includes("is not assignable to parameter of type 'ToolHandler<"),
+    );
+    expect(refused).toHaveLength(handlers.length);
+  }, 120_000);
 
   it.each([
     {

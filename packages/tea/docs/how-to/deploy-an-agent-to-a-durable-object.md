@@ -81,6 +81,6 @@ SSE stream of the agent's events — the host assembly is `createAgentHost` from
 `@demlik/tea/do` (see [the reference](../reference/do.md)); it wires the same
 resume path (`autoBoot`) at activation. If the Durable Object also runs
 Cloudflare's `agents` SDK, which owns the alarm and a state table of its own,
-the coexistence rules are being written under
-[kamp-us/demlik#34](https://github.com/kamp-us/demlik/issues/34); this guide
-does not cover that composition.
+the coexistence rules are in
+[Coexisting with Cloudflare's `agents` SDK](../explanation/agents-sdk-coexistence.md);
+this guide does not cover that composition.

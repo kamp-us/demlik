@@ -11,7 +11,14 @@ afternoon.
 
 Every sample below is quoted from
 [`examples/agent-stop-conditions.ts`](../../examples/agent-stop-conditions.ts),
-which runs in-process with a scripted model that never stops asking for tools.
+which runs in-process with a scripted model that never stops asking for tools:
+`modelAsking(napMs)` asks for one `tick` every turn, and each `tick` naps that
+many milliseconds. They use these imports:
+
+```ts
+import { defineAgent, status } from "@demlik/tea/agent";
+import { DriveFailedError } from "@demlik/tea";
+```
 
 ## `maxTurns` — cap the model round-trips
 
@@ -21,7 +28,7 @@ again.
 
 ```ts
 const bounded = defineAgent({
-  model,
+  model: modelAsking(1),
   tools: [tick],
   instructions: "You tick.",
   maxTurns: 3,
@@ -75,7 +82,7 @@ naps 20ms and answers:
 
 ```ts
 const progressing = defineAgent({
-  model,
+  model: modelAsking(20),
   tools: [tick],
   instructions: "You tick.",
   deadlineMs: 150,
@@ -97,7 +104,7 @@ same agent, one tool call that naps 400ms:
 
 ```ts
 const stalling = defineAgent({
-  model,
+  model: modelAsking(400),
   tools: [tick],
   instructions: "You tick.",
   deadlineMs: 150,
@@ -133,7 +140,7 @@ above — same budget, same ticks:
 
 ```ts
 const capped = defineAgent({
-  model,
+  model: modelAsking(20),
   tools: [tick],
   instructions: "You tick.",
   maxElapsedMs: 150,
@@ -169,7 +176,7 @@ there — no further model call.
 
 ```ts
 const untilFive = defineAgent({
-  model,
+  model: modelAsking(1),
   tools: [tick],
   instructions: "You tick.",
   stopWhen: (state) => (state.conversation?.turnCount ?? 0) >= 5,

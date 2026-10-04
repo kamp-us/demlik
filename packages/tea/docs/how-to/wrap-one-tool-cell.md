@@ -26,7 +26,9 @@ const queued = agent.with({
 The key is the tool's **name** — a `tool("fetch_rate", …)` is a `Cmd.define`d
 effect whose `type` is that name, and the interpret cell keyed by it is what the
 kernel calls to run the tool. `next` is the cell `defineAgent` wired: the one
-that parses the arguments, calls your handler, and settles.
+that calls your handler and returns its outcome. `cmd` is the tool's Cmd, and
+`cmd.callId` is the call's id — a `tool()` handler is not handed it, so a
+wrapper is where you read it.
 
 `queued` is a whole defined agent — `run`, `machine` and `with` again. The agent
 you called `.with` on is unchanged, and every cell you did not name is carried
@@ -44,54 +46,64 @@ function inTurn<A>(job: () => Promise<A>): Promise<A> {
 }
 ```
 
-Two `fetch_rate` calls in one model turn now reach the upstream one after the
-other instead of together. Nothing else about the run changed.
+Two runs of `queued` that call `fetch_rate` at the same moment now reach the
+upstream one after the other instead of together. Nothing else about either run
+changed. Inside one run there is nothing to queue: a turn's tool calls already
+go out one at a time.
 
-## Return `next`'s Msg — that is the whole contract
+That holds at the default `toolConcurrency`. Raise it above `1` and the cell
+`next` names launches the handler and returns before it has finished, so a
+wrapper cannot wait for the work, time it or queue it.
 
-The cell you return settles through the **same typed Cmd→Msg edge** as the cell
-it wraps: `next` resolves the `fetch_rate_ok` / `fetch_rate_err` Msg that
-`Cmd.define` minted for this tool, carrying the `callId` the fan-out folds on,
-and returning it unchanged is what keeps the Model — and therefore a replay —
-identical to the unwrapped run's.
+## Return `next`'s outcome — that is the whole contract
+
+`next` resolves an `Outcome`, the value your handler returned through `ok` or
+`fail`. It is not a Msg. The engine makes the Msg: it takes what your cell
+returns, pairs it with the Cmd it handed you, and mints `fetch_rate_ok` or
+`fetch_rate_err`. Returning `next`'s outcome unchanged is what keeps the Model —
+and therefore a replay — identical to the unwrapped run's.
 
 So the door is one over the **effect** boundary, never over the fold:
 
 - **Do** await, retry around, log, time, rate-limit, or enrich `ctx` before
   calling `next`.
-- **Do not** mint a settle Msg yourself, return a Msg from an earlier call, or
-  swallow the one `next` gave you. A cached Msg carries the earlier call's
-  `callId`, and the fold will settle the wrong call with it.
+- **Do not** return a Msg, return an outcome from an earlier call, or swallow
+  the one `next` gave you. A Msg is not an outcome, and the engine refuses it
+  with an `OutcomeContractError`. An earlier call's outcome settles *this* call
+  with that call's result. A cell that returns nothing dispatches nothing, and
+  the call never settles.
 
 A cell that genuinely has to settle differently is a different machine, and
 `createAgent` is where you build one.
 
-The two Msgs in full, as `Cmd.define` mints them:
+The outcome `next` resolves, and the Msg the engine mints from each arm:
 
 ```ts
-{ type: "fetch_rate_ok",  cmd, value, at }   // `value` is what your `ok` schema parsed
-{ type: "fetch_rate_err", cmd, error, at }   // `error` is a `{ _tag, … }` failure
+{ _tag: "Ok", value }    // → { type: "fetch_rate_ok",  cmd, value, at }
+{ _tag: "Err", error }   // → { type: "fetch_rate_err", cmd, error, at }
 ```
 
-`cmd` is the Cmd you were handed — `cmd.callId` is the id the fan-out folds on.
+`value` is checked against your `ok` schema as the Msg is minted, and `error` is
+a `{ _tag, … }` failure. `cmd` is the Cmd you were handed, so the Msg carries
+this call's `callId` whatever your cell returned.
 
 ## When the tool carries a resilience policy
 
-If the tool declared `timeoutMs` or `retry`, the Msg your cell returns is the
-**same shape** — `fetch_rate_ok` / `fetch_rate_err`, minted by the same
-`Cmd.define`. The ladder is in the reducer, not in the effect, so it changes
-nothing about what `next` resolves. What it changes is what happens to that Msg,
-and there are three facts worth knowing before you print one:
+If the tool declared `timeoutMs` or `retry`, your cell returns the **same
+outcome**, and the engine mints the same `fetch_rate_ok` / `fetch_rate_err` from
+it. The ladder is in the reducer, not in the effect, so it changes nothing about
+what `next` resolves. What it changes is what happens to the minted Msg, and
+there are three facts worth knowing before you print one:
 
 - **Your cell can run more than once for one `cmd.callId`.** Each retry attempt
   re-enters the same interpret cell with the same Cmd, so a wrapper that counts
   calls, queues them, or opens a span per call sees one entry per *attempt* — not
   one per model tool call.
-- **A `fetch_rate_err` you pass through may be absorbed.** The reducer offers
-  each failure to the ladder first; while retry budget remains it arms a timer
-  and folds nothing, so that Msg never reaches the conversation. Returning it
-  unchanged is still the whole contract — the absorbing is the reducer's call,
-  not yours.
+- **A failure you pass through may be absorbed.** The reducer offers each
+  `fetch_rate_err` to the ladder first; while retry budget remains it arms a
+  timer and folds nothing, so that failure never reaches the conversation.
+  Returning the outcome unchanged is still the whole contract — the absorbing is
+  the reducer's call, not yours.
 - **The call's final failure may be authored without your cell running at all.**
   When the budget is spent the reducer settles the call itself, with a
   `{ kind: "error", _tag, reason }` failure carrying `_tag: "timeout"` or
@@ -101,9 +113,9 @@ and there are three facts worth knowing before you print one:
   `defineAgent`'s `onToolError` is where it surfaces.
 
 A timeout also does not cancel the attempt in flight: the handler, and your
-wrapper around it, runs to its own end, and the Msg it eventually resolves
+wrapper around it, runs to its own end, and the outcome it eventually returns
 arrives for a call nothing is waiting on and folds nothing. So a wrapper's
-`finally` still fires, and its Msg still means nothing.
+`finally` still fires, and what it returns still means nothing.
 
 If you were reaching for `resilient_run_ok` / `resilient_run_err` — those are the agent's
 own private settle Msgs for the brain call and for compaction. No tool settles

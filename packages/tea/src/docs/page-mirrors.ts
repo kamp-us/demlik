@@ -348,6 +348,18 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
     ),
   },
   {
+    page: "docs/how-to/bound-a-run.md",
+    shows: regions(
+      "examples/agent-stop-conditions.ts",
+      "bounded",
+      "progressing",
+      "stalling",
+      "capped",
+      "until-five",
+      "budgeted",
+    ),
+  },
+  {
     page: "docs/how-to/drive-from-react.md",
     shows: [
       { file: "examples/downloader.ts" },
@@ -361,6 +373,15 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
       ),
     ],
     only: true,
+  },
+  {
+    page: "docs/how-to/handle-a-tool-failure.md",
+    shows: regions(
+      "examples/agent-tool-failure.ts",
+      "lookup",
+      "fetch-rate",
+      "agent",
+    ),
   },
   {
     page: "docs/how-to/make-durable.md",
@@ -393,6 +414,15 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
       { file: "examples/profile-lookup-effect-main.ts" },
       { file: "examples/profile-lookup-effect-timer.ts" },
     ],
+  },
+  {
+    page: "docs/how-to/wrap-one-tool-cell.md",
+    shows: regions(
+      "src/docs/how-to/wrap-one-tool-cell.test.ts",
+      "queued",
+      "in-turn",
+      "traced",
+    ),
   },
 ];
 

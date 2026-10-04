@@ -75,11 +75,11 @@ what you are trying to do, and it names the subpath you need.
 
 - [Handle a tool failure](./handle-a-tool-failure.md) — declare an `err` tag, fail
   with it from the handler, and read the `ToolOutcome` the model gets back —
-  including `thrown`, `unknown_tool` and `malformed_args`, the three failures you
-  never declared.
+  including the six failures you never declared.
 - [Bound a `defineAgent` run](./bound-a-run.md) — stop a run that would otherwise
-  go on forever with `maxTurns` and `deadlineMs`, and see why `deadlineMs` is a
-  no-progress watchdog rather than the wall-clock cap it reads as.
+  go on forever with one of four guards, `maxTurns`, `deadlineMs`,
+  `maxElapsedMs` and `stopWhen`, and see why `deadlineMs` is a no-progress
+  watchdog rather than the wall-clock cap it reads as.
 - [Wrap one tool's interpret cell](./wrap-one-tool-cell.md) — use
   `defineAgent(cfg).with({ interpret })` to give one tool a behaviour the lid has
   no option for — a queue, an audit log — without rebuilding the agent with
