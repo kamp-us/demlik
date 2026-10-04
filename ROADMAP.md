@@ -54,12 +54,21 @@ Diátaxis modes. This campaign fixes what it found: the README's dead links (#53
 that contradict the source, the tasks no page covers, and a generated reference that cannot answer
 "what does this take" (#538). It ends when #538's children ship. Declared and started 2026-10-03.
 
+**Child machine helpers** (#6). A host that runs child machines under a parent copies about 90
+lines of Effect code from the many-machines how-to and has to avoid the three race bugs that page
+lists; Tuval wrote it by hand and hit all three. This campaign ships plain-function helpers on
+`@demlik/tea/effect` that do the dangerous steps, so no host has to read that list to get it right
+(#556, ruled in grilling session #554). The host keeps its own table, ids and Msg names: no
+supervisor and no registry, so #312 stands. It ends when #556 ships. Declared and started
+2026-10-04.
+
 | Campaign | Milestone | State |
 |---|---|---|
 | Tuval on tea | #2 | done |
 | Binclusive agent migration | #3 | active |
 | Code coordinates | #4 | active |
 | tea docs sweep | #5 | active |
+| Child machine helpers | #6 | active |
 
 ## Dependencies
 
