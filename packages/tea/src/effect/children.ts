@@ -80,8 +80,12 @@ export interface SpawnSteps<A, E = never, R = never> {
    * Say the child stopped, usually a {@link tell} to the parent. It runs
    * after `remove`, on a fiber of its own that the closing scope never waits
    * for, so it may wait on the parent.
+   *
+   * It cannot fail: nothing reads that fiber, so the step itself handles what
+   * its notice can fail with, such as the `StoreFailed` of a `tell`. A defect
+   * in it is not observed by `spawn` and ends the fiber unseen.
    */
-  readonly notify: Effect.Effect<unknown, unknown>;
+  readonly notify: Effect.Effect<unknown>;
 }
 
 /**
@@ -99,6 +103,11 @@ export interface SpawnSteps<A, E = never, R = never> {
  *     fiber, so a parent Cmd handler can stop a child;
  *   - `remove` runs after the child's run has stopped.
  *
+ * Nothing reads the fiber `notify` runs on, so `spawn` reports no failure of
+ * it and `notify` is typed to have none. The host handles what its notice can
+ * fail with inside the step, as the `Effect.catch` below does for a parent
+ * whose save failed. A defect in `notify` ends that fiber unseen.
+ *
  * `child.run.stop()` is not one of the two ways to stop a child. It stops the
  * run and leaves the scope open, so the entry stays in the table and the
  * parent is not told.
@@ -109,7 +118,9 @@ export interface SpawnSteps<A, E = never, R = never> {
  *     Effect.map(run(worker, {}), (run) => ({ run, scope })),
  *   enrol: (child) => Effect.sync(() => children.set(id, child)),
  *   remove: Effect.sync(() => children.delete(id)),
- *   notify: tell(parent, parentRun, { type: "child_stopped", id }),
+ *   notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
+ *     Effect.catch((failure) => Effect.logError("notice failed", failure)),
+ *   ),
  * });
  * ```
  */

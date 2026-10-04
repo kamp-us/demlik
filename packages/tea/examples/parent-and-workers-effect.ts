@@ -41,7 +41,12 @@ export const spawnWorker = (
       Effect.map(run(worker, {}), (run): Child => ({ run, scope })),
     enrol: (child) => Effect.sync(() => children.set(id, child)),
     remove: Effect.sync(() => children.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    // Nothing reads the fiber `notify` runs on, so a failed save ends here.
+    notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
+      Effect.catch((failure) =>
+        Effect.logError(`the parent did not take the stop of ${id}`, failure),
+      ),
+    ),
   });
 
 /** Stop one worker. An id not in the table is a no-op. */

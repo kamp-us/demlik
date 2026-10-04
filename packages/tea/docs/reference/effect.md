@@ -230,8 +230,12 @@ interface SpawnSteps<A, E = never, R = never> {
    * Say the child stopped, usually a tell to the parent. It runs
    * after `remove`, on a fiber of its own that the closing scope never waits
    * for, so it may wait on the parent.
+   *
+   * It cannot fail: nothing reads that fiber, so the step itself handles what
+   * its notice can fail with, such as the `StoreFailed` of a `tell`. A defect
+   * in it is not observed by `spawn` and ends the fiber unseen.
    */
-  readonly notify: Effect<unknown, unknown>;
+  readonly notify: Effect<unknown>;
   /**
    * Take the child out of the host's table. It runs when the child's scope
    * closes, after its run has stopped, whether or not `enrol` ran, so it must
