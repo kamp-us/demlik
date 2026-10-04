@@ -59,9 +59,13 @@ function asRng(fn: () => number, probe?: boolean): Rng
 
 ```ts
 interface BackoffCurve {
+  /** Delay for attempt 0, in milliseconds, before any jitter or cap. */
   readonly baseMs: number;
+  /** Hard ceiling, in milliseconds. The capped exponential never exceeds this. */
   readonly capMs: number;
+  /** Geometric growth factor. `2` doubles the delay each attempt. */
   readonly factor: number;
+  /** Jitter strategy applied to the capped exponential delay. */
   readonly jitter: Jitter;
 }
 ```
@@ -80,6 +84,10 @@ function backoffDelay(attempt: number, policy: BackoffCurve, rng?: Rng): number
 
 ```ts
 interface CountBound {
+  /**
+   * Maximum number of attempts. `shouldRetry` allows attempts `0 .. maxAttempts-1`,
+   * so `maxAttempts: 3` means "try once, then retry at most twice" (attempts 0, 1, 2).
+   */
   readonly maxAttempts: number;
   readonly maxElapsedMs?: undefined;
   readonly unbounded?: undefined;
@@ -108,7 +116,13 @@ const defaultRng: Rng
 
 ```ts
 interface DurationBound {
+  /** Optional secondary count bound; omitted means "no count bound". */
   readonly maxAttempts?: number;
+  /**
+   * Outage budget in wall-clock milliseconds. `shouldRetry` permits another
+   * attempt while `nowMs - firstFailureAtMs < maxElapsedMs`, however many
+   * attempts that takes.
+   */
   readonly maxElapsedMs: number;
   readonly unbounded?: undefined;
 }
@@ -194,7 +208,9 @@ type RetryPolicy = BackoffCurve & CountBound
 
 ```ts
 interface RetryState {
+  /** Count of failures recorded so far. Also the 0-based index of the next attempt. */
   readonly attempt: number;
+  /** The error from the most recent failure, if any. Carried, never interpreted. */
   readonly lastError?: unknown;
 }
 ```
@@ -230,6 +246,7 @@ function shouldRetry(
 
 ```ts
 interface TimedRetryState extends RetryState {
+  /** When the streak's first failure was observed (caller's clock, epoch ms). */
   readonly firstFailureAtMs: number;
 }
 ```

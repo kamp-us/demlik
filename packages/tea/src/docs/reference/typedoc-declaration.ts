@@ -3,6 +3,8 @@
  *
  * The reference page answers "what does this function take" and "what shape is
  * this type", and the typedoc model already holds both as a tree of type nodes.
+ * A member's TSDoc is printed above it, as a declaration file carries it, so
+ * "what does this option do" is answered beside its type.
  * This module is the one place that tree becomes text. Like the model parse it
  * sits behind, it trusts nothing structurally: every node is checked before it
  * is read, and a node kind it does not know is an error rather than a guess —
@@ -40,6 +42,33 @@ function text(x: unknown): string {
 
 function flag(node: Node, name: string): boolean {
   return isRecord(node.flags) && node.flags[name] === true;
+}
+
+/** Flatten a typedoc `comment.summary` part array into plain text. */
+export function commentText(comment: unknown): string {
+  if (!isRecord(comment)) return "";
+  let out = "";
+  for (const part of nodes(comment.summary)) out += text(part.text);
+  return out.trim();
+}
+
+/**
+ * A member's TSDoc as the comment block that sits above it, or "" when it has
+ * none. A function-typed property's comment is on its call signature, where
+ * typedoc moves it, so that is read when the member carries none of its own.
+ */
+function docComment(...holders: unknown[]): string {
+  const body = holders.map((h) => (isRecord(h) ? commentText(h.comment) : ""));
+  const lines = (body.find((b) => b !== "") ?? "").split("\n");
+  if (lines.length === 1) return lines[0] === "" ? "" : `/** ${lines[0]} */\n`;
+  const starred = lines.map((l) => ` * ${l}`.trimEnd());
+  return `/**\n${starred.join("\n")}\n */\n`;
+}
+
+/** The call signature of a function-typed property, where its comment lives. */
+function propertySignature(child: Node): unknown {
+  if (!isRecord(child.type) || !isRecord(child.type.declaration)) return;
+  return nodes(child.type.declaration.signatures)[0];
 }
 
 /** Indent every line after the first, so a multi-line part nests where it sits. */
@@ -266,7 +295,9 @@ function members(decl: Node): string[] {
       }
     } else if (child.kind === KIND_METHOD) {
       for (const sig of nodes(child.signatures)) {
-        lines.push(`${lead}${name}${optional}${signature(sig, ": ")}`);
+        lines.push(
+          `${docComment(sig, child)}${lead}${name}${optional}${signature(sig, ": ")}`,
+        );
       }
     } else if (child.kind === KIND_ACCESSOR) {
       if (isRecord(child.getSignature)) {
@@ -280,7 +311,7 @@ function members(decl: Node): string[] {
     } else if (child.kind === KIND_PROPERTY || child.kind === KIND_VARIABLE) {
       const readonly = flag(child, "isReadonly") ? "readonly " : "";
       lines.push(
-        `${lead}${readonly}${name}${optional}: ${printType(child.type)}`,
+        `${docComment(child, propertySignature(child))}${lead}${readonly}${name}${optional}: ${printType(child.type)}`,
       );
     } else {
       throw new Error(

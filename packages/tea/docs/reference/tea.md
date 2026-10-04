@@ -226,7 +226,9 @@ interface Ack {
 
 ```ts
 interface AckPartition<T> {
+  /** Inputs the authoritative side has applied (`seq <= lastAppliedSeq`). */
   readonly acked: readonly SeqTagged<T>[];
+  /** Inputs still in flight / un-acked (`seq > lastAppliedSeq`) — the replay tail. */
   readonly pending: readonly SeqTagged<T>[];
 }
 ```
@@ -296,6 +298,7 @@ class AsyncSchemaError extends Error {
   constructor(where: string);
   readonly _tag: "AsyncSchemaError";
   readonly name: "AsyncSchemaError";
+  /** What the schema was checking, e.g. `the "fetch" Cmd's ok schema`. */
   readonly where: string;
 }
 ```
@@ -306,7 +309,9 @@ class AsyncSchemaError extends Error {
 
 ```ts
 interface BootedRunHandle<S, M extends { type: string }, E extends { type: string } = never> extends RunHandle<S, M, E> {
+  /** Resolves to the booted handle once boot completes. */
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
+  /** The current State. Total. */
   getState(): S;
 }
 ```
@@ -317,18 +322,90 @@ interface BootedRunHandle<S, M extends { type: string }, E extends { type: strin
 
 ```ts
 interface BootingRuntime<S, M extends { type: string }, E extends { type: string } = never> extends RuntimeRef<M>, RunHandle<S, M, E> {
+  /**
+   * Resolves to the booted `Runtime<S, M>` after boot completes (or rejects with
+   * the boot error). This is the ONLY way to obtain a `Runtime` — and a
+   * `Runtime` is the only handle whose `getState()` is total. Awaiting `ready` is
+   * the single gate between "boot in flight" and "State exists":
+   *
+   * ```ts
+   * const runtime = await run(machine, opts).ready;
+   * runtime.getState(); // total — never throws-before-boot
+   * ```
+   *
+   * Idempotent — the same settled promise, resolving to the same `Runtime`, comes
+   * back on every read. Expresses canon §2.3 (boot is a named, awaitable moment).
+   */
   ready: Promise<Runtime<S, M, E>>;
+  /**
+   * Put a Msg in the runtime's inbox and resolve once processed. Runs to
+   * QUIESCENCE by default: settles only after the dispatched Msg AND every
+   * transitive interpret follow-up has drained. Pass `{ settle: "once" }` (or
+   * call `dispatchOnce`) for the single-step case.
+   *
+   * Rejection ordering: the ONE dispatched transition's own failure surfaces
+   * first, here. If it succeeds but the follow-up chain never stabilizes, the
+   * quiescent drain rejects with `QuiescenceTimeoutError`. Follow-up Msg
+   * rejections themselves route to the `onError` sink, never here.
+   */
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
+  /**
+   * Dispatch `msg` and resolve after exactly ONE transition's effects settle,
+   * WITHOUT draining the follow-up chain — equivalent to
+   * `dispatch(msg, { settle: "once" })`. Prefer plain `dispatch` unless you will
+   * `await runtime.idle()` yourself; the un-awaited follow-up chain is the
+   * footgun the quiescent default removed.
+   */
   dispatchOnce(msg: M): Promise<void>;
+  /**
+   * Emit a value on a Port from OUTSIDE an interpret handler — same synchronous
+   * fanout as `ctx.emit`. The canonical use is `observe`-driven emission (one
+   * runtime publishing a state-derived signal another subscribes to via
+   * `subscribePort`) without spawning a "tell the outside world" Cmd per
+   * transition.
+   */
   emitPort<T>(port: Port<T>, value: T): void;
+  /**
+   * Register a `(msg, state)` trace hook, fired for every applied transition
+   * with the fold's committed State. A `dispatch` issued from the observer is
+   * SCHEDULED onto the serial tail behind the fold that fired it, never folded
+   * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
+   * deferral; two listeners issuing in order fold in that order.
+   */
   observe(observer: (msg: M, state: S) => void): () => void;
+  /**
+   * Subscribe to a SEMANTIC event of `type`. The handler receives exactly the
+   * `E` member whose `type` matches `K`, so a consumer never touches another
+   * event's shape and never references the machine's PRIVATE Msg names. Multiple
+   * handlers per type; fanout is synchronous and throw-isolated. Fires only when
+   * the machine's `events` projector (wired on `run`) emits that type.
+   */
   on<K extends string>(
     type: K,
     handler: (event: Extract<E, { type: K }>) => void,
   ): () => void;
+  /**
+   * Subscribe to the INITIAL State — the boot transition. Fires exactly once:
+   * immediately if boot already completed (so a late subscriber never misses
+   * it), otherwise on the boot fanout. Returns a cleanup (a no-op once fired).
+   */
   onBoot(handler: (state: S) => void): () => void;
+  /** Stop the run; resolves once the engine has torn it down. */
   stop(): Promise<void>;
+  /**
+   * Register a zero-arg change notifier, fired for every applied transition
+   * with the fold's State already committed — `getState()` inside the listener
+   * reads it, not the State before. A `dispatch` issued from the listener is
+   * SCHEDULED onto the serial tail behind the fold that fired it, never folded
+   * re-entrantly and never discarded, so it needs no `setTimeout(fn, 0)`
+   * deferral; two listeners issuing in order fold in that order.
+   */
   subscribe(listener: () => void): () => void;
+  /**
+   * Subscribe to a typed Port. Multiple listeners per port; fanout is synchronous
+   * and isolated. Ports are for "data leaving the runtime selectively" (see
+   * `definePort`) — distinct from `observe` (every transition) and State.
+   */
   subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
 }
 ```
@@ -371,15 +448,60 @@ type CancelTimer = () => void
 
 ```ts
 type Cmd<T extends string = string, Ok = unknown, E = unknown> = {
+  /** Phantom — the `_tag` union this Cmd can settle with. Never assigned. */
   readonly __e?: E;
+  /** Phantom — the value this Cmd settles with. Never assigned. */
   readonly __ok?: Ok;
   readonly type: T;
 }
 
 const Cmd: {
+  /**
+   * Flat concat of cmd arrays. Use when a cell composes effects from
+   * multiple conditional sources:
+   *
+   *   return [next, Cmd.batch(
+   *     Cmd.whenDefined(state.queueItemId, (id) => ({ type: "complete", id })),
+   *     Cmd.when(state.windowId !== undefined, { type: "close_window", windowId }),
+   *     [{ type: "detach_debugger", tabId: state.tabId }],
+   *   )];
+   *
+   * `<const C>` keeps inline cmd literals' discriminants narrow (same
+   * rationale as `when` / `whenDefined` above).
+   */
   readonly batch: <const C extends Cmd<string, unknown, unknown>>(
     ...arrs: readonly (readonly C[])[],
   ) => readonly C[];
+  /**
+   * Declare a typed Cmd constructor (ADR 0014, 0021). Returns the builder —
+   * `fetch({ url })` yields `{ type: "fetch", url }` — carrying the minted Msg
+   * builders `fetch.ok(cmd, value)` / `fetch.err(cmd, error)` (for replay
+   * logs and tests) and the declaration the runtime edge parses against.
+   * `Settled<typeof fetch>` is the two-arm Msg union it settles with;
+   * `defineMachine({ cmds: [fetch] })` folds that union into the machine's `M`.
+   *
+   *   const fetch = Cmd.define("fetch", {
+   *     input: z.object({ url: z.string() }),
+   *     ok: z.object({ status: z.number(), body: z.string() }),
+   *     err: ["not_found", "timeout"],
+   *   });
+   *
+   * `input` and `ok` take any Standard Schema whose `validate` is synchronous:
+   * zod directly, Effect Schema through `Schema.toStandardSchemaV1(...)`. `err`
+   * is the `_tag` list the handler may fail with; the runtime adds
+   * `malformed_result` for an `Ok` value the `ok` schema rejects.
+   *
+   * The handler returns an outcome and the engine mints the Msg:
+   *
+   *   fetch: async (cmd, { ok, err }) =>
+   *     res.status === 404 ? err({ _tag: "not_found" }) : ok(await res.json()),
+   *
+   * A throw or an undeclared tag goes to the error sink, never to `fetch_err`.
+   * The handler reads its services off the plain `ctx` handed to `run` (ADR
+   * 0020).
+   *
+   * A Cmd must not wait; see `DepKeyedSub` for anything that watches.
+   */
   readonly define: <
     const Name extends string,
     Input extends CmdInput,
@@ -393,11 +515,45 @@ const Cmd: {
       readonly ok: StandardSchemaV1<unknown, Ok>;
     },
   ) => CmdDef<Name, Input, Ok, TaggedError<Tags[number]>>;
+  /**
+   * The empty Cmd array. Typed `readonly never[]` so it's assignable to any
+   * `readonly C[]` for any `C extends Cmd`. Use in `init` returns and
+   * Transitions cells that emit zero effects:
+   *
+   *   init: (loaded) => [loaded ?? initial, Cmd.none],
+   *   tick: (state) => [state, Cmd.none],
+   *
+   * Elm's `Cmd.none` analogue. Cultural signal alongside the runtime help:
+   * `[state, Cmd.none]` reads as intent ("this transition emits nothing"),
+   * `[state, []]` reads as "empty array of what".
+   *
+   * Frozen at runtime so a downstream consumer can't `.push()` into the
+   * shared reference.
+   */
   readonly none: readonly never[];
+  /**
+   * Emit `cmd` wrapped in a single-element array iff `cond` is true.
+   * Otherwise return the empty array. Spreads cleanly into the cmds array
+   * returned by a Transitions cell.
+   *
+   * `const C` (TypeScript 5.0+) keeps the inferred `type:` discriminator
+   * literal narrow when called with an object literal — so `Cmd.when(b,
+   * { type: "x", ... })` infers as `{ type: "x", ... }`, not `{ type:
+   * string, ... }`, and stays assignable to a discriminated-union arm
+   * without `as const` at the call site.
+   */
   readonly when: <const C extends Cmd<string, unknown, unknown>>(
     cond: boolean,
     cmd: C,
   ) => readonly C[];
+  /**
+   * If `value` is defined, call `build(value)` and emit the resulting cmd
+   * wrapped in a single-element array. If `value` is `undefined`, return
+   * the empty array. `value` is narrowed to `T` inside `build`.
+   *
+   * `const C` on the return type keeps the callback's object-literal
+   * `type:` field narrow (see `when` above for the full rationale).
+   */
   readonly whenDefined: <T, const C extends Cmd<string, unknown, unknown>>(
     value: T | undefined,
     build: (value: T) => C,
@@ -412,12 +568,14 @@ const Cmd: {
 ```ts
 interface CmdDef<Name extends string, Input extends CmdInput, Ok, E extends Tagged> {
   (input: Input): CmdValue<Name, Input, Ok, E>;
+  /** The `type` discriminant of every Cmd this builds. */
   readonly cmdType: Name;
   readonly err: (
     cmd: CmdValue<Name, Input, Ok, E>,
     error: E,
     at?: number,
   ) => SettledErr<Name, CmdValue<Name, Input, Ok, E>, E>;
+  /** The declared `_tag` list, verbatim. */
   readonly errTags: readonly E["_tag"][];
   readonly errType: `${Name}_err`;
   readonly ok: (
@@ -577,8 +735,34 @@ function defineManagedResource<N extends string, TKey, Handle, Ctx>(
 
 ```ts
 interface DefineManagedResourceOpts<N extends string, TKey, Handle, Ctx> {
+  /**
+   * Build the resource. Runs when the resource's `deps` turns non-null.
+   * The returned Handle is the ONLY thing `release` receives — capture
+   * everything teardown needs into it. If `acquire` throws, the engine does
+   * NOT register the Sub and `release` is never called (no dangling
+   * half-built resource).
+   */
   readonly acquire: (key: TKey, ctx: Ctx) => Handle;
+  /**
+   * A short, stable name — and the resource's Sub `type`. The machine's
+   * `subscribe` table holds this battery's runner under it, so it must be
+   * unique among the machine's Sub types.
+   */
   readonly name: N;
+  /**
+   * Tear the resource down. Runs when the key goes null (phase exited) or
+   * changes. MANDATORY — the guaranteed teardown is the reason this battery
+   * exists.
+   *
+   * May be sync or async, and an async one is really awaited: the promise is
+   * returned to the substrate, which tracks it and drains it inside `stop()`
+   * (bounded by `run({ disposeTimeoutMs })`). So `await runtime.stop()` means
+   * the release finished — the reading a host evicting an isolate acts on.
+   * MID-RUN teardown (a phase exit, a key change) is still fire-and-forget
+   * (Rule 2): the reconcile pass is synchronous by construction, so it starts
+   * the release and moves on. A rejection is never a Msg — it reaches the
+   * runtime's `onError` sink under `phase: "sub-cleanup"`.
+   */
   readonly release: (handle: Handle) => void | Promise<void>;
 }
 ```
@@ -597,6 +781,7 @@ function definePort<T>(name: string): Port<T>
 
 ```ts
 interface DeletableStore<S> extends Store<S> {
+  /** Remove the saved state. Idempotent: deleting nothing resolves. */
   delete(): Promise<void>;
 }
 ```
@@ -607,6 +792,13 @@ interface DeletableStore<S> extends Store<S> {
 
 ```ts
 type DepKeyedSub<S, U extends Sub = Sub> = U extends Sub<infer T, infer D> ? {
+  /**
+   * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+   * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+   * correctly. Pure (invariant 2). Plain JSON-compatible data only
+   * (invariant 1): the structural hash THROWS on a `Date`, `Map`, `Set`,
+   * `Error` or class instance rather than collapsing them onto one id.
+   */
   readonly deps: (state: S) => D | null | undefined;
   readonly type: T;
 } : never
@@ -762,7 +954,9 @@ type ExhaustiveTransitions<S extends { type: string }, M extends { type: string 
 
 ```ts
 interface FencedRead {
+  /** Raw bytes at the key, the `Store.load` contract unchanged. */
   readonly raw: unknown;
+  /** The version those bytes were written at. A never-written key reads `0`. */
   readonly version: number;
 }
 ```
@@ -773,8 +967,15 @@ interface FencedRead {
 
 ```ts
 interface FencedStore<S> extends Store<S> {
+  /** Discriminant — the one thing isFencedStore reads. */
   readonly fenced: true;
+  /** `load`, plus the version those bytes carry. */
   loadFenced(): Promise<FencedRead>;
+  /**
+   * Compare-and-swap save. Writes `state` only if the stored version is still
+   * `expectedVersion`, and resolves with the NEW version to swap on next time.
+   * Throws StoreConflictError when it is not.
+   */
   saveFenced(state: S, expectedVersion: number): Promise<number>;
 }
 ```
@@ -803,8 +1004,11 @@ function foldMsgs<
 
 ```ts
 interface FoldRefusal<M> {
+  /** The underlying cell-lookup failure: msg.type + state name + accepted set. */
   readonly error: NoCellError;
+  /** Index into the `msgs` array the fold was given. */
   readonly index: number;
+  /** The offending Msg itself — so the caller can print it, not just point. */
   readonly msg: M;
 }
 ```
@@ -930,11 +1134,40 @@ function fromTransport<N extends string, TKey, Inbound, Outbound, M, Ctx>(
 
 ```ts
 interface FromTransportOpts<N extends string, TKey, Inbound, Outbound, M, Ctx> {
+  /**
+   * The Msg dispatched when the transport closes (peer gone, network
+   * dropped, normal close). ONE Msg arm, not a Sub, not a heartbeat-derived
+   * deadline — the transport's own close signal is the truth.
+   */
   readonly lostMsg: (key: TKey) => M;
+  /**
+   * A short, stable name for this seam — and its Sub `type`. The machine's
+   * `subscribe` table holds the seam's runner under it, so it must be unique
+   * among the machine's Sub types.
+   */
   readonly name: N;
+  /**
+   * Map a parsed inbound to a domain Msg. Returning `null` drops the
+   * dispatch (e.g. a transport-level pong that doesn't change domain state).
+   */
   readonly onInbound: (inbound: Inbound, key: TKey) => M | null;
+  /**
+   * Build the transport. The battery owns the lifetime; the factory is the
+   * platform-specific constructor (`new WebSocket(...)` adapter on a DO,
+   * `MessagePort` adapter in a worker, in-memory stub in tests).
+   */
   readonly openTransport: (key: TKey, ctx: Ctx) => Transport;
+  /**
+   * Parse one inbound frame. The battery hands `unknown` through (boundary
+   * parse is the consumer's responsibility per invariant 8). Returning
+   * `null` drops the frame silently — useful for frames the seam doesn't
+   * recognize at this layer (e.g. transport-level keepalive).
+   */
   readonly parseInbound: (raw: string, key: TKey) => Inbound | null;
+  /**
+   * Serialize an outbound. Called by the Cmd handler the battery wires.
+   * Pure data → string at the seam boundary.
+   */
   readonly serializeOutbound: (outbound: Outbound) => string;
 }
 ```
@@ -966,7 +1199,27 @@ function historyTracker<S, M extends { type: string }>(
 
 ```ts
 interface HistoryTracker<S, M extends { type: string }> {
+  /**
+   * Snapshot of recorded transitions, oldest first. Each entry is
+   * `{ msg, state }`: `msg` is `null` for the boot transition (recorded via
+   * `onBoot`) and the applied Msg for every other (recorded via `observe`).
+   *
+   * Returns a shallow copy: the array is fresh on every call (callers may
+   * iterate, slice, or replay without affecting the tracker's buffer).
+   * Entry values are references to the originals (TEA states/msgs are
+   * conventionally immutable; do not mutate them if your S/M is not).
+   */
   snapshot(): readonly { readonly msg: M | null; readonly state: S }[];
+  /**
+   * Detach the underlying observer. After `stop()`:
+   *   - No new transitions are recorded.
+   *   - `snapshot()` continues to work and returns the buffer's contents
+   *     at the moment of stop (useful for post-hoc inspection in tests).
+   *   - The tracker holds no references that would prevent GC of the
+   *     `runtime` argument other than the entries already buffered.
+   *
+   * Idempotent — subsequent calls are no-ops.
+   */
   stop(): void;
 }
 ```
@@ -977,7 +1230,13 @@ interface HistoryTracker<S, M extends { type: string }> {
 
 ```ts
 interface Identity<S, M> {
+  /**
+   * The identity a message is addressed to, or `undefined` when the message
+   * carries no identity (lifecycle / pre-identity messages — never dropped).
+   * Pure (invariant 2); plain value when defined.
+   */
   readonly ofMsg: (msg: M) => unknown;
+  /** The identity THIS instance owns. Pure (invariant 2); plain value. */
   readonly ofState: (state: S) => unknown;
 }
 ```
@@ -1084,11 +1343,77 @@ interface ListenerTarget<Args extends readonly unknown[], S extends Sub, Ctx> {
 
 ```ts
 type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> = {
+  /**
+   * The update form ("reducer" | "transitions"), stamped non-enumerably by
+   * `defineMachine` at construction (see `UpdateForm` / `formOf`). Optional in
+   * the type so the structural `Machine` annotation form keeps accepting plain
+   * object literals; readers go through `formOf`, which falls back to
+   * `detectUpdateForm` when the tag is absent. Never written by hand.
+   */
   readonly __form?: UpdateForm;
+  /**
+   * Phantom — never assigned, never read. `subs` reaches `U` only through a
+   * conditional type, which is no inference site, so this is the slot a caller
+   * like `run(machine, …)` infers the Sub union from (and so what types its
+   * `subscribe` runners). Same device as `Cmd`'s `__ok`. Tuple-wrapped so an
+   * empty union (`never`) is still a candidate rather than `undefined`.
+   */
   readonly __sub?: readonly [U];
+  /**
+   * The typed Cmd constructors this machine emits (`Cmd.define`). Declared
+   * through `defineMachine({ cmds })`, which derives `C` and the settled half
+   * of `M` from them; the runtime reads the list to parse each handler's
+   * `_ok` value against its `ok` schema and stamp `at` at the interpret edge.
+   * A machine of hand-written Cmds omits it and runs exactly as before.
+   */
   readonly cmds?: readonly AnyCmdDef[];
+  /**
+   * Instance-identity filter. Declares THIS instance's identity once; the
+   * substrate drops any message addressed to a DIFFERENT identity before it
+   * reaches `update`. Replaces the per-cell `if (msg.runId !== state.runId)`
+   * guard entirely — the reducer never sees a foreign-instance message, so no
+   * cell needs to check.
+   *
+   * Opt-in: a machine that omits `identity` skips the filter (every message
+   * reaches `update`, exactly as before). A message whose `ofMsg` returns
+   * `undefined` is identity-agnostic and always reaches `update` (lifecycle /
+   * pre-identity messages).
+   *
+   * Strengthens invariant 7 (identity is explicit — declared once, enforced by
+   * the substrate) and invariant 6 (mis-addressed messages dropped at one
+   * observable point, not per cell).
+   */
   identity?: Identity<S, M>;
+  /**
+   * Boot the runtime. Called once by `run(...)` with whatever `Store.load()`
+   * returned: `null` on fresh boot, the persisted state on rehydrate.
+   *
+   * **Contract:** when `loaded !== null`, init MUST return `[loaded, []]` —
+   * no Cmds. Init's rehydrate branch is the migration / parse boundary, not
+   * the boot-effect hook. See Invariant 2 in `.patterns/tea/tea-invariants.md`.
+   *
+   * Boot effects routes:
+   *   - Stateless infrastructure → host module top, outside TEA.
+   *   - State-conditional resume → a `boot` Msg the host dispatches once
+   *     after `run(...)` returns.
+   *
+   * Violations are caught at runtime by `replay` (which throws with a
+   * pointer to the alternatives).
+   */
   init: (loaded: S | null, ctx: Ctx) => readonly [S, readonly C[]];
+  /**
+   * The machine's Subs, as data: each entry names a Sub `type` and the state
+   * slice it depends on (`deps`). The engine derives the id
+   * (`structuralHash({ type, deps })`) and the gate (`deps` non-null), starts
+   * the runner for `type` when an entry turns on, leaves it alone while the id
+   * holds, restarts it when the id changes, and stops it on `null` or `stop()`.
+   *
+   * `U` is the machine's own Sub union (`types.sub`); the built-in `timer`
+   * (`{ type: "timer", deps: (s) => ({ ms, msg }) }`) is always available.
+   *
+   * Strengthens invariant 4 (lifecycle owned by the substrate) and invariant 7
+   * (identity derived, not hand-authored).
+   */
   readonly subs?: ReadonlyArray<DepKeyedSub<S, U | BuiltinSub<M>>>;
   update: Reducer<S, M, C> | ([S] extends [{ type: string }] ? Transitions<S, M, C> : never);
 }
@@ -1102,12 +1427,16 @@ type Machine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> =
 type MachineShape =
   | {
     readonly form: "reducer";
+    /** Every `Msg.type` the flat reducer has a cell for. */
     readonly msgs: readonly string[];
   }
   | {
+    /** `state.type` → the `Msg.type`s that state has a cell for. */
     readonly accepts: Readonly<Record<string, readonly string[]>>;
     readonly form: "transitions";
+    /** The union of every row's `Msg.type` keys (see `msgKeysOf`). */
     readonly msgs: readonly string[];
+    /** Every `state.type` the table has a row for, in table order. */
     readonly states: readonly string[];
   }
 ```
@@ -1146,18 +1475,46 @@ type MalformedResult = {
 
 ```ts
 interface ManagedResourceBattery<N extends string, TKey, Handle, Ctx> {
+  /**
+   * The `subs` entry. `when(state)` returns the resource's KEY when it should
+   * be held, or `null` when it should be torn down. The key is the Sub's
+   * `deps`, so the engine derives the id from it: an unchanged key leaves the
+   * resource alone, a changed key releases the old one and acquires anew.
+   * Plain JSON-compatible data only — the id hash throws on anything else.
+   */
   readonly depKeyed: <S>(
     when: (state: S) => TKey | null,
   ) => {
+    /**
+     * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+     * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+     * correctly. Pure (invariant 2). Plain JSON-compatible data only
+     * (invariant 1): the structural hash THROWS on a `Date`, `Map`, `Set`,
+     * `Error` or class instance rather than collapsing them onto one id.
+     */
     readonly deps: (state: S) => TKey | null | undefined;
     readonly type: N;
   };
+  /**
+   * Accessor for the live Handle, keyed on `key` (the author's key, never the
+   * derived Sub id). Returns `undefined` when the resource is not currently
+   * held — the caller decides whether that is an error. A Cmd handler wires
+   * its `ctx.getX(key)` through this, so the handler reads the SAME owner the
+   * reconciler holds, never a hand-built duplicate.
+   */
   readonly get: (key: TKey) => Handle | undefined;
+  /**
+   * The runner for this battery's Sub type — hand it to `run` as
+   * `subscribe: { [battery.type]: battery.subscribe }`. Runs `acquire` on
+   * start, holds the Handle in the battery's handle table, and returns a
+   * cleanup that runs `release` (and forgets the Handle) on stop.
+   */
   readonly subscribe: (
     sub: ManagedResourceSub<N, TKey>,
     ctx: Ctx,
     dispatch: (msg: never) => void,
   ) => Dispose;
+  /** The battery's Sub type — its `name`. */
   readonly type: N;
 }
 ```
@@ -1212,6 +1569,7 @@ const NO_ACK: Seq
 class NoCellError extends Error {
   constructor(msgType: string, stateName: string, acceptedTypes: readonly string[]);
   readonly _tag: "NoCellError";
+  /** The Msg types the refusing state has cells for; empty when it has none. */
   readonly acceptedTypes: readonly string[];
   readonly msgType: string;
   readonly name: "NoCellError";
@@ -1377,7 +1735,9 @@ function readInOrder<In, Out>(
 
 ```ts
 interface ReadStep<In, Out> {
+  /** The slice this step consults — `"cache"`, `"failed"`, `"inFlight"`. */
   readonly name: string;
+  /** What this slice says about `input`, or `undefined` to defer. */
   readonly read: (input: In) => Out | undefined;
 }
 ```
@@ -1407,14 +1767,23 @@ function reconcile<
 
 ```ts
 interface ReconnectingWebSocketFactoryOpts<S, M> {
+  /** First backoff delay in ms (doubles each failed attempt). Default 250. */
   backoffBaseMs?: number;
+  /** Backoff ceiling in ms. Default 5000. */
   backoffMaxMs?: number;
+  /** Inject the socket constructor (defaults to the global `WebSocket`); the test seam. */
   connect?: (url: string) => MinimalWebSocket;
   onClose?: (code: number, reason: string, sub: S) => M | null;
   onError?: (event: MinimalEvent, sub: S) => M | null;
   onMessage: (data: unknown, sub: S) => M | null;
   onOpen?: (sub: S) => M | null;
+  /**
+   * Fires when a reconnection (any open after the first) succeeds, carrying the
+   * 1-based reconnect count — the resync hook. Omitting drops reconnect events
+   * silently.
+   */
   onReconnect?: (attempt: number, sub: S) => M | null;
+  /** Inject the timer (defaults to `setTimeout`/`clearTimeout`); the test seam. */
   schedule?: (fn: () => void, ms: number) => CancelTimer;
 }
 ```
@@ -1478,15 +1847,22 @@ function replay<
 
 ```ts
 interface RunHandle<S, M extends { type: string }, E extends { type: string } = never> {
+  /** Resolves to the booted handle once boot completes. */
   readonly ready: Promise<BootedRunHandle<S, M, E>>;
+  /** Put a Msg in the inbox; resolves once the engine has processed it. */
   dispatch(msg: M): Promise<void>;
+  /** A `(msg, state)` hook, fired after each applied transition. */
   observe(observer: (msg: M, state: S) => void): () => void;
+  /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
     type: K,
     handler: (event: Extract<E, { type: K }>) => void,
   ): () => void;
+  /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
+  /** Stop the run; resolves once the engine has torn it down. */
   stop(): Promise<void>;
+  /** A zero-arg change notifier, fired after each applied transition. */
   subscribe(listener: () => void): () => void;
 }
 ```
@@ -1523,10 +1899,44 @@ type RunOptions<
 
 ```ts
 interface Runtime<S, M extends { type: string }, E extends { type: string } = never> extends BootingRuntime<S, M, E> {
+  /** Resolves to this same `Runtime` once boot completes. Idempotent. */
   ready: Promise<Runtime<S, M, E>>;
+  /**
+   * Resolves with the terminal State the first time the run reaches one (per the
+   * `terminal` predicate). If ALREADY terminal, resolves immediately; otherwise
+   * on the transition that first makes `terminal` hold. The awaitable companion
+   * to `result()`. With no predicate this never resolves. Idempotent and
+   * multi-caller safe.
+   */
   done(): Promise<S>;
+  /**
+   * The current State. TOTAL — never throws. Obtaining a `Runtime` requires
+   * awaiting `ready`, which only resolves AFTER boot has run `init` and set the
+   * initial State.
+   */
   getState(): S;
+  /**
+   * Resolves once the runtime has reached QUIESCENCE — every dispatched Msg AND
+   * every transitive interpret follow-up has been processed, with no further step
+   * pending on the tail. Since plain `dispatch` already runs to quiescence, this
+   * is mainly for follow-ups left by a `dispatchOnce` single step, or a chain
+   * kicked off by a Sub / boot `init` cmds with no `dispatch` to await.
+   *
+   * Idempotent and re-entrant-safe. Tail rejections are NOT surfaced here (a
+   * failing dispatch surfaces on its OWN promise; follow-up rejections route to
+   * `onError`). The one rejection `idle()` produces is `QuiescenceTimeoutError`
+   * on hitting the iteration cap — so a livelock stays distinguishable from a
+   * genuine quiesce (invariant 6). A poll is still correct when waiting on an
+   * EXTERNAL event the runtime cannot enqueue itself.
+   */
   idle(): Promise<void>;
+  /**
+   * The terminal State of the run, or `undefined` while in flight — "terminal"
+   * per the `terminal` predicate passed to `run()` (no predicate → never
+   * terminal → always `undefined`). The first-class result read: the run's
+   * product off the State the machine already owns, NOT scraped off the `observe`
+   * firehose by matching an internal Msg name. Total — never throws.
+   */
   result(): S | undefined;
 }
 ```
@@ -1589,7 +1999,25 @@ type RuntimeErrorPhase =
 
 ```ts
 interface RuntimeRef<M extends { type: string }> {
+  /**
+   * Put a Msg in the runtime's inbox and resolve once processed. Runs to
+   * QUIESCENCE by default: settles only after the dispatched Msg AND every
+   * transitive interpret follow-up has drained. Pass `{ settle: "once" }` (or
+   * call `dispatchOnce`) for the single-step case.
+   *
+   * Rejection ordering: the ONE dispatched transition's own failure surfaces
+   * first, here. If it succeeds but the follow-up chain never stabilizes, the
+   * quiescent drain rejects with `QuiescenceTimeoutError`. Follow-up Msg
+   * rejections themselves route to the `onError` sink, never here.
+   */
   dispatch(msg: M, opts?: { readonly settle?: DispatchSettle }): Promise<void>;
+  /**
+   * Dispatch `msg` and resolve after exactly ONE transition's effects settle,
+   * WITHOUT draining the follow-up chain — equivalent to
+   * `dispatch(msg, { settle: "once" })`. Prefer plain `dispatch` unless you will
+   * `await runtime.idle()` yourself; the un-awaited follow-up chain is the
+   * footgun the quiescent default removed.
+   */
   dispatchOnce(msg: M): Promise<void>;
 }
 ```
@@ -1648,6 +2076,7 @@ type Settled<D extends AnyCmdDef> = D extends CmdDef<infer Name, infer Input, in
 
 ```ts
 type SettledErr<Name extends string, C, E extends Tagged> = {
+  /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
   readonly at: number;
   readonly cmd: C;
   readonly error: E | MalformedResult;
@@ -1661,6 +2090,7 @@ type SettledErr<Name extends string, C, E extends Tagged> = {
 
 ```ts
 type SettledOk<Name extends string, C, Ok> = {
+  /** Stamped by the runtime at the interpret edge (`run`'s `clock`). */
   readonly at: number;
   readonly cmd: C;
   readonly type: `${Name}_ok`;
@@ -1790,6 +2220,13 @@ type Supervision<S, M extends { type: string }> =
   | { readonly strategy: "stop" }
   | { readonly strategy: "escalate" }
   | {
+    /**
+     * Host-provided rehydration to last-known-good state. Invoked when the
+     * reducer throws; its return value becomes the new state and the transition
+     * continues from there. Receives the pre-throw `state`, the `msg` that
+     * triggered the throw, and the thrown `error` so the host can route by
+     * cause.
+     */
     readonly rehydrate: (state: S, msg: M, error: unknown) => S;
     readonly strategy: "restart";
   }
@@ -1846,8 +2283,11 @@ function tagSeq<T>(seq: number, value: T): SeqTagged<T>
 
 ```ts
 interface TelemetryEvent {
+  /** When the transition committed, read off `run`'s `clock` (ms since epoch). */
   readonly at: number;
+  /** The `Msg.type` that drove the transition. */
   readonly msgType: string;
+  /** This run's applied transitions so far, counted from 1. Boot is not one. */
   readonly seq: number;
 }
 ```
@@ -1893,9 +2333,20 @@ type Transitions<S extends { type: string }, M extends { type: string }, C exten
 
 ```ts
 interface Transport {
+  /** Close the underlying channel cleanly. Called by the Sub cleanup. */
   close(): void;
+  /**
+   * Subscribe to a one-shot close. Returns a cleanup that removes the
+   * listener. The battery dispatches `lostMsg` on close.
+   */
   onClose(listener: () => void): () => void;
+  /**
+   * Subscribe to inbound frames. Returns a cleanup that removes the listener.
+   * The battery wires this in its runner; cleanup runs when the seam's key
+   * goes null or changes.
+   */
   onMessage(listener: (data: string) => void): () => void;
+  /** Send a string frame. Best-effort; failures are logged at the boundary. */
   send(data: string): void;
 }
 ```
@@ -1906,14 +2357,42 @@ interface Transport {
 
 ```ts
 interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
+  /**
+   * The `subs` entry. `when(state)` returns the seam's KEY when it should be
+   * open, or `null` when it should be torn down. The key is the Sub's `deps`,
+   * so the engine derives the id from it: an unchanged key leaves the seam
+   * open, a changed key closes it and opens a fresh one. Plain
+   * JSON-compatible data only — the id hash throws on anything else.
+   */
   readonly depKeyed: <S>(
     when: (state: S) => TKey | null,
   ) => {
+    /**
+     * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+     * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+     * correctly. Pure (invariant 2). Plain JSON-compatible data only
+     * (invariant 1): the structural hash THROWS on a `Date`, `Map`, `Set`,
+     * `Error` or class instance rather than collapsing them onto one id.
+     */
     readonly deps: (state: S) => TKey | null | undefined;
     readonly type: N;
   };
+  /**
+   * Outbound send, addressed by the seam's key (never the derived Sub id,
+   * which the caller cannot know). The Cmd handler calls this; the battery's
+   * handle table (built when the runner started) routes to the live
+   * transport. If the seam is closed (no running Sub), the send is dropped
+   * honestly (logged, not thrown — the reducer already moved past caring,
+   * same shape as Rule 2 fire-and-forget Cmds).
+   */
   readonly send: (key: TKey, outbound: Outbound) => void;
+  /**
+   * The runner for this seam's Sub type — hand it to `run` as
+   * `subscribe: { [seam.type]: seam.subscribe }`. Wires inbound + close in
+   * one shot and publishes the live transport to the outbound handle table.
+   */
   readonly subscribe: (sub: TransportSub<N, TKey>, ctx: Ctx, dispatch: (msg: M) => void) => Dispose;
+  /** The seam's Sub type — its `name`. */
   readonly type: N;
 }
 ```
@@ -1979,7 +2458,9 @@ class UndeclaredFailureError extends Error {
   constructor(cmdType: string, failure: unknown, declared: readonly string[]);
   readonly _tag: "UndeclaredFailureError";
   readonly cmdType: string;
+  /** The tags the def declares. */
   readonly declared: readonly string[];
+  /** The `error` the handler's `Err` carried, verbatim. */
   readonly failure: unknown;
   readonly name: "UndeclaredFailureError";
 }

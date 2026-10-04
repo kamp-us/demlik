@@ -117,20 +117,31 @@ function queueAdapter<I>(): QueueAdapter<I>
 
 ```ts
 interface QueueAdapter<I> {
+  /**
+   * Claim the first `pending` item — flip it `running`, stamp `startedAt` to
+   * `now` — or `null` if nothing is pending.
+   */
   claim(
     queue: readonly QueueItem<I>[],
     now: number,
   ): { claimed: QueueItem<I>; next: QueueItem<I>[] } | null;
+  /** Append a new `pending` item stamped `now` under `id`. */
   enqueue(
     queue: readonly QueueItem<I>[],
     input: I,
     now: number,
     id: string,
   ): { item: QueueItem<I>; next: QueueItem<I>[] };
+  /** Drop the item `id` from the queue (completed runs leave the queue). */
   markDone(
     queue: readonly QueueItem<I>[],
     id: string,
   ): { changed: boolean; next: QueueItem<I>[] };
+  /**
+   * Single-item transition: replace the item `id` with `patch(item)`. The
+   * closure is the only place a `QueueItem` literal is constructed, so the
+   * field shape stays out of the consumer's hands except through this verb.
+   */
   patch(
     queue: readonly QueueItem<I>[],
     id: string,

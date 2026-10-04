@@ -102,15 +102,32 @@ type ClassifyBatchCmd<C extends string> = JevAskCmd<ItemQuestions<C>>
 
 ```ts
 interface ClassifyBatchConfig<I, C extends string> {
+  /** Max batches in flight, forwarded to fan-out. */
   readonly concurrency: number;
+  /** The rubric every item is classified against. Its keys are the answer domain. */
   readonly criteria: ClassifyCriteria<C>;
+  /** Eviction tick for the TTL cache. Omit and no eviction Sub is declared. */
   readonly evictEveryMs?: number;
+  /** The pure decider `offline` answers with, for a handler with no key. */
   readonly fallback?: JevFallback<Readonly<Record<string, ItemQuestion<C>>>>;
+  /**
+   * The `instructions` for one item's question. Defaults to a template naming
+   * the item's key, which is what tells the model WHICH element of the request
+   * `state` the question is about.
+   */
   readonly instructions?: (key: string, item: I) => JevText;
+  /**
+   * The cache key and the question id of an item — e.g. a sanitized merchant
+   * string, so two transactions at the same shop share one answer. PURE.
+   */
   readonly keyOf: (item: I) => string;
+  /** Size trigger, forwarded to the batch window. Defaults to DEFAULT_CLASSIFY_MAX_ITEMS. */
   readonly maxItems?: number;
+  /** Latency ceiling in ms, forwarded to the batch window. */
   readonly maxMs: number;
+  /** The model asked for. Forwarded to `../ask`'s default when omitted. */
   readonly model?: string;
+  /** How long a settled answer stays cached, forwarded to the TTL cache. */
   readonly ttlMs: number;
 }
 ```
@@ -145,9 +162,13 @@ type ClassifyBatchOkMsg<C extends string> = JevSucceedMsg<ItemQuestions<C>>
 
 ```ts
 interface ClassifyBatchState<I, C extends string> {
+  /** The answers, keyed by `keyOf` — `../../resilience/cache`'s slice. */
   readonly cache: TtlCache<JevChoiceAnswer<Extract<C, string>>>;
+  /** Keys whose batch settled `resilient_run_err`, with the error that settled it. */
   readonly failed: Readonly<Record<string, JevAskErr>>;
+  /** The in-flight batches — `../../flow/fan-out`'s slice. */
   readonly fanOut: FanOutState<Batch<I>, JevOk<Readonly<Record<string, ItemQuestion<C>>>>>;
+  /** The open batch window — `../../flow/batch-window`'s slice. */
   readonly window: BatchWindow<I>;
 }
 ```
@@ -176,8 +197,33 @@ function classifyStatus(status: number): JevHttpStatus
 function createClassifyBatch<I, C extends string>(
   config: ClassifyBatchConfig<I, C>,
 ): {
+  /**
+   * Offer `item` to the pipeline at `at`. PURE.
+   *
+   * An item whose key is cached, buffered, or already in a batch is DROPPED:
+   * the cache hit is the whole point of the cache, and the other two are what
+   * keeps one key out of two batches at once — which is the property that makes
+   * a batch's id a usable identity and an answer's key unambiguous.
+   *
+   * An item that is NOT dropped loses its standing failure mark, exactly as
+   * onBatchOk clears one: from the instant the key is buffered it is in
+   * flight again, and a `failed` entry left standing would make `answerFor`
+   * report the PREVIOUS attempt's error for the whole of the new one — telling a
+   * host that polls it to stop waiting for work that is running.
+   */
   add: (state: State, item: I, at: number) => readonly [State, Cmds];
+  /**
+   * What is known about `key` at `at`. PURE, derived — it stores nothing.
+   *
+   * `at` is a parameter rather than a clock read because a TTL answer is only
+   * an answer relative to an instant, and this module reads no clock anywhere.
+   * The host passes the `at` of the Msg it is handling.
+   *
+   * The precedence is ANSWER_ORDER, not this function's statement
+   * order; `absent` is what every slice deferring means.
+   */
   answerFor: (state: State, key: string, at: number) => KeyAnswer<C>;
+  /** The ask Cmd def — list it in the machine's `cmds`. */
   ask: CmdDef<"resilient_run", {
     readonly input: JevRequest;
     readonly key: string;
@@ -188,24 +234,66 @@ function createClassifyBatch<I, C extends string>(
     readonly [detail: string]: unknown;
     readonly _tag: "port_rejected";
   }>;
+  /**
+   * Your handler's outcome for Jev's reply to one batch — `../ask`'s
+   * `decodeJevReply`, parsing against the questions the batch carried.
+   */
   decode: (
     request: JevRequest<Readonly<Record<string, ItemQuestion<C>>>>,
     reply: JevHttpReply,
   ) => Outcome<JevOk<Readonly<Record<string, ItemQuestion<C>>>>, JevRejected>;
+  /** The starting slice — each battery's own `init`, side by side. */
   init: () => State;
+  /** Your handler's outcome with no network — the configured `fallback`. */
   offline: (
     request: JevRequest<Readonly<Record<string, ItemQuestion<C>>>>,
   ) => Outcome<JevOk<Readonly<Record<string, ItemQuestion<C>>>>, JevRejected>;
+  /**
+   * A batch settled `resilient_run_err`. PURE.
+   *
+   * Each of its keys is marked failed with the error that settled it and the
+   * cache is NOT touched: a failure is not an answer, and writing one back under
+   * `ttlMs` would poison every later `add` for that key for the whole TTL. The
+   * key stays re-addable, because it is neither cached nor in flight once
+   * fan-out has moved the batch to `failed`.
+   */
   onBatchErr: (state: State, msg: JevFailMsg) => readonly [State, Cmds];
+  /**
+   * A batch settled OK. PURE.
+   *
+   * Every answer is written back to the cache with `ttlMs` at `msg.at`, the
+   * batch's keys lose any standing failure mark, and fan-out backfills the freed
+   * concurrency slot — so the returned Cmds are the next batches' asks.
+   *
+   * An answer arrives under the question id it was asked under, which is the
+   * item's own key, so the write-back needs no positional matching between the
+   * request `state` array and the answers map.
+   */
   onBatchOk: (state: State, msg: ClassifyBatchOkMsg<C>) => readonly [State, Cmds];
+  /** The eviction tick fired: drop every entry expired at `at`. PURE. */
   onEvict: (state: State, at: number) => readonly [State, Cmds];
+  /** The time window closed: flush whatever is buffered. PURE. */
   onWindow: (state: State, at: number) => readonly [State, Cmds];
+  /** Your handler's outcome when the call threw — `../ask`'s `jevCallThrew`. */
   rejected: (cause: unknown) => Outcome<never, JevRejected>;
+  /**
+   * The machine's `subs` entries, over a host Model that holds the slice where
+   * `select` reads it: the window's built-in `timer`, plus the cache's eviction
+   * tick when `evictEveryMs` is configured.
+   */
   subEntries: <Model>(
     select: (model: Model) => State,
     id?: string,
   ) => readonly DepKeyedSub<Model, CacheEvictionSub | TimerSub<BatchWindowExpired>>[];
+  /**
+   * The window's flush deadline while a window is open. Fan-out lists none (it
+   * runs no timers). PURE.
+   */
   subs: (state: State, id?: string) => readonly BatchWindowSub[];
+  /**
+   * The runners the `subEntries` Subs need beyond the built-in `timer`, handed
+   * to `run` as `subscribe`: the cache's eviction tick.
+   */
   subscribers: () => {
     cache: SubscribeHandler<CacheEvictionSub, CacheEvictMsg, unknown>;
   };
@@ -221,20 +309,51 @@ function createJevAsk<Q extends Readonly<Record<string, JevQuestion>>>(
   config: JevAskConfig<Q>,
   rng?: () => number,
 ): {
+  /**
+   * Ask the configured questions about `content` under `key`. PURE — it builds
+   * the plain-data request (no closures: `state`, `model` and `questions` are
+   * all values) and delegates straight to resilient-call's gate.
+   */
   attempt: (
     s: State,
     key: string,
     content: JevState,
     at: number,
   ) => readonly [State, readonly JevAskCmd<Q>[]];
+  /** The call's deadlines — resilient-call's retry and deadline timers. */
   deadlines: (s: State) => readonly DeadlineSub[];
+  /** Your handler's outcome for an HTTP reply — decodeJevReply. */
   decode: (request: JevRequest<Q>, reply: JevHttpReply) => Outcome<JevOk<Q>, JevRejected>;
+  /**
+   * Record a failure. PURE. The backoff itself is resilient-call's — nothing
+   * here recomputes a delay, counts an attempt or reads a clock. What this verb
+   * adds is the routing the typed error makes possible, and it is two
+   * decisions:
+   *
+   *   1. A TERMINAL error settles through `settleFailed`, which ends the call
+   *      without touching the breaker or the retry counter. Handing a 401 or a
+   *      parse failure to `settle` instead would re-issue the identical request
+   *      and trip a breaker over a backend that is perfectly healthy.
+   *   2. When the transient path EXHAUSTS the retry budget and a `fallback` is
+   *      configured, the fallback answers instead of the call settling failed.
+   *      This is the one place that can be observed — exhaustion is a fact of
+   *      the slice, not of the handler, so the handler cannot know it is on the
+   *      last attempt.
+   *
+   * The slice's `failed` phase stores the typed JevAskErr, never the
+   * JevRejected carrier.
+   */
   fail: (s: State, msg: JevFailMsg) => readonly [State, readonly JevAskCmd<Q>[]];
+  /** The starting slice — resilient-call's. */
   init: () => State;
   name: "resilient";
+  /** Your handler's outcome with no network — offlineJevAnswer. */
   offline: (request: JevRequest<Q>) => Outcome<JevOk<Q>, JevRejected>;
+  /** A retry / deadline timer fired. PURE — resilient-call's `onTimer`. */
   onTimer: (s: State, msg: JevTimerMsg) => readonly [State, readonly JevAskCmd<Q>[]];
+  /** Your handler's outcome when the call threw — jevCallThrew. */
   rejected: (cause: unknown) => Outcome<never, JevRejected>;
+  /** The `Cmd.define`d run Cmd — list it in the machine's `cmds`. */
   run: CmdDef<"resilient_run", {
     readonly input: JevRequest;
     readonly key: string;
@@ -245,7 +364,9 @@ function createJevAsk<Q extends Readonly<Record<string, JevQuestion>>>(
     readonly [detail: string]: unknown;
     readonly _tag: "port_rejected";
   }>;
+  /** Record a settled answer. PURE — resilient-call's `settle`. */
   succeed: (s: State, msg: JevSucceedMsg<Q>) => readonly [State, readonly JevAskCmd<Q>[]];
+  /** The built-in `timer` Sub's deps — resilient-call's `timer`. */
   timer: (
     s: ResilientState<JevRequest<Q>, JevOk<Q>>,
   ) => TimerDeps<ResilientTimerMsg<"resilient">> | null;
@@ -385,9 +506,13 @@ function jevAskCmdDef<Q extends Readonly<Record<string, JevQuestion>>>(): CmdDef
 
 ```ts
 interface JevAskConfig<Q extends JevQuestionMap> {
+  /** The pure decider for the no-key and budget-spent paths. Absent → those settle as an error. */
   readonly fallback?: JevFallback<Q>;
+  /** The model id asked for. Defaults to DEFAULT_JEV_MODEL. */
   readonly model?: string;
+  /** The question map every request carries; its keys type the answers. */
   readonly questions: Q;
+  /** Backoff policy, composed into `../../resilience/resilient-call`. Omit → no backoff. */
   readonly retry?: RetryPolicy;
 }
 ```
@@ -578,9 +703,13 @@ interface JevNoulQuestion {
 
 ```ts
 interface JevOk<Q extends JevQuestionMap> {
+  /** The typed answers, one per question id. */
   readonly answers: JevAnswers<Q>;
+  /** The model that answered, as the response reported it (or the requested one, for a fallback). */
   readonly model: string;
+  /** Which path produced this answer. */
   readonly source: "port" | "fallback";
+  /** Tokens spent. Zero on the fallback path. */
   readonly usage: JevUsage;
 }
 ```
@@ -813,7 +942,21 @@ interface ResilientState<I, R> {
   readonly cache: TtlCache<R>;
   readonly calls: Readonly<Record<string, CallPhase<I, R>>>;
   readonly circuit: CircuitState;
+  /**
+   * The instant of the latest clocked transition this slice saw — the `at` of
+   * the last `attempt` / `resume` / `settleFailed`, settled Msg or timer fire.
+   * `timer` counts the soonest deadline down from it, so the built-in `timer`
+   * Sub gets a relative `ms` without anything reading a clock. `0` until the
+   * first clocked transition.
+   */
   readonly clockMs: number;
+  /**
+   * Per-key backoff counter. Entries minted by `backoff` are `TimedRetryState`s
+   * (they carry the streak's `firstFailureAtMs`, since every failure path holds
+   * the observation instant); the field is typed at the `RetryState` supertype
+   * because a key that has never failed has no streak, and a slice persisted
+   * before the origin existed rehydrates without one. Still plain data.
+   */
   readonly retry: Readonly<Record<string, RetryState>>;
 }
 ```

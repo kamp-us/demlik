@@ -44,6 +44,13 @@ function memoryStore<S>(
 
 ```ts
 interface MemoryStoreOptions {
+  /**
+   * Refuse a second live writer (#143). With `{ fenced: true }` the returned
+   * store is a `FencedStore<S>` whose version is an in-process counter — honest
+   * for this adapter, since the cell it guards is in this process too. Two
+   * `run`s handed the SAME `memoryStore` are the case it catches, and it is the
+   * cheapest way to exercise the fenced path in a test.
+   */
   readonly fenced?: true;
 }
 ```

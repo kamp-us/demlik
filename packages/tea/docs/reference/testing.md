@@ -51,10 +51,31 @@ function bindMachine<
 
 ```ts
 interface BoundMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> {
+  /**
+   * Assert the exact set of subs desired at the final state. Mirrors the
+   * free `expectActiveSubs(machine, opts, expected)`.
+   */
   expectActiveSubs(opts: BoundOpts<S, M>, expected: readonly NoInfer<U | BuiltinSub<M>>[]): void;
+  /**
+   * Assert `cmd` appears at least once in the emitted cmd list. Order is
+   * not asserted. Mirrors the free `expectCmdEmitted(machine, opts, cmd)`.
+   */
   expectCmdEmitted(opts: BoundOpts<S, M>, cmd: NoInfer<C>): void;
+  /**
+   * Assert the exact ordered sequence of cmds emitted by replaying
+   * `opts.msgs`. Mirrors the free `expectCmdSequence(machine, opts, expected)`.
+   */
   expectCmdSequence(opts: BoundOpts<S, M>, expected: readonly NoInfer<C>[]): void;
+  /**
+   * Assert the final state after replaying `opts.msgs` deep-equals
+   * `expected`. Mirrors the free `expectFinalState(machine, opts, expected)`.
+   */
   expectFinalState(opts: BoundOpts<S, M>, expected: NoInfer<S>): void;
+  /**
+   * Bound `replay` — returns `{ state, cmds, subs }` for the given opts.
+   * Use for the "narrow-then-assert" pattern where the test inspects a
+   * specific field after `state.type === "..."` discrimination.
+   */
   replay(
     opts: BoundOpts<S, M>,
   ): {
@@ -62,6 +83,10 @@ interface BoundMachine<S, M extends { type: string }, C extends Cmd, U extends S
     state: S;
     subs: readonly (U | BuiltinSub<M>)[];
   };
+  /**
+   * Single-msg step — feeds `loaded → msg → [next state, cmds emitted by
+   * that msg]`. Mirrors the free `step(machine, loaded, msg, ctx)`.
+   */
   step(loaded: S, msg: M): readonly [S, readonly C[]];
 }
 ```
@@ -161,7 +186,14 @@ function expectReplayDeterministic<
 
 ```ts
 function noopRuntime<S, M extends { type: string }>(
-  opts?: { initialState?: S },
+  opts?: {
+    /**
+     * Optional value returned by `getState()`. Omit
+     *   when the test never calls `getState()` on the no-op runtime — most
+     *   tests only need the type-level slot filled.
+     */
+    initialState?: S;
+  },
 ): Runtime<S, M>
 ```
 

@@ -56,8 +56,11 @@ function MsgLog(__namedParameters: MsgLogProps): Element
 
 ```ts
 type MsgLogEntry = {
+  /** Visual category — drives the row icon. Defaults to "msg" via CSS. */
   kind?: "msg" | "sub" | "cmd" | "ok" | "fail";
+  /** Row text — usually the Msg tag plus a short detail. */
   text: string;
+  /** Display timestamp (whatever format you produced). */
   ts: string;
 }
 ```
@@ -79,9 +82,13 @@ interface MsgLogProps {
 
 ```ts
 interface StateChange {
+  /** The value on the `actual` side (`undefined` when `removed`). */
   actual: unknown;
+  /** The value on the `expected` side (`undefined` when `added`). */
   expected: unknown;
+  /** How the cell differs between the two states. */
   kind: "changed" | "added" | "removed";
+  /** Access path from the state root, e.g. `state.items[1].status`. */
   path: string;
 }
 ```
@@ -100,8 +107,18 @@ function StateDiff(__namedParameters: StateDiffProps): Element
 
 ```ts
 interface StateDiffProps {
+  /**
+   * The "after" state to compare against `expected` — the recomputed or
+   * current model.
+   */
   actual: unknown;
+  /** Optional className appended to the container. Use to override layout. */
   className?: string;
+  /**
+   * The baseline / "before" state — what you expected. In a regression view
+   * this is a trace's recorded `finalState`; in a time-travel view it's the
+   * previous model.
+   */
   expected: unknown;
 }
 ```
@@ -120,8 +137,17 @@ function StateInspector(__namedParameters: StateInspectorProps): Element
 
 ```ts
 interface StateInspectorProps {
+  /** Optional className appended to the container. Use to override layout. */
   className?: string;
+  /**
+   * When this number changes, the inspector flashes. Pass `model.msgCount` or
+   * any other monotonic counter you already have. Omit to disable flashing.
+   */
   flashKey?: number;
+  /**
+   * The machine state to display. Render-derived shape — pass whatever you
+   * want surfaced to the inspector (often a hand-picked subset of the model).
+   */
   state: unknown;
 }
 ```

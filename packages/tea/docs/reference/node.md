@@ -68,6 +68,15 @@ function fileStore<S>(
 
 ```ts
 interface FileStoreOptions {
+  /**
+   * Refuse a second live writer (#143). With `{ fenced: true }` the returned
+   * store is a `FencedStore<S>`: it carries a version stamp beside the state
+   * file, and `run` compare-and-swaps against it on every save. A process that
+   * boots reads the current version and takes the fence; the older live writer
+   * that started from the same version is refused with a `StoreConflictError`
+   * at its next save. Omit it and the store is exactly as it was — the last
+   * writer wins, and single-writer is the caller's precondition to keep.
+   */
   readonly fenced?: true;
 }
 ```

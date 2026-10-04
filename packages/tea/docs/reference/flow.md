@@ -185,6 +185,13 @@ function awaitTerminal<
 
 ```ts
 interface AwaitTerminalOptions {
+  /**
+   * Optional bounded deadline in milliseconds. When set, the returned promise
+   * REJECTS with TerminalTimeoutError if no terminal state is reached
+   * within the window; the timer is cleared on the resolve path so a resolved
+   * await never later rejects or leaves a dangling timer. Omit for an unbounded
+   * await (never rejects for time).
+   */
   readonly timeoutMs?: number;
 }
 ```
@@ -206,8 +213,28 @@ interface BatchWindow<I> {
 
 ```ts
 interface BatchWindowConfig<I, C extends Cmd> {
+  /**
+   * Map a flushed batch to the single Cmd the runtime performs. Called with the
+   * buffered items in arrival order; the returned Cmd is what `add` / `onWindow`
+   * emit when a window closes. PURE constructor — no I/O, no clock; the I/O
+   * happens later in the consumer's interpret handler for the returned Cmd.
+   */
   readonly flush: (items: readonly I[]) => C;
+  /**
+   * Size trigger. A batch flushes the instant its buffer reaches `maxItems`,
+   * WITHOUT waiting for the time window — the classic "send as soon as the
+   * page is full" cutoff. Must be `>= 1`; a config of `maxItems: 0` would flush
+   * an empty batch on every `add`, which is never useful, so callers treat `1`
+   * as the floor (the verb still behaves: with `maxItems <= 1` every item
+   * flushes on arrival, a degenerate but legal "no batching" window).
+   */
   readonly maxItems: number;
+  /**
+   * Time trigger, in milliseconds. A batch flushes no later than `openedAt +
+   * maxMs` — `openedAt` being the `at` of the item that opened the window. This
+   * is the latency ceiling: an item never waits longer than `maxMs` to ship,
+   * even if the buffer never reaches `maxItems`.
+   */
   readonly maxMs: number;
 }
 ```
@@ -234,14 +261,29 @@ type BatchWindowExpired = DeadlineExceeded
 
 ```ts
 interface BatchWindowKnob<I, C extends Cmd> {
+  /**
+   * Buffer `item` (arrival-stamped `at`), flushing immediately if that brings
+   * the buffer to `maxItems`. See `addItem`.
+   */
   add(
     state: BatchWindow<I>,
     item: I,
     at: number,
   ): readonly [BatchWindow<I>, readonly C[]];
+  /** The starting slice — `initBatchWindow()`. */
   init(): BatchWindow<I>;
+  /** Flush whatever is buffered because the time window closed. See `onWindow`. */
   onWindow(state: BatchWindow<I>, at: number): readonly [BatchWindow<I>, readonly C[]];
+  /**
+   * The window timer as an absolute deadline, listed only while a window is
+   * open — for `deadlinesSub` + `subscribeBatchWindow`. See `subsFor`.
+   */
   subs(state: BatchWindow<I>, id?: string): readonly BatchWindowSub[];
+  /**
+   * The built-in `timer` Sub's deps while a window is open, `null` while it is
+   * closed. See `timerFor`. `id` keys the Msg so several windows on one
+   * machine route distinctly.
+   */
   timer(state: BatchWindow<I>, id?: string): TimerDeps<BatchWindowExpired> | null;
 }
 ```
@@ -260,10 +302,15 @@ type BatchWindowSub = DeadlineSub
 
 ```ts
 interface CompensatingWorkflow<A, R, F> {
+  /** Completed steps whose compensation has confirmed, in unwind (reverse) order. */
   readonly compensated: readonly CompletedStep<A, R>[];
+  /** The completed forward steps, in execution order — the history being unwound. */
   readonly completed: readonly CompletedStep<A, R>[];
+  /** The single compensation in flight right now. */
   readonly current: InFlightCompensation<A>;
+  /** The step whose forward activity failed, triggering the unwind. */
   readonly failedStep: WorkflowStep<A>;
+  /** The opaque forward failure that triggered the unwind. Carried, never interpreted. */
   readonly failure: F;
   readonly status: "compensating";
   readonly steps: readonly WorkflowStep<A>[];
@@ -296,11 +343,17 @@ interface CompensationErr<F> {
 
 ```ts
 interface CompensationFailedWorkflow<A, R, F> {
+  /** Completed steps successfully compensated before the rollback broke, in unwind order. */
   readonly compensated: readonly CompletedStep<A, R>[];
+  /** The opaque rollback failure (distinct from failure). Carried, never interpreted. */
   readonly compensationFailure: F;
+  /** The full completed-forward history, in execution order. */
   readonly completed: readonly CompletedStep<A, R>[];
+  /** The step whose compensation bounced. Its forward effect stands un-reversed. */
   readonly failedCompensationStep: WorkflowStep<A>;
+  /** The step whose forward activity failed, triggering the unwind. */
   readonly failedStep: WorkflowStep<A>;
+  /** The opaque forward failure that triggered compensation. Carried, never interpreted. */
   readonly failure: F;
   readonly status: "compensation_failed";
   readonly steps: readonly WorkflowStep<A>[];
@@ -335,7 +388,9 @@ interface CompletedStep<A, R> {
 
 ```ts
 interface CompletedWorkflow<A, R> {
+  /** Every step, in execution order, with its result. */
   readonly completed: readonly CompletedStep<A, R>[];
+  /** The final step's result — the workflow's output. */
   readonly output: R;
   readonly status: "completed";
   readonly steps: readonly WorkflowStep<A>[];
@@ -360,23 +415,101 @@ function createBatchWindow<I, C extends Cmd>(
 function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
   config: FanOutConfig<I, R, C, J>,
 ): {
+  /**
+   * The out-of-band completion splice. Returns an observer-shaped function the
+   * consumer calls after every settle: when the batch has just completed it
+   * emits the gathered results onto `ports.complete`. This is the Port-side
+   * analogue of the `join` Cmd — use it when completion should leave the
+   * runtime as a typed signal rather than re-enter `update`.
+   *
+   * Returns the emit-on-complete callback so the consumer wires it into its own
+   * runtime `observe` (e.g. `runtime.observe((_, s) => emit(s.fanOut))`); fan-out
+   * stays out of the dispatch loop, matching `historyTracker`'s discipline.
+   */
   completion: (
     ports: FanOutPorts<R>,
   ) => {
+    /**
+     * Emit the gathered done-results onto `ports.complete` iff `state` is a
+     * just-completed batch. Idempotency is the caller's concern (call it once
+     * per transition via `observe`); emitting to a Port with no subscribers
+     * is a no-op at the runtime, so an extra call is harmless.
+     */
     emitOnComplete(emit: <T>(port: Port<T>, value: T) => void, state: FanOutState<I, R>): void;
   };
+  /** The starting slice: nothing scattered yet. */
   init: () => FanOutState<I, R>;
+  /**
+   * Whether every scattered item has settled (no `pending`, no `running`).
+   * Derived — reads the slice, never mutates. The verbs use it to decide when to
+   * fire `join`; consumers can read it directly to branch their own phase.
+   *
+   * An empty fan-out (nothing ever scattered) is NOT complete: completion is "a
+   * non-empty batch fully drained," so `isComplete(initFanOut())` is `false` and
+   * a `scatter([])` of zero items also reads `false` (there was no batch to
+   * complete). This keeps `join` from firing on a degenerate empty scatter.
+   */
   isComplete: <I, R>(state: FanOutState<I, R>) => boolean;
+  /**
+   * Record `id`'s effect as failed with `error`, then launch the next pending
+   * item to backfill the freed slot. PURE.
+   *
+   * Symmetric to `itemOk`: moves the item out of `running` into `failed`
+   * (carrying the original input + the error), flips its ledger record
+   * `running → failed`, backfills via `launchUpTo`, and fires `join` at the
+   * completion edge if configured. A failed item still counts toward completion
+   * — the batch is "done" when every item has settled, success or failure;
+   * `join` receives only the OK results (failures are read off `failed`).
+   *
+   * Same unknown-`id` no-op contract as `itemOk`.
+   */
   itemErr: (
     state: FanOutState<I, R>,
     id: string,
     error: unknown,
   ) => readonly [FanOutState<I, R>, readonly (C | J)[]];
+  /**
+   * Record `id`'s effect as succeeded with `result`, then launch the next
+   * pending item to backfill the freed slot. PURE.
+   *
+   * Moves the item out of `running` into `done` (carrying the original input +
+   * its result), flips its ledger record `running → done`, and runs
+   * `launchUpTo` to keep the pipeline full. If this transition empties both
+   * `pending` and `running` AND a `join` is configured, the returned Cmds also
+   * include the single `join(results)` Cmd — fired exactly once at the
+   * completion edge.
+   *
+   * A settle for an unknown / already-settled `id` is a no-op (returns the
+   * slice unchanged, no Cmds): the runtime's serial dispatch makes a true
+   * double-settle impossible, but a stale Msg after a boot/replay is real, and
+   * swallowing it is the safe direction (the result is already recorded).
+   */
   itemOk: (
     state: FanOutState<I, R>,
     id: string,
     result: R,
   ) => readonly [FanOutState<I, R>, readonly (C | J)[]];
+  /**
+   * Enqueue `items` and launch up to `concurrency` of them. PURE.
+   *
+   * Each item gets a ledger record (`status: "pending"`, its `idOf` id) and is
+   * appended to `pending`; `launchUpTo` then promotes as many as the free
+   * concurrency budget allows, emitting `of(item)` per launch. The returned
+   * Cmds are exactly the launch effects — `scatter` never fires `join` (a batch
+   * can't complete on the same transition it starts unless it launches zero
+   * effects, which `isComplete`'s empty-batch rule already declines to treat as
+   * completion).
+   *
+   * Each pending ledger record is minted by the `QueueAdapter`'s `enqueue` — the
+   * same `pending` append `src/internal/work-queue/` owns — rather than re-rolled
+   * inline, so the `status: "pending"` literal lives in exactly one place (no
+   * `as QueueItemStatus` cast here).
+   *
+   * `enqueuedAt` is stamped `0` rather than read from a clock: fan-out's verbs
+   * are pure, and fan-out does not use the timestamp for any decision (ordering
+   * is positional via the arrays). A consumer that needs real enqueue times
+   * threads them through its own Msg `at` and stores them alongside.
+   */
   scatter: (
     state: FanOutState<I, R>,
     items: readonly I[],
@@ -392,20 +525,71 @@ function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
 function createMonitoredRun<Stage, V = unknown>(
   config?: MonitoredRunConfig<Stage>,
 ): {
+  /**
+   * Advance the pipeline on a stage outcome:
+   *
+   *   - `result.kind === "fail"` → terminate `failed { reason: "stage" }`,
+   *     carrying the failing stage index + error. No further stages run.
+   *   - `result.kind === "ok"`:
+   *       - single-shot run → finish to `done` (and force a final checkpoint
+   *         when checkpointing, so the last durable snapshot is the terminal
+   *         state).
+   *       - pipeline → retire the current stage (`markDoneOp`) and claim the
+   *         next (`claimNextOp`). If none remain, finish to `done`. The new
+   *         position survives eviction.
+   *
+   * An advance is itself a progress event, so it bumps the watchdog (re-arming
+   * the alarm at the new stage) and accounts a snapshot unit. A no-op on a
+   * settled (`done` / `failed` / `cancelled`) or never-started (`idle`) run. PURE — `at` is the
+   * only clock, ids are positional.
+   */
   advance: (
     s: MonitoredRunState<Stage>,
     payload: V,
     result: StageResult,
     at: number,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /**
+   * Resume after a reload (cold wake). Re-seeds the watchdog clock to `at` so
+   * the safety alarm re-arms from NOW (the pre-crash `lastProgressAt` would
+   * immediately fire a deadline that already elapsed during downtime — a cold
+   * wake is not a no-progress wedge). Bumps `progressSeq` so the alarm gets a
+   * fresh id, and resets the snapshot cadence counter (un-checkpointed
+   * pre-crash progress is moot — recovery resumes from the last durable
+   * checkpoint). The pipeline POSITION (`stepStates`) is preserved untouched —
+   * that is the whole point of staging: resume at the same stage.
+   *
+   * A no-op on a settled (`done` / `failed` / `cancelled`) or never-started (`idle`) run. Emits
+   * NO Cmd — re-emitting the current stage's outstanding effect is the CONSUMER's
+   * job (it knows the per-stage Cmd), the audit machine's `outstandingEffect(stage)`
+   * pattern. PURE.
+   */
   boot: (
     s: MonitoredRunState<Stage>,
     at: number,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /**
+   * Stop the run from outside and settle it `cancelled` at `at`. The durable half
+   * of an `AbortSignal`: the outcome is a phase in the slice, so a reload reads a
+   * run that ended rather than one to resume.
+   *
+   * Legal from `idle` too, not just the live phases — a signal already aborted
+   * when the run is asked for has to end it BEFORE `start`, and leaving it `idle`
+   * would let the next boot start the very run the caller stopped. That is the
+   * one arm where `runId` is `null`, built explicitly rather than spread so no
+   * stale `failure` or absent `runId` rides along.
+   *
+   * A no-op on a settled run (`done` / `failed` / `cancelled`): a terminal outcome
+   * is already the answer, and an abort landing after it must not overwrite it.
+   * That also makes a second abort idempotent. Emits no Cmd — cancelling issues no
+   * effect, and the in-flight ones it cannot recall are the consumer's to drain.
+   * PURE.
+   */
   cancel: (
     s: MonitoredRunState<Stage>,
     at: number,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /** The `snapshot_write` Cmd def — list it in `cmds` when checkpointing. */
   checkpoint: CmdDef<"snapshot_write", {
     readonly at: number;
     readonly key: string;
@@ -415,29 +599,91 @@ function createMonitoredRun<Stage, V = unknown>(
     readonly [detail: string]: unknown;
     readonly _tag: "snapshot_write_failed";
   }>;
+  /**
+   * Fold a confirmed checkpoint write into the slice — advances the snapshot
+   * watermark (forward-only). A no-op pass-through when checkpointing is
+   * disabled. PURE. Fold the `snapshot_write_ok` Msg here.
+   */
   confirmSnapshot: (
     s: MonitoredRunState<Stage>,
     msg: SnapshotSavedMsg<V>,
   ) => MonitoredRunState<Stage>;
+  /**
+   * The no-progress safety deadline, listed only while the run is live
+   * (`running` / `stale`) AND a `deadlineMs` is configured. Its id is keyed on
+   * `progressSeq`, so every progress event retires the old alarm and arms a
+   * fresh one at the new `lastProgressAt + deadlineMs` — a self-rearming
+   * watchdog with no manual `clearTimeout`. A settled run lists none.
+   *
+   * A NEVER-STARTED slice (`init()`) is its OWN `idle` phase, not a `running` run
+   * with an empty `runId`. The `phase !== "running" && phase !== "stale"` narrow
+   * therefore excludes it structurally — no separate `runId === ""` sentinel gate
+   * is needed. Were `idle` armed, it would fire a deadline at `0 + deadlineMs`
+   * (already in the past) and auto-fail a run that never began — the "born live"
+   * defect. `start` is the only transition out of `idle`, so the watchdog exists
+   * exactly once a real run is in flight.
+   */
   deadlines: (s: MonitoredRunState<Stage>) => readonly DeadlineSub[];
+  /** The starting slice for a never-started run: the `idle` phase, no `runId`. */
   init: () => MonitoredRunState<Stage>;
+  /**
+   * Mark the run `stale` — a soft "no progress observed" signal the consumer
+   * raises WITHOUT the deadline having fired (e.g. an upstream heartbeat gap).
+   * Recoverable: the next `progress` flips it back to `running`. A no-op unless
+   * the run is currently `running` (a settled run cannot go stale). Does NOT
+   * touch `progressSeq` — going stale is not progress, so the armed deadline
+   * keeps counting toward the hard terminal. PURE.
+   */
   markStale: (
     s: MonitoredRunState<Stage>,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /**
+   * The safety alarm fired. Two outcomes by deadline-id match:
+   *
+   *   - the alarm matches the CURRENT `progressSeq` (no progress since it was
+   *     armed) → the run is wedged → terminate `failed { reason: "deadline" }`.
+   *   - the alarm matches an OLDER seq → a stale fire racing a progress event
+   *     that already re-armed the alarm → no-op (the engine retired this id;
+   *     tolerate a fire still in flight defensively).
+   *
+   * A no-op on a settled run (its alarm was reconciled away; tolerate a stale
+   * fire) and on a NEVER-STARTED (`idle`) run (`subs` armed nothing for it, so
+   * any alarm reaching it is a rogue fire that must not un-start it). PURE —
+   * `msg.atMs` stamps the failure.
+   */
   onDeadline: (
     s: MonitoredRunState<Stage>,
     msg: MonitoredRunTimerMsg,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /**
+   * Record forward progress: bump the watchdog (re-arming the safety alarm),
+   * clear any `stale` mark back to `running`, and account a snapshot unit
+   * (emitting a checkpoint Cmd on a cadence hit). A no-op unless the run is live
+   * (`running` / `stale`) — a late progress event on a settled (`done` /
+   * `failed`) or never-started (`idle`) run is ignored. PURE.
+   */
   progress: (
     s: MonitoredRunState<Stage>,
     payload: V,
     at: number,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /**
+   * Start (or restart) the run for `runId` at time `at`. Seeds the stage queue
+   * (if a pipeline) and enters `running` with the watchdog clock primed. Stamps
+   * `runId` from the host — the machine never mints (invariant: identity is
+   * host-minted, parsed at the boundary). PURE.
+   */
   start: (
     s: MonitoredRunState<Stage>,
     runId: string,
     at: number,
   ) => readonly [MonitoredRunState<Stage>, readonly MonitoredRunCmd<V>[]];
+  /**
+   * The built-in `timer` Sub's deps for the watchdog: `deadlineMs` counted from
+   * `lastProgressAt`, the instant the current alarm was armed. Its fire is a
+   * `deadline_exceeded` Msg; route it to `onDeadline`. Declare
+   * `{ type: "timer", deps: (s) => run.timer(s.run) }`. PURE.
+   */
   timer: (s: MonitoredRunState<Stage>) => TimerDeps<MonitoredRunTimerMsg> | null;
 }
 ```
@@ -469,20 +715,102 @@ function createReconciler<
   config: ReconcilerConfig<Actual, Desired, Page, Change, ApplyCmd, Cursor>,
   rng?: () => number,
 ): {
+  /**
+   * Record that `change` finished applying: write it into the applied ledger,
+   * advance the cursor past it, and drive the next `applyNext`. PURE — `at` is
+   * the ledger-write clock (the entry never expires in practice; a large TTL
+   * keeps the idempotency window open for the reconcile's lifetime).
+   *
+   * `change` is the SAME change the consumer's apply handler settled (echoed back
+   * on the settle Msg) — its id is computed from the change's own identity (NOT a
+   * cursor position), so the ledger key matches the skip check in `applyNext`
+   * regardless of where the change sits in the plan. A no-op unless `applying` (a
+   * late settle after `done` is ignored). PURE.
+   */
   applied: (s: State, change: Change, at: number) => readonly [State, readonly OutCmd[]];
+  /**
+   * Emit the apply Cmd for the next not-yet-applied change in the plan, skipping
+   * any whose id is already in the applied ledger (idempotent re-apply after
+   * eviction). Advances `appliedCursor` past skipped + the emitted change. When
+   * the cursor reaches the end of the plan, settles `done`. A no-op unless
+   * `applying`. PURE — `at` is read only for the ledger lookup clock; `idOf`
+   * keys the skip check.
+   *
+   * Emits at most ONE apply Cmd per call (the loop is sequential: each `applied`
+   * drives the next `applyNext`). This keeps the actual-world mutation
+   * one-at-a-time, matching a controller's serial reconcile.
+   */
   applyNext: (s: State, at: number) => readonly [State, readonly OutCmd[]];
+  /**
+   * The scan's deadlines — exactly paginated-walk's: a retry timer while a scan
+   * page is `waiting_retry`, and (with the `deadline` brick) a per-page deadline
+   * timer while a scan fetch is active. The apply loop emits no timers (each
+   * apply settles via the consumer's own Msg), so once the scan finishes the
+   * list empties.
+   */
   deadlines: (s: State) => readonly DeadlineSub[];
+  /** The starting slice: idle, fresh walk + empty accumulator / plan / ledger. */
   init: () => State;
+  /**
+   * Whether the reconcile has fully settled — every planned change applied (or an
+   * empty plan: already in sync). PURE, read-only. Lets a consumer's reducer fire
+   * a "reconcile complete" Cmd without re-checking the phase by hand.
+   */
   isComplete: (s: State) => boolean;
+  /**
+   * A scan retry / deadline timer fired. Defers to paginated-walk's `onTimer`: a
+   * retry timer re-issues the SAME scan-page fetch (re-fetching the parked
+   * cursor); a deadline timer settles the scan call failed. A deadline-driven
+   * terminal scan failure escalates the whole reconcile to `failed`. A stale fire
+   * is a pure no-op (inherited identity). PURE.
+   */
   onTimer: (s: State, msg: PaginatedWalkTimerMsg) => readonly [State, readonly OutCmd[]];
+  /**
+   * Record a failed scan-page fetch and back off via the inherited resilience:
+   * schedule a retry (the scan cursor stays parked — no advance) or, once the
+   * page-fetch retries are exhausted, the underlying call settles `failed`. When
+   * the scan call is terminally failed, the whole reconcile enters `failed`.
+   * PURE — `msg.at` stamps the breaker trip + the retry-delay base.
+   */
   pageErr: (s: State, msg: PageErrMsg) => readonly [State, readonly OutCmd[]];
+  /**
+   * Record a successfully fetched actual-list `page`: append its items to the
+   * `actual` accumulator and advance the walk. When the walk finishes (the
+   * listing is exhausted), the full actual snapshot is in hand → compute the
+   * plan (`planned`) and start applying. PURE — `msg.at` is the scan clock.
+   *
+   * A stray `pageOk` while not `scanning` (a late duplicate after the scan
+   * completed) is absorbed by the walk (no cursor advance) and contributes no
+   * items — the reconcile never re-accumulates after the plan is computed.
+   */
   pageOk: (s: State, msg: ScanPageOkMsg<Page>) => readonly [State, readonly OutCmd[]];
+  /**
+   * Compute the remediation plan from the accumulated `actual` snapshot and the
+   * configured `desired`, store it, and enter `applying`. Normally driven
+   * internally by `pageOk` when the scan finishes, but exposed as a
+   * verb so a consumer can force planning from an externally-supplied actual
+   * snapshot (e.g. a single-shot actual fetch outside the paginated scan), or
+   * re-plan after a desired change. An empty plan settles straight to `done`
+   * (already in sync). PURE — `at` only stamps the (empty) apply-loop clock.
+   *
+   * `changes` is optional: omit it to diff the slice's own accumulated `actual`
+   * against `config.desired`; pass an explicit plan to install it directly
+   * (skipping the diff — the consumer computed it elsewhere).
+   */
   planned: (
     s: State,
     at: number,
     changes?: readonly Change[],
   ) => readonly [State, readonly OutCmd[]];
+  /**
+   * Begin the reconcile: start the paginated walk over the ACTUAL world and
+   * enter `scanning`. Issues the first scan-page fetch (gated through the
+   * inherited resilience). A no-op on any non-`idle` phase — re-scanning a
+   * reconcile already in flight would restart the actual walk and double-count,
+   * so a stray `scan` is absorbed. PURE — `at` threads into the fetch gate.
+   */
   scan: (s: State, at: number) => readonly [State, readonly OutCmd[]];
+  /** The scan's page-fetch Cmd def — list it in the machine's `cmds`. */
   scanPage: CmdDef<"resilient_run", { readonly input: Cursor; readonly key: string }, Page, {
     readonly [detail: string]: unknown;
     readonly _tag: "deadline_exceeded";
@@ -490,6 +818,10 @@ function createReconciler<
     readonly [detail: string]: unknown;
     readonly _tag: "port_rejected";
   }>;
+  /**
+   * The built-in `timer` Sub's deps for the scan. Declare
+   * `{ type: "timer", deps: (s) => rec.timer(s.rec) }`.
+   */
   timer: (s: State) => TimerDeps<ResilientTimerMsg<"resilient">> | null;
 }
 ```
@@ -502,21 +834,119 @@ function createReconciler<
 function createSaga<D extends Cmd, U extends Cmd>(
   config: SagaConfig<D, U>,
 ): {
+  /**
+   * The starting slice: idle, nothing run, winding-forward direction. `items` is
+   * empty until `start` stamps one ledger record per configured step — the slice
+   * is generic in the ledger payload `I`, defaulting to the positional `StepId`
+   * since a saga's "input" per step is just its index (the consumer's real inputs
+   * ride on its own Msgs).
+   */
   init: () => SagaState<number>;
+  /** Whether the saga has terminated in failure, fully unwound (every completed step undone). */
   isAborted: <I>(state: SagaState<I>) => boolean;
+  /** Whether the saga has terminated successfully (every step committed). */
   isCommitted: <I>(state: SagaState<I>) => boolean;
+  /**
+   * Whether the saga has terminated in failure with an UNFINISHED rollback: an
+   * `undo` itself failed, so some completed steps were never compensated and need
+   * hand reconciliation. Terminal, but distinct from `aborted` (fully unwound).
+   */
   isCompensationFailed: <I>(state: SagaState<I>) => boolean;
+  /**
+   * Whether the saga has reached a terminal phase (success, fully-unwound
+   * failure, or compensation-failed). Derived — reads the slice, never mutates.
+   * Consumers branch their own phase off this; no further verb has any effect
+   * once it holds (the verbs guard on phase and no-op).
+   */
   isSettled: <I>(state: SagaState<I>) => boolean;
+  /**
+   * Begin the saga: stamp a `pending` ledger record per step, mark step 0
+   * `running`, and emit step 0's `do` Cmd. PURE.
+   *
+   * A saga with zero configured steps commits immediately (nothing to do, so
+   * the empty transaction trivially succeeds) and emits no Cmd. Calling `start`
+   * on an already-started saga (phase ≠ `"idle"`) is a no-op: the slice is
+   * returned unchanged with no Cmds, so a stray re-`start` after a boot/replay
+   * can't relaunch step 0 on top of an in-flight saga.
+   */
   start: (state: SagaState<number>) => readonly [SagaState<number>, readonly D[]];
+  /**
+   * Pivot from winding to unwinding: the in-flight step failed. PURE.
+   *
+   * Flips the failed step's ledger record `running → failed`, records the
+   * `error`, sets the direction bit, and begins compensation by emitting the
+   * `undo` of the MOST-recently-completed step (the tail of the compensation
+   * log) — rollback is the mirror of progress, so the last step that succeeded
+   * is the first to be undone.
+   *
+   * If nothing completed forward (the first step itself failed), there is
+   * nothing to compensate: the saga goes straight to `aborted` (terminal
+   * failure) and emits no `undo`.
+   *
+   * `stepErr` while not `running` is a no-op (same stale-Msg reasoning as
+   * `stepOk`): once a saga is already compensating or terminal, a late failure
+   * Msg for an old step must not restart or re-pivot the unwind.
+   */
   stepErr: (
     state: SagaState<number>,
     error: unknown,
   ) => readonly [SagaState<number>, readonly U[]];
+  /**
+   * Record the in-flight step as committed and advance. PURE.
+   *
+   * Flips the current step's ledger record `running → done`, appends its id to
+   * the compensation log, and:
+   *   - if a next step exists, marks it `running` and emits its `do` Cmd;
+   *   - if this was the last step, transitions to `committed` (terminal
+   *     success) and emits no Cmd.
+   *
+   * `stepOk` while not `running` (idle, compensating, or already terminal) is a
+   * no-op — the runtime's serial dispatch makes a true double-`stepOk`
+   * impossible, but a stale success Msg after a boot/replay is real, and
+   * swallowing it is the safe direction (the step's outcome is already recorded
+   * in the ledger).
+   */
   stepOk: (state: SagaState<number>) => readonly [SagaState<number>, readonly D[]];
+  /**
+   * Halt the rollback: the `undo` for the current compensation position itself
+   * FAILED. PURE.
+   *
+   * A failed compensation is a real-world fact — a refund that bounced, a hold
+   * that won't release — and it must become visible terminal state, never leave
+   * the saga wedged in `compensating` forever waiting for an `undoOk` that will
+   * never come. So `undoErr`:
+   *   - flips the in-flight compensation step's ledger record `done → failed`
+   *     (its `undo` did not take, so it is NOT `cancelled`);
+   *   - records the undo failure in `compensationError` (distinct from `error`,
+   *     the forward failure that started the rollback);
+   *   - transitions to the terminal `compensation_failed` phase and emits no
+   *     Cmd. The compensation log is LEFT INTACT (`done` keeps the steps that
+   *     were never rolled back) so the consumer can see exactly which steps
+   *     still need hand reconciliation.
+   *
+   * `undoErr` while not `compensating` is a no-op (same stale-Msg reasoning as
+   * the other verbs): an `undo`-failure Msg that arrives after the saga has
+   * already settled must not re-pivot a terminal saga.
+   */
   undoErr: (
     state: SagaState<number>,
     error: unknown,
   ) => readonly [SagaState<number>, readonly U[]];
+  /**
+   * Continue the rollback: the `undo` for the current compensation position
+   * succeeded. PURE.
+   *
+   * Pops the just-undone step off the tail of the compensation log (flipping
+   * its ledger record `done → cancelled` to mark it rolled back), and:
+   *   - if more completed steps remain, emits the next one's `undo` (continuing
+   *     in reverse) and moves `position` to it;
+   *   - if the log is now empty, transitions to `aborted` (terminal failure —
+   *     the saga is fully unwound) and emits no Cmd.
+   *
+   * `undoOk` while not `compensating` is a no-op (same stale-Msg reasoning as
+   * the forward verbs): an `undo`-success Msg that arrives after the saga has
+   * already finished unwinding must not pop a step that isn't there.
+   */
   undoOk: (state: SagaState<number>) => readonly [SagaState<number>, readonly U[]];
 }
 ```
@@ -542,7 +972,37 @@ function createWorkflow<A, R, F>(
 function debounce<A extends readonly unknown[]>(
   fn: (...args: A) => void,
   ms: number,
-  opts?: { leading?: boolean; trailing?: boolean },
+  opts?: {
+    /**
+     * Fire on the FIRST call of a burst (the leading edge),
+     *             with that first call's args. Default `false`.
+     */
+    leading?: boolean;
+    /**
+     * Fire on the trailing edge with the LAST call's args.
+     *             Default `true`.
+     *
+     * Edge combinations (matching lodash's settled semantics, the de-facto
+     * standard the ecosystem rediscovered):
+     *
+     *   - `{ trailing: true }` (default): one fire, after the burst, last args.
+     *   - `{ leading: true, trailing: false }`: one fire, at the burst START,
+     *     first args. Subsequent calls within the window are swallowed; the timer
+     *     only re-opens the "can lead again" latch after `ms` of quiet.
+     *   - `{ leading: true, trailing: true }`: fires at the start AND end of a
+     *     burst — BUT the trailing fire is SUPPRESSED for a burst of exactly ONE
+     *     call (the leading fire already covered it, so a lone call doesn't
+     *     double-fire). This matches lodash and is the behavior tests pin.
+     *   - `{ leading: false, trailing: false }`: never fires. Degenerate but legal;
+     *     we don't throw — the caller asked for a no-op transformer.
+     *
+     * WHY a default of trailing-only: a debounce's whole job is "act after the
+     * activity settles." The trailing edge IS that semantic — fire with the final
+     * state of the burst (the last keystroke, the final scroll position). Leading
+     * is the opt-in for "respond instantly, then go quiet."
+     */
+    trailing?: boolean;
+  },
 ): Debounced<A>
 ```
 
@@ -553,7 +1013,23 @@ function debounce<A extends readonly unknown[]>(
 ```ts
 interface Debounced<A extends readonly unknown[]> {
   (...args: A): void;
+  /**
+   * Drop any pending trailing fire WITHOUT invoking `fn`. Clears the timer and
+   * forgets the captured args. Idempotent — calling it with nothing pending is
+   * a no-op. The leading-edge latch (if `leading` is enabled) also resets, so
+   * the next call after `cancel` is treated as a fresh burst.
+   *
+   * The host-cleanup partner of `removeEventListener`: cancel the pending fire
+   * when the component unmounts / the listener detaches, so a queued
+   * `dispatch` can't land after teardown.
+   */
   cancel(): void;
+  /**
+   * Fire any pending trailing call IMMEDIATELY with its captured args, then
+   * clear the timer. No-op when nothing is pending. Use to force the last
+   * coalesced call out early — e.g. flush a debounced save on `beforeunload`,
+   * or flush a debounced search when the user presses Enter.
+   */
   flush(): void;
 }
 ```
@@ -625,8 +1101,11 @@ type EnqueueInput<I> = I
 
 ```ts
 interface FailedCompensatedWorkflow<A, R, F> {
+  /** The forward steps that completed (and were each compensated), in execution order. */
   readonly completed: readonly CompletedStep<A, R>[];
+  /** The step whose forward activity failed, triggering the (now-finished) unwind. */
   readonly failedStep: WorkflowStep<A>;
+  /** The opaque forward failure that triggered compensation. Carried, never interpreted. */
   readonly failure: F;
   readonly status: "failed_compensated";
   readonly steps: readonly WorkflowStep<A>[];
@@ -639,8 +1118,11 @@ interface FailedCompensatedWorkflow<A, R, F> {
 
 ```ts
 interface FailedWorkflow<A, R, F> {
+  /** Empty by construction — a failure with completed steps compensates instead. */
   readonly completed: readonly CompletedStep<A, R>[];
+  /** The step whose activity failed. */
   readonly failedStep: WorkflowStep<A>;
+  /** The opaque failure the activity reported. */
   readonly failure: F;
   readonly status: "failed";
   readonly steps: readonly WorkflowStep<A>[];
@@ -653,9 +1135,23 @@ interface FailedWorkflow<A, R, F> {
 
 ```ts
 interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
+  /** Max in-flight `of(item)` effects. Clamped to `>= 1` (a 0/negative cap would deadlock). */
   readonly concurrency: number;
+  /**
+   * Stable, deterministic identity for an item. PURE — no clock, no RNG. The
+   * id is what `itemOk` / `itemErr` address, so it must survive a round-trip
+   * through the durable slice and match across the launch → settle gap. For
+   * value-unique inputs (URLs, ids) this is often the identity function; for
+   * structural inputs, a content hash or a caller-assigned key.
+   */
   readonly idOf: (item: I) => string;
+  /**
+   * Optional: fold the gathered done-results into a single completion Cmd,
+   * fired exactly once at the transition that empties `pending` + `running`.
+   * Omit to drive completion off `isComplete` (or the `completion` Port) instead.
+   */
   readonly join?: (results: readonly R[]) => J;
+  /** The per-item effect, as data. Performed by the consumer's own `interpret`. */
   readonly of: (item: I) => C;
 }
 ```
@@ -666,7 +1162,9 @@ interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
 
 ```ts
 interface FanOutDone<I, R> {
+  /** The original scattered input value. */
   readonly item: I;
+  /** The result the item's effect produced, routed in via `itemOk`. */
   readonly result: R;
 }
 ```
@@ -677,7 +1175,9 @@ interface FanOutDone<I, R> {
 
 ```ts
 interface FanOutFailed<I> {
+  /** The error the item's effect surfaced, routed in via `itemErr`. Carried, never interpreted. */
   readonly error: unknown;
+  /** The original scattered input value. */
   readonly item: I;
 }
 ```
@@ -688,6 +1188,7 @@ interface FanOutFailed<I> {
 
 ```ts
 interface FanOutPorts<R> {
+  /** Fires once with every gathered done-result when the batch completes. */
   readonly complete: Port<readonly R[]>;
 }
 ```
@@ -698,13 +1199,41 @@ interface FanOutPorts<R> {
 
 ```ts
 interface FanOutState<I, R> {
+  /** Items whose effect resolved OK, with the result it produced. */
   readonly done: readonly FanOutDone<I, R>[];
+  /** Items whose effect failed, with the error it surfaced. */
   readonly failed: readonly FanOutFailed<I>[];
+  /**
+   * The work-queue ledger: one record per scattered item, keyed by the
+   * caller's `idOf`. The single source of truth the four arrays project from.
+   */
   readonly items: readonly QueueItem<I>[];
+  /**
+   * Whether the current wave has already fired its `join`. `join` fires at most
+   * once per wave — set `true` at the completion edge so a stale settle that
+   * re-reaches `isComplete` cannot re-fire it. A new `scatter` that opens a wave
+   * resets it to `false`.
+   */
   readonly joined: boolean;
+  /** Items accepted but not yet launched (queue back-pressure beyond `concurrency`). */
   readonly pending: readonly I[];
+  /** Items whose `of(item)` effect is in flight (size never exceeds `concurrency`). */
   readonly running: readonly I[];
+  /**
+   * Index into `done` where the CURRENT wave's OK results begin. `done` is
+   * append-only and accumulates across every wave (so a consumer reading
+   * `done` sees the full history), but `join` must fold only the wave that
+   * just drained — not the cumulative total. A wave opens when `scatter`
+   * enqueues into a slice with nothing in flight; this marks `done.length` at
+   * that moment so `join` receives exactly `done.slice(waveDoneFrom)`.
+   */
   readonly waveDoneFrom: number;
+  /**
+   * Index into `failed` where the current wave's failures begin. Symmetric to
+   * `waveDoneFrom` — the wave boundary over the failure partition. Carried for
+   * a consumer that wants to read only the current wave's failures; `join`
+   * itself folds only OK results.
+   */
   readonly waveFailedFrom: number;
 }
 ```
@@ -726,8 +1255,11 @@ function foldWorkflow<A, R, F>(
 
 ```ts
 interface InFlightActivity<A> {
+  /** The #67 ledger delivery id this activity was owed under (the dedup key). */
   readonly id: number;
+  /** The 0-based index of this step in the workflow's step sequence. */
   readonly index: number;
+  /** The step whose activity is in flight. */
   readonly step: WorkflowStep<A>;
 }
 ```
@@ -738,8 +1270,11 @@ interface InFlightActivity<A> {
 
 ```ts
 interface InFlightCompensation<A> {
+  /** The #67 ledger delivery id this compensation was owed under (the dedup key). */
   readonly id: number;
+  /** The 0-based index (into the step sequence) of the step being compensated. */
   readonly index: number;
+  /** The step whose compensation is in flight. */
   readonly step: WorkflowStep<A>;
 }
 ```
@@ -857,9 +1392,29 @@ type MonitoredRunCmd<V> = SnapshotWriteCmd<V>
 
 ```ts
 interface MonitoredRunConfig<Stage> {
+  /**
+   * No-progress watchdog budget, in ms. The safety deadline is armed at
+   * `lastProgressAt + deadlineMs` and re-armed on every progress event. Omit
+   * for no watchdog.
+   */
   readonly deadlineMs?: number;
+  /**
+   * Checkpoint cadence — write a durable snapshot once this many progress
+   * units have accumulated. Threaded straight into `../snapshot`'s `every`.
+   * Omit for no checkpointing.
+   */
   readonly snapshotEvery?: number;
+  /**
+   * Store key the rolling checkpoint is written under. Forwarded to
+   * `../snapshot`'s `key`; defaults to that module's `@@snapshot`. Ignored
+   * when `snapshotEvery` is omitted.
+   */
   readonly snapshotKey?: string;
+  /**
+   * The ordered stages of the pipeline. Position survives eviction (lives in
+   * the Model's stage queue). Omit for a single-shot run. An empty array is
+   * treated as single-shot too — there is nothing to pipeline through.
+   */
   readonly stages?: readonly Stage[];
 }
 ```
@@ -921,10 +1476,21 @@ function onWindow<I, C extends Cmd>(
 
 ```ts
 interface Poller<State, R> {
+  /** Seed the Model slice. Idle until `start(...)` arms the first tick. */
   init(): PollerCore<R> & {
     readonly nextAtMs: number | null;
     readonly phase: "polling";
   };
+  /**
+   * Arm the first tick. `at` is the current clock (carried in from the Msg /
+   * runtime that kicks the poller off — never read inside the verb). Returns
+   * the slice with the first deadline target set to `at + everyMs` and emits NO
+   * Cmd. The cadence has ONE source — the deadline Sub — so `start` does not
+   * perform the first observation itself (an immediate `onTick` here would race
+   * the timer and poll as fast as the source responds). The first observation
+   * fires when the deadline crosses `at + everyMs` and the consumer routes
+   * `deadline_exceeded` → `tick`.
+   */
   start(
     state: PollerState<R>,
     at: number,
@@ -932,8 +1498,57 @@ interface Poller<State, R> {
     readonly nextAtMs: number | null;
     readonly phase: "polling";
   }, readonly Cmd[]];
+  /**
+   * The tick deadline, listed while the poller is `"polling"` with an armed
+   * `nextAtMs`; `[]` once `"done"` / `"gave_up"` (the timer disarms) or before
+   * `start`. Declare it on the machine:
+   * `subs: [deadlinesSub((s) => poll.subs(s.poll))]`.
+   *
+   * The list is armed by `../deadline`'s `subscribeDeadline` runner, which the
+   * consumer passes to `run` as `subscribe.deadline` — the poller does not
+   * redraw the timer lifecycle.
+   */
   subs(state: PollerState<R>): readonly PollerSub[];
+  /**
+   * Perform one observation — the cadence verb. The consumer routes the
+   * deadline Sub's `deadline_exceeded` Msg here; `tick` emits the single
+   * `config.onTick()` Cmd that goes and reads the source. This is the ONLY
+   * next-tick mechanism: the timer fires, the consumer calls `tick`, the fetch
+   * runs, and the observation comes back through `tickResult` / `tickErr`
+   * (which re-arm the next deadline). A no-op on a finished poller — a stale
+   * deadline fire racing a terminal transition the reconcile pass has not yet
+   * retired emits nothing.
+   *
+   * Takes no `at`: `tick` does not touch the schedule (the just-fired deadline
+   * is exhausted; the next target is set when the result lands), so it needs no
+   * clock — keeping it trivially pure.
+   */
   tick(state: PollerState<R>): readonly [PollerState<R>, readonly Cmd[]];
+  /**
+   * Record a FAILED tick at clock `at`. Backs off instead of holding the
+   * steady cadence:
+   *
+   * - Advances the retry counter (`recordFailure`).
+   * - If `shouldRetry` still permits another attempt, arms the next tick at
+   *   `at + nextDelayMs(retry, policy)` (the backoff curve) and emits NO Cmd —
+   *   the retry observation fires when that backoff deadline crosses and the
+   *   consumer routes `deadline_exceeded` → `tick`. The timer is the single
+   *   next-tick mechanism, on the backoff curve here instead of `everyMs`.
+   * - If backoff is exhausted (`!shouldRetry`), enters `"gave_up"`, disarms
+   *   (`nextAtMs: null`), and emits no Cmd.
+   *
+   * `at` is both the backoff anchor AND the streak clock: it is passed to
+   * `recordFailure` (starting / preserving `firstFailureAtMs`) and to
+   * `shouldRetry`, so a `DurationRetryPolicy` on `config.retry` is honoured
+   * with no extra wiring. Under a duration bound the poller keeps retrying
+   * however many attempts the outage takes, and stops at the declared
+   * wall-clock budget measured from the streak's FIRST failure.
+   *
+   * The backoff jitter uses the `rng` injected ONCE at `createPoller` (default
+   * `Math.random` at the effect boundary, a fixed value in tests); the verb
+   * body never names the global RNG, so a poller built with a fixed `rng`
+   * replays a failure-and-backoff run bit-for-bit.
+   */
   tickErr(
     state: PollerState<R>,
     error: unknown,
@@ -942,6 +1557,30 @@ interface Poller<State, R> {
     readonly nextAtMs: number | null;
     readonly phase: "polling";
   } | PollerCore<R> & { readonly phase: "gave_up" }, readonly Cmd[]];
+  /**
+   * Record a successful tick observation at clock `at`.
+   *
+   * - Resets the retry counter (a success clears consecutive-failure state).
+   * - Stores `result` as `lastResult` and bumps `tick`.
+   * - Re-arms the next tick at the absolute target `at + everyMs` (the steady
+   *   cadence). It emits NO cadence `onTick` — the next observation fires from
+   *   the deadline Sub via `tick`, never immediately from a result.
+   * - Dedupe (opt-in, orthogonal to cadence): when `dedupeKey` is set, a FRESH
+   *   observation emits one `onTick` FOLLOW-UP (the consumer's "run the
+   *   downstream side effect once per distinct observation" hook) and a
+   *   DUPLICATE key records the sighting but suppresses the follow-up. With no
+   *   `dedupeKey`, `tickResult` emits nothing — the cadence `tick` is the only
+   *   `onTick`, so an unconfigured poller never double-fetches.
+   * - UNLESS `untilHeld` is `true` (the consumer evaluated `config.until`
+   *   against the post-result Model) — then the poller enters `"done"`,
+   *   disarms (`nextAtMs: null`), and emits no Cmd, dedupe or otherwise.
+   *
+   * `untilHeld` is passed in rather than computed here because `until` reads
+   * the consumer's WHOLE Model, which this verb does not hold — the consumer
+   * evaluates it at the call site after folding `result` into its Model and
+   * passes the boolean. (`subs` re-checks `phase` to decide arming, so a
+   * mis-passed `untilHeld` cannot leave a "done" poller arming timers.)
+   */
   tickResult(
     state: PollerState<R>,
     result: R,
@@ -960,11 +1599,58 @@ interface Poller<State, R> {
 
 ```ts
 interface PollerConfig<State, R> {
+  /**
+   * Optional dedupe key derived from a tick result. When provided, a result
+   * whose key was already `seen` records the observation but emits NO fresh
+   * `onTick` follow-up — the side effect runs once per distinct observation.
+   * Omit to treat every tick result as fresh (no dedupe). The dedupe store is
+   * bounded by `dedupeTtlMs` if set; otherwise it grows with distinct keys.
+   */
   readonly dedupeKey?: (result: R) => string;
+  /**
+   * TTL for the dedupe store, in milliseconds. Only meaningful when
+   * `dedupeKey` is set. An observation older than `dedupeTtlMs` is forgotten,
+   * so a key seen long ago is treated as fresh again. Omit for an unbounded
+   * dedupe window (every distinct key remembered for the poller's lifetime).
+   */
   readonly dedupeTtlMs?: number;
+  /**
+   * The steady cadence, in milliseconds, between successful ticks. The next
+   * tick is armed at the absolute target `at + everyMs` (computed from the
+   * `at` the prior tick's Msg carried), NOT `everyMs` from when the Sub
+   * happens to be reconciled — so the cadence does not drift across resumes.
+   */
   readonly everyMs: number;
+  /**
+   * The effect to run on each tick — the actual "go observe the source" Cmd
+   * (a fetch, a status read, a list call). The knob returns it from
+   * `tickResult` when the run continues; the consumer's `interpret` performs
+   * it and routes the observation back as the next tick-result Msg.
+   *
+   * Nullary by contract: a tick carries no per-call argument (the poller
+   * re-reads the same source every cadence). Capture any target in the Cmd
+   * literal the consumer's `onTick` returns.
+   */
   readonly onTick: () => Cmd;
+  /**
+   * Backoff policy for FAILED ticks. Omit to use `defaultRetryPolicy`
+   * (full-jitter, 5 attempts). A success resets the retry counter, so the
+   * policy only governs consecutive failures.
+   *
+   * Any bound the `../retry-backoff` union admits: a count (`RetryPolicy`), a
+   * wall-clock outage budget (`DurationRetryPolicy`), or explicit
+   * `unbounded: true`. The duration bound needs no extra wiring here — every
+   * failure already arrives through `tickErr(state, error, at)` carrying the
+   * instant it was observed, so the streak clock is fed from the Msg's own
+   * data and the poller never reads a clock of its own (invariant 2).
+   */
   readonly retry?: AnyRetryPolicy;
+  /**
+   * The stop predicate, read against the consumer's whole Model. When it
+   * returns `true`, the poller is DONE: `subs` returns `[]` (the timer
+   * disarms) and no further tick is scheduled. Pure — it must not read the
+   * clock or mutate; the consumer's reducer cell calls it (`untilHeld`).
+   */
   readonly until: (state: State) => boolean;
 }
 ```
@@ -1029,16 +1715,67 @@ type ReconcilePhase = "idle" | "scanning" | "applying" | "done" | "failed"
 
 ```ts
 interface ReconcilerConfig<Actual, Desired, Page, Change, ApplyCmd extends Cmd, Cursor = number> {
+  /**
+   * Realize one `Change` as the Cmd that mutates the actual world. Returns plain
+   * data (a `{ type, ... }` Cmd the consumer's interpret handler performs).
+   * PURE — the side effect happens when the runtime performs the emitted Cmd,
+   * never here.
+   */
   readonly apply: (change: Change) => ApplyCmd;
+  /** Circuit breaker around the scan fetch (one upstream → one breaker). */
   readonly circuit?: CircuitConfig;
+  /** Overall wall-clock deadline per individual scan-page fetch. */
   readonly deadline?: DeadlineConfig;
+  /**
+   * The DESIRED spec to converge on. Held verbatim and handed to `diff` once the
+   * scan completes. Any JSON-serializable value — a list of specs, a target map,
+   * a single target object — `diff` alone interprets it.
+   */
   readonly desired: Desired;
+  /**
+   * Compute the remediation plan: the ordered `Change[]` that moves `actual` to
+   * `desired`. Called once when the scan finishes (the full actual snapshot is in
+   * hand). An empty plan means "already in sync — nothing to apply". PURE +
+   * consumer-specific (only the consumer knows the domain's reconcile rules).
+   */
   readonly diff: (desired: Desired, actual: readonly Actual[]) => readonly Change[];
+  /**
+   * The cursor the actual-list scan fetches first. For an offset API typically
+   * `0`; for a token API whatever sentinel the API treats as page one.
+   */
   readonly firstPage: Cursor;
+  /**
+   * Stable identity for a `Change` — the applied-ledger cache key. A re-`applyNext`
+   * after eviction (or after a re-plan) skips a change whose id is already in the
+   * ledger (idempotent re-apply). MUST be a property of the change itself, NOT its
+   * position in the plan: the ledger has to survive re-planning. When omitted the
+   * default keys by the change's serialized CONTENT (`JSON.stringify(change)`) —
+   * a stable per-change identity that is unchanged by where the change sits in the
+   * plan. Supply a domain id (the target node id, the resource key) when one
+   * exists; it is cheaper than serializing and dedupes two changes that differ
+   * only in fields irrelevant to identity. PURE.
+   *
+   * Why NOT positional: keying by index silently drops changes on the documented
+   * re-plan path. After applying the index-0 change, its `"0"` ledger entry would
+   * match WHATEVER different, never-applied change lands at index 0 in the next
+   * plan — the apply loop skips it as "already done". Identity must be intrinsic
+   * to the change so the ledger means "this change settled", not "slot N settled".
+   */
   readonly idOf?: (change: Change) => string;
+  /**
+   * Extract the actual items from one fetched page. Each page's items are
+   * appended to the running `actual` accumulator. PURE.
+   */
   readonly itemsOf: (page: Page) => readonly Actual[];
+  /**
+   * Extract the next scan cursor from a fetched page — a `Cursor` to keep
+   * scanning, or `null` when the actual listing is exhausted (scan finishes,
+   * plan computed). PURE + consumer-specific.
+   */
   readonly nextCursor: (page: Page) => Cursor | null;
+  /** Token-bucket rate limit on the scan — the "don't 429 the listing API" knob. */
   readonly rateLimit?: RateLimitConfig;
+  /** Exponential-backoff retry policy for a transient scan-page failure. */
   readonly retry?: RetryPolicy;
 }
 ```
@@ -1101,9 +1838,12 @@ type RunFailure<Stage> =
 
 ```ts
 interface RunningWorkflow<A, R> {
+  /** Steps that have produced a result, in execution order. */
   readonly completed: readonly CompletedStep<A, R>[];
+  /** The single activity in flight right now. */
   readonly current: InFlightActivity<A>;
   readonly status: "running";
+  /** The full, static step sequence this workflow runs. */
   readonly steps: readonly WorkflowStep<A>[];
 }
 ```
@@ -1133,6 +1873,7 @@ function runToTerminal<
 
 ```ts
 interface SagaConfig<D extends Cmd, U extends Cmd> {
+  /** The steps, in forward order. `do` runs `0 → n-1`; `undo` runs the completed prefix `n-1 → 0`. */
   readonly steps: readonly SagaStep<D, U>[];
 }
 ```
@@ -1157,12 +1898,19 @@ type SagaPhase =
 
 ```ts
 interface SagaState<I = StepId> {
+  /** Direction bit: `false` winding forward, `true` unwinding. */
   readonly compensating: boolean;
+  /** The failure of an `undo` itself (only when `compensation_failed`). Carried, never interpreted. */
   readonly compensationError?: unknown;
+  /** The compensation log: ids of completed-forward steps, in completion order. */
   readonly done: readonly number[];
+  /** The forward failure that triggered compensation, if any. Carried, never interpreted. */
   readonly error?: unknown;
+  /** The work-queue ledger: one record per step, keyed by positional id. */
   readonly items: readonly QueueItem<I>[];
+  /** The derived lifecycle tag (see `SagaPhase`). */
   readonly phase: SagaPhase;
+  /** The step in flight (`running`) or being compensated (`compensating`). */
   readonly position: number;
 }
 ```
@@ -1173,7 +1921,9 @@ interface SagaState<I = StepId> {
 
 ```ts
 interface SagaStep<D extends Cmd, U extends Cmd> {
+  /** The forward effect, performed while the saga winds forward. */
   readonly do: D;
+  /** The compensating inverse, performed (in reverse) while the saga unwinds. */
   readonly undo: U;
 }
 ```
@@ -1290,23 +2040,78 @@ function timerFor<I, C extends Cmd>(
 
 ```ts
 interface Workflow<A, R, F> {
+  /**
+   * Seed a fresh workflow over `steps` (a NON-EMPTY WorkflowSteps) and
+   * dispatch its first activity → `running` with `current` = step 0, owed on the
+   * ledger. The "≥ 1 step" precondition is carried by the tuple type: an empty
+   * sequence is a compile error at the call site, not a runtime throw here — a
+   * workflow with nothing to do could never reach `completed` (no final result
+   * to carry), so it is unrepresentable by construction.
+   */
   init(steps: WorkflowSteps<A>): WorkflowReducerStep<A, R, F>;
+  /**
+   * Fold an activity failure (#125). Same id-match idempotency guard as
+   * onActivityOk. On a match: confirm the owed activity on the ledger,
+   * then PIVOT into compensation — walk the completed-step history in strict
+   * reverse and owe the first declared compensation as a durable effect on the
+   * same ledger, transitioning to `compensating`. If NO completed step declares
+   * a compensation (the empty-rollback edge — the first activity failed, or
+   * every completed step is irreversible), settle `failed` directly with
+   * nothing to unwind.
+   */
   onActivityErr(
     state: WorkflowState<A, R, F>,
     msg: ActivityErr<F>,
   ): WorkflowReducerStep<A, R, F>;
+  /**
+   * Fold an activity success. If `msg.id` does not match the in-flight
+   * activity's id (a stale/duplicate result from re-emit-on-wake, or a result
+   * for an already-advanced step), the state is returned UNCHANGED with no
+   * effects — idempotent by delivery id (acceptance criterion 3). Otherwise:
+   * record the completed step, confirm the owed activity on the ledger, and
+   * either advance to the next step (owing its activity) or transition to
+   * `completed` carrying the final result.
+   *
+   * Only meaningful on `running`; a result arriving for a terminal workflow is
+   * a no-op (the workflow is done — at-least-once tolerates the late echo).
+   */
   onActivityOk(
     state: WorkflowState<A, R, F>,
     msg: ActivityOk<R>,
   ): WorkflowReducerStep<A, R, F>;
+  /**
+   * Fold a compensation failure (#125). Same id-match idempotency guard. On a
+   * match: confirm the owed compensation and HALT the rollback at the terminal
+   * `compensation_failed` state — a bounced compensation is visible terminal
+   * state to reconcile by hand, never a workflow wedged in `compensating`
+   * forever. Mirrors `../saga/`'s `undoErr`.
+   */
   onCompensationErr(
     state: WorkflowState<A, R, F>,
     msg: CompensationErr<F>,
   ): WorkflowReducerStep<A, R, F>;
+  /**
+   * Fold a compensation success (#125). Same id-match idempotency guard against
+   * the in-flight compensation. On a match: confirm the owed compensation,
+   * record the step as compensated, and continue the reverse walk — owe the
+   * next declared compensation strictly below the step just undone, or settle
+   * `failed_compensated` when the unwind is complete. Only meaningful on
+   * `compensating`; a result for a terminal/forward workflow is a no-op.
+   */
   onCompensationOk(
     state: WorkflowState<A, R, F>,
     msg: CompensationOk,
   ): WorkflowReducerStep<A, R, F>;
+  /**
+   * The owed-but-unconfirmed dispatch(es) to re-emit on activation — a forward
+   * activity OR (#125) a compensation, rebuilt by folding the persisted ledger
+   * events. On a fresh / fully-settled workflow this is empty. The re-fired Cmd
+   * carries the SAME delivery id, so a duplicate result is a no-op at the
+   * reducer (the id-match guard). This is the cold-wake re-emit that makes both
+   * activities AND compensations exactly-once-observable despite the
+   * at-least-once transport (acceptance criterion 2 & 3) — including a
+   * compensation owed mid-rollback when the actor was evicted.
+   */
   survivingActivities(
     ledgerEvents: Iterable<EffectLedgerEvent<WorkflowCmd<A>>>,
   ): readonly WorkflowCmd<A>[];
@@ -1335,8 +2140,11 @@ const WORKFLOW_STATUSES: ReadonlySet<string>
 
 ```ts
 function workflowActivityDef<A>(): CmdDef<"workflow_activity", {
+  /** The opaque activity to perform. */
   readonly activity: A;
+  /** The #67 delivery id the result Msg must echo (the dedup key). */
   readonly id: number;
+  /** The 0-based step index this activity belongs to. */
   readonly index: number;
 }, undefined, never>
 ```
@@ -1355,8 +2163,11 @@ type WorkflowCmd<A> = ActivityCmd<A> | CompensationCmd<A>
 
 ```ts
 function workflowCompensationDef<A>(): CmdDef<"workflow_compensation", {
+  /** The opaque compensating (inverse) activity to perform. */
   readonly compensation: A;
+  /** The #67 delivery id the result Msg must echo (the dedup key). */
   readonly id: number;
+  /** The 0-based step index whose compensation this is. */
   readonly index: number;
 }, undefined, never>
 ```
@@ -1383,7 +2194,9 @@ type WorkflowMsgType = WorkflowMsg<unknown, unknown>["type"]
 
 ```ts
 interface WorkflowReducerStep<A, R, F> {
+  /** Activity dispatch Cmds, after the ledger events are durable. */
   readonly cmds: readonly WorkflowCmd<A>[];
+  /** Ledger events to persist into the event log, in order, BEFORE `cmds`. */
   readonly ledger: readonly EffectLedgerEvent<WorkflowCmd<A>>[];
   readonly state: WorkflowState<A, R, F>;
 }
@@ -1417,8 +2230,16 @@ type WorkflowStatus = WorkflowState<unknown, unknown, unknown>["status"]
 
 ```ts
 interface WorkflowStep<A> {
+  /** The opaque activity this step performs. Interpreted by the consumer. */
   readonly activity: A;
+  /**
+   * The opaque compensating (inverse) activity, performed in reverse order on a
+   * downstream failure (#125). Optional: a step with no compensation is skipped
+   * during the unwind. Interpreted by the consumer's interpret cell, exactly
+   * like activity.
+   */
   readonly compensation?: A;
+  /** Stable, human-readable step name — appears in the completed-step record. */
   readonly name: string;
 }
 ```

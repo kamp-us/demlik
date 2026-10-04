@@ -42,21 +42,44 @@ type CellErrors<C extends Cmd, I> = { [K in keyof I & C["type"]]: unknown extend
 
 ```ts
 interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: string } = never, Err = never> {
+  /**
+   * Succeeds with the booted handle once boot completes. Fails with
+   * `StoreFailed` when the saved state could not be restored (`"load"`) or the
+   * initial save failed (`"save"`), and with a hand-written cell's declared
+   * failure when a boot Cmd fails with one.
+   */
   readonly ready: Effect<EffectRuntime<S, M, E, Err>, StoreFailed | Err>;
+  /**
+   * Fold `msg` and run to quiescence, as the Promise engine's `dispatch` does.
+   * Fails with `Stopped` once the run is stopping or stopped, `StoreFailed`
+   * when the transition's save fails, and a hand-written cell's declared
+   * failure when the transition's Cmd fails with one.
+   */
   dispatch(
     msg: M,
     opts?: { readonly settle?: DispatchSettle },
   ): Effect<void, Stopped | StoreFailed | Err>;
+  /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
   dispatchOnce(msg: M): Effect<void, Stopped | StoreFailed | Err>;
+  /** Emit a value on a Port from outside a Cmd handler. */
   emitPort<T>(port: Port<T>, value: T): void;
+  /** A `(msg, state)` hook, fired after each applied transition. */
   observe(observer: (msg: M, state: S) => void): () => void;
+  /** Subscribe to the semantic event of `type` the run's `events` projects. */
   on<K extends string>(
     type: K,
     handler: (event: Extract<E, { type: K }>) => void,
   ): () => void;
+  /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
+  /**
+   * Stop the run: drain in-flight work, stop its Subs, flush the final State.
+   * Closing the run's Scope does the same.
+   */
   stop(): Effect<void>;
+  /** A zero-arg change notifier, fired after each applied transition. */
   subscribe(listener: () => void): () => void;
+  /** Subscribe to a typed Port. */
   subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
 }
 ```
@@ -100,13 +123,19 @@ type EffectRunOptions<
   I,
   B,
 > = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & {
+  /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
   readonly clock?: () => number;
+  /** How long `stop()` waits for async teardown. Defaults to 5_000ms. */
   readonly disposeTimeoutMs?: number;
+  /** Projects each applied transition to the public events `on` serves. */
   readonly events?: (msg: M, state: S) => readonly E[];
   readonly onError?: OnError;
   readonly store?: Store<S>;
+  /** The policy for a reducer throw. Defaults to `"stop"`. */
   readonly supervision?: Supervision<S, M>;
+  /** A fire-and-forget sink for every applied transition. */
   readonly telemetry?: TelemetrySink;
+  /** The terminal predicate `result()` and `done()` read. */
   readonly terminal?: (state: S) => boolean;
 }
 ```
@@ -117,10 +146,20 @@ type EffectRunOptions<
 
 ```ts
 interface EffectRuntime<S, M extends { type: string }, E extends { type: string } = never, Err = never> extends EffectBootingRuntime<S, M, E, Err> {
+  /**
+   * Succeeds with the booted handle once boot completes. Fails with
+   * `StoreFailed` when the saved state could not be restored (`"load"`) or the
+   * initial save failed (`"save"`), and with a hand-written cell's declared
+   * failure when a boot Cmd fails with one.
+   */
   readonly ready: Effect<EffectRuntime<S, M, E, Err>, StoreFailed | Err>;
+  /** Succeeds with the terminal State the first time the run reaches one. */
   done(): Effect<S>;
+  /** The current State. Total. */
   getState(): S;
+  /** Succeeds once every dispatched Msg and its follow-ups are processed. */
   idle(): Effect<void>;
+  /** The terminal State, or `undefined` while the run is in flight. */
   result(): S | undefined;
 }
 ```
