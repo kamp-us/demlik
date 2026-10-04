@@ -4,9 +4,9 @@
  *
  * tea still runs one machine per `run` and keeps no table of runs (#312). A
  * host that builds a tree of runs keeps its own table, ids and Msg names, and
- * hands the two steps that race to these functions: `spawn` starts a child and
- * enrols it as one step, and `tell` sends the parent a notice it may no longer
- * take.
+ * hands the steps that race to these functions: `spawn` starts a child and
+ * enrols it as one step, `stop` stops one child, and `tell` sends the parent a
+ * notice it may no longer take.
  */
 
 import { Effect, Exit, Scope } from "effect";
@@ -64,7 +64,7 @@ export interface SpawnSteps<A, E = never, R = never> {
    * Start the child and return what the host keeps for it. It runs with the
    * child's scope provided, so a `run(machine, opts)` in it belongs to that
    * scope, and so does anything else it acquires. `scope` is the same scope,
-   * for a host that keeps it to stop the child with `Scope.close`. A failure
+   * for a host that keeps it to stop the child with `stop`. A failure
    * closes the child's scope, which runs `remove` and `notify`.
    */
   readonly start: (scope: Scope.Closeable) => Effect.Effect<A, E, R>;
@@ -86,17 +86,22 @@ export interface SpawnSteps<A, E = never, R = never> {
 
 /**
  * Start a child in a scope forked from `parentScope` and enrol it in the
- * host's table, as one uninterruptible step. Closing the child's scope stops
- * it; closing `parentScope` stops every child spawned under it.
+ * host's table, as one uninterruptible step. Stop a child with `stop`,
+ * or by closing its scope; closing `parentScope` stops every child spawned
+ * under it.
  *
  * What it guarantees, with no guard in host code:
  *
- *   - the table never holds a child that is not running. The fork, the
+ *   - the table never holds a child whose scope has closed. The fork, the
  *     removal finalizer, `start` and `enrol` all happen or none do, and a
  *     child whose scope closed before `enrol` is removed again;
  *   - closing a child never waits for the parent. `notify` runs on a detached
- *     fiber, so a parent Cmd handler can close a child's scope;
+ *     fiber, so a parent Cmd handler can stop a child;
  *   - `remove` runs after the child's run has stopped.
+ *
+ * `child.run.stop()` is not one of the two ways to stop a child. It stops the
+ * run and leaves the scope open, so the entry stays in the table and the
+ * parent is not told.
  *
  * ```ts
  * const child = yield* spawn(parentScope, {
@@ -131,3 +136,19 @@ export const spawn = <A, E = never, R = never>(
       return child;
     }),
   );
+
+/**
+ * Stop one child that `spawn` started. `scope` is the child's scope,
+ * the one its `start` was handed.
+ *
+ * It closes that scope, so the child's run stops, `remove` takes the entry
+ * out of the host's table and `notify` tells the parent. It does not wait for
+ * `notify`, so a parent Cmd handler can call it. Stopping a child that has
+ * already stopped succeeds and sends no second notice.
+ *
+ * ```ts
+ * yield* stop(child.scope);
+ * ```
+ */
+export const stop = (scope: Scope.Closeable): Effect.Effect<void> =>
+  Scope.close(scope, Exit.void);

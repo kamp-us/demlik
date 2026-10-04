@@ -1,6 +1,6 @@
 import { Cmd, defineMachine } from "@demlik/tea";
-import { type EffectRuntime, run, spawn, tell } from "@demlik/tea/effect";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { type EffectRuntime, run, spawn, stop, tell } from "@demlik/tea/effect";
+import { Context, Effect, Layer, type Scope } from "effect";
 import { z } from "zod";
 import { type ParentMsg, type ParentState, parent } from "./parent-and-workers";
 
@@ -91,14 +91,12 @@ export const spawnProcess = <E>(
     notify: tell(parent, parentRun, { type: "child_stopped", id }),
   });
 
-/** Stop one process by closing its scope. Any other id is a no-op. */
+/** Stop one running process. Any other id is a no-op. */
 export const stopProcess = (
   processes: Processes,
   id: string,
 ): Effect.Effect<void> =>
   Effect.suspend(() => {
     const process = processes.get(id);
-    return process?.lifecycle === "running"
-      ? Scope.close(process.scope, Exit.void)
-      : Effect.void;
+    return process?.lifecycle === "running" ? stop(process.scope) : Effect.void;
   });

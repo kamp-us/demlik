@@ -4,9 +4,9 @@
  * handlers and sub runners, the caller's Layers and interruption on stop, and
  * yields an Effect handle: the Promise engine's member names, with Effects
  * that fail with `Stopped`, `StoreFailed` or a cell's declared failure where
- * the Promise engine returns Promises. `spawn` and `tell` are for a host that
- * runs child machines under a parent: it keeps its own table of children, and
- * they run the steps that race.
+ * the Promise engine returns Promises. `spawn`, `stop` and `tell` are for a
+ * host that runs child machines under a parent: it keeps its own table of
+ * children, and they run the steps that race.
  *
  * The machine you hand it is built from the neutral core at `@demlik/tea` —
  * the same file runs on `@demlik/tea/promise`. `effect` is an optional peer
@@ -14,7 +14,7 @@
  * import it.
  */
 
-export { type SpawnSteps, spawn, tell } from "./children";
+export { type SpawnSteps, spawn, stop, tell } from "./children";
 export { Stopped, StoreFailed } from "./failures";
 export type { EffectBootingRuntime, EffectRuntime } from "./handle";
 export {
