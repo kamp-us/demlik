@@ -342,9 +342,11 @@ Give each knob a `name`. The name renames that knob's whole family:
 | `resilient_run_err` | `review_run_err` |
 | `deadline_exceeded` | `review_deadline` |
 
-The timer Msg is the one that does not follow the unnamed pattern: a named
-knob's is `<name>_deadline`. `JevCmd` and `JevTimerMsg` take the name as a
-second type argument, and `createJevAsk` infers it from the config.
+The timer Msg is the odd one: unnamed it is `deadline_exceeded`, named it is
+`<name>_deadline`.
+
+`JevCmd<Q, N>` takes the name as its second type argument. `JevTimerMsg<N>`
+takes it as its only one. `createJevAsk` infers the name from the config.
 
 ```ts
 import { liftSlice } from "@demlik/tea";
