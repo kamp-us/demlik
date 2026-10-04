@@ -60,9 +60,10 @@ function scopeIssues(rules: BoundaryRules, key: string, scopes: readonly string[
   });
 }
 
-// What one scope's allowance says that the rules file alone can show: it lists a file and a type,
-// each file is a driven adapter and each type is declared. Whether a file is one the scope loads
-// is judged where the scope is loaded.
+// What one scope's allowance says that the rules file alone can show: it lists a file, and a type
+// when it names any (an omitted `decidedBy` is a choice, an empty one grants nothing), each file is
+// a driven adapter and each type is declared. Whether a file is one the scope loads is judged where
+// the scope is loaded.
 function allowanceIssues(rules: BoundaryRules): string[] {
   return Object.entries(rules.readAllowance).flatMap(([scope, { driven, decidedBy }]) => {
     const zoning = scopeZoning(rules, scope);
@@ -80,9 +81,9 @@ function allowanceIssues(rules: BoundaryRules): string[] {
       );
     return [
       ...empty("driven", driven),
-      ...empty("decidedBy", decidedBy),
+      ...(decidedBy === undefined ? [] : empty("decidedBy", decidedBy)),
       ...notDriven,
-      ...typeIssues(rules, "readAllowance", decidedBy, ` in "${scope}"`),
+      ...typeIssues(rules, "readAllowance", decidedBy ?? [], ` in "${scope}"`),
     ];
   });
 }

@@ -48,10 +48,9 @@ function b8(
 }
 
 const reads = (body: string) => ({ [DRIVEN]: `${body}\n` });
+const SELECT = 'export const read = (env: Env) => env.DB.prepare("SELECT id FROM orders");';
 
 describe("a read allowance lets a driving adapter read through a listed driven file", () => {
-  const SELECT = 'export const read = (env: Env) => env.DB.prepare("SELECT id FROM orders");';
-
   it("leaves B8 as it is for a scope with no allowance and for a driven file it does not list", () => {
     const files = { ...reads(SELECT), [HTTP]: `${KERNEL}${READ}${USE}` };
     expect(b8(files, {})).toHaveLength(1);
@@ -267,5 +266,77 @@ describe("a listed file that writes is never licensed, and the report names the 
     repo = apiRepo(files, RULES, WORKER);
     repo.run({ acceptCrossings: true, reason: "legacy" });
     expect(ledgerOf(repo).entries).toEqual(before);
+  });
+});
+
+describe("a read allowance that omits decidedBy licenses a listed read-only file for any driving file", () => {
+  const OMITTED = { ...RULES, readAllowance: { [API]: { driven: [DRIVEN] } } };
+  const OTHER = "src/orders/adapters/driven/other.ts";
+  const USE_APPLICATION = "src/orders/application/use.ts";
+
+  it.each([
+    ["no library at all", `${READ}${USE}`],
+    ["a library of a type another scope names", `${KERNEL}${READ}${USE}`],
+    [
+      "only a type from a library",
+      `import type { Total } from "@shop/domain-kernel";\n${READ}${USE}`,
+    ],
+    ["a library of another type", `import { slug } from "@shop/string-util";\n${READ}${USE}`],
+    ["a package that is no declared library", `import { z } from "zod";\n${READ}${USE}`],
+  ])("is clean for a file that imports %s", (_, source) => {
+    expect(b8({ ...reads(SELECT), [HTTP]: source }, OMITTED)).toEqual([]);
+  });
+
+  it("keeps B8 for application/ and for a driven file it does not list", () => {
+    const files = {
+      ...reads(SELECT),
+      [USE_APPLICATION]: "export const use = 1;\n",
+      [OTHER]: "export const other = 1;\n",
+      [HTTP]: `${READ}import { other } from "../driven/other";\nimport { use } from "../../application/use";\nexport const h = [read, other, use];\n`,
+    };
+    const found = b8(files, OMITTED);
+    expect(found.map((v) => v.to).sort()).toEqual([at(OTHER), at(USE_APPLICATION)]);
+  });
+
+  it("is B8 for every driving file that imports a listed file that writes, naming the site", () => {
+    const write =
+      'export const read = (env: Env) => {\n  return env.DB.prepare("DELETE FROM t");\n};';
+    const files = {
+      ...reads(write),
+      [HTTP]: `${READ}${USE}`,
+      "src/orders/adapters/driving/cron.ts": `${KERNEL}${READ}${USE}`,
+    };
+    repo = apiRepo(files, OMITTED, WORKER);
+    const rows = reportOf(repo.run({ json: true })).scopes.flatMap((s) => s.violations as Row[]);
+    const site = { file: at(DRIVEN), line: 2, binding: "DB" };
+    expect(rows.filter((v) => v.kind === B8).map((v) => [v.from, v.write])).toEqual([
+      [at("src/orders/adapters/driving/cron.ts"), site],
+      [at(HTTP), site],
+    ]);
+  });
+
+  it("judges a scope that names decidedBy and a scope that omits it each by its own rule, in one run", () => {
+    const ADMIN = "services/admin";
+    const driving = `${READ}${USE}`;
+    repo = apiRepo(
+      { ...reads(SELECT), [HTTP]: driving },
+      {
+        ...RULES,
+        features: { [API]: ["orders"], [ADMIN]: ["orders"] },
+        layout: { [API]: "hexagonal", [ADMIN]: "hexagonal" },
+        readAllowance: {
+          [API]: { driven: [DRIVEN], decidedBy: ["kernel"] },
+          [ADMIN]: { driven: [DRIVEN] },
+        },
+      },
+      {
+        ...WORKER,
+        ...shopManifests([ADMIN]),
+        [`${ADMIN}/${DRIVEN}`]: `${SELECT}\n`,
+        [`${ADMIN}/${HTTP}`]: driving,
+      },
+    );
+    const rows = reportOf(repo.run({ json: true })).scopes.flatMap((s) => s.violations);
+    expect(rows.filter((v) => v.kind === B8).map((v) => v.from)).toEqual([at(HTTP)]);
   });
 });

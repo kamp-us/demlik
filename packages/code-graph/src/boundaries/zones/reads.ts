@@ -11,9 +11,10 @@ import type { WriteSite } from "../violation.js";
 
 // The read allowance of a scope: the driven files a driving adapter may import (B8's exception),
 // and the library types whose runtime import beside one says the decision was made in the core.
+// `decidedBy` is null when the declaration left it out: the reads of the scope decide nothing.
 export type ScopeAllowance = {
   readonly driven: ReadonlySet<string>;
-  readonly decidedBy: ReadonlySet<string>;
+  readonly decidedBy: ReadonlySet<string> | null;
 };
 
 // The allowances a rules file declares, by scope, read once for the run beside the wrangler
@@ -24,13 +25,19 @@ export type ReadAllowance = {
 };
 
 type Declared = Readonly<
-  Record<string, { readonly driven: readonly string[]; readonly decidedBy: readonly string[] }>
+  Record<
+    string,
+    { readonly driven: readonly string[]; readonly decidedBy?: readonly string[] | undefined }
+  >
 >;
 
 export function readAllowanceOf(declared: Declared, catalog: BindingCatalog): ReadAllowance {
   const scopes = Object.entries(declared).map(
     ([scope, { driven, decidedBy }]) =>
-      [scope, { driven: new Set(driven), decidedBy: new Set(decidedBy) }] as const,
+      [
+        scope,
+        { driven: new Set(driven), decidedBy: decidedBy === undefined ? null : new Set(decidedBy) },
+      ] as const,
   );
   return { scopes: new Map(scopes), catalog };
 }
@@ -97,6 +104,7 @@ export type DrivenVerdict =
 export type DrivenReads = (target: string) => DrivenVerdict;
 
 const UNLICENSED: DrivenVerdict = { licensed: false };
+const LICENSED: DrivenVerdict = { licensed: true };
 
 // Whether a file imports, when it runs, a library whose type is one of `decidedBy`: `import type`
 // holds no decision, and `runtimeSpecifiers` says which specifiers the file runs.
@@ -117,7 +125,8 @@ function decides(
 
 // B8's exception for one driving file. A listed file that writes is never licensed, whoever imports
 // it: a write goes through the application. A listed file that only reads is licensed for a file
-// that also decides, which is where the decision lives. Anything else is B8 as before.
+// that also decides, which is where the decision lives, or for any file when the scope names no
+// `decidedBy` (review holds that its adapters decide nothing). Anything else is B8 as before.
 export function drivenReadsOf(
   reads: ScopeReads | null,
   module: Parameters<typeof decides>[0],
@@ -129,7 +138,9 @@ export function drivenReadsOf(
     if (!reads.allowance.driven.has(target)) return UNLICENSED;
     const write = reads.writes.get(target);
     if (write !== undefined) return { licensed: false, write };
-    decided ??= decides(module, libraries, reads.allowance.decidedBy);
-    return decided ? { licensed: true } : UNLICENSED;
+    const { decidedBy } = reads.allowance;
+    if (decidedBy === null) return LICENSED;
+    decided ??= decides(module, libraries, decidedBy);
+    return decided ? LICENSED : UNLICENSED;
   };
 }

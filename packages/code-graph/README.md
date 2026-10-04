@@ -99,7 +99,7 @@ cross-package callers; re-run with `--deep`.
 | `--boundaries --ci` | Boundary ledger gate: **exits 1** on a crossing `boundary-ledger.json` does not name, listing each; entries whose crossing is gone are pruned from the file and printed, never failed on. Exits 2 when only a legacy `boundary-ceilings.json` exists. See [The boundary ledger](#the-boundary-ledger---boundaries---ci) |
 | `--boundaries --accept-crossings --reason "<why>"` | Add every unrecorded crossing to the ledger with that reason. Exits 2 and writes nothing without a non-empty `--reason` |
 | `--boundaries --migrate-ceilings` | Seed the ledger from today's crossings and delete `boundary-ceilings.json`; exits 2, writing nothing, if any scope's import crossings exceed its recorded count (world-door entries, B5, B7, B9 and a door used by name in `rules/`, `unknown-zone` entries, the library kinds B11-B14, the shape kinds B15 and B16 and the deployable kinds B17-B19 are seeded too and are not counted against it; library scopes are measured like any other, and so is the repo's worker call graph, scope `.`) |
-| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" }, libraryTypes: { "<type>": { imports: ["<type>", …], pure: true \| false, importedFrom: ["driven" \| "configurator" \| "any", …] } }, libraries: { "<package directory>": "<type>" }, libraryRoots: ["<directory>", …], worldLibraries: ["<package>", …], acrossDeployables: ["binding-outside-driven-adapter" \| "worker-call-cycle" \| "relative-import-crosses-workspace", …], bindingOwners: { "<scope>": { "<binding>": ["<owner file>", …] } }, applicationShape: ["index-not-exports-only" \| "application-import-outside-allowlist", …], applicationMayImport: ["<library type>", …], pureDependencies: ["<package glob>", …], testFiles: ["<glob>", …], strictDriving: ["<scope>", …], readAllowance: { "<scope>": { driven: ["<driven file>", …], decidedBy: ["<library type>", …] } } }`. An override REPLACES each key wholesale. `doors`, `layout`, `bindingOwners`, `strictDriving` and `readAllowance` ride a scope that declares `features` (the last two a hexagonal one); the four library keys ride none; `acrossDeployables` and `applicationShape` list the rules that run, none by default; `applicationMayImport` and `pureDependencies` narrow B16 and need it listed; see [World doors](#world-doors-doors), [Hexagonal features](#hexagonal-features-layout), [Library types](#library-types-librarytypes), [Application shape](#application-shape-applicationshape) and [Across deployables](#across-deployables-acrossdeployables) |
+| `--boundary-rules <file>` | JSON file of boundary-declaration overrides: `{ features: { "<scope>": ["<folder under src/>", …] }, lib: ["lib"], contracts: ["<package>", …], doors: { "<scope>": { "<door>": ["<owner file>", …] } }, layout: { "<scope>": "rules" \| "hexagonal" }, libraryTypes: { "<type>": { imports: ["<type>", …], pure: true \| false, importedFrom: ["driven" \| "configurator" \| "any", …] } }, libraries: { "<package directory>": "<type>" }, libraryRoots: ["<directory>", …], worldLibraries: ["<package>", …], acrossDeployables: ["binding-outside-driven-adapter" \| "worker-call-cycle" \| "relative-import-crosses-workspace", …], bindingOwners: { "<scope>": { "<binding>": ["<owner file>", …] } }, applicationShape: ["index-not-exports-only" \| "application-import-outside-allowlist", …], applicationMayImport: ["<library type>", …], pureDependencies: ["<package glob>", …], testFiles: ["<glob>", …], strictDriving: ["<scope>", …], readAllowance: { "<scope>": { driven: ["<driven file>", …], decidedBy?: ["<library type>", …] } } }`. An override REPLACES each key wholesale. `doors`, `layout`, `bindingOwners`, `strictDriving` and `readAllowance` ride a scope that declares `features` (the last two a hexagonal one); the four library keys ride none; `acrossDeployables` and `applicationShape` list the rules that run, none by default; `applicationMayImport` and `pureDependencies` narrow B16 and need it listed; `decidedBy` is optional, and left out a listed driven file that only reads is licensed for any driving file of its feature; see [World doors](#world-doors-doors), [Hexagonal features](#hexagonal-features-layout), [Library types](#library-types-librarytypes), [Application shape](#application-shape-applicationshape) and [Across deployables](#across-deployables-acrossdeployables) |
 | `--collapse` | Ranked collapse candidates: pairs of functions that may be one function, grouped into cliques, each carrying its evidence — plus **partial twins**, pairs sharing one decision block over the same named constants and then calling different things. Implies `--kinds`. `--json` emits the full report (clusters + every scored pair + the skipped blocking keys + the partial twins) |
 | `--collapse --ci` | Partial-twin ratchet over the scopes recorded in `collapse-ceilings.json`. Fails both ways: above a ceiling (a new twin) and below one (a fixed twin the file still counts). Does not gate the whole-function candidates |
 | `--collapse --write-ceilings` | Record the analyzed path's partial-twin count in `collapse-ceilings.json`, leaving the other scopes as they are |
@@ -1021,7 +1021,8 @@ no key.
   against each file's scope-relative path in every scope the pass reads, a feature scope's and a
   declared library's.
 - `strictDriving`: scopes where B9 judges every catalog door, declared or not.
-- `readAllowance`: per scope, the driven files a driving adapter may read through.
+- `readAllowance`: per scope, the driven files a driving adapter may read through, and optionally
+  `decidedBy`, the library types one of which that adapter must also import when it runs.
 
 | Rule | Kind | Fires on | Allowed |
 |---|---|---|---|
@@ -1094,6 +1095,22 @@ listed driven file when the file **also imports, when it runs, at least one libr
 cannot hold a decision). The allowance never licenses `application/` and never a file it does not
 list.
 
+**`decidedBy` is optional.** A thin read handler parses its input, calls one read file and returns
+the answer: it decides nothing, so it imports no library of any type and the rule above never finds
+a decision to excuse it. Leave `decidedBy` out of a scope's entry and every listed driven file that
+only reads is licensed for any driving file of its own feature, whatever else that file imports:
+
+```json
+{ "readAllowance": { "services/api": { "driven": ["src/orders/adapters/driven/order-reads.ts"] } } }
+```
+
+Omission is what says it: `decidedBy: []` is still refused, so the weaker rule is chosen by leaving
+the key out and never by emptying a list. The tool does not check that the adapter decides nothing.
+That is the declaration's claim, and review holds it, the way it holds an ORM write. A scope that
+names `decidedBy` is judged as above, and each scope of one rules file by its own entry. The write
+rule below holds either way, and omission never licenses `application/` or a file the entry does not
+list.
+
 **A write always goes through the application.** A listed file that holds a data site with `write`
 access is B8 for every driving file that imports it, as if undeclared. `write` is the access
 `--data` computes over the data bindings (D1, KV, R2, queue) the worker that owns the file
@@ -1114,11 +1131,12 @@ A bad declaration exits 2 with one line and writes nothing, in the report, `--ci
 `applicationMayImport` or `pureDependencies` while `application-import-outside-allowlist` is not
 listed, an `applicationMayImport` or `decidedBy` type that `libraryTypes` lacks, a `pureDependencies`
 or `testFiles` entry that is not a valid glob, a `strictDriving` or `readAllowance` scope that
-declares no `features` or whose layout is not `hexagonal`, an empty `driven` or `decidedBy`, a
-`driven` file that is not under a feature's `adapters/driven/` or that the scope does not load, and,
-with `readAllowance` declared, a wrangler config in the repo that cannot be parsed, because a worker
-whose config is not read has no write site to see and the allowance would grant silently. A rules
-file without `readAllowance` is not refused for one.
+declares no `features` or whose layout is not `hexagonal`, an empty `driven`, a `decidedBy` that is
+present and empty (leave it out instead), a `driven` file that is not under a feature's
+`adapters/driven/` or that the scope does not load, and, with `readAllowance` declared, a wrangler
+config in the repo that cannot be parsed, because a worker whose config is not read has no write
+site to see and the allowance would grant silently. A rules file without `readAllowance` is not
+refused for one.
 
 Adopting a kind is declare, seed, shrink, empty, as for doors: list it, record today's crossings
 with `--accept-crossings --reason "<why>"`, fix them PR by PR (each `--ci` prunes one), until the

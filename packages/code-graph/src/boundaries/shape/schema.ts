@@ -11,16 +11,17 @@ export const SHAPE_KINDS = [
 
 export type ShapeKind = (typeof SHAPE_KINDS)[number];
 
-// `{ "<scope>": { driven: ["<scope-relative file>", …], decidedBy: ["<library type>", …] } }`: the
+// `{ "<scope>": { driven: ["<scope-relative file>", …], decidedBy?: ["<library type>", …] } }`: the
 // driven files a driving adapter may import beside a library of one of these types, which is where
-// the decision lives. The files and the types are judged where the file is read
-// (`shapeDeclarationIssue`) and where the scope is loaded (`unknownDrivenFiles`).
+// the decision lives. Leaving `decidedBy` out says the reads of the scope decide nothing, so a
+// listed file is licensed for any driving file. The files and the types are judged where the file is
+// read (`shapeDeclarationIssue`) and where the scope is loaded (`unknownDrivenFiles`).
 const ReadAllowanceSchema = z.record(
   z.string().min(1),
   z
     .object({
       driven: z.array(z.string().min(1)),
-      decidedBy: z.array(z.string().min(1)),
+      decidedBy: z.array(z.string().min(1)).optional(),
     })
     .strict(),
 );
