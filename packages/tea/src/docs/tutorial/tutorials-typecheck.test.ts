@@ -19,9 +19,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { cacheDir, inMemoryProgram } from "../in-memory-program";
+import { cacheDir, programDiagnostics } from "../in-memory-program";
 import { programOf, UNNAMED_PAGE_FILE } from "./program";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
@@ -44,21 +43,10 @@ async function pages(): Promise<[string, Map<string, string>][]> {
 }
 
 /** The compiler's diagnostics for one page's program, one formatted line each. */
-function diagnosticsOf(page: string, program: Map<string, string>): string[] {
-  const dir = join(cacheDir("tea-tutorial-typecheck"), page);
-  const files = new Map(
-    [...program].map(([name, body]) => [join(dir, name), body]),
-  );
-  const compiled = inMemoryProgram(dir, files, {
+const diagnosticsOf = (page: string, program: Map<string, string>): string[] =>
+  programDiagnostics(join(cacheDir("tea-tutorial-typecheck"), page), program, {
     allowImportingTsExtensions: true,
   });
-  return ts.getPreEmitDiagnostics(compiled).map((d) => {
-    const text = ts.flattenDiagnosticMessageText(d.messageText, "\n");
-    if (d.file === undefined || d.start === undefined) return text;
-    const { line } = d.file.getLineAndCharacterOfPosition(d.start);
-    return `${d.file.fileName.replace(`${dir}/`, "")}:${line + 1} ${text}`;
-  });
-}
 
 describe("docs/tutorial/*.md programs typecheck", async () => {
   const programs = await pages();

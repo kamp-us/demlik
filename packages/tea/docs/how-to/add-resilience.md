@@ -21,33 +21,52 @@ interface State {
   readonly retryAtMs: number;
   readonly retry: RetryState;
 }
+
+const initial: State = {
+  phase: "idle",
+  body: null,
+  retryAtMs: 0,
+  retry: initRetry(),
+};
 ```
 
 `retry` is the backoff module's own state — just a field. Seed it with
-`initRetry()` in `init`.
+`initRetry()`, as `initial` does.
 
 ## 2. Emit the call as an effect Cmd
 
 The attempt does not perform the call; it emits it as data and lets `interpret`
-run it:
+run it. Name the Cmd, the Msgs the call comes back as, and the `ctx` the handler
+reads its HTTP client from:
 
 ```ts
-import { type Cmd, defineMachine, type Interpret, tryInterpret } from "@demlik/tea";
+import {
+  type Cmd,
+  defineMachine,
+  type Interpret,
+  tryInterpret,
+} from "@demlik/tea";
 
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
 
-// inside update:
-fetch: (s, m) => [
-  { ...s, phase: "fetching", body: null },
-  [{ type: "do_fetch", url: m.url }],
-],
+type Msg =
+  | { readonly type: "fetch"; readonly url: string }
+  | { readonly type: "fetch_ok"; readonly body: string }
+  | { readonly type: "fetch_err"; readonly error: string; readonly at: number };
+
+interface Ctx {
+  readonly http: (url: string) => Promise<string>;
+}
 ```
+
+Time is data: the failure Msg carries `at`, so the reducer never reads the
+clock.
 
 ## 3. On failure, let the backoff ops decide
 
-When the failure Msg arrives, record it, ask whether to retry, and — if so —
-schedule the next attempt using the delay the policy computes. Time is data: the
-failure Msg carries `at`, so the reducer never reads the clock:
+The `fetch` cell emits the Cmd. When the failure Msg arrives, the `fetch_err`
+cell records it, asks whether to retry, and — if so — schedules the next attempt
+using the delay the policy computes:
 
 ```ts
 import {
@@ -57,22 +76,40 @@ import {
   shouldRetry,
 } from "@demlik/tea/retry-backoff";
 
-// inside update:
-fetch_err: (s, m) => {
-  const retry = recordFailure(s.retry, m.error);
-  if (!shouldRetry(retry, defaultRetryPolicy)) {
-    return [{ ...s, retry, phase: "failed" }, []];
-  }
-  return [
-    {
-      ...s,
-      retry,
-      phase: "waiting_retry",
-      retryAtMs: m.at + nextDelayMs(retry, defaultRetryPolicy),
+const resilientFetch = defineMachine({
+  types: {
+    model: {} as State,
+    msg: {} as Msg,
+    cmd: {} as DoFetch,
+    ctx: {} as Ctx,
+  },
+  init: (loaded) => [loaded ?? initial, []],
+  update: {
+    fetch: (s, m) => [
+      { ...s, phase: "fetching", body: null },
+      [{ type: "do_fetch", url: m.url }],
+    ],
+    fetch_ok: (s, m) => [
+      { ...s, phase: "ok", body: m.body, retry: initRetry() },
+      [],
+    ],
+    fetch_err: (s, m) => {
+      const retry = recordFailure(s.retry, m.error);
+      if (!shouldRetry(retry, defaultRetryPolicy)) {
+        return [{ ...s, retry, phase: "failed" }, []];
+      }
+      return [
+        {
+          ...s,
+          retry,
+          phase: "waiting_retry",
+          retryAtMs: m.at + nextDelayMs(retry, defaultRetryPolicy),
+        },
+        [],
+      ];
     },
-    [],
-  ];
-},
+  },
+});
 ```
 
 ## 4. Run the effect through `tryInterpret`
@@ -82,6 +119,12 @@ thrown request becomes a `fetch_err` your reducer already handles. The handler
 sits beside the machine, not on it — hand it to `run`:
 
 ```ts
+import { run } from "@demlik/tea/promise";
+
+const ctx: Ctx = {
+  http: (url) => fetch(url).then((response) => response.text()),
+};
+
 const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
     (cmd, ctx) => ctx.http(cmd.url),
@@ -105,10 +148,11 @@ unreachable, however many attempts that takes:
 ```ts
 import {
   type DurationRetryPolicy,
-  recordFailure,
   retryElapsedMs,
-  shouldRetry,
 } from "@demlik/tea/retry-backoff";
+
+/** How long the peer above this call waits before it gives up on it. */
+const PEER_GIVE_UP_MS = 10_000;
 
 // Derive the budget from the peer's own give-up window — never restate a guess.
 const policy: DurationRetryPolicy = {
@@ -118,15 +162,53 @@ const policy: DurationRetryPolicy = {
   maxElapsedMs: PEER_GIVE_UP_MS,
   jitter: "full",
 };
+```
 
-// inside update:
-fetch_err: (s, m) => {
-  const retry = recordFailure(s.retry, m.error, m.at); // `m.at` starts the streak clock
-  if (!shouldRetry(retry, policy, m.at)) {
-    return [{ ...s, retry, phase: "failed", outageMs: retryElapsedMs(retry, m.at) }, []];
-  }
-  // …schedule the next attempt exactly as in step 3.
-},
+The machine is step 3's with two changes. The Model gains an `outageMs` field
+for how long the outage lasted, and `fetch_err` reads the clock off the Msg in
+both calls:
+
+```ts
+interface OutageState extends State {
+  /** How long the far side had been unreachable when the retrying gave up. */
+  readonly outageMs: number | null;
+}
+
+const outageBoundedFetch = defineMachine({
+  types: {
+    model: {} as OutageState,
+    msg: {} as Msg,
+    cmd: {} as DoFetch,
+    ctx: {} as Ctx,
+  },
+  init: (loaded) => [loaded ?? { ...initial, outageMs: null }, []],
+  update: {
+    fetch: (s, m) => [
+      { ...s, phase: "fetching", body: null },
+      [{ type: "do_fetch", url: m.url }],
+    ],
+    fetch_ok: (s, m) => [
+      { ...s, phase: "ok", body: m.body, retry: initRetry() },
+      [],
+    ],
+    fetch_err: (s, m) => {
+      const retry = recordFailure(s.retry, m.error, m.at); // `m.at` starts the streak clock
+      if (!shouldRetry(retry, policy, m.at)) {
+        const outageMs = retryElapsedMs(retry, m.at);
+        return [{ ...s, retry, phase: "failed", outageMs }, []];
+      }
+      return [
+        {
+          ...s,
+          retry,
+          phase: "waiting_retry",
+          retryAtMs: m.at + nextDelayMs(retry, policy),
+        },
+        [],
+      ];
+    },
+  },
+});
 ```
 
 The clock stays an argument, so the reducer stays pure. Passing `m.at` to

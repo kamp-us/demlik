@@ -39,12 +39,31 @@ is the entire reason for the shape: it is the only one that still means
 something on the other side of persistence.
 
 ```ts
-// After a reload, this branch still works — the tag is data.
-switch (state.lastCall._tag) {
-  case "unauthorized":
-    return [{ ...state, phase: "reauth" }, [login()]];
-  case "deadline_exceeded":
-    return [{ ...state, attempts: state.attempts + 1 }, [retry()]];
+import type { Cmd } from "@demlik/tea";
+
+type CallFailure =
+  | { readonly _tag: "unauthorized"; readonly status: number }
+  | { readonly _tag: "deadline_exceeded"; readonly afterMs: number };
+
+interface State {
+  readonly phase: "calling" | "reauth";
+  readonly attempts: number;
+  readonly lastCall: CallFailure;
+}
+
+type NextMove = Cmd<"login"> | Cmd<"retry">;
+
+function onCallFailed(state: State): [State, NextMove[]] {
+  // After a reload, this branch still works — the tag is data.
+  switch (state.lastCall._tag) {
+    case "unauthorized":
+      return [{ ...state, phase: "reauth" }, [{ type: "login" }]];
+    case "deadline_exceeded":
+      return [
+        { ...state, attempts: state.attempts + 1 },
+        [{ type: "retry" }],
+      ];
+  }
 }
 ```
 
@@ -54,11 +73,12 @@ Model — only the tag survives.
 ## Where the two kinds show up in the types
 
 The split is not only a convention you follow by hand — it is the two channels of
-[`Cmd<T, E, R>`](../reference/tea.md), the effect type every command in the
-library is defined as. `T` is what the effect settles with when it works, `E` the
-tagged failures it may settle with instead, and `R` the ctx it reads. A tool
-declares both channels in the same shape: its `ok` schema is `T`, its `err` tag
-list is `E`. See [Declare a
+[`Cmd<Type, Ok, E>`](../reference/tea.md), the effect type every command in the
+library is defined as. `Type` is the Cmd's tag, `Ok` is what the effect settles
+with when it works, and `E` is the tagged failures it may settle with instead. A
+Cmd names no requirements: its handler reads its services from the `ctx` handed
+to `run`. A tool declares both channels in the same shape: its `ok` schema is
+`Ok`, its `err` tag list is `E`. See [Declare a
 tool](../tutorial/build-a-durable-agent.md#declare-a-tool) for that read on a
 real tool.
 
