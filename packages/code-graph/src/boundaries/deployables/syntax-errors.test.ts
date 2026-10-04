@@ -44,67 +44,74 @@ function workersRepo(auth: string) {
 
 const OTHERS = ["api", "mailer", "search"].map((name) => `services/${name}/wrangler.jsonc`);
 
-describe("a wrangler config with a syntax error stops the gate and one wrangler accepts never does", () => {
-  // The run refuses before it measures anything, so every mode answers alike: exit 2, one line
-  // naming the broken file alone, no stdout, and nothing written.
-  function refusal(repo: ReturnType<typeof workersRepo>, options: Parameters<typeof repo.run>[0]) {
-    const run = repo.run(options);
-    expect(run.code).toBe(2);
-    expect(run.stdout).toBe("");
-    expect(run.errors).toHaveLength(1);
-    expect(fs.existsSync(repo.ledgerFile)).toBe(false);
-    const message = run.errors[0] ?? "";
-    expect(message).toContain(AUTH);
-    for (const other of OTHERS) expect(message).not.toContain(other);
-  }
-
-  it("refuses every mode over the broken config, then lists both cycles once it is closed", () => {
-    const repo = workersRepo(AUTH_UNCLOSED);
-    try {
-      fs.writeFileSync(repo.legacyFile, JSON.stringify({ default: 0, scopes: {} }));
-      const modes = [
-        {},
-        { json: true },
-        { ci: true },
-        { acceptCrossings: true, reason: "legacy workers" },
-        { migrateCeilings: true },
-      ];
-      for (const mode of modes) refusal(repo, mode);
-
-      repo.put(AUTH, AUTH_CONFIG);
-      fs.rmSync(repo.legacyFile);
-      const failed = repo.run({ ci: true });
-      expect(failed.code).toBe(1);
-      expect(entryLines(failed.stdout)).toEqual([
-        expect.stringContaining("worker-call-cycle  api, auth"),
-        expect.stringContaining("worker-call-cycle  mailer, search"),
-      ]);
-
-      expect(repo.run({ acceptCrossings: true, reason: "legacy workers" }).code).toBe(0);
-      expect(ledgerOf(repo).entries.map((entry) => [entry.kind, entry.from])).toEqual([
-        ["worker-call-cycle", "api, auth"],
-        ["worker-call-cycle", "mailer, search"],
-      ]);
-
-      const seeded = ledgerText(repo);
-      const first = repo.run({ ci: true });
-      const second = repo.run({ ci: true });
-      expect([first.code, second.code]).toEqual([0, 0]);
-      expect(second.stdout).toBe(first.stdout);
-      expect(ledgerText(repo)).toBe(seeded);
-    } finally {
-      repo.dispose();
+describe(
+  "a wrangler config with a syntax error stops the gate and one wrangler accepts never does",
+  { timeout: 60_000 },
+  () => {
+    // The run refuses before it measures anything, so every mode answers alike: exit 2, one line
+    // naming the broken file alone, no stdout, and nothing written.
+    function refusal(
+      repo: ReturnType<typeof workersRepo>,
+      options: Parameters<typeof repo.run>[0],
+    ) {
+      const run = repo.run(options);
+      expect(run.code).toBe(2);
+      expect(run.stdout).toBe("");
+      expect(run.errors).toHaveLength(1);
+      expect(fs.existsSync(repo.ledgerFile)).toBe(false);
+      const message = run.errors[0] ?? "";
+      expect(message).toContain(AUTH);
+      for (const other of OTHERS) expect(message).not.toContain(other);
     }
-  }, 60_000);
 
-  it.each(
-    MID_FILE_ERRORS.map(({ name, text }) => [name, text] as const),
-  )("refuses --ci over %s", (_name, text) => {
-    const repo = workersRepo(text);
-    try {
-      refusal(repo, { ci: true });
-    } finally {
-      repo.dispose();
-    }
-  });
-});
+    it("refuses every mode over the broken config, then lists both cycles once it is closed", () => {
+      const repo = workersRepo(AUTH_UNCLOSED);
+      try {
+        fs.writeFileSync(repo.legacyFile, JSON.stringify({ default: 0, scopes: {} }));
+        const modes = [
+          {},
+          { json: true },
+          { ci: true },
+          { acceptCrossings: true, reason: "legacy workers" },
+          { migrateCeilings: true },
+        ];
+        for (const mode of modes) refusal(repo, mode);
+
+        repo.put(AUTH, AUTH_CONFIG);
+        fs.rmSync(repo.legacyFile);
+        const failed = repo.run({ ci: true });
+        expect(failed.code).toBe(1);
+        expect(entryLines(failed.stdout)).toEqual([
+          expect.stringContaining("worker-call-cycle  api, auth"),
+          expect.stringContaining("worker-call-cycle  mailer, search"),
+        ]);
+
+        expect(repo.run({ acceptCrossings: true, reason: "legacy workers" }).code).toBe(0);
+        expect(ledgerOf(repo).entries.map((entry) => [entry.kind, entry.from])).toEqual([
+          ["worker-call-cycle", "api, auth"],
+          ["worker-call-cycle", "mailer, search"],
+        ]);
+
+        const seeded = ledgerText(repo);
+        const first = repo.run({ ci: true });
+        const second = repo.run({ ci: true });
+        expect([first.code, second.code]).toEqual([0, 0]);
+        expect(second.stdout).toBe(first.stdout);
+        expect(ledgerText(repo)).toBe(seeded);
+      } finally {
+        repo.dispose();
+      }
+    });
+
+    it.each(
+      MID_FILE_ERRORS.map(({ name, text }) => [name, text] as const),
+    )("refuses --ci over %s", (_name, text) => {
+      const repo = workersRepo(text);
+      try {
+        refusal(repo, { ci: true });
+      } finally {
+        repo.dispose();
+      }
+    });
+  },
+);
