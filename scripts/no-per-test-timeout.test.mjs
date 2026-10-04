@@ -48,7 +48,14 @@ function declaresTest(call) {
 const isFunction = (node) =>
   ts.isArrowFunction(node) || ts.isFunctionExpression(node);
 
-function isTimeoutOption(property) {
+/** An options property that is a `timeout`, or that the guard cannot read: a spread or a computed key. */
+function spellsTimeout(property) {
+  if (
+    ts.isSpreadAssignment(property) ||
+    ts.isComputedPropertyName(property.name)
+  ) {
+    return true;
+  }
   const named =
     ts.isPropertyAssignment(property) ||
     ts.isShorthandPropertyAssignment(property);
@@ -66,13 +73,14 @@ function isTimeoutOption(property) {
  * - any other second argument is the body, however it is spelled (inline, a named function, a
  *   member access), and whatever follows the body is the timeout;
  * - except that an inline function in third place makes the second argument an options variable.
- *   The guard cannot read through a variable, so it counts as a spelling: inline the options.
+ * What the guard cannot read, a variable or a spread or computed key, counts as a spelling, so
+ * the slip cannot hide in it: inline the options to pass.
  */
 function timeoutSpellings(test) {
   const [, second, third] = test.arguments;
   const options = test.arguments
     .filter(ts.isObjectLiteralExpression)
-    .flatMap((object) => object.properties.filter(isTimeoutOption));
+    .flatMap((object) => object.properties.filter(spellsTimeout));
   if (!second || ts.isObjectLiteralExpression(second) || !third) return options;
   if (isFunction(third)) return [...options, second];
   return ts.isObjectLiteralExpression(third) ? options : [...options, third];
@@ -161,6 +169,8 @@ const PLANTED = [
   'it("named body, no timeout", handler);',
   'it("options variable, then an inline body", options, () => {}); // FLAGGED',
   'it.each([1, 2])("each options variable %s", SLOW, () => {}); // FLAGGED',
+  'it("spread options", { ...SLOW }, () => {}); // FLAGGED',
+  'it("computed key", { ["time" + "out"]: 5_000 }, () => {}); // FLAGGED',
   'it("inline body, options object", () => {}, { retry: 2 });',
   "beforeAll(() => {}, 120_000);",
   "afterAll(() => {}, 120_000);",
@@ -178,7 +188,7 @@ describe("no per-test timeout in any test file", { timeout: 60_000 }, () => {
     const flagged = PLANTED.flatMap((line, at) =>
       line.endsWith(FLAGGED) ? [at + 1] : [],
     );
-    expect(flagged).toHaveLength(16);
+    expect(flagged).toHaveLength(18);
     expect(perTestTimeouts(PLANTED.join("\n"), "planted.test.ts")).toEqual(
       flagged,
     );
