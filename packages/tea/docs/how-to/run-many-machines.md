@@ -111,7 +111,12 @@ export const spawnWorker = (
       Effect.map(run(worker, {}), (run): Child => ({ run, scope })),
     enrol: (child) => Effect.sync(() => children.set(id, child)),
     remove: Effect.sync(() => children.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    // Nothing reads the fiber `notify` runs on, so a failed save ends here.
+    notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
+      Effect.catch((failure) =>
+        Effect.logError(`the parent did not take the stop of ${id}`, failure),
+      ),
+    ),
   });
 
 /** Stop one worker. An id not in the table is a no-op. */
@@ -136,6 +141,10 @@ export const stopWorker = (
   after the worker has stopped.
 - **`notify`** runs after `remove`. Here it is `tell(parent, parentRun, msg)`,
   which dispatches `msg` only when the parent's State has a cell for it.
+  `spawn` runs `notify` on a fiber nothing reads, so `notify` is typed to
+  never fail. `tell` fails with `StoreFailed` when the parent's save fails,
+  so a bare `notify: tell(...)` does not compile. The `Effect.catch` is where
+  this host says what happens to that failure: it logs it.
 
 `stop(child.scope)` stops that one worker: its run stops, `remove` takes its
 entry out and `notify` tells the parent. The table lookup is yours, so
@@ -274,7 +283,12 @@ export const spawnProcess = <E>(
       }),
     enrol: (process) => Effect.sync(() => processes.set(id, process)),
     remove: Effect.sync(() => processes.delete(id)),
-    notify: tell(parent, parentRun, { type: "child_stopped", id }),
+    // Nothing reads the fiber `notify` runs on, so a failed save ends here.
+    notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
+      Effect.catch((failure) =>
+        Effect.logError(`the parent did not take the stop of ${id}`, failure),
+      ),
+    ),
   });
 
 /** Stop one running process. Any other id is a no-op. */
@@ -315,8 +329,14 @@ You do not guard any of these in host code.
   `NoCellError` of a State that changed after the check, and the `Stopped` of
   a parent that stopped. Tuval sent the notice anyway and logged an error per
   spawn ([phoenix #8927](https://github.com/kamp-us/phoenix/issues/8927)).
-- **A failed save is still a failure.** `tell` fails with `StoreFailed` when
-  the parent's save fails.
+
+One thing stays yours:
+
+- **A failed save of the parent reaches only your `notify`.** `tell` fails
+  with `StoreFailed` when the parent's save fails. `spawn` does not report it
+  and the parent's `onError` is not handed it, so the type makes `notify`
+  handle it. Log it, send it somewhere, or turn it into a defect with
+  `Effect.orDie`. A defect in `notify` ends its fiber and nobody sees it.
 
 Stop a child with `stop`, or by closing its scope. `child.run.stop()` is not
 one of them: it stops the run and leaves the scope open, so the entry stays in

@@ -477,6 +477,58 @@ describe("a parent and six children on the helpers", () => {
     );
   });
 
+  it("a parent whose every save fails: three children stop, and the handler each `notify` carries is the one place the three failed notices are seen", async () => {
+    const disk = new Error("disk full");
+    const inner = memoryStore<ParentState>();
+    let full = false;
+    const store: Store<ParentState> = {
+      load: () => inner.load(),
+      save: async (state) => {
+        if (full) throw disk;
+        await inner.save(state);
+      },
+      migrate: (raw) => inner.migrate(raw),
+    };
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const { parentScope, parentRun, reports } = yield* openParent(store);
+        const table = new Map<string, Child>();
+        const failed: Array<{ id: string; failure: StoreFailed }> = [];
+        const ids = ["a", "b", "c"];
+        for (const id of ids) {
+          yield* spawn(parentScope, {
+            start: (scope) =>
+              Effect.map(run(worker, {}), (run): Child => ({ run, scope })),
+            enrol: (child) => Effect.sync(() => table.set(id, child)),
+            remove: Effect.sync(() => table.delete(id)),
+            notify: tell(parent, parentRun, stopped(id)).pipe(
+              Effect.catch((failure) =>
+                Effect.sync(() => failed.push({ id, failure })),
+              ),
+            ),
+          });
+        }
+        const all = new Map(table);
+        full = true;
+
+        // Each stop succeeds: the failed notice is not the stop's failure.
+        for (const id of ids) yield* stop((all.get(id) as Child).scope);
+
+        expect(table.size).toBe(0);
+        yield* settled(() => expect(failed).toHaveLength(ids.length));
+        expect(failed.map((f) => f.id).sort()).toEqual(ids);
+        for (const { failure } of failed) {
+          expect(failure).toBeInstanceOf(StoreFailed);
+          expect(failure).toMatchObject({ operation: "save", cause: disk });
+        }
+        // The parent's own sink was handed none of them.
+        expect(reports).toEqual([]);
+        full = false;
+        yield* Scope.close(parentScope, Exit.void);
+      }),
+    );
+  });
+
   it("a parent whose State has no cell for the notice: a child stops, nothing dies and nothing is logged", async () => {
     const logged = [
       vi.spyOn(console, "error").mockImplementation(() => {}),
