@@ -1297,7 +1297,7 @@ readonly DeadlineSub[]>`. `cacheEvictionSub(name, everyMs)` returns a `subs`
 
   The door is a re-export file over `src/internal/jev/`; nothing moved and nothing
   was renamed to open it. `docs/reference/jev.md` is generated with the rest, and
-  [Ask Jev a typed question](https://github.com/kamp-us/demlik/blob/main/docs/how-to/ask-jev-a-typed-question.md)
+  [Ask Jev a typed question](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/ask-jev-a-typed-question.md)
   wires a small machine end to end.
 
 - e1d1d1a: Refusals name the accepted set, and `acceptedTypes(machine, state)` lets a caller ask first.
@@ -1345,7 +1345,7 @@ readonly DeadlineSub[]>`. `cacheEvictionSub(name, everyMs)` returns a `subs`
   annotation, not a third update form.
 
   The new explanation page [Which update form, and what a missing cell
-  means](https://github.com/kamp-us/demlik/blob/main/docs/explanation/pick-an-update-form.md) covers
+  means](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/explanation/pick-an-update-form.md) covers
   the choice and what the absence promises.
 
   **Migration: none.** An existing full table typechecks unchanged — optional cells only widen what
