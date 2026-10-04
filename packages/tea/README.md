@@ -63,7 +63,10 @@ file imports only the core, so it runs unchanged on either engine.
 
 [Run a machine on the Promise engine](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-on-the-promise-engine.md)
 and [on the Effect engine](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-on-the-effect-engine.md)
-build on the same machine file. Coming from 0.15?
+build on the same machine file.
+[Run many machines under one parent](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-many-machines.md)
+starts child machines on the Effect engine with `spawn`, `tell` and `stop`.
+Coming from 0.15?
 [The migration guide](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/migrate-from-0-15.md)
 shows every removed or reshaped API, before and after.
 

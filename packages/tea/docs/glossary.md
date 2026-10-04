@@ -42,6 +42,18 @@ cell is the handler for one Cmd type, typed as `InterpretCell` in `@demlik/tea`.
 Reference: [`InterpretCell`](./reference/tea.md#InterpretCell). Why:
 [which update form, and what a missing cell means](./explanation/pick-an-update-form.md).
 
+## child
+
+A machine a host runs under a parent machine, in a scope of its own inside the
+parent's scope. tea has no supervisor, so the host keeps the table of live
+children. Three helpers from `@demlik/tea/effect` run the steps that race:
+`spawn` starts a child, `stop` stops one, and `tell` sends the parent a Msg
+when a child stops.
+Reference: [`spawn`](./reference/effect.md#spawn),
+[`stop`](./reference/effect.md#stop) and
+[`tell`](./reference/effect.md#tell). How:
+[Run many machines under one parent](./how-to/run-many-machines.md).
+
 ## Cmd
 
 A plain object, tagged by `type`, that describes one piece of work for the
