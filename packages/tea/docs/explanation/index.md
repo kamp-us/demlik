@@ -2,13 +2,15 @@
 
 Understanding-oriented discussion of `@demlik/tea` — why it is shaped the way it
 is, and what each shape promises you. These pages stand on their own; read one
-straight through without following a link.
+straight through without following a link. The words they use are each defined
+in the [glossary](../glossary.md).
 
-- [Cmd or Sub: do this once, or tell me whenever](./cmd-or-sub.md) — why a Cmd
-  that waits stops the machine folding, why a watcher belongs in a Sub instead,
+- [Cmd or Sub: do this once, or tell me whenever](./cmd-or-sub.md) — why a [Cmd](../glossary.md#cmd)
+  that waits stops the machine [folding](../glossary.md#fold), why a watcher belongs in a
+  [Sub](../glossary.md#sub) instead,
   and the one question that tells the two apart.
 - [Which update form, and what a missing cell means](./pick-an-update-form.md) —
-  reducer table or state × message table, why a missing transitions cell is a
+  reducer table or state × message table, why a missing transitions [cell](../glossary.md#cell) is a
   declared refusal rather than an omission, and how to ask a state what it
   accepts before you dispatch.
 - [What durability actually promises](./durability-model.md) — how state survives
@@ -16,9 +18,9 @@ straight through without following a link.
   where a handler can run twice, and what to do about it.
 - [Why failures are values and bugs are throws](./errors-as-data.md) — the one
   question that decides an error's shape, and why a recoverable failure cannot be
-  an `Error` object in a Model that has to survive persistence.
+  an `Error` object in a [Model](../glossary.md#model) that has to survive persistence.
 - [What each import is allowed to do to you](./export-tiers.md) — the `stable` /
-  `battery` / `experimental` tiers, what each promises across a version bump, and
+  [`battery`](../glossary.md#battery) / `experimental` tiers, what each promises across a version bump, and
   why the surface is not flat.
 - [Coexisting with Cloudflare's `agents` SDK](./agents-sdk-coexistence.md) — who
   owns the alarm, the state cell and the loop when you are already inside an

@@ -8,7 +8,10 @@ subpaths that have no dedicated page — is listed in [all-modules.md](./all-mod
 > Generated from the typedoc model. Do not edit by hand — run `pnpm --filter
 > @demlik/tea docs:reference` to regenerate.
 
-Each module is listed with its tier: `stable`, `battery` or `experimental`.
+Each module is listed with its tier: `stable`, [`battery`](../glossary.md#battery) or `experimental`.
+
+The words these pages use (Model, Msg, Cmd, Sub, Store and the rest) are each
+defined in the [glossary](../glossary.md).
 
 ## Core
 
