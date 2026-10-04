@@ -19,6 +19,7 @@ It needs the Effect engine: see
 
 Both machines are plain tea and import nothing from Effect. The parent uses
 the transitions form, so a `closed` parent has no cell for `child_stopped`.
+Save them as `parent-and-workers.ts`.
 
 ```ts
 import { defineMachine } from "@demlik/tea";
@@ -63,7 +64,8 @@ export const parent = defineMachine({
 
 ## 2. Start each worker with `spawn`, and stop it with `stop`
 
-This is host code, and it is yours to change.
+This is host code, and it is yours to change. Save it beside the machines as
+`parent-and-workers-effect.ts`.
 
 ```ts
 import {
@@ -142,7 +144,19 @@ every child forked from it, so the whole tree stops with it.
 
 ## 3. Use it
 
+This goes in a third file beside the other two. It imports `Scope` as a value
+and `Exit` with it, because it opens the parent's scope and closes it.
+
 ```ts
+import { run } from "@demlik/tea/effect";
+import { Effect, Exit, Scope } from "effect";
+import { parent } from "./parent-and-workers";
+import {
+  type Children,
+  spawnWorker,
+  stopWorker,
+} from "./parent-and-workers-effect";
+
 const program = Effect.gen(function* () {
   const parentScope = yield* Scope.make();
   const parentRun = yield* (yield* run(parent, {}).pipe(
@@ -166,7 +180,8 @@ const program = Effect.gen(function* () {
 
 A host often does more than start a run. This one gives every process its own
 `Terminal` service, and its table says whether a process is `starting` or
-`running`. That work goes in `start`, ahead of the run.
+`running`. That work goes in `start`, ahead of the run. It is a file of its
+own beside `parent-and-workers.ts`.
 
 ```ts
 import { Cmd, defineMachine } from "@demlik/tea";
