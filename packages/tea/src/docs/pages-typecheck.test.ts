@@ -102,16 +102,14 @@ const diagnosticsOf = (page: Page, markdown: string): string[] =>
 
 const read = (page: Page) => readFile(join(PKG_ROOT, page.path), "utf8");
 
-describe("pages typecheck from their own text", () => {
-  it.each(PAGES.map((page) => [page.path, page] as const))(
-    "%s compiles without a diagnostic",
-    async (_path, page) => {
-      const markdown = await read(page);
-      expect(pastedFrom(page, markdown).size).toBeGreaterThan(0);
-      expect(diagnosticsOf(page, markdown)).toEqual([]);
-    },
-    120_000,
-  );
+describe("pages typecheck from their own text", { timeout: 120_000 }, () => {
+  it.each(
+    PAGES.map((page) => [page.path, page] as const),
+  )("%s compiles without a diagnostic", async (_path, page) => {
+    const markdown = await read(page);
+    expect(pastedFrom(page, markdown).size).toBeGreaterThan(0);
+    expect(diagnosticsOf(page, markdown)).toEqual([]);
+  });
 
   it("fails a handler that takes `ok` from a third argument the engine never passes", async () => {
     const page = pageOf("docs/explanation/cmd-or-sub.md");
@@ -156,7 +154,7 @@ describe("pages typecheck from their own text", () => {
       d.includes("is not assignable to parameter of type 'ToolHandler<"),
     );
     expect(refused).toHaveLength(handlers.length);
-  }, 120_000);
+  });
 
   it.each([
     {
@@ -184,5 +182,5 @@ describe("pages typecheck from their own text", () => {
     const diagnostics = diagnosticsOf(page, markdown.replace(defines, renamed));
 
     expect(diagnostics.join("\n")).toContain(`Cannot find name '${name}'`);
-  }, 120_000);
+  });
 });
