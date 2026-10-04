@@ -13,7 +13,7 @@ import { tsBlocksOf } from "../page-mirrors";
 export const UNNAMED_PAGE_FILE = "main.ts";
 
 /** The `// <file>.ts` line a block that starts a file opens with. */
-const MARKER = /^\/\/ (\S+\.ts)\n/;
+export const FILE_MARKER = /^\/\/ (\S+\.ts)\n/;
 
 /**
  * Every ```ts block on the page, keyed by the `// <file>` marker on its first
@@ -25,12 +25,12 @@ export function programOf(
 ): Map<string, string> {
   const blocks = tsBlocksOf(markdown);
   const files = new Map<string, string>();
-  if (!blocks.some((block) => MARKER.test(block))) {
+  if (!blocks.some((block) => FILE_MARKER.test(block))) {
     if (blocks.length > 0) files.set(unnamed, blocks.join(""));
     return files;
   }
   for (const block of blocks) {
-    const marker = MARKER.exec(block);
+    const marker = FILE_MARKER.exec(block);
     const name = marker?.[1] ?? [...files.keys()].at(-1);
     if (name === undefined)
       throw new Error("a ts block precedes any file marker");

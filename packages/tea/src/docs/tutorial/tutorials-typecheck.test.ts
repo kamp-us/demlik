@@ -51,8 +51,11 @@ const diagnosticsOf = (page: string, program: Map<string, string>): string[] =>
 describe("docs/tutorial/*.md programs typecheck", async () => {
   const programs = await pages();
 
-  it("reads both tutorials, including the page that names no file", () => {
+  it("reads every tutorial, including the page that names no file", () => {
     const byPage = new Map(programs);
+    expect(byPage.get("add-your-first-effect.md")?.has("effects.ts")).toBe(
+      true,
+    );
     expect(byPage.get("build-a-durable-agent.md")?.has("model.ts")).toBe(true);
     expect(
       byPage.get("build-your-first-machine.md")?.has(UNNAMED_PAGE_FILE),

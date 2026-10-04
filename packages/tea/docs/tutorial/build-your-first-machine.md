@@ -123,9 +123,8 @@ handed in — you can ignore that for now). Each `update` cell returns
 `[nextState, effects]`. When enough bytes have arrived, the `chunk` cell flips
 `phase` to `"done"` — that is your terminal state.
 
-The empty list is where effects go, and this lesson never fills it; [Cmd or
-Sub: do this once, or tell me whenever](../explanation/cmd-or-sub.md) is where
-they start.
+The empty list is where effects go, and this lesson never fills it. The next
+lesson, [Add your first effect](./add-your-first-effect.md), does.
 
 ## Run it and watch it finish
 
@@ -219,3 +218,8 @@ table keyed by state and then message, where leaving a cell out declares that
 the state does not accept that message at all. Which one to reach for, and what
 that absence promises, is [Which update form, and what a missing cell
 means](../explanation/pick-an-update-form.md).
+
+## Next step
+
+Go on to [Add your first effect](./add-your-first-effect.md), where this
+machine fetches its own data and handles a failure.
