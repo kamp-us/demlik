@@ -5,6 +5,10 @@ import `run` from `@demlik/tea/effect`. The machine file is the one the Promise
 engine runs, unchanged: see
 [Run a machine on the Promise engine](./run-on-the-promise-engine.md).
 
+This page runs one machine. To run several under a parent, use `spawn`, `tell`
+and `stop` from the same entry: see
+[Run many machines under one parent](./run-many-machines.md).
+
 The agent layer runs on the Promise engine, not this one. `defineAgent` from
 `@demlik/tea/agent` drives its machine with the Promise engine's `run`, so
 `agent.run` returns a Promise and a `tool()` handler is an `async` function, not
