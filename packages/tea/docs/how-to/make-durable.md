@@ -147,7 +147,7 @@ Process A is still holding the version it read before B moved it on, so A's
 next save is the one that throws `StoreConflictError`. The guard therefore
 belongs around every dispatch, not only around boot: a conflict can surface at
 any save, and by then this process has already fired the effects it got to.
-Catch it, stop, and exit — another worker owns this run now.
+Catch it and stop dispatching — another worker owns this run now.
 
 ```ts
 import { StoreConflictError } from "@demlik/tea";

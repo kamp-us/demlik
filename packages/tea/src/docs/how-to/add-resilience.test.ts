@@ -1,12 +1,13 @@
 /**
  * The retry-and-backoff how-to's compile-and-run gate (#542).
  *
- * `docs/how-to/add-resilience.md` builds a retrying fetch one piece at a time:
- * a Model slice, two reducer cells, a handler table, then a second failure
- * cell bounded by outage duration. Each piece is a `#region` of this file,
- * verbatim (`../page-mirrors.ts` holds the row), so the page shows code the
- * test program compiles, and the tests below run both machines the pieces
- * make. Step 6, the `defineAgent` policy, is not mirrored here.
+ * `docs/how-to/add-resilience.md` builds a retrying fetch in five steps: a
+ * Model slice, the Cmd and Msgs, the machine, the handler table, then a second
+ * machine bounded by outage duration. Each block of those steps is a `#region`
+ * of this file, verbatim and in page order (`../page-mirrors.ts` holds the
+ * row). The regions define every name they use, so the page compiles from its
+ * own text too (`../pages-typecheck.test.ts`). The tests below run both
+ * machines. Step 6, the `defineAgent` policy, is not mirrored here.
  */
 
 // biome-ignore-all assist/source/organizeImports: the `#region` markers below
@@ -15,7 +16,7 @@
 
 import { replay } from "@demlik/tea";
 import { expectCmdEmitted } from "@demlik/tea/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // #region model
 import { type RetryState, initRetry } from "@demlik/tea/retry-backoff";
@@ -26,16 +27,14 @@ interface State {
   readonly retryAtMs: number;
   readonly retry: RetryState;
 }
+
+const initial: State = {
+  phase: "idle",
+  body: null,
+  retryAtMs: 0,
+  retry: initRetry(),
+};
 // #endregion model
-
-type Msg =
-  | { readonly type: "fetch"; readonly url: string; readonly at: number }
-  | { readonly type: "fetch_ok"; readonly body: string }
-  | { readonly type: "fetch_err"; readonly error: string; readonly at: number };
-
-interface Ctx {
-  readonly http: (url: string) => Promise<string>;
-}
 
 // #region cmd
 import {
@@ -46,23 +45,24 @@ import {
 } from "@demlik/tea";
 
 type DoFetch = Cmd<"do_fetch"> & { readonly url: string };
+
+type Msg =
+  | { readonly type: "fetch"; readonly url: string }
+  | { readonly type: "fetch_ok"; readonly body: string }
+  | { readonly type: "fetch_err"; readonly error: string; readonly at: number };
+
+interface Ctx {
+  readonly http: (url: string) => Promise<string>;
+}
 // #endregion cmd
 
-// #region backoff-ops
+// #region machine
 import {
   defaultRetryPolicy,
   nextDelayMs,
   recordFailure,
   shouldRetry,
 } from "@demlik/tea/retry-backoff";
-// #endregion backoff-ops
-
-const initial: State = {
-  phase: "idle",
-  body: null,
-  retryAtMs: 0,
-  retry: initRetry(),
-};
 
 const resilientFetch = defineMachine({
   types: {
@@ -73,17 +73,14 @@ const resilientFetch = defineMachine({
   },
   init: (loaded) => [loaded ?? initial, []],
   update: {
-    // #region attempt
     fetch: (s, m) => [
       { ...s, phase: "fetching", body: null },
       [{ type: "do_fetch", url: m.url }],
     ],
-    // #endregion attempt
     fetch_ok: (s, m) => [
       { ...s, phase: "ok", body: m.body, retry: initRetry() },
       [],
     ],
-    // #region failure
     fetch_err: (s, m) => {
       const retry = recordFailure(s.retry, m.error);
       if (!shouldRetry(retry, defaultRetryPolicy)) {
@@ -99,22 +96,16 @@ const resilientFetch = defineMachine({
         [],
       ];
     },
-    // #endregion failure
   },
 });
-
-/** A flaky backend: the first request throws, every later one answers. */
-let requests = 0;
-const ctx: Ctx = {
-  http: async (url) => {
-    requests += 1;
-    if (requests === 1) throw new Error("503");
-    return `body of ${url}`;
-  },
-};
+// #endregion machine
 
 // #region run
 import { run } from "@demlik/tea/promise";
+
+const ctx: Ctx = {
+  http: (url) => fetch(url).then((response) => response.text()),
+};
 
 const interpret: Interpret<Msg, DoFetch, Ctx> = {
   do_fetch: tryInterpret<DoFetch, string, Msg, Ctx>(
@@ -127,18 +118,14 @@ const interpret: Interpret<Msg, DoFetch, Ctx> = {
 const runtime = run(resilientFetch, { ctx, interpret });
 // #endregion run
 
-/** How long the peer above this call waits before it gives up on it. */
-const PEER_GIVE_UP_MS = 10_000;
-
-interface OutageState extends State {
-  readonly outageMs: number | null;
-}
-
 // #region outage-policy
 import {
   type DurationRetryPolicy,
   retryElapsedMs,
 } from "@demlik/tea/retry-backoff";
+
+/** How long the peer above this call waits before it gives up on it. */
+const PEER_GIVE_UP_MS = 10_000;
 
 // Derive the budget from the peer's own give-up window — never restate a guess.
 const policy: DurationRetryPolicy = {
@@ -149,6 +136,12 @@ const policy: DurationRetryPolicy = {
   jitter: "full",
 };
 // #endregion outage-policy
+
+// #region outage-machine
+interface OutageState extends State {
+  /** How long the far side had been unreachable when the retrying gave up. */
+  readonly outageMs: number | null;
+}
 
 const outageBoundedFetch = defineMachine({
   types: {
@@ -167,7 +160,6 @@ const outageBoundedFetch = defineMachine({
       { ...s, phase: "ok", body: m.body, retry: initRetry() },
       [],
     ],
-    // #region outage-failure
     fetch_err: (s, m) => {
       const retry = recordFailure(s.retry, m.error, m.at); // `m.at` starts the streak clock
       if (!shouldRetry(retry, policy, m.at)) {
@@ -184,30 +176,41 @@ const outageBoundedFetch = defineMachine({
         [],
       ];
     },
-    // #endregion outage-failure
   },
+});
+// #endregion outage-machine
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("docs/how-to/add-resilience.md — it runs", () => {
-  it("step 2: the attempt emits the call as a Cmd", () => {
+  it("step 3: the attempt emits the call as a Cmd", () => {
     expectCmdEmitted(
       resilientFetch,
-      { msgs: [{ type: "fetch", url: "/x", at: 1_000 }], ctx },
+      { msgs: [{ type: "fetch", url: "/x" }], ctx },
       { type: "do_fetch", url: "/x" },
     );
   });
 
   it("steps 3 and 4: a thrown request becomes `fetch_err`, which schedules a backed-off retry", async () => {
+    // A flaky backend: the first request throws, every later one answers.
+    let requests = 0;
+    vi.stubGlobal("fetch", async (url: string) => {
+      requests += 1;
+      if (requests === 1) throw new Error("503");
+      return new Response(`body of ${url}`);
+    });
     const booted = await runtime.ready;
     const before = Date.now();
 
-    await booted.dispatch({ type: "fetch", url: "/x", at: before });
+    await booted.dispatch({ type: "fetch", url: "/x" });
     const waiting = booted.getState();
     expect(waiting.phase).toBe("waiting_retry");
     expect(waiting.retry.attempt).toBe(1);
     expect(waiting.retryAtMs).toBeGreaterThanOrEqual(before);
 
-    await booted.dispatch({ type: "fetch", url: "/x", at: Date.now() });
+    await booted.dispatch({ type: "fetch", url: "/x" });
     expect(booted.getState()).toMatchObject({
       phase: "ok",
       body: "body of /x",
