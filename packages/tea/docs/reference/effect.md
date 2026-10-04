@@ -1,6 +1,6 @@
 # @demlik/tea/effect
 
-> the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises.
+> the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises. `spawn` and `tell` are for a host that runs child machines under a parent: it keeps its own table of children, and they run the steps that race.
 
 Tier: `stable`
 
@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (13)
+## Exports (16)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -22,9 +22,12 @@ import { … } from "@demlik/tea/effect";
 | [`EffectSubscribe`](#EffectSubscribe) | Type | stable | The Effect engine's `subscribe` map: a runner for every Sub type the machine declares beyond the built-ins, and optionally one for a built-in, which replaces the engine's own (#270 R2.1). |
 | [`InterpretServices`](#InterpretServices) | Type | stable | The services every cell of an `interpret` map reads. |
 | [`run`](#run) | Function | stable | Run `machine` on the Effect engine. |
+| [`spawn`](#spawn) | Function | stable | Start a child in a scope forked from `parentScope` and enrol it in the host's table, as one uninterruptible step. |
+| [`SpawnSteps`](#SpawnSteps) | Interface | stable | The host's own steps of a spawn. |
 | [`Stopped`](#Stopped) | Class | stable | A dispatch the run refused because it is stopping or has stopped. |
 | [`StoreFailed`](#StoreFailed) | Class | stable | The run's store failed. |
 | [`SubscribeServices`](#SubscribeServices) | Type | stable | The services every runner of a `subscribe` map reads. |
+| [`tell`](#tell) | Function | stable | Hand `msg` to a run only when its State has a cell for it, and drop it when the run no longer takes it. |
 
 ## Declarations
 
@@ -200,6 +203,48 @@ function run<
 ): Effect<EffectBootingRuntime<S, M, E, CellErrors<C, I>>, never, Scope | InterpretServices<I> | SubscribeServices<B>>
 ```
 
+<a id="spawn"></a>
+
+### `spawn`
+
+```ts
+function spawn<A, E = never, R = never>(
+  parentScope: Scope,
+  steps: SpawnSteps<A, E, R>,
+): Effect<A, E, Exclude<R, Scope>>
+```
+
+<a id="SpawnSteps"></a>
+
+### `SpawnSteps`
+
+```ts
+interface SpawnSteps<A, E = never, R = never> {
+  /** Add the started child to the host's table. */
+  readonly enrol: (child: A) => Effect<unknown>;
+  /**
+   * Say the child stopped, usually a tell to the parent. It runs
+   * after `remove`, on a fiber of its own that the closing scope never waits
+   * for, so it may wait on the parent.
+   */
+  readonly notify: Effect<unknown, unknown>;
+  /**
+   * Take the child out of the host's table. It runs when the child's scope
+   * closes, after its run has stopped, whether or not `enrol` ran, so it must
+   * be safe on a child the table does not hold.
+   */
+  readonly remove: Effect<unknown>;
+  /**
+   * Start the child and return what the host keeps for it. It runs with the
+   * child's scope provided, so a `run(machine, opts)` in it belongs to that
+   * scope, and so does anything else it acquires. `scope` is the same scope,
+   * for a host that keeps it to stop the child with `Scope.close`. A failure
+   * closes the child's scope, which runs `remove` and `notify`.
+   */
+  readonly start: (scope: Closeable) => Effect<A, E, R>;
+}
+```
+
 <a id="Stopped"></a>
 
 ### `Stopped`
@@ -232,4 +277,24 @@ class StoreFailed extends YieldableError<this> & {} & Readonly<{
 
 ```ts
 type SubscribeServices<B> = { [K in keyof B]-?: ServicesOfRunner<NonNullable<B[K]>> }[keyof B]
+```
+
+<a id="tell"></a>
+
+### `tell`
+
+```ts
+function tell<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+  E extends { type: string } = never,
+  Err = never,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  runtime: EffectRuntime<S, M, E, Err>,
+  msg: NoInfer<M>,
+): Effect<void, StoreFailed | Err>
 ```
