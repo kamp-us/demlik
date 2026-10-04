@@ -59,20 +59,20 @@ file imports only the core, so it runs unchanged on either engine.
   Effects with typed errors, and closing the scope interrupts whatever is in
   flight.
 
-[Run a machine on the Promise engine](https://github.com/kamp-us/demlik/blob/main/docs/how-to/run-on-the-promise-engine.md)
-and [on the Effect engine](https://github.com/kamp-us/demlik/blob/main/docs/how-to/run-on-the-effect-engine.md)
+[Run a machine on the Promise engine](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-on-the-promise-engine.md)
+and [on the Effect engine](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/run-on-the-effect-engine.md)
 build on the same machine file. Coming from 0.15?
-[The migration guide](https://github.com/kamp-us/demlik/blob/main/docs/how-to/migrate-from-0-15.md)
+[The migration guide](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/migrate-from-0-15.md)
 shows every removed or reshaped API, before and after.
 
 ## Documentation
 
-The four Diátaxis quadrants live in [`docs/`](https://github.com/kamp-us/demlik/blob/main/docs/README.md):
+The four Diátaxis quadrants live in [`docs/`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/README.md):
 
-- [Tutorials](https://github.com/kamp-us/demlik/blob/main/docs/tutorial/index.md) — learning-oriented lessons that take you through the library by building a real machine.
-- [How-to guides](https://github.com/kamp-us/demlik/blob/main/docs/how-to/index.md) — goal-oriented directions for getting a specific job done.
-- [Reference](https://github.com/kamp-us/demlik/blob/main/docs/reference/index.md) — information-oriented API description, generated per public module.
-- [Explanation](https://github.com/kamp-us/demlik/blob/main/docs/explanation/index.md) — understanding-oriented discussion of how it works and why it is shaped this way.
+- [Tutorials](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/tutorial/index.md) — learning-oriented lessons that take you through the library by building a real machine.
+- [How-to guides](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/index.md) — goal-oriented directions for getting a specific job done.
+- [Reference](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/reference/index.md) — information-oriented API description, generated per public module.
+- [Explanation](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/explanation/index.md) — understanding-oriented discussion of how it works and why it is shaped this way.
 
 Two more surfaces sit behind those, for people working on the library rather than using it:
 [`.patterns/`](https://github.com/kamp-us/demlik/blob/main/.patterns/index.md) is how the code is shaped, and
