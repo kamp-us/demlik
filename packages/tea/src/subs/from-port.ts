@@ -46,6 +46,11 @@ import { dispatchIfPresent, type SubscribeHandler } from "./types";
 // less-specific Runtime still compile — the factory still only ever calls
 // `subscribePort`, so it does not read RS/RM, but the boundary no longer
 // hardcodes the widest type when the caller knows a narrower one.
+/**
+ * Build a Sub runner that listens to a `Port` on another runtime and dispatches
+ * `msgFn(value, sub)` for each value emitted. Use it to let one machine react
+ * to another's announcements.
+ */
 export function fromPort<
   S extends Sub,
   M,

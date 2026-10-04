@@ -43,8 +43,13 @@ import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/types";
 import { dispatchIfPresent } from "../../subs/types";
 
+/** The `chrome.tabs` events `fromChromeTabsEvent` can listen to. */
 export type TabsEventName = "onActivated" | "onUpdated" | "onRemoved";
 
+/**
+ * Options for `fromChromeTabsEvent`: which tab `events` to listen to, whether
+ * to fire once on mount, and the `msgFn` that builds the Msg.
+ */
 export interface ChromeTabsEventOpts<S extends Sub, M> {
   events: readonly TabsEventName[];
   /**
@@ -63,6 +68,10 @@ export interface ChromeTabsEventOpts<S extends Sub, M> {
 // not forward the event payload — every event collapses to `msgFn(sub)`.
 type AnyTabsListener = (...args: unknown[]) => void;
 
+/**
+ * Build a Sub runner that dispatches `msgFn(sub)` whenever one of the chosen
+ * `chrome.tabs` events fires.
+ */
 export function fromChromeTabsEvent<S extends Sub, M>(
   opts: ChromeTabsEventOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {

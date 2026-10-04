@@ -32,6 +32,10 @@ import type { Sub } from "../index";
 import type { MinimalEvent, MinimalEventTarget } from "./platform";
 import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
+/**
+ * Build a Sub runner that listens for `eventName` on a DOM-style event target
+ * and dispatches `msgFn(event, sub)` for each event.
+ */
 export function fromEventTarget<S extends Sub, M>(
   getTarget: () => MinimalEventTarget,
   eventName: string,

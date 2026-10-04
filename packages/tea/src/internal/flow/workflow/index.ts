@@ -406,6 +406,11 @@ export function workflowActivityDef<A>() {
     err: [],
   });
 }
+/**
+ * The Cmd a workflow emits to run one forward activity. Your handler performs
+ * `cmd.activity`, and the result is dispatched back as a Msg carrying the same
+ * `id`.
+ */
 export type ActivityCmd<A> = CmdOf<ReturnType<typeof workflowActivityDef<A>>>;
 
 /**
@@ -431,6 +436,10 @@ export function workflowCompensationDef<A>() {
     err: [],
   });
 }
+/**
+ * The Cmd a workflow emits to run one compensation, the inverse of an earlier
+ * activity.
+ */
 export type CompensationCmd<A> = CmdOf<
   ReturnType<typeof workflowCompensationDef<A>>
 >;

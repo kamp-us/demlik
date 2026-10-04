@@ -29,6 +29,11 @@ import { dispatchIfPresent } from "../../subs/types";
 
 type AlarmSubData = { readonly alarmName: string };
 
+/**
+ * Build a Sub runner that dispatches `msgFn(alarm, sub)` when the
+ * `chrome.alarms` alarm named `sub.deps.alarmName` fires. It only listens;
+ * create and clear the alarm with Cmds.
+ */
 export function fromChromeAlarm<S extends Sub<string, AlarmSubData>, M>(
   msgFn: (alarm: chrome.alarms.Alarm, sub: S) => M | null,
 ): SubscribeHandler<S, M, unknown> {

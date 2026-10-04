@@ -1,3 +1,4 @@
+/** One row of the `MsgLog`: a timestamp, a category and the text to show. */
 export type MsgLogEntry = {
   /** Display timestamp (whatever format you produced). */
   ts: string;
@@ -7,11 +8,15 @@ export type MsgLogEntry = {
   text: string;
 };
 
+/** Props for `MsgLog`: the rows to render and an optional `className`. */
 export interface MsgLogProps {
   history: readonly MsgLogEntry[];
   className?: string;
 }
 
+/**
+ * React component that renders a list of `MsgLogEntry` rows as a message log.
+ */
 export function MsgLog({ history, className }: MsgLogProps) {
   return (
     <div className={`tea-dt-log${className ? ` ${className}` : ""}`}>

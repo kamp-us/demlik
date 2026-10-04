@@ -14,6 +14,10 @@ import type { BootingRuntime } from "./runtime-types";
 // everyone; the composition shape stays out of the dispatch loop entirely, so
 // the substrate's hot path pays no cost for a feature it doesn't need.
 
+/**
+ * A bounded log of a runtime's recent `(msg, state)` transitions, returned by
+ * `historyTracker`. Use it to feed a debug inspector.
+ */
 export interface HistoryTracker<S, M extends { type: string }> {
   /**
    * Snapshot of recorded transitions, oldest first. Each entry is

@@ -362,6 +362,11 @@ export type CmdValue<
   E extends Tagged,
 > = Cmd<Name, Ok, E | MalformedResult> & Readonly<Input>;
 
+/**
+ * The Msg the engine mints when a `Cmd.define`d Cmd's handler succeeds:
+ * `<name>_ok`, carrying the Cmd and its value. Handle it in `update` to fold
+ * the result into state.
+ */
 export type SettledOk<Name extends string, C, Ok> = {
   readonly type: `${Name}_ok`;
   readonly cmd: C;
@@ -370,6 +375,11 @@ export type SettledOk<Name extends string, C, Ok> = {
   readonly at: number;
 };
 
+/**
+ * The Msg the engine mints when a `Cmd.define`d Cmd's handler fails:
+ * `<name>_err`, carrying the Cmd and the tagged error. Handle it in `update` to
+ * decide what a failure means.
+ */
 export type SettledErr<Name extends string, C, E extends Tagged> = {
   readonly type: `${Name}_err`;
   readonly cmd: C;
@@ -742,6 +752,10 @@ function stamp<T extends object>(
 //
 // This mirrors `retry-backoff`'s `Rng` brand (#63): the obligation lives in the
 // type at the construction boundary ("parse, don't validate"), not in a comment.
+/**
+ * What an update cell returns: the `[nextState, cmds]` tuple, typed so that a
+ * Promise cannot stand in for it. An `async` cell fails to compile against it.
+ */
 export type SyncReturn<S, C extends Cmd> = readonly [S, readonly C[]] & {
   // A thenable carries a callable `then`; forbidding it rejects every Promise.
   // Optional + `never` means "absent on a sync tuple, impossible on a Promise".
@@ -765,6 +779,10 @@ export type SyncReturn<S, C extends Cmd> = readonly [S, readonly C[]] & {
 // form ONCE at construction and stamps it on the machine as a non-enumerable
 // `__form` (so it never serializes, never collides with a Msg.type key, never
 // shows up in `Object.keys(machine)`). Every reader calls `formOf(machine)`.
+/**
+ * Which of the two shapes a machine's `update` takes: a flat `reducer` keyed by
+ * Msg type, or a `transitions` table keyed by state type and then Msg type.
+ */
 export type UpdateForm = "reducer" | "transitions";
 
 // The single structural heuristic, defined ONCE. Used only by `defineMachine`
@@ -773,6 +791,10 @@ export type UpdateForm = "reducer" | "transitions";
 // Transitions table's first own value is a record (of functions). An empty
 // record (`M` is `never`) can never dispatch a Msg, so the form is irrelevant —
 // "reducer" is returned arbitrarily.
+/**
+ * Work out an `update` record's `UpdateForm` from its shape. For a machine, use
+ * `formOf`, which prefers the form `defineMachine` already recorded.
+ */
 export function detectUpdateForm(update: object): UpdateForm {
   const firstKey = Object.keys(update)[0];
   if (firstKey === undefined) return "reducer";
@@ -785,6 +807,10 @@ export function detectUpdateForm(update: object): UpdateForm {
 // typed construction boundary); falls back to `detectUpdateForm` only for a
 // machine that never passed through `defineMachine`. No reader re-implements the
 // heuristic.
+/**
+ * Read a machine's `UpdateForm`. Reach for it when code has to treat reducer
+ * and transitions machines differently.
+ */
 export function formOf(machine: {
   update: object;
   __form?: UpdateForm;
@@ -808,6 +834,10 @@ export function formOf(machine: {
 // load-bearing case, so the message states it in words rather than rendering an
 // empty list — a caller skimming `accepts: []` reads a formatting artefact,
 // not a dead end.
+/**
+ * Thrown when a Msg is dispatched to a state that has no update cell for it. It
+ * names the Msg type, the state, and the Msg types that state does accept.
+ */
 export class NoCellError extends Error {
   override readonly name = "NoCellError";
   readonly _tag = "NoCellError" as const;
@@ -1004,6 +1034,11 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
 //
 // The `Outcome`-returning twin is `tryApplyCell` (in `../runtime-types`).
 // Both read the SAME `lookupCell`, so "which cell" is decided once.
+/**
+ * Run the one update cell that matches `state` and `msg` and return its
+ * `[nextState, cmds]`. Use it to step a machine by hand; it throws
+ * `NoCellError` when no cell matches.
+ */
 export function applyCell<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
@@ -1037,6 +1072,10 @@ export function checkedStep<S, M extends { type: string }, R>(
 }
 
 // === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
+/**
+ * `applyCell` with the development-mode checks that catch an impure cell: the
+ * input state is frozen and the result is asserted to be plain data.
+ */
 export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   state: S,
@@ -1070,6 +1109,10 @@ export function applyCellChecked<S, M extends { type: string }, C extends Cmd>(
 // The widening is pure: for any total table the returned array is identical
 // (same keys, same order). Cost goes from O(msgs) to O(states × msgs), paid
 // ONCE per wrapper construction — never inside the dispatch loop.
+/**
+ * List every Msg type a machine has an update cell for, across all of its
+ * states.
+ */
 export function msgKeysOf(machine: {
   update: object;
   __form?: UpdateForm;
@@ -1120,6 +1163,10 @@ export function msgKeysOf(machine: {
 //     not consult the state, so `msgs` is the whole answer and there is no
 //     `accepts` field to read. Reaching for one is a compile error, not an
 //     empty object.
+/**
+ * What `describeMachine` returns: the Msg types a machine handles and, for a
+ * transitions machine, its states and the Msg types each one accepts.
+ */
 export type MachineShape =
   | {
       readonly form: "reducer";
@@ -1136,6 +1183,11 @@ export type MachineShape =
       readonly accepts: Readonly<Record<string, readonly string[]>>;
     };
 
+/**
+ * Describe a machine's update table as data: its form, its Msg types, and the
+ * per-state accept sets of a transitions machine. Use it to build tooling, or
+ * to ask what a machine handles without dispatching to it.
+ */
 export function describeMachine(machine: {
   update: object;
   __form?: UpdateForm;
@@ -1158,6 +1210,10 @@ export function describeMachine(machine: {
 // state, so EVERY state accepts the full Msg set and returning it is the true
 // answer, not a stand-in. A `stateType` with no row in a Transitions table
 // accepts nothing, so `[]` — equally true.
+/**
+ * List the Msg types a machine accepts in the state named `stateType`. A
+ * reducer machine accepts every one of its Msg types in every state.
+ */
 export function acceptsOf(
   machine: { update: object; __form?: UpdateForm },
   stateType: string,
@@ -1181,6 +1237,10 @@ export function acceptsOf(
 //
 // `defineMachine` accepts the Reducer record form via overload. The runtime
 // dispatches via `update[msg.type](state, msg)`.
+/**
+ * The flat form of `update`: a record with one handler per Msg type, each
+ * returning `[nextState, cmds]`. Leaving a Msg type out is a compile error.
+ */
 export type Reducer<S, M extends { type: string }, C extends Cmd> = {
   [K in M["type"]]: (
     state: S,
@@ -1313,6 +1373,11 @@ export type ExhaustiveTransitions<
 // scope reads as a generic conditional, but these helpers are specifically
 // for *Cmd emission* (return `readonly C[]`, the cmds-array contract of
 // every Transitions cell). The namespace pins that intent at the call site.
+/**
+ * The helpers for building Cmds: `Cmd.define` declares a typed Cmd constructor,
+ * and `Cmd.none`, `Cmd.batch`, `Cmd.when` and `Cmd.whenDefined` build the Cmd
+ * list an update cell returns.
+ */
 export const Cmd = {
   /**
    * Declare a typed Cmd constructor (ADR 0014, 0021). Returns the builder —
@@ -1424,6 +1489,7 @@ export const Cmd = {
 // The brand is structural: `string & { __brand: "SubId" }`. The `subId(s)`
 // constructor is the ONE permitted cast in the substrate — every other call
 // site must go through it.
+/** The branded string that identifies a running Sub. Build one with `subId`. */
 export type SubId = string & { readonly __brand: "SubId" };
 
 /**
@@ -1446,6 +1512,11 @@ export function subId(s: string): SubId {
 // value `deps(state)` returned, and `id` is `structuralHash({ type, deps })`.
 // So a runner reads its data off `sub.deps`, and `id` changes exactly when the
 // type or the deps value does — which is when the engine restarts the runner.
+/**
+ * A running subscription as its runner sees it: its `type`, the `deps` value
+ * the machine's `subs` entry returned, and an `id` derived from both. Use it to
+ * declare a machine's Sub union and to type the `sub` argument of a runner.
+ */
 export type Sub<T extends string = string, D = unknown> = {
   readonly id: SubId;
   readonly type: T;
@@ -1458,6 +1529,10 @@ export type Sub<T extends string = string, D = unknown> = {
 // engine calls it when the Sub's `deps` go null (torn down), change (restarted:
 // old `Dispose`, then a fresh runner) or when the runtime stops. A returned
 // Promise is awaited by `stop()` (bounded).
+/**
+ * The cleanup function a Sub runner returns. The engine calls it when the Sub
+ * turns off or restarts, and when the runtime stops.
+ */
 export type Dispose = () => void | Promise<void>;
 
 // === Built-in sub runners: names every engine ships ===
@@ -1550,6 +1625,11 @@ export function depsInactive(deps: unknown): boolean {
 // Sub factories in `src/subs/` address their interpret-local handle tables
 // with, so a battery's key rendering and the kernel's Sub identity can never
 // drift into two hashes for one fact.
+/**
+ * Turn a plain-data value into a stable string that does not depend on object
+ * key order. Use it wherever two values must compare equal by content, as the
+ * engine does for Sub ids.
+ */
 export function structuralHash(deps: unknown): string {
   return stableStringify(deps);
 }
@@ -1627,6 +1707,10 @@ function stableStringify(value: unknown): string {
 //
 // Strengthens invariant 4 (external lifecycle owned by the substrate) and
 // invariant 7 (identity derived, never hand-authored).
+/**
+ * One entry of a machine's `subs`: a Sub `type` plus `deps(state)`, which
+ * returns the data the runner needs, or `null` to keep the Sub off.
+ */
 export type DepKeyedSub<S, U extends Sub = Sub> =
   U extends Sub<infer T, infer D>
     ? {
@@ -1711,6 +1795,11 @@ export function desiredSub<S>(entry: SubEntry<S>, state: S): Sub | null {
 // deterministically, kernel-enforced rather than re-checked per cell) and
 // invariant 6 (the runtime is small and inspectable — a mis-addressed message
 // is dropped at ONE observable point, not silently mishandled in N cells).
+/**
+ * A machine's optional message filter: `ofState` names the identity this
+ * instance owns, and `ofMsg` the identity a Msg is addressed to. The engine
+ * drops a Msg addressed to a different identity before `update` runs.
+ */
 export interface Identity<S, M> {
   /** The identity THIS instance owns. Pure (invariant 2); plain value. */
   readonly ofState: (state: S) => unknown;
@@ -1748,6 +1837,11 @@ export interface Identity<S, M> {
 // the symmetric runtime check to `SubId` (canon §2.12, invariant 7). Each
 // definePort call must use a unique name; if two modules need the same port,
 // one module exports it and the other imports it.
+/**
+ * A named, typed channel for values leaving the runtime. A Cmd handler sends on
+ * it with `ctx.emit(port, value)` and a host listens with
+ * `runtime.subscribePort`; create one with `definePort`.
+ */
 export interface Port<T> {
   readonly __brand: "port";
   readonly name: string;
@@ -1788,6 +1882,10 @@ export interface PortEmitter {
 // Strengthens invariant 6 (no silent looseness — a context-free seam is named,
 // not inferred) and invariant 8 (the boundary is legible; `unknown` stays
 // reserved for genuine wire-edge erasure, not for "didn't bother").
+/**
+ * The `Ctx` of a machine whose handlers read nothing from context. Use it in
+ * place of `unknown` to say so on purpose.
+ */
 export type NoCtx = Readonly<Record<never, never>>;
 
 // === HandlerCtx<Ctx>: the ctx a Cmd handler is handed ===
@@ -1857,6 +1955,10 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
 // def's declared tags, and the engine mints `<name>_ok` / `<name>_err` from
 // what it returns. Such a cell resolves to an outcome or nothing, never a Msg.
 // A hand-written Cmd's cell returns a Msg, a list of Msgs, or nothing.
+/**
+ * The Cmd handler table an engine is handed: one async handler per Cmd type.
+ * Leaving a Cmd type out is a compile error.
+ */
 export type Interpret<M extends { type: string }, C extends Cmd, Ctx> = {
   [K in C["type"]]: InterpretCell<M, Extract<C, { type: K }>, Ctx>;
 };
@@ -1904,6 +2006,11 @@ export type DeclaredErrorsOf<C> = Exclude<ErrorsOf<C>, MalformedResult>;
 // Authored via `wrapDetached` (in `../runtime-types`), which adapts this shape
 // back into a plain `Interpret` cell so it drops into the existing `interpret`
 // dictionary with no kernel change at the call site.
+/**
+ * A Cmd handler that reports back through a `dispatch` limited to the Msgs it
+ * is allowed to send. Use it for work that outlives the handler call, and adapt
+ * it into an `Interpret` cell with `wrapDetached`.
+ */
 export type InterpretDetached<
   C extends Cmd,
   Allowed extends { type: string },
@@ -1932,6 +2039,10 @@ export type InterpretDetached<
 //
 // Strengthens invariant 7 (identity is explicit — the Sub variant set is
 // load-bearing at the type level).
+/**
+ * The Sub runner table an engine is handed: one runner per Sub type. Each
+ * runner opens its resource, dispatches Msgs from it, and returns a `Dispose`.
+ */
 export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
   [K in U["type"]]: (
     sub: Extract<U, { type: K }>,
@@ -2032,6 +2143,10 @@ export type Wired<
 // run — `run(machine, { interpret, subscribe })`, `useMachine(machine, { … })`
 // — so one machine file runs unchanged under any engine. Their conditional
 // requiredness lives on {@link RunHandlers}.
+/**
+ * A machine as plain data: `init`, `update`, and optionally `subs`, `cmds` and
+ * `identity`. Build one with `defineMachine` and hand it to an engine's `run`.
+ */
 export type Machine<
   S,
   M extends { type: string },
@@ -2134,6 +2249,12 @@ export type Machine<
 // only calls `update` cells. The two public folds differ only in how they
 // enter and what they return: `replay` enters via `init` and returns
 // `{ state, cmds, subs }`; `foldMsgs` enters from a base state and returns `S`.
+/**
+ * Fold a machine's `update` over a list of Msgs from a starting state, and
+ * return the final state with every Cmd the cells emitted. `replay` and
+ * `foldMsgs` cover the common cases; use this when you need both the state and
+ * the Cmds from a state of your choosing.
+ */
 export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
   machine: { update: object; __form?: UpdateForm },
   initialState: S,
@@ -2179,6 +2300,11 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
 // graph never reaches `run`; that barrel + the import-graph guard are #213's
 // scope. `foldMsgs` ships as a reachable public API from the root door, which
 // is where the whole runtime-free surface publishes since #51.
+/**
+ * Fold a machine's `update` over a list of Msgs from a base state and return
+ * only the final state. Use it for client-side prediction: re-apply
+ * unacknowledged inputs on top of a server snapshot without running any effect.
+ */
 export function foldMsgs<
   S,
   M extends { type: string },

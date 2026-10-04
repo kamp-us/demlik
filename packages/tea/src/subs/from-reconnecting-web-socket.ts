@@ -63,6 +63,10 @@ declare const WebSocket: MinimalWebSocketCtor;
 /** Cancels a scheduled reconnect timer (the inverse of `schedule`). */
 export type CancelTimer = () => void;
 
+/**
+ * Options for `fromReconnectingWebSocket`: the event-to-Msg mappers, the
+ * backoff settings, and an injectable `connect` and `schedule` for tests.
+ */
 export interface ReconnectingWebSocketFactoryOpts<S, M> {
   onMessage: (data: unknown, sub: S) => M | null;
   onOpen?: (sub: S) => M | null;
@@ -91,6 +95,10 @@ const defaultSchedule = (fn: () => void, ms: number): CancelTimer => {
   return () => clearTimeout(handle);
 };
 
+/**
+ * Build a Sub runner that keeps a WebSocket to `sub.deps.wsUrl` open,
+ * reconnecting with backoff when it drops.
+ */
 export function fromReconnectingWebSocket<
   S extends Sub<string, WebSocketSubData>,
   M,

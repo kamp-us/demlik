@@ -43,6 +43,10 @@ function genId(): string {
   );
 }
 
+/**
+ * Where a queue item is in its lifecycle: `pending`, `running`, `done`,
+ * `failed` or `cancelled`.
+ */
 export type QueueItemStatus =
   | "pending"
   | "running"

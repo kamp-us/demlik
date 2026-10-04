@@ -172,6 +172,7 @@ export const refreshToken = Cmd.define("refresh_token", {
   ok: unchecked<Token>(),
   err: ["token_refresh_failed"],
 });
+/** The `refresh_token` Cmd value that `refreshTokenCmd` builds. */
 export type RefreshTokenCmd = CmdOf<typeof refreshToken>;
 
 /** Construct a `refresh_token` Cmd. */

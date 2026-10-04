@@ -10,7 +10,7 @@ import { … } from "@demlik/tea/flow";
 
 | Symbol | Kind | Summary |
 | --- | --- | --- |
-| `ActivityCmd` | Type |  |
+| `ActivityCmd` | Type | The Cmd a workflow emits to run one forward activity. |
 | `ActivityErr` | Interface | An activity failed (retries already exhausted by the consumer's interpret cell — this module does not retry). |
 | `ActivityOk` | Interface | An activity succeeded: `id` echoes the ActivityCmd it answers; the reducer matches it against `current.id`, records the completed step, and advances. |
 | `addItem` | Function | Buffer `item` and decide whether the size trigger fires. |
@@ -23,7 +23,7 @@ import { … } from "@demlik/tea/flow";
 | `BatchWindowKnob` | Interface | The bound knob returned by `createBatchWindow`. |
 | `BatchWindowSub` | Type | The deadline a batch window's open timer lists: it IS `../deadline`'s `DeadlineSub`, not a re-tagged copy. |
 | `CompensatingWorkflow` | Interface | A workflow unwinding after a forward failure (#125): the compensations of the `completed` steps are being emitted in STRICT REVERSE order, one at a time, on the same #67 ledger. |
-| `CompensationCmd` | Type |  |
+| `CompensationCmd` | Type | The Cmd a workflow emits to run one compensation, the inverse of an earlier activity. |
 | `CompensationErr` | Interface | A compensation itself failed (#125): the inverse activity bounced (a refund that won't go through). |
 | `CompensationFailedWorkflow` | Interface | A workflow whose ROLLBACK itself failed: a compensation activity reported a failure mid-unwind. |
 | `CompensationOk` | Interface | A compensation succeeded (#125): the inverse activity took. |
@@ -72,8 +72,8 @@ import { … } from "@demlik/tea/flow";
 | `onWindow` | Function | Flush the open window because its time bound was reached. |
 | `Poller` | Interface | The knob handle returned by `createPoller`. |
 | `PollerConfig` | Interface | The poller knob's config — the single object you hand `createPoller`. |
-| `PollerDone` | Type |  |
-| `PollerGaveUp` | Type |  |
+| `PollerDone` | Type | The poller state once a poll has returned its final result. |
+| `PollerGaveUp` | Type | The poller state once it has stopped without a result. |
 | `PollerPolling` | Type | The three arms, named — so a verb can DECLARE the phases it can actually reach instead of the whole union. |
 | `PollerState` | Type | The Model field the poller knob owns — its visible slice (the knob principle: managed state lives in the Model, never a closure, so it is durable and replayable). |
 | `PollerSub` | Type | The deadline the poller lists — a `../deadline` entry under the `poller:tick:` id family (see `pollerSubId`). |
@@ -81,7 +81,7 @@ import { … } from "@demlik/tea/flow";
 | `ReconcilerConfig` | Interface | The reconciler knob. |
 | `ReconcilerState` | Interface | The slice. |
 | `ReconcilerTimerMsg` | Type | The scan retry / deadline timer Msg — inherited from paginated-walk. |
-| `routeWorkflowMsg` | Function |  |
+| `routeWorkflowMsg` | Function | Route a `WorkflowMsg` to the matching verb of a workflow and return its step. |
 | `RunFailure` | Type | Why a run terminated as `failed`. |
 | `RunningWorkflow` | Interface | A workflow in progress. |
 | `runToTerminal` | Function | Fire-and-await convenience: `run()` the machine, dispatch the seed `msgs`, and resolve with the terminal state — then tear the runtime down (`runtime.stop()`) on BOTH the resolve and reject paths. |
@@ -90,10 +90,10 @@ import { … } from "@demlik/tea/flow";
 | `SagaState` | Interface | The slice this knob owns. |
 | `SagaStep` | Interface | One step of the saga: the forward effect and its compensating inverse, both as data (plain Cmds). |
 | `ScanPageCmd` | Type | The actual-list page-fetch effect: the inherited `resilient_run` Cmd from paginated-walk, whose `input` is the `Cursor` to fetch and whose `key` is the fixed `PAGE_KEY`. |
-| `ScanPageErrMsg` | Type |  |
+| `ScanPageErrMsg` | Type | The Msg the engine mints when the scan's page-fetch handler fails. |
 | `ScanPageOkMsg` | Type | The page-settled Msgs the engine mints from that handler's outcome. |
 | `SnapshotSavedMsg` | Type | The Msg the engine mints when a write lands. |
-| `SnapshotWriteCmd` | Type |  |
+| `SnapshotWriteCmd` | Type | The Cmd a snapshot decision emits to write a checkpoint: `payload` under `key`, at sequence `seq`. |
 | `StageResult` | Type | The outcome a consumer reports to `advance`: the current stage either succeeded (retire it, claim the next) or failed (terminate the run). |
 | `StepId` | Type | A step's stable identity. |
 | `subscribeBatchWindow` | Variable | The `deadline` runner for a batch window's absolute timer — the exact `../deadline` runner. |

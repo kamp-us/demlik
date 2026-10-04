@@ -18,9 +18,9 @@ import { … } from "@demlik/tea/idempotency";
 | `IntakeCmd` | Type | The Cmd union the intake verbs emit. |
 | `IntakeConfig` | Interface | The intake knob's config — `keyOf` derives the idempotency key from a payload, `ttlMs` (optional) ages a *completed* cached key out so a webhook replayed long after the work finished is treated as new and re-processed. |
 | `IntakeEntry` | Type | A cached intake entry: either a key whose work is still in flight (`pending`) or one whose work has finished and whose `result` is held for replay to later duplicates (`done`). |
-| `IntakeProcessCmd` | Type |  |
+| `IntakeProcessCmd` | Type | The Cmd intake emits for a first-time request: process `payload` for the queue item `itemId`. |
 | `intakeProcessDef` | Function | A genuinely-new payload was accepted and enqueued — go run the work. |
-| `IntakeReplayCmd` | Type |  |
+| `IntakeReplayCmd` | Type | The Cmd intake emits for a duplicate of a completed request: hand back the cached `result` instead of redoing the work. |
 | `intakeReplayDef` | Function | A duplicate of an already-completed key arrived — replay the cached result to the caller instead of re-running the side effect. |
 | `IntakeState` | Interface | The Model slice this knob owns. |
 | `recall` | Function | The cached `value` for `key` if present and unexpired at `nowMs`, else `undefined`. |

@@ -229,7 +229,9 @@ export type PollerState<R> =
  * nothing at runtime and moves a fact out of the source and into the signature.
  */
 export type PollerPolling<R> = Extract<PollerState<R>, { phase: "polling" }>;
+/** The poller state once a poll has returned its final result. */
 export type PollerDone<R> = Extract<PollerState<R>, { phase: "done" }>;
+/** The poller state once it has stopped without a result. */
 export type PollerGaveUp<R> = Extract<PollerState<R>, { phase: "gave_up" }>;
 
 /**

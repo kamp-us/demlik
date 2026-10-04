@@ -5,6 +5,10 @@ import {
   type StateChange,
 } from "./state-diff";
 
+/**
+ * Props for `StateDiff`: the `expected` and `actual` states to compare, and an
+ * optional `className`.
+ */
 export interface StateDiffProps {
   /**
    * The baseline / "before" state — what you expected. In a regression view

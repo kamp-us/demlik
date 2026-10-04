@@ -38,6 +38,10 @@ import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/types";
 import { dispatchIfPresent } from "../../subs/types";
 
+/**
+ * Options for `fromChromeMessage`: an optional `filter`, and the `msgFn` that
+ * maps a runtime message to a Msg.
+ */
 export interface ChromeMessageOpts<S extends Sub, M> {
   /**
    * Pre-filter — when provided, the factory only dispatches when this
@@ -51,6 +55,10 @@ export interface ChromeMessageOpts<S extends Sub, M> {
   ) => M | null;
 }
 
+/**
+ * Build a Sub runner that dispatches a Msg for each `chrome.runtime.onMessage`
+ * message that passes the filter. It never sends a response.
+ */
 export function fromChromeMessage<S extends Sub, M>(
   opts: ChromeMessageOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {

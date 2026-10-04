@@ -12,4 +12,4 @@ import { … } from "@demlik/tea/promise";
 | --- | --- | --- |
 | `driveToDone` | Function | Drive a machine from `start` to its terminal State in one call, then tear the runtime down. |
 | `DriveToDoneOptions` | Type | Options for `driveToDone`. |
-| `run` | Function |  |
+| `run` | Function | Start a machine on the Promise engine and return its runtime. |
