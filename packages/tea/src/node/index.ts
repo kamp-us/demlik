@@ -460,6 +460,10 @@ export type NodeSignalDeps<M> = {
  */
 export type NodeSignalSub<M> = Sub<"node_signal", NodeSignalDeps<M>>;
 
+/**
+ * The union of the Sub types the Node adapter ships runners for: WebSocket,
+ * timer and process signal.
+ */
 export type NodeSub<M> = NodeWsSub | NodeTimerSub<M> | NodeSignalSub<M>;
 
 // ─────────────────────────────────────────────────────────────────────────────

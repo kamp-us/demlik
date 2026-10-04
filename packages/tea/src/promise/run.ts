@@ -49,6 +49,11 @@ import { builtinRunners } from "./builtin-runners";
 // phase leaves the persisted state ahead of the host's belief about what
 // executed — the Railway discipline (`tryInterpret` in handlers) makes that
 // safe in practice.
+/**
+ * Start a machine on the Promise engine and return its runtime. Pass the Cmd
+ * handlers, the Sub runners, `ctx` and an optional `Store`; the runtime is
+ * returned at once and every method waits for boot.
+ */
 export function run<
   S,
   M extends { type: string },

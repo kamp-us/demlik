@@ -23,6 +23,10 @@ import type { SubscribeHandler } from "./types";
 
 type IntervalSubData = { readonly intervalMs: number };
 
+/**
+ * Build a Sub runner that dispatches `msgFn(sub)` every `sub.deps.intervalMs`
+ * milliseconds while the Sub is on.
+ */
 export function fromInterval<S extends Sub<string, IntervalSubData>, M>(
   msgFn: (sub: S) => M,
 ): SubscribeHandler<S, M, unknown> {

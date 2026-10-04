@@ -34,6 +34,10 @@ import type { Sub } from "../../index";
 import type { SubscribeHandler } from "../../subs/types";
 import { dispatchIfPresent } from "../../subs/types";
 
+/**
+ * Options for `fromChromeStorageChange`: the storage `area`, an optional `keys`
+ * filter, and the `msgFn` that maps the changes to a Msg.
+ */
 export interface ChromeStorageChangeOpts<S extends Sub, M> {
   area: chrome.storage.AreaName;
   /**
@@ -47,6 +51,10 @@ export interface ChromeStorageChangeOpts<S extends Sub, M> {
   ) => M | null;
 }
 
+/**
+ * Build a Sub runner that dispatches a Msg when keys change in a
+ * `chrome.storage` area.
+ */
 export function fromChromeStorageChange<S extends Sub, M>(
   opts: ChromeStorageChangeOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {

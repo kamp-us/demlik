@@ -26,6 +26,10 @@ import type { SubscribeHandler } from "./types";
 
 type TimeoutSubData = { readonly delayMs: number };
 
+/**
+ * Build a Sub runner that dispatches `msgFn(sub)` once, `sub.deps.delayMs`
+ * milliseconds after the Sub turns on. Turning the Sub off first cancels it.
+ */
 export function fromTimeout<S extends Sub<string, TimeoutSubData>, M>(
   msgFn: (sub: S) => M,
 ): SubscribeHandler<S, M, unknown> {

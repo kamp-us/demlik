@@ -188,6 +188,10 @@ export function snapshotWriteDef<V>() {
     err: ["snapshot_write_failed"],
   });
 }
+/**
+ * The Cmd a snapshot decision emits to write a checkpoint: `payload` under
+ * `key`, at sequence `seq`.
+ */
 export type SnapshotWriteCmd<V> = CmdOf<ReturnType<typeof snapshotWriteDef<V>>>;
 
 /**
@@ -209,6 +213,7 @@ export function snapshotLoadDef<V>() {
     err: ["snapshot_load_failed"],
   });
 }
+/** The Cmd `requestLoad` emits to read the checkpoint saved under `key`. */
 export type SnapshotLoadCmd<V = unknown> = CmdOf<
   ReturnType<typeof snapshotLoadDef<V>>
 >;

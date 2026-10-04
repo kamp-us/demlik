@@ -19,6 +19,6 @@ import { … } from "@demlik/tea/work-queue";
 | `queueAdapter` | Function | The canonical `QueueAdapter<I>`, binding each verb to its blessed op. |
 | `QueueAdapter` | Interface | The verb interface over a `QueueItem<I>[]` slice. |
 | `QueueItem` | Interface | A single queue entry. |
-| `QueueItemStatus` | Type |  |
+| `QueueItemStatus` | Type | Where a queue item is in its lifecycle: `pending`, `running`, `done`, `failed` or `cancelled`. |
 | `removeOp` | Function | Hard-delete an item regardless of status. |
 | `resetRunningOp` | Function | Reset every `running` item back to `pending`, clearing `startedAt`. |

@@ -46,9 +46,9 @@ import { … } from "@demlik/tea/resilience";
 | `DeadlineSub` | Type | One deadline, as a battery lists it. |
 | `DEFAULT_RESILIENT_NAME` | Variable | The family every unnamed knob speaks: `resilient_run` / `resilient_run_ok` / `resilient_run_err`. |
 | `defaultCircuitPolicy` | Variable | Sensible defaults: trip after 5 consecutive failures, cool down for 30s, admit a single probe before deciding. |
-| `DefaultResilientName` | Type |  |
+| `DefaultResilientName` | Type | The Msg-name family a resilient call uses when it is given no name: `resilient`. |
 | `evictExpired` | Function | Physically drop every entry expired at `nowMs` (`nowMs >= expiresAtMs`). |
-| `FailMsg` | Type |  |
+| `FailMsg` | Type | The Msg the engine mints when a resilient call's handler fails: `<name>_run_err`, carrying the Cmd and the error. |
 | `get` | Function | The cached `value` for `key` iff present AND unexpired at `nowMs`, else `undefined`. |
 | `has` | Function | True iff `key` is present AND unexpired at `nowMs`. |
 | `initBucket` | Function | Create a full bucket. |
@@ -66,7 +66,7 @@ import { … } from "@demlik/tea/resilience";
 | `refill` | Function | Add the tokens accrued since `lastRefillMs`, clamped to `capacity`, and advance `lastRefillMs` to `nowMs`. |
 | `refreshToken` | Variable | The Cmd this knob emits to ask the runtime to mint a fresh token. |
 | `refreshTokenCmd` | Function | Construct a `refresh_token` Cmd. |
-| `RefreshTokenCmd` | Type |  |
+| `RefreshTokenCmd` | Type | The `refresh_token` Cmd value that `refreshTokenCmd` builds. |
 | `remaining` | Function | How many more hits `record` would accept at `nowMs` without blocking — `limit` minus the live (post-prune) hit count, floored at 0. |
 | `remove` | Function | Drop `key` regardless of expiry. |
 | `ResilientCallDeadlineConfig` | Interface | Overall deadline knob — a budget of IN-PROCESS time per in-flight call. |
@@ -82,7 +82,7 @@ import { … } from "@demlik/tea/resilience";
 | `RetryToSuccessOptions` | Interface | Options for retryToSuccess. |
 | `RunCmd` | Type | The run Cmd value. |
 | `runCmdDef` | Function | The one effect this knob emits: "run the work for `key` with `input`". |
-| `RunCmdDef` | Type |  |
+| `RunCmdDef` | Type | The type of the `Cmd.define` definition that `runCmdDef` returns for a resilient call's run Cmd. |
 | `RunErr` | Type | The failures a run handler may return (ADR 0021). |
 | `set` | Function | Write `key → value` with an absolute expiry of `nowMs + ttlMs`. |
 | `setTimeoutArmTimer` | Function | The `setTimeout` timer backing — for node / browser / any host whose timer is a plain `setTimeout`. |

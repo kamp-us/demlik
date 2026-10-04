@@ -18,7 +18,7 @@ import { … } from "@demlik/tea/paginate";
 | `isDone` | Function | Whether the walk has finished (the API returned a null next cursor). |
 | `liftWalk` | Function | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.walk`. |
 | `PAGE_KEY` | Variable | The single resilient-call key every page fetch runs under. |
-| `PageErrMsg` | Type |  |
+| `PageErrMsg` | Type | The Msg the engine mints when the page-fetch handler fails. |
 | `PageOkMsg` | Type | The page-settled Msgs the engine mints from that handler's outcome. |
 | `PaginatedWalkConfig` | Interface | The paginated-walk knob. |
 | `PaginatedWalkState` | Interface | The slice. |

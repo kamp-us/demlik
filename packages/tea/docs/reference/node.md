@@ -15,7 +15,7 @@ import { … } from "@demlik/tea/node";
 | `FileStoreOptions` | Interface | Options for fileStore. |
 | `NodeSignalDeps` | Type | The `deps` of a `node_signal` Sub: `signal` (SIGINT/SIGTERM/…) → `msg`. |
 | `NodeSignalSub` | Type | A process-signal sub. |
-| `NodeSub` | Type |  |
+| `NodeSub` | Type | The union of the Sub types the Node adapter ships runners for: WebSocket, timer and process signal. |
 | `nodeSubscribe` | Function | Build the `subscribe` runners for the node Sub types, to hand to `run`: `run(machine, { subscribe: nodeSubscribe<M, Ctx>({ ws: { onMessage } }), ctx })`. |
 | `NodeSubscribeBase` | Interface | The `node_timer` + `node_signal` runners — what every `nodeSubscribe` returns. |
 | `NodeSubscribeCtx` | Interface | The Ctx fields the `node_ws` runner depends on. |

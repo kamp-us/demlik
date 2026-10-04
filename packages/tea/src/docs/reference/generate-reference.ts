@@ -333,6 +333,31 @@ async function loadModel(): Promise<DocModule[]> {
   return parseTypedocModel(raw);
 }
 
+/** One row of a generated table: where it sits, what it names, what it says. */
+export interface SummaryRow {
+  /** The import path of a module page, or the catalog's filename. */
+  readonly module: string;
+  /** The exported symbol, or the subpath on a catalog row. */
+  readonly symbol: string;
+  readonly summary: string;
+}
+
+/**
+ * Refuse a row with an empty summary. typedoc reads a TSDoc block and nothing
+ * else, so a symbol documented with `//` renders a blank cell; the error names
+ * every such row by module and symbol.
+ */
+export function assertEveryRowDescribed(rows: readonly SummaryRow[]): void {
+  const empty = rows.filter((r) => r.summary.trim() === "");
+  if (empty.length === 0) return;
+  throw new Error(
+    [
+      `reference: ${empty.length} row(s) have no description. Add a /** */ summary to each (a // comment is not read):`,
+      ...empty.map((r) => `  - ${r.module}: ${r.symbol}`),
+    ].join("\n"),
+  );
+}
+
 /** Escape a one-liner so it is safe inside a markdown table cell. */
 function cell(text: string): string {
   return text.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
@@ -446,7 +471,10 @@ async function barrelGloss(srcRelPath: string): Promise<string> {
     }
   }
   if (text === undefined) return "";
-  const block = text.match(/\/\*\*([\s\S]*?)\*\//);
+  // A stylesheet has no TSDoc; its leading plain block comment is its gloss.
+  const block = text.match(
+    srcRelPath.endsWith(".css") ? /\/\*([\s\S]*?)\*\// : /\/\*\*([\s\S]*?)\*\//,
+  );
   if (!block?.[1]) return "";
   const body = block[1]
     .replace(/^\s*\*/gm, "")
@@ -474,32 +502,43 @@ function subpathToSrc(
   return imp.replace(/^\.\/dist\//, "src/").replace(/\.js$/, ".ts");
 }
 
-async function renderCatalog(
+const CATALOG_FILE = "all-modules.md";
+
+/** One catalog row per public subpath: its name and its barrel's gloss. */
+async function catalogRows(
   exports: Record<string, unknown>,
-): Promise<string> {
-  const pageBySubpath = new Map(
-    MODULE_ALLOWLIST.map((e) => [e.subpath, e.file]),
-  );
+): Promise<SummaryRow[]> {
   const subpaths = Object.keys(exports)
     .filter((k) => k !== "./package.json")
     .sort();
+  return Promise.all(
+    subpaths.map(async (subpath) => ({
+      module: CATALOG_FILE,
+      symbol: subpath,
+      summary: await barrelGloss(subpathToSrc(subpath, exports)),
+    })),
+  );
+}
+
+function renderCatalog(rows: readonly SummaryRow[]): string {
+  const pageBySubpath = new Map(
+    MODULE_ALLOWLIST.map((e) => [e.subpath, e.file]),
+  );
   const lines: string[] = [];
   lines.push(
     "# @demlik/tea — all modules",
     "",
-    `The complete export catalog — all ${subpaths.length} public subpaths. Curated`,
+    `The complete export catalog — all ${rows.length} public subpaths. Curated`,
     "modules link to their dedicated reference page; the rest are plumbing,",
     "discoverable here with a one-line gloss from their source barrel.",
     "",
     "| Subpath | Summary |",
     "| --- | --- |",
   );
-  for (const subpath of subpaths) {
-    const src = subpathToSrc(subpath, exports);
-    const gloss = src.endsWith(".css") ? "" : await barrelGloss(src);
+  for (const { symbol: subpath, summary } of rows) {
     const page = pageBySubpath.get(subpath);
     const label = page ? `[\`${subpath}\`](./${page})` : `\`${subpath}\``;
-    lines.push(`| ${label} | ${cell(gloss)} |`);
+    lines.push(`| ${label} | ${cell(summary)} |`);
   }
   lines.push("");
   return lines.join("\n");
@@ -513,6 +552,7 @@ export async function generateReferenceDocs(): Promise<Map<string, string>> {
   const [modules, pkg] = await Promise.all([loadModel(), readPackageJson()]);
   const byName = new Map(modules.map((m) => [m.name, m]));
   const docs = new Map<string, string>();
+  const rows: SummaryRow[] = [];
   for (const entry of MODULE_ALLOWLIST) {
     const mod = byName.get(entry.typedocName);
     if (!mod) {
@@ -521,8 +561,17 @@ export async function generateReferenceDocs(): Promise<Map<string, string>> {
       );
     }
     docs.set(entry.file, renderModulePage(entry, mod));
+    for (const s of mod.symbols) {
+      rows.push({
+        module: entry.importPath,
+        symbol: s.name,
+        summary: s.summary,
+      });
+    }
   }
-  docs.set("all-modules.md", await renderCatalog(pkg.exports));
+  const catalog = await catalogRows(pkg.exports);
+  assertEveryRowDescribed([...rows, ...catalog]);
+  docs.set(CATALOG_FILE, renderCatalog(catalog));
   docs.set("index.md", renderCompass(pkg.version));
   return docs;
 }

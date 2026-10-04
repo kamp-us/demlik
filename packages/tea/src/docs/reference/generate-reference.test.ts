@@ -9,10 +9,14 @@
  *     detected), PLUS allowlist-integrity (every curated subpath is a real
  *     package.json export). The guard-fires proof is what keeps the gate from
  *     degenerating into a trivial exit-0.
+ *
+ * Both modes generate, and generating refuses a public export with no TSDoc
+ * summary, so an undescribed export fails either one.
  */
 
 import { describe, expect, it } from "vitest";
 import {
+  assertEveryRowDescribed,
   collectReferenceDrift,
   generateReferenceDocs,
   MODULE_ALLOWLIST,
@@ -53,6 +57,18 @@ describe.skipIf(WRITE)("reference docs — drift gate", () => {
     },
     TIMEOUT,
   );
+
+  it("a row with no summary is refused, named by module and symbol", () => {
+    const refusal = (): void =>
+      assertEveryRowDescribed([
+        { module: "@demlik/tea", symbol: "replay", summary: "Run a machine." },
+        { module: "@demlik/tea/promise", symbol: "run", summary: "" },
+        { module: "@demlik/tea/flow", symbol: "ActivityCmd", summary: "  " },
+      ]);
+    expect(refusal).toThrowError(/@demlik\/tea\/promise: run/);
+    expect(refusal).toThrowError(/@demlik\/tea\/flow: ActivityCmd/);
+    expect(refusal).not.toThrowError(/replay/);
+  });
 
   it("every curated module subpath is a real package.json export", async () => {
     const keys = new Set(await packageExportKeys());

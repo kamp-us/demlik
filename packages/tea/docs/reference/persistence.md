@@ -23,13 +23,13 @@ import { … } from "@demlik/tea/persistence";
 | `SnapshotConfig` | Interface | The snapshot knob. |
 | `SnapshotFailedMsg` | Type | The Msg the engine mints when a write fails. |
 | `SnapshotKnob` | Interface | The bundle `createSnapshot` returns: plain functions plus the two Cmd defs to list in `cmds`. |
-| `SnapshotLoadCmd` | Type |  |
+| `SnapshotLoadCmd` | Type | The Cmd `requestLoad` emits to read the checkpoint saved under `key`. |
 | `snapshotLoadDef` | Function | The checkpoint-READ Cmd a `requestLoad` decision emits — the recovery half of the module. |
 | `SnapshotLoadedMsg` | Type | The Msg the engine mints when a read resolves. |
 | `SnapshotLoadFailedMsg` | Type | The Msg the engine mints when a read fails. |
 | `SnapshotSavedMsg` | Type | The Msg the engine mints when a write lands. |
 | `SnapshotState` | Interface | The snapshot bookkeeping slice. |
-| `SnapshotWriteCmd` | Type |  |
+| `SnapshotWriteCmd` | Type | The Cmd a snapshot decision emits to write a checkpoint: `payload` under `key`, at sequence `seq`. |
 | `snapshotWriteDef` | Function | The checkpoint-write Cmd a `record` / `force` decision emits. |
 | `Trace` | Interface | A recorded run, sufficient to reproduce it via `../trace-replay`. |
 | `traceAttachment` | Function | Serialize a Trace into a Sentry-shaped attachment so a crash event carries the full, replayable run. |

@@ -9,7 +9,7 @@ discoverable here with a one-line gloss from their source barrel.
 | [`.`](./tea.md) | TEA-faithful state machine substrate. |
 | [`./agent`](./agent.md) | THE headline Level-3 machine: a durable, crash-recoverable AI agent that runs an ordered stage pipeline, and inside the agentic stage drives the classic loop `llm → tools → fold → llm` until the model stops asking for tools. |
 | [`./devtools`](./devtools.md) | presentational inspector for any tea machine. |
-| `./devtools/styles.css` |  |
+| `./devtools/styles.css` | visual defaults. |
 | [`./do`](./do.md) | Durable Object adapter for `@demlik/tea`. |
 | [`./effect`](./effect.md) | the Effect engine: `run` boots a machine with Effect handlers and sub runners, the caller's Layers and interruption on stop, and yields an Effect handle: the Promise engine's member names, with Effects that fail with `Stopped`, `StoreFailed` or a cell's declared failure where the Promise engine returns Promises. |
 | [`./extension`](./extension.md) | Chrome service-worker host adapter for @demlik/tea. |

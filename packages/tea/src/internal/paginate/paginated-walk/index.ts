@@ -226,6 +226,7 @@ export type FetchPageCmd<Cursor> = RunCmd<Cursor>;
 
 /** The page-settled Msgs the engine mints from that handler's outcome. */
 export type PageOkMsg<Page> = SucceedMsg<Page>;
+/** The Msg the engine mints when the page-fetch handler fails. */
 export type PageErrMsg = FailMsg;
 
 /** The retry / deadline timer Msg — inherited from resilient-call. */
