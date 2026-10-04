@@ -327,8 +327,10 @@ export interface ToolResilience {
    * What it does NOT do is cancel the handler: a promise cannot be cancelled in
    * JavaScript, so the attempt runs to its own end, and `run`'s teardown still
    * drains it. A handler that resolves LATE is bounded by this knob; a handler
-   * that never resolves at all holds the runtime's shutdown regardless, and
-   * wants an `AbortSignal` in the handler rather than a budget out here.
+   * that never resolves at all holds the runtime's shutdown regardless. tea
+   * hands a tool handler no `AbortSignal`: if the work has to stop, put a signal
+   * of your own on the `ctx` you pass to `agent.run` and read it from the
+   * handler's second argument.
    *
    * Omit → the call has no cap and ends only when its handler settles.
    */

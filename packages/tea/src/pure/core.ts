@@ -764,14 +764,8 @@ export type SyncReturn<S, C extends Cmd> = readonly [S, readonly C[]] & {
 
 // === update form: Reducer vs Transitions, tagged once ===
 //
-// The substrate accepts two `update` shapes (see the `Machine.update` union and
-// the `defineMachine` overloads):
-//
-//   - "reducer"     — flat record keyed by Msg.type, every cell a function.
-//   - "transitions" — 2D table keyed by State.type then Msg.type, every cell a
-//                     record of functions.
-//
-// Which one a given machine is must be known at runtime by `run`, `replay`, and
+// Which form a given machine is (see the `Machine.update` union and the
+// `defineMachine` overloads) must be known at runtime by `run`, `replay`, and
 // the `withX` wrappers (their dispatch / key-enumeration / reserved-namespace
 // scans differ per form). Rather than re-derive it structurally at every reader
 // — a `typeof update[firstKey] === "function"` heuristic that breaks the day a
@@ -785,15 +779,16 @@ export type SyncReturn<S, C extends Cmd> = readonly [S, readonly C[]] & {
  */
 export type UpdateForm = "reducer" | "transitions";
 
-// The single structural heuristic, defined ONCE. Used only by `defineMachine`
-// (and `formOf`'s fallback for machines built without it, e.g. a plain object
-// literal annotated as `Machine`). A Reducer's first own value is a function; a
-// Transitions table's first own value is a record (of functions). An empty
-// record (`M` is `never`) can never dispatch a Msg, so the form is irrelevant —
-// "reducer" is returned arbitrarily.
+// The single structural heuristic, defined ONCE: only `defineMachine` calls it,
+// plus `formOf`'s fallback for a machine built without it (e.g. a plain object
+// literal annotated as `Machine`).
 /**
  * Work out an `update` record's `UpdateForm` from its shape. For a machine, use
  * `formOf`, which prefers the form `defineMachine` already recorded.
+ *
+ * A reducer's first own value is a function; a transitions table's is a record
+ * of functions. An empty record can never dispatch a Msg, so it reads as
+ * `reducer`.
  */
 export function detectUpdateForm(update: object): UpdateForm {
   const firstKey = Object.keys(update)[0];
@@ -802,14 +797,14 @@ export function detectUpdateForm(update: object): UpdateForm {
   return typeof firstValue === "function" ? "reducer" : "transitions";
 }
 
-// The single reader every form-sensitive site goes through. Prefers the
-// `__form` tag stamped by `defineMachine` (authoritative — computed once at the
-// typed construction boundary); falls back to `detectUpdateForm` only for a
-// machine that never passed through `defineMachine`. No reader re-implements the
-// heuristic.
+// The single reader every form-sensitive site goes through: no reader
+// re-implements the heuristic. The `__form` tag is authoritative because
+// `defineMachine` computes it once, at the typed construction boundary.
 /**
  * Read a machine's `UpdateForm`. Reach for it when code has to treat reducer
- * and transitions machines differently.
+ * and transitions machines differently. It prefers the form `defineMachine`
+ * recorded, and works the form out from the shape only for a machine that
+ * never went through `defineMachine`.
  */
 export function formOf(machine: {
   update: object;
@@ -1023,14 +1018,12 @@ export function lookupCell<S, M extends { type: string }, C extends Cmd>(
 
 // === applyCell: THE single reducer-vs-transitions dispatch primitive ===
 //
-// Applies the one update cell selected by `lookupCell(machine, state, msg)` and
-// returns its `[nextState, cmds]` verbatim. Every site that steps a machine —
-// `run`'s applyUpdate, `foldUpdates` (replay/foldMsgs), the PBT fold runner,
-// and the withX wrappers — dispatches through THIS function, so production and
-// the verification tools agree on the update form by construction (#275).
-// Pure and dev-check-free: `deepFreeze`/`assertPureResult` stay at the call
-// sites that want them. A missing cell throws `NoCellError` (#276), never a
-// bare TypeError.
+// Every site that steps a machine — `run`'s applyUpdate, `foldUpdates`
+// (replay/foldMsgs), the PBT fold runner, and the withX wrappers — dispatches
+// through THIS function, so production and the verification tools agree on the
+// update form by construction (#275). Pure and dev-check-free:
+// `deepFreeze`/`assertPureResult` stay at the call sites that want them. The
+// missing-cell throw is the named `NoCellError` (#276), never a bare TypeError.
 //
 // The `Outcome`-returning twin is `tryApplyCell` (in `../runtime-types`).
 // Both read the SAME `lookupCell`, so "which cell" is decided once.
@@ -1071,7 +1064,6 @@ export function checkedStep<S, M extends { type: string }, R>(
   return result;
 }
 
-// === applyCellChecked: `applyCell` wrapped in the DEV pre/post invariant pair ===
 /**
  * `applyCell` with the development-mode checks that catch an impure cell: the
  * input state is frozen and the result is asserted to be plain data.
@@ -1207,12 +1199,11 @@ export function describeMachine(machine: {
 
 // The one-state shorthand over `describeMachine`. Reducer-form is not a
 // special case being papered over: a flat reducer's dispatch never reads the
-// state, so EVERY state accepts the full Msg set and returning it is the true
-// answer, not a stand-in. A `stateType` with no row in a Transitions table
-// accepts nothing, so `[]` — equally true.
+// state, so the full Msg set is the true answer, not a stand-in.
 /**
  * List the Msg types a machine accepts in the state named `stateType`. A
- * reducer machine accepts every one of its Msg types in every state.
+ * reducer machine accepts every one of its Msg types in every state, and a
+ * `stateType` with no row in a transitions table accepts none.
  */
 export function acceptsOf(
   machine: { update: object; __form?: UpdateForm },
@@ -1225,11 +1216,10 @@ export function acceptsOf(
 
 // === Reducer<S, M, C>: record-of-handlers form of `update` ===
 //
-// Flat dispatch table keyed by `Msg.type`. Each cell is a pure transition for
-// a single Msg variant, narrowed via `Extract<M, { type: K }>`. The mapped type
-// is *load-bearing*: adding a Msg variant without a matching key in the
-// Reducer record is a compile error — no `absurd()` helper at call sites, no
-// silent fall-through, no default branch hiding impurity.
+// Each cell is narrowed to its Msg variant via `Extract<M, { type: K }>`. The
+// mapped type is *load-bearing*: it is what rejects a missing key, so there is
+// no `absurd()` helper at call sites, no silent fall-through, no default branch
+// hiding impurity.
 //
 // Strengthens invariant 2 (pure transitions — the record form has no
 // fall-through default to hide impurity behind) and invariant 7 (identity is
@@ -1505,17 +1495,16 @@ export function subId(s: string): SubId {
   return s as SubId;
 }
 
-// === Sub: a running subscription, as its runner sees it ===
-//
-// A machine never builds one of these. It declares `{ type, deps(state) }` in
-// `subs` (see `DepKeyedSub`), and the engine derives the rest: `deps` is the
-// value `deps(state)` returned, and `id` is `structuralHash({ type, deps })`.
-// So a runner reads its data off `sub.deps`, and `id` changes exactly when the
-// type or the deps value does — which is when the engine restarts the runner.
 /**
  * A running subscription as its runner sees it: its `type`, the `deps` value
  * the machine's `subs` entry returned, and an `id` derived from both. Use it to
  * declare a machine's Sub union and to type the `sub` argument of a runner.
+ *
+ * A machine never builds one. It declares `{ type, deps(state) }` in `subs`
+ * (see `DepKeyedSub`) and the engine derives the rest. A runner reads its data
+ * off `sub.deps`. `id` is `structuralHash({ type, deps })`, so it changes
+ * exactly when the type or the deps value does, which is when the engine
+ * restarts the runner.
  */
 export type Sub<T extends string = string, D = unknown> = {
   readonly id: SubId;
@@ -1523,15 +1512,12 @@ export type Sub<T extends string = string, D = unknown> = {
   readonly deps: D;
 };
 
-// === Dispose: the cleanup a sub runner returns ===
-//
-// A runner opens a resource and returns the function that closes it. The
-// engine calls it when the Sub's `deps` go null (torn down), change (restarted:
-// old `Dispose`, then a fresh runner) or when the runtime stops. A returned
-// Promise is awaited by `stop()` (bounded).
 /**
- * The cleanup function a Sub runner returns. The engine calls it when the Sub
- * turns off or restarts, and when the runtime stops.
+ * The cleanup function a Sub runner returns. The runner opens a resource and
+ * returns the function that closes it. The engine calls it when the Sub's
+ * `deps` go null (turned off), when they change (restarted: the old `Dispose`,
+ * then a fresh runner), and when the runtime stops. A returned Promise is
+ * awaited by `stop()`, with a bound.
  */
 export type Dispose = () => void | Promise<void>;
 
@@ -1813,10 +1799,8 @@ export interface Identity<S, M> {
 
 // === Port<T>: typed escape hatch for "data leaving the runtime" ===
 //
-// A Port is a named, typed channel that Cmd handlers can `emit` to via the
-// augmented `ctx.emit(port, value)`. Subscribers attach via
-// `runtime.subscribePort(port, listener)` and receive every emitted value
-// synchronously (same fanout discipline as `runtime.observe`).
+// Subscribers receive every emitted value synchronously (same fanout
+// discipline as `runtime.observe`).
 //
 // Why Ports are a substrate primitive, distinct from State and Observe:
 // - **State** is "the world as the program sees it." Folding outgoing
@@ -1909,13 +1893,10 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
 
 // === Interpret<M, C, Ctx>: record-of-handlers form of `interpret` ===
 //
-// Flat dispatch table keyed by `Cmd.type`. Each cell receives the narrowed Cmd
-// and the runtime-augmented Ctx (`HandlerCtx<Ctx>`) and resolves to a
-// follow-up Msg, a list of them, or `void` (fire-and-forget). A list is
-// dispatched in order as follow-ups, the way Elm's `Cmd.batch` answers with
-// several Msgs (#324). The mapped type makes a missing
-// handler a compile error — `defineMachine` cannot accept the dictionary until
-// every Cmd variant has one.
+// Each cell receives the narrowed Cmd and the runtime-augmented Ctx
+// (`HandlerCtx<Ctx>`) and resolves to a follow-up Msg, a list of them, or
+// `void` (fire-and-forget). A list is dispatched in order as follow-ups, the
+// way Elm's `Cmd.batch` answers with several Msgs (#324).
 //
 // **The injected `dispatch` — the typed Cmd→Msg edge.** A leaf handler that
 // resolves on its own returns its follow-ups — one Msg, a list of them, or
@@ -1990,26 +1971,17 @@ export type OkOfCmd<C> = C extends { readonly __ok?: infer Ok } ? Ok : unknown;
 /** The failures a `Cmd.define`d Cmd's handler may return: its declared tags. */
 export type DeclaredErrorsOf<C> = Exclude<ErrorsOf<C>, MalformedResult>;
 
-// === InterpretDetached<C, Allowed, Ctx>: a detached interpret handler ===
-//
-// A handler that detaches long-running work (`ctx.waitUntil(...)`) and therefore
-// CANNOT return its terminal Msg inline (awaiting it would deadlock the serial
-// dispatch tail). It returns `Promise<void>` and fires its terminal Msg through
-// the kernel-injected `dispatch`, which is NARROWED to `Allowed` — the subset
-// of the Msg union this Cmd is permitted to produce. A wrong / typo'd terminal
-// Msg then fails to compile.
-//
-// `Allowed extends { type: string }` is the declared result-Msg set (e.g.
-// `GraphFinished | GraphFailed`). `dispatch: (msg: Allowed) => void` is the
-// narrowed edge. The handler still receives `ctx` (carrying `waitUntil`).
-//
-// Authored via `wrapDetached` (in `../runtime-types`), which adapts this shape
-// back into a plain `Interpret` cell so it drops into the existing `interpret`
-// dictionary with no kernel change at the call site.
 /**
  * A Cmd handler that reports back through a `dispatch` limited to the Msgs it
  * is allowed to send. Use it for work that outlives the handler call, and adapt
  * it into an `Interpret` cell with `wrapDetached`.
+ *
+ * Such a handler hands its long-running work to `ctx.waitUntil(...)` and cannot
+ * return its terminal Msg inline, because awaiting it would deadlock the serial
+ * dispatch tail. So it returns `Promise<void>` and dispatches instead.
+ * `Allowed` is the Cmd's declared result-Msg set (e.g.
+ * `GraphFinished | GraphFailed`), and `dispatch` takes only those, so a wrong
+ * or mistyped terminal Msg fails to compile.
  */
 export type InterpretDetached<
   C extends Cmd,
@@ -2023,11 +1995,6 @@ export type InterpretDetached<
 
 // === Subscribe<M, U, Ctx>: the sub runners an engine is handed at run ===
 //
-// Flat table keyed by `Sub.type`. Each runner receives the running Sub
-// (`{ id, type, deps }`), the Ctx, and a `dispatch` to fire follow-up Msgs, and
-// returns the `Dispose` the engine calls when the Sub stops. The mapped type
-// guarantees every Sub variant has a runner at the type level.
-//
 // A returned Promise from the `Dispose` is AWAITED by `stop()` (bounded), so an
 // async teardown a host relies on before evicting the isolate actually
 // completes. Mid-run reconcile does not await it — the reconcile pass is
@@ -2040,8 +2007,11 @@ export type InterpretDetached<
 // Strengthens invariant 7 (identity is explicit — the Sub variant set is
 // load-bearing at the type level).
 /**
- * The Sub runner table an engine is handed: one runner per Sub type. Each
- * runner opens its resource, dispatches Msgs from it, and returns a `Dispose`.
+ * The Sub runner table an engine is handed: one runner per Sub type. Leaving a
+ * Sub type out is a compile error. Each runner receives the running Sub
+ * (`{ id, type, deps }`), the Ctx and a `dispatch`. It opens its resource,
+ * dispatches Msgs from it, and returns the `Dispose` the engine calls when the
+ * Sub stops.
  */
 export type Subscribe<M extends { type: string }, U extends Sub, Ctx> = {
   [K in U["type"]]: (
@@ -2239,11 +2209,10 @@ export type Machine<
 
 // === foldUpdates: the single internal fold `replay` and `foldMsgs` share ===
 //
-// Folds `machine.update` over `msgs` from `initialState`, dispatching each
-// Msg through `applyCell` — the same primitive `run` uses — so every fold site
-// agrees on the reducer-vs-transitions form by construction (no second copy of
-// the dispatch to drift). Returns the final state plus the Cmds the cells emitted
-// along the way; the caller keeps them (`replay`) or discards them (`foldMsgs`).
+// Each Msg is dispatched through `applyCell` — the same primitive `run` uses —
+// so every fold site agrees on the reducer-vs-transitions form by construction
+// (no second copy of the dispatch to drift). The caller keeps the returned Cmds
+// (`replay`) or discards them (`foldMsgs`).
 //
 // Touches no `Store`, no `interpret` handler, and starts no subscription — it
 // only calls `update` cells. The two public folds differ only in how they
@@ -2274,11 +2243,7 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
 
 // === foldMsgs: runtime-free client-prediction fold seam (ADR 0006, #211) ===
 //
-// Folds `machine.update` over an ordered `Msg[]` starting from a caller-supplied
-// `base` state and returns the resulting state ONLY. This is the client-side
-// replay primitive a prediction loop needs (the Gambetta/Valve
-// authoritative-server reconcile step): re-simulate a queue of un-acked inputs
-// on top of an authoritative snapshot —
+// The reconcile step of Gambetta/Valve authoritative-server prediction:
 // `foldMsgs(machine, snapshot, pendingInputs)`.
 //
 // Distinct from `replay` (the test idiom), by design (ADR 0006):

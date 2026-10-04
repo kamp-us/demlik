@@ -8,7 +8,8 @@ watched determinism fall out for free.
 
 ## Set up the project
 
-You need Node 22 or newer. In an empty directory:
+You need Node 22.6.0 or newer, the release that added
+`--experimental-strip-types`. In an empty directory:
 
 ```sh
 pnpm init
