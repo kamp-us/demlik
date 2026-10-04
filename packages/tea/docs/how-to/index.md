@@ -23,9 +23,9 @@ guides use are each defined in the [glossary](../glossary.md).
   same machine file with `run` from `@demlik/tea/effect`: Effect handlers,
   services from your Layers, and interruption when the scope closes.
 - [Run many machines under one parent](./run-many-machines.md) — start each
-  child with the Effect [engine](../glossary.md#engine)'s `run` in a `Scope.fork` of the parent's scope,
-  keep your own table of live children, and tell the parent when one stops,
-  with no supervisor from tea.
+  child with `spawn` from the Effect [engine](../glossary.md#engine), keep your own table of live
+  children, and tell the parent when one stops with `tell`, with no supervisor
+  from tea.
 - [Make a machine durable and crash-recoverable](./make-durable.md) — give `run` a
   [`Store`](../glossary.md#store) so the [Model](../glossary.md#model) survives a Durable Object eviction and resumes on the next
   boot.
