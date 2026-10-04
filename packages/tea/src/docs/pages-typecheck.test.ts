@@ -13,6 +13,10 @@
  * file can define a name outside the region: the block then matches and still
  * does not compile when pasted.
  *
+ * `run-many-machines.md` is under the mirror gate too, and its "use it" step
+ * is no example file. Each of its blocks is a file of its own that imports the
+ * ones before it by name, so it is read as those files (#579).
+ *
  * The options are the test program's with one loosened: a page shows what a
  * call returns by binding it, so `noUnusedLocals` is off.
  */
@@ -21,20 +25,32 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cacheDir, PKG_ROOT, programDiagnostics } from "./in-memory-program";
+import { tsBlocksOf } from "./page-mirrors";
 import { programOf } from "./tutorial/program";
 
-interface Page {
+/** How a page's blocks become modules: all of them one, or each its own. */
+type Layout =
+  | {
+      /** The module the page's blocks make. A page showing JSX names a `.tsx` one. */
+      readonly file?: string;
+      readonly files?: never;
+    }
+  | {
+      readonly file?: never;
+      /** One module per block, in page order, under the names the page's imports use. */
+      readonly files: readonly string[];
+    };
+
+type Page = Layout & {
   /** Package-relative. */
   readonly path: string;
-  /** The module the page's blocks make. A page showing JSX names a `.tsx` one. */
-  readonly file?: string;
   /**
    * `## ` sections left out of the program, by heading. Their blocks are not
    * module-level code a reader pastes after the ones above: a fragment of a
    * component body, or a recipe of its own that brings its own names.
    */
   readonly skip?: readonly string[];
-}
+};
 
 const PAGES: readonly Page[] = [
   { path: "README.md" },
@@ -64,6 +80,15 @@ const PAGES: readonly Page[] = [
     ],
   },
   { path: "docs/how-to/make-durable.md" },
+  {
+    path: "docs/how-to/run-many-machines.md",
+    files: [
+      "parent-and-workers.ts",
+      "parent-and-workers-effect.ts",
+      "main.ts",
+      "process-tree-effect.ts",
+    ],
+  },
 ];
 
 const pageOf = (path: string): Page => {
@@ -88,9 +113,26 @@ function withoutSections(
     .join("");
 }
 
+/** One module per block, in page order. The names and the blocks must pair off. */
+function modulesOf(
+  markdown: string,
+  names: readonly string[],
+): Map<string, string> {
+  const blocks = tsBlocksOf(markdown);
+  if (blocks.length !== names.length)
+    throw new Error(
+      `the page has ${blocks.length} ts blocks and ${names.length} file names`,
+    );
+  return new Map(blocks.map((block, i) => [names[i] ?? "", block]));
+}
+
 /** The program a reader pastes from `markdown`: file name → text. */
-const pastedFrom = (page: Page, markdown: string): Map<string, string> =>
-  programOf(withoutSections(markdown, page.skip ?? []), page.file);
+function pastedFrom(page: Page, markdown: string): Map<string, string> {
+  const shown = withoutSections(markdown, page.skip ?? []);
+  return page.files === undefined
+    ? programOf(shown, page.file)
+    : modulesOf(shown, page.files);
+}
 
 /** The compiler's diagnostics for `markdown` read as the page's program. */
 const diagnosticsOf = (page: Page, markdown: string): string[] =>
@@ -182,5 +224,33 @@ describe("pages typecheck from their own text", { timeout: 120_000 }, () => {
     const diagnostics = diagnosticsOf(page, markdown.replace(defines, renamed));
 
     expect(diagnostics.join("\n")).toContain(`Cannot find name '${name}'`);
+  });
+
+  // #579: step 3 opens and closes the parent's scope, so it needs `Scope` as a
+  // value and `Exit`. The step above it imports `Scope` as a type only.
+  it.each([
+    {
+      loses: "`Exit`",
+      imports: "import { Effect, Scope }",
+      error: "Cannot find name 'Exit'",
+    },
+    {
+      loses: "`Scope` as a value",
+      imports: "import { Effect, Exit, type Scope }",
+      error: "'Scope' cannot be used as a value",
+    },
+  ])("fails run-many-machines.md when step 3's import loses $loses", async ({
+    imports,
+    error,
+  }) => {
+    const page = pageOf("docs/how-to/run-many-machines.md");
+    const markdown = await read(page);
+    const current = "import { Effect, Exit, Scope }";
+    expect(markdown).toContain(current);
+
+    const diagnostics = diagnosticsOf(page, markdown.replace(current, imports));
+
+    expect(diagnostics.join("\n")).toContain(`main.ts:`);
+    expect(diagnostics.join("\n")).toContain(error);
   });
 });
