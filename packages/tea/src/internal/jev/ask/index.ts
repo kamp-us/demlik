@@ -74,18 +74,41 @@
  *       },
  *     },
  *   });
+ *
+ * ## Naming a knob, when a machine holds more than one
+ *
+ * Two unnamed knobs both speak `resilient_run` / `resilient_run_ok` /
+ * `resilient_run_err`, so their handlers and settle cells collide. `name`
+ * renames the whole family for one knob. It is resilient-call's own `name`,
+ * forwarded:
+ *
+ *   const judge = createJevAsk({ questions: judgeQuestions, name: "judge" });
+ *   const sort = createJevAsk({ questions: sortQuestions, name: "sort" });
+ *
+ *   cmds: [judge.run, sort.run],
+ *   update: {
+ *     judge_run_ok: (s, m) => …,   // m.value is JevOk<JudgeQuestions>
+ *     sort_run_ok: (s, m) => …,    // m.value is JevOk<SortQuestions>
+ *     judge_deadline: (s, m) => …, // a named knob's timer Msg
+ *   },
+ *
+ * Both type parameters infer from the config. Omit `name` and every string
+ * above is `resilient*`, with `deadline_exceeded` as the timer Msg.
  */
 
 import { liftSlice } from "../../../compose";
 import { describeError } from "../../../describe-error";
 import { type Cmd, Outcome } from "../../../index";
 import type { RetryPolicy } from "../../../retry-backoff";
-import type { DeadlineExceeded, DeadlineSub } from "../../resilience/deadline";
+import type { DeadlineSub } from "../../resilience/deadline";
 import {
   createResilientCall,
+  type DeadlineNameOf,
+  type DefaultResilientName,
   type FailMsg,
   type ResilientConfig,
   type ResilientState,
+  type ResilientTimerMsg,
   type RunCmd,
   runCmdDef,
   type SucceedMsg,
@@ -223,9 +246,20 @@ const NO_USAGE: JevUsage = { input_tokens: 0, output_tokens: 0 };
  * sent on every request and the type that makes the answers narrow at the call
  * site, so it belongs to the knob rather than to a call.
  */
-export interface JevAskConfig<Q extends JevQuestionMap> {
+export interface JevAskConfig<
+  Q extends JevQuestionMap,
+  N extends string = DefaultResilientName,
+> {
   /** The question map every request carries; its keys type the answers. */
   readonly questions: Q;
+  /**
+   * What this knob's Cmd and Msgs are called: `<name>_run`, `<name>_run_ok`,
+   * `<name>_run_err` and the timer Msg `<name>_deadline`. Omit it and they are
+   * `resilient_run`, `resilient_run_ok`, `resilient_run_err` and
+   * `deadline_exceeded`. Name a knob when a machine holds more than one, so
+   * each settles into its own `update` cell with its own answer type.
+   */
+  readonly name?: N;
   /** The pure decider for the no-key and budget-spent paths. Absent → those settle as an error. */
   readonly fallback?: JevFallback<Q>;
   /** Backoff policy, composed into `../../resilience/resilient-call`. Omit → no backoff. */
@@ -341,31 +375,41 @@ export function offlineJevAnswer<Q extends JevQuestionMap>(
  * channels are types on the constructor rather than a convention). It is
  * resilient-call's `runCmdDef` specialized to this door's input and result, the
  * same way `../../idempotency/idempotent-intake` mints its defs per knob: `Q` is
- * a type parameter, so the def is a factory and not a module constant.
+ * a type parameter, so the def is a factory and not a module constant. `name`
+ * is the knob's name; omit it for the `resilient` family.
  */
-export function jevAskCmdDef<Q extends JevQuestionMap>() {
-  return runCmdDef<JevRequest<Q>, JevOk<Q>>();
+export function jevAskCmdDef<
+  Q extends JevQuestionMap,
+  N extends string = DefaultResilientName,
+>(name?: N) {
+  return runCmdDef<JevRequest<Q>, JevOk<Q>, N>(name);
 }
 
-/** The Cmd the verbs emit — `resilient_run` carrying the request. */
-export type JevAskCmd<Q extends JevQuestionMap> = RunCmd<
-  JevRequest<Q>,
-  "resilient",
-  JevOk<Q>
->;
+/** The Cmd the verbs emit — `<name>_run` carrying the request. */
+export type JevAskCmd<
+  Q extends JevQuestionMap,
+  N extends string = DefaultResilientName,
+> = RunCmd<JevRequest<Q>, N, JevOk<Q>>;
 
 /** The success settle Msg — resilient-call's, with `value` narrowed to {@link JevOk}. */
-export type JevSucceedMsg<Q extends JevQuestionMap> = SucceedMsg<JevOk<Q>>;
+export type JevSucceedMsg<
+  Q extends JevQuestionMap,
+  N extends string = DefaultResilientName,
+> = SucceedMsg<JevOk<Q>, N>;
 
 /**
  * The failure settle Msg the engine mints — resilient-call's. Its `error` is a
  * {@link JevRejected} when your handler used this door's builders; `fail`
  * reads it with {@link jevAskErrOf}.
  */
-export type JevFailMsg = FailMsg;
+export type JevFailMsg<N extends string = DefaultResilientName> = FailMsg<N>;
 
-/** The retry / deadline timer Msg — `DeadlineExceeded`, inherited. */
-export type JevTimerMsg = DeadlineExceeded;
+/**
+ * The retry / deadline timer Msg — resilient-call's. `deadline_exceeded` for an
+ * unnamed knob, `<name>_deadline` for a named one.
+ */
+export type JevTimerMsg<N extends string = DefaultResilientName> =
+  ResilientTimerMsg<N>;
 
 // ===========================================================================
 // The knob factory.
@@ -381,14 +425,18 @@ export type JevTimerMsg = DeadlineExceeded;
  * routes on it (see its docblock); it reimplements no backoff. `decode`,
  * `rejected` and `offline` are the pure outcome builders your handler returns.
  */
-export function createJevAsk<Q extends JevQuestionMap>(
-  config: JevAskConfig<Q>,
-  rng: () => number = Math.random,
-) {
-  const resilientConfig: ResilientConfig = {
+export function createJevAsk<
+  Q extends JevQuestionMap,
+  N extends string = DefaultResilientName,
+>(config: JevAskConfig<Q, N>, rng: () => number = Math.random) {
+  const resilientConfig: ResilientConfig<N> = {
+    ...(config.name === undefined ? {} : { name: config.name }),
     ...(config.retry === undefined ? {} : { retry: config.retry }),
   };
-  const rc = createResilientCall<JevRequest<Q>, JevOk<Q>>(resilientConfig, rng);
+  const rc = createResilientCall<JevRequest<Q>, JevOk<Q>, N>(
+    resilientConfig,
+    rng,
+  );
   const model = config.model ?? DEFAULT_JEV_MODEL;
 
   /** The slice this knob owns — resilient-call's slice verbatim. */
@@ -418,7 +466,7 @@ export function createJevAsk<Q extends JevQuestionMap>(
     key: string,
     content: JevState,
     at: number,
-  ): readonly [State, readonly JevAskCmd<Q>[]] {
+  ): readonly [State, readonly JevAskCmd<Q, N>[]] {
     const request: JevRequest<Q> = {
       state: content,
       model,
@@ -430,8 +478,8 @@ export function createJevAsk<Q extends JevQuestionMap>(
   /** Record a settled answer. PURE — resilient-call's `settle`. */
   function succeed(
     s: State,
-    msg: JevSucceedMsg<Q>,
-  ): readonly [State, readonly JevAskCmd<Q>[]] {
+    msg: JevSucceedMsg<Q, N>,
+  ): readonly [State, readonly JevAskCmd<Q, N>[]] {
     const { call, cmds } = rc.settle(s, msg);
     return [call, cmds];
   }
@@ -449,7 +497,7 @@ export function createJevAsk<Q extends JevQuestionMap>(
     request: JevRequest<Q>,
     fallback: JevFallback<Q>,
     at: number,
-  ): readonly [State, readonly JevAskCmd<Q>[]] {
+  ): readonly [State, readonly JevAskCmd<Q, N>[]] {
     const decided = offlineJevAnswer(request, fallback);
     if (decided._tag === "Err") {
       return rc.settleFailed(s, key, decided.error.jev, at);
@@ -483,8 +531,8 @@ export function createJevAsk<Q extends JevQuestionMap>(
    */
   function fail(
     s: State,
-    msg: JevFailMsg,
-  ): readonly [State, readonly JevAskCmd<Q>[]] {
+    msg: JevFailMsg<N>,
+  ): readonly [State, readonly JevAskCmd<Q, N>[]] {
     const { key } = msg.cmd;
     const error = jevAskErrOf(msg.error);
     if (!isTransientJevAskErr(error)) {
@@ -505,13 +553,13 @@ export function createJevAsk<Q extends JevQuestionMap>(
   /** A retry / deadline timer fired. PURE — resilient-call's `onTimer`. */
   function onTimer(
     s: State,
-    msg: JevTimerMsg,
-  ): readonly [State, readonly JevAskCmd<Q>[]] {
+    msg: JevTimerMsg<N>,
+  ): readonly [State, readonly JevAskCmd<Q, N>[]] {
     return rc.onTimer(s, msg);
   }
 
   /** The call's deadlines — resilient-call's retry and deadline timers. */
-  function deadlines(s: State): readonly DeadlineSub[] {
+  function deadlines(s: State): readonly DeadlineSub<DeadlineNameOf<N>>[] {
     return rc.deadlines(s);
   }
 
@@ -544,7 +592,10 @@ export function createJevAsk<Q extends JevQuestionMap>(
  * block reads well with. It is stated here so a host writes `cmd: {} as
  * JevCmd<Questions>` rather than deriving it from the knob's shape.
  */
-export type JevCmd<Q extends JevQuestionMap> = JevAskCmd<Q>;
+export type JevCmd<
+  Q extends JevQuestionMap,
+  N extends string = DefaultResilientName,
+> = JevAskCmd<Q, N>;
 
 /**
  * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
