@@ -2,21 +2,25 @@
  * The generated + drift-gated reference quadrant for `@demlik/tea`.
  *
  * `@demlik/tea` is a LIBRARY, so the reference is ONE PAGE PER PUBLIC MODULE
- * (a curated ~19), never one page per symbol. The structured source is the
- * typedoc JSON model (`typedoc --json`), read once and rendered to markdown by
- * this module — never typedoc-plugin-markdown (the per-symbol firehose).
+ * (every entry of `MODULE_ALLOWLIST`), never one page per symbol. The structured
+ * source is the typedoc JSON model (`typedoc --json`), read once and rendered to
+ * markdown by this module — never typedoc-plugin-markdown (the per-symbol
+ * firehose).
  *
  * One generator builds a `Map<relPath, markdown>` from that model. A single
  * writer (`writeReferenceDocs`) and a single drift guard (`collectReferenceDrift`)
- * both consume the same map — no fact is produced twice. The vitest gate in
- * `generate-reference.test.ts` runs the guard in CI and the writer under the
+ * both consume the same map — no fact is produced twice. That map is the whole
+ * truth of `docs/reference/`: the writer removes any file it did not write, and
+ * `collectReferenceStrays` names one. The vitest gate in
+ * `generate-reference.test.ts` runs the guards in CI and the writer under the
  * `TEA_DOCS_WRITE` env flag.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Application, TSConfigReader, TypeDocReader } from "typedoc";
+import { parseTierTable, type Tier, tierOf } from "./tier-table";
 import {
   type DocModule,
   type DocSymbol,
@@ -37,6 +41,8 @@ export const REFERENCE_DIR = join(PKG_ROOT, "docs", "reference");
 /** The typedoc JSON model — gitignored, regenerated on every run. */
 const MODEL_JSON = join(PKG_ROOT, ".typedoc", "model.json");
 const PACKAGE_JSON = join(PKG_ROOT, "package.json");
+/** Holds the tier table — the one source of every tier a page prints. */
+const MAINTAINING_MD = join(PKG_ROOT, "MAINTAINING.md");
 
 /** A curated module group — governs the compass layout. */
 type Group =
@@ -288,6 +294,20 @@ export const MODULE_ALLOWLIST: readonly Curated[] = [
     typedocName: "devtools",
     group: "Testing",
   },
+  {
+    subpath: "./machine-viz",
+    importPath: "@demlik/tea/machine-viz",
+    file: "machine-viz.md",
+    typedocName: "machine-viz",
+    group: "Testing",
+  },
+  {
+    subpath: "./parity",
+    importPath: "@demlik/tea/parity",
+    file: "parity.md",
+    typedocName: "parity",
+    group: "Testing",
+  },
 ];
 
 const GROUP_ORDER: readonly Group[] = [
@@ -397,35 +417,78 @@ function renderStartHere(
     "",
     "| Symbol | Reach for it when |",
     "| --- | --- |",
-    ...rows.map((r) => `| \`${cell(r.symbol)}\` | ${cell(r.reachFor)} |`),
+    ...rows.map((r) => `| ${symbolLink(r.symbol)} | ${cell(r.reachFor)} |`),
     "",
   ];
 }
 
-function renderModulePage(entry: Curated, mod: DocModule): string {
+/** A link to a symbol's own entry on its module page. */
+function symbolLink(name: string): string {
+  return `[\`${cell(name)}\`](#${name})`;
+}
+
+/**
+ * A symbol's tier: its module's, unless its own TSDoc says `@experimental`.
+ * MAINTAINING.md stamps subpaths, and an export inherits its door's stamp; the
+ * tag is how one export opts out of a promise its door makes.
+ */
+function symbolTier(symbol: DocSymbol, moduleTier: Tier): Tier {
+  return symbol.experimental ? "experimental" : moduleTier;
+}
+
+/**
+ * One entry per exported name: the anchor other pages link to, then what the
+ * name declares. A type and a value exported under one name (`Cmd`) share the
+ * entry, because they share the anchor — a name is what a link can point at.
+ */
+function renderDeclarations(symbols: readonly DocSymbol[]): string[] {
+  const byName = new Map<string, string[]>();
+  for (const s of symbols) {
+    const declarations = byName.get(s.name) ?? [];
+    if (s.declaration !== null) declarations.push(s.declaration);
+    byName.set(s.name, declarations);
+  }
+  const lines: string[] = ["## Declarations", ""];
+  for (const [name, declarations] of byName) {
+    lines.push(`<a id="${name}"></a>`, "", `### \`${name}\``, "");
+    if (declarations.length > 0) {
+      lines.push("```ts", declarations.join("\n\n"), "```", "");
+    }
+  }
+  return lines;
+}
+
+function renderModulePage(entry: Curated, mod: DocModule, tier: Tier): string {
   const intro = tagline(mod.summary);
   const symbols = [...mod.symbols].sort((a, b) => a.name.localeCompare(b.name));
   const lines: string[] = [];
   lines.push(`# ${entry.importPath}`, "");
   if (intro) lines.push(`> ${intro}`, "");
+  lines.push(`Tier: \`${tier}\``, "");
   lines.push("```ts", `import { … } from "${entry.importPath}";`, "```", "");
   lines.push(...renderStartHere(entry, symbols));
   lines.push(`## Exports (${symbols.length})`, "");
   if (symbols.length === 0) {
     lines.push("_No public exports._", "");
   } else {
-    lines.push("| Symbol | Kind | Summary |", "| --- | --- | --- |");
+    lines.push(
+      "| Symbol | Kind | Tier | Summary |",
+      "| --- | --- | --- | --- |",
+    );
     for (const s of symbols) {
       lines.push(
-        `| \`${cell(s.name)}\` | ${s.kindLabel} | ${cell(s.summary)} |`,
+        `| ${symbolLink(s.name)} | ${s.kindLabel} | ${symbolTier(s, tier)} | ${cell(s.summary)} |`,
       );
     }
-    lines.push("");
+    lines.push("", ...renderDeclarations(symbols));
   }
   return lines.join("\n");
 }
 
-function renderCompass(version: string): string {
+function renderCompass(
+  version: string,
+  tiers: ReadonlyMap<string, Tier>,
+): string {
   const lines: string[] = [];
   lines.push(
     "# @demlik/tea — reference",
@@ -438,13 +501,17 @@ function renderCompass(version: string): string {
     "> Generated from the typedoc model. Do not edit by hand — run `pnpm --filter",
     "> @demlik/tea docs:reference` to regenerate.",
     "",
+    "Each module is listed with its tier: `stable`, `battery` or `experimental`.",
+    "",
   );
   for (const group of GROUP_ORDER) {
     const rows = MODULE_ALLOWLIST.filter((e) => e.group === group);
     if (rows.length === 0) continue;
     lines.push(`## ${group}`, "");
     for (const e of rows) {
-      lines.push(`- [\`${e.importPath}\`](./${e.file})`);
+      lines.push(
+        `- [\`${e.importPath}\`](./${e.file}) — ${tierOf(tiers, e.subpath)}`,
+      );
     }
     lines.push("");
   }
@@ -503,6 +570,7 @@ function subpathToSrc(
 }
 
 const CATALOG_FILE = "all-modules.md";
+const COMPASS_FILE = "index.md";
 
 /** One catalog row per public subpath: its name and its barrel's gloss. */
 async function catalogRows(
@@ -520,7 +588,10 @@ async function catalogRows(
   );
 }
 
-function renderCatalog(rows: readonly SummaryRow[]): string {
+function renderCatalog(
+  rows: readonly SummaryRow[],
+  tiers: ReadonlyMap<string, Tier>,
+): string {
   const pageBySubpath = new Map(
     MODULE_ALLOWLIST.map((e) => [e.subpath, e.file]),
   );
@@ -532,24 +603,51 @@ function renderCatalog(rows: readonly SummaryRow[]): string {
     "modules link to their dedicated reference page; the rest are plumbing,",
     "discoverable here with a one-line gloss from their source barrel.",
     "",
-    "| Subpath | Summary |",
-    "| --- | --- |",
+    "| Subpath | Tier | Summary |",
+    "| --- | --- | --- |",
   );
   for (const { symbol: subpath, summary } of rows) {
     const page = pageBySubpath.get(subpath);
     const label = page ? `[\`${subpath}\`](./${page})` : `\`${subpath}\``;
-    lines.push(`| ${label} | ${cell(summary)} |`);
+    lines.push(`| ${label} | ${tierOf(tiers, subpath)} | ${cell(summary)} |`);
   }
   lines.push("");
   return lines.join("\n");
 }
 
+/** Everything the pages are rendered from, read once. */
+export interface ReferenceInputs {
+  readonly modules: readonly DocModule[];
+  readonly version: string;
+  /** One row per public subpath, glossed from its source barrel. */
+  readonly catalog: readonly SummaryRow[];
+  /** Subpath → tier, as `MAINTAINING.md`'s tier table stamps it. */
+  readonly tiers: ReadonlyMap<string, Tier>;
+}
+
+/** Read the typedoc model, the export map and the tier table. */
+export async function loadReferenceInputs(): Promise<ReferenceInputs> {
+  const [modules, pkg, maintaining] = await Promise.all([
+    loadModel(),
+    readPackageJson(),
+    readFile(MAINTAINING_MD, "utf8"),
+  ]);
+  return {
+    modules,
+    version: pkg.version,
+    catalog: await catalogRows(pkg.exports),
+    tiers: parseTierTable(maintaining),
+  };
+}
+
 /**
- * Build the full reference doc set as a `Map<relPath, markdown>`. This is the
+ * Render the full reference doc set as a `Map<relPath, markdown>`. This is the
  * single source both the writer and the drift guard consume.
  */
-export async function generateReferenceDocs(): Promise<Map<string, string>> {
-  const [modules, pkg] = await Promise.all([loadModel(), readPackageJson()]);
+export function renderReferenceDocs(
+  inputs: ReferenceInputs,
+): Map<string, string> {
+  const { modules, version, catalog, tiers } = inputs;
   const byName = new Map(modules.map((m) => [m.name, m]));
   const docs = new Map<string, string>();
   const rows: SummaryRow[] = [];
@@ -560,7 +658,10 @@ export async function generateReferenceDocs(): Promise<Map<string, string>> {
         `typedoc model missing curated module '${entry.typedocName}' (${entry.subpath}) — check typedoc.json entryPoints`,
       );
     }
-    docs.set(entry.file, renderModulePage(entry, mod));
+    docs.set(
+      entry.file,
+      renderModulePage(entry, mod, tierOf(tiers, entry.subpath)),
+    );
     for (const s of mod.symbols) {
       rows.push({
         module: entry.importPath,
@@ -569,14 +670,54 @@ export async function generateReferenceDocs(): Promise<Map<string, string>> {
       });
     }
   }
-  const catalog = await catalogRows(pkg.exports);
   assertEveryRowDescribed([...rows, ...catalog]);
-  docs.set(CATALOG_FILE, renderCatalog(catalog));
-  docs.set("index.md", renderCompass(pkg.version));
+  docs.set(CATALOG_FILE, renderCatalog(catalog, tiers));
+  docs.set(COMPASS_FILE, renderCompass(version, tiers));
   return docs;
 }
 
-/** Write every generated page to disk (creates directories as needed). */
+/** Load the inputs and render them — the generated reference doc set. */
+export async function generateReferenceDocs(): Promise<Map<string, string>> {
+  return renderReferenceDocs(await loadReferenceInputs());
+}
+
+/**
+ * Every filename the generator writes. Known without running typedoc, because
+ * the allowlist fixes the page set — which is what lets the stray check run
+ * without generating anything.
+ */
+export function referenceFileNames(): string[] {
+  return [...MODULE_ALLOWLIST.map((e) => e.file), CATALOG_FILE, COMPASS_FILE];
+}
+
+/** Every file under `root`, as a `/`-separated path relative to it. */
+async function listFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((e) => e.isFile())
+    .map((e) =>
+      relative(root, join(e.parentPath, e.name)).split(sep).join("/"),
+    );
+}
+
+/**
+ * The files under `root` the generator does not write, sorted. A page whose
+ * module left the allowlist is one; so is a file somebody dropped in by hand.
+ * Empty means the directory holds the generated set and nothing else.
+ */
+export async function collectReferenceStrays(
+  root: string = REFERENCE_DIR,
+  generated: Iterable<string> = referenceFileNames(),
+): Promise<string[]> {
+  const written = new Set(generated);
+  return (await listFiles(root)).filter((rel) => !written.has(rel)).sort();
+}
+
+/**
+ * Write every generated page to disk (creates directories as needed), then
+ * remove whatever else `root` holds: the directory is the generator's output and
+ * nothing more.
+ */
 export async function writeReferenceDocs(
   root: string = REFERENCE_DIR,
 ): Promise<void> {
@@ -586,6 +727,9 @@ export async function writeReferenceDocs(
     const target = join(root, rel);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, content, "utf8");
+  }
+  for (const stray of await collectReferenceStrays(root, docs.keys())) {
+    await rm(join(root, stray));
   }
 }
 

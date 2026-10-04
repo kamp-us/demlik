@@ -1,4 +1,5 @@
 /**
+ * @packageDocumentation
  * @demlik/tea/machine-viz — turn a `Machine` into a Mermaid diagram string.
  *
  * PURE. No deps, no AST parsing, no file I/O. The function reads only the
