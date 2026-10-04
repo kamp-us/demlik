@@ -48,56 +48,58 @@ const diagnosticsOf = (page: string, program: Map<string, string>): string[] =>
     allowImportingTsExtensions: true,
   });
 
-describe("docs/tutorial/*.md programs typecheck", async () => {
-  const programs = await pages();
+describe(
+  "docs/tutorial/*.md programs typecheck",
+  { timeout: 120_000 },
+  async () => {
+    const programs = await pages();
 
-  it("reads every tutorial, including the page that names no file", () => {
-    const byPage = new Map(programs);
-    expect(byPage.get("add-your-first-effect.md")?.has("effects.ts")).toBe(
-      true,
-    );
-    expect(byPage.get("build-a-durable-agent.md")?.has("model.ts")).toBe(true);
-    expect(
-      byPage.get("build-your-first-machine.md")?.has(UNNAMED_PAGE_FILE),
-    ).toBe(true);
-  });
+    it("reads every tutorial, including the page that names no file", () => {
+      const byPage = new Map(programs);
+      expect(byPage.get("add-your-first-effect.md")?.has("effects.ts")).toBe(
+        true,
+      );
+      expect(byPage.get("build-a-durable-agent.md")?.has("model.ts")).toBe(
+        true,
+      );
+      expect(
+        byPage.get("build-your-first-machine.md")?.has(UNNAMED_PAGE_FILE),
+      ).toBe(true);
+    });
 
-  it.each(programs)(
-    "%s compiles without a diagnostic",
-    (page, program) => {
+    it.each(programs)("%s compiles without a diagnostic", (page, program) => {
       expect(diagnosticsOf(page, program)).toEqual([]);
-    },
-    120_000,
-  );
+    });
 
-  // #543: `tool()` calls a handler with `(args, ctx, { ok, fail })`. The call's
-  // id and an abort signal are not among them, so the lesson must not show a
-  // handler that takes either.
-  it.each([
-    { takes: "`callId` as a fourth argument", edit: ", callId: string) =>" },
-    {
-      takes: "an `AbortSignal` as a fourth argument",
-      edit: ", signal: AbortSignal) =>",
-    },
-  ])("fails build-a-durable-agent.md's tool handler edited to take $takes", ({
-    edit,
-  }) => {
-    const page = "build-a-durable-agent.md";
-    const program = new Map(programs).get(page) ?? new Map<string, string>();
-    const agent = program.get("agent.ts") ?? "";
-    const handler = "async ({ text }, _ctx, { ok }) =>";
-    expect(agent).toContain(handler);
+    // #543: `tool()` calls a handler with `(args, ctx, { ok, fail })`. The call's
+    // id and an abort signal are not among them, so the lesson must not show a
+    // handler that takes either.
+    it.each([
+      { takes: "`callId` as a fourth argument", edit: ", callId: string) =>" },
+      {
+        takes: "an `AbortSignal` as a fourth argument",
+        edit: ", signal: AbortSignal) =>",
+      },
+    ])("fails build-a-durable-agent.md's tool handler edited to take $takes", ({
+      edit,
+    }) => {
+      const page = "build-a-durable-agent.md";
+      const program = new Map(programs).get(page) ?? new Map<string, string>();
+      const agent = program.get("agent.ts") ?? "";
+      const handler = "async ({ text }, _ctx, { ok }) =>";
+      expect(agent).toContain(handler);
 
-    const diagnostics = diagnosticsOf(
-      page,
-      new Map([
-        ...program,
-        ["agent.ts", agent.replace(handler, handler.replace(") =>", edit))],
-      ]),
-    );
+      const diagnostics = diagnosticsOf(
+        page,
+        new Map([
+          ...program,
+          ["agent.ts", agent.replace(handler, handler.replace(") =>", edit))],
+        ]),
+      );
 
-    expect(diagnostics.join("\n")).toContain(
-      "is not assignable to parameter of type 'ToolHandler<",
-    );
-  }, 120_000);
-});
+      expect(diagnostics.join("\n")).toContain(
+        "is not assignable to parameter of type 'ToolHandler<",
+      );
+    });
+  },
+);

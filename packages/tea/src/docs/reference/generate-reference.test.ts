@@ -36,8 +36,6 @@ import {
 import { tierOf } from "./tier-table";
 
 const WRITE = process.env.TEA_DOCS_WRITE === "1";
-// typedoc compiles the whole package on each generate; give it real headroom.
-const TIMEOUT = 120_000;
 
 // One typedoc run serves every test that only renders.
 let loaded: Promise<ReferenceInputs> | undefined;
@@ -59,20 +57,19 @@ const exportRows = (page: string) =>
     ([, symbol = "", kind = "", tier = ""]) => ({ symbol, kind, tier }),
   );
 
-describe.runIf(WRITE)("reference docs — regenerate (TEA_DOCS_WRITE=1)", () => {
-  it(
-    "writes every generated page to docs/reference/",
-    async () => {
-      await writeReferenceDocs();
+// typedoc compiles the whole package on each generate; give it real headroom.
+describe("reference generator", { timeout: 120_000 }, () => {
+  describe.runIf(WRITE)(
+    "reference docs — regenerate (TEA_DOCS_WRITE=1)",
+    () => {
+      it("writes every generated page to docs/reference/", async () => {
+        await writeReferenceDocs();
+      });
     },
-    TIMEOUT,
   );
-});
 
-describe.skipIf(WRITE)("reference docs — drift gate", () => {
-  it(
-    "the drift guard fires when a committed page is tampered",
-    async () => {
+  describe.skipIf(WRITE)("reference docs — drift gate", () => {
+    it("the drift guard fires when a committed page is tampered", async () => {
       const docs = await generateReferenceDocs();
       const tampered = "index.md";
       expect(docs.has(tampered)).toBe(true);
@@ -84,49 +81,49 @@ describe.skipIf(WRITE)("reference docs — drift gate", () => {
         return docs.get(rel) ?? null;
       });
       expect(drift).toEqual([tampered]);
-    },
-    TIMEOUT,
-  );
+    });
 
-  it("a row with no summary is refused, named by module and symbol", () => {
-    const refusal = (): void =>
-      assertEveryRowDescribed([
-        { module: "@demlik/tea", symbol: "replay", summary: "Run a machine." },
-        { module: "@demlik/tea/promise", symbol: "run", summary: "" },
-        { module: "@demlik/tea/flow", symbol: "ActivityCmd", summary: "  " },
-      ]);
-    expect(refusal).toThrowError(/@demlik\/tea\/promise: run/);
-    expect(refusal).toThrowError(/@demlik\/tea\/flow: ActivityCmd/);
-    expect(refusal).not.toThrowError(/replay/);
-  });
+    it("a row with no summary is refused, named by module and symbol", () => {
+      const refusal = (): void =>
+        assertEveryRowDescribed([
+          {
+            module: "@demlik/tea",
+            symbol: "replay",
+            summary: "Run a machine.",
+          },
+          { module: "@demlik/tea/promise", symbol: "run", summary: "" },
+          { module: "@demlik/tea/flow", symbol: "ActivityCmd", summary: "  " },
+        ]);
+      expect(refusal).toThrowError(/@demlik\/tea\/promise: run/);
+      expect(refusal).toThrowError(/@demlik\/tea\/flow: ActivityCmd/);
+      expect(refusal).not.toThrowError(/replay/);
+    });
 
-  it("every curated module subpath is a real package.json export", async () => {
-    const keys = new Set(await packageExportKeys());
-    for (const entry of MODULE_ALLOWLIST) {
-      expect(
-        keys.has(entry.subpath),
-        `curated subpath ${entry.subpath} is not a package.json export key`,
-      ).toBe(true);
-    }
-  });
+    it("every curated module subpath is a real package.json export", async () => {
+      const keys = new Set(await packageExportKeys());
+      for (const entry of MODULE_ALLOWLIST) {
+        expect(
+          keys.has(entry.subpath),
+          `curated subpath ${entry.subpath} is not a package.json export key`,
+        ).toBe(true);
+      }
+    });
 
-  it("every public subpath has a page", async () => {
-    const paged = new Set(MODULE_ALLOWLIST.map((e) => e.subpath));
-    // `./package.json` is metadata and a stylesheet is an asset: neither has an API.
-    const api = (await packageExportKeys()).filter(
-      (k) => k !== "./package.json" && !k.endsWith(".css"),
-    );
-    expect(api.filter((k) => !paged.has(k))).toEqual([]);
-  });
+    it("every public subpath has a page", async () => {
+      const paged = new Set(MODULE_ALLOWLIST.map((e) => e.subpath));
+      // `./package.json` is metadata and a stylesheet is an asset: neither has an API.
+      const api = (await packageExportKeys()).filter(
+        (k) => k !== "./package.json" && !k.endsWith(".css"),
+      );
+      expect(api.filter((k) => !paged.has(k))).toEqual([]);
+    });
 
-  it("curated page filenames are unique", () => {
-    const files = MODULE_ALLOWLIST.map((e) => e.file);
-    expect(new Set(files).size).toBe(files.length);
-  });
+    it("curated page filenames are unique", () => {
+      const files = MODULE_ALLOWLIST.map((e) => e.file);
+      expect(new Set(files).size).toBe(files.length);
+    });
 
-  it(
-    "every function row carries its signature on the same page",
-    async () => {
+    it("every function row carries its signature on the same page", async () => {
       const docs = renderReferenceDocs(await inputs());
       const unsigned: string[] = [];
       let functions = 0;
@@ -150,13 +147,9 @@ describe.skipIf(WRITE)("reference docs — drift gate", () => {
       );
       expect(defineMachine).toMatch(/\n {2}m: .*Machine</);
       expect(defineMachine).toMatch(/\): Machine<S, M, C, U, Ctx>/);
-    },
-    TIMEOUT,
-  );
+    });
 
-  it(
-    "every page and catalog row prints the tier MAINTAINING.md stamps",
-    async () => {
+    it("every page and catalog row prints the tier MAINTAINING.md stamps", async () => {
       const { tiers } = await inputs();
       const docs = renderReferenceDocs(await inputs());
       const compass = docs.get("index.md") ?? "";
@@ -173,13 +166,9 @@ describe.skipIf(WRITE)("reference docs — drift gate", () => {
         "experimental",
       );
       expect(node.find((r) => r.symbol === "fileStore")?.tier).toBe("stable");
-    },
-    TIMEOUT,
-  );
+    });
 
-  it(
-    "re-stamping a subpath in the tier table changes its page and its rows",
-    async () => {
+    it("re-stamping a subpath in the tier table changes its page and its rows", async () => {
       const base = await inputs();
       const restamped = renderReferenceDocs({
         ...base,
@@ -196,19 +185,15 @@ describe.skipIf(WRITE)("reference docs — drift gate", () => {
       expect(rows.find((r) => r.symbol === "fileJournal")?.tier).toBe(
         "experimental",
       );
-    },
-    TIMEOUT,
-  );
+    });
 
-  // `docs:reference:check` runs this one by name, before it regenerates: the
-  // writer removes a stray, so afterwards there is nothing left to catch.
-  it("docs/reference/ holds nothing the generator does not write", async () => {
-    expect(await collectReferenceStrays()).toEqual([]);
-  });
+    // `docs:reference:check` runs this one by name, before it regenerates: the
+    // writer removes a stray, so afterwards there is nothing left to catch.
+    it("docs/reference/ holds nothing the generator does not write", async () => {
+      expect(await collectReferenceStrays()).toEqual([]);
+    });
 
-  it(
-    "a file the generator did not write is named as a stray, and the writer removes it",
-    async () => {
+    it("a file the generator did not write is named as a stray, and the writer removes it", async () => {
       const root = await mkdtemp(join(tmpdir(), "tea-reference-"));
       try {
         await writeFile(join(root, "removed-module.md"), "# gone\n", "utf8");
@@ -222,7 +207,6 @@ describe.skipIf(WRITE)("reference docs — drift gate", () => {
       } finally {
         await rm(root, { recursive: true, force: true });
       }
-    },
-    TIMEOUT,
-  );
+    });
+  });
 });

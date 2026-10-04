@@ -48,7 +48,7 @@ describe("examplesOf", () => {
   });
 });
 
-describe("tea's JSDoc examples", async () => {
+describe("tea's JSDoc examples", { timeout: 120_000 }, async () => {
   const examples = await sourceExamples();
 
   it("finds examples, so a broken extractor cannot pass green", () => {
@@ -57,7 +57,7 @@ describe("tea's JSDoc examples", async () => {
 
   it("typechecks every example", async () => {
     expect(await exampleFailures(examples)).toEqual([]);
-  }, 120_000);
+  });
 
   it("names the source line of an example broken on purpose", async () => {
     const example = examples.find(
@@ -81,5 +81,5 @@ describe("tea's JSDoc examples", async () => {
         ),
       ),
     );
-  }, 120_000);
+  });
 });
