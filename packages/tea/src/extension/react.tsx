@@ -146,10 +146,9 @@ export function useBackgroundRuntime<S, M extends { type: string }>({
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider + consumer hooks — factory-style React context.
 //
-// `createBackgroundRuntimeContext<S, M>()` returns a `{ Provider, useDispatch,
-// useState, useRuntime }` tuple bound to the caller's `S` / `M`. The
-// Provider mounts `useBackgroundRuntime(opts)` ONCE internally and shares
-// the `{ state, dispatch }` pair via context. Child consumers (anywhere in
+// The Provider `createBackgroundRuntimeContext<S, M>()` returns is bound to the
+// caller's `S` / `M`. It mounts `useBackgroundRuntime(opts)` ONCE internally
+// and shares the `{ state, dispatch }` pair via context. Child consumers (anywhere in
 // the tree) read the slice they need — no prop drilling, single bridge
 // client per channel per Provider mount.
 //

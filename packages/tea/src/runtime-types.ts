@@ -48,11 +48,10 @@ import {
 // return, enforced on every cell.
 declare const ReducerBrand: unique symbol;
 
-// A `Reducer` (or `Transitions`) minted through `asReducer` / `defineMachine`.
-// Carries the phantom brand; otherwise identical to its structural counterpart.
 /**
  * A `Reducer` or `Transitions` value that went through `asReducer` or
- * `defineMachine`. It behaves exactly like the unbranded value.
+ * `defineMachine`. It carries the phantom brand and otherwise behaves exactly
+ * like the unbranded value.
  */
 export type Branded<T> = T & { readonly [ReducerBrand]: true };
 
@@ -82,11 +81,11 @@ export function absurd(x: never): never {
   throw new Error(`unreachable: ${JSON.stringify(x)}`);
 }
 
-// The explicit "this cell ignores this msg" helper. Naming the no-op forces the
-// author to *decide* "this cell does nothing" (a real decision), distinct from
-// "I forgot to write this cell" (which the mapped type rejects); an implicit
-// wildcard would silently swallow a future Msg variant that should be handled.
-// Assignable to any Transitions cell regardless of S/M/C concrete types.
+// Naming the no-op forces the author to *decide* "this cell does nothing" (a
+// real decision), distinct from "I forgot to write this cell" (which the mapped
+// type rejects); an implicit wildcard would silently swallow a future Msg
+// variant that should be handled. Assignable to any Transitions cell regardless
+// of S/M/C concrete types.
 /**
  * An update cell that ignores its Msg: it returns the state unchanged, with no
  * Cmds. Use it to say a state deliberately does nothing for a Msg.
@@ -760,12 +759,11 @@ export function schemaMigrate<S>(
 
 // === DispatchSettle: how far a dispatch awaits ===
 //
-// The default is the SAFE one, `"quiescent"` — `dispatch` resolves only once the
-// entire transitive follow-up chain has drained (the same drain `idle()`
-// performs). Were the default one transition, an `interpret` follow-up Msg would
-// enqueue a fresh transition fire-and-forget relative to the original
-// `dispatch`, resolving "early". The rare single-step case opts in with `"once"`
-// (or the `dispatchOnce` convenience).
+// `"quiescent"` is the default because it is the SAFE one: were the default one
+// transition, an `interpret` follow-up Msg would enqueue a fresh transition
+// fire-and-forget relative to the original `dispatch`, resolving "early". Its
+// drain is the same one `idle()` performs. `dispatchOnce` is the convenience
+// spelling of `"once"`.
 /**
  * How long a `dispatch` waits before it resolves: `quiescent`, the default,
  * waits for every follow-up Msg to drain, and `once` waits for the single
@@ -775,11 +773,10 @@ export type DispatchSettle = "quiescent" | "once";
 
 // === RuntimeRef<M>: typed sibling-runtime handle ===
 //
-// Exposes only the inbox of a Runtime — `dispatch` / `dispatchOnce`. Use it as
-// the field type when one runtime holds a *sibling* (composition by reduction
-// across orthogonal lifecycles — invariant 5): the holder learns the Msg shape
-// it can send, nothing about the referenced runtime's State/Cmd/Sub/Ctx/
-// observers/Port fanout. `Runtime<S, M>` extends `RuntimeRef<M>` structurally.
+// Holding a *sibling* runtime is composition by reduction across orthogonal
+// lifecycles (invariant 5): the holder learns the Msg shape it can send, nothing
+// about the referenced runtime's State/Cmd/Sub/Ctx/observers/Port fanout.
+// `Runtime<S, M>` extends `RuntimeRef<M>` structurally.
 /**
  * The dispatch-only view of a runtime. Use it as the type of a handle one
  * runtime holds in order to send Msgs to another.
@@ -1252,13 +1249,11 @@ export function defineMachine<
 
 // === asReducer: the validated minting path for a reducer ===
 //
-// Turns a raw record of handlers into a branded `Reducer<S, M, C>`. The
-// parameter type's every cell returns the non-thenable `SyncReturn<S, C>`, so
-// the reentrancy guard fires HERE, at construction: an `async` cell returns
+// The parameter type's every cell returns the non-thenable `SyncReturn<S, C>`,
+// so the reentrancy guard fires HERE, at construction: an `async` cell returns
 // `Promise<...>`, not assignable to `SyncReturn`, and `tsc` rejects it. PURE —
 // identity at runtime (the brand is phantom). `defineMachine` brands its
-// `update` internally the same way, so this exists for the standalone `const
-// update = asReducer<...>({ ... })` form.
+// `update` internally the same way.
 /**
  * Type-check a standalone reducer record and return it branded. Use it when you
  * write `update` apart from `defineMachine`.
@@ -1273,12 +1268,11 @@ export function asReducer<S, M extends { type: string }, C extends Cmd>(
 //
 // A PURE machine reads nothing from `ctx` (its `Ctx` is `NoCtx` /
 // `Record<string, never>` / `unknown`); forcing `ctx: {}` is ceremony for a
-// value the type already pins as empty. So `ctx` is CONDITIONALLY optional: when
-// `{}` satisfies `Ctx` it may be OMITTED (defaulted to `{}`), so a pure reducer
-// runs as `run(machine)`; when `Ctx` carries a field a handler reads, `ctx` stays
-// REQUIRED. `[Record<never, never>] extends [Ctx]` reads as "is `{}` assignable
-// to `Ctx`" — true for the context-free shapes, false for `{ db: … }`; the
-// tuple-wrap disables distributive conditional behavior.
+// value the type already pins as empty, so a pure reducer runs as
+// `run(machine)` and the omitted `ctx` defaults to `{}`.
+// `[Record<never, never>] extends [Ctx]` reads as "is `{}` assignable to `Ctx`"
+// — true for the context-free shapes, false for `{ db: … }`; the tuple-wrap
+// disables distributive conditional behavior.
 /**
  * The `ctx` field of an engine's options: optional when the machine's `Ctx` is
  * empty, required otherwise.
@@ -1287,22 +1281,18 @@ export type CtxArg<Ctx> = [Record<never, never>] extends [Ctx]
   ? { ctx?: Ctx }
   : { ctx: Ctx };
 
-// === replay: pure unit-test helper ===
-//
-// Composes `init(loaded ?? null, ctx)` then `update(state, msg)` for each msg.
-// Returns the final state plus the cmds that *would* have been emitted and the
-// Subs that *would* be running at the final state. It does NOT call any
-// `interpret[type]` handler, does NOT touch `Store`, and does NOT start any
-// subscription.
-//
-// `subs` is each `machine.subs` entry that is on at the final state, as its
-// runner would see it — `{ id, type, deps }`, the id derived exactly as the
-// engine derives it — deduplicated by id the way the engine runs them. So a
-// test asserts "the retry timer is armed in `waiting`" without wiring a runner.
 /**
  * Run a machine's `init` and then its `update` over a list of Msgs, with no
  * engine, store or effects. Use it in unit tests to assert the final state, the
  * Cmds emitted, and the Subs that would be running.
+ *
+ * It composes `init(loaded ?? null, ctx)` and then `update(state, msg)` for each
+ * Msg. No Cmd handler is called, no `Store` is touched and no Sub is started.
+ *
+ * `subs` is each `machine.subs` entry that is on at the final state, as its
+ * runner would see it: `{ id, type, deps }`, the id derived exactly as the
+ * engine derives it, deduplicated by id the way the engine runs them. So a test
+ * asserts "the retry timer is armed in `waiting`" without wiring a runner.
  */
 export function replay<
   S,
@@ -1528,18 +1518,15 @@ export function tryFoldMsgs<S, M extends { type: string }, C extends Cmd>(
   return Outcome.ok(state);
 }
 
-// === tryInterpret: Railway sugar for a hand-written Cmd's handler ===
-//
-// Wraps a fallible `(cmd, ctx) => Promise<Ok>` into a handler for
-// `interpret[type]`: on success resolves `onOk(value, cmd)`, on rejection (or a
-// synchronous throw) `onErr(error, cmd)`, with the original error untouched so
-// `instanceof` checks inside `onErr` hold. It NEVER rejects (assuming
-// `onOk`/`onErr` are total). A `Cmd.define`d Cmd needs none of this: its
-// handler returns an `Outcome` and the engine mints the Msg (ADR 0021).
 /**
  * Wrap a function that may throw into a Cmd handler that never rejects: success
  * maps to one Msg through `onOk`, failure to another through `onErr`. Use it
- * for a hand-written Cmd; a `Cmd.define`d Cmd does not need it.
+ * for a hand-written Cmd; a `Cmd.define`d Cmd does not need it, because its
+ * handler returns an `Outcome` and the engine mints the Msg (ADR 0021).
+ *
+ * A rejection and a synchronous throw both reach `onErr(error, cmd)`, with the
+ * original error untouched so `instanceof` checks inside `onErr` hold. The
+ * never-rejects promise assumes `onOk` and `onErr` do not throw.
  */
 export function tryInterpret<C extends Cmd, Ok, M, Ctx>(
   work: (cmd: C, ctx: Ctx) => Promise<Ok>,

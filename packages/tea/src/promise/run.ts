@@ -37,8 +37,8 @@ import { builtinRunners } from "./builtin-runners";
 
 // === run ===
 //
-// Returns a `BootingRuntime<S, M>` synchronously; boot runs as the FIRST entry
-// on the serial dispatch tail, awaited implicitly by every public method.
+// Boot runs as the FIRST entry on the serial dispatch tail, which is how every
+// public method of the returned `BootingRuntime<S, M>` waits for it.
 //
 // Save-then-effects ordering is structural: every transition mutates state,
 // awaits `store.save(newState)`, then reconciles subscriptions, then runs
