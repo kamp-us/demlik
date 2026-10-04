@@ -40,6 +40,7 @@ import { z } from "zod";
 // schemas — and each one is a failure the handler's `fail` may name.
 // ===========================================================================
 
+// #region lookup
 const TABLE: Record<string, string> = { blue: "#2563eb", red: "#dc2626" };
 
 const lookup = tool(
@@ -59,6 +60,7 @@ const lookup = tool(
     return ok({ hex });
   },
 );
+// #endregion lookup
 
 // ===========================================================================
 // A tool that is SLOW rather than wrong. `timeoutMs` caps one call and `retry`
@@ -66,8 +68,7 @@ const lookup = tool(
 // wait is on the Model and a crash mid-ladder resumes at the attempt it was on.
 // ===========================================================================
 
-let rateAttempts = 0;
-
+// #region fetch-rate
 const fetchRate = tool(
   "fetch_rate",
   {
@@ -81,7 +82,6 @@ const fetchRate = tool(
     retry: { baseMs: 10, factor: 1, capMs: 10, jitter: "none", maxAttempts: 3 },
   },
   async ({ pair }, _ctx, { ok, fail }) => {
-    rateAttempts += 1;
     // `usd_eur` is down for good — it burns the ladder and settles exhausted.
     if (pair === "usd_eur") return fail({ _tag: "upstream" });
     // `usd_jpy` is not down, just far too slow — the budget ends the call and
@@ -90,6 +90,7 @@ const fetchRate = tool(
     return ok({ rate: 1 });
   },
 );
+// #endregion fetch-rate
 
 // ===========================================================================
 // The FAKE model — a script, plus a printer for the tool messages it receives.
@@ -144,6 +145,7 @@ const printed = new Set<string>();
 // `onToolError` is the HOST's channel onto the same failure the model reads:
 // the outcome carries `_tag` and its payload structurally, so this switch is
 // exhaustive and a failure mode nobody handled is a compile error.
+// #region agent
 const agent = defineAgent({
   model,
   tools: [lookup, fetchRate],
@@ -159,6 +161,7 @@ const agent = defineAgent({
     }
   },
 });
+// #endregion agent
 
 const final = await agent.run("Find the hex code for blue and for green.");
 console.log("done:", final.output?.content);

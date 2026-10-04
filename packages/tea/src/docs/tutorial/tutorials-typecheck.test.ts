@@ -66,4 +66,35 @@ describe("docs/tutorial/*.md programs typecheck", async () => {
     },
     120_000,
   );
+
+  // #543: `tool()` calls a handler with `(args, ctx, { ok, fail })`. The call's
+  // id and an abort signal are not among them, so the lesson must not show a
+  // handler that takes either.
+  it.each([
+    { takes: "`callId` as a fourth argument", edit: ", callId: string) =>" },
+    {
+      takes: "an `AbortSignal` as a fourth argument",
+      edit: ", signal: AbortSignal) =>",
+    },
+  ])("fails build-a-durable-agent.md's tool handler edited to take $takes", ({
+    edit,
+  }) => {
+    const page = "build-a-durable-agent.md";
+    const program = new Map(programs).get(page) ?? new Map<string, string>();
+    const agent = program.get("agent.ts") ?? "";
+    const handler = "async ({ text }, _ctx, { ok }) =>";
+    expect(agent).toContain(handler);
+
+    const diagnostics = diagnosticsOf(
+      page,
+      new Map([
+        ...program,
+        ["agent.ts", agent.replace(handler, handler.replace(") =>", edit))],
+      ]),
+    );
+
+    expect(diagnostics.join("\n")).toContain(
+      "is not assignable to parameter of type 'ToolHandler<",
+    );
+  }, 120_000);
 });

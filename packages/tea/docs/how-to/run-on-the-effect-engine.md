@@ -5,6 +5,13 @@ import `run` from `@demlik/tea/effect`. The machine file is the one the Promise
 engine runs, unchanged: see
 [Run a machine on the Promise engine](./run-on-the-promise-engine.md).
 
+The agent layer runs on the Promise engine, not this one. `defineAgent` from
+`@demlik/tea/agent` drives its machine with the Promise engine's `run`, so
+`agent.run` returns a Promise and a `tool()` handler is an `async` function, not
+an `Effect`. Whether the agent layer gets an Effect form is an open question,
+tracked in
+[kamp-us/demlik#322](https://github.com/kamp-us/demlik/issues/322).
+
 `@demlik/tea/effect` is `stable` and targets Effect v4 (still a release
 candidate). `effect` is an optional peer dependency, so install it yourself:
 

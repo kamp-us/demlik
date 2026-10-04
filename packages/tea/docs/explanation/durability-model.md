@@ -121,11 +121,18 @@ and a store you write yourself does not need one.
 - **Idempotent by construction** is the cheapest fix when it is available:
   writing a file at a fixed path, `PUT`ing a record by id, upserting a row. Doing
   it twice leaves the same result.
-- **Key the effect** when it is not. Every tool call and effect carries a stable
-  id that is the same across the re-fire — for an agent's tool calls that is
-  `callId`. Pass it to the downstream system as its idempotency key, or record it
-  yourself and skip an id you have already handled. The dedupe lives in your
-  handler; the library ships the stable id, not the deduplication.
+- **Key the effect** when it is not. An agent's tool call carries a stable id
+  that is the same across the re-fire: its `callId`. A `tool()` handler is not
+  handed it — it takes `args`, `ctx` and `{ ok, fail }` — so read it as
+  `cmd.callId` in a `.with` wrapper around the tool, as
+  [Wrap one tool's interpret cell](../how-to/wrap-one-tool-cell.md) shows.
+  Pass the id to the downstream system as its idempotency key, or record it
+  yourself and skip an id you have already handled. tea applies no dedupe to an
+  effect for you:
+  [`@demlik/tea/idempotency`](../reference/idempotency.md) ships the
+  dedupe-by-key state and its ops, and
+  [`@demlik/tea/do`](../reference/do.md) ships `idempotentEffect` over a key you
+  supply, and wiring either is yours.
 - **Push the risk to the end.** Where an effect is genuinely non-repeatable and
   cannot be keyed — charging a card through an API with no idempotency key —
   order it so the unrepeatable step is the last thing that happens before a

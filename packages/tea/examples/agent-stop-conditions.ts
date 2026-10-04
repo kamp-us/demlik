@@ -100,12 +100,14 @@ async function ended(run: () => Promise<unknown>): Promise<string> {
 // 1 — `maxTurns` counts COMPLETED model round-trips and fails at the count.
 // ===========================================================================
 
+// #region bounded
 const bounded = defineAgent({
   model: modelAsking(1),
   tools: [tick],
   instructions: "You tick.",
   maxTurns: 3,
 });
+// #endregion bounded
 
 calls = 0;
 console.log("maxTurns: 3 →", await ended(() => bounded.run("go")));
@@ -118,6 +120,7 @@ console.log("  model calls:", calls);
 // ends this run — remove it and it never ends at all.
 // ===========================================================================
 
+// #region progressing
 const progressing = defineAgent({
   model: modelAsking(20),
   tools: [tick],
@@ -125,6 +128,7 @@ const progressing = defineAgent({
   deadlineMs: 150,
   maxTurns: 25,
 });
+// #endregion progressing
 
 calls = 0;
 console.log("deadlineMs: 150, progressing →", await ended(() => progressing.run("go")));
@@ -135,12 +139,14 @@ console.log("  model calls:", calls);
 // and 400ms with no advance is what the watchdog is actually watching for.
 // ===========================================================================
 
+// #region stalling
 const stalling = defineAgent({
   model: modelAsking(400),
   tools: [tick],
   instructions: "You tick.",
   deadlineMs: 150,
 });
+// #endregion stalling
 
 calls = 0;
 console.log("deadlineMs: 150, stalling →", await ended(() => stalling.run("go")));
@@ -152,12 +158,14 @@ console.log("  model calls:", calls);
 // cap counts from the start and never restarts, so progress does not buy time.
 // ===========================================================================
 
+// #region capped
 const capped = defineAgent({
   model: modelAsking(20),
   tools: [tick],
   instructions: "You tick.",
   maxElapsedMs: 150,
 });
+// #endregion capped
 
 calls = 0;
 console.log("maxElapsedMs: 150, progressing →", await ended(() => capped.run("go")));
@@ -170,12 +178,14 @@ console.log("  model calls:", calls);
 // and that answering `true` ends the run CANCELLED, so `run` resolves.
 // ===========================================================================
 
+// #region until-five
 const untilFive = defineAgent({
   model: modelAsking(1),
   tools: [tick],
   instructions: "You tick.",
   stopWhen: (state) => (state.conversation?.turnCount ?? 0) >= 5,
 });
+// #endregion until-five
 
 calls = 0;
 console.log("stopWhen: turnCount >= 5 →", await ended(() => untilFive.run("go")));
@@ -210,6 +220,7 @@ const modelReporting = () => {
   };
 };
 
+// #region budgeted
 const budgeted = defineAgent({
   model: modelReporting(),
   tools: [tick],
@@ -217,6 +228,7 @@ const budgeted = defineAgent({
   compaction: { afterContextTokens: 8_000, keepTurns: 1 },
   stopWhen: ({ usage }) => usage.inputTokens + usage.outputTokens >= 60_000,
 });
+// #endregion budgeted
 
 calls = 0;
 const spent = await budgeted.run("go");
