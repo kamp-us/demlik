@@ -43,6 +43,10 @@ function fmtJson(obj: unknown, indent = 0): string {
   return escapeHtml(String(obj));
 }
 
+/**
+ * Props for `StateInspector`: the `state` to show, an optional `flashKey`, and
+ * an optional `className`.
+ */
 export interface StateInspectorProps {
   /**
    * The machine state to display. Render-derived shape — pass whatever you
@@ -60,6 +64,10 @@ export interface StateInspectorProps {
   className?: string;
 }
 
+/**
+ * React component that renders a state value as formatted JSON, and flashes
+ * when `flashKey` changes.
+ */
 export function StateInspector({
   state,
   flashKey,

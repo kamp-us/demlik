@@ -38,6 +38,10 @@ type TabRemovedListener = (
   removeInfo: chrome.tabs.OnRemovedInfo,
 ) => void;
 
+/**
+ * The in-memory `chrome` stand-in `fakeChrome` returns, with `__test.fire*`
+ * helpers that drive its events from a test.
+ */
 export interface FakeChrome {
   storage: {
     local: chrome.storage.StorageArea;
@@ -152,6 +156,10 @@ export interface FakeChrome {
   };
 }
 
+/**
+ * Create an in-memory fake of the `chrome` APIs this adapter uses. Use it to
+ * test extension machines without a browser.
+ */
 export function fakeChrome(): FakeChrome {
   const data = new Map<string, unknown>();
 

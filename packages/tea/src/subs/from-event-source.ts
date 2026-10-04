@@ -50,12 +50,20 @@ type EventSourceSubData = { readonly url: string };
 
 declare const EventSource: MinimalEventSourceCtor;
 
+/**
+ * Options for `fromEventSource`: map each server-sent message, error and open
+ * event to a Msg, or to `null` to drop it.
+ */
 export interface EventSourceFactoryOpts<S, M> {
   onMessage: (data: string, sub: S) => M | null;
   onError?: (event: MinimalEvent, sub: S) => M | null;
   onOpen?: (sub: S) => M | null;
 }
 
+/**
+ * Build a Sub runner that opens an `EventSource` on `sub.deps.url` and
+ * dispatches a Msg for each server-sent event.
+ */
 export function fromEventSource<S extends Sub<string, EventSourceSubData>, M>(
   opts: EventSourceFactoryOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {

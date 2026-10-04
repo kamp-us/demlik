@@ -8,12 +8,28 @@
  * every field is checked with a type guard before it is read.
  */
 
-/** A single exported symbol on a module page (one table row). */
+import { commentText, isRecord, printDeclaration } from "./typedoc-declaration";
+
+export { isRecord };
+
+/** A single exported symbol on a module page (one table row, one declaration). */
 export interface DocSymbol {
   readonly name: string;
   readonly kindLabel: string;
   /** One-line summary (first sentence of the symbol's TSDoc), possibly empty. */
   readonly summary: string;
+  /**
+   * The declaration as TypeScript: a function's signatures, a type's shape.
+   * `null` only for a re-export whose target lies outside the project. A
+   * function always carries one — the parse refuses a function with no call
+   * signature.
+   */
+  readonly declaration: string | null;
+  /**
+   * The symbol's TSDoc carries `@experimental`: it has no stability promise,
+   * whatever tier the subpath exporting it is stamped with.
+   */
+  readonly experimental: boolean;
 }
 
 /** A curated module: its own reference page. */
@@ -44,10 +60,6 @@ export function kindLabel(kind: number): string {
   return KIND_LABELS.get(kind) ?? "Other";
 }
 
-export function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === "object" && x !== null && !Array.isArray(x);
-}
-
 /**
  * The comment that documents a symbol. typedoc parks a function's TSDoc on its
  * first call signature rather than on the declaration reflection, so reading
@@ -60,16 +72,13 @@ function symbolComment(sym: Record<string, unknown>): unknown {
   return isRecord(first) ? first.comment : undefined;
 }
 
-/** Flatten a typedoc `comment.summary` part array into plain text. */
-function extractSummary(comment: unknown): string {
-  if (!isRecord(comment)) return "";
-  const { summary } = comment;
-  if (!Array.isArray(summary)) return "";
-  let out = "";
-  for (const part of summary) {
-    if (isRecord(part) && typeof part.text === "string") out += part.text;
-  }
-  return out.trim();
+/** Whether a symbol's TSDoc carries the `@experimental` modifier tag. */
+function isExperimental(comment: unknown): boolean {
+  return (
+    isRecord(comment) &&
+    Array.isArray(comment.modifierTags) &&
+    comment.modifierTags.includes("@experimental")
+  );
 }
 
 /**
@@ -159,20 +168,24 @@ export function parseTypedocModel(raw: unknown): DocModule[] {
           `typedoc model: a symbol on module '${child.name}' is malformed`,
         );
       }
-      // The name is the module's (that is how a consumer imports it); the kind
-      // and the TSDoc are the declaration's, followed through any re-export.
+      // The name is the module's (that is how a consumer imports it); the kind,
+      // the TSDoc and the printed shape are the declaration's, followed through
+      // any re-export.
       const decl = resolveReference(sym, byId);
+      const comment = symbolComment(decl);
       symbols.push({
         name: sym.name,
         kindLabel: kindLabel(
           typeof decl.kind === "number" ? decl.kind : sym.kind,
         ),
-        summary: firstSentence(extractSummary(symbolComment(decl))),
+        summary: firstSentence(commentText(comment)),
+        declaration: printDeclaration(sym.name, decl),
+        experimental: isExperimental(comment),
       });
     }
     modules.push({
       name: child.name,
-      summary: extractSummary(child.comment),
+      summary: commentText(child.comment),
       symbols,
     });
   }

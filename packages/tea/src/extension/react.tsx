@@ -61,6 +61,10 @@ import {
 } from "react";
 import { bridgeClient, passThroughMsg } from "./bridge";
 
+/**
+ * Options for `useBackgroundRuntime`: the `channel` name and the required
+ * `parseState`.
+ */
 export interface UseBackgroundRuntimeOpts<S> {
   channel: string;
   /**
@@ -72,6 +76,10 @@ export interface UseBackgroundRuntimeOpts<S> {
   parseState: (raw: unknown) => S | null;
 }
 
+/**
+ * What `useBackgroundRuntime` returns: the latest `state`, which is `null`
+ * until the first one arrives, and `dispatch`.
+ */
 export interface UseBackgroundRuntimeResult<S, M> {
   /** Latest snapshot from the host. `null` until the first hydrate response
    * or the first broadcast arrives. Surfaces SHOULD render a placeholder
@@ -82,6 +90,11 @@ export interface UseBackgroundRuntimeResult<S, M> {
   dispatch(msg: M): Promise<void>;
 }
 
+/**
+ * React hook for an extension surface: it subscribes to the background
+ * runtime's state and returns it with a `dispatch`. Use it in a popup or side
+ * panel component.
+ */
 export function useBackgroundRuntime<S, M extends { type: string }>({
   channel,
   parseState,
@@ -133,10 +146,9 @@ export function useBackgroundRuntime<S, M extends { type: string }>({
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider + consumer hooks — factory-style React context.
 //
-// `createBackgroundRuntimeContext<S, M>()` returns a `{ Provider, useDispatch,
-// useState, useRuntime }` tuple bound to the caller's `S` / `M`. The
-// Provider mounts `useBackgroundRuntime(opts)` ONCE internally and shares
-// the `{ state, dispatch }` pair via context. Child consumers (anywhere in
+// The Provider `createBackgroundRuntimeContext<S, M>()` returns is bound to the
+// caller's `S` / `M`. It mounts `useBackgroundRuntime(opts)` ONCE internally
+// and shares the `{ state, dispatch }` pair via context. Child consumers (anywhere in
 // the tree) read the slice they need — no prop drilling, single bridge
 // client per channel per Provider mount.
 //
@@ -145,6 +157,10 @@ export function useBackgroundRuntime<S, M extends { type: string }>({
 // than "silently returns null state forever".
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * What `createBackgroundRuntimeContext` returns: a `Provider`, plus the
+ * `useState`, `useDispatch` and `useRuntime` hooks that read from it.
+ */
 export interface BackgroundRuntimeContext<S, M> {
   /**
    * Wrap a subtree to share a single background-runtime bridge client.
@@ -192,6 +208,11 @@ export interface BackgroundRuntimeContext<S, M> {
 const PROVIDER_ERROR =
   "createBackgroundRuntimeContext: hook used outside its Provider. Wrap the consumer in <BackgroundRuntime.Provider opts={...}>.";
 
+/**
+ * Create a React context that shares one background-runtime connection across a
+ * component tree. Use it instead of calling `useBackgroundRuntime` in several
+ * components.
+ */
 export function createBackgroundRuntimeContext<
   S,
   M extends { type: string },

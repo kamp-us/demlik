@@ -5,16 +5,62 @@ a worker restarting — give `run` a `Store`. The substrate saves the Model afte
 every transition and rehydrates it on the next boot. Your reducer authors none
 of it: the Model is plain data, so persistence is a round-trip, not code.
 
+The machine saved here is the download from
+[Build and replay your first machine](../tutorial/build-your-first-machine.md).
+The blocks on this page are one file, in order, and this is its top:
+
+```ts
+import { defineMachine } from "@demlik/tea";
+
+export interface State {
+  readonly phase: "idle" | "downloading" | "done";
+  readonly received: number;
+  readonly total: number;
+}
+
+export type Msg =
+  | { readonly type: "start"; readonly total: number }
+  | { readonly type: "chunk"; readonly size: number };
+
+/** A download that counts the bytes it has received until it has them all. */
+export const downloader = defineMachine({
+  types: { model: {} as State, msg: {} as Msg },
+  init: (loaded) => [loaded ?? { phase: "idle", received: 0, total: 0 }, []],
+  update: {
+    start: (s, m) => [
+      { ...s, phase: "downloading", received: 0, total: m.total },
+      [],
+    ],
+    chunk: (s, m) => {
+      if (s.phase !== "downloading") return [s, []];
+      const received = s.received + m.size;
+      return received >= s.total
+        ? [{ ...s, received: s.total, phase: "done" }, []]
+        : [{ ...s, received }, []];
+    },
+  },
+});
+```
+
 ## 1. Implement the `Store` seam
 
 A `Store<S>` has three methods: `load` returns whatever bytes are at the key
 (typed `unknown` — storage genuinely doesn't know your `S`), `save` persists the
 Model, and `migrate` parses raw bytes back into an `S`. `migrate` returns `null`
 when nothing was saved, so the run boots fresh, and `refuse(reason)` for saved
-bytes it can't read:
+bytes it can't read. Here that parse is a function of its own, `parse`, because
+step 4 hands the same one to a file store:
 
 ```ts
-import { refuse, type Store } from "@demlik/tea";
+import { type Migrated, refuse, type Store } from "@demlik/tea";
+
+/** Recognize a saved State, boot fresh on nothing, refuse anything else. */
+function parse(raw: unknown): Migrated<State> {
+  if (raw === null) return null;
+  return typeof raw === "object" && "phase" in raw
+    ? (raw as State)
+    : refuse("not a saved State");
+}
 
 function memStore(box: { snapshot: string | null }): Store<State> {
   return {
@@ -23,15 +69,7 @@ function memStore(box: { snapshot: string | null }): Store<State> {
       box.snapshot = JSON.stringify(state);
       return Promise.resolve();
     },
-    migrate: (raw) => {
-      if (raw === null) return null;
-      const parsed: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
-      return typeof parsed === "object" &&
-        parsed !== null &&
-        "phase" in parsed
-        ? (parsed as State)
-        : refuse("not a saved State");
-    },
+    migrate: (raw) => parse(typeof raw === "string" ? JSON.parse(raw) : raw),
   };
 }
 ```
@@ -49,9 +87,11 @@ does.
 ## 2. Boot with the Store, and let it persist
 
 ```ts
+import { run } from "@demlik/tea/promise";
+
 const box = { snapshot: null as string | null };
 
-const a = await run(downloader, { ctx: undefined, store: memStore(box) }).ready;
+const a = await run(downloader, { store: memStore(box) }).ready;
 await a.dispatch({ type: "start", total: 3 });
 await a.dispatch({ type: "chunk", size: 1 }); // phase is now "downloading"
 await a.stop(); // box.snapshot now holds the persisted Model
@@ -67,9 +107,9 @@ old one stopped. `init(loaded)` receives the migrated Model and returns it
 unchanged:
 
 ```ts
-const b = await run(downloader, { ctx: undefined, store: memStore(box) }).ready;
+const b = await run(downloader, { store: memStore(box) }).ready;
 
-console.log(b.getState().phase); // "downloading" — exactly where A stopped
+const resumed = b.getState(); // phase "downloading", received 1: where A stopped
 ```
 
 Runtime B never re-ran the earlier chunks; it rehydrated their result. The Model
@@ -85,8 +125,10 @@ pod, the CLI started twice. When that is reachable, ask the store to fence:
 ```ts
 import { fileStore } from "@demlik/tea/node";
 
-const store = fileStore("agent.json", parse, { fenced: true });
-const a = await run(downloader, { ctx: undefined, store }).ready;
+const file = process.env.DOWNLOAD_FILE ?? "download.json";
+const first = await run(downloader, {
+  store: fileStore(file, parse, { fenced: true }),
+}).ready;
 ```
 
 The store now carries a version. `run` reads it at boot and compare-and-swaps on
@@ -96,31 +138,26 @@ the one refused** — at its next save, not at the newer one's boot:
 ```ts
 // Process B starts while A is still running. B reads the CURRENT version at
 // boot, so B's own boot save swaps cleanly and B runs.
-const second = run(downloader, {
-  ctx: undefined,
-  store: fileStore("agent.json", parse, { fenced: true }),
-});
-
-await second.ready; // resolves — B now holds the fence
-
-// Process A is still holding the version it read before B moved it on. A's
-// next save is the one that throws StoreConflictError.
-a.dispatch({ type: "chunkDone" }); // A dies here
+const second = await run(downloader, {
+  store: fileStore(file, parse, { fenced: true }),
+}).ready; // resolves — B now holds the fence
 ```
 
-So the guard belongs around the whole run, not only around boot: a conflict can
-surface at any save, and by then this process has already fired the effects it
-got to. Catch it, stop, and exit — another worker owns this run now.
+Process A is still holding the version it read before B moved it on, so A's
+next save is the one that throws `StoreConflictError`. The guard therefore
+belongs around every dispatch, not only around boot: a conflict can surface at
+any save, and by then this process has already fired the effects it got to.
+Catch it and stop dispatching — another worker owns this run now.
 
 ```ts
 import { StoreConflictError } from "@demlik/tea";
 
+let takenOver = false;
 try {
-  const runtime = await run(downloader, { ctx: undefined, store }).ready;
-  await driveToCompletion(runtime); // your dispatch loop
+  await first.dispatch({ type: "start", total: 3 }); // A's next save
 } catch (err) {
-  if (err instanceof StoreConflictError) return; // someone else has it now
-  throw err;
+  if (!(err instanceof StoreConflictError)) throw err;
+  takenOver = true; // another process owns this run now: stop dispatching
 }
 ```
 

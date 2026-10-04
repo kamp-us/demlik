@@ -16,17 +16,17 @@ It returns the final `state`, the `cmds` that would have been emitted, and the
 ```ts
 import { replay } from "@demlik/tea";
 
-const { state, cmds } = replay(downloader, {
-  msgs: [
-    { type: "start", total: 3 },
-    { type: "chunk", size: 1 },
-    { type: "chunk", size: 1 },
-    { type: "chunk", size: 1 },
-  ],
-  ctx: undefined,
-});
+const msgs: Msg[] = [
+  { type: "start", total: 3 },
+  { type: "chunk", size: 1 },
+  { type: "chunk", size: 1 },
+  { type: "chunk", size: 1 },
+];
+
+const { state, cmds } = replay(downloader, { msgs, ctx: undefined });
 
 expect(state.phase).toBe("done");
+expect(cmds).toEqual([]); // this machine emits no effects
 ```
 
 Because the fold is pure, the same messages always produce the same `state` — so

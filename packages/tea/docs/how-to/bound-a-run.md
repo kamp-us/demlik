@@ -1,42 +1,51 @@
 # Bound a `defineAgent` run
 
-**Goal:** stop an agent run that would otherwise go on forever — and know which
-of the four guards actually bounds what you think it bounds.
+**Goal:** stop an agent run that goes on too long. Each step adds one of the four
+guards `defineAgent` takes, `maxTurns`, `deadlineMs`, `maxElapsedMs` and
+`stopWhen`, and the last step puts all four on one agent.
 
-`defineAgent` takes four optional stop conditions: `maxTurns`, `deadlineMs`,
-`maxElapsedMs` and `stopWhen`. Omit them all and the run is unbounded: it ends
-only when the model stops asking for tools. `deadlineMs` is not a wall-clock cap
-— `maxElapsedMs` is — and that is the thing most readers get wrong on the first
-afternoon.
+Omit them all and the run is unbounded: it ends only when the model stops asking
+for tools.
+
+This page is the steps. What each guard measures, and why `deadlineMs` is not the
+wall-clock cap it reads as, is in
+[What each run guard bounds](../explanation/what-bounds-a-run.md). Each option's
+exact behaviour is on
+[`DefineAgentConfig`](../reference/agent.md#DefineAgentConfig) in the reference.
 
 Every sample below is quoted from
 [`examples/agent-stop-conditions.ts`](../../examples/agent-stop-conditions.ts),
-which runs in-process with a scripted model that never stops asking for tools.
+which runs in-process with a scripted model that never stops asking for tools:
+`modelAsking(napMs)` asks for one `tick` every turn, and each `tick` naps that
+many milliseconds. They use these imports:
 
-## `maxTurns` — cap the model round-trips
+```ts
+import { defineAgent, status } from "@demlik/tea/agent";
+import { DriveFailedError } from "@demlik/tea";
+```
 
-`maxTurns` is the livelock guard. It counts **completed model round-trips**, and
-once that count reaches the number the run fails rather than calling the model
-again.
+## 1. Cap the model round-trips with `maxTurns`
+
+Set `maxTurns` to the most model calls the run may make. Round-trips are what
+you pay for, so this is the guard to set when you are protecting a bill.
 
 ```ts
 const bounded = defineAgent({
-  model,
+  model: modelAsking(1),
   tools: [tick],
   instructions: "You tick.",
   maxTurns: 3,
 });
 ```
 
-That run makes exactly three model calls and then fails:
+That run makes three model calls and then fails:
 
 ```
 maxTurns: 3 → failed with turn_limit after 8ms (guard fired at +8ms)
   model calls: 3
 ```
 
-The rejection is a `DriveFailedError` carrying the final Model on `.state`, and
-the reason is on the agent's own failure field:
+Catch the rejection to read which guard ended the run:
 
 ```ts
 try {
@@ -51,125 +60,65 @@ try {
 }
 ```
 
-Two things do **not** move the count. A compaction pass is not model reasoning,
-so it never trips `maxTurns`; and tool calls are not counted at all — a turn that
-asks for six tools is one turn.
+## 2. Catch a hang with `deadlineMs`
 
-This is the guard to reach for when what you want is a spend ceiling. Round-trips
-are what you pay for, so a turn cap is the closest thing the lid offers to a cost
-cap.
-
-## `deadlineMs` — a no-progress watchdog, not a timeout
-
-`deadlineMs` is the one to read carefully. It is **milliseconds the run may sit
-without advancing**, and it restarts on every advance. It is not a total
-wall-clock cap on the run.
-
-Concretely: a run that keeps making progress is **not bounded in time by
-`deadlineMs` at all**, however small you set it. Each advance re-arms the
-watchdog, so it never comes due. `maxElapsedMs`, below, is the guard that does
-bound it.
-
-Here is that, run for real — a 150ms budget over an agent whose every tool call
-naps 20ms and answers:
-
-```ts
-const progressing = defineAgent({
-  model,
-  tools: [tick],
-  instructions: "You tick.",
-  deadlineMs: 150,
-  maxTurns: 25,
-});
-```
-
-```
-deadlineMs: 150, progressing → failed with turn_limit after 531ms (guard fired at +531ms)
-  model calls: 25
-```
-
-The run took 531ms and 25 model calls under a 150ms budget, and what ended it was
-`maxTurns` — not the deadline. Drop the `maxTurns: 25` and that agent runs
-forever with `deadlineMs: 150` set.
-
-What the watchdog *does* catch is a run that stops moving. Same 150ms budget,
-same agent, one tool call that naps 400ms:
+Set `deadlineMs` to the longest the run may sit without moving. Use it against a
+tool waiting on something that will never answer, or a provider that accepted
+the request and went quiet.
 
 ```ts
 const stalling = defineAgent({
-  model,
+  model: modelAsking(400),
   tools: [tick],
   instructions: "You tick.",
   deadlineMs: 150,
 });
 ```
+
+One tool call naps 400ms under the 150ms budget, so the run fails:
 
 ```
 deadlineMs: 150, stalling → failed with deadline after 402ms (guard fired at +150ms)
   model calls: 1
 ```
 
-That failure lands on the monitored-run slice rather than the agent's own field —
-`error.state.run.failure` is `{ reason: "deadline", at: <ms> }`.
+Read this failure off `error.state.run.failure`. Step 1's `error.state.failure`
+is empty for this guard.
 
-Note the gap between the two numbers on that line. The watchdog fired on schedule
-at +150ms, but `run` settled at 402ms: the guard **fails the run, it does not
-cancel work already in flight**. So even a deadline that does fire is not an
-upper bound on how long `run` takes to settle — and that is true of every guard
-here, `maxElapsedMs` included.
+Do not use `deadlineMs` to cap total time. A run that keeps moving never trips
+it. Step 3 sets the guard that does.
 
-Reach for `deadlineMs` when what you are defending against is a hang — a tool
-waiting on something that will never answer, a provider that accepted the request
-and went quiet. It is a liveness guard, and it is good at that job.
+## 3. Cap total time with `maxElapsedMs`
 
-## `maxElapsedMs` — the total wall-clock cap
-
-`maxElapsedMs` is the guard `deadlineMs` is mistaken for: **total milliseconds
-from the run's start**, whether or not it is progressing. The budget never
-restarts, so an advance buys the run nothing.
-
-Here it is over the *same* 20ms-tick agent that sailed past the 150ms deadline
-above — same budget, same ticks:
+Set `maxElapsedMs` to the total milliseconds the run may take from its start.
+Use it when you owe someone an answer by a deadline.
 
 ```ts
 const capped = defineAgent({
-  model,
+  model: modelAsking(20),
   tools: [tick],
   instructions: "You tick.",
   maxElapsedMs: 150,
 });
 ```
 
+The run fails at the first turn boundary past 150ms:
+
 ```
 maxElapsedMs: 150, progressing → failed with elapsed_limit after 171ms (guard fired at +171ms)
   model calls: 8
 ```
 
-Eight calls, not twenty-five, and no `maxTurns` in sight. The reason is on the
-failure field: `{ reason: "elapsed_limit", at: <ms> }`, on the agent's own
-`state.failure` beside `turn_limit`.
+Read the reason off `error.state.failure`, as in step 1.
 
-Two things worth knowing before you set it:
+## 4. Stop on your own condition with `stopWhen`
 
-- It is read **at the turn boundary**, so it ends the run at the first boundary
-  past the budget, not at the millisecond it comes due. A run 10ms into a 400ms
-  tool call under a 150ms budget fails when that tool settles.
-- The run's start time is on the durable Model, so **a killed and resumed run
-  continues the original budget**. The hours a crashed run spent dead count
-  against it, and a resume does not hand it a fresh 150ms.
-
-Reach for `maxElapsedMs` when the thing you owe someone is an answer by a
-deadline. Reach for `maxTurns` when the thing you are protecting is a bill.
-
-## `stopWhen` — your own condition
-
-`stopWhen` is a predicate consulted at the turn boundary, after the other three
-guards have passed, over the run's durable Model. Answer `true` and the run ends
-there — no further model call.
+Pass `stopWhen` a predicate over the run's state. Return `true` and the run ends
+there, with no further model call.
 
 ```ts
 const untilFive = defineAgent({
-  model,
+  model: modelAsking(1),
   tools: [tick],
   instructions: "You tick.",
   stopWhen: (state) => (state.conversation?.turnCount ?? 0) >= 5,
@@ -181,40 +130,30 @@ stopWhen: turnCount >= 5 → resolved after 7ms
   model calls: 5
 ```
 
-Read the verb: **resolved**, not failed. A stop you asked for is not a failure,
-so the run ends `cancelled` — the same terminal an aborted `signal` reaches — and
-`run` resolves with the final Model instead of rejecting. `status(state)` answers
-`{ kind: "cancelled", at }`, and the transcript stands.
+This run resolved, so there is nothing to catch. `run` hands back the final
+state, and `status(state).kind` is `"cancelled"`.
 
-The example's condition is one `maxTurns` would also express. The point is the
-ones it would not: a token budget ([below](#budget-tokens-and-compact-by-context-size)),
-an external flag, a condition on the content of the turns so far. The predicate
-sees the whole Model.
+The example's condition is one `maxTurns` would also express. Write a
+`stopWhen` for the ones it would not: a token budget (step 5), an external flag,
+a condition on the content of the turns so far.
 
-Two rules come with it:
+Two things to do when you write one:
 
-- **It must be pure.** The reducer calls it, so a replay of the same run hands it
-  the same state and must get the same answer. A predicate that reads
-  `Date.now()`, a mutable counter or the network makes the run unreplayable —
-  and if elapsed time is what you want to bound, that is `maxElapsedMs`.
-- **It is config, not state.** A function cannot be persisted, so a resumed run
-  is governed by the `stopWhen` you passed to *this* boot — exactly as it uses
-  the `maxTurns` you passed to this boot. Pass it on every resume, or the resumed
-  run has no predicate.
+- Keep it pure. Do not read `Date.now()`, a mutable counter or the network in
+  it. To bound elapsed time, use `maxElapsedMs`.
+- Pass it on every resume. A resumed run uses the `stopWhen` you hand that boot,
+  and has no predicate if you hand it none.
 
-## Budget tokens, and compact by context size
+## 5. Budget tokens, and fold the transcript by size
 
-Both need a model whose turns carry `usage` — the token counts the provider
-reported for that call. The tutorial's Anthropic adapter
-[maps it](../tutorial/build-a-durable-agent.md#give-the-agent-a-brain); a model
-that reports none gets a zero total and never triggers a size-based fold. tea
-never estimates a token: it reads only what the provider said.
+Skip this step if your model reports no `usage`. Both settings read the token
+counts the provider reported for each call. The tutorial's Anthropic adapter
+[maps them](../tutorial/build-a-durable-agent.md#give-the-agent-a-brain).
 
-The agent keeps two readings of it. `state.usage` is the run's running total,
-every turn's report summed. `conversation.contextTokens` is the last turn's
-`inputTokens + outputTokens`: how full the context window is now. A token
-budget is a `stopWhen` over the first, and a size-based fold is
-`compaction.afterContextTokens` over the second:
+Write the budget as a `stopWhen` over `state.usage`, the run's running total.
+Set `compaction.afterContextTokens` to fold the oldest turns into a summary once
+the last call's size reaches it, and `keepTurns` to how many of the newest turns
+to keep as they are.
 
 ```ts
 const budgeted = defineAgent({
@@ -232,65 +171,52 @@ token budget 60k → cancelled
   spent: { inputTokens: 68000, outputTokens: 550 }
 ```
 
-Eleven brain turns went out, and the eleventh took the total past 60k, so the run
-ended `cancelled` there, like any `stopWhen`. Twice before that, the last call's
-reported size reached 8k and the oldest turns were folded into a summary before
-the next call. What to expect from each:
+Set the budget below your real limit by one turn's worth: the run spent 68k
+against a 60k budget. When the run ends, read what it spent off `state.usage`,
+or off `status(state).usage` when `status(state).kind === "done"`.
 
-- **A fold does not reduce the total.** The folded turns were still paid for. It
-  clears the context size, so a stale reading from before the fold can't
-  trigger a second fold before the next turn reports the new size.
-- **The budget overshoots by up to one turn.** Like every guard here it is read
-  at the turn boundary, so the turn that crosses it has already been paid for.
-  Set the number below the real limit by one turn's worth.
-- **The total survives a kill.** Each turn's usage is saved with the turn, so a
-  resumed run adds up to the same total as one that was never interrupted.
-- **The total survives the end of the run.** It belongs to the run, not to a
-  stage's conversation, so a stage advance keeps it and so does `done`, which
-  clears the conversation. Read it off `state.usage` whichever way the run
-  ended, or off `status(state).usage` when `status(state).kind === "done"`.
-  `RunDone`'s `done` status carries it too.
-- **Summaries are not counted.** Only brain turns add to the total. The
-  summarize call's own cost is not tracked yet.
-- **The threshold is your number.** tea knows no model's window size, so
-  `afterContextTokens` is whatever headroom you want below it. It can sit
-  beside `afterTurns`, and the first trigger reached folds.
+To fold by turn count instead, set `compaction: { afterTurns: 20 }`.
 
-## Which guard bounds what
+## 6. Put all four on one agent
 
-| You want to bound | Use | What it actually does |
-| --- | --- | --- |
-| Model round-trips, and so roughly spend | `maxTurns` | Fails the run when the completed-turn count reaches it |
-| A run that has hung | `deadlineMs` | Fails the run after that long with **no advance**; restarts on each advance |
-| Total wall-clock time | `maxElapsedMs` | Fails the run at the first turn boundary past that long since it started, progressing or not |
-| A condition only you can see | `stopWhen` | Ends the run **cancelled** at the turn boundary your predicate answers `true` on |
-| Tokens spent | `stopWhen` over `state.usage` | Ends the run **cancelled** at the first turn boundary past your budget |
-| How long the prompt gets | `compaction` | Folds the oldest turns into one summary instead of failing anything |
+Set the guards together. `maxTurns` bounds the run's length, `deadlineMs` bounds
+any one stall inside it, `maxElapsedMs` bounds the whole thing by the clock, and
+none of them substitutes for another.
 
-Use them together for the common case. `maxTurns` bounds the run's length,
-`deadlineMs` bounds any one stall inside it, `maxElapsedMs` bounds the whole
-thing by the clock, and none of them substitutes for another.
+```ts
+const guarded = defineAgent({
+  model: modelAsking(20),
+  tools: [tick],
+  instructions: "You tick.",
+  maxTurns: 25,
+  deadlineMs: 150,
+  maxElapsedMs: 300,
+  stopWhen: ({ usage }) => usage.inputTokens + usage.outputTokens >= 60_000,
+});
+```
 
-`compaction` is in the table because it answers a question readers arrive with —
-"how do I stop this thing sending a bigger prompt every turn" — but it is not a
-guard: nothing fails. Set `compaction: { afterTurns: 20 }` and once the
-conversation holds twenty turns the oldest are replaced by one model-written
-summary before the next call, so the transcript stops growing while the run goes
-on. `keepTurns` says how many of the newest survive the fold intact. A long run
-usually wants this **and** `maxTurns`: compaction keeps the prompt payable, and
-only the guard ends the run.
+The first guard to trip ends the run. Here it is the wall-clock cap:
 
-## What no guard here does
+```
+all four → failed with elapsed_limit after 300ms (guard fired at +300ms)
+  model calls: 14
+```
 
-None of them cancels work already in flight. Every one is read at a boundary in
-the reducer, so a tool call or model call that is out when a guard trips runs to
-its own end and `run` settles after it — the 402ms line above is that, measured.
-A hard upper bound on how long `run` takes to settle has to come from outside the
-run: race `agent.run(...)` against your own timer, and remember that losing the
-race abandons the run rather than stopping it.
+A long run usually wants `compaction` beside these, as in step 5. Compaction
+keeps the prompt payable, and only a guard ends the run.
+
+That agent is bounded by all four guards. One thing is still open: a guard does
+not cancel a tool call or model call that is already out, so `run` can settle
+later than the guard fired. If you need a hard limit on how long `run` takes to
+settle, race `agent.run(...)` against your own timer. Losing that race abandons
+the run. It does not stop it.
 
 ## See also
 
-- [`defineAgent` reference](../reference/agent.md) — the full config surface.
-- [Handle a tool failure](./handle-a-tool-failure.md) — the per-tool `timeoutMs`
+- [What each run guard bounds](../explanation/what-bounds-a-run.md): why
+  `deadlineMs` is a no-progress watchdog, why a guard does not cancel work in
+  flight, and what the token total counts.
+- [`DefineAgentConfig` reference](../reference/agent.md#DefineAgentConfig): each
+  option's exact behaviour, and the rest of the config.
+- [Handle a tool failure](./handle-a-tool-failure.md): the per-tool `timeoutMs`
   and `retry` knobs, which bound one **call** rather than the run.

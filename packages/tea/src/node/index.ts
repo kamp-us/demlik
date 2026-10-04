@@ -296,6 +296,11 @@ const LOCK_SPIN_MS = 10;
  * `changes` fires for appends made through THIS instance; a cross-process
  * append lands on disk but is not broadcast here (that is a polling concern the
  * log leaves to its consumer, and the remote-journal work downstream).
+ *
+ * The journal carries no stability promise, and this factory travels with it
+ * rather than with `./node`'s `stable` stamp (MAINTAINING.md).
+ *
+ * @experimental
  */
 export function fileJournal<R>(
   dir: string,
@@ -460,6 +465,10 @@ export type NodeSignalDeps<M> = {
  */
 export type NodeSignalSub<M> = Sub<"node_signal", NodeSignalDeps<M>>;
 
+/**
+ * The union of the Sub types the Node adapter ships runners for: WebSocket,
+ * timer and process signal.
+ */
 export type NodeSub<M> = NodeWsSub | NodeTimerSub<M> | NodeSignalSub<M>;
 
 // ─────────────────────────────────────────────────────────────────────────────

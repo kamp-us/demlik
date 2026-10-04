@@ -3,8 +3,16 @@
  * against the closest block and shows only what drifted.
  */
 
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { type Mirror, mirrorDrift, tsBlocksOf } from "./page-mirrors";
+import {
+  expectPageRow,
+  type Mirror,
+  mirrorDrift,
+  PAGE_MIRRORS,
+  regionMirror,
+  tsBlocksOf,
+} from "./page-mirrors";
 
 const promiseRun = [
   'import { run } from "@demlik/tea/promise";',
@@ -115,5 +123,54 @@ describe("mirrorDrift", () => {
 describe("tsBlocksOf", () => {
   it("reads every ts block's body, untrimmed, in page order", () => {
     expect(tsBlocksOf(page)).toEqual([`${promiseRun}\n`, `${effectRun}\n`]);
+  });
+
+  it("reads a tsx block as it reads a ts one, and no other fence", () => {
+    const view = "const view = <p>{state.phase}</p>;\n";
+    expect(
+      tsBlocksOf(`\`\`\`tsx\n${view}\`\`\`\n\n\`\`\`sh\npnpm test\n\`\`\`\n`),
+    ).toEqual([view]);
+  });
+});
+
+describe("regionMirror", () => {
+  const self = fileURLToPath(import.meta.url);
+
+  it("shows a `flush` region nested in other code flush left, keeping its inner indentation", async () => {
+    const nested = {
+      // #region nested
+      cell: (n: number) => {
+        return n + 1;
+      },
+      // #endregion nested
+    };
+    expect(nested.cell(1)).toBe(2);
+
+    const mirror = await regionMirror(self, "nested", "flush");
+
+    expect(mirror).toMatchObject({
+      text: ["cell: (n: number) => {", "  return n + 1;", "},"].join("\n"),
+      fit: "block",
+    });
+  });
+
+  it("leaves a `block` region's indentation exactly as written", async () => {
+    const mirror = await regionMirror(self, "nested");
+
+    expect(mirror.text).toBe(
+      [
+        "      cell: (n: number) => {",
+        "        return n + 1;",
+        "      },",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("PAGE_MIRRORS — each row's page shows its compiled source verbatim", () => {
+  it.each(
+    PAGE_MIRRORS.map((row) => [row.page, row] as const),
+  )("%s", async (_page, row) => {
+    await expectPageRow(row);
   });
 });

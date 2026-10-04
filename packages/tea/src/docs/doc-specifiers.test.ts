@@ -1,8 +1,8 @@
 /**
- * The hand-authored-docs specifier gate — the tracer's sibling.
+ * The hand-authored-docs specifier gate.
  *
- * `docs.tracer.test.ts` proves the code blocks it runs still advance a machine;
- * this one proves no hand-authored page points a reader at a door
+ * The tests beside each page prove the code blocks they run still advance a
+ * machine; this one proves no hand-authored page points a reader at a door
  * `package.json` `exports` no longer carries. It is the guard for #73: a family
  * moving under `src/internal/` closes subpaths, and the prose quadrants are
  * compiled by nothing, so without this the drift lands silently.

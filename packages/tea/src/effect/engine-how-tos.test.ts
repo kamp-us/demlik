@@ -13,17 +13,18 @@
  * `effect`, which only this entry may do.
  */
 
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { profile } from "../../examples/profile-lookup";
 import {
   Directory,
   lookUp as lookUpOnEffect,
 } from "../../examples/profile-lookup-effect";
+import { state as stateOnEffectMain } from "../../examples/profile-lookup-effect-main";
+import { runProfileInTest } from "../../examples/profile-lookup-effect-timer";
 import { lookUp as lookUpOnPromise } from "../../examples/profile-lookup-promise";
 import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
 import { run as runPromise } from "../promise";
-import { run as runEffect } from "./index";
 
 const names: Readonly<Record<string, string>> = { u1: "Ada" };
 
@@ -43,6 +44,10 @@ describe("one machine file, both engines — it runs", () => {
     const promise = await onPromise("u1");
     expect(promise).toEqual({ status: "loaded", name: "Ada" });
     expect(await onEffect("u1")).toEqual(promise);
+  });
+
+  it("the page's own Layer settles `u1` as `loaded`", () => {
+    expect(stateOnEffectMain).toEqual({ status: "loaded", name: "Ada" });
   });
 
   it("an unknown id settles `missing` through the declared err on both engines", async () => {
@@ -86,12 +91,7 @@ describe("a `timer` entry in `subscribe` replaces the built-in — both pages' s
   it("on the Effect engine, a miss clears at once", async () => {
     const status = await Effect.runPromise(
       Effect.gen(function* () {
-        const handle = yield* runEffect(profile, {
-          interpret: {
-            fetch_user: () => Effect.fail({ _tag: "not_found" as const }),
-          },
-          subscribe: { timer: (sub) => Stream.make(sub.deps.msg) },
-        });
+        const handle = yield* runProfileInTest;
         const runtime = yield* handle.ready;
         yield* runtime.dispatch({ type: "look_up", id: "u2" });
         yield* Effect.promise(() =>

@@ -235,6 +235,10 @@ export interface DeadlineConfig {
  * stay the vocabulary of every knob that passes no name.
  */
 export const DEFAULT_RESILIENT_NAME = "resilient";
+/**
+ * The Msg-name family a resilient call uses when it is given no name:
+ * `resilient`.
+ */
 export type DefaultResilientName = typeof DEFAULT_RESILIENT_NAME;
 
 // The default family IS the protocol's `MsgType.Resilient*` vocabulary, not a
@@ -431,6 +435,10 @@ export function runCmdDef<I, R, N extends string = DefaultResilientName>(
     err: ["port_rejected", "deadline_exceeded"],
   });
 }
+/**
+ * The type of the `Cmd.define` definition that `runCmdDef` returns for a
+ * resilient call's run Cmd.
+ */
 export type RunCmdDef<
   I,
   R,
@@ -469,6 +477,10 @@ export type SucceedMsg<
   readonly value: R;
   readonly at: number;
 };
+/**
+ * The Msg the engine mints when a resilient call's handler fails:
+ * `<name>_run_err`, carrying the Cmd and the error.
+ */
 export type FailMsg<
   N extends string = DefaultResilientName,
   I = unknown,

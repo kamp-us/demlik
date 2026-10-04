@@ -37,8 +37,8 @@ import { builtinRunners } from "./builtin-runners";
 
 // === run ===
 //
-// Returns a `BootingRuntime<S, M>` synchronously; boot runs as the FIRST entry
-// on the serial dispatch tail, awaited implicitly by every public method.
+// Boot runs as the FIRST entry on the serial dispatch tail, which is how every
+// public method of the returned `BootingRuntime<S, M>` waits for it.
 //
 // Save-then-effects ordering is structural: every transition mutates state,
 // awaits `store.save(newState)`, then reconciles subscriptions, then runs
@@ -49,6 +49,11 @@ import { builtinRunners } from "./builtin-runners";
 // phase leaves the persisted state ahead of the host's belief about what
 // executed — the Railway discipline (`tryInterpret` in handlers) makes that
 // safe in practice.
+/**
+ * Start a machine on the Promise engine and return its runtime. Pass the Cmd
+ * handlers, the Sub runners, `ctx` and an optional `Store`; the runtime is
+ * returned at once and every method waits for boot.
+ */
 export function run<
   S,
   M extends { type: string },

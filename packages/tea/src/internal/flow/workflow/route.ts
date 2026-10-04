@@ -19,6 +19,10 @@ import type {
   WorkflowState,
 } from "./index";
 
+/**
+ * Route a `WorkflowMsg` to the matching verb of a workflow and return its step.
+ * Use it when you fold workflow Msgs yourself.
+ */
 export function routeWorkflowMsg<A, R, F>(
   wf: Workflow<A, R, F>,
   state: WorkflowState<A, R, F>,

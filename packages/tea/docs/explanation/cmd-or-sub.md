@@ -34,6 +34,9 @@ A vending machine gives the customer thirty seconds to finish paying. Written as
 a Cmd, that reads perfectly reasonably:
 
 ```ts
+import { Cmd, type CmdOf, type Interpret } from "@demlik/tea";
+import { z } from "zod";
+
 // Don't do this.
 const openPaymentWindow = Cmd.define("open_payment_window", {
   input: z.object({ seconds: z.number() }),
@@ -41,8 +44,10 @@ const openPaymentWindow = Cmd.define("open_payment_window", {
   err: [],
 });
 
-const interpret = {
-  open_payment_window: async (cmd, _ctx, { ok }) => {
+type OpenPaymentWindow = CmdOf<typeof openPaymentWindow>;
+
+const interpret: Interpret<never, OpenPaymentWindow, unknown> = {
+  open_payment_window: async (cmd, { ok }) => {
     await new Promise((resolve) => setTimeout(resolve, cmd.seconds * 1000));
     return ok({});
   },
@@ -69,10 +74,30 @@ built-in `timer`. Its `deps` are `{ ms, msg }`: dispatch `msg` once, `ms` after
 it starts.
 
 ```ts
+import { defineMachine } from "@demlik/tea";
+
+type VendingState =
+  | { readonly phase: "idle" }
+  | { readonly phase: "awaiting_payment"; readonly saleId: string };
+
+type VendingMsg =
+  | { readonly type: "sale_started"; readonly saleId: string }
+  | { readonly type: "payment_window_expired"; readonly saleId: string };
+
 const vendingMachine = defineMachine({
-  types: { model: {} as State, msg: {} as Msg },
-  init: /* … */,
-  update: /* … */,
+  types: { model: {} as VendingState, msg: {} as VendingMsg },
+  init: (loaded) => [loaded ?? { phase: "idle" }, []],
+  update: {
+    sale_started: (_s, m) => [
+      { phase: "awaiting_payment", saleId: m.saleId },
+      [],
+    ],
+    // A window that expires after its sale ended closes nothing.
+    payment_window_expired: (s, m) =>
+      s.phase === "awaiting_payment" && s.saleId === m.saleId
+        ? [{ phase: "idle" }, []]
+        : [s, []],
+  },
   subs: [
     {
       type: "timer",
@@ -102,12 +127,26 @@ does not live on the machine: it is handed to `run` in `subscribe`, gets the Sub
 as `{ id, type, deps }`, and returns the function that closes it.
 
 ```ts
+import type { Sub } from "@demlik/tea";
+import { run } from "@demlik/tea/promise";
+
 type JobPoll = Sub<"job_poll", { readonly jobId: string }>;
 
+type JobState =
+  | { readonly phase: "idle" }
+  | { readonly phase: "waiting"; readonly jobId: string };
+
+type JobMsg =
+  | { readonly type: "job_started"; readonly jobId: string }
+  | { readonly type: "poll_due"; readonly jobId: string };
+
 const jobs = defineMachine({
-  types: { model: {} as State, msg: {} as Msg, sub: {} as JobPoll },
-  init: /* … */,
-  update: /* … */,
+  types: { model: {} as JobState, msg: {} as JobMsg, sub: {} as JobPoll },
+  init: (loaded) => [loaded ?? { phase: "idle" }, []],
+  update: {
+    job_started: (_s, m) => [{ phase: "waiting", jobId: m.jobId }, []],
+    poll_due: (s) => [s, []],
+  },
   subs: [
     {
       type: "job_poll",

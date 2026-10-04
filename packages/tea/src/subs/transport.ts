@@ -90,6 +90,11 @@ export type TransportFactory<K> = (key: K) => Transport;
  */
 export type TransportSub<N extends string, TKey> = Sub<N, TKey>;
 
+/**
+ * Options for `fromTransport`: the seam's `name`, how to open the transport,
+ * and how inbound values, outbound values and a dropped connection map to and
+ * from Msgs.
+ */
 export interface FromTransportOpts<
   N extends string,
   TKey,

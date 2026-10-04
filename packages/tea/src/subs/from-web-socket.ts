@@ -52,10 +52,15 @@ import type {
 } from "./platform";
 import { dispatchIfPresent, type SubscribeHandler } from "./types";
 
+/** The `deps` a WebSocket Sub carries: the `wsUrl` to connect to. */
 export type WebSocketSubData = { readonly wsUrl: string };
 
 declare const WebSocket: MinimalWebSocketCtor;
 
+/**
+ * Options for `fromWebSocket`: map each message, open, error and close event to
+ * a Msg, or to `null` to drop it.
+ */
 export interface WebSocketFactoryOpts<S, M> {
   onMessage: (data: unknown, sub: S) => M | null;
   onOpen?: (sub: S) => M | null;
@@ -63,6 +68,11 @@ export interface WebSocketFactoryOpts<S, M> {
   onClose?: (code: number, reason: string, sub: S) => M | null;
 }
 
+/**
+ * Build a Sub runner that opens a WebSocket to `sub.deps.wsUrl` and dispatches
+ * a Msg for each socket event. It does not reconnect; use
+ * `fromReconnectingWebSocket` for that.
+ */
 export function fromWebSocket<S extends Sub<string, WebSocketSubData>, M>(
   opts: WebSocketFactoryOpts<S, M>,
 ): SubscribeHandler<S, M, unknown> {

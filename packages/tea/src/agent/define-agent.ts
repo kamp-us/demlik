@@ -274,6 +274,14 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * Stops a run that keeps going: the maximum number of model round-trips it
    * may take. Once the completed-turn count reaches it the run fails rather
    * than calling the model again. Omit → no limit on turns.
+   *
+   * The count is COMPLETED model round-trips. A compaction pass is not one, and
+   * tool calls are not counted at all: a turn that asks for six tools is one
+   * turn.
+   *
+   * The failure is `{ reason: "turn_limit", at }` on the Model's own `failure`
+   * field. `run` rejects with a `DriveFailedError` whose `.state` is that final
+   * Model.
    */
   readonly maxTurns?: number;
   /**
@@ -281,6 +289,12 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * advancing before it fails. The budget is a no-progress watchdog, not a
    * total wall-clock cap — it restarts each time the run moves. Omit → no
    * watchdog.
+   *
+   * The failure is `{ reason: "deadline", at }` on the Model's `run.failure`,
+   * the monitored-run slice, and not on the agent's own `failure` field where
+   * `turn_limit` and `elapsed_limit` land. `at` is when the watchdog fired. A
+   * tool or model call already out runs to its own end first, so `run` can
+   * settle later than `at`.
    */
   readonly deadlineMs?: number;
   /**
@@ -291,6 +305,12 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * and it counts elapsed time where `maxTurns` counts round-trips. It is read
    * at the turn boundary, so like both of those it stops the run rather than
    * cancelling the work already in flight. Omit → no wall-clock cap.
+   *
+   * Read at the turn boundary means the run ends at the first boundary past
+   * the budget, not at the millisecond it comes due: a run 10ms into a 400ms
+   * tool call under a 150ms budget fails when that tool settles. The failure
+   * is `{ reason: "elapsed_limit", at }` on the Model's own `failure` field,
+   * beside `turn_limit`.
    *
    * The run's start time is on the durable Model, so a run killed and resumed
    * continues the ORIGINAL budget — the time it spent dead counts against it.
@@ -310,6 +330,10 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * this bounds whatever you name — a token budget over `state.usage` (the
    * run's provider-reported total), an external flag, a condition on the turns
    * so far. Omit → no predicate.
+   *
+   * A stop you asked for is not a failure, so `run` RESOLVES with the final
+   * Model where the other three guards make it reject, and `status(state)`
+   * answers `{ kind: "cancelled", at }`.
    *
    * It must be PURE: the reducer calls it, so a replay hands it the same state
    * and must get the same answer. And it is config rather than Model — a
@@ -374,6 +398,13 @@ export interface DefineAgentConfig<T extends AnyToolDef> {
    * {@link DefineAgentCompaction}. `compaction` is what a run tolerates, and the
    * summarize round-trip that enforces it is wiring, so the lid takes the
    * former and supplies the latter from the `model` it already has.
+   *
+   * `afterTurns: 20` folds once the conversation holds twenty turns.
+   * `afterContextTokens: 8_000` folds once the last brain turn's reported
+   * `inputTokens + outputTokens` reaches eight thousand; the number is yours,
+   * because tea knows no model's window size. Set both and the first one
+   * reached folds. `keepTurns` is how many of the newest turns survive the
+   * fold intact. It is not a guard: nothing fails, and the run goes on.
    *
    * Omit → NO compaction, exactly as before: the transcript grows for as long
    * as the model keeps asking for tools. Nothing is defaulted on your behalf —

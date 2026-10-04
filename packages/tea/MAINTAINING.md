@@ -123,7 +123,9 @@ log. `fileJournal` (`./node`, beside `fileStore`) is the one journal factory
 still published, and it carries the journal's **experimental** promise, not the
 `stable` stamp of the subpath it is exported from — `fileJournal` lives in
 `./node` per the #30 ruling (a host file substrate homes with the host's other
-file adapter), and its tier travels with the journal feature. `memoryJournal`,
+file adapter), and its tier travels with the journal feature. Its TSDoc carries
+`@experimental`, which is what makes its row on the generated `./node` reference
+page read `experimental` while the page reads `stable`. `memoryJournal`,
 the remote-sync half (#31: `RemoteJournal<R>` + `memoryRemoteJournal`,
 `CursorStore` + `memoryCursorStore`, `SyncClient<R>` + `makeSyncClient`) and the
 conformance suite are internal; no durable or hosted remote ships.
@@ -151,7 +153,7 @@ deprecated re-export is published first
 
 1. The removal, every internal import rewrite and a changeset land together. The
    changeset is `minor` for a `stable` or `battery` subpath and its breaking-change note
-   names where each thing went (`./retry-backoff` → `./resilience` `{ retryBackoff }`).
+   names where each thing went (`drive` from `./testing` → `./testing/promise`).
    `experimental` removes silently, as its tier allows.
 2. A collapse **moves parts, never drops them**: the grouped door re-exports every
    primitive of the doors it replaces. Only a genuinely dead twin — a superseded

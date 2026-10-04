@@ -6,7 +6,45 @@ makes tea worth using: given the same messages, a machine always lands in the
 same state. By the end you will have written a Model, a Msg, an `update`, and
 watched determinism fall out for free.
 
-You need the core and the Promise engine:
+## Set up the project
+
+You need Node 22.6.0 or newer, the release that added
+`--experimental-strip-types`. In an empty directory:
+
+```sh
+pnpm init
+npm pkg set type=module
+pnpm add @demlik/tea
+pnpm add -D typescript @types/node
+```
+
+The `type=module` line is not optional. `pnpm init` writes a CommonJS
+`package.json`, and the program below uses a top-level `await` — without
+`"type": "module"` TypeScript rejects it with TS1309 ("The current file is a
+CommonJS module and cannot use 'await' at the top level"), which points at the
+`await` rather than at the missing field.
+
+Write a `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}
+```
+
+`noEmit` is what you want here: Node runs the `.ts` file directly, so there is
+nothing to emit.
+
+The whole lesson is one file, `main.ts`. Every TypeScript block below goes into
+it, in the order you meet them. Start it with the core and the Promise engine:
 
 ```ts
 import { defineMachine, replay } from "@demlik/tea";
@@ -86,15 +124,8 @@ handed in — you can ignore that for now). Each `update` cell returns
 `[nextState, effects]`. When enough bytes have arrived, the `chunk` cell flips
 `phase` to `"done"` — that is your terminal state.
 
-That second slot is where Cmds go, and there is one rule worth learning before
-you put anything in it: **a Cmd is one-shot work, and the runtime waits for it
-before folding anything else.** Emit a Cmd whose handler sleeps on a timer or
-polls until something changes, and every message behind it waits too — the
-machine stops folding and nothing says why. Anything that *watches* rather than
-*does* belongs in a Sub instead. [Cmd or Sub: do this once, or tell me
-whenever](../explanation/cmd-or-sub.md) works the distinction through a real
-example; the short test is that if the handler would `await` something that is
-not the work itself, it is a Sub.
+The empty list is where effects go, and this lesson never fills it. The next
+lesson, [Add your first effect](./add-your-first-effect.md), does.
 
 ## Run it and watch it finish
 
@@ -104,8 +135,7 @@ not the work itself, it is a Sub.
 ```ts
 const isDone = (s: State) => s.phase === "done";
 
-const runtime = await run(downloader, { ctx: undefined, terminal: isDone })
-  .ready;
+const runtime = await run(downloader, { terminal: isDone }).ready;
 
 await runtime.dispatch({ type: "start", total: 3 });
 await runtime.dispatch({ type: "chunk", size: 1 });
@@ -120,7 +150,23 @@ await runtime.stop();
 
 `await runtime.dispatch(msg)` resolves once the message and all of its
 consequences have settled, so by the time `done()` resolves the download has
-genuinely reached `"done"`. You just ran your first machine.
+genuinely reached `"done"`.
+
+Check the types, then run the file:
+
+```sh
+pnpm exec tsc --noEmit
+node --experimental-strip-types main.ts
+```
+
+`tsc` prints nothing, which means the program typechecks. Node prints:
+
+```text
+done
+3 of 3
+```
+
+You just ran your first machine.
 
 ## Replay the run — the payoff
 
@@ -139,6 +185,24 @@ const { state } = replay(downloader, { msgs, ctx: undefined });
 console.log(state.phase); // "done" — the exact same terminal Model
 ```
 
+`replay` asks for a `ctx`, the value a machine reads its outside dependencies
+from. This machine has none, so you pass `undefined`.
+
+Run the file again:
+
+```sh
+node --experimental-strip-types main.ts
+```
+
+The live run prints its two lines, and the replay adds the same phase under
+them:
+
+```text
+done
+3 of 3
+done
+```
+
 `replay` folds `init` + `update` and nothing else — it never runs an effect,
 never touches storage, never starts a timer. Because your machine's transitions
 are pure, the replayed Model is identical to the one the live run produced. The
@@ -155,3 +219,8 @@ table keyed by state and then message, where leaving a cell out declares that
 the state does not accept that message at all. Which one to reach for, and what
 that absence promises, is [Which update form, and what a missing cell
 means](../explanation/pick-an-update-form.md).
+
+## Next step
+
+Go on to [Add your first effect](./add-your-first-effect.md), where this
+machine fetches its own data and handles a failure.

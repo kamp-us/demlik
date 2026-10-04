@@ -1,14 +1,20 @@
 # Handle a tool failure
 
 **Goal:** declare a failure a tool may name, fail with it from the handler,
-know exactly what the model reads on the next turn — including the three
+know exactly what the model reads on the next turn — including the six
 failures you never declared — and branch on the tag in your own code.
 
 Every sample below is inlined on this page rather than linked out, so it reads
 the same here, on the published site, and in whatever the docs are bundled into.
 The samples are quoted from a runnable script that lives in the repository at
 `examples/agent-tool-failure.ts` — it runs in-process with a scripted model and
-prints the transcript at the bottom of this page, verbatim.
+prints the transcript at the bottom of this page, verbatim. They start from two
+imports:
+
+```ts
+import { defineAgent, tool } from "@demlik/tea/agent";
+import { z } from "zod";
+```
 
 ## Declare the failure tags
 
@@ -18,6 +24,8 @@ built from a schema, but `err` never sees a `z.object`. Passing one is a type
 error with no runtime meaning.
 
 ```ts
+const TABLE: Record<string, string> = { blue: "#2563eb", red: "#dc2626" };
+
 const lookup = tool(
   "lookup",
   {
@@ -29,37 +37,44 @@ const lookup = tool(
   async ({ key }, _ctx, { ok, fail }) => {
     if (key === "boom") throw new Error("the table went away");
     const hex = TABLE[key];
+    // `fail` takes the tagged value itself: `_tag` must be one of the literals
+    // in `err`, and every other field rides along as detail.
     if (hex === undefined) return fail({ _tag: "not_found", key });
     return ok({ hex });
   },
 );
 ```
 
-The handler's third argument is the settle pair. `ok(value)` is parsed against
+The handler takes three arguments and no others: the parsed `args`, the `ctx`
+you handed `run`, and the settle pair. `ok(value)` is parsed against
 `ok`; `fail(error)` takes the tagged value itself — `_tag` must be one of the
 literals in `err`, and every other field on the object rides along as **detail**.
 Here that detail is `key`, so the model is told which key was missing rather than
 just that something was.
 
-## The three failures you did not declare
+## The six failures you did not declare
 
-`err: []` does **not** mean the tool cannot fail. Three failures exist whatever
-you declare, and a consumer meets all three in a first afternoon:
+`err: []` does **not** mean the tool cannot fail. Six failures exist whatever
+you declare. The first four can end any call. The last two end a call only when
+its spec declares `timeoutMs` or `retry`, [below](#bound-a-slow-tool-or-retry-a-flaky-one).
 
-| Tag | Minted when | Detail it carries |
-| --- | --- | --- |
-| `thrown` | the handler throws anything that is not one of *its own* declared tags — a network error, a `TypeError`, a rejected promise | `message`, the described throw |
-| `unknown_tool` | the model names a tool no `toolRouter` in this agent declares — a hallucinated name, or one from a stale prompt | `name`, the name it asked for |
-| `malformed_args` | the model names a real tool, but its `args` fail that tool's `input` schema | `name`, plus `issues` — one `{ path, message }` per schema violation |
+| Tag | Minted by | Minted when | Detail it carries |
+| --- | --- | --- | --- |
+| `thrown` | `tool()` | the handler throws anything that is not one of *its own* declared tags — a network error, a `TypeError`, a rejected promise | `message`, the described throw |
+| `malformed_result` | the kernel | the handler returned an `ok` value its own `ok` schema rejects | `issues` — one `{ path, message }` per schema violation |
+| `unknown_tool` | the router | the model names a tool no `toolRouter` in this agent declares — a hallucinated name, or one from a stale prompt | `name`, the name it asked for |
+| `malformed_args` | the router | the model names a real tool, but its `args` fail that tool's `input` schema | `name`, plus `issues` — one `{ path, message }` per schema violation |
+| `timeout` | the reducer | the call outlived its `timeoutMs` | none — the tag is the whole reason |
+| `retry_exhausted` | the reducer | the call's `retry` budget is spent | `attempts`, and `last` — the final attempt's own reason |
 
 `"thrown"` is appended to **every** tool's `err` by `tool()` itself, so
 `ToolDef`'s error type is always `TaggedError<…yours | "thrown">`. A throw whose
 `_tag` *is* one of your declared tags is passed through as that tag; anything
 else becomes `{ _tag: "thrown", message }`.
 
-The other two are the router's, not any tool's. `toolOf` is total — it never
-throws inside the reducer — so a call it cannot route rides its own Cmd and
-settles like any other tool failure. Your reducer sees no special case.
+The router's two are no tool's. `toolOf` is total — it never throws inside the
+reducer — so a call it cannot route rides its own Cmd and settles like any other
+tool failure. Your reducer sees no special case.
 
 ## Bound a slow tool, or retry a flaky one
 
@@ -81,10 +96,19 @@ const fetchRate = tool(
     retry: { baseMs: 10, factor: 1, capMs: 10, jitter: "none", maxAttempts: 3 },
   },
   async ({ pair }, _ctx, { ok, fail }) => {
-    /* … */
+    // `usd_eur` is down for good — it burns the ladder and settles exhausted.
+    if (pair === "usd_eur") return fail({ _tag: "upstream" });
+    // `usd_jpy` is not down, just far too slow — the budget ends the call and
+    // the loop moves on without waiting for the attempt still in flight.
+    await new Promise((r) => setTimeout(r, 500));
+    return ok({ rate: 1 });
   },
 );
 ```
+
+A call that outlives `timeoutMs` ends `timeout`, and one that spends its `retry`
+budget ends `retry_exhausted`: the last two rows of
+[the table above](#the-six-failures-you-did-not-declare).
 
 ### What `retry` actually takes
 
@@ -114,13 +138,6 @@ Every field is specified per-symbol in the
 shape is what a reducer of your own folds in
 [Add retry and backoff to a call](./add-resilience.md).
 
-Two more reasons join the table, and they read exactly like the others:
-
-| Tag | Minted when | Detail it carries |
-| --- | --- | --- |
-| `timeout` | the call outlived `timeoutMs` | none — the tag is the whole reason |
-| `retry_exhausted` | the `retry` budget is spent | `attempts`, and `last` — the final attempt's own reason |
-
 **Why this is a spec field and not a `for` loop in your handler.** The ladder runs
 in the reducer, so a waiting retry is a `waiting_retry` phase on the durable Model
 with its timer armed as a subscription. Kill the process between two attempts and
@@ -137,8 +154,9 @@ Three things worth knowing before you reach for these:
   `resilient-call` deadline the brain call already uses, applied per tool call.
 - **A timeout does not cancel your handler.** A promise cannot be cancelled in
   JavaScript. The *call* is over at the budget and the loop moves on; the attempt
-  runs to its own end and its late settle folds nothing. If you need the work to
-  actually stop, take an `AbortSignal` in the handler.
+  runs to its own end and its late settle folds nothing. tea hands a handler no
+  `AbortSignal`. If the work has to stop, put a signal of your own on the `ctx`
+  you pass to `agent.run`, and read it from the handler's second argument.
 - **Absorbed attempts are invisible to the model.** A retried failure never
   reaches the conversation — only the final outcome does. The model is not shown
   a problem the ladder already dealt with.
@@ -211,21 +229,23 @@ hook: fetch_rate failed with timeout
 done: Blue is #2563eb; everything else failed.
 ```
 
-`c1` is the declared success. `c2` is the declared failure. `c3`, `c4` and `c5`
-are the three nobody declared. `c6` ran the handler three times before its retry
-budget ran out; `c7` ran it once and was over at 50ms while that attempt was
-still sleeping out its 500ms. Note that all six failures are the same shape —
+`c1` is the declared success. `c2` is the declared failure. `c3` to `c7` are five
+of the six nobody declared; the script has no call that ends `malformed_result`.
+`c6` ran the handler three times before its retry budget ran out; `c7` ran it
+once and was over at 50ms while that attempt was still sleeping out its 500ms.
+Note that all six failed calls are the same shape —
 `{ kind: "error", _tag, …payload, reason }` — so an adapter that renders one
 renders all of them. The `hook:` lines are `onToolError`, below.
 
 ## Branch on the failure in your own code
 
-The model gets `reason`. Your program gets the tag, through `onToolError`:
+The model gets `reason`. Your program gets the tag, through `onToolError`.
+`model` is yours; the example's is a script:
 
 ```ts
 const agent = defineAgent({
   model,
-  tools: [lookup],
+  tools: [lookup, fetchRate],
   instructions: "You look colours up.",
   onToolError: (outcome, { name }) => {
     switch (outcome._tag) {
@@ -243,12 +263,10 @@ const agent = defineAgent({
 `outcome` is typed from **this agent's tools**, so the `switch` narrows the
 payload per tag — `outcome.key` above exists only in the `not_found` arm — and
 the tags it must cover are every failure the run can produce: each tool's
-declared tags, `thrown`, the kernel's `malformed_result`, the router's
-`unknown_tool` / `malformed_args`, and the ladder's `timeout` /
-`retry_exhausted` — the two a `tool()` spec's `timeoutMs` / `retry` can end a
-call with from outside the handler. Handle them all and the default arm is
-`never`; miss one and it is a compile error rather than a failure you find in a
-log.
+declared tags, and the six in
+[the table above](#the-six-failures-you-did-not-declare). Handle them all and
+the default arm is `never`; miss one and it is a compile error rather than a
+failure you find in a log.
 
 `ctx.name` is the tool the **model** asked for, which for an `unknown_tool` is
 the name it invented — there is no declared tool to name there.
@@ -280,7 +298,8 @@ told. Use it to log, to count, to page.
 ## Render it for your provider
 
 The adapter decides how a failure reads to its model. The tutorial's Anthropic
-adapter sends the whole outcome and flags it:
+adapter sends the whole outcome and flags it. This is the `tool` arm of
+[its `toParam`](../tutorial/build-a-durable-agent.md#give-the-agent-a-brain):
 
 ```ts
 case "tool":
@@ -291,7 +310,9 @@ case "tool":
         {
           type: "tool_result",
           tool_use_id: m.callId,
-          content: JSON.stringify(m.outcome),
+          // A tool that declared `content` sends parts the model should
+          // see (a screenshot, say); every other outcome goes as data.
+          content: m.parts?.map(toBlock) ?? JSON.stringify(m.outcome),
           is_error: m.outcome.kind !== "ok",
         },
       ],
@@ -299,6 +320,7 @@ case "tool":
   ];
 ```
 
+A failure never carries `parts`, so it always goes as the JSON of its outcome.
 Sending `reason` alone is also fine — `is_error` already carries the polarity.
 What you should not do is drop the failure, or replace it with a generic string:
 the detail beside the tag is the only thing that lets the model fix its own call

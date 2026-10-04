@@ -9,21 +9,23 @@ pnpm add @demlik/tea
 ```
 
 The one runtime dependency is `@standard-schema/spec`, a types-only package
-installed for you. `Cmd.define` takes any Standard Schema, so bring the schema
+installed for you. [`Cmd.define`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#cmd) takes any Standard Schema, so bring the schema
 library you already use (zod, or Effect Schema through
 `Schema.toStandardSchemaV1`). The host and
 testing adapters ride on optional peers you add only for the surface you use:
 `react` / `react-dom` (the `./react` hooks), `ws` (Node WebSocket subs),
 `fast-check` (the `./pbt` property-testing helpers), `vitest` (the testing
-utilities), and `effect` (the `./effect` engine).
+utilities), `effect` (the `./effect` engine), and `@opentelemetry/api` (the
+`./otel` spans).
 
 ## Quickstart
 
-A machine is plain data: an `init` and an `update` map keyed by `Msg` type.
-`run` drives it, and when it has effects you hand `run` the `interpret` map
-that performs them; `dispatch` folds a `Msg`; `getState` reads the current
-Model. You name the Model and the `Msg` union
-once, under `types`; everything else is inferred from the machine itself.
+A [machine](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#machine) is plain data: an `init` and an [`update`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#update) map keyed by [`Msg`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#msg) type.
+[`run`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#run) drives it, and when it has effects you hand `run` the [`interpret`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#interpret) map
+that performs them; [`dispatch`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#dispatch) folds a `Msg`; `getState` reads the current
+[Model](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#model). You name the Model and the `Msg` union
+once, under `types`; everything else is inferred from the machine itself. Each of
+these words has an entry in the [glossary](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md).
 
 ```ts
 import { defineMachine } from "@demlik/tea";
@@ -41,14 +43,14 @@ const counter = defineMachine({
   },
 });
 
-const runtime = await run(counter, { ctx: {} }).ready;
+const runtime = await run(counter, {}).ready;
 await runtime.dispatch({ type: "increment" });
 runtime.getState(); // { count: 1 }
 ```
 
 ## Two engines, one machine
 
-The core is `@demlik/tea`, and each engine has its own entry point. A machine
+The core is `@demlik/tea`, and each [engine](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#engine) has its own entry point. A machine
 file imports only the core, so it runs unchanged on either engine.
 
 - `@demlik/tea` — the core: `defineMachine`, `Cmd`, `replay` and the types. It
@@ -73,6 +75,8 @@ The four Diátaxis quadrants live in [`docs/`](https://github.com/kamp-us/demlik
 - [How-to guides](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/index.md) — goal-oriented directions for getting a specific job done.
 - [Reference](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/reference/index.md) — information-oriented API description, generated per public module.
 - [Explanation](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/explanation/index.md) — understanding-oriented discussion of how it works and why it is shaped this way.
+
+The [glossary](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md) defines each word those pages use: Model, Msg, Cmd, Sub, Store and the rest.
 
 Two more surfaces sit behind those, for people working on the library rather than using it:
 [`.patterns/`](https://github.com/kamp-us/demlik/blob/main/.patterns/index.md) is how the code is shaped, and

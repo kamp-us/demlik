@@ -54,6 +54,10 @@ import { structuralHash } from "../index";
  */
 export type ManagedResourceSub<N extends string, TKey> = Sub<N, TKey>;
 
+/**
+ * Options for `defineManagedResource`: the resource's `name`, how to `acquire`
+ * it for a key, and how to `release` the handle.
+ */
 export interface DefineManagedResourceOpts<
   N extends string,
   TKey,

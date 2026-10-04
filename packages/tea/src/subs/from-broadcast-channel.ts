@@ -36,6 +36,11 @@ type BroadcastSubData = { readonly channelName: string };
 
 declare const BroadcastChannel: MinimalBroadcastChannelCtor;
 
+/**
+ * Build a Sub runner that listens on the `BroadcastChannel` named by
+ * `sub.deps.channelName` and dispatches `msgFn(event, sub)` for each message.
+ * Returning `null` from `msgFn` drops the event.
+ */
 export function fromBroadcastChannel<
   S extends Sub<string, BroadcastSubData>,
   M,

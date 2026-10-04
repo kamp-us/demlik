@@ -176,6 +176,10 @@ export function intakeProcessDef<P>() {
     err: [],
   });
 }
+/**
+ * The Cmd intake emits for a first-time request: process `payload` for the
+ * queue item `itemId`.
+ */
 export type IntakeProcessCmd<P> = CmdOf<ReturnType<typeof intakeProcessDef<P>>>;
 
 /**
@@ -194,6 +198,10 @@ export function intakeReplayDef<R>() {
     err: [],
   });
 }
+/**
+ * The Cmd intake emits for a duplicate of a completed request: hand back the
+ * cached `result` instead of redoing the work.
+ */
 export type IntakeReplayCmd<R> = CmdOf<ReturnType<typeof intakeReplayDef<R>>>;
 
 /** The Cmd union the intake verbs emit. */

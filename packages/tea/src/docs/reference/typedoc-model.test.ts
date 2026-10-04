@@ -50,9 +50,26 @@ describe("parseTypedocModel — the symbol comment fallback", () => {
   });
 
   it("is empty when neither the declaration nor a signature is documented", () => {
-    expect(summaryOf({})).toBe("");
-    expect(summaryOf({ signatures: [] })).toBe("");
     expect(summaryOf({ signatures: [{}] })).toBe("");
+  });
+
+  it("refuses a function that has no call signature to print", () => {
+    expect(() => summaryOf({})).toThrowError(/no call signature/);
+    expect(() => summaryOf({ signatures: [] })).toThrowError(
+      /no call signature/,
+    );
+  });
+
+  it("marks a symbol whose TSDoc carries `@experimental`, and no other", () => {
+    const experimentalOf = (signature: Record<string, unknown>) =>
+      parseTypedocModel(projectWith({ signatures: [signature] }))[0]?.symbols[0]
+        ?.experimental;
+    expect(
+      experimentalOf({
+        comment: { ...comment("Append."), modifierTags: ["@experimental"] },
+      }),
+    ).toBe(true);
+    expect(experimentalOf({ comment: comment("Append.") })).toBe(false);
   });
 
   it("ignores every signature past the first", () => {
@@ -103,12 +120,15 @@ describe("parseTypedocModel — re-exports", () => {
           name: "doThing",
           kind: KIND_FUNCTION,
           comment: comment("Do the thing. At length."),
+          signatures: [{}],
         }),
       ),
     ).toEqual({
       name: "doThing",
       kindLabel: "Function",
       summary: "Do the thing.",
+      declaration: "function doThing()",
+      experimental: false,
     });
   });
 
@@ -134,6 +154,7 @@ describe("parseTypedocModel — re-exports", () => {
               name: "doThing",
               kind: KIND_FUNCTION,
               comment: comment("The declaration at the end."),
+              signatures: [{}],
             },
           ],
         },
@@ -149,6 +170,8 @@ describe("parseTypedocModel — re-exports", () => {
       name: "doThing",
       kindLabel: "Reference",
       summary: "",
+      declaration: null,
+      experimental: false,
     });
   });
 

@@ -5,6 +5,13 @@ import `run` from `@demlik/tea/effect`. The machine file is the one the Promise
 engine runs, unchanged: see
 [Run a machine on the Promise engine](./run-on-the-promise-engine.md).
 
+The agent layer runs on the Promise engine, not this one. `defineAgent` from
+`@demlik/tea/agent` drives its machine with the Promise engine's `run`, so
+`agent.run` returns a Promise and a `tool()` handler is an `async` function, not
+an `Effect`. Whether the agent layer gets an Effect form is an open question,
+tracked in
+[kamp-us/demlik#322](https://github.com/kamp-us/demlik/issues/322).
+
 `@demlik/tea/effect` is `stable` and targets Effect v4 (still a release
 candidate). `effect` is an optional peer dependency, so install it yourself:
 
@@ -107,11 +114,14 @@ export const lookUp = (id: string) =>
 Then provide the service and run it:
 
 ```ts
-const DirectoryLive = Layer.succeed(Directory, {
+import { Effect, Layer } from "effect";
+import { Directory, lookUp } from "./profile-lookup-effect";
+
+export const DirectoryLive = Layer.succeed(Directory, {
   nameOf: (id) => Effect.succeed(id === "u1" ? "Ada" : undefined),
 });
 
-const state = await Effect.runPromise(
+export const state = await Effect.runPromise(
   lookUp("u1").pipe(Effect.provide(DirectoryLive)),
 );
 // { status: "loaded", name: "Ada" }
@@ -148,8 +158,15 @@ A Sub runner returns a `Stream` of Msgs. A `subscribe` entry with a built-in's
 name replaces it, so a test can fire the `timer` Msg at once:
 
 ```ts
-run(profile, {
-  interpret,
+import { run } from "@demlik/tea/effect";
+import { Effect, Stream } from "effect";
+import { profile } from "./profile-lookup";
+
+/** The profile machine with every lookup a miss, and a `timer` that fires at once. */
+export const runProfileInTest = run(profile, {
+  interpret: {
+    fetch_user: () => Effect.fail({ _tag: "not_found" as const }),
+  },
   subscribe: { timer: (sub) => Stream.make(sub.deps.msg) },
 });
 ```

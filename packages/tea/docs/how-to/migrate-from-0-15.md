@@ -1,9 +1,15 @@
-# Migrate from 0.15 to the two-engine release
+# Migrate from 0.15 to 0.19
 
-To move a 0.15 codebase onto the release that splits `@demlik/tea` into a
-core and two engines, work through the sections below in order. Each one names
-what was removed or reshaped and shows it before and after. The machine ends up
-as plain data, and everything that runs it moves to `run`.
+This guide ends at 0.19.0, the current release. To move a 0.15 codebase onto
+it, work through the sections below in order. Each one names what was removed
+or reshaped and shows it before and after.
+
+- Sections 1 to 10 are the 0.16 split of `@demlik/tea` into a core and two
+  engines. The machine ends up as plain data, and everything that runs it moves
+  to `run`.
+- Section 11 is 0.17.
+- Sections 12 to 16 are 0.18.
+- 0.19 has no breaking change. A Model saved by an older release still loads.
 
 The short version:
 
@@ -14,9 +20,12 @@ The short version:
 - A `Cmd.define`d handler returns an outcome, and the engine mints the Msg.
 - There is no DI (`provide`, `layer`, `R`) and no battery layer (`mount*`,
   `with*`, `handlers(ports)`).
+- `drive` lives in `@demlik/tea/testing/promise`.
+- `store.migrate` can answer a `Refusal`, and a Sub runner that throws stops
+  the run.
 
-The release notes list every renamed type. This page covers the moves that
-change how you write code.
+The [release notes](../../CHANGELOG.md) list every renamed type. This page
+covers the moves that change how you write code.
 
 ## 1. Import `run` from `@demlik/tea/promise`
 
@@ -320,8 +329,8 @@ run(machine, {
 The same move applies to `authed-call`, `paginated-walk`, `reconciler`,
 `monitored-run`, `snapshot`, `classify-batch` and `jev`. Their settle Msgs are
 the minted `<cmd>_ok` / `<cmd>_err`, and their verbs take that Msg. `fan-out`'s
-`handlers(ports)` is renamed `completion(ports)`. The release notes list each
-helper's new names.
+`handlers(ports)` is renamed `completion(ports)`. The
+[release notes](../../CHANGELOG.md) list each helper's new names.
 
 ## 9. Replace `withResilience`, `withDeadline` and `withTelemetry`
 
@@ -404,3 +413,180 @@ createAgentHost({ run, buildMachine, store, ctx, toSseFrame });
   `host.result()`.
 - `useRuntime` takes any `BootedRunHandle`, and `bootResume` / `autoBoot` take
   any `RunHandle`.
+
+## 11. Replace `assertWrapperFaithful` with `expectReplayDeterministic`
+
+`assertWrapperFaithful` is removed from `@demlik/tea/testing`, with
+`AssertWrapperFaithfulOpts`, `InterceptingOpt` and `WrapperModel`. It checked
+the `withX` wrappers that section 9 removed. Its clock and RNG check lives on
+as `expectReplayDeterministic`, which takes the machine itself:
+
+```ts
+// before
+assertWrapperFaithful(wired.machine, () => withX(wired, cfg).machine, { msgs, ctx });
+
+// after
+import { expectReplayDeterministic } from "@demlik/tea/testing";
+
+expectReplayDeterministic(machine, { msgs, ctx });
+```
+
+It fails when `init` or `update` reads `Date.now()` or `Math.random()`. Delete
+the other wrapper checks. They have no successor.
+
+## 12. Import `drive` from `@demlik/tea/testing/promise`
+
+`drive` left `@demlik/tea/testing`, with `DriveResult`, `DriveTraceEntry`,
+`DriveOptions`, `DriveCtxArg`, `DriveRoundsExceededError`,
+`DriveNoHandlerError`, `driveTraceOf` and `DEFAULT_MAX_ROUNDS`. The signature
+is the same.
+
+```ts
+// before
+import { drive, expectFinalState } from "@demlik/tea/testing";
+
+// after
+import { expectFinalState } from "@demlik/tea/testing";
+import { drive } from "@demlik/tea/testing/promise";
+```
+
+The helpers that work with either engine stay on `@demlik/tea/testing`. To
+drive a machine with Effect handlers, import `drive` from
+`@demlik/tea/testing/effect`.
+
+`drive` now throws `OutcomeContractError` when a `Cmd.define`d handler
+dispatches its own `_ok` or `_err` Msg, as `run` already did. Return the
+outcome instead (section 4).
+
+## 13. Narrow what `store.migrate` returns, and refuse bytes you can't read
+
+`Store.migrate` returns `Migrated<S>`, which is `S | null | Refusal`. Code that
+calls `migrate` itself narrows the new arm:
+
+```ts
+// before
+const state = store.migrate(raw);
+if (state !== null) use(state);
+
+// after
+import { Refusal } from "@demlik/tea";
+
+const answer = store.migrate(raw);
+if (answer instanceof Refusal) report(answer.reason);
+else if (answer !== null) use(answer);
+```
+
+In your own `migrate`, keep `null` for "nothing was saved" and return
+`refuse(reason)` for saved bytes you can't read. A `null` there still boots a
+fresh run, and the first save overwrites those bytes.
+
+```ts
+// before
+migrate: (raw) => (isSettings(raw) ? raw : null),
+
+// after
+import { refuse } from "@demlik/tea";
+
+migrate: (raw) =>
+  raw == null ? null : isSettings(raw) ? raw : refuse("settings: unknown shape"),
+```
+
+On a refusal `ready` rejects with a `StoreRefusedError` and nothing is written.
+The same now happens when `load` or `migrate` throws, so a corrupt `fileStore`
+or `doStore` file rejects `ready` with a `StoreRefusedError`, not a raw
+`SyntaxError`. Update any `catch` that matched the old error.
+
+- `schemaMigrate` refuses bytes the schema rejects.
+- `createQueue` from `@demlik/tea/work-queue` throws `StoreRefusedError` on a
+  queue it can't read.
+- To show a view instead of failing, see
+  [Show a "couldn't restore" view](./restore-or-refuse.md).
+- For a versioned `migrate`, see
+  [Change a saved state's shape without losing old saves](./migrate-a-saved-state.md).
+
+## 14. Turn a Sub's expected errors into Msgs
+
+A Sub runner that throws while it starts now stops the run. It still rejects
+the dispatch (or `ready`) that started it, and it reaches `onError` under the
+new `"sub"` phase. Before, the run stayed alive. Catch the errors you expect in
+the runner and dispatch a Msg for them:
+
+```ts
+// before: a throw here left the run alive
+run(machine, {
+  subscribe: { feed: (sub, _ctx, dispatch) => openFeed(sub.deps.url, dispatch) },
+});
+
+// after
+run(machine, {
+  subscribe: {
+    feed: (sub, _ctx, dispatch) => {
+      try {
+        return openFeed(sub.deps.url, dispatch);
+      } catch (cause) {
+        dispatch({ type: "feed_failed", reason: String(cause) });
+        return () => {};
+      }
+    },
+  },
+});
+```
+
+`RuntimeErrorPhase` gains `"sub"`. Add the case to any exhaustive `switch`
+over it:
+
+```ts
+// after
+case "sub":
+  return report(error);
+```
+
+On the Effect engine, a Sub's `Stream` that fails stops the run the same way.
+See [Turn a Sub's errors into Msgs](./run-on-the-effect-engine.md#4-turn-a-subs-errors-into-msgs).
+For why an unexpected error is fatal, see
+[Why failures are values and bugs are throws](../explanation/errors-as-data.md).
+
+## 15. Yield the Effect handle's members directly
+
+This step is for code on `@demlik/tea/effect`. Its `run` no longer yields the
+Promise engine's handle. `ready`, `dispatch`, `dispatchOnce`, `idle`, `done`
+and `stop` return Effects.
+
+```ts
+// before
+const handle = yield* run(machine, { interpret });
+const runtime = yield* Effect.promise(() => handle.ready);
+yield* Effect.promise(() => runtime.dispatch(msg));
+
+// after
+const handle = yield* run(machine, { interpret });
+const runtime = yield* handle.ready;
+yield* runtime.dispatch(msg);
+```
+
+- `dispatch` fails with `Stopped`, `StoreFailed` or a hand-written cell's own
+  error. Sort them with `Effect.catchTags`. See
+  [Catch a run's failures by tag](./run-on-the-effect-engine.md#5-catch-a-runs-failures-by-tag).
+- The handle is not a `BootingRuntime` or a `RunHandle`. Hosts typed on those,
+  like `useRuntime` from `@demlik/tea/react`, no longer take it.
+
+## 16. Read an agent run's output off `RunDone.status`
+
+This step is for code on `@demlik/tea/agent`. `RunDone.output` is gone.
+`RunDone` now fires on every ending and carries `status`.
+
+```ts
+// before
+onEvent: (e) => {
+  if (e.type === "RunDone") save(e.output);
+},
+
+// after
+onEvent: (e) => {
+  if (e.type === "RunDone" && e.status.kind === "done") save(e.status.output);
+},
+```
+
+A failed or cancelled run reports `RunDone` too, with `status.kind` of
+`"failed"` or `"cancelled"`. Before, it reported nothing, so a listener that
+treated every `RunDone` as a success needs the `kind` check.

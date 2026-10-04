@@ -298,6 +298,7 @@ export type ScanPageCmd<Cursor> = FetchPageCmd<Cursor>;
 
 /** The page-settled Msgs the engine mints from that handler's outcome. */
 export type ScanPageOkMsg<Page> = PageOkMsg<Page>;
+/** The Msg the engine mints when the scan's page-fetch handler fails. */
 export type ScanPageErrMsg = PageErrMsg;
 
 /** The scan retry / deadline timer Msg — inherited from paginated-walk. */

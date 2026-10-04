@@ -10,8 +10,9 @@ whole run live in a JSON file you can open.
 
 ## Set up the project
 
-You need Node 22 or newer and an Anthropic API key in `ANTHROPIC_API_KEY`. In an
-empty directory:
+You need Node 22.6.0 or newer, the release that added
+`--experimental-strip-types`, and an Anthropic API key in `ANTHROPIC_API_KEY`.
+In an empty directory:
 
 ```sh
 pnpm init
@@ -241,7 +242,7 @@ turn's size as the conversation's context size, which is what a token budget
 or a size-based compaction reads. The numbers are the ones Anthropic reported,
 saved with the turn, so a resumed run adds up to the same total as one that was
 never killed.
-[Bound a run](../how-to/bound-a-run.md#budget-tokens-and-compact-by-context-size)
+[Bound a run](../how-to/bound-a-run.md#5-budget-tokens-and-fold-the-transcript-by-size)
 shows both uses.
 
 `toBlock` is where pictures go. A tea message can carry content parts — text, an
@@ -360,9 +361,15 @@ Model. A finished run keeps its `run` slice and `output`; `conversation` is
 `agent.json` mid-run and the conversation is there — it is the retire that drops
 it.
 
+The agent layer runs on the Promise engine. `defineAgent` drives its machine
+with `run` from `@demlik/tea/promise`, so `agent.run` returns a Promise and a
+`tool()` handler is an `async` function. Whether the agent layer gets an Effect
+form is an open question, tracked in
+[kamp-us/demlik#322](https://github.com/kamp-us/demlik/issues/322).
+
 One term you will meet the moment you look past `agent.run`: the **runtime**.
-`agent.run` is a thin drive over the kernel's `run(machine, …)`, which hands
-back a runtime handle rather than a promise — and `runtime.result()` is that
+`agent.run` is a thin drive over the Promise engine's `run(machine, …)`, which
+hands back a runtime handle rather than a promise — and `runtime.result()` is that
 handle's read of the same finished Model `final` holds above, returning
 `undefined` while the run is still in flight. It is `undefined` unless the run
 was given a `terminal` predicate, which `agent.run` supplies for you; drive
@@ -421,9 +428,14 @@ it leaves a Model still awaiting the call, so boot re-fires the Cmd and your
 handler appends the same line again.
 
 So write handlers you can afford to run twice: make the effect idempotent, or
-key it by the call's `callId`, which is stable across the re-fire, and skip a
-call you have already applied. `@demlik/tea` ships no idempotency key of its
-own; the dedupe is the tool runner's to implement.
+key it and skip a call you have already applied. The stable key is the call's
+`callId`, which is the same across the re-fire. A `tool()` handler is not handed
+it — its arguments are `args`, `ctx` and `{ ok, fail }` — so read it as
+`cmd.callId` in a `.with` wrapper around the tool:
+[Wrap one tool's interpret cell](../how-to/wrap-one-tool-cell.md) shows the
+wrapper. tea applies no dedupe to a tool call for you.
+[`@demlik/tea/idempotency`](../reference/idempotency.md) ships the dedupe-by-key
+state and its ops, and where you keep that state and check it is yours to wire.
 
 That is the whole durability story for an agent, and it is the same one the
 [first lesson](./build-your-first-machine.md) showed for a download: the Model is
@@ -479,9 +491,9 @@ failed call, and its `outcome` is typed from *this agent's* tools. Add it to the
 ```
 
 Six tags you never declared ride beside your one. They are not optional and they
-are not hypothetical: a handler that throws is `thrown`, a model that invents a
-tool name is `unknown_tool`, and [Handle a tool
-failure](../how-to/handle-a-tool-failure.md) walks all six. The `default` arm is
+are not hypothetical: [Handle a tool
+failure](../how-to/handle-a-tool-failure.md#the-six-failures-you-did-not-declare)
+has the one table that says what mints each. The `default` arm is
 the whole trick — `outcome` is narrowed to what no `case` above claimed, and
 assigning it to `never` compiles only when that is nothing.
 

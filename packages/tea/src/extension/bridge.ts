@@ -95,6 +95,10 @@ interface HydrateResponse<S, M> {
 // Background side — bridgeRuntime(runtime, { channel, serialize? })
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Options for `bridgeRuntime`: the `channel` name, the required `parseMsg` for
+ * inbound Msgs, and an optional `serialize` for the state sent to surfaces.
+ */
 export interface BridgeRuntimeOpts<S, M, V = S> {
   channel: string;
   /**
@@ -309,6 +313,11 @@ export function passThroughMsg<M>(raw: unknown): M | null {
   return raw as M;
 }
 
+/**
+ * A surface's handle on the background runtime: hydrate the current state,
+ * dispatch Msgs, and subscribe to state broadcasts. `bridgeClient` and
+ * `bridgeTabClient` return one.
+ */
 export interface BridgeClient<S, M> {
   /** Send the hydrate request; resolves with the initial snapshot (or null
    * if the host is still booting OR the response failed to parse). Also
@@ -329,6 +338,10 @@ export interface BridgeClient<S, M> {
   getSnapshot(): S | null;
 }
 
+/**
+ * Options for `bridgeClient`: the `channel` name and the required parsers for
+ * inbound state and Msgs.
+ */
 export interface BridgeClientOpts<S, M> {
   channel: string;
   /**
@@ -522,6 +535,10 @@ function makeBridgeClient<S, M extends { type: string }>({
   return client;
 }
 
+/**
+ * Create a `BridgeClient` for a popup, side panel or content script, which
+ * talks to the background runtime over `chrome.runtime` messages.
+ */
 export function bridgeClient<S, M extends { type: string }>({
   channel,
   parseState,
@@ -553,6 +570,10 @@ export function bridgeClient<S, M extends { type: string }>({
 // context and use the rest of the surface identically.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Options for `bridgeTabClient`: the target `tabId`, the `channel` name, and
+ * the required parsers.
+ */
 export interface BridgeTabClientOpts<S, M> {
   tabId: number;
   channel: string;

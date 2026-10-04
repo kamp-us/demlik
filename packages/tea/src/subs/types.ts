@@ -28,6 +28,10 @@
 
 import type { Dispose, Sub } from "../index";
 
+/**
+ * A Sub runner: given the Sub, the `ctx` and a `dispatch`, it opens the
+ * resource and returns a `Dispose`. Every `from*` factory returns one.
+ */
 export type SubscribeHandler<S extends Sub, M, Ctx> = (
   sub: S,
   ctx: Ctx,
