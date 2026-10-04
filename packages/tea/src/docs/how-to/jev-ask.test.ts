@@ -260,6 +260,164 @@ export function classifyOne(
 }
 // #endregion drive
 
+// #region two-knobs
+import { liftSlice } from "@demlik/tea";
+
+/** A second rubric, for a second question about the same expense. */
+export const reviewQuestions = jevQuestions({
+  review: {
+    type: "choice",
+    instructions: "Does a human need to look at this expense?",
+    criteria: {
+      fine: "Ordinary spending",
+      flag: "Unusual, or over budget",
+    },
+  },
+});
+
+export type ReviewQuestions = typeof reviewQuestions;
+
+/** Two knobs, two names. Both type parameters infer from the config. */
+export const categoryAsk = createJevAsk({ questions, name: "category" });
+export const reviewAsk = createJevAsk({
+  questions: reviewQuestions,
+  name: "review",
+});
+
+export interface LedgerState {
+  readonly category: ResilientState<JevRequest<Questions>, JevOk<Questions>>;
+  readonly review: ResilientState<
+    JevRequest<ReviewQuestions>,
+    JevOk<ReviewQuestions>
+  >;
+}
+
+/** A named knob's timer Msg is `<name>_deadline`. */
+export type LedgerMsg =
+  | Classify
+  | JevTimerMsg<"category">
+  | JevTimerMsg<"review">;
+
+export type LedgerCmd =
+  | JevCmd<Questions, "category">
+  | JevCmd<ReviewQuestions, "review">;
+
+export const ledgerMachine = defineMachine({
+  types: {
+    model: {} as LedgerState,
+    msg: {} as LedgerMsg,
+    ctx: undefined,
+  },
+  cmds: [categoryAsk.run, reviewAsk.run],
+  init: (loaded) =>
+    loaded !== null
+      ? [loaded, []]
+      : [{ category: categoryAsk.init(), review: reviewAsk.init() }, []],
+  update: {
+    // One Msg asks both questions. The two calls share a key and stay apart.
+    classify: (s, m) => {
+      const [category, asked] = categoryAsk.attempt(
+        s.category,
+        m.key,
+        m.memo,
+        m.at,
+      );
+      const [review, alsoAsked] = reviewAsk.attempt(
+        s.review,
+        m.key,
+        m.memo,
+        m.at,
+      );
+      return [{ category, review }, [...asked, ...alsoAsked]];
+    },
+    // `m.value` is `JevOk<Questions>` in this cell...
+    category_run_ok: (s, m) =>
+      liftSlice("category", s, categoryAsk.succeed(s.category, m)),
+    category_run_err: (s, m) =>
+      liftSlice("category", s, categoryAsk.fail(s.category, m)),
+    category_deadline: (s, m) =>
+      liftSlice("category", s, categoryAsk.onTimer(s.category, m)),
+    // ...and `JevOk<ReviewQuestions>` in this one.
+    review_run_ok: (s, m) =>
+      liftSlice("review", s, reviewAsk.succeed(s.review, m)),
+    review_run_err: (s, m) =>
+      liftSlice("review", s, reviewAsk.fail(s.review, m)),
+    review_deadline: (s, m) =>
+      liftSlice("review", s, reviewAsk.onTimer(s.review, m)),
+  },
+  // One timer per knob.
+  subs: [
+    {
+      type: "timer",
+      deps: (s: LedgerState) => categoryAsk.timer(s.category),
+    },
+    { type: "timer", deps: (s: LedgerState) => reviewAsk.timer(s.review) },
+  ],
+});
+
+export type CallReview = (
+  request: JevRequest<ReviewQuestions>,
+) => Promise<JevHttpReply>;
+
+/** One handler per knob. Each decodes against its own request. */
+export function ledgerHandlers(
+  callCategory: CallJev,
+  callReview: CallReview,
+): Interpret<LedgerMsg, LedgerCmd, unknown> {
+  return {
+    category_run: async (cmd) => {
+      try {
+        return categoryAsk.decode(cmd.input, await callCategory(cmd.input));
+      } catch (cause) {
+        return categoryAsk.rejected(cause);
+      }
+    },
+    review_run: async (cmd) => {
+      try {
+        return reviewAsk.decode(cmd.input, await callReview(cmd.input));
+      } catch (cause) {
+        return reviewAsk.rejected(cause);
+      }
+    },
+  };
+}
+// #endregion two-knobs
+
+describe("docs/how-to/ask-jev-a-typed-question.md (#576) — two knobs run", () => {
+  it("settles each knob's answer into its own slice", async () => {
+    const callReview: CallReview = async () => ({
+      status: 200,
+      body: {
+        model: "jev-1",
+        answers: {
+          review: {
+            type: "choice",
+            choice: "flag",
+            confidence: 0.8,
+            probabilities: { fine: 0.2, flag: 0.8 },
+          },
+        },
+        usage: { input_tokens: 9, output_tokens: 2 },
+      },
+    });
+    const { state } = await drive(
+      ledgerMachine,
+      { category: categoryAsk.init(), review: reviewAsk.init() },
+      { type: "classify", key: "tx-1", memo: "PIZZA NAPOLI 240 EUR", at: 0 },
+      ledgerHandlers(fakeJev([["dining", 0.93]]), callReview),
+    );
+
+    const category = state.category.calls["tx-1"];
+    const review = state.review.calls["tx-1"];
+    if (category?.phase !== "succeeded" || review?.phase !== "succeeded") {
+      throw new Error("expected both calls to succeed");
+    }
+    const booked: Category = category.result.answers.category.choice;
+    const looked: "fine" | "flag" = review.result.answers.review.choice;
+    expect([booked, looked]).toEqual(["dining", "flag"]);
+  });
+});
+
 describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
   it("books a confident answer under its narrowed category", async () => {
     const ask = createJevAsk({ questions });
@@ -331,6 +489,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it cannot rot", () 
     "machine",
     "handler",
     "drive",
+    "two-knobs",
   ])("shows the compiled `%s` block verbatim", async (name) => {
     await expectPageMirrors(page, [region(name)]);
   });

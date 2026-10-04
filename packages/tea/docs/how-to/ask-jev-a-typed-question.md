@@ -326,6 +326,156 @@ Swap `0.93` for `0.41` and the same machine returns
 `{ kind: "triage", why: "confidence 0.41" }`. That is the threshold branch,
 exercised without a single mock of the door itself.
 
+## Two knobs in one machine
+
+An unnamed knob speaks `resilient_run`, `resilient_run_ok`, `resilient_run_err`
+and `deadline_exceeded`. Two unnamed knobs in one machine share all four, so
+one handler has to answer both question maps and one settle cell receives both
+answers.
+
+Give each knob a `name`. The name renames that knob's whole family:
+
+| Unnamed | Named `review` |
+|---|---|
+| `resilient_run` | `review_run` |
+| `resilient_run_ok` | `review_run_ok` |
+| `resilient_run_err` | `review_run_err` |
+| `deadline_exceeded` | `review_deadline` |
+
+The timer Msg is the odd one: unnamed it is `deadline_exceeded`, named it is
+`<name>_deadline`.
+
+`JevCmd<Q, N>` takes the name as its second type argument. `JevTimerMsg<N>`
+takes it as its only one. `createJevAsk` infers the name from the config.
+
+```ts
+import { liftSlice } from "@demlik/tea";
+
+/** A second rubric, for a second question about the same expense. */
+export const reviewQuestions = jevQuestions({
+  review: {
+    type: "choice",
+    instructions: "Does a human need to look at this expense?",
+    criteria: {
+      fine: "Ordinary spending",
+      flag: "Unusual, or over budget",
+    },
+  },
+});
+
+export type ReviewQuestions = typeof reviewQuestions;
+
+/** Two knobs, two names. Both type parameters infer from the config. */
+export const categoryAsk = createJevAsk({ questions, name: "category" });
+export const reviewAsk = createJevAsk({
+  questions: reviewQuestions,
+  name: "review",
+});
+
+export interface LedgerState {
+  readonly category: ResilientState<JevRequest<Questions>, JevOk<Questions>>;
+  readonly review: ResilientState<
+    JevRequest<ReviewQuestions>,
+    JevOk<ReviewQuestions>
+  >;
+}
+
+/** A named knob's timer Msg is `<name>_deadline`. */
+export type LedgerMsg =
+  | Classify
+  | JevTimerMsg<"category">
+  | JevTimerMsg<"review">;
+
+export type LedgerCmd =
+  | JevCmd<Questions, "category">
+  | JevCmd<ReviewQuestions, "review">;
+
+export const ledgerMachine = defineMachine({
+  types: {
+    model: {} as LedgerState,
+    msg: {} as LedgerMsg,
+    ctx: undefined,
+  },
+  cmds: [categoryAsk.run, reviewAsk.run],
+  init: (loaded) =>
+    loaded !== null
+      ? [loaded, []]
+      : [{ category: categoryAsk.init(), review: reviewAsk.init() }, []],
+  update: {
+    // One Msg asks both questions. The two calls share a key and stay apart.
+    classify: (s, m) => {
+      const [category, asked] = categoryAsk.attempt(
+        s.category,
+        m.key,
+        m.memo,
+        m.at,
+      );
+      const [review, alsoAsked] = reviewAsk.attempt(
+        s.review,
+        m.key,
+        m.memo,
+        m.at,
+      );
+      return [{ category, review }, [...asked, ...alsoAsked]];
+    },
+    // `m.value` is `JevOk<Questions>` in this cell...
+    category_run_ok: (s, m) =>
+      liftSlice("category", s, categoryAsk.succeed(s.category, m)),
+    category_run_err: (s, m) =>
+      liftSlice("category", s, categoryAsk.fail(s.category, m)),
+    category_deadline: (s, m) =>
+      liftSlice("category", s, categoryAsk.onTimer(s.category, m)),
+    // ...and `JevOk<ReviewQuestions>` in this one.
+    review_run_ok: (s, m) =>
+      liftSlice("review", s, reviewAsk.succeed(s.review, m)),
+    review_run_err: (s, m) =>
+      liftSlice("review", s, reviewAsk.fail(s.review, m)),
+    review_deadline: (s, m) =>
+      liftSlice("review", s, reviewAsk.onTimer(s.review, m)),
+  },
+  // One timer per knob.
+  subs: [
+    {
+      type: "timer",
+      deps: (s: LedgerState) => categoryAsk.timer(s.category),
+    },
+    { type: "timer", deps: (s: LedgerState) => reviewAsk.timer(s.review) },
+  ],
+});
+
+export type CallReview = (
+  request: JevRequest<ReviewQuestions>,
+) => Promise<JevHttpReply>;
+
+/** One handler per knob. Each decodes against its own request. */
+export function ledgerHandlers(
+  callCategory: CallJev,
+  callReview: CallReview,
+): Interpret<LedgerMsg, LedgerCmd, unknown> {
+  return {
+    category_run: async (cmd) => {
+      try {
+        return categoryAsk.decode(cmd.input, await callCategory(cmd.input));
+      } catch (cause) {
+        return categoryAsk.rejected(cause);
+      }
+    },
+    review_run: async (cmd) => {
+      try {
+        return reviewAsk.decode(cmd.input, await callReview(cmd.input));
+      } catch (cause) {
+        return reviewAsk.rejected(cause);
+      }
+    },
+  };
+}
+```
+
+Each knob keeps its own slice, its own handler and its own three cells. The
+timer ids carry the name too (`review:retry:<key>`), so two knobs can use the
+same key and a fired timer still reaches the right one. A knob with no `name`
+is unchanged, so a machine with a single knob needs none of this.
+
 ## Classifying many items at once
 
 One `ask` per item is the wrong shape past a handful. `createClassifyBatch`,

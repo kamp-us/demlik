@@ -465,6 +465,128 @@ describe("createJevAsk — the fallback", () => {
   });
 });
 
+describe("createJevAsk — a named knob", () => {
+  const answers = okBody.answers as unknown as JevAnswers<Questions>;
+
+  it("names its run Cmd, both settle Msgs and its timer Msg after `name`", () => {
+    const ask = createJevAsk({ questions, name: "judge", retry }, rngZero);
+    expect(ask.name).toBe("judge");
+    expect(ask.run.cmdType).toBe("judge_run");
+    expect(jevAskCmdDef<Questions, "judge">("judge").cmdType).toBe("judge_run");
+
+    const [running, cmds] = ask.attempt(ask.init(), "k", "x", 0);
+    expect(cmds.map((cmd) => cmd.type)).toEqual(["judge_run"]);
+
+    const cmd = ask.run({ key: "k", input: request });
+    const result: JevOk<Questions> = {
+      answers,
+      model: "jev-1",
+      usage: { input_tokens: 1, output_tokens: 1 },
+      source: "port",
+    };
+    expect(ask.run.ok(cmd, result, 0).type).toBe("judge_run_ok");
+    const failed = ask.run.err(
+      cmd,
+      { _tag: "port_rejected", jev: { _tag: "http_retry", status: 429 } },
+      0,
+    );
+    expect(failed.type).toBe("judge_run_err");
+
+    const [waiting] = ask.fail(running, failed);
+    expect(ask.timer(waiting)).toEqual({
+      ms: 0,
+      msg: { type: "judge_deadline", id: "judge:retry:k", atMs: 0 },
+    });
+  });
+
+  it("a spent retry budget settles the fallback's answer through the named cells", async () => {
+    const { http, calls } = scriptedHttp([
+      [429, {}],
+      [429, {}],
+      [429, {}],
+    ]);
+    const ask = createJevAsk(
+      { questions, name: "judge", retry, fallback: () => answers },
+      rngZero,
+    );
+    interface JudgeState {
+      readonly judge: ResilientState<JevRequest<Questions>, JevOk<Questions>>;
+    }
+    type JudgeMsg = { type: "ask"; content: string } | JevTimerMsg<"judge">;
+    const machine = defineMachine({
+      types: { model: {} as JudgeState, msg: {} as JudgeMsg, ctx: undefined },
+      cmds: [ask.run],
+      init: (loaded) =>
+        loaded !== null ? [loaded, []] : [{ judge: ask.init() }, []],
+      update: {
+        ask: (s, m) => {
+          const [judge, cmds] = ask.attempt(s.judge, "k", m.content, 0);
+          return [{ judge }, cmds];
+        },
+        judge_run_ok: (s, m) => {
+          const [judge, cmds] = ask.succeed(s.judge, m);
+          return [{ judge }, cmds];
+        },
+        judge_run_err: (s, m) => {
+          const [judge, cmds] = ask.fail(s.judge, m);
+          return [{ judge }, cmds];
+        },
+        judge_deadline: (s, m) => {
+          const [judge, cmds] = ask.onTimer(s.judge, m);
+          return [{ judge }, cmds];
+        },
+      },
+    });
+
+    let state: JudgeState = { judge: ask.init() };
+    let msg: JudgeMsg = { type: "ask", content: "a diff" };
+    const folded: string[] = [];
+    for (let guard = 0; guard < 20; guard += 1) {
+      const driven = await drive(
+        machine,
+        state,
+        msg,
+        {
+          judge_run: async (cmd) => {
+            try {
+              return ask.decode(cmd.input, await http(cmd.input));
+            } catch (cause) {
+              return ask.rejected(cause);
+            }
+          },
+        },
+        { clock: () => 0 },
+      );
+      state = driven.state;
+      for (const entry of driven.trace) {
+        if (entry.kind === "msg") folded.push(entry.msg.type);
+      }
+      const call = state.judge.calls.k;
+      if (call?.phase !== "waiting_retry") break;
+      msg = { type: "judge_deadline", id: "judge:retry:k", atMs: 0 };
+    }
+
+    expect(calls).toEqual([429, 429, 429]);
+    expect(folded).toEqual([
+      "ask",
+      "judge_run_err",
+      "judge_deadline",
+      "judge_run_err",
+      "judge_deadline",
+      "judge_run_err",
+    ]);
+    expect(state.judge.calls.k).toEqual({
+      phase: "succeeded",
+      result: {
+        answers,
+        model: "jev-latest",
+        usage: { input_tokens: 0, output_tokens: 0 },
+        source: "fallback",
+      },
+    });
+  });
+});
+
 describe("createJevAsk — the outcome builders a handler returns", () => {
   it("decode turns a 200 into the parsed JevOk, and the edge stamps `at`", async () => {
     const ask = createJevAsk<Questions>({ questions, retry }, rngZero);

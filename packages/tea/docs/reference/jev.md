@@ -35,7 +35,7 @@ import { … } from "@demlik/tea/jev";
 | [`JevAnswer`](#JevAnswer) | Type | battery | One typed answer. |
 | [`JevAnswerFor`](#JevAnswerFor) | Type | battery | The answer a given question type yields, with the choice union carried through. |
 | [`JevAnswers`](#JevAnswers) | Type | battery | A questions map turned into its answers map, id for id. |
-| [`JevAskCmd`](#JevAskCmd) | Type | battery | The Cmd the verbs emit — `resilient_run` carrying the request. |
+| [`JevAskCmd`](#JevAskCmd) | Type | battery | The Cmd the verbs emit — `<name>_run` carrying the request. |
 | [`jevAskCmdDef`](#jevAskCmdDef) | Function | battery | The one effect this knob emits: run the ask for `key` with the plain-data JevRequest (ADR 0014 — a Cmd is DECLARED, so its input, ok and err channels are types on the constructor rather than a convention). |
 | [`JevAskConfig`](#JevAskConfig) | Interface | battery | The jev-ask knob. |
 | [`JevAskErr`](#JevAskErr) | Type | battery | Every way an ask can fail, as DATA. |
@@ -67,7 +67,7 @@ import { … } from "@demlik/tea/jev";
 | [`JevState`](#JevState) | Type | battery | The content to evaluate: text, or structured data. |
 | [`JevSucceedMsg`](#JevSucceedMsg) | Type | battery | The success settle Msg — resilient-call's, with `value` narrowed to JevOk. |
 | [`JevText`](#JevText) | Type | battery | What every `instructions` and every criterion description accepts. |
-| [`JevTimerMsg`](#JevTimerMsg) | Type | battery | The retry / deadline timer Msg — `DeadlineExceeded`, inherited. |
+| [`JevTimerMsg`](#JevTimerMsg) | Type | battery | The retry / deadline timer Msg — resilient-call's. |
 | [`JevUsage`](#JevUsage) | Interface | battery | Token usage for the request. |
 | [`KeyAnswer`](#KeyAnswer) | Type | battery | What ClassifyBatchKnob.answerFor reports about one key. |
 | [`liftJevAsk`](#liftJevAsk) | Function | battery | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience` — resilient-call's convenience, re-typed for this door's slice so a consumer wires one import. |
@@ -257,7 +257,7 @@ function createClassifyBatch<I, C extends string>(
    * key stays re-addable, because it is neither cached nor in flight once
    * fan-out has moved the batch to `failed`.
    */
-  onBatchErr: (state: State, msg: JevFailMsg) => readonly [State, Cmds];
+  onBatchErr: (state: State, msg: ClassifyBatchErrMsg) => readonly [State, Cmds];
   /**
    * A batch settled OK. PURE.
    *
@@ -305,8 +305,11 @@ function createClassifyBatch<I, C extends string>(
 ### `createJevAsk`
 
 ```ts
-function createJevAsk<Q extends Readonly<Record<string, JevQuestion>>>(
-  config: JevAskConfig<Q>,
+function createJevAsk<
+  Q extends Readonly<Record<string, JevQuestion>>,
+  N extends string = "resilient",
+>(
+  config: JevAskConfig<Q, N>,
   rng?: () => number,
 ): {
   /**
@@ -319,9 +322,9 @@ function createJevAsk<Q extends Readonly<Record<string, JevQuestion>>>(
     key: string,
     content: JevState,
     at: number,
-  ) => readonly [State, readonly JevAskCmd<Q>[]];
+  ) => readonly [State, readonly JevAskCmd<Q, N>[]];
   /** The call's deadlines — resilient-call's retry and deadline timers. */
-  deadlines: (s: State) => readonly DeadlineSub[];
+  deadlines: (s: State) => readonly DeadlineSub<DeadlineNameOf<N>>[];
   /** Your handler's outcome for an HTTP reply — decodeJevReply. */
   decode: (request: JevRequest<Q>, reply: JevHttpReply) => Outcome<JevOk<Q>, JevRejected>;
   /**
@@ -343,18 +346,18 @@ function createJevAsk<Q extends Readonly<Record<string, JevQuestion>>>(
    * The slice's `failed` phase stores the typed JevAskErr, never the
    * JevRejected carrier.
    */
-  fail: (s: State, msg: JevFailMsg) => readonly [State, readonly JevAskCmd<Q>[]];
+  fail: (s: State, msg: JevFailMsg<N>) => readonly [State, readonly JevAskCmd<Q, N>[]];
   /** The starting slice — resilient-call's. */
   init: () => State;
-  name: "resilient";
+  name: N;
   /** Your handler's outcome with no network — offlineJevAnswer. */
   offline: (request: JevRequest<Q>) => Outcome<JevOk<Q>, JevRejected>;
   /** A retry / deadline timer fired. PURE — resilient-call's `onTimer`. */
-  onTimer: (s: State, msg: JevTimerMsg) => readonly [State, readonly JevAskCmd<Q>[]];
+  onTimer: (s: State, msg: JevTimerMsg<N>) => readonly [State, readonly JevAskCmd<Q, N>[]];
   /** Your handler's outcome when the call threw — jevCallThrew. */
   rejected: (cause: unknown) => Outcome<never, JevRejected>;
   /** The `Cmd.define`d run Cmd — list it in the machine's `cmds`. */
-  run: CmdDef<"resilient_run", {
+  run: CmdDef<`${N}_run`, {
     readonly input: JevRequest;
     readonly key: string;
   }, JevOk<Q>, {
@@ -365,11 +368,14 @@ function createJevAsk<Q extends Readonly<Record<string, JevQuestion>>>(
     readonly _tag: "port_rejected";
   }>;
   /** Record a settled answer. PURE — resilient-call's `settle`. */
-  succeed: (s: State, msg: JevSucceedMsg<Q>) => readonly [State, readonly JevAskCmd<Q>[]];
+  succeed: (
+    s: State,
+    msg: JevSucceedMsg<Q, N>,
+  ) => readonly [State, readonly JevAskCmd<Q, N>[]];
   /** The built-in `timer` Sub's deps — resilient-call's `timer`. */
   timer: (
     s: ResilientState<JevRequest<Q>, JevOk<Q>>,
-  ) => TimerDeps<ResilientTimerMsg<"resilient">> | null;
+  ) => TimerDeps<ResilientTimerMsg<N>> | null;
 }
 ```
 
@@ -480,7 +486,7 @@ type JevAnswers<Q extends JevQuestionMap> = { readonly [K in keyof Q]: JevAnswer
 ### `JevAskCmd`
 
 ```ts
-type JevAskCmd<Q extends JevQuestionMap> = RunCmd<JevRequest<Q>, "resilient", JevOk<Q>>
+type JevAskCmd<Q extends JevQuestionMap, N extends string = DefaultResilientName> = RunCmd<JevRequest<Q>, N, JevOk<Q>>
 ```
 
 <a id="jevAskCmdDef"></a>
@@ -488,7 +494,12 @@ type JevAskCmd<Q extends JevQuestionMap> = RunCmd<JevRequest<Q>, "resilient", Je
 ### `jevAskCmdDef`
 
 ```ts
-function jevAskCmdDef<Q extends Readonly<Record<string, JevQuestion>>>(): CmdDef<"resilient_run", {
+function jevAskCmdDef<
+  Q extends Readonly<Record<string, JevQuestion>>,
+  N extends string = "resilient",
+>(
+  name?: N,
+): CmdDef<`${N}_run`, {
   readonly input: JevRequest;
   readonly key: string;
 }, JevOk<Q>, {
@@ -505,11 +516,19 @@ function jevAskCmdDef<Q extends Readonly<Record<string, JevQuestion>>>(): CmdDef
 ### `JevAskConfig`
 
 ```ts
-interface JevAskConfig<Q extends JevQuestionMap> {
+interface JevAskConfig<Q extends JevQuestionMap, N extends string = DefaultResilientName> {
   /** The pure decider for the no-key and budget-spent paths. Absent → those settle as an error. */
   readonly fallback?: JevFallback<Q>;
   /** The model id asked for. Defaults to DEFAULT_JEV_MODEL. */
   readonly model?: string;
+  /**
+   * What this knob's Cmd and Msgs are called: `<name>_run`, `<name>_run_ok`,
+   * `<name>_run_err` and the timer Msg `<name>_deadline`. Omit it and they are
+   * `resilient_run`, `resilient_run_ok`, `resilient_run_err` and
+   * `deadline_exceeded`. Name a knob when a machine holds more than one, so
+   * each settles into its own `update` cell with its own answer type.
+   */
+  readonly name?: N;
   /** The question map every request carries; its keys type the answers. */
   readonly questions: Q;
   /** Backoff policy, composed into `../../resilience/resilient-call`. Omit → no backoff. */
@@ -593,7 +612,7 @@ interface JevChoiceQuestion<C extends JevChoiceCriteria = JevChoiceCriteria> {
 ### `JevCmd`
 
 ```ts
-type JevCmd<Q extends JevQuestionMap> = JevAskCmd<Q>
+type JevCmd<Q extends JevQuestionMap, N extends string = DefaultResilientName> = JevAskCmd<Q, N>
 ```
 
 <a id="JevErr"></a>
@@ -641,7 +660,7 @@ type JevErr =
 ### `JevFailMsg`
 
 ```ts
-type JevFailMsg = FailMsg
+type JevFailMsg<N extends string = DefaultResilientName> = FailMsg<N>
 ```
 
 <a id="JevFallback"></a>
@@ -845,7 +864,7 @@ type JevState = string | Readonly<Record<string, unknown>> | readonly unknown[]
 ### `JevSucceedMsg`
 
 ```ts
-type JevSucceedMsg<Q extends JevQuestionMap> = SucceedMsg<JevOk<Q>>
+type JevSucceedMsg<Q extends JevQuestionMap, N extends string = DefaultResilientName> = SucceedMsg<JevOk<Q>, N>
 ```
 
 <a id="JevText"></a>
@@ -861,7 +880,7 @@ type JevText = string | Readonly<Record<string, unknown>> | readonly unknown[]
 ### `JevTimerMsg`
 
 ```ts
-type JevTimerMsg = DeadlineExceeded
+type JevTimerMsg<N extends string = DefaultResilientName> = ResilientTimerMsg<N>
 ```
 
 <a id="JevUsage"></a>
