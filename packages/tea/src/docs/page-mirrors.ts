@@ -336,6 +336,14 @@ const regions = (file: string, ...names: string[]): Shown[] =>
  */
 export const PAGE_MIRRORS: readonly PageRow[] = [
   {
+    page: "docs/explanation/what-bounds-a-run.md",
+    shows: regions(
+      "examples/agent-stop-conditions.ts",
+      "progressing",
+      "capped",
+    ),
+  },
+  {
     page: "docs/how-to/add-resilience.md",
     shows: regions(
       "src/docs/how-to/add-resilience.test.ts",
@@ -352,11 +360,11 @@ export const PAGE_MIRRORS: readonly PageRow[] = [
     shows: regions(
       "examples/agent-stop-conditions.ts",
       "bounded",
-      "progressing",
       "stalling",
       "capped",
       "until-five",
       "budgeted",
+      "guarded",
     ),
   },
   {

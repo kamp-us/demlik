@@ -82,10 +82,9 @@ guides use are each defined in the [glossary](../glossary.md).
 - [Handle a tool failure](./handle-a-tool-failure.md) — declare an `err` tag, fail
   with it from the handler, and read the `ToolOutcome` the model gets back —
   including the six failures you never declared.
-- [Bound a `defineAgent` run](./bound-a-run.md) — stop a run that would otherwise
-  go on forever with one of four guards, `maxTurns`, `deadlineMs`,
-  `maxElapsedMs` and `stopWhen`, and see why `deadlineMs` is a no-progress
-  watchdog rather than the wall-clock cap it reads as.
+- [Bound a `defineAgent` run](./bound-a-run.md) — stop a run that goes on too
+  long by setting `maxTurns`, `deadlineMs`, `maxElapsedMs` and `stopWhen` one
+  step at a time, then all four on one agent, with a token budget on the way.
 - [Wrap one tool's interpret cell](./wrap-one-tool-cell.md) — use
   `defineAgent(cfg).with({ interpret })` to give one tool a behaviour the [lid](../glossary.md#lid) has
   no option for — a queue, an audit log — without rebuilding the agent with

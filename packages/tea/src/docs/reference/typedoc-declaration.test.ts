@@ -144,6 +144,56 @@ describe("printDeclaration", () => {
     );
   });
 
+  it("prints a member's TSDoc above it, read off the call signature for a function-typed one", () => {
+    const comment = (...lines: string[]) => ({
+      summary: [{ kind: "text", text: lines.join("\n") }],
+    });
+    const printed = printDeclaration("Options", {
+      kind: KIND_INTERFACE,
+      children: [
+        {
+          name: "maxTurns",
+          kind: KIND_PROPERTY,
+          flags: { isOptional: true },
+          type: intrinsic("number"),
+          comment: comment("Model round-trips the run may take."),
+        },
+        {
+          name: "stopWhen",
+          kind: KIND_PROPERTY,
+          type: {
+            type: "reflection",
+            declaration: {
+              signatures: [
+                {
+                  parameters: [],
+                  type: intrinsic("boolean"),
+                  comment: comment("Your own condition.", "", "Must be pure."),
+                },
+              ],
+            },
+          },
+        },
+        { name: "bare", kind: KIND_PROPERTY, type: intrinsic("string") },
+      ],
+    });
+    expect(printed).toBe(
+      [
+        "interface Options {",
+        "  /** Model round-trips the run may take. */",
+        "  maxTurns?: number;",
+        "  /**",
+        "   * Your own condition.",
+        "   *",
+        "   * Must be pure.",
+        "   */",
+        "  stopWhen: () => boolean;",
+        "  bare: string;",
+        "}",
+      ].join("\n"),
+    );
+  });
+
   it("prints a type alias under the name the module exports it as", () => {
     expect(
       printDeclaration("Exported", {

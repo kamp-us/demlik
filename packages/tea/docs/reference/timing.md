@@ -52,7 +52,37 @@ function createThrottledInput<V, C extends Cmd>(
 function debounce<A extends readonly unknown[]>(
   fn: (...args: A) => void,
   ms: number,
-  opts?: { leading?: boolean; trailing?: boolean },
+  opts?: {
+    /**
+     * Fire on the FIRST call of a burst (the leading edge),
+     *             with that first call's args. Default `false`.
+     */
+    leading?: boolean;
+    /**
+     * Fire on the trailing edge with the LAST call's args.
+     *             Default `true`.
+     *
+     * Edge combinations (matching lodash's settled semantics, the de-facto
+     * standard the ecosystem rediscovered):
+     *
+     *   - `{ trailing: true }` (default): one fire, after the burst, last args.
+     *   - `{ leading: true, trailing: false }`: one fire, at the burst START,
+     *     first args. Subsequent calls within the window are swallowed; the timer
+     *     only re-opens the "can lead again" latch after `ms` of quiet.
+     *   - `{ leading: true, trailing: true }`: fires at the start AND end of a
+     *     burst — BUT the trailing fire is SUPPRESSED for a burst of exactly ONE
+     *     call (the leading fire already covered it, so a lone call doesn't
+     *     double-fire). This matches lodash and is the behavior tests pin.
+     *   - `{ leading: false, trailing: false }`: never fires. Degenerate but legal;
+     *     we don't throw — the caller asked for a no-op transformer.
+     *
+     * WHY a default of trailing-only: a debounce's whole job is "act after the
+     * activity settles." The trailing edge IS that semantic — fire with the final
+     * state of the burst (the last keystroke, the final scroll position). Leading
+     * is the opt-in for "respond instantly, then go quiet."
+     */
+    trailing?: boolean;
+  },
 ): Debounced<A>
 ```
 
@@ -63,7 +93,23 @@ function debounce<A extends readonly unknown[]>(
 ```ts
 interface Debounced<A extends readonly unknown[]> {
   (...args: A): void;
+  /**
+   * Drop any pending trailing fire WITHOUT invoking `fn`. Clears the timer and
+   * forgets the captured args. Idempotent — calling it with nothing pending is
+   * a no-op. The leading-edge latch (if `leading` is enabled) also resets, so
+   * the next call after `cancel` is treated as a fresh burst.
+   *
+   * The host-cleanup partner of `removeEventListener`: cancel the pending fire
+   * when the component unmounts / the listener detaches, so a queued
+   * `dispatch` can't land after teardown.
+   */
   cancel(): void;
+  /**
+   * Fire any pending trailing call IMMEDIATELY with its captured args, then
+   * clear the timer. No-op when nothing is pending. Use to force the last
+   * coalesced call out early — e.g. flush a debounced save on `beforeunload`,
+   * or flush a debounced search when the user presses Enter.
+   */
   flush(): void;
 }
 ```
@@ -144,7 +190,40 @@ function subsFor<V, C extends Cmd>(
 function throttle<A extends readonly unknown[]>(
   fn: (...args: A) => void,
   ms: number,
-  opts?: { leading?: boolean; trailing?: boolean },
+  opts?: {
+    /**
+     * Fire on the FIRST call of a window (the leading edge),
+     *             immediately. Default `true`.
+     */
+    leading?: boolean;
+    /**
+     * Fire once at window END with the latest args dropped
+     *             during the window. Default `true`.
+     *
+     * Edge combinations (matching lodash's settled semantics, the de-facto
+     * standard the ecosystem rediscovered):
+     *
+     *   - `{ leading: true, trailing: true }` (default): immediate fire + a
+     *     trailing fire per window while calls keep arriving. The trailing fire is
+     *     SUPPRESSED when no extra call arrived during the window (a lone call
+     *     already fired on the leading edge — no stale trailing double-fire).
+     *   - `{ leading: true, trailing: false }`: only the immediate fire; everything
+     *     in the window is dropped with no catch-up at the end.
+     *   - `{ leading: false, trailing: true }`: no immediate fire; the FIRST call
+     *     opens a window and `fn` fires at the window's end with the latest args.
+     *     Steady "sample every `ms`" behavior with no instant response.
+     *   - `{ leading: false, trailing: false }`: never fires. Degenerate but legal;
+     *     we don't throw — the caller asked for a no-op transformer.
+     *
+     * WHY a default of leading + trailing both `true`: a throttle's job is "respond
+     * now, then keep responding at a steady rate." Leading gives the instant
+     * response (the first `mousemove` updates immediately); trailing guarantees the
+     * FINAL sample of a window isn't lost (the cursor ends where the user actually
+     * left it, not one window-width behind). Dropping either loses one of those two
+     * guarantees, so both default on.
+     */
+    trailing?: boolean;
+  },
 ): Throttled<A>
 ```
 
@@ -155,7 +234,23 @@ function throttle<A extends readonly unknown[]>(
 ```ts
 interface Throttled<A extends readonly unknown[]> {
   (...args: A): void;
+  /**
+   * Drop any pending trailing fire WITHOUT invoking `fn`, and close the active
+   * window. Clears the timer, forgets the captured trailing args, and resets
+   * the cursor so the next call fires immediately on the leading edge (if
+   * `leading` is enabled). Idempotent.
+   *
+   * The host-cleanup partner of `removeEventListener`: cancel the pending fire
+   * when the component unmounts / the listener detaches, so a queued
+   * `dispatch` can't land after teardown.
+   */
   cancel(): void;
+  /**
+   * Fire any pending trailing call IMMEDIATELY with its latest captured args,
+   * then close the window. No-op when nothing is pending. Use to force the last
+   * dropped call out early — e.g. flush the final cursor position when a drag
+   * ends, so the rest state isn't a stale mid-drag sample.
+   */
   flush(): void;
 }
 ```
@@ -186,16 +281,24 @@ type ThrottledInputConfig<V, C extends Cmd> = ThrottledInputNoCache<V, C> | Thro
 
 ```ts
 interface ThrottledInputKnob<V, C extends Cmd> {
+  /** Seed the Model slice (with a cache iff `cacheTtlMs` is configured). */
   init(): ThrottledInput<V>;
+  /** Feed a new input through the dedupe → rate → settle gates. See `input`. */
   input(
     state: ThrottledInput<V>,
     value: V,
     at: number,
   ): readonly [ThrottledInput<V>, readonly C[]];
+  /** Emit the held value because the settle window closed. See `onFlush`. */
   onFlush(
     state: ThrottledInput<V>,
     at: number,
   ): readonly [ThrottledInput<V>, readonly C[]];
+  /**
+   * The settle timer deadline, listed only while a value is held. See
+   * `subsFor`. `id` keys the deadline so several gates on one machine route
+   * distinctly.
+   */
   subs(state: ThrottledInput<V>, id?: string): readonly ThrottledInputSub[];
 }
 ```
@@ -249,7 +352,18 @@ type ThrottledInputSub = DeadlineSub
 
 ```ts
 interface ThrottledInputWithCache<V, C extends Cmd> extends ThrottledInputGates<V, C> {
+  /**
+   * Key a value for the dedupe cache. REQUIRED whenever `cacheTtlMs` is set:
+   * there is no `String(value)` fallback, so a structured value's identity is
+   * always the consumer's explicit choice and two distinct values can never
+   * collapse to one slot. A primitive stream passes `(v) => v` / `String`.
+   */
   readonly cacheKey: (value: V) => string;
+  /**
+   * Dedupe / memoize TTL, in milliseconds. An input whose `cacheKey` is already
+   * cached and unexpired emits NOTHING; a fresh emit writes the value into the
+   * cache so the next identical input within `cacheTtlMs` is suppressed.
+   */
   readonly cacheTtlMs: number;
 }
 ```

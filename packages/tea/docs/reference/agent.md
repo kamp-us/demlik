@@ -323,26 +323,127 @@ interface AgentConfigCore<
   TC extends Cmd = Cmd,
   Msg = unknown,
 > {
+  /** No-progress watchdog budget, in ms. Omit → no watchdog. */
   readonly deadlineMs?: number;
+  /**
+   * The system prompt, stored ON THE MODEL at `init` (`AgentState.instructions`)
+   * rather than closed over — so a replay reproduces the exact prompt that ran,
+   * a rehydrated run keeps the prompt it started with, and a compaction fold
+   * (which touches only the conversation) can never lose it (ADR 0004). It
+   * reaches the brain call through `payloadOf`'s third argument. Omit → `null`.
+   */
   readonly instructions?: string;
+  /** DI port — the SDK / message loader. Omit → brain calls invoke with `[]`. */
   readonly loadMessages?: MessageLoader<P, Msg>;
+  /**
+   * Wall-clock guard: total milliseconds from `run.startedAt` the run may take.
+   * At the turn boundary, `at - run.startedAt >= maxElapsedMs` fails the run
+   * `{ reason: "elapsed_limit" }`. Unlike `deadlineMs` — a no-progress watchdog
+   * that RESTARTS on every advance — this budget never restarts, so a run that
+   * keeps progressing is bounded by it. Omit → no wall-clock cap.
+   *
+   * `startedAt` is durable, so a resumed run continues the ORIGINAL budget
+   * rather than starting a fresh one; the elapsed span a killed run spent dead
+   * counts against it.
+   */
   readonly maxElapsedMs?: number;
+  /**
+   * Livelock guard: bound on model round-trips within one run. On
+   * `turnCount >= maxTurns` the run fails `{ reason: "turn_limit" }`. Omit → no
+   * turn guard (the other stop conditions still bound the loop).
+   */
   readonly maxTurns?: number;
+  /**
+   * DI port — the brain. `async (messages) => turn` is the common path:
+   * the returned turn is validated through the purpose's schema
+   * (`agentTurnSchema` for the plain case), so a malformed turn is the run's
+   * `llm` failure, not a throw. `(modelId) => Llm` is the advanced form for a
+   * model that binds the structured-output schema itself.
+   */
   readonly model: ModelPort<Msg, O[P]>;
+  /** The model id every brain call invokes. Omit → `null` (the host's default). */
   readonly modelId?: string | null;
+  /**
+   * Build the per-purpose brain-call payload from the durable state: the
+   * stage, the conversation, and the Model's `instructions` slot. Omit → `null`.
+   */
   readonly payloadOf?: (
     stage: Stage | undefined,
     conversation: Conversation<R>,
     instructions: string | null,
   ) => unknown;
+  /** Backoff policy for brain calls, composed into `../llm-call`. Omit → no backoff. */
   readonly retry?: RetryPolicy;
+  /**
+   * The impurity-injection seam for the inherited brain-call retry jitter — the
+   * ONE place this otherwise-pure machine reads randomness. Pass a fixed
+   * `() => 0` to pin backoff (tests, replay, durability proofs). Omit →
+   * `Math.random`, read only at the resilient-call verb boundary.
+   */
   readonly rng?: () => number;
+  /** One structured-output schema per purpose; the parse target per brain call. */
   readonly schemas: { readonly [K in string]: Schema<O[K]> };
+  /** The ordered stages. Omit / empty → a single-shot run (one agentic stage). */
   readonly stages?: readonly Stage[];
+  /**
+   * The consumer's own stop condition, consulted at the turn boundary once the
+   * turn-count and wall-clock guards have passed. `true` settles the run
+   * `cancelled` at `at` — the same terminal an aborted `signal` reaches, so the
+   * transcript stands and no further model call goes out. Omit → no predicate.
+   *
+   * Where `maxTurns` and `maxElapsedMs` bound a quantity this agent counts,
+   * this bounds one only the caller can see (an external flag, a condition on
+   * the turns so far) — or a token budget: `state.usage` is the run's running
+   * total of provider-reported usage, so a budget stop is a predicate over it
+   * and needs no knob of its own (#332). It must be PURE and total over the state
+   * it is handed — the reducer calls it, so a replay of the same Msg log calls
+   * it with the same state and must get the same answer. It is config, not
+   * Model: a resumed run consults the predicate the config passed to THIS boot.
+   */
   readonly stopWhen?: (state: AgentState<Stage, P, O, R>) => boolean;
+  /**
+   * How many of ONE turn's tool calls a transition LAUNCHES at once. At the
+   * default `1` a turn's calls go out one at a time; raise it and up to that
+   * many move from `pending` to `running` in the fan-out ledger in a single
+   * transition, so the durable Model (and a `store`'s record of it) says what
+   * was launched.
+   *
+   * Above `1` those calls also OVERLAP on the clock, so a turn of two slow
+   * tools costs the slower rather than the sum — but only for the tool cells a
+   * `toolRouter` owns (the `toMachine({ tools })` path, which `defineAgent`
+   * takes). The overlap lives inside those cells, never in the kernel:
+   * `runInterpret` still interprets a transition's Cmds one after another and
+   * never interleaves two handlers (ADR 0018). A hand-wired `toolInterpret`
+   * cell is yours, so it overlaps only if you write it to.
+   *
+   * Overlapping does NOT reorder the fold. Settle Msgs are dispatched in
+   * Cmd-EMISSION order whichever call finishes first, so a replayed log
+   * reproduces the same Model — invariant 2's serializability, which the knob
+   * was never allowed to spend.
+   *
+   * Omit (or `1`) → serial dispatch, exactly as before.
+   */
   readonly toolConcurrency?: number;
+  /** Map one tool call to the effect Cmd the consumer's interpret performs. */
   readonly toolOf: (call: ToolCall) => TC;
+  /**
+   * The per-tool timeout / retry knob for a call, read once per launch. `null`
+   * (or an omitted seam) → the tool runs bare and its settle path is the plain
+   * fan-out one, byte for byte what it was before the knob existed.
+   *
+   * This is the seam a `toolRouter` fills from the `tool()` specs
+   * (`router.resilienceOf`), which is how `defineAgent` grows the knob without
+   * growing a lid option: the policy is declared where the tool is. A hand-wired
+   * `createAgent` supplies it directly. It must be PURE and config-derived — the
+   * reducer calls it on the launch path.
+   */
   readonly toolResilienceOf?: (call: ToolCall) => ToolResilience | null;
+  /**
+   * Which brain-call purpose a given stage runs. The agent fires
+   * `call_llm{ turnOf(stage) }` to drive the agentic stage's loop. The purpose's
+   * schema output is an `AgentTurn` — enforced by the `O extends Record<P,
+   * AgentTurn>` bound, not left to a doc-comment.
+   */
   readonly turnOf: (stage: Stage | undefined) => P;
 }
 ```
@@ -373,6 +474,7 @@ type AgentEvent<R> =
   | AgentEventHead & {
     readonly turn: AgentTurn;
     readonly type: "TurnSettled";
+    /** The usage the provider reported for this turn. Absent → none reported. */
     readonly usage?: TurnUsage;
   }
   | AgentEventHead & {
@@ -404,7 +506,9 @@ type AgentEvent<R> =
 
 ```ts
 interface AgentEventHead {
+  /** When the transition that produced it happened. */
   readonly at: number;
+  /** The run this event belongs to — stable across a kill and resume. */
   readonly runId: string;
 }
 ```
@@ -464,11 +568,18 @@ interface AgentKnob<
   Compact extends boolean,
 > {
   readonly boot: AgentVerb1<Stage, P, O, R, TC, [at: number]>;
+  /** The brain call's `Cmd.define`d run Cmd def — list it in `cmds` when you hand-wire. */
   readonly brain: CmdDef<"resilient_run", {
     readonly input: LlmCall;
     readonly key: string;
   }>;
   readonly brainCall: (s: AgentState<Stage, P, O, R>) => LlmCall<P>;
+  /**
+   * The brain call's `resilient_run` handler — the one `toMachine` wires. Its
+   * Cmd is `Cmd.define`d, so it returns an outcome and the engine mints the
+   * `resilient_run_ok` / `resilient_run_err` Msg that `succeed` / `fail` fold
+   * (ADR 0021). List `AgentKnob`'s brain Cmd def in `cmds` when you hand-wire.
+   */
   readonly brainInterpret: () => Interpret<AgentLlmOkMsg<P, O> | AgentLlmErrMsg<P>, AgentLlmRunCmd<P>, unknown>;
   readonly compactErr: AgentVerb1<Stage, P, O, R, TC, [key: string, msg: AgentCompactErrMsg, at: number]>;
   readonly compactOk: AgentVerb1<Stage, P, O, R, TC, [key: string, msg: AgentCompactOkMsg, at: number]>;
@@ -481,6 +592,12 @@ interface AgentKnob<
   readonly subs: (s: AgentState<Stage, P, O, R>) => readonly DeadlineSub[];
   readonly succeed: AgentVerb1<Stage, P, O, R, TC, [msg: AgentLlmOkMsg<P, O>, at: number]>;
   readonly toMachine: AgentToMachine<Stage, P, O, R, TC, Snap, Compact>;
+  /**
+   * A bare `reason` string still works and settles an untagged failure — the
+   * hand-wired shape this verb has always had. Hand it a whole `ToolFailure`
+   * instead to keep the `{ _tag, …payload }` beside that reason, which is what
+   * `onToolError` and any host code discriminating on `_tag` then read (#115).
+   */
   readonly toolErr: AgentVerb1<Stage, P, O, R, TC, [callId: string, failure: string | ToolFailure, at: number]>;
   readonly toolOk: AgentVerb1<Stage, P, O, R, TC, [callId: string, result: R, at: number]>;
   readonly turn: AgentVerb1<Stage, P, O, R, TC, [result: AgentTurn, at: number]>;
@@ -628,17 +745,114 @@ type AgentSnapshotConfig = { readonly snapshotEvery?: never } | { readonly snaps
 
 ```ts
 interface AgentState<Stage, P extends string, O extends Record<P, unknown>, R> {
+  /**
+   * The compaction round-trip's resilient slice (#85, design B1) — a DEDICATED
+   * resilient-call slice for the reserved `$compact` purpose, separate from the
+   * brain `resilience` slice so a compaction retry/backoff never disturbs the
+   * brain call's breaker or retry counter. Always present (empty `calls` when no
+   * compaction is in flight, or when no policy is configured) so the slice stays
+   * a flat plain-data record — durable + replayable like every composed wrapper.
+   */
   readonly compaction: ResilientState<LlmCall<"$compact">, LlmOk<"$compact", CompactionOutputs>>;
   readonly conversation: Conversation<R> | null;
   readonly failure: AgentFailure | null;
+  /**
+   * The system prompt, durable beside the transcript it governs. `null` when
+   * the config named none. Read by `brainCall` on every model call — a
+   * rehydrated or replayed run prompts with what the Model says, never with
+   * what a closure happens to hold now.
+   */
   readonly instructions: string | null;
+  /**
+   * What THIS transition started, failed or ended (#331) — the outbox the
+   * event projector reads. Cleared on entry to every verb, so it only ever
+   * holds the one transition's facts.
+   *
+   * The projector sees `(msg, post-state)` and nothing else, and none of these
+   * facts can be read back off that pair: a brain call issued after a batch
+   * drains, a queued tool backfilling a slot, a timeout the ladder settled and
+   * the transition that ended the run all leave a state that looks like the
+   * one before. The reducer knows at the moment it does them, so it writes
+   * them down here, the same way `refusedCalls` carries the one fact the
+   * projector could not derive.
+   *
+   * Absent on a Model persisted before 0.18; every reader treats that as empty.
+   */
   readonly lifecycle: readonly AgentLifecycleNote[];
+  /**
+   * The run's terminal output — the FIRST-CLASS result (issue #46). `null`
+   * until the pipeline finishes; set to the last model turn (the empty-tool
+   * turn that retired the final stage) the instant `run.phase` becomes `"done"`.
+   *
+   * This survives the `conversation` clear on stage retire: clearing the
+   * conversation is correct durability hygiene (a finished stage's transcript
+   * is not live state), but the run's PRODUCT is, so it lives here on the
+   * durable slice rather than being scraped off the `observe` firehose by
+   * matching the private `resilient_ok` Msg and racing the clear (the old
+   * `captureLastTurn` dance this field deletes). A consumer reads
+   * `runtime.result()?.output` / `(await runtime.done()).output`.
+   *
+   * Typed `AgentTurn | null` (not `O[P]`): the run's output is always a model
+   * turn — the `O extends Record<P, AgentTurn>` type bound pins every purpose's
+   * output to an `AgentTurn`, and the terminating turn is the one with no tool
+   * calls. The wider `Record<P, unknown>` bound on `AgentState` itself does not
+   * constrain `O[P]`, so naming the concrete `AgentTurn` keeps this field's type
+   * total without a purpose-indexing narrow.
+   */
   readonly output: AgentTurn | null;
+  /**
+   * The `callId`s whose PUBLIC outcome is already a failure (#145) — a tool the
+   * ladder settled on its deadline or on a spent retry budget, or one whose own
+   * error was folded. A promise cannot be cancelled, so the abandoned attempt
+   * may still resolve; when it does, its late `_ok` names a `callId` listed
+   * here and every public channel stays silent about it.
+   *
+   * The fan-out already drops the late value (its entry is gone, so the fold is
+   * a no-op), but "folds nothing" and "emits nothing" are two different facts:
+   * the event projector is Msg-shaped and would otherwise push a `ToolSettled`
+   * for a `callId` `onToolError` already reported as `{ _tag: "timeout" }`. The
+   * projector reads the post-transition state, by which point the ladder has
+   * forgotten the key, so the discriminator is carried HERE rather than derived
+   * from a presence check that erases both readings.
+   *
+   * Plain data, one string per failed call, cleared by `start` with the rest of
+   * the prior run's bookkeeping. It survives the batch drain and the stage
+   * retire on purpose — that is exactly when a late settle arrives.
+   */
   readonly refusedCalls: readonly string[];
   readonly resilience: ResilientState<LlmCall<P>, LlmOk<P, O>>;
   readonly run: MonitoredRunState<Stage>;
+  /**
+   * The per-tool timeout / retry ladders (#117) — one dedicated resilient-call
+   * slice PER TOOL NAME, because the policy is declared per tool and one slice
+   * carries one config. Keyed by tool name; each slice's own keys are
+   * toolCallKeys, so two concurrent calls to the same tool climb
+   * independent ladders while sharing the tool's declared policy.
+   *
+   * A tool declaring neither `timeoutMs` nor `retry` mints no entry, so this is
+   * `{}` for every agent that uses no per-tool knob — the addition costs an
+   * empty record on the durable Model and nothing else.
+   *
+   * The result arm is `null`: a tool's VALUE settles through the fan-out ledger
+   * and the conversation, exactly as before. This slice tracks only the ladder —
+   * which attempt is out, when the next one is due, and when the budget is spent
+   * — which is what has to survive a reload.
+   */
   readonly toolResilience: Readonly<Record<string, ResilientState<ToolCall, null>>>;
   readonly tools: FanOutState<ToolCall, ToolOutcome<R>>;
+  /**
+   * The run's running usage total (#332, #354): every brain turn of this RUN
+   * that reported usage, summed field by field. It is what the run cost, so it
+   * belongs to the run and not to any one conversation: a compaction fold keeps
+   * it, a stage advance keeps it, and the retire to `done` keeps it after the
+   * conversation is cleared — `status(state)`'s `done` arm hands it on. Only
+   * `agent_start` resets it to zero. Read it from `stopWhen` for a token budget.
+   *
+   * The one place the total lives. A Model persisted before this field held its
+   * total on `conversation.usage`, and one persisted by 0.17.x held none; the
+   * first transition either takes over lifts the old total here (or starts from
+   * zero) and drops the conversation's copy.
+   */
   readonly usage: TurnUsage;
 }
 ```
@@ -751,13 +965,35 @@ type AgentToolError =
 
 ```ts
 type AgentToolSpec<Args, Ok, CT extends AnyToolDef, Ctx> = {
+  /**
+   * The child. Its bounds (`maxTurns`, `maxElapsedMs`, `stopWhen`), its tools
+   * and its instructions are all its own definition's; the helper adds none.
+   */
   readonly agent: DefinedAgent<CT>;
+  /** The model-facing sentence — the same field `tool()` declares. */
   readonly description: string;
+  /** Parses the parent model's `args`. */
   readonly input: StandardSchemaV1<unknown, Args>;
+  /**
+   * The namespace the child run's key sits under, read off the parent's ctx —
+   * the parent run's id, a tenant, whatever keeps two parents' calls apart.
+   * The key is `<namespace>/<callId>`.
+   */
   readonly namespace: (ctx: HandlerCtx<Ctx>) => string;
+  /** Parses what `result` returns, at the edge, like any tool's `ok`. */
   readonly ok: StandardSchemaV1<unknown, Ok>;
+  /**
+   * The child's whole input, derived from the call's args. It is the only thing
+   * the child is told: the parent's conversation never reaches it.
+   */
   readonly prompt: (args: Args) => string;
+  /** The value the parent call settles with, read off the child's final turn. */
   readonly result: (output: AgentTurn) => Ok;
+  /**
+   * The child run's Store at `key`. The same key must reach the same durable
+   * cell on every call, in every process — that is what makes a re-fired call
+   * resume the child instead of restarting it.
+   */
   readonly store: (key: string, ctx: HandlerCtx<Ctx>) => Store<DefinedAgentState<CT>>;
 } & ChildCtxOption<CT, Ctx>
 ```
@@ -768,9 +1004,13 @@ type AgentToolSpec<Args, Ok, CT extends AnyToolDef, Ctx> = {
 
 ```ts
 interface AgentTurn {
+  /** Free-text narration the model produced this turn (folded into the conversation). */
   readonly content: string;
+  /** Provider-opaque blocks to echo back verbatim next turn. tea never reads it. */
   readonly provider?: unknown;
+  /** The tools the model asked us to run; empty = stage done. */
   readonly toolCalls: readonly ToolCall[];
+  /** The token usage the provider reported for this call. Omit → none reported. */
   readonly usage?: TurnUsage;
 }
 ```
@@ -854,8 +1094,11 @@ interface CompactionOutputs extends Record<CompactionPurpose, unknown> {
 
 ```ts
 interface CompactionPolicy<R, Msg = unknown> {
+  /** DI port — the SDK / message loader for the summarize call. Omit → invoke with `[]`. */
   readonly loadMessages?: MessageLoader<"$compact", Msg>;
+  /** Build the summarize call's prompt payload from the turns being folded. Omit → `null`. */
   readonly payloadOf?: (conversation: Conversation<R>, folding: number) => unknown;
+  /** PURE trigger: how many OLDEST turns to fold (`0` = skip). No clock/RNG. */
   readonly planCompaction: (conversation: Conversation<R>) => number;
 }
 ```
@@ -874,6 +1117,7 @@ type CompactionPurpose = "$compact"
 
 ```ts
 interface CompactionSummary {
+  /** The model's summary of the folded-away (oldest) turns + their tool records. */
   readonly summary: string;
 }
 ```
@@ -908,10 +1152,21 @@ function contentParts(content: MessageContent): readonly ContentPart[]
 
 ```ts
 interface Conversation<R> {
+  /** What the loop is waiting for next. */
   readonly awaiting: Awaiting;
+  /**
+   * The latest context size: `inputTokens + outputTokens` of the most recent
+   * brain turn — how much of the context window the transcript now fills.
+   * `null` when that turn reported no usage, when a compaction fold has run
+   * since (the pre-fold size describes a transcript that no longer exists), and
+   * at the start of each stage. `compaction.afterContextTokens` reads it.
+   */
   readonly contextTokens: number | null;
+  /** Settled tool records, in settle order — the model sees these next turn. */
   readonly toolRecords: readonly ToolRecord<R>[];
+  /** Monotonic round-trip count; the livelock guard compares it to `maxTurns`. */
   readonly turnCount: number;
+  /** Model turns this stage has produced, in order. */
   readonly turns: readonly AgentTurn[];
 }
 ```
@@ -983,6 +1238,13 @@ function createAgent<
 function deadlinesSub<S, N extends string | undefined = undefined>(
   select: (state: S) => readonly DeadlineSub<N>[],
 ): {
+  /**
+   * The slice of state this Sub depends on. `null` or `undefined` ⇒ off in
+   * this state (see `depsInactive`), so `(s) => s.optionalRunId` gates
+   * correctly. Pure (invariant 2). Plain JSON-compatible data only
+   * (invariant 1): the structural hash THROWS on a `Date`, `Map`, `Set`,
+   * `Error` or class instance rather than collapsing them onto one id.
+   */
   readonly deps: (state: S) => readonly DeadlineSub<N>[] | null | undefined;
   readonly type: "deadline";
 }
@@ -1052,16 +1314,172 @@ type DefineAgentCompaction =
 
 ```ts
 interface DefineAgentConfig<T extends AnyToolDef> {
+  /**
+   * Bounds a run that keeps going without ever failing: the transcript budget,
+   * past which the OLDEST turns are folded into one model-written summary
+   * before the next brain call, so a long run's prompt stops growing instead of
+   * climbing until the provider rejects it.
+   *
+   * The knob is a THRESHOLD, not a policy function — see
+   * DefineAgentCompaction. `compaction` is what a run tolerates, and the
+   * summarize round-trip that enforces it is wiring, so the lid takes the
+   * former and supplies the latter from the `model` it already has.
+   *
+   * `afterTurns: 20` folds once the conversation holds twenty turns.
+   * `afterContextTokens: 8_000` folds once the last brain turn's reported
+   * `inputTokens + outputTokens` reaches eight thousand; the number is yours,
+   * because tea knows no model's window size. Set both and the first one
+   * reached folds. `keepTurns` is how many of the newest turns survive the
+   * fold intact. It is not a guard: nothing fails, and the run goes on.
+   *
+   * Omit → NO compaction, exactly as before: the transcript grows for as long
+   * as the model keeps asking for tools. Nothing is defaulted on your behalf —
+   * a silent budget would change the prompt every existing caller sends.
+   */
   readonly compaction?: DefineAgentCompaction;
+  /**
+   * Stops a run that stops progressing: milliseconds the run may sit without
+   * advancing before it fails. The budget is a no-progress watchdog, not a
+   * total wall-clock cap — it restarts each time the run moves. Omit → no
+   * watchdog.
+   *
+   * The failure is `{ reason: "deadline", at }` on the Model's `run.failure`,
+   * the monitored-run slice, and not on the agent's own `failure` field where
+   * `turn_limit` and `elapsed_limit` land. `at` is when the watchdog fired. A
+   * tool or model call already out runs to its own end first, so `run` can
+   * settle later than `at`.
+   */
   readonly deadlineMs?: number;
+  /**
+   * The system prompt — stored on the Model at `init` (ADR 0004) and never
+   * re-read, so a resumed run keeps the prompt it started with even across a
+   * redeploy that changed this string; to replace a bad prompt already in
+   * flight, end that run and start a new one rather than resuming it.
+   */
   readonly instructions: string;
+  /**
+   * Stops a run that keeps going, by the clock: total milliseconds from the
+   * run's start it may take before it fails. This is the total wall-clock cap
+   * `deadlineMs` is not — the budget never restarts, so a run that keeps
+   * progressing is bounded by it where `deadlineMs` would let it run forever,
+   * and it counts elapsed time where `maxTurns` counts round-trips. It is read
+   * at the turn boundary, so like both of those it stops the run rather than
+   * cancelling the work already in flight. Omit → no wall-clock cap.
+   *
+   * Read at the turn boundary means the run ends at the first boundary past
+   * the budget, not at the millisecond it comes due: a run 10ms into a 400ms
+   * tool call under a 150ms budget fails when that tool settles. The failure
+   * is `{ reason: "elapsed_limit", at }` on the Model's own `failure` field,
+   * beside `turn_limit`.
+   *
+   * The run's start time is on the durable Model, so a run killed and resumed
+   * continues the ORIGINAL budget — the time it spent dead counts against it.
+   *
+   * The same name on a `DurationRetryPolicy` (`retry`, and a tool's own) is the
+   * same idea one altitude down: that one bounds how long ONE call's retry
+   * ladder may keep climbing, this one how long the whole run may take.
+   */
   readonly maxElapsedMs?: number;
+  /**
+   * Stops a run that keeps going: the maximum number of model round-trips it
+   * may take. Once the completed-turn count reaches it the run fails rather
+   * than calling the model again. Omit → no limit on turns.
+   *
+   * The count is COMPLETED model round-trips. A compaction pass is not one, and
+   * tool calls are not counted at all: a turn that asks for six tools is one
+   * turn.
+   *
+   * The failure is `{ reason: "turn_limit", at }` on the Model's own `failure`
+   * field. `run` rejects with a `DriveFailedError` whose `.state` is that final
+   * Model.
+   */
   readonly maxTurns?: number;
+  /** The brain — either DefinedAgentModel shape. */
   readonly model: DefinedAgentModel;
+  /**
+   * Observe a tool call that failed, typed against THIS agent's tools: the
+   * outcome is `{ kind: "error", _tag, …payload, reason }` over
+   * `ToolError`'s union — declared tags, `thrown`, `malformed_result`,
+   * `unknown_tool`, `malformed_args` — so a `switch` on `_tag` is exhaustive and an
+   * unhandled failure mode is a compile error rather than a silent turn (#115).
+   * The model still reads `reason` next turn either way — this is the host's
+   * channel beside it, never instead of it.
+   *
+   * Called ONCE per failed call, at the interpret boundary: after the handler
+   * settled, before the failure is folded into the conversation. It is awaited,
+   * so an async hook holds the settle until it resolves — keep it short, and put
+   * anything slow on your own queue.
+   *
+   * A resume calls it for the calls THIS process runs and no others: an outcome
+   * a previous process already folded is in the Model the Store handed back and
+   * is never re-interpreted, so a durable run does not re-fire the hook over its
+   * history.
+   *
+   * The hook is CONTAINED, exactly as `onEvent` is: a throw (or a rejected
+   * promise) is warned about and the run goes on, so `run`'s contract does not
+   * depend on the hook's.
+   *
+   * Omit → the router is wired unwrapped and nothing observes failures.
+   */
   readonly onToolError?: (outcome: ToolFailureOf<T>, ctx: ToolErrorContext) => void | Promise<void>;
+  /**
+   * The backoff ladder a FAILED BRAIN CALL climbs — the same `RetryPolicy`
+   * shape `AgentConfigCore.retry` takes, threaded straight to it, so the ladder
+   * runs in the resilient slice that already exists and lives on the Model:
+   * each failure is recorded there and the next attempt is armed as a timer
+   * Sub, which is what makes the wait durable and the attempt count survive a
+   * reload.
+   *
+   * The per-tool knob grows no lid option because a `tool()` is a spec object
+   * that declares its own policy (`ToolResilience.retry`). A
+   * `defineAgent` `model` is a bare function with no spec object, so the lid is
+   * the only declaration site a brain-call policy has.
+   *
+   * Omit → NO backoff, exactly as before: one throw from `model` ends the run
+   * after a single attempt. Nothing is defaulted on your behalf — a silent
+   * default would change the failure timing of every existing caller.
+   */
   readonly retry?: RetryPolicy;
+  /**
+   * Stops a run on a condition only you can see: a predicate consulted at the
+   * turn boundary, after the other three guards have passed, over the run's
+   * durable Model. Answer `true` and the run ends there — settled `cancelled`,
+   * the same terminal an aborted `signal` reaches, with the transcript intact
+   * and no further model call made. Where `maxTurns` and `maxElapsedMs` bound
+   * a quantity the agent counts for you and `deadlineMs` watches for a stall,
+   * this bounds whatever you name — a token budget over `state.usage` (the
+   * run's provider-reported total), an external flag, a condition on the turns
+   * so far. Omit → no predicate.
+   *
+   * A stop you asked for is not a failure, so `run` RESOLVES with the final
+   * Model where the other three guards make it reject, and `status(state)`
+   * answers `{ kind: "cancelled", at }`.
+   *
+   * It must be PURE: the reducer calls it, so a replay hands it the same state
+   * and must get the same answer. And it is config rather than Model — a
+   * resumed run consults the predicate the config passed to THIS boot, exactly
+   * as it uses the `maxTurns` passed to this boot.
+   */
   readonly stopWhen?: (state: DefinedAgentState<T>) => boolean;
+  /**
+   * How many of ONE turn's tool calls a transition launches at once. At the
+   * default `1` a turn's calls go out one at a time, each waiting for the last
+   * to settle; raise it and up to that many are launched together, so they are
+   * all in flight in the fan-out ledger rather than queued behind each other.
+   * A turn asking for more calls than this runs them in waves.
+   *
+   * Launched together means overlapping on the clock: a turn of two slow tools
+   * costs the slower of them, not their sum. The overlap lives inside the tool
+   * Cmds' own handlers and NOT in the kernel — `runInterpret` still interprets
+   * a transition's Cmds one after another and never interleaves two handlers,
+   * which is ADR 0018's ruling and the reason a replay is unaffected. Settle
+   * Msgs fold in Cmd-EMISSION order whichever call finishes first, so raising
+   * the knob changes the turn's latency and nothing about its Model.
+   *
+   * Omit (or `1`) → serial dispatch, exactly as before.
+   */
   readonly toolConcurrency?: number;
+  /** The `tool()`s the model may call. */
   readonly tools: readonly T[];
 }
 ```
@@ -1072,11 +1490,56 @@ interface DefineAgentConfig<T extends AnyToolDef> {
 
 ```ts
 interface DefinedAgent<T extends AnyToolDef> {
+  /**
+   * The machine `run` drives for `input` and the interpret table it runs under
+   * — the door down to the raw kernel.
+   */
   readonly machine: (input: string) => DefinedAgentWired<T>;
+  /**
+   * Run `input` to its terminal Model. Resolves on `run.phase: "done"`; a
+   * failed run rejects with `DriveFailedError` carrying the failed Model.
+   *
+   * With a `store`, the same call is also the resume: a Model the Store hands
+   * back mid-run is booted (`agent_boot`) at its one outstanding effect —
+   * same `runId`, no tool re-run — and one already `done` resolves as it is.
+   * A fresh start needs an empty Store.
+   *
+   * It resolves with DefinedAgentResolvedState — the Model whose `run`
+   * slice is narrowed to the ENDED phases, so `(await agent.run(i)).run.runId`
+   * reads without a guard against an `idle` arm this promise cannot produce.
+   */
   readonly run: (
     input: string,
     ...opts: [Record<never, never>] extends [UnionToIntersection<KnownToolCtx<ToolCtxBoxed<T>>>] ? [opts?: DefinedAgentRunOptions<T>] : [opts: DefinedAgentRunOptions<T>],
   ) => Promise<DefinedAgentResolvedState<T>>;
+  /**
+   * The ramp between the lid and `createAgent`: wrap ONE interpret cell of the
+   * machine this agent builds and get back a NEW defined agent that runs the
+   * wrapped table. The agent it is called on is untouched, and so is every cell
+   * the overlay does not name.
+   *
+   *     const traced = agent.with({
+   *       interpret: {
+   *         fetch_rate: (next) => async (cmd, ctx, dispatch) => {
+   *           console.time(cmd.callId);
+   *           try { return await next(cmd, ctx, dispatch); }
+   *           finally { console.timeEnd(cmd.callId); }
+   *         },
+   *       },
+   *     });
+   *
+   * The wrapped cell settles through the SAME typed Cmd→Msg edge as the cell it
+   * wraps — it returns whatever `next` returned — so the reducer folds the same
+   * Msgs and a replay of a wrapped run is the unwrapped run's replay. That is
+   * the whole contract: the door is one over the effect boundary, never over
+   * the fold. A cell that must settle DIFFERENTLY is a different machine, and
+   * `createAgent` is still where you build one.
+   *
+   * `with` composes — `agent.with(a).with(b)` puts `b`'s wrapper OUTSIDE `a`'s,
+   * so `b` is entered first and `a`'s cell is what its `next` calls. Naming a
+   * cell the machine has none of throws at `machine(input)`, where the table it
+   * is checked against exists.
+   */
   readonly with: (overlay: DefinedAgentOverlay<T>) => DefinedAgent<T>;
 }
 ```
@@ -1161,10 +1624,69 @@ type DefinedAgentResolvedState<T extends AnyToolDef> = Omit<DefinedAgentState<T>
 
 ```ts
 type DefinedAgentRunOptions<T extends AnyToolDef> = CtxArg<DefinedAgentCtx<T>> & {
+  /** The clock that stamps `at`. Omit → `Date.now`. */
   readonly clock?: () => number;
+  /**
+   * Observe the token deltas of the turn being produced right now — the
+   * granularity below `onEvent`'s. Wired only when the configured `model` is
+   * the streaming shape (`async (messages, { onChunk }) => turn`); a plain
+   * model has no deltas to give, so passing this beside one is silent.
+   *
+   * Chunks ride a SIDE CHANNEL, never state. They are not projected off
+   * transitions like an AgentEvent is, because nothing about a chunk is
+   * a transition: it is never journaled, never written to the `Store`, and
+   * never folded into the Model. That is the whole rule this option obeys — a
+   * delta that has not settled is not an outcome, so a run that dies mid-turn
+   * loses its chunks and resumes from the last SETTLED turn, and a resumed run
+   * re-emits nothing it did not itself re-produce.
+   *
+   * The listener is CONTAINED exactly as `onEvent`'s is: a throw is caught and
+   * warned, never allowed to fail the model call it fired from.
+   *
+   * Omit → the streaming model is still invoked in its streaming shape, with a
+   * sink that drops every chunk.
+   */
   readonly onChunk?: (chunk: TurnChunk) => void;
+  /**
+   * Observe the run's turn-level lifecycle events — `TurnSettled`,
+   * `ToolSettled`, `RunDone` — in the order the kernel settles them. This is
+   * the progress seam: without it the only way to see anything mid-run is
+   * `machine(input)` plus the raw kernel loop.
+   *
+   * It forwards the runtime's existing semantic stream (`agentEvents()` /
+   * `runtime.on`); it mints no vocabulary of its own, so a consumer folds the
+   * same AgentEvents a hand-wired `run` would.
+   *
+   * The listener is CONTAINED: a throw is caught and warned, never allowed to
+   * take the run down, and never observable in `run`'s resolution. Only
+   * transitions applied by THIS process project events, so a store-backed
+   * resume replays nothing that settled before the boot.
+   *
+   * Omit → no projector is wired and the run behaves exactly as before.
+   */
   readonly onEvent?: (event: DefinedAgentEvent<T>) => void;
+  /** The run's identity. Omit → a fresh UUID. */
   readonly runId?: string;
+  /**
+   * Stop the run from outside — the stop button's seam. On abort the run settles
+   * on a CANCELLED terminal Model and `run` RESOLVES with it; it does not reject,
+   * and no `DriveFailedError` is thrown. Read the outcome with `status(state)`,
+   * which answers `{ kind: "cancelled", at }` — distinct from `failed`, because a
+   * run someone stopped did not fail.
+   *
+   * The outcome is durable, so it is also the answer on the next boot: a process
+   * killed after an abort resumes reading a run that ENDED, not one to restart.
+   * A signal already aborted when `run` is called ends it before the first model
+   * call is made.
+   *
+   * It stops DISPATCH, not the work already in flight — a promise cannot be
+   * cancelled, so a tool handler mid-call runs to its own end. Those late results
+   * reach no `onEvent`, no `onToolError` and no Model, and they do not hold the
+   * runtime's teardown. Propagating the signal INTO handlers is a separate seam
+   * this option does not open.
+   *
+   * Omit → the run has no stop button and every path behaves exactly as before.
+   */
   readonly signal?: AbortSignal;
   readonly store?: Store<DefinedAgentState<T>>;
 }
@@ -1338,8 +1860,11 @@ interface Llm<Msg> {
 
 ```ts
 interface LlmCall<P extends string> {
+  /** The model id to invoke; `null` = the host's default model. */
   readonly model: string | null;
+  /** The per-purpose prompt payload the message loader consumes. Opaque to the knob. */
   readonly payload: unknown;
+  /** The stage / schema selector — drives both `schemas[purpose]` and message assembly. */
   readonly purpose: P;
 }
 ```
@@ -1350,9 +1875,11 @@ interface LlmCall<P extends string> {
 
 ```ts
 interface LlmErr<P extends string> {
+  /** The original error, carried untouched for the consumer to inspect. */
   readonly error: unknown;
   readonly key: string;
   readonly purpose: P;
+  /** A human-readable cause (model throw, retry-exhaustion, or schema parse). */
   readonly reason: string;
 }
 ```
@@ -1464,6 +1991,7 @@ type ModelPort<Msg, T = unknown> = ModelFactory<Msg> | PlainModel<Msg, T>
 
 ```ts
 interface ModelStream {
+  /** Hand one delta to whoever is watching this run. */
   readonly onChunk: (chunk: TurnChunk) => void;
 }
 ```
@@ -1554,6 +2082,7 @@ type RunFailure<Stage> =
 
 ```ts
 interface Schema<T> {
+  /** Validate + narrow `value` to `T`, or throw on mismatch (the zod contract). */
   parse(value: unknown): T;
 }
 ```
@@ -1632,12 +2161,38 @@ function tool<
 >(
   name: Name & NotReserved<Name>,
   spec: {
+    /**
+     * What the model SEES of an `ok` result, as content parts. A screenshot
+     * tool whose result is `{ jpeg }` (base64) declares
+     * `content: (r) => [{ type: "image", mediaType: "image/jpeg", source: { type: "base64", data: r.jpeg } }]`.
+     * The parts ride on the `tool` message beside the outcome, so an adapter
+     * sends them instead of stringifying the result. PURE: it runs on every
+     * render, over the result as the `Store` hands it back, and never on a
+     * failure. Omit → the model reads the outcome as data, as before.
+     */
     readonly content?: (result: Ok) => readonly ContentPart[];
     readonly description: string;
     readonly err: Tags;
     readonly input: StandardSchemaV1<unknown, Args>;
     readonly ok: StandardSchemaV1<unknown, Ok>;
+    /**
+     * The backoff ladder a failed attempt of this tool climbs — the same
+     * `{ baseMs, factor, capMs, jitter, maxAttempts }` shape the brain call's
+     * `retry` takes. The ladder is folded into the Model and its wait is a timer
+     * Sub, so a process killed between two attempts resumes at the attempt it
+     * was on. A spent budget settles as a `ToolOutcome` error carrying
+     * `_tag: "retry_exhausted"` beside its `reason`, with the attempt count and
+     * the last attempt's reason as the `attempts` / `last` fields.
+     * Omit → the first failure is the outcome.
+     */
     readonly retry?: AnyRetryPolicy;
+    /**
+     * The budget one call of this tool gets, in ms — the overall cap, measured
+     * from the first attempt and not restarted by a retry. When it elapses the
+     * call settles as a `ToolOutcome` error carrying `_tag: "timeout"` beside
+     * its `reason`, and the loop moves on; the attempt is NOT cancelled (a promise cannot be), so it runs to its
+     * own end and its late settle folds nothing. Omit → no cap.
+     */
     readonly timeoutMs?: number;
   },
   handler: ToolHandler<Args, Ok, TaggedError<Tags[number]>, Ctx>,
@@ -1666,8 +2221,11 @@ const TOOL_TIMEOUT_TAG: "timeout"
 
 ```ts
 interface ToolCall {
+  /** Args the model emitted, opaque to the agent. */
   readonly args: Readonly<Record<string, unknown>>;
+  /** Stable id the model minted; the fan-out item identity (`idOf`). */
   readonly callId: string;
+  /** The tool to invoke. The consumer's `toolOf` maps it to an effect Cmd. */
   readonly name: string;
 }
 ```
@@ -1697,14 +2255,27 @@ type ToolConstructors<Ok, E extends Tagged> = {
 
 ```ts
 type ToolDef<Name extends string, Args, Ok, E extends Tagged, Ctx> = CmdDef<Name, ToolInput<Args>, Ok, E> & {
+  /** Phantom — the ctx the handler reads. Never assigned. */
   readonly __ctx?: Ctx;
   readonly args: StandardSchemaV1<unknown, Args>;
+  /**
+   * The parts the model reads for an `ok` result, or `null` when the tool
+   * declared no `content` and the model reads the result as data.
+   */
   readonly content: ((result: Ok) => readonly ContentPart[]) | null;
   readonly description: string;
+  /**
+   * The colocated handler, as an interpret cell: it returns the tool's
+   * outcome, and the engine mints `<name>_ok` / `<name>_err` from it.
+   */
   readonly interpret: (
     cmd: CmdValue<Name, ToolInput<Args>, Ok, E>,
     ctx: HandlerCtx<Ctx>,
   ) => Promise<Outcome<Ok, E>>;
+  /**
+   * The timeout / retry knob this tool declared, or `null` when it declared
+   * neither. `toolRouter` serves it to the agent as `resilienceOf`.
+   */
   readonly resilience: ToolResilience | null;
 }
 ```
@@ -1750,8 +2321,10 @@ type ToolFail<Ok, E extends Tagged> = (error: E) => Outcome<Ok, E>
 
 ```ts
 interface ToolFailure {
+  /** The failure's tag; absent only on a record persisted before 0.13. */
   readonly _tag?: string;
   readonly kind: "error";
+  /** The model-facing rendering — `toolErrorReason(error)`. */
   readonly reason: string;
 }
 ```
@@ -1827,6 +2400,7 @@ type ToolPartsOf = (call: ToolCall, outcome: ToolOutcome<unknown>) => readonly C
 interface ToolRecord<R> {
   readonly call: ToolCall;
   readonly outcome: ToolOutcome<R>;
+  /** The `turnCount` at fold time — which round-trip this record belongs to (#85, A1). */
   readonly turn: number;
 }
 ```
@@ -1865,7 +2439,35 @@ type ToolRejection =
 
 ```ts
 interface ToolResilience {
+  /**
+   * The backoff ladder a FAILED attempt climbs — the same
+   * `BackoffCurve & RetryBudget` shape `AgentConfigCore.retry` takes for the
+   * brain call. Each failure is recorded in the Model and the next attempt is
+   * armed as a timer Sub, so the wait is durable and the attempt count survives
+   * a reload. When the budget is spent the call settles as a `ToolOutcome` error
+   * carrying `_tag: "retry_exhausted"` beside its `reason`, plus `attempts` and
+   * `last` as fields — see ToolRetryExhausted.
+   *
+   * Omit → the first failure is the outcome, exactly as before.
+   */
   readonly retry?: AnyRetryPolicy;
+  /**
+   * The budget one tool CALL gets, in ms, measured from the first attempt and
+   * NOT restarted by a retry — the overall cap `resilient-call`'s deadline brick
+   * enforces. When it elapses the call settles as a `ToolOutcome` error
+   * carrying `_tag: "timeout"` beside its `reason`, and the loop moves on, whatever the
+   * in-flight attempt does next — its late settle arrives for a call nothing is
+   * waiting on and folds nothing, so a slow tool costs the budget and not the
+   * turn.
+   *
+   * What it does NOT do is cancel the handler: a promise cannot be cancelled in
+   * JavaScript, so the attempt runs to its own end, and `run`'s teardown still
+   * drains it. A handler that resolves LATE is bounded by this knob; a handler
+   * that never resolves at all holds the runtime's shutdown regardless, and
+   * wants an `AbortSignal` in the handler rather than a budget out here.
+   *
+   * Omit → the call has no cap and ends only when its handler settles.
+   */
   readonly timeoutMs?: number;
 }
 ```
@@ -1893,7 +2495,9 @@ type ToolResult<T extends AnyToolDef> = OkOf<T>
 ```ts
 interface ToolRetryExhausted {
   readonly _tag: "retry_exhausted";
+  /** How many attempts the ladder burned, the failed last one included. */
   readonly attempts: number;
+  /** The last attempt's own `reason`, so the real failure is not buried. */
   readonly last: string;
 }
 ```
@@ -1912,11 +2516,31 @@ function toolRouter<T extends AnyToolDef>(tools: readonly T[]): ToolRouter<T>
 
 ```ts
 interface ToolRouter<T extends AnyToolDef> {
+  /** Every def the router settles through — hand to `Machine.cmds`. */
   readonly defs: readonly AnyCmdDef[];
+  /** One interpret handler per tool plus the `tool_rejected` handler. */
   readonly interpret: Interpret<ToolMsg<T>, ToolCmd<T>, ToolsCtx<T>>;
+  /**
+   * Read a settled tool off a Msg: `null` when the Msg is not one of this
+   * router's `<name>_ok` / `<name>_err`. The one place a `{ _tag }` failure is
+   * rendered to the `reason` string the conversation carries — and the tag and
+   * its payload ride beside that rendering, never instead of it (#115).
+   */
   readonly outcomeOf: (msg: { readonly type: string }) => ToolSettlement<OkOf<T>, ToolError<T>> | null;
+  /**
+   * The parts the model reads for one settled call: the called tool's
+   * `content` over an `ok` result. `null` for a failure, for a tool that
+   * declared no `content`, and for a call no tool answers. PURE.
+   */
   readonly partsOf: (call: ToolCall, outcome: ToolOutcome<unknown>) => readonly ContentPart[] | null;
+  /**
+   * The timeout / retry knob the called tool declared — `AgentConfigCore`'s
+   * `toolResilienceOf` seam, filled from the `tool()` specs. `null` for a tool
+   * that declared neither field and for a call no tool answers (the rejection
+   * path settles in the reducer and never runs an effect to time out). PURE.
+   */
   readonly resilienceOf: (call: ToolCall) => ToolResilience | null;
+  /** The `toolOf` for `createAgent`: total, pure, parses `args` at the edge. */
   readonly toolOf: (call: ToolCall) => ToolCmd<T>;
 }
 ```
@@ -1975,7 +2599,9 @@ function transcript<R>(seed?: TranscriptSeed<R>): Transcript<R>
 
 ```ts
 interface Transcript<R> {
+  /** Wire this to `run`'s `onEvent`. */
   readonly onEvent: (event: AgentEvent<R>) => void;
+  /** The transcript as of now. Each call returns a fresh immutable snapshot. */
   readonly read: () => TranscriptSnapshot<R>;
 }
 ```
@@ -2004,8 +2630,11 @@ interface TranscriptSeed<R> {
 
 ```ts
 interface TranscriptSnapshot<R> {
+  /** Whether `RunDone` has been seen, and how the run ended if so. */
   readonly outcome: TranscriptOutcome;
+  /** Every tool call that settled OK, in settle order. */
   readonly tools: readonly TranscriptToolResult<R>[];
+  /** Every model turn the transcript holds, in order. */
   readonly turns: readonly AgentTurn[];
 }
 ```
@@ -2027,6 +2656,7 @@ interface TranscriptToolResult<R> {
 
 ```ts
 interface TurnChunk {
+  /** The text delta this chunk adds to the turn's `content`. */
   readonly text: string;
 }
 ```
@@ -2037,9 +2667,13 @@ interface TurnChunk {
 
 ```ts
 interface TurnUsage {
+  /** Of `inputTokens`, those served from the provider's prompt cache — when it says. */
   readonly cachedInputTokens?: number;
+  /** Prompt tokens the call read, cached ones included. */
   readonly inputTokens: number;
+  /** Tokens the model produced. */
   readonly outputTokens: number;
+  /** Of `outputTokens`, those spent on reasoning — when the provider says. */
   readonly reasoningTokens?: number;
 }
 ```

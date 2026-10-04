@@ -8,7 +8,7 @@
  * every field is checked with a type guard before it is read.
  */
 
-import { isRecord, printDeclaration } from "./typedoc-declaration";
+import { commentText, isRecord, printDeclaration } from "./typedoc-declaration";
 
 export { isRecord };
 
@@ -70,18 +70,6 @@ function symbolComment(sym: Record<string, unknown>): unknown {
   if (isRecord(sym.comment)) return sym.comment;
   const [first] = Array.isArray(sym.signatures) ? sym.signatures : [];
   return isRecord(first) ? first.comment : undefined;
-}
-
-/** Flatten a typedoc `comment.summary` part array into plain text. */
-function extractSummary(comment: unknown): string {
-  if (!isRecord(comment)) return "";
-  const { summary } = comment;
-  if (!Array.isArray(summary)) return "";
-  let out = "";
-  for (const part of summary) {
-    if (isRecord(part) && typeof part.text === "string") out += part.text;
-  }
-  return out.trim();
 }
 
 /** Whether a symbol's TSDoc carries the `@experimental` modifier tag. */
@@ -190,14 +178,14 @@ export function parseTypedocModel(raw: unknown): DocModule[] {
         kindLabel: kindLabel(
           typeof decl.kind === "number" ? decl.kind : sym.kind,
         ),
-        summary: firstSentence(extractSummary(comment)),
+        summary: firstSentence(commentText(comment)),
         declaration: printDeclaration(sym.name, decl),
         experimental: isExperimental(comment),
       });
     }
     modules.push({
       name: child.name,
-      summary: extractSummary(child.comment),
+      summary: commentText(child.comment),
       symbols,
     });
   }

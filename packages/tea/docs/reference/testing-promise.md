@@ -62,8 +62,10 @@ type DriveCtxArg<Ctx> = [undefined] extends [Ctx] ? { readonly ctx?: Ctx } : Ctx
 class DriveNoHandlerError<M, C> extends Error {
   constructor(cmdType: string, trace: readonly DriveTraceEntry<M, C>[]);
   readonly _tag: "DriveNoHandlerError";
+  /** The Cmd `type` nothing in the handler record answered. */
   readonly cmdType: string;
   readonly name: "DriveNoHandlerError";
+  /** Every Msg folded and Cmd dispatched before the miss. */
   readonly trace: readonly DriveTraceEntry<M, C>[];
 }
 ```
@@ -74,7 +76,17 @@ class DriveNoHandlerError<M, C> extends Error {
 
 ```ts
 type DriveOptions<Ctx> = DriveCtxArg<Ctx> & {
+  /**
+   * The clock that stamps `at` on a `Cmd.define`d Cmd's minted `_ok` / `_err`
+   * Msg — the one `run` takes. Defaults to `Date.now`; pin it for a test that
+   * asserts on `at`.
+   */
   readonly clock?: () => number;
+  /**
+   * The round bound. Exceeding it fails the drive with
+   * DriveRoundsExceededError; `drive` never returns a half-driven
+   * state. Defaults to DEFAULT_MAX_ROUNDS (100).
+   */
   readonly maxRounds?: number;
 }
 ```
@@ -85,7 +97,13 @@ type DriveOptions<Ctx> = DriveCtxArg<Ctx> & {
 
 ```ts
 interface DriveResult<S, M, C> {
+  /** The state after the machine went quiet — no Msg pending, no Cmd unperformed. */
   readonly state: S;
+  /**
+   * Every Msg folded and every Cmd dispatched, in order. Filtering it to its
+   * `msg` entries and replaying those through `replay` from the same initial
+   * state reproduces DriveResult.state.
+   */
   readonly trace: readonly DriveTraceEntry<M, C>[];
 }
 ```
@@ -98,9 +116,12 @@ interface DriveResult<S, M, C> {
 class DriveRoundsExceededError<M, C> extends Error {
   constructor(maxRounds: number, rounds: number, trace: readonly DriveTraceEntry<M, C>[]);
   readonly _tag: "DriveRoundsExceededError";
+  /** The bound that was exceeded. */
   readonly maxRounds: number;
   readonly name: "DriveRoundsExceededError";
+  /** The round the driver stopped at — always `maxRounds + 1`. */
   readonly rounds: number;
+  /** Every Msg folded and Cmd dispatched before the driver gave up. */
   readonly trace: readonly DriveTraceEntry<M, C>[];
 }
 ```

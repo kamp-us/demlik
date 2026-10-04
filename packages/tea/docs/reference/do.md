@@ -156,10 +156,40 @@ function acceptPresenceSocket<A>(
 
 ```ts
 interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, Frame> {
+  /**
+   * The SSE hub — the route (`host.sse.open()`) AND the test seam
+   * (`host.sse.register(sink)`). The host drives `hub.emit` off the semantic
+   * event stream; the consumer never touches it except to open / register.
+   */
   readonly sse: SseHub<Frame>;
+  /**
+   * Tear down the cached runtime (drain its tail via `stop()`, drop the handle)
+   * so the next `runtime()` rebuilds from storage. The framework `settle` test
+   * seam, owned once.
+   */
   reset(): Promise<void>;
+  /**
+   * The run's terminal State (#46), or `undefined` while in flight. Read the
+   * run's product off it (e.g. `result()?.output`). Replaces the per-consumer
+   * `verdict` plumbing's source. Ensures the runtime is built first.
+   */
   result(): Promise<AgentState<Stage, P, O, R> | undefined>;
+  /**
+   * Get (or build) the booted runtime. Build-once-boot-once: the first call
+   * builds the machine, wires SSE off the semantic event stream, awaits the boot
+   * gate, runs the `autoBoot` re-fire for a rehydrated suspended run, and caches
+   * the booted handle; subsequent calls return the cached handle. The single
+   * assembly every consumer used to hand-roll in `getRuntime()`.
+   */
   runtime(): Promise<BootedRunHandle<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, AgentEvent<R>>>;
+  /**
+   * The agent's lifecycle status (#49) — the ONE typed channel a consumer reads
+   * instead of re-deriving `run.phase` / `awaiting` by hand. Ensures the runtime
+   * is built + boot-reconciled first. Replaces the per-consumer `isSuspended` /
+   * `runPhase` test methods (read `status().kind`: `idle` / `running` /
+   * `suspended` / `done` / `failed`). A hydrated DO that has not yet seen
+   * `agent_start` reads `idle`, not `running` (#92).
+   */
   status(): Promise<AgentStatus<Stage>>;
 }
 ```
@@ -179,12 +209,35 @@ interface AgentHostConfig<
   U extends Sub = Sub,
   Ctx = unknown,
 > {
+  /**
+   * Build the wired agent machine and the handlers it runs under — its
+   * `interpret` table and `subscribe` runners (a machine carries none — #278,
+   * #279). Called once per host build (per activation), AFTER the previous
+   * runtime — if any — was torn down. The consumer wires its per-tool interpret
+   * here, and `agent.toMachine({ toolInterpret })` already returns exactly this.
+   */
   readonly buildMachine: () => Wired<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx>;
+  /** The plain Ctx the machine threads to its interpret cells. */
   readonly ctx: Ctx;
+  /** Clock injected for `autoBoot` (the host's only boot clock read). */
   readonly now?: () => number;
+  /**
+   * The engine's `run` — `run` from `@demlik/tea/promise`, or any engine's. The
+   * host imports no engine; it boots the machine through this.
+   */
   readonly run: EngineRun<AgentState<Stage, P, O, R>, AgentMachineMsg<P, O, R>, C, U, Ctx, AgentEvent<R>>;
+  /** The durable `Store` for the agent slice (typically `doStore(storage, parse)`). */
   readonly store: Store<AgentState<Stage, P, O, R>>;
+  /**
+   * The run-terminality predicate (#46) — what makes `result()` first-class.
+   * Defaults to the agent's own terminal phases (`done` / `failed`).
+   */
   readonly terminal?: (state: AgentState<Stage, P, O, R>) => boolean;
+  /**
+   * Map one semantic AgentEvent to the consumer's SSE frame, or `null`
+   * to skip it. This is the ONLY place the consumer touches the SSE seam — the
+   * host owns the subscription wiring (`sseFromAgentEvents`) and the hub.
+   */
   readonly toSseFrame: (event: AgentEvent<R>) => Frame | null;
 }
 ```
@@ -354,7 +407,15 @@ function broadcastHibernatable(ctx: HibernatableCtx, frame: unknown): void
 
 ```ts
 interface BroadcastOptions<S extends PresenceSocket> {
+  /**
+   * A socket to exclude from the fan-out — typically the sender, so a collab /
+   * chat frame is not echoed back to its originator. Compared by identity.
+   */
   readonly except?: S;
+  /**
+   * How to turn `frame` into the wire string. Defaults to `JSON.stringify`.
+   * Override for a non-JSON wire format (e.g. a pre-encoded string passthrough).
+   */
   readonly serialize?: (frame: unknown) => string;
 }
 ```
@@ -448,8 +509,26 @@ type DeferredStepResponse<I, O> = StepResponse<I, O> | StepWorking
 
 ```ts
 interface DeferResumeHook<R> {
+  /**
+   * Optional advisory re-poll delay (ms) surfaced on the StepWorking arm
+   * so the hands can back off to the host's expected step latency.
+   */
   readonly retryAfterMs?: number;
+  /**
+   * SETTLE-AND-ENQUEUE the posted result to resume OUT of the held request:
+   * durably record it and schedule the compute (e.g. `ctx.storage.setAlarm` or a
+   * queue) so a returning activation runs `engine.resume`. MUST return promptly —
+   * it never awaits the step compute. Called at most once per distinct `callId`
+   * (`stepHost` dedupes re-POSTs through `idempotent-intake` first), so a re-POST
+   * of the same step does not re-enqueue.
+   */
   enqueue(runId: string, posted: StepResult<R>): void | Promise<void>;
+  /**
+   * Has the enqueued resume for `callId` COMPLETED and been written to the
+   * durable checkpoint? `false` ⇒ the held request returns StepWorking
+   * (poll again); `true` ⇒ `stepHost` reads the next step / terminal output off
+   * the now-advanced checkpoint, exactly as the inline path does.
+   */
   settled(runId: string, callId: string): boolean | Promise<boolean>;
 }
 ```
@@ -514,8 +593,27 @@ function doStore<S>(
 
 ```ts
 interface DoStoreOptions<S> {
+  /**
+   * Refuse a second live writer (#143). With `{ fenced: true }` the returned
+   * store is a `FencedStore<S>`: the version lives in its own storage cell
+   * (`<key>@@version`) and the compare-and-swap runs inside
+   * `storage.transaction`, so the read, the compare and the two writes are one
+   * atomic unit. Inside a single DO the platform already guarantees one writer;
+   * fencing is what refuses a SECOND grain — a stale zombie isolate mid-migration,
+   * or a second DO id pointed at the same state by a routing bug.
+   */
   readonly fenced?: true;
+  /** Storage key the snapshot cell lives at. Defaults to `@@state`. */
   readonly key?: string;
+  /**
+   * The serialize half of the boundary (#182) — the INVERSE of `doStore`'s
+   * `parse`. Maps the live `S` to a JSON-safe carrier before `JSON.stringify`,
+   * so a Model holding a `Map`/`Set`/`Date` (which `JSON.stringify` would
+   * silently flatten) round-trips: `parse` reconstructs the rich `S` from the
+   * carrier on load. Omit for a plain-JSON Model (the identity default — the
+   * `Record`-not-`Map` constraint, unchanged). When present, `parse` MUST
+   * accept whatever `serialize` produces.
+   */
   readonly serialize?: (state: S) => unknown;
 }
 ```
@@ -586,7 +684,19 @@ function durableTimer(config: DurableTimerConfig): DurableTimer
 
 ```ts
 interface DurableTimer {
+  /**
+   * The body the DO `alarm()` lifecycle hook delegates to: run
+   * DurableTimerConfig.onFire, then DurableTimer.rearm off the
+   * post-fire state. A still-active grain keeps ticking; an idle one (its
+   * `nextDeadline` now `null`) stops here.
+   */
   onAlarm(): Promise<void>;
+  /**
+   * Recompute DurableTimerConfig.nextDeadline off the live state and arm
+   * the alarm at it — or, when it returns `null`, arm nothing (idle). Safe to
+   * call repeatedly; arming the same absolute target twice is a harmless
+   * overwrite on the DO alarm API.
+   */
   rearm(): Promise<void>;
 }
 ```
@@ -597,8 +707,32 @@ interface DurableTimer {
 
 ```ts
 interface DurableTimerConfig {
+  /**
+   * The DO alarm carrier. `setAlarm(atMs)` schedules the next fire at an
+   * absolute epoch-ms target. A real `DurableObjectStorage` satisfies this
+   * structurally; a test supplies a fake. Only `setAlarm` is read — never the
+   * whole `DurableObjectStorage`.
+   */
   readonly alarm: AlarmStorage;
+  /**
+   * Compute the next absolute deadline (epoch ms) off the live state, or `null`
+   * when there is no work to schedule. Returning `null` is the idle signal:
+   * DurableTimer.rearm arms nothing and the DO is free to hibernate.
+   *
+   * Called fresh on every `rearm` (including the post-fire re-arm and the
+   * cold-wake re-arm), so it MUST read live state / the injected clock each call
+   * — that freshness is what keeps the schedule a pure function of the persisted
+   * state and the re-arm eviction-safe. Examples:
+   *   - raft: `node.subs(state, now())[0]?.atMs ?? null` (election XOR heartbeat).
+   *   - vortex: `connectionCount() > 0 ? now() + TICK_INTERVAL_MS : null`.
+   */
   nextDeadline(): number | Promise<number | null> | null;
+  /**
+   * Run the timer's effect when the alarm fires — the consumer dispatches its
+   * timer Msg here (a `Tick`, a re-derived deadline Msg) and persists/broadcasts
+   * as its grain requires. DurableTimer.onAlarm awaits this BEFORE it
+   * re-arms, so the re-arm sees the post-fire state.
+   */
   onFire(): void | Promise<void>;
 }
 ```
@@ -682,7 +816,9 @@ function emptyLedger<E>(): PendingEffectsLedger<E>
 
 ```ts
 interface EventLogRange {
+  /** Lowest `seq` to include (inclusive). Default: the first event. */
   readonly fromSeq?: number;
+  /** Highest `seq` to include (inclusive). Default: the last event. */
   readonly toSeq?: number;
 }
 ```
@@ -693,14 +829,42 @@ interface EventLogRange {
 
 ```ts
 interface EventSourcedOptions<S, M> {
+  /** Cell-key overrides (rarely needed; for coexisting actors in one DO). */
   readonly keys?: {
     readonly eventPrefix?: string;
     readonly meta?: string;
     readonly snapshot?: string;
   };
+  /**
+   * End-of-recovery hook (recovery.md `RecoveryCompleted`). Fires EXACTLY ONCE
+   * per activation, after the fold completes, carrying the recovered state —
+   * even when the log was empty (fresh actor). It may fire again on a later
+   * activation, so it MUST be idempotent. Side effects that belong "once after
+   * recovery" go here, never in the reducer (the reducer re-runs on every
+   * replay).
+   */
   readonly onReady?: (state: S) => void;
+  /**
+   * Boundary parse for the persisted SNAPSHOT cell (the `S` blob). Returns `S`
+   * on a recognized shape, `null` on an unrecognized one, and must NOT throw.
+   * Unlike `doStore`'s `parse`, `null` loses nothing: the snapshot is only a
+   * shortcut, so a `null` discards it and replays the whole event log from
+   * seq 0. Default accepts any non-null, non-array object as `S`.
+   */
   readonly parse?: (raw: unknown) => S | null;
+  /**
+   * Boundary parse for a persisted EVENT (one logged `Msg`). Returns the `M` on
+   * a recognized shape; returning `null` DROPS the event from replay (use for a
+   * removed Msg variant). Must NOT throw. Default accepts any object carrying a
+   * string `type` as `M`.
+   */
   readonly parseEvent?: (raw: unknown) => M | null;
+  /**
+   * Take a snapshot every N appended events (count-based retention, mirrors
+   * Akka `RetentionCriteria.snapshotEvery`). A snapshot bounds how many events
+   * replay on the next activation — it never changes the fold's result, only
+   * its length (recovery.md). Must be >= 1. Default 100.
+   */
   readonly snapshotEvery?: number;
 }
 ```
@@ -711,9 +875,59 @@ interface EventSourcedOptions<S, M> {
 
 ```ts
 interface EventSourcedStore<S, M> {
+  /**
+   * The `Store<S>` to pass as `run(machine, { ctx, store })`. Its `load()`
+   * performs the fold (snapshot + log replay); its `save(state)` is the
+   * count-based snapshot writer. `migrate` forwards to `parse`.
+   */
   readonly store: Store<S>;
+  /**
+   * Append one applied `Msg` to the log. Call from `runtime.observe` for every
+   * non-null msg. Resolves once the event is durably written. Triggers a
+   * snapshot when the event count crosses a `snapshotEvery` boundary.
+   */
   append(msg: M): Promise<void>;
+  /**
+   * Stream the persisted event log in `seq` order, optionally bounded by an
+   * inclusive EventLogRange. This is the PUBLIC read side of the
+   * event-sourced write model — the surface replay / projection / audit
+   * consumers (CQRS reads, recovery.md / projections.md) read through, instead
+   * of mirroring the store's private `@@es/evt/` key convention.
+   *
+   * The log is APPEND-ONLY and is never truncated by snapshotting (a snapshot
+   * only bounds the *replay* tail, never the log), so this yields EVERY event
+   * in range — including ones a snapshot already folds. Each entry carries its
+   * `seq`, so a consumer can resume from a known offset (`{ fromSeq }`) or read
+   * a window (`{ fromSeq, toSeq }`). An empty (or fully out-of-range) log yields
+   * nothing. Events whose `parseEvent` returns `null` (a retired Msg variant)
+   * are dropped, identical to the recovery fold.
+   *
+   * Read-only: it never appends, snapshots, or mutates store state, so streaming
+   * the log can never perturb the live actor.
+   */
   readEvents(range?: EventLogRange): AsyncIterable<PersistedEvent<M>>;
+  /**
+   * Take a snapshot NOW, independent of the count-based `snapshotEvery` trigger
+   * (a time/tick-based retention trigger, #190). The count-based trigger bounds
+   * the replay tail by raw EVENT COUNT; a grain that derives many state
+   * transitions per logged event (e.g. simulation ticks between sparse intents)
+   * needs the tail bounded by ELAPSED TIME instead — so it calls `snapshotNow()`
+   * on its own cadence (every N derived ticks, or on a wall-clock interval) to
+   * checkpoint the current folded state without injecting filler events purely
+   * to advance the counter.
+   *
+   * It checkpoints the latest state the substrate handed `save()` at the current
+   * highest sequence, then advances the count-based baseline (`snapshotEvery`
+   * counts afresh from here, so a manual snapshot defers the next automatic one).
+   *
+   * Returns `true` if a snapshot was written, `false` on a no-op: nothing has
+   * been applied yet (fresh actor), or no new event exists since the last
+   * snapshot (already current). Like the count-based path, it pairs the held
+   * state with the highest sequence, so the caller MUST invoke it between
+   * settled transitions — after the turn's `append()`s have resolved — never
+   * mid-transition (the same boundary discipline `append`'s own snapshot relies
+   * on). Resolves once the snapshot is durably written.
+   */
   snapshotNow(): Promise<boolean>;
 }
 ```
@@ -880,7 +1094,9 @@ interface PendingEffectsRecorder<E> {
 
 ```ts
 interface PersistedEvent<M> {
+  /** The decoded `Msg`, parsed through the store's `parseEvent` boundary. */
   readonly event: M;
+  /** The append sequence number this event was logged under (1-based, gap-free). */
   readonly seq: number;
 }
 ```
@@ -921,7 +1137,9 @@ interface PresenceSocket {
 
 ```ts
 interface PresenceUpgrade {
+  /** The 101 Switching-Protocols upgrade response carrying the client end. */
   readonly response: Response;
+  /** The server end of the pair — send the welcome / initial snapshot on it. */
   readonly server: WebSocket;
 }
 ```
@@ -932,9 +1150,23 @@ interface PresenceUpgrade {
 
 ```ts
 interface Projection<Model, Msg extends { type: string }, View> {
+  /** This projection's id (offset-isolation unit). */
   readonly id: ProjectionId;
+  /** The seed view for a fresh or rebuilt run (the `NoOffset` start). */
   readonly initial: View;
+  /**
+   * The per-envelope reducer: derive the next view from the previous view and
+   * one update. Pure; MUST be idempotent — re-applying an update at the same
+   * offset yields the same view (upsert the derived value, never a blind
+   * increment). Returning the SAME view reference (or an equal one) for an
+   * update the view does not care about is the canonical "skip".
+   */
   apply(view: View, update: ProjectionUpdate<Model, Msg>): View;
+  /**
+   * The sink — publish the derived view. SSE frame, durable cell, report row.
+   * Fired by the driver after `apply` produces a new view. A throwing `emit` is
+   * isolated by the driver (it must not strand sibling projections).
+   */
   emit(view: View): void;
 }
 ```
@@ -945,6 +1177,7 @@ interface Projection<Model, Msg extends { type: string }, View> {
 
 ```ts
 interface ProjectionErrorContext {
+  /** The id of the projection whose `apply`/`emit` threw. */
   readonly id: ProjectionId;
 }
 ```
@@ -992,12 +1225,22 @@ function projectionRegistry<Model, Msg extends { type: string }>(
 
 ```ts
 interface ProjectionRegistry<Model, Msg extends { type: string }> {
+  /**
+   * Present one update to EVERY registered runner. Each folds independently; an
+   * `apply`/`emit` throw in one runner is caught so it cannot strand the others
+   * (errors-are-data: a broken projection is dropped from THIS update, not
+   * allowed to corrupt siblings) and routed to the registry's `onError` sink so
+   * it surfaces rather than vanishing. Returns the offset assigned to this update.
+   */
   dispatch(msg: Msg | null, model: Model): number;
+  /** The current monotonic offset (the last dispatched update's position). */
   offset(): number;
+  /** Register a projection; returns its live runner. */
   register<View>(
     projection: Projection<Model, Msg, View>,
     startOffset?: number,
   ): ProjectionRunner<Model, Msg, View>;
+  /** The registered runners (introspection / tests). */
   runners(): readonly ProjectionRunner<Model, Msg, unknown>[];
 }
 ```
@@ -1009,9 +1252,28 @@ interface ProjectionRegistry<Model, Msg extends { type: string }> {
 ```ts
 interface ProjectionRunner<Model, Msg extends { type: string }, View> {
   readonly id: ProjectionId;
+  /**
+   * The exclusive stored offset — the position of the LAST applied update.
+   * Resume reads strictly after this; `0` is the `NoOffset` start.
+   */
   offset(): number;
+  /**
+   * Present one update to the projection. At-least-once entry point:
+   *   - if `update.offset <= storedOffset` the update was already applied →
+   *     NO-OP (idempotent replay window; offset stays, view stays, no emit).
+   *   - otherwise fold via `apply`, advance the offset TO `update.offset`, and
+   *     `emit` the new view. Offset-and-view advance together (one unit) →
+   *     exactly-once: the stored offset always matches the folded view.
+   * Returns true iff the update was applied (false on the no-op replay).
+   */
   present(update: ProjectionUpdate<Model, Msg>): boolean;
+  /**
+   * Clear the view to `initial` and the offset to 0 — the canonical rebuild
+   * reset (offset-tracking.md: "resetting it to NoOffset is the view-rebuild
+   * operation"). After `reset`, re-presenting the full stream rebuilds the view.
+   */
   reset(): void;
+  /** The current derived view (the read model). */
   view(): View;
 }
 ```
@@ -1022,8 +1284,16 @@ interface ProjectionRunner<Model, Msg extends { type: string }, View> {
 
 ```ts
 interface ProjectionUpdate<Model, Msg> {
+  /** The post-transition write-model state. */
   readonly model: Model;
+  /** The applied event, or `null` on the boot update (initial state). */
   readonly msg: Msg | null;
+  /**
+   * The exclusive position of this update in the ordered stream — monotonic,
+   * 1-based; 0 is the boot update (the `NoOffset` start). The stored offset is
+   * EXCLUSIVE: re-presenting an update whose offset is `<=` the stored offset
+   * must be a no-op (the at-least-once replay window). Do NOT ±1 it.
+   */
   readonly offset: number;
 }
 ```
@@ -1060,7 +1330,16 @@ function registerHibernatableSocket<S extends AttachableSocket, A>(
 
 ```ts
 interface RegisterOptions<A> {
+  /**
+   * A per-socket value to persist via `server.serializeAttachment` so it
+   * survives DO eviction (e.g. the player/session id the grain re-reads in
+   * `webSocketMessage`/`webSocketClose`). Omitted ⇒ no attachment written.
+   */
   readonly attachment?: A;
+  /**
+   * Hibernation tags for the socket — the same strings `ctx.getWebSockets(tag)`
+   * filters on, so a grain can fan out to a subset (e.g. a team, a channel).
+   */
   readonly tags?: readonly string[];
 }
 ```
@@ -1118,10 +1397,19 @@ function runStepLoop<R, I, O>(
 
 ```ts
 interface RunStepLoopConfig {
+  /**
+   * Absolute wall-clock deadline (ms epoch). The loop stops asking once `now()`
+   * reaches it, surfacing a `deadline_exceeded` outcome. Mirrors the poller's
+   * absolute-deadline contract (a resumed loop honors the SAME moment).
+   */
   readonly deadlineMs: number;
+  /** Clock, injected for determinism. Defaults to `Date.now`. */
   readonly now?: () => number;
+  /** Backoff policy for FAILED `/step` POSTs. Defaults to `defaultRetryPolicy`. */
   readonly retry?: RetryPolicy;
+  /** Backoff jitter RNG, injected for determinism. Defaults to `Math.random`. */
   readonly rng?: Rng;
+  /** `(ms) => Promise` sleep, injected for determinism. Defaults to real sleep. */
   readonly sleep?: (ms: number) => Promise<void>;
 }
 ```
@@ -1147,6 +1435,7 @@ function sseFromAgentEvents<R, Frame>(
         }, { type: K }> | Extract<AgentEventHead & {
           readonly turn: AgentTurn;
           readonly type: "TurnSettled";
+          /** The usage the provider reported for this turn. Absent → none reported. */
           readonly usage?: TurnUsage;
         }, { type: K }> | Extract<AgentEventHead & {
           readonly args: Readonly<Record<string, unknown>>;
@@ -1222,9 +1511,33 @@ interface StepCtx {
 
 ```ts
 interface StepEngine<R, I, O> {
+  /**
+   * Read the next step the run is now waiting on — the next tool call — off the
+   * resumed runtime's durable state, or `null` if the run has reached its
+   * terminal State (then terminalOutput supplies the output).
+   */
   nextStep(runId: string): NextStep<I> | Promise<NextStep<I> | null> | null;
+  /**
+   * Settle the posted tool result into the run, then RESUME from the durable
+   * checkpoint: dispatch the settle and run to DISPATCH-QUIESCENCE (e.g.
+   * `await runtime.dispatch(settleMsg)` — dispatch drains the follow-up chain
+   * by default, #50). Called at most once per distinct
+   * `callId` — `stepHost` dedupes re-POSTs via `idempotent-intake` BEFORE
+   * calling this, so the side effect runs exactly once. On the first request
+   * (`posted === null`) `stepHost` skips settle and calls nextStep
+   * directly to hand out the first step.
+   */
   resume(runId: string, posted: StepResult<R>): void | Promise<void>;
+  /**
+   * Read the run's terminal output (off `runtime.result()`). Only called when
+   * nextStep returned `null`.
+   */
   terminalOutput(runId: string): O | Promise<O>;
+  /**
+   * The persisted capability token for `runId`, or `null` if the run is
+   * unknown. Read from DO storage. `stepHost` compares the request token
+   * against this constant-time.
+   */
   tokenFor(runId: string): string | Promise<string | null> | null;
 }
 ```
@@ -1256,6 +1569,11 @@ function stepHost<R, I, O>(
 
 ```ts
 interface StepHostConfig {
+  /**
+   * How far ahead, in ms, to re-arm the give-up alarm on every step. A run that
+   * stops POSTing for longer than this is abandoned and the alarm fires (the
+   * consumer's `alarm()` handler tears the run down). Defaults to 5 minutes.
+   */
   readonly giveUpAfterMs?: number;
 }
 ```
@@ -1341,6 +1659,11 @@ type StepTransport<R, I, O> = (request: StepRequest<R>) => Promise<DeferredStepR
 ```ts
 interface StepWorking {
   readonly done: false;
+  /**
+   * Advisory earliest re-poll delay as a hint to the hands (ms to wait before
+   * the next pull). Purely advisory — a host may omit it and the hands fall back
+   * to their own backoff curve.
+   */
   readonly retryAfterMs?: number;
   readonly working: true;
 }

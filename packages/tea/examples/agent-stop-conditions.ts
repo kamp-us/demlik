@@ -2,8 +2,8 @@
  * The four stop conditions `defineAgent` offers, worked end to end — the source
  * the how-to guide `docs/how-to/bound-a-run.md` quotes.
  *
- * Story: one scripted model that never stops asking for tools, run five times
- * under five different bounds. No keys, no network.
+ * Story: one scripted model that never stops asking for tools, run seven times
+ * under seven different bounds. No keys, no network.
  *
  *   1. `maxTurns: 3`   — the run fails at the third completed round-trip.
  *   2. `deadlineMs: 150` over a run that KEEPS MOVING — it does not fire. The
@@ -18,6 +18,8 @@
  *   6. A token budget — `stopWhen` over the provider-reported usage total the
  *      conversation keeps — beside `compaction.afterContextTokens`, which folds
  *      the transcript once the last call's reported size reaches a threshold.
+ *   7. All four guards on one agent. Each bounds a different thing, so the
+ *      first to trip ends the run and the others never fire.
  *
  * (2) beside (4) is the whole reason this file exists. `deadlineMs` is not a
  * wall-clock cap on a run and setting it is not a spend cap; `maxElapsedMs` is.
@@ -236,6 +238,28 @@ console.log("token budget 60k →", status(spent).kind);
 console.log("  model calls:", calls, "of which summaries:", summaries);
 console.log("  spent:", spent.usage);
 
+// ===========================================================================
+// 7 — all four on one agent. The 20ms ticks keep the watchdog re-armed and the
+// model reports no usage, so neither `deadlineMs` nor `stopWhen` trips; the
+// 300ms wall-clock cap comes due before the twenty-fifth turn does.
+// ===========================================================================
+
+// #region guarded
+const guarded = defineAgent({
+  model: modelAsking(20),
+  tools: [tick],
+  instructions: "You tick.",
+  maxTurns: 25,
+  deadlineMs: 150,
+  maxElapsedMs: 300,
+  stopWhen: ({ usage }) => usage.inputTokens + usage.outputTokens >= 60_000,
+});
+// #endregion guarded
+
+calls = 0;
+console.log("all four →", await ended(() => guarded.run("go")));
+console.log("  model calls:", calls);
+
 /*
  * What it prints. The millisecond figures move a little run to run — the shape
  * is what matters:
@@ -253,6 +277,8 @@ console.log("  spent:", spent.usage);
  *   token budget 60k → cancelled
  *     model calls: 13 of which summaries: 2
  *     spent: { inputTokens: 68000, outputTokens: 550 }
+ *   all four → failed with elapsed_limit after 300ms (guard fired at +300ms)
+ *     model calls: 14
  *
  * Read the second line beside the fourth. Same agent, same 20ms ticks, two 150ms
  * budgets. `deadlineMs` let it take 531ms and 25 model calls — every tick was an
@@ -271,10 +297,14 @@ console.log("  spent:", spent.usage);
  * asking, not a budget being spent, so the run ends `cancelled` and `run`
  * resolves with the Model rather than rejecting.
  *
- * The last three are case 6. Eleven brain turns went out, and the total they
- * reported crossed 60k on the eleventh, so there was no twelfth. Twice the last
- * call's reported size reached 8k and the transcript folded before the next
- * call — the two summaries — and the total kept every folded turn's cost: a
- * fold shrinks the prompt, never the bill. The summarize calls' own usage is
- * not in the total; only brain turns are counted.
+ * The three `token budget` lines are case 6. Eleven brain turns went out, and
+ * the total they reported crossed 60k on the eleventh, so there was no twelfth.
+ * Twice the last call's reported size reached 8k and the transcript folded
+ * before the next call — the two summaries — and the total kept every folded
+ * turn's cost: a fold shrinks the prompt, never the bill. The summarize calls'
+ * own usage is not in the total; only brain turns are counted.
+ *
+ * The last two are case 7: four guards, one run. The wall-clock cap was the
+ * first to come due, at the fourteenth turn boundary, so it ended the run and
+ * the other three never fired.
  */

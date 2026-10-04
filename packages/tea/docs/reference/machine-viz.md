@@ -25,12 +25,17 @@ import { … } from "@demlik/tea/machine-viz";
 
 ```ts
 interface MachineVizOptions<S, M> {
+  /** Mermaid layout direction. Default `"TB"` (top-to-bottom). */
   direction?: "TB" | "LR";
   samples?: {
+    /** Ctx for `init(null, ctx)` — unlocks the `[*] -->` initial-state edge. */
     ctx?: unknown;
+    /** Sample msg per `msg.type` — unlocks RESOLVED edges. */
     msgs?: Partial<Record<string, M>>;
+    /** Sample state per `state.type` — unlocks RESOLVED edges + sub annotations. */
     states?: Partial<Record<string, S>>;
   };
+  /** Optional diagram title, emitted as a Mermaid front-matter `title:` block. */
   title?: string;
 }
 ```

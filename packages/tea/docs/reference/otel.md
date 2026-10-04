@@ -53,6 +53,7 @@ interface AgentEventSource<R> {
       }, { type: K }> | Extract<AgentEventHead & {
         readonly turn: AgentTurn;
         readonly type: "TurnSettled";
+        /** The usage the provider reported for this turn. Absent → none reported. */
         readonly usage?: TurnUsage;
       }, { type: K }> | Extract<AgentEventHead & {
         readonly args: Readonly<Record<string, unknown>>;
@@ -91,7 +92,16 @@ function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R>
 
 ```ts
 interface AgentSpans<R> {
+  /**
+   * End every span still open — the leg this process ran, when it stops
+   * before its run does. Each carries `tea.run.detached: true`.
+   *
+   * With `at`, every open span ends at `at`, used as given. Without it, each
+   * run's spans end at the `at` of the last event that run folded — its own
+   * clock, never wall time.
+   */
   readonly end: (at?: number) => void;
+  /** Fold one event into the span tree. */
   readonly onEvent: (event: AgentEvent<R>) => void;
 }
 ```
@@ -137,9 +147,23 @@ function traceAgent<R>(
 
 ```ts
 interface TraceAgentOptions {
+  /**
+   * Applied to every exported input and output. Omit → maskBase64DataUris,
+   * which keeps a screenshot a tool returned from being exported as megabytes
+   * of base64.
+   */
   readonly mask?: SpanMask;
+  /**
+   * The agent's name, on `gen_ai.agent.name`, the run span's name and
+   * Langfuse's trace name. Omit → `"agent"`.
+   */
   readonly name?: string;
+  /**
+   * The trace id a run writes into, from its `runId`. Omit → runTraceId.
+   * Must return 32 lowercase hex characters, not all zero.
+   */
   readonly traceIdOf?: (runId: string) => string;
+  /** The tracer the spans are started on — `provider.getTracer("…")`. */
   readonly tracer: Tracer;
 }
 ```

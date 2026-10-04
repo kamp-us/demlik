@@ -242,7 +242,7 @@ turn's size as the conversation's context size, which is what a token budget
 or a size-based compaction reads. The numbers are the ones Anthropic reported,
 saved with the turn, so a resumed run adds up to the same total as one that was
 never killed.
-[Bound a run](../how-to/bound-a-run.md#budget-tokens-and-compact-by-context-size)
+[Bound a run](../how-to/bound-a-run.md#5-budget-tokens-and-fold-the-transcript-by-size)
 shows both uses.
 
 `toBlock` is where pictures go. A tea message can carry content parts — text, an
