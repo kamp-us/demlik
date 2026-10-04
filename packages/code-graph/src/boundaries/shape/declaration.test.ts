@@ -143,6 +143,46 @@ describe("the six keys are parsed at the config boundary", () => {
     );
   });
 
+  // Leaving decidedBy out is a choice about the decision proxy, not a licence to skip the rest.
+  it.each([
+    [
+      "an empty driven",
+      api({ readAllowance: { [API]: { driven: [] } } }),
+      `"readAllowance" in "${API}" lists no "driven" entry: an allowance that grants nothing.`,
+    ],
+    [
+      "a driven file that is no driven adapter",
+      api({ readAllowance: { [API]: { driven: ["src/orders/application/use.ts"] } } }),
+      `file "src/orders/application/use.ts" of "readAllowance" in "${API}" is not under a hexagonal feature's adapters/driven/: only a driven file can be read through, so a listing anywhere else could never grant.`,
+    ],
+    [
+      "a driven file the scope does not load",
+      api({ readAllowance: { [API]: { driven: ["src/orders/adapters/driven/gone.ts"] } } }),
+      `driven file(s) of "readAllowance" in "${API}" name no file the scope loads: src/orders/adapters/driven/gone.ts. ` +
+        "A listed file is an exact scope-relative .ts/.tsx path, such as src/orders/adapters/driven/order-reads.ts.",
+    ],
+    [
+      "a scope that declares no features",
+      { readAllowance: { "services/other": { driven: [DRIVEN] } } },
+      '"readAllowance" declares scope "services/other", which declares no "features": it rides a scope that declares features.',
+    ],
+    [
+      "a scope that is not hexagonal",
+      { features: { [API]: ["orders"] }, readAllowance: { [API]: { driven: [DRIVEN] } } },
+      `"readAllowance" declares scope "${API}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
+    ],
+  ])("refuses %s when decidedBy is omitted", (_, rules, message) => {
+    expect(refused(rules)).toBe(message);
+  });
+
+  it("accepts a readAllowance that omits decidedBy, with no libraryTypes declared", () => {
+    const file = path.join(repo.root, "ok.json");
+    fs.writeFileSync(file, JSON.stringify(api({ readAllowance: { [API]: { driven: [DRIVEN] } } })));
+    const run = repo.run({ rules: file, json: true });
+    expect(run.errors).toEqual([]);
+    expect(run.code).toBe(0);
+  });
+
   it.each([
     ["an application/ file", "src/orders/application/use.ts"],
     ["a feature's index.ts", "src/orders/index.ts"],
@@ -232,6 +272,14 @@ describe("a wrangler config the run cannot parse, with a read allowance declared
     const run = open(ALLOWANCE);
     run.put("services/third/wrangler.toml", "= nope\n");
     expect(run.run().errors[0]).toContain(`${BAD}, services/third/wrangler.toml.`);
+  });
+
+  it("refuses it when the allowance omits decidedBy as well", () => {
+    const refused = open({ readAllowance: { [API]: { driven: [DRIVEN] } } }).run({ ci: true });
+    expect(refused.code).toBe(2);
+    expect(refused.errors).toEqual([
+      expect.stringContaining(`a wrangler config cannot be parsed: ${BAD}.`),
+    ]);
   });
 
   it("is not a refusal for a rules file without a read allowance", () => {
