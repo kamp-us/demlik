@@ -96,12 +96,12 @@ afterAll(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("engine parity: CLI output on the parity fixture matches the ts-morph goldens", () => {
-  for (const view of VIEWS) {
-    it(
-      `${view.name}: ${view.args.filter((a) => a.startsWith("--")).join(" ")}`,
-      { timeout: 180_000 },
-      () => {
+describe(
+  "engine parity: CLI output on the parity fixture matches the ts-morph goldens",
+  { timeout: 180_000 },
+  () => {
+    for (const view of VIEWS) {
+      it(`${view.name}: ${view.args.filter((a) => a.startsWith("--")).join(" ")}`, () => {
         const actual = run(view);
         const golden = path.join(GOLDENS, view.name);
         if (RECORD) {
@@ -110,7 +110,7 @@ describe("engine parity: CLI output on the parity fixture matches the ts-morph g
           return;
         }
         expect(actual).toBe(fs.readFileSync(golden, "utf8"));
-      },
-    );
-  }
-});
+      });
+    }
+  },
+);

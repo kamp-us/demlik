@@ -23,6 +23,7 @@
     "@biomejs/biome": "catalog:",
     "@changesets/cli": "catalog:",
     "@kampus/fabrika-cli": "catalog:",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "packageManager": "pnpm@10.2.1",
