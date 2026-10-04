@@ -158,7 +158,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe("publish-pending", () => {
+describe("publish-pending", { timeout: 120_000 }, () => {
   it("attempts every package when the first publish fails, names each in the summary, and exits non-zero", () => {
     const { status, out } = runScript(
       ["--publish-cmd", writeFakePublish(), "packages/a", "packages/b"],
@@ -178,7 +178,7 @@ describe("publish-pending", () => {
       /^@fx\/a@1\.0\.0: failed at publish .*exited 1 — npm error 404 Not Found/,
     );
     expect(lines[1]).toMatch(/^@fx\/b@2\.1\.0: published/);
-  }, 120_000);
+  });
 
   it("builds each tarball from the commit that set its version, not from HEAD", () => {
     const { status, out } = runScript([
@@ -199,7 +199,7 @@ describe("publish-pending", () => {
     ]);
     // The worktrees it built in are gone again.
     expect(git("worktree", "list").split("\n")).toHaveLength(1);
-  }, 120_000);
+  });
 
   it("--dry-run packs every package and never runs npm", () => {
     const bin = path.join(root, "bin");
@@ -222,7 +222,7 @@ describe("publish-pending", () => {
       `@fx/b@2.1.0: dry-run, not published (built from ${versionCommitB.slice(0, 12)})`,
     ]);
     expect(() => readFileSync(path.join(root, "npm-called"))).toThrow();
-  }, 120_000);
+  });
 
   it("fails a package that declares no verify:exports script instead of skipping the gate, and still attempts the rest", () => {
     // a's next version drops the script; its version commit is the one that carries no gate.
@@ -247,7 +247,7 @@ describe("publish-pending", () => {
     expect(publishLog().map((l) => l.split(" ")[0])).toEqual([
       "fx-b-2.1.0.tgz",
     ]);
-  }, 120_000);
+  });
 
   it("refuses to name a version commit from a shallow clone", () => {
     const shallow = path.join(root, "shallow");
@@ -270,5 +270,5 @@ describe("publish-pending", () => {
     for (const line of lines) {
       expect(line).toMatch(/failed at version-commit .*shallow/);
     }
-  }, 120_000);
+  });
 });

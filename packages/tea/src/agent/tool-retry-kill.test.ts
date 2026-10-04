@@ -115,73 +115,77 @@ async function attempts(cwd: string): Promise<number> {
   return log.trimEnd() === "" ? 0 : log.trimEnd().split("\n").length;
 }
 
-describe("a per-tool retry ladder survives SIGKILL between two attempts", () => {
-  let work: string;
-  let cache: string;
-  let entry: string;
+describe(
+  "a per-tool retry ladder survives SIGKILL between two attempts",
+  { timeout: 60_000 },
+  () => {
+    let work: string;
+    let cache: string;
+    let entry: string;
 
-  beforeAll(async () => {
-    work = await mkdtemp(join(tmpdir(), "tea-tool-retry-"));
-    // Bundled inside the repo so the fixture's bare `zod` import resolves from
-    // the repo's node_modules for both the bundler and the child.
-    cache = join(
-      repo,
-      "node_modules/.cache/tea-tool-retry",
-      work.split("-").at(-1) ?? "x",
-    );
-    await mkdir(cache, { recursive: true });
-    await build({
-      configFile: join(repo, "vitest.config.ts"),
-      root: repo,
-      logLevel: "error",
-      build: {
-        ssr: fixture,
-        outDir: cache,
-        emptyOutDir: true,
-        minify: false,
-        rollupOptions: {
-          output: { entryFileNames: "fixture.mjs", format: "es" },
+    beforeAll(async () => {
+      work = await mkdtemp(join(tmpdir(), "tea-tool-retry-"));
+      // Bundled inside the repo so the fixture's bare `zod` import resolves from
+      // the repo's node_modules for both the bundler and the child.
+      cache = join(
+        repo,
+        "node_modules/.cache/tea-tool-retry",
+        work.split("-").at(-1) ?? "x",
+      );
+      await mkdir(cache, { recursive: true });
+      await build({
+        configFile: join(repo, "vitest.config.ts"),
+        root: repo,
+        logLevel: "error",
+        build: {
+          ssr: fixture,
+          outDir: cache,
+          emptyOutDir: true,
+          minify: false,
+          rollupOptions: {
+            output: { entryFileNames: "fixture.mjs", format: "es" },
+          },
         },
-      },
+      });
+      entry = join(cache, "fixture.mjs");
+    }, 120_000);
+
+    afterAll(async () => {
+      await rm(work, { recursive: true, force: true });
+      await rm(cache, { recursive: true, force: true });
     });
-    entry = join(cache, "fixture.mjs");
-  }, 120_000);
 
-  afterAll(async () => {
-    await rm(work, { recursive: true, force: true });
-    await rm(cache, { recursive: true, force: true });
-  });
+    it("resumes at the attempt it was on and calls the handler no more than the budget", async () => {
+      const cwd = join(work, "run");
+      await mkdir(cwd, { recursive: true });
 
-  it("resumes at the attempt it was on and calls the handler no more than the budget", async () => {
-    const cwd = join(work, "run");
-    await mkdir(cwd, { recursive: true });
+      // Run 1: park it the moment the Model says an attempt is OWED — the phase
+      // is the handshake, not a sleep, so the kill lands in the window by
+      // construction rather than by timing luck.
+      const first = launch(entry, cwd);
+      const parked = await until(() => parkedPhase(cwd), "the armed retry");
+      first.child.kill("SIGKILL");
+      await first.exited;
 
-    // Run 1: park it the moment the Model says an attempt is OWED — the phase
-    // is the handshake, not a sleep, so the kill lands in the window by
-    // construction rather than by timing luck.
-    const first = launch(entry, cwd);
-    const parked = await until(() => parkedPhase(cwd), "the armed retry");
-    first.child.kill("SIGKILL");
-    await first.exited;
+      // One attempt spent, one owed. This is the number that has to survive.
+      expect(parked.attempt).toBe(1);
+      expect(await attempts(cwd)).toBe(1);
 
-    // One attempt spent, one owed. This is the number that has to survive.
-    expect(parked.attempt).toBe(1);
-    expect(await attempts(cwd)).toBe(1);
+      // Run 2: the same program over the same directory, nothing else changed.
+      const second = launch(entry, cwd);
+      expect(await second.exited).toBe(0);
 
-    // Run 2: the same program over the same directory, nothing else changed.
-    const second = launch(entry, cwd);
-    expect(await second.exited).toBe(0);
-
-    // The whole claim, in two numbers: the handler ran the budget's worth of
-    // times ACROSS the two processes — not the budget's worth in each — and the
-    // outcome the model was shown says the original budget is what ran out.
-    expect(await attempts(cwd)).toBe(MAX_ATTEMPTS);
-    expect(second.stdout()).toContain(
-      `outcome: retry_exhausted ${JSON.stringify({
-        attempts: MAX_ATTEMPTS,
-        last: "upstream",
-      })}`,
-    );
-    expect(second.stdout()).toContain("done");
-  }, 60_000);
-});
+      // The whole claim, in two numbers: the handler ran the budget's worth of
+      // times ACROSS the two processes — not the budget's worth in each — and the
+      // outcome the model was shown says the original budget is what ran out.
+      expect(await attempts(cwd)).toBe(MAX_ATTEMPTS);
+      expect(second.stdout()).toContain(
+        `outcome: retry_exhausted ${JSON.stringify({
+          attempts: MAX_ATTEMPTS,
+          last: "upstream",
+        })}`,
+      );
+      expect(second.stdout()).toContain("done");
+    });
+  },
+);

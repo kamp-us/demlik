@@ -113,71 +113,78 @@ async function calls(cwd: string): Promise<string[]> {
   return log.trimEnd() === "" ? [] : log.trimEnd().split("\n");
 }
 
-describe("a fanned turn survives SIGKILL without re-running a settled call", () => {
-  let work: string;
-  let cache: string;
-  let entry: string;
+describe(
+  "a fanned turn survives SIGKILL without re-running a settled call",
+  { timeout: 60_000 },
+  () => {
+    let work: string;
+    let cache: string;
+    let entry: string;
 
-  beforeAll(async () => {
-    work = await mkdtemp(join(tmpdir(), "tea-tool-fanout-"));
-    // Bundled inside the repo so the fixture's bare `zod` import resolves from
-    // the repo's node_modules for both the bundler and the child.
-    cache = join(
-      repo,
-      "node_modules/.cache/tea-tool-fanout",
-      work.split("-").at(-1) ?? "x",
-    );
-    await mkdir(cache, { recursive: true });
-    await build({
-      configFile: join(repo, "vitest.config.ts"),
-      root: repo,
-      logLevel: "error",
-      build: {
-        ssr: fixture,
-        outDir: cache,
-        emptyOutDir: true,
-        minify: false,
-        rollupOptions: {
-          output: { entryFileNames: "fixture.mjs", format: "es" },
+    beforeAll(async () => {
+      work = await mkdtemp(join(tmpdir(), "tea-tool-fanout-"));
+      // Bundled inside the repo so the fixture's bare `zod` import resolves from
+      // the repo's node_modules for both the bundler and the child.
+      cache = join(
+        repo,
+        "node_modules/.cache/tea-tool-fanout",
+        work.split("-").at(-1) ?? "x",
+      );
+      await mkdir(cache, { recursive: true });
+      await build({
+        configFile: join(repo, "vitest.config.ts"),
+        root: repo,
+        logLevel: "error",
+        build: {
+          ssr: fixture,
+          outDir: cache,
+          emptyOutDir: true,
+          minify: false,
+          rollupOptions: {
+            output: { entryFileNames: "fixture.mjs", format: "es" },
+          },
         },
-      },
+      });
+      entry = join(cache, "fixture.mjs");
+    }, 120_000);
+
+    afterAll(async () => {
+      await rm(work, { recursive: true, force: true });
+      await rm(cache, { recursive: true, force: true });
     });
-    entry = join(cache, "fixture.mjs");
-  }, 120_000);
 
-  afterAll(async () => {
-    await rm(work, { recursive: true, force: true });
-    await rm(cache, { recursive: true, force: true });
-  });
+    it("re-runs only the call that was still in flight", async () => {
+      const cwd = join(work, "run");
+      await mkdir(cwd, { recursive: true });
 
-  it("re-runs only the call that was still in flight", async () => {
-    const cwd = join(work, "run");
-    await mkdir(cwd, { recursive: true });
+      // Run 1: park it the moment the Model says one call is folded and the other
+      // is still running — which is only reachable at all because the two
+      // overlapped. Serially, `q` could not have settled while `s` was running.
+      const first = launch(entry, cwd);
+      const settled = await until(
+        () => midFanOut(cwd),
+        "the mid-fan-out window",
+      );
+      first.child.kill("SIGKILL");
+      await first.exited;
 
-    // Run 1: park it the moment the Model says one call is folded and the other
-    // is still running — which is only reachable at all because the two
-    // overlapped. Serially, `q` could not have settled while `s` was running.
-    const first = launch(entry, cwd);
-    const settled = await until(() => midFanOut(cwd), "the mid-fan-out window");
-    first.child.kill("SIGKILL");
-    await first.exited;
+      expect(settled).toEqual(["q"]);
+      expect(await calls(cwd)).toEqual(["quick", "slow"]);
 
-    expect(settled).toEqual(["q"]);
-    expect(await calls(cwd)).toEqual(["quick", "slow"]);
+      // Run 2: the same program over the same directory, with `slow` released so
+      // it can finish this time. Nothing else changed.
+      await writeFile(join(cwd, "release"), "go");
+      const second = launch(entry, cwd);
+      expect(await second.exited).toBe(0);
 
-    // Run 2: the same program over the same directory, with `slow` released so
-    // it can finish this time. Nothing else changed.
-    await writeFile(join(cwd, "release"), "go");
-    const second = launch(entry, cwd);
-    expect(await second.exited).toBe(0);
-
-    // The whole claim, in one list: `quick` ran ONCE across the two processes —
-    // its settle was durable, so the resume did not buy it again — and `slow`
-    // ran twice, which is the documented at-least-once window for the one call
-    // that was still in flight.
-    expect(await calls(cwd)).toEqual(["quick", "slow", "slow"]);
-    // And the model was shown both outcomes, in Cmd-emission order.
-    expect(second.stdout()).toContain("outcomes: q:ok,s:ok");
-    expect(second.stdout()).toContain("done");
-  }, 60_000);
-});
+      // The whole claim, in one list: `quick` ran ONCE across the two processes —
+      // its settle was durable, so the resume did not buy it again — and `slow`
+      // ran twice, which is the documented at-least-once window for the one call
+      // that was still in flight.
+      expect(await calls(cwd)).toEqual(["quick", "slow", "slow"]);
+      // And the model was shown both outcomes, in Cmd-emission order.
+      expect(second.stdout()).toContain("outcomes: q:ok,s:ok");
+      expect(second.stdout()).toContain("done");
+    });
+  },
+);
