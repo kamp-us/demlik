@@ -60,24 +60,22 @@ function isTimeoutOption(property) {
 }
 
 /**
- * The nodes of a test declaration that spell its timeout: a `{ timeout }` option, or `it`'s third
- * slot. An object in second place is options and the body follows it, so only a second argument
- * that is anything else is the body, and whatever follows that body is the timeout, however the
- * body is spelled (inline, a named function, a member access). An inline function in third place
- * is a body behind an options variable, never a timeout.
+ * The nodes of a test declaration that spell its timeout. A test is `(name, options, body)` or
+ * `(name, body, timeout)`, and the second argument tells the forms apart:
+ * - an options object is read for a `timeout` property, wherever it sits;
+ * - any other second argument is the body, however it is spelled (inline, a named function, a
+ *   member access), and whatever follows the body is the timeout;
+ * - except that an inline function in third place makes the second argument an options variable.
+ *   The guard cannot read through a variable, so it counts as a spelling: inline the options.
  */
 function timeoutSpellings(test) {
   const [, second, third] = test.arguments;
   const options = test.arguments
     .filter(ts.isObjectLiteralExpression)
     .flatMap((object) => object.properties.filter(isTimeoutOption));
-  const trailing =
-    second &&
-    !ts.isObjectLiteralExpression(second) &&
-    third &&
-    !ts.isObjectLiteralExpression(third) &&
-    !isFunction(third);
-  return trailing ? [...options, third] : options;
+  if (!second || ts.isObjectLiteralExpression(second) || !third) return options;
+  if (isFunction(third)) return [...options, second];
+  return ts.isObjectLiteralExpression(third) ? options : [...options, third];
 }
 
 /** Every line of `source` where a test spells a timeout of its own, 1-based and ascending. */
@@ -161,7 +159,9 @@ const PLANTED = [
   "const slow = (name, fn) => it(name, fn, 120_000); // FLAGGED",
   'it("options, then a named body", { retry: 2 }, handler);',
   'it("named body, no timeout", handler);',
-  'it("options variable, then an inline body", options, () => {});',
+  'it("options variable, then an inline body", options, () => {}); // FLAGGED',
+  'it.each([1, 2])("each options variable %s", SLOW, () => {}); // FLAGGED',
+  'it("inline body, options object", () => {}, { retry: 2 });',
   "beforeAll(() => {}, 120_000);",
   "afterAll(() => {}, 120_000);",
   "beforeEach(() => {}, 120_000);",
@@ -178,7 +178,7 @@ describe("no per-test timeout in any test file", { timeout: 60_000 }, () => {
     const flagged = PLANTED.flatMap((line, at) =>
       line.endsWith(FLAGGED) ? [at + 1] : [],
     );
-    expect(flagged).toHaveLength(14);
+    expect(flagged).toHaveLength(16);
     expect(perTestTimeouts(PLANTED.join("\n"), "planted.test.ts")).toEqual(
       flagged,
     );
