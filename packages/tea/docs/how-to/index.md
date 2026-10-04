@@ -6,10 +6,11 @@ what you are trying to do, and it names the subpath you need.
 
 ## Upgrade
 
-- [Migrate from 0.15 to the two-engine release](./migrate-from-0-15.md) — every
-  removed or reshaped API, before and after: `run` on `@demlik/tea/promise`,
-  handlers and Sub runners at `run`, Subs as `{ type, deps }` data, handler
-  outcomes, and the end of `provide`, `mount*` and the `with*` wrappers.
+- [Migrate from 0.15 to 0.19](./migrate-from-0-15.md) — every removed or
+  reshaped API, before and after: `run` on `@demlik/tea/promise`, handlers and
+  Sub runners at `run`, Subs as `{ type, deps }` data, handler outcomes, the end
+  of `provide`, `mount*` and the `with*` wrappers, `drive` on
+  `@demlik/tea/testing/promise`, and `store.migrate`'s `Refusal`.
 
 ## Run a machine somewhere
 
