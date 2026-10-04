@@ -4,7 +4,14 @@
 // 5s default under load. Hooks, `describe` options and `expect.poll` windows are not tests.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -52,7 +59,13 @@ function isTimeoutOption(property) {
   );
 }
 
-/** The nodes of a test declaration that spell its timeout: a `{ timeout }` option, or `it`'s third slot. */
+/**
+ * The nodes of a test declaration that spell its timeout: a `{ timeout }` option, or `it`'s third
+ * slot. An object in second place is options and the body follows it, so only a second argument
+ * that is anything else is the body, and whatever follows that body is the timeout, however the
+ * body is spelled (inline, a named function, a member access). An inline function in third place
+ * is a body behind an options variable, never a timeout.
+ */
 function timeoutSpellings(test) {
   const [, second, third] = test.arguments;
   const options = test.arguments
@@ -60,9 +73,10 @@ function timeoutSpellings(test) {
     .flatMap((object) => object.properties.filter(isTimeoutOption));
   const trailing =
     second &&
-    isFunction(second) &&
+    !ts.isObjectLiteralExpression(second) &&
     third &&
-    !ts.isObjectLiteralExpression(third);
+    !ts.isObjectLiteralExpression(third) &&
+    !isFunction(third);
   return trailing ? [...options, third] : options;
 }
 
@@ -107,6 +121,20 @@ function gitFiles(...pathspecs) {
   return out.split("\0").filter(Boolean);
 }
 
+/**
+ * A listed test file's text. `git ls-files --cached` still lists a file deleted from the working
+ * tree, and only that file (`ENOENT`) is skipped: a read that fails any other way throws naming
+ * the file, so an unreadable file can never read as one with no offenders.
+ */
+function readTestFile(root, file) {
+  try {
+    return readFileSync(path.join(root, file), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return undefined;
+    throw new Error(`cannot read ${file}: ${error.message}`, { cause: error });
+  }
+}
+
 // One line per case; a line that must be flagged ends in the marker, so a spelling that moves
 // keeps its expectation beside it. Held in strings, so this file holds no timeout of its own.
 const FLAGGED = "// FLAGGED";
@@ -127,6 +155,13 @@ const PLANTED = [
   "it.each`",
   "  a | b",
   '`("tagged table",() => {}, 5_000); // FLAGGED',
+  'it("named body", handler, 5_000); // FLAGGED',
+  'it("member body", suite.body, 5_000); // FLAGGED',
+  'it.each([1, 2])("each named body", handler, 5_000); // FLAGGED',
+  "const slow = (name, fn) => it(name, fn, 120_000); // FLAGGED",
+  'it("options, then a named body", { retry: 2 }, handler);',
+  'it("named body, no timeout", handler);',
+  'it("options variable, then an inline body", options, () => {});',
   "beforeAll(() => {}, 120_000);",
   "afterAll(() => {}, 120_000);",
   "beforeEach(() => {}, 120_000);",
@@ -143,7 +178,7 @@ describe("no per-test timeout in any test file", { timeout: 60_000 }, () => {
     const flagged = PLANTED.flatMap((line, at) =>
       line.endsWith(FLAGGED) ? [at + 1] : [],
     );
-    expect(flagged).toHaveLength(10);
+    expect(flagged).toHaveLength(14);
     expect(perTestTimeouts(PLANTED.join("\n"), "planted.test.ts")).toEqual(
       flagged,
     );
@@ -163,14 +198,26 @@ describe("no per-test timeout in any test file", { timeout: 60_000 }, () => {
     expect(unscanned).toEqual([]);
 
     const offenders = files.flatMap((file) => {
-      let source;
-      try {
-        source = readFileSync(path.join(REPO_ROOT, file), "utf8");
-      } catch {
-        return []; // tracked but deleted from the working tree
-      }
+      const source = readTestFile(REPO_ROOT, file);
+      if (source === undefined) return [];
       return perTestTimeouts(source, file).map((line) => `${file}:${line}`);
     });
     expect(offenders).toEqual([]);
+  });
+
+  it("skips a file deleted from the working tree and throws, naming it, on any other unreadable file", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "no-per-test-timeout-"));
+    try {
+      writeFileSync(path.join(root, "readable.test.ts"), "// readable");
+      mkdirSync(path.join(root, "a-directory.test.ts"));
+
+      expect(readTestFile(root, "readable.test.ts")).toBe("// readable");
+      expect(readTestFile(root, "deleted.test.ts")).toBeUndefined();
+      expect(() => readTestFile(root, "a-directory.test.ts")).toThrow(
+        "cannot read a-directory.test.ts",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
