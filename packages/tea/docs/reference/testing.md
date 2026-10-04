@@ -2,24 +2,216 @@
 
 > test-side ergonomics over @demlik/tea's pure substrate.
 
+Tier: `stable`
+
 ```ts
 import { … } from "@demlik/tea/testing";
 ```
 
 ## Exports (13)
 
-| Symbol | Kind | Summary |
-| --- | --- | --- |
-| `bindMachine` | Function | Bind a machine + ctx into a small bag of 2-arg helpers. |
-| `BoundMachine` | Interface | The bound testing surface. |
-| `expectActiveSubs` | Function | Assert the exact set of subs desired at the final state after replaying `opts.msgs`. |
-| `expectCmdEmitted` | Function | Assert that `cmd` appears at least once in the cmds array produced by replaying `opts.msgs`. |
-| `expectCmdSequence` | Function | Assert the exact ordered sequence of cmds emitted by replaying `opts.msgs`. |
-| `expectFinalState` | Function | Assert the final state after replaying `opts.msgs` equals `expected`. |
-| `expectReplayDeterministic` | Function | Assert that replaying `opts.msgs` is a pure function of the Msg log: the final state and every emitted Cmd come out the same under two different global wall-clocks and RNG seeds. |
-| `noopRuntime` | Function | Construct an inert `Runtime<S, M>` value. |
-| `ReplayOpts` | Interface | Shared options shape for every test assertion below. |
-| `stateFactory` | Function | Build a typed phase-constructor API from per-phase defaults. |
-| `StateFactoryAPI` | Type | The API returned by `stateFactory`. |
-| `StateFactoryDefaults` | Type | Defaults shape passed to `stateFactory`. |
-| `step` | Function | Single-msg step helper — feeds `loaded → msg → next state + cmds emitted by that msg`. |
+| Symbol | Kind | Tier | Summary |
+| --- | --- | --- | --- |
+| [`bindMachine`](#bindMachine) | Function | stable | Bind a machine + ctx into a small bag of 2-arg helpers. |
+| [`BoundMachine`](#BoundMachine) | Interface | stable | The bound testing surface. |
+| [`expectActiveSubs`](#expectActiveSubs) | Function | stable | Assert the exact set of subs desired at the final state after replaying `opts.msgs`. |
+| [`expectCmdEmitted`](#expectCmdEmitted) | Function | stable | Assert that `cmd` appears at least once in the cmds array produced by replaying `opts.msgs`. |
+| [`expectCmdSequence`](#expectCmdSequence) | Function | stable | Assert the exact ordered sequence of cmds emitted by replaying `opts.msgs`. |
+| [`expectFinalState`](#expectFinalState) | Function | stable | Assert the final state after replaying `opts.msgs` equals `expected`. |
+| [`expectReplayDeterministic`](#expectReplayDeterministic) | Function | stable | Assert that replaying `opts.msgs` is a pure function of the Msg log: the final state and every emitted Cmd come out the same under two different global wall-clocks and RNG seeds. |
+| [`noopRuntime`](#noopRuntime) | Function | stable | Construct an inert `Runtime<S, M>` value. |
+| [`ReplayOpts`](#ReplayOpts) | Interface | stable | Shared options shape for every test assertion below. |
+| [`stateFactory`](#stateFactory) | Function | stable | Build a typed phase-constructor API from per-phase defaults. |
+| [`StateFactoryAPI`](#StateFactoryAPI) | Type | stable | The API returned by `stateFactory`. |
+| [`StateFactoryDefaults`](#StateFactoryDefaults) | Type | stable | Defaults shape passed to `stateFactory`. |
+| [`step`](#step) | Function | stable | Single-msg step helper — feeds `loaded → msg → next state + cmds emitted by that msg`. |
+
+## Declarations
+
+<a id="bindMachine"></a>
+
+### `bindMachine`
+
+```ts
+function bindMachine<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  ctx: Ctx,
+): BoundMachine<S, M, C, U, Ctx>
+```
+
+<a id="BoundMachine"></a>
+
+### `BoundMachine`
+
+```ts
+interface BoundMachine<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx> {
+  expectActiveSubs(opts: BoundOpts<S, M>, expected: readonly NoInfer<U | BuiltinSub<M>>[]): void;
+  expectCmdEmitted(opts: BoundOpts<S, M>, cmd: NoInfer<C>): void;
+  expectCmdSequence(opts: BoundOpts<S, M>, expected: readonly NoInfer<C>[]): void;
+  expectFinalState(opts: BoundOpts<S, M>, expected: NoInfer<S>): void;
+  replay(
+    opts: BoundOpts<S, M>,
+  ): {
+    cmds: readonly C[];
+    state: S;
+    subs: readonly (U | BuiltinSub<M>)[];
+  };
+  step(loaded: S, msg: M): readonly [S, readonly C[]];
+}
+```
+
+<a id="expectActiveSubs"></a>
+
+### `expectActiveSubs`
+
+```ts
+function expectActiveSubs<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: NoInfer<ReplayOpts<S, M, Ctx>>,
+  expected: NoInfer<readonly U[]>,
+): void
+```
+
+<a id="expectCmdEmitted"></a>
+
+### `expectCmdEmitted`
+
+```ts
+function expectCmdEmitted<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: NoInfer<ReplayOpts<S, M, Ctx>>,
+  cmd: NoInfer<C>,
+): void
+```
+
+<a id="expectCmdSequence"></a>
+
+### `expectCmdSequence`
+
+```ts
+function expectCmdSequence<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: NoInfer<ReplayOpts<S, M, Ctx>>,
+  expected: NoInfer<readonly C[]>,
+): void
+```
+
+<a id="expectFinalState"></a>
+
+### `expectFinalState`
+
+```ts
+function expectFinalState<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: NoInfer<ReplayOpts<S, M, Ctx>>,
+  expected: NoInfer<S>,
+): void
+```
+
+<a id="expectReplayDeterministic"></a>
+
+### `expectReplayDeterministic`
+
+```ts
+function expectReplayDeterministic<
+  S,
+  M extends { type: string },
+  C extends Cmd,
+  U extends Sub,
+  Ctx,
+>(
+  machine: Machine<S, M, C, U, Ctx>,
+  opts: NoInfer<ReplayOpts<S, M, Ctx>>,
+): void
+```
+
+<a id="noopRuntime"></a>
+
+### `noopRuntime`
+
+```ts
+function noopRuntime<S, M extends { type: string }>(
+  opts?: { initialState?: S },
+): Runtime<S, M>
+```
+
+<a id="ReplayOpts"></a>
+
+### `ReplayOpts`
+
+```ts
+interface ReplayOpts<S, M, Ctx> {
+  readonly ctx: Ctx;
+  readonly loaded?: S | null;
+  readonly msgs: readonly M[];
+}
+```
+
+<a id="stateFactory"></a>
+
+### `stateFactory`
+
+```ts
+function stateFactory<S extends { type: string }>(
+  defaults: StateFactoryDefaults<S>,
+): StateFactoryAPI<S>
+```
+
+<a id="StateFactoryAPI"></a>
+
+### `StateFactoryAPI`
+
+```ts
+type StateFactoryAPI<S extends { type: string }> = { readonly [K in S["type"]]: (overrides?: Partial<RequiredFields<StateOf<S, K>>>) => StateOf<S, K> }
+```
+
+<a id="StateFactoryDefaults"></a>
+
+### `StateFactoryDefaults`
+
+```ts
+type StateFactoryDefaults<S extends { type: string }> = { readonly [K in S["type"]]: RequiredFields<StateOf<S, K>> }
+```
+
+<a id="step"></a>
+
+### `step`
+
+```ts
+function step<S, M extends { type: string }, C extends Cmd, U extends Sub, Ctx>(
+  machine: Machine<S, M, C, U, Ctx>,
+  loaded: NoInfer<S>,
+  msg: NoInfer<M>,
+  ctx: NoInfer<Ctx>,
+): readonly [S, readonly C[]]
+```

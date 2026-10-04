@@ -123,7 +123,9 @@ log. `fileJournal` (`./node`, beside `fileStore`) is the one journal factory
 still published, and it carries the journal's **experimental** promise, not the
 `stable` stamp of the subpath it is exported from — `fileJournal` lives in
 `./node` per the #30 ruling (a host file substrate homes with the host's other
-file adapter), and its tier travels with the journal feature. `memoryJournal`,
+file adapter), and its tier travels with the journal feature. Its TSDoc carries
+`@experimental`, which is what makes its row on the generated `./node` reference
+page read `experimental` while the page reads `stable`. `memoryJournal`,
 the remote-sync half (#31: `RemoteJournal<R>` + `memoryRemoteJournal`,
 `CursorStore` + `memoryCursorStore`, `SyncClient<R>` + `makeSyncClient`) and the
 conformance suite are internal; no durable or hosted remote ships.
