@@ -1,5 +1,108 @@
 # @demlik/tea
 
+## 0.20.0
+
+### Minor Changes
+
+- a564264: `@demlik/tea/effect` now exports `spawn` and `tell`, two helpers for a host
+  that runs child machines under a parent. `spawn(parentScope, steps)` forks a
+  child scope, starts the child and enrols it in the host's table as one
+  uninterruptible step, and sends the stop notice from a fiber the closing scope
+  never waits for. `tell(machine, runtime, msg)` dispatches a Msg only when the
+  run's State has a cell for it, and drops it when the State changed or the run
+  stopped; a failed save still fails with `StoreFailed`. The host keeps its own
+  table, ids and Msg names: tea adds no supervisor and no registry.
+  `SpawnSteps` is the type of the four host steps `spawn` takes.
+
+  `docs/how-to/run-many-machines.md` is rewritten on the helpers, and
+  `examples/process-tree-effect.ts` shows a host that builds a service set per
+  child between the fork and the run.
+
+- 36654cb: `@demlik/tea/effect` now exports `stop`, the helper a host stops one child
+  with. `stop(scope)` takes the scope `spawn` handed the child's `start` and
+  closes it: the child's run stops, `remove` takes its entry out of the host's
+  table and `notify` tells the parent. It does not wait for `notify`, so a parent
+  Cmd handler can call it, and stopping a child twice sends one notice. tea still
+  keeps no table: the lookup by id stays the host's.
+
+  The `spawn` docs no longer say the table never holds a child that is not
+  running. They say it never holds a child whose scope has closed, and that
+  `child.run.stop()` stops the run without removing the entry or telling the
+  parent. The `stop()` doc on the Effect handle says the same.
+
+  `docs/how-to/run-many-machines.md` and its two examples stop a child through
+  the helper. `examples/parent-and-workers-effect.ts` now exports `stopWorker`
+  where it exported `stop`.
+
+- ccaa4f2: `createJevAsk` from `@demlik/tea/jev` takes an optional `name`. A named knob
+  gets its own run Cmd (`<name>_run`), its own settle Msgs (`<name>_run_ok`,
+  `<name>_run_err`) and its own timer Msg (`<name>_deadline`), so a machine can
+  hold several Jev knobs with different question maps. Each handler and each
+  settle cell is then typed to one knob's answers, with no cast.
+
+  `createJevAsk({ questions, name: "judge" })` infers both type parameters.
+  `JevAskConfig`, `jevAskCmdDef`, `JevAskCmd`, `JevSucceedMsg`, `JevFailMsg`,
+  `JevTimerMsg` and `JevCmd` take the name as a type parameter that defaults to
+  `resilient`.
+
+  An unnamed knob is unchanged: it still speaks `resilient_run`,
+  `resilient_run_ok`, `resilient_run_err` and `deadline_exceeded`, and existing
+  code compiles as it is.
+
+  `docs/how-to/ask-jev-a-typed-question.md` has a new section on two knobs in one
+  machine.
+
+- df980b9: `SpawnSteps.notify` can no longer fail. It is typed `Effect.Effect<unknown>`
+  where it was `Effect.Effect<unknown, unknown>`.
+
+  `spawn` runs `notify` on a fiber nothing reads, so a failure of it was seen by
+  nobody. The usual `notify` is `tell(parent, parentRun, msg)`, which fails with
+  `StoreFailed` when the parent's save fails, and that failure was lost. A bare
+  `notify: tell(...)` is now a compile error. Handle the failure inside the
+  step:
+
+  ```ts
+  notify: tell(parent, parentRun, { type: "child_stopped", id }).pipe(
+    Effect.catch((failure) => Effect.logError("notice failed", failure)),
+  ),
+  ```
+
+  `spawn` itself runs as before. The `notify` and `spawn` docs now say what
+  happens to a failure, and that a defect in `notify` ends its fiber unseen.
+  `docs/how-to/run-many-machines.md` and its two examples handle the failure in
+  the open.
+
+### Patch Changes
+
+- e674787: The agent docs now match the source: the agent layer is named as running on the
+  Promise engine, a `tool()` handler is shown taking only `args`, `ctx` and
+  `{ ok, fail }`, the six undeclared tool failures are in one table, and a `.with`
+  wrapper returns an outcome, not a Msg. No code changed.
+- e674787: `DefineAgentConfig`'s TSDoc now says, per guard, what `maxTurns`, `deadlineMs`,
+  `maxElapsedMs` and `stopWhen` count and where each one's failure lands, and
+  what `compaction`'s triggers do. The generated reference pages print each
+  member's TSDoc above it. `docs/how-to/bound-a-run.md` is now numbered steps, and
+  the reasoning it carried moved to `docs/explanation/what-bounds-a-run.md`.
+- e674787: The README quickstart no longer passes a `ctx` a pure machine does not need, and
+  its optional-peer list now names `@opentelemetry/api`. No code changed.
+- e674787: The README links each term it uses (machine, `update`, `Msg`, `run`,
+  `interpret`, `dispatch`, Model, engine, `Cmd.define`) to a new glossary page,
+  `packages/tea/docs/glossary.md`, which defines every word the docs rely on.
+- d5663f0: Step 3 of the run-many-machines how-to now shows its own imports, so it compiles
+  when added beside steps 1 and 2. The page names the file each step is saved as.
+  No code changed.
+- 7daede0: The README's links into the docs work again. Eight of them pointed at a `docs/`
+  folder at the repo root, which has not existed since the docs moved to
+  `packages/tea/docs/`, so every docs entry point on the npm page was a 404.
+- e674787: Every public export now carries a description. 102 of them had none, including
+  `defineMachine`, `replay`, `Store`, `Machine`, `Sub`, the `Cmd` helpers and the
+  Promise engine's `run`, so their editor hovers and their rows in the generated
+  reference were blank.
+- e674787: `fileJournal`'s TSDoc now carries `@experimental`, so an editor hover says what
+  `MAINTAINING.md` already did: it has no stability promise, even though `./node`
+  is `stable`. The generated reference pages now print each export's declaration
+  and tier, and `./machine-viz` and `./parity` have pages.
+
 ## 0.19.0
 
 ### Minor Changes
