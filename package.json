@@ -17,7 +17,8 @@
     "check:merge-markers": "node scripts/check-merge-markers.mjs",
     "check:codeowners": "node scripts/check-codeowners.mjs",
     "check:catalog": "fabrika guard catalog-guard check",
-    "release": "changeset"
+    "release": "changeset",
+    "release:version": "node scripts/release-version.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

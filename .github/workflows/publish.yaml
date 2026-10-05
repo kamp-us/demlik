@@ -3,8 +3,9 @@ name: publish
 # Per-merge publishing for every public package under packages/, version-PR model. Trusted
 # publishing can only ship a NEW version number, so this job is version-gated: a merge to main
 # publishes a package ONLY when its package.json version is not yet on npm. Versioning is a PR — someone runs
-# `pnpm changeset version` on a branch, the queue merges it, this job sees the new
-# number and ships it. The job never pushes to main: branch rules reject a direct push
+# `pnpm release:version <package>` on a branch (it versions that one package and leaves every
+# other package's changesets pending), the queue merges it, this job sees the new number and
+# ships it. The job never pushes to main: branch rules reject a direct push
 # (the 2026-09-06 0.13.0 run published and then lost its version commit to exactly that
 # rejection, leaving every later merge refused as "cannot publish over 0.13.0").
 #

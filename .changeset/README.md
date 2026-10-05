@@ -1,8 +1,22 @@
 # Changesets
 
-This folder is the release ledger for `@demlik/tea`. Each unreleased change adds a
-markdown changeset here declaring its semver bump; the `publish-tea` workflow consumes
-them on merge to `main` (`changeset version`), bumps the package, then packs + publishes
-the new version via npm trusted publishing (OIDC).
+This folder is the release ledger for every package under `packages/`. Each unreleased change
+adds a markdown changeset here naming the packages it touches and the semver bump each one gets.
 
 Add one with `pnpm changeset`. See https://github.com/changesets/changesets for the format.
+
+To cut a release of one package, run this on a branch and open the result as a PR:
+
+```sh
+pnpm release:version <package>   # e.g. pnpm release:version @demlik/tea
+```
+
+It runs `changeset version` for that package alone. Every other package with a pending changeset
+is passed to `--ignore`, along with each package that depends on one of them at runtime, so their
+changesets stay in this folder for a later release. It prints each ignored package and why before
+it runs. It refuses, and changes nothing, when the target has no pending changeset or shares a
+changeset file with a package it has to hold back. For `@demlik/tea` it then regenerates
+`packages/tea/docs/reference/`, which prints tea's version, so commit those pages with the bump.
+
+When the version PR merges, the `publish` workflow (`.github/workflows/publish.yaml`) publishes
+each package whose version is not on npm yet, via npm trusted publishing (OIDC).
