@@ -1,5 +1,11 @@
 # @demlik/structure-sweep
 
+## 0.3.5
+
+### Patch Changes
+
+- Depends on `@demlik/tea` 0.20.0 and `@demlik/code-graph` 0.5.0. The 0.3.4 release still pinned the versions before them, because structure-sweep sat out both of their releases.
+
 ## 0.3.4
 
 ### Patch Changes
