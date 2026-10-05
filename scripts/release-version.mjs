@@ -15,9 +15,13 @@
 // changeset, is itself a dependent of an ignored package, or shares a changeset file with an
 // ignored package (changesets refuses that mixed file too).
 //
+// Some packages check in files that print their own version. After `changeset version` succeeds,
+// the script regenerates those for the target (AFTER_VERSION below), so the release PR passes CI's
+// drift checks without a hand re-run.
+//
 // Run:  pnpm release:version <package>
-//       node scripts/release-version.mjs [--changeset-cmd <cmd>] <package>
-//   --changeset-cmd  run `<cmd> <args>` through the shell instead of `pnpm exec changeset`. For tests.
+//       node scripts/release-version.mjs [--pnpm <cmd>] <package>
+//   --pnpm  run `<cmd> <args>` through the shell wherever the script would run `pnpm`. For tests.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -148,6 +152,23 @@ export function planRelease({ packages, changesets, target }) {
   return { kind: "run", ignored };
 }
 
+/**
+ * What a package needs regenerated after `changeset version` bumps it: `pnpm` arguments, and why.
+ * tea's generated reference prints its version, and CI's "Docs reference drift" step fails until
+ * it is regenerated (#583).
+ */
+export const AFTER_VERSION = {
+  "@demlik/tea": {
+    why: "packages/tea/docs/reference/ prints the tea version",
+    pnpmArgs: ["--filter", "@demlik/tea", "run", "docs:reference"],
+  },
+};
+
+/** The regeneration step for `target` after its version bump, or `null` when it needs none. */
+export function afterVersionStep(target) {
+  return Object.hasOwn(AFTER_VERSION, target) ? AFTER_VERSION[target] : null;
+}
+
 /** One printed line per ignored package. */
 export function ignoreLine({ name, reason }) {
   return reason.kind === "own-changeset"
@@ -156,20 +177,37 @@ export function ignoreLine({ name, reason }) {
 }
 
 function parseArgs(argv) {
-  let changesetCmd;
+  let pnpmCmd;
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--changeset-cmd") {
-      changesetCmd = argv[++i];
-      if (changesetCmd === undefined || changesetCmd.startsWith("--"))
-        throw new Error("--changeset-cmd needs a value");
+    if (a === "--pnpm") {
+      pnpmCmd = argv[++i];
+      if (pnpmCmd === undefined || pnpmCmd.startsWith("--"))
+        throw new Error("--pnpm needs a value");
     } else if (a.startsWith("--")) throw new Error(`unknown flag ${a}`);
     else rest.push(a);
   }
   if (rest.length !== 1)
     throw new Error("usage: pnpm release:version <package>");
-  return { changesetCmd, target: rest[0] };
+  return { pnpmCmd, target: rest[0] };
+}
+
+/** Run `pnpm <args>` (or `<pnpmCmd> <args>` through the shell) in `repo`; its exit code. */
+function runPnpm(repo, pnpmCmd, args) {
+  const r =
+    pnpmCmd === undefined
+      ? spawnSync("pnpm", args, { cwd: repo, stdio: "inherit" })
+      : spawnSync(`${pnpmCmd} ${args.join(" ")}`, [], {
+          cwd: repo,
+          stdio: "inherit",
+          shell: true,
+        });
+  if (r.error) {
+    console.error(`release:version: pnpm could not start: ${r.error.message}`);
+    return 1;
+  }
+  return r.status ?? 1;
 }
 
 function main() {
@@ -198,28 +236,25 @@ function main() {
     for (const row of plan.ignored) console.log(ignoreLine(row));
   }
 
-  const args = [
+  const versioned = runPnpm(repo, opts.pnpmCmd, [
+    "exec",
+    "changeset",
     "version",
     ...plan.ignored.flatMap(({ name }) => ["--ignore", name]),
-  ];
-  const r =
-    opts.changesetCmd === undefined
-      ? spawnSync("pnpm", ["exec", "changeset", ...args], {
-          cwd: repo,
-          stdio: "inherit",
-        })
-      : spawnSync(`${opts.changesetCmd} ${args.join(" ")}`, [], {
-          cwd: repo,
-          stdio: "inherit",
-          shell: true,
-        });
-  if (r.error) {
+  ]);
+  if (versioned !== 0) return versioned;
+
+  const after = afterVersionStep(opts.target);
+  if (after === null) return 0;
+  console.log(
+    `release:version: regenerating, because ${after.why}: pnpm ${after.pnpmArgs.join(" ")}`,
+  );
+  const regenerated = runPnpm(repo, opts.pnpmCmd, after.pnpmArgs);
+  if (regenerated !== 0)
     console.error(
-      `release:version: changeset could not start: ${r.error.message}`,
+      `release:version: the version bump landed, but regenerating failed. Fix it, then run: pnpm ${after.pnpmArgs.join(" ")}`,
     );
-    return 1;
-  }
-  return r.status ?? 1;
+  return regenerated;
 }
 
 if (

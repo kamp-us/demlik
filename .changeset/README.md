@@ -15,7 +15,8 @@ It runs `changeset version` for that package alone. Every other package with a p
 is passed to `--ignore`, along with each package that depends on one of them at runtime, so their
 changesets stay in this folder for a later release. It prints each ignored package and why before
 it runs. It refuses, and changes nothing, when the target has no pending changeset or shares a
-changeset file with a package it has to hold back.
+changeset file with a package it has to hold back. For `@demlik/tea` it then regenerates
+`packages/tea/docs/reference/`, which prints tea's version, so commit those pages with the bump.
 
 When the version PR merges, the `publish` workflow (`.github/workflows/publish.yaml`) publishes
 each package whose version is not on npm yet, via npm trusted publishing (OIDC).

@@ -1,6 +1,6 @@
 // scripts/release-version.mjs over planted workspaces: the ignore set it computes, what it prints,
-// and the refusals that run nothing (#583). The CLI runs with a recording stand-in for
-// `changeset version`, so no package is versioned here.
+// the refusals that run nothing, and the regeneration after a tea bump (#583). The CLI runs with a
+// recording stand-in for `pnpm`, so no package is versioned and nothing is regenerated here.
 
 import { spawnSync } from "node:child_process";
 import {
@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  afterVersionStep,
   changesetPackages,
   planRelease,
   readChangesets,
@@ -68,12 +69,12 @@ function plan(target) {
   });
 }
 
-function runCli(target) {
+function runCli(target, env = {}) {
   const log = path.join(repo, "changeset.log");
   const r = spawnSync(
     process.execPath,
-    [SCRIPT, "--changeset-cmd", `node record.mjs`, target],
-    { cwd: repo, encoding: "utf8" },
+    [SCRIPT, "--pnpm", `node record.mjs`, target],
+    { cwd: repo, encoding: "utf8", env: { ...process.env, ...env } },
   );
   return {
     status: r.status,
@@ -161,6 +162,19 @@ describe("planRelease", () => {
   });
 });
 
+describe("afterVersionStep", () => {
+  it("names tea's reference regeneration and nothing for other packages", () => {
+    expect(afterVersionStep("@demlik/tea")?.pnpmArgs).toEqual([
+      "--filter",
+      "@demlik/tea",
+      "run",
+      "docs:reference",
+    ]);
+    expect(afterVersionStep("@demlik/code-graph")).toBeNull();
+    expect(afterVersionStep("toString")).toBeNull();
+  });
+});
+
 describe("the CLI", () => {
   it("prints each ignored package and why, then runs changeset version with one --ignore each", () => {
     plantChain();
@@ -173,7 +187,7 @@ describe("the CLI", () => {
     expect(r.stdout).toContain("@w/mid — depends on @w/base");
     expect(r.stdout).toContain("@w/top — depends on @w/mid");
     expect(r.calls).toBe(
-      "version --ignore @w/base --ignore @w/mid --ignore @w/top\n",
+      "exec changeset version --ignore @w/base --ignore @w/mid --ignore @w/top\n",
     );
   });
 
@@ -181,12 +195,37 @@ describe("the CLI", () => {
     plantChain();
     changeset("b.md", { "@w/solo": "patch" });
 
-    const r = spawnSync(
-      process.execPath,
-      [SCRIPT, "--changeset-cmd", "node record.mjs", "@w/solo"],
-      { cwd: repo, encoding: "utf8", env: { ...process.env, EXIT_WITH: "3" } },
+    expect(runCli("@w/solo", { EXIT_WITH: "3" }).status).toBe(3);
+  });
+
+  it("regenerates tea's reference docs after a tea bump, and not after another package's", () => {
+    pkg("tea", "@demlik/tea");
+    pkg("code-graph", "@demlik/code-graph");
+    changeset("a.md", { "@demlik/tea": "minor" });
+    changeset("b.md", { "@demlik/code-graph": "patch" });
+
+    const tea = runCli("@demlik/tea");
+    expect(tea.status).toBe(0);
+    expect(tea.calls).toBe(
+      "exec changeset version --ignore @demlik/code-graph\n" +
+        "--filter @demlik/tea run docs:reference\n",
     );
-    expect(r.status).toBe(3);
+
+    rmSync(path.join(repo, "changeset.log"));
+    const codeGraph = runCli("@demlik/code-graph");
+    expect(codeGraph.status).toBe(0);
+    expect(codeGraph.calls).toBe(
+      "exec changeset version --ignore @demlik/tea\n",
+    );
+  });
+
+  it("does not regenerate when changeset version fails", () => {
+    pkg("tea", "@demlik/tea");
+    changeset("a.md", { "@demlik/tea": "minor" });
+
+    const r = runCli("@demlik/tea", { EXIT_WITH: "2" });
+    expect(r.status).toBe(2);
+    expect(r.calls).toBe("exec changeset version\n");
   });
 
   it("refuses an unknown target, naming the valid names, and runs nothing", () => {
