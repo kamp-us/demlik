@@ -70,6 +70,11 @@ jobs:
       # One row per public workspace package whose package.json version is not on npm yet.
       # Each package is gated on its own version, so a tea release never re-publishes
       # code-graph and a code-graph release never blocks on tea.
+      #
+      # npm's answer here can trail the registry's own write by minutes (it serves a packument
+      # cached for up to five minutes), so a version the previous run just published can still
+      # read as missing. That stays a pending version: scripts/publish-pending.mjs settles the
+      # repeat when npm refuses it, and a miss here is never retried.
       - name: Detect which package versions are not on npm yet
         id: version
         run: |
@@ -91,6 +96,13 @@ jobs:
       # (not main's HEAD), then one summary line per package; the step goes red only after all
       # of them were tried. The inline loop this replaces stopped at the first failed publish,
       # so code-graph's 404 kept tea 0.18.0 from ever being attempted (#372).
+      #
+      # A package has one of three outcomes: `published`; `already published`, when npm refuses the
+      # publish because it already holds that version and npm's `dist.integrity` for it is the
+      # tarball just packed (a green outcome, the Detect step having read npm stale); or `failed`,
+      # which is every other refusal, npm holding different bytes (both hashes named), and npm
+      # giving no integrity within the read budget. Each refused duplicate is settled after every
+      # package has had its attempt, so one waiting on npm never holds up another.
       #
       # The script also runs the last gate before each tarball is cut: each package's required
       # `verify:exports` script, against the dist it is about to pack; a package without one fails.

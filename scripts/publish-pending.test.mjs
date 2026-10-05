@@ -1,5 +1,6 @@
 // Runs scripts/publish-pending.mjs as publish.yaml does, over a throwaway two-package repo, with an
-// injected publish command in place of `npm publish` — so no registry is ever called (#372).
+// injected publish command in place of `npm publish` and an injected lookup command in place of
+// `npm view` — so no registry is ever called (#372, #587), and no read waits between attempts.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -93,6 +94,8 @@ function runScript(args, env = {}, cwd = repo) {
         ...process.env,
         GITHUB_STEP_SUMMARY: "",
         PUBLISH_LOG: path.join(root, "publish.log"),
+        REGISTRY_FILE: path.join(root, "registry.json"),
+        REGISTRY_LOG: path.join(root, "registry.log"),
         ...env,
       },
     },
@@ -117,6 +120,101 @@ function summary(out) {
     .filter((l) => /^publish-pending summary: /.test(l))
     .map((l) => l.replace(/^publish-pending summary: /, ""));
 }
+
+/**
+ * A registry stand-in, split in two the way the script splits it: `publish <tarball>` and
+ * `lookup <name>@<version>`. Its records persist in `registry.json`, so they outlive each script
+ * run the way npm's do: `publish` stores the tarball's SRI sha512 and refuses what it already
+ * holds with npm's own wording (or with `refuses[spec]` when the file names one), and `lookup`
+ * prints that integrity, but answers nothing for its first `$LOOKUP_LAG` reads of a version, as a
+ * cached packument does. Both append to the one `registry.log`, so the order of calls is visible.
+ */
+function writeFakeRegistry() {
+  const file = path.join(root, "fake-registry.mjs");
+  write(
+    file,
+    'import { execFileSync } from "node:child_process";\n' +
+      'import { createHash } from "node:crypto";\n' +
+      'import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";\n' +
+      "const [, , command, arg] = process.argv;\n" +
+      "const { REGISTRY_FILE, REGISTRY_LOG } = process.env;\n" +
+      "const state = existsSync(REGISTRY_FILE)\n" +
+      "  ? JSON.parse(readFileSync(REGISTRY_FILE, 'utf8'))\n" +
+      "  : { records: {}, refuses: {}, reads: {} };\n" +
+      "const save = () => writeFileSync(REGISTRY_FILE, JSON.stringify(state));\n" +
+      "const log = (line) => appendFileSync(REGISTRY_LOG, line + '\\n');\n" +
+      "if (command === 'publish') {\n" +
+      "  const manifest = JSON.parse(execFileSync('tar', ['-xzOf', arg, 'package/package.json'], { encoding: 'utf8' }));\n" +
+      "  const spec = manifest.name + '@' + manifest.version;\n" +
+      "  log('publish ' + spec);\n" +
+      "  if (state.refuses[spec]) {\n" +
+      "    console.error(state.refuses[spec]);\n" +
+      "    process.exit(1);\n" +
+      "  }\n" +
+      "  if (state.records[spec]) {\n" +
+      "    console.error('npm error You cannot publish over the previously published versions: ' + manifest.version + '.');\n" +
+      "    process.exit(1);\n" +
+      "  }\n" +
+      "  state.records[spec] = 'sha512-' + createHash('sha512').update(readFileSync(arg)).digest('base64');\n" +
+      "  save();\n" +
+      "} else {\n" +
+      "  log('lookup ' + arg);\n" +
+      "  state.reads[arg] = (state.reads[arg] ?? 0) + 1;\n" +
+      "  save();\n" +
+      "  if (state.reads[arg] > Number(process.env.LOOKUP_LAG ?? 0) && state.records[arg]) {\n" +
+      "    console.log(state.records[arg]);\n" +
+      "  } else {\n" +
+      "    console.error('npm error code E404');\n" +
+      "    process.exit(1);\n" +
+      "  }\n" +
+      "}\n",
+  );
+  const node = `${JSON.stringify(process.execPath)} ${JSON.stringify(file)}`;
+  return { publishCmd: `${node} publish`, lookupCmd: `${node} lookup` };
+}
+
+/** Run the script over `dirs` against the fake registry, taking `attempts` reads with no wait between. */
+function publishVia(fake, dirs, { attempts = 3, env } = {}) {
+  return runScript(
+    [
+      "--publish-cmd",
+      fake.publishCmd,
+      "--lookup-cmd",
+      fake.lookupCmd,
+      "--lookup-attempts",
+      String(attempts),
+      "--lookup-interval",
+      "0",
+      ...dirs,
+    ],
+    env,
+  );
+}
+
+function registry() {
+  return JSON.parse(readFileSync(path.join(root, "registry.json"), "utf8"));
+}
+
+function registryLog() {
+  try {
+    return readFileSync(path.join(root, "registry.log"), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** Two more packages sharing one version commit, which with a and b make the realistic N > 2 fixture. */
+function addPackagesCAndD() {
+  writePackage("packages/c", "@fx/c", "3.0.0", "c-released");
+  writePackage("packages/d", "@fx/d", "4.0.0", "d-released");
+  return commit("add c and d");
+}
+
+/** An integrity no tarball here packs to: npm "holding different bytes". */
+const OTHER_BYTES = `sha512-${Buffer.alloc(64, 1).toString("base64")}`;
 
 let versionCommitA;
 let versionCommitB;
@@ -270,5 +368,160 @@ describe("publish-pending", { timeout: 120_000 }, () => {
     for (const line of lines) {
       expect(line).toMatch(/failed at version-commit .*shallow/);
     }
+  });
+
+  it("stays green when npm already holds the tarball it just packed, and goes red naming both hashes when npm holds other bytes", () => {
+    const versionCommitCD = addPackagesCAndD();
+    const fake = writeFakeRegistry();
+    const abc = ["packages/a", "packages/b", "packages/c"];
+    const stepSummary = path.join(root, "step-summary.md");
+
+    // Run 1: nothing is on npm yet.
+    const first = publishVia(fake, abc);
+    expect(first.status).toBe(0);
+    expect(summary(first.out).map((l) => l.replace(/ \(built.*/, ""))).toEqual([
+      "@fx/a@1.0.0: published",
+      "@fx/b@2.1.0: published",
+      "@fx/c@3.0.0: published",
+    ]);
+    const records = registry().records;
+
+    // Run 2: the stale "not on npm" list hands over the same three again.
+    const second = publishVia(fake, abc, {
+      env: { GITHUB_STEP_SUMMARY: stepSummary },
+    });
+    expect(second.status).toBe(0);
+    expect(registry().records).toEqual(records);
+    const lines = summary(second.out);
+    expect(lines).toEqual([
+      `@fx/a@1.0.0: already published, npm holds the same tarball (${records["@fx/a@1.0.0"]}) (built from ${versionCommitA.slice(0, 12)})`,
+      `@fx/b@2.1.0: already published, npm holds the same tarball (${records["@fx/b@2.1.0"]}) (built from ${versionCommitB.slice(0, 12)})`,
+      `@fx/c@3.0.0: already published, npm holds the same tarball (${records["@fx/c@3.0.0"]}) (built from ${versionCommitCD.slice(0, 12)})`,
+    ]);
+    expect(second.out).not.toMatch(/: failed at |::error::/);
+    expect(readFileSync(stepSummary, "utf8")).toBe(
+      `### Publish\n\n${lines.map((l) => `- ${l}`).join("\n")}\n`,
+    );
+
+    // Runs 3 and 4 do not drift, and a package npm lacks is still published beside the held ones.
+    for (const again of [publishVia(fake, abc), publishVia(fake, abc)]) {
+      expect(again.status).toBe(0);
+      expect(summary(again.out)).toEqual(lines);
+    }
+    const withD = publishVia(fake, [...abc, "packages/d"]);
+    expect(withD.status).toBe(0);
+    expect(summary(withD.out).slice(0, 3)).toEqual(lines);
+    expect(summary(withD.out)[3]).toMatch(/^@fx\/d@4\.0\.0: published/);
+
+    // Run 5: npm now holds other bytes for c.
+    const state = registry();
+    state.records["@fx/c@3.0.0"] = OTHER_BYTES;
+    writeFileSync(path.join(root, "registry.json"), JSON.stringify(state));
+    rmSync(path.join(root, "registry.log"));
+    const red = publishVia(fake, abc);
+    expect(red.status).toBe(1);
+    const redLines = summary(red.out);
+    expect(redLines.slice(0, 2)).toEqual(lines.slice(0, 2));
+    expect(redLines[2]).toMatch(/^@fx\/c@3\.0\.0: failed at publish /);
+    expect(redLines[2]).toContain(OTHER_BYTES);
+    expect(redLines[2]).toContain(records["@fx/c@3.0.0"]);
+    expect(red.out.match(/^::error::/gm)).toHaveLength(1);
+    expect(registryLog().filter((l) => l.startsWith("publish "))).toEqual([
+      "publish @fx/a@1.0.0",
+      "publish @fx/b@2.1.0",
+      "publish @fx/c@3.0.0",
+    ]);
+  });
+
+  it("waits out a registry read that lags the conflict, and never holds another package up while it does", () => {
+    const fake = writeFakeRegistry();
+    expect(publishVia(fake, ["packages/a"]).status).toBe(0);
+    rmSync(path.join(root, "registry.log"));
+
+    // a is already on npm but the read answers nothing for its first two lookups; b is new.
+    const { status, out } = publishVia(fake, ["packages/a", "packages/b"], {
+      attempts: 4,
+      env: { LOOKUP_LAG: "2" },
+    });
+
+    expect(status).toBe(0);
+    expect(summary(out).map((l) => l.replace(/ \(.*/, ""))).toEqual([
+      "@fx/a@1.0.0: already published, npm holds the same tarball",
+      "@fx/b@2.1.0: published",
+    ]);
+    expect(registryLog()).toEqual([
+      "publish @fx/a@1.0.0",
+      "publish @fx/b@2.1.0",
+      "lookup @fx/a@1.0.0",
+      "lookup @fx/a@1.0.0",
+      "lookup @fx/a@1.0.0",
+    ]);
+  });
+
+  it("fails a package whose conflict npm never backs with an integrity, after exactly the reads it was given", () => {
+    const fake = writeFakeRegistry();
+    expect(publishVia(fake, ["packages/a"]).status).toBe(0);
+    rmSync(path.join(root, "registry.log"));
+
+    const { status, out } = publishVia(fake, ["packages/a"], {
+      attempts: 3,
+      env: { LOOKUP_LAG: "99" },
+    });
+
+    expect(status).toBe(1);
+    expect(summary(out)).toHaveLength(1);
+    expect(summary(out)[0]).toMatch(
+      /^@fx\/a@1\.0\.0: failed at publish .*npm reported the version as existing but returned no integrity/,
+    );
+    expect(registryLog().filter((l) => l.startsWith("lookup "))).toHaveLength(
+      3,
+    );
+  });
+
+  it("opens the registry lookup only for the registry's own conflict wording", () => {
+    addPackagesCAndD();
+    const fake = writeFakeRegistry();
+    const wordings = [
+      [
+        "@fx/a@1.0.0",
+        "npm error You cannot publish over the previously published versions: 1.0.0.",
+      ],
+      [
+        "@fx/b@2.1.0",
+        "npm error You cannot publish over the previously published version 2.1.0",
+      ],
+      ["@fx/c@3.0.0", "npm error Cannot publish over existing version"],
+      [
+        "@fx/d@4.0.0",
+        "npm error code E403\nnpm error 403 403 Forbidden - PUT https://registry.npmjs.org/@fx%2fd - You do not have permission to publish",
+      ],
+    ];
+    writeFileSync(
+      path.join(root, "registry.json"),
+      JSON.stringify({
+        records: Object.fromEntries(
+          wordings.map(([spec]) => [spec, OTHER_BYTES]),
+        ),
+        refuses: Object.fromEntries(wordings),
+        reads: {},
+      }),
+    );
+
+    const { status, out } = publishVia(fake, [
+      "packages/a",
+      "packages/b",
+      "packages/c",
+      "packages/d",
+    ]);
+
+    expect(status).toBe(1);
+    expect(registryLog().filter((l) => l.startsWith("lookup "))).toEqual([
+      "lookup @fx/a@1.0.0",
+      "lookup @fx/b@2.1.0",
+      "lookup @fx/c@3.0.0",
+    ]);
+    expect(summary(out)[3]).toMatch(
+      /^@fx\/d@4\.0\.0: failed at publish .*exited 1 — npm error code E403/,
+    );
   });
 });

@@ -19,4 +19,8 @@ changeset file with a package it has to hold back. For `@demlik/tea` it then reg
 `packages/tea/docs/reference/`, which prints tea's version, so commit those pages with the bump.
 
 When the version PR merges, the `publish` workflow (`.github/workflows/publish.yaml`) publishes
-each package whose version is not on npm yet, via npm trusted publishing (OIDC).
+each package whose version is not on npm yet, via npm trusted publishing (OIDC). A package ends
+`published`, `already published` or `failed`. `already published` is a green outcome: npm refused
+the publish because a run a few minutes earlier had just published that version, and npm's
+`dist.integrity` for it is the tarball this run packed. npm holding different bytes, or giving no
+integrity within the read budget, is `failed`, and the job goes red.
