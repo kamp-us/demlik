@@ -76,6 +76,7 @@ describe("a package owner adopts the doors and watches them close", () => {
   };
   const RULES = {
     features: { [SCOPE]: ["billing", "users", "reports"] },
+    layout: { [SCOPE]: "rules" },
     lib: ["lib"],
     doors: { [SCOPE]: { "process.env": ["src/env.ts"], "node:fs": ["src/credentials.ts"] } },
   };
@@ -268,6 +269,7 @@ describe("a rules/ file that reads the world still passes as pure at main (#510)
   };
   const RULES = {
     features: { [SCOPE]: ["billing", "orders", "users", "shipping"] },
+    layout: { [SCOPE]: "rules" },
     contracts: ["@acme/contracts"],
   };
   let repo: BoundaryRepo;
@@ -336,7 +338,10 @@ describe("a global never collides with an import of the package named like it", 
   };
   let repo: BoundaryRepo;
   beforeEach(() => {
-    repo = boundaryRepo(SCOPE, FILES, { features: { [SCOPE]: ["billing"] } });
+    repo = boundaryRepo(SCOPE, FILES, {
+      features: { [SCOPE]: ["billing"] },
+      layout: { [SCOPE]: "rules" },
+    });
   });
   afterEach(() => repo.dispose());
 
@@ -412,6 +417,7 @@ describe("a rules/ file is the zone where no door has an owner", () => {
   };
   const RULES = {
     features: { [SCOPE]: ["billing"] },
+    layout: { [SCOPE]: "rules" },
     doors: { [SCOPE]: { "process.env": ["src/env.ts"], "node:fs": ["src/credentials.ts"] } },
   };
   let repo: BoundaryRepo;
@@ -453,6 +459,7 @@ describe("process.stdin.isTTY is a door narrower than process.stdin", () => {
   beforeEach(() => {
     repo = boundaryRepo(SCOPE, FILES, {
       features: { [SCOPE]: ["billing"] },
+      layout: { [SCOPE]: "rules" },
       doors: { [SCOPE]: { "process.stdin.isTTY": ["src/terminal.ts"] } },
     });
   });
@@ -470,6 +477,7 @@ describe("process.stdin.isTTY is a door narrower than process.stdin", () => {
       repo.rulesFile,
       JSON.stringify({
         features: { [SCOPE]: ["billing"] },
+        layout: { [SCOPE]: "rules" },
         doors: {
           [SCOPE]: {
             "process.stdin": ["src/listen.ts"],
@@ -500,7 +508,7 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
 
   const refused = (doors: unknown, features: unknown = { [SCOPE]: ["billing"] }): string => {
     const file = path.join(repo.root, "bad.json");
-    fs.writeFileSync(file, JSON.stringify({ features, doors }));
+    fs.writeFileSync(file, JSON.stringify({ features, doors, layout: { [SCOPE]: "rules" } }));
     let all = "";
     for (const flags of [{}, { ci: true }, { acceptCrossings: true, reason: "x" }]) {
       const { code, errors, stdout } = repo.run({ ...flags, rules: file });
@@ -566,6 +574,7 @@ describe("a bad `doors` declaration exits 2, names the problem and writes nothin
       file,
       JSON.stringify({
         features: { [SCOPE]: ["billing"] },
+        layout: { [SCOPE]: "rules" },
         doors: {
           [SCOPE]: {
             "process.env.CI": ["src/env.ts"],
@@ -604,6 +613,7 @@ describe("a package owner who mistypes one door among several is told which, and
   };
   const rulesWith = (doors: Record<string, string[]>) => ({
     features: { [SCOPE]: ["billing", "users", "reports"] },
+    layout: { [SCOPE]: "rules" },
     lib: ["lib"],
     doors: { [SCOPE]: doors },
   });
@@ -785,6 +795,7 @@ describe("a team whose CI runs on more than one host learns from the refusal whi
         rules,
         JSON.stringify({
           features: { [SCOPE]: ["billing", "users", "reports"] },
+          layout: { [SCOPE]: "rules" },
           lib: ["lib"],
           doors: { [SCOPE]: Object.fromEntries(doors.map((door) => [door, ["src/env.ts"]])) },
         }),
@@ -830,6 +841,7 @@ describe("--migrate-ceilings counts import edges only and seeds the doors the co
   };
   const RULES = {
     features: { [SCOPE]: ["billing"] },
+    layout: { [SCOPE]: "rules" },
     lib: ["lib"],
     doors: { [SCOPE]: { "process.env": ["src/env.ts"] } },
   };
@@ -936,6 +948,7 @@ describe("a team adopts the gate where rules/ reads any process member and files
   };
   const RULES = {
     features: { [SCOPE]: ["billing", "orders", "users", "shipping"] },
+    layout: { [SCOPE]: "rules" },
     lib: ["lib"],
     doors: { [SCOPE]: { "node:fs": ["src/credentials.ts"] } },
   };
@@ -1062,7 +1075,10 @@ describe("a process member is one entry per file, and only rules/ polices one no
   };
   let repo: BoundaryRepo;
   beforeEach(() => {
-    repo = boundaryRepo(SCOPE, FILES, { features: { [SCOPE]: ["billing"] } });
+    repo = boundaryRepo(SCOPE, FILES, {
+      features: { [SCOPE]: ["billing"] },
+      layout: { [SCOPE]: "rules" },
+    });
   });
   afterEach(() => repo.dispose());
 
@@ -1097,7 +1113,7 @@ describe("a ledger the previous release wrote still gates the seven names it lis
         "tsconfig.json": TSCONFIG,
         "src/billing/rules/cfg.ts": "export const c = [process.env.X, process.cwd()];\n",
       },
-      { features: { [SCOPE]: ["billing"] } },
+      { features: { [SCOPE]: ["billing"] }, layout: { [SCOPE]: "rules" } },
     );
   });
   afterEach(() => repo.dispose());
@@ -1134,6 +1150,7 @@ describe("a declared process member is a door with an owner, and the narrowest d
   beforeEach(() => {
     repo = boundaryRepo(SCOPE, FILES, {
       features: { [SCOPE]: ["billing"] },
+      layout: { [SCOPE]: "rules" },
       doors: {
         [SCOPE]: {
           "process.platform": ["src/platform.ts"],
@@ -1201,6 +1218,7 @@ describe("a type-only import opens no door, in any spelling", () => {
   beforeEach(() => {
     repo = boundaryRepo(SCOPE, FILES, {
       features: { [SCOPE]: ["billing"] },
+      layout: { [SCOPE]: "rules" },
       doors: {
         [SCOPE]: { "node:fs": ["src/credentials.ts"], "node:child_process": ["src/spawner.ts"] },
       },

@@ -10,7 +10,7 @@ const B16 = "application-import-outside-allowlist";
 const DRIVEN = "src/orders/adapters/driven/reads.ts";
 const LIBRARIES = { libraryTypes: SHOP_TYPES, libraries: { "packages/domain-kernel": "kernel" } };
 
-describe("the six keys are parsed at the config boundary", () => {
+describe("the five keys are parsed at the config boundary", () => {
   let repo: BoundaryRepo;
   beforeEach(() => {
     repo = apiRepo(
@@ -100,17 +100,8 @@ describe("the six keys are parsed at the config boundary", () => {
     );
   });
 
-  it("refuses a strictDriving scope that declares no features, or is not hexagonal", () => {
-    expect(refused(api({ strictDriving: ["services/other"] }))).toBe(
-      '"strictDriving" declares scope "services/other", which declares no "features": it rides a scope that declares features.',
-    );
-    const rules = { features: { [API]: ["orders"] }, strictDriving: [API] };
-    expect(refused(rules)).toBe(
-      `"strictDriving" declares scope "${API}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
-    );
-    expect(refused({ ...rules, layout: { [API]: "rules" } })).toContain(
-      'whose "layout" is not "hexagonal"',
-    );
+  it("refuses the strictDriving key, which every hexagonal scope now has by declaring features", () => {
+    expect(refused(api({ strictDriving: [API] }))).toContain("strictDriving");
   });
 
   it("refuses a readAllowance scope that declares no features, or is not hexagonal", () => {
@@ -120,6 +111,7 @@ describe("the six keys are parsed at the config boundary", () => {
     );
     const rules = {
       features: { [API]: ["orders"] },
+      layout: { [API]: "rules" },
       ...LIBRARIES,
       readAllowance: { [API]: entry },
     };
@@ -168,7 +160,11 @@ describe("the six keys are parsed at the config boundary", () => {
     ],
     [
       "a scope that is not hexagonal",
-      { features: { [API]: ["orders"] }, readAllowance: { [API]: { driven: [DRIVEN] } } },
+      {
+        features: { [API]: ["orders"] },
+        layout: { [API]: "rules" },
+        readAllowance: { [API]: { driven: [DRIVEN] } },
+      },
       `"readAllowance" declares scope "${API}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
     ],
   ])("refuses %s when decidedBy is omitted", (_, rules, message) => {
@@ -209,14 +205,13 @@ describe("the six keys are parsed at the config boundary", () => {
     );
   });
 
-  it("accepts the six keys, and a rules file that declares none", () => {
+  it("accepts the five keys, and a rules file that declares none", () => {
     const rules = api({
       ...allowance({}),
       applicationShape: [B15, B16],
       applicationMayImport: ["kernel"],
       pureDependencies: ["zod", "@scope/*"],
       testFiles: ["**/*.test.ts", "{test,spec}/**"],
-      strictDriving: [API],
     });
     for (const keys of [rules, api({})]) {
       const file = path.join(repo.root, "ok.json");
@@ -283,10 +278,7 @@ describe("a wrangler config the run cannot parse, with a read allowance declared
   });
 
   it("is not a refusal for a rules file without a read allowance", () => {
-    for (const rules of [
-      {},
-      { applicationShape: [B15], testFiles: ["**/*.test.ts"], strictDriving: [API] },
-    ]) {
+    for (const rules of [{}, { applicationShape: [B15], testFiles: ["**/*.test.ts"] }]) {
       repo?.dispose();
       const run = open(rules);
       expect(run.run({ ci: true }).code).toBe(0);

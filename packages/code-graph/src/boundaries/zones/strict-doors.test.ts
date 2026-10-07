@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { API, apiRepo } from "../../test-helpers/api-repo.js";
 import type { BoundaryRepo } from "../../test-helpers/boundary-repo.js";
@@ -7,20 +5,19 @@ import { crossingsOf, ledgerText } from "../../test-helpers/library-report.js";
 
 const B9 = "door-outside-driven-adapter";
 const DRIVING = "src/orders/adapters/driving/http.ts";
-const STRICT = { strictDriving: [API] };
 
 let repo: BoundaryRepo | null = null;
 afterEach(() => repo?.dispose());
 
 // The B9 entries a `--json` run lists: `[file below the scope, door]`.
-function doorsIn(files: Record<string, string>, rules: Record<string, unknown> = STRICT) {
+function doorsIn(files: Record<string, string>, rules: Record<string, unknown> = {}) {
   repo = apiRepo(files, rules);
   return crossingsOf(repo.run({ json: true }))
     .filter(([kind]) => kind === B9)
     .map(([, from, door]) => [from?.slice(API.length + 1), door]);
 }
 
-describe("strictDriving makes B9 judge every catalog door, declared or not", () => {
+describe("a hexagonal scope has B9 judge every catalog door, declared or not", () => {
   it.each([
     ["console", 'export const x = () => console.log("x");\n'],
     ["fetch", 'export const x = () => fetch("https://example.test");\n'],
@@ -28,9 +25,7 @@ describe("strictDriving makes B9 judge every catalog door, declared or not", () 
     ["new Date()", "export const x = new Date();\n"],
     ["process.env", "export const x = process.env.MODE;\n"],
     ["node:fs", 'import { readFileSync } from "node:fs";\nexport const x = readFileSync;\n'],
-  ])("flips %s in a driving adapter from clean to B9", (door, source) => {
-    expect(doorsIn({ [DRIVING]: source }, {})).toEqual([]);
-    repo?.dispose();
+  ])("reports %s in a driving adapter as B9", (door, source) => {
     expect(doorsIn({ [DRIVING]: source })).toEqual([[DRIVING, door]]);
   });
 
@@ -75,16 +70,9 @@ describe("strictDriving makes B9 judge every catalog door, declared or not", () 
     ).toEqual([]);
   });
 
-  it("is off for a scope it does not name, and without the key", () => {
-    const source = "export const x = console.log;\n";
-    expect(doorsIn({ [DRIVING]: source }, { strictDriving: [] })).toEqual([]);
-    repo?.dispose();
-    const rules = {
-      features: { [API]: ["orders"], "services/other": ["x"] },
-      layout: { [API]: "hexagonal", "services/other": "hexagonal" },
-      strictDriving: ["services/other"],
-    };
-    expect(doorsIn({ [DRIVING]: source }, rules)).toEqual([]);
+  it("is off for a scope that opts out with layout rules", () => {
+    const rules = { features: { [API]: ["orders"] }, layout: { [API]: "rules" } };
+    expect(doorsIn({ [DRIVING]: "export const x = console.log;\n" }, rules)).toEqual([]);
   });
 
   it("keeps the entry of a declared door, so a recorded B9 entry still gates", () => {
@@ -101,10 +89,7 @@ describe("strictDriving makes B9 judge every catalog door, declared or not", () 
     const run = repo as BoundaryRepo;
     expect(run.run({ acceptCrossings: true, reason: "legacy" }).code).toBe(0);
     const recorded = ledgerText(run);
-    const strict = path.join(run.root, "strict.json");
-    const rules = { features: { [API]: ["orders", "billing"] }, layout: { [API]: "hexagonal" } };
-    fs.writeFileSync(strict, JSON.stringify({ ...rules, doors, ...STRICT }));
-    const gated = run.run({ ci: true, rules: strict });
+    const gated = run.run({ ci: true });
     expect(gated.code).toBe(0);
     expect(gated.stdout).toContain("2 recorded crossing(s), none new");
     expect(ledgerText(run)).toBe(recorded);
@@ -116,7 +101,7 @@ describe("strictDriving makes B9 judge every catalog door, declared or not", () 
     };
     const doors = { [API]: { "process.env": ["src/orders/adapters/driven/env.ts"] } };
     const driven = { "src/orders/adapters/driven/env.ts": "export const m = process.env.MODE;\n" };
-    expect(doorsIn({ ...files, ...driven }, { doors, ...STRICT })).toEqual([
+    expect(doorsIn({ ...files, ...driven }, { doors })).toEqual([
       [DRIVING, "console"],
       [DRIVING, "process.env"],
       [DRIVING, "process.hrtime"],

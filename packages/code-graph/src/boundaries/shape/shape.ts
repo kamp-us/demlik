@@ -7,7 +7,7 @@ import { firstWrite, type ReadAllowance, readAllowanceOf } from "../zones/reads.
 import { firstOffendingForm } from "./entry-file.js";
 import { declaresReadAllowance, type ShapeKind, type ShapeRules } from "./schema.js";
 
-// What the six keys about a feature's own files read as, once for the run: the globs compiled, the
+// What the five keys about a feature's own files read as, once for the run: the globs compiled, the
 // scopes and kinds as sets, and the read allowance beside the wrangler catalog it reads. Every
 // question the judgments ask about them is answered from this value and never from the rules file.
 export type Shape = {
@@ -15,7 +15,6 @@ export type Shape = {
   readonly mayImport: ReadonlySet<string>;
   readonly pure: readonly RegExp[];
   readonly tests: readonly RegExp[];
-  readonly strict: ReadonlySet<string>;
   readonly allowance: ReadAllowance;
 };
 
@@ -44,7 +43,6 @@ export function readShape(rules: ShapeRules, catalog: BindingCatalog): ShapeRead
       mayImport: new Set(rules.applicationMayImport),
       pure: rules.pureDependencies.map(globToRegExp),
       tests: rules.testFiles.map(globToRegExp),
-      strict: new Set(rules.strictDriving),
       allowance: readAllowanceOf(rules.readAllowance, catalog),
     },
   };

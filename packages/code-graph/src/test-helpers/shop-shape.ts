@@ -192,7 +192,6 @@ export const SHAPE_RULES = {
   applicationMayImport: ["contract", "kernel", "util"],
   pureDependencies: ["zod"],
   testFiles: ["**/*.test.ts"],
-  strictDriving: [API],
   readAllowance: SHAPE_READ_ALLOWANCE,
 };
 

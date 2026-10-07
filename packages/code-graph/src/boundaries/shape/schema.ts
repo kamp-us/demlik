@@ -26,19 +26,17 @@ const ReadAllowanceSchema = z.record(
     .strict(),
 );
 
-// The six keys of the rules file about a feature's own files, spread into `BoundaryRulesSchema`.
+// The five keys of the rules file about a feature's own files, spread into `BoundaryRulesSchema`.
 //  - `applicationShape`: the kinds that run, empty by default.
 //  - `applicationMayImport`: library types an `application/` file may import (needs B16 listed).
 //  - `pureDependencies`: package globs an `application/` file may import (needs B16 listed).
 //  - `testFiles`: globs of the files that are tests, which sit in no zone.
-//  - `strictDriving`: scopes where B9 judges every catalog door, not only the declared ones.
 //  - `readAllowance`: per scope, the driven files a driving adapter may read through.
 export const SHAPE_KEYS = {
   applicationShape: z.array(z.enum(SHAPE_KINDS)).default([]),
   applicationMayImport: z.array(z.string().min(1)).default([]),
   pureDependencies: z.array(z.string().min(1)).default([]),
   testFiles: z.array(z.string().min(1)).default([]),
-  strictDriving: z.array(z.string().min(1)).default([]),
   readAllowance: ReadAllowanceSchema.default({}),
 };
 

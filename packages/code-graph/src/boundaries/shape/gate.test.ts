@@ -132,7 +132,6 @@ describe("the shape kinds are off until listed", () => {
   it("reports B8, B9 and B1 as before and nothing for B15 and B16 when applicationShape lists none", () => {
     const rules = shapeless({
       testFiles: SHAPE_RULES.testFiles,
-      strictDriving: SHAPE_RULES.strictDriving,
       readAllowance: SHAPE_RULES.readAllowance,
     });
     const kinds = new Set(listed(open(rules)).map(([, kind]) => kind));
