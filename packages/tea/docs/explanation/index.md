@@ -13,9 +13,8 @@ in the [glossary](../glossary.md).
   reducer table or state × message table, why a missing transitions [cell](../glossary.md#cell) is a
   declared refusal rather than an omission, and how to ask a state what it
   accepts before you dispatch.
-- [What durability actually promises](./durability-model.md) — how state survives
-  a crash, why effects are at-least-once rather than exactly-once, the window
-  where a handler can run twice, and what to do about it.
+- [What durability actually promises](./durability-model.md) — snapshot restore,
+  event-log replay, pending-work resume, and why an effect can run twice.
 - [What each run guard bounds](./what-bounds-a-run.md) — why `deadlineMs` is a
   no-progress watchdog and `maxElapsedMs` is the wall-clock cap, why a guard
   that fires does not cancel work in flight, and what an [agent](../glossary.md#agent)'s token total

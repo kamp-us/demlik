@@ -70,6 +70,15 @@ Coming from 0.15?
 [The migration guide](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/migrate-from-0-15.md)
 shows every removed or reshaped API, before and after.
 
+## Durability
+
+With `fileStore` or `doStore`, state is saved before commands run. Restarting loads it.
+`agent.run` resumes pending work automatically; custom machines handle a boot
+message. An effect can run again if its result was not saved before the crash.
+
+[Make a machine durable](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/how-to/make-durable.md)
+and [understand restore versus replay](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/explanation/durability-model.md).
+
 ## Documentation
 
 The four Diátaxis quadrants live in [`docs/`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/README.md):

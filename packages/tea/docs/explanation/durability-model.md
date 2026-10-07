@@ -1,190 +1,132 @@
 # What durability actually promises
 
-A machine built with `@demlik/tea` can be killed mid-run and picked up again by
-a different process — or a different machine in a different datacentre — with no
-recovery code of your own. This page says exactly how far that goes, and where it
-stops, because the edge is the part that matters when you are deciding whether to
-trust it.
+With a persistent `Store`, a restarted machine can recover its saved Model.
+The usual `fileStore` and `doStore` path restores a snapshot; it does not replay
+all earlier messages. Pending work then resumes from that state.
 
-## The mechanism, in one paragraph
+## Snapshot restore
 
-Your Model is plain JSON. A transition is a pure function from `(Model, Msg)` to
-a new Model plus a list of effects to run. Hand the runtime a `Store` and it
-**saves the new Model before it runs that transition's effects**. So the saved
-state is always one step ahead of the outside world: whatever is on disk either
-already knows about an effect, or is about to ask for it. On boot the runtime
-reads the Store, sees which effects the Model is still waiting on, and re-issues
-them. The reducer never learns it was interrupted.
+A transition produces a new Model and commands. The runtime saves the Model
+before running those commands:
 
-That is the whole story. There is no recovery API, no journal you replay by
-hand, no lifecycle hook. Persistence is a round trip of a JSON value.
-
-## What is guaranteed
-
-- **State is durable.** Every transition that completed is on disk before the
-  next effect runs. Restarting resumes the same run — the same run id, the same
-  accumulated Model — rather than starting a new one.
-- **The Model is idempotent under re-fire.** Re-issuing an outstanding effect
-  and folding its result cannot corrupt state. Folding the same settle twice
-  leaves the same Model.
-- **A finished run stays finished.** Boot a Store holding a completed Model and
-  you get that Model back; it does not re-run.
-- **Nothing is hidden from you.** The saved state is a JSON file — or a Durable
-  Object storage key, or a `chrome.storage` entry — that you can print, diff, and
-  assert on. There is no opaque runtime handle in the way.
-
-## What is not guaranteed: effects are at-least-once
-
-**A side effect can run more than once across a crash.** This is the single most
-important sentence on the page.
-
-The window is between two moments:
-
-1. your handler performs its side effect — writes the row, sends the email,
-   calls the API;
-2. the runtime writes that effect's settle into the Store.
-
-A crash inside that window leaves a Model that is still waiting on the effect. On
-boot the runtime re-issues it, and your handler runs the effect a second time.
-The state fold is idempotent; the effect in the world is not, because the library
-has no way to know what your handler did out there.
-
-This is the same guarantee every durable-execution system ships. Exactly-once
-delivery of a real-world side effect is not a thing any of them provide; what
-they provide is at-least-once with a named window, and here it is named.
-
-## What is not guaranteed by default: one writer
-
-**Nothing in a plain `Store` refuses a second process.** `save` is unconditional, so two
-runtimes pointed at the same file — a retried job, a second pod, a developer running the CLI
-twice — both drive the same run to done, and every side effect happens twice. Neither of them
-can tell. Atomic writes do not help here: temp-plus-rename makes one write torn-proof, and says
-nothing about a second writer.
-
-So **single-writer is your precondition to keep** whenever the store is a plain `Store`. Inside a
-Durable Object the platform keeps it for you — one grain, one writer, by construction. On a
-shared file, a shared KV bucket or anything else two processes can open, it is yours.
-
-Unless you fence. Hand `run` a **`FencedStore`** instead and the substrate enforces it: the store
-carries a version, the runtime reads it at boot and compare-and-swaps on every save, and a run
-whose version another process has already moved past is refused with a `StoreConflictError`.
-The loser does not limp on; it stops.
-
-Which run loses is worth being exact about, because the intuitive answer is backwards. A process
-reads the version **at boot**, so a newly started second process reads whatever is current and its
-own boot save swaps cleanly — **the newer starter takes the fence**. The run that is refused is the
-*older* one, still holding the version it read before, at its next save. It has already fired the
-effects it got to by then. Only in the narrow race where both processes read the same version
-before either wrote does the loser die at boot with nothing done. So fencing buys you **at most one
-live writer from here on** — not a promise that the loser never ran.
-
-```ts
-import { fileStore } from "@demlik/tea/node";
-
-// Opt in per store. Everything else is the same call you already write.
-const store = fileStore("agent.json", parse, { fenced: true });
+```text
+message → update → save Model → run commands → result message
 ```
 
-Fencing is opt-in for the whole 0.x line, and not every host can offer it honestly:
+On restart, `load` reads the saved value, `migrate` validates it, and
+`init(loaded)` receives the restored Model. Completed work survives as data.
+The old process's JavaScript stack and promises do not survive.
 
-| Store | Fenced with `{ fenced: true }` | How |
-|---|---|---|
-| `fileStore` (`@demlik/tea/node`) | yes | version stamp beside the file, swapped under a `wx` lock |
-| `doStore` (`@demlik/tea/do`) | yes | compare-and-swap inside `storage.transaction` |
-| `memoryStore` (`@demlik/tea/mem`) | yes | in-process counter |
-| `chromeStorageStore` (`@demlik/tea/extension`) | **no** | `chrome.storage` has no atomic compare-and-swap; a fence there would report success while both writers won |
+For example, suppose A and B have saved results and C is pending. Restarting
+keeps A and B completed and attempts C again. Recovery starts from the last
+successful store write, so a transition whose save was interrupted may be lost.
 
-A conflict is a throw and not a Msg you fold, because there is no correct way for the loser to
-continue — see [ADR 0017](../../../../.decisions/0017-fencing-is-an-optional-store-widening.md).
+A store backed only by memory cannot survive process termination. The new
+process must open the same persistent file, storage key, or equivalent backing.
 
-Fencing refuses a second **writer**. It does not make effects exactly-once: everything in the
-section above still holds for the process that wins.
+## Restoring state and resuming work
+
+A store saves the Model, not a separate queue of command objects. The machine
+must keep enough data to reconstruct pending work: its phase, request ids,
+arguments, and any completed results.
+
+`init(loaded)` returns `[loaded, []]`. It restores state without issuing
+commands. A boot message handled by `update` derives the commands still needed;
+subscriptions are reconciled from the restored state.
+
+`agent.run` sends that resume message automatically for a run caught mid-flight.
+A custom machine needs its own boot/resume handler. Durable Object hosts can use
+[`bootResume`](../reference/do.md#bootResume) with a typed resume port.
+An agent's saved retry counters survive too; restarting does not reset its attempt budget.
+
+Stopping the host and cancelling the run have different meanings. A killed
+process leaves its last saved phase in place. An agent cancellation records a
+terminal outcome, so reopening that store does not continue the cancelled run.
+A completed agent likewise stays completed.
+
+## Event-log replay
+
+The optional [`doEventSourcedStore`](../reference/do.md#doEventSourcedStore)
+recovers differently. It loads the latest snapshot and folds persisted messages
+after that snapshot through the reducer. With no snapshot, it folds the full log.
+Commands produced during this fold are data; their handlers are not executed.
+Pending work still needs the resume path after recovery.
+
+This mode requires applied-message append wiring as well as the store. Changing
+the store alone does not record the message log.
+
+[`replay` and `replayTrace`](../how-to/replay-in-a-test.md) also fold messages
+without effects. They support tests and debugging; normal snapshot restore does
+not call them.
+
+## Effects are at-least-once
+
+An external action and the store write of its result are separate operations.
+If a handler finishes its action and the process dies before the result is
+saved, the restored Model still says the work is pending. Resume attempts it again.
+
+That can mean a repeated API call, row write, or email. Idempotent operations
+leave the same result when repeated. Other operations need a stable key that
+the downstream system can deduplicate.
+
+An agent tool's `callId` survives the restart. A `tool()` handler receives
+`args`, `ctx`, and `{ ok, fail }`; the id is available as `cmd.callId` in an
+interpret wrapper. See [Wrap one tool's interpret cell](../how-to/wrap-one-tool-cell.md).
+TEA does not apply external-effect deduplication automatically.
+[`idempotency`](../reference/idempotency.md) and
+[`idempotentEffect`](../reference/do.md#idempotentEffect) provide helpers;
+the host supplies the stable key and wires them into its handlers.
+
+Saving state also does not make an arbitrary reducer idempotent. Custom
+machines must recognize already-settled work if duplicate results can arrive.
+
+## One writer per saved run
+
+A plain `Store.save` is unconditional. Two processes sharing a store can race
+and issue the same work. Atomic file replacement prevents partial writes;
+it does not choose which process owns the run.
+
+A `FencedStore` adds a version check to each save. A stale writer gets
+`StoreConflictError`. A later starter can read the current version and take
+over; the older process is refused at its next save. Effects already running
+can still finish, so fencing does not remove the repeated-effect window.
+
+`fileStore`, `doStore`, and `memoryStore` support `{ fenced: true }`.
+`chromeStorageStore` has no atomic compare-and-swap and stays unfenced.
+The [durability how-to](../how-to/make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)
+shows the setup; [ADR 0017](../../../../.decisions/0017-fencing-is-an-optional-store-widening.md)
+records the design.
 
 ## Forgetting a run: `delete()`
 
-`fileStore`, `memoryStore` and `doStore` return a **`DeletableStore`**, fenced or not. Its
-`delete()` removes the saved state, so a host that forgets a run does not need to know how each
-store lays out its bytes. `fileStore` removes the state file and its `.fence` stamp; `doStore`
-removes the state cell and its version cell. Deleting nothing resolves. After a delete, `load()`
-answers what a never-saved store answers, so the next `run` boots fresh.
+`fileStore`, `memoryStore`, and `doStore` expose `delete()`. Removing the saved
+state lets the next runtime boot fresh. A custom `Store` need not expose deletion.
 
-The store does not guard against a run that is still live. An unfenced `save` after a delete
-writes the state again. A fenced store drops its version with the state, so a live fenced run is
-refused with a `StoreConflictError` at its next save. Stop the run before you delete its state.
-`DeletableStore` is an optional widening like `FencedStore`: `Store<S>` itself has no `delete`,
-and a store you write yourself does not need one.
-
-## What you do about it
-
-**Make handlers idempotent, or key them.**
-
-- **Idempotent by construction** is the cheapest fix when it is available:
-  writing a file at a fixed path, `PUT`ing a record by id, upserting a row. Doing
-  it twice leaves the same result.
-- **Key the effect** when it is not. An agent's tool call carries a stable id
-  that is the same across the re-fire: its `callId`. A `tool()` handler is not
-  handed it — it takes `args`, `ctx` and `{ ok, fail }` — so read it as
-  `cmd.callId` in a `.with` wrapper around the tool, as
-  [Wrap one tool's interpret cell](../how-to/wrap-one-tool-cell.md) shows.
-  Pass the id to the downstream system as its idempotency key, or record it
-  yourself and skip an id you have already handled. tea applies no dedupe to an
-  effect for you:
-  [`@demlik/tea/idempotency`](../reference/idempotency.md) ships the
-  dedupe-by-key state and its ops, and
-  [`@demlik/tea/do`](../reference/do.md) ships `idempotentEffect` over a key you
-  supply, and wiring either is yours.
-- **Push the risk to the end.** Where an effect is genuinely non-repeatable and
-  cannot be keyed — charging a card through an API with no idempotency key —
-  order it so the unrepeatable step is the last thing that happens before a
-  settle, and keep the window as small as you can.
-
-A useful habit when testing: kill the process at several different points, not
-just one, and check that the result is the same. A single well-timed `Ctrl-C`
-that lands outside the window proves less than it looks like it does.
+A live unfenced runtime can save again and recreate the state. Deleting a fenced
+store also removes its version, so the old writer is refused at its next save.
+Deletion therefore belongs after the current runtime has stopped.
 
 ## What a resumed agent run keeps: the prompt it started with
 
-`instructions` is pinned. It is written into the Model when the run's state is
-created — at `init`, before the run's first `agent_start` — and read back from
-there on every brain call, so it is never re-read from your config again. Resume
-a killed run after a redeploy that changed the system prompt and the run
-continues on the **old** prompt; the new string reaches new runs only. That is
-the design, not a defect: the prompt is state rather than a closure so a replay
-reproduces the exact prompt that ran, a rehydrated run stays the run it was, and
-a compaction fold — which touches only the conversation — can never lose it
-([ADR 0004](../../../../.decisions/0004-agent-context-compaction.md)).
+An agent stores `instructions` in its Model at initialization. Later model
+calls read that saved prompt. Redeploying with a different prompt changes new
+runs; an existing run continues with its original instructions.
 
-There is no override. **A bad prompt already in flight is ended, not patched**:
-stop the run's process, leave its stored Model alone rather than resuming it, and
-start a **new** run on the new prompt. A run is the unit that carries a prompt,
-so replacing the prompt means replacing the run.
+Compaction changes the conversation, not the stored instructions. Using a new
+prompt requires a new run. See [ADR 0004](../../../../.decisions/0004-agent-context-compaction.md).
 
 ## What a finished agent run keeps
 
-For the agent layer specifically, one detail surprises people. When a run reaches
-`phase: "done"`, the stored Model holds the **run slice and the final `output`** —
-and `conversation` is cleared to `null`.
+At `phase: "done"`, the Model retains the run slice and final `output`.
+`conversation` becomes `null`, so the stored Model is not a full transcript archive.
 
-This is deliberate, not a bug. The terminating turn is stamped onto `output`
-before the conversation is dropped, so the answer survives; what does not survive
-is the full transcript, which would otherwise grow without bound in storage that
-is being kept for its state, not its history. If you need the transcript after a
-run ends, capture it as it goes rather than expecting to read it back off the
-finished Model.
-
-Capturing it is one line rather than a fold you write: `transcript()` collects
-the turns off the run's existing event stream, and is not state itself, so the
-clear above is unchanged by attaching one. See
-[Keep the whole transcript](../how-to/show-a-run-in-progress.md#4-keep-the-whole-transcript-with-transcript),
-including what to seed it with when the run is a resume.
+[`transcript()`](../how-to/show-a-run-in-progress.md#4-keep-the-whole-transcript-with-transcript)
+collects turns from the event stream. A collector attached after a restart
+needs the saved conversation as its seed to include earlier turns.
 
 ## Further reading
 
-- [Make a machine durable and crash-recoverable](../how-to/make-durable.md) — the
-  `Store` seam and the four host factories, as a task.
-- [Build a durable agent](../tutorial/build-a-durable-agent.md) — the same story
-  as a lesson, including a kill-it-and-rerun exercise.
-- [Deploy an agent to a Durable Object](../how-to/deploy-an-agent-to-a-durable-object.md)
-  — where the eviction is the platform's rather than your `Ctrl-C`.
-- [Why failures are values and bugs are throws](./errors-as-data.md) — why the
-  Model has to be JSON, which is what makes all of the above possible.
+- [Make a machine durable and crash-recoverable](../how-to/make-durable.md): store and resume setup.
+- [Build a durable agent](../tutorial/build-a-durable-agent.md): kill and restart a running agent.
+- [Deploy an agent to a Durable Object](../how-to/deploy-an-agent-to-a-durable-object.md): platform-hosted recovery.
+- [Why failures are values and bugs are throws](./errors-as-data.md): serializable state and outcomes.

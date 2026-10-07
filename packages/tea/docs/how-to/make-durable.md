@@ -1,9 +1,8 @@
 # Make a machine durable and crash-recoverable
 
-To let a machine survive its host being evicted — a Durable Object hibernating,
-a worker restarting — give `run` a `Store`. The substrate saves the Model after
-every transition and rehydrates it on the next boot. Your reducer authors none
-of it: the Model is plain data, so persistence is a round-trip, not code.
+Give `run` a persistent `Store`. With `fileStore` or `doStore`, the runtime
+saves the Model before running commands and loads it on the next boot.
+Keep pending work in the Model so a resume handler can reconstruct it.
 
 The machine saved here is the download from
 [Build and replay your first machine](../tutorial/build-your-first-machine.md).
@@ -44,12 +43,9 @@ export const downloader = defineMachine({
 
 ## 1. Implement the `Store` seam
 
-A `Store<S>` has three methods: `load` returns whatever bytes are at the key
-(typed `unknown` — storage genuinely doesn't know your `S`), `save` persists the
-Model, and `migrate` parses raw bytes back into an `S`. `migrate` returns `null`
-when nothing was saved, so the run boots fresh, and `refuse(reason)` for saved
-bytes it can't read. Here that parse is a function of its own, `parse`, because
-step 4 hands the same one to a file store:
+A `Store<S>` loads an `unknown` value, saves the Model, and uses `migrate`
+to validate loaded data. Return `null` for no saved state and `refuse(reason)`
+for unreadable data. Step 4 reuses this `parse` function with a file store:
 
 ```ts
 import { type Migrated, refuse, type Store } from "@demlik/tea";
@@ -79,10 +75,10 @@ with a `StoreRefusedError` and nothing is written, so the saved bytes are never
 overwritten by a fresh boot. To show a "couldn't restore" view instead, see
 [Show a "couldn't restore" view](./restore-or-refuse.md).
 
-On Cloudflare, swap `memStore` for `@demlik/tea/do`'s `doStore` (or
-`doEventSourcedStore`), whose `load`/`save` are backed by
-`DurableObjectStorage`. The machine code above does not change — only the Store
-does.
+The in-memory box demonstrates serialization within one process. Use
+`fileStore` in step 4 or Cloudflare's `doStore` for storage that survives a
+process restart. The optional `doEventSourcedStore` also needs message-log
+append wiring; see [snapshot restore versus replay](../explanation/durability-model.md#event-log-replay).
 
 ## 2. Boot with the Store, and let it persist
 
@@ -97,8 +93,8 @@ await a.dispatch({ type: "chunk", size: 1 }); // phase is now "downloading"
 await a.stop(); // box.snapshot now holds the persisted Model
 ```
 
-Every dispatch has already written through the Store, so the moment the host is
-evicted the last state is safe in storage.
+Each dispatch has saved its state through the Store. With persistent backing,
+those successful writes survive the host stopping.
 
 ## 3. Resume from a fresh runtime
 
@@ -112,9 +108,20 @@ const b = await run(downloader, { store: memStore(box) }).ready;
 const resumed = b.getState(); // phase "downloading", received 1: where A stopped
 ```
 
-Runtime B never re-ran the earlier chunks; it rehydrated their result. The Model
-is serializable data, the `Store` is the one seam that persists it, and the
-substrate handles the save-then-boot cycle.
+Runtime B loads the saved count; it does not replay the earlier chunk messages.
+
+### Resume pending commands
+
+This downloader counts incoming messages, so it waits for the next chunk after
+restore. A machine waiting on an API call needs a resume handler as well:
+keep the pending request's id and arguments in its Model, then have the host
+dispatch a boot message after `ready`. Its `update` cell issues the commands
+still needed. Keep `init(loaded)` as `[loaded, []]`.
+
+`agent.run` handles this boot message automatically. Durable Object hosts can
+use [`bootResume`](../reference/do.md#bootResume) with their machine's resume port.
+Handlers must tolerate a repeated attempt if their previous result was not
+saved; see [the repeated-effect window](../explanation/durability-model.md#effects-are-at-least-once).
 
 ## 4. Refuse a second writer, if two processes can reach the storage
 

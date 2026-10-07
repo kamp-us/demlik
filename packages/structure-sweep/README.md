@@ -83,11 +83,10 @@ twice.
 Folders and paths are taken relative to where you run the command; outputs default to
 `.structure-sweep/` at the repository root.
 
-`--graph` (on `sweep` and `propose`) is not yet supported for repositories with more than about 5k
-source files: code-graph's ts-morph loader can hang or run out of memory there
-([#384](https://github.com/kamp-us/demlik/issues/384)). Until code-graph moves off ts-morph
-([#397](https://github.com/kamp-us/demlik/issues/397)), run both commands without `--graph` on
-those repositories.
+`--graph` on `sweep` and `propose` reads saved code-graph JSON. Generate it with
+`code-graph <path> --graph --out graph.json`, adding analysis flags for the data you need.
+Choose a path containing all relevant files. See code-graph's
+[commands and scope](../code-graph/docs/reference/cli.md#pass-selection-and-scope).
 
 ### `structure-sweep propose <folder>...`
 
