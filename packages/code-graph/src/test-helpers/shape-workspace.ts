@@ -248,7 +248,7 @@ function scopeOf(scope: string, s: number): Written {
   return written;
 }
 
-// The six keys, by name.
+// The five keys, by name.
 function keysOf(): Record<string, unknown> {
   const allowance = {
     driven: ["src/f0/adapters/driven/reads.ts", "src/f1/adapters/driven/writes.ts"],
@@ -259,7 +259,6 @@ function keysOf(): Record<string, unknown> {
     applicationMayImport: ["contract", "kernel", "util"],
     pureDependencies: ["zod"],
     testFiles: ["**/*.test.ts"],
-    strictDriving: SCOPES,
     readAllowance: Object.fromEntries(SCOPES.map((scope) => [scope, allowance])),
   };
 }
@@ -269,7 +268,6 @@ function keysOf(): Record<string, unknown> {
 const GROUPS: Readonly<Record<string, readonly string[]>> = {
   "application shape": ["applicationShape", "applicationMayImport", "pureDependencies"],
   "test files": ["testFiles"],
-  "strict doors": ["strictDriving"],
   "read allowance": ["readAllowance"],
 };
 

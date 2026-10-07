@@ -1,5 +1,5 @@
 import { GlobSyntaxError, globToRegExp } from "../../kinds/glob.js";
-import { type BoundaryRules, featureFileOf, scopeZoning } from "../rules.js";
+import { type BoundaryRules, featureFileOf, layoutOf, scopeZoning } from "../rules.js";
 
 const B16 = "application-import-outside-allowlist";
 
@@ -52,7 +52,7 @@ function scopeIssues(rules: BoundaryRules, key: string, scopes: readonly string[
         `"${key}" declares scope "${scope}", which declares no "features": it rides a scope that declares features.`,
       ];
     }
-    return rules.layout[scope] === "hexagonal"
+    return layoutOf(rules, scope) === "hexagonal"
       ? []
       : [
           `"${key}" declares scope "${scope}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
@@ -88,7 +88,7 @@ function allowanceIssues(rules: BoundaryRules): string[] {
   });
 }
 
-// The first problem in the six keys that the rules file alone can show, or null. A kind outside the
+// The first problem in the five keys that the rules file alone can show, or null. A kind outside the
 // two is refused by the schema. What needs the repo (a listed file the scope does not load, a
 // wrangler config that cannot be parsed) is judged where the scope is loaded and the run is read.
 export function shapeDeclarationIssue(rules: BoundaryRules): string | null {
@@ -98,7 +98,6 @@ export function shapeDeclarationIssue(rules: BoundaryRules): string | null {
       ...typeIssues(rules, "applicationMayImport", rules.applicationMayImport, ""),
       ...globIssues("pureDependencies", rules.pureDependencies),
       ...globIssues("testFiles", rules.testFiles),
-      ...scopeIssues(rules, "strictDriving", rules.strictDriving),
       ...scopeIssues(rules, "readAllowance", Object.keys(rules.readAllowance)),
       ...allowanceIssues(rules),
     ][0] ?? null

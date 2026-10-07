@@ -193,7 +193,7 @@ const SUPPORT: Record<string, string> = {
 
 const RULES = {
   features: { [API]: ["orders", "billing"], [LEGACY]: ["cart"] },
-  layout: { [API]: "hexagonal" },
+  layout: { [LEGACY]: "rules" },
   libraryTypes: SHOP_TYPES,
   libraries: {
     "packages/util": "util",
@@ -202,7 +202,6 @@ const RULES = {
   },
   doors: { [API]: { "process.env": ["src/orders/adapters/driven/env.ts"] } },
   acrossDeployables: ["binding-outside-driven-adapter", "relative-import-crosses-workspace"],
-  strictDriving: [API],
   testFiles: ["**/*.test.ts"],
 };
 

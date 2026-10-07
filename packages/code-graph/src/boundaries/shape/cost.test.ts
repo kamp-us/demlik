@@ -58,11 +58,10 @@ const EMPTY_KEYS = {
   applicationMayImport: [],
   pureDependencies: [],
   testFiles: [],
-  strictDriving: [],
   readAllowance: {},
 };
 
-describe("a rules file with none of the six keys behaves as it did", () => {
+describe("a rules file with none of the five keys behaves as it did", () => {
   it("reports, gates and writes the same bytes with the keys absent, or present and empty", () => {
     const outputs = [
       SHAPE_RULES_WITHOUT_SHAPE,

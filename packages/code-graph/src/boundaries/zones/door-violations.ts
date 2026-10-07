@@ -18,9 +18,6 @@ export type DoorContext = {
   readonly module: DoorFile;
   readonly place: Place;
   readonly doors: Readonly<Record<string, readonly string[]>>;
-  // Whether the rules file's `strictDriving` names this scope: a zone that judges the declared
-  // doors (B9) then judges every catalog door.
-  readonly strict: boolean;
 };
 
 function zoneDoor(ctx: DoorContext, feature: string, door: string): ZoneDoor {
@@ -93,7 +90,7 @@ export function doorViolations(ctx: DoorContext): BoundaryViolation[] {
     case "impure-application":
       return impureApplication(ctx, place.feature);
     case "door-outside-driven-adapter":
-      return doorsUsed(ctx, ctx.strict).map((door) => ({
+      return doorsUsed(ctx, true).map((door) => ({
         kind: rule,
         ...zoneDoor(ctx, place.feature, door),
       }));

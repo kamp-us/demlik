@@ -39,6 +39,7 @@ const FILES: Record<string, string> = {
 
 const RULES = {
   features: { [SCOPE]: ["audit-runs", "findings"] },
+  layout: { [SCOPE]: "rules" },
   lib: ["lib"],
   contracts: ["@acme/wire-contract"],
 };
@@ -367,6 +368,7 @@ describe("B4 judges an importer outside every declared feature and every lib fol
   beforeAll(() => {
     repo = boundaryRepo(OUTSIDE_SCOPE, OUTSIDE_FILES, {
       features: { [OUTSIDE_SCOPE]: ["billing"] },
+      layout: { [OUTSIDE_SCOPE]: "rules" },
     });
   });
   afterAll(() => repo.dispose());
@@ -534,7 +536,7 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
   const RULES = {
     features: { [API]: ["billing", "orders", "users", "shipping"], [LEGACY]: ["cart"] },
     lib: ["lib"],
-    layout: { [API]: "hexagonal" },
+    layout: { [LEGACY]: "rules" },
     doors: {
       [API]: {
         fetch: ["src/billing/adapters/driven/stripe.ts"],
@@ -543,7 +545,7 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
     },
   };
   const api = (file: string) => `${API}/src/${file}`;
-  const SEVENTEEN = [
+  const EIGHTEEN = [
     [
       "application-imports-adapter",
       api("billing/application/charge.ts"),
@@ -555,6 +557,7 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
       api("orders/adapters/driving/http.ts"),
     ],
     ["cross-feature", api("orders/application/place.ts"), api("billing/adapters/driven/stripe.ts")],
+    ["door-outside-driven-adapter", api("orders/adapters/driving/http.ts"), "console"],
     ["door-outside-driven-adapter", api("orders/index.ts"), "process.env"],
     ["door-outside-driven-adapter", api("shipping/adapters/driving/rpc.ts"), "fetch"],
     ["door-outside-owner", api("users/adapters/driven/db.ts"), "fetch"],
@@ -588,10 +591,10 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
   const ledgered = () =>
     ledgerOf(repo).entries.map((e) => [e.kind, e.from, ledgerTargetOf(e), e.reason]);
 
-  it("lists exactly the 17 crossings, gates on them, records them, and shrinks as they are fixed", () => {
+  it("lists exactly the 18 crossings, gates on them, records them, and shrinks as they are fixed", () => {
     const failed = repo.run({ ci: true });
     expect(failed.code).toBe(1);
-    expect(entryLines(failed.stdout)).toHaveLength(17);
+    expect(entryLines(failed.stdout)).toHaveLength(18);
     expect(failed.stdout).toContain(
       "services/api  B9 door-outside-driven-adapter  services/api/src/orders/index.ts -> process.env\n",
     );
@@ -610,20 +613,20 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
 
     const report = repo.run();
     expect(report.code).toBe(0);
-    expect(report.stdout.split("\n").filter((line) => /^ {2}B\d+ /.test(line))).toHaveLength(17);
+    expect(report.stdout.split("\n").filter((line) => /^ {2}B\d+ /.test(line))).toHaveLength(18);
     expect(
       violationsOf(repo.run({ json: true })).map((v) => [v.kind, v.from, ledgerTargetOf(v)]),
-    ).toEqual(SEVENTEEN);
+    ).toEqual(EIGHTEEN);
 
     const reason = "adopting the hexagonal layout";
     expect(repo.run({ acceptCrossings: true, reason }).code).toBe(0);
-    expect(ledgered()).toEqual(SEVENTEEN.map((row) => [...row, reason]));
+    expect(ledgered()).toEqual(EIGHTEEN.map((row) => [...row, reason]));
     const seeded = ledgerText(repo);
     const first = repo.run({ ci: true });
     const second = repo.run({ ci: true });
     expect([first.code, second.code]).toEqual([0, 0]);
     expect(second.stdout).toBe(first.stdout);
-    expect(first.stdout).toContain("17 recorded crossing(s), none new");
+    expect(first.stdout).toContain("18 recorded crossing(s), none new");
     expect(ledgerText(repo)).toBe(seeded);
 
     repo.put(
@@ -643,7 +646,7 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
     expect(ledgerText(repo)).toBe(seeded);
 
     expect(repo.run({ acceptCrossings: true, reason: "cron reads users until #1" }).code).toBe(0);
-    expect(ledgerOf(repo).entries).toHaveLength(18);
+    expect(ledgerOf(repo).entries).toHaveLength(19);
     repo.put(
       `${API}/src/billing/application/charge.ts`,
       [
@@ -660,13 +663,13 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
         ' -> services/api/src/billing/adapters/driven/stripe.ts  ("../adapters/driven/stripe.js")' +
         "  — adopting the hexagonal layout",
     ]);
-    expect(ledgerOf(repo).entries).toHaveLength(17);
+    expect(ledgerOf(repo).entries).toHaveLength(18);
     const pruned = ledgerText(repo);
     expect(repo.run({ ci: true }).code).toBe(0);
     expect(ledgerText(repo)).toBe(pruned);
   });
 
-  it("leaves the scope with no layout on rules/: application/ there is internal", () => {
+  it("leaves the scope that opts out on rules/: application/ there is internal", () => {
     const legacy = violationsOf(repo.run({ json: true })).filter((v) => v.from.startsWith(LEGACY));
     expect(legacy.map((v) => [v.kind, v.from, v.specifier])).toEqual([
       ["impure-rules", `${LEGACY}/src/cart/rules/total.ts`, "Date.now"],
@@ -732,6 +735,7 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
 
   it("judges each zone by its own rule and nothing else", () => {
     expect(crossingsOf(SCOPE, repo.run({ json: true }))).toEqual([
+      ["door-outside-driven-adapter", "billing/adapters/driving/log.ts", "console"],
       ["door-outside-owner", "billing/adapters/driven/leak.ts", "process.env"],
       ["impure-application", "billing/application/disk.ts", "node:fs"],
       ["lib-imports-feature", "lib/wire.ts", "billing/adapters/driven/env.ts"],
@@ -761,9 +765,9 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
     ]);
   });
 
-  it("leaves an undeclared door in a driving adapter alone, and a folder with no source silent", () => {
+  it("judges an undeclared door in a driving adapter, and leaves a folder with no source silent", () => {
     const froms = violationsOf(repo.run({ json: true })).map((v) => v.from);
-    expect(froms.some((from) => from.includes("driving/log.ts"))).toBe(false);
+    expect(froms.some((from) => from.includes("driving/log.ts"))).toBe(true);
     expect(froms.some((from) => from.includes("assets"))).toBe(false);
   });
 
@@ -869,33 +873,35 @@ describe("the layout key is parsed at the config boundary", () => {
     }
   });
 
-  it("keeps an unlisted scope, and one listed as rules, on the rules/ layout", () => {
-    for (const rules of [{ features }, { features, layout: { [SCOPE]: "rules" } }]) {
-      const run = repo.run({ rules: withRules(rules), json: true });
-      expect(run.code).toBe(0);
-      expect(violationsOf(run)).toEqual([]);
-    }
-    const hexagonal = repo.run({
-      rules: withRules({ features, layout: { [SCOPE]: "hexagonal" } }),
+  it("keeps a scope listed as rules on the rules/ layout, and lays out any other as hexagonal", () => {
+    const optedOut = repo.run({
+      rules: withRules({ features, layout: { [SCOPE]: "rules" } }),
       json: true,
     });
-    expect(crossingsOf(SCOPE, hexagonal)).toEqual([
-      [
-        "application-imports-adapter",
-        "billing/application/run.ts",
-        "billing/adapters/driven/db.ts",
-      ],
-    ]);
+    expect(optedOut.code).toBe(0);
+    expect(violationsOf(optedOut)).toEqual([]);
+    for (const rules of [{ features }, { features, layout: { [SCOPE]: "hexagonal" } }]) {
+      const run = repo.run({ rules: withRules(rules), json: true });
+      expect(crossingsOf(SCOPE, run)).toEqual([
+        [
+          "application-imports-adapter",
+          "billing/application/run.ts",
+          "billing/adapters/driven/db.ts",
+        ],
+      ]);
+    }
   });
 
   it("adds the hexagonal advice to a failing gate only when a hexagonal kind fails", () => {
     const doors = { [SCOPE]: { "process.env": ["src/env.ts"] } };
-    const onRules = repo.run({ rules: withRules({ features, doors }), ci: true });
+    const onRules = repo.run({
+      rules: withRules({ features, doors, layout: { [SCOPE]: "rules" } }),
+      ci: true,
+    });
     expect(onRules.code).toBe(1);
     expect(onRules.stdout).toContain("B5 door-outside-owner");
     expect(onRules.stdout).not.toContain("hexagonal");
-    const layout = { [SCOPE]: "hexagonal" };
-    const onHexagonal = repo.run({ rules: withRules({ features, doors, layout }), ci: true });
+    const onHexagonal = repo.run({ rules: withRules({ features, doors }), ci: true });
     expect(onHexagonal.code).toBe(1);
     expect(onHexagonal.stdout).toContain("In a hexagonal feature");
   });

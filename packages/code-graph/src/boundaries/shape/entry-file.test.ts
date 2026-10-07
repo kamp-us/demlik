@@ -139,7 +139,7 @@ describe("B15 judges an entry file of a declared library and of a hexagonal feat
       RULES,
     );
     expect(crossings(repo)).toEqual([]);
-    const rules = { ...RULES, layout: {} };
+    const rules = { ...RULES, layout: { [API]: "rules" } };
     repo.dispose();
     repo = apiRepo(files({ "src/orders/index.ts": "export const x = 1;\n" }), rules);
     expect(crossings(repo)).toEqual([]);

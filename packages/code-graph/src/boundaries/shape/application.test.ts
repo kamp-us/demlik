@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { apiRepo, at } from "../../test-helpers/api-repo.js";
+import { API, apiRepo, at } from "../../test-helpers/api-repo.js";
 import type { BoundaryRepo } from "../../test-helpers/boundary-repo.js";
 import { SHOP_TYPES, shopManifests } from "../../test-helpers/shop-workspace.js";
 import type { BoundaryViolation } from "../violation.js";
@@ -237,7 +237,7 @@ describe("B16 runs only where it is asked to", () => {
   });
 
   it("never runs in a rules-layout feature", () => {
-    expect(judge(SOURCE, { layout: {} })).toEqual([]);
+    expect(judge(SOURCE, { layout: { [API]: "rules" } })).toEqual([]);
   });
 
   it.each([

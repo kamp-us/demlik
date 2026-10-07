@@ -162,7 +162,7 @@ describe("B17 binding-outside-driven-adapter", () => {
   });
 
   it("judges a feature of a scope that lays out `rules/` as outside every driven adapter", () => {
-    const rules = { ...RULES, layout: {} };
+    const rules = { ...RULES, layout: { [API]: "rules" } };
     const files = {
       [`${ORDERS}/adapters/driven/use.ts`]: "export const u = (env: Env) => env.DB.prepare('a');\n",
     };

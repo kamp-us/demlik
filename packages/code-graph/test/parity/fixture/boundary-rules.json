@@ -5,6 +5,9 @@
       "findings"
     ]
   },
+  "layout": {
+    "services/svc": "rules"
+  },
   "lib": [
     "lib"
   ],

@@ -19,8 +19,8 @@ const DoorsSchema = z.record(
   z.record(z.string().min(1), z.array(z.string().min(1)).min(1)),
 );
 
-// How the features of a scope lay out their folders, one row of `ZONINGS` each. A scope the
-// `layout` key does not name keeps `rules`.
+// How the features of a scope lay out their folders, one row of `ZONINGS` each. A scope that
+// declares features is a hexagon; the `layout` key only opts one out, by naming it `rules`.
 const FeatureLayoutSchema = z.enum(["rules", "hexagonal"]);
 type FeatureLayout = z.infer<typeof FeatureLayoutSchema>;
 
@@ -174,11 +174,15 @@ export type ScopeZoning = {
   readonly zoneOf: Zoning;
 };
 
+export function layoutOf(rules: Pick<BoundaryRules, "layout">, scope: string): FeatureLayout {
+  return rules.layout[scope] ?? "hexagonal";
+}
+
 export function scopeZoning(rules: BoundaryRules, scope: string): ScopeZoning {
   return {
     features: new Set(rules.features[scope] ?? []),
     lib: new Set(rules.lib),
-    zoneOf: ZONINGS[rules.layout[scope] ?? "rules"],
+    zoneOf: ZONINGS[layoutOf(rules, scope)],
   };
 }
 

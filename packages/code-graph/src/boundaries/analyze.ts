@@ -246,7 +246,6 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
     module,
     place: fromPlace,
     doors: rules.doors[scope] ?? {},
-    strict: shape.strict.has(scope),
   });
   const file = { ...module, file: inScope(scope, module.file) };
   const libs = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
