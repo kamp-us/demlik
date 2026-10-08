@@ -207,7 +207,7 @@ type Graph = {
   summary: Summary;
   // The opt-in reports (crossRuntime, reachability, clusters, interfaceWidth, data) sit here too,
   // each `null` unless its pass ran. `data` is the --data table: one DataEdge per call site on a
-  // D1 / Durable Object / KV / R2 / queue binding (README "Data edges").
+  // D1 / Durable Object / KV / R2 / queue binding (docs/reference/analyses.md#storage-access).
   data: DataReport | null;
   functions: FunctionNode[];
   modules: ModuleNode[];
