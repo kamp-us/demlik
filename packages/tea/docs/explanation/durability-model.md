@@ -124,6 +124,11 @@ At `phase: "done"`, the Model retains the run slice and final `output`.
 collects turns from the event stream. A collector attached after a restart
 needs the saved conversation as its seed to include earlier turns.
 
+That seed cannot recover turns removed by compaction or completion, and the
+collector excludes failed tools. For a retained review history, see
+[Why the case source outlives its active context](./retained-case-history.md)
+and its file-journal example.
+
 ## Further reading
 
 - [Make a machine durable and crash-recoverable](../how-to/make-durable.md): store and resume setup.
