@@ -1,0 +1,122 @@
+# Interrupted tool recovery: who owns the accepted operation?
+
+Investigation for [#594 — Interrupted tools are reissued without a declared recovery policy](https://github.com/kamp-us/demlik/issues/594). Source baseline: `origin/main` at `d2730b199dcc0d5c8660ac237d6b08b789506e59`. This is a dated explanation of the inspected code and a controlled consumer proof, not a recovery API decision.
+
+An interrupted append can repeat because the saved agent Model still owns a pending call after the file has changed. The stable call identity lets a consumer recognize that attempt; it does not make the external action idempotent. Conversely, `agentTool()` already uses that identity to reopen the same child run. The evidence supports improving one consumer's acceptance contract before adding a library-wide policy.
+
+## What the existing machinery knows
+
+The [Promise engine](../packages/tea/src/promise/run.ts) saves a transition's Model before interpreting its Cmds. The [file store](../packages/tea/src/node/index.ts) writes a temporary JSON file and renames it; it covers process interruption and torn reads, without promising power-loss durability or exclusive ownership across hosts. The [durability explanation](../packages/tea/docs/explanation/durability-model.md) owns that general contract.
+
+A tool-bearing turn puts the model's `callId`, name and args into the [agent's visible fan-out ledger](../packages/tea/src/agent/types.ts). [`createAgent().boot()`](../packages/tea/src/agent/index.ts) derives reissued Cmds from its restored running calls. [`defineAgent().run()`](../packages/tea/src/agent/define-agent.ts) sends the boot Msg for a restored unfinished run. `init(loaded)` restores without Cmds. A settled call is no longer pending; a tool awaiting a retry timer is resumed by that timer instead of getting an extra boot attempt.
+
+[`toolRouter()`](../packages/tea/src/agent/tool.ts) resolves the current definition and parses args before constructing its Cmd. A bare `tool()` handler receives args, context and `ok`/`fail`; it does not receive `callId`. A consumer can read `cmd.callId` at the existing [interpret cell seam](../packages/tea/docs/how-to/wrap-one-tool-cell.md). The [shared tool construction](../packages/tea/src/agent/tool-cell.ts) returns typed outcomes; the kernel's [Cmd edge](../packages/tea/src/pure/core.ts) parses successful results and mints the settlement Msg. The result becomes durable only after that Msg is folded and the resulting Model is saved.
+
+There are two separate identities:
+
+- **Call intent:** the run plus its model-supplied `callId`. Reissue preserves it. Durable child identity is specifically `<namespace>/<callId>`.
+- **Business operation:** the receiver's identity for the action, including its tenant/owner and payload. None is automatically derived for an arbitrary tool. A new model turn or a new run may request the same action with a new `callId`.
+
+The agent Model retains instructions, call arguments and progress, but no per-call recovery classification or tool-definition version. A handler result that existed only in the dead process is lost. These are source observations; no production incident or downstream deployment was inspected.
+
+## Actual declarations and runners in this repository
+
+The scope is the agent library, executable agent examples, and authored tutorial/how-to callsites. Generated reference pages mirror these declarations and are not independent consumers. Test-only tools are controlled fixtures. The table separates those surfaces so a simulated service name cannot become a claim about a production service.
+
+All agent rows below use the common declaration → parsed input → pending call → external work → typed settlement → saved Model path above. The raw `run_tool` examples supply their own input/result handling. “None” in the external identity column means the inspected code declares none, not that no downstream user has one.
+
+| Declaration / runner and evidence | Input and external acceptance | Durable intent / external identity | Repetition owner and current bounds |
+| --- | --- | --- | --- |
+| Tutorial [`note`](../packages/tea/docs/tutorial/build-a-durable-agent.md), a real file-append snippet | `{ text }`; acceptance is completed `appendFile("notes.txt", line)`. A returned `{ saved: true }` is still separate from settlement persistence. | Run + `callId`; no operation key or append receipt | Consumer runner owns dedupe, but this snippet implements none. No tool timeout or retry. It explicitly documents duplicate lines after interruption. This is a demonstrated tutorial boundary, not a production incident. |
+| Executable example [`lookup`](../packages/tea/examples/agent-tool-failure.ts) | `{ key }`; reads a local colour table. Missing key is `not_found`, `boom` throws. There is no external mutation to accept. | Run + `callId`; no external operation | Reissue is tolerable for this fixed lookup. No tool timeout/retry. The script and its process-local model cursor are demonstration machinery, not a durable production model. |
+| Same example [`fetch_rate`](../packages/tea/examples/agent-tool-failure.ts) | `{ pair }`; either declares `upstream` or delays and returns rate `1`. It makes no HTTP request. | Run + `callId`; no provider key, operation status or external mutation | Existing ladder owns its three-attempt budget, 10ms backoff and 50ms overall active-time cap. The 500ms attempt can finish after timeout. This is a scripted read simulation; safety of a real provider is unknown. |
+| Executable example [`tick`](../packages/tea/examples/agent-stop-conditions.ts) | `{ napMs }`; waits then returns `{ napped }`. No domain write; console output belongs to the demo host. | Run + `callId`; no external operation | No tool timeout/retry. The agent examples exercise run bounds. Repeating this busywork has no demonstrated external mutation. |
+| Raw [`search` / `run_tool`](../packages/tea/examples/agent-research-loop.ts) | Query becomes a lookup in `KNOWLEDGE`; returns a canned snippet or `agent_tool_err`. The handler converts the query itself. | `cmd.callId` in the running ledger; no external operation | Custom consumer interpret owns parsing and idempotency. `toolConcurrency: 2` and `maxTurns: 20` bound fan-out/run shape, not external acceptance. No tool-specific deadline or retry is declared here. |
+| Raw [`fetch_docs` / `run_tool`](../packages/tea/examples/agent-resilient-and-durable.ts) | Reads a canned `TOOLS` map and returns `agent_tool_ok`; there is no network fetch. | `cmd.callId`; no provider identity | Custom runner owns repetition safety. Configured `retry` hardens brain calls; it is not a dedupe contract for this tool. The example's durability sections use controlled restored state. |
+| How-to [`dismiss`](../packages/tea/docs/how-to/delegate-to-a-sub-agent.md) | `{ selector }`; returns `selector !== ""`. Despite its name/description, this snippet operates no browser. | Child run + child `callId`; no actual browser operation | Bare tool has no dedupe, timeout or retry. A real browser operator would need its own postcondition/reconciliation evidence. The snippet cannot establish that evidence. |
+| Library [`agentTool()`](../packages/tea/src/agent/agent-tool.ts), instantiated as [`request_unblock`](../packages/tea/docs/how-to/delegate-to-a-sub-agent.md) | Parsed barrier description becomes the child's prompt. Durable child progress/final state is acceptance; `result(output)` is separately read and checked for the parent. | `<namespace>/<parent callId>` is both child Store key and runId; this is an existing durable operation identity | Consumer namespace/store mapping must remain stable. The helper reopens the same child, resumes unfinished progress or reads a finished result. It declares no timeout or retry. Child bounds/tools are its own; durable child resumption does not remove an unsafe child tool's external-effect window. |
+
+No inspected non-test callsite connects an agent tool to a real payment, mail, ticket-writing, browser mutation, or provider idempotency/status API. No production keyed mutation is claimed. The append is the concrete unkeyed mutation; the receiver-keyed operation in the proof below is deliberately controlled.
+
+## What a definition change does
+
+For the `tool()` rows, an outstanding call is resolved against the current tool set on boot. Removing/renaming the tool produces `unknown_tool`; incompatible arguments produce `malformed_args`. A changed handler with the same name and compatible args can perform different work under the old call identity. A changed result schema can reject a new response. There is no stored definition version establishing semantic compatibility, and already-saved outcomes are not re-executed simply because the declaration changed.
+
+Raw `run_tool` rows depend on the current consumer's `toolOf` and interpret table; they do not acquire `toolRouter`'s rejection contract automatically. A new canned lookup can return different data. A migrated Store must parse the restored Model; it must not quietly reinterpret unreadable intent as a fresh action.
+
+For `agentTool`, a changed namespace/store mapping can reach a new child instead of the original one. With the same mapping, saved child instructions/input remain authoritative, but pending child tools use current wiring. A finished child is read without rerunning its model; the current `result` projection and parent result schema still apply to its saved output. Restoring the same child is sufficient only if that child's own external writes are safe to repeat or reconcile.
+
+Timeout/retry policies also come from current definitions. The [tool ladder](../packages/tea/src/agent/tool-resilience.ts) retains attempt progress, skips waiting retries on boot, preserves remaining active-time budget across downtime and settles already-exhausted deadlines. Changing the policy is not a demonstrated migration strategy; the old intent's compatibility and receiver status remain consumer questions.
+
+## Why applied markers do not settle every interruption
+
+The [durable-effects ledger](../packages/tea/src/do/durable-effects.ts) records owed intent and confirmation in the authoritative event stream. Unconfirmed survivors are reissued after restore. Its `DeliveryId` is a sender identity, not a promise of one receiver-side write; monotonic identity across pruned history also needs the retained highest id.
+
+[`idempotentEffect` / `appliedEffects`](../packages/tea/src/do/idempotent-effect.ts) credit a stable consumer `EffectKey` and an applied marker folded with authoritative state. The guard awaits `fn()` before yielding `effect_applied`. If the external write succeeds and the process dies before that marker is persisted, the restored applied set cannot prove the write happened and `fn()` can run again. Once the marker is durably folded, subsequent attempts are skipped. Recording it first would instead risk losing work. Neither helper atomically joins an arbitrary external service's acceptance to the sender's commit.
+
+An adequate receiver contract is an atomic operation keyed with its business payload, an idempotent operation whose repeat is acceptable, or a status/reconciliation query that can distinguish accepted, absent and unknown. Its retention and conflict behavior matter. A sender-side “applied” flag alone cannot prove that contract.
+
+## Provider-free recovery proof
+
+The [fixture](../packages/tea/src/agent/fixtures/interrupted-tool-recovery.ts) uses the existing `tool()`, `defineMachine`, Promise engine and `fileStore`. It is a small controlled consumer with a visible `Pending | Settled | Failed` Model, not a replica of the full agent/model loop. The typed intent holds `callId` and `{ operationId, text }`. Restore parses persisted bytes; `init(loaded)` emits nothing; an explicit `HostBooted` Msg derives the pending Cmd. The kernel parses the tool result and saves its settlement.
+
+The unkeyed handler performs the tutorial's append operation. The keyed receiver instead stores the operation payload itself in one exclusively created receipt file, using `operationId`, not `callId`. An existing matching receipt is read and validated; the same key with a different payload returns the declared `key_conflict` error. There is no second sender marker pretending to cover the write.
+
+The [test](../packages/tea/src/agent/interrupted-tool-recovery.test.ts) waits for IPC handshakes, checks the persisted pending intent and receiver bytes, sends real `SIGKILL`, awaits process exit, then starts a fresh host over those files. Each row kills three processes at the same boundary, with the fourth completing: three successive fresh-host recoveries. A fifth process reads the settled state and performs no additional tool call.
+
+| Kill boundary | What the handshake proves | Append entries after completion | Keyed operations after completion |
+| --- | --- | --- | --- |
+| Before execution | Pending intent is saved; receiver write has not started | 1 | 1 |
+| After external acceptance | Receiver write completed; handler is paused before returning its result | 4 | 1 |
+| Before settlement persistence | Kernel received the tool outcome and attempted to save `Settled`; Store is paused before writing that Model | 4 | 1 |
+
+Every row records four handler entries with the same `c1`, followed by no entry on reopening the settled run. A separate case starts independent intents `c1`, `c2`, `c3` against one business operation: the first two share the accepted note, and the conflicting third fails without replacing it.
+
+These are actual process interruptions at handshake-selected boundaries and completed local filesystem writes. They do not test a kill inside receipt publication, concurrent receiver writers, disk/power loss, network ambiguity, retention expiry, or a provider's atomicity. `writeFile(..., { flag: "wx" })` establishes exclusive creation; a partially written receipt would fail parsing, not justify another write. This serial controlled receiver is not production exactly-once evidence.
+
+The full agent's existing [fan-out kill proof](../packages/tea/src/agent/tool-fanout-kill.test.ts) independently exercises real `defineAgent`/`fileStore` restore and avoids re-running a settled sibling. The [retry kill proof](../packages/tea/src/agent/tool-retry-kill.test.ts) covers a saved retry ladder. The [`agentTool` tests](../packages/tea/src/agent/agent-tool.test.ts) use serialized snapshot simulations to cover unfinished child resumption and a completed child whose parent has not settled. Those simulation boundaries remain distinct from this fixture's real process kills.
+
+## Which response is justified?
+
+These are recommendations, not selected policy or a founder ruling. An explicit rerun is a conscious consumer permission to repeat; it does not make a mutation safe by declaration.
+
+| Response | Evidence needed | Fit for inspected runners / missing decision |
+| --- | --- | --- |
+| Keep existing reissue / permit rerun | Repeat is harmless, or receiver accepts the same operation identity/payload without repeating the action | Fixed `lookup`, canned reads and `tick` have no demonstrated domain mutation. `agentTool` already reopens its durable child if namespace/store remain stable. A real service needs a contract beyond the example. |
+| Reconcile, then settle or rerun | Persisted business key, authoritative status/receipt, compatible definition and payload; an unknown status stays unknown | Controlled receiver reads its accepted operation. An accepted real write should be read back rather than blindly repeated. No actual provider status API in scope justifies shipping general reconciliation wiring. |
+| Record an interrupted outcome | Acceptance cannot be established, repetition is unacceptable, or the current definition cannot safely interpret saved intent | The tutorial append has no key/status proof. A nonrepeatable real write would need a typed consumer outcome and a human/product decision about resolving ambiguity. A missing definition or incompatible payload should remain an explicit refusal. |
+
+Timeout is a local budget decision, not proof that a remote action failed. A Promise attempt can continue after its timeout; the [late-settlement discipline](../packages/tea/src/agent/late-settle.test.ts) keeps its success out of the fan-out/conversation and public events, without undoing external work. Reconciliation must account for that still-running attempt. An interrupted outcome likewise must communicate “may have been accepted”, not claim rollback. Cancelling the agent terminally prevents resume of that run; it does not recall effects already in flight.
+
+Before choosing for a real consumer, the missing facts are: namespace/tenant and business operation identity, receiver atomicity and payload conflicts, receipt/status retention, accepted/absent/unknown semantics, definition/schema compatibility, timeout and cancellation propagation, and who resolves an ambiguous result. A new model call must reuse the business identity when it represents the same action. Human ruling is needed for acceptable repetition/ambiguity and any public authoring shape, not for acknowledging the existing reissue mechanism.
+
+The smallest justified next step is one real mutating consumer wired through its existing interpret cell: keep its intent/key/definition information as plain host Model data, parse receiver evidence at the effect/restore boundary, and prove accepted-but-unsettled recovery against its real receipt/status contract. Existing child-store wiring is already sufficient for finding the same `agentTool` child; it needs no new wrapper. There is no present evidence for a kernel change, scheduler, registry, mount/plugin layer, or Pi runtime dependency.
+
+### Pi comparison
+
+At the [pinned Pi source](https://github.com/earendil-works/pi/blob/1cedd32724abfcb0915f76cc61b6827e2c16dbad/packages/durable/src/harness/tool.ts), durable intent stores arguments and replay classification. Recovery reruns only when both recorded and current classifications permit it; otherwise it records interruption. This guards a definition-policy change, but supplies no receiver reconciliation or business identity for a later new call. TEA's existing child resumption and consumer identities should be credited before considering that separate choice. No Pi code or dependency is transplanted here.
+
+## Constraints and verification
+
+The [eight TEA invariants](../.patterns/tea/tea-invariants.md), [ADR 0015](../.decisions/0015-hide-the-wiring-never-the-state.md), [ADR 0022](../.decisions/0022-no-battery-layer-plain-functions.md) and [export tiers](../packages/tea/MAINTAINING.md) remain intact. Only a report and test-owned files are added. Fixture transitions return new plain values; IO remains in handlers/Store/host instrumentation; identities are explicit; external inputs and restored bytes are parsed. No timer subscription, child-composition framework or hidden runtime state is added. Public exports, existing tool declarations and default agent behavior are unchanged, so no release changeset is owed.
+
+The pnpm commands below ran under Node `22.23.2`, matching CI's Node 22 family. The recovery fixture passed all seven cases; the focused group covering child tools, retry, timeout/late settlement and real fan-out/retry kills passed 37 tests across six files. The root suite passed 3,952 tests across 302 files, with four skips and 11 TODOs. It ran separately from the build, with at most three workers. Source inspection and these fixtures are distinct from deployed behavior; no paid model or real external service was called. The fixture's IPC lifecycle follows Node's documented [channel reference](https://nodejs.org/api/process.html#processchannelref) contract and uses events rather than polling.
+
+Root typecheck, test typecheck and lint pass; lint reports three existing warnings in untouched files. The package build, consumer typecheck, reference drift check, export-tier stamps, every package's dist export verification, merge-marker check and CODEOWNERS coverage check pass. Commands for the root and tea gates:
+
+```sh
+volta run --node 22.23.2 pnpm exec vitest run packages/tea/src/agent/interrupted-tool-recovery.test.ts
+volta run --node 22.23.2 pnpm --filter @demlik/tea typecheck:test
+volta run --node 22.23.2 pnpm typecheck
+volta run --node 22.23.2 pnpm lint
+volta run --node 22.23.2 pnpm test --maxWorkers=3
+volta run --node 22.23.2 pnpm build
+volta run --node 22.23.2 pnpm check:merge-markers
+volta run --node 22.23.2 pnpm check:codeowners
+volta run --node 22.23.2 pnpm --filter @demlik/tea run docs:reference:check
+volta run --node 22.23.2 pnpm --filter @demlik/tea exec node scripts/check-export-stamps.mjs
+volta run --node 22.23.2 pnpm --filter @demlik/tea run typecheck:consumers
+volta run --node 22.23.2 pnpm --filter @demlik/tea exec node scripts/verify-exports.mjs
+```
+
+Fabrika's code and prose checks, run through the lane-provided entrypoint, return green for their respective files. Both run the README, settings/environment, catalog, pointer, CODEOWNERS and decision-index guards. They skip eleven guards whose expected files or scope are absent here: `skill-lint`, `fanout-guard`, `patch-guard`, `publish-isolation-guard`, `path-filter-guard`, `change-detect-guard`, `design-token-guard`, `design-inventory`, `i18n-guard`, `no-gh` and `portability-guard`. These skips are not passes; CI remains authoritative for its gates. The private fixture does not change the published export map or optional-peer integration.
