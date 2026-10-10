@@ -14,6 +14,7 @@ export type Opts = {
   headers?: boolean;
   deep?: boolean;
   blast?: string;
+  find?: string;
   html?: boolean;
   ci?: boolean;
   failOn?: string;
@@ -70,6 +71,10 @@ function graphOptions(command: Command): Command {
     )
     .option("--deep", "edge pass over the whole monorepo (cross-package callers; implies --edges)")
     .option("--blast <id>", "callers of <id> (direct + transitive); requires the edge pass")
+    .option(
+      "--find <name>",
+      "every function and top-level declaration (type alias, interface, enum, class, constant) named <name>, as JSON: kind, file, line, exported flag and uses; implies the edge pass",
+    )
     .option("--html", "emit a self-contained HTML report (human view); implies the edge pass")
     .option("--ci", "CI gate: exit non-zero per --fail-on / --max policy")
     .option("--fail-on <level>", "CI severity to fail on: high | warn", "high")

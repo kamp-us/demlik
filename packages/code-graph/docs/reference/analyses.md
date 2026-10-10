@@ -23,6 +23,19 @@ Plan rows include their ranking inputs. Thresholds and the exact metric rules
 are defined in [the schema](../../src/schema/core.ts) and
 [extraction specification](../../SPEC.md#7-metrics).
 
+## Declarations and name lookup
+
+A declaration node represents a top-level type alias, interface, enum, class,
+or `const` binding that is not already a function node. Each has an id, name,
+kind, file, line, exported flag, and `uses`: every `file` and `line` where the
+type checker resolves a name to it, through renamed imports and re-exports.
+`uses` is `null` without call analysis. Declarations have no metrics or findings.
+
+`--find <name>` prints every function and declaration with that bare name as
+JSON. A function's uses are its call sites. Several matches are listed, not
+refused. The rules are in the
+[extraction specification](../../SPEC.md#a1--what-gets-a-node).
+
 ## Calls and import cycles
 
 Call analysis adds `calls`, `calledBy`, `callChainDepth`, `importedBy`, and

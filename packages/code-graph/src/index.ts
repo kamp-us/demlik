@@ -15,6 +15,7 @@ import {
   withEntryPresets,
 } from "./config.js";
 import { renderData } from "./data/render.js";
+import { renderFind } from "./declarations/find.js";
 import { loadEnvKeyReport } from "./env-keys/query.js";
 import type { AnalysisOptions } from "./extract/analysis.js";
 import {
@@ -197,6 +198,7 @@ defineProgram()
       opts.edges === true ||
       opts.deep === true ||
       typeof opts.blast === "string" ||
+      typeof opts.find === "string" ||
       opts.html === true ||
       opts.cycles === true ||
       wantCrossRuntime ||
@@ -348,6 +350,14 @@ defineProgram()
 
     if (typeof opts.blast === "string") {
       const { stdout, warning, exitCode } = renderBlast(graph, opts.blast, json, pretty);
+      if (warning) process.stderr.write(`${warning}\n`);
+      if (stdout !== null) emit(`${stdout}\n`);
+      if (exitCode !== 0) process.exitCode = exitCode;
+      return;
+    }
+
+    if (typeof opts.find === "string") {
+      const { stdout, warning, exitCode } = renderFind(graph, opts.find, pretty);
       if (warning) process.stderr.write(`${warning}\n`);
       if (stdout !== null) emit(`${stdout}\n`);
       if (exitCode !== 0) process.exitCode = exitCode;

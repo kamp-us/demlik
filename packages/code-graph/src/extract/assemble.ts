@@ -1,6 +1,8 @@
 import path from "node:path";
 import { TypeContext } from "../checker/context.js";
 import { loadDataReport } from "../data/extract.js";
+import { buildDeclarationNodes, discoverDeclarations } from "../declarations/discover.js";
+import { resolveDeclarationUses } from "../declarations/uses.js";
 import {
   type DirectoryNode,
   type FunctionNode,
@@ -11,6 +13,7 @@ import {
   type Smell,
   type Summary,
   type Thresholds,
+  type UseSite,
 } from "../schema.js";
 import { couplingByFile } from "../smells/coupling.js";
 import { compareFlatSmells, smellsForFunction, smellsForModule } from "../smells/evaluate.js";
@@ -37,6 +40,7 @@ function smellWeight(smells: Smell[]): number {
 
 type EdgeBundle = {
   result: EdgeResult;
+  declarationUses: ReadonlyMap<string, UseSite[]>;
   scope: EdgeScope;
   tsConfig: string;
 };
@@ -227,6 +231,7 @@ function build(
     interfaceWidth: analysis?.interfaceWidth?.(functions, modules) ?? null,
     data: data === null ? null : loadDataReport(sourceFiles, fns, data.repoRoot),
     functions,
+    declarations: buildDeclarationNodes(sourceFiles, edges?.declarationUses ?? null),
     modules,
     directories,
     smells: allSmells,
@@ -252,13 +257,11 @@ export function assembleGraph(
   return build(loaded, thresholds, null, null, null, data, fields);
 }
 
-function reportUnjoined(unjoined: readonly string[]): void {
+function reportUnjoined(unjoined: readonly string[], what: string): void {
   if (unjoined.length === 0) return;
   const shown = unjoined.slice(0, 5).join(", ");
   const more = unjoined.length > 5 ? ", ..." : "";
-  process.stderr.write(
-    `code-graph: warning: ${unjoined.length} function(s) have no node in tsgo's tree, so their calls are not resolved: ${shown}${more}\n`,
-  );
+  process.stderr.write(`code-graph: warning: ${unjoined.length} ${what}: ${shown}${more}\n`);
 }
 
 export function assembleGraphWithEdges(
@@ -277,9 +280,17 @@ export function assembleGraphWithEdges(
 
   const ctx = TypeContext.open({ rootAbsolute, tsConfigPath: tsConfig, sourceFiles, functions });
   try {
-    reportUnjoined(ctx.unjoined);
+    reportUnjoined(
+      ctx.unjoined,
+      "function(s) have no node in tsgo's tree, so their calls are not resolved",
+    );
     const prep = options === null ? null : prepareAnalysis(options, rootAbsolute, ctx);
     const result = resolveEdges(ctx, imports, ids, prep?.resolver ?? null);
+    const uses = resolveDeclarationUses(ctx, discoverDeclarations(sourceFiles));
+    reportUnjoined(
+      uses.unjoined,
+      "declaration(s) have no node in tsgo's tree, so their uses are unknown",
+    );
     const analysis =
       options === null || prep === null
         ? null
@@ -291,15 +302,8 @@ export function assembleGraphWithEdges(
             functions,
             ...analysisInputs(functions),
           });
-    return build(
-      loaded,
-      thresholds,
-      { result, scope, tsConfig },
-      functions,
-      analysis,
-      data,
-      fields,
-    );
+    const edges = { result, declarationUses: uses.usesById, scope, tsConfig };
+    return build(loaded, thresholds, edges, functions, analysis, data, fields);
   } finally {
     ctx.close();
   }

@@ -24,6 +24,7 @@ Choose the report you need; these examples use `code-graph` as shorthand for
 | Rank refactor targets | `code-graph src --plan` |
 | Browse files and functions | `code-graph src --tree` |
 | Inspect one function's callers | `code-graph src --blast example.ts:calculate` |
+| Look up a name: where it is declared, whether it is exported, who uses it | `code-graph src --find Order` |
 | Save a call graph | `code-graph src --graph --edges --out graph.json` |
 | Browse an HTML report | `code-graph src --html --out report.html` |
 | Find unreachable functions | `code-graph src --unreachable` |

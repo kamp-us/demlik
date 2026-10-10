@@ -69,6 +69,7 @@ function graphOf(functions: FunctionNode[], modules: ModuleNode[]): Graph {
     interfaceWidth: null,
     data: null,
     functions,
+    declarations: [],
     modules,
     directories: [],
     smells: [],

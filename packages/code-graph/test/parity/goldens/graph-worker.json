@@ -72,6 +72,138 @@ exit 0
     "unparsedConfigs": []
   },
   "data": null,
+  "declarations": [
+    {
+      "file": "orphan.workflow.ts",
+      "id": "orphan.workflow.ts:class:OrphanWorkflow",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 7,
+      "name": "OrphanWorkflow",
+      "uses": []
+    },
+    {
+      "file": "platform.ts",
+      "id": "platform.ts:class:WorkerEntrypoint",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 1,
+      "name": "WorkerEntrypoint",
+      "uses": [
+        {
+          "file": "store.ts",
+          "line": 1
+        },
+        {
+          "file": "store.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "platform.ts",
+      "id": "platform.ts:class:WorkflowEntrypoint",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 2,
+      "name": "WorkflowEntrypoint",
+      "uses": [
+        {
+          "file": "orphan.workflow.ts",
+          "line": 1
+        },
+        {
+          "file": "orphan.workflow.ts",
+          "line": 7
+        },
+        {
+          "file": "scan.workflow.ts",
+          "line": 1
+        },
+        {
+          "file": "scan.workflow.ts",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "file": "platform.ts",
+      "id": "platform.ts:type-alias:Workflow",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "Workflow",
+      "uses": [
+        {
+          "file": "store.ts",
+          "line": 1
+        },
+        {
+          "file": "store.ts",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "file": "scan.workflow.ts",
+      "id": "scan.workflow.ts:class:ScanWorkflowImpl",
+      "isExported": false,
+      "isTest": false,
+      "kind": "class",
+      "line": 7,
+      "name": "ScanWorkflowImpl",
+      "uses": [
+        {
+          "file": "scan.workflow.ts",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "file": "scan.workflow.ts",
+      "id": "scan.workflow.ts:constant:ScanWorkflow",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 15,
+      "name": "ScanWorkflow",
+      "uses": []
+    },
+    {
+      "file": "store.ts",
+      "id": "store.ts:type-alias:Env",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "Env",
+      "uses": [
+        {
+          "file": "store.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "store.ts",
+      "id": "store.ts:class:Store",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 5,
+      "name": "Store",
+      "uses": [
+        {
+          "file": "store.ts",
+          "line": 17
+        }
+      ]
+    }
+  ],
   "directories": [
     {
       "dir": ".",
