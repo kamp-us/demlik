@@ -2,9 +2,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { runApiView } from "./api/cli.js";
+import { runApiFlags } from "./api/cli.js";
 import { runBoundaryGate } from "./boundaries/gate.js";
-import { cleanExit, defineProgram, type Opts } from "./cli.js";
+import { cleanExit, defineProgram, exitWith, type Opts } from "./cli.js";
 import { runCollapseGate } from "./collapse/gate.js";
 import { renderCollapse } from "./collapse/render.js";
 import { runCommentGate } from "./comments/gate.js";
@@ -96,24 +96,16 @@ defineProgram()
       process.stdout.write(payload);
     };
 
-    if (typeof opts.apiBase === "string" && typeof opts.api !== "string") {
-      cleanExit("--api-base needs --api <map>");
-      return;
-    }
-
-    if (typeof opts.api === "string") {
-      const given = Object.keys(opts).filter((key) => command.getOptionValueSource(key) === "cli");
-      void runApiView({
-        rootAbsolute,
-        mapFile: opts.api,
-        base: opts.apiBase,
-        given,
-        pretty,
-        emit,
-        report: cleanExit,
-      }).then((code) => {
-        if (code !== 0) process.exitCode = code;
-      });
+    const apiRun = runApiFlags(opts, {
+      rootAbsolute,
+      given: Object.keys(opts).filter((key) => command.getOptionValueSource(key) === "cli"),
+      json,
+      pretty,
+      emit,
+      report: cleanExit,
+    });
+    if (apiRun !== null) {
+      void apiRun.then(exitWith);
       return;
     }
 

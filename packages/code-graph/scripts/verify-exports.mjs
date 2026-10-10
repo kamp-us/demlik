@@ -24,11 +24,17 @@ const expected = {
     "rekeyBoundaryLedger",
     "rekeyBoundaryLedgerFile",
   ],
-  "@demlik/code-graph/api": ["readPublishedApi", "ApiInputError"],
+  "@demlik/code-graph/api": [
+    "readPublishedApi",
+    "diffPublishedApi",
+    "readChangesetsSince",
+    "ratchetApiDiff",
+    "ApiInputError",
+  ],
 };
 
 // Exports that are values but not functions: the zod schemas a caller parses through.
-const schemas = { "@demlik/code-graph/api": ["ApiMapSchema"] };
+const schemas = { "@demlik/code-graph/api": ["ApiMapSchema", "BumpPolicySchema"] };
 
 // Removed from ./project in #397 with ts-morph: the loaders returned ts-morph's Project.
 const removed = { "@demlik/code-graph/project": ["loadEdgeProject", "loadCheapProject"] };

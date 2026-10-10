@@ -87,8 +87,9 @@ packages/code-graph/
     data/       --data — access.ts (read/write per binding method) + extract.ts (call sites) + render.ts
     comments/   Feature I — classify.ts + census.ts + render.ts + ceilings.ts + ratchet.ts + gate.ts
     api.ts      barrel for the `./api` library subpath (§13.7)
-    api/        the published-API mode (§13) — schema.ts + emit.ts + view.ts + base.ts + diff.ts +
-                changesets.ts + ratchet.ts + render.ts
+    api/        the published-API mode (§13) — map.ts + emit.ts + read.ts + text.ts + view.ts +
+                base.ts + diff.ts + cli.ts, and ratchet/ (§13.5): policy.ts + changesets.ts +
+                verdict.ts + text.ts
 ```
 
 > **`render/` and `extract/` directory-sprawl gate:** `render/` holds one renderer per CLI output mode, and `extract/` holds one parser/scanner per extraction concern (cohesion, not sprawl) — both exceed the default `directorySprawl` (10). `selfcheck.thresholds.json` bumps `directorySprawl` to 16 for the self-gate ONLY — the shipped default is unchanged, and the number has not moved since. A feature that would push `render/` or `extract/` past it owns a DIRECTORY instead (`layers/`, `collapse/`, `hotspots/`, `env-keys/`, `schema/`): the fix for a full drawer is another drawer, never a bigger number (#4846). The `--html` feature is the pure model (`html-model.ts`), the inert page scaffold (`html-template.ts`), and a thin entry (`html.ts`); splitting it three ways keeps each file under the per-file `big-file`/`long-function` bars without relaxing those. `env-keys/extract.ts` (Feature H2) is the AST scan for `env.<KEY>` reads, kept separate from `references.ts` (the call-graph reference walk) and `wrangler-config.ts` (the declared-key source) because the three answer different questions over different inputs — merging them would trade one cohesive file for one bloated one.

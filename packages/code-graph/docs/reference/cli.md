@@ -112,12 +112,87 @@ finds.
 code-graph packages/tea --api tea-api.json --api-base origin/main --pretty
 ```
 
+`--api-policy <file>` gates that diff on the package's changesets, for a CI
+job. `<file>` is a JSON bump policy the caller writes. code-graph ships no
+policy and no default row:
+
+```json
+{
+  "callout": "**Breaking",
+  "tiers": {
+    "stable": {
+      "added": { "bump": "minor" },
+      "changed": { "bump": "minor", "callout": true },
+      "removed": { "bump": "major", "callout": true }
+    },
+    "experimental": {
+      "added": { "bump": "none" },
+      "changed": { "bump": "none" },
+      "removed": { "bump": "none" }
+    }
+  }
+}
+```
+
+- `tiers` maps a tier, as the API map spells it, to one rule per change kind.
+  All three kinds, `added`, `changed` and `removed`, are required. A rule's
+  `bump` is `none`, `patch`, `minor` or `major`, the least changeset bump that
+  change needs. Its `callout` is optional and defaults to `false`.
+- `callout` is the marker text, required and non-empty. A rule with
+  `callout: true` is met only when a counted changeset's body contains it.
+- `default` is optional and has the shape of one tier's row. It covers a
+  subpath whose tier `tiers` does not name, and a subpath with no tier.
+  Without it, a changed name in such a subpath exits 2 naming the subpath and
+  the tier. A subpath with no change needs no row.
+
+A changeset counts when it is a `.md` file directly in `.changeset/` at the
+repo root, is not `README.md`, exists in the working tree, does not exist in
+the base commit's tree, and its frontmatter gives the package (the `name` in
+`<directory>/package.json`) a `major`, `minor` or `patch` bump. A changeset
+for another package does not count. The highest bump among the counted files
+is the bump found, `none` when no file counts, and the callout is found when
+any counted file's body contains the marker.
+
+A changed name misses when its rule's bump is above the bump found, or when
+its rule asks for the callout and none is found. A pass prints one line:
+
+```text
+API RATCHET: pass — 4 changes against 4b1c0de, highest changeset bump minor, callout found
+```
+
+A miss prints one block per name that misses, sorted by subpath, then name,
+then a summary line. Each block names the name, subpath, tier and change kind,
+the bump and callout it needs, and what was found, then the before and after
+text with references (an added name has no before, a removed name no after):
+
+```text
+API RATCHET: parse in . (stable) changed — needs a minor changeset with a "**Breaking" callout; found minor with no callout
+  before:
+    export declare function parse(text: string): number;
+  after:
+    export declare function parse(text: string, radix?: number): number;
+API RATCHET: 1 of 1 change misses its bump against 4b1c0de
+```
+
+`--json` prints an `ApiRatchetVerdict` instead: `passed`, the full `base` sha,
+the `package` name, the counted `changesets` (repo-relative, sorted),
+`highestBump`, `calloutFound` and `misses`, each with `subpath`, `tier`,
+`name`, `kind`, `needs` (`{ bump, callout }`), `before` and `after` (`null`
+where the name has none). The same commits give the same bytes.
+
+```sh
+git fetch origin main
+code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy tea-bumps.json
+```
+
 | Flags | Prints | Exit |
 |---|---|---|
 | `--api <map>` | `PublishedApi` JSON | 0, 2 |
 | `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2 |
+| `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2 |
 
-`--api` combines only with `--api-base`, `--json`, `--pretty` and `--out`.
+`--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
+and `--out`.
 Exit 2, with one stderr line and nothing on stdout or in `--out`, for any other
 flag beside it, a map that is not JSON or fails the schema (an unknown key, no
 subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
@@ -125,6 +200,12 @@ subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
 tsconfig, tsgo failing to start, or an entry with no emitted file. With
 `--api-base`, also for `--api-base` without `--api`, a package outside any git
 repository, a rev that does not resolve to a commit, or a failed `git archive`.
+With `--api-policy`, also for `--api-policy` without `--api-base`, a policy
+that is not JSON or fails the schema (an unknown key, an empty `callout`, a
+row missing a change kind, a `bump` outside the four), a
+`<directory>/package.json` that is missing or has no `name`, a changeset
+added since the base whose frontmatter does not parse, or a changed name whose
+tier has no row and no `default`.
 Without `--api` no emit runs and every other output is unchanged. The full
 contract, with examples, is [SPEC.md §13](../../SPEC.md).
 

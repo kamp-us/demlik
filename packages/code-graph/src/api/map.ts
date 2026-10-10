@@ -33,7 +33,8 @@ export type ApiSubpath = {
   readonly tier: string | null;
 };
 
-function issueText(error: z.ZodError): string {
+// The first schema issue as `<where>: <message>`, the body of a refusal's one line.
+export function issueText(error: z.ZodError): string {
   const issue = error.issues[0];
   const where = issue?.path.join(".") || "(root)";
   return `${where}: ${issue?.message ?? "parse error"}`;
