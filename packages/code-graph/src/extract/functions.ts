@@ -96,7 +96,7 @@ function memberName(syntax: SyntaxFile, member: SyntaxNode): string {
   return key === null ? "" : nameText(syntax, member, key);
 }
 
-function classifyMember(syntax: SyntaxFile, member: SyntaxNode): Classified | null {
+function memberClassified(syntax: SyntaxFile, member: SyntaxNode): Classified {
   switch (field(member, "kind")) {
     case "constructor":
       return { kind: "constructor", name: "constructor" };
@@ -104,12 +104,16 @@ function classifyMember(syntax: SyntaxFile, member: SyntaxNode): Classified | nu
       return { kind: "getter", name: memberName(syntax, member) };
     case "set":
       return { kind: "setter", name: memberName(syntax, member) };
-    default: {
-      const value = nodeField(member, "value");
-      if (value?.type !== "FunctionExpression") return null;
+    default:
       return { kind: "method", name: memberName(syntax, member) };
-    }
   }
+}
+
+// A1: a member is a node only when it has a body. An overload signature, an `abstract` member and
+// a `declare class` member carry a `TSEmptyBodyFunctionExpression` instead, whatever their kind.
+function classifyMember(syntax: SyntaxFile, member: SyntaxNode): Classified | null {
+  if (nodeField(member, "value")?.type !== "FunctionExpression") return null;
+  return memberClassified(syntax, member);
 }
 
 function classifyFunctionDeclaration(syntax: SyntaxFile, node: SyntaxNode): Classified | null {
@@ -139,14 +143,15 @@ function classifyFunctionExpression(syntax: SyntaxFile, node: SyntaxNode): Class
   return name === null ? null : { kind: "function-expression", name };
 }
 
+// An interface's `get`/`set` has no body by construction, and is a node anyway (A1's one exception).
 function classifySignature(syntax: SyntaxFile, node: SyntaxNode): Classified | null {
-  return isAccessorKind(node) ? classifyMember(syntax, node) : null;
+  return isAccessorKind(node) ? memberClassified(syntax, node) : null;
 }
 
 type Classifier = (syntax: SyntaxFile, node: SyntaxNode) => Classified | null;
 
 // The ESTree node types that are a callable TypeScript names: `TSMethodSignature` for an
-// interface's `get`/`set`, which TypeScript parses as accessors.
+// interface's `get`/`set`, which TypeScript parses as accessors and code-graph keeps as nodes.
 const CLASSIFIERS: ReadonlyMap<string, Classifier> = new Map<string, Classifier>([
   ["FunctionDeclaration", classifyFunctionDeclaration],
   ["MethodDefinition", classifyMember],
