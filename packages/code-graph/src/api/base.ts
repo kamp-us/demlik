@@ -5,7 +5,7 @@ import path from "node:path";
 import { ApiInputError } from "./map.js";
 
 // The git repository that holds a package (SPEC §13.4). Every git command here only reads:
-// `rev-parse` and `archive`. Nothing writes the checkout's files, index or refs.
+// `rev-parse`, `archive` and `ls-tree`. Nothing writes the checkout's files, index or refs.
 export type Checkout = {
   readonly top: string;
   // The package root, relative to `top`.
@@ -39,6 +39,18 @@ export function resolveBase(checkout: Checkout, rev: string): string {
     );
   }
   return run.stdout.trim();
+}
+
+// The names the commit `sha` holds directly under `dir`, relative to `cwd` (a folder inside the
+// repository): `git ls-tree --name-only <sha> -- <dir>`. A folder the commit lacks lists nothing.
+export function namesAtBase(cwd: string, sha: string, dir: string): readonly string[] {
+  const run = gitRead(cwd, ["ls-tree", "-z", "--name-only", sha, "--", dir]);
+  if (run.error !== undefined || run.status !== 0) {
+    throw new ApiInputError(
+      `git ls-tree of ${sha} failed: ${run.stderr?.trim() || run.error?.message || "no output"}`,
+    );
+  }
+  return run.stdout.split("\0").filter((name) => name !== "");
 }
 
 const exited = (child: ReturnType<typeof spawn>): Promise<number | null> =>

@@ -124,11 +124,14 @@ Source: [resolver](../../src/resolve.ts).
 |---|---|
 | `readPublishedApi(root, map, options?)` | `Promise<PublishedApi>`: per subpath, every published name with its text and references |
 | `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: per subpath, the names added, removed and changed against the commit `base` names |
-| `ApiMapSchema` | The zod schema an API map is parsed through |
+| `readChangesetsSince(root, base, options?)` | `ChangesetsSince`: the package's name and its changesets added since the commit `base` names |
+| `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`: the changes that miss the bump the policy asks for; pure, no I/O |
+| `ApiMapSchema`, `BumpPolicySchema` | The zod schemas an API map and a bump policy are parsed through |
 | `ApiInputError` | Thrown for every input the CLI refuses with exit 2, with the same message |
 
-and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff` and
-`PublishedApiOptions`.
+and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`,
+`PublishedApiOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`,
+`ChangesetsOptions` and `ApiRatchetVerdict`.
 
 `root` is the package root and resolves against the working directory. `map`
 is the API map, `{ "<subpath>": { entry, tier? } }`, parsed through
@@ -165,6 +168,54 @@ import { diffPublishedApi } from "@demlik/code-graph/api";
 const diff = await diffPublishedApi("packages/tea", map, "origin/main");
 diff.subpaths["./testing"]?.changed.expectCmdEmitted?.before.text;
 // "…, cmd: NoInfer<C>): void;"  (and `.after.text` ends "…, cmd: C): void;")
+```
+
+`readChangesetsSince` and `ratchetApiDiff` are the library side of
+`--api-policy`. `readChangesetsSince(root, base, options?)` is synchronous and
+only reads. It returns `{ package, changesets }`: `package` is the `name` in
+`root`'s `package.json`, and each `Changeset` is `{ file, bump, body }` for a
+file that counts, with `file` repo-relative, `bump` one of `major`, `minor`
+and `patch`, and `body` the text after the frontmatter. The
+[CLI reference](cli.md#published-api) says which files count. `options` is
+`{ repoRoot? }`, the folder that holds `.changeset/`, defaulting to
+`findRepoRoot(root)`. A `package.json` with no `name`, or a changeset whose
+frontmatter does not parse, throws `ApiInputError`.
+
+`ratchetApiDiff(diff, policy, changesets)` judges a diff and reads nothing but
+its arguments. `policy` is the bump policy, parsed through `BumpPolicySchema`
+before use:
+`{ callout, tiers: { "<tier>": { added, changed, removed } }, default? }`, each
+rule `{ bump, callout? }` with `bump` one of `none`, `patch`, `minor` and
+`major`. The library holds no policy of its own. The verdict has `passed`,
+`base`, `package`, the counted `changesets`, `highestBump`, `calloutFound` and
+`misses`, sorted by subpath, then name, each with `subpath`, `tier`, `name`,
+`kind`, `needs`, `before` and `after`. An invalid policy throws
+`ApiInputError`, and so does a changed name whose tier the policy gives no row
+and no `default`.
+
+```ts
+import {
+  diffPublishedApi,
+  ratchetApiDiff,
+  readChangesetsSince,
+} from "@demlik/code-graph/api";
+
+const diff = await diffPublishedApi("packages/tea", map, "origin/main");
+const verdict = ratchetApiDiff(
+  diff,
+  {
+    callout: "**Breaking",
+    tiers: {
+      stable: {
+        added: { bump: "minor" },
+        changed: { bump: "minor", callout: true },
+        removed: { bump: "minor", callout: true },
+      },
+    },
+  },
+  readChangesetsSince("packages/tea", diff.base),
+);
+if (!verdict.passed) process.exitCode = 1;
 ```
 
 Source: [API exports](../../src/api.ts).

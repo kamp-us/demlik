@@ -1,0 +1,20 @@
+{
+  "callout": "**Breaking",
+  "tiers": {
+    "stable": {
+      "added": { "bump": "minor" },
+      "changed": { "bump": "minor", "callout": true },
+      "removed": { "bump": "major", "callout": true }
+    },
+    "battery": {
+      "added": { "bump": "patch" },
+      "changed": { "bump": "minor" },
+      "removed": { "bump": "minor", "callout": true }
+    },
+    "experimental": {
+      "added": { "bump": "none" },
+      "changed": { "bump": "patch" },
+      "removed": { "bump": "patch", "callout": true }
+    }
+  }
+}
