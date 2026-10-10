@@ -141,8 +141,35 @@ describe("function headers (SPEC §6 A5)", () => {
       "}",
       "",
     ].join("\n");
-    const implementation = [...headers(source).values()].find((h) => h.startLine === 3);
-    expect(implementation?.overloads).toEqual([{ startLine: 2, text: "constructor(a: string)" }]);
+    expect([...headers(source).keys()]).toEqual(["fixture.ts:constructor"]);
+    expect(header(source, "constructor").overloads).toEqual([
+      { startLine: 2, text: "constructor(a: string)" },
+    ]);
+  });
+
+  it("each class's constructor node carries only its own overloads, in source order", () => {
+    const source = [
+      "class A {",
+      "  constructor(a: string);",
+      "  constructor(a: number);",
+      "  constructor(a: boolean);",
+      "  constructor(a: string | number | boolean) {}",
+      "}",
+      "class B {",
+      "  constructor(a: string);",
+      "  constructor(a: number);",
+      "  constructor(a: string | number) {}",
+      "}",
+      "",
+    ].join("\n");
+    const a = header(source, "constructor#0");
+    expect(a.startLine).toBe(5);
+    expect(a.overloads).toEqual([
+      { startLine: 2, text: "constructor(a: string)" },
+      { startLine: 3, text: "constructor(a: number)" },
+      { startLine: 4, text: "constructor(a: boolean)" },
+    ]);
+    expect(header(source, "constructor#1").overloads).toHaveLength(2);
   });
 
   it("stops at the first signature that is not an overload of the implementation", () => {

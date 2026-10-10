@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TypeContext } from "../checker/context.js";
 import { resolveImports } from "../syntax/imports.js";
+import { sourceUnit } from "../test-helpers/source-unit.js";
 import { type EdgeResult, resolveEdges } from "./edges.js";
 import { discoverFunctions } from "./functions.js";
 import { loadEdgeProject } from "./project.js";
@@ -187,6 +188,72 @@ export function caller() { return parse("1"); }`;
     const { result } = resolve(src);
     const callerCalls = result.callsById.get("fixture.ts:caller") ?? [];
     expect(callerCalls.map((c) => c.calleeId)).toContain("fixture.ts:parse");
+  });
+});
+
+describe("A1 — bodiless constructors and class accessors are not nodes", () => {
+  const src = [
+    "class A {",
+    "  constructor(a: string);",
+    "  constructor(a: number);",
+    "  constructor(a: boolean);",
+    "  constructor(a: string | number | boolean) {}",
+    "}",
+    "class B {",
+    "  constructor(a: string);",
+    "  constructor(a: number);",
+    "  constructor(a: string | number) {}",
+    "}",
+    "abstract class C {",
+    "  abstract get size(): number;",
+    "  abstract set size(v: number);",
+    "}",
+    "declare class D { constructor(a: string); get x(): number; }",
+    "interface I { get size(): number; set size(v: number); }",
+    "class E {",
+    "  get value(): number { return 1; }",
+    "  set value(v: number) {}",
+    "}",
+    "",
+  ].join("\n");
+
+  const nodes = (source: string) =>
+    discoverFunctions([sourceUnit(source)]).functions.map((f) => ({
+      id: f.id,
+      kind: f.kind,
+      startLine: f.startLine,
+    }));
+
+  it("enumerates only bodied constructors and class accessors, plus interface get/set", () => {
+    expect(nodes(src)).toEqual([
+      { id: "fixture.ts:constructor#0", kind: "constructor", startLine: 5 },
+      { id: "fixture.ts:constructor#1", kind: "constructor", startLine: 10 },
+      { id: "fixture.ts:size#0", kind: "getter", startLine: 17 },
+      { id: "fixture.ts:size#1", kind: "setter", startLine: 17 },
+      { id: "fixture.ts:value#0", kind: "getter", startLine: 19 },
+      { id: "fixture.ts:value#1", kind: "setter", startLine: 20 },
+    ]);
+  });
+
+  it("gives the same ids through the edge pass, run after run", () => {
+    const first = resolve(src);
+    const second = resolve(src);
+    expect(first.ids).toEqual(nodes(src).map((n) => n.id));
+    expect(JSON.stringify(second.ids)).toBe(JSON.stringify(first.ids));
+  });
+
+  it("a class whose only constructor has 2 overloads above it yields one unsuffixed node", () => {
+    const only = [
+      "class K {",
+      "  constructor(a: string);",
+      "  constructor(a: number);",
+      "  constructor(a: string | number) {}",
+      "}",
+      "",
+    ].join("\n");
+    expect(nodes(only)).toEqual([
+      { id: "fixture.ts:constructor", kind: "constructor", startLine: 4 },
+    ]);
   });
 });
 
