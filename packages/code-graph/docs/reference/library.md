@@ -27,7 +27,8 @@ Source: [project exports](../../src/project.ts).
 ## Resolve
 
 `@demlik/code-graph/resolve` exports `loadInProcessGraph` and the types
-`InProcessGraph`, `InProcessGraphOptions`, and `ExportOrigin`.
+`InProcessGraph`, `InProcessGraphOptions`, `ExportOrigin`, `ExportDeclaration`,
+`SubpathEntries`, and `SubpathExport`.
 
 `loadInProcessGraph(root, options)` returns a resolver, or `null` without a
 suitable tsconfig. Options default to `scope: "package"` and `repoRoot: root`.
@@ -35,6 +36,29 @@ suitable tsconfig. Options default to `scope: "package"` and `repoRoot: root`.
 `resolveExportOrigin(fromFile, specifier, exportName)` follows a static import
 and its aliases/re-exports to `{ file, name }`. The result's file is absolute.
 Missing files, missing imports, or unresolved exports return `null`.
+
+`resolveModuleExport(moduleFile, exportName)` asks a module file itself what it
+exports under `exportName`, so an entry file that only re-exports needs no file
+importing it. It follows re-exports and aliases to an `ExportDeclaration`:
+
+| Field | Meaning |
+|---|---|
+| `file` | Absolute path of the declaring file |
+| `name` | The declared name, which differs from `exportName` after `export { a as b }` |
+| `line` | 1-based line of the declaration's first token, past any doc comment |
+
+A name with several declarations, such as an overloaded function, reports the
+first one: its first overload signature. A missing file, or a name the module
+does not export, returns `null`.
+
+`resolvePublishingSubpaths(entries, exportName)` asks every entry in
+`entries`, a `SubpathEntries` record from subpath to source file such as
+`{ ".": "src/index.ts", "./testing": "src/testing/index.ts" }`. It returns a
+`SubpathExport` (`{ subpath, entry, declaration }`, `entry` absolute) for each
+subpath that publishes the name, in the record's order, and `[]` when none
+does. The caller supplies the map because an export map points at build output
+and only the build config knows which source file each entry comes from.
+Relative paths resolve against the working directory.
 
 One tsgo session opens on the first lookup and is reused. Each lookup gets
 its own program. `dispose()` releases the session; create a new handle for
@@ -57,6 +81,13 @@ try {
     "findRepoRoot",
   );
   // { file: "<absolute root>/src/extract/project.ts", name: "findRepoRoot" }
+
+  const publishers = graph.resolvePublishingSubpaths(
+    { "./resolve": path.join(root, "src/resolve.ts") },
+    "loadInProcessGraph",
+  );
+  // [{ subpath: "./resolve", entry: "<absolute root>/src/resolve.ts",
+  //    declaration: { file: "<absolute root>/src/resolve.ts", name: "loadInProcessGraph", line: <n> } }]
 } finally {
   graph.dispose();
 }
