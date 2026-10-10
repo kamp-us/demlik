@@ -47,6 +47,7 @@ export type Opts = {
   reason?: string;
   migrateCeilings?: boolean;
   api?: string;
+  apiBase?: string;
 };
 
 export function cleanExit(message: string): void {
@@ -158,10 +159,15 @@ function featureOptions(command: Command): Command {
 }
 
 function apiOptions(command: Command): Command {
-  return command.option(
-    "--api <map>",
-    'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --json, --pretty and --out',
-  );
+  return command
+    .option(
+      "--api <map>",
+      'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --api-base, --json, --pretty and --out',
+    )
+    .option(
+      "--api-base <rev>",
+      "with --api: diff the published API against the commit <rev> names (SPEC §13.4) and print, per subpath, the added, removed and changed names with before/after text and tier; the base tree is read from git's objects into a temp folder, never into the checkout",
+    );
 }
 
 function outputOptions(command: Command): Command {

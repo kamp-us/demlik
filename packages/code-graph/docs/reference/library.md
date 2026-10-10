@@ -123,10 +123,11 @@ Source: [resolver](../../src/resolve.ts).
 | Export | Result |
 |---|---|
 | `readPublishedApi(root, map, options?)` | `Promise<PublishedApi>`: per subpath, every published name with its text and references |
+| `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: per subpath, the names added, removed and changed against the commit `base` names |
 | `ApiMapSchema` | The zod schema an API map is parsed through |
 | `ApiInputError` | Thrown for every input the CLI refuses with exit 2, with the same message |
 
-and the types `ApiMap`, `ApiEntryText`, `PublishedApi` and
+and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff` and
 `PublishedApiOptions`.
 
 `root` is the package root and resolves against the working directory. `map`
@@ -145,6 +146,25 @@ const api = await readPublishedApi("packages/tea", {
 });
 api.subpaths["./testing"]?.names.expectCmdEmitted?.text;
 // "export declare function expectCmdEmitted<S, M extends {\n    type: string;\n}, …>(…): void;"
+```
+
+`diffPublishedApi` takes the same `root`, `map` and `options`, plus `base`, any
+rev git resolves to a commit in the repository that holds `root`. It writes
+that commit's tree from git's objects into a temp folder outside the checkout,
+links the checkout's installed `node_modules` into it, reads the same view
+there, and compares it with the view of the working tree as it is. The
+checkout's files, index, branch and stash are never written, and the temp
+folders are removed before the promise settles. A rev that names no commit
+throws `ApiInputError` before anything is emitted. Per subpath, the result has
+the `tier` and `added` (`{ after }`), `removed` (`{ before }`) and `changed`
+(`{ before, after }`) maps of `ApiEntryText`, with `base` as the full sha.
+
+```ts
+import { diffPublishedApi } from "@demlik/code-graph/api";
+
+const diff = await diffPublishedApi("packages/tea", map, "origin/main");
+diff.subpaths["./testing"]?.changed.expectCmdEmitted?.before.text;
+// "…, cmd: NoInfer<C>): void;"  (and `.after.text` ends "…, cmd: C): void;")
 ```
 
 Source: [API exports](../../src/api.ts).

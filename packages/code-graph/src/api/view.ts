@@ -23,7 +23,7 @@ export type PublishedApiOptions = {
   readonly warn?: (line: string) => void;
 };
 
-function packageRoot(root: string): string {
+export function packageRoot(root: string): string {
   const absolute = path.resolve(root);
   if (!fs.existsSync(absolute) || !fs.statSync(absolute).isDirectory()) {
     throw new ApiInputError(`${absolute} is not a directory`);
@@ -58,17 +58,40 @@ function readNames(
   }
 }
 
-function assemble(
+// What one emit of one tree publishes: the compiler that emitted, and the names per subpath.
+export type EmittedNames = {
+  readonly compiler: string;
+  readonly names: ReadonlyMap<string, SubpathNames>;
+};
+
+export const projectRelative = (rootAbsolute: string): string =>
+  path.relative(process.cwd(), rootAbsolute) || ".";
+
+// Emits the package at `rootAbsolute` and reads every subpath in `subpaths`, whose entries are
+// already checked against that tree. The emit lives in a temp folder outside the tree and is
+// removed before this returns or throws. `context` names the tree in the diagnostics warning.
+export async function readEmittedNames(
   rootAbsolute: string,
-  compiler: string,
   subpaths: readonly ApiSubpath[],
-  names: ReadonlyMap<string, SubpathNames>,
-): PublishedApi {
-  const view: Record<string, PublishedApi["subpaths"][string]> = {};
-  for (const { subpath, entry, tier } of subpaths) {
-    view[subpath] = { entry, tier, names: names.get(subpath) ?? {} };
+  options: PublishedApiOptions & { readonly context?: string },
+): Promise<EmittedNames> {
+  const tsConfigPath = packageTsConfig(
+    rootAbsolute,
+    options.repoRoot ?? findRepoRoot(rootAbsolute),
+  );
+  const emit = await emitDeclarations(rootAbsolute, tsConfigPath);
+  try {
+    if (emit.diagnostics > 0) {
+      const warn = options.warn ?? ((line: string) => process.stderr.write(`${line}\n`));
+      warn(
+        `code-graph: warning: tsgo reported ${emit.diagnostics} diagnostic(s)${options.context ?? ""}; the declarations were emitted anyway`,
+      );
+    }
+    const entries = emittedEntries(emit, rootAbsolute, subpaths);
+    return { compiler: emit.compiler, names: readNames(tsConfigPath, emit.out, entries) };
+  } finally {
+    removeEmit(emit);
   }
-  return { root: path.relative(process.cwd(), rootAbsolute) || ".", compiler, subpaths: view };
 }
 
 // The published-API view of the package at `root` (SPEC §13.3): every name each subpath of `map`
@@ -81,26 +104,10 @@ export async function readPublishedApi(
 ): Promise<PublishedApi> {
   const rootAbsolute = packageRoot(root);
   const subpaths = apiSubpaths(rootAbsolute, map);
-  const tsConfigPath = packageTsConfig(
-    rootAbsolute,
-    options.repoRoot ?? findRepoRoot(rootAbsolute),
-  );
-  const emit = await emitDeclarations(rootAbsolute, tsConfigPath);
-  try {
-    if (emit.diagnostics > 0) {
-      const warn = options.warn ?? ((line: string) => process.stderr.write(`${line}\n`));
-      warn(
-        `code-graph: warning: tsgo reported ${emit.diagnostics} diagnostic(s); the declarations were emitted anyway`,
-      );
-    }
-    const entries = emittedEntries(emit, rootAbsolute, subpaths);
-    return assemble(
-      rootAbsolute,
-      emit.compiler,
-      subpaths,
-      readNames(tsConfigPath, emit.out, entries),
-    );
-  } finally {
-    removeEmit(emit);
+  const { compiler, names } = await readEmittedNames(rootAbsolute, subpaths, options);
+  const view: Record<string, PublishedApi["subpaths"][string]> = {};
+  for (const { subpath, entry, tier } of subpaths) {
+    view[subpath] = { entry, tier, names: names.get(subpath) ?? {} };
   }
+  return { root: projectRelative(rootAbsolute), compiler, subpaths: view };
 }

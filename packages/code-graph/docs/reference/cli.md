@@ -85,18 +85,41 @@ comments, and `references`: the text of every declaration it reaches that the
 subpath does not publish, keyed `<emitted file>#<declared name>`. A change to
 a private type therefore changes the published name that uses it.
 
+`--api-base <rev>` diffs that view against a base commit. `<rev>` is any rev
+git resolves to a commit (`origin/main`, a sha, `HEAD~1`); in CI, fetch it
+first, because `actions/checkout` fetches one commit. The base commit's tree is
+written from git's objects into a temp folder outside the checkout
+(`git archive`), with the checkout's installed `node_modules` linked in, and
+the same view runs there. The "after" side is the working tree as it is,
+uncommitted edits and untracked files included. The checkout's files, index,
+branch and stash are never written. It prints an `ApiDiff` JSON object: the
+package `root`, the base commit's full sha as `base`, the tsgo `compiler`, and
+per subpath its `tier` and three maps of names: `added` (with `after`),
+`removed` (with `before`) and `changed` (with both). A name is `changed` when
+its text or its references differ, so a change to a private type shows on the
+published name that uses it. A subpath whose entry the base commit lacks has
+every name `added`. The diff reports and does not gate: it exits 0 whatever it
+finds.
+
+```sh
+code-graph packages/tea --api tea-api.json --api-base origin/main --pretty
+```
+
 | Flags | Prints | Exit |
 |---|---|---|
 | `--api <map>` | `PublishedApi` JSON | 0, 2 |
+| `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2 |
 
-`--api` combines only with `--json`, `--pretty` and `--out`. Exit 2, with one
-stderr line and nothing on stdout, for any other flag beside it, a map that is
-not JSON or fails the schema (an unknown key, no subpath, an empty `entry` or
-`tier`, an entry that is not a `.ts`, `.tsx`, `.mts` or `.cts` file, lies
-outside the package or does not exist), no tsconfig, tsgo failing to start,
-or an entry with no emitted file. Without `--api` no emit runs and every other
-output is unchanged. The full contract, with an example, is
-[SPEC.md §13](../../SPEC.md).
+`--api` combines only with `--api-base`, `--json`, `--pretty` and `--out`.
+Exit 2, with one stderr line and nothing on stdout or in `--out`, for any other
+flag beside it, a map that is not JSON or fails the schema (an unknown key, no
+subpath, an empty `entry` or `tier`, an entry that is not a `.ts`, `.tsx`,
+`.mts` or `.cts` file, lies outside the package or does not exist), no
+tsconfig, tsgo failing to start, or an entry with no emitted file. With
+`--api-base`, also for `--api-base` without `--api`, a package outside any git
+repository, a rev that does not resolve to a commit, or a failed `git archive`.
+Without `--api` no emit runs and every other output is unchanged. The full
+contract, with examples, is [SPEC.md §13](../../SPEC.md).
 
 ## Analysis options
 

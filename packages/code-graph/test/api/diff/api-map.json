@@ -1,0 +1,5 @@
+{
+  ".": { "entry": "src/index.ts", "tier": "stable" },
+  "./testing": { "entry": "src/testing/index.ts", "tier": "stable" },
+  "./labs": { "entry": "src/labs/index.ts", "tier": "experimental" }
+}
