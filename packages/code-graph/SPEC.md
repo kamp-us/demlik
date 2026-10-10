@@ -69,7 +69,8 @@ packages/code-graph/
       find.ts             --find: every function and declaration node of one bare name
     engine/     the seam: oxc.ts (oxc-parser + oxc-resolver), tsgo.ts (the one tsgo import), seam.test.ts
     syntax/     file.ts (oxc's tree, parents, TypeScript-shaped children, lines), trivia.ts (TypeScript's
-                comment ranges), imports.ts (import literals and their resolution)
+                comment ranges), imports.ts (import literals and their resolution), headers.ts
+                (a function node's declaration header and overload signatures, §6 A5)
     checker/    context.ts: the tsgo program and the join from oxc's functions to tsgo's nodes
     smells/
       rules.ts            the keyed rule table RULES: Record<SmellKind, Rule> — SSOT for kinds + thresholds
@@ -146,6 +147,13 @@ type FunctionNode = {
     callChainDepth: number; // C5; a real measured number (a genuine leaf = 0)
   } | null;                 // null = cheap pass (edge pass did not run)
   smells: Smell[];
+  // Present ONLY on a `--headers` run (A5) and ABSENT otherwise — not `null`, unlike
+  // `edges`: the field is opt-in output, not an uncomputed measurement, and a run
+  // without the flag prints byte-for-byte what it printed before the field existed.
+  header?: {
+    text: string;           // the declaration header, a verbatim slice of the file (A5)
+    overloads: { startLine: number; text: string }[];  // source order; [] when none
+  };
 };
 
 type ModuleNode = {
@@ -263,7 +271,7 @@ Two node sets, widened from "named callables only" on the founder's ruling (http
 
 **Declaration nodes (`DeclarationNode`, §5).** One per **top-level** statement of a loaded file (a direct child of the file, or of its `export` / `export default` wrapper) of kind: type alias (`type-alias`), interface (`interface`), enum and `const enum` (`enum`), class and abstract class (`class`), and each `const` declarator whose binding is a plain identifier (`constant`). A `declare` form counts as its plain form (`declare class`, `declare const`). Not a node: a `const` bound directly to an arrow or function expression (it is already a function node, so no name gets two), a destructured `const`, `let` / `var` / `using`, anything inside a function, class, `namespace` / `module` or `declare global` block, `export default <expression>`, and a function or overload signature (functions are the other set). Merged declarations stay one node each (`interface Foo` twice; `interface Foo` + `const Foo`). `isExported` is true when the statement carries `export` / `export default` or the file exports the name from its own top level (`export { Foo }`, `export default Foo`, `export = Foo`). Discovery is syntax only and runs in the cheap pass; uses are C6's. No metrics, smells, or header text.
 
-**Function nodes.** Include: function declarations, class methods, constructors, get/set accessors, and arrow / function-expressions **assigned to a name** (variable, property, default export). **Exclude** anonymous inline callbacks (`arr.map(x => …)`) from the function list — but still count their nodes toward the **enclosing** function's `nestingDepth` and `complexity`. **Also exclude overload signatures and ambient/bodyless declarations** (`node.isOverload()` or `!node.hasBody()` on a `FunctionDeclaration`/`MethodDeclaration`): only the **implementation** (the one with a body) is enumerated, so a caller resolves to the real function — not to a phantom `loc:1` first signature — and calls to ambient stubs become honest `external:*`. One `forEachDescendant` pass switching on `node.getKind()`. Record each node in the node→id map (§3).
+**Function nodes.** Include: function declarations, class methods, constructors, get/set accessors, and arrow / function-expressions **assigned to a name** (variable, property, default export). **Exclude** anonymous inline callbacks (`arr.map(x => …)`) from the function list — but still count their nodes toward the **enclosing** function's `nestingDepth` and `complexity`. **Also exclude overload signatures and ambient/bodyless declarations** (`node.isOverload()` or `!node.hasBody()` on a `FunctionDeclaration`/`MethodDeclaration`): only the **implementation** (the one with a body) is enumerated, so a caller resolves to the real function — not to a phantom `loc:1` first signature — and calls to ambient stubs become honest `external:*`. (An overload's text is still reachable, as the implementation's `header.overloads` on a `--headers` run — A5 — never as a node.) One `forEachDescendant` pass switching on `node.getKind()`. Record each node in the node→id map (§3).
 
 ### A2 — name resolution
 - Named node → its name.
@@ -278,6 +286,15 @@ Source of truth: **`Node.getLeadingCommentRanges()`** (already includes JSDoc, s
 - `FunctionNode.commentLines` = comment lines attributable to that function (its leading ranges + leading-and-trailing ranges inside its span).
 - `ModuleNode.commentLines` = **all** comment lines in the file (the file total; function counts are subsets).
 - `stats.totalCommentLines` = sum of `ModuleNode.commentLines` (never sum of functions — avoids double counting).
+
+### A5 — function headers (`--headers` only; `syntax/headers.ts`)
+One rule for every function kind (declaration, method, constructor, getter, setter, arrow, function expression, default-export function):
+- **The text is a verbatim slice of the file** — never reformatted or normalized.
+- **It starts where `startLine` places the node.** An exported declaration's `export` / `export default` is included, as are a member's modifiers (`static`, `async`, accessibility, `get` / `set`). An arrow or function expression starts at its own first token (`async`, `<T>`, `(` or `function`), not at the binding that names it — the binding's name is the node's `name`.
+- **It ends at the last token before the body**, so it holds the name, type parameters, parameters and return type as written and no part of the body. An arrow's header therefore ends on its `=>`, whether the body is a block or an expression. Whitespace and comments between that token and the body are not part of it.
+- **No leading comment or JSDoc** — a comment above the function sits before the node's start and is never part of the header. Comments *inside* the header (between parameters, say) stay, because the text is verbatim.
+- **A node with no body** (an interface `get`/`set`, a bodiless member) runs to its end, less the closing `;` or `,`.
+- **Overloads** — on a bodied function declaration, method or constructor, `overloads` lists the unbroken run of same-named bodiless signatures directly above it (for a method: same name, same `static`-ness, same kind), in source order. Each carries its own `startLine` (its `export` included) and its text by the same rule, less the closing `;`. The comments between overloads are not part of any. Every other node lists `[]`. A1 still holds: an overload signature is **never** a node — this field is the only place one appears.
 
 ## 7. Metrics
 
@@ -346,6 +363,7 @@ code-graph <path> [flags]
 | `--find <name>` | Name lookup over both node sets (§6 A1): every `FunctionNode` and `DeclarationNode` whose `name` is exactly `<name>`, printed as JSON `{ name, scope, matches }` (`--pretty` indents it). Each match is `{ id, name, kind, file, line, isExported, uses }`, sorted by (file, line, id); `line` is a function's `startLine` or a declaration's `line`. A declaration's `uses` are C6's; a function's are its `calledBy` sites as `{ file, line }` (the caller's file), one per (file, line). **Several matches are data, not an error:** exit 0 whatever the count, and no match prints `matches: []` with a stderr warning. Runs the edge pass (like `--blast`) |
 | `--edges` | Opt-in edge pass at `package` scope (§3): summary/plan/smells/graph include `calls`/`calledBy`/`importedBy`/`callChainDepth` and the edge smells (`high-fan-in`, `deep-call-chain`). Without it (and without `--blast`/`--deep`) the run stays cheap. |
 | `--deep` | Edge pass loads the whole monorepo (C3); implies `--edges` at `deep` scope |
+| `--headers` | Every `FunctionNode` in the JSON (`--graph`, `--file <f> --json`, `--tree --json`) carries `header`: its declaration header as written and its overload signatures with their start lines, by the §6-A5 rule (starts where `startLine` places the node, ends at the last token before the body, an arrow's on `=>`, no leading comment). Overloads appear only through this field; they are never nodes (§6-A1). Rides either pass. Without the flag `header` is absent and every output is unchanged |
 | `--html` | Emit a self-contained HTML report (human view — header + hotspot treemap + hub call-graph + sortable top-targets table; see `HTML-VIEW.md`). **Implies the edge pass** (the call-graph section needs `calls`). Pair with `--out <file>` to write the report directly (banner-safe); never an agent surface |
 | `--out <file>` | Write the view payload straight to `<file>` via `fs.writeFileSync` instead of stdout. The **banner-safe** artifact path (#1761): under the `pnpm code-graph` wrapper, pnpm's run banner lands on stdout, so `… --html > report.html` prepends the banner to the file — `--out` sidesteps stdout entirely, so the file carries only the document. Applies to every view (`--html`, `--graph`, `--smells`, `--plan`, `--tree`, `--file`, `--blast`, default summary). A one-line `wrote N bytes to <file>` confirmation goes to **stderr**, never the file |
 | `--comments` | Comment CENSUS. Every comment range from `extract/metrics.ts`'s `collectModuleCommentRanges` (the SAME walk `ModuleNode.commentLines` counts — the census total and `stats.totalCommentLines` are one computation) gets exactly ONE bucket, first match wins: `pragma` → `license` → `marker` → `commented-out-code` → `banner` → `file-header` → `docblock` → `block` → `inline`. Each bucket rolls into exactly one CLASS via `classOf` (an exhaustive switch, so a tenth bucket cannot skip the question): **`mechanical`** = `banner` + `commented-out-code` (removable with no judgment), **`protected`** = `pragma` + `license` + `marker` (never touch), **`prose`** = the rest (the volume — a comment carrying rationale is not a defect, and the tool passes no verdict on it). The three classes partition `commentLines`. Lines are attributed to the FIRST range covering them, so per-bucket lines partition the file's comment lines exactly. Rolled up by bucket, by package scope (`discoverPackageRoots`, longest match), and by file, ranked by comment lines descending, tiebroken on path. Human view caps files and scopes at 20; `--json` emits the whole `CommentCensus`. Report only. Standalone (cheap pass, no Graph) |
@@ -365,7 +383,7 @@ code-graph <path> [flags]
 ## 11. Edge cases (nailed)
 
 - **Name collisions** in a file → `id` gets `#ordinal` (source order), stable within a run.
-- **Overloads** → only the **implementation** (the bodied declaration) is a node; overload signatures and bodyless/ambient declarations are excluded (§6-A1). A caller resolves to the real function, not a phantom `loc:1` first signature.
+- **Overloads** → only the **implementation** (the bodied declaration) is a node; overload signatures and bodyless/ambient declarations are excluded (§6-A1). A caller resolves to the real function, not a phantom `loc:1` first signature. Their text reaches the output only through the implementation's `header.overloads`, on a `--headers` run (§6-A5).
 - **Parse failures** → the TS parser is error-tolerant and won't throw on syntax errors. A file is recorded in `stats.parseFailures` when the parser's own `parseDiagnostics` array (read off `sourceFile.compilerNode` through a typed module augmentation — it's `@internal`, no Program/language service built, so this is cheap) reports a syntax error, or `addSourceFileAtPath` throws. Absence of the field is treated as "no parse failure" (`Array.isArray` guard). Failed files are excluded from metrics; never crash the run; surfaced in `summary.parseFailures` and in `--file`/`--blast` warnings.
 - **External calls** → `external:${name}`, kept (not dropped) so fan-out is visible; excluded from `callChainDepth` (C5).
 - **Empty folder** → valid `Graph` with empty arrays, zeroed stats, `health: "healthy"`.

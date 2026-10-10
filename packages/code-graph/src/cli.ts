@@ -11,6 +11,7 @@ export type Opts = {
   by?: string;
   file?: string;
   edges?: boolean;
+  headers?: boolean;
   deep?: boolean;
   blast?: string;
   find?: string;
@@ -62,6 +63,10 @@ function graphOptions(command: Command): Command {
     .option("--tree", "emit an indented file → function tree with inline smell markers")
     .option("--file <f>", "emit one module + its functions")
     .option("--edges", "run the opt-in edge pass (calls/calledBy/importedBy/chain + edge smells)")
+    .option(
+      "--headers",
+      "give each function node a `header`: its declaration header as written, from where its startLine places it (export and modifiers included) to the last token before its body (an arrow's ends on =>), no leading comment, plus its overload signatures with their start lines (overloads are never nodes); absent without the flag",
+    )
     .option("--deep", "edge pass over the whole monorepo (cross-package callers; implies --edges)")
     .option("--blast <id>", "callers of <id> (direct + transitive); requires the edge pass")
     .option(

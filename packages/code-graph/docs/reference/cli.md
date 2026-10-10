@@ -34,6 +34,35 @@ list of `{ file, line }`. A function's uses are its call sites. A declaration's
 are every place the type checker resolves to it. Several matches exit 0. No
 match prints an empty list, warns on stderr, and exits 0.
 
+## Function headers
+
+`--headers` adds a `header` field to every function node in the JSON that
+`--graph`, `--file <file> --json` and `--tree --json` print. Without the flag
+the field is absent, and the output is unchanged.
+
+```json
+"header": {
+  "text": "export function pick(a: string | number): string | number",
+  "overloads": [
+    { "startLine": 2, "text": "export function pick(a: string): string" },
+    { "startLine": 4, "text": "export function pick(a: number): number" }
+  ]
+}
+```
+
+- `text` is the source as written, never reformatted. It starts where the
+  node's `startLine` points: `export`, `export default`, `async`, `static` and
+  other modifiers are included. It ends at the last token before the body, so
+  an arrow's header ends with `=>`. A comment above the function, or between
+  the header and the body, is not included.
+- `overloads` lists the overload signatures written before the implementation,
+  in source order, each with its own start line and without its closing `;`.
+  The comments between them are left out. A function with no overloads lists
+  none. Overload signatures are never function nodes; this field is the only
+  place they appear.
+- A node with no body, such as an `interface` accessor, runs to its end without
+  the closing `;` or `,`.
+
 ## Analysis options
 
 | Flag | Analysis |
