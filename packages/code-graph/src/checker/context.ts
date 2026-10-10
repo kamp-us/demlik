@@ -146,6 +146,11 @@ export class TypeContext {
     return target;
   }
 
+  // `{ x }` names a property, so the symbol at `x` is the property's; this is the value it reads.
+  shorthandValueSymbol(assignment: ts.ShorthandPropertyAssignment): ts.TsSymbol | undefined {
+    return this.program.shorthandValueSymbol(assignment);
+  }
+
   declarationsOf(symbol: ts.TsSymbol): readonly ts.Node[] {
     return this.program.declarations(symbol);
   }

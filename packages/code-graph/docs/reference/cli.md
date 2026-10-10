@@ -20,12 +20,19 @@ The default output is a JSON summary of counts, health, and refactor targets.
 | `--tree` | File/function tree with line ranges, metrics, and findings |
 | `--file <file>` | One module and its functions |
 | `--blast <id>` | Direct and transitive callers of a function |
+| `--find <name>` | Every function and top-level declaration with that name, as JSON |
 | `--html` | Standalone HTML report; enables call analysis |
 
 `--by impact` requires call analysis. A blast target may be a unique name or a
 function id. Id paths are relative to the analyzed directory: a scan of `src`
 uses `orders.ts:charge`. Ambiguous names exit 1. `--tree --json` returns the
 full graph.
+
+`--find` always prints JSON (`--pretty` indents it): `{ name, scope, matches }`.
+Each match has `id`, `name`, `kind`, `file`, `line`, `isExported`, and `uses`, a
+list of `{ file, line }`. A function's uses are its call sites. A declaration's
+are every place the type checker resolves to it. Several matches exit 0. No
+match prints an empty list, warns on stderr, and exits 0.
 
 ## Function headers
 
@@ -86,8 +93,8 @@ references.
 The default scan uses oxc syntax only. `--data` and `--hotspots` can add results
 without enabling the call graph.
 
-`--edges`, `--deep`, `--blast`, `--html`, `--cycles`, and `--interface-width`
-enable call analysis. Other reports enable the passes they need:
+`--edges`, `--deep`, `--blast`, `--find`, `--html`, `--cycles`, and
+`--interface-width` enable call analysis. Other reports enable the passes they need:
 
 | Report | Also enables |
 |---|---|

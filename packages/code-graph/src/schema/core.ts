@@ -135,6 +135,37 @@ export const FunctionNodeSchema = z.object({
 });
 export type FunctionNode = z.infer<typeof FunctionNodeSchema>;
 
+// A top-level declaration that is not a function node (SPEC §6 A1). Its kinds never share a name
+// with a FunctionKind, so a `--find` match's kind alone says which node set it came from.
+export const DeclarationKindSchema = z.enum([
+  "type-alias",
+  "interface",
+  "enum",
+  "class",
+  "constant",
+]);
+export type DeclarationKind = z.infer<typeof DeclarationKindSchema>;
+
+export const UseSiteSchema = z.object({
+  file: z.string(),
+  line: z.number(),
+});
+export type UseSite = z.infer<typeof UseSiteSchema>;
+
+export const DeclarationNodeSchema = z.object({
+  id: z.string(), // `${file}:${kind}:${name}`; a merged same-kind repeat gets `#${ordinal}`
+  name: z.string(),
+  kind: DeclarationKindSchema,
+  file: z.string(),
+  line: z.number(),
+  isExported: z.boolean(),
+  isTest: z.boolean(),
+  // Every place the type checker resolves to this declaration; `null` when the edge pass did not
+  // run, never `[]`, which would read as measured-unused.
+  uses: z.array(UseSiteSchema).nullable(),
+});
+export type DeclarationNode = z.infer<typeof DeclarationNodeSchema>;
+
 export const ModuleNodeSchema = z.object({
   file: z.string(), // relative to the analyzed root (join with graph.root for absolute)
   loc: z.number(),

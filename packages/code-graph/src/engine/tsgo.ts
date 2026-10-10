@@ -22,6 +22,7 @@ export type TypeProgram = {
   readonly symbolAt: (node: Node) => TsSymbol | undefined;
   readonly symbolsAt: (nodes: readonly Node[]) => readonly (TsSymbol | undefined)[];
   readonly aliasTarget: (symbol: TsSymbol) => TsSymbol | undefined;
+  readonly shorthandValueSymbol: (assignment: Node) => TsSymbol | undefined;
   readonly declarations: (symbol: TsSymbol) => readonly Node[];
   readonly exportsOf: (moduleSymbol: TsSymbol) => ReadonlyMap<string, TsSymbol>;
   readonly libraryKind: (sourceFile: SourceFile) => LibraryKind | null;
@@ -147,6 +148,7 @@ function typeProgramOf(project: Project, close: () => void): TypeProgram {
     symbolsAt: (nodes) => (nodes.length === 0 ? [] : checker.getSymbolAtLocation(nodes)),
     aliasTarget: (symbol) =>
       (symbol.flags & SymbolFlags.Alias) === 0 ? undefined : checker.getAliasedSymbol(symbol),
+    shorthandValueSymbol: (assignment) => checker.getShorthandAssignmentValueSymbol(assignment),
     declarations,
     exportsOf: (moduleSymbol) => {
       const out = new Map<string, TsSymbol>();

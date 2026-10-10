@@ -251,6 +251,6972 @@ exit 0
     "unparsedConfigs": []
   },
   "data": null,
+  "declarations": [
+    {
+      "file": "src/cg/collapse/candidates.ts",
+      "id": "src/cg/collapse/candidates.ts:type-alias:BlockKind",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 14,
+      "name": "BlockKind",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 16
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 65
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/candidates.ts",
+      "id": "src/cg/collapse/candidates.ts:type-alias:SkippedBlock",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 16,
+      "name": "SkippedBlock",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 45
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 83
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 102
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 106
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/candidates.ts",
+      "id": "src/cg/collapse/candidates.ts:type-alias:CollapseCandidate",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 18,
+      "name": "CollapseCandidate",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 35
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 46
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 125
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 174
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 210
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 235
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/candidates.ts",
+      "id": "src/cg/collapse/candidates.ts:type-alias:CollapseCluster",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 34,
+      "name": "CollapseCluster",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 47
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 163
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 175
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 210
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 212
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/candidates.ts",
+      "id": "src/cg/collapse/candidates.ts:type-alias:CollapseReport",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 41,
+      "name": "CollapseReport",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 227
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 84
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 99
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 111
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/candidates.ts",
+      "id": "src/cg/collapse/candidates.ts:type-alias:Index",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 57,
+      "name": "Index",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 59
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 65
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 66
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 67
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 68
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/ceilings.ts",
+      "id": "src/cg/collapse/ceilings.ts:constant:CEILINGS_FILENAME",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 4,
+      "name": "CEILINGS_FILENAME",
+      "uses": [
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 18
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 58
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 74
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/ceilings.ts",
+      "id": "src/cg/collapse/ceilings.ts:type-alias:RatchetRender",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 24,
+      "name": "RatchetRender",
+      "uses": [
+        {
+          "file": "src/cg/collapse/ceilings.ts",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/cost.ts",
+      "id": "src/cg/collapse/cost.ts:type-alias:CostInputs",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 6,
+      "name": "CostInputs",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 57
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 72
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/cost.ts",
+      "id": "src/cg/collapse/cost.ts:type-alias:CostContext",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 13,
+      "name": "CostContext",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 124
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 151
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/gate.ts",
+      "id": "src/cg/collapse/gate.ts:type-alias:CollapseGateArgs",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 22,
+      "name": "CollapseGateArgs",
+      "uses": [
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 35
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 50
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/partial.ts",
+      "id": "src/cg/collapse/partial.ts:type-alias:PartialTwin",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 4,
+      "name": "PartialTwin",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 79
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 122
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 129
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 156
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 169
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 182
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 184
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 71
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/partial.ts",
+      "id": "src/cg/collapse/partial.ts:type-alias:Sequence",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 21,
+      "name": "Sequence",
+      "uses": [
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 44
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 75
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 76
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 109
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 135
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 154
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/partial.ts",
+      "id": "src/cg/collapse/partial.ts:type-alias:Run",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 42,
+      "name": "Run",
+      "uses": [
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 44
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 77
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/partial.ts",
+      "id": "src/cg/collapse/partial.ts:type-alias:Occurrence",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 107,
+      "name": "Occurrence",
+      "uses": [
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 109
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 110
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 138
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 153
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/partial.ts",
+      "id": "src/cg/collapse/partial.ts:type-alias:Pair",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 135,
+      "name": "Pair",
+      "uses": [
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 142
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/render.ts",
+      "id": "src/cg/collapse/render.ts:constant:HUMAN_LIMIT",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 14,
+      "name": "HUMAN_LIMIT",
+      "uses": [
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 93
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 112
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 120
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/render.ts",
+      "id": "src/cg/collapse/render.ts:constant:SKIPPED_SHOWN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 15,
+      "name": "SKIPPED_SHOWN",
+      "uses": [
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 105
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/render.ts",
+      "id": "src/cg/collapse/render.ts:constant:BLOCK_SHOWN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 16,
+      "name": "BLOCK_SHOWN",
+      "uses": [
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 66
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 67
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/settings.ts",
+      "id": "src/cg/collapse/settings.ts:constant:CollapseSettingsSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 3,
+      "name": "CollapseSettingsSchema",
+      "uses": [
+        {
+          "file": "src/cg/collapse/settings.ts",
+          "line": 34
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 54
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 56
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/settings.ts",
+      "id": "src/cg/collapse/settings.ts:type-alias:CollapseSettings",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 34,
+      "name": "CollapseSettings",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 42
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 51
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 81
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 101
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 123
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 226
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 72
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 20
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 28
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 78
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 155
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 181
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 130
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 87
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 98
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 109
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 119
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/signals.ts",
+      "id": "src/cg/collapse/signals.ts:type-alias:Twin",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 5,
+      "name": "Twin",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 65
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 100
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 121
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 122
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 57
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 87
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 98
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 109
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 119
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/signals.ts",
+      "id": "src/cg/collapse/signals.ts:type-alias:Signal",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 19,
+      "name": "Signal",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 27
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 116
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 18
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 25
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 87
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 98
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 109
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 119
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/signals.ts",
+      "id": "src/cg/collapse/signals.ts:type-alias:SignalName",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 25,
+      "name": "SignalName",
+      "uses": []
+    },
+    {
+      "file": "src/cg/collapse/tokens.ts",
+      "id": "src/cg/collapse/tokens.ts:constant:STOPWORDS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 1,
+      "name": "STOPWORDS",
+      "uses": [
+        {
+          "file": "src/cg/collapse/tokens.ts",
+          "line": 104
+        },
+        {
+          "file": "src/cg/collapse/tokens.ts",
+          "line": 106
+        }
+      ]
+    },
+    {
+      "file": "src/cg/collapse/tokens.ts",
+      "id": "src/cg/collapse/tokens.ts:constant:SUFFIXES",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 68,
+      "name": "SUFFIXES",
+      "uses": [
+        {
+          "file": "src/cg/collapse/tokens.ts",
+          "line": 84
+        }
+      ]
+    },
+    {
+      "file": "src/cg/config.ts",
+      "id": "src/cg/config.ts:type-alias:Reporter",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 10,
+      "name": "Reporter",
+      "uses": [
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 16
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 44
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 52
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 61
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 84
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 117
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 126
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 77
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/clusters.test.ts",
+      "id": "src/cg/query/clusters.test.ts:constant:here",
+      "isExported": false,
+      "isTest": true,
+      "kind": "constant",
+      "line": 12,
+      "name": "here",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/clusters.test.ts",
+      "id": "src/cg/query/clusters.test.ts:constant:SRC_DIR",
+      "isExported": false,
+      "isTest": true,
+      "kind": "constant",
+      "line": 13,
+      "name": "SRC_DIR",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 56
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 64
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/clusters.test.ts",
+      "id": "src/cg/query/clusters.test.ts:constant:thresholds",
+      "isExported": false,
+      "isTest": true,
+      "kind": "constant",
+      "line": 14,
+      "name": "thresholds",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 68
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 75
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:type-alias:Edge",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 1,
+      "name": "Edge",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 87
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 107
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 55
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 66
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 38
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 194
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:type-alias:Weights",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "Weights",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 17
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 23
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 39
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 49
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 50
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 114
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:type-alias:Level",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 5,
+      "name": "Level",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 23
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 38
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 49
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 80
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 96
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 118
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 137
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 151
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 166
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 179
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:constant:EPS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 13,
+      "name": "EPS",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 71
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:constant:MAX_PASSES",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 14,
+      "name": "MAX_PASSES",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 101
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:constant:MAX_LEVELS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 15,
+      "name": "MAX_LEVELS",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 198
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:type-alias:Fold",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 112,
+      "name": "Fold",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 118
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 126
+        },
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 138
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/louvain.ts",
+      "id": "src/cg/query/louvain.ts:type-alias:Partition",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 189,
+      "name": "Partition",
+      "uses": [
+        {
+          "file": "src/cg/query/louvain.ts",
+          "line": 194
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/reach.ts",
+      "id": "src/cg/query/reach.ts:type-alias:Adjacency",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "Adjacency",
+      "uses": [
+        {
+          "file": "src/cg/query/reach.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/query/reach.ts",
+          "line": 28
+        },
+        {
+          "file": "src/cg/query/reach.ts",
+          "line": 47
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 59
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 110
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/surface.ts",
+      "id": "src/cg/query/surface.ts:constant:BARREL_SUFFIXES",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 3,
+      "name": "BARREL_SUFFIXES",
+      "uses": [
+        {
+          "file": "src/cg/query/surface.ts",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/unguarded.ts",
+      "id": "src/cg/query/unguarded.ts:type-alias:Search",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 19,
+      "name": "Search",
+      "uses": [
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 26
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 44
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 45
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 90
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 109
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/unguarded.ts",
+      "id": "src/cg/query/unguarded.ts:type-alias:Walk",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 57,
+      "name": "Walk",
+      "uses": [
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 63
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "file": "src/cg/query/unreachable.ts",
+      "id": "src/cg/query/unreachable.ts:type-alias:UnreachableResult",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 8,
+      "name": "UnreachableResult",
+      "uses": [
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 75
+        }
+      ]
+    },
+    {
+      "file": "src/cg/ratchet/scope-count.ts",
+      "id": "src/cg/ratchet/scope-count.ts:constant:ScopeCountCeilingsSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 6,
+      "name": "ScopeCountCeilingsSchema",
+      "uses": [
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 13
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 78
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 87
+        }
+      ]
+    },
+    {
+      "file": "src/cg/ratchet/scope-count.ts",
+      "id": "src/cg/ratchet/scope-count.ts:type-alias:ScopeCountCeilings",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 13,
+      "name": "ScopeCountCeilings",
+      "uses": [
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 47
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 70
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 71
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 77
+        }
+      ]
+    },
+    {
+      "file": "src/cg/ratchet/scope-count.ts",
+      "id": "src/cg/ratchet/scope-count.ts:type-alias:ScopeCount",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 15,
+      "name": "ScopeCount",
+      "uses": [
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 50
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 46
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 69
+        }
+      ]
+    },
+    {
+      "file": "src/cg/ratchet/scope-count.ts",
+      "id": "src/cg/ratchet/scope-count.ts:type-alias:CeilingDirection",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 17,
+      "name": "CeilingDirection",
+      "uses": [
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 23
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 115
+        }
+      ]
+    },
+    {
+      "file": "src/cg/ratchet/scope-count.ts",
+      "id": "src/cg/ratchet/scope-count.ts:type-alias:ScopeCountViolation",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 19,
+      "name": "ScopeCountViolation",
+      "uses": [
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 49
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 98
+        }
+      ]
+    },
+    {
+      "file": "src/cg/ratchet/scope-count.ts",
+      "id": "src/cg/ratchet/scope-count.ts:type-alias:ScopeCountVerdict",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 27,
+      "name": "ScopeCountVerdict",
+      "uses": [
+        {
+          "file": "src/cg/collapse/ceilings.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/collapse/ceilings.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/collapse/ceilings.ts",
+          "line": 27
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 107
+        },
+        {
+          "file": "src/cg/ratchet/scope-count.ts",
+          "line": 115
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/analysis.ts",
+      "id": "src/cg/render/analysis.ts:constant:REACH_NOT_RUN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 17,
+      "name": "REACH_NOT_RUN",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 93
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 131
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/analysis.ts",
+      "id": "src/cg/render/analysis.ts:constant:REACH_HEADINGS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 113,
+      "name": "REACH_HEADINGS",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 121
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/analysis.ts",
+      "id": "src/cg/render/analysis.ts:constant:CLUSTERS_NOT_RUN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 140,
+      "name": "CLUSTERS_NOT_RUN",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 190
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/analysis.ts",
+      "id": "src/cg/render/analysis.ts:constant:TOP_N",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 143,
+      "name": "TOP_N",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 168
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 175
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 181
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 185
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/analysis.ts",
+      "id": "src/cg/render/analysis.ts:constant:FILES_PER_GROUP",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 144,
+      "name": "FILES_PER_GROUP",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 151
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 152
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 153
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/analysis.ts",
+      "id": "src/cg/render/analysis.ts:constant:WIDTH_NOT_RUN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 195,
+      "name": "WIDTH_NOT_RUN",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 200
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/blast.ts",
+      "id": "src/cg/render/blast.ts:type-alias:BlastCaller",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 5,
+      "name": "BlastCaller",
+      "uses": [
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 24
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/blast.ts",
+      "id": "src/cg/render/blast.ts:type-alias:BlastResult",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 12,
+      "name": "BlastResult",
+      "uses": [
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 98
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 148
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/blast.ts",
+      "id": "src/cg/render/blast.ts:type-alias:BlastOutput",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 18,
+      "name": "BlastOutput",
+      "uses": [
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 125
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 165
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/blast.ts",
+      "id": "src/cg/render/blast.ts:type-alias:CallerTraversal",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 33,
+      "name": "CallerTraversal",
+      "uses": [
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 41
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 61
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/ci.ts",
+      "id": "src/cg/render/ci.ts:type-alias:FailOn",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "FailOn",
+      "uses": [
+        {
+          "file": "src/cg/render/ci.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/render/ci.ts",
+          "line": 14
+        },
+        {
+          "file": "src/cg/render/ci.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/ci.ts",
+      "id": "src/cg/render/ci.ts:type-alias:CiResult",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 5,
+      "name": "CiResult",
+      "uses": [
+        {
+          "file": "src/cg/render/ci.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/file.ts",
+      "id": "src/cg/render/file.ts:type-alias:FileRender",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 5,
+      "name": "FileRender",
+      "uses": [
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:type-alias:Severity",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 6,
+      "name": "Severity",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 14
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 16
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 17
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 19
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 25
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 33
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 76
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 13
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:constant:SEVERITY_COLOR",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 8,
+      "name": "SEVERITY_COLOR",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 35
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 36
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 37
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 246
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:constant:SEVERITY_RANK",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 14,
+      "name": "SEVERITY_RANK",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 20
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:type-alias:TreemapNode",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 29,
+      "name": "TreemapNode",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 57
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 91
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 97
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 105
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:type-alias:GraphNode",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 38,
+      "name": "GraphNode",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 59
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 142
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 200
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 205
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:type-alias:GraphEdge",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 53,
+      "name": "GraphEdge",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 180
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 182
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:type-alias:HtmlModel",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 55,
+      "name": "HtmlModel",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 195
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 215
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 244
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:type-alias:TreemapDir",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 91,
+      "name": "TreemapDir",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 91
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 93
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 97
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-model.ts",
+      "id": "src/cg/render/html-model.ts:constant:HUB_FAN_IN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 131,
+      "name": "HUB_FAN_IN",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 138
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-template.ts",
+      "id": "src/cg/render/html-template.ts:constant:D3_CDN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 5,
+      "name": "D3_CDN",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-template.ts",
+      "id": "src/cg/render/html-template.ts:constant:CYTOSCAPE_CDN",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 6,
+      "name": "CYTOSCAPE_CDN",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-template.ts",
+      "id": "src/cg/render/html-template.ts:constant:FCOSE_DEPS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 7,
+      "name": "FCOSE_DEPS",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-template.ts",
+      "id": "src/cg/render/html-template.ts:constant:HEALTH_SEVERITY",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 13,
+      "name": "HEALTH_SEVERITY",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 246
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-template.ts",
+      "id": "src/cg/render/html-template.ts:constant:STYLE",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 33,
+      "name": "STYLE",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 254
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/html-template.ts",
+      "id": "src/cg/render/html-template.ts:constant:CLIENT_SCRIPT",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 125,
+      "name": "CLIENT_SCRIPT",
+      "uses": [
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 261
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/plan.ts",
+      "id": "src/cg/render/plan.ts:constant:HUMAN_LIMIT",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 5,
+      "name": "HUMAN_LIMIT",
+      "uses": [
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 20
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "file": "src/cg/render/tree.ts",
+      "id": "src/cg/render/tree.ts:constant:NAME_COL",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 4,
+      "name": "NAME_COL",
+      "uses": [
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 17
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:constant:ClusterFileGroupSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 3,
+      "name": "ClusterFileGroupSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:type-alias:ClusterFileGroup",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 7,
+      "name": "ClusterFileGroup",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:constant:ScatteredClusterSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 9,
+      "name": "ScatteredClusterSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 15
+        },
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:type-alias:ScatteredCluster",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 15,
+      "name": "ScatteredCluster",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 101
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 102
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:constant:DirectoryClusterGroupSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 17,
+      "name": "DirectoryClusterGroupSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 21
+        },
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:type-alias:DirectoryClusterGroup",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 21,
+      "name": "DirectoryClusterGroup",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 147
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:constant:SplitDirectorySchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 23,
+      "name": "SplitDirectorySchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:type-alias:SplitDirectory",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 30,
+      "name": "SplitDirectory",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 142
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 143
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:constant:ClusterReportSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 32,
+      "name": "ClusterReportSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/clusters.ts",
+          "line": 42
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/clusters.ts",
+      "id": "src/cg/schema/clusters.ts:type-alias:ClusterReport",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 42,
+      "name": "ClusterReport",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 162
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 157
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 165
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 178
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:SmellKindSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 4,
+      "name": "SmellKindSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 34
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:ThresholdsSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 6,
+      "name": "ThresholdsSchema",
+      "uses": [
+        {
+          "file": "src/cg/config.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 45
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 47
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 14
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 19
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:Thresholds",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 19,
+      "name": "Thresholds",
+      "uses": [
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 16
+        },
+        {
+          "file": "src/cg/collapse/gate.ts",
+          "line": 26
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/config.ts",
+          "line": 44
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 59
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 78
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 31
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:SmellTargetSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 21,
+      "name": "SmellTargetSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:SmellTarget",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 31,
+      "name": "SmellTarget",
+      "uses": [
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:SmellSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 33,
+      "name": "SmellSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 40
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 117
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 130
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 139
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 157
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:Smell",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 40,
+      "name": "Smell",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 16
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 13
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 88
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 33
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 61
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 63
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 78
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 79
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 89
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 95
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:FunctionKindSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 42,
+      "name": "FunctionKindSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 51
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 105
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:FunctionKind",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 51,
+      "name": "FunctionKind",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:CallSiteSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 53,
+      "name": "CallSiteSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 59
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:CallSite",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 59,
+      "name": "CallSite",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:CallerSiteSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 61,
+      "name": "CallerSiteSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 65
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:CallerSite",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 65,
+      "name": "CallerSite",
+      "uses": [
+        {
+          "file": "src/cg/smells/plan.test.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/plan.test.ts",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:ImportEdgeKindSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 67,
+      "name": "ImportEdgeKindSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 68
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 72
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:ImportEdgeKind",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 68,
+      "name": "ImportEdgeKind",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:ImportEdgeSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 70,
+      "name": "ImportEdgeSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 76
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 128
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:ImportEdge",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 76,
+      "name": "ImportEdge",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:EdgesSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 78,
+      "name": "EdgesSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 83
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 115
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:Edges",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 83,
+      "name": "Edges",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:EntryReachSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 85,
+      "name": "EntryReachSchema",
+      "uses": [
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 83
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 136
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 86
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 93
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:EntryReach",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 86,
+      "name": "EntryReach",
+      "uses": [
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 37
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 63
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 94
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 113
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 119
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:NodeKindSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 88,
+      "name": "NodeKindSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 99
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 116
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:NodeKind",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 99,
+      "name": "NodeKind",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 100
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:NodeKindName",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 100,
+      "name": "NodeKindName",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:FunctionNodeSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 102,
+      "name": "FunctionNodeSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 119
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:FunctionNode",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 119,
+      "name": "FunctionNode",
+      "uses": [
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 51
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 149
+        },
+        {
+          "file": "src/cg/collapse/candidates.ts",
+          "line": 224
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/collapse/cost.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/collapse/partial.ts",
+          "line": 180
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/collapse/signals.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 16
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 34
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 52
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 160
+        },
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 33
+        },
+        {
+          "file": "src/cg/query/reach.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/query/reach.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/query/reach.ts",
+          "line": 26
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 37
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 58
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 77
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 92
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 15
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 38
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 69
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 27
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 98
+        },
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 40
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 66
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 67
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 76
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 82
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 133
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 137
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 160
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 161
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 179
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 196
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 15
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 33
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 17
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/smells/plan.test.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/plan.test.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 27
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:ModuleNodeSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 121,
+      "name": "ModuleNodeSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 132
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:ModuleNode",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 132,
+      "name": "ModuleNode",
+      "uses": [
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/query/clusters.test.ts",
+          "line": 40
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 53
+        },
+        {
+          "file": "src/cg/query/clusters.ts",
+          "line": 161
+        },
+        {
+          "file": "src/cg/query/surface.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/query/surface.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/query/surface.ts",
+          "line": 33
+        },
+        {
+          "file": "src/cg/query/surface.ts",
+          "line": 35
+        },
+        {
+          "file": "src/cg/query/surface.ts",
+          "line": 41
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 70
+        },
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 32
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 76
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 82
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 24
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 15
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 33
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 88
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 101
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 127
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 159
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 171
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 58
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:DirectoryNodeSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 134,
+      "name": "DirectoryNodeSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:DirectoryNode",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 141,
+      "name": "DirectoryNode",
+      "uses": [
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:PlanRowSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 143,
+      "name": "PlanRowSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 159
+        },
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 179
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:PlanRow",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 159,
+      "name": "PlanRow",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 63
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 18
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 27
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 46
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 61
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 69
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 78
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:ProvenanceSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 161,
+      "name": "ProvenanceSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 169
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:Provenance",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 169,
+      "name": "Provenance",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:constant:SummarySchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 171,
+      "name": "SummarySchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/core.ts",
+          "line": 182
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 20
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/core.ts",
+      "id": "src/cg/schema/core.ts:type-alias:Summary",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 182,
+      "name": "Summary",
+      "uses": [
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 56
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 13
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 74
+        },
+        {
+          "file": "src/cg/smells/health.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/smells/health.ts",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:constant:CrossRuntimeReasonSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 3,
+      "name": "CrossRuntimeReasonSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:type-alias:CrossRuntimeReason",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 8,
+      "name": "CrossRuntimeReason",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:constant:BindingKindSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 10,
+      "name": "BindingKindSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 15
+        },
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:type-alias:BindingKind",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 11,
+      "name": "BindingKind",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:constant:CrossRuntimeEdgeSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 13,
+      "name": "CrossRuntimeEdgeSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 25
+        },
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:type-alias:CrossRuntimeEdge",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 25,
+      "name": "CrossRuntimeEdge",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:constant:BindingCensusRowSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 27,
+      "name": "BindingCensusRowSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 35
+        },
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:type-alias:BindingCensusRow",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 35,
+      "name": "BindingCensusRow",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:constant:CrossRuntimeReportSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 37,
+      "name": "CrossRuntimeReportSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/cross-runtime.ts",
+          "line": 43
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/cross-runtime.ts",
+      "id": "src/cg/schema/cross-runtime.ts:type-alias:CrossRuntimeReport",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 43,
+      "name": "CrossRuntimeReport",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 19
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 31
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/graph.ts",
+      "id": "src/cg/schema/graph.ts:constant:GraphSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 16,
+      "name": "GraphSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 38
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/graph.ts",
+      "id": "src/cg/schema/graph.ts:type-alias:Graph",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 38,
+      "name": "Graph",
+      "uses": [
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/collapse/render.ts",
+          "line": 128
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 63
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 71
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 91
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 129
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 188
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 198
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 227
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 96
+        },
+        {
+          "file": "src/cg/render/blast.ts",
+          "line": 144
+        },
+        {
+          "file": "src/cg/render/ci.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/ci.ts",
+          "line": 29
+        },
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/file.ts",
+          "line": 17
+        },
+        {
+          "file": "src/cg/render/graph.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/graph.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 66
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 105
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 195
+        },
+        {
+          "file": "src/cg/render/html-model.ts",
+          "line": 215
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 74
+        },
+        {
+          "file": "src/cg/render/html-template.ts",
+          "line": 244
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/html.ts",
+          "line": 17
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 28
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 50
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 84
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 109
+        },
+        {
+          "file": "src/cg/render/summary.ts",
+          "line": 1
+        },
+        {
+          "file": "src/cg/render/summary.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/tree.ts",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/interface-width.ts",
+      "id": "src/cg/schema/interface-width.ts:constant:ExportWidthSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 3,
+      "name": "ExportWidthSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/interface-width.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/schema/interface-width.ts",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/interface-width.ts",
+      "id": "src/cg/schema/interface-width.ts:type-alias:ExportWidth",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 10,
+      "name": "ExportWidth",
+      "uses": [
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 37
+        },
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/interface-width.ts",
+      "id": "src/cg/schema/interface-width.ts:constant:PackageWidthSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 12,
+      "name": "PackageWidthSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/interface-width.ts",
+          "line": 18
+        },
+        {
+          "file": "src/cg/schema/interface-width.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/interface-width.ts",
+      "id": "src/cg/schema/interface-width.ts:type-alias:PackageWidth",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 18,
+      "name": "PackageWidth",
+      "uses": [
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 36
+        },
+        {
+          "file": "src/cg/query/interface-width.ts",
+          "line": 55
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/interface-width.ts",
+      "id": "src/cg/schema/interface-width.ts:constant:InterfaceWidthReportSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 20,
+      "name": "InterfaceWidthReportSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 13
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 24
+        },
+        {
+          "file": "src/cg/schema/interface-width.ts",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/interface-width.ts",
+      "id": "src/cg/schema/interface-width.ts:type-alias:InterfaceWidthReport",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 25,
+      "name": "InterfaceWidthReport",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:constant:UnreachableCategorySchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 4,
+      "name": "UnreachableCategorySchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:type-alias:UnreachableCategory",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 5,
+      "name": "UnreachableCategory",
+      "uses": []
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:constant:UnreachableSymbolSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 7,
+      "name": "UnreachableSymbolSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 14
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:type-alias:UnreachableSymbol",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 14,
+      "name": "UnreachableSymbol",
+      "uses": [
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 42
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 82
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:constant:WithheldReasonSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 16,
+      "name": "WithheldReasonSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 21
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:type-alias:WithheldReason",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 21,
+      "name": "WithheldReason",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 85
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:constant:WithheldSymbolSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 23,
+      "name": "WithheldSymbolSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 27
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:type-alias:WithheldSymbol",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 27,
+      "name": "WithheldSymbol",
+      "uses": [
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 10
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 42
+        },
+        {
+          "file": "src/cg/query/unreachable.ts",
+          "line": 83
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:constant:UnguardedEffectSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 29,
+      "name": "UnguardedEffectSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 37
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:type-alias:UnguardedEffect",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 37,
+      "name": "UnguardedEffect",
+      "uses": [
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 77
+        },
+        {
+          "file": "src/cg/query/unguarded.ts",
+          "line": 89
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:constant:ReachabilityReportSchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 39,
+      "name": "ReachabilityReportSchema",
+      "uses": [
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 14
+        },
+        {
+          "file": "src/cg/schema/graph.ts",
+          "line": 22
+        },
+        {
+          "file": "src/cg/schema/reachability.ts",
+          "line": 47
+        }
+      ]
+    },
+    {
+      "file": "src/cg/schema/reachability.ts",
+      "id": "src/cg/schema/reachability.ts:type-alias:ReachabilityReport",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 47,
+      "name": "ReachabilityReport",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 11
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 85
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 119
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/coupling.ts",
+      "id": "src/cg/smells/coupling.ts:type-alias:ValueEdge",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 13,
+      "name": "ValueEdge",
+      "uses": [
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 15
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 18
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 34
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 67
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 102
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/coupling.ts",
+      "id": "src/cg/smells/coupling.ts:type-alias:Cycle",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 46,
+      "name": "Cycle",
+      "uses": [
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 14
+        },
+        {
+          "file": "src/cg/render/analysis.ts",
+          "line": 217
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 32
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 51
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 60
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 103
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 164
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/coupling.ts",
+      "id": "src/cg/smells/coupling.ts:type-alias:CrossBoundaryGroup",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 64,
+      "name": "CrossBoundaryGroup",
+      "uses": [
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 7
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 32
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 69
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 70
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 90
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 165
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/coupling.ts",
+      "id": "src/cg/smells/coupling.ts:type-alias:CouplingFacts",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 94,
+      "name": "CouplingFacts",
+      "uses": [
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 105
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 115
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 129
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 167
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 3
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 60
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/coupling.ts",
+      "id": "src/cg/smells/coupling.ts:type-alias:ModuleRank",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 134,
+      "name": "ModuleRank",
+      "uses": [
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 9
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 32
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 141
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 142
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 159
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 166
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/coupling.ts",
+      "id": "src/cg/smells/coupling.ts:type-alias:CouplingAnalysis",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 163,
+      "name": "CouplingAnalysis",
+      "uses": [
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/render/smells.ts",
+          "line": 30
+        },
+        {
+          "file": "src/cg/smells/coupling.ts",
+          "line": 173
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/evaluate.ts",
+      "id": "src/cg/smells/evaluate.ts:constant:KINDS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 7,
+      "name": "KINDS",
+      "uses": [
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 34
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 64
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/plan.ts",
+      "id": "src/cg/smells/plan.ts:type-alias:PlanAxis",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 4,
+      "name": "PlanAxis",
+      "uses": [
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 2
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 18
+        },
+        {
+          "file": "src/cg/render/plan.ts",
+          "line": 28
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 6
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 8
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 12
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 46
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 61
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 69
+        },
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/plan.ts",
+      "id": "src/cg/smells/plan.ts:constant:PLAN_AXES",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 6,
+      "name": "PLAN_AXES",
+      "uses": [
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/plan.ts",
+      "id": "src/cg/smells/plan.ts:constant:AXIS_KEYS",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 46,
+      "name": "AXIS_KEYS",
+      "uses": [
+        {
+          "file": "src/cg/smells/plan.ts",
+          "line": 62
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:FunctionFacts",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "FunctionFacts",
+      "uses": [
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 17
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:ModuleFacts",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 15,
+      "name": "ModuleFacts",
+      "uses": [
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 4
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 48
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:DirectoryFacts",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 22,
+      "name": "DirectoryFacts",
+      "uses": [
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:RuleContext",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 27,
+      "name": "RuleContext",
+      "uses": [
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:RawSmell",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 34,
+      "name": "RawSmell",
+      "uses": [
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:Rule",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 41,
+      "name": "Rule",
+      "uses": [
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 202
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:constant:RULES",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 49,
+      "name": "RULES",
+      "uses": [
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 5
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 35
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 65
+        },
+        {
+          "file": "src/cg/smells/evaluate.ts",
+          "line": 81
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 204
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 207
+        }
+      ]
+    },
+    {
+      "file": "src/cg/smells/rules.ts",
+      "id": "src/cg/smells/rules.ts:type-alias:SmellKind",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 204,
+      "name": "SmellKind",
+      "uses": [
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 206
+        },
+        {
+          "file": "src/cg/smells/rules.ts",
+          "line": 207
+        }
+      ]
+    },
+    {
+      "file": "src/misc/shapes.ts",
+      "id": "src/misc/shapes.ts:constant:table",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 38,
+      "name": "table",
+      "uses": []
+    },
+    {
+      "file": "src/misc/shapes.ts",
+      "id": "src/misc/shapes.ts:class:Store",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 49,
+      "name": "Store",
+      "uses": [
+        {
+          "file": "src/misc/shapes.ts",
+          "line": 51
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:type-alias:FieldBuilder",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 1,
+      "name": "FieldBuilder",
+      "uses": [
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 2
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:type-alias:Fields",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 2,
+      "name": "Fields",
+      "uses": [
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 3
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:type-alias:TypeOptions",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "TypeOptions",
+      "uses": [
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 4
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:type-alias:Ref",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 4,
+      "name": "Ref",
+      "uses": [
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 6
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 7
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 8
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:constant:builder",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 5,
+      "name": "builder",
+      "uses": [
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 12
+        },
+        {
+          "file": "src/pothos/refs.ts",
+          "line": 13
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 1
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 19
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 23
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 27
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 31
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:constant:Project",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 12,
+      "name": "Project",
+      "uses": [
+        {
+          "file": "src/pothos/types.ts",
+          "line": 1
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 12
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 19
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 23
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 27
+        }
+      ]
+    },
+    {
+      "file": "src/pothos/refs.ts",
+      "id": "src/pothos/refs.ts:constant:Open",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 13,
+      "name": "Open",
+      "uses": [
+        {
+          "file": "src/pothos/types.ts",
+          "line": 1
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 38
+        },
+        {
+          "file": "src/pothos/types.ts",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "file": "src/resume/limits.ts",
+      "id": "src/resume/limits.ts:constant:MAX_RESUME_ATTEMPTS",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 1,
+      "name": "MAX_RESUME_ATTEMPTS",
+      "uses": [
+        {
+          "file": "src/resume/resume.ts",
+          "line": 1
+        },
+        {
+          "file": "src/resume/resume.ts",
+          "line": 38
+        },
+        {
+          "file": "src/resume/resume.ts",
+          "line": 56
+        }
+      ]
+    },
+    {
+      "file": "src/resume/limits.ts",
+      "id": "src/resume/limits.ts:constant:RESUME_BACKOFF_MAX_S",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 2,
+      "name": "RESUME_BACKOFF_MAX_S",
+      "uses": [
+        {
+          "file": "src/resume/resume.ts",
+          "line": 1
+        },
+        {
+          "file": "src/resume/resume.ts",
+          "line": 39
+        },
+        {
+          "file": "src/resume/resume.ts",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "file": "src/resume/resume.ts",
+      "id": "src/resume/resume.ts:type-alias:Decision",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 3,
+      "name": "Decision",
+      "uses": [
+        {
+          "file": "src/resume/resume.ts",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/define-rpc.ts",
+      "id": "src/rpc/define-rpc.ts:interface:Spec",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 1,
+      "name": "Spec",
+      "uses": [
+        {
+          "file": "src/rpc/define-rpc.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:WorkerEntrypoint",
+      "isExported": false,
+      "isTest": false,
+      "kind": "class",
+      "line": 1,
+      "name": "WorkerEntrypoint",
+      "uses": [
+        {
+          "file": "src/rpc/entrypoints.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:DurableObject",
+      "isExported": false,
+      "isTest": false,
+      "kind": "class",
+      "line": 2,
+      "name": "DurableObject",
+      "uses": [
+        {
+          "file": "src/rpc/entrypoints.ts",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:WorkflowEntrypoint",
+      "isExported": false,
+      "isTest": false,
+      "kind": "class",
+      "line": 3,
+      "name": "WorkflowEntrypoint",
+      "uses": [
+        {
+          "file": "src/rpc/entrypoints.ts",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:PublicStore",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 5,
+      "name": "PublicStore",
+      "uses": []
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:Room",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 19,
+      "name": "Room",
+      "uses": []
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:Pipeline",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 23,
+      "name": "Pipeline",
+      "uses": []
+    },
+    {
+      "file": "src/rpc/entrypoints.ts",
+      "id": "src/rpc/entrypoints.ts:class:Plain",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 27,
+      "name": "Plain",
+      "uses": []
+    },
+    {
+      "file": "src/rpc/handler.ts",
+      "id": "src/rpc/handler.ts:constant:createProject",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 3,
+      "name": "createProject",
+      "uses": [
+        {
+          "file": "src/rpc/store.ts",
+          "line": 1
+        },
+        {
+          "file": "src/rpc/store.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/handler.ts",
+      "id": "src/rpc/handler.ts:constant:methodShaped",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 10,
+      "name": "methodShaped",
+      "uses": [
+        {
+          "file": "src/rpc/store.ts",
+          "line": 1
+        },
+        {
+          "file": "src/rpc/store.ts",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "file": "src/rpc/handler.ts",
+      "id": "src/rpc/handler.ts:constant:setupOnly",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 14,
+      "name": "setupOnly",
+      "uses": [
+        {
+          "file": "src/rpc/store.ts",
+          "line": 1
+        },
+        {
+          "file": "src/rpc/store.ts",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:type-alias:CompactionPurpose",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 26,
+      "name": "CompactionPurpose",
+      "uses": [
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 29
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 38
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 102
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 129
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 130
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 136
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 137
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 144
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 145
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:constant:COMPACTION_PURPOSE",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 29,
+      "name": "COMPACTION_PURPOSE",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 25
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1070
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1072
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1073
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:interface:CompactionOutputs",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 38,
+      "name": "CompactionOutputs",
+      "uses": [
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 137
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:constant:compactionSummarySchema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 61,
+      "name": "compactionSummarySchema",
+      "uses": []
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:interface:CompactionSummary",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 71,
+      "name": "CompactionSummary",
+      "uses": [
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 39
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 49
+        },
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 61
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:interface:CompactionPolicy",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 93,
+      "name": "CompactionPolicy",
+      "uses": [
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 118
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 26
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1001
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:type-alias:AgentCompactionConfig",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 116,
+      "name": "AgentCompactionConfig",
+      "uses": []
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:type-alias:AgentCompactRunCmd",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 128,
+      "name": "AgentCompactRunCmd",
+      "uses": [
+        {
+          "file": "src/tea/agent/compaction.ts",
+          "line": 170
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 24
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1062
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:type-alias:AgentCompactOkMsg",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 134,
+      "name": "AgentCompactOkMsg",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 23
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1062
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:type-alias:AgentCompactErrMsg",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 142,
+      "name": "AgentCompactErrMsg",
+      "uses": []
+    },
+    {
+      "file": "src/tea/agent/compaction.ts",
+      "id": "src/tea/agent/compaction.ts:type-alias:CompactInterpret",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 165,
+      "name": "CompactInterpret",
+      "uses": []
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:AgentMessage",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 85,
+      "name": "AgentMessage",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 247
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 248
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 763
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 889
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 891
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 893
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 934
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 953
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 962
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1001
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1060
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1097
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1110
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1111
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1119
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1123
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1143
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1163
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:ToolPartsOf",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 106,
+      "name": "ToolPartsOf",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1061
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1096
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1109
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:AgentPrompt",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 116,
+      "name": "AgentPrompt",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1008
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1064
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1086
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1099
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1108
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:LidPurpose",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 123,
+      "name": "LidPurpose",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 124
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 129
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 158
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 175
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 759
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 790
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 930
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 958
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1097
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1098
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1194
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1231
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1366
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1377
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1398
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:LidOutputs",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 124,
+      "name": "LidOutputs",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 130
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 158
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 760
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 790
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 931
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 959
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1194
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1231
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1366
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1377
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1398
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentState",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 127,
+      "name": "DefinedAgentState",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 149
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 194
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 220
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 319
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 487
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 799
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1193
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1230
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1392
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentResolvedState",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 148,
+      "name": "DefinedAgentResolvedState",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 609
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1393
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1394
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentCtx",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 154,
+      "name": "DefinedAgentCtx",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 189
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 198
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 213
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 224
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 485
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 606
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 764
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 967
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 968
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentMsg",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 157,
+      "name": "DefinedAgentMsg",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 187
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 195
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 211
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 221
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentCmd",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 174,
+      "name": "DefinedAgentCmd",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 188
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 196
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 222
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentInterpret",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 186,
+      "name": "DefinedAgentInterpret",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 209
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 568
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 866
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentMachine",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 193,
+      "name": "DefinedAgentMachine",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 208
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentWired",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 207,
+      "name": "DefinedAgentWired",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 614
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 705
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 747
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 766
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 772
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 846
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 848
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 955
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 970
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:RunOptionsOf",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 218,
+      "name": "RunOptionsOf",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 793
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentModel",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 246,
+      "name": "DefinedAgentModel",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 263
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 887
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:DefineAgentConfig",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 261,
+      "name": "DefineAgentConfig",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 667
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 696
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1235
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1290
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefineAgentCompaction",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 420,
+      "name": "DefineAgentCompaction",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 382
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 952
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1000
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1026
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:CompactionTriggers",
+      "isExported": false,
+      "isTest": false,
+      "kind": "interface",
+      "line": 431,
+      "name": "CompactionTriggers",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 421
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 425
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:ToolErrorContext",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 467,
+      "name": "ToolErrorContext",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 365
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentEvent",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 476,
+      "name": "DefinedAgentEvent",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 509
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1195
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1197
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1232
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:DefinedAgentRunOptions",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 484,
+      "name": "DefinedAgentRunOptions",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 607
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 608
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1175
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1176
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:InterpretOverlay",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 567,
+      "name": "InterpretOverlay",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 586
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 698
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 847
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:CellWrappers",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 577,
+      "name": "CellWrappers",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 567
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:DefinedAgentOverlay",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 585,
+      "name": "DefinedAgentOverlay",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 643
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:DefinedAgent",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 590,
+      "name": "DefinedAgent",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 643
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 668
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 699
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 774
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:interface:LidWiring",
+      "isExported": false,
+      "isTest": false,
+      "kind": "interface",
+      "line": 679,
+      "name": "LidWiring",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 697
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:type-alias:LidCoreConfig",
+      "isExported": false,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 928,
+      "name": "LidCoreConfig",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 711
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 951
+        }
+      ]
+    },
+    {
+      "file": "src/tea/agent/define-agent.ts",
+      "id": "src/tea/agent/define-agent.ts:constant:SUMMARIZE_INSTRUCTION",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 978,
+      "name": "SUMMARIZE_INSTRUCTION",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1009
+        }
+      ]
+    },
+    {
+      "file": "src/tea/devtools/msg-log.tsx",
+      "id": "src/tea/devtools/msg-log.tsx:type-alias:MsgLogEntry",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 1,
+      "name": "MsgLogEntry",
+      "uses": [
+        {
+          "file": "src/tea/devtools/msg-log.tsx",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "file": "src/tea/devtools/msg-log.tsx",
+      "id": "src/tea/devtools/msg-log.tsx:interface:MsgLogProps",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 10,
+      "name": "MsgLogProps",
+      "uses": [
+        {
+          "file": "src/tea/devtools/msg-log.tsx",
+          "line": 15
+        }
+      ]
+    },
+    {
+      "file": "src/tea/devtools/state-inspector.tsx",
+      "id": "src/tea/devtools/state-inspector.tsx:interface:StateInspectorProps",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 46,
+      "name": "StateInspectorProps",
+      "uses": [
+        {
+          "file": "src/tea/devtools/state-inspector.tsx",
+          "line": 67
+        }
+      ]
+    },
+    {
+      "file": "src/tea/extension/react.tsx",
+      "id": "src/tea/extension/react.tsx:interface:UseBackgroundRuntimeOpts",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 64,
+      "name": "UseBackgroundRuntimeOpts",
+      "uses": [
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 88
+        },
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 155
+        },
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 208
+        }
+      ]
+    },
+    {
+      "file": "src/tea/extension/react.tsx",
+      "id": "src/tea/extension/react.tsx:interface:UseBackgroundRuntimeResult",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 75,
+      "name": "UseBackgroundRuntimeResult",
+      "uses": [
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 88
+        },
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 189
+        },
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 202
+        },
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 218
+        },
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 225
+        }
+      ]
+    },
+    {
+      "file": "src/tea/extension/react.tsx",
+      "id": "src/tea/extension/react.tsx:interface:BackgroundRuntimeContext",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 148,
+      "name": "BackgroundRuntimeContext",
+      "uses": [
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 198
+        }
+      ]
+    },
+    {
+      "file": "src/tea/extension/react.tsx",
+      "id": "src/tea/extension/react.tsx:constant:PROVIDER_ERROR",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 192,
+      "name": "PROVIDER_ERROR",
+      "uses": [
+        {
+          "file": "src/tea/extension/react.tsx",
+          "line": 227
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:constant:ReducerBrand",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 49,
+      "name": "ReducerBrand",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:Branded",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 53,
+      "name": "Branded",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 1229
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 1230
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:constant:definedPortNames",
+      "isExported": false,
+      "isTest": false,
+      "kind": "constant",
+      "line": 94,
+      "name": "definedPortNames",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 121
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 493
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 496
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:PortNameCollisionError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 101,
+      "name": "PortNameCollisionError",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 494
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:RuntimeErrorPhase",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 174,
+      "name": "RuntimeErrorPhase",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 211
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:TelemetryEvent",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 193,
+      "name": "TelemetryEvent",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 207
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:TelemetrySink",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 207,
+      "name": "TelemetrySink",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:RuntimeErrorContext",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 210,
+      "name": "RuntimeErrorContext",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 220
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:OnError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 220,
+      "name": "OnError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:SupervisionStrategy",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 244,
+      "name": "SupervisionStrategy",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:Supervision",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 254,
+      "name": "Supervision",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:QuiescenceTimeoutError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 278,
+      "name": "QuiescenceTimeoutError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:DriveFailedError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 299,
+      "name": "DriveFailedError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:DriveStalledError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 325,
+      "name": "DriveStalledError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:RuntimeDiscardNotice",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 352,
+      "name": "RuntimeDiscardNotice",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 369
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 401
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 426
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 456
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:RuntimeDiscardedError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 369,
+      "name": "RuntimeDiscardedError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:IdentityDropNotice",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 401,
+      "name": "IdentityDropNotice",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:DisposeTimeoutNotice",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 426,
+      "name": "DisposeTimeoutNotice",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:DispatchDiscardedError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 456,
+      "name": "DispatchDiscardedError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:Store",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 524,
+      "name": "Store",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 21
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 487
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 623
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 650
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 656
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 846
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:Migrated",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 534,
+      "name": "Migrated",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 527
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 724
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 725
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:Refusal",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 540,
+      "name": "Refusal",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 534
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 556
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 557
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:StoreRefusedError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 569,
+      "name": "StoreRefusedError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:FencedRead",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 602,
+      "name": "FencedRead",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 627
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:FencedStore",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 623,
+      "name": "FencedStore",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 656
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:DeletableStore",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 650,
+      "name": "DeletableStore",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:class:StoreConflictError",
+      "isExported": true,
+      "isTest": false,
+      "kind": "class",
+      "line": 669,
+      "name": "StoreConflictError",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:Schema",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 708,
+      "name": "Schema",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 722
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:DispatchSettle",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 748,
+      "name": "DispatchSettle",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 769
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 893
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:RuntimeRef",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 757,
+      "name": "RuntimeRef",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 891
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:RunHandle",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 797,
+      "name": "RunHandle",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 826
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 866
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 892
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:BootedRunHandle",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 822,
+      "name": "BootedRunHandle",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 816
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 829
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:RunOptions",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 837,
+      "name": "RunOptions",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 865
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:EngineRun",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 856,
+      "name": "EngineRun",
+      "uses": []
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:BootingRuntime",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 887,
+      "name": "BootingRuntime",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 21
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1192
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 1229
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 976
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:Runtime",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 972,
+      "name": "Runtime",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 957
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 984
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:MachineTypes",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 1088,
+      "name": "MachineTypes",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 1111
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 1124
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:type-alias:CtxArg",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 1243,
+      "name": "CtxArg",
+      "uses": [
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 21
+        },
+        {
+          "file": "src/tea/agent/define-agent.ts",
+          "line": 484
+        },
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 844
+        }
+      ]
+    },
+    {
+      "file": "src/tea/runtime-types.ts",
+      "id": "src/tea/runtime-types.ts:interface:FoldRefusal",
+      "isExported": true,
+      "isTest": false,
+      "kind": "interface",
+      "line": 1438,
+      "name": "FoldRefusal",
+      "uses": [
+        {
+          "file": "src/tea/runtime-types.ts",
+          "line": 1464
+        }
+      ]
+    }
+  ],
   "directories": [
     {
       "dir": "src/cg",

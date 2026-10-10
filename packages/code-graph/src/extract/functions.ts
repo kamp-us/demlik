@@ -201,7 +201,7 @@ function exportNamesOf(statement: SyntaxNode): string[] {
 // `export = f`, and the declarations a function's symbol can merge with. TypeScript's
 // `isExported()` answers from the module symbol's exports, and these are the ones a top-level
 // function declaration can be reached through.
-function exportedLocalNames(syntax: SyntaxFile): ReadonlySet<string> {
+export function exportedLocalNames(syntax: SyntaxFile): ReadonlySet<string> {
   return new Set(syntax.program.body.flatMap((statement) => exportNamesOf(statement)));
 }
 
