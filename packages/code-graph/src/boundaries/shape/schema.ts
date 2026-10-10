@@ -30,7 +30,8 @@ const ReadAllowanceSchema = z.record(
 //  - `applicationShape`: the kinds that run, empty by default.
 //  - `applicationMayImport`: library types an `application/` file may import (needs B16 listed).
 //  - `pureDependencies`: package globs an `application/` file may import (needs B16 listed).
-//  - `testFiles`: globs of the files that are tests, which sit in no zone.
+//  - `testFiles`: globs of the files that are tests, matched against a file's scope-relative or
+//    repo-relative path, which sit in no zone.
 //  - `readAllowance`: per scope, the driven files a driving adapter may read through.
 export const SHAPE_KEYS = {
   applicationShape: z.array(z.enum(SHAPE_KINDS)).default([]),

@@ -1,3 +1,4 @@
+import { inScope } from "../rules.js";
 import type { BoundaryKind, BoundaryViolation } from "../violation.js";
 
 // A test file sits in no zone: it may import any file of its own feature, read the clock and use
@@ -31,9 +32,11 @@ const JUDGES_TEST_FILES = {
   "relative-import-crosses-workspace": true,
 } as const satisfies Record<BoundaryKind, boolean>;
 
-// Whether a scope-relative file matches one of the `testFiles` globs.
-export function isTestFile(tests: readonly RegExp[], file: string): boolean {
-  return tests.some((glob) => glob.test(file));
+// Whether a scope's file matches one of the `testFiles` globs, by its scope-relative path or by its
+// repo-relative one. At scope `.` the two are one path.
+export function isTestFile(tests: readonly RegExp[], scope: string, file: string): boolean {
+  const repoRelative = inScope(scope, file);
+  return tests.some((glob) => glob.test(file) || glob.test(repoRelative));
 }
 
 // What a test file is left with once the kinds that do not judge it are dropped.

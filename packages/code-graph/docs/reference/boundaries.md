@@ -173,9 +173,11 @@ B16 allows a feature's own `ports.ts` and `application/`, another feature's
 and packages matching `pureDependencies`. Type-only imports are checked.
 The two allowlist keys require B16 to be enabled.
 
-`testFiles` matches repository-relative globs. Matched tests are excluded
-from B6–B10, B13, and B15–B17; other import and ownership rules still apply.
-Globs support `**`, `*`, `?`, and `{a,b}`.
+`testFiles` globs match a file's scope-relative path or its
+repository-relative path. `src/**/*.test.ts` applies in every scope, and
+`services/*/test-support/**` in worker scopes alone. Matched tests are
+excluded from B6–B10, B13, and B15–B17; other import and ownership rules
+still apply. Globs support `**`, `*`, `?`, and `{a,b}`.
 
 ### Read allowances
 
@@ -207,7 +209,7 @@ declares read allowances, because write detection would be incomplete.
 
 | Rule | Kind | Violation |
 |---|---|---|
-| B17 | `binding-outside-driven-adapter` | A declared worker binding is referenced outside a driven adapter |
+| B17 | `binding-outside-driven-adapter` | A declared worker binding is referenced outside a driven adapter and its worker's `main` |
 | B18 | `worker-call-cycle` | Service-binding declarations form a cycle between workers |
 | B19 | `relative-import-crosses-workspace` | A relative import points into another package directory |
 
@@ -218,6 +220,14 @@ B17 reads the nearest top-level Wrangler config and recognizes `env`, `.env`
 receivers, and one alias level. Arbitrary receiver names, deeper aliases,
 and named config environments are not followed. Its census includes clean
 and violating binding sites.
+
+A worker's `main`, the file its Wrangler config names, is clean for that
+worker's own bindings: it is where they are wired to the driven adapters,
+whether or not it sits in a feature and whether or not `bindingOwners` names
+the binding. Every other file still needs a driven adapter. A config
+with no `main`, or a `main` that names no file the scope loads, cleans
+nothing. A file under a nested worker's directory is judged against that
+worker, so it is clean only when that worker's config names it.
 
 B18 runs only at the repository root and uses service declarations, including
 unused bindings. Self-bindings are ignored. Durable Object and Workflow

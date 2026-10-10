@@ -176,9 +176,9 @@ const SHAPE_FIX_LINES = [
 ];
 
 const DEPLOYABLE_FIX_LINES = [
-  "  Use a worker binding only in a feature's adapters/driven/ (`bindingOwners` narrows one to exact",
-  "  files), break a loop of workers that bind each other, and reach another workspace by its",
-  "  package name, never a relative path.",
+  "  Use a worker binding only in a feature's adapters/driven/ or in its worker's wrangler main",
+  "  (`bindingOwners` narrows one to exact driven files), break a loop of workers that bind each",
+  "  other, and reach another workspace by its package name, never a relative path.",
 ];
 
 // What each advice adds to the lines every failure prints, in the order they print.
