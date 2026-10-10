@@ -26,7 +26,7 @@ Source: [project exports](../../src/project.ts).
 
 ## Resolve
 
-`@demlik/code-graph/resolve` exports `loadInProcessGraph` and the types
+`@demlik/code-graph/resolve` exports `loadInProcessGraph`, `moduleSymbolOf` and the types
 `InProcessGraph`, `InProcessGraphOptions`, `ExportOrigin`, `ExportDeclaration`,
 `SubpathEntries`, and `SubpathExport`.
 
@@ -64,6 +64,12 @@ One tsgo session opens on the first lookup and is reused. Each lookup gets
 its own program. `dispose()` releases the session; create a new handle for
 later lookups.
 
+`moduleSymbolOf(program, moduleFile)` is the step under `resolveModuleExport`:
+the module symbol a file declares in an open tsgo program, or `undefined`. It
+is exported for the published-API view below, which asks the same step; its
+`program` argument is code-graph's own tsgo wrapper, so most callers want
+`resolveModuleExport` instead.
+
 Example, run in this checkout's `packages/code-graph` directory after building:
 
 ```ts
@@ -94,6 +100,40 @@ try {
 ```
 
 Source: [resolver](../../src/resolve.ts).
+
+## API
+
+`@demlik/code-graph/api` is the library side of `--api` (see the
+[CLI reference](cli.md#published-api)). It exports:
+
+| Export | Result |
+|---|---|
+| `readPublishedApi(root, map, options?)` | `Promise<PublishedApi>`: per subpath, every published name with its text and references |
+| `ApiMapSchema` | The zod schema an API map is parsed through |
+| `ApiInputError` | Thrown for every input the CLI refuses with exit 2, with the same message |
+
+and the types `ApiMap`, `ApiEntryText`, `PublishedApi` and
+`PublishedApiOptions`.
+
+`root` is the package root and resolves against the working directory. `map`
+is the API map, `{ "<subpath>": { entry, tier? } }`, parsed through
+`ApiMapSchema` before use. `options` is `{ repoRoot?, warn? }`: `repoRoot`
+defaults to `findRepoRoot(root)`, and `warn` receives the one warning line for
+an emit with diagnostics (stderr by default). The emit runs in a temp folder
+outside the checkout and is removed before the promise settles.
+
+```ts
+import { readPublishedApi } from "@demlik/code-graph/api";
+
+const api = await readPublishedApi("packages/tea", {
+  ".": { entry: "src/index.ts", tier: "stable" },
+  "./testing": { entry: "src/testing/index.ts", tier: "stable" },
+});
+api.subpaths["./testing"]?.names.expectCmdEmitted?.text;
+// "export declare function expectCmdEmitted<S, M extends {\n    type: string;\n}, …>(…): void;"
+```
+
+Source: [API exports](../../src/api.ts).
 
 ## SCC
 

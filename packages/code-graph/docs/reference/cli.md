@@ -56,6 +56,48 @@ the field is absent, and the output is unchanged.
 - A node with no body, such as an `interface` accessor, runs to its end without
   the closing `;` or `,`.
 
+## Published API
+
+`--api <map>` prints what a package publishes, per export subpath, as a
+consumer's types see it. `<directory>` is the package root. `<map>` is a JSON
+file the caller writes:
+
+```json
+{
+  ".": { "entry": "src/index.ts", "tier": "stable" },
+  "./testing": { "entry": "src/testing/index.ts" }
+}
+```
+
+Each key is a subpath. `entry` is its source file, relative to the package
+root. `tier` is optional and any non-empty string; it is copied to the output
+and never read. code-graph reads no `package.json` `exports` and no build
+config: only the caller knows which source file a subpath comes from.
+
+The mode runs the pinned tsgo with declaration-only emit into a temp folder
+outside the checkout, using the tsconfig the package scope picks, and removes
+the folder before it exits. A type error does not stop the emit; tsgo's
+diagnostic count goes to stderr as one warning line. It prints a
+`PublishedApi` JSON object with sorted keys: the package `root`, the tsgo
+`compiler` version, and per subpath its `entry`, `tier` (`null` when absent)
+and `names`. Each name has its declaration `text` as emitted, without
+comments, and `references`: the text of every declaration it reaches that the
+subpath does not publish, keyed `<emitted file>#<declared name>`. A change to
+a private type therefore changes the published name that uses it.
+
+| Flags | Prints | Exit |
+|---|---|---|
+| `--api <map>` | `PublishedApi` JSON | 0, 2 |
+
+`--api` combines only with `--json`, `--pretty` and `--out`. Exit 2, with one
+stderr line and nothing on stdout, for any other flag beside it, a map that is
+not JSON or fails the schema (an unknown key, no subpath, an empty `entry` or
+`tier`, an entry that is not a `.ts`, `.tsx`, `.mts` or `.cts` file, lies
+outside the package or does not exist), no tsconfig, tsgo failing to start,
+or an entry with no emitted file. Without `--api` no emit runs and every other
+output is unchanged. The full contract, with an example, is
+[SPEC.md §13](../../SPEC.md).
+
 ## Analysis options
 
 | Flag | Analysis |
@@ -188,4 +230,4 @@ The option parser also rejects unknown flags. Check stderr for the specific
 error and for scope warnings.
 
 Source: [CLI options](../../src/cli.ts), [mode selection](../../src/index.ts),
-[file discovery](../../src/extract/project.ts).
+[file discovery](../../src/extract/project.ts), [published API](../../src/api/cli.ts).

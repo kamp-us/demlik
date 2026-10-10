@@ -24,7 +24,11 @@ const expected = {
     "rekeyBoundaryLedger",
     "rekeyBoundaryLedgerFile",
   ],
+  "@demlik/code-graph/api": ["readPublishedApi", "ApiInputError"],
 };
+
+// Exports that are values but not functions: the zod schemas a caller parses through.
+const schemas = { "@demlik/code-graph/api": ["ApiMapSchema"] };
 
 // Removed from ./project in #397 with ts-morph: the loaders returned ts-morph's Project.
 const removed = { "@demlik/code-graph/project": ["loadEdgeProject", "loadCheapProject"] };
@@ -50,6 +54,10 @@ for (const [specifier, names] of Object.entries(expected)) {
   }
   for (const name of names) {
     if (typeof mod[name] !== "function") failures.push(`${specifier}: no function export ${name}`);
+  }
+  for (const name of schemas[specifier] ?? []) {
+    if (typeof mod[name]?.safeParse !== "function")
+      failures.push(`${specifier}: no schema export ${name}`);
   }
   for (const name of removed[specifier] ?? []) {
     if (name in mod) failures.push(`${specifier}: still exports ${name}`);
