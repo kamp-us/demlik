@@ -7,6 +7,7 @@ export default defineConfig({
     project: "src/project.ts",
     scc: "src/scc.ts",
     boundaries: "src/boundaries/ledger.ts",
+    api: "src/api.ts",
   },
   format: ["esm"],
   dts: true,
