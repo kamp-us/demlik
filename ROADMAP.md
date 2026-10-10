@@ -62,6 +62,16 @@ lists; Tuval wrote it by hand and hit all three. This campaign ships plain-funct
 supervisor and no registry, so #312 stands. It ends when #556 ships. Declared and started
 2026-10-04.
 
+**Code facts for agents** (#7). Before an agent changes code it asks plain questions: where is
+this name declared, what is its signature as written, who uses it, and which export subpath
+publishes it. tea-fabrika's facts step (usirin/tea-fabrika) asks them of `@demlik/code-graph` for
+every name a ticket mentions, and today falls back to `git grep` and throwaway probe files because
+the graph only holds functions. This campaign closes those gaps: declaration nodes for types,
+classes and constants with their uses (#599), each declaration's header as written, overloads
+included (#600), and asking a module what it exports without a probe file (#601). Each ships on
+its own. It ends when all three ship and the facts step drops its workarounds. Declared and
+started 2026-10-10.
+
 | Campaign | Milestone | State |
 |---|---|---|
 | Tuval on tea | #2 | done |
@@ -69,6 +79,7 @@ supervisor and no registry, so #312 stands. It ends when #556 ships. Declared an
 | Code coordinates | #4 | active |
 | tea docs sweep | #5 | active |
 | Child machine helpers | #6 | active |
+| Code facts for agents | #7 | active |
 
 ## Dependencies
 
