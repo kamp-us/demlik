@@ -175,4 +175,55 @@ describe("resolvePublishingSubpaths", () => {
     }
     expect(graph.resolvePublishingSubpaths(absoluteEntries(), "hidden")).toEqual([]);
   });
+
+  it("names a missing entry file as unresolvable for every name, and leaves the others as they were", () => {
+    const graph = load();
+    const missing = path.join(root, "src/moved/index.ts");
+    const broken = { ...absoluteEntries(), "./testing": missing };
+    for (const name of [...names, "absent"]) {
+      const correct = graph.resolvePublishingSubpaths(absoluteEntries(), name);
+      const answers = graph.resolvePublishingSubpaths(broken, name);
+      expect(answers).toContainEqual({
+        subpath: "./testing",
+        given: missing,
+        entry: missing,
+        unresolvable: "missing-entry-file",
+      });
+      expect(answers.filter((answer) => answer.subpath !== "./testing")).toEqual(
+        correct.filter((answer) => answer.subpath !== "./testing"),
+      );
+    }
+    expect(graph.resolvePublishingSubpaths(broken, "Box")).toEqual([
+      {
+        subpath: "./testing",
+        given: missing,
+        entry: missing,
+        unresolvable: "missing-entry-file",
+      },
+    ]);
+  });
+
+  it("resolves a relative entry against the working directory, as its absolute form", () => {
+    const graph = load();
+    const relativeEntries = Object.fromEntries(
+      Object.entries(absoluteEntries()).map(([subpath, file]) => [
+        subpath,
+        path.relative(process.cwd(), file),
+      ]),
+    );
+    for (const name of names)
+      expect(graph.resolvePublishingSubpaths(relativeEntries, name)).toEqual(
+        graph.resolvePublishingSubpaths(absoluteEntries(), name),
+      );
+
+    const relativeMissing = path.relative(process.cwd(), path.join(root, "src/moved/index.ts"));
+    expect(graph.resolvePublishingSubpaths({ "./moved": relativeMissing }, "plain")).toEqual([
+      {
+        subpath: "./moved",
+        given: relativeMissing,
+        entry: path.join(root, "src/moved/index.ts"),
+        unresolvable: "missing-entry-file",
+      },
+    ]);
+  });
 });

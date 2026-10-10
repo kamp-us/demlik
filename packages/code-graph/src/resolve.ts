@@ -22,6 +22,18 @@ export interface SubpathExport {
   readonly declaration: ExportDeclaration;
 }
 
+// A map entry whose source file does not exist, so nothing can be said about what it publishes.
+// `given` is the path as the caller wrote it; `entry` is that path made absolute.
+export interface UnresolvableSubpath {
+  readonly subpath: string;
+  readonly given: string;
+  readonly entry: string;
+  readonly unresolvable: "missing-entry-file";
+}
+
+// Narrow with `"unresolvable" in result`. A correct map yields only `SubpathExport` values.
+export type SubpathAnswer = SubpathExport | UnresolvableSubpath;
+
 // The caller's own subpath-to-source map, e.g. `{ ".": "src/index.ts", "./testing":
 // "src/testing/index.ts" }`. An export map points at build output, and only the build config knows
 // which source file each entry comes from, so the resolver never guesses that layout.
@@ -32,7 +44,7 @@ export type SubpathEntries = Readonly<Record<string, string>>;
 export interface InProcessGraph {
   resolveExportOrigin(fromFile: string, specifier: string, exportName: string): ExportOrigin | null;
   resolveModuleExport(moduleFile: string, exportName: string): ExportDeclaration | null;
-  resolvePublishingSubpaths(entries: SubpathEntries, exportName: string): readonly SubpathExport[];
+  resolvePublishingSubpaths(entries: SubpathEntries, exportName: string): readonly SubpathAnswer[];
   dispose(): void;
 }
 
@@ -187,11 +199,12 @@ export function loadInProcessGraph(
     },
     resolveModuleExport,
     resolvePublishingSubpaths(entries, exportName) {
-      return Object.entries(entries).flatMap(([subpath, entryFile]) => {
-        const declaration = resolveModuleExport(entryFile, exportName);
-        return declaration === null
-          ? []
-          : [{ subpath, entry: path.resolve(entryFile), declaration }];
+      return Object.entries(entries).flatMap(([subpath, given]): SubpathAnswer[] => {
+        const entry = path.resolve(given);
+        if (!fs.existsSync(entry))
+          return [{ subpath, given, entry, unresolvable: "missing-entry-file" }];
+        const declaration = resolveModuleExport(entry, exportName);
+        return declaration === null ? [] : [{ subpath, entry, declaration }];
       });
     },
     dispose: () => session.dispose(),
