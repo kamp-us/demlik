@@ -15,7 +15,12 @@ import {
 import { renderData } from "./data/render.js";
 import { loadEnvKeyReport } from "./env-keys/query.js";
 import type { AnalysisOptions } from "./extract/analysis.js";
-import { assembleGraph, assembleGraphWithEdges, type DataOptions } from "./extract/assemble.js";
+import {
+  assembleGraph,
+  assembleGraphWithEdges,
+  type DataOptions,
+  type NodeFields,
+} from "./extract/assemble.js";
 import {
   type EdgeScope,
   findRepoRoot,
@@ -181,6 +186,7 @@ defineProgram()
 
     const data: DataOptions | null =
       opts.data === true ? { repoRoot: findRepoRoot(rootAbsolute) } : null;
+    const fields: NodeFields = { headers: opts.headers === true };
 
     let graph: Graph;
     if (wantEdges) {
@@ -211,9 +217,10 @@ defineProgram()
         loaded.tsConfigPath,
         analysis,
         data,
+        fields,
       );
     } else {
-      graph = assembleGraph(loadCheapProject(rootAbsolute), thresholds, data);
+      graph = assembleGraph(loadCheapProject(rootAbsolute), thresholds, data, fields);
     }
 
     if (opts.ci === true) {

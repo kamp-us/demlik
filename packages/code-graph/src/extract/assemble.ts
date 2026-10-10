@@ -16,6 +16,7 @@ import { couplingByFile } from "../smells/coupling.js";
 import { compareFlatSmells, smellsForFunction, smellsForModule } from "../smells/evaluate.js";
 import { healthBand } from "../smells/health.js";
 import { rankPlan } from "../smells/plan.js";
+import { functionHeader } from "../syntax/headers.js";
 import { importDeclarationSpecifiers, resolveImports } from "../syntax/imports.js";
 import {
   type AnalysisBundle,
@@ -40,11 +41,17 @@ type EdgeBundle = {
   tsConfig: string;
 };
 
+// The opt-in fields a function node carries only when a run asks for them.
+export type NodeFields = { readonly headers: boolean };
+
+const DEFAULT_NODE_FIELDS: NodeFields = { headers: false };
+
 function buildFunctionNodes(
   fns: DiscoveredFunction[],
   thresholds: Thresholds,
   edges: EdgeBundle | null,
   analysis: AnalysisBundle | null,
+  fields: NodeFields,
 ): FunctionNode[] {
   return fns.map((d) => {
     const m = computeFunctionMetrics(d);
@@ -73,6 +80,7 @@ function buildFunctionNodes(
     };
     fn.nodeKind = analysis?.classify?.(fn) ?? null;
     fn.smells = smellsForFunction(fn, thresholds);
+    if (fields.headers) fn.header = functionHeader(d.unit.syntax, d.node);
     return fn;
   });
 }
@@ -186,12 +194,13 @@ function build(
   discovered: DiscoveredFunction[] | null,
   analysis: AnalysisBundle | null,
   data: DataOptions | null,
+  fields: NodeFields,
 ): Graph {
   const { rootAbsolute, sourceFiles, parseFailures } = loaded;
   const root = path.relative(process.cwd(), rootAbsolute) || ".";
 
   const fns = discovered ?? discoverFunctions(sourceFiles).functions;
-  const functions = buildFunctionNodes(fns, thresholds, edges, analysis);
+  const functions = buildFunctionNodes(fns, thresholds, edges, analysis, fields);
   const modules = buildModuleNodes(loaded, edges, functions);
   attachModuleSmells(modules, thresholds, edges, rootAbsolute);
   const directories: DirectoryNode[] = buildDirectories(modules, thresholds);
@@ -238,8 +247,9 @@ export function assembleGraph(
   loaded: LoadedProject,
   thresholds: Thresholds,
   data: DataOptions | null = null,
+  fields: NodeFields = DEFAULT_NODE_FIELDS,
 ): Graph {
-  return build(loaded, thresholds, null, null, null, data);
+  return build(loaded, thresholds, null, null, null, data, fields);
 }
 
 function reportUnjoined(unjoined: readonly string[]): void {
@@ -258,6 +268,7 @@ export function assembleGraphWithEdges(
   tsConfig: string,
   options: AnalysisOptions | null = null,
   data: DataOptions | null = null,
+  fields: NodeFields = DEFAULT_NODE_FIELDS,
 ): Graph {
   const { rootAbsolute, sourceFiles } = loaded;
   const { functions } = discoverFunctions(sourceFiles);
@@ -280,7 +291,15 @@ export function assembleGraphWithEdges(
             functions,
             ...analysisInputs(functions),
           });
-    return build(loaded, thresholds, { result, scope, tsConfig }, functions, analysis, data);
+    return build(
+      loaded,
+      thresholds,
+      { result, scope, tsConfig },
+      functions,
+      analysis,
+      data,
+      fields,
+    );
   } finally {
     ctx.close();
   }

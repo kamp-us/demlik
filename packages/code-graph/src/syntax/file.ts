@@ -63,6 +63,7 @@ export class SyntaxFile {
   private readonly parents = new Map<Node, Node>();
   private readonly childCache = new Map<Node, readonly Node[]>();
   private triviaCache: Trivia | null = null;
+  private commentStartsByEnd: Map<number, number> | null = null;
 
   constructor(
     readonly text: string,
@@ -86,6 +87,12 @@ export class SyntaxFile {
   get trivia(): Trivia {
     this.triviaCache ??= new Trivia(this.text, this.comments);
     return this.triviaCache;
+  }
+
+  // Where the comment that ends exactly at `position` starts, or `null` when none does.
+  commentStartEndingAt(position: number): number | null {
+    this.commentStartsByEnd ??= new Map(this.comments.map((c) => [c.end, c.start]));
+    return this.commentStartsByEnd.get(position) ?? null;
   }
 
   parentOf(node: Node): Node | undefined {
