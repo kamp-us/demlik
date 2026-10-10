@@ -95,11 +95,17 @@ defineProgram()
       process.stdout.write(payload);
     };
 
+    if (typeof opts.apiBase === "string" && typeof opts.api !== "string") {
+      cleanExit("--api-base needs --api <map>");
+      return;
+    }
+
     if (typeof opts.api === "string") {
       const given = Object.keys(opts).filter((key) => command.getOptionValueSource(key) === "cli");
       void runApiView({
         rootAbsolute,
         mapFile: opts.api,
+        base: opts.apiBase,
         given,
         pretty,
         emit,
