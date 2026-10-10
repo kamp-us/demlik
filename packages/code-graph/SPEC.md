@@ -21,6 +21,7 @@ When sent to refactor folder `X`, the agent's first moves are Bash calls, not Re
 | One file's functions + line ranges | `code-graph X --file <f>` |
 | Blast radius before changing a signature (intra-package) | `code-graph X --blast <id>` |
 | **Cross-package** blast radius (before changing a shared export) | `code-graph X --blast <id> --deep` |
+| Where a name is declared, whether it is exported, who uses it (any kind) | `code-graph X --find <name>` |
 | Full graph (rarely — large) | `code-graph X --graph` |
 | Comment census — how much comment, of what kind, where | `code-graph X --comments` |
 | Comment ratio ratchet (a gate) | `code-graph . --comments --ci` |
@@ -34,7 +35,7 @@ When sent to refactor folder `X`, the agent's first moves are Bash calls, not Re
   1. **Cheap pass** — every visible source file parsed by oxc, **no tsconfig**, syntax only. Fills `name, file, lines, loc, commentLines, nestingDepth, complexity, imports`. No checker is started, so this is fast. `provenance.pass = "cheap"`.
   2. **Edge pass** — the target's nearest tsconfig drives module resolution (oxc-resolver) and a tsgo program over that tsconfig's files plus every loaded file. Resolves `calls[]`; `calledBy[]` is derived by **inverting** `calls[]` (never `findReferences`, which forces the whole monorepo into RAM). `provenance.pass = "edges"`. `--boundaries` reads only the import edges and each file's syntax tree (for the world doors it uses by name, the modules it runs, when a deployable kind is listed the worker bindings it references, when B15 is listed the first form of an entry file that is not a named re-export, and when a read allowance is declared the first data write of each driven file it lists) and, for a deployable kind or a read allowance, the wrangler configs, read once, so it never starts tsgo.
 
-**The edge pass is opt-in.** Only `calls`/`calledBy`/`importedBy`/`callChainDepth` and the smells `high-fan-in` + `deep-call-chain` require it. It runs when **any** of these is passed: `--blast <id>` (required — blast radius is a callers query), `--deep` (implies edges + monorepo scope), or `--edges` (opt-in; makes summary/plan/smells/graph include edge data + edge smells). With no flag the run stays cheap/fast (cheap-pass smells only, plus `directory-sprawl` which needs no type info — see §8-C4).
+**The edge pass is opt-in.** Only `calls`/`calledBy`/`importedBy`/`callChainDepth`, declaration `uses` (C6) and the smells `high-fan-in` + `deep-call-chain` require it. It runs when **any** of these is passed: `--blast <id>` (required — blast radius is a callers query), `--find <name>` (its answer carries uses), `--deep` (implies edges + monorepo scope), or `--edges` (opt-in; makes summary/plan/smells/graph include edge data + edge smells). With no flag the run stays cheap/fast (cheap-pass smells only, plus `directory-sprawl` which needs no type info — see §8-C4).
 - **Node→id map.** Function enumeration (A1) runs on oxc's tree; the edge pass joins each function to its node in tsgo's tree by TypeScript start position and node kind, once, and every rule that reads a symbol resolves through that `tsgo Node → FunctionNode.id` map (C1).
 - **Determinism:** **every** array in the output is sorted by a total order and deduped; JSON is serialized with sorted object keys. No `Date`, no random. Same input → same bytes. (Sort keys per array type in §6/§8.)
 
@@ -62,6 +63,10 @@ packages/code-graph/
       metrics.ts          ONE AST walk per function: loc, commentLines, nestingDepth, complexity (B)
       edges.ts            calls[] resolve (C1) → invert to calledBy (C2); imports/importedBy; call-chain (C5)
       directories.ts      group files by directory (C4)
+    declarations/
+      discover.ts         enumerate top-level declarations (A1's second set) on oxc's tree
+      uses.ts             join them to tsgo's tree and resolve their uses (C6)
+      find.ts             --find: every function and declaration node of one bare name
     engine/     the seam: oxc.ts (oxc-parser + oxc-resolver), tsgo.ts (the one tsgo import), seam.test.ts
     syntax/     file.ts (oxc's tree, parents, TypeScript-shaped children, lines), trivia.ts (TypeScript's
                 comment ranges), imports.ts (import literals and their resolution)
@@ -154,6 +159,27 @@ type ModuleNode = {
   smells: Smell[];
 };
 
+type DeclarationKind = "type-alias" | "interface" | "enum" | "class" | "constant";
+//  ^ never a FunctionKind, so a kind alone says which node set a node belongs to.
+
+type UseSite = { file: string; line: number };
+
+type DeclarationNode = {
+  id: string;            // `${file}:${kind}:${name}`; a same-kind, same-name repeat in one file (a merged
+                         //   interface or enum) appends `#${ordinal}` in source order. The `kind:` segment
+                         //   keeps it apart from every FunctionNode id and from a merged partner of
+                         //   another kind (`interface Foo` + `const Foo`).
+  name: string;          // `default` for an anonymous `export default class`
+  kind: DeclarationKind;
+  file: string;          // relative to the analyzed root
+  line: number;          // the line of the declaration's first token (`export` included; for a
+                         //   constant past its statement's first declarator, its own name)
+  isExported: boolean;
+  isTest: boolean;
+  uses: UseSite[] | null; // C6; edge pass only. `null` = the edge pass did not run (or the node did
+                          //   not join tsgo's tree), never `[]`, which reads as measured-unused
+};
+
 type DirectoryNode = {
   dir: string;           // directory relative to the analyzed root
   fileCount: number;
@@ -210,6 +236,8 @@ type Graph = {
   // D1 / Durable Object / KV / R2 / queue binding (docs/reference/analyses.md#storage-access).
   data: DataReport | null;
   functions: FunctionNode[];
+  declarations: DeclarationNode[]; // A1's second set; sorted by (file, line, kind, id). In every
+                                   //   graph, cheap or edge; no summary, plan or smell reads it
   modules: ModuleNode[];
   directories: DirectoryNode[];
   smells: Smell[];                 // flattened, all smells
@@ -230,8 +258,12 @@ type Graph = {
 
 ## 6. Extraction semantics
 
-### A1 — what counts as a "function" (LOCKED: named callables only)
-Include: function declarations, class methods, constructors, get/set accessors, and arrow / function-expressions **assigned to a name** (variable, property, default export). **Exclude** anonymous inline callbacks (`arr.map(x => …)`) from the function list — but still count their nodes toward the **enclosing** function's `nestingDepth` and `complexity`. **Also exclude overload signatures and ambient/bodyless declarations** (`node.isOverload()` or `!node.hasBody()` on a `FunctionDeclaration`/`MethodDeclaration`): only the **implementation** (the one with a body) is enumerated, so a caller resolves to the real function — not to a phantom `loc:1` first signature — and calls to ambient stubs become honest `external:*`. One `forEachDescendant` pass switching on `node.getKind()`. Record each node in the node→id map (§3).
+### A1 — what gets a node
+Two node sets, widened from "named callables only" on the founder's ruling (https://github.com/kamp-us/demlik/issues/599#issuecomment-6102379297): function nodes exactly as below, and declaration nodes for the top-level declarations that are not functions.
+
+**Declaration nodes (`DeclarationNode`, §5).** One per **top-level** statement of a loaded file (a direct child of the file, or of its `export` / `export default` wrapper) of kind: type alias (`type-alias`), interface (`interface`), enum and `const enum` (`enum`), class and abstract class (`class`), and each `const` declarator whose binding is a plain identifier (`constant`). A `declare` form counts as its plain form (`declare class`, `declare const`). Not a node: a `const` bound directly to an arrow or function expression (it is already a function node, so no name gets two), a destructured `const`, `let` / `var` / `using`, anything inside a function, class, `namespace` / `module` or `declare global` block, `export default <expression>`, and a function or overload signature (functions are the other set). Merged declarations stay one node each (`interface Foo` twice; `interface Foo` + `const Foo`). `isExported` is true when the statement carries `export` / `export default` or the file exports the name from its own top level (`export { Foo }`, `export default Foo`, `export = Foo`). Discovery is syntax only and runs in the cheap pass; uses are C6's. No metrics, smells, or header text.
+
+**Function nodes.** Include: function declarations, class methods, constructors, get/set accessors, and arrow / function-expressions **assigned to a name** (variable, property, default export). **Exclude** anonymous inline callbacks (`arr.map(x => …)`) from the function list — but still count their nodes toward the **enclosing** function's `nestingDepth` and `complexity`. **Also exclude overload signatures and ambient/bodyless declarations** (`node.isOverload()` or `!node.hasBody()` on a `FunctionDeclaration`/`MethodDeclaration`): only the **implementation** (the one with a body) is enumerated, so a caller resolves to the real function — not to a phantom `loc:1` first signature — and calls to ambient stubs become honest `external:*`. One `forEachDescendant` pass switching on `node.getKind()`. Record each node in the node→id map (§3).
 
 ### A2 — name resolution
 - Named node → its name.
@@ -271,6 +303,7 @@ Deterministic. Default axis `--by rot`: sort descending by `(1) smells.length, (
 | **C3 scope** | **Default `package`:** load target folder's nearest `tsconfig.json`; `calledBy` complete within that package. **`--deep`:** load whole monorepo (root tsconfig) for cross-package `calledBy`. `--deep` parses + type-resolves every workspace file: expect tens of seconds and high RAM on this monorepo; it is the heavy path, used on demand only. |
 | **C4 directory-sprawl** | Group source files by their **directory** (`dirname` of the analyzed-root-relative path). No naming convention. `DirectoryNode.fileCount`/`functionCount` per dir. (Replaces the unbuildable entity-based grouping.) **Cheap-pass:** this only needs the file list grouped by directory — no type info — so directories are built and the `directory-sprawl` smell is evaluated in the default (cheap) pass, not the edge pass. |
 | **C5 callChainDepth** | Longest path in the call graph through this node, on the **callees** side. Cycles (recursion / mutual recursion) are collapsed via **strongly-connected-component condensation**, then longest path is computed on the resulting DAG in topological order, O(V+E). `external:*` nodes are excluded from the chain. A node inside a cycle inherits its SCC's collapsed depth. |
+| **C6 declaration uses** | Edge pass only (`DeclarationNode.uses` is `null` in the cheap pass). Each declaration node joins tsgo's tree by `(kind, name, ordinal of that pair in source order)` over the file's top-level statements, read the same way on both sides; one that does not join keeps `uses: null` and is named in a stderr warning. A **use** is any identifier in a loaded file whose symbol — after following import and export aliases to the end (`getAliasedSymbol`), and for a `{ X }` shorthand property the value it reads — has the declaration among its declarations, except the declaration's own name. So import and re-export specifiers count (`import { X as Y }` and `export { X } from`), as do type positions, value positions, `new X()`, `extends` / `implements`, `typeof X`; a same-named local in another scope resolves to its own symbol and does not. A merged symbol's use counts for each of its declaration nodes. Only identifiers spelled like a declaration name or like a local an import binds are sent to the checker (only those can resolve to a top-level declaration), so the cost stays one batched symbol query per file. One `UseSite` per (file, line); sorted by (file, line). Only loaded files are walked, so in either scope a use outside the analyzed directory is not seen. |
 
 ## 9. Smells (`rules.ts` — the SSOT keyed table)
 
@@ -310,6 +343,7 @@ code-graph <path> [flags]
 | `--tree` | Indented `file → function  L12-48  loc=36 cx=8 nest=3 [smell markers]` |
 | `--file <f>` | One module + its functions only. Warns if `<f>` is in `parseFailures` |
 | `--blast <id>` | Direct + transitive callers of `<id>`: list of `{ callerId, file, line, depth }` + `callChainDepth`. **Lists DISTINCT external callers only** — the target's own self-recursion is excluded from `callers` (so `callers.length` equals the target's `fanIn`) and surfaced separately as `recursiveSelfCalls` (count of self-call sites), shown as a `recursive: N self-calls` note in the human render. If a **bare name** matches >1 function, prints all candidate ids and exits non-zero. Output carries `scope`; in `package` scope sets `crossPackageCallersOmitted: true` and warns to re-run with `--deep` |
+| `--find <name>` | Name lookup over both node sets (§6 A1): every `FunctionNode` and `DeclarationNode` whose `name` is exactly `<name>`, printed as JSON `{ name, scope, matches }` (`--pretty` indents it). Each match is `{ id, name, kind, file, line, isExported, uses }`, sorted by (file, line, id); `line` is a function's `startLine` or a declaration's `line`. A declaration's `uses` are C6's; a function's are its `calledBy` sites as `{ file, line }` (the caller's file), one per (file, line). **Several matches are data, not an error:** exit 0 whatever the count, and no match prints `matches: []` with a stderr warning. Runs the edge pass (like `--blast`) |
 | `--edges` | Opt-in edge pass at `package` scope (§3): summary/plan/smells/graph include `calls`/`calledBy`/`importedBy`/`callChainDepth` and the edge smells (`high-fan-in`, `deep-call-chain`). Without it (and without `--blast`/`--deep`) the run stays cheap. |
 | `--deep` | Edge pass loads the whole monorepo (C3); implies `--edges` at `deep` scope |
 | `--html` | Emit a self-contained HTML report (human view — header + hotspot treemap + hub call-graph + sortable top-targets table; see `HTML-VIEW.md`). **Implies the edge pass** (the call-graph section needs `calls`). Pair with `--out <file>` to write the report directly (banner-safe); never an agent surface |

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ClusterReportSchema } from "./clusters.js";
 import {
+  DeclarationNodeSchema,
   DirectoryNodeSchema,
   FunctionNodeSchema,
   ModuleNodeSchema,
@@ -25,6 +26,7 @@ export const GraphSchema = z.object({
   interfaceWidth: InterfaceWidthReportSchema.nullable(),
   data: DataReportSchema.nullable(),
   functions: z.array(FunctionNodeSchema),
+  declarations: z.array(DeclarationNodeSchema),
   modules: z.array(ModuleNodeSchema),
   directories: z.array(DirectoryNodeSchema),
   smells: z.array(SmellSchema),

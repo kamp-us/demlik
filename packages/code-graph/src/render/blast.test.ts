@@ -50,6 +50,7 @@ function graphOf(functions: FunctionNode[]): Graph {
       parseFailures: [],
     },
     functions,
+    declarations: [],
     modules: [],
     directories: [],
     smells: [],

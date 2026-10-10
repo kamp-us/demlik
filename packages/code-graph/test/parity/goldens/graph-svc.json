@@ -3,6 +3,157 @@ exit 0
   "clusters": null,
   "crossRuntime": null,
   "data": null,
+  "declarations": [
+    {
+      "file": "src/audit-runs/store/db.ts",
+      "id": "src/audit-runs/store/db.ts:constant:save",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 1,
+      "name": "save",
+      "uses": [
+        {
+          "file": "src/audit-runs/index.ts",
+          "line": 1
+        },
+        {
+          "file": "src/findings/flows/run.ts",
+          "line": 1
+        },
+        {
+          "file": "src/findings/flows/run.ts",
+          "line": 2
+        },
+        {
+          "file": "src/findings/flows/run.ts",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "file": "src/findings/flows/run.ts",
+      "id": "src/findings/flows/run.ts:constant:run",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 4,
+      "name": "run",
+      "uses": [
+        {
+          "file": "src/findings/index.ts",
+          "line": 1
+        },
+        {
+          "file": "src/lib/util.ts",
+          "line": 1
+        },
+        {
+          "file": "src/lib/util.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "file": "src/findings/rules/helper.ts",
+      "id": "src/findings/rules/helper.ts:constant:helper",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 1,
+      "name": "helper",
+      "uses": [
+        {
+          "file": "src/findings/rules/score.ts",
+          "line": 1
+        },
+        {
+          "file": "src/findings/rules/score.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "src/findings/rules/score.ts",
+      "id": "src/findings/rules/score.ts:constant:score",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 5,
+      "name": "score",
+      "uses": []
+    },
+    {
+      "file": "src/findings/rules/score.ts",
+      "id": "src/findings/rules/score.ts:type-alias:W",
+      "isExported": true,
+      "isTest": false,
+      "kind": "type-alias",
+      "line": 6,
+      "name": "W",
+      "uses": [
+        {
+          "file": "src/findings/flows/lazy.ts",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "src/findings/store/repo.ts",
+      "id": "src/findings/store/repo.ts:constant:repo",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 1,
+      "name": "repo",
+      "uses": [
+        {
+          "file": "src/findings/flows/run.ts",
+          "line": 3
+        },
+        {
+          "file": "src/findings/flows/run.ts",
+          "line": 4
+        },
+        {
+          "file": "src/findings/rules/score.ts",
+          "line": 3
+        },
+        {
+          "file": "src/findings/rules/score.ts",
+          "line": 5
+        },
+        {
+          "file": "src/index.ts",
+          "line": 1
+        },
+        {
+          "file": "src/index.ts",
+          "line": 2
+        }
+      ]
+    },
+    {
+      "file": "src/index.ts",
+      "id": "src/index.ts:constant:entry",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 2,
+      "name": "entry",
+      "uses": []
+    },
+    {
+      "file": "src/lib/util.ts",
+      "id": "src/lib/util.ts:constant:util",
+      "isExported": true,
+      "isTest": false,
+      "kind": "constant",
+      "line": 2,
+      "name": "util",
+      "uses": []
+    }
+  ],
   "directories": [
     {
       "dir": "src",

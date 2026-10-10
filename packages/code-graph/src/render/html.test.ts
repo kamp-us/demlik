@@ -91,6 +91,7 @@ function graphOf(parts: {
     thresholds,
     summary: emptySummary(parts.summary),
     functions: parts.functions,
+    declarations: [],
     modules: parts.modules,
     directories: [],
     smells,
