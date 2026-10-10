@@ -99,6 +99,20 @@ export const NodeKindSchema = z.discriminatedUnion("kind", [
 export type NodeKind = z.infer<typeof NodeKindSchema>;
 export type NodeKindName = NodeKind["kind"];
 
+// One overload signature of an overloaded function: the source as written, from its start line.
+export const OverloadSignatureSchema = z.object({
+  startLine: z.number(),
+  text: z.string(),
+});
+export type OverloadSignature = z.infer<typeof OverloadSignatureSchema>;
+
+// A function's declaration header as written (SPEC §6 A5), and the overload signatures before it.
+export const FunctionHeaderSchema = z.object({
+  text: z.string(),
+  overloads: z.array(OverloadSignatureSchema),
+});
+export type FunctionHeader = z.infer<typeof FunctionHeaderSchema>;
+
 export const FunctionNodeSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -115,6 +129,9 @@ export const FunctionNodeSchema = z.object({
   edges: EdgesSchema.nullable(),
   nodeKind: NodeKindSchema.nullable(),
   smells: z.array(SmellSchema),
+  // Present only on a `--headers` run, and absent (not `null`) otherwise, so a run without the
+  // flag prints exactly what it printed before the field existed.
+  header: FunctionHeaderSchema.optional(),
 });
 export type FunctionNode = z.infer<typeof FunctionNodeSchema>;
 
