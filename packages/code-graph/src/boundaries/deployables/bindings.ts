@@ -26,9 +26,11 @@ export function bindingSitesOf(
   }));
 }
 
-// A binding is clean only in a driven adapter, and where an owner list names the binding, only in
-// a file on it: the list narrows the driven adapters and never exempts a file from them.
+// A binding is clean in its worker's `main`, which wires it to the adapters, and otherwise only in a
+// driven adapter. Where an owner list names the binding, a driven adapter must also be on it: the
+// list narrows the driven adapters and never exempts another file from them.
 function isClean(file: DeployableFile, binding: string): boolean {
+  if (file.isMain) return true;
   if (!file.driven) return false;
   const owners = file.owners[binding];
   return owners === undefined || owners.includes(file.file);

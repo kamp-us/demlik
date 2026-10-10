@@ -1,6 +1,6 @@
 import type { ImportEdge, ModuleNode } from "../schema.js";
 import type { SiteRow } from "./deployables/census.js";
-import type { BindingSite, Deployables } from "./deployables/deployables.js";
+import { type BindingSite, type Deployables, isWorkerMain } from "./deployables/deployables.js";
 import { judgeDeployables } from "./deployables/judge.js";
 import type { DoorUse } from "./door-uses.js";
 import { type Libraries, ownerOf } from "./libraries/libraries.js";
@@ -216,6 +216,7 @@ function acrossDeployables(
     importEdges: module.importEdges,
     bindingSites: module.bindingSites,
     driven: place.kind === "feature" && place.zone.rule.touchesBindings,
+    isMain: isWorkerMain(deployables, from),
     owners: ctx.rules.bindingOwners[scope] ?? {},
   });
   const sites = module.bindingSites.map((site) => ({ file: from, ...site }));
@@ -258,7 +259,9 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
     ...judgeShape(ctx, module, fromPlace, judged),
   ];
   return {
-    violations: isTestFile(shape.tests, module.file) ? judgedInTestFile(violations) : violations,
+    violations: isTestFile(shape.tests, scope, module.file)
+      ? judgedInTestFile(violations)
+      : violations,
     unjudged: libs.unjudged,
     sites: across.sites,
   };
@@ -289,7 +292,7 @@ export function analyzeBoundaries(
   for (const module of modules) {
     const fromPlace = placeOf(module.file, ctx.zoning);
     // A test file sits in no zone, so an entry that holds only test files is no entry.
-    const isTest = isTestFile(inputs.shape.tests, module.file);
+    const isTest = isTestFile(inputs.shape.tests, scope, module.file);
     if (!isTest && fromPlace.kind === "feature" && fromPlace.zone.name === "unknown") {
       const entry = unknownZone(scope, fromPlace);
       unknownEntries.set(entry.from, entry);

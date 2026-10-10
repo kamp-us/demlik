@@ -52,8 +52,8 @@ export type BindingSite = { readonly binding: string; readonly line: number };
 
 // The facts of one file the deployable rules read, as `analyzeBoundaries` hands them over.
 // `file` is scope-relative and `from` repo-relative, as the ledger writes it; `driven` is whether
-// the file sits in a hexagonal feature's `adapters/driven/`, and `owners` the scope's
-// `bindingOwners`.
+// the file sits in a hexagonal feature's `adapters/driven/`, `isMain` whether it is the `main` of the
+// worker its bindings are judged against, and `owners` the scope's `bindingOwners`.
 export type DeployableFile = {
   readonly scope: string;
   readonly file: string;
@@ -61,6 +61,7 @@ export type DeployableFile = {
   readonly importEdges: readonly ImportEdge[];
   readonly bindingSites: readonly BindingSite[];
   readonly driven: boolean;
+  readonly isMain: boolean;
   readonly owners: Readonly<Record<string, readonly string[]>>;
 };
 
@@ -143,4 +144,11 @@ export function readDeployables(
 // The worker a repo-relative file belongs to: the nearest config above it.
 export function workerOf(deployables: Deployables, file: string): ServiceManifest | null {
   return ownerOf(deployables.catalog.manifests, file);
+}
+
+// Whether a repo-relative file is the `main` the nearest worker config names, the file where that
+// worker's own bindings are wired. A config with no `main`, or one naming a file no scope loads,
+// has no such file here.
+export function isWorkerMain(deployables: Deployables, file: string): boolean {
+  return workerOf(deployables, file)?.main === file;
 }

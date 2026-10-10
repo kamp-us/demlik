@@ -11,10 +11,12 @@ const FILES: Record<string, string> = {
   [`${API}/package.json`]: JSON.stringify({ name: "@shop/api" }),
   [`${API}/wrangler.jsonc`]: JSON.stringify({
     name: "api",
+    main: "src/index.ts",
     d1_databases: [{ binding: "DB" }],
     workflows: [{ binding: "FLOW", class_name: "Flow" }],
     vars: { MODE: "x" },
   }),
+  [`${API}/src/index.ts`]: "export {};\n",
   [`${API}/${DRIVEN}/orders-db.ts`]: 'export const a = (env: Env) => env.DB.prepare("a");\n',
   [`${API}/src/orders/application/place.ts`]: "export const p = 1;\n",
   "tools/src/orders/adapters/driven/x.ts": "export const x = 1;\n",
@@ -88,6 +90,10 @@ describe("a bad deployable declaration exits 2 with one line and writes nothing"
     expect(refusal(notHexagonal)).toContain(`owner "${DRIVEN}/orders-db.ts"`);
     const outsideFeatures = { [API]: { DB: ["src/orders-db.ts"] } };
     expect(refusal({ ...GOOD, bindingOwners: outsideFeatures })).toContain("could never be clean");
+    const main = { [API]: { DB: ["src/index.ts"] } };
+    expect(refusal({ ...GOOD, bindingOwners: main })).toContain(
+      `owner "src/index.ts" of binding "DB" in "${API}" is not under a hexagonal feature's adapters/driven/`,
+    );
   });
 
   it("refuses a binding the worker owning that file does not declare", () => {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { type BoundaryRepo, boundaryRepo } from "../../test-helpers/boundary-repo.js";
 import { crossingsOf, ledgerOf, sorted } from "../../test-helpers/library-report.js";
-import { SHOP_TYPES, shopManifests } from "../../test-helpers/shop-workspace.js";
+import { SHOP_TSCONFIG, SHOP_TYPES, shopManifests } from "../../test-helpers/shop-workspace.js";
 import type { BoundaryKind, BoundaryViolation } from "../violation.js";
 import { isTestFile, judgedInTestFile } from "./test-role.js";
 
@@ -50,10 +50,10 @@ describe("the table of kinds a test file is judged by", () => {
 
   it("matches a glob against the scope-relative path", () => {
     const tests = [/^.*\.test\.ts$/, /^test\//];
-    expect(isTestFile(tests, "src/orders/orders.test.ts")).toBe(true);
-    expect(isTestFile(tests, "test/e2e.ts")).toBe(true);
-    expect(isTestFile(tests, "src/orders/orders.spec.ts")).toBe(false);
-    expect(isTestFile([], "src/orders/orders.test.ts")).toBe(false);
+    expect(isTestFile(tests, API, "src/orders/orders.test.ts")).toBe(true);
+    expect(isTestFile(tests, API, "test/e2e.ts")).toBe(true);
+    expect(isTestFile(tests, API, "src/orders/orders.spec.ts")).toBe(false);
+    expect(isTestFile([], API, "src/orders/orders.test.ts")).toBe(false);
   });
 });
 
@@ -285,6 +285,46 @@ describe("a file the testFiles globs match is zone-neutral", () => {
     expect(crossingsOf(repo.run({ json: true }))).toEqual([
       ["impure-application", at("src/orders/application/b.ts"), "Date.now"],
       ["impure-library", "packages/util/src/clock.ts", "Date.now"],
+    ]);
+  });
+
+  it("matches a repo-relative glob too, so worker scopes alone can allow their helpers", () => {
+    const helper = [
+      'export const cached = (env: Env) => env.CACHE.get("k");',
+      "export const stamp = Date.now();",
+      "",
+    ].join("\n");
+    const written = {
+      ...SUPPORT,
+      [at("test-support/helper.ts")]: helper,
+      "packages/util/test-support/helper.ts": helper,
+    };
+    const listedWith = (testFiles: string[]) => {
+      repo = boundaryRepo(".", written, { ...RULES, testFiles });
+      const found = crossingsOf(repo.run({ json: true }));
+      repo.dispose();
+      return found;
+    };
+    expect(listedWith(["services/*/test-support/**"])).toEqual([
+      ["impure-library", "packages/util/test-support/helper.ts", "Date.now"],
+    ]);
+    expect(listedWith(["test-support/**"])).toEqual([]);
+  });
+
+  it("reads one path at scope `.`, where the scope-relative and the repo-relative path are the same", () => {
+    const body = "export const x = Date.now();\n";
+    repo = boundaryRepo(
+      ".",
+      {
+        "tsconfig.json": SHOP_TSCONFIG,
+        "src/orders/index.ts": "export {};\n",
+        "src/orders/application/a.spec.ts": body,
+        "src/orders/application/b.ts": body,
+      },
+      { features: { ".": ["orders"] }, testFiles: ["src/orders/application/*.spec.ts"] },
+    );
+    expect(crossingsOf(repo.run({ json: true }))).toEqual([
+      ["impure-application", "src/orders/application/b.ts", "Date.now"],
     ]);
   });
 
