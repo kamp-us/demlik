@@ -28,7 +28,7 @@ Source: [project exports](../../src/project.ts).
 
 `@demlik/code-graph/resolve` exports `loadInProcessGraph`, `moduleSymbolOf` and the types
 `InProcessGraph`, `InProcessGraphOptions`, `ExportOrigin`, `ExportDeclaration`,
-`SubpathEntries`, and `SubpathExport`.
+`SubpathEntries`, `SubpathExport`, `UnresolvableSubpath`, and `SubpathAnswer`.
 
 `loadInProcessGraph(root, options)` returns a resolver, or `null` without a
 suitable tsconfig. Options default to `scope: "package"` and `repoRoot: root`.
@@ -54,11 +54,25 @@ does not export, returns `null`.
 `resolvePublishingSubpaths(entries, exportName)` asks every entry in
 `entries`, a `SubpathEntries` record from subpath to source file such as
 `{ ".": "src/index.ts", "./testing": "src/testing/index.ts" }`. It returns a
-`SubpathExport` (`{ subpath, entry, declaration }`, `entry` absolute) for each
-subpath that publishes the name, in the record's order, and `[]` when none
-does. The caller supplies the map because an export map points at build output
-and only the build config knows which source file each entry comes from.
-Relative paths resolve against the working directory.
+list of `SubpathAnswer`, in the record's order, and `[]` when no entry
+publishes the name and every entry file exists. The caller supplies the map
+because an export map points at build output and only the build config knows
+which source file each entry comes from. Relative paths resolve against the
+working directory.
+
+A `SubpathAnswer` is one of two shapes. Narrow with `"unresolvable" in answer`.
+
+| Shape | Fields | When |
+|---|---|---|
+| `SubpathExport` | `subpath`, `entry` (absolute), `declaration` (an `ExportDeclaration`) | The entry file publishes the name |
+| `UnresolvableSubpath` | `subpath`, `given` (the path as written in `entries`), `entry` (`given` made absolute), `unresolvable: "missing-entry-file"` | The entry file does not exist |
+
+A subpath whose file exists but does not publish the name is left out. A
+subpath whose file is missing comes back as `UnresolvableSubpath` for every
+name asked, so a stale map is visible instead of reading as "does not
+publish". With a map whose files all exist, the list holds only
+`SubpathExport` values. `resolveModuleExport` still returns `null` for a
+missing file.
 
 One tsgo session opens on the first lookup and is reused. Each lookup gets
 its own program. `dispose()` releases the session; create a new handle for

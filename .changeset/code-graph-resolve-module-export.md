@@ -9,4 +9,7 @@ the declaration's first token. An entry file that only re-exports no longer need
 imports it, and the line tells two declarations of one name in one file apart.
 `resolvePublishingSubpaths(entries, exportName)` takes your own subpath-to-source map and returns
 each subpath that publishes the name, with its declaration. It never guesses how build output maps
-back to source. `resolveExportOrigin` and `ExportOrigin` are unchanged.
+back to source. An entry whose source file does not exist comes back as an `UnresolvableSubpath`
+(`{ subpath, given, entry, unresolvable: "missing-entry-file" }`) for every name asked, so a stale
+map shows up instead of reading as "does not publish"; the result type is `SubpathAnswer`.
+`resolveExportOrigin` and `ExportOrigin` are unchanged.
