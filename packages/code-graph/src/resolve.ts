@@ -8,10 +8,31 @@ export interface ExportOrigin {
   readonly name: string;
 }
 
+// `line` is 1-based and points at the declaration's first token, past any doc comment, so two
+// declarations of one name in one file stay apart.
+export interface ExportDeclaration {
+  readonly file: string;
+  readonly name: string;
+  readonly line: number;
+}
+
+export interface SubpathExport {
+  readonly subpath: string;
+  readonly entry: string;
+  readonly declaration: ExportDeclaration;
+}
+
+// The caller's own subpath-to-source map, e.g. `{ ".": "src/index.ts", "./testing":
+// "src/testing/index.ts" }`. An export map points at build output, and only the build config knows
+// which source file each entry comes from, so the resolver never guesses that layout.
+export type SubpathEntries = Readonly<Record<string, string>>;
+
 // The graph holds one tsgo process from its first lookup until `dispose()`, so a long-lived caller
 // disposes the graph when it is done with it. A lookup after `dispose()` throws.
 export interface InProcessGraph {
   resolveExportOrigin(fromFile: string, specifier: string, exportName: string): ExportOrigin | null;
+  resolveModuleExport(moduleFile: string, exportName: string): ExportDeclaration | null;
+  resolvePublishingSubpaths(entries: SubpathEntries, exportName: string): readonly SubpathExport[];
   dispose(): void;
 }
 
@@ -40,6 +61,17 @@ function importedModule(
   return undefined;
 }
 
+// The first declaration, as for an overload set or a merged name: the first overload signature.
+function exportedDeclaration(
+  program: ts.TypeProgram,
+  moduleSymbol: ts.TsSymbol,
+  exportName: string,
+): ts.Node | undefined {
+  const exported = program.exportsOf(moduleSymbol).get(exportName);
+  if (exported === undefined) return undefined;
+  return program.declarations(program.aliasTarget(exported) ?? exported)[0];
+}
+
 function exportOrigin(
   program: ts.TypeProgram,
   fromFile: string,
@@ -50,11 +82,28 @@ function exportOrigin(
   if (source === undefined) return null;
   const moduleSymbol = importedModule(program, source, specifier);
   if (moduleSymbol === undefined) return null;
-  const exported = program.exportsOf(moduleSymbol).get(exportName);
-  if (exported === undefined) return null;
-  const decl = program.declarations(program.aliasTarget(exported) ?? exported)[0];
+  const decl = exportedDeclaration(program, moduleSymbol, exportName);
   if (decl === undefined) return null;
   return { file: decl.getSourceFile().fileName, name: declaredName(decl) ?? exportName };
+}
+
+function moduleExport(
+  program: ts.TypeProgram,
+  moduleFile: string,
+  exportName: string,
+): ExportDeclaration | null {
+  const source = program.sourceFile(moduleFile);
+  if (source === undefined) return null;
+  const moduleSymbol = program.symbolAt(source);
+  if (moduleSymbol === undefined) return null;
+  const decl = exportedDeclaration(program, moduleSymbol, exportName);
+  if (decl === undefined) return null;
+  const declaring = decl.getSourceFile();
+  return {
+    file: declaring.fileName,
+    name: declaredName(decl) ?? exportName,
+    line: declaring.getLineAndCharacterOfPosition(decl.getStart(declaring)).line + 1,
+  };
 }
 
 type SessionState =
@@ -62,8 +111,50 @@ type SessionState =
   | { readonly kind: "open"; readonly session: ts.TypeSession }
   | { readonly kind: "disposed" };
 
-// Each lookup opens a program over the importing file alone, so its answer does not depend on which
-// files earlier lookups named; the programs share one tsgo session, opened on the first lookup.
+interface LazySession {
+  // Opens a program over `file` alone, hands it to `read`, and closes it. A missing file answers
+  // `null` before any session opens.
+  withProgram<A>(file: string, read: (program: ts.TypeProgram) => A | null): A | null;
+  dispose(): void;
+}
+
+function lazySession(tsConfigPath: string): LazySession {
+  let state: SessionState = { kind: "idle" };
+  const session = (): ts.TypeSession => {
+    switch (state.kind) {
+      case "open":
+        return state.session;
+      case "idle":
+        state = { kind: "open", session: ts.openTypeSession(tsConfigPath) };
+        return state.session;
+      case "disposed":
+        throw new Error("code-graph: lookup called on a disposed InProcessGraph");
+      default: {
+        const exhaustive: never = state;
+        return exhaustive;
+      }
+    }
+  };
+
+  return {
+    withProgram(file, read) {
+      if (!fs.existsSync(file)) return null;
+      const program = session().program({ rootFiles: [file], includeConfigFiles: false });
+      try {
+        return read(program);
+      } finally {
+        program.close();
+      }
+    },
+    dispose() {
+      if (state.kind === "open") state.session.close();
+      state = { kind: "disposed" };
+    },
+  };
+}
+
+// Each lookup opens a program over the file it asks about alone, so its answer does not depend on
+// which files earlier lookups named; the programs share one tsgo session, opened on the first lookup.
 export function loadInProcessGraph(
   root: string,
   options: InProcessGraphOptions = {},
@@ -79,37 +170,30 @@ export function loadInProcessGraph(
     return null;
   }
 
-  let state: SessionState = { kind: "idle" };
-  const session = (): ts.TypeSession => {
-    switch (state.kind) {
-      case "open":
-        return state.session;
-      case "idle":
-        state = { kind: "open", session: ts.openTypeSession(tsConfigPath) };
-        return state.session;
-      case "disposed":
-        throw new Error("code-graph: resolveExportOrigin called on a disposed InProcessGraph");
-      default: {
-        const exhaustive: never = state;
-        return exhaustive;
-      }
-    }
+  const session = lazySession(tsConfigPath);
+  const resolveModuleExport = (moduleFile: string, exportName: string) => {
+    const absModule = path.resolve(moduleFile);
+    return session.withProgram(absModule, (program) =>
+      moduleExport(program, absModule, exportName),
+    );
   };
 
   return {
     resolveExportOrigin(fromFile, specifier, exportName) {
       const absFrom = path.resolve(fromFile);
-      if (!fs.existsSync(absFrom)) return null;
-      const program = session().program({ rootFiles: [absFrom], includeConfigFiles: false });
-      try {
-        return exportOrigin(program, absFrom, specifier, exportName);
-      } finally {
-        program.close();
-      }
+      return session.withProgram(absFrom, (program) =>
+        exportOrigin(program, absFrom, specifier, exportName),
+      );
     },
-    dispose() {
-      if (state.kind === "open") state.session.close();
-      state = { kind: "disposed" };
+    resolveModuleExport,
+    resolvePublishingSubpaths(entries, exportName) {
+      return Object.entries(entries).flatMap(([subpath, entryFile]) => {
+        const declaration = resolveModuleExport(entryFile, exportName);
+        return declaration === null
+          ? []
+          : [{ subpath, entry: path.resolve(entryFile), declaration }];
+      });
     },
+    dispose: () => session.dispose(),
   };
 }
