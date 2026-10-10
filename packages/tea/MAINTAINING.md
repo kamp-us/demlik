@@ -145,6 +145,11 @@ The package is at 0.x. Semver's 0.x escape hatch is not the policy — the tier 
   obligation beyond noting the change. Do not build a stability-sensitive consumer on
   an experimental subpath.
 
+An added published name on an existing subpath owes at least a **minor** changeset on a
+`stable` or `battery` subpath and any bump on an `experimental` one, with no separate
+changelog callout on any tier — the changeset entry naming the export is the record
+([ruling](https://github.com/kamp-us/demlik/issues/612#issuecomment-6102843973)).
+
 ### Removal, while 0.x
 
 A subpath, module or exported name is removed in the **same PR** that replaces it — no
