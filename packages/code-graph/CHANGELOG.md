@@ -1,5 +1,85 @@
 # @demlik/code-graph
 
+## 0.7.0
+
+### Minor Changes
+
+- f6339b0: Types, interfaces, enums, classes and constants now get nodes. The graph has a new `declarations`
+  list: one node per top-level declaration that is not already a function, with its name, kind,
+  file, line, exported flag and `uses`. With the edge pass, `uses` lists every `file` and `line` where
+  the type checker resolves a name to the declaration, through renamed imports and re-exports;
+  without it, `uses` is `null`.
+
+  The new `--find <name>` prints every function and declaration with that bare name as JSON, each
+  with its kind, file, line, exported flag and uses. A name with several matches is listed, not
+  refused. Function ids, metrics, smells, `calls` / `calledBy` and `--blast` are unchanged.
+
+- 3aa9334: Add `--headers`: each function node in the JSON gets a `header` field with its declaration header as written, from where its `startLine` points to the last token before its body, with no leading comment. An overloaded function also lists its overload signatures, in source order, each with its start line. Without the flag the field is absent and the output does not change.
+- f8f7b9e: New: diff a package's published API against a base commit. `code-graph <package> --api <map>
+--api-base <rev>` and `diffPublishedApi(root, map, base)` from `@demlik/code-graph/api` list, per
+  export subpath, the names added, removed and changed since `<rev>`, with before/after declaration
+  text and the subpath's tier. A change to a private type shows as a change to the published name
+  that uses it. The base commit's tree is read from git's objects into a temp folder outside the
+  checkout, so the checkout's files, index, branch and stash are left as they were; the "after" side
+  is the working tree as it is. A rev that names no commit exits 2. Without `--api-base`, nothing
+  changes.
+- f8f7b9e: New: gate a PR on its published-API diff. `code-graph <package> --api <map> --api-base <rev>
+--api-policy <file>` checks every added, removed and changed name against the changesets added
+  since `<rev>`. The policy is a JSON file the caller writes: per tier and change kind, the least
+  bump (`none`, `patch`, `minor`, `major`) and whether a callout is owed, plus the callout's marker
+  text. code-graph ships no policy of its own, and a changed name whose tier the policy gives no row
+  and no `default` exits 2 instead of passing. The changesets that count are the `.changeset/*.md`
+  files the base commit lacks whose frontmatter names the package; the highest of their bumps is the
+  bump found. It exits 0 on a pass and 1 on a miss, printing one block per name that misses with its
+  subpath, tier, change kind, the bump needed and found, and the before/after text; `--json` prints
+  the verdict. `readChangesetsSince`, `ratchetApiDiff` and `BumpPolicySchema` from
+  `@demlik/code-graph/api` are the library side. Without `--api-policy`, nothing changes.
+- f8f7b9e: New opt-in mode: the published-API view. `code-graph <package> --api <map>` and
+  `readPublishedApi(root, map)` from the new `@demlik/code-graph/api` subpath list, per export
+  subpath, every name the package publishes with its declaration text as a consumer's types see it.
+  You write the map (`{ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }`); code-graph
+  reads no export map or build config. It emits the package's declarations with the pinned tsgo into
+  a temp folder outside the checkout, so an inferred return type shows in a name's text, and each name
+  carries the text of the unpublished declarations it references, so a change to a private type shows
+  on the published name that uses it. The output is sorted JSON, the same bytes for the same commit.
+  Without `--api`, every other output is unchanged. `@demlik/code-graph/resolve` also exports
+  `moduleSymbolOf`, the file-to-module-symbol step the view shares with `resolveModuleExport`.
+- 29bb830: `InProcessGraph` (`@demlik/code-graph/resolve`) can now ask a module file directly what it exports.
+  `resolveModuleExport(moduleFile, exportName)` follows re-exports and aliases from the module itself
+  and returns an `ExportDeclaration`: the declaring file, the declared name, and the 1-based line of
+  the declaration's first token. An entry file that only re-exports no longer needs a probe file that
+  imports it, and the line tells two declarations of one name in one file apart.
+  `resolvePublishingSubpaths(entries, exportName)` takes your own subpath-to-source map and returns
+  each subpath that publishes the name, with its declaration. It never guesses how build output maps
+  back to source. An entry whose source file does not exist comes back as an `UnresolvableSubpath`
+  (`{ subpath, given, entry, unresolvable: "missing-entry-file" }`) for every name asked, so a stale
+  map shows up instead of reading as "does not publish"; the result type is `SubpathAnswer`.
+  `resolveExportOrigin` and `ExportOrigin` are unchanged.
+- 26d22c9: B17 `binding-outside-driven-adapter` now treats the file a worker's wrangler config names as `main`
+  as clean for that worker's own bindings, because that file is where the worker wires its bindings
+  to the driven adapters. It holds whether or not the file sits in a feature and whether or not
+  `bindingOwners` names the binding, so a repo no longer carries an accepted exception for each
+  worker's entry file. Every other file that reads a binding outside a driven adapter, a sibling of
+  `main` included, is still B17, and `bindingOwners` still refuses an owner that is not under an
+  `adapters/driven/`.
+
+  `testFiles` now matches a glob against a file's repo-relative path as well as its scope-relative
+  path. Every glob that matched before still matches, and a repo-relative glob such as
+  `services/*/test-support/**` allows test helpers in worker scopes alone. At scope `.` the two paths
+  are one string.
+
+### Patch Changes
+
+- b45811c: Fix: `code-graph --api` (alone, with `--api-base`, or with `--api-policy`) no longer ends a crash
+  with exit 1, the code the ratchet uses for a miss. Any error that is not a refused input now prints
+  one line, `code-graph: unexpected error: <message>`, with no stack trace, and exits 3. An `--out`
+  file that cannot be written is one of these. Exits 0, 1 and 2 mean what they did.
+
+  Fix: the tsgo server code-graph starts no longer prints a stray `context canceled` line on stderr
+  when a run ends. This applies to every mode that reads types, not only `--api`.
+
+- 1dbb4e4: Bodiless constructors and bodiless class get/set accessors are no longer function nodes. A constructor's overload signatures, an `abstract` accessor and the members of a `declare class` used to each get a node; now only the constructor or accessor with a body does, as SPEC §6 A1 already said. Interface `get` / `set` signatures stay nodes. Function ids change in files that had such members: a phantom node is gone, and the `#n` ordinals of the real constructors and accessors beside it no longer count it. Code without them gets the same output as before.
+
 ## 0.6.0
 
 ### Minor Changes
