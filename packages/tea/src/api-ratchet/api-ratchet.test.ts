@@ -4,9 +4,13 @@
  *   - TEA_API_BASE=<rev> → the check (`pnpm run api:ratchet`, CI on a pull
  *     request): diff the working tree's published API against that commit and
  *     fail naming every change that misses the changeset its tier asks for.
- *   - unset → the mechanism proofs: the API map covers the export map and
- *     refuses a subpath it cannot place, and the policy gives each tier and
- *     change kind the verdict `MAINTAINING.md` states.
+ *   - unset → the mechanism proofs (`pnpm test`): the API map covers the export
+ *     map and refuses a subpath it cannot place, and the policy gives each tier
+ *     and change kind the verdict `MAINTAINING.md` states.
+ *
+ * The unset mode compares nothing, so `pnpm run api:ratchet` never reaches it:
+ * `scripts/api-ratchet.mjs` exits 1 with no base, printing the command that
+ * gives one, and exits 1 on a base that names no commit (`script.test.ts`).
  */
 
 import { existsSync, readFileSync } from "node:fs";
