@@ -187,9 +187,9 @@ code-graph packages/tea --api tea-api.json --api-base origin/main --api-policy t
 
 | Flags | Prints | Exit |
 |---|---|---|
-| `--api <map>` | `PublishedApi` JSON | 0, 2 |
-| `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2 |
-| `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2 |
+| `--api <map>` | `PublishedApi` JSON | 0, 2, 3 |
+| `--api <map> --api-base <rev>` | `ApiDiff` JSON | 0, 2, 3 |
+| `--api <map> --api-base <rev> --api-policy <file>` | the verdict as text; `--json` for `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
 
 `--api` combines only with `--api-base`, `--api-policy`, `--json`, `--pretty`
 and `--out`.
@@ -206,6 +206,11 @@ row missing a change kind, a `bump` outside the four), a
 `<directory>/package.json` that is missing or has no `name`, a changeset
 added since the base whose frontmatter does not parse, or a changed name whose
 tier has no row and no `default`.
+Exit 3 for any other error inside the run, in all three: one stderr line,
+`code-graph: unexpected error: <message>`, no stack trace and nothing on
+stdout. The diagnostics warning above is a line of its own and still comes
+first when tsgo reported any. An `--out` file that cannot be written exits 3,
+not 2. Exit 1 therefore always means a ratchet miss, never a crash.
 Without `--api` no emit runs and every other output is unchanged. The full
 contract, with examples, is [SPEC.md §13](../../SPEC.md).
 
