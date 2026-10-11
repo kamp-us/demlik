@@ -100,7 +100,9 @@ jobs:
       # semver policy asks for. A PR that changes no published name passes with
       # no changeset. `HEAD^1` is the base commit the checkout merged the PR
       # into, so the diff holds exactly what the PR adds. Pull requests only: a
-      # push has no base to diff against.
+      # push has no base to diff against. The script never passes without one:
+      # with `TEA_API_BASE` unset or empty it exits 1 and prints the command
+      # that gives a base, and a base that names no commit exits 1 naming it.
       - name: Published API changes carry the changeset their tier asks for
         if: github.event_name == 'pull_request'
         env:
