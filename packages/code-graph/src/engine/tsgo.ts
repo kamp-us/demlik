@@ -98,6 +98,7 @@ export function openTypeSession(tsConfigPath: string): TypeSession {
     fs: { readFile: (fileName) => virtualFiles.get(fileName) },
   });
   let opened = 0;
+  const live = new Set<Snapshot>();
   return {
     program: (input) => {
       const configPath = virtualConfigPath(tsConfigPath, opened++);
@@ -107,14 +108,40 @@ export function openTypeSession(tsConfigPath: string): TypeSession {
         configPath,
         virtualFiles,
       );
+      live.add(snapshot);
       return typeProgramOf(project, () => {
+        live.delete(snapshot);
         snapshot.dispose();
         api.updateSnapshot({ closeProjects: [configPath] }).dispose();
         virtualFiles.delete(configPath);
       });
     },
-    close: () => api.close(),
+    // Releasing a snapshot is a request to the server, so every one goes before the kill; after
+    // it `api.close` has only its own handles left to drop.
+    close: () => {
+      for (const snapshot of live) snapshot.dispose();
+      live.clear();
+      killServer(api);
+      api.close();
+    },
   };
+}
+
+type ServerProcess = { readonly kill: (signal: "SIGKILL") => boolean };
+
+// The tsgo server writes to the stderr it inherits from this process. `API.close` closes its stdin
+// and sends SIGTERM, and a server that sees the signal first can print `context canceled` on its
+// way out. SIGKILL first: a killed process prints nothing. The pinned build keeps the child on
+// private fields, so a pin that moves them throws here instead of bringing the stray line back.
+function killServer(api: API): void {
+  const { client } = api as unknown as {
+    readonly client?: { readonly channel?: { readonly child?: Partial<ServerProcess> } };
+  };
+  const child = client?.channel?.child;
+  if (typeof child?.kill !== "function") {
+    throw new Error("code-graph: the pinned tsgo API no longer exposes its server process");
+  }
+  child.kill("SIGKILL");
 }
 
 export function openTypeProgram(input: TypeProgramInput): TypeProgram {

@@ -85,16 +85,16 @@ async function outcomeOf(run: ApiRun): Promise<ApiOutcome> {
   return { payload: `${stableStringify(result, run.pretty)}\n`, code: 0 };
 }
 
-// A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
-// reading the map and policy files and refusing flags the mode does not take. Resolves to the exit
-// code: 0, 1 when the ratchet finds a miss, 2 on a refused input, and `API_CRASH_EXIT` on any other
-// error, so it never rejects and a crash never reads as Node's exit 1, the ratchet's miss.
 export const API_CRASH_EXIT = 3;
 
 // One line for whatever was thrown: an error's message can span several.
 const crashLine = (error: unknown): string =>
   `unexpected error: ${(error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").trim()}`;
 
+// A thin caller of the `@demlik/code-graph/api` exports: it holds no logic of its own beyond
+// reading the map and policy files and refusing flags the mode does not take. Resolves to the exit
+// code: 0, 1 when the ratchet finds a miss, 2 on a refused input, and `API_CRASH_EXIT` on any other
+// error, so it never rejects and a crash never reads as Node's exit 1, the ratchet's miss.
 export async function runApiView(run: ApiRun): Promise<number> {
   const stray = run.given.filter((attribute) => !API_COMPANIONS.has(attribute));
   if (stray.length > 0) {

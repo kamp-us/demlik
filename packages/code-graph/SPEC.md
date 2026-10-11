@@ -791,7 +791,7 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
 - a base rev that does not resolve, or a failed `git archive`;
 - with `--api-policy`: no `name` in `<path>/package.json`, a changeset whose frontmatter does not parse, or a tier with no policy row and no `default`.
 
-Exit 3 for any other error inside the run, on all three rows: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. An `--out` file that cannot be written is one of these and exits 3, not 2. So exit 1 always means a ratchet miss, never a crash.
+Exit 3 for any other error inside the run, on all three rows: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. The emit's diagnostics warning (§13.3) is a line of its own and still comes first when tsgo reported any. An `--out` file that cannot be written is one of these and exits 3, not 2. So exit 1 always means a ratchet miss, never a crash.
 
 ### 13.7 Library subpath `@demlik/code-graph/api`
 
