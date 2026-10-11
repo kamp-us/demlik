@@ -27,10 +27,31 @@ const indent = (text: string, by: string): string =>
     .map((line) => `${by}${line}`)
     .join("\n");
 
-/** One side of a change: its declaration text, then each private type it uses. */
-function sideLines(label: string, side: ApiEntryText | null): string[] {
+/**
+ * The types a changed name uses whose text moved between the two sides. A name
+ * folds in every type it reaches, and one edit rarely touches more than one of
+ * them, so the rest would only bury the line that changed.
+ */
+function movedReferences(miss: Miss): ReadonlySet<string> {
+  if (miss.before === null || miss.after === null) return new Set();
+  const before = miss.before.references;
+  const after = miss.after.references;
+  return new Set(
+    [...Object.keys(before), ...Object.keys(after)].filter(
+      (key) => before[key] !== after[key],
+    ),
+  );
+}
+
+/** One side of a change: its declaration text, then each moved type it uses. */
+function sideLines(
+  label: string,
+  side: ApiEntryText | null,
+  moved: ReadonlySet<string>,
+): string[] {
   if (side === null) return [];
   const references = Object.keys(side.references)
+    .filter((key) => moved.has(key))
     .sort()
     .map((key) => indent(`${key}: ${side.references[key]}`, "    "));
   return [`  ${label}:`, indent(side.text, "    "), ...references];
@@ -55,10 +76,11 @@ function missLines(
   verdict: ApiRatchetVerdict,
   callout: string,
 ): string[] {
+  const moved = movedReferences(miss);
   return [
     `api-ratchet: ${miss.name} in ${miss.subpath} (${miss.tier}) ${miss.kind} — needs ${owed(miss.needs, callout)}; found ${found(verdict, miss.needs)}`,
-    ...sideLines("before", miss.before),
-    ...sideLines("after", miss.after),
+    ...sideLines("before", miss.before, moved),
+    ...sideLines("after", miss.after, moved),
   ];
 }
 
@@ -75,8 +97,9 @@ export const changeCount = (diff: ApiDiff): number =>
 
 /**
  * The verdict as text: one line on a pass; on a miss, one block per change that
- * misses its bump — name, subpath, tier, what it needs and its before and after
- * text — then a summary line. Nothing in it varies between two runs of one tree.
+ * misses its bump — name, subpath, tier, what it needs, and its before and after
+ * text with the types it uses that moved — then a summary line. Nothing in it
+ * varies between two runs of one tree.
  */
 export function renderVerdict(
   verdict: ApiRatchetVerdict,

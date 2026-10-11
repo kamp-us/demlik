@@ -207,6 +207,55 @@ describe.runIf(BASE === undefined)("verdict text", () => {
     );
   });
 
+  it("prints a type the name uses only when its text moved", () => {
+    const make = "export declare function make(options: Options): Store;";
+    const diff: ApiDiff = {
+      ...oneChange("stable", "changed"),
+      subpaths: {
+        "./mem": {
+          tier: "stable",
+          added: {},
+          removed: {},
+          changed: {
+            make: {
+              before: {
+                text: make,
+                references: {
+                  "src/mem.d.ts#Options": "type Options = { fenced?: true };",
+                  "src/mem.d.ts#Store": "type Store = { load(): void };",
+                },
+              },
+              after: {
+                text: make,
+                references: {
+                  "src/mem.d.ts#Options":
+                    "type Options = { fenced?: boolean };",
+                  "src/mem.d.ts#Store": "type Store = { load(): void };",
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const verdict = ratchetApiDiff(diff, TEA_BUMP_POLICY, {
+      package: "@demlik/tea",
+      changesets: [],
+    });
+
+    const text = renderVerdict(verdict, 1, TEA_BUMP_POLICY.callout);
+
+    expect(text.split("\n").slice(1, 7)).toEqual([
+      "  before:",
+      `    ${make}`,
+      "    src/mem.d.ts#Options: type Options = { fenced?: true };",
+      "  after:",
+      `    ${make}`,
+      "    src/mem.d.ts#Options: type Options = { fenced?: boolean };",
+    ]);
+    expect(text).not.toContain("#Store");
+  });
+
   it("says what a miss found when a changeset lacks the callout", () => {
     const text = renderVerdict(
       judge("stable", "changed", [changeset("minor", PLAIN)]),
