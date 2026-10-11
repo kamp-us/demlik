@@ -291,7 +291,9 @@ describe.runIf(BASE !== undefined)(
     it("every changed published name carries the changeset its tier asks for", async () => {
       const run = await runApiRatchet(BASE as string);
       if (!run.passed) expect.fail(`\n${run.text}`);
-      console.log(run.text);
+      // Not `console.log`: vitest's reporter for an agent shell drops what a
+      // passing test logs, and a pass must always name the commit it compared.
+      process.stdout.write(run.text);
     });
   },
 );
