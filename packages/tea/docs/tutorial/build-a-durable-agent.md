@@ -23,8 +23,8 @@ pnpm add -D typescript @types/node @types/ws
 
 The `type=module` line is not optional. `pnpm init` writes a CommonJS
 `package.json`, and `agent.ts` below ends in a top-level `await` — without
-`"type": "module"` TypeScript rejects them with TS1309 ("await is only allowed
-at the top level of a file when that file is a module"), which points at the
+`"type": "module"` TypeScript rejects them with TS1309 ("The current file is a
+CommonJS module and cannot use 'await' at the top level."), which points at the
 `await` rather than at the missing field.
 
 `@types/ws` is there because `@demlik/tea/node`'s typings name `ws`, the
