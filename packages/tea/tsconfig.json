@@ -22,6 +22,11 @@
   "exclude": [
     "dist",
     "node_modules",
+    // The API ratchet is a CI check that calls code-graph's library and reads
+    // `tsup.config.ts`. Nothing tea publishes imports it, so it stays out of the
+    // shipped program, and out of the declarations the ratchet itself emits
+    // from this config; `tsconfig.test.json` typechecks it.
+    "src/api-ratchet",
     "**/*.test.ts",
     "**/*.test.tsx"
   ]

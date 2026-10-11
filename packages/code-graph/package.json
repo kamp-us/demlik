@@ -34,6 +34,10 @@
       "types": "./dist/boundaries.d.ts",
       "import": "./dist/boundaries.js"
     },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js"
+    },
     "./dist/*": "./dist/*"
   },
   "files": [

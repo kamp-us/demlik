@@ -146,6 +146,7 @@
     "typecheck:consumers": "tsc -p tsconfig.consumers.json",
     "docs:reference": "TEA_DOCS_WRITE=1 vitest run src/docs/reference/generate-reference.test.ts",
     "docs:reference:strays": "vitest run src/docs/reference/generate-reference.test.ts -t 'holds nothing the generator does not write'",
+    "api:ratchet": "vitest run src/api-ratchet/api-ratchet.test.ts",
     "docs:reference:check": "pnpm run docs:reference:strays && pnpm run docs:reference && git diff --exit-code -- docs/reference",
     "prepublishOnly": "NODE_OPTIONS=--max-old-space-size=8192 tsup && node scripts/verify-exports.mjs",
     "verify:exports": "node scripts/verify-exports.mjs",
@@ -189,6 +190,7 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@demlik/code-graph": "workspace:*",
     "@langfuse/otel": "catalog:",
     "@opentelemetry/api": "catalog:",
     "@opentelemetry/sdk-trace-base": "catalog:",

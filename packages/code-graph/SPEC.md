@@ -25,6 +25,8 @@ When sent to refactor folder `X`, the agent's first moves are Bash calls, not Re
 | Full graph (rarely — large) | `code-graph X --graph` |
 | Comment census — how much comment, of what kind, where | `code-graph X --comments` |
 | Comment ratio ratchet (a gate) | `code-graph . --comments --ci` |
+| What a package publishes, per export subpath (§13) | `code-graph <pkg> --api <map>` |
+| What a branch did to it, and does it owe a changeset (§13) | `code-graph <pkg> --api <map> --api-base <rev> [--api-policy <file>]` |
 
 `--blast` requires an unambiguous target; pass the `id` (`file:name`), not a bare name. In default (`package`) scope, blast output is flagged incomplete for cross-package callers (§10).
 
@@ -84,6 +86,10 @@ packages/code-graph/
     hotspots/   Feature F — churn.ts + render.ts       env-keys/   Feature H2 — extract.ts + query.ts
     data/       --data — access.ts (read/write per binding method) + extract.ts (call sites) + render.ts
     comments/   Feature I — classify.ts + census.ts + render.ts + ceilings.ts + ratchet.ts + gate.ts
+    api.ts      barrel for the `./api` library subpath (§13.7)
+    api/        the published-API mode (§13) — map.ts + emit.ts + read.ts + text.ts + view.ts +
+                base.ts + diff.ts + cli.ts, and ratchet/ (§13.5): policy.ts + changesets.ts +
+                verdict.ts + text.ts
 ```
 
 > **`render/` and `extract/` directory-sprawl gate:** `render/` holds one renderer per CLI output mode, and `extract/` holds one parser/scanner per extraction concern (cohesion, not sprawl) — both exceed the default `directorySprawl` (10). `selfcheck.thresholds.json` bumps `directorySprawl` to 16 for the self-gate ONLY — the shipped default is unchanged, and the number has not moved since. A feature that would push `render/` or `extract/` past it owns a DIRECTORY instead (`layers/`, `collapse/`, `hotspots/`, `env-keys/`, `schema/`): the fix for a full drawer is another drawer, never a bigger number (#4846). The `--html` feature is the pure model (`html-model.ts`), the inert page scaffold (`html-template.ts`), and a thin entry (`html.ts`); splitting it three ways keeps each file under the per-file `big-file`/`long-function` bars without relaxing those. `env-keys/extract.ts` (Feature H2) is the AST scan for `env.<KEY>` reads, kept separate from `references.ts` (the call-graph reference walk) and `wrangler-config.ts` (the declared-key source) because the three answer different questions over different inputs — merging them would trade one cohesive file for one bloated one.
@@ -377,6 +383,9 @@ code-graph <path> [flags]
 | `--pretty` | Pretty-print JSON output |
 | `--json` | Force JSON output on a view command |
 | `--ci [--fail-on high\|warn] [--max <n>]` | Exit non-zero per policy: `--fail-on high` (default) fails only on `high` severity; `--max <n>` fails if smell count exceeds `n` |
+| `--api <map>` | Published-API view: per export subpath, every published name with its emitted declaration text (§13.3). Standalone; reads emitted declarations, never the graph |
+| `--api-base <rev>` | With `--api`: the API diff against a base commit (§13.4) |
+| `--api-policy <file>` | With `--api` and `--api-base`: the bump ratchet (§13.5). Exit 1 on a miss |
 
 **Emitting output — one way, banner-safe.** With no `--out`, a view writes its document to stdout (unchanged). To capture it to a file, prefer `--out <file>`: because the `pnpm code-graph` wrapper prints its run banner to stdout, a bare `… > report.html` redirect interleaves that banner above the document (an invalid artifact, #1761), whereas `--out` writes the file directly and leaves the banner harmlessly on stdout. If you must redirect stdout instead, run banner-free — `pnpm --silent code-graph …` or `tsx tools/code-graph/src/index.ts …` directly.
 
@@ -403,3 +412,402 @@ code-graph <path> [flags]
 **Order rationale:** schema first (no rework, SSOT locked); cheap pass + summary next (the default output, most value, zero perf risk); IP (smells/plan) third; the only perf-sensitive pass (edges) last, kept cheap via inversion. Phase 4 makes the tool *discoverable*.
 
 **Verification discipline:** every phase validated against `services/audit-agents`, with ≥1 hand-checked number per phase before relying on the output in a real refactor.
+
+## 13. Published-API mode (`--api`)
+
+An opt-in mode that answers two questions about one package: what does each export subpath publish, as a consumer's types see it, and what did a change do to that. It has three steps over one input. The **view** (§13.3) lists the published names. The **diff** (§13.4) compares the view at a base commit with the view now. The **ratchet** (§13.5) checks the diff against the package's changesets and a bump policy. Each step adds one flag, and each later step runs the earlier ones.
+
+### 13.1 What it reads, and what it leaves alone
+
+- **Emitted declarations, not the oxc graph.** The mode runs the pinned tsgo itself (`tsgoBinary()` in `src/engine/tsgo.ts`) with declaration-only emit into a temp folder, then reads those `.d.ts` files with a tsgo program. It runs neither the cheap pass nor the edge pass and never reads the `Graph` or its nodes, including the nodes #599 and #600 add. Source text misses what a consumer gets: an inferred return type, a private type folded into a public name. The emitted declarations carry both.
+- **§6-A3 still holds.** The `**/*.d.ts` exclusion filters the source graph's files. This mode's `.d.ts` files are the ones it emitted into its own temp folder, and they never enter the source graph.
+- **Existing output does not change.** With none of `--api`, `--api-base` and `--api-policy` on the command line, no emit runs, no temp folder is made, and every existing flag's output is byte-identical to before: the summary, `Graph`, every report and every gate. The mode adds no key to `Graph` and changes no existing type.
+- **The checkout is never written.** The mode writes only inside temp folders outside the checkout. It changes no file, index entry or ref in the checkout (§13.4 says how the base commit is read).
+
+### 13.2 Input: the API map
+
+The caller says which subpaths exist, which source file each comes from, and its tier. code-graph reads no `package.json` `exports`, no build config (`tsup.config.ts` or any other) and no `MAINTAINING.md`.
+
+`--api <file>` names a JSON file with this shape:
+
+```json
+{
+  ".": { "entry": "src/index.ts", "tier": "stable" },
+  "./testing": { "entry": "src/testing/index.ts", "tier": "stable" },
+  "./labs": { "entry": "src/labs/index.ts", "tier": "experimental" }
+}
+```
+
+- **Keys** are export subpaths, spelled as the caller spells them. **`entry`** (required) is the source file for that subpath, relative to the analyzed `<path>`. **`tier`** (optional) is any non-empty string.
+- **The subpath-to-source map is the caller's.** code-graph holds no `dist/X` → `src/X` rule anywhere, in the CLI or the library. An export map points at build output, and only the package's own build config knows which source file each entry comes from, so any rule here would be a guess about one package's layout. This follows the ruling on #601 ([option (b)](https://github.com/kamp-us/demlik/issues/601#issuecomment-6102379089)), and the map has the same subpath → source shape as #601's `SubpathEntries`: an API map without its tiers is one.
+- **A tier is an opaque string.** code-graph never interprets it. It copies the tier onto the view and the diff, and the ratchet uses it only as a key into the caller's policy (§13.5). `stable`, `battery` and `experimental` mean nothing to code-graph. A package that stamps its tiers in a `MAINTAINING.md` reads them with its own reader and writes them into the map.
+- **Parse boundary.** The file is parsed through a zod schema (`ApiMapSchema`), as `--thresholds` is (§5). An unknown key, an empty map, an empty `entry` or an empty `tier` exits 2. So does an `entry` that is not a `.ts`, `.tsx`, `.mts` or `.cts` file, that lies outside `<path>`, or that does not exist.
+
+### 13.3 The view
+
+`code-graph <path> --api <map>`, where `<path>` is the package root.
+
+**Emit.** The tsconfig is the one package scope picks for `<path>`: `resolveEdgeTsConfig(<path>, "package", repoRoot)` (§8-C3); none exits 2. code-graph runs tsgo on it with `--noEmit false --declaration --emitDeclarationOnly --declarationMap false --noEmitOnError false --incremental false --composite false --rootDir <path> --outDir <temp>/out`. Because code-graph sets `rootDir` and `outDir` itself, an entry's emitted file follows from the emit's own rule, not from any guess about the package: `src/testing/index.ts` emits to `<temp>/out/src/testing/index.d.ts` (`.tsx` → `.d.ts`, `.mts` → `.d.mts`, `.cts` → `.d.cts`). A type error does not stop the emit; tsgo's diagnostic count goes to stderr as one warning line. Exit 2 when tsgo fails to start, or when an entry has no emitted file (for example, the tsconfig does not include it).
+
+**Program.** A tsgo program opens over the emitted entry files with the tsconfig's compiler options. Bare specifiers resolve against the package's installed dependencies through a `node_modules` symlink at `<temp>/node_modules` → `<path>/node_modules`, made in the temp folder, never in the checkout.
+
+**Names.** For each subpath, the entry's module symbol comes from the module step #601 adds to `src/resolve.ts` (the step behind `resolveModuleExport`). The view enumerates that symbol's exports with `exportsOf` and follows each through aliases, renames and `export *` with `aliasTarget`. It imports #601's step and never writes a second one. Every exported name is listed, types and values alike. A default export is the name `default`, and `export =` is the name `export=`. A name re-exported from a dependency is listed with its declaration text from the dependency's own `.d.ts`.
+
+**Text.** A name's `text` is the emitted text of each of its declarations, from the first token to the end of the statement (a variable's whole variable statement), with every comment removed, trailing whitespace trimmed, blank lines dropped and indentation kept as emitted. A doc-comment edit therefore changes no text. Several declarations (overloads, an interface merged with a namespace) join with `\n`, in emitted file order, then position. A renamed export keeps the declared name in its text: `export { plain as increment }` lists `increment` with the text of `declare function plain…`.
+
+**References.** A name also carries the text of every declaration it reaches that its subpath does not publish, so a change to a private type is a change to the published name that uses it. From each of the name's declarations, every type reference and `typeof` query resolves to a symbol. A declaration of that symbol is added, and walked in turn, when it sits in the emitted tree (`<temp>/out`) and is not the declaration of a name this subpath publishes. A published name the walk meets is not inlined, because its change shows on its own row. A declaration in a dependency is not followed. The key is `<emitted file, relative to <temp>/out>#<declared name>` (for example `src/core.d.ts#Options`), and the value is that declaration's text by the rule above.
+
+**JSON.** Output is a `PublishedApi`:
+
+```ts
+type ApiEntryText = {
+  text: string;
+  references: Record<string, string>; // "<emitted file>#<declared name>" → text
+};
+
+type PublishedApi = {
+  root: string;     // <path> relative to cwd, as Graph.root
+  compiler: string; // the pinned tsgo version that emitted
+  subpaths: Record<string, {
+    entry: string;        // as the map gave it
+    tier: string | null;  // as the map gave it; null when absent
+    names: Record<string, ApiEntryText>;
+  }>;
+};
+```
+
+Every subpath in the map is a key, including one that publishes nothing (`names: {}`). The JSON is serialized with sorted keys, like every code-graph output (§3). No key or text holds an absolute path, and the temp folder is removed before exit, on success and on failure. The same commit and the same map give the same bytes. It goes to stdout, or to `--out <file>`; `--pretty` indents it.
+
+**Example.** A package `packages/demo` with three subpaths:
+
+```ts
+// src/index.ts
+export * from "./core";
+
+// src/core.ts
+type Options = { readonly retries: number };
+/** Builds a runner. */
+export function make(options: Options) {
+  return { options, started: false };
+}
+export const VERSION = "1";
+
+// src/testing/index.ts
+export { expectEmitted } from "./expect";
+
+// src/testing/expect.ts
+export function expectEmitted<T>(actual: readonly T[], expected: NoInfer<T>): void {}
+
+// src/labs/index.ts
+export const flag = true;
+```
+
+With the map in §13.2, `code-graph packages/demo --api demo-api.json --pretty` run from the repo root prints:
+
+```json
+{
+  "compiler": "7.0.0-dev.20260707.2",
+  "root": "packages/demo",
+  "subpaths": {
+    ".": {
+      "entry": "src/index.ts",
+      "names": {
+        "VERSION": {
+          "references": {},
+          "text": "export declare const VERSION = \"1\";"
+        },
+        "make": {
+          "references": {
+            "src/core.d.ts#Options": "type Options = {\n    readonly retries: number;\n};"
+          },
+          "text": "export declare function make(options: Options): {\n    options: Options;\n    started: boolean;\n};"
+        }
+      },
+      "tier": "stable"
+    },
+    "./labs": {
+      "entry": "src/labs/index.ts",
+      "names": {
+        "flag": {
+          "references": {},
+          "text": "export declare const flag = true;"
+        }
+      },
+      "tier": "experimental"
+    },
+    "./testing": {
+      "entry": "src/testing/index.ts",
+      "names": {
+        "expectEmitted": {
+          "references": {},
+          "text": "export declare function expectEmitted<T>(actual: readonly T[], expected: NoInfer<T>): void;"
+        }
+      },
+      "tier": "stable"
+    }
+  }
+}
+```
+
+`make`'s inferred return type shows in its text, and the private `Options` shows under its references. `compiler` is whatever version the package pins.
+
+### 13.4 The diff
+
+`code-graph <path> --api <map> --api-base <rev>`.
+
+**Reading the base.** `<rev>` resolves with `git rev-parse --verify <rev>^{commit}` in the repository that holds `<path>`. A rev that does not resolve exits 2. (In CI, fetch the base commit first: `actions/checkout` fetches one commit by default.) The base commit's whole tree is written from the repository's objects into a second temp folder, with `git archive <sha>` piped into `tar -x -C <temp>/base`, so a tsconfig `extends` that points outside the package still resolves. `<temp>/base/<path>/node_modules` and `<temp>/base/node_modules` are symlinks to the checkout's installed `<path>/node_modules` and repo-root `node_modules`, so the base resolves its dependencies against what is installed now. The view (§13.3) then runs on `<temp>/base/<path>` with the same map. The only git commands the mode runs are `rev-parse`, `archive` and `ls-tree` (§13.5), all of which only read. It never runs `checkout`, `switch`, `stash`, `worktree`, `reset`, `read-tree`, `update-ref` or any other command that writes the checkout's files, index or refs. The diff child's test asserts that `git status --porcelain`, the index and `HEAD` are the same before and after a run.
+
+A subpath whose entry does not exist at the base has every name `added`. An entry missing now exits 2, as in the view.
+
+**Compare.** Per subpath, a name published now and not at the base is `added`. A name published at the base and not now is `removed`. A name in both whose `text` or `references` differ is `changed`. Equality is exact string equality on the text rules of §13.3.
+
+**JSON.** Output is an `ApiDiff`:
+
+```ts
+type ApiDiff = {
+  root: string;     // as PublishedApi.root
+  base: string;     // the base commit's full sha
+  compiler: string;
+  subpaths: Record<string, {
+    tier: string | null;
+    added: Record<string, { after: ApiEntryText }>;
+    removed: Record<string, { before: ApiEntryText }>;
+    changed: Record<string, { before: ApiEntryText; after: ApiEntryText }>;
+  }>;
+};
+```
+
+Every subpath in the map is a key, including one with no change. The serialization and determinism rules of §13.3 apply. The diff reports and does not gate: it exits 0 whatever it finds.
+
+**Example.** Against the §13.3 package as the base (commit `4b1c0de…`), a branch adds `readonly delayMs?: number` to the private `Options`, drops `NoInfer` from `expectEmitted`, and replaces `./labs`'s `flag` with `export const level = 2;`. `code-graph packages/demo --api demo-api.json --api-base origin/main --pretty` prints (the `4b1c0de…` sha in full in the real output):
+
+```json
+{
+  "base": "4b1c0de…",
+  "compiler": "7.0.0-dev.20260707.2",
+  "root": "packages/demo",
+  "subpaths": {
+    ".": {
+      "added": {},
+      "changed": {
+        "make": {
+          "after": {
+            "references": {
+              "src/core.d.ts#Options": "type Options = {\n    readonly retries: number;\n    readonly delayMs?: number;\n};"
+            },
+            "text": "export declare function make(options: Options): {\n    options: Options;\n    started: boolean;\n};"
+          },
+          "before": {
+            "references": {
+              "src/core.d.ts#Options": "type Options = {\n    readonly retries: number;\n};"
+            },
+            "text": "export declare function make(options: Options): {\n    options: Options;\n    started: boolean;\n};"
+          }
+        }
+      },
+      "removed": {},
+      "tier": "stable"
+    },
+    "./labs": {
+      "added": {
+        "level": { "after": { "references": {}, "text": "export declare const level = 2;" } }
+      },
+      "changed": {},
+      "removed": {
+        "flag": { "before": { "references": {}, "text": "export declare const flag = true;" } }
+      },
+      "tier": "experimental"
+    },
+    "./testing": {
+      "added": {},
+      "changed": {
+        "expectEmitted": {
+          "after": {
+            "references": {},
+            "text": "export declare function expectEmitted<T>(actual: readonly T[], expected: T): void;"
+          },
+          "before": {
+            "references": {},
+            "text": "export declare function expectEmitted<T>(actual: readonly T[], expected: NoInfer<T>): void;"
+          }
+        }
+      },
+      "removed": {},
+      "tier": "stable"
+    }
+  }
+}
+```
+
+`make`'s own text did not move, but its private `Options` did, so `make` is `changed`.
+
+### 13.5 The ratchet
+
+`code-graph <path> --api <map> --api-base <rev> --api-policy <file>`.
+
+**The bump policy** is the caller's, a JSON file parsed through `BumpPolicySchema`:
+
+```json
+{
+  "callout": "**Breaking",
+  "tiers": {
+    "stable": {
+      "added": { "bump": "minor" },
+      "changed": { "bump": "minor", "callout": true },
+      "removed": { "bump": "minor", "callout": true }
+    },
+    "experimental": {
+      "added": { "bump": "none" },
+      "changed": { "bump": "none" },
+      "removed": { "bump": "none" }
+    }
+  }
+}
+```
+
+- **`tiers`** maps a tier string to one row per change kind. Every row names all three kinds, `added`, `changed` and `removed`. A kind's rule is `bump`, one of `none` < `patch` < `minor` < `major`, and `callout`, a boolean that defaults to `false`.
+- **`callout`** is the marker text, non-empty. A rule with `callout: true` is met only when a counted changeset's body contains this text. The marker is policy, not a constant, because each package marks a breaking change its own way.
+- **`default`** is optional and has the shape of one `tiers` row. It applies to a subpath whose tier the policy does not name, and to a subpath with no tier. Without `default`, a diff row whose subpath's tier the policy does not name, or whose tier is `null`, exits 2 naming the subpath and tier, so no change passes unpoliced.
+- An unknown key exits 2. code-graph ships no policy and no default row: every rule is the caller's, and it adds none stricter.
+
+**Which changesets count.** The changeset folder is `.changeset/` at the repo root (`findRepoRoot(<path>)`). A file counts when all four hold:
+
+1. It is a `.md` file directly in `.changeset/` and is not `README.md`.
+2. It exists in the checkout's working tree.
+3. It does not exist in the base commit's tree (`git ls-tree --name-only <sha> -- .changeset/`).
+4. Its frontmatter names the package, the `name` in `<path>/package.json`, with a bump of `major`, `minor` or `patch`.
+
+The frontmatter is the changesets format: a block between two `---` lines whose lines read `"<package>": <bump>`. A file whose frontmatter does not parse exits 2 naming it. The body is everything after the closing `---`. A missing `<path>/package.json`, or one with no `name`, exits 2.
+
+The **highest bump** is the largest bump the counted files give the package, or `none` when no file counts. The **callout is found** when any counted file's body contains the policy's `callout` text.
+
+**Verdict.** Each diff row (subpath, kind, name) takes its rule from the policy by its subpath's tier. A row misses when its rule's `bump` is above the highest bump, or when its rule has `callout: true` and no callout is found. Exit 0 when nothing misses, 1 when anything does.
+
+**Output.** The default is human text on stdout. A pass is one line:
+
+```text
+API RATCHET: pass — 4 changes against 4b1c0de, highest changeset bump minor, callout found
+```
+
+A miss is one block per missing row, then a summary line:
+
+```text
+API RATCHET: make in . (stable) changed — needs a minor changeset with a "**Breaking" callout; found none
+  before:
+    export declare function make(options: Options): {
+        options: Options;
+        started: boolean;
+    };
+    src/core.d.ts#Options: type Options = {
+        readonly retries: number;
+    };
+  after:
+    …the same, with the after text…
+API RATCHET: 2 of 4 changes miss their bump against 4b1c0de
+```
+
+The block names the name, its subpath, its tier and its change kind, and prints the before and after text with references (an `added` row has no before, a `removed` row no after). `--json` prints an `ApiRatchetVerdict` instead:
+
+```ts
+type Bump = "none" | "patch" | "minor" | "major";
+
+type ApiRatchetVerdict = {
+  passed: boolean;
+  base: string;          // full sha
+  package: string;       // <path>/package.json name
+  changesets: string[];  // counted files, repo-relative, sorted
+  highestBump: Bump;
+  calloutFound: boolean;
+  misses: Array<{        // sorted by subpath, then name, then kind
+    subpath: string;
+    tier: string | null;
+    name: string;
+    kind: "added" | "removed" | "changed";
+    needs: { bump: Bump; callout: boolean };
+    before: ApiEntryText | null; // null for added
+    after: ApiEntryText | null;  // null for removed
+  }>;
+};
+```
+
+**Example.** On the §13.4 diff with the policy above and no changeset, `--json` prints:
+
+```json
+{
+  "base": "4b1c0de…",
+  "calloutFound": false,
+  "changesets": [],
+  "highestBump": "none",
+  "misses": [
+    {
+      "after": { "references": { "src/core.d.ts#Options": "type Options = {\n    readonly retries: number;\n    readonly delayMs?: number;\n};" }, "text": "export declare function make(options: Options): {\n    options: Options;\n    started: boolean;\n};" },
+      "before": { "references": { "src/core.d.ts#Options": "type Options = {\n    readonly retries: number;\n};" }, "text": "export declare function make(options: Options): {\n    options: Options;\n    started: boolean;\n};" },
+      "kind": "changed",
+      "name": "make",
+      "needs": { "bump": "minor", "callout": true },
+      "subpath": ".",
+      "tier": "stable"
+    },
+    {
+      "after": { "references": {}, "text": "export declare function expectEmitted<T>(actual: readonly T[], expected: T): void;" },
+      "before": { "references": {}, "text": "export declare function expectEmitted<T>(actual: readonly T[], expected: NoInfer<T>): void;" },
+      "kind": "changed",
+      "name": "expectEmitted",
+      "needs": { "bump": "minor", "callout": true },
+      "subpath": "./testing",
+      "tier": "stable"
+    }
+  ],
+  "package": "@demo/pkg",
+  "passed": false
+}
+```
+
+and exits 1. The `./labs` rows need `none`, so they never miss. With `.changeset/demo-options.md` added on the branch:
+
+```md
+---
+"@demo/pkg": minor
+---
+
+**Breaking:** `expectEmitted` no longer pins `expected` to `actual`'s type, and `make` takes `delayMs`.
+```
+
+the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBump": "minor"`, `"calloutFound": true`, `"misses": []`, `"passed": true`, and exits 0. A `patch` changeset with the callout, or a `minor` one without it, still misses both rows.
+
+### 13.6 Flags and exit codes
+
+| Flags | Runs | Prints | Exit |
+|---|---|---|---|
+| `--api <map>` | view | `PublishedApi` JSON | 0, 2 |
+| `--api <map> --api-base <rev>` | view at the base and now, then diff | `ApiDiff` JSON | 0, 2 |
+| `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2 |
+
+`--json`, `--pretty` and `--out` apply as in §10; no other flag combines with `--api`. Exit 2, with one stderr line naming the cause and nothing written, for:
+
+- `--api-base` without `--api`, `--api-policy` without `--api-base`, or `--api` with any view, analysis or gate flag other than `--json`, `--pretty` and `--out`;
+- an invalid map (§13.2) or policy (§13.5);
+- no tsconfig for `<path>`, tsgo failing to start, or an entry with no emitted file;
+- a base rev that does not resolve, or a failed `git archive`;
+- with `--api-policy`: no `name` in `<path>/package.json`, a changeset whose frontmatter does not parse, or a tier with no policy row and no `default`.
+
+### 13.7 Library subpath `@demlik/code-graph/api`
+
+The mode ships as the `./api` export (`src/api.ts`, a barrel over `src/api/`), built and verified like the other subpaths: `package.json` `exports`, the tsup entry, and a row in `scripts/verify-exports.mjs`.
+
+| Export | Result |
+|---|---|
+| `readPublishedApi(root, map, options?)` | `Promise<PublishedApi>`: the view |
+| `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: the diff; `base` is any rev |
+| `readChangesetsSince(root, base, options?)` | `ChangesetsSince`: `{ package, changesets }`, where each `Changeset` is `{ file, bump, body }` and only counted files appear |
+| `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`; pure, no I/O |
+| `ApiMapSchema`, `BumpPolicySchema` | the zod schemas the CLI parses through |
+
+It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these five exports and holds no logic of its own.
+
+### 13.8 Where it is documented
+
+- `docs/reference/cli.md` gains a "Published API" section: the three flags, what each prints, and the exit codes of §13.6, pointing here for the JSON.
+- `docs/reference/library.md` gains an "API" section for `@demlik/code-graph/api`: the exports of §13.7, the map and policy shapes, and one example.
+
+Each child documents the part it builds: the view child `--api` and `readPublishedApi`, the diff child `--api-base` and `diffPublishedApi`, the ratchet child `--api-policy`, `readChangesetsSince` and `ratchetApiDiff`.

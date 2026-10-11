@@ -73,6 +73,12 @@ export default defineConfig({
     alias: [
       { find: /^@demlik\/tea$/, replacement: abs("src/index.ts") },
       ...subpathAliases,
+      // The API ratchet (`src/api-ratchet`) calls code-graph's library, and CI
+      // tests before it builds, so the specifier resolves to source here too.
+      {
+        find: /^@demlik\/code-graph\/api$/,
+        replacement: abs("../code-graph/src/api.ts"),
+      },
     ],
   },
   test: {

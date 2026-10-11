@@ -1,0 +1,6 @@
+{
+  ".": { "entry": "src/index.ts", "tier": "stable" },
+  "./testing": { "entry": "src/testing/index.ts", "tier": "stable" },
+  "./renamed": { "entry": "src/renamed/index.ts" },
+  "./relay": { "entry": "src/relay/index.ts", "tier": "experimental" }
+}

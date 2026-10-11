@@ -18,8 +18,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Depth 2, not the default 1: on a pull request the checkout is the merge of
+      # the PR into its base, and the "Published API" step below diffs against
+      # that merge's first parent — the base commit — so it has to be fetched.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -87,6 +92,20 @@ jobs:
       # stability promise. Runs before the slower suites.
       - name: Check every export carries a tier stamp
         run: pnpm --filter @demlik/tea exec node scripts/check-export-stamps.mjs
+
+      # The step above checks that every subpath HAS a tier; this one holds a PR
+      # to what the tier promises. It diffs every name tea publishes against the
+      # PR's base commit and fails, naming the name, its subpath, its tier and
+      # the before/after text, when a change lacks the changeset MAINTAINING.md's
+      # semver policy asks for. A PR that changes no published name passes with
+      # no changeset. `HEAD^1` is the base commit the checkout merged the PR
+      # into, so the diff holds exactly what the PR adds. Pull requests only: a
+      # push has no base to diff against.
+      - name: Published API changes carry the changeset their tier asks for
+        if: github.event_name == 'pull_request'
+        env:
+          TEA_API_BASE: HEAD^1
+        run: pnpm --filter @demlik/tea run api:ratchet
 
       - name: Run tests
         run: pnpm test

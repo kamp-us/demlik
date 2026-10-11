@@ -47,11 +47,19 @@ export type Opts = {
   acceptCrossings?: boolean;
   reason?: string;
   migrateCeilings?: boolean;
+  api?: string;
+  apiBase?: string;
+  apiPolicy?: string;
 };
 
 export function cleanExit(message: string): void {
   process.stderr.write(`code-graph: ${message}\n`);
   process.exitCode = 2;
+}
+
+// Sets the process exit code a run resolved to; 0 leaves whatever is already set.
+export function exitWith(code: number): void {
+  if (code !== 0) process.exitCode = code;
 }
 
 function graphOptions(command: Command): Command {
@@ -161,6 +169,22 @@ function featureOptions(command: Command): Command {
     );
 }
 
+function apiOptions(command: Command): Command {
+  return command
+    .option(
+      "--api <map>",
+      'published-API view (SPEC §13): emit <path>\'s declarations with the pinned tsgo into a temp folder and print, per export subpath of the JSON map <map> ({ "<subpath>": { "entry": "<source file>", "tier"?: "<string>" } }), every published name with its declaration text and the text of the unpublished declarations it references; combines only with --api-base, --api-policy, --json, --pretty and --out',
+    )
+    .option(
+      "--api-policy <file>",
+      'with --api --api-base: gate the diff on the package\'s changesets (SPEC §13.5). <file> is the caller\'s JSON bump policy ({ "callout": "<marker>", "tiers": { "<tier>": { "added" | "changed" | "removed": { "bump": "none" | "patch" | "minor" | "major", "callout"?: true } } }, "default"?: <one tier\'s row> }); code-graph ships no policy of its own. The changesets that count are the .changeset/*.md files added since <rev> whose frontmatter names the package of <path>/package.json; the highest of their bumps is compared with the bump each changed name\'s tier and change kind needs, and a rule with a callout also needs the marker in a counted changeset\'s body. Prints one line on a pass, or one block per name that misses (name, subpath, tier, change kind, bump needed and found, before/after text); --json prints the verdict. Exits 0 on a pass, 1 on a miss, 2 on a tier with no policy row and no default',
+    )
+    .option(
+      "--api-base <rev>",
+      "with --api: diff the published API against the commit <rev> names (SPEC §13.4) and print, per subpath, the added, removed and changed names with before/after text and tier; the base tree is read from git's objects into a temp folder, never into the checkout",
+    );
+}
+
 function outputOptions(command: Command): Command {
   return command
     .option("--pretty", "pretty-print JSON output")
@@ -176,5 +200,5 @@ export function defineProgram(): Command {
     .name("code-graph")
     .description("Agent-native TypeScript code-graph tool (SPEC.md)")
     .argument("<path>", "folder to analyze");
-  return outputOptions(featureOptions(analysisOptions(graphOptions(command))));
+  return outputOptions(apiOptions(featureOptions(analysisOptions(graphOptions(command)))));
 }

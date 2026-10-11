@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import type { Command } from "commander";
+import { runApiFlags } from "./api/cli.js";
 import { runBoundaryGate } from "./boundaries/gate.js";
-import { cleanExit, defineProgram, type Opts } from "./cli.js";
+import { cleanExit, defineProgram, exitWith, type Opts } from "./cli.js";
 import { runCollapseGate } from "./collapse/gate.js";
 import { renderCollapse } from "./collapse/render.js";
 import { runCommentGate } from "./comments/gate.js";
@@ -55,7 +57,7 @@ import type { Graph } from "./schema.js";
 import { isPlanAxis, type PlanAxis } from "./smells/plan.js";
 
 defineProgram()
-  .action((targetPath: string, opts: Opts) => {
+  .action((targetPath: string, opts: Opts, command: Command) => {
     const resolved = path.resolve(targetPath);
 
     let stat: fs.Stats;
@@ -93,6 +95,19 @@ defineProgram()
       }
       process.stdout.write(payload);
     };
+
+    const apiRun = runApiFlags(opts, {
+      rootAbsolute,
+      given: Object.keys(opts).filter((key) => command.getOptionValueSource(key) === "cli"),
+      json,
+      pretty,
+      emit,
+      report: cleanExit,
+    });
+    if (apiRun !== null) {
+      void apiRun.then(exitWith);
+      return;
+    }
 
     if (opts.layers === true) {
       const code = runLayerGate({

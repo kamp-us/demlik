@@ -99,14 +99,23 @@ function exportOrigin(
   return { file: decl.getSourceFile().fileName, name: declaredName(decl) ?? exportName };
 }
 
+// The file-to-module-symbol step: the module symbol of `moduleFile` in `program`, or undefined when
+// the program holds no such file or the file is not a module. It is the package's one such step;
+// the published-API view (`src/api/`) asks it too.
+export function moduleSymbolOf(
+  program: ts.TypeProgram,
+  moduleFile: string,
+): ts.TsSymbol | undefined {
+  const source = program.sourceFile(moduleFile);
+  return source === undefined ? undefined : program.symbolAt(source);
+}
+
 function moduleExport(
   program: ts.TypeProgram,
   moduleFile: string,
   exportName: string,
 ): ExportDeclaration | null {
-  const source = program.sourceFile(moduleFile);
-  if (source === undefined) return null;
-  const moduleSymbol = program.symbolAt(source);
+  const moduleSymbol = moduleSymbolOf(program, moduleFile);
   if (moduleSymbol === undefined) return null;
   const decl = exportedDeclaration(program, moduleSymbol, exportName);
   if (decl === undefined) return null;

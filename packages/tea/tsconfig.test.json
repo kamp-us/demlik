@@ -35,7 +35,11 @@
     // imports the specifier, so this is scoped to the test program deliberately.
     "paths": {
       "@demlik/tea": ["./src/index.ts"],
-      "@demlik/tea/*": ["./src/*/index.ts", "./src/*"]
+      "@demlik/tea/*": ["./src/*/index.ts", "./src/*"],
+      // The API ratchet (`src/api-ratchet`, which only this program compiles)
+      // calls code-graph's library. CI typechecks before it builds, so the
+      // specifier resolves to source, not to a `dist/` that does not exist yet.
+      "@demlik/code-graph/api": ["../code-graph/src/api.ts"]
     }
   },
   "include": ["src"],

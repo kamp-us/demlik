@@ -1,0 +1,5 @@
+{
+  ".": { "entry": "src/index.ts", "tier": "stable" },
+  "./battery": { "entry": "src/battery/index.ts", "tier": "battery" },
+  "./labs": { "entry": "src/labs/index.ts", "tier": "experimental" }
+}

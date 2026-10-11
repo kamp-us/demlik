@@ -26,7 +26,7 @@ Source: [project exports](../../src/project.ts).
 
 ## Resolve
 
-`@demlik/code-graph/resolve` exports `loadInProcessGraph` and the types
+`@demlik/code-graph/resolve` exports `loadInProcessGraph`, `moduleSymbolOf` and the types
 `InProcessGraph`, `InProcessGraphOptions`, `ExportOrigin`, `ExportDeclaration`,
 `SubpathEntries`, `SubpathExport`, `UnresolvableSubpath`, and `SubpathAnswer`.
 
@@ -78,6 +78,12 @@ One tsgo session opens on the first lookup and is reused. Each lookup gets
 its own program. `dispose()` releases the session; create a new handle for
 later lookups.
 
+`moduleSymbolOf(program, moduleFile)` is the step under `resolveModuleExport`:
+the module symbol a file declares in an open tsgo program, or `undefined`. It
+is exported for the published-API view below, which asks the same step; its
+`program` argument is code-graph's own tsgo wrapper, so most callers want
+`resolveModuleExport` instead.
+
 Example, run in this checkout's `packages/code-graph` directory after building:
 
 ```ts
@@ -108,6 +114,111 @@ try {
 ```
 
 Source: [resolver](../../src/resolve.ts).
+
+## API
+
+`@demlik/code-graph/api` is the library side of `--api` (see the
+[CLI reference](cli.md#published-api)). It exports:
+
+| Export | Result |
+|---|---|
+| `readPublishedApi(root, map, options?)` | `Promise<PublishedApi>`: per subpath, every published name with its text and references |
+| `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: per subpath, the names added, removed and changed against the commit `base` names |
+| `readChangesetsSince(root, base, options?)` | `ChangesetsSince`: the package's name and its changesets added since the commit `base` names |
+| `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`: the changes that miss the bump the policy asks for; pure, no I/O |
+| `ApiMapSchema`, `BumpPolicySchema` | The zod schemas an API map and a bump policy are parsed through |
+| `ApiInputError` | Thrown for every input the CLI refuses with exit 2, with the same message |
+
+and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`,
+`PublishedApiOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`,
+`ChangesetsOptions` and `ApiRatchetVerdict`.
+
+`root` is the package root and resolves against the working directory. `map`
+is the API map, `{ "<subpath>": { entry, tier? } }`, parsed through
+`ApiMapSchema` before use. `options` is `{ repoRoot?, warn? }`: `repoRoot`
+defaults to `findRepoRoot(root)`, and `warn` receives the one warning line for
+an emit with diagnostics (stderr by default). The emit runs in a temp folder
+outside the checkout and is removed before the promise settles.
+
+```ts
+import { readPublishedApi } from "@demlik/code-graph/api";
+
+const api = await readPublishedApi("packages/tea", {
+  ".": { entry: "src/index.ts", tier: "stable" },
+  "./testing": { entry: "src/testing/index.ts", tier: "stable" },
+});
+api.subpaths["./testing"]?.names.expectCmdEmitted?.text;
+// "export declare function expectCmdEmitted<S, M extends {\n    type: string;\n}, …>(…): void;"
+```
+
+`diffPublishedApi` takes the same `root`, `map` and `options`, plus `base`, any
+rev git resolves to a commit in the repository that holds `root`. It writes
+that commit's tree from git's objects into a temp folder outside the checkout,
+links the checkout's installed `node_modules` into it, reads the same view
+there, and compares it with the view of the working tree as it is. The
+checkout's files, index, branch and stash are never written, and the temp
+folders are removed before the promise settles. A rev that names no commit
+throws `ApiInputError` before anything is emitted. Per subpath, the result has
+the `tier` and `added` (`{ after }`), `removed` (`{ before }`) and `changed`
+(`{ before, after }`) maps of `ApiEntryText`, with `base` as the full sha.
+
+```ts
+import { diffPublishedApi } from "@demlik/code-graph/api";
+
+const diff = await diffPublishedApi("packages/tea", map, "origin/main");
+diff.subpaths["./testing"]?.changed.expectCmdEmitted?.before.text;
+// "…, cmd: NoInfer<C>): void;"  (and `.after.text` ends "…, cmd: C): void;")
+```
+
+`readChangesetsSince` and `ratchetApiDiff` are the library side of
+`--api-policy`. `readChangesetsSince(root, base, options?)` is synchronous and
+only reads. It returns `{ package, changesets }`: `package` is the `name` in
+`root`'s `package.json`, and each `Changeset` is `{ file, bump, body }` for a
+file that counts, with `file` repo-relative, `bump` one of `major`, `minor`
+and `patch`, and `body` the text after the frontmatter. The
+[CLI reference](cli.md#published-api) says which files count. `options` is
+`{ repoRoot? }`, the folder that holds `.changeset/`, defaulting to
+`findRepoRoot(root)`. A `package.json` with no `name`, or a changeset whose
+frontmatter does not parse, throws `ApiInputError`.
+
+`ratchetApiDiff(diff, policy, changesets)` judges a diff and reads nothing but
+its arguments. `policy` is the bump policy, parsed through `BumpPolicySchema`
+before use:
+`{ callout, tiers: { "<tier>": { added, changed, removed } }, default? }`, each
+rule `{ bump, callout? }` with `bump` one of `none`, `patch`, `minor` and
+`major`. The library holds no policy of its own. The verdict has `passed`,
+`base`, `package`, the counted `changesets`, `highestBump`, `calloutFound` and
+`misses`, sorted by subpath, then name, each with `subpath`, `tier`, `name`,
+`kind`, `needs`, `before` and `after`. An invalid policy throws
+`ApiInputError`, and so does a changed name whose tier the policy gives no row
+and no `default`.
+
+```ts
+import {
+  diffPublishedApi,
+  ratchetApiDiff,
+  readChangesetsSince,
+} from "@demlik/code-graph/api";
+
+const diff = await diffPublishedApi("packages/tea", map, "origin/main");
+const verdict = ratchetApiDiff(
+  diff,
+  {
+    callout: "**Breaking",
+    tiers: {
+      stable: {
+        added: { bump: "minor" },
+        changed: { bump: "minor", callout: true },
+        removed: { bump: "minor", callout: true },
+      },
+    },
+  },
+  readChangesetsSince("packages/tea", diff.base),
+);
+if (!verdict.passed) process.exitCode = 1;
+```
+
+Source: [API exports](../../src/api.ts).
 
 ## SCC
 
