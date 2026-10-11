@@ -779,9 +779,9 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
 
 | Flags | Runs | Prints | Exit |
 |---|---|---|---|
-| `--api <map>` | view | `PublishedApi` JSON | 0, 2 |
-| `--api <map> --api-base <rev>` | view at the base and now, then diff | `ApiDiff` JSON | 0, 2 |
-| `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2 |
+| `--api <map>` | view | `PublishedApi` JSON | 0, 2, 3 |
+| `--api <map> --api-base <rev>` | view at the base and now, then diff | `ApiDiff` JSON | 0, 2, 3 |
+| `--api <map> --api-base <rev> --api-policy <file>` | the above, then ratchet | human verdict; `--json` gives `ApiRatchetVerdict` | 0 pass, 1 miss, 2, 3 |
 
 `--json`, `--pretty` and `--out` apply as in §10; no other flag combines with `--api`. Exit 2, with one stderr line naming the cause and nothing written, for:
 
@@ -790,6 +790,8 @@ the same run prints `"changesets": [".changeset/demo-options.md"]`, `"highestBum
 - no tsconfig for `<path>`, tsgo failing to start, or an entry with no emitted file;
 - a base rev that does not resolve, or a failed `git archive`;
 - with `--api-policy`: no `name` in `<path>/package.json`, a changeset whose frontmatter does not parse, or a tier with no policy row and no `default`.
+
+Exit 3 for any other error inside the run, on all three rows: one stderr line, `code-graph: unexpected error: <message>`, no stack trace and nothing on stdout. An `--out` file that cannot be written is one of these and exits 3, not 2. So exit 1 always means a ratchet miss, never a crash.
 
 ### 13.7 Library subpath `@demlik/code-graph/api`
 
