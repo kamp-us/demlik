@@ -2,13 +2,13 @@
  * The compose-two-battery-slices recipe's compile-and-run gate (#240).
  *
  * `docs/how-to/compose-two-battery-slices.md` hands the reader a two-battery
- * door to paste. Two of its claims cannot survive a page nothing compiles: that
+ * host Model to paste. Two of its claims cannot survive a page nothing compiles: that
  * `liftSlice`'s key is checked against the host Model, so threading one
  * battery's slice into the other's field is a compile error rather than a state
  * shape nothing reads correctly; and that `readInOrder`'s precedence is a VALUE,
  * so reshuffling it changes an answer a test can name.
  *
- * So the door lives HERE, as real TypeScript in the test program
+ * So the host Model lives HERE, as real TypeScript in the test program
  * (`tsconfig.test.json`, gated in CI as `typecheck:test`), and the tests below
  * assert the page's `ts` blocks are this file's `#region` bodies verbatim. The
  * page cannot drift from a compiling artifact, because the page IS the
@@ -20,7 +20,7 @@
 // biome-ignore-all assist/source/organizeImports: the `#region` markers below
 // pin import blocks the page reproduces verbatim; sorting the harness's imports
 // into them would move a marker and break the assertions this file is.
-// biome-ignore-all lint/suspicious/noExportsInTest: the door is the artifact
+// biome-ignore-all lint/suspicious/noExportsInTest: the host Model is the artifact
 // under test, and it is exported because the reader pastes it as a module.
 
 import { fileURLToPath } from "node:url";
@@ -76,11 +76,11 @@ export const inFlight = {
 };
 // #endregion batteries
 
-// #region door
+// #region host
 import { defineMachine, liftSlice } from "@demlik/tea";
 
 /**
- * The door: one Model carrying both slices at named keys, plus whatever the
+ * The host Model: one Model carrying both slices at named keys, plus whatever the
  * host itself owns. The batteries never see this type, and it never sees
  * theirs — the two meet only at the key.
  */
@@ -127,12 +127,12 @@ export const lookup = defineMachine({
     },
   },
 });
-// #endregion door
+// #endregion host
 
 // #region read
 import { type ReadStep, readInOrder } from "@demlik/tea";
 
-/** What the door says about one key, for a caller that has to render something. */
+/** What the host Model says about one key, for a caller that has to render something. */
 export type Status =
   | { readonly state: "ready"; readonly title: string }
   | { readonly state: "pending"; readonly since: number }
@@ -276,7 +276,7 @@ const region = (name: string) => regionMirror(self, name);
 describe("docs/how-to/compose-two-battery-slices.md (#240) — it cannot rot", () => {
   it.each([
     "batteries",
-    "door",
+    "host",
     "read",
     "precedence",
   ])("shows the compiled `%s` block verbatim", async (name) => {
