@@ -63,7 +63,8 @@ returns, pairs it with the Cmd it handed you, and mints `fetch_rate_ok` or
 `fetch_rate_err`. Returning `next`'s outcome unchanged is what keeps the Model —
 and therefore a replay — identical to the unwrapped run's.
 
-So the door is one over the **effect** boundary, never over the fold:
+So a wrapper may act around the **effect** boundary, and must never change the
+fold:
 
 - **Do** await, retry around, log, time, rate-limit, or enrich `ctx` before
   calling `next`.

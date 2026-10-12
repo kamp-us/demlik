@@ -1,4 +1,4 @@
-# Compose two battery slices into one door
+# Compose two battery slices in one Model
 
 You have two batteries — pure state plus verbs over that state — and one Model
 that has to carry both. Two jobs fall out of that, and `@demlik/tea`'s root door
@@ -7,7 +7,7 @@ covers each with one function: `liftSlice` threads a verb's
 key, and `readInOrder` turns a read spanning both slices into a precedence you
 can name, export and assert on.
 
-This guide wires a two-battery door end to end and reads across it. Each
+This guide wires a two-battery host Model end to end and reads across it. Each
 function's own surface is in [the reference page](../reference/tea.md);
 why this is forty lines here rather than a dependency is settled in
 [ADR 0001](../../../../.decisions/0001-no-offtheshelf-resilience.md) and
@@ -85,7 +85,7 @@ compile error instead of a Model whose reads quietly stop agreeing.
 import { defineMachine, liftSlice } from "@demlik/tea";
 
 /**
- * The door: one Model carrying both slices at named keys, plus whatever the
+ * The host Model: one Model carrying both slices at named keys, plus whatever the
  * host itself owns. The batteries never see this type, and it never sees
  * theirs — the two meet only at the key.
  */
@@ -152,7 +152,7 @@ the `absent` value you pass when every step defers.
 ```ts
 import { type ReadStep, readInOrder } from "@demlik/tea";
 
-/** What the door says about one key, for a caller that has to render something. */
+/** What the host Model says about one key, for a caller that has to render something. */
 export type Status =
   | { readonly state: "ready"; readonly title: string }
   | { readonly state: "pending"; readonly since: number }
@@ -200,7 +200,7 @@ pins the order by name and a log line can say which slice answered.
 ## 4. Assert the order, not just the answer
 
 Precedence is only tested by an input the two orders disagree about — for this
-door, a key that is cached and refreshing at once. Fold to that state, then
+host Model, a key that is cached and refreshing at once. Fold to that state, then
 assert the order by name beside the answer it produces:
 
 ```ts
