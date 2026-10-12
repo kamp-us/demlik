@@ -124,14 +124,14 @@ describe.runIf(BASE === undefined)("api map", () => {
     ).toThrow("./labs has no entry in tsup.config.ts that builds its target");
   });
 
-  it("covers every subpath tea exports, each with a source file that exists", () => {
+  it("covers every subpath tea exports, each with a source file that exists", async () => {
     const pkg = JSON.parse(
       readFileSync(join(PKG_ROOT, "package.json"), "utf8"),
     ) as { exports: Record<string, unknown> };
     const exported = Object.keys(pkg.exports).filter(
       (s) => s !== "./package.json" && !s.endsWith(".css"),
     );
-    const map = readApiMap();
+    const map = await readApiMap();
 
     expect(Object.keys(map).sort()).toEqual(exported.sort());
     expect(ApiMapSchema.safeParse(map).success).toBe(true);

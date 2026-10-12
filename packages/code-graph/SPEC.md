@@ -559,6 +559,16 @@ With the map in §13.2, `code-graph packages/demo --api demo-api.json --pretty` 
 
 A subpath whose entry does not exist at the base has every name `added`. An entry missing now exits 2, as in the view.
 
+**A base-side map (library only).** One map cannot name a subpath the working tree deleted: its entry is missing now, and that exits 2. So a change that deletes a whole subpath is invisible to a one-map diff. `diffPublishedApi` takes an optional `baseMap` in its options to close that: a function called once with `<temp>/base/<path>`, the package root inside the base tree, that returns the API map the package had at that commit (or a promise of it). The caller reads it from the base tree's own files, the same way it reads the working tree's map. With `baseMap`:
+
+- The base side is read through the base map, and the working tree through `map`. The fallback above does not apply: a base map entry the base tree lacks throws `ApiInputError` (`base API map: <subpath>: entry <entry> does not exist at the base <sha, 12 chars>`), and a base map that fails §13.2's shape throws `invalid base API map: …`. An empty base map is valid: the package published nothing then.
+- A subpath in `map` and not in the base map has every name `added`.
+- A subpath in the base map and not in `map` is a key of the diff too, with **the tier the base map gave it** and every name it published `removed`. A moved subpath is both: the old one all `removed`, the new one all `added`.
+- A subpath in both keeps `map`'s tier, as in a one-map diff.
+- A base commit that has no `<path>` folder is not handed to `baseMap`: every name is `added`.
+
+A call that passes no `baseMap` reads both sides through `map` and returns what it returned before, byte for byte. The CLI passes none and has no flag for one, so `--api-base` output does not change.
+
 **Compare.** Per subpath, a name published now and not at the base is `added`. A name published at the base and not now is `removed`. A name in both whose `text` or `references` differ is `changed`. Equality is exact string equality on the text rules of §13.3.
 
 **JSON.** Output is an `ApiDiff`:
@@ -577,7 +587,7 @@ type ApiDiff = {
 };
 ```
 
-Every subpath in the map is a key, including one with no change. The serialization and determinism rules of §13.3 apply. The diff reports and does not gate: it exits 0 whatever it finds.
+Every subpath in the map is a key, including one with no change, and so is every subpath only a base-side map names. The keys are in sorted order. The serialization and determinism rules of §13.3 apply. The diff reports and does not gate: it exits 0 whatever it finds.
 
 **Example.** Against the §13.3 package as the base (commit `4b1c0de…`), a branch adds `readonly delayMs?: number` to the private `Options`, drops `NoInfer` from `expectEmitted`, and replaces `./labs`'s `flag` with `export const level = 2;`. `code-graph packages/demo --api demo-api.json --api-base origin/main --pretty` prints (the `4b1c0de…` sha in full in the real output):
 
@@ -800,12 +810,12 @@ The mode ships as the `./api` export (`src/api.ts`, a barrel over `src/api/`), b
 | Export | Result |
 |---|---|
 | `readPublishedApi(root, map, options?)` | `Promise<PublishedApi>`: the view |
-| `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: the diff; `base` is any rev |
+| `diffPublishedApi(root, map, base, options?)` | `Promise<ApiDiff>`: the diff; `base` is any rev. Its options also take `baseMap` (§13.4) |
 | `readChangesetsSince(root, base, options?)` | `ChangesetsSince`: `{ package, changesets }`, where each `Changeset` is `{ file, bump, body }` and only counted files appear |
 | `ratchetApiDiff(diff, policy, changesets)` | `ApiRatchetVerdict`; pure, no I/O |
 | `ApiMapSchema`, `BumpPolicySchema` | the zod schemas the CLI parses through |
 
-It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these five exports and holds no logic of its own.
+It also exports the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`, `ApiDiffOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`, `ApiRatchetVerdict` and the error class `ApiInputError`. `root` is the package root and resolves against cwd when relative. `options` is `{ repoRoot?: string }`, defaulting to `findRepoRoot(root)`. Every input the CLI refuses with exit 2 makes the library throw `ApiInputError` with the same message, and the CLI maps that error to exit 2. The CLI is a thin caller of these five exports and holds no logic of its own.
 
 ### 13.8 Where it is documented
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { checkoutOf, exportBaseTree, removeBaseTree, resolveBase } from "./base.js";
-import { type ApiSubpath, apiSubpaths } from "./map.js";
+import { type ApiSubpath, apiSubpaths, baseApiSubpaths } from "./map.js";
 import type { ApiEntryText, SubpathNames } from "./read.js";
 import {
   type EmittedNames,
@@ -60,6 +60,17 @@ export function diffSubpathNames(
   return { tier, added, removed, changed };
 }
 
+// What the diff takes beyond the view's options (SPEC §13.4).
+export type ApiDiffOptions = PublishedApiOptions & {
+  // Reads the API map the package had at the base commit. It is called with the package root
+  // inside the base tree, so it can read the files that stated the map then, and the base side is
+  // read through its answer. Without it the base is read through `map`, which cannot name a
+  // subpath the working tree no longer has.
+  readonly baseMap?: (baseRoot: string) => unknown | Promise<unknown>;
+};
+
+const isDirectory = (dir: string): boolean => fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+
 // The map's subpaths as they stand in the base tree: a subpath whose entry the base commit lacks is
 // left out, so every name it publishes now is `added`.
 function subpathsAtBase(baseRoot: string, subpaths: readonly ApiSubpath[]): readonly ApiSubpath[] {
@@ -71,23 +82,36 @@ function subpathsAtBase(baseRoot: string, subpaths: readonly ApiSubpath[]): read
   });
 }
 
-async function readBaseNames(
+// What the base commit publishes: the subpaths it is read through, and each one's names.
+type BaseSide = {
+  readonly subpaths: readonly ApiSubpath[];
+  readonly names: EmittedNames["names"];
+};
+
+async function readBaseSide(
   rootAbsolute: string,
   sha: string,
   subpaths: readonly ApiSubpath[],
+  baseMap: ApiDiffOptions["baseMap"],
   options: PublishedApiOptions,
-): Promise<EmittedNames["names"]> {
+): Promise<BaseSide> {
   const checkout = checkoutOf(rootAbsolute);
   const tree = await exportBaseTree(checkout, sha);
   try {
-    const present = subpathsAtBase(tree.root, subpaths);
-    if (present.length === 0) return new Map();
+    // A commit that predates the package has no map to read: it published nothing.
+    const present =
+      baseMap === undefined
+        ? subpathsAtBase(tree.root, subpaths)
+        : isDirectory(tree.root)
+          ? baseApiSubpaths(tree.root, await baseMap(tree.root), sha)
+          : [];
+    if (present.length === 0) return { subpaths: present, names: new Map() };
     const { names } = await readEmittedNames(tree.root, present, {
       ...options,
       repoRoot: tree.temp,
       context: ` at the base ${sha.slice(0, 12)}`,
     });
-    return names;
+    return { subpaths: present, names };
   } finally {
     removeBaseTree(tree);
   }
@@ -96,21 +120,30 @@ async function readBaseNames(
 // The published-API diff of the package at `root` against the commit `base` names (SPEC §13.4).
 // The base tree is read from the repository's objects into a temp folder outside the checkout;
 // the checkout's files, index and refs are never written. The "after" side is the working tree as
-// it is, uncommitted edits included.
+// it is, uncommitted edits included. With `options.baseMap`, a subpath only the base map names is
+// a key too, with the tier that map gave it and every name it published `removed`.
 export async function diffPublishedApi(
   root: string,
   map: unknown,
   base: string,
-  options: PublishedApiOptions = {},
+  { baseMap, ...options }: ApiDiffOptions = {},
 ): Promise<ApiDiff> {
   const rootAbsolute = packageRoot(root);
   const subpaths = apiSubpaths(rootAbsolute, map);
   const sha = resolveBase(checkoutOf(rootAbsolute), base);
   const now = await readEmittedNames(rootAbsolute, subpaths, options);
-  const before = await readBaseNames(rootAbsolute, sha, subpaths, options);
+  const before = await readBaseSide(rootAbsolute, sha, subpaths, baseMap, options);
+  const kept = new Set(subpaths.map(({ subpath }) => subpath));
+  const gone = before.subpaths.filter(({ subpath }) => !kept.has(subpath));
   const diff: Record<string, SubpathDiff> = {};
-  for (const { subpath, tier } of subpaths) {
-    diff[subpath] = diffSubpathNames(tier, before.get(subpath) ?? {}, now.names.get(subpath) ?? {});
+  for (const { subpath, tier } of [...subpaths, ...gone].sort((a, b) =>
+    a.subpath < b.subpath ? -1 : a.subpath > b.subpath ? 1 : 0,
+  )) {
+    diff[subpath] = diffSubpathNames(
+      tier,
+      before.names.get(subpath) ?? {},
+      now.names.get(subpath) ?? {},
+    );
   }
   return { root: projectRelative(rootAbsolute), base: sha, compiler: now.compiler, subpaths: diff };
 }
