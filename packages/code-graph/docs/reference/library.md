@@ -130,7 +130,7 @@ Source: [resolver](../../src/resolve.ts).
 | `ApiInputError` | Thrown for every input the CLI refuses with exit 2, with the same message |
 
 and the types `ApiMap`, `ApiEntryText`, `PublishedApi`, `ApiDiff`,
-`PublishedApiOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`,
+`ApiDiffOptions`, `PublishedApiOptions`, `BumpPolicy`, `Bump`, `Changeset`, `ChangesetsSince`,
 `ChangesetsOptions` and `ApiRatchetVerdict`.
 
 `root` is the package root and resolves against the working directory. `map`
@@ -161,6 +161,23 @@ folders are removed before the promise settles. A rev that names no commit
 throws `ApiInputError` before anything is emitted. Per subpath, the result has
 the `tier` and `added` (`{ after }`), `removed` (`{ before }`) and `changed`
 (`{ before, after }`) maps of `ApiEntryText`, with `base` as the full sha.
+
+One map cannot name a subpath the working tree deleted, because its entry no
+longer exists. To see a deleted subpath, pass `baseMap` in the options
+(`ApiDiffOptions`): a function that gets the package root inside the base tree
+and returns the API map the package had at that commit, or a promise of it.
+The base is then read through that map. A subpath only the base map names
+comes back with the base map's tier and every name `removed`, and a subpath
+only `map` names with every name `added`. A base map entry the base commit
+lacks throws `ApiInputError`. Without `baseMap` the result is what it was
+before the option existed.
+
+```ts
+const diff = await diffPublishedApi("packages/tea", map, "origin/main", {
+  baseMap: (baseRoot) => readMyApiMap(baseRoot),
+});
+diff.subpaths["./paginate"]?.removed; // every name the deleted subpath published
+```
 
 ```ts
 import { diffPublishedApi } from "@demlik/code-graph/api";

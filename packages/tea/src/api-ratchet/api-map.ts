@@ -11,11 +11,16 @@
  *     reference generator uses
  *
  * A subpath one of them does not cover is an error here, never a guess.
+ *
+ * The three files are read from the package root the caller names, so one
+ * reader serves both sides of the ratchet: the working tree, and the base
+ * commit's tree, where a subpath the pull request deleted still has its
+ * `exports` key, its build entry and its tier row.
  */
 
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import tsupConfig from "../../tsup.config";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseTierTable, type Tier } from "../docs/reference/tier-table";
 
 export const PKG_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -85,15 +90,30 @@ export function buildApiMap(sources: ApiMapSources): TeaApiMap {
   return map;
 }
 
-/** tsup's `entry` and out folder, as `tsup.config.ts` states them. */
-function tsupEntries(): Pick<ApiMapSources, "entries" | "outDir"> {
-  if (typeof tsupConfig === "function" || Array.isArray(tsupConfig)) {
+const isRecord = (x: unknown): x is Readonly<Record<string, unknown>> =>
+  typeof x === "object" && x !== null && !Array.isArray(x);
+
+const isEntries = (x: unknown): x is Readonly<Record<string, string>> =>
+  isRecord(x) && Object.values(x).every((source) => typeof source === "string");
+
+/**
+ * tsup's `entry` and out folder, as the `tsup.config.ts` under `root` states
+ * them. The config is code, so it is imported from that root: the base tree's
+ * copy is the one that still names a deleted subpath's build entry.
+ */
+async function tsupEntries(
+  root: string,
+): Promise<Pick<ApiMapSources, "entries" | "outDir">> {
+  const file = pathToFileURL(join(root, "tsup.config.ts")).href;
+  const config: unknown = ((await import(file)) as { default?: unknown })
+    .default;
+  if (!isRecord(config)) {
     throw new Error(
       "api-ratchet: tsup.config.ts must export one options object",
     );
   }
-  const { entry, outDir = "dist" } = tsupConfig;
-  if (entry === undefined || Array.isArray(entry)) {
+  const { entry, outDir = "dist" } = config;
+  if (!isEntries(entry) || typeof outDir !== "string") {
     throw new Error(
       "api-ratchet: tsup.config.ts `entry` must map each built file to its source",
     );
@@ -101,16 +121,15 @@ function tsupEntries(): Pick<ApiMapSources, "entries" | "outDir"> {
   return { entries: entry, outDir };
 }
 
-/** The API map of the package as it stands on disk. */
-export function readApiMap(): TeaApiMap {
-  const read = (file: string): string =>
-    readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+/** The API map of the package as it stands under `root`. */
+export async function readApiMap(root: string = PKG_ROOT): Promise<TeaApiMap> {
+  const read = (file: string): string => readFileSync(join(root, file), "utf8");
   const pkg = JSON.parse(read("package.json")) as {
     exports: Readonly<Record<string, ExportTarget>>;
   };
   return buildApiMap({
     exports: pkg.exports,
-    ...tsupEntries(),
+    ...(await tsupEntries(root)),
     tiers: parseTierTable(read("MAINTAINING.md")),
   });
 }

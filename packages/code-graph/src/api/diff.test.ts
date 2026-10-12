@@ -196,6 +196,83 @@ describe("diffPublishedApi — the published-API diff (SPEC §13.4)", () => {
   });
 });
 
+describe("diffPublishedApi with a base-side map (SPEC §13.4)", () => {
+  const whole = map as Record<string, { entry: string; tier: string }>;
+  const kept = { ".": whole["."] };
+
+  // The `after` commit as the base, with `./testing` and `./labs` deleted from the working tree.
+  function repositoryWithoutTwoSubpaths(): string {
+    const pruned = throwawayRepository();
+    fs.rmSync(path.join(pruned, "src", "testing"), { recursive: true });
+    fs.rmSync(path.join(pruned, "src", "labs"), { recursive: true });
+    return pruned;
+  }
+
+  it("reports a subpath only the base map names, with that map's tier and every name removed", async () => {
+    const pruned = repositoryWithoutTwoSubpaths();
+    const state = checkoutState(pruned);
+    const roots: string[] = [];
+
+    const pruning = await diffPublishedApi(pruned, kept, "HEAD", {
+      ...quiet,
+      baseMap: (baseRoot) => {
+        roots.push(baseRoot);
+        // The base tree still holds the entry the working tree deleted.
+        expect(fs.existsSync(path.join(baseRoot, "src", "testing", "index.ts"))).toBe(true);
+        return { ...whole, "./labs": { entry: "src/labs/index.ts", tier: "beta" } };
+      },
+    });
+
+    expect(roots).toHaveLength(1);
+    expect(roots[0]?.startsWith(pruned)).toBe(false);
+    expect(pruning.subpaths).toEqual({
+      ".": { tier: "stable", added: {}, removed: {}, changed: {} },
+      "./labs": {
+        tier: "beta",
+        added: {},
+        removed: {
+          flag: { before: { text: "export declare const flag = true;", references: {} } },
+        },
+        changed: {},
+      },
+      "./testing": {
+        tier: "stable",
+        added: {},
+        removed: { verify: { before: { text: EXPECT_EQUAL, references: {} } } },
+        changed: {},
+      },
+    });
+    expect(Object.keys(pruning.subpaths)).toEqual([".", "./labs", "./testing"]);
+    expect(checkoutState(pruned)).toEqual(state);
+    expect(fs.existsSync(roots[0] as string)).toBe(false);
+  });
+
+  it("reads a subpath only the working tree's map names as added", async () => {
+    const adding = await diffPublishedApi(root, map, "HEAD~1", {
+      ...quiet,
+      baseMap: () => ({ ".": whole["."], "./testing": whole["./testing"] }),
+    });
+    expect(adding.subpaths).toEqual(expectedSubpaths());
+  });
+
+  it("refuses a base map entry the base commit lacks, naming the commit and not a temp folder", async () => {
+    const sha = git(root, "rev-parse", "HEAD~1").trim();
+    await expect(
+      diffPublishedApi(root, map, "HEAD~1", { ...quiet, baseMap: () => whole }),
+    ).rejects.toThrow(
+      new ApiInputError(
+        `base API map: ./labs: entry src/labs/index.ts does not exist at the base ${sha.slice(0, 12)}`,
+      ),
+    );
+  });
+
+  it("refuses a base map that is not a map", async () => {
+    await expect(
+      diffPublishedApi(root, map, "HEAD~1", { ...quiet, baseMap: () => ({ ".": {} }) }),
+    ).rejects.toThrow("invalid base API map: ..entry");
+  });
+});
+
 describe("code-graph --api --api-base", () => {
   const run = (cwd: string, args: readonly string[]) => {
     try {

@@ -14,7 +14,7 @@ import {
   ratchetApiDiff,
   readChangesetsSince,
 } from "@demlik/code-graph/api";
-import { PKG_ROOT, readApiMap } from "./api-map";
+import { PKG_ROOT, readApiMap, type TeaApiMap } from "./api-map";
 import { TEA_BUMP_POLICY } from "./policy";
 
 type Miss = ApiRatchetVerdict["misses"][number];
@@ -84,6 +84,41 @@ function missLines(
   ];
 }
 
+/**
+ * A subpath the pull request deleted, as one block: the subpath, the tier the
+ * base stamped it with and what its removal owes, then the names it published.
+ * Every name of a deleted subpath is `removed` under one tier, so they all miss
+ * the same rule and one line says it for the lot.
+ */
+function removedSubpathLines(
+  misses: readonly Miss[],
+  verdict: ApiRatchetVerdict,
+  callout: string,
+): string[] {
+  const [first] = misses;
+  if (first === undefined) return [];
+  const names = misses.map((miss) => miss.name);
+  const counted = `${names.length} ${names.length === 1 ? "name" : "names"}`;
+  return [
+    `api-ratchet: ${first.subpath} (${first.tier}) removed, with the ${counted} it published — needs ${owed(first.needs, callout)}; found ${found(verdict, first.needs)}`,
+    `  removed: ${names.join(", ")}`,
+  ];
+}
+
+/**
+ * The subpaths the base published and the working tree's map no longer names:
+ * the diff carries a key for each, and `map` has none.
+ */
+export const removedSubpaths = (
+  diff: ApiDiff,
+  map: Readonly<Record<string, unknown>>,
+): ReadonlySet<string> =>
+  new Set(
+    Object.keys(diff.subpaths).filter(
+      (subpath) => !Object.hasOwn(map, subpath),
+    ),
+  );
+
 /** How many published names the diff reports as added, changed or removed. */
 export const changeCount = (diff: ApiDiff): number =>
   Object.values(diff.subpaths).reduce(
@@ -98,36 +133,72 @@ export const changeCount = (diff: ApiDiff): number =>
 /**
  * The verdict as text: one line on a pass; on a miss, one block per change that
  * misses its bump — name, subpath, tier, what it needs, and its before and after
- * text with the types it uses that moved — then a summary line. Nothing in it
- * varies between two runs of one tree.
+ * text with the types it uses that moved — then a summary line. A subpath in
+ * `removed` gets one block for the whole subpath in place of one per name.
+ * Nothing in it varies between two runs of one tree.
  */
 export function renderVerdict(
   verdict: ApiRatchetVerdict,
   changes: number,
   callout: string,
+  removed: ReadonlySet<string> = new Set(),
 ): string {
   const base = verdict.base.slice(0, 7);
   const counted = `${changes} published ${changes === 1 ? "name" : "names"} changed`;
   if (verdict.passed) {
     return `api-ratchet: pass — ${counted} against ${base}; ${verdict.package} changesets since: ${verdict.changesets.length}, highest bump ${verdict.highestBump}\n`;
   }
-  const blocks = verdict.misses.flatMap((miss) =>
-    missLines(miss, verdict, callout),
-  );
+  // The misses arrive sorted by subpath, so a deleted subpath's are adjacent:
+  // its block goes where its first miss stands.
+  const blocks = verdict.misses.flatMap((miss, at, misses) => {
+    if (!removed.has(miss.subpath)) return missLines(miss, verdict, callout);
+    if (misses[at - 1]?.subpath === miss.subpath) return [];
+    const ofSubpath = misses.filter((m) => m.subpath === miss.subpath);
+    return removedSubpathLines(ofSubpath, verdict, callout);
+  });
   const summary = `api-ratchet: ${verdict.misses.length} of ${counted} against ${base} without the changeset MAINTAINING.md's semver policy asks for — add one with \`pnpm changeset\``;
   return `${[...blocks, summary].join("\n")}\n`;
 }
 
-/** Run the ratchet on the working tree against the commit `base` names. */
-export async function runApiRatchet(base: string): Promise<RatchetRun> {
-  const diff = await diffPublishedApi(PKG_ROOT, readApiMap(), base);
+/** The base commit's API map, read from the base tree's own three files. */
+async function readBaseApiMap(baseRoot: string): Promise<TeaApiMap> {
+  try {
+    return await readApiMap(baseRoot);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `api-ratchet: could not read the API map of the base commit: ${reason}`,
+    );
+  }
+}
+
+/**
+ * Run the ratchet on the working tree of the package at `root` against the
+ * commit `base` names. Each side is read through its own map: the working
+ * tree's, and the one the base commit's files state. A subpath only the base
+ * has comes back with the base's tier and every name `removed`, so the policy's
+ * `removed` row judges a deleted subpath as it judges one deleted name.
+ */
+export async function runApiRatchet(
+  base: string,
+  root: string = PKG_ROOT,
+): Promise<RatchetRun> {
+  const map = await readApiMap(root);
+  const diff = await diffPublishedApi(root, map, base, {
+    baseMap: readBaseApiMap,
+  });
   const verdict = ratchetApiDiff(
     diff,
     TEA_BUMP_POLICY,
-    readChangesetsSince(PKG_ROOT, diff.base),
+    readChangesetsSince(root, diff.base),
   );
   return {
     passed: verdict.passed,
-    text: renderVerdict(verdict, changeCount(diff), TEA_BUMP_POLICY.callout),
+    text: renderVerdict(
+      verdict,
+      changeCount(diff),
+      TEA_BUMP_POLICY.callout,
+      removedSubpaths(diff, map),
+    ),
   };
 }

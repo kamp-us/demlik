@@ -1,4 +1,4 @@
-export { type ApiDiff, diffPublishedApi } from "./api/diff.js";
+export { type ApiDiff, type ApiDiffOptions, diffPublishedApi } from "./api/diff.js";
 export { ApiInputError, type ApiMap, ApiMapSchema } from "./api/map.js";
 export {
   type Changeset,
