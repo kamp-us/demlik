@@ -10,8 +10,8 @@ pnpm add @demlik/tea
 
 The one runtime dependency is `@standard-schema/spec`, a types-only package
 installed for you. [`Cmd.define`](https://github.com/kamp-us/demlik/blob/main/packages/tea/docs/glossary.md#cmd) takes any Standard Schema, so bring the schema
-library you already use (zod, or Effect Schema through
-`Schema.toStandardSchemaV1`). The host and
+library you already use (zod as it is, or Effect Schema through the
+`Cmd.define` that `@demlik/tea/effect` exports). The host and
 testing adapters ride on optional peers you add only for the surface you use:
 `react` / `react-dom` (the `./react` hooks), `ws` (Node WebSocket subs),
 `fast-check` (the `./pbt` property-testing helpers), `vitest` (the testing

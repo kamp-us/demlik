@@ -14,16 +14,18 @@
  */
 
 import { Effect, Layer } from "effect";
-import { describe, expect, it, vi } from "vitest";
-import { profile } from "../../examples/profile-lookup";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { fetchUser, profile } from "../../examples/profile-lookup";
 import {
   Directory,
   lookUp as lookUpOnEffect,
 } from "../../examples/profile-lookup-effect";
 import { state as stateOnEffectMain } from "../../examples/profile-lookup-effect-main";
+import { fetchUser as fetchUserInEffectSchema } from "../../examples/profile-lookup-effect-schema";
 import { runProfileInTest } from "../../examples/profile-lookup-effect-timer";
 import { lookUp as lookUpOnPromise } from "../../examples/profile-lookup-promise";
 import { expectPageMirrors, fileMirror } from "../docs/page-mirrors";
+import type { OkOf } from "../index";
 import { run as runPromise } from "../promise";
 
 const names: Readonly<Record<string, string>> = { u1: "Ada" };
@@ -116,5 +118,25 @@ describe("the engine how-tos — they cannot rot", () => {
       new URL(`../../docs/how-to/${page}`, import.meta.url),
       [example("profile-lookup.ts"), example(runner)],
     );
+  });
+
+  it("run-on-the-effect-engine.md shows the Effect Schema `Cmd.define` verbatim", async () => {
+    await expectPageMirrors(
+      new URL("../../docs/how-to/run-on-the-effect-engine.md", import.meta.url),
+      [example("profile-lookup-effect-schema.ts")],
+    );
+  });
+
+  it("the Effect Schema `fetchUser` builds and settles as the machine file's does", () => {
+    expect(fetchUserInEffectSchema({ id: "u1" })).toEqual(
+      fetchUser({ id: "u1" }),
+    );
+    expect(fetchUserInEffectSchema.okType).toBe(fetchUser.okType);
+    expect(fetchUserInEffectSchema.errType).toBe(fetchUser.errType);
+    expect(fetchUserInEffectSchema.errTags).toEqual(fetchUser.errTags);
+    // Effect Schema's struct is readonly where zod's is not; nothing else differs.
+    expectTypeOf<OkOf<typeof fetchUserInEffectSchema>>().toEqualTypeOf<
+      Readonly<OkOf<typeof fetchUser>>
+    >();
   });
 });
