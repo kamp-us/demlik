@@ -9,6 +9,11 @@
 // — instead of `undefined & {…}`, which reduces to `never`. The kernel's half
 // carries no `emit`: the old port family is gone (#664), so a handler that
 // calls `ctx.emit` does not compile, with or without a declared Ctx.
+//
+// Each `emit` case below is a bare property read, never a call. A call with
+// wrong arguments fails whether or not `emit` exists, so it would stay green if
+// `emit` came back. A bare read compiles the moment the property is there,
+// which leaves its `@ts-expect-error` unused and fails the typecheck.
 
 import { z } from "zod";
 import {
@@ -20,6 +25,7 @@ import {
   wrapDetached,
 } from "../index";
 import { run } from "../promise";
+import type { HandlerCtx } from "../pure/core";
 
 const fetchName = Cmd.define("fetch_name", {
   input: z.object({ id: z.string() }),
@@ -48,12 +54,12 @@ const interpret: Interpret<Msg, AppCmd, undefined> = {
 const emitting: Interpret<Msg, AppCmd, undefined> = {
   fetch_name: async (cmd, ctx) => {
     // @ts-expect-error a `Cmd.define`d cell's ctx has no `emit`
-    ctx.emit("progress", 1);
+    void ctx.emit;
     return ctx.ok(`user ${cmd.id}`);
   },
   ping: async (_cmd, ctx) => {
     // @ts-expect-error a hand-written cell's ctx has no `emit`
-    ctx.emit("progress", 2);
+    void ctx.emit;
     return { type: "pong" };
   },
 };
@@ -96,7 +102,7 @@ const detached: InterpretDetached<Ping, Pong, undefined> = async (
   dispatch,
 ) => {
   // @ts-expect-error a detached handler's ctx has no `emit`
-  ctx.emit("progress", 3);
+  void ctx.emit;
   dispatch({ type: "pong" });
 };
 const wrapped = wrapDetached<Ping, Msg, Pong, undefined>(detached);
@@ -117,12 +123,36 @@ void withCtx;
 const withCtxEmitting: Interpret<Msg, AppCmd, Db> = {
   fetch_name: async (cmd, ctx) => {
     // @ts-expect-error `emit` is not on `Db`, and the kernel adds none
-    ctx.emit("progress", 4);
+    void ctx.emit;
     return ctx.ok(ctx.db.get(cmd.id));
   },
   ping: async (_cmd, ctx) => {
     // @ts-expect-error `emit` is not on `Db`, and the kernel adds none
-    ctx.emit("progress", 5);
+    void ctx.emit;
   },
 };
 void withCtxEmitting;
+
+// A detached handler with a declared Ctx gains none either.
+const detachedWithCtx: InterpretDetached<Ping, Pong, Db> = async (
+  _cmd,
+  ctx,
+  dispatch,
+) => {
+  // @ts-expect-error `emit` is not on `Db`, and the kernel adds none
+  void ctx.emit;
+  dispatch({ type: "pong" });
+};
+void detachedWithCtx;
+
+// ── the alias itself has no `emit` key ──────────────────────────────────────
+//
+// The same fact stated on `HandlerCtx`, the one alias every handler-ctx site
+// builds on. `true` is assignable only while `emit` is not a key.
+
+type LacksEmit<T> = "emit" extends keyof T ? false : true;
+
+const noCtxLacksEmit: LacksEmit<HandlerCtx<undefined>> = true;
+const declaredCtxLacksEmit: LacksEmit<HandlerCtx<Db>> = true;
+void noCtxLacksEmit;
+void declaredCtxLacksEmit;
