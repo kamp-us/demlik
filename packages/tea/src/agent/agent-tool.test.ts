@@ -243,7 +243,7 @@ describe("agentTool — the child run is keyed by the parent call (#333)", () =>
       unblocker(childModel(child), handled),
       storage,
     );
-    const ctx = { session: "s1", emit: () => {} };
+    const ctx = { session: "s1" };
     const call = (callId: string) =>
       unblock.interpret(
         unblock({ callId, args: { description: "a modal" } }),
@@ -277,7 +277,7 @@ describe("agentTool — the child run is keyed by the parent call (#333)", () =>
     for (const session of ["s1", "s2"]) {
       await unblock.interpret(
         unblock({ callId: "u1", args: { description: "a modal" } }),
-        { session, emit: () => {} },
+        { session },
       );
     }
     expect([...storage.keys()].sort()).toEqual(["child:s1/u1", "child:s2/u1"]);
@@ -512,7 +512,7 @@ describe("agentTool — the child's ctx (#355)", () => {
     namespace: (ctx: ParentCtx) => ctx.session,
     store: (key: string) => cell<never>(new Map(), `child:${key}`),
   };
-  const PARENT = { session: "s1", emit: () => {} };
+  const PARENT = { session: "s1" };
 
   it("a supplied childCtx is the ctx the child's tools are handed, derived from the parent's", async () => {
     const seen: unknown[] = [];

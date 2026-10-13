@@ -23,7 +23,7 @@ The repo runs The Elm Architecture as substrate — not as inspiration. The
 
 | Package | Role | Analogue in Elm |
 |---|---|---|
-| `@demlik/tea` | Pure substrate. `Machine`, `Runtime`, `Cmd`, `Sub`, `Port`, `Store`, `run`, `tryInterpret`. | The unwritten "core" of Elm's runtime system. |
+| `@demlik/tea` | Pure substrate. `Machine`, `Runtime`, `Cmd`, `Sub`, `Store`, `run`, `tryInterpret`. | The unwritten "core" of Elm's runtime system. |
 | `@demlik/tea/react` | React host. `useMachine`, `useRuntime` on `useSyncExternalStore`. | `Browser.element` / `Browser.document`. |
 | `@demlik/tea/extension` | Chrome extension cross-context bridge. `bridgeRuntime`, `bridgeClient`, `bridgeTabClient`, `useBackgroundRuntime`. | Has no Elm analogue — ports + custom transport. |
 | `@demlik/tea/do` | Cloudflare Durable Object adapter. `doStore`, `doSubscribe` with alarm + websocket Sub variants. | No analogue — server-side persistent runtime. |
@@ -283,7 +283,7 @@ interpret: {
 }
 ```
 
-`tryInterpret` is our Railway-style sugar (see Section 4.6) over a
+`tryInterpret` is our Railway-style sugar (see Section 4.2) over a
 `try` / `catch`. It guarantees the handler never rejects — the success or
 failure both become a Msg the update function can case on. A `Cmd.define`d
 Cmd needs no sugar: its handler returns an `Outcome` and the engine mints the
@@ -574,9 +574,6 @@ Together they make `init: (loaded, ctx) => [state, cmds]` cover both
 
 Elm guide: `interop/ports.md`.
 
-**Ports in Elm are the canonical inspiration for `@demlik/tea`'s `Port`
-primitive — read this section twice.**
-
 Elm declares ports inside a `port module`:
 
 ```elm
@@ -593,57 +590,47 @@ app.ports.sendMessage.subscribe(function(message) { ... });
 app.ports.messageReceiver.send("hello from JS");
 ```
 
-Three properties of Elm ports that we faithfully preserve:
+The two directions map onto what a machine already has:
 
-1. **Typed.** The port has a single value type. We use TS generics
-   (`Port<T>`).
-2. **Selective.** Outgoing ports are NOT folded into Model and they are
-   NOT broadcast through `observe`. Subscribers only see what was sent.
-3. **Identity by declaration.** Each `port` declaration is a unique
-   symbol. We mirror that with `Port` being a branded object — identity
-   by reference, not by name. Two `definePort<T>("foo")` calls produce
-   *two distinct ports*.
+- **Outgoing** (`port sendMessage : String -> Cmd msg`) is a Cmd. The
+  reducer returns it as data and the `interpret` handler handed to `run`
+  performs the I/O.
+- **Incoming** (`port messageReceiver : (String -> msg) -> Sub msg`) is a
+  Sub. The `subscribe` runner handed to `run` listens and dispatches a Msg.
 
 ```ts
-// packages/tea/src/index.ts
-export interface Port<T> {
-  readonly __brand: "port";
-  readonly name: string;
-  readonly __t?: T;  // phantom carrier
-}
-
-export function definePort<T>(name: string): Port<T> { ... }
-
-// In an interpret handler:
+// Elm: port sendMessage : String -> Cmd msg
 interpret: {
-  announce: async (cmd, ctx) => {
-    ctx.emit(cursorPort, { text: cmd.line, polite: true });
-    // ↑ outgoing port emit. No Msg returned.
+  send_message: async (cmd, ctx) => {
+    ctx.socket.send(cmd.text);
   },
 }
 
-// On the host:
-const cleanup = runtime.subscribePort(cursorPort, (announcement) => {
-  liveRegion.textContent = announcement.text;
-});
+// Elm: port messageReceiver : (String -> msg) -> Sub msg
+subscribe: {
+  messages: (_sub, ctx, dispatch) =>
+    ctx.socket.listen((text) => dispatch({ type: "message_received", text })),
+}
 ```
 
-Why we built this even though Elm-style ports work over chrome.runtime.sendMessage:
-the **State / Observe / Port** triangle is the substrate's typed escape
-hatch story.
+[Pattern 14](./patterns/14-ports-interop.md) walks the same mapping case by
+case.
 
-- **State** — the world the program models. Folding "I just announced X" into
-  state turns ephemeral signals into persisted facts (the anti-pattern that
-  motivated `definePort`).
-- **Observe** — every (msg, state) transition. Right channel for devtools and
-  logging; wrong channel for one signal.
-- **Port** — one typed channel per concept. Subscribers only see emissions
-  to *that* channel.
+Two rules of Elm ports hold for both:
 
-The cursor announcement work (commits `c85f4e55c`, `9e5cee05b`,
-`8f4f3fad5`) is the canonical port use case in this repo. The cursor
-runtime emits to a `cursorPort` instead of folding announcements into
-state — that's how `lastAnnouncement` got killed.
+1. **Typed.** One value type per channel: the Cmd variant's fields, the Msg
+   the runner dispatches.
+2. **Not folded into Model.** A signal that only leaves ("I just announced
+   X") is a Cmd, never a field in State. Folding it in turns a passing
+   signal into a persisted fact. A host that wants one named signal out of
+   a run, rather than every transition from `observe`, reads the semantic
+   event channel: the `events` projector handed to `run`, and
+   `runtime.on(type, handler)`.
+
+tea has no untyped channel value called a port.
+[ADR 0026](../../.decisions/0026-tea-owns-typed-ports-and-tell.md) decides
+what the word means in tea: a typed in or out declaration on
+`defineMachine`.
 
 ### 2.13 Interop: Custom Elements
 
@@ -722,7 +709,7 @@ result._tag === "Ok" ? result.value : result.error
 ```
 
 A `Cmd.define`d handler returns one and the engine mints `<name>_ok` /
-`<name>_err`. Our `tryInterpret` (Section 4.6) is the same idea for a
+`<name>_err`. Our `tryInterpret` (Section 4.2) is the same idea for a
 hand-written Cmd. It's the Railway
 pattern at the boundary: every Cmd handler is "fallible work, two named
 outcomes." See `docs/design-patterns.md` "Railway."
@@ -969,14 +956,7 @@ Five primitives in `@demlik/tea` that have no direct Elm analogue. Each
 exists because the host story (CF, chrome, React 18) needed it and the
 substrate is the right place to put it.
 
-### 4.1 `Port<T>` — typed selective output
-
-Already covered in 2.12. Elm has ports but they live at the program
-boundary (declared in a `port module`); ours are first-class values you
-pass around. Identity-by-reference, not by name. The cursor announcement
-work is the canonical use case.
-
-### 4.2 `observe(msg, state)` — every-transition trace
+### 4.1 `observe(msg, state)` — every-transition trace
 
 ```ts
 const off = runtime.observe((msg, state) => devtools.append({ msg, state }));
@@ -991,7 +971,7 @@ Distinct from `subscribe(listener)` because the contracts differ. React
 consumers want "something changed, re-read state"; devtools consumers
 want "here is the exact (msg, state) pair, append it."
 
-### 4.3 `tryInterpret` — Railway sugar over Cmd handlers
+### 4.2 `tryInterpret` — Railway sugar over Cmd handlers
 
 ```ts
 interpret: {
@@ -1007,7 +987,7 @@ Wraps a `try` / `catch`. Guarantees the handler resolves with an Ok-Msg
 or an Err-Msg, never rejects. This is the boundary where Elm's `Result e
 a` lives and our type system catches up.
 
-### 4.4 `Store<S>` — pluggable persistence
+### 4.3 `Store<S>` — pluggable persistence
 
 ```ts
 interface Store<S> {
@@ -1019,7 +999,7 @@ interface Store<S> {
 Elm doesn't have this because Elm doesn't persist. We do (DO storage, chrome
 storage, in-memory). Same Machine, different Store, different lifetime.
 
-### 4.5 `enqueueDispatch` serial gate
+### 4.4 `enqueueDispatch` serial gate
 
 The runtime is a single concurrency gate: every dispatch waits for the
 previous step (reducer + save + reconcile + interpret) to fully resolve.
@@ -1041,9 +1021,9 @@ the substrate guarantee:
 Elm's runtime gives the same guarantee implicitly. Our runtime gives it
 explicitly so it can be tested.
 
-### 4.6 Throw-isolation discipline
+### 4.5 Throw-isolation discipline
 
-Listeners, observers, port subscribers, sub cleanups: a single bad
+Listeners, observers, event handlers, sub cleanups: a single bad
 consumer cannot strand the others. Throws are caught at the fanout site,
 `console.error`'d, and the next consumer runs. This is *not* "fail
 silently" — the dispatch promise still reflects the underlying outcome,
@@ -1062,7 +1042,7 @@ Deliberate non-goals and known gaps. The list is short.
 | `Cmd.map` / `Sub.map` for parent-child composition | Flat Cmd / Sub union per machine | **By design.** TS discriminated unions are cheap; flat unions outperform the nested-component story most of the time. Revisit if we ever ship a generic page-router. |
 | `Task` algebra (chained deferred effects) | Compose Promises inside `interpret` | **By design.** Task exists to dodge Elm's purity; we don't need it. |
 | `Browser.application` URL routing | Next router + Relay route params | **By design.** TEA owns fragments; routing owns the URL. |
-| `Browser.document` `<title>` control | DOM-imperative outside the machine | **Gap.** Title sync is fine as-is; if it ever becomes a TEA-managed concern it's a Port. |
+| `Browser.document` `<title>` control | DOM-imperative outside the machine | **Gap.** Title sync is fine as-is; if it ever becomes a TEA-managed concern it's a Cmd. |
 | `Html.Lazy` referential-transparency cache | `React.memo` + `useMemo` | **Equivalent.** Different mechanism, same property. |
 | Effect managers (custom Cmd / Sub backends, à la `elm/random`'s internals) | Direct handler registry in `interpret` / `subscribe` | **By design.** Effect managers were removed from public Elm for a reason — they're too easy to misuse. Our registry is the simpler version. |
 | Time-travel debugger | `@demlik/tea/devtools` + `observe` | **Equivalent.** Replay-from-history is a few lines of host code on top. |
@@ -1093,7 +1073,7 @@ Order matters. Each builds on the previous.
     page if you're growing a TEA app.
 11. `webapps/modules.md` — parent/child composition. Read with caveat
     (we use flat unions per machine; see 2.10).
-12. `interop/ports.md` — the canonical inspiration for `Port<T>`.
+12. `interop/ports.md` — the JS boundary; see 2.12 for how it maps.
 13. `interop/flags.md` — context-injection at boot.
 14. `interop/custom_elements.md`, `interop/limits.md` — the discipline
     chapter.
@@ -1129,8 +1109,8 @@ When reviewing TEA code in this repo, this is the checklist.
 | `loading: boolean` next to `result?: T` | "Make impossible states impossible" | `type Phase = { type: "loading" } \| { type: "success"; result: T } \| { type: "failure" }` |
 | `try { await fetch(...) } catch` inside `update` | Side effect in pure code | Lift to a `Cmd`, handle in `interpret` |
 | `setTimeout` / `setInterval` inside `update` or `interpret` | Effect that should be reconciled | `Sub` variant; let runtime own the lifecycle |
-| Fold "I just announced X" into Model | Ephemeral signal as persisted fact | `Port<T>` |
-| `observe` consumer filtering for one Msg variant | Wrong channel | `Port<T>` |
+| Fold "I just announced X" into Model | Ephemeral signal as persisted fact | A `Cmd`, handled in `interpret` |
+| `observe` consumer filtering for one Msg variant | Wrong channel | The `events` projector + `runtime.on(type, handler)` |
 | Parent reaches into child's Model | Composition leak | Lift state up; child takes props + onChange |
 | `Cmd` handler returns nothing on failure | Silent failure | `tryInterpret` with two Msg outcomes |
 | A runner reading something outside `sub.deps` that changes | Identity drift — the id holds, the behavior moved | Put it in `deps`, so a change restarts the Sub |
@@ -1148,7 +1128,7 @@ When reviewing TEA code in this repo, this is the checklist.
 | View | `view : Model -> Html Msg` | A React component reading state via `useMachine` |
 | Cmd | `Cmd msg` value | `{ type: "..." }` tagged variant; handler in `interpret` |
 | Sub | `Sub msg` value | `subs: [{ type, deps(state) }]` entry; runner in `subscribe` at `run` |
-| Port (outgoing) | `port sendFoo : Foo -> Cmd msg` | `Port<Foo>` + `ctx.emit(port, value)` |
+| Port (outgoing) | `port sendFoo : Foo -> Cmd msg` | `Cmd` variant carrying `Foo`; handler in `interpret` |
 | Port (incoming) | `port onFoo : (Foo -> msg) -> Sub msg` | `Sub` variant that dispatches `Foo` |
 | Flag | `Browser.element { init = init }` arg | `ctx` arg to `init(loaded, ctx)` |
 | Loaded state | n/a | `loaded: S \| null` arg to `init` |

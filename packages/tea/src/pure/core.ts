@@ -4,7 +4,7 @@
  * This is the runtime-free pure core of the substrate. It holds the
  * client-prediction fold seam (`foldMsgs`), the form reader
  * (`formOf`/`detectUpdateForm`), and the pure type vocabulary (`Machine`,
- * `Reducer`, `Transitions`, `Cmd`, `Sub`, `Port`, …).
+ * `Reducer`, `Transitions`, `Cmd`, `Sub`, …).
  *
  * **Dependency direction (the actual decoupling):** this module imports
  * NOTHING from the runtime — no `run`/host/`Store`. The
@@ -123,8 +123,7 @@ export function without<V>(
 //
 // `Ok` and `E` are carried as PHANTOM type parameters (ADR 0014): the runtime
 // value stays `{ readonly type: T }` — JSON-plain, hashable, replayable — and
-// the two channels ride on optional fields that are never assigned, exactly as
-// `Port.__t` carries its `T`.
+// the two channels ride on optional fields that are never assigned.
 //
 //   - `Ok` — the value this Cmd settles with on success. Defaults to `unknown`.
 //   - `E` — the `_tag` union this Cmd can settle with (`{ _tag: "timeout" } |
@@ -444,7 +443,7 @@ export type AnyCmdDef = {
 //
 // `run` builds ONE edge over `machine.cmds` and its clock, applies it to every
 // interpret handler's return, and hands the same edge to the handlers under
-// `cmdEdge` on ctx (beside `emit`). The hand-off is for a handler that invokes
+// `cmdEdge` on ctx. The hand-off is for a handler that invokes
 // another def's handler INSIDE its own — the agent's fanned tool cells — where
 // `run`'s edge sees the carrier's `type`,
 // never the def's, so the base outcome would cross unminted (#66). Settling
@@ -1797,56 +1796,6 @@ export interface Identity<S, M> {
   readonly ofMsg: (msg: M) => unknown;
 }
 
-// === Port<T>: typed escape hatch for "data leaving the runtime" ===
-//
-// Subscribers receive every emitted value synchronously (same fanout
-// discipline as `runtime.observe`).
-//
-// Why Ports are a substrate primitive, distinct from State and Observe:
-// - **State** is "the world as the program sees it." Folding outgoing
-//   announcements into State turns ephemeral signals into persisted facts —
-//   the classic anti-pattern that motivated this primitive.
-// - **Observe** sees every transition `(msg, state)`. That's the right channel
-//   for devtools and logging, but it forces every consumer to filter the
-//   entire firehose for a single signal.
-// - **Ports** are typed and selective: one channel per concept, subscribers
-//   only see what the handler chose to emit. Mirrors Elm's outgoing-port
-//   semantics — a typed declaration with `port` keyword whose values flow
-//   out of the program to the host.
-//
-// Port identity is **by reference** — the returned object IS the identity.
-// Name is metadata for debugging. To prevent the "two modules definePort the
-// same name expecting to share a channel, silently get distinct ports" class
-// of bug, `definePort` asserts the name has not been seen in this process —
-// the symmetric runtime check to `SubId` (canon §2.12, invariant 7). Each
-// definePort call must use a unique name; if two modules need the same port,
-// one module exports it and the other imports it.
-/**
- * A named, typed channel for values leaving the runtime. A Cmd handler sends on
- * it with `ctx.emit(port, value)` and a host listens with
- * `runtime.subscribePort`; create one with `definePort`.
- */
-export interface Port<T> {
-  readonly __brand: "port";
-  readonly name: string;
-  // Phantom field — never assigned, never read at runtime. Carries `T` for
-  // inference at `ctx.emit` and `subscribePort` call sites. Using `?` so
-  // `definePort` can produce a Port without constructing a value of `T`.
-  readonly __t?: T;
-}
-
-/**
- * Augmentation injected onto `ctx` inside Cmd handlers. Handlers receive
- * `ctx & PortEmitter` so they can call `ctx.emit(port, value)` synchronously.
- * Subscribers registered via `runtime.subscribePort(port, listener)` receive
- * the value immediately.
- *
- * Emitting to a port with no subscribers is a no-op (does not throw).
- */
-export interface PortEmitter {
-  emit<T>(port: Port<T>, value: T): void;
-}
-
 // === NoCtx: the context-free marker ===
 //
 // A handler, Sub, or machine that reads NOTHING from `ctx` says so by using
@@ -1858,7 +1807,7 @@ export interface PortEmitter {
 // ambiguity at the type level. A reader (and the next agent) sees `NoCtx` and
 // knows the context-free-ness is a choice the author made, not a hole.
 //
-// Shape: an empty readonly record. A `Ctx & PortEmitter` is-a `NoCtx`, so a
+// Shape: an empty readonly record. Every handler ctx is-a `NoCtx`, so a
 // context-free handler still composes at a richer call site. It carries no
 // own fields, so the name's claim ("reads nothing from ctx") is what callers
 // read at the seam.
@@ -1874,22 +1823,21 @@ export type NoCtx = Readonly<Record<never, never>>;
 
 // === HandlerCtx<Ctx>: the ctx a Cmd handler is handed ===
 //
-// The machine's `Ctx` plus the kernel's `emit`. A machine that declares no
-// context (`ctx: undefined`, or `void`) has no Ctx half to add, so that half
-// becomes `unknown` before the intersection — `undefined & PortEmitter` would
-// otherwise reduce to `never` and leave the handler unable to reach `emit`,
-// `ok` or `err` at all (#296). The check is wrapped in a tuple so a `Ctx`
-// that merely MAY be undefined (`Foo | undefined`) is left alone, and `any`
-// is left as `any` rather than narrowed to the kernel's half.
+// The machine's `Ctx`. A machine that declares no context (`ctx: undefined`,
+// or `void`) has no Ctx to hand over, so it becomes `unknown` — a
+// `Cmd.define`d cell intersects this with the `ok` / `err` builders, and
+// `undefined & OutcomeHelpers` would otherwise reduce to `never` and leave the
+// handler unable to reach `ok` or `err` at all (#296). The check is wrapped in
+// a tuple so a `Ctx` that merely MAY be undefined (`Foo | undefined`) is left
+// alone, and `any` is left as `any` rather than narrowed.
 //
 // Every handler-ctx site builds on this one alias, so the rule lives here.
-export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
+export type HandlerCtx<Ctx> = 0 extends 1 & Ctx
   ? Ctx
   : // biome-ignore lint/suspicious/noConfusingVoidType: `void` catches both a `ctx: undefined` and a `ctx: void` machine; `undefined` alone misses the second
     [Ctx] extends [void]
     ? unknown
-    : Ctx) &
-  PortEmitter;
+    : Ctx;
 
 // === Interpret<M, C, Ctx>: record-of-handlers form of `interpret` ===
 //
@@ -1923,7 +1871,7 @@ export type HandlerCtx<Ctx> = (0 extends 1 & Ctx
 // they hand `run` with `Interpret<MyMsg, MyCmd, MyCtx>` instead of
 // re-declaring the mapped type at every effects module.
 //
-// A cell's `ctx` is the machine's plain `Ctx` plus the kernel's `emit`; tea
+// A cell's `ctx` is the machine's plain `Ctx`; tea
 // does no dependency injection (ADR 0020), so every handler reads the same
 // object `run` was handed.
 //

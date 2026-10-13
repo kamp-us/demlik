@@ -260,7 +260,7 @@ function update(state: ParentState, msg: ParentMsg) {
 ## Invariant 6 — Runtime is small and inspectable
 
 Every transition is observable. The runtime exposes `subscribe`,
-`observe`, `subscribePort`, `getState`, `ready`. No hidden queue, no
+`observe`, `on`, `getState`, `ready`. No hidden queue, no
 private bus, no monkey-patched globals. Boot is a named, awaitable
 moment.
 
@@ -278,7 +278,7 @@ class Runtime {
 ```ts
 runtime.observe((msg, state) => devtools.append({ msg, state }));
 await runtime.ready;            // boot is a named promise
-runtime.subscribePort(cursorPort, (announcement) => liveRegion.textContent = announcement.text);
+runtime.on("announced", (event) => liveRegion.textContent = event.text);
 ```
 
 **Enforcement today**
@@ -294,7 +294,7 @@ runtime.subscribePort(cursorPort, (announcement) => liveRegion.textContent = ann
 ## Invariant 7 — Identity is explicit
 
 Variant tags (`type: "tick"`), sub ids (derived — `structuralHash({ type,
-deps })`, never hand-written), port brands (`Port<T>`). Identity is never positional, never inferred from
+deps })`, never hand-written). Identity is never positional, never inferred from
 string equality alone, never reflective. The type system or a runtime
 assert catches collisions; nothing is silent.
 
@@ -320,8 +320,7 @@ subs: [
 
 **Enforcement today**
 
-- Substrate: discriminated unions for Msg / Cmd / Sub. `Port<T>` is a
-  branded object — identity by reference, not by name.
+- Substrate: discriminated unions for Msg / Cmd / Sub.
 - Sub ids are derived (`subIdOf(type, deps)`), never authored; the
   `SubId` brand keeps an ad-hoc string from passing for one.
 - Phase 1.1: `Reducer<S, M, C>` and `Transitions<S, M, C>` mapped types

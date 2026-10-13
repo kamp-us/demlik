@@ -329,7 +329,8 @@ run(machine, {
 The same move applies to `authed-call`, `paginated-walk`, `reconciler`,
 `monitored-run`, `snapshot`, `classify-batch` and `jev`. Their settle Msgs are
 the minted `<cmd>_ok` / `<cmd>_err`, and their verbs take that Msg. `fan-out`'s
-`handlers(ports)` is renamed `completion(ports)`. The
+`handlers(ports)` is gone: read completion off `isComplete`, or give the knob a
+`join` Cmd. The
 [release notes](../../CHANGELOG.md) list each helper's new names.
 
 ## 9. Replace `withResilience`, `withDeadline` and `withTelemetry`

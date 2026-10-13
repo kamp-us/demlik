@@ -4,8 +4,7 @@
  * implements against: `Store`, the error-sink and supervision contracts, the
  * engine-neutral `RunHandle` / `BootedRunHandle` host adapters are typed on,
  * the Promise engine's `RuntimeRef` / `BootingRuntime` / `Runtime` handle
- * hierarchy that widens it, `definePort`, the
- * identity-typed constructors `defineMachine` / `asReducer`, and the pure tools
+ * hierarchy that widens it, the identity-typed constructors `defineMachine` / `asReducer`, and the pure tools
  * `replay` (compose without running) and `tryInterpret` (Railway).
  */
 
@@ -17,7 +16,6 @@ import type {
   HandlerCtx,
   InterpretDetached,
   Machine,
-  Port,
   Reducer,
   RunHandlers,
   Settled,
@@ -58,7 +56,7 @@ export type Branded<T> = T & { readonly [ReducerBrand]: true };
 /**
  * Compile-time exhaustiveness assertion for default branches of switches over
  * discriminated unions narrowed by hand (Sub handlers, message-bridge
- * dispatchers, port fanouts) — TS narrows the operand to `never` only if every
+ * dispatchers) — TS narrows the operand to `never` only if every
  * variant is covered, so adding one produces a compile error at the `absurd(x)`
  * site. Strengthens invariant 7 (identity is explicit).
  *
@@ -95,39 +93,6 @@ export const noop = <S, M, C extends Cmd>(
   _msg: M,
 ): readonly [S, readonly C[]] => [state, []];
 
-// Module-level registry — process-scope, identity-by-name. The runtime witness
-// that every port name in this process is unique. Cleared only by the test-only
-// `__resetPortRegistry()` helper.
-const definedPortNames = new Set<string>();
-
-/**
- * Thrown by `definePort` when a name has already been registered in the current
- * process. It mechanizes invariant 7 (identity is explicit) at the runtime
- * layer the type system cannot reach (string names compared at runtime).
- */
-export class PortNameCollisionError extends Error {
-  override readonly name = "PortNameCollisionError";
-  readonly _tag = "PortNameCollisionError" as const;
-  constructor(portName: string) {
-    super(
-      `definePort: a port named "${portName}" was already defined. ` +
-        `Each definePort call must use a unique name. ` +
-        `If two modules need the same port, export it from one module and import it.`,
-    );
-  }
-}
-
-/**
- * Test-only escape hatch — clears the module-level port-name registry so the
- * collision assert in `definePort` doesn't false-positive across vitest's
- * non-isolated runs. Production code MUST NOT call this.
- *
- * @internal test-only
- */
-export function __resetPortRegistry(): void {
-  definedPortNames.clear();
-}
-
 /**
  * Which otherwise-unattributable runtime path produced an error. Every fanout is
  * throw-isolated so one bad consumer never strands its siblings, and the
@@ -152,7 +117,6 @@ export function __resetPortRegistry(): void {
  *   the `telemetry` sink threw or rejected.
  * - `"event"` — the `events` projector or an `on(type, ...)` handler threw.
  * - `"boot"` — an `onBoot` handler threw (boot fanout, or a late registration).
- * - `"port-emit"` — a `subscribePort` listener threw during a port emission.
  * - `"sub-cleanup"` — a subscription's cleanup threw (reconcile-removal or
  *   `stop()` teardown).
  * - `"sub"` — a running Sub failed with an error it did not turn into a Msg:
@@ -189,7 +153,6 @@ export type RuntimeErrorPhase =
   | "observer"
   | "event"
   | "boot"
-  | "port-emit"
   | "sub-cleanup"
   | "sub"
   | "discard"
@@ -281,8 +244,7 @@ export type Supervision<S, M extends { type: string }> =
  * Raised by `idle()` when the quiescence wait hits its iteration cap without the
  * dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving,
  * so a livelocking machine surfaces instead of masquerading as quiescent.
- * Mechanizes invariant 6 at the runtime layer, the role `PortNameCollisionError`
- * plays for invariant 7.
+ * Mechanizes invariant 6 at the runtime layer.
  */
 export class QuiescenceTimeoutError extends Error {
   override readonly name = "QuiescenceTimeoutError";
@@ -526,36 +488,6 @@ export class DispatchDiscardedError extends RuntimeDiscardNotice {
         `useMachine's ctx) if the transition matters.`,
     );
   }
-}
-
-/**
- * Define a typed port. `name` is metadata (devtools / debug logs); port identity
- * is by reference. Each definePort call must use a unique `name` — a second call
- * with the same name throws `PortNameCollisionError`. Use ports for "data leaving
- * the runtime selectively" (cursor announcements, DOM-mutation broadcasts,
- * telemetry) that should NOT be folded into State. Strengthens invariant 7.
- */
-export function definePort<T>(name: string): Port<T> {
-  // HMR skip — Vite / dev servers re-import the module on hot reload, which
-  // would otherwise false-positive on every definePort across reloads. The
-  // try/catch is load-bearing for service-worker bundles: Vite polyfills
-  // `import.meta.url` via `document.baseURI`, which throws ReferenceError in
-  // an MV3 service worker. A throw here would abort SW install (Chrome
-  // surfaces it as "registration failed status 15"). Catching it = "no HMR
-  // detected" = the collision check applies, which is the correct SW
-  // behavior (SWs reload via chrome.runtime.reload, not module HMR).
-  let isHmr = false;
-  try {
-    const meta = import.meta as { hot?: unknown };
-    isHmr = meta?.hot !== undefined && meta?.hot !== null;
-  } catch {
-    isHmr = false;
-  }
-  if (!isHmr && definedPortNames.has(name)) {
-    throw new PortNameCollisionError(name);
-  }
-  definedPortNames.add(name);
-  return { __brand: "port", name } as Port<T>;
 }
 
 // === Store: pluggable persistence adapter ===
@@ -829,7 +761,7 @@ export type DispatchSettle = "quiescent" | "once";
 //
 // Holding a *sibling* runtime is composition by reduction across orthogonal
 // lifecycles (invariant 5): the holder learns the Msg shape it can send, nothing
-// about the referenced runtime's State/Cmd/Sub/Ctx/observers/Port fanout.
+// about the referenced runtime's State/Cmd/Sub/Ctx/observers.
 // `Runtime<S, M>` extends `RuntimeRef<M>` structurally.
 /**
  * The dispatch-only view of a runtime. Use it as the type of a handle one
@@ -950,9 +882,9 @@ export type EngineRun<
 
 /**
  * What the Promise engine's `run` returns, the instant it is called, while boot
- * is still in flight: its {@link RunHandle}, widened with Ports and
+ * is still in flight: its {@link RunHandle}, widened with
  * `dispatchOnce`. It exposes exactly the surface total before boot — queue a
- * dispatch, subscribe, observe, wire a Port, stop. Reading State (`getState`)
+ * dispatch, subscribe, observe, stop. Reading State (`getState`)
  * and waiting for quiescence (`idle`) need the initial State to exist, so they
  * live on the {@link Runtime} that `ready` resolves to; "read State before boot"
  * is a compile error, not a runtime throw.
@@ -1007,20 +939,6 @@ export interface BootingRuntime<
     type: K,
     handler: (event: Extract<E, { type: K }>) => void,
   ): () => void;
-  /**
-   * Subscribe to a typed Port. Multiple listeners per port; fanout is synchronous
-   * and isolated. Ports are for "data leaving the runtime selectively" (see
-   * `definePort`) — distinct from `observe` (every transition) and State.
-   */
-  subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
-  /**
-   * Emit a value on a Port from OUTSIDE an interpret handler — same synchronous
-   * fanout as `ctx.emit`. The canonical use is `observe`-driven emission (one
-   * runtime publishing a state-derived signal another subscribes to via
-   * `subscribePort`) without spawning a "tell the outside world" Cmd per
-   * transition.
-   */
-  emitPort<T>(port: Port<T>, value: T): void;
   /**
    * Resolves to the booted `Runtime<S, M>` after boot completes (or rejects with
    * the boot error). This is the ONLY way to obtain a `Runtime` — and a
