@@ -80,7 +80,7 @@ async function startRun() {
         await held;
         return { type: "got" } as const;
       },
-      after: () => {
+      after: async () => {
         started.push("after");
       },
     },
