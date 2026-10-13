@@ -88,8 +88,13 @@ const Cmd: {
    *
    * `input` and `ok` take a schema that checks and never translates: both of
    * its sides are one type and decoding needs no service. A transformation, a
-   * brand or a schema that needs a service is a compile error. To keep such a
-   * schema's checks, pass `Schema.toType(schema)`.
+   * brand or a schema that needs a service is a compile error.
+   *
+   * To keep the checks of a transformation or a brand, pass
+   * `Schema.toType(schema)`. That is no way through for a schema that needs a
+   * service: its check lives in the decode step, and `Schema.toType` drops that
+   * step, so the Cmd would compile and never run the check. Run such a check in
+   * the handler.
    *
    * A schema whose validation needs a Promise compiles, and is refused with
    * `AsyncSchemaError` when the Cmd settles, as the core's is.
