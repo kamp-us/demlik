@@ -29,6 +29,15 @@ The founder ruled on it in
 writes that ruling down. The reason it gives: a host must always be able to shut down, and a rule
 that every host bounds its own handlers is a rule on paper, not a guard.
 
+That ruling's point 3 said nothing is saved after `stop()` has returned.
+[#656](https://github.com/kamp-us/demlik/issues/656) showed the sentence reads wider than tea can
+hold: a store call is a Promise too, so one already under way cannot be called back. It also showed
+one case where tea itself started a save late, after a `store.load()` held past the limit.
+[#660](https://github.com/kamp-us/demlik/issues/660) measured both, on both engines. The founder
+narrowed the sentence in
+[this comment](https://github.com/kamp-us/demlik/issues/656#issuecomment-6140793623). The Decision
+and the Consequences below carry that narrowing.
+
 ## Decision
 
 **`stop()` gives up on a Cmd handler that has not returned.**
@@ -39,8 +48,11 @@ that every host bounds its own handlers is a rule on paper, not a guard.
   runs the final save and returns.
 - Work that turns up after `stop()` gave up is dropped: what the stuck handler returns later, the
   next Cmd of its step, and the Msgs already queued behind it. Each dropped Msg is a
-  `DispatchDiscardedError`. Nothing is saved after `stop()` has returned, and no further handler
-  starts.
+  `DispatchDiscardedError`. No further handler starts.
+- tea starts no store call after `stop()` has returned. A run stopped while its `store.load()` was
+  still pending saves nothing when that load returns: its `ready` resolves with the loaded State
+  installed and unsaved, and it starts no Sub and no handler. A second `stop()` returns the first
+  one's result and runs no second final save.
 - `runToTerminal` rejects with `TerminalTimeoutError` at its `timeoutMs` window. It starts the
   teardown and does not wait for it.
 
@@ -63,6 +75,14 @@ What `stop()` promises on each engine when a Cmd handler never returns:
 - A host that stops a run to get out of a stuck handler gets its Sub cleanup and its final save.
 - **Cost:** a handler `stop()` gave up on is still running after `stop()` has returned. A Promise
   cannot be cancelled. Its side effects still happen; only its result is dropped.
+- **Cost:** a store call already under way when `stop()` gave up is not cancelled and can finish
+  after `stop()` has returned. A store's `load` and `save` are Promises on both engines. tea starts
+  no store call after that.
+- **Cost:** on a plain store a save that lands late can overwrite what a newer run saved, and
+  nothing reports it. A fenced store refuses it with `StoreConflictError`
+  ([ADR 0017](./0017-fencing-is-an-optional-store-widening.md)). So a host that starts a new run on
+  the same store after a `stop()` that gave up needs a fenced store. No option is added to the
+  store contract for this.
 - `stop()` makes two waits, one after the other: the queue, then the teardown work that returned a
   Promise. Each is bounded by `disposeTimeoutMs`, so the worst case before the final save is twice
   that limit.

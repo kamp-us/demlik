@@ -260,6 +260,12 @@ type EffectRunOptions<
    * before giving up on each. Defaults to 5_000ms. `stop()` interrupts every
    * handler here, so the first wait ends early unless a handler cannot be
    * interrupted.
+   *
+   * A store call is not interrupted. tea starts none after `stop()` has
+   * returned, but one already under way when `stop()` gave up can finish
+   * after it. On a plain store that late save can overwrite what a newer
+   * run saved; a fenced store refuses it. So a host that starts a new run on
+   * the same store after a `stop()` that gave up needs a fenced store.
    */
   readonly disposeTimeoutMs?: number;
   /** Projects each applied transition to the public events `on` serves. */

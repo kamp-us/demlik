@@ -91,6 +91,15 @@ A `FencedStore` adds a version check to each save. A stale writer gets
 over; the older process is refused at its next save. Effects already running
 can still finish, so fencing does not remove the repeated-effect window.
 
+A stopped run can be that stale writer. When `stop()` gives up at
+`disposeTimeoutMs`, tea starts no store call after `stop()` has returned, but a
+save already under way is not cancelled and can land later. On a plain store
+that late save can overwrite what a newer run saved, and nothing reports it. A
+fenced store refuses it. So a host that starts a new run on the same store
+after a `stop()` that gave up needs a fenced store.
+[ADR 0025](../../../../.decisions/0025-stop-gives-up-on-handlers.md) records
+the limit.
+
 `fileStore`, `doStore`, and `memoryStore` support `{ fenced: true }`.
 `chromeStorageStore` has no atomic compare-and-swap and stays unfenced.
 The [durability how-to](../how-to/make-durable.md#4-refuse-a-second-writer-if-two-processes-can-reach-the-storage)

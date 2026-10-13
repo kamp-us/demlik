@@ -461,7 +461,12 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
  * Whatever it returns later is dropped, and so are the Msgs queued behind it:
  * each dropped Msg is a `DispatchDiscardedError`. The rest of its step's
  * Cmds are skipped: no handler starts for them, and they get no notice of
- * their own. Nothing is saved.
+ * their own. None of it is saved.
+ *
+ * tea starts no store call after `stop()` has returned. A store call already
+ * under way when `stop()` gave up is not cancelled and can finish afterwards;
+ * on a plain store that late save can overwrite what a newer run saved, and a
+ * fenced store refuses it.
  *
  * `cmdTypes` names the Cmd of each handler call still awaiting, one entry per
  * call. `pendingCmds` counts those plus any detached work, the same count
@@ -482,7 +487,8 @@ export class DrainTimeoutNotice extends RuntimeDiscardNotice {
           ? ` (${cmdTypes.map((type) => `"${type}"`).join(", ")})`
           : "") +
         ` — whatever they return, the rest of their step and the Msgs queued ` +
-        `behind them are dropped, and nothing more is saved. Bound the ` +
+        `behind them are dropped. No store call starts after stop() has ` +
+        `returned; one already under way can still land. Bound the ` +
         `handler's own IO so it returns, or raise run({ disposeTimeoutMs }).`,
     );
   }
