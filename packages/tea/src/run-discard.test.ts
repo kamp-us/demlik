@@ -64,9 +64,11 @@ async function flushMicrotasks(): Promise<void> {
 // Capture the macrotasks the default sink schedules instead of letting them
 // become process-level uncaught exceptions — the same interception
 // `run-errors.test.ts` uses to assert the "surface, never swallow" default.
-// `scheduled` being EMPTY is the proof that nothing was rethrown.
+// `stop()` arms its own limit timer through the same `setTimeout`, so the proof
+// that nothing was rethrown is `expectNoRethrow`: no captured macrotask throws.
 function captureRethrows(): {
   scheduled: Array<() => void>;
+  expectNoRethrow: () => void;
   restore: () => void;
 } {
   const scheduled: Array<() => void> = [];
@@ -78,6 +80,9 @@ function captureRethrows(): {
   }) as typeof setTimeout);
   return {
     scheduled,
+    expectNoRethrow: () => {
+      for (const fn of scheduled) expect(fn).not.toThrow();
+    },
     restore: () => {
       spy.mockRestore();
     },
@@ -179,7 +184,7 @@ describe("stop() with Cmds in flight reports phase: discard", () => {
     expect(warn.mock.calls[1]?.[0]).toBeInstanceOf(DispatchDiscardedError);
     // Nothing was scheduled for a macrotask rethrow: an unmount during a fetch
     // is not an uncaught error for a consumer who configured nothing.
-    expect(rethrows.scheduled).toEqual([]);
+    rethrows.expectNoRethrow();
     rethrows.restore();
     warn.mockRestore();
   });
@@ -394,7 +399,7 @@ describe("the stop barrier distinguishes the drain window from after it", () => 
     expect((warn.mock.calls[0]?.[0] as DispatchDiscardedError).msgType).toBe(
       "late",
     );
-    expect(rethrows.scheduled).toEqual([]);
+    rethrows.expectNoRethrow();
     // The Msg was REFUSED, not folded — the stop barrier is absolute.
     expect(runtime.getState()).toEqual({ started: 1, done: 0 });
     rethrows.restore();

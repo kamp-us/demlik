@@ -104,17 +104,22 @@ export function run<
        */
       telemetry?: TelemetrySink;
       /**
-       * How long `stop()` waits for teardown work that returned a Promise (an
-       * async `release` in `defineManagedResource`, an async Sub cleanup) before
-       * giving up on it. Defaults to 5_000ms.
+       * How long `stop()` waits for work it cannot interrupt before giving up
+       * on it. Defaults to 5_000ms. It bounds two waits, one after the other:
+       * the queue, where a Cmd handler may still be running, and then the
+       * teardown work that returned a Promise (an async `release` in
+       * `defineManagedResource`, an async Sub cleanup).
        *
        * `stop()` awaits those disposals so a host doing
        * `await runtime.stop(); env.evict()` cannot drop the isolate mid-release —
        * the leak the managed-resource battery exists to prevent, relocated to
-       * shutdown. The bound is what keeps a release that never settles from
-       * hanging the host: on expiry `stop()` reports a `DisposeTimeoutNotice`
-       * (warn-only, like every `RuntimeDiscardNotice`) and resolves anyway,
-       * because `stop()` resolving is a contract.
+       * shutdown. The bound is what keeps a handler that never returns, or a
+       * release that never settles, from hanging the host: on expiry `stop()`
+       * reports a `DrainTimeoutNotice` or a `DisposeTimeoutNotice` (warn-only,
+       * like every `RuntimeDiscardNotice`) and resolves anyway, because `stop()`
+       * resolving is a contract (ADR 0025). The Subs are still stopped and the
+       * final save still runs. A handler `stop()` gave up on keeps running;
+       * what it returns later is dropped and nothing more is saved.
        */
       disposeTimeoutMs?: number;
       /**
@@ -296,7 +301,8 @@ export type DriveToDoneOptions<
  * throws later, since both leave the run with no State to settle on. A State the
  * caller's `failed` predicate marks rejects on an abort exit exactly as it does
  * anywhere else. In-flight effects are not recalled — a promise cannot be cancelled —
- * so they settle to their own end and `stop()` drains them as it always did;
+ * so they settle to their own end and `stop()` drains them, up to
+ * `disposeTimeoutMs`;
  * keeping their results off the public channels is the machine's own business.
  * Omit the pair and every path here behaves exactly as it did before.
  *
@@ -411,7 +417,8 @@ export async function driveToDone<
     // it has already finished.
     unlisten?.();
     // `stop()` resolves by contract, so awaiting it here cannot mask the error
-    // a rejecting branch above is carrying.
+    // a rejecting branch above is carrying. It can delay it, by up to
+    // `disposeTimeoutMs` per wait, while a Cmd handler has not returned.
     await handle.stop();
   }
 }

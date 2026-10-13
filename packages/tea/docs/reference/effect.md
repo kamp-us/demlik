@@ -198,11 +198,13 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   /** Fires once with the initial State — at once if boot already ran. */
   onBoot(handler: (state: S) => void): () => void;
   /**
-   * Stop the run: drain in-flight work, stop its Subs, flush the final State.
-   * Closing the run's Scope stops the run the same way, and `stop()` leaves
-   * that Scope open. So for a child under `spawn` the two differ: `stop()`
-   * does not take the child out of the host's table or tell the parent. Stop
-   * such a child with the `stop` helper.
+   * Stop the run: drain in-flight work, up to `disposeTimeoutMs`, stop its
+   * Subs, flush the final State. `stop()` interrupts every handler still in
+   * flight, so the limit is reached only by a handler that cannot be
+   * interrupted. Closing the run's Scope stops the run the same way, and
+   * `stop()` leaves that Scope open. So for a child under `spawn` the two
+   * differ: `stop()` does not take the child out of the host's table or tell
+   * the parent. Stop such a child with the `stop` helper.
    */
   stop(): Effect<void>;
   /** A zero-arg change notifier, fired after each applied transition. */
@@ -253,7 +255,12 @@ type EffectRunOptions<
 > = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & {
   /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
   readonly clock?: () => number;
-  /** How long `stop()` waits for async teardown. Defaults to 5_000ms. */
+  /**
+   * How long `stop()` waits for the queue, and then for async teardown,
+   * before giving up on each. Defaults to 5_000ms. `stop()` interrupts every
+   * handler here, so the first wait ends early unless a handler cannot be
+   * interrupted.
+   */
   readonly disposeTimeoutMs?: number;
   /** Projects each applied transition to the public events `on` serves. */
   readonly events?: (msg: M, state: S) => readonly E[];

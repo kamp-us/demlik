@@ -33,7 +33,8 @@
  * that order for every engine; it is not a user-facing plugin API (#268).
  *
  * `stop()` is the core's own lifecycle, because the gate it drives is what every
- * dispatch passes through: open → draining → closed, never backwards.
+ * dispatch passes through: open → draining → closed, or → abandoned when
+ * `stop()` gives up on the queue (ADR 0025), never backwards.
  */
 
 import type { Dispose, Sub, SubEntry } from "../../pure/core";
@@ -48,6 +49,7 @@ import type {
 import {
   DispatchDiscardedError,
   DisposeTimeoutNotice,
+  DrainTimeoutNotice,
   QuiescenceTimeoutError,
   RuntimeDiscardedError,
   RuntimeDiscardNotice,
@@ -271,29 +273,37 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   let state: S | undefined;
   let bootError: unknown = null;
   // The dispatch gate. It only ever ADVANCES — `"open"` → `"draining"` →
-  // `"closed"` — so the discard window can never re-open under a second `stop()`.
+  // `"closed"` or `"abandoned"` — so the discard window can never re-open under
+  // a second `stop()`.
   //
-  //   "open"     — normal operation; `enqueueDispatch` accepts.
-  //   "draining" — inside `stop()`, before the tail has settled. New work is
-  //                still refused (refusing is what makes the drain terminate),
-  //                but a Msg refused HERE was discarded BY the teardown: an
-  //                in-flight Cmd's follow-up, a detached handler's last Msg, or a
-  //                Sub still live because subs are torn down after the drain. So
-  //                the rejection is a `DispatchDiscardedError` reported under
-  //                `phase: "discard"` — lossy, legal, warn-only.
-  //   "closed"   — halted by an extension, or `stop()` has returned. A dispatch
-  //                refused here is a consumer using a retired runtime — a real
-  //                error, and it stays loud.
-  let gate: "open" | "draining" | "closed" = "open";
-  // Interpret handlers currently awaiting. Written only by `trackInFlight`, read
-  // by `stop()` to make a mid-flight teardown LOUD instead of silent (#365).
-  let inFlightCmds = 0;
+  //   "open"      — normal operation; `enqueueDispatch` accepts.
+  //   "draining"  — inside `stop()`, before the tail has settled. New work is
+  //                 still refused (refusing is what makes the drain terminate),
+  //                 but a Msg refused HERE was discarded BY the teardown: an
+  //                 in-flight Cmd's follow-up, a detached handler's last Msg, or
+  //                 a Sub still live because subs are torn down after the drain.
+  //                 So the rejection is a `DispatchDiscardedError` reported
+  //                 under `phase: "discard"` — lossy, legal, warn-only.
+  //   "closed"    — halted by an extension, or `stop()` has drained the tail. A
+  //                 dispatch refused here is a consumer using a retired runtime
+  //                 — a real error, and it stays loud.
+  //   "abandoned" — `stop()` gave up on the tail at `disposeTimeoutMs` (ADR
+  //                 0025). Closed to a caller exactly as `"closed"` is, and the
+  //                 work still on the tail is dropped as it surfaces: a stuck
+  //                 handler's late result, the next Cmd of its step, the Msgs
+  //                 queued behind it. Each is a teardown discard, never a save.
+  let gate: "open" | "draining" | "closed" | "abandoned" = "open";
+  // The work currently awaiting: one entry per interpret handler call, named by
+  // its Cmd type, and one unnamed entry per piece of detached work. Written only
+  // by `trackInFlight`, read by `stop()` to make a mid-flight teardown LOUD
+  // instead of silent (#365) and to name what it gave up on.
+  const inFlight = new Set<{ readonly cmdType: string | undefined }>();
 
   const services: LoopServices<S> = {
     report,
     fanout,
     halt() {
-      gate = "closed";
+      if (gate !== "abandoned") gate = "closed";
     },
     state: () => state,
   };
@@ -374,30 +384,65 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   }
 
   /**
-   * Wait for the disposals started so far, bounded by `disposeTimeoutMs`. On
-   * expiry report a `DisposeTimeoutNotice` and return anyway — `stop()` resolves
-   * regardless (contract), and a release that never settles must not become a
-   * host that never shuts down.
+   * Wait for `work`, for at most `disposeTimeoutMs`. The one bound both of
+   * `stop()`'s waits share: `stop()` resolves regardless (contract), so neither
+   * a handler nor a release that never settles may become a host that never
+   * shuts down (ADR 0025).
    */
-  async function drainDisposals(): Promise<void> {
-    if (pendingDisposals.size === 0) return;
-    const outstanding = [...pendingDisposals];
+  async function withinLimit(
+    work: Promise<unknown>,
+  ): Promise<"settled" | "timeout"> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const outcome = await Promise.race([
-        Promise.all(outstanding).then(() => "settled" as const),
+      return await Promise.race([
+        work.then(() => "settled" as const),
         new Promise<"timeout">((resolve) => {
           timer = setTimeout(() => resolve("timeout"), disposeTimeoutMs);
         }),
       ]);
-      if (outcome === "timeout") {
-        report(
-          new DisposeTimeoutNotice(outstanding.length, disposeTimeoutMs),
-          "discard",
-        );
-      }
     } finally {
       if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Wait for the tail, up to the limit, and settle the gate on what happened.
+   * On expiry report a `DrainTimeoutNotice` naming the handlers still awaiting
+   * and leave the gate `"abandoned"`, which is what drops their late work.
+   * Memoized, so a second `stop()` neither waits nor reports a second time.
+   */
+  let draining: Promise<void> | undefined;
+  function drainTail(): Promise<void> {
+    draining ??= withinLimit(tail).then((outcome) => {
+      if (outcome === "settled") {
+        gate = "closed";
+        return;
+      }
+      report(
+        new DrainTimeoutNotice(
+          [...inFlight].flatMap(({ cmdType }) => cmdType ?? []),
+          inFlight.size,
+          disposeTimeoutMs,
+        ),
+        "discard",
+      );
+      gate = "abandoned";
+    });
+    return draining;
+  }
+
+  /**
+   * Wait for the disposals started so far, up to the limit. On expiry report a
+   * `DisposeTimeoutNotice` and return anyway.
+   */
+  async function drainDisposals(): Promise<void> {
+    if (pendingDisposals.size === 0) return;
+    const outstanding = [...pendingDisposals];
+    if ((await withinLimit(Promise.all(outstanding))) === "timeout") {
+      report(
+        new DisposeTimeoutNotice(outstanding.length, disposeTimeoutMs),
+        "discard",
+      );
     }
   }
 
@@ -507,7 +552,7 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // would turn a Sub firing during `stop()`'s drain into an unhandled rejection
   // the sink never sees.
   function dispatchUnawaited(msg: M): void {
-    enqueueDispatch(msg).catch(reportUndelivered);
+    enqueueDispatch(msg, "loop").catch(reportUndelivered);
   }
 
   // A `DispatchDiscardedError` means the teardown refused the Msg (`"discard"`,
@@ -523,12 +568,17 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * Count a handler's work as in flight for exactly the lifetime of its
    * promise. `finally`-balanced, so a rejecting handler can never strand the
    * count above zero. A handler that throws SYNCHRONOUSLY never reaches here,
-   * which is correct — it was never in flight.
+   * which is correct — it was never in flight. `cmdType` names a handler call;
+   * detached work has no Cmd of its own to name.
    */
-  function trackInFlight<T>(work: T | Promise<T>): Promise<T> {
-    inFlightCmds++;
+  function trackInFlight<T>(
+    work: T | Promise<T>,
+    cmdType?: string,
+  ): Promise<T> {
+    const entry = { cmdType };
+    inFlight.add(entry);
     return Promise.resolve(work).finally(() => {
-      inFlightCmds--;
+      inFlight.delete(entry);
     });
   }
 
@@ -555,9 +605,10 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // missing handler returns nothing, which is invariant 6's forward progress
   // for a miswired consumer.
   function callHandler(cmd: C, dispatch: (msg: M) => void): Promise<unknown> {
-    const handler = config.handlerFor((cmd as { type: string }).type);
+    const { type } = cmd as { type: string };
+    const handler = config.handlerFor(type);
     if (handler === undefined) return Promise.resolve(undefined);
-    return trackInFlight(handler(cmd as never, handlerCtx, dispatch));
+    return trackInFlight(handler(cmd as never, handlerCtx, dispatch), type);
   }
 
   /**
@@ -571,13 +622,15 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * Msgs it enqueues fold in Cmd-EMISSION order and a replayed log reproduces
    * the same fold — invariant 2's serializability. Overlap in time belongs
    * INSIDE one Cmd's handler, never across the Cmds of one transition.
+   *
+   * Once `stop()` has given up on this step, no further handler starts; what
+   * the stuck one returned is refused at the gate like any other late Msg.
    */
   async function runCmds(cmds: readonly C[]): Promise<void> {
     for (const cmd of cmds) {
+      if (gate === "abandoned") return;
       const returned = await interpret(cmd, dispatchUnawaited);
-      for (const follow of followUps<M>(returned)) {
-        enqueueDispatch(follow).catch(reportUndelivered);
-      }
+      for (const follow of followUps<M>(returned)) dispatchUnawaited(follow);
     }
   }
 
@@ -639,16 +692,26 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * runner calls also go through. Rejects when the gate is not open (with a
    * `DispatchDiscardedError` while `stop()` drains, a `RuntimeStoppedError`
    * once it has), boot failed, or the fold / save / sub start / handler throws.
+   *
+   * `origin` separates the two refusals an abandoned run makes. A Msg from the
+   * loop's own producers is the late work `stop()` gave up on, so it is a
+   * discard; a caller's dispatch is still a retired runtime being used. A Msg
+   * accepted before `stop()` gave up is dropped when its turn comes, unfolded
+   * and unsaved, as a discard whoever sent it.
    */
-  function enqueueDispatch(msg: M): Promise<void> {
+  function enqueueDispatch(
+    msg: M,
+    origin: "caller" | "loop" = "caller",
+  ): Promise<void> {
     if (gate !== "open") {
       return Promise.reject(
-        gate === "draining"
+        gate === "draining" || (gate === "abandoned" && origin === "loop")
           ? new DispatchDiscardedError(msg.type)
           : new RuntimeStoppedError(msg.type),
       );
     }
     const next = tail.then(() => {
+      if (gate === "abandoned") throw new DispatchDiscardedError(msg.type);
       if (bootError !== null) throw bootError;
       return stepDispatch(msg);
     });
@@ -698,9 +761,9 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   });
 
   const core: LoopHandle<S, M> = {
-    [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlightCmds }),
+    [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlight.size }),
     dispatch: dispatchToQuiescence,
-    dispatchOnce: enqueueDispatch,
+    dispatchOnce: (msg) => enqueueDispatch(msg),
     getState(): S {
       // TOTAL. A booted handle is only obtainable by awaiting `ready`, which
       // resolves AFTER boot set `state`.
@@ -711,23 +774,23 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     ready: bootPromise.then(() => handle),
     idle: drainToQuiescence,
     async stop(): Promise<void> {
-      // Open the discard window unless the gate is already `"closed"` (a halt,
-      // or a redundant second `stop()`): the gate only advances.
+      // Open the discard window unless the gate is already past it (a halt, or
+      // a redundant second `stop()`): the gate only advances.
       if (gate === "open") gate = "draining";
-      // Report BEFORE the drain: after `await tail` the count is zero by
-      // construction, and the fact worth surfacing is what was outstanding at
-      // the moment the host let go (#365).
-      if (inFlightCmds > 0) {
-        report(new RuntimeDiscardedError(inFlightCmds), "discard");
+      // Report BEFORE the drain: a drained tail leaves nothing in flight, and
+      // the fact worth surfacing is what was outstanding at the moment the
+      // host let go (#365).
+      if (inFlight.size > 0) {
+        report(new RuntimeDiscardedError(inFlight.size), "discard");
       }
-      // Drain in-flight work. Tail rejections were swallowed at enqueue time, so
-      // this always resolves. It TERMINATES because the gate refuses the
-      // follow-ups those handlers return.
-      await tail;
-      gate = "closed";
+      // Drain in-flight work, up to `disposeTimeoutMs`. The gate refuses the
+      // follow-ups those handlers return, so the tail ends once each handler
+      // has returned; a handler that never returns is what the limit is for
+      // (ADR 0025). Either way this resolves, and the teardown below runs.
+      await drainTail();
       stopSubs([...subRegistry.keys()]);
-      // …then WAIT for the teardown still settling, bounded by
-      // `disposeTimeoutMs` (see `drainDisposals`).
+      // …then WAIT for the teardown still settling, up to the same limit (see
+      // `drainDisposals`).
       await drainDisposals();
       // Flush final State. A save throw does not reject `stop()` (contract:
       // resolves regardless) but IS loss of the last write, so it reaches the
