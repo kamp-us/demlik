@@ -163,9 +163,11 @@ interface AgentHost<Stage, P extends string, O extends Record<P, AgentTurn>, R, 
    */
   readonly sse: SseHub<Frame>;
   /**
-   * Tear down the cached runtime (drain its tail via `stop()`, drop the handle)
-   * so the next `runtime()` rebuilds from storage. The framework `settle` test
-   * seam, owned once.
+   * Tear down the cached runtime (drain its tail via `stop()`, up to
+   * `disposeTimeoutMs`, then drop the handle) so the next `runtime()` rebuilds
+   * from storage. A Cmd handler that has not returned by the limit is given up
+   * on, so `reset()` returns either way. The framework `settle` test seam,
+   * owned once.
    */
   reset(): Promise<void>;
   /**

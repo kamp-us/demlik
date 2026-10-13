@@ -458,9 +458,10 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
  * for it without limit. It then stops the Subs and runs the final save as it
  * always does. The work it gave up on is not recalled — a Promise cannot be
  * cancelled — so a handler may still be running after `stop()` has returned.
- * Whatever it returns later is dropped, and so are the rest of its step's Cmds
- * and the Msgs queued behind it: each is a `DispatchDiscardedError`, and
- * nothing is saved.
+ * Whatever it returns later is dropped, and so are the Msgs queued behind it:
+ * each dropped Msg is a `DispatchDiscardedError`. The rest of its step's
+ * Cmds are skipped: no handler starts for them, and they get no notice of
+ * their own. Nothing is saved.
  *
  * `cmdTypes` names the Cmd of each handler call still awaiting, one entry per
  * call. `pendingCmds` counts those plus any detached work, the same count

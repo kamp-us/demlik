@@ -92,10 +92,11 @@ export type UseMachineOpts<
  * - Subscribes via `useSyncExternalStore(runtime.subscribe, runtime.getState,
  *   runtime.getState)` — tearing-free under React 18 concurrent rendering.
  * - On unmount (or any dep change), `useEffect` cleanup calls
- *   `runtime.stop()` — drains the queue, runs every active sub cleanup,
- *   flushes state, and — if Cmds were still in flight — reports
- *   `RuntimeDiscardedError` (`phase: "discard"`) rather than dropping them
- *   silently.
+ *   `runtime.stop()` — drains the queue, up to `disposeTimeoutMs`, runs every
+ *   active sub cleanup, flushes state, and — if Cmds were still in flight —
+ *   reports `RuntimeDiscardedError` (`phase: "discard"`) rather than dropping
+ *   them silently. A handler that has not returned by the limit is given up
+ *   on and reported as a `DrainTimeoutNotice`.
  *
  * Returns `[state, dispatch]` shaped like `useReducer`.
  */
