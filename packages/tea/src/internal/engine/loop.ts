@@ -292,6 +292,8 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   //                 work still on the tail is dropped as it surfaces: a stuck
   //                 handler's late result, the next Cmd of its step, the Msgs
   //                 queued behind it. Each is a teardown discard, never a save.
+  //                 A boot whose load returns only now saves nothing either
+  //                 (`commit`): no store call starts once `stop()` gave up.
   let gate: "open" | "draining" | "closed" | "abandoned" = "open";
   // The work currently awaiting: one entry per interpret handler call, named by
   // its Cmd type, and one unnamed entry per piece of detached work. Written only
@@ -409,26 +411,21 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
    * Wait for the tail, up to the limit, and settle the gate on what happened.
    * On expiry report a `DrainTimeoutNotice` naming the handlers still awaiting
    * and leave the gate `"abandoned"`, which is what drops their late work.
-   * Memoized, so a second `stop()` neither waits nor reports a second time.
    */
-  let draining: Promise<void> | undefined;
-  function drainTail(): Promise<void> {
-    draining ??= withinLimit(tail).then((outcome) => {
-      if (outcome === "settled") {
-        gate = "closed";
-        return;
-      }
-      report(
-        new DrainTimeoutNotice(
-          [...inFlight].flatMap(({ cmdType }) => cmdType ?? []),
-          inFlight.size,
-          disposeTimeoutMs,
-        ),
-        "discard",
-      );
-      gate = "abandoned";
-    });
-    return draining;
+  async function drainTail(): Promise<void> {
+    if ((await withinLimit(tail)) === "settled") {
+      gate = "closed";
+      return;
+    }
+    report(
+      new DrainTimeoutNotice(
+        [...inFlight].flatMap(({ cmdType }) => cmdType ?? []),
+        inFlight.size,
+        disposeTimeoutMs,
+      ),
+      "discard",
+    );
+    gate = "abandoned";
   }
 
   /**
@@ -642,13 +639,20 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
   // rejects the dispatch with its own error, but the State it left installed
   // and saved still reaches every listener, observer, `on` handler, `done()`
   // waiter and the telemetry sink (#311).
+  //
+  // No store call starts once `stop()` has given up (ADR 0025). A step never
+  // gets here abandoned, because the queued step in `enqueueDispatch` drops it
+  // first; boot does, when `stop()` gave up while `store.load()` was pending and
+  // the load returns afterwards. That boot installs the loaded State, so
+  // `getState()` stays total, and saves nothing: the store may already belong
+  // to a newer run. It starts no Sub and no handler either, as the gate rules.
   async function commit(
     next: S,
     msg: M | undefined,
     cmds: readonly C[],
   ): Promise<void> {
     state = next;
-    if (store) await store.save(next);
+    if (store && gate !== "abandoned") await store.save(next);
     reconcileSubs();
     try {
       await runCmds(cmds);
@@ -760,48 +764,61 @@ export function startLoop<S, M extends { type: string }, C, Ctx>(
     bootError = err;
   });
 
+  async function teardown(): Promise<void> {
+    // Open the discard window unless the gate is already past it (a halt):
+    // the gate only advances.
+    if (gate === "open") gate = "draining";
+    // Report BEFORE the drain: a drained tail leaves nothing in flight, and
+    // the fact worth surfacing is what was outstanding at the moment the
+    // host let go (#365).
+    if (inFlight.size > 0) {
+      report(new RuntimeDiscardedError(inFlight.size), "discard");
+    }
+    // Drain in-flight work, up to `disposeTimeoutMs`. The gate refuses the
+    // follow-ups those handlers return, so the tail ends once each handler
+    // has returned; a handler that never returns is what the limit is for
+    // (ADR 0025). Either way this resolves, and the teardown below runs.
+    await drainTail();
+    stopSubs([...subRegistry.keys()]);
+    // …then WAIT for the teardown still settling, up to the same limit (see
+    // `drainDisposals`).
+    await drainDisposals();
+    // Flush final State. A save throw does not reject `stop()` (contract:
+    // resolves regardless) but IS loss of the last write, so it reaches the
+    // sink (invariant 6).
+    if (store && state !== undefined && bootError === null) {
+      try {
+        await store.save(state);
+      } catch (error) {
+        report(error, "stop-save");
+      }
+    }
+  }
+
+  // The teardown runs once. A second `stop()` — a host calling it again, or the
+  // Effect engine's Scope closing after the handle's own `stop()` — gets the
+  // first one's promise, so it reports nothing twice and, above all, runs no
+  // second final save: that would be a store call after `stop()` has returned
+  // (ADR 0025), over a store that may by then belong to a newer run.
+  let stopped: Promise<void> | undefined;
+
   const core: LoopHandle<S, M> = {
     [liveWork]: () => ({ subs: subRegistry.size, cmds: inFlight.size }),
     dispatch: dispatchToQuiescence,
     dispatchOnce: (msg) => enqueueDispatch(msg),
     getState(): S {
       // TOTAL. A booted handle is only obtainable by awaiting `ready`, which
-      // resolves AFTER boot set `state`.
+      // resolves AFTER boot set `state`. That holds for a run `stop()` gave up
+      // on mid-load too: its late boot installs the loaded State (`commit`).
       return state as S;
     },
     // A failed boot never hands out a handle. The forward reference resolves
     // at `.then` time, after `handle` below is built.
     ready: bootPromise.then(() => handle),
     idle: drainToQuiescence,
-    async stop(): Promise<void> {
-      // Open the discard window unless the gate is already past it (a halt, or
-      // a redundant second `stop()`): the gate only advances.
-      if (gate === "open") gate = "draining";
-      // Report BEFORE the drain: a drained tail leaves nothing in flight, and
-      // the fact worth surfacing is what was outstanding at the moment the
-      // host let go (#365).
-      if (inFlight.size > 0) {
-        report(new RuntimeDiscardedError(inFlight.size), "discard");
-      }
-      // Drain in-flight work, up to `disposeTimeoutMs`. The gate refuses the
-      // follow-ups those handlers return, so the tail ends once each handler
-      // has returned; a handler that never returns is what the limit is for
-      // (ADR 0025). Either way this resolves, and the teardown below runs.
-      await drainTail();
-      stopSubs([...subRegistry.keys()]);
-      // …then WAIT for the teardown still settling, up to the same limit (see
-      // `drainDisposals`).
-      await drainDisposals();
-      // Flush final State. A save throw does not reject `stop()` (contract:
-      // resolves regardless) but IS loss of the last write, so it reaches the
-      // sink (invariant 6).
-      if (store && state !== undefined && bootError === null) {
-        try {
-          await store.save(state);
-        } catch (error) {
-          report(error, "stop-save");
-        }
-      }
+    stop(): Promise<void> {
+      stopped ??= teardown();
+      return stopped;
     },
   };
   const handle: LoopHandle<S, M> = Object.assign(

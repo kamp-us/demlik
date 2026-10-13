@@ -119,7 +119,16 @@ export function run<
        * like every `RuntimeDiscardNotice`) and resolves anyway, because `stop()`
        * resolving is a contract (ADR 0025). The Subs are still stopped and the
        * final save still runs. A handler `stop()` gave up on keeps running;
-       * what it returns later is dropped and nothing more is saved.
+       * what it returns later is dropped.
+       *
+       * tea starts no store call after `stop()` has returned. A store call
+       * already under way when `stop()` gave up is not cancelled and can
+       * finish after `stop()` has returned. On a plain store that late save
+       * can overwrite what a newer run saved; a fenced store refuses it with
+       * `StoreConflictError`. So a host that starts a new run on the same
+       * store after a `stop()` that gave up needs a fenced store. A run
+       * stopped while its `store.load()` was pending saves nothing when the
+       * load returns: `ready` resolves with the loaded State, unsaved.
        */
       disposeTimeoutMs?: number;
       /**
