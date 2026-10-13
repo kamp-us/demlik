@@ -5,7 +5,6 @@ import {
   DriveStalledError,
   NoCellError,
   OutcomeContractError,
-  PortNameCollisionError,
   QuiescenceTimeoutError,
   UndeclaredFailureError,
 } from "./index";
@@ -24,8 +23,8 @@ import { RetryExhaustedError } from "./internal/resilience/retry-to-success";
 //   (1) THROWN / boundary errors — raised at the runtime edge, never folded
 //       into Model. `class extends Error` + `readonly _tag` literal, so a
 //       consumer can branch by `instanceof` OR by tag.
-//       → PortNameCollisionError, QuiescenceTimeoutError, NoCellError,
-//         TerminalTimeoutError, RetryExhaustedError.
+//       → QuiescenceTimeoutError, NoCellError, TerminalTimeoutError,
+//         RetryExhaustedError.
 //
 //   (2) SETTLED-VALUE errors — folded INTO a machine's Model (`call.error`,
 //       `settleFailed`) and persisted into a `Store<S>` that reloads via plain
@@ -50,12 +49,6 @@ type ThrownCase = {
 // One row per THROWN error. `make` constructs a real instance so the assertion
 // exercises the class, not a mock.
 const thrownCases: readonly ThrownCase[] = [
-  {
-    name: "PortNameCollisionError",
-    make: () => new PortNameCollisionError("dup-port"),
-    ctor: PortNameCollisionError,
-    tag: "PortNameCollisionError",
-  },
   {
     name: "QuiescenceTimeoutError",
     make: () => new QuiescenceTimeoutError(25),

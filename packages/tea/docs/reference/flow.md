@@ -8,7 +8,7 @@ Tier: `battery`
 import { … } from "@demlik/tea/flow";
 ```
 
-## Exports (103)
+## Exports (102)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -52,7 +52,6 @@ import { … } from "@demlik/tea/flow";
 | [`FanOutConfig`](#FanOutConfig) | Interface | battery | The knob. |
 | [`FanOutDone`](#FanOutDone) | Interface | battery | One settled-OK item: the original `input` and the `result` its effect produced. |
 | [`FanOutFailed`](#FanOutFailed) | Interface | battery | One settled-error item: the original `input` and the `error` its effect surfaced. |
-| [`FanOutPorts`](#FanOutPorts) | Interface | battery | Optional Port for observing batch completion out-of-band. |
 | [`FanOutState`](#FanOutState) | Interface | battery | The slice this knob owns — four partitions over the work-queue item lifecycle, plus the work-queue records the verbs thread the lifecycle through. |
 | [`foldWorkflow`](#foldWorkflow) | Function | battery | Replay a workflow from its event log: seed over `steps`, then fold each activity-result `Msg` in order. |
 | [`InFlightActivity`](#InFlightActivity) | Interface | battery | The activity currently in flight on a `running` workflow. |
@@ -415,28 +414,6 @@ function createBatchWindow<I, C extends Cmd>(
 function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
   config: FanOutConfig<I, R, C, J>,
 ): {
-  /**
-   * The out-of-band completion splice. Returns an observer-shaped function the
-   * consumer calls after every settle: when the batch has just completed it
-   * emits the gathered results onto `ports.complete`. This is the Port-side
-   * analogue of the `join` Cmd — use it when completion should leave the
-   * runtime as a typed signal rather than re-enter `update`.
-   *
-   * Returns the emit-on-complete callback so the consumer wires it into its own
-   * runtime `observe` (e.g. `runtime.observe((_, s) => emit(s.fanOut))`); fan-out
-   * stays out of the dispatch loop, matching `historyTracker`'s discipline.
-   */
-  completion: (
-    ports: FanOutPorts<R>,
-  ) => {
-    /**
-     * Emit the gathered done-results onto `ports.complete` iff `state` is a
-     * just-completed batch. Idempotency is the caller's concern (call it once
-     * per transition via `observe`); emitting to a Port with no subscribers
-     * is a no-op at the runtime, so an extra call is harmless.
-     */
-    emitOnComplete(emit: <T>(port: Port<T>, value: T) => void, state: FanOutState<I, R>): void;
-  };
   /** The starting slice: nothing scattered yet. */
   init: () => FanOutState<I, R>;
   /**
@@ -1148,7 +1125,7 @@ interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
   /**
    * Optional: fold the gathered done-results into a single completion Cmd,
    * fired exactly once at the transition that empties `pending` + `running`.
-   * Omit to drive completion off `isComplete` (or the `completion` Port) instead.
+   * Omit to drive completion off `isComplete` instead.
    */
   readonly join?: (results: readonly R[]) => J;
   /** The per-item effect, as data. Performed by the consumer's own `interpret`. */
@@ -1179,17 +1156,6 @@ interface FanOutFailed<I> {
   readonly error: unknown;
   /** The original scattered input value. */
   readonly item: I;
-}
-```
-
-<a id="FanOutPorts"></a>
-
-### `FanOutPorts`
-
-```ts
-interface FanOutPorts<R> {
-  /** Fires once with every gathered done-result when the batch completes. */
-  readonly complete: Port<readonly R[]>;
 }
 ```
 

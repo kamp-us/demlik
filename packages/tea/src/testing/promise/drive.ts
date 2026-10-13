@@ -18,7 +18,6 @@ import {
   type Interpret,
   type Machine,
   Outcome,
-  type PortEmitter,
   type Sub,
 } from "../../index";
 import { cmdEdge } from "../../pure/core";
@@ -52,10 +51,6 @@ import {
  * exactly where `run` would report it (#304). A settle it minted through
  * `cmdEdgeOf(ctx)` passes.
  *
- * The `ctx` handed to each handler is `opts.ctx` augmented with a NO-OP `emit`,
- * so a handler that emits to a `Port` runs without a live runtime; nothing here
- * observes ports. Supply your own `emit` on `ctx` to capture them.
- *
  * @throws {DriveRoundsExceededError} when the machine is still emitting work
  *   after `opts.maxRounds` rounds. It never returns a half-driven state.
  * @throws whatever a handler rejects with, unchanged — annotated with the
@@ -83,13 +78,10 @@ export async function drive<
   };
   const contract = driveContractOf(machine, options.clock ?? Date.now);
 
-  // A handler's ctx is `Ctx & PortEmitter`, plus the `ok` / `err` builders and
+  // A handler's ctx is the caller's `Ctx`, plus the `ok` / `err` builders and
   // the edge a defined Cmd's handler is handed. The Ctx half is the caller's;
-  // the rest is the kernel's, and a driven test has no kernel — so a no-op
-  // `emit` stands in, placed FIRST so a caller's own `emit` wins.
-  const noopEmit: PortEmitter = { emit: () => {} };
+  // the rest is the kernel's, and a driven test has no kernel.
   const handlerCtx = {
-    ...noopEmit,
     ok: Outcome.ok,
     err: Outcome.err,
     [cmdEdge]: contract.settle,

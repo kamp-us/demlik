@@ -19,10 +19,9 @@
 //     deliberate `undefined` cast as S — the function lies about its
 //     return type when no initial state is provided; this is the trade-off
 //     we accept for an ergonomic test substrate).
-//   - `subscribe` / `observe` / `subscribePort`: register the listener,
-//     return a no-op unsubscribe. The listener is never fired because the
-//     state never changes.
-//   - `emitPort`: no-op.
+//   - `subscribe` / `observe`: register the listener, return a no-op
+//     unsubscribe. The listener is never fired because the state never
+//     changes.
 //   - `ready`: a Promise that resolves to the no-op runtime itself (the #45
 //     `ready: Promise<Runtime<S, M>>` shape — already booted, nothing to wait
 //     for).
@@ -31,7 +30,7 @@
 // Strengthens invariant 9 (the testing surface is named and small).
 // ---------------------------------------------------------------------------
 
-import type { Port, Runtime } from "../index";
+import type { Runtime } from "../index";
 
 /**
  * Construct an inert `Runtime<S, M>` value. Use at ctx sites that require
@@ -98,15 +97,6 @@ export function noopRuntime<S, M extends { type: string }>(opts?: {
       // so `on` is structurally present but uncallable — there is no `K` to
       // pass. The body is unreachable; it returns the shared no-op unsubscribe.
       return noopUnsubscribe;
-    },
-    subscribePort<T>(
-      _port: Port<T>,
-      _listener: (value: T) => void,
-    ): () => void {
-      return noopUnsubscribe;
-    },
-    emitPort<T>(_port: Port<T>, _value: T): void {
-      // No-op. No subscribers to fan out to; nothing to do.
     },
     // Assigned just below — `ready` must resolve to `runtime` itself, which
     // can't be referenced inside its own object literal.

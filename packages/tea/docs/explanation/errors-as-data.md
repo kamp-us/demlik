@@ -3,7 +3,7 @@
 `@demlik/tea` splits everything that can go wrong into two kinds, and gives each
 kind a different shape. A **recoverable failure** — the network said no, the
 token expired, the deadline lapsed — is a plain tagged value folded into your
-Model. A **contract breach** — two ports registered under one name, a reducer
+Model. A **contract breach** — a machine that never goes quiet, a reducer
 with no cell for a Msg — is a thrown `Error`.
 
 The rule that decides which one you are holding is a single question: **does the
@@ -15,7 +15,7 @@ caller have a next move?**
 |---|---|---|
 | A call's deadline lapsed | retry, or give up on this item | `{ _tag: "deadline_exceeded", … }` in Model |
 | A call came back 401 | send the user to log in again | `{ _tag: "unauthorized", … }` in Model |
-| Two ports share a name | none — the wiring is wrong | `throw new PortNameCollisionError(…)` |
+| A machine never goes quiet | none — its Msgs loop forever | `throw new QuiescenceTimeoutError(…)` |
 | A machine has no cell for a Msg | none — the dispatch was invalid here | `throw new NoCellError(…)` |
 
 The first two are outcomes of a program that is working correctly; the world
@@ -89,7 +89,7 @@ which is the same question this page opened with, now asked by the compiler.
 ## Why bugs are not also data
 
 Consistency would say: make everything a value. The problem is that a bug has no
-handler. Hand `{ _tag: "port_collision" }` up the stack as a value and one of two
+handler. Hand `{ _tag: "no_cell" }` up the stack as a value and one of two
 things happens. Either nobody handles it, it reaches the top, and it gets thrown
 there anyway — so the throw only moved, and every call in between paid for the
 plumbing. Or somebody quietly swallows it and the program keeps running on

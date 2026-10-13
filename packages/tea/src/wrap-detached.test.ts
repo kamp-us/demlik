@@ -78,10 +78,8 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
       startGraph,
     );
     const fired: Msg[] = [];
-    const result = await wrapped(
-      { type: "start_graph" },
-      { emit: () => {} },
-      (m) => fired.push(m),
+    const result = await wrapped({ type: "start_graph" }, undefined, (m) =>
+      fired.push(m),
     );
     expect(result).toBeUndefined();
     await new Promise<void>((resolve) => queueMicrotask(resolve));
@@ -94,7 +92,7 @@ describe("wrapDetached — the typed Cmd→Msg edge", () => {
     const wrapped = wrapDetached<Start, Msg, Finished | Failed, undefined>(
       startGraph,
     );
-    expect(() => wrapped({ type: "start_graph" }, { emit: () => {} })).toThrow(
+    expect(() => wrapped({ type: "start_graph" }, undefined)).toThrow(
       /without the injected dispatch/,
     );
   });

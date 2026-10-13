@@ -5,14 +5,15 @@
 // positive case that must compile.
 //
 // The contract (`HandlerCtx<Ctx>`): a machine whose `Ctx` is `undefined` hands
-// its handlers the kernel's half alone — `emit`, plus `ok` / `err` for a
-// `Cmd.define`d Cmd — instead of `undefined & {…}`, which reduces to `never`.
+// its handlers the kernel's half alone — `ok` / `err` for a `Cmd.define`d Cmd
+// — instead of `undefined & {…}`, which reduces to `never`. The kernel's half
+// carries no `emit`: the old port family is gone (#664), so a handler that
+// calls `ctx.emit` does not compile, with or without a declared Ctx.
 
 import { z } from "zod";
 import {
   Cmd,
   defineMachine,
-  definePort,
   type Interpret,
   type InterpretDetached,
   type Settled,
@@ -32,23 +33,31 @@ type Go = { readonly type: "go" };
 type Msg = Go | Pong | Settled<typeof fetchName>;
 type AppCmd = ReturnType<typeof fetchName> | Ping;
 
-const progress = definePort<number>("progress");
-
 // ── Interpret<M, C, undefined> ──────────────────────────────────────────────
 
 const interpret: Interpret<Msg, AppCmd, undefined> = {
-  // A `Cmd.define`d cell reaches `ok` / `err` (and `emit`) with no cast.
+  // A `Cmd.define`d cell reaches `ok` / `err` with no cast.
   fetch_name: async (cmd, ctx) => {
-    ctx.emit(progress, 1);
     if (cmd.id === "") return ctx.err({ _tag: "not_found" });
     return ctx.ok(`user ${cmd.id}`);
   },
-  // A hand-written cell reaches `emit` with no cast.
+  ping: async () => ({ type: "pong" }),
+};
+
+// No handler ctx carries `emit`.
+const emitting: Interpret<Msg, AppCmd, undefined> = {
+  fetch_name: async (cmd, ctx) => {
+    // @ts-expect-error a `Cmd.define`d cell's ctx has no `emit`
+    ctx.emit("progress", 1);
+    return ctx.ok(`user ${cmd.id}`);
+  },
   ping: async (_cmd, ctx) => {
-    ctx.emit(progress, 2);
+    // @ts-expect-error a hand-written cell's ctx has no `emit`
+    ctx.emit("progress", 2);
     return { type: "pong" };
   },
 };
+void emitting;
 
 // `err` is still typed to the def's declared tags.
 const undeclared: Interpret<Msg, AppCmd, undefined> = {
@@ -86,7 +95,8 @@ const detached: InterpretDetached<Ping, Pong, undefined> = async (
   ctx,
   dispatch,
 ) => {
-  ctx.emit(progress, 3);
+  // @ts-expect-error a detached handler's ctx has no `emit`
+  ctx.emit("progress", 3);
   dispatch({ type: "pong" });
 };
 const wrapped = wrapDetached<Ping, Msg, Pong, undefined>(detached);
@@ -102,3 +112,17 @@ const withCtx: Interpret<Msg, AppCmd, Db> = {
   ping: async () => undefined,
 };
 void withCtx;
+
+// A declared Ctx gains no `emit` either: the handler reads exactly its Ctx.
+const withCtxEmitting: Interpret<Msg, AppCmd, Db> = {
+  fetch_name: async (cmd, ctx) => {
+    // @ts-expect-error `emit` is not on `Db`, and the kernel adds none
+    ctx.emit("progress", 4);
+    return ctx.ok(ctx.db.get(cmd.id));
+  },
+  ping: async (_cmd, ctx) => {
+    // @ts-expect-error `emit` is not on `Db`, and the kernel adds none
+    ctx.emit("progress", 5);
+  },
+};
+void withCtxEmitting;

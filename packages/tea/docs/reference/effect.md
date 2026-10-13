@@ -186,8 +186,6 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   ): Effect<void, Stopped | StoreFailed | Err>;
   /** `dispatch(msg, { settle: "once" })`: one transition, no follow-up drain. */
   dispatchOnce(msg: M): Effect<void, Stopped | StoreFailed | Err>;
-  /** Emit a value on a Port from outside a Cmd handler. */
-  emitPort<T>(port: Port<T>, value: T): void;
   /** A `(msg, state)` hook, fired after each applied transition. */
   observe(observer: (msg: M, state: S) => void): () => void;
   /** Subscribe to the semantic event of `type` the run's `events` projects. */
@@ -209,8 +207,6 @@ interface EffectBootingRuntime<S, M extends { type: string }, E extends { type: 
   stop(): Effect<void>;
   /** A zero-arg change notifier, fired after each applied transition. */
   subscribe(listener: () => void): () => void;
-  /** Subscribe to a typed Port. */
-  subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
 }
 ```
 

@@ -7,20 +7,21 @@
 // The machine declares a Sub as data in `subs`; a factory in this subpath
 // returns the runner for that Sub's type, which the caller hands to `run`:
 //
-//   subs: [{ type: "audit-idle", deps: (s) => (s.watching ? {} : null) }],
+//   subs: [
+//     {
+//       type: "poll",
+//       deps: (s) => (s.watching ? { intervalMs: 1_000 } : null),
+//     },
+//   ],
 //   // …
 //   run(machine, {
 //     subscribe: {
-//       "audit-idle": fromPort(
-//         (ctx) => ctx.auditRuntime,
-//         auditIdlePort,
-//         (idle) => ({ type: "audit:idle", idle }),
-//       ),
+//       poll: fromInterval(() => ({ type: "poll:tick" })),
 //     },
 //   });
 //
 // The factory absorbs the lifecycle (subscribe + cleanup); the caller keeps
-// the intent (which port, which msg). A runner reads its data off `sub.deps`.
+// the intent (which msg). A runner reads its data off `sub.deps`.
 // Strengthens invariant 9 (the surface for cross-cutting Sub topologies is
 // named, small, and exported from one subpath instead of redrawn at every
 // call site).

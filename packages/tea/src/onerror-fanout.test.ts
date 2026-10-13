@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   defineMachine,
-  definePort,
   type Interpret,
   type Reducer,
   type RuntimeErrorContext,
@@ -14,7 +13,7 @@ import { run } from "./promise";
 // OnError sink routing for the runtime FANOUT paths (invariant 6 — the
 // runtime is inspectable; no silent failures). The sink already covered
 // `follow-up` / `stop-save` / `reduce`, but the fanout sites (observers,
-// listeners, port listeners, semantic-event handlers, boot handlers, sub
+// listeners, semantic-event handlers, boot handlers, sub
 // cleanups) historically swallowed throws to a bare `console.error` — so a
 // consumer wiring `onError` to Sentry missed exactly the "no caller to
 // reject at" failures the sink exists for. These tests pin the fix: every
@@ -28,17 +27,13 @@ type PingCmd = { readonly type: "ping" };
 type TickSub = Sub<"tick", { readonly on: true }>;
 type BumpEvent = { readonly type: "bumped" };
 
-const pingPort = definePort<number>("onerror-fanout.test.ping");
-
 const update: Reducer<State, Msg, PingCmd> = {
   inc: (s) => [{ ...s, n: s.n + 1 }, [{ type: "ping" }]],
   sub_off: (s) => [{ ...s, subOn: false }, []],
 };
 
 const interpret: Interpret<Msg, PingCmd, undefined> = {
-  ping: async (_cmd, ctx) => {
-    ctx.emit(pingPort, 1);
-  },
+  ping: async () => {},
 };
 
 function collector() {
@@ -99,20 +94,6 @@ describe("fanout throws route to the onError sink with distinguishing phases", (
     });
     await runtime.dispatch({ type: "inc" });
     expect(seen).toEqual([{ error: boom, context: { phase: "listener" } }]);
-    await runtime.stop();
-  });
-
-  it("a throwing port listener reaches the sink with phase 'port-emit'", async () => {
-    const { seen, onError } = collector();
-    const boom = new Error("port listener blew up");
-    const runtime = await run(fanoutMachine(), { ...handlers(), onError })
-      .ready;
-    runtime.subscribePort(pingPort, () => {
-      throw boom;
-    });
-    await runtime.dispatch({ type: "inc" });
-    await runtime.idle();
-    expect(seen).toEqual([{ error: boom, context: { phase: "port-emit" } }]);
     await runtime.stop();
   });
 
