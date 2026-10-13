@@ -76,7 +76,7 @@ Each `dispatch` folds a Msg through `update` and re-renders with the next state.
 Under the hood `useMachine` calls the `run` you passed with
 `(machine, { ctx, interpret, subscribe })`,
 subscribes via `useSyncExternalStore` (so it is tearing-free under React 18's
-concurrent rendering), and calls `runtime.stop()` on unmount to drain the queue
+concurrent rendering), and calls `runtime.stop()` on unmount to drain the queue, up to `disposeTimeoutMs`,
 and stop every running Sub.
 
 ## 2. Hand it the handlers, and a `ctx` when they need one

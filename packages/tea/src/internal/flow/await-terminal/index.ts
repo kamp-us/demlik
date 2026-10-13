@@ -145,6 +145,10 @@ export function awaitTerminal<
  * resolve with the terminal state — then tear the runtime down (`runtime.stop()`)
  * on BOTH the resolve and reject paths. Wraps {@link awaitTerminal}.
  *
+ * A `timeoutMs` rejection fires at its window. It starts the teardown and does
+ * not wait for it, because `stop()` may wait up to `disposeTimeoutMs` for a Cmd
+ * handler that has not returned.
+ *
  * The seed carries the machine's `ctx` (conditionally optional, exactly as
  * `run`'s `ctx` — a pure machine omits it), the handlers `run` takes beside the
  * machine (`interpret`, and `subscribe` when its Subs need runners), and the
@@ -195,8 +199,12 @@ export async function runToTerminal<
     return state;
   } catch (err) {
     // Tear down on the reject path too (timeout, dispatch failure) — a rejected
-    // runToTerminal never leaves the runtime running.
-    await runtime.stop().catch(() => {});
+    // runToTerminal never leaves the runtime running. The timeout does not wait
+    // for that teardown: `stop()` waits up to `disposeTimeoutMs` for a Cmd
+    // handler that has not returned, and the window the caller set is the
+    // promise this rejection keeps.
+    const stopped = runtime.stop().catch(() => {});
+    if (!(err instanceof TerminalTimeoutError)) await stopped;
     throw err;
   }
 }

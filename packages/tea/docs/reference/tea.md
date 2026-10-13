@@ -8,7 +8,7 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (157)
+## Exports (158)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
@@ -50,6 +50,7 @@ import { … } from "@demlik/tea";
 | [`DispatchSettle`](#DispatchSettle) | Type | stable | How long a `dispatch` waits before it resolves: `quiescent`, the default, waits for every follow-up Msg to drain, and `once` waits for the single transition. |
 | [`Dispose`](#Dispose) | Type | stable | The cleanup function a Sub runner returns. |
 | [`DisposeTimeoutNotice`](#DisposeTimeoutNotice) | Class | stable | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for async teardown work hits `disposeTimeoutMs`. |
+| [`DrainTimeoutNotice`](#DrainTimeoutNotice) | Class | stable | Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait for the queue hits `disposeTimeoutMs` (ADR 0025): a Cmd handler, a save or detached work had not returned. |
 | [`DriveFailedError`](#DriveFailedError) | Class | stable | Raised by `driveToDone` when the drive ends on a State its `failed` predicate marks as a failure. |
 | [`DriveStalledError`](#DriveStalledError) | Class | stable | Raised by `driveToDone` when `start`'s follow-up chain quiesces on a State that is neither terminal nor `failed` AND nothing in the runtime can still transition it — no live Sub, no in-flight Cmd. |
 | [`EngineRun`](#EngineRun) | Type | stable | An engine's `run`, seen from a host adapter: a machine and its RunOptions in, a RunHandle out. |
@@ -861,6 +862,21 @@ class DisposeTimeoutNotice extends RuntimeDiscardNotice {
   readonly _tag: "DisposeTimeoutNotice";
   readonly name: "DisposeTimeoutNotice";
   readonly pendingDisposals: number;
+  readonly timeoutMs: number;
+}
+```
+
+<a id="DrainTimeoutNotice"></a>
+
+### `DrainTimeoutNotice`
+
+```ts
+class DrainTimeoutNotice extends RuntimeDiscardNotice {
+  constructor(cmdTypes: readonly string[], pendingCmds: number, timeoutMs: number);
+  readonly _tag: "DrainTimeoutNotice";
+  readonly cmdTypes: readonly string[];
+  readonly name: "DrainTimeoutNotice";
+  readonly pendingCmds: number;
   readonly timeoutMs: number;
 }
 ```

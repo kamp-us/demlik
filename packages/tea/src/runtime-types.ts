@@ -160,12 +160,14 @@ export function __resetPortRegistry(): void {
  *   run stops — on the Effect engine by closing its Scope with the failure. A
  *   Sub that expects an error maps it to a Msg itself; there is no hook for it
  *   here.
- * - `"discard"` — work lost to a teardown the host asked for. Two witnesses,
- *   both carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
- *   handlers were still awaiting (`RuntimeDiscardedError`), and a Msg that
- *   arrived DURING `stop()`'s drain and so could not be delivered
- *   (`DispatchDiscardedError`), and teardown work that did not settle inside
- *   `disposeTimeoutMs` (`DisposeTimeoutNotice`). The one phase that is a
+ * - `"discard"` — work lost to a teardown the host asked for. Four witnesses,
+ *   each carrying a `RuntimeDiscardNotice`: `stop()` was called while interpret
+ *   handlers were still awaiting (`RuntimeDiscardedError`), a Msg that
+ *   arrived DURING `stop()`'s drain, or was still queued when `stop()` gave up
+ *   on it, and so could not be delivered (`DispatchDiscardedError`), a drain
+ *   that did not finish inside `disposeTimeoutMs` (`DrainTimeoutNotice`), and
+ *   teardown work that did not settle inside `disposeTimeoutMs`
+ *   (`DisposeTimeoutNotice`). The one phase that is a
  *   LIFECYCLE report rather than a failure: legal, merely lossy.
  * - `"identity-drop"` — the `Identity` filter dropped a message addressed to a
  *   different instance (`IdentityDropNotice`). Its own phase rather than
@@ -361,7 +363,8 @@ export abstract class RuntimeDiscardNotice extends Error {}
 /**
  * Reported to the `OnError` sink under `phase: "discard"` when `stop()` is
  * called while `interpret` handlers are still awaiting. The host is dropping
- * its only handle on that work: `stop()` drains the tail, but the listeners,
+ * its only handle on that work: `stop()` drains the tail, up to
+ * `disposeTimeoutMs`, but the listeners,
  * observers and event handlers that would have consumed the resulting
  * transitions are gone, so the Cmds' results reach nobody.
  *
@@ -447,10 +450,53 @@ export class DisposeTimeoutNotice extends RuntimeDiscardNotice {
 }
 
 /**
+ * Reported to the `OnError` sink under `phase: "discard"` when `stop()`'s wait
+ * for the queue hits `disposeTimeoutMs` (ADR 0025): a Cmd handler, a save or
+ * detached work had not returned.
+ *
+ * `stop()` resolves by contract, so it gives up on that work instead of waiting
+ * for it without limit. It then stops the Subs and runs the final save as it
+ * always does. The work it gave up on is not recalled — a Promise cannot be
+ * cancelled — so a handler may still be running after `stop()` has returned.
+ * Whatever it returns later is dropped, and so are the rest of its step's Cmds
+ * and the Msgs queued behind it: each is a `DispatchDiscardedError`, and
+ * nothing is saved.
+ *
+ * `cmdTypes` names the Cmd of each handler call still awaiting, one entry per
+ * call. `pendingCmds` counts those plus any detached work, the same count
+ * `RuntimeDiscardedError` carries.
+ */
+export class DrainTimeoutNotice extends RuntimeDiscardNotice {
+  override readonly name = "DrainTimeoutNotice";
+  readonly _tag = "DrainTimeoutNotice" as const;
+  constructor(
+    public readonly cmdTypes: readonly string[],
+    public readonly pendingCmds: number,
+    public readonly timeoutMs: number,
+  ) {
+    super(
+      `@demlik/tea: stop() gave up waiting for the queue after ${timeoutMs}ms ` +
+        `with ${pendingCmds} Cmd(s) still in flight` +
+        (cmdTypes.length > 0
+          ? ` (${cmdTypes.map((type) => `"${type}"`).join(", ")})`
+          : "") +
+        ` — whatever they return, the rest of their step and the Msgs queued ` +
+        `behind them are dropped, and nothing more is saved. Bound the ` +
+        `handler's own IO so it returns, or raise run({ disposeTimeoutMs }).`,
+    );
+  }
+}
+
+/**
  * The rejection of a dispatch that arrived DURING `stop()`'s drain — an in-flight
  * interpret handler's follow-up Msg, a detached handler's terminal Msg, or a Sub
  * that is still live because subs are torn down only after the drain. The stop
  * barrier is absolute (the Msg is refused, never folded), so this names the loss.
+ *
+ * It is also the rejection of the work `stop()` gave up on (see
+ * `DrainTimeoutNotice`): a Msg a stuck handler produces after `stop()` has
+ * returned, and a Msg that was accepted before `stop()` and was still queued
+ * behind that handler.
  *
  * It is the SECOND witness of `RuntimeDiscardedError`'s fact, and it is why the
  * drain window is a distinct runtime state rather than a plain `stopped` flag:
@@ -465,11 +511,12 @@ export class DispatchDiscardedError extends RuntimeDiscardNotice {
   readonly _tag = "DispatchDiscardedError" as const;
   constructor(public readonly msgType: string) {
     super(
-      `@demlik/tea: Msg "${msgType}" arrived while the runtime was stopping ` +
-        `and was discarded — stop() refuses new work so the drain terminates. ` +
-        `It is the result of a Cmd that outlived its runtime; keep the runtime ` +
-        `alive until the Cmd settles (in React: stabilize useMachine's ctx) if ` +
-        `the transition matters.`,
+      `@demlik/tea: Msg "${msgType}" was discarded by stop() — it arrived ` +
+        `while the runtime was stopping, or was still waiting behind a Cmd ` +
+        `handler stop() gave up on. stop() refuses new work so the drain ` +
+        `terminates. If it is the result of a Cmd that outlived its runtime, ` +
+        `keep the runtime alive until the Cmd settles (in React: stabilize ` +
+        `useMachine's ctx) if the transition matters.`,
     );
   }
 }

@@ -253,7 +253,12 @@ type EffectRunOptions<
 > = CtxArg<Ctx> & InterpretOption<C, I> & SubscribeOption<U, B> & {
   /** Stamps `at` on minted Msgs and telemetry. Defaults to `Date.now`. */
   readonly clock?: () => number;
-  /** How long `stop()` waits for async teardown. Defaults to 5_000ms. */
+  /**
+   * How long `stop()` waits for the queue, and then for async teardown,
+   * before giving up on each. Defaults to 5_000ms. `stop()` interrupts every
+   * handler here, so the first wait ends early unless a handler cannot be
+   * interrupted.
+   */
   readonly disposeTimeoutMs?: number;
   /** Projects each applied transition to the public events `on` serves. */
   readonly events?: (msg: M, state: S) => readonly E[];

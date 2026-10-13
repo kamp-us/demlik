@@ -201,7 +201,12 @@ export type EffectRunOptions<
     readonly terminal?: (state: S) => boolean;
     /** A fire-and-forget sink for every applied transition. */
     readonly telemetry?: TelemetrySink;
-    /** How long `stop()` waits for async teardown. Defaults to 5_000ms. */
+    /**
+     * How long `stop()` waits for the queue, and then for async teardown,
+     * before giving up on each. Defaults to 5_000ms. `stop()` interrupts every
+     * handler here, so the first wait ends early unless a handler cannot be
+     * interrupted.
+     */
     readonly disposeTimeoutMs?: number;
   };
 

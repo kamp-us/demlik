@@ -111,8 +111,12 @@ What each piece does:
   when the machine declares a Sub type the engine does not ship.
 - **`dispatch` resolves after the step settles.** Here that includes the
   `fetch_user` call, so `getState()` already reads `loaded` or `missing`.
-- **`stop()`** drains the queue and stops every running Sub, the pending
-  `timer` included.
+- **`stop()`** drains the queue, up to `disposeTimeoutMs` (5 seconds unless
+  you set it), and stops every running Sub, the pending `timer` included. When
+  a handler never returns, `stop()` gives up on it at that limit, reports a
+  `DrainTimeoutNotice` to `onError`, then stops the Subs, runs the final save
+  and returns. The handler is still running. What it returns later is dropped,
+  and so are the Msgs queued behind it.
 
 ## 3. Swap a runner in a test
 

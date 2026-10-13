@@ -156,5 +156,54 @@ describe("runToTerminal", () => {
       // The reject path ran runtime.stop(): no timers dangle after teardown.
       expect(vi.getTimerCount()).toBe(0);
     });
+
+    it("three runs whose Cmd handler never returns each reject at the window", async () => {
+      // stop() gives up on the handler at `disposeTimeoutMs` and says so; the
+      // default sink warns, which is noise here.
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      type StuckMsg = { readonly type: "start" };
+      type StuckCmd = { readonly type: "hang" };
+      const stuck = defineMachine({
+        types: {
+          model: {} as JobState,
+          msg: {} as StuckMsg,
+          cmd: {} as StuckCmd,
+          ctx: {} as NoCtx,
+        },
+        init: () => [{ phase: "idle" }, []],
+        update: { start: () => [{ phase: "working" }, [{ type: "hang" }]] },
+      });
+      const outcomes = [1, 2, 3].map(() =>
+        runToTerminal(
+          stuck,
+          {
+            interpret: { hang: () => new Promise<void>(() => {}) },
+            msgs: [{ type: "start" }],
+          },
+          isDone,
+          { timeoutMs: 100 },
+        ).then(
+          () => "resolved",
+          (error: unknown) => error,
+        ),
+      );
+
+      // Just short of the window nothing has settled; at it, all three reject.
+      // The rejection does not wait out stop()'s 5_000ms default limit.
+      let settled = 0;
+      for (const outcome of outcomes) void outcome.then(() => settled++);
+      await vi.advanceTimersByTimeAsync(99);
+      expect(settled).toBe(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(3);
+      for (const outcome of outcomes) {
+        expect(await outcome).toBeInstanceOf(TerminalTimeoutError);
+      }
+
+      // The teardown it started finishes on its own, at stop()'s limit.
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(vi.getTimerCount()).toBe(0);
+      warn.mockRestore();
+    });
   });
 });
