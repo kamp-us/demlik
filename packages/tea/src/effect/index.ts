@@ -15,6 +15,7 @@
  */
 
 export { type SpawnSteps, spawn, stop, tell } from "./children";
+export { type CheckingSchema, Cmd } from "./cmd";
 export { Stopped, StoreFailed } from "./failures";
 export type { EffectBootingRuntime, EffectRuntime } from "./handle";
 export {

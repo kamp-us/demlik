@@ -8,11 +8,14 @@ Tier: `stable`
 import { … } from "@demlik/tea/effect";
 ```
 
-## Exports (17)
+## Exports (20)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
 | [`CellErrors`](#CellErrors) | Type | stable | The failures a dispatch on the handle can end with from an `interpret` map: the error type of every hand-written Cmd's cell. |
+| [`CheckingSchema`](#CheckingSchema) | Type | stable | An Effect schema that checks a value and hands the same type on. |
+| [`Cmd`](#Cmd) | Type | stable | A Cmd value, as the core types it. |
+| [`Cmd`](#Cmd) | Variable | stable | The helpers for building Cmds on the Effect engine. |
 | [`EffectBootingRuntime`](#EffectBootingRuntime) | Interface | stable | What the Effect engine's `run` yields while boot is in flight. |
 | [`EffectInterpret`](#EffectInterpret) | Type | stable | The Effect engine's `interpret` map: one cell per Cmd variant, each reading services within `R`. |
 | [`EffectInterpretCell`](#EffectInterpretCell) | Type | stable | One Effect `interpret` cell. |
@@ -38,6 +41,124 @@ import { … } from "@demlik/tea/effect";
 
 ```ts
 type CellErrors<C extends Cmd, I> = { [K in keyof I & C["type"]]: unknown extends ErrorsOf<Extract<C, { type: K }>> ? ErrorOfCell<I[K]> : never }[keyof I & C["type"]]
+```
+
+<a id="CheckingSchema"></a>
+
+### `CheckingSchema`
+
+```ts
+type CheckingSchema<T> = Schema.Codec<T, NoInfer<T>>
+```
+
+<a id="Cmd"></a>
+
+### `Cmd`
+
+```ts
+type Cmd<T extends string = string, Ok = unknown, E = unknown> = CoreCmd<T, Ok, E>
+
+const Cmd: {
+  /**
+   * Flat concat of cmd arrays. Use when a cell composes effects from
+   * multiple conditional sources:
+   *
+   *   return [next, Cmd.batch(
+   *     Cmd.whenDefined(state.queueItemId, (id) => ({ type: "complete", id })),
+   *     Cmd.when(state.windowId !== undefined, { type: "close_window", windowId }),
+   *     [{ type: "detach_debugger", tabId: state.tabId }],
+   *   )];
+   *
+   * `<const C>` keeps inline cmd literals' discriminants narrow (same
+   * rationale as `when` / `whenDefined` above).
+   */
+  readonly batch: <const C extends Cmd<string, unknown, unknown>>(
+    ...arrs: readonly (readonly C[])[],
+  ) => readonly C[];
+  /**
+   * Declare a typed Cmd constructor from plain Effect schemas. It returns what
+   * the core `Cmd.define` returns, with each schema passed through
+   * `Schema.toStandardSchemaV1` for you:
+   *
+   *   const fetchUser = Cmd.define("fetch_user", {
+   *     input: Schema.Struct({ id: Schema.String }),
+   *     ok: Schema.Struct({ name: Schema.String }),
+   *     err: ["not_found"],
+   *   });
+   *
+   * `input` and `ok` take a schema that checks and never translates: both of
+   * its sides are one type and decoding needs no service. A transformation, a
+   * brand or a schema that needs a service is a compile error.
+   *
+   * To keep the checks of a transformation or a brand, pass
+   * `Schema.toType(schema)`. That is no way through for a schema that needs a
+   * service: its check lives in the decode step, and `Schema.toType` drops that
+   * step, so the Cmd would compile and never run the check. Run such a check in
+   * the handler.
+   *
+   * A schema whose validation needs a Promise compiles, and is refused with
+   * `AsyncSchemaError` when the Cmd settles, as the core's is.
+   *
+   * It takes Effect schemas only. A zod schema, or any other Standard Schema,
+   * goes to `Cmd.define` from `@demlik/tea`.
+   */
+  define: <
+    const Name extends string,
+    Input extends CmdInput,
+    Ok,
+    const Tags extends readonly string[],
+  >(
+    name: Name,
+    spec: {
+      readonly err: Tags;
+      readonly input: CheckingSchema<Input>;
+      readonly ok: CheckingSchema<Ok>;
+    },
+  ) => CmdDef<Name, Input, Ok, TaggedError<Tags[number]>>;
+  /**
+   * The empty Cmd array. Typed `readonly never[]` so it's assignable to any
+   * `readonly C[]` for any `C extends Cmd`. Use in `init` returns and
+   * Transitions cells that emit zero effects:
+   *
+   *   init: (loaded) => [loaded ?? initial, Cmd.none],
+   *   tick: (state) => [state, Cmd.none],
+   *
+   * Elm's `Cmd.none` analogue. Cultural signal alongside the runtime help:
+   * `[state, Cmd.none]` reads as intent ("this transition emits nothing"),
+   * `[state, []]` reads as "empty array of what".
+   *
+   * Frozen at runtime so a downstream consumer can't `.push()` into the
+   * shared reference.
+   */
+  readonly none: readonly never[];
+  /**
+   * Emit `cmd` wrapped in a single-element array iff `cond` is true.
+   * Otherwise return the empty array. Spreads cleanly into the cmds array
+   * returned by a Transitions cell.
+   *
+   * `const C` (TypeScript 5.0+) keeps the inferred `type:` discriminator
+   * literal narrow when called with an object literal — so `Cmd.when(b,
+   * { type: "x", ... })` infers as `{ type: "x", ... }`, not `{ type:
+   * string, ... }`, and stays assignable to a discriminated-union arm
+   * without `as const` at the call site.
+   */
+  readonly when: <const C extends Cmd<string, unknown, unknown>>(
+    cond: boolean,
+    cmd: C,
+  ) => readonly C[];
+  /**
+   * If `value` is defined, call `build(value)` and emit the resulting cmd
+   * wrapped in a single-element array. If `value` is `undefined`, return
+   * the empty array. `value` is narrowed to `T` inside `build`.
+   *
+   * `const C` on the return type keeps the callback's object-literal
+   * `type:` field narrow (see `when` above for the full rationale).
+   */
+  readonly whenDefined: <T, const C extends Cmd<string, unknown, unknown>>(
+    value: T | undefined,
+    build: (value: T) => C,
+  ) => readonly C[];
+}
 ```
 
 <a id="EffectBootingRuntime"></a>

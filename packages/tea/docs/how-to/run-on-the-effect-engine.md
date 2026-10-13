@@ -74,8 +74,27 @@ export const profile = defineMachine({
 });
 ```
 
-`Cmd.define` takes any Standard Schema. To use Effect Schema instead of zod,
-pass each schema through `Schema.toStandardSchemaV1`.
+To write the schemas in Effect Schema instead of zod, import `Cmd` from
+`@demlik/tea/effect`. Its `Cmd.define` takes plain Effect schemas:
+
+```ts
+import { Cmd } from "@demlik/tea/effect";
+import { Schema } from "effect";
+
+/** `fetchUser` again, with its schemas written in Effect Schema. */
+export const fetchUser = Cmd.define("fetch_user", {
+  input: Schema.Struct({ id: Schema.String }),
+  ok: Schema.Struct({ name: Schema.String }),
+  err: ["not_found"],
+});
+```
+
+It returns a Cmd like the zod one, so the rest of the machine file stays as it
+is and still runs on both engines. The file now imports `effect`.
+
+A schema here checks a value and never translates it. One that changes a
+value's type, such as `Schema.FiniteFromString` or a brand, is a compile error.
+To keep its checks, pass `Schema.toType(schema)`.
 
 ## 2. Hand `run` Effect handlers
 
