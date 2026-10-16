@@ -1,5 +1,15 @@
 # @demlik/structure-sweep
 
+## 0.3.8
+
+### Patch Changes
+
+- Updated dependencies [f4d0c71]
+- Updated dependencies [4a13a10]
+- Updated dependencies [626dc6f]
+- Updated dependencies [5d04176]
+  - @demlik/tea@0.21.0
+
 ## 0.3.7
 
 ### Patch Changes
