@@ -1,5 +1,44 @@
 # @demlik/tea
 
+## 0.21.0
+
+### Minor Changes
+
+- f4d0c71: `@demlik/tea/effect` exports its own `Cmd`. Its `Cmd.define` takes plain Effect schemas, so an Effect Schema user no longer wraps `input` and `ok` in `Schema.toStandardSchemaV1`:
+
+  ```ts
+  import { Cmd } from "@demlik/tea/effect";
+  import { Schema } from "effect";
+
+  const fetchUser = Cmd.define("fetch_user", {
+    input: Schema.Struct({ id: Schema.String }),
+    ok: Schema.Struct({ name: Schema.String }),
+    err: ["not_found"],
+  });
+  ```
+
+  It returns the same Cmd the core `Cmd.define` returns, and `Cmd.none`, `Cmd.batch`, `Cmd.when` and `Cmd.whenDefined` are the core's. A schema whose two sides differ (a transformation such as `Schema.FiniteFromString`, or a brand) is a compile error. Pass `Schema.toType(schema)` to keep its checks. A schema that needs a service is a compile error too, and `Schema.toType` is no way through for it: its check lives in the decode step, which `Schema.toType` drops, so run that check in the handler. The entry also exports the `Cmd` type and `CheckingSchema`, the schema type `Cmd.define` accepts. The core `Cmd.define` does not change.
+
+- 4a13a10: `stop()` no longer waits without limit for a Cmd handler that has not returned. It waits for the queue up to `disposeTimeoutMs` (5 seconds unless you set it), then reports a `DrainTimeoutNotice` to `onError` under `phase: "discard"`, stops the Subs, runs the final save and returns. Before this, one handler that never returned meant `stop()` never returned, and the Sub cleanup and the final save never ran.
+
+  **Behaviour change.** A handler `stop()` gave up on is still running after `stop()` has returned. What it returns later is dropped, and so are the next Cmd of its step and the Msgs queued behind it. Each dropped Msg is a `DispatchDiscardedError`. A handler that needs longer than five seconds to finish during a stop needs a larger `disposeTimeoutMs`.
+
+  tea starts no store call after `stop()` has returned. A store call already under way when `stop()` gave up is not cancelled and can finish after `stop()` has returned. On a plain store a save that lands late can overwrite what a newer run saved; a fenced store (`{ fenced: true }`) refuses it with `StoreConflictError`. A host that starts a new run on the same store after a `stop()` that gave up needs a fenced store.
+
+  `DrainTimeoutNotice` is a new export. It carries `cmdTypes` (the Cmd of each handler still running), `pendingCmds` and `timeoutMs`, and it is warn-only like every `RuntimeDiscardNotice`.
+
+  `runToTerminal` with `timeoutMs` now rejects with `TerminalTimeoutError` at its window when a Cmd handler is still running. It used to wait for that handler first, so it rejected late or never. It starts the teardown and does not wait for it.
+
+  The same limit applies on the Effect engine, where `stop()` already interrupts every handler, so only a handler that cannot be interrupted reaches it. See ADR 0025.
+
+- 5d04176: The word "door" is gone from `@demlik/tea`: a published import path is a subpath, and the root is `@demlik/tea`. The docs, the generated reference, the TSDoc and the repo's own maintenance notes say subpath where they said door, and the three test files that pin the export map are now `public-subpaths.test.ts`, `battery-subpaths.test.ts` and `closed-subpath-specifiers.test.ts`. Other uses of the word take the plain word that fits. No export, subpath or runtime behavior changes.
+
+### Patch Changes
+
+- 626dc6f: A run stopped while its store was still loading no longer saves after `stop()` has returned. Before this, when `stop()` gave up at `disposeTimeoutMs` with `store.load()` still pending, the load's late return started one `store.save()`, which could write over what a newer run on the same store had saved. Now that run saves nothing: `ready` resolves with the loaded State installed and unsaved, and no Sub and no Cmd handler starts. Both engines.
+
+  A second `stop()` on the same run now returns the first one's result. It used to run the final save again, which on the Effect engine also happened when the run's Scope closed after the handle's own `stop()`.
+
 ## 0.20.0
 
 ### Minor Changes
