@@ -2,7 +2,7 @@
  * The hand-authored-docs specifier gate.
  *
  * The tests beside each page prove the code blocks they run still advance a
- * machine; this one proves no hand-authored page points a reader at a door
+ * machine; this one proves no hand-authored page points a reader at a subpath
  * `package.json` `exports` no longer carries. It is the guard for #73: a family
  * moving under `src/internal/` closes subpaths, and the prose quadrants are
  * compiled by nothing, so without this the drift lands silently.

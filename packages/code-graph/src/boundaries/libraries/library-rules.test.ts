@@ -90,14 +90,14 @@ describe("the library keys are parsed at the config boundary", () => {
     expect(refused({ worldLibraries: ["{"] })).toContain('world library "{" is not a valid glob');
   });
 
-  it("refuses a `worldLibraries` entry that matches a catalog door, whose ledger entry it would share", () => {
-    for (const [entry, door] of [
+  it("refuses a `worldLibraries` entry that matches an impure global, whose ledger entry it would share", () => {
+    for (const [entry, global] of [
       ["fetch", "fetch"],
       ["console", "console"],
       ["node:*", "node:fs"],
     ]) {
       expect(refused({ worldLibraries: [entry] })).toContain(
-        `world library "${entry}" matches the catalog door "${door}"`,
+        `world library "${entry}" matches the impure global "${global}"`,
       );
     }
   });
@@ -242,7 +242,7 @@ describe("B12: a library imports only the types its own type lists", () => {
   });
 });
 
-describe("B13: a pure library uses no world door and imports no world library", () => {
+describe("B7: a pure library uses no impure global and imports no world library", () => {
   const types = {
     pure: { imports: ["pure"], pure: true },
     free: { imports: ["pure", "free"], pure: false },
@@ -253,7 +253,7 @@ describe("B13: a pure library uses no world door and imports no world library", 
     libraries,
     worldLibraries: ["drizzle-orm", "hono", "@sentry/*"],
   };
-  const DOORS = [
+  const GLOBALS = [
     "export const a = Date.now();",
     "export const b = process.env.TOKEN;",
     'import fs from "node:fs";',
@@ -272,7 +272,7 @@ describe("B13: a pure library uses no world door and imports no world library", 
     'import type { Context } from "hono";',
   ].join("\n");
   const CLEAN = {
-    "packages/core/src/type-door.ts": [
+    "packages/core/src/type-global.ts": [
       'import type { Stats } from "node:fs";',
       'import { type Dirent } from "node:fs";',
       "export type S = Stats | Dirent;",
@@ -290,9 +290,9 @@ describe("B13: a pure library uses no world door and imports no world library", 
     repo = boundaryRepo(
       ".",
       base(Object.keys(libraries), {
-        "packages/core/src/doors.ts": DOORS,
+        "packages/core/src/globals.ts": GLOBALS,
         "packages/core/src/world.ts": WORLD,
-        "packages/edge/src/doors.ts": DOORS,
+        "packages/edge/src/globals.ts": GLOBALS,
         "packages/edge/src/world.ts": WORLD,
         ...CLEAN,
       }),
@@ -301,15 +301,15 @@ describe("B13: a pure library uses no world door and imports no world library", 
   });
   afterEach(() => repo.dispose());
 
-  it("is one entry per file per door, whether used by name or opened as a module", () => {
-    const doors = crossingsOf(repo.run({ json: true })).filter(([, from]) =>
-      from.endsWith("core/src/doors.ts"),
+  it("is one entry per file per global, whether used by name or opened as a module", () => {
+    const globals = crossingsOf(repo.run({ json: true })).filter(([, from]) =>
+      from.endsWith("core/src/globals.ts"),
     );
-    expect(doors).toEqual(
-      ["Date.now", "new Date()", "node:fs", "process.env"].map((door) => [
-        "impure-library",
-        "packages/core/src/doors.ts",
-        door,
+    expect(globals).toEqual(
+      ["Date.now", "new Date()", "node:fs", "process.env"].map((global) => [
+        "impure",
+        "packages/core/src/globals.ts",
+        global,
       ]),
     );
   });
@@ -336,11 +336,11 @@ describe("B13: a pure library uses no world door and imports no world library", 
     expect(targets).not.toContain("honox");
   });
 
-  it("marks a type-only world import, and judges a type-only module door as clean", () => {
+  it("marks a type-only world import, and judges a type-only module global as clean", () => {
     const found = reportOf(repo.run({ json: true })).scopes.flatMap((s) => s.violations);
     const typeOnly = found.filter((v) => v.typeOnly).map((v) => [v.from, v.specifier]);
     expect(typeOnly).toEqual([["packages/core/src/world.ts", "hono"]]);
-    expect(found.filter((v) => v.from.endsWith("type-door.ts"))).toEqual([]);
+    expect(found.filter((v) => v.from.endsWith("type-global.ts"))).toEqual([]);
   });
 
   it("leaves a name the file binds itself, and a call on an injected object, clean", () => {
@@ -387,7 +387,6 @@ describe("B14: an adapter library is imported only from the zones its type names
       ),
       {
         features: { "services/api": ["orders"], "services/legacy": ["cart"] },
-        layout: { "services/api": "hexagonal" },
         libraryTypes: types,
         libraries,
       },
@@ -404,7 +403,7 @@ describe("B14: an adapter library is imported only from the zones its type names
     expect(flagged(FILES[4] ?? "")).toEqual(["packages/d"]);
   });
 
-  it("is one entry from application/, adapters/driving/, index.ts and a rules-layout feature file", () => {
+  it("is one entry from application/, adapters/driving/, index.ts and a feature file in no zone", () => {
     for (const file of [FILES[1], FILES[2], FILES[3], FILES[5]]) {
       const flagged = crossingsOf(repo.run({ json: true }))
         .filter(([, from]) => from === file)

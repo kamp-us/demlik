@@ -1,18 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// NO PROSE POINTS AT A DOOR THAT IS NOT THERE.
+// NO PROSE POINTS AT A SUBPATH THAT IS NOT THERE.
 //
 // `exports` in `package.json` IS the public contract (MAINTAINING.md), and the
 // epic that moved the composed flows behind `internal/` closed eleven subpaths
 // that prose kept naming. Nothing gated it: a `@demlik/tea/work-queue` inside a
 // JSDoc comment is not an import, so typecheck, lint and the suite all stayed
 // green while `.patterns/` — the surface CLAUDE.md tells agents to trust over
-// their own recollection — described a door a reader cannot open (#81).
+// their own recollection — described a subpath a reader cannot open (#81).
 //
 // So the specifier is checked wherever it appears, not only where it is
 // imported: every tracked file under `.patterns/` and `src/`, minus the tests
-// (this file names closed doors on purpose, in its own fixtures).
+// (this file names closed subpaths on purpose, in its own fixtures).
 //
-// A closed door is fixed by REWRITING the prose, never by widening `exports` —
+// A closed subpath is fixed by REWRITING the prose, never by widening `exports` —
 // the in-tree path (`src/internal/work-queue/ops.ts`) is what a reader can
 // actually follow, and it is what the sweep for #81 put there.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SPECIFIER = /@demlik\/tea(?:\/[a-z0-9-]+)*(?:\.[a-z]{2,4})?/g;
 
 /** The `@demlik/tea…` specifiers in `text` that `allowed` does not carry. */
-function closedDoorSpecifiers(
+function closedSubpathSpecifiers(
   text: string,
   allowed: ReadonlySet<string>,
 ): string[] {
@@ -66,7 +66,7 @@ function scannedFiles(): string[] {
   return out === "" ? [] : out.split("\n");
 }
 
-describe("closedDoorSpecifiers", () => {
+describe("closedSubpathSpecifiers", () => {
   const allowed = new Set([
     "@demlik/tea",
     "@demlik/tea/mem",
@@ -75,13 +75,16 @@ describe("closedDoorSpecifiers", () => {
 
   it("flags a subpath `exports` does not carry", () => {
     expect(
-      closedDoorSpecifiers("see `@demlik/tea/work-queue` for the ops", allowed),
+      closedSubpathSpecifiers(
+        "see `@demlik/tea/work-queue` for the ops",
+        allowed,
+      ),
     ).toEqual(["@demlik/tea/work-queue"]);
   });
 
   it("flags one inside a JSDoc comment, where no importer ever would", () => {
     const jsdoc = " * Same pure-state-ops shape as `@demlik/tea/idempotency`.";
-    expect(closedDoorSpecifiers(jsdoc, allowed)).toEqual([
+    expect(closedSubpathSpecifiers(jsdoc, allowed)).toEqual([
       "@demlik/tea/idempotency",
     ]);
   });
@@ -90,12 +93,12 @@ describe("closedDoorSpecifiers", () => {
     const prose =
       'import { memoryStore } from "@demlik/tea/mem"; // over @demlik/tea\n' +
       "plus `@demlik/tea/devtools/styles.css`";
-    expect(closedDoorSpecifiers(prose, allowed)).toEqual([]);
+    expect(closedSubpathSpecifiers(prose, allowed)).toEqual([]);
   });
 
   it("does not swallow the period that ends a sentence", () => {
     expect(
-      closedDoorSpecifiers(
+      closedSubpathSpecifiers(
         "the store ships on @demlik/tea/mem. The host wires it.",
         allowed,
       ),
@@ -103,11 +106,11 @@ describe("closedDoorSpecifiers", () => {
   });
 });
 
-describe("no tracked file names a closed door", () => {
+describe("no tracked file names a closed subpath", () => {
   const allowed = publishedSpecifiers();
 
   it.each(scannedFiles())("%s", (file) => {
     const text = readFileSync(join(PKG_ROOT, file), "utf8");
-    expect(closedDoorSpecifiers(text, allowed)).toEqual([]);
+    expect(closedSubpathSpecifiers(text, allowed)).toEqual([]);
   });
 });

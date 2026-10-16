@@ -17,13 +17,6 @@
       "to": "services/svc/src/audit-runs/store/db.ts"
     },
     {
-      "from": "services/svc/src/findings/rules/score.ts",
-      "kind": "impure-rules",
-      "scope": "services/svc",
-      "specifier": "zod",
-      "to": null
-    },
-    {
       "from": "services/svc/src/lib/util.ts",
       "kind": "lib-imports-feature",
       "reason": "recorded debt",

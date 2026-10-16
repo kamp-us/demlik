@@ -487,10 +487,10 @@ export type NodeWsRegistry = Map<string, WebSocket>;
  * `fileJournal` — everything the tutorial uses — do not. A static
  * `import … from "ws"` puts the dependency on the module's load path, so a
  * consumer who installed only the tutorial's three packages could not import
- * this door at all (`ERR_MODULE_NOT_FOUND`). The type import above is erased,
+ * this subpath at all (`ERR_MODULE_NOT_FOUND`). The type import above is erased,
  * and the value arrives through this loader at the moment a socket is actually
  * opened — so the cost of an optional peer is paid by the feature that needs
- * it, not by the door it happens to share.
+ * it, not by the subpath it happens to share.
  *
  * `createRequire` rather than `await import("ws")` because a runner's
  * contract is synchronous — it must return its cleanup on the same tick the

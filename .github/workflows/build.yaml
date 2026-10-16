@@ -145,7 +145,7 @@ jobs:
       # The one gate that runs the case this repo's node_modules can never
       # reproduce: pack the tarball, install it into a temp project WITHOUT the
       # optional `ws` peer, and import `@demlik/tea/node`. Every in-repo gate
-      # stayed green while 0.12.0 shipped a door no clean install could import
+      # stayed green while 0.12.0 shipped a subpath no clean install could import
       # (#113), because `ws` is always present here.
       - name: Import /node with no optional peer installed
         run: pnpm --filter @demlik/tea exec node scripts/verify-optional-peer-install.mjs

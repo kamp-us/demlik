@@ -13,8 +13,8 @@ export const DEPLOYABLE_KINDS = [
 export type DeployableKind = (typeof DEPLOYABLE_KINDS)[number];
 
 // `{ "<scope>": { "<binding>": ["<scope-relative owner file>", …] } }`: which driven adapters may
-// use a binding, as `doors` says which files may open a door. Read where the file is read
-// (`deployableDeclarationIssue`) and where the scope is loaded (`unknownBindingOwners`).
+// use a binding. Read where the file is read (`deployableDeclarationIssue`) and where the scope is
+// loaded (`unknownBindingOwners`).
 const BindingOwnersSchema = z.record(
   z.string().min(1),
   z.record(z.string().min(1), z.array(z.string().min(1)).min(1)),

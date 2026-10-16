@@ -4,7 +4,7 @@
  * circuit breakers, rate limits, TTL caches and credential refresh, as plain
  * functions and `Cmd.define`d Cmds you call from your own `update` (ADR 0022).
  *
- * A DOOR, not a module. Every name here is declared under
+ * A SUBPATH, not a module. Every name here is declared under
  * `src/internal/resilience/` and re-exported unchanged; the one renamed name is
  * named below. The modules behind it:
  *
@@ -33,8 +33,8 @@
  * churn. `resilient-call` is therefore enumerated by hand below.
  *
  * Hand-enumerating a module is a drift risk a star export does not carry, so
- * `src/battery-doors.test.ts` walks every module behind every door and fails
- * when a name it exports is not reachable through the door.
+ * `src/battery-subpaths.test.ts` walks every module behind every subpath and fails
+ * when a name it exports is not reachable through the subpath.
  */
 
 export * from "../internal/resilience/authed-call";

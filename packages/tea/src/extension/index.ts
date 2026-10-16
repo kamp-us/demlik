@@ -30,12 +30,12 @@ export {
   bridgeTabClient,
   passThroughMsg,
 } from "./bridge";
-// The three extension sub-doors closed in the #51 sweep and their parts moved
+// The three extension subpaths closed in the #51 sweep and their parts moved
 // here (ADR 0016): the React adapter, the chrome-event Sub factories, and the
 // fake-chrome test double. `react` is a re-export and nothing in this package
 // is side-effectful outside `*.css`, so a background service worker that never
 // names a hook still tree-shakes React out of its bundle — the react-free
-// background entry is preserved by the bundler, not by a second door.
+// background entry is preserved by the bundler, not by a second subpath.
 export {
   type BackgroundRuntimeContext,
   createBackgroundRuntimeContext,

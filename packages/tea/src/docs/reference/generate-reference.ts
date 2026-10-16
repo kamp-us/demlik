@@ -429,8 +429,8 @@ function symbolLink(name: string): string {
 
 /**
  * A symbol's tier: its module's, unless its own TSDoc says `@experimental`.
- * MAINTAINING.md stamps subpaths, and an export inherits its door's stamp; the
- * tag is how one export opts out of a promise its door makes.
+ * MAINTAINING.md stamps subpaths, and an export inherits its subpath's stamp; the
+ * tag is how one export opts out of a promise its subpath makes.
  */
 function symbolTier(symbol: DocSymbol, moduleTier: Tier): Tier {
   return symbol.experimental ? "experimental" : moduleTier;

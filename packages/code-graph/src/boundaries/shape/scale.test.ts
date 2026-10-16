@@ -22,7 +22,7 @@ describe(
       expect(new Set(workspace.planted.map(([, kind]) => kind))).toEqual(
         new Set([
           "driving-reaches-driven",
-          "door-outside-driven-adapter",
+          "impure",
           "index-not-exports-only",
           "application-import-outside-allowlist",
         ]),

@@ -4,7 +4,7 @@
  * `Store<S>`: enqueue, claim the next item, mark it done, failed or cancelled,
  * and reset whatever was running when the process went away.
  *
- * A DOOR, not a module. Every name here is declared under
+ * A SUBPATH, not a module. Every name here is declared under
  * `src/internal/work-queue/` and re-exported unchanged; nothing moved and
  * nothing was renamed to open it. The three files behind it:
  *

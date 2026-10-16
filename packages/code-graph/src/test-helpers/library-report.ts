@@ -16,7 +16,7 @@ export function reportOf(run: GateRun): LibraryReport {
 export const sorted = (rows: readonly (readonly string[])[]): string[][] =>
   rows.map((row) => [...row]).sort((a, b) => a.join("\0").localeCompare(b.join("\0")));
 
-// `[kind, importer or package, target or door]` of every crossing a `--json` run lists, sorted.
+// `[kind, importer or package, target or global]` of every crossing a `--json` run lists, sorted.
 export function crossingsOf(run: GateRun): string[][] {
   return sorted(
     reportOf(run)

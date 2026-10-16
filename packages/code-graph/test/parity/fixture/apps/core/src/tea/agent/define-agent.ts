@@ -1,12 +1,12 @@
 /**
  * @demlik/tea/agent — `defineAgent`, the convenience layer over `createAgent`.
  *
- * `defineAgent({ model, tools, instructions })` is the three-line door: it
+ * `defineAgent({ model, tools, instructions })` is the three-line entry: it
  * defaults the single-stage wiring (`stages`, `turnOf`, `schemas`), derives the
  * tool handlers from `toolRouter`, renders the prompt off the Model, and absorbs
  * the drive loop through `driveToDone`. It hides wiring, never state (ADR
  * 0015): the Model it runs is the same `AgentState` a hand-wired `createAgent`
- * produces, under the same keys, and `machine(input)` is the door down to the
+ * produces, under the same keys, and `machine(input)` is the way down to the
  * raw kernel `run`. Each hidden thing is a named helper below.
  */
 
@@ -609,7 +609,7 @@ export interface DefinedAgent<T extends AnyToolDef> {
   ) => Promise<DefinedAgentResolvedState<T>>;
   /**
    * The machine `run` drives for `input` and the interpret table it runs under
-   * — the door down to the raw kernel.
+   * — the way down to the raw kernel.
    */
   readonly machine: (input: string) => DefinedAgentWired<T>;
   /**
@@ -631,7 +631,7 @@ export interface DefinedAgent<T extends AnyToolDef> {
    * The wrapped cell settles through the SAME typed Cmd→Msg edge as the cell it
    * wraps — it returns whatever `next` returned — so the reducer folds the same
    * Msgs and a replay of a wrapped run is the unwrapped run's replay. That is
-   * the whole contract: the door is one over the effect boundary, never over
+   * the whole contract: the wrapper is one over the effect boundary, never over
    * the fold. A cell that must settle DIFFERENTLY is a different machine, and
    * `createAgent` is still where you build one.
    *
@@ -767,7 +767,7 @@ function definedAgent<T extends AnyToolDef>(
         : compactingMachine(core, compaction, brain, tools);
     return overlaid(agent, overlays);
   };
-  // The public door down carries no chunk sink: `machine(input)` is handed to
+  // The public way down carries no chunk sink: `machine(input)` is handed to
   // the raw kernel by a caller who has no run options to read one from.
   const machine = (input: string): DefinedAgentWired<T> =>
     machineWith(input, undefined);

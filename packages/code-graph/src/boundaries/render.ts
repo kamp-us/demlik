@@ -21,25 +21,21 @@ import {
 
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
-// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, library,
-// deployable and shape blocks only when a kind that needs them fails.
-type Advice = "feature" | "hexagonal" | "library" | "deployable" | "shape";
+// Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, impure,
+// library, deployable and shape blocks only when a kind that needs them fails.
+type Advice = "feature" | "hexagonal" | "impure" | "library" | "deployable" | "shape";
 
 // Each kind's rule label, and the advice it adds.
 const KINDS = {
   "cross-feature": { rule: "B1", advice: "feature" },
-  "impure-rules": { rule: "B2", advice: "feature" },
   "lib-imports-feature": { rule: "B3", advice: "feature" },
   "outside-imports-feature-internal": { rule: "B4", advice: "feature" },
-  "door-outside-owner": { rule: "B5", advice: "feature" },
   "application-imports-adapter": { rule: "B6", advice: "hexagonal" },
-  "impure-application": { rule: "B7", advice: "hexagonal" },
+  impure: { rule: "B7", advice: "impure" },
   "driving-reaches-driven": { rule: "B8", advice: "hexagonal" },
-  "door-outside-driven-adapter": { rule: "B9", advice: "hexagonal" },
   "unknown-zone": { rule: "B10", advice: "hexagonal" },
   "library-undeclared": { rule: "B11", advice: "library" },
   "library-imports-up": { rule: "B12", advice: "library" },
-  "impure-library": { rule: "B13", advice: "library" },
   "adapter-library-imported-outside-driven": { rule: "B14", advice: "library" },
   "index-not-exports-only": { rule: "B15", advice: "shape" },
   "application-import-outside-allowlist": { rule: "B16", advice: "shape" },
@@ -48,8 +44,9 @@ const KINDS = {
   "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
-// A door, a binding and an entry are their own target: no import specifier was written for them.
-function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier" | "global">): string {
+// An impure use, a binding and an entry are their own target: no import specifier was written for
+// them.
+function writtenAs(entry: Pick<BoundaryLedgerEntry, "kind" | "specifier">): string {
   return crossingOf(entry) === "import" ? `  ("${entry.specifier}")` : "";
 }
 
@@ -149,24 +146,25 @@ function prunedLines(pruned: readonly BoundaryLedgerEntry[]): string[] {
 }
 
 const FIX_LINES = [
-  "  Import a feature from outside it through its index.ts, keep rules/ on contracts only and free",
-  "  of world reads (any process.<member>, fetch, the clock), and keep lib/ out of features. Open a",
-  '  world door only in the file its `doors` declaration names (`--boundary-rules`: { "doors":',
-  '  { "<scope>": { "<door>": ["<owner file>"] } } }). A crossing that has to stay is added by name',
-  '  and with a reason: `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
+  "  Import a feature from outside it through its index.ts, and keep lib/ out of features. A",
+  "  crossing that has to stay is added by name and with a reason:",
+  '  `code-graph <scope> --boundaries --accept-crossings --reason "<why>"`.',
 ];
 
 const HEXAGONAL_FIX_LINES = [
-  "  In a hexagonal feature, keep application/ off its own adapters/ and free of every world door,",
-  "  let adapters/driving/ reach the core only through ports.ts and index.ts, open a declared door",
-  "  only in adapters/driven/, and keep the feature to index.ts, ports.ts, application/,",
-  "  adapters/driving/ and adapters/driven/.",
+  "  In a hexagonal feature, keep application/ off its own adapters/, let adapters/driving/ reach",
+  "  the core only through ports.ts and index.ts, and keep the feature to index.ts, ports.ts,",
+  "  application/, adapters/driving/ and adapters/driven/.",
+];
+
+const IMPURE_FIX_LINES = [
+  "  Reach the outside world (any process.<member>, fetch, the clock, node:fs) only in",
+  "  adapters/driven/, and keep a pure library free of it and of `worldLibraries`.",
 ];
 
 const LIBRARY_FIX_LINES = [
   "  Declare every package under a library root in `libraries`, import only the library types a",
-  "  type's `imports` lists, keep a pure library free of world doors and `worldLibraries`, and",
-  "  import a library that names `importedFrom` only from those zones.",
+  "  type's `imports` lists, and import a library that names `importedFrom` only from those zones.",
 ];
 
 const SHAPE_FIX_LINES = [
@@ -185,6 +183,7 @@ const DEPLOYABLE_FIX_LINES = [
 const ADVICE_LINES = {
   feature: [],
   hexagonal: HEXAGONAL_FIX_LINES,
+  impure: IMPURE_FIX_LINES,
   library: LIBRARY_FIX_LINES,
   deployable: DEPLOYABLE_FIX_LINES,
   shape: SHAPE_FIX_LINES,

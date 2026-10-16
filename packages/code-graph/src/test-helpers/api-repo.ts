@@ -17,6 +17,6 @@ export function apiRepo(
   return boundaryRepo(
     ".",
     { ...shopManifests([API]), ...Object.fromEntries(own), ...extra },
-    { features: { [API]: ["orders", "billing"] }, layout: { [API]: "hexagonal" }, ...rules },
+    { features: { [API]: ["orders", "billing"] }, ...rules },
   );
 }

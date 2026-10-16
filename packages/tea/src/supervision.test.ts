@@ -256,20 +256,20 @@ describe("supervision: a non-throwing reducer is unaffected", () => {
 // `NoCellError`, nothing is reported under `"reduce"`, and the run stays live.
 // ───────────────────────────────────────────────────────────────────────────
 
-type Door = { readonly type: "closed" } | { readonly type: "open" };
-type DoorMsg = { readonly type: "open" } | { readonly type: "close" };
+type Latch = { readonly type: "closed" } | { readonly type: "open" };
+type LatchMsg = { readonly type: "open" } | { readonly type: "close" };
 
 // Each phase has a cell for one Msg only, so the other one is refused there.
-const doorUpdate: Transitions<Door, DoorMsg, never> = {
+const latchUpdate: Transitions<Latch, LatchMsg, never> = {
   closed: { open: () => [{ type: "open" }, []] },
   open: { close: () => [{ type: "closed" }, []] },
 };
 
-function doorMachine() {
+function latchMachine() {
   return defineMachine({
-    types: { model: {} as Door, msg: {} as DoorMsg, ctx: undefined },
+    types: { model: {} as Latch, msg: {} as LatchMsg, ctx: undefined },
     init: (loaded) => [loaded ?? { type: "closed" }, []],
-    update: doorUpdate,
+    update: latchUpdate,
   });
 }
 
@@ -280,7 +280,7 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
     ["escalate", "escalate"],
   ] as const)("under %s: rejects that dispatch only, reports nothing under reduce, and a later valid Msg applies", async (_label, supervision) => {
     const { seen, onError } = collectErrors();
-    const runtime = await run(doorMachine(), {
+    const runtime = await run(latchMachine(), {
       ctx: undefined,
       onError,
       supervision,
@@ -300,8 +300,8 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
 
   it("under restart: does not call rehydrate, and the run keeps its State", async () => {
     const { seen, onError } = collectErrors();
-    const rehydrate = vi.fn((): Door => ({ type: "open" }));
-    const runtime = await run(doorMachine(), {
+    const rehydrate = vi.fn((): Latch => ({ type: "open" }));
+    const runtime = await run(latchMachine(), {
       ctx: undefined,
       onError,
       supervision: { strategy: "restart", rehydrate },
@@ -318,18 +318,18 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
   });
 
   it("leaves no persisted or observed trace, so replaying the run never meets it", async () => {
-    const saved: Door[] = [];
-    const store: Store<Door> = {
+    const saved: Latch[] = [];
+    const store: Store<Latch> = {
       async load() {
         return null;
       },
-      migrate: (raw) => (raw as Door | null) ?? null,
+      migrate: (raw) => (raw as Latch | null) ?? null,
       async save(s) {
         saved.push(s);
       },
     };
-    const runtime = run(doorMachine(), { ctx: undefined, store });
-    const observed: DoorMsg[] = [];
+    const runtime = run(latchMachine(), { ctx: undefined, store });
+    const observed: LatchMsg[] = [];
     runtime.observe((msg) => observed.push(msg));
     const booted = await runtime.ready;
     saved.length = 0; // drop the boot save
@@ -345,7 +345,7 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
     expect(observed).toEqual([{ type: "open" }]);
 
     // The observed log is what a host journals; folding it does not throw.
-    expect(foldMsgs(doorMachine(), { type: "closed" }, observed)).toEqual({
+    expect(foldMsgs(latchMachine(), { type: "closed" }, observed)).toEqual({
       type: "open",
     });
 
@@ -353,7 +353,7 @@ describe("supervision: a Msg with no cell is refused, not supervised (#310)", ()
   });
 
   it("a NoCellError thrown INSIDE a cell that exists is a reducer throw, and stays supervised", async () => {
-    const child = doorMachine();
+    const child = latchMachine();
     const update: Reducer<State, Msg, Cmd> = {
       inc: (s) => [{ n: s.n + 1 }, []],
       // A reducer stepping a child machine by hand, into a Msg it refuses.

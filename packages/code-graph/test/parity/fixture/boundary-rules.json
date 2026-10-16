@@ -5,13 +5,7 @@
       "findings"
     ]
   },
-  "layout": {
-    "services/svc": "rules"
-  },
   "lib": [
     "lib"
-  ],
-  "contracts": [
-    "@acme/wire-contract"
   ]
 }

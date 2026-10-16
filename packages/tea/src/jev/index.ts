@@ -4,7 +4,7 @@
  * and get a typed answer back under each name: the wire contract, the one Cmd
  * that issues the call, and the batching composition over it.
  *
- * A DOOR, not a module. Every name here is declared under `src/internal/jev/`
+ * A SUBPATH, not a module. Every name here is declared under `src/internal/jev/`
  * and re-exported unchanged; nothing moved and nothing was renamed to open it.
  * The three modules behind it:
  *
@@ -15,23 +15,23 @@
  * - `ask` — one `Cmd.define`d Cmd over `internal/resilience/resilient-call`,
  *   the pure functions that turn Jev's HTTP reply into that Cmd's outcome, and
  *   a pure `JevFallback` behind it. The HTTP call is the handler you write; the
- *   door owns no key, no clock, no I/O and no retry loop of its own.
+ *   subpath owns no key, no clock, no I/O and no retry loop of its own.
  * - `classify-batch` — a stream of items turned into Jev calls by wiring
  *   `flow/batch-window`, `flow/fan-out` and `resilience/cache` around `ask`.
  *   It writes no chunker, cache, limiter or retry; it is the wiring.
  *
- * No name is declared twice behind this door, so every module is starred and
+ * No name is declared twice behind this subpath, so every module is starred and
  * nothing is enumerated by hand — unlike `../resilience/index.ts`, which has to
  * name a winner for its `DeadlineConfig`. `ask` also forwards `ResilientState`
- * from resilient-call, which is the one declaration of it behind this door.
+ * from resilient-call, which is the one declaration of it behind this subpath.
  *
  * `battery` tier (MAINTAINING.md): a published named pattern over the kernel,
  * which may break in a minor provided the changelog for that minor says so.
- * The tier is the honest one here for a second reason: the door speaks a
+ * The tier is the honest one here for a second reason: the subpath speaks a
  * third-party wire contract, and a break upstream is a break here.
  *
- * `src/battery-doors.test.ts` walks every module behind every door and fails
- * when a name it exports is not reachable through the door.
+ * `src/battery-subpaths.test.ts` walks every module behind every subpath and fails
+ * when a name it exports is not reachable through the subpath.
  */
 
 export * from "../internal/jev/ask";

@@ -278,7 +278,7 @@ describe("stage 8: the re-measure", () => {
     const elsewhere = crossing("src/other/x.ts", "src/billing/ledger.ts");
     const spec = await specOf(s, [gone, elsewhere]);
     expect(spec.boundaries.entries).toEqual([gone]);
-    const added = crossing(PAY_FILE, OWNER_FILE, "impure-rules");
+    const added = crossing(PAY_FILE, OWNER_FILE, "impure");
     const result = await remeasure(
       spec,
       afterOf(

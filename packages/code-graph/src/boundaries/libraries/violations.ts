@@ -1,5 +1,5 @@
 import type { ImportEdge } from "../../schema.js";
-import { type DoorUse, doorsOf } from "../door-uses.js";
+import { type ImpureUse, impureNamesOf } from "../impure-uses.js";
 import type { BoundaryViolation } from "../violation.js";
 import {
   importedFromOutside,
@@ -16,7 +16,7 @@ import type { ImportedFrom } from "./schema.js";
 export type LibraryFile = {
   readonly file: string;
   readonly importEdges: readonly ImportEdge[];
-  readonly doorUses: readonly DoorUse[];
+  readonly impureUses: readonly ImpureUse[];
   readonly runtimeSpecifiers: ReadonlySet<string>;
 };
 
@@ -92,25 +92,25 @@ function worldSpecifiers(ctx: Context): Map<string, boolean> {
   return found;
 }
 
-// A pure library's every use of a catalog door, and every import of a world library. A call on an
-// object the file was handed (`deps.clock.now()`) is no door the file can name, so it is not seen.
+// A pure library's every use of a row of `IMPURE_GLOBALS`, and every import of a world library. A
+// call on an object the file was handed (`deps.clock.now()`) names no row, so it is not seen.
 function impureViolations(ctx: Context): BoundaryViolation[] {
   const type = ctx.importer === null ? null : libraryTypeOf(ctx.libraries, ctx.importer);
   if (type === null || !type.pure) return [];
   const entry = (specifier: string, typeOnly: boolean): BoundaryViolation => ({
-    kind: "impure-library",
+    kind: "impure",
     from: ctx.file.file,
     to: null,
     specifier,
     typeOnly,
   });
   return [
-    ...doorsOf(ctx.file).map((door) => entry(door, false)),
+    ...impureNamesOf(ctx.file).map((name) => entry(name, false)),
     ...[...worldSpecifiers(ctx)].map(([specifier, typeOnly]) => entry(specifier, typeOnly)),
   ];
 }
 
-// B12, B13 and B14 for one file of a scope. A file inside a library nested in the scope belongs to
+// B12, B14 and the pure-library B7 for one file of a scope. A file inside a library nested in the scope belongs to
 // that library's own scope and is judged there.
 export function judgeLibraries(
   libraries: Libraries,

@@ -42,9 +42,8 @@ limits described in [the analysis reference](../reference/analyses.md).
 JSON keys and result arrays have stable ordering. Repeatable output requires
 the same source, dependencies, config, paths, and analysis options.
 
-Hotspots also depend on git history and the resolved time window. Door
-declarations involving `process` depend on the Node version, platform, and
-launch mode. Cluster traversal and tie-breaking are fixed rather than random.
+Hotspots also depend on git history and the resolved time window. Cluster
+traversal and tie-breaking are fixed rather than random.
 
 ## Verification
 

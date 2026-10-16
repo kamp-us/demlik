@@ -21,18 +21,39 @@ exit 1
       "to": "services/svc/src/audit-runs/store/db.ts"
     },
     {
-      "from": "services/svc/src/findings/rules/score.ts",
-      "kind": "impure-rules",
-      "scope": "services/svc",
-      "specifier": "../store/repo.js",
-      "to": "services/svc/src/findings/store/repo.ts"
-    },
-    {
       "from": "services/svc/src/index.ts",
       "kind": "outside-imports-feature-internal",
       "scope": "services/svc",
       "specifier": "./findings/store/repo.js",
       "to": "services/svc/src/findings/store/repo.ts"
+    },
+    {
+      "from": "services/svc/src/audit-runs/store",
+      "kind": "unknown-zone",
+      "scope": "services/svc",
+      "specifier": "store",
+      "to": null
+    },
+    {
+      "from": "services/svc/src/findings/flows",
+      "kind": "unknown-zone",
+      "scope": "services/svc",
+      "specifier": "flows",
+      "to": null
+    },
+    {
+      "from": "services/svc/src/findings/rules",
+      "kind": "unknown-zone",
+      "scope": "services/svc",
+      "specifier": "rules",
+      "to": null
+    },
+    {
+      "from": "services/svc/src/findings/store",
+      "kind": "unknown-zone",
+      "scope": "services/svc",
+      "specifier": "store",
+      "to": null
     }
   ]
 }

@@ -12,8 +12,8 @@
 - [CLI](./reference/cli.md): flags, scope, file selection, output, and exit codes.
 - [Analyses](./reference/analyses.md): result meanings and detection limits.
 - [Layers](./reference/layers.md): ordered layers and allowed violations.
-- [Boundaries](./reference/boundaries.md): features, doors, libraries, workers,
-  tests, and the crossing ledger.
+- [Boundaries](./reference/boundaries.md): features, impure globals, libraries,
+  workers, tests, and the crossing ledger.
 - [Library API](./reference/library.md): the four named ESM subpaths.
 
 ## Explanation

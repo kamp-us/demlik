@@ -11,18 +11,14 @@ const sample = (kind: string): BoundaryViolation =>
   ({ kind, from: "a.ts", to: null, specifier: "x", typeOnly: false }) as BoundaryViolation;
 const SAMPLES = {
   "cross-feature": sample("cross-feature"),
-  "impure-rules": sample("impure-rules"),
   "lib-imports-feature": sample("lib-imports-feature"),
   "outside-imports-feature-internal": sample("outside-imports-feature-internal"),
-  "door-outside-owner": sample("door-outside-owner"),
   "application-imports-adapter": sample("application-imports-adapter"),
-  "impure-application": sample("impure-application"),
+  impure: sample("impure"),
   "driving-reaches-driven": sample("driving-reaches-driven"),
-  "door-outside-driven-adapter": sample("door-outside-driven-adapter"),
   "unknown-zone": sample("unknown-zone"),
   "library-undeclared": sample("library-undeclared"),
   "library-imports-up": sample("library-imports-up"),
-  "impure-library": sample("impure-library"),
   "adapter-library-imported-outside-driven": sample("adapter-library-imported-outside-driven"),
   "index-not-exports-only": sample("index-not-exports-only"),
   "application-import-outside-allowlist": sample("application-import-outside-allowlist"),
@@ -32,14 +28,12 @@ const SAMPLES = {
 } as const satisfies Record<BoundaryKind, BoundaryViolation>;
 
 describe("the table of kinds a test file is judged by", () => {
-  it("keeps B1-B5, B11, B12, B14, B18 and B19, and drops B6-B10, B13, B15, B16 and B17", () => {
+  it("keeps B1, B3, B4, B11, B12, B14, B18 and B19, and drops B6-B8, B10, B15, B16 and B17", () => {
     const kept = judgedInTestFile(Object.values(SAMPLES)).map((v) => v.kind);
     expect(kept).toEqual([
       "cross-feature",
-      "impure-rules",
       "lib-imports-feature",
       "outside-imports-feature-internal",
-      "door-outside-owner",
       "library-undeclared",
       "library-imports-up",
       "adapter-library-imported-outside-driven",
@@ -58,7 +52,6 @@ describe("the table of kinds a test file is judged by", () => {
 });
 
 const API = "services/api";
-const LEGACY = "services/legacy";
 const at = (rel: string): string => `${API}/${rel}`;
 
 // Every kind that judges a test file or not, as one snippet in one place. A snippet is written
@@ -80,7 +73,7 @@ const CASES: readonly Case[] = [
     inTests: false,
   },
   {
-    kind: "impure-application",
+    kind: "impure",
     dir: "src/orders/application",
     body: "export const x = Date.now();\n",
     inTests: false,
@@ -92,7 +85,7 @@ const CASES: readonly Case[] = [
     inTests: false,
   },
   {
-    kind: "door-outside-driven-adapter",
+    kind: "impure",
     dir: "src/orders/adapters/driving",
     body: 'export const x = () => console.log("x");\n',
     inTests: false,
@@ -104,7 +97,7 @@ const CASES: readonly Case[] = [
     inTests: false,
   },
   {
-    kind: "impure-library",
+    kind: "impure",
     scope: "packages/util",
     dir: "src",
     body: "export const x = Date.now();\n",
@@ -129,12 +122,6 @@ const CASES: readonly Case[] = [
     inTests: true,
   },
   {
-    kind: "door-outside-owner",
-    dir: "src/orders/adapters/driven",
-    body: "export const x = process.env.MODE;\n",
-    inTests: true,
-  },
-  {
     kind: "library-imports-up",
     scope: "packages/util",
     dir: "src",
@@ -154,53 +141,34 @@ const CASES: readonly Case[] = [
     inTests: true,
   },
   {
-    kind: "impure-rules",
-    scope: LEGACY,
-    dir: "src/cart/rules",
-    body: 'import { db } from "../store/db";\nexport const x = db;\n',
-    inTests: true,
-  },
-  {
     kind: "lib-imports-feature",
-    scope: LEGACY,
     dir: "src/lib",
-    body: 'import { db } from "../cart/store/db";\nexport const x = db;\n',
+    body: 'import { use } from "../orders/application/use";\nexport const x = use;\n',
     inTests: true,
   },
 ];
 
 const SUPPORT: Record<string, string> = {
-  ...shopManifests([
-    API,
-    LEGACY,
-    "packages/util",
-    "packages/orders-contract",
-    "packages/db-adapter",
-  ]),
+  ...shopManifests([API, "packages/util", "packages/orders-contract", "packages/db-adapter"]),
   [`${API}/wrangler.jsonc`]: JSON.stringify({ name: "api", kv_namespaces: [{ binding: "CACHE" }] }),
   [at("src/orders/index.ts")]: "export {};\n",
   [at("src/orders/application/use.ts")]: "export const use = 1;\n",
   [at("src/orders/adapters/driven/db.ts")]: "export const db = 1;\n",
-  [at("src/orders/adapters/driven/env.ts")]: "export const mode = process.env.MODE;\n",
   [at("src/billing/index.ts")]: "export {};\n",
   [at("src/billing/application/charge.ts")]: "export const charge = 1;\n",
   "packages/util/src/index.ts": "export const util = 1;\n",
   "packages/orders-contract/src/index.ts": "export const id = 1;\n",
   "packages/db-adapter/src/index.ts": "export const connect = 1;\n",
-  [`${LEGACY}/src/cart/index.ts`]: "export {};\n",
-  [`${LEGACY}/src/cart/store/db.ts`]: "export const db = 1;\n",
 };
 
 const RULES = {
-  features: { [API]: ["orders", "billing"], [LEGACY]: ["cart"] },
-  layout: { [LEGACY]: "rules" },
+  features: { [API]: ["orders", "billing"] },
   libraryTypes: SHOP_TYPES,
   libraries: {
     "packages/util": "util",
     "packages/orders-contract": "contract",
     "packages/db-adapter": "adapter",
   },
-  doors: { [API]: { "process.env": ["src/orders/adapters/driven/env.ts"] } },
   acrossDeployables: ["binding-outside-driven-adapter", "relative-import-crosses-workspace"],
   testFiles: ["**/*.test.ts"],
 };
@@ -283,8 +251,8 @@ describe("a file the testFiles globs match is zone-neutral", () => {
     const globs = ["src/orders/application/*.spec.ts", "src/*.mock.ts"];
     repo = boundaryRepo(".", written, { ...RULES, testFiles: globs });
     expect(crossingsOf(repo.run({ json: true }))).toEqual([
-      ["impure-application", at("src/orders/application/b.ts"), "Date.now"],
-      ["impure-library", "packages/util/src/clock.ts", "Date.now"],
+      ["impure", "packages/util/src/clock.ts", "Date.now"],
+      ["impure", at("src/orders/application/b.ts"), "Date.now"],
     ]);
   });
 
@@ -306,7 +274,7 @@ describe("a file the testFiles globs match is zone-neutral", () => {
       return found;
     };
     expect(listedWith(["services/*/test-support/**"])).toEqual([
-      ["impure-library", "packages/util/test-support/helper.ts", "Date.now"],
+      ["impure", "packages/util/test-support/helper.ts", "Date.now"],
     ]);
     expect(listedWith(["test-support/**"])).toEqual([]);
   });
@@ -324,7 +292,7 @@ describe("a file the testFiles globs match is zone-neutral", () => {
       { features: { ".": ["orders"] }, testFiles: ["src/orders/application/*.spec.ts"] },
     );
     expect(crossingsOf(repo.run({ json: true }))).toEqual([
-      ["impure-application", "src/orders/application/b.ts", "Date.now"],
+      ["impure", "src/orders/application/b.ts", "Date.now"],
     ]);
   });
 

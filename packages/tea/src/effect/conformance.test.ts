@@ -18,7 +18,7 @@ import {
   clock,
   conformanceMachines,
   counter,
-  door,
+  latch,
   lookup,
   lookupAnswer,
   owned,
@@ -154,10 +154,10 @@ const engines: { readonly [K in Name]: EnginePair } = {
       },
     }) as EffectRun,
   },
-  door: {
+  latch: {
     // Default supervision on both engines: the refusal must not halt the run.
-    promise: () => runPromise(door, { clock: fixed }) as AnyRuntime,
-    effect: runEffect(door, { clock: fixed }) as EffectRun,
+    promise: () => runPromise(latch, { clock: fixed }) as AnyRuntime,
+    effect: runEffect(latch, { clock: fixed }) as EffectRun,
   },
   owned: {
     promise: () =>
@@ -232,8 +232,8 @@ describe("both engines run every shared machine to the same trace", () => {
     });
   });
 
-  it("the door trace refuses the Msg with no cell and applies the ones after it", async () => {
-    const trace = await onEffect("door");
+  it("the latch trace refuses the Msg with no cell and applies the ones after it", async () => {
+    const trace = await onEffect("latch");
     expect(trace).toEqual([
       ["boot", { type: "closed" }],
       ["refused", JSON.stringify({ type: "close" })],

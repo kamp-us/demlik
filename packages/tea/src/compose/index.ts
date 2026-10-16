@@ -1,8 +1,8 @@
 /**
  * @packageDocumentation
- * The composition seam — the layer between a battery and a door.
+ * The composition seam — the layer between a battery and a subpath.
  *
- * A battery is pure state plus verbs over that state. A door holds several
+ * A battery is pure state plus verbs over that state. A subpath holds several
  * batteries side by side in one Model. Everything between those two facts was,
  * until now, hand-written at every consumer: the one-key record rebuild that
  * threads a verb's `[slice, cmds]` result back into the host state, and the
@@ -16,7 +16,7 @@
  * forty lines here rather than a dependency.
  *
  * `docs/how-to/compose-two-battery-slices.md` wires both end to end over a
- * two-battery door, and its `ts` blocks are compiled and run as
+ * two-battery subpath, and its `ts` blocks are compiled and run as
  * `src/docs/how-to/compose-slices.test.ts`.
  *
  * Both are pure: no clock, no RNG, no storage, nothing captured. A `liftSlice`

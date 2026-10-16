@@ -1568,25 +1568,26 @@ export function createAgent<
       AgentMachineMsg<P, O, R>,
       AgentCmd<P, TC>
     > = {
-      [MsgType.AgentStart]: (s, m) => door.start(s, m.runId, m.at),
-      [MsgType.AgentToolOk]: (s, m) => door.toolOk(s, m.callId, m.result, m.at),
+      [MsgType.AgentStart]: (s, m) => entering.start(s, m.runId, m.at),
+      [MsgType.AgentToolOk]: (s, m) =>
+        entering.toolOk(s, m.callId, m.result, m.at),
       // `agent_tool_err` is `createAgent`'s own raw settle Msg and its wire
       // shape is a bare `reason` string — a consumer routing their own interpret
       // through it never declared a tag, so the failure it mints carries none.
       [MsgType.AgentToolErr]: (s, m) =>
-        door.toolErr(s, m.callId, m.reason, m.at),
+        entering.toolErr(s, m.callId, m.reason, m.at),
       // The engine-minted brain-call settle Msgs (from `brainHandlers`' outcome):
       // success runs `succeed` (reset retry + fold the turn), failure runs `fail`.
-      [MsgType.ResilientOk]: (s, m) => door.succeed(s, m, m.at),
-      [MsgType.ResilientErr]: (s, m) => door.fail(s, m, m.at),
+      [MsgType.ResilientOk]: (s, m) => entering.succeed(s, m, m.at),
+      [MsgType.ResilientErr]: (s, m) => entering.fail(s, m, m.at),
       // The re-entered compaction settle Msgs (from the consumer's `compact_run`
       // cell, #85): `compact_ok` folds the summary back (drop oldest turns +
       // their records, fire the next brain call), `compact_err` backs off via the
       // compaction retry or proceeds without compacting.
-      [MsgType.CompactOk]: (s, m) => door.compactOk(s, m.key, m, m.at),
-      [MsgType.CompactErr]: (s, m) => door.compactErr(s, m.key, m, m.at),
-      deadline_exceeded: (s, m) => door.onTimer(s, m),
-      [MsgType.AgentBoot]: (s, m) => door.boot(s, m.at),
+      [MsgType.CompactOk]: (s, m) => entering.compactOk(s, m.key, m, m.at),
+      [MsgType.CompactErr]: (s, m) => entering.compactErr(s, m.key, m, m.at),
+      deadline_exceeded: (s, m) => entering.onTimer(s, m),
+      [MsgType.AgentBoot]: (s, m) => entering.boot(s, m.at),
       [MsgType.AgentCancel]: (s, m) =>
         transition(s, m.at, (entered) => cancel(entered, m.at)),
     };
@@ -1647,7 +1648,7 @@ export function createAgent<
    * makes `RunDone` once-only whichever of them did it — `done`, a turn or
    * time limit, a spent brain retry, a watchdog, a cancel.
    *
-   * Every door a Msg enters by goes through here: the knob's verbs and
+   * Every way a Msg enters goes through here: the knob's verbs and
    * `toMachine`'s cells. The verbs calling one another inside a transition do
    * not, so their notes accumulate in the order they happened. Emptying and
    * noting both build a fresh array, so a non-empty outbox belongs to the one
@@ -1670,8 +1671,8 @@ export function createAgent<
       : [next, cmds];
   }
 
-  /** The verbs as doors — each one a whole transition. */
-  const door = {
+  /** The verbs as entry points — each one a whole transition. */
+  const entering = {
     start: (s: State, runId: string, at: number) =>
       transition(s, at, (e) => start(e, runId, at)),
     turn: (s: State, result: AgentTurn, at: number) =>
@@ -1699,7 +1700,7 @@ export function createAgent<
 
   return {
     init,
-    ...door,
+    ...entering,
     isSettled,
     currentStage,
     brainCall,

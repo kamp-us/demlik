@@ -4,7 +4,7 @@
  * replay that trace back, and checkpoint a long-running machine to a host
  * store between evictions.
  *
- * A DOOR, not a module. Every name here is declared under
+ * A SUBPATH, not a module. Every name here is declared under
  * `src/internal/persistence/` and re-exported unchanged; nothing moved and
  * nothing was renamed to open it. The modules behind it:
  *

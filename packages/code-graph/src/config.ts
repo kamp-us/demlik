@@ -1,9 +1,7 @@
 import fs from "node:fs";
 import type { z } from "zod";
 import { deployableDeclarationIssue } from "./boundaries/deployables/declaration.js";
-import { doorDeclarationIssue } from "./boundaries/doors.js";
 import { libraryDeclarationIssue } from "./boundaries/libraries/declaration.js";
-import { type ProcessMembers, runningProcessMembers } from "./boundaries/process-members.js";
 import { type BoundaryRules, BoundaryRulesSchema } from "./boundaries/rules.js";
 import { shapeDeclarationIssue } from "./boundaries/shape/declaration.js";
 import { type CollapseSettings, CollapseSettingsSchema } from "./collapse/settings.js";
@@ -153,7 +151,7 @@ export function resolveCommentCeilings(
   return loadOverrides(file, CommentCeilingsSchema.partial(), defaults, report);
 }
 
-// The first problem in the features and layouts a rules file declares, or null.
+// The first problem in the features a rules file declares, or null.
 function featureDeclarationIssue(rules: BoundaryRules): string | null {
   const lib = new Set(rules.lib);
   for (const [scope, features] of Object.entries(rules.features)) {
@@ -166,18 +164,12 @@ function featureDeclarationIssue(rules: BoundaryRules): string | null {
       seen.add(feature);
     }
   }
-  for (const scope of Object.keys(rules.layout)) {
-    if (rules.features[scope] === undefined) {
-      return `"layout" declares scope "${scope}", which declares no "features": a layout rides a scope that declares features.`;
-    }
-  }
   return null;
 }
 
 export function resolveBoundaryRules(
   file: string | undefined,
   report: Reporter,
-  members: ProcessMembers = runningProcessMembers(),
 ): BoundaryRules | null {
   const defaults = BoundaryRulesSchema.parse({});
   const rules =
@@ -187,7 +179,6 @@ export function resolveBoundaryRules(
   if (rules === null) return null;
   const issue =
     featureDeclarationIssue(rules) ??
-    doorDeclarationIssue(rules, members) ??
     libraryDeclarationIssue(rules) ??
     deployableDeclarationIssue(rules) ??
     shapeDeclarationIssue(rules);

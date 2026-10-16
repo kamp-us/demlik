@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Property runners, published on the `@demlik/tea/pbt` door (`propertyTerminates`,
+// Property runners, published on the `@demlik/tea/pbt` subpath (`propertyTerminates`,
 // `propertyInvariant`, `propertyTrace`) plus the internal `foldEvents`
 // helper they all share.
 // ---------------------------------------------------------------------------

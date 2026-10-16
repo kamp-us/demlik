@@ -275,7 +275,7 @@ root tsconfig for a root `--deep` run.
 | `--node-kinds <file>` | Function-classification rules |
 | `--entry-preset <name>` | Built-in entry conventions; currently `nextjs`, repeatable |
 | `--layer-rules <file>` | Layer stack and allowed violations |
-| `--boundary-rules <file>` | Feature, door, library, and worker declarations |
+| `--boundary-rules <file>` | Feature, library, and worker declarations |
 | `--collapse-config <file>` | Similarity and shared-block settings |
 
 Unknown JSON keys, invalid values, and invalid patterns are rejected.

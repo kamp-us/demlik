@@ -5,25 +5,19 @@ import type { BoundaryKind, BoundaryViolation } from "../violation.js";
 // the console. Which kinds still judge it is this one table, a row per kind, so a kind added later
 // does not compile until someone decides. Which files are tests is the rules file's `testFiles`.
 //
-// B1 and B4 still judge what a test imports across features, B2 a test in a `rules/` folder (a
-// `rules`-layout feature has no zone to be neutral in), B3 a test in `lib`, B5 a declared door
-// opened outside its owners, B12 a library test importing upward, B14 an adapter library imported
-// from outside a driven adapter, and B19 a relative path out of the workspace, whatever the file
-// is named. B11 and B18 hold no file.
+// B1 and B4 still judge what a test imports across features, B3 a test in `lib`, B12 a library
+// test importing upward, B14 an adapter library imported from outside a driven adapter, and B19 a
+// relative path out of the workspace, whatever the file is named. B11 and B18 hold no file.
 const JUDGES_TEST_FILES = {
   "cross-feature": true,
-  "impure-rules": true,
   "lib-imports-feature": true,
   "outside-imports-feature-internal": true,
-  "door-outside-owner": true,
   "application-imports-adapter": false,
-  "impure-application": false,
+  impure: false,
   "driving-reaches-driven": false,
-  "door-outside-driven-adapter": false,
   "unknown-zone": false,
   "library-undeclared": true,
   "library-imports-up": true,
-  "impure-library": false,
   "adapter-library-imported-outside-driven": true,
   "index-not-exports-only": false,
   "application-import-outside-allowlist": false,

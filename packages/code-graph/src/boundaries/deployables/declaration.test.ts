@@ -30,7 +30,6 @@ const KINDS = [
 
 const GOOD = {
   features: { [API]: ["orders"] },
-  layout: { [API]: "hexagonal" },
   acrossDeployables: KINDS,
   bindingOwners: { [API]: { DB: [`${DRIVEN}/orders-db.ts`] } },
 };
@@ -86,8 +85,6 @@ describe("a bad deployable declaration exits 2 with one line and writes nothing"
   it("refuses an owner file that is not under a feature's adapters/driven/", () => {
     const inApplication = { [API]: { DB: ["src/orders/application/place.ts"] } };
     expect(refusal({ ...GOOD, bindingOwners: inApplication })).toContain("adapters/driven/");
-    const notHexagonal = { ...GOOD, layout: { [API]: "rules" } };
-    expect(refusal(notHexagonal)).toContain(`owner "${DRIVEN}/orders-db.ts"`);
     const outsideFeatures = { [API]: { DB: ["src/orders-db.ts"] } };
     expect(refusal({ ...GOOD, bindingOwners: outsideFeatures })).toContain("could never be clean");
     const main = { [API]: { DB: ["src/index.ts"] } };
@@ -111,7 +108,6 @@ describe("a bad deployable declaration exits 2 with one line and writes nothing"
   it("refuses an owner file that sits under no worker config", () => {
     const rules = {
       features: { tools: ["orders"] },
-      layout: { tools: "hexagonal" },
       acrossDeployables: KINDS,
       bindingOwners: { tools: { DB: ["src/orders/adapters/driven/x.ts"] } },
     };

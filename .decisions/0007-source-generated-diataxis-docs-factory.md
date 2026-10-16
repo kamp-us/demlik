@@ -17,7 +17,7 @@ tags: []
 `@demlik/tea` shipped a Locked API Surface, ~19 public modules across the root
 entry and its subpaths, six ADRs, and a `.patterns/tea/` canon — but no product
 documentation. A consumer arriving at the package had the TSDoc in `src/` and the
-examples in `examples/`, and nothing that told them which door to walk through
+examples in `examples/`, and nothing that told them which subpath to import
 for the job they had. The four jobs a docs reader actually arrives with are
 distinct — *learn the library*, *get one task done*, *look a symbol up*,
 *understand why it is shaped this way* — and a single flat `README` serves none
@@ -77,14 +77,14 @@ Recorded so they are not rediscovered from scratch:
    TSDoc on the export, not a patch to the reference — but until that TSDoc lands,
    the reference has honest blanks.
 2. **The tutorial/how-to tracer lands in Layer 3.** This layer stands up the
-   quadrant front-doors and the generated reference; the hand-written lessons and
+   quadrant front pages and the generated reference; the hand-written lessons and
    guides — and the shape-assertion tracer that binds them to `examples/` — are
    the next increment. Until then the tutorial and how-to compasses list no
    lessons, only the note that they grow.
 
 ## Consequences
 
-- A consumer lands on a four-quadrant compass and walks through the door for the
+- A consumer lands on a four-quadrant compass and walks into the quadrant for the
   job they have; no single flat README blurs the four.
 - The reference cannot silently drift: a public API change that skips
   `docs:reference` fails `docs:reference:check` in CI.

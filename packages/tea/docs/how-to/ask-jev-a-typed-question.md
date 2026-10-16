@@ -7,7 +7,7 @@ wrote**: a `choice` question's `criteria` keys are its answer's `choice` domain,
 so nothing downstream ever handles a `string` you have to re-validate.
 
 This guide wires one such call into a machine end to end and drives it in a test
-with no network, no key and no clock. The door's own surface is in
+with no network, no key and no clock. The jev subpath's own surface is in
 [the reference page](../reference/jev.md); everything below is the wiring.
 
 ## 1. Write the rubric once
@@ -188,7 +188,7 @@ The state stays yours
 
 ## 3. Write the handler — or don't call Jev at all
 
-The HTTP call is the one handler you write. The door holds no API key and reads
+The HTTP call is the one handler you write. jev holds no API key and reads
 no environment variable: your handler owns the `Authorization` header. It hands
 Jev's reply to `ask.decode`, which returns the outcome, and `ask.rejected` when
 the call itself threw. That split is what lets a test swap the network for a
@@ -324,7 +324,7 @@ expect(trace.filter((entry) => entry.kind === "cmd")).toHaveLength(1);
 
 Swap `0.93` for `0.41` and the same machine returns
 `{ kind: "triage", why: "confidence 0.41" }`. That is the threshold branch,
-exercised without a single mock of the door itself.
+exercised without a single mock of the ask itself.
 
 ## Two knobs in one machine
 
@@ -479,7 +479,7 @@ is unchanged, so a machine with a single knob needs none of this.
 ## Classifying many items at once
 
 One `ask` per item is the wrong shape past a handful. `createClassifyBatch`,
-from the same door, wires
+from the same subpath, wires
 [`@demlik/tea/flow`](../reference/flow.md)'s batch window and fan-out plus a TTL
 cache around `ask`: you call `add(item, at)` and it coalesces, bounds
 concurrency, and never re-asks about a key it has cached. It writes no chunker,

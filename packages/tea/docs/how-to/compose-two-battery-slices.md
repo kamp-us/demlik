@@ -1,7 +1,7 @@
 # Compose two battery slices in one Model
 
 You have two batteries — pure state plus verbs over that state — and one Model
-that has to carry both. Two jobs fall out of that, and `@demlik/tea`'s root door
+that has to carry both. Two jobs fall out of that, and `@demlik/tea`'s root entry
 covers each with one function: `liftSlice` threads a verb's
 `readonly [Slice, readonly Cmd[]]` result back into the host Model at a typed
 key, and `readInOrder` turns a read spanning both slices into a precedence you

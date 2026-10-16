@@ -1,45 +1,20 @@
 import fs from "node:fs";
 import { z } from "zod";
 import { stableStringify } from "../render/json.js";
-import type { BoundaryKind } from "./violation.js";
+import { type BoundaryKind, CROSSINGS } from "./violation.js";
+
+export { type BoundaryRules, BoundaryRulesSchema } from "./rules.js";
 
 // `boundary-ledger.json` at the repo root: one entry per boundary crossing a scope still carries.
 // The gate fails only on a crossing the ledger does not name, and drops the entries whose crossing
 // is gone, so the file only shrinks unless someone adds to it by name and with a reason.
 export const LEDGER_FILENAME = "boundary-ledger.json";
 
-export const BOUNDARY_KINDS = [
-  "adapter-library-imported-outside-driven",
-  "application-import-outside-allowlist",
-  "application-imports-adapter",
-  "binding-outside-driven-adapter",
-  "cross-feature",
-  "door-outside-driven-adapter",
-  "door-outside-owner",
-  "driving-reaches-driven",
-  "impure-application",
-  "impure-library",
-  "impure-rules",
-  "index-not-exports-only",
-  "lib-imports-feature",
-  "library-imports-up",
-  "library-undeclared",
-  "outside-imports-feature-internal",
-  "relative-import-crosses-workspace",
-  "unknown-zone",
-  "worker-call-cycle",
-] as const satisfies readonly BoundaryKind[];
-
-// Fails to compile when violation.ts grows a kind this list does not name.
-const everyKindListed: Exclude<BoundaryKind, (typeof BOUNDARY_KINDS)[number]> extends never
-  ? true
-  : never = true;
-void everyKindListed;
+export const BOUNDARY_KINDS = Object.keys(CROSSINGS) as BoundaryKind[];
 
 // Whether a kind can cross to something that is not a file of the scope: a bare import
-// (`impure-rules`, `application-import-outside-allowlist`), a world door or world library
-// (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`, `impure-library`), a
-// worker binding (`binding-outside-driven-adapter`) or an entry (`unknown-zone` of a feature,
+// (`application-import-outside-allowlist`), an impure global or world library (`impure`), a worker
+// binding (`binding-outside-driven-adapter`) or an entry (`unknown-zone` of a feature,
 // `index-not-exports-only` of an entry file, `library-undeclared` of a package, `worker-call-cycle`
 // of workers). Every other kind names its target file, or for an import of a library
 // (`library-imports-up`, `adapter-library-imported-outside-driven`) or of another workspace
@@ -50,12 +25,8 @@ const MAY_HAVE_NO_FILE = {
   "application-imports-adapter": false,
   "binding-outside-driven-adapter": true,
   "cross-feature": false,
-  "door-outside-driven-adapter": true,
-  "door-outside-owner": true,
   "driving-reaches-driven": false,
-  "impure-application": true,
-  "impure-library": true,
-  "impure-rules": true,
+  impure: true,
   "index-not-exports-only": true,
   "lib-imports-feature": false,
   "library-imports-up": false,
@@ -75,24 +46,15 @@ const EntrySchema = z
     from: z.string().min(1),
     to: z.string().min(1).nullable(),
     specifier: z.string().min(1),
-    global: z.literal(true).optional(),
     reason: z.string().min(1).optional(),
   })
   .strict()
   .refine((entry) => entry.to !== null || MAY_HAVE_NO_FILE[entry.kind], {
     message:
-      "only a bare-specifier import, a world door or a feature's entry may have a null `to` " +
+      "only a bare-specifier import, an impure use or a feature's entry may have a null `to` " +
       `(kinds ${NO_FILE_KINDS})`,
     path: ["to"],
-  })
-  .refine(
-    (entry) => entry.global !== true || (entry.kind === "impure-rules" && entry.to === null),
-    {
-      message:
-        "`global` marks an impure-rules entry for a world door read by name, with a null `to`",
-      path: ["global"],
-    },
-  );
+  });
 
 export const BoundaryLedgerSchema = z
   .object({ entries: z.array(EntrySchema).default([]) })
@@ -113,15 +75,12 @@ export const BoundaryLedgerSchema = z
   });
 
 // `to` is the resolved target file (for an import of a library or of another workspace, its
-// directory), or null for a bare import (`impure-rules`, `application-import-outside-allowlist`), a
-// world door (`door-outside-owner`, `impure-application`, `door-outside-driven-adapter`,
-// `impure-library`, or `impure-rules` with `global`), a world library (`impure-library`), a worker
-// binding (`binding-outside-driven-adapter`) or an entry (`unknown-zone`, `index-not-exports-only`,
-// `library-undeclared`, `worker-call-cycle`), in which case the target is the specifier itself. `specifier` is how an
-// import was written, or the door's name, and is display only for a file target: it is not part of
-// the identity, so a move that rewrites a relative specifier keeps it. `global` is part of the
-// identity: a global `fetch` and a bare `import "fetch"` from one file are two crossings, and the
-// flag is all that tells them apart.
+// directory), or null for a bare import (`application-import-outside-allowlist`), an impure global
+// or world library (`impure`), a worker binding (`binding-outside-driven-adapter`) or an entry
+// (`unknown-zone`, `index-not-exports-only`, `library-undeclared`, `worker-call-cycle`), in which
+// case the target is the specifier itself. `specifier` is how an import was written, or the
+// `IMPURE_GLOBALS` row's name, and is display only for a file target: it is not part of the
+// identity, so a move that rewrites a relative specifier keeps it.
 export type BoundaryLedgerEntry = z.infer<typeof EntrySchema>;
 export type BoundaryLedger = { readonly entries: readonly BoundaryLedgerEntry[] };
 
@@ -136,11 +95,10 @@ export function ledgerTargetOf(entry: Pick<BoundaryLedgerEntry, "to" | "specifie
   return entry.to ?? entry.specifier;
 }
 
-// The identity: `(scope, kind, from, to ?? specifier)`, and whether the target is a global. Two
-// imports of one target from one file are one crossing, and so are two reads of one door.
+// The identity: `(scope, kind, from, to ?? specifier)`. Two imports of one target from one file are
+// one crossing, and so are two uses of one `IMPURE_GLOBALS` row.
 export function ledgerKey(entry: Omit<BoundaryLedgerEntry, "reason">): string {
-  const key = [entry.scope, entry.kind, entry.from, ledgerTargetOf(entry)];
-  return JSON.stringify(entry.global === true ? [...key, "global"] : key);
+  return JSON.stringify([entry.scope, entry.kind, entry.from, ledgerTargetOf(entry)]);
 }
 
 function compareEntries(a: BoundaryLedgerEntry, b: BoundaryLedgerEntry): number {
@@ -149,8 +107,7 @@ function compareEntries(a: BoundaryLedgerEntry, b: BoundaryLedgerEntry): number 
     a.kind.localeCompare(b.kind) ||
     a.from.localeCompare(b.from) ||
     ledgerTargetOf(a).localeCompare(ledgerTargetOf(b)) ||
-    a.specifier.localeCompare(b.specifier) ||
-    Number(a.global === true) - Number(b.global === true)
+    a.specifier.localeCompare(b.specifier)
   );
 }
 

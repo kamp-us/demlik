@@ -4,7 +4,7 @@
  * sides" (epic #186, ADR 0006).
  *
  * THE POINT OF THIS FILE: every import is a value from the runtime-free half of
- * the surface — since #51 those publish on the root `@demlik/tea` door rather
+ * the surface — since #51 those publish on the root `@demlik/tea` entry rather
  * than a `/pure` subpath. It pulls in the fold seam (`foldMsgs`), the ack
  * primitive (`tagSeq` / `nextSeq` / `partitionByAck`), and the reconciliation
  * helper (`reconcile`) — and NOTHING that drags `run`, the host, or `Store` into

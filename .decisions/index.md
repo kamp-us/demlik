@@ -24,10 +24,11 @@ One row per ADR, repo-wide. Read the file for the why.
 | [0020](./0020-tea-owns-no-dependency-injection.md) | Dependencies belong to the handler, never to tea's core or its Cmds | Accepted | 2026-09-22 |
 | [0021](./0021-handler-outcome-becomes-the-msg.md) | A Cmd handler returns its outcome and the engine mints the Msg, never the handler | Accepted | 2026-09-23 |
 | [0022](./0022-no-battery-layer-plain-functions.md) | Reusable logic ships as plain functions and Cmds called from update, never a battery layer | Accepted | 2026-09-23 |
-| [0023](./0023-door-identity-and-process-members.md) | A world door is named for what a use read, and Node's own process judges a declaration | Accepted | 2026-10-01 |
+| [0023](./0023-door-identity-and-process-members.md) | A world door is named for what a use read, and Node's own process judges a declaration | Superseded by [0027](./0027-one-impure-kind-and-one-word-per-concept.md) | 2026-10-01 |
 | [0024](./0024-admins-bypass-code-owner-review.md) | A repo admin may merge a governed-root PR without a second reviewer, never bypass the PR itself | Accepted | 2026-10-01 |
 | [0025](./0025-stop-gives-up-on-handlers.md) | `stop()` gives up on a Cmd handler that has not returned at `disposeTimeoutMs`, never waits for it without limit | Accepted | 2026-10-13 |
 | [0026](./0026-tea-owns-typed-ports-and-tell.md) | tea owns typed ports on a machine and a `tell` that never waits, never the program, the route graph or the registry | Accepted | 2026-10-13 |
+| [0027](./0027-one-impure-kind-and-one-word-per-concept.md) | code-graph reports one impure kind, and each concept has one word in code-graph and tea | Accepted | 2026-10-16 |
 
 Numbers are inherited from the `csirin/monorepo` sequence this package was extracted
 from, and the gaps are real: 0009 (the brain/hand seam) and 0012 (the single-root ADR

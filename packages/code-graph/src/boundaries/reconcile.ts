@@ -15,7 +15,6 @@ export function entryOf(scope: string, violation: BoundaryViolation): BoundaryLe
     from: violation.from,
     to: violation.to,
     specifier: violation.specifier,
-    ...(violation.kind === "impure-rules" && violation.global === true ? { global: true } : {}),
   };
 }
 

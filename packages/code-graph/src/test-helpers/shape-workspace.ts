@@ -2,8 +2,8 @@ import { SHOP_TSCONFIG, SHOP_TYPES } from "./shop-workspace.js";
 
 // A generated workspace for the shape rules' scale test and timing script: three hexagonal scopes of
 // eight features, 40 libraries over the five types, 2,000+ source files of which 300+ are tests that
-// carry code that would be a B6, B7, B10 or B13 crossing outside the test role, and 100+ planted
-// crossings across B8, B9, B15 and B16. Everything is a function of the sizes below, so two runs of
+// carry code that would be a B6, B7 or B10 crossing outside the test role, and 100+ planted
+// crossings across B7, B8, B15 and B16. Everything is a function of the sizes below, so two runs of
 // the generator write the same bytes.
 
 const SCOPES = ["services/s0", "services/s1", "services/s2"];
@@ -108,7 +108,7 @@ function cleanFeature(scope: string, feature: string, f: number): Record<string,
 }
 
 // Ten tests per feature, each carrying code that is a crossing anywhere else: four in `application/`
-// (B6 and B7), three in `adapters/driving/` (B8 and B9) and three at the feature root (B10).
+// (B6 and B7), three in `adapters/driving/` (B7 and B8) and three at the feature root (B10).
 function featureTests(scope: string, feature: string): Record<string, string> {
   const root = `${scope}/src/${feature}`;
   const files: Record<string, string> = {};
@@ -160,7 +160,7 @@ function plantedIn(scope: string, feature: string, f: number): Planted {
     `${root}/adapters/driven/d0.ts`,
   );
   plant(
-    "door-outside-driven-adapter",
+    "impure",
     `${root}/adapters/driving/log.ts`,
     'export const log = () => console.log("driving");\n',
     "console",
@@ -284,7 +284,6 @@ export function shapeWorkspace(): ShapeWorkspace {
   );
   const base = {
     features: Object.fromEntries(SCOPES.map((scope) => [scope, FEATURES])),
-    layout: Object.fromEntries(SCOPES.map((scope) => [scope, "hexagonal"])),
     libraryRoots: ["packages"],
     libraryTypes: SHOP_TYPES,
     libraries: libraries.types,

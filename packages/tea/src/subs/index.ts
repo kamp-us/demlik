@@ -1,7 +1,7 @@
 /**
  * @packageDocumentation
- * Universal Sub factories — published on the root `@demlik/tea` door (#51; the
- * `/subs` door closed and its parts moved up, per ADR 0016).
+ * Universal Sub factories — published on the root `@demlik/tea` entry (#51; the
+ * `/subs` subpath closed and its parts moved up, per ADR 0016).
  *
  * Each factory returns a sub runner — the `(sub, ctx, dispatch) => Dispose`
  * shape of every cross-cutting Sub topology: timers, DOM events,

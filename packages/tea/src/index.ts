@@ -9,17 +9,17 @@
  */
 
 // The composition seam — `liftSlice` / `readInOrder`, the layer between a
-// battery and a door. It lands on the ROOT door rather than a battery subpath
+// battery and a subpath. It lands on the ROOT subpath rather than a battery subpath
 // because both `./resilience` and `./jev` import it, so it cannot live inside
 // either one.
 export * from "./compose";
 export * from "./observability";
-// `./pure` and `./subs` are no longer doors of their own (#51): the closing
-// sweep pinned the export map to the public doors, and ADR 0016 moves parts
+// `./pure` and `./subs` are no longer subpaths of their own (#51): the closing
+// sweep pinned the export map to the public subpaths, and ADR 0016 moves parts
 // rather than dropping them — so the whole runtime-free surface and the whole
-// subscription-factory surface land here, on the root door, as named exports.
+// subscription-factory surface land here, on the root entry, as named exports.
 // The runtime-free GUARANTEE still lives in `src/pure/`, which nothing outside
-// it may import from; the door it used to have is what closed.
+// it may import from; the subpath it used to have is what closed.
 export * from "./pure";
 export type {
   AnyCmdDef,

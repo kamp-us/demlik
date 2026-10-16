@@ -25,9 +25,8 @@ export type ShapeContext = {
 // layout. An inner `index.ts` (`src/schema/index.ts`) is no entry.
 const LIBRARY_ENTRY = "src/index.ts";
 
-// B15: an entry file holding more than named re-exports. A hexagonal feature's is the `index` zone
-// (a `rules`-layout feature's is not judged), and a declared library's `src/index.ts` is its own
-// scope's.
+// B15: an entry file holding more than named re-exports. A hexagonal feature's is the `index` zone,
+// and a declared library's `src/index.ts` is its own scope's.
 function entryViolations(ctx: ShapeContext, file: ShapedFile, place: Place): BoundaryViolation[] {
   const { scope, shape, libraries } = ctx;
   if (!shape.kinds.has("index-not-exports-only") || file.offendingForm === null) return [];

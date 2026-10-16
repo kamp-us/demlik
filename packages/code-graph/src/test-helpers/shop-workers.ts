@@ -148,7 +148,6 @@ export const SHOP_WORKER_FILES: Record<string, string> = {
 
 export const SHOP_WORKER_RULES = {
   features: { "services/api": ["orders", "billing"], "services/auth": ["sessions"] },
-  layout: { "services/api": "hexagonal", "services/auth": "hexagonal" },
   acrossDeployables: [
     "binding-outside-driven-adapter",
     "worker-call-cycle",

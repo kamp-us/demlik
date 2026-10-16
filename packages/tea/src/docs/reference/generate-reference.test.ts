@@ -160,7 +160,7 @@ describe("reference generator", { timeout: 120_000 }, () => {
         expect(compass).toContain(`(./${entry.file}) — ${tier}\n`);
         expect(catalog).toContain(`(./${entry.file}) | ${tier} |`);
       }
-      // An export inherits its door's tier unless its own TSDoc opts out.
+      // An export inherits its subpath's tier unless its own TSDoc opts out.
       const node = exportRows(docs.get("node.md") ?? "");
       expect(node.find((r) => r.symbol === "fileJournal")?.tier).toBe(
         "experimental",

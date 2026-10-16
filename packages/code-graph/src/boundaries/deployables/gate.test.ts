@@ -89,7 +89,6 @@ describe("a rules file that lists none of the three kinds behaves as it did", ()
     const run = open(
       {
         features: { [API]: ["orders", "billing"] },
-        layout: { [API]: "hexagonal" },
       },
       {
         ...SHOP_WORKER_FILES,

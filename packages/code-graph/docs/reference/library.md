@@ -260,8 +260,9 @@ Source: [SCC exports](../../src/scc.ts).
 | `ledgerKey`, `ledgerTargetOf` | Crossing identity and effective target |
 | `rekeyBoundaryLedger`, `rekeyBoundaryLedgerFile` | Update identities after exact file moves |
 
-It also exports `BoundaryLedgerSchema`, `BOUNDARY_KINDS`, `LEDGER_FILENAME`,
-and the ledger/move/status types.
+It also exports `BoundaryLedgerSchema`, `BoundaryRulesSchema` (the zod schema of
+`boundary-rules.json`) with its `BoundaryRules` type, `BOUNDARY_KINDS`,
+`LEDGER_FILENAME`, and the ledger/move/status types.
 
 Move paths are repository-relative. Rekeying updates importing files and
 file targets, preserves reasons, and leaves worker identities and package
