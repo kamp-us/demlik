@@ -4,13 +4,13 @@
 // `exports` in `package.json` is what a consumer can open (MAINTAINING.md), and
 // nothing in the repo used to fail when it grew: a new subpath added for one
 // caller's convenience became a permanent semver promise the moment it
-// published, and the closing sweep (#51) had to walk sixty-odd doors back down
-// to thirteen. Adding a door is a decision — it earns a tier row and a
+// published, and the closing sweep (#51) had to walk sixty-odd subpaths back down
+// to thirteen. Adding a subpath is a decision — it earns a tier row and a
 // maintenance cost — so it is made deliberately, HERE, by editing this list in
 // the same diff that adds the export.
 //
 // The changelog arm is the other half of ADR 0016's promise (a removal lands in
-// one minor with a changeset callout naming where each part went): a door that
+// one minor with a changeset callout naming where each part went): a subpath that
 // closes is a break a consumer reads about in the changelog, naming where the
 // parts went. So every subpath the published v0.12.0 map carried and this one
 // does not has to be named somewhere a release note is assembled from —
@@ -20,7 +20,7 @@
 // The published map is a CHECKED-IN FIXTURE, never a read of git history. A
 // `git show <sha>:package.json` here exits 128 under CI's default
 // `actions/checkout` (one commit, no `fetch-depth`), and it does so at COLLECT
-// time — which kills the door-list pin above it too, so the gate reports
+// time — which kills the subpath-list pin above it too, so the gate reports
 // `(0 test)` and pins nothing exactly where pinning matters (#51). The v0.12.0
 // map is a fixed historical fact; a fixture makes this file depth-independent,
 // ref-independent, and runnable in any consumer checkout.
@@ -35,38 +35,38 @@ const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE_ROOT = resolve(PKG_ROOT, "../..");
 
 /**
- * The public doors, exactly. Twenty-six module doors plus the two non-module
+ * The public subpaths, exactly. Twenty-six module subpaths plus the two non-module
  * entries — `./package.json` (metadata passthrough) and
- * `./devtools/styles.css` (the asset stays with its door).
+ * `./devtools/styles.css` (the asset stays with its subpath).
  *
  * `./promise` and `./effect` are the two engines beside the neutral core at
  * `.` (#274 R2.1).
  *
  * `./devtools`, `./machine-viz` and `./parity` are here rather than folded
  * because each has a live external callsite (ADR 0016 as amended by #83): a
- * part someone imports keeps its own door.
+ * part someone imports keeps its own subpath.
  *
  * `./testing/promise` and `./testing/effect` are `drive`'s two forms, one per
  * engine, beside the engine-neutral `./testing` (#321, ruled R13.1 in #325):
- * `./testing/effect` is the one door outside `./effect` that imports `effect`,
+ * `./testing/effect` is the one subpath outside `./effect` that imports `effect`,
  * so a Promise test never installs it.
  *
- * `./otel` is a door because it is the one module that imports
+ * `./otel` is a subpath because it is the one module that imports
  * `@opentelemetry/api`, an optional peer (#331): folding it into `./agent`
  * would make every agent consumer install OpenTelemetry.
  *
- * The seven grouped `battery` doors are the sweep's other direction (#205),
+ * The seven grouped `battery` subpaths are the sweep's other direction (#205),
  * and `./jev` is the eighth, opened on the same terms (#219).
- * The sweep closed sixty-odd doors because each was a permanent promise bought
+ * The sweep closed sixty-odd subpaths because each was a permanent promise bought
  * for one caller's convenience; these eight are bought deliberately, at a tier
  * that may break in a minor, because the modules behind them are finished and
  * tested and a consumer who needs one has otherwise to copy the source. They
  * are grouped rather than per-module for the same reason the sweep happened:
- * eight promises, not forty-odd — `./jev` is one door over its three modules,
- * not three. Each is a re-export file over `src/internal/<door>/` — nothing
+ * eight promises, not forty-odd — `./jev` is one subpath over its three modules,
+ * not three. Each is a re-export file over `src/internal/<subpath>/` — nothing
  * moved to open one.
  */
-const PUBLIC_DOORS = [
+const PUBLIC_SUBPATHS = [
   ".",
   "./promise",
   "./effect",
@@ -113,19 +113,19 @@ function exportKeys(json: string): string[] {
   );
 }
 
-const currentDoors = exportKeys(
+const currentSubpaths = exportKeys(
   readFileSync(join(PKG_ROOT, "package.json"), "utf8"),
 );
 
 describe("package.json `exports`", () => {
-  it("carries exactly the public doors", () => {
-    expect([...currentDoors].sort()).toEqual([...PUBLIC_DOORS].sort());
+  it("carries exactly the public subpaths", () => {
+    expect([...currentSubpaths].sort()).toEqual([...PUBLIC_SUBPATHS].sort());
   });
 });
 
-describe("every door closed since v0.12.0 is named in a release note", () => {
+describe("every subpath closed since v0.12.0 is named in a release note", () => {
   const removed = PUBLISHED_V0_12_0.exports.filter(
-    (door) => !currentDoors.includes(door),
+    (subpath) => !currentSubpaths.includes(subpath),
   );
 
   // One haystack: the shipped changelog plus the pending changesets, which are
@@ -138,13 +138,13 @@ describe("every door closed since v0.12.0 is named in a release note", () => {
       .map((f) => readFileSync(join(WORKSPACE_ROOT, ".changeset", f), "utf8"))
       .join("\n");
 
-  it("removed at least the sub-doors this sweep closed", () => {
+  it("removed at least the subpaths this sweep closed", () => {
     expect(removed).toEqual(expect.arrayContaining(["./pure", "./subs"]));
   });
 
-  it.each(removed)("%s", (door) => {
+  it.each(removed)("%s", (subpath) => {
     // The specifier as a consumer wrote it — that is the string a reader
     // searches the changelog for when their import stops resolving.
-    expect(notes).toContain(`@demlik/tea/${door.slice(2)}`);
+    expect(notes).toContain(`@demlik/tea/${subpath.slice(2)}`);
   });
 });

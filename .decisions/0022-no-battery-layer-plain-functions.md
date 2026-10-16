@@ -57,7 +57,7 @@ unchanged: resilience is built in-house as pure functions over machine data, it 
 and replayable, and the narrow-exception note still limits when we build instead of install.
 
 **What this changes in 0010.** Verdict 2's survivor, `with-resilience`, is removed, so that
-verdict no longer names the resilience door to keep. The resilient-call pure verbs stay, per item
+verdict no longer names the resilience subpath to keep. The resilient-call pure verbs stay, per item
 2. The tiers, their semver promises and verdicts 1 and 3 stand.
 
 **Banned.**

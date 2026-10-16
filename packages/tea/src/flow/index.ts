@@ -4,7 +4,7 @@
  * run steps in order and compensate on failure, poll until a predicate holds,
  * reconcile desired against actual.
  *
- * A DOOR, not a module. Every name here is declared under `src/internal/flow/`
+ * A SUBPATH, not a module. Every name here is declared under `src/internal/flow/`
  * and re-exported unchanged; nothing moved and nothing was renamed to open it.
  * The modules behind it:
  *

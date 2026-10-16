@@ -17,8 +17,7 @@ import { deployableCensus, type SiteRow } from "./deployables/census.js";
 import { workerCycles } from "./deployables/cycles.js";
 import { type Deployables, NO_CATALOG, readDeployables } from "./deployables/deployables.js";
 import { declaresDeployables } from "./deployables/schema.js";
-import { detectDoorUses } from "./door-uses.js";
-import { unknownOwners } from "./doors.js";
+import { detectImpureUses } from "./impure-uses.js";
 import {
   type BoundaryLedger,
   LEDGER_FILENAME,
@@ -29,7 +28,6 @@ import { libraryCensus } from "./libraries/census.js";
 import { type Libraries, libraryScopes, readLibraries } from "./libraries/libraries.js";
 import { declaresLibraries } from "./libraries/schema.js";
 import { migratedLedger } from "./migrate.js";
-import type { ProcessMembers } from "./process-members.js";
 import { reconcile, withAccepted } from "./reconcile.js";
 import {
   type Censuses,
@@ -56,7 +54,6 @@ export type BoundaryGateArgs = BoundaryFlags & {
   readonly rootAbsolute: string;
   readonly repoRoot: string;
   readonly boundaryRulesFile: string | undefined;
-  readonly members?: ProcessMembers;
   readonly emit: (payload: string) => void;
   readonly report: Reporter;
   readonly json: boolean;
@@ -120,7 +117,7 @@ function loadModules(scope: string, reads: Reads, args: BoundaryGateArgs): Bound
   return loaded.sourceFiles.map(({ file, syntax }) => ({
     file,
     importEdges: importEdgesByFile.get(file) ?? [],
-    doorUses: detectDoorUses(syntax),
+    impureUses: detectImpureUses(syntax),
     runtimeSpecifiers: runtimeSpecifiers(syntax),
     bindingSites: bindingSitesOf(reads.deployables, inScope(scope, file), syntax),
     ...shapeFactsOf(reads.shape, scope, file, syntax),
@@ -135,13 +132,6 @@ function analyzeScope(
 ): ScopeAnalysis {
   const modules = readsFiles(scope, rules, reads.libraries) ? loadModules(scope, reads, args) : [];
   const files = new Set(modules.map((module) => module.file));
-  const unknown = unknownOwners(rules.doors[scope] ?? {}, files);
-  if (unknown.length > 0) {
-    throw new Error(
-      `door owner(s) in "${scope}" name no file the scope loads: ${unknown.join("; ")}. ` +
-        "An owner is an exact scope-relative .ts/.tsx path, such as src/env.ts.",
-    );
-  }
   const owners = rules.bindingOwners[scope] ?? {};
   const issue = bindingOwnerIssue(scope, owners, files, reads.deployables);
   if (issue !== null) throw new Error(issue);
@@ -331,7 +321,7 @@ function censusesOf(reads: Reads, analysis: Analysis): Censuses {
 export function runBoundaryGate(args: BoundaryGateArgs): number {
   const mode = modeOf(args, args.report);
   if (mode === null) return 2;
-  const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report, args.members);
+  const rules = resolveBoundaryRules(args.boundaryRulesFile, args.report);
   if (rules === null) return 2;
   const reads = readRun(rules, args);
   if (reads === null) return 2;

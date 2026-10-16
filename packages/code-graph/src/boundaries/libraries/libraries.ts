@@ -148,7 +148,7 @@ export function importTargetOf(libraries: Libraries, specifier: string): ImportT
 // Whether a specifier names a package one of the globs matches: a glob matches the specifier's name
 // and any subpath of it, so `@sentry/*` matches `@sentry/node` and `@sentry/node/integrations`,
 // never `@sentryx/node`. A relative specifier names a file, not a package. The one matcher for
-// `worldLibraries` (B13) and `pureDependencies` (B16).
+// `worldLibraries` (B7) and `pureDependencies` (B16).
 export function inPackageGlobs(globs: readonly RegExp[], specifier: string): boolean {
   if (specifier.startsWith(".") || specifier.startsWith("/")) return false;
   const segments = specifier.split("/");

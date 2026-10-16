@@ -9,7 +9,7 @@
  * **Dependency direction (the actual decoupling):** this module imports
  * NOTHING from the runtime — no `run`/host/`Store`. The
  * runtime (`run`, the host, interpret, `Store`, subscribe — all in
- * `../index.ts`) imports *from* here; never the reverse. The root door
+ * `../index.ts`) imports *from* here; never the reverse. The root entry
  * re-exports this surface through `./index.ts`, and
  * `pure/import-graph.test.ts` is the regression fence asserting the pure
  * entrypoint's import graph never reaches `run`.
@@ -877,7 +877,7 @@ function stateNameOf(state: unknown): string {
 // different things about the same `(machine, state)` pair (#14, folded #21).
 //
 // It takes a STATE, not a `state.type`, which is what separates it from
-// `acceptsOf` next door: `acceptsOf` answers about a state NAME a tool already
+// `acceptsOf` next to it: `acceptsOf` answers about a state NAME a tool already
 // has in hand, and this answers about the state value a caller is actually
 // holding — including a reducer-form state that carries no discriminant at all.
 // That untagged case is handled exactly as the refusal path handles it: the
@@ -2263,7 +2263,7 @@ export function foldUpdates<S, M extends { type: string }, C extends Cmd>(
 //
 // Per ADR 0006 the runtime-free *guarantee* lives in `src/pure/`, whose module
 // graph never reaches `run`; that barrel + the import-graph guard are #213's
-// scope. `foldMsgs` ships as a reachable public API from the root door, which
+// scope. `foldMsgs` ships as a reachable public API from the root entry, which
 // is where the whole runtime-free surface publishes since #51.
 /**
  * Fold a machine's `update` over a list of Msgs from a base state and return

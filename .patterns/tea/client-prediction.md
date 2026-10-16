@@ -82,7 +82,7 @@ A browser client must not drag the server runtime (`run`, the host, `Store`,
 interpret handlers, sub runners) into its bundle. ADR 0006 makes that a **structural
 guarantee, not a tree-shaking accident**:
 
-- The seam ships on the root door **`@demlik/tea`** — the fold seam
+- The seam ships on the root entry **`@demlik/tea`** — the fold seam
   (`foldMsgs`), the ack primitive (`tagSeq`/`nextSeq`/`partitionByAck`/`ack`)
   and the reconciliation helper (`reconcile`) are all named exports of it. The
   `/pure` subpath they used to ship on closed in the #51 sweep;
@@ -94,7 +94,7 @@ guarantee, not a tree-shaking accident**:
 - [`src/pure/import-graph.test.ts`](../../packages/tea/src/pure/import-graph.test.ts)
   BFS-walks the transitive import graph rooted at `src/pure/index.ts` and
   **fails if it ever reaches `run`/the host**. That is the regression fence, and
-  closing the door did not move it.
+  closing the subpath did not move it.
 
 ```ts
 import { foldMsgs, nextSeq, partitionByAck, reconcile, tagSeq } from "@demlik/tea";

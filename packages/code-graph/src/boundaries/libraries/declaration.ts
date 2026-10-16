@@ -1,5 +1,5 @@
 import { GlobSyntaxError, globToRegExp } from "../../kinds/glob.js";
-import { DOOR_ROWS } from "../doors.js";
+import { IMPURE_ROWS } from "../impure.js";
 import type { LibraryRules } from "./schema.js";
 
 function typeIssues(rules: LibraryRules): string[] {
@@ -17,17 +17,17 @@ function typeIssues(rules: LibraryRules): string[] {
   return [...imports, ...libraries];
 }
 
-// A world library that compiles as a glob, and matches no catalog door. A door is judged by its own
-// name (`fetch`, `console`, `node:fs`), so a package of that name would share its ledger entry and
-// hide behind it: the two are named apart, or not declared.
+// A world library that compiles as a glob, and matches no row of `IMPURE_GLOBALS`. A row is judged
+// by its own name (`fetch`, `console`, `node:fs`), so a package of that name would share its ledger
+// entry and hide behind it: the two are named apart, or not declared.
 function worldLibraryIssues(rules: LibraryRules): string[] {
   return rules.worldLibraries.flatMap((entry) => {
     try {
       const glob = globToRegExp(entry);
-      const door = DOOR_ROWS.find((name) => glob.test(name));
-      if (door === undefined) return [];
+      const row = IMPURE_ROWS.find((name) => glob.test(name));
+      if (row === undefined) return [];
       return [
-        `world library "${entry}" matches the catalog door "${door}", which a pure library already may not use: a package and a door of one name would share one ledger entry, so declare a pattern that matches no door.`,
+        `world library "${entry}" matches the impure global "${row}", which a pure library already may not use: a package and a global of one name would share one ledger entry, so declare a pattern that matches no global.`,
       ];
     } catch (error) {
       if (!(error instanceof GlobSyntaxError)) throw error;
@@ -37,7 +37,7 @@ function worldLibraryIssues(rules: LibraryRules): string[] {
 }
 
 // The first problem in the library keys that the schema alone cannot see, or null: a type no
-// `libraryTypes` entry declares, and a world library that is no glob or names a door. What needs
+// `libraryTypes` entry declares, and a world library that is no glob or names an impure global. What needs
 // the repo (a library that is no package, a root that is no directory) is judged where the repo is
 // read.
 export function libraryDeclarationIssue(rules: LibraryRules): string | null {

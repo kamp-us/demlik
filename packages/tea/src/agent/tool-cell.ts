@@ -2,7 +2,7 @@
  * @demlik/tea/agent — the one construction every tool definition goes through.
  *
  * NOT part of the public `./agent` barrel. `tool()` and `agentTool()` are two
- * doors onto the same `ToolDef`: `tool()` hands its handler the parsed `args`,
+ * constructors of the same `ToolDef`: `tool()` hands its handler the parsed `args`,
  * and `agentTool()` needs the whole Cmd — `callId` included — because the call's
  * identity is what keys the child run. Both are built here, so the reserved-name
  * refusal, the `thrown` channel and the resilience knob have one definition.
@@ -77,7 +77,7 @@ const reservedToolNames: ReadonlySet<string> = new Set<string>([
   SNAPSHOT_WRITE_TYPE,
 ]);
 
-/** Whether `name` is one a tool door refuses — the set `ReservedToolName` types. */
+/** Whether `name` is one a tool constructor refuses — the set `ReservedToolName` types. */
 export function isReservedToolName(name: string): name is ReservedToolName {
   return reservedToolNames.has(name);
 }
@@ -92,7 +92,7 @@ export type NotReserved<Name extends string> = Name extends ReservedToolName
   ? never
   : unknown;
 
-/** The spec fields every tool door shares. */
+/** The spec fields every tool constructor shares. */
 export interface ToolSpec<Args, Ok> {
   readonly description: string;
   readonly input: StandardSchemaV1<unknown, Args>;
@@ -115,7 +115,7 @@ export function definedTool<
   E extends Tagged,
   Ctx,
 >(
-  door: string,
+  builder: string,
   name: Name,
   spec: ToolSpec<Args, Ok>,
   declaredTags: readonly string[],
@@ -126,12 +126,12 @@ export function definedTool<
 ): ToolDef<Name, Args, Ok, E, Ctx> {
   if (isReservedToolName(name)) {
     throw new Error(
-      `${door}: "${name}" is reserved — it is an agent-owned Msg prefix`,
+      `${builder}: "${name}" is reserved — it is an agent-owned Msg prefix`,
     );
   }
   // The router parses `args` against `spec.input` before it builds the Cmd,
   // so the Cmd's own input schema only names the type. `Cmd.define` types its
-  // failures off the tag list alone; `E` is the richer union the door declared
+  // failures off the tag list alone; `E` is the richer union the constructor declared
   // over those same tags, so the def is read at that type.
   const def = Cmd.define(name, {
     input: unchecked<ToolInput<Args>>(),

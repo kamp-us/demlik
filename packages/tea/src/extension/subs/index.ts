@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// Chrome-specific Sub factories, published on the `@demlik/tea/extension` door,
-// which re-exports this barrel (#51: the `/extension/subs` door closed and its
+// Chrome-specific Sub factories, published on the `@demlik/tea/extension` subpath,
+// which re-exports this barrel (#51: the `/extension/subs` subpath closed and its
 // parts moved up, per ADR 0016).
 //
 // Companion to the universal, host-agnostic factories in `src/subs/`. The
@@ -16,7 +16,7 @@
 // adapter — chromeStorageStore and the bridge runtime — and the factories that
 // touch the broader chrome.* surface (alarms, tabs, runtime messaging, storage
 // events) are kept in this leaf so the two halves stay legible. They now
-// publish through the one extension door; a bundle that names no factory shakes
+// publish through the one extension subpath; a bundle that names no factory shakes
 // them out, which is the isolation the second subpath used to buy.
 //
 // Excluded from v1:

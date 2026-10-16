@@ -24,7 +24,7 @@ Undeclared rules do not create a verdict.
 Scope paths are repository-relative. Feature names are folders directly under
 that scope's `src/`. Shared helper folders default to `lib`.
 
-A declared feature uses this layout by default:
+A declared feature uses this layout, the only one:
 
 ```text
 src/billing/
@@ -35,50 +35,33 @@ src/billing/
   adapters/driven/     storage and other external operations
 ```
 
-`layout: { "packages/app": "rules" }` selects the older layout: `index.ts`
-is public, `rules/` is pure, and other files are internal. `contracts` lists
-the package imports allowed from `rules/`.
-
 | Rule | Kind | Violation |
 |---|---|---|
 | B1 | `cross-feature` | Another feature's internals imported instead of its `index.ts` |
-| B2 | `impure-rules` | `rules/` imports beyond itself/contracts or uses a world door |
 | B3 | `lib-imports-feature` | A shared helper folder imports a feature |
 | B4 | `outside-imports-feature-internal` | A file outside features/helpers imports feature internals |
-| B5 | `door-outside-owner` | A declared world door is used outside its owner files |
 
-Hexagonal features add these rules:
+Features add these rules:
 
 | Rule | Kind | Violation |
 |---|---|---|
 | B6 | `application-imports-adapter` | A use case imports its own feature's adapter |
-| B7 | `impure-application` | A use case opens a world door |
+| B7 | `impure` | An impure global is used where the place may not be impure |
 | B8 | `driving-reaches-driven` | A driving adapter imports its own application or driven adapter |
-| B9 | `door-outside-driven-adapter` | A door is opened in `index.ts`, `ports.ts`, or a driving adapter |
 | B10 | `unknown-zone` | A file or folder directly under the feature has no declared zone |
 
 A wiring file outside features and helpers may import hexagonal adapters.
 It still cannot import `application/` or `ports.ts`. Cross-feature imports
-remain limited to `index.ts`. B2 applies only to the `rules` layout.
+remain limited to `index.ts`.
 
-## World doors
+## Impure globals
 
-A door is a recognized reference to an external facility. `doors` assigns
-exact scope-relative owner files:
+An impure global is a recognized reference to the outside world. B7 `impure`
+is the one rule for it, and the place comes from the entry's `from` path.
+`index.ts`, `ports.ts`, `application/`, `adapters/driving/` and a library
+whose type is `pure: true` may not use one. `adapters/driven/` may.
 
-```json
-{
-  "features": { "packages/app": ["billing", "orders"] },
-  "doors": {
-    "packages/app": {
-      "process.env": ["src/env.ts"],
-      "node:fs": ["src/billing/adapters/driven/files.ts"]
-    }
-  }
-}
-```
-
-| Door family | Recognized use |
+| Impure global | Recognized use |
 |---|---|
 | `process.<member>` | Static references, including literal member access and destructuring |
 | `Date.now`, `performance.now` | Clock references |
@@ -88,21 +71,14 @@ exact scope-relative owner files:
 | `console` | Any `console.*` reference |
 | `node:fs`, `node:child_process` | Runtime module imports, including subpaths and unprefixed names |
 
-Deeper static paths, such as `process.stdin.isTTY`, may have their own owners.
-The most specific declared prefix wins. Bare `process` is not a valid door.
-Its first member must exist on the running Node process; platform and launch
-mode can therefore affect declaration validation.
+Bare `process` is not a use. Type positions and type-only module imports are
+not uses. Locally bound names suppress global detection; aliases such as
+`const p = process` are not followed. Detection of rebinding is per file, not
+full lexical data flow.
 
-Type positions and type-only module imports do not open doors. Locally bound
-names suppress global detection; aliases such as `const p = process` are not
-followed. Detection of rebinding is per file, not full lexical data flow.
-
-B2, B7, and B9 enforce their zone's door restriction even without an owner
-declaration, and take precedence over B5 there. `rules/` import restrictions
-can still reject a type-only import that opens no runtime door.
-
-Owners must name loaded files outside forbidden zones. Each crossing records
-one file/door pair; another read in the same ledgered file is not a new entry.
+Each crossing records one file/global pair; another read in the same
+ledgered file is not a new entry. A pure library also reports each world
+library its files import (`worldLibraries`) under the same kind.
 
 ## Library types
 
@@ -142,7 +118,6 @@ Library-to-library imports are configurator imports.
 |---|---|---|
 | B11 | `library-undeclared` | A package under a library root has no declared type |
 | B12 | `library-imports-up` | A library imports a type its own type does not allow |
-| B13 | `impure-library` | A pure library opens a door or imports a world library |
 | B14 | `adapter-library-imported-outside-driven` | An import violates the target type's `importedFrom` list |
 
 Imports resolve by workspace package name, including subpaths. Relative
@@ -176,7 +151,7 @@ The two allowlist keys require B16 to be enabled.
 `testFiles` globs match a file's scope-relative path or its
 repository-relative path. `src/**/*.test.ts` applies in every scope, and
 `services/*/test-support/**` in worker scopes alone. Matched tests are
-excluded from B6–B10, B13, and B15–B17; other import and ownership rules
+excluded from B6–B8, B10, and B15–B17; other import and ownership rules
 still apply. Globs support `**`, `*`, `?`, and `{a,b}`.
 
 ### Read allowances
@@ -255,13 +230,12 @@ are outside B19. Type-only relative imports still count.
 }
 ```
 
-Identity is `(scope, kind, from, to ?? specifier)`, plus `global` when present.
-`specifier` is display-only for file targets. `global: true` distinguishes a
-by-name door from a package import for `impure-rules`. Reasons are optional
-in existing entries; accepting new entries requires a reason.
+Identity is `(scope, kind, from, to ?? specifier)`. `specifier` is display-only
+for file targets. Reasons are optional in existing entries; accepting new
+entries requires a reason.
 
 Targets are files for ordinary imports, package directories for library and
-workspace crossings, or `null` for doors, bare imports, and structural findings.
+workspace crossings, or `null` for impure globals, bare imports, and structural findings.
 The schema validates which kinds may use `null`.
 
 | Mode | Effect |
@@ -273,7 +247,7 @@ The schema validates which kinds may use `null`.
 
 Scopes outside the analyzed directory remain untouched. Invalid declarations
 exit 2 before writing. Migration refuses increases above legacy import
-ceilings; door, structural, library, shape, and deployable entries are seeded
+ceilings; impure, structural, library, shape, and deployable entries are seeded
 without counting toward those import ceilings.
 
 File movers can preserve ledger identities with

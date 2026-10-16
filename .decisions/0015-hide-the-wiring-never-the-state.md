@@ -51,13 +51,13 @@ layer beneath remains a first-class, reachable escape hatch.**
    JSON-serializable slice the raw kernel would produce, under the same keys; the lid adds no
    private store, no opaque handle, no wrapper object whose contents cannot be read back.
    `getState`, `observe`, `replay` and the journal see exactly what a hand-wired machine shows.
-3. **Progressive disclosure is a contract, not a courtesy.** Each altitude is a real door to the
+3. **Progressive disclosure is a contract, not a courtesy.** Each altitude is a real subpath to the
    one below — `defineAgent` → `createAgent` → the composed bricks → the raw reducer — and
    descending one step never requires rewriting the steps above. A lid that can only be used
    whole, or a primitive that can only be reached through a lid, breaks this.
 4. **Facade where the common case composes three or more parts; bare where one part suffices.**
    This is the test for whether a lid should exist at all. A one-liner primitive stays a
-   one-liner door; the export collapse groups siblings, it does not bury them.
+   one-liner subpath; the export collapse groups siblings, it does not bury them.
 5. **A lid's own ceremony is a measurement.** Every piece of plumbing a lid must perform to sit
    on the kernel is a candidate for the kernel to absorb, for the lid *and* every power user.
    The lid is written thin and named — each hidden thing a helper (`toolRouter`,
@@ -65,7 +65,7 @@ layer beneath remains a first-class, reachable escape hatch.**
 
 **Banned.** A lid that stores Model in a private field or non-JSON wrapper; a facade whose
 output cannot be fed to the raw `run`; a primitive removed from the export map because a lid
-"covers" it — a collapse may move a part to a grouped door, never drop the part; a lid that reads
+"covers" it — a collapse may move a part to a grouped subpath, never drop the part; a lid that reads
 the clock or RNG inside a transition to spare the user threading `at` — that moves impurity into
 the kernel rather than hiding wiring at the edge.
 
@@ -87,17 +87,17 @@ governs (Model, Cmd, lid altitude) are already canonized.
 ## Amendments
 
 - **#83 — item 4 and the Banned paragraph: a collapse moves a part to an internal folder built
-  to public standard, never to a grouped public door; a part is exported only on a real external
+  to public standard, never to a grouped public subpath; a part is exported only on a real external
   callsite (today `./retry-backoff`). Ruling: epic #41's 2026-09-04 grilling session, recorded at
   https://github.com/kamp-us/demlik/issues/41#issuecomment-5556466033 (2026-09-06).**
 
 - **#205 — supersedes the #83 amendment above. A finished battery built to public standard is
-  reached through a grouped public door at `battery` tier, and it is opened because it is
+  reached through a grouped public subpath at `battery` tier, and it is opened because it is
   finished, not because an external callsite already asks for it. The Banned paragraph's "a
-  collapse may move a part to a grouped door, never drop the part" now reads literally: the
-  grouped door is the destination, not a shape to avoid. Seven doors exist — `./idempotency`,
+  collapse may move a part to a grouped subpath, never drop the part" now reads literally: the
+  grouped subpath is the destination, not a shape to avoid. Seven subpaths exist — `./idempotency`,
   `./flow`, `./resilience`, `./timing`, `./persistence`, `./paginate`, `./work-queue` — each a
-  re-export file over `src/internal/`, so the lid rule this ADR states is untouched: a door
+  re-export file over `src/internal/`, so the lid rule this ADR states is untouched: a subpath
   hides nothing, it only makes reachable what the source already shows. `journal`, `prediction`
   and `llm-call` stay internal. Ruling: the Ruling section of
   https://github.com/kamp-us/demlik/issues/205 (Can, 2026-09-14).**

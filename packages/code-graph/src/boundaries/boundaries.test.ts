@@ -5,7 +5,7 @@ import { resolveBoundaryRules } from "../config.js";
 import { type BoundaryRepo, boundaryRepo, type GateRun } from "../test-helpers/boundary-repo.js";
 import { type BoundaryLedger, ledgerTargetOf, readBoundaryLedger } from "./ledger.js";
 import { MIGRATED_REASON } from "./migrate.js";
-import { type BoundaryViolation, isDoorUse } from "./violation.js";
+import type { BoundaryViolation } from "./violation.js";
 
 const SCOPE = "services/svc";
 
@@ -14,34 +14,29 @@ const FILES: Record<string, string> = {
     compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true },
     include: ["src"],
   }),
-  "src/audit-runs/index.ts": "export { save } from './store/db.js';\n",
-  "src/audit-runs/store/db.ts": "export const save = 1;\n",
-  "src/findings/index.ts": "export { run } from './flows/run.js';\n",
-  "src/findings/store/repo.ts": "export const repo = 1;\n",
-  "src/findings/flows/run.ts": [
+  "src/audit-runs/index.ts": "export { save } from './adapters/driven/db.js';\n",
+  "src/audit-runs/adapters/driven/db.ts": "export const save = 1;\n",
+  "src/findings/index.ts": "export { run } from './application/run.js';\n",
+  "src/findings/adapters/driven/repo.ts": "export const repo = 1;\n",
+  "src/findings/application/run.ts": [
     "import { save } from '../../audit-runs/index.js';",
-    "import { save as raw } from '../../audit-runs/store/db.js';",
-    "import { repo } from '../store/repo.js';",
+    "import { save as raw } from '../../audit-runs/adapters/driven/db.js';",
+    "import { repo } from '../adapters/driven/repo.js';",
     "export const run = save + raw + repo;",
   ].join("\n"),
-  "src/findings/rules/helper.ts": "export const helper = 1;\n",
-  "src/findings/rules/score.ts": [
+  "src/findings/application/helper.ts": "export const helper = 1;\n",
+  "src/findings/application/score.ts": [
     "import { helper } from './helper.js';",
-    "import type { Wire } from '@acme/wire-contract';",
-    "import { repo } from '../store/repo.js';",
-    "import { z } from 'zod';",
-    "export const score = helper + repo;",
-    "export type W = Wire | typeof z;",
+    "export const score = helper + Date.now();",
   ].join("\n"),
   "src/lib/util.ts": "import { run } from '../findings/index.js';\nexport const util = run;\n",
-  "src/index.ts": "import { repo } from './findings/store/repo.js';\nexport const entry = repo;\n",
+  "src/index.ts":
+    "import { helper } from './findings/application/helper.js';\nexport const entry = helper;\n",
 };
 
 const RULES = {
   features: { [SCOPE]: ["audit-runs", "findings"] },
-  layout: { [SCOPE]: "rules" },
   lib: ["lib"],
-  contracts: ["@acme/wire-contract"],
 };
 
 function ledgerOf(repo: BoundaryRepo): BoundaryLedger {
@@ -66,21 +61,32 @@ describe("analyzeBoundaries over a real fixture's import edges", () => {
 
   it("reports each kind once, at the edge that crosses", () => {
     expect(violations().map((v) => [v.kind, v.from, v.specifier])).toEqual([
-      ["cross-feature", "services/svc/src/findings/flows/run.ts", "../../audit-runs/store/db.js"],
-      ["impure-rules", "services/svc/src/findings/rules/score.ts", "../store/repo.js"],
-      ["impure-rules", "services/svc/src/findings/rules/score.ts", "zod"],
+      [
+        "application-imports-adapter",
+        "services/svc/src/findings/application/run.ts",
+        "../adapters/driven/repo.js",
+      ],
+      [
+        "cross-feature",
+        "services/svc/src/findings/application/run.ts",
+        "../../audit-runs/adapters/driven/db.js",
+      ],
+      ["impure", "services/svc/src/findings/application/score.ts", "Date.now"],
       ["lib-imports-feature", "services/svc/src/lib/util.ts", "../findings/index.js"],
-      ["outside-imports-feature-internal", "services/svc/src/index.ts", "./findings/store/repo.js"],
+      [
+        "outside-imports-feature-internal",
+        "services/svc/src/index.ts",
+        "./findings/application/helper.js",
+      ],
     ]);
   });
 
-  it("allows another feature's index.ts, the same feature, rules/ siblings and contracts", () => {
+  it("allows another feature's index.ts and the same zone's siblings", () => {
     const found = violations();
     const specifiers = found.map((v) => v.specifier);
     expect(specifiers).not.toContain("../../audit-runs/index.js");
-    expect(found.filter((v) => v.from.endsWith("flows/run.ts"))).toHaveLength(1);
+    expect(found.filter((v) => v.from.endsWith("application/run.ts"))).toHaveLength(2);
     expect(specifiers).not.toContain("./helper.js");
-    expect(specifiers).not.toContain("@acme/wire-contract");
   });
 
   it("judges a file outside every feature and lib: a feature's internal file is B4", () => {
@@ -88,9 +94,9 @@ describe("analyzeBoundaries over a real fixture's import edges", () => {
       {
         kind: "outside-imports-feature-internal",
         from: "services/svc/src/index.ts",
-        to: "services/svc/src/findings/store/repo.ts",
+        to: "services/svc/src/findings/application/helper.ts",
         toFeature: "findings",
-        specifier: "./findings/store/repo.js",
+        specifier: "./findings/application/helper.js",
         typeOnly: false,
       },
     ]);
@@ -101,14 +107,14 @@ describe("analyzeBoundaries over a real fixture's import edges", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("services/svc — features: audit-runs, findings");
     expect(stdout).toContain(
-      "B1 cross-feature       services/svc/src/findings/flows/run.ts -> services/svc/src/audit-runs/store/db.ts",
+      "B1 cross-feature       services/svc/src/findings/application/run.ts -> services/svc/src/audit-runs/adapters/driven/db.ts",
     );
     expect(stdout).toContain(
-      "B2 impure-rules        services/svc/src/findings/rules/score.ts -> zod",
+      "B7 impure              services/svc/src/findings/application/score.ts -> Date.now",
     );
     expect(stdout).toContain(
-      "B4 outside-imports-feature-internal services/svc/src/index.ts -> services/svc/src/findings/store/repo.ts" +
-        '  ("./findings/store/repo.js")',
+      "B4 outside-imports-feature-internal services/svc/src/index.ts -> services/svc/src/findings/application/helper.ts" +
+        '  ("./findings/application/helper.js")',
     );
   });
 
@@ -136,29 +142,29 @@ describe("the boundary ledger records each crossing and fails only when one is n
     const { entries } = ledgerOf(repo);
     expect(entries.map((e) => [e.kind, e.from, e.to ?? e.specifier])).toEqual([
       [
-        "cross-feature",
-        "services/svc/src/findings/flows/run.ts",
-        "services/svc/src/audit-runs/store/db.ts",
+        "application-imports-adapter",
+        "services/svc/src/findings/application/run.ts",
+        "services/svc/src/findings/adapters/driven/repo.ts",
       ],
       [
-        "impure-rules",
-        "services/svc/src/findings/rules/score.ts",
-        "services/svc/src/findings/store/repo.ts",
+        "cross-feature",
+        "services/svc/src/findings/application/run.ts",
+        "services/svc/src/audit-runs/adapters/driven/db.ts",
       ],
-      ["impure-rules", "services/svc/src/findings/rules/score.ts", "zod"],
+      ["impure", "services/svc/src/findings/application/score.ts", "Date.now"],
       ["lib-imports-feature", "services/svc/src/lib/util.ts", "services/svc/src/findings/index.ts"],
       [
         "outside-imports-feature-internal",
         "services/svc/src/index.ts",
-        "services/svc/src/findings/store/repo.ts",
+        "services/svc/src/findings/application/helper.ts",
       ],
     ]);
-    expect(entries.find((e) => e.specifier === "zod")).toEqual({
+    expect(entries.find((e) => e.specifier === "Date.now")).toEqual({
       scope: SCOPE,
-      kind: "impure-rules",
-      from: "services/svc/src/findings/rules/score.ts",
+      kind: "impure",
+      from: "services/svc/src/findings/application/score.ts",
       to: null,
-      specifier: "zod",
+      specifier: "Date.now",
       reason: "known debt",
     });
 
@@ -187,7 +193,7 @@ describe("the boundary ledger records each crossing and fails only when one is n
     repo.put("src/lib/util.ts", "export const util = 1;\n");
     repo.put(
       "src/lib/clock.ts",
-      "import { save } from '../audit-runs/store/db.js';\nexport const clock = save;\n",
+      "import { save } from '../audit-runs/adapters/driven/db.js';\nexport const clock = save;\n",
     );
     const { code, stdout } = repo.run({ ci: true, json: true });
     expect(code).toBe(1);
@@ -239,7 +245,7 @@ describe("the boundary ledger records each crossing and fails only when one is n
     accept("first");
     repo.put(
       "src/lib/clock.ts",
-      "import { save } from '../audit-runs/store/db.js';\nexport const clock = save;\n",
+      "import { save } from '../audit-runs/adapters/driven/db.js';\nexport const clock = save;\n",
     );
     expect(repo.run({ ci: true }).code).toBe(1);
     const { code, stdout } = accept("clock reads the store until #1");
@@ -313,12 +319,12 @@ describe("--migrate-ceilings seeds the ledger from the count file without loosen
   });
 
   it("refuses, writing nothing, when a scope crosses more than its recorded count", () => {
-    recordCount(4);
+    recordCount(3);
     const before = fs.readFileSync(repo.legacyFile, "utf8");
     const { code, errors } = repo.run({ migrateCeilings: true });
     expect(code).toBe(2);
     expect(errors.join("\n")).toContain(
-      "services/svc: 5 crossing(s) against a recorded ceiling of 4",
+      "services/svc: 4 crossing(s) against a recorded ceiling of 3",
     );
     expect(fs.existsSync(repo.ledgerFile)).toBe(false);
     expect(fs.readFileSync(repo.legacyFile, "utf8")).toBe(before);
@@ -340,21 +346,21 @@ describe("B4 judges an importer outside every declared feature and every lib fol
       compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true },
       include: ["src", "scripts"],
     }),
-    "src/billing/index.ts": "export { charge } from './flows/charge.js';\n",
-    "src/billing/flows/charge.ts":
-      "import { price } from '../rules/price.js';\nexport const charge = price;\n",
-    "src/billing/rules/price.ts": "export const price = 1;\n",
-    "src/billing/store/ledger.ts": "export const ledger = 1;\n",
+    "src/billing/index.ts": "export { charge } from './application/charge.js';\n",
+    "src/billing/application/charge.ts":
+      "import { price } from './price.js';\nexport const charge = price;\n",
+    "src/billing/application/price.ts": "export const price = 1;\n",
+    "src/billing/application/ledger.ts": "export const ledger = 1;\n",
     "src/main.ts": [
       "import { charge } from './billing/index.js';",
-      "import { ledger } from './billing/store/ledger.js';",
-      "import { price } from './billing/rules/price.js';",
+      "import { ledger } from './billing/application/ledger.js';",
+      "import { price } from './billing/application/price.js';",
       "export const main = charge + ledger + price;",
     ].join("\n"),
     "src/lib/clock.ts":
-      "import { ledger } from '../billing/store/ledger.js';\nexport const clock = ledger;\n",
+      "import { ledger } from '../billing/application/ledger.js';\nexport const clock = ledger;\n",
     "scripts/seed.ts":
-      "import { ledger } from '../src/billing/store/ledger.js';\nexport const seed = ledger;\n",
+      "import { ledger } from '../src/billing/application/ledger.js';\nexport const seed = ledger;\n",
   };
   let repo: BoundaryRepo;
 
@@ -368,21 +374,28 @@ describe("B4 judges an importer outside every declared feature and every lib fol
   beforeAll(() => {
     repo = boundaryRepo(OUTSIDE_SCOPE, OUTSIDE_FILES, {
       features: { [OUTSIDE_SCOPE]: ["billing"] },
-      layout: { [OUTSIDE_SCOPE]: "rules" },
     });
   });
   afterAll(() => repo.dispose());
 
-  it("allows the feature's index.ts and flags every other file, rules/ included, once per edge", () => {
+  it("allows the feature's index.ts and flags every other file, application/ included, once per edge", () => {
     expect(found().map((v) => [v.kind, v.from, v.specifier])).toEqual([
-      ["lib-imports-feature", "apps/web/src/lib/clock.ts", "../billing/store/ledger.js"],
+      ["lib-imports-feature", "apps/web/src/lib/clock.ts", "../billing/application/ledger.js"],
       [
         "outside-imports-feature-internal",
         "apps/web/scripts/seed.ts",
-        "../src/billing/store/ledger.js",
+        "../src/billing/application/ledger.js",
       ],
-      ["outside-imports-feature-internal", "apps/web/src/main.ts", "./billing/rules/price.js"],
-      ["outside-imports-feature-internal", "apps/web/src/main.ts", "./billing/store/ledger.js"],
+      [
+        "outside-imports-feature-internal",
+        "apps/web/src/main.ts",
+        "./billing/application/ledger.js",
+      ],
+      [
+        "outside-imports-feature-internal",
+        "apps/web/src/main.ts",
+        "./billing/application/price.js",
+      ],
     ]);
     expect(found().map((v) => v.specifier)).not.toContain("./billing/index.js");
   });
@@ -392,9 +405,9 @@ describe("B4 judges an importer outside every declared feature and every lib fol
       {
         kind: "lib-imports-feature",
         from: "apps/web/src/lib/clock.ts",
-        to: "apps/web/src/billing/store/ledger.ts",
+        to: "apps/web/src/billing/application/ledger.ts",
         toFeature: "billing",
-        specifier: "../billing/store/ledger.js",
+        specifier: "../billing/application/ledger.js",
         typeOnly: false,
       },
     ]);
@@ -407,7 +420,7 @@ describe("B4 judges an importer outside every declared feature and every lib fol
 
     repo.put(
       "src/extra.ts",
-      "import { ledger } from './billing/store/ledger.js';\nexport const extra = ledger;\n",
+      "import { ledger } from './billing/application/ledger.js';\nexport const extra = ledger;\n",
     );
     const { code, stdout } = repo.run({ ci: true });
     expect(code).toBe(1);
@@ -422,10 +435,9 @@ describe("the boundary declaration is parsed at the config boundary", () => {
   });
   afterAll(() => repo.dispose());
 
-  it("ships an empty feature map and no contract packages by default", () => {
+  it("ships an empty feature map by default", () => {
     const defaults = resolveBoundaryRules(undefined, () => {});
     expect(defaults?.features).toEqual({});
-    expect(defaults?.contracts).toEqual([]);
   });
 
   it("refuses a folder declared as both a feature and lib, or a path as a feature", () => {
@@ -452,7 +464,7 @@ function violationsOf(run: GateRun): BoundaryViolation[] {
   return parsed.scopes.flatMap((s) => s.violations);
 }
 
-// `[kind, file under <scope>/src, target under <scope>/src or the door or entry]`.
+// `[kind, file under <scope>/src, target under <scope>/src or the impure row or entry]`.
 function crossingsOf(scope: string, run: GateRun): string[][] {
   const root = `${scope}/src/`;
   return violationsOf(run).map((v) => [
@@ -465,9 +477,8 @@ function crossingsOf(scope: string, run: GateRun): string[][] {
 const entryLines = (stdout: string): string[] =>
   stdout.split("\n").filter((line) => line.startsWith("  services/"));
 
-describe("one scope moves to the hexagonal layout while another stays on rules/", () => {
+describe("a hexagonal scope lists every crossing, edge by edge", () => {
   const API = "services/api";
-  const LEGACY = "services/legacy";
   const FILES: Record<string, string> = {
     [`${API}/tsconfig.json`]: TSCONFIG,
     [`${API}/src/env.ts`]: "export const salt = process.env.SALT;\n",
@@ -526,26 +537,13 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
       'export const rpc = () => fetch("https://rpc.test");\n',
     [`${API}/src/shipping/adapters/driven/carrier.ts`]: "export const carrier = 1;\n",
     [`${API}/src/shipping/helpers.ts`]: "export const helper = 1;\n",
-    [`${LEGACY}/tsconfig.json`]: TSCONFIG,
-    [`${LEGACY}/src/cart/index.ts`]: "export { apply } from './application/apply.js';\n",
-    [`${LEGACY}/src/cart/rules/total.ts`]: "export const total = () => Date.now();\n",
-    [`${LEGACY}/src/cart/application/apply.ts`]:
-      "import { store } from '../adapters/driven/store.js';\nexport const apply = store;\n",
-    [`${LEGACY}/src/cart/adapters/driven/store.ts`]: "export const store = 1;\n",
   };
   const RULES = {
-    features: { [API]: ["billing", "orders", "users", "shipping"], [LEGACY]: ["cart"] },
+    features: { [API]: ["billing", "orders", "users", "shipping"] },
     lib: ["lib"],
-    layout: { [LEGACY]: "rules" },
-    doors: {
-      [API]: {
-        fetch: ["src/billing/adapters/driven/stripe.ts"],
-        "process.env": ["src/env.ts"],
-      },
-    },
   };
   const api = (file: string) => `${API}/src/${file}`;
-  const EIGHTEEN = [
+  const SIXTEEN = [
     [
       "application-imports-adapter",
       api("billing/application/charge.ts"),
@@ -557,10 +555,6 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
       api("orders/adapters/driving/http.ts"),
     ],
     ["cross-feature", api("orders/application/place.ts"), api("billing/adapters/driven/stripe.ts")],
-    ["door-outside-driven-adapter", api("orders/adapters/driving/http.ts"), "console"],
-    ["door-outside-driven-adapter", api("orders/index.ts"), "process.env"],
-    ["door-outside-driven-adapter", api("shipping/adapters/driving/rpc.ts"), "fetch"],
-    ["door-outside-owner", api("users/adapters/driven/db.ts"), "fetch"],
     [
       "driving-reaches-driven",
       api("orders/adapters/driving/http.ts"),
@@ -571,15 +565,17 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
       api("users/adapters/driving/cron.ts"),
       api("users/adapters/driven/db.ts"),
     ],
-    ["impure-application", api("billing/application/charge.ts"), "Date.now"],
-    ["impure-application", api("shipping/application/quote.ts"), "node:fs"],
-    ["impure-application", api("users/application/register.ts"), "crypto.randomUUID"],
-    ["impure-application", api("users/application/register.ts"), "process.env"],
+    ["impure", api("billing/application/charge.ts"), "Date.now"],
+    ["impure", api("orders/adapters/driving/http.ts"), "console"],
+    ["impure", api("orders/index.ts"), "process.env"],
+    ["impure", api("shipping/adapters/driving/rpc.ts"), "fetch"],
+    ["impure", api("shipping/application/quote.ts"), "node:fs"],
+    ["impure", api("users/application/register.ts"), "crypto.randomUUID"],
+    ["impure", api("users/application/register.ts"), "process.env"],
     ["outside-imports-feature-internal", api("main.ts"), api("users/application/register.ts")],
     ["unknown-zone", api("billing/domain"), "domain"],
     ["unknown-zone", api("orders/adapters/shared"), "adapters/shared"],
     ["unknown-zone", api("shipping/helpers.ts"), "helpers.ts"],
-    ["impure-rules", `${LEGACY}/src/cart/rules/total.ts`, "Date.now"],
   ];
 
   let repo: BoundaryRepo;
@@ -591,15 +587,15 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
   const ledgered = () =>
     ledgerOf(repo).entries.map((e) => [e.kind, e.from, ledgerTargetOf(e), e.reason]);
 
-  it("lists exactly the 18 crossings, gates on them, records them, and shrinks as they are fixed", () => {
+  it("lists exactly the 16 crossings, gates on them, records them, and shrinks as they are fixed", () => {
     const failed = repo.run({ ci: true });
     expect(failed.code).toBe(1);
-    expect(entryLines(failed.stdout)).toHaveLength(18);
+    expect(entryLines(failed.stdout)).toHaveLength(16);
     expect(failed.stdout).toContain(
-      "services/api  B9 door-outside-driven-adapter  services/api/src/orders/index.ts -> process.env\n",
+      "services/api  B7 impure  services/api/src/orders/index.ts -> process.env\n",
     );
     expect(failed.stdout).toContain(
-      "services/api  B7 impure-application  services/api/src/shipping/application/quote.ts -> node:fs\n",
+      "services/api  B7 impure  services/api/src/shipping/application/quote.ts -> node:fs\n",
     );
     expect(failed.stdout).toContain(
       "services/api  B6 application-imports-adapter  services/api/src/billing/application/charge.ts" +
@@ -613,20 +609,20 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
 
     const report = repo.run();
     expect(report.code).toBe(0);
-    expect(report.stdout.split("\n").filter((line) => /^ {2}B\d+ /.test(line))).toHaveLength(18);
+    expect(report.stdout.split("\n").filter((line) => /^ {2}B\d+ /.test(line))).toHaveLength(16);
     expect(
       violationsOf(repo.run({ json: true })).map((v) => [v.kind, v.from, ledgerTargetOf(v)]),
-    ).toEqual(EIGHTEEN);
+    ).toEqual(SIXTEEN);
 
-    const reason = "adopting the hexagonal layout";
+    const reason = "adopting the hexagonal zones";
     expect(repo.run({ acceptCrossings: true, reason }).code).toBe(0);
-    expect(ledgered()).toEqual(EIGHTEEN.map((row) => [...row, reason]));
+    expect(ledgered()).toEqual(SIXTEEN.map((row) => [...row, reason]));
     const seeded = ledgerText(repo);
     const first = repo.run({ ci: true });
     const second = repo.run({ ci: true });
     expect([first.code, second.code]).toEqual([0, 0]);
     expect(second.stdout).toBe(first.stdout);
-    expect(first.stdout).toContain("18 recorded crossing(s), none new");
+    expect(first.stdout).toContain("16 recorded crossing(s), none new");
     expect(ledgerText(repo)).toBe(seeded);
 
     repo.put(
@@ -646,7 +642,7 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
     expect(ledgerText(repo)).toBe(seeded);
 
     expect(repo.run({ acceptCrossings: true, reason: "cron reads users until #1" }).code).toBe(0);
-    expect(ledgerOf(repo).entries).toHaveLength(19);
+    expect(ledgerOf(repo).entries).toHaveLength(17);
     repo.put(
       `${API}/src/billing/application/charge.ts`,
       [
@@ -661,19 +657,12 @@ describe("one scope moves to the hexagonal layout while another stays on rules/"
     expect(entryLines(shrunk.stdout)).toEqual([
       "  services/api  B6 application-imports-adapter  services/api/src/billing/application/charge.ts" +
         ' -> services/api/src/billing/adapters/driven/stripe.ts  ("../adapters/driven/stripe.js")' +
-        "  — adopting the hexagonal layout",
+        "  — adopting the hexagonal zones",
     ]);
-    expect(ledgerOf(repo).entries).toHaveLength(18);
+    expect(ledgerOf(repo).entries).toHaveLength(16);
     const pruned = ledgerText(repo);
     expect(repo.run({ ci: true }).code).toBe(0);
     expect(ledgerText(repo)).toBe(pruned);
-  });
-
-  it("leaves the scope that opts out on rules/: application/ there is internal", () => {
-    const legacy = violationsOf(repo.run({ json: true })).filter((v) => v.from.startsWith(LEGACY));
-    expect(legacy.map((v) => [v.kind, v.from, v.specifier])).toEqual([
-      ["impure-rules", `${LEGACY}/src/cart/rules/total.ts`, "Date.now"],
-    ]);
   });
 });
 
@@ -717,16 +706,7 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
       "export const main = [log, env, other, port];",
     ].join("\n"),
   };
-  const RULES = {
-    features: { [SCOPE]: ["billing", "users"] },
-    layout: { [SCOPE]: "hexagonal" },
-    doors: {
-      [SCOPE]: {
-        "process.env": ["src/billing/adapters/driven/env.ts"],
-        "node:fs": ["src/billing/adapters/driven/files.ts"],
-      },
-    },
-  };
+  const RULES = { features: { [SCOPE]: ["billing", "users"] } };
   let repo: BoundaryRepo;
   beforeAll(() => {
     repo = boundaryRepo(SCOPE, FILES, RULES);
@@ -735,9 +715,8 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
 
   it("judges each zone by its own rule and nothing else", () => {
     expect(crossingsOf(SCOPE, repo.run({ json: true }))).toEqual([
-      ["door-outside-driven-adapter", "billing/adapters/driving/log.ts", "console"],
-      ["door-outside-owner", "billing/adapters/driven/leak.ts", "process.env"],
-      ["impure-application", "billing/application/disk.ts", "node:fs"],
+      ["impure", "billing/adapters/driving/log.ts", "console"],
+      ["impure", "billing/application/disk.ts", "node:fs"],
       ["lib-imports-feature", "lib/wire.ts", "billing/adapters/driven/env.ts"],
       ["lib-imports-feature", "lib/wire.ts", "billing/adapters/driving/log.ts"],
       ["outside-imports-feature-internal", "main.ts", "billing/application/other.ts"],
@@ -751,13 +730,12 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
     expect(found.filter((v) => v.from.endsWith("application/clean.ts"))).toEqual([]);
   });
 
-  it("reports a module door in application/ as impure-application alone, never also B5", () => {
+  it("reports a module opened in application/ as impure, once", () => {
     const found = violationsOf(repo.run({ json: true }));
     expect(found.filter((v) => v.from.endsWith("application/disk.ts"))).toEqual([
       {
-        kind: "impure-application",
+        kind: "impure",
         from: `${SCOPE}/src/billing/application/disk.ts`,
-        feature: "billing",
         to: null,
         specifier: "node:fs",
         typeOnly: false,
@@ -765,7 +743,7 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
     ]);
   });
 
-  it("judges an undeclared door in a driving adapter, and leaves a folder with no source silent", () => {
+  it("judges a driving adapter, never a driven one, and leaves a folder with no source silent", () => {
     const froms = violationsOf(repo.run({ json: true })).map((v) => v.from);
     expect(froms.some((from) => from.includes("driving/log.ts"))).toBe(true);
     expect(froms.some((from) => from.includes("assets"))).toBe(false);
@@ -773,15 +751,11 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
 
   it("labels the hexagonal kinds B6 to B10 in the human report", () => {
     const { stdout } = repo.run();
-    expect(stdout).toContain("B7 impure-application  packages/app/src/billing/application/disk.ts");
+    expect(stdout).toContain("B7 impure              packages/app/src/billing/application/disk.ts");
     expect(stdout).toContain("B10 unknown-zone        packages/app/src/billing/rules -> rules\n");
   });
 
-  it("counts B7 and B9 as door uses, and emits no key the rules/ kinds do not", () => {
-    expect(isDoorUse({ kind: "impure-application" })).toBe(true);
-    expect(isDoorUse({ kind: "door-outside-driven-adapter" })).toBe(true);
-    expect(isDoorUse({ kind: "application-imports-adapter" })).toBe(false);
-    expect(isDoorUse({ kind: "unknown-zone" })).toBe(false);
+  it("emits only the keys a violation is documented to carry", () => {
     const known = new Set([
       "kind",
       "from",
@@ -791,14 +765,13 @@ describe("the zones of a hexagonal feature, edge by edge", () => {
       "toFeature",
       "specifier",
       "typeOnly",
-      "global",
     ]);
     const keys = violationsOf(repo.run({ json: true })).flatMap((v) => Object.keys(v));
     expect(keys.filter((key) => !known.has(key))).toEqual([]);
   });
 });
 
-describe("the layout key is parsed at the config boundary", () => {
+describe("the rules file is parsed at the config boundary", () => {
   const SCOPE = "packages/app";
   const FILES: Record<string, string> = {
     "tsconfig.json": TSCONFIG,
@@ -806,6 +779,7 @@ describe("the layout key is parsed at the config boundary", () => {
     "src/billing/index.ts": "export const b = 1;\n",
     "src/billing/application/run.ts":
       "import { db } from '../adapters/driven/db.js';\nexport const run = db;\n",
+    "src/billing/application/now.ts": "export const now = Date.now();\n",
     "src/billing/adapters/driven/db.ts": "export const db = process.env.DB;\n",
   };
   const features = { [SCOPE]: ["billing"] };
@@ -835,74 +809,40 @@ describe("the layout key is parsed at the config boundary", () => {
     return messages[0] ?? "";
   };
 
-  it("refuses a layout for a scope that declares no features", () => {
-    expect(refused({ features, layout: { "packages/other": "hexagonal" } })).toBe(
-      '"layout" declares scope "packages/other", which declares no "features": a layout rides a ' +
-        "scope that declares features.",
+  it("refuses the keys that were deleted, naming each, with no alias", () => {
+    expect(refused({ features, layout: { [SCOPE]: "rules" } })).toContain("layout");
+    expect(refused({ features, contracts: ["@acme/wire-contract"] })).toContain("contracts");
+  });
+
+  it("lays out every scope that declares features as hexagonal", () => {
+    const run = repo.run({ rules: withRules({ features }), json: true });
+    expect(crossingsOf(SCOPE, run)).toEqual([
+      [
+        "application-imports-adapter",
+        "billing/application/run.ts",
+        "billing/adapters/driven/db.ts",
+      ],
+      ["impure", "billing/application/now.ts", "Date.now"],
+    ]);
+  });
+
+  it("adds each piece of advice to a failing gate only when a kind that needs it fails", () => {
+    const rules = withRules({ features });
+    const failed = repo.run({ rules, ci: true });
+    expect(failed.code).toBe(1);
+    expect(failed.stdout).toContain("In a hexagonal feature");
+    expect(failed.stdout).toContain("Reach the outside world");
+
+    repo.put("src/billing/application/run.ts", "export const run = 1;\n");
+    repo.put("src/billing/application/now.ts", "export const now = 1;\n");
+    repo.put(
+      "src/lib/wire.ts",
+      "import { run } from '../billing/application/run.js';\nexport const w = run;\n",
     );
-  });
-
-  it("refuses a layout other than rules or hexagonal", () => {
-    expect(refused({ features, layout: { [SCOPE]: "onion" } })).toContain("layout.packages/app");
-  });
-
-  it("refuses a door owner in a hexagonal zone that judges doors itself", () => {
-    const layout = { [SCOPE]: "hexagonal" };
-    const owners = [
-      ["src/billing/index.ts", "is src/billing/index.ts, where no door has an owner"],
-      ["src/billing/ports.ts", "is src/billing/ports.ts, where no door has an owner"],
-      ["src/billing/application/env.ts", "is under src/billing/application/, where no door"],
-      ["src/billing/adapters/driving/env.ts", "is under src/billing/adapters/driving/, where no"],
-    ];
-    for (const [owner, where] of owners) {
-      const message = refused({ features, layout, doors: { [SCOPE]: { "process.env": [owner] } } });
-      expect(message).toContain(
-        `owner "${owner}" of door "process.env" in "packages/app" ${where}`,
-      );
-      expect(message).toContain("adapters/driven/");
-    }
-  });
-
-  it("accepts a door owner under adapters/driven/ or outside every feature", () => {
-    const layout = { [SCOPE]: "hexagonal" };
-    for (const owner of ["src/billing/adapters/driven/db.ts", "src/env.ts"]) {
-      const file = withRules({ features, layout, doors: { [SCOPE]: { "process.env": [owner] } } });
-      const run = repo.run({ rules: file, json: true });
-      expect(run.errors).toEqual([]);
-      expect(run.code).toBe(0);
-    }
-  });
-
-  it("keeps a scope listed as rules on the rules/ layout, and lays out any other as hexagonal", () => {
-    const optedOut = repo.run({
-      rules: withRules({ features, layout: { [SCOPE]: "rules" } }),
-      json: true,
-    });
-    expect(optedOut.code).toBe(0);
-    expect(violationsOf(optedOut)).toEqual([]);
-    for (const rules of [{ features }, { features, layout: { [SCOPE]: "hexagonal" } }]) {
-      const run = repo.run({ rules: withRules(rules), json: true });
-      expect(crossingsOf(SCOPE, run)).toEqual([
-        [
-          "application-imports-adapter",
-          "billing/application/run.ts",
-          "billing/adapters/driven/db.ts",
-        ],
-      ]);
-    }
-  });
-
-  it("adds the hexagonal advice to a failing gate only when a hexagonal kind fails", () => {
-    const doors = { [SCOPE]: { "process.env": ["src/env.ts"] } };
-    const onRules = repo.run({
-      rules: withRules({ features, doors, layout: { [SCOPE]: "rules" } }),
-      ci: true,
-    });
-    expect(onRules.code).toBe(1);
-    expect(onRules.stdout).toContain("B5 door-outside-owner");
-    expect(onRules.stdout).not.toContain("hexagonal");
-    const onHexagonal = repo.run({ rules: withRules({ features, doors }), ci: true });
-    expect(onHexagonal.code).toBe(1);
-    expect(onHexagonal.stdout).toContain("In a hexagonal feature");
+    const featureOnly = repo.run({ rules: withRules({ features, lib: ["lib"] }), ci: true });
+    expect(featureOnly.code).toBe(1);
+    expect(featureOnly.stdout).toContain("B3 lib-imports-feature");
+    expect(featureOnly.stdout).not.toContain("In a hexagonal feature");
+    expect(featureOnly.stdout).not.toContain("Reach the outside world");
   });
 });

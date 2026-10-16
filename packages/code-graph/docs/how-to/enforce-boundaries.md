@@ -21,8 +21,7 @@ with your project's directories:
 ```
 
 Declared features use `index.ts`, `ports.ts`, `application/`,
-`adapters/driving/`, and `adapters/driven/`. For an existing `rules/` layout,
-add `"layout": { "packages/app": "rules" }`.
+`adapters/driving/`, and `adapters/driven/`.
 
 ## 2. Inspect current crossings
 

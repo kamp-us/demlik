@@ -106,8 +106,8 @@ function indexById(
  * exporting it is not the module declaring it — which is what EVERY entry point
  * that re-exports another entry point's symbol produces. Read as-is, such a row
  * renders "Reference" with an empty summary: the reader is told the name exists
- * and nothing else, and the page silently got worse the moment a door opened
- * over a module another door already carried (#205).
+ * and nothing else, and the page silently got worse the moment a subpath opened
+ * over a module another subpath already carried (#205).
  *
  * A re-export is the same declaration reached by another path, so the row
  * renders the TARGET's kind and TSDoc under the name the module exports it as.

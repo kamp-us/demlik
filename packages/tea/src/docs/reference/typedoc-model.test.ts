@@ -87,7 +87,7 @@ describe("parseTypedocModel — the symbol comment fallback", () => {
 /**
  * A project where `index` re-exports a symbol another module declares — what
  * typedoc emits for every entry point that re-exports another entry point's
- * symbol, and therefore what every door over `src/internal/` produces.
+ * symbol, and therefore what every subpath over `src/internal/` produces.
  */
 const projectWithReference = (
   target: number,

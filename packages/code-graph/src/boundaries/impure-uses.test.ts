@@ -1,29 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { sourceUnit } from "../test-helpers/source-unit.js";
-import { type DoorUse, detectDoorUses } from "./door-uses.js";
 import {
-  DOOR_ROWS,
-  DOORS,
-  type DoorName,
-  type DoorRowName,
-  declaredDoorOf,
-  moduleDoorOf,
-  moduleDoorsOpened,
-  pathDoorOf,
-} from "./doors.js";
+  IMPURE_GLOBALS,
+  IMPURE_ROWS,
+  type ImpureName,
+  type ImpureRowName,
+  impureModuleOf,
+  impureModulesOpened,
+  impurePathOf,
+} from "./impure.js";
+import { detectImpureUses, type ImpureUse } from "./impure-uses.js";
 
-const usesOf = (source: string): DoorUse[] => detectDoorUses(sourceUnit(source).syntax);
-const doorsOf = (source: string): DoorName[] => [...new Set(usesOf(source).map((u) => u.door))];
+const usesOf = (source: string): ImpureUse[] => detectImpureUses(sourceUnit(source).syntax);
+const namesOf = (source: string): ImpureName[] => [...new Set(usesOf(source).map((u) => u.name))];
 
-// One case per catalog row. `satisfies Record<DoorRowName, …>` makes a new row in `DOORS` fail to
+// One case per catalog row. `satisfies Record<ImpureRowName, …>` makes a new row in `IMPURE_GLOBALS` fail to
 // compile until it has a case here, and the shape check below keeps a case honest about how its
-// door is read: from the syntax tree, from an import edge, or, for a family row, from the syntax
-// tree with each use naming the member door it falls under.
-type DoorCase =
+// row is read: from the syntax tree, from an import edge, or, for a family row, from the syntax
+// tree with each use naming the member it falls under.
+type RowCase =
   | { readonly via: "syntax"; readonly uses: readonly string[]; readonly pure: readonly string[] }
   | {
       readonly via: "members";
-      // Every door a source reads: `globalThis.process.platform` is a use of `globalThis` too.
+      // Every row a source reads: `globalThis.process.platform` is a use of `globalThis` too.
       readonly uses: Readonly<Record<string, readonly string[]>>;
       readonly pure: readonly string[];
     }
@@ -168,7 +167,7 @@ const CASES = {
     uses: ["node:child_process", "child_process", "node:child_process/foo"],
     pure: ["child_process_x", "execa"],
   },
-} as const satisfies Record<DoorRowName, DoorCase>;
+} as const satisfies Record<ImpureRowName, RowCase>;
 
 const edge = (specifier: string, over: { target?: string | null; typeOnly?: boolean } = {}) => ({
   specifier,
@@ -178,21 +177,21 @@ const edge = (specifier: string, over: { target?: string | null; typeOnly?: bool
 
 const VIA = { path: "syntax", "bare-new": "syntax", members: "members", module: "edge" } as const;
 
-describe("the door catalog is one table that every consumer reads", () => {
-  it("has a case for every row, and each case reads its door the way the table says", () => {
-    expect(Object.keys(CASES).sort()).toEqual([...DOOR_ROWS].sort());
-    for (const name of DOOR_ROWS) {
-      expect(CASES[name].via, name).toBe(VIA[DOORS[name].shape]);
+describe("IMPURE_GLOBALS is one table that every consumer reads", () => {
+  it("has a case for every row, and each case reads its row the way the table says", () => {
+    expect(Object.keys(CASES).sort()).toEqual([...IMPURE_ROWS].sort());
+    for (const name of IMPURE_ROWS) {
+      expect(CASES[name].via, name).toBe(VIA[IMPURE_GLOBALS[name].shape]);
     }
   });
 
   it("holds one row for `process.<member>`, not a row per member", () => {
-    expect(DOOR_ROWS.filter((name) => name.startsWith("process."))).toEqual(["process.<member>"]);
+    expect(IMPURE_ROWS.filter((name) => name.startsWith("process."))).toEqual(["process.<member>"]);
   });
 
   it("holds no row whose prefix is a prefix of another's, so a use falls under exactly one", () => {
-    const prefixes = DOOR_ROWS.flatMap((name) => {
-      const row = DOORS[name];
+    const prefixes = IMPURE_ROWS.flatMap((name) => {
+      const row = IMPURE_GLOBALS[name];
       if (row.shape === "path") return [name.split(".")];
       return row.shape === "members" ? [[row.of]] : [];
     });
@@ -205,26 +204,26 @@ describe("the door catalog is one table that every consumer reads", () => {
     }
   });
 
-  for (const name of DOOR_ROWS) {
+  for (const name of IMPURE_ROWS) {
     const row = CASES[name];
     it(`reads ${name} and only ${name}`, () => {
       switch (row.via) {
         case "syntax":
-          for (const source of row.uses) expect(doorsOf(source), source).toEqual([name]);
-          for (const source of row.pure) expect(doorsOf(source), source).toEqual([]);
+          for (const source of row.uses) expect(namesOf(source), source).toEqual([name]);
+          for (const source of row.pure) expect(namesOf(source), source).toEqual([]);
           return;
         case "members":
-          for (const [source, doors] of Object.entries(row.uses)) {
-            expect(doorsOf(source).sort(), source).toEqual([...doors].sort());
+          for (const [source, names] of Object.entries(row.uses)) {
+            expect(namesOf(source).sort(), source).toEqual([...names].sort());
           }
-          for (const source of row.pure) expect(doorsOf(source), source).toEqual([]);
+          for (const source of row.pure) expect(namesOf(source), source).toEqual([]);
           return;
         case "edge":
           for (const specifier of row.uses) {
-            expect(moduleDoorOf(edge(specifier)), specifier).toBe(name);
+            expect(impureModuleOf(edge(specifier)), specifier).toBe(name);
           }
           for (const specifier of row.pure) {
-            expect(moduleDoorOf(edge(specifier)), specifier).toBeNull();
+            expect(impureModuleOf(edge(specifier)), specifier).toBeNull();
           }
           return;
         default: {
@@ -236,36 +235,36 @@ describe("the door catalog is one table that every consumer reads", () => {
   }
 });
 
-describe("every member of process is a door, named by the member", () => {
+describe("every member of process is its own row, named by the member", () => {
   it("keeps the seven names the catalog once listed row by row, so an old ledger gates unchanged", () => {
     for (const member of ["env", "argv", "stdin", "stdout", "stderr", "exit", "cwd"]) {
-      expect(doorsOf(`process.${member};`), member).toEqual([`process.${member}`]);
+      expect(namesOf(`process.${member};`), member).toEqual([`process.${member}`]);
     }
   });
 
-  it("is one door per member however deep the read goes, and two for two members", () => {
-    expect(doorsOf("process.hrtime(); process.hrtime.bigint();")).toEqual(["process.hrtime"]);
+  it("is one row per member however deep the read goes, and two for two members", () => {
+    expect(namesOf("process.hrtime(); process.hrtime.bigint();")).toEqual(["process.hrtime"]);
     expect(
       usesOf("process.hrtime(); process.hrtime.bigint();").map((u) => u.path.join(".")),
     ).toEqual(["process.hrtime", "process.hrtime.bigint"]);
-    expect(doorsOf("process.hrtime(); process.platform;").sort()).toEqual([
+    expect(namesOf("process.hrtime(); process.platform;").sort()).toEqual([
       "process.hrtime",
       "process.platform",
     ]);
   });
 
-  it("names a member only when the file does: a bare `process` or `process[k]` is no door", () => {
-    expect(pathDoorOf(["process"])).toBeNull();
-    expect(pathDoorOf(["process", "hrtime", "bigint"])).toBe("process.hrtime");
-    expect(doorsOf("run(process); const p = process; process[k]();")).toEqual([]);
+  it("names a member only when the file does: a bare `process` or `process[k]` names no row", () => {
+    expect(impurePathOf(["process"])).toBeNull();
+    expect(impurePathOf(["process", "hrtime", "bigint"])).toBe("process.hrtime");
+    expect(namesOf("run(process); const p = process; process[k]();")).toEqual([]);
   });
 });
 
 describe("what process.env is", () => {
-  it("is one door however it is spelled, and `globalThis.process.env.CI` is also a use of globalThis", () => {
-    expect(doorsOf("globalThis.process.env.CI;").sort()).toEqual(["globalThis", "process.env"]);
-    expect(doorsOf("globalThis.fetch('u');").sort()).toEqual(["fetch", "globalThis"]);
-    expect(doorsOf("globalThis.globalThis.Math.random();").sort()).toEqual([
+  it("is one row however it is spelled, and `globalThis.process.env.CI` is also a use of globalThis", () => {
+    expect(namesOf("globalThis.process.env.CI;").sort()).toEqual(["globalThis", "process.env"]);
+    expect(namesOf("globalThis.fetch('u');").sort()).toEqual(["fetch", "globalThis"]);
+    expect(namesOf("globalThis.globalThis.Math.random();").sort()).toEqual([
       "Math.random",
       "globalThis",
     ]);
@@ -283,16 +282,16 @@ describe("what process.env is", () => {
   });
 
   it("still reads the expressions it could not follow", () => {
-    expect(doorsOf("a[process.env.K].b[Math.random()];").sort()).toEqual([
+    expect(namesOf("a[process.env.K].b[Math.random()];").sort()).toEqual([
       "Math.random",
       "process.env",
     ]);
-    expect(doorsOf("const { [process.argv[0]]: x } = o;")).toEqual(["process.argv"]);
+    expect(namesOf("const { [process.argv[0]]: x } = o;")).toEqual(["process.argv"]);
   });
 
   it("is not what scanEnvKeys calls an env receiver: only the real, unbound `process.env` counts", () => {
-    expect(doorsOf("c.env.X; const { X } = env; env.Y; ctx.process.env.Z;")).toEqual([]);
-    expect(doorsOf("const { X }: Env = e;")).toEqual([]);
+    expect(namesOf("c.env.X; const { X } = env; env.Y; ctx.process.env.Z;")).toEqual([]);
+    expect(namesOf("const { X }: Env = e;")).toEqual([]);
   });
 });
 
@@ -327,19 +326,19 @@ describe("a name the file binds itself is not the global", () => {
       `const run = function ${root}() {};`,
     ];
     it(`${root}: an injected or imported ${root} is the pure pattern`, () => {
-      for (const binder of binders) expect(doorsOf(`${binder}\n${USE[root]}`), binder).toEqual([]);
+      for (const binder of binders) expect(namesOf(`${binder}\n${USE[root]}`), binder).toEqual([]);
     });
     it(`${root}: a bare \`declare\` types the real global and does not shadow it`, () => {
-      expect(doorsOf(`declare const ${root}: Thing;\n${USE[root]}`).length).toBeGreaterThan(0);
+      expect(namesOf(`declare const ${root}: Thing;\n${USE[root]}`).length).toBeGreaterThan(0);
     });
   }
 
   it("fails open on a file that rebinds a name in one function and uses the real one in another", () => {
-    expect(doorsOf("const f = (fetch: F) => fetch('u');\nconst g = () => fetch('v');")).toEqual([]);
+    expect(namesOf("const f = (fetch: F) => fetch('u');\nconst g = () => fetch('v');")).toEqual([]);
   });
 });
 
-describe("what is not a use of a door", () => {
+describe("what is not an impure use", () => {
   it("a type position reads nothing at run time", () => {
     const types = [
       "type Env = typeof process.env;",
@@ -350,13 +349,13 @@ describe("what is not a use of a door", () => {
       "class A implements B<typeof console> {}",
       "let t: typeof globalThis;",
     ];
-    for (const source of types) expect(doorsOf(source), source).toEqual([]);
+    for (const source of types) expect(namesOf(source), source).toEqual([]);
   });
 
   it("an assertion's operand is still read", () => {
-    expect(doorsOf("const x = process.env as Env;")).toEqual(["process.env"]);
-    expect(doorsOf("const x = <Env>process.env;")).toEqual(["process.env"]);
-    expect(doorsOf("const x = (process.env satisfies Env);")).toEqual(["process.env"]);
+    expect(namesOf("const x = process.env as Env;")).toEqual(["process.env"]);
+    expect(namesOf("const x = <Env>process.env;")).toEqual(["process.env"]);
+    expect(namesOf("const x = (process.env satisfies Env);")).toEqual(["process.env"]);
   });
 
   it("a property, method, label or export name is a name and not a read", () => {
@@ -369,40 +368,40 @@ describe("what is not a use of a door", () => {
       "import.meta.env.X;",
       "export { local as fetch };",
     ];
-    for (const source of names) expect(doorsOf(source), source).toEqual([]);
+    for (const source of names) expect(namesOf(source), source).toEqual([]);
   });
 
   it("a computed key is an expression and is read", () => {
-    expect(doorsOf("const o = { [Date.now()]: 1 };")).toEqual(["Date.now"]);
-    expect(doorsOf("class A { [Math.random()]() {} }")).toEqual(["Math.random"]);
+    expect(namesOf("const o = { [Date.now()]: 1 };")).toEqual(["Date.now"]);
+    expect(namesOf("class A { [Math.random()]() {} }")).toEqual(["Math.random"]);
   });
 
   it("follows no data flow: an alias or a require is not tracked", () => {
-    expect(doorsOf("const p = process; p.env.X;")).toEqual([]);
-    expect(doorsOf("import process from 'node:process'; process.env.X;")).toEqual([]);
-    expect(doorsOf("const { env } = require('node:process'); env.X;")).toEqual([]);
+    expect(namesOf("const p = process; p.env.X;")).toEqual([]);
+    expect(namesOf("import process from 'node:process'; process.env.X;")).toEqual([]);
+    expect(namesOf("const { env } = require('node:process'); env.X;")).toEqual([]);
   });
 
   it("reads code inside a namespace, a parameter default and a template", () => {
-    expect(doorsOf("namespace N { export const t = Date.now(); }")).toEqual(["Date.now"]);
-    expect(doorsOf("const f = ({ X } = process.env) => X;")).toEqual(["process.env"]);
-    expect(doorsOf("class A { constructor(private t = Math.random()) {} }")).toEqual([
+    expect(namesOf("namespace N { export const t = Date.now(); }")).toEqual(["Date.now"]);
+    expect(namesOf("const f = ({ X } = process.env) => X;")).toEqual(["process.env"]);
+    expect(namesOf("class A { constructor(private t = Math.random()) {} }")).toEqual([
       "Math.random",
     ]);
   });
 
   it("reads a destructuring assignment, and not a rest element or a computed key", () => {
-    expect(doorsOf("let x; ({ X: x } = process.env);")).toEqual(["process.env"]);
+    expect(namesOf("let x; ({ X: x } = process.env);")).toEqual(["process.env"]);
     expect(usesOf("const { ...rest } = process;")).toEqual([]);
     expect(usesOf("const { [k]: v } = process;")).toEqual([]);
   });
 });
 
-describe("a module door is an import edge that opens something", () => {
+describe("a module row is an import edge that opens something", () => {
   it("a type-only import, or one that resolves to a file of the scope, opens nothing", () => {
-    expect(moduleDoorOf(edge("node:fs", { typeOnly: true }))).toBeNull();
-    expect(moduleDoorOf(edge("fs", { target: "src/fs.ts" }))).toBeNull();
-    expect(moduleDoorOf(edge("node:fs"))).toBe("node:fs");
+    expect(impureModuleOf(edge("node:fs", { typeOnly: true }))).toBeNull();
+    expect(impureModuleOf(edge("fs", { target: "src/fs.ts" }))).toBeNull();
+    expect(impureModuleOf(edge("node:fs"))).toBe("node:fs");
   });
 
   it("opens only what a runtime import names, because one edge stands for every literal of a specifier", () => {
@@ -411,28 +410,17 @@ describe("a module door is an import edge that opens something", () => {
       edge("node:child_process"),
       edge("fs", { target: "src/fs.ts" }),
     ];
-    expect(moduleDoorsOpened(edges, new Set())).toEqual([]);
-    expect(moduleDoorsOpened(edges, new Set(["node:fs", "fs"]))).toEqual(["node:fs"]);
+    expect(impureModulesOpened(edges, new Set())).toEqual([]);
+    expect(impureModulesOpened(edges, new Set(["node:fs", "fs"]))).toEqual(["node:fs"]);
   });
 });
 
-describe("a use belongs to the most specific declared door that is a path prefix of it", () => {
+describe("a use falls under the row whose path is its prefix", () => {
   const stdin = ["process", "stdin", "isTTY"];
 
-  it("picks the deepest declaration, and none when nothing declared is a prefix", () => {
-    expect(declaredDoorOf(stdin, ["process.stdin", "process.stdin.isTTY"])).toBe(
-      "process.stdin.isTTY",
-    );
-    expect(declaredDoorOf(stdin, ["process.stdin"])).toBe("process.stdin");
-    expect(declaredDoorOf(["process", "stdin", "on"], ["process.stdin.isTTY"])).toBeNull();
-    expect(declaredDoorOf(["process", "stdinX"], ["process.stdin"])).toBeNull();
-    expect(declaredDoorOf(["node:fs"], ["node:fs"])).toBe("node:fs");
-    expect(declaredDoorOf(["new Date()"], ["new Date()"])).toBe("new Date()");
-  });
-
-  it("falls under the catalog door whose path is its prefix", () => {
-    expect(pathDoorOf(stdin)).toBe("process.stdin");
-    expect(pathDoorOf(["process", "platform"])).toBe("process.platform");
-    expect(pathDoorOf(["Date"])).toBeNull();
+  it("falls under the row whose path is its prefix", () => {
+    expect(impurePathOf(stdin)).toBe("process.stdin");
+    expect(impurePathOf(["process", "platform"])).toBe("process.platform");
+    expect(impurePathOf(["Date"])).toBeNull();
   });
 });

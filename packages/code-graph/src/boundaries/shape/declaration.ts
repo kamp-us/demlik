@@ -1,10 +1,10 @@
 import { GlobSyntaxError, globToRegExp } from "../../kinds/glob.js";
-import { type BoundaryRules, featureFileOf, layoutOf, scopeZoning } from "../rules.js";
+import { type BoundaryRules, featureFileOf, scopeZoning } from "../rules.js";
 
 const B16 = "application-import-outside-allowlist";
 
 // A key that narrows B16 does nothing while B16 is off, and a key that enforces nothing silently is
-// the failure a mistyped door was: the rules file says so, once.
+// the failure a mistyped key is: the rules file says so, once.
 function narrowsOffKind(rules: BoundaryRules): string[] {
   if (rules.applicationShape.includes(B16)) return [];
   const narrowing = {
@@ -47,16 +47,11 @@ function globIssues(key: string, globs: readonly string[]): string[] {
 // A scope these keys ride declares features, laid out in the hexagonal zones they judge.
 function scopeIssues(rules: BoundaryRules, key: string, scopes: readonly string[]): string[] {
   return scopes.flatMap((scope) => {
-    if (rules.features[scope] === undefined) {
-      return [
-        `"${key}" declares scope "${scope}", which declares no "features": it rides a scope that declares features.`,
-      ];
-    }
-    return layoutOf(rules, scope) === "hexagonal"
-      ? []
-      : [
-          `"${key}" declares scope "${scope}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
-        ];
+    return rules.features[scope] === undefined
+      ? [
+          `"${key}" declares scope "${scope}", which declares no "features": it rides a scope that declares features.`,
+        ]
+      : [];
   });
 }
 

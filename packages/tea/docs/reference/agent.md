@@ -104,7 +104,7 @@ These are the ones to read first:
 | [`InterpretOverlay`](#InterpretOverlay) | Type | experimental | One decorator per interpret cell you name: it receives the cell the agent wired (`next`) and returns the cell that runs in its place. |
 | [`isAgentTurn`](#isAgentTurn) | Function | experimental | Narrow an unknown to an `AgentTurn` — the runtime witness for tea's own structured-output type. |
 | [`isCompactionSummary`](#isCompactionSummary) | Function | experimental | Narrow an unknown to a CompactionSummary — the runtime witness for the compaction call's structured output. |
-| [`isReservedToolName`](#isReservedToolName) | Function | experimental | Whether `name` is one a tool door refuses — the set `ReservedToolName` types. |
+| [`isReservedToolName`](#isReservedToolName) | Function | experimental | Whether `name` is one a tool constructor refuses — the set `ReservedToolName` types. |
 | [`isStreamingModel`](#isStreamingModel) | Function | experimental | Whether a model port wants the ModelStream — read off its declared arity, which is the mark JavaScript already carries. |
 | [`isTurnUsage`](#isTurnUsage) | Function | experimental | Narrow an unknown to a TurnUsage — the two required counts present, and each optional one either absent or a count too. |
 | [`LidPurpose`](#LidPurpose) | Type | experimental | The one purpose a `defineAgent` agent runs. |
@@ -1492,7 +1492,7 @@ interface DefineAgentConfig<T extends AnyToolDef> {
 interface DefinedAgent<T extends AnyToolDef> {
   /**
    * The machine `run` drives for `input` and the interpret table it runs under
-   * — the door down to the raw kernel.
+   * — the way down to the raw kernel.
    */
   readonly machine: (input: string) => DefinedAgentWired<T>;
   /**
@@ -1531,7 +1531,7 @@ interface DefinedAgent<T extends AnyToolDef> {
    * The wrapped cell settles through the SAME typed Cmd→Msg edge as the cell it
    * wraps — it returns whatever `next` returned — so the reducer folds the same
    * Msgs and a replay of a wrapped run is the unwrapped run's replay. That is
-   * the whole contract: the door is one over the effect boundary, never over
+   * the whole contract: the wrapper is one over the effect boundary, never over
    * the fold. A cell that must settle DIFFERENTLY is a different machine, and
    * `createAgent` is still where you build one.
    *

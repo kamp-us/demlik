@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // `fc.Arbitrary<...>` builders for Msg variants, Msg sequences, and Ctx stubs —
-// published on the `@demlik/tea/pbt` door, which re-exports this barrel.
+// published on the `@demlik/tea/pbt` subpath, which re-exports this barrel.
 // ---------------------------------------------------------------------------
 
 export { stubCtxThrowingProxy } from "./ctx";

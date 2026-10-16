@@ -1,6 +1,6 @@
 import type { ImportEdge } from "../../schema.js";
 import { isRelativeName } from "../../syntax/imports.js";
-import { moduleDoorsOpened } from "../doors.js";
+import { impureModulesOpened } from "../impure.js";
 import {
   importedFromOutside,
   importTargetOf,
@@ -49,7 +49,7 @@ function outsideFile(
     case "elsewhere":
       return { to: target };
     case "feature":
-      // Another feature's front door: its internals were B1's. Its own zones are an allowlist.
+      // Another feature's index.ts: its internals were B1's. Its own zones are an allowlist.
       if (place.feature !== file.feature) return null;
       return file.own.includes(place.zone.name) ? null : { to: target };
     default: {
@@ -73,15 +73,15 @@ function outsidePackage(world: ApplicationWorld, specifier: string): Outside | n
 }
 
 // What is left of an import once the kinds that judge a part of it have had theirs: B1 and B6
-// (`judged`), and B7 for a module door the file opens when it runs. A type-only import of `node:fs`
-// opens nothing, so it stays here.
+// (`judged`), and B7 for a module of `IMPURE_GLOBALS` the file opens when it runs. A type-only
+// import of `node:fs` opens nothing, so it stays here.
 function outsideOf(
   file: ApplicationFile,
   world: ApplicationWorld,
   edge: ImportEdge,
 ): Outside | null {
   if (file.judged.has(edge)) return null;
-  if (moduleDoorsOpened([edge], file.runtimeSpecifiers).length > 0) return null;
+  if (impureModulesOpened([edge], file.runtimeSpecifiers).length > 0) return null;
   return edge.target === null
     ? outsidePackage(world, edge.specifier)
     : outsideFile(file, world, edge.target);

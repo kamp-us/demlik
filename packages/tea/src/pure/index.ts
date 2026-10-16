@@ -1,8 +1,8 @@
 /**
  * The client-safe barrel (ADR 0006, #213).
  *
- * The `/pure` DOOR closed in the #51 sweep and its parts moved onto the root
- * `@demlik/tea` door (ADR 0016). What closed was the specifier; the boundary
+ * The `/pure` SUBPATH closed in the #51 sweep and its parts moved onto the root
+ * `@demlik/tea` entry (ADR 0016). What closed was the specifier; the boundary
  * this file names is unchanged and still enforced below.
  *
  * This is the surface for code that must NOT drag the runtime (`run`,

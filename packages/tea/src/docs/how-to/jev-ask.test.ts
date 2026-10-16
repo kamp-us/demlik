@@ -431,7 +431,7 @@ describe("docs/how-to/ask-jev-a-typed-question.md (#219) — it runs", () => {
       kind: "booked",
       category: "dining",
     });
-    // The trace is what the loop could not express: the door was asked EXACTLY
+    // The trace is what the loop could not express: the ask was made EXACTLY
     // once, so the booked verdict is a first-attempt answer and not a retry.
     expect(trace.filter((entry) => entry.kind === "cmd")).toHaveLength(1);
   });

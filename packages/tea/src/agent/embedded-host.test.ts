@@ -12,7 +12,7 @@ import {
 
 // ---------------------------------------------------------------------------
 // #355 — a host that embeds the agent's verbs in a machine of its own. The
-// agent's outbox is emptied only on the way into one of its doors, so a Msg the
+// agent's outbox is emptied only on the way into one of its verbs, so a Msg the
 // host folds itself leaves the previous agent transition's notes standing.
 // `agentEvents` must not project them a second time.
 // ---------------------------------------------------------------------------

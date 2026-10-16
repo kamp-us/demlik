@@ -2,7 +2,7 @@
  * internal/prediction — the client-prediction ack primitive (epic #186, facet 2).
  * Internal since #49 — not published on any subpath of its own; the
  * client-safe barrel `src/pure/` re-exports the public surface, and the root
- * `@demlik/tea` door publishes it.
+ * `@demlik/tea` entry publishes it.
  *
  * The contract the Gambetta/Valve authoritative-server netcode loop needs:
  * **command-seq-in → last-applied-seq-out.** A client tags each predicted

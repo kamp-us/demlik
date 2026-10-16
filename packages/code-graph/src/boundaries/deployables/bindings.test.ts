@@ -42,7 +42,6 @@ const WORKER = {
 
 const RULES = {
   features: { "services/api": ["orders"] },
-  layout: { "services/api": "hexagonal" },
   acrossDeployables: ["binding-outside-driven-adapter"],
 };
 
@@ -174,18 +173,8 @@ describe("B17 binding-outside-driven-adapter", () => {
     );
   });
 
-  it("judges a feature of a scope that lays out `rules/` as outside every driven adapter", () => {
-    const rules = { ...RULES, layout: { [API]: "rules" } };
-    const files = {
-      [`${ORDERS}/adapters/driven/use.ts`]: "export const u = (env: Env) => env.DB.prepare('a');\n",
-    };
-    expect(bindingsOf(open(files, rules).run({ json: true }))).toEqual([
-      [`${ORDERS}/adapters/driven/use.ts`, "DB"],
-    ]);
-  });
-
   it("holds a file under no worker config to have no binding", () => {
-    const rules = { ...RULES, features: { tools: ["x"] }, layout: { tools: "hexagonal" } };
+    const rules = { ...RULES, features: { tools: ["x"] } };
     const files = {
       "tools/src/x/application/use.ts": 'export const u = (env: Env) => env.DB.prepare("a");\n',
     };

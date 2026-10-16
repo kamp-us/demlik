@@ -81,11 +81,11 @@ receives one to deliver what it observes.
 Reference: [`RunHandle`](./reference/tea.md#RunHandle). Why:
 [Cmd or Sub](./explanation/cmd-or-sub.md).
 
-## door
+## subpath
 
 A published import path: one subpath of the package's export map, such as
-`@demlik/tea/promise` or `@demlik/tea/jev`. The root door is `@demlik/tea`
-itself. Each door carries one tier.
+`@demlik/tea/promise` or `@demlik/tea/jev`. The root entry is `@demlik/tea`
+itself. Each subpath carries one tier.
 Reference: [the module list, by tier](./reference/index.md). Why:
 [what each import is allowed to do to you](./explanation/export-tiers.md).
 

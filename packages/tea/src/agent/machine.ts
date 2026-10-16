@@ -582,7 +582,7 @@ export function agentEvents<
   const tools = opts?.tools;
   // The outboxes this projector has already projected (#355). A transition
   // that notes anything builds a fresh outbox array, and one that enters an
-  // agent door with a non-empty outbox empties it into a fresh one, so an
+  // agent verb with a non-empty outbox empties it into a fresh one, so an
   // outbox array belongs to exactly one transition. A host that embeds the
   // verbs and folds a Msg of its own leaves the agent slice — and so this
   // array — untouched, and it must not project the same notes again.

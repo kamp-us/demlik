@@ -28,7 +28,6 @@ export const SHOP_LIBRARIES = {
 
 export const SHOP_RULES = {
   features: { "services/api": ["orders", "billing"] },
-  layout: { "services/api": "hexagonal" },
   libraryRoots: ["packages"],
   libraryTypes: SHOP_TYPES,
   libraries: SHOP_LIBRARIES,
@@ -55,7 +54,7 @@ const lines = (...source: string[]): string => `${source.join("\n")}\n`;
 
 // What the issue plants: the clean files that must produce nothing, and the twelve crossings that
 // must be listed exactly: one `library-undeclared` (`packages/scratch`), four `library-imports-up`,
-// four `impure-library` and three `adapter-library-imported-outside-driven`.
+// four `impure` and three `adapter-library-imported-outside-driven`.
 export const SHOP_SOURCES: Record<string, string> = {
   "packages/orders-contract/src/index.ts": lines(
     'import { b } from "@shop/billing-contract";',
@@ -136,17 +135,17 @@ export const SHOP_SOURCES: Record<string, string> = {
   ),
 };
 
-// `[kind, importer or package, target or door]` of each planted crossing, as the report lists it.
+// `[kind, importer or package, target or global]` of each planted crossing, as the report lists it.
 export const SHOP_CROSSINGS: readonly (readonly [string, string, string])[] = [
   ["library-undeclared", "packages/scratch", "scratch"],
   ["library-imports-up", "packages/orders-contract/src/index.ts", "packages/domain-kernel"],
   ["library-imports-up", "packages/string-util/src/x.ts", "packages/orders-contract"],
   ["library-imports-up", "packages/clock-adapter/src/index.ts", "packages/db-adapter"],
   ["library-imports-up", "packages/design-ui/src/theme.ts", "packages/clock-adapter"],
-  ["impure-library", "packages/orders-contract/src/clock.ts", "Date.now"],
-  ["impure-library", "packages/domain-kernel/src/store.ts", "drizzle-orm"],
-  ["impure-library", "packages/string-util/src/log.ts", "@sentry/node"],
-  ["impure-library", "packages/orders-contract/src/types.ts", "hono"],
+  ["impure", "packages/orders-contract/src/clock.ts", "Date.now"],
+  ["impure", "packages/domain-kernel/src/store.ts", "drizzle-orm"],
+  ["impure", "packages/string-util/src/log.ts", "@sentry/node"],
+  ["impure", "packages/orders-contract/src/types.ts", "hono"],
   ["adapter-library-imported-outside-driven", "services/api/src/main.ts", "packages/clock-adapter"],
   [
     "adapter-library-imported-outside-driven",

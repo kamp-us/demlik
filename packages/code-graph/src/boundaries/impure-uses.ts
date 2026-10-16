@@ -2,17 +2,17 @@ import type { ImportEdge } from "../schema.js";
 import { patternNames } from "../syntax/bindings.js";
 import { field, nodeField, type SyntaxFile, type SyntaxNode } from "../syntax/file.js";
 import {
-  bareNewDoorOf,
-  type DoorName,
   GLOBAL_OBJECT,
-  moduleDoorsOpened,
-  pathDoorOf,
-} from "./doors.js";
+  type ImpureName,
+  impureBareNewOf,
+  impureModulesOpened,
+  impurePathOf,
+} from "./impure.js";
 
-// One use of a world door by one file: the door it falls under, and the static path it was read
-// through (`process.stdin.isTTY` falls under `process.stdin`, `process.hrtime.bigint` under
-// `process.hrtime`). Module doors are not here: they are import edges, and the edges are already read.
-export type DoorUse = { readonly door: DoorName; readonly path: readonly string[] };
+// One use of a global by one file: the row it falls under, and the static path it was read through
+// (`process.stdin.isTTY` falls under `process.stdin`, `process.hrtime.bigint` under
+// `process.hrtime`). Modules are not here: they are import edges, and the edges are already read.
+export type ImpureUse = { readonly name: ImpureName; readonly path: readonly string[] };
 
 // This is not `env-keys/extract.ts`. `scanEnvKeys` answers "which keys does the code read from any
 // env-shaped receiver", so it matches by text and accepts a bare `env` or any `.env`. The gate
@@ -20,35 +20,35 @@ export type DoorUse = { readonly door: DoorName; readonly path: readonly string[
 // reads a name the file never bound, through steps it can see. The two share the syntax tree and
 // `field`/`nodeField`, and nothing else can be shared without one of them changing its answer.
 //
-// What counts: a runtime reference to a catalog door, however it is spelled (`process.env.X`,
+// What counts: a runtime reference to a row of the table, however it is spelled (`process.env.X`,
 // `process["env"].X`, `process.env[k]`, a spread, an argument, `const { X } = process.env`,
-// `const { env } = process`), and any static member of `process` is its own door. What does not: a
+// `const { env } = process`), and any static member of `process` is its own row. What does not: a
 // type position, a name the file binds itself (that check is per file, so it fails open on a file
 // that rebinds a name in one function and uses the real one in another), and data flow
-// (`const p = process`, a bare `process`, `process[k]`: no member is named, so no door is).
-export function detectDoorUses(syntax: SyntaxFile): DoorUse[] {
+// (`const p = process`, a bare `process`, `process[k]`: no member is named, so no row is).
+export function detectImpureUses(syntax: SyntaxFile): ImpureUse[] {
   const scan: Scan = { syntax, bound: boundNames(syntax), found: new Map() };
   for (const child of codeChildren(syntax, syntax.program)) visit(scan, child);
   return [...scan.found.values()].sort(
-    (a, b) => a.door.localeCompare(b.door) || a.path.join(".").localeCompare(b.path.join(".")),
+    (a, b) => a.name.localeCompare(b.name) || a.path.join(".").localeCompare(b.path.join(".")),
   );
 }
 
-// Every catalog door a file uses by name or opens as a module, declared or not, once each: what a
-// place that judges every door reads (B7 in `application/`, B13 in a pure library).
-export function doorsOf(file: {
-  readonly doorUses: readonly DoorUse[];
+// Every row of the table a file uses by name or opens as a module, once each: what a place that may
+// not be impure reads (a file in `application/`, a pure library).
+export function impureNamesOf(file: {
+  readonly impureUses: readonly ImpureUse[];
   readonly importEdges: readonly Pick<ImportEdge, "specifier" | "target" | "typeOnly">[];
   readonly runtimeSpecifiers: ReadonlySet<string>;
-}): DoorName[] {
-  const opened = moduleDoorsOpened(file.importEdges, file.runtimeSpecifiers);
-  return [...new Set([...file.doorUses.map((use) => use.door), ...opened])];
+}): ImpureName[] {
+  const opened = impureModulesOpened(file.importEdges, file.runtimeSpecifiers);
+  return [...new Set([...file.impureUses.map((use) => use.name), ...opened])];
 }
 
 type Scan = {
   readonly syntax: SyntaxFile;
   readonly bound: ReadonlySet<string>;
-  readonly found: Map<string, DoorUse>;
+  readonly found: Map<string, ImpureUse>;
 };
 
 // TypeScript's type-only nodes hold no runtime reference. These host code, so they are read: an
@@ -215,14 +215,14 @@ function visit(scan: Scan, node: SyntaxNode): void {
   for (const child of codeChildren(scan.syntax, node)) visit(scan, child);
 }
 
-function record(scan: Scan, door: DoorName, path: readonly string[]): void {
-  scan.found.set(`${door}\0${path.join("\0")}`, { door, path });
+function record(scan: Scan, name: ImpureName, path: readonly string[]): void {
+  scan.found.set(`${name}\0${path.join("\0")}`, { name, path });
 }
 
 function recordPath(scan: Scan, path: readonly string[]): void {
   const [root = ""] = path;
-  const door = scan.bound.has(root) ? null : pathDoorOf(path);
-  if (door !== null) record(scan, door, path);
+  const name = scan.bound.has(root) ? null : impurePathOf(path);
+  if (name !== null) record(scan, name, path);
 }
 
 function recordChain(scan: Scan, { root, segments }: Chain): void {
@@ -240,8 +240,8 @@ function recordBareNew(scan: Scan, node: SyntaxNode): void {
   const args = field(node, "arguments") as readonly SyntaxNode[];
   if (callee?.type !== "Identifier" || args.length > 0) return;
   const ctor = String(field(callee, "name"));
-  const door = scan.bound.has(ctor) ? null : bareNewDoorOf(ctor);
-  if (door !== null) record(scan, door, [door]);
+  const name = scan.bound.has(ctor) ? null : impureBareNewOf(ctor);
+  if (name !== null) record(scan, name, [name]);
 }
 
 // The nodes that pull names out of a value: `const { a } = v`, `({ a } = v)`, `({ a } = v) => …`.

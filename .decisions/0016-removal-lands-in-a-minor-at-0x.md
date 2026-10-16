@@ -18,8 +18,8 @@ changeset that names its replacement — instead of publishing a deprecated twin
 
 ## Context
 
-The deprecate-don't-delete ritual (stamp `@deprecated`, keep the door published for a minor,
-then remove) buys one thing: a stranger who imported the old door gets a compile-time nudge
+The deprecate-don't-delete ritual (stamp `@deprecated`, keep the subpath published for a minor,
+then remove) buys one thing: a stranger who imported the old subpath gets a compile-time nudge
 before a break. That is worth a minor of duplicated surface **when strangers exist**. They do
 not yet. Every repository on GitHub importing `@demlik/tea` is ours — `Binclusive/monorepo`,
 `cansirin/monorepo`, `kamp-us/phoenix` — and the ~7.7k monthly downloads are our own CI. The
@@ -27,10 +27,10 @@ ritual is currently paying its cost and collecting no benefit.
 
 Meanwhile the cost is compounding. `./resilient-call` has sat "deprecated" since #270 while
 remaining the 813-line implementation that `with-resilience` and five other modules still
-import from, so the deprecated door is load-bearing and the successor is a wrapper — the ritual
+import from, so the deprecated subpath is load-bearing and the successor is a wrapper — the ritual
 froze a migration halfway. Two more deprecated aliases (`diff` → `parityEqual` in `./parity`,
 the `NoCtx` alias in `pure/core`) have zero in-tree uses and exist only to wait out a minor.
-The export collapse ahead (≈65 doors → ≈15) would, under the ritual, ship every old door as a
+The export collapse ahead (≈65 subpaths → ≈15) would, under the ritual, ship every old subpath as a
 deprecated re-export for a release, briefly *doubling* the parts bin the collapse exists to
 shrink.
 
@@ -48,8 +48,8 @@ re-export is published first.**
 1. **One PR, one changeset.** The removal, the internal import rewrites and the changeset
    land together. The changeset is `minor` for a stable or battery subpath and states, per the
    tier policy, what moved where — `./retry-backoff` → `./resilience` `{ retryBackoff }`.
-2. **A collapse moves parts, never drops them.** A grouped door re-exports every primitive of
-   the doors it replaces under a named export; removing the old door removes a path, not a
+2. **A collapse moves parts, never drops them.** A grouped subpath re-exports every primitive of
+   the subpaths it replaces under a named export; removing the old subpath removes a path, not a
    capability ([0015](./0015-hide-the-wiring-never-the-state.md)). A genuinely dead twin — a
    superseded implementation, an inverted-name alias — is deleted, with its migration named.
 3. **Stable tier still pays the callout, not the lag.** Removing a stable name at 0.x is a
@@ -62,13 +62,13 @@ re-export is published first.**
 
 **Banned.** Publishing a `@deprecated` re-export as a holding pattern for a removal that can
 land now; removing a primitive without a named home in the changeset; a removal PR without a
-changeset; citing the retired ritual as a reason to keep a dead door.
+changeset; citing the retired ritual as a reason to keep a dead subpath.
 
 ## Consequences
 
 - The export collapse ships as N small PRs that each *shrink* the map, with no interim
   doubling. `./resilient-call` finally finishes its migration — the implementation moves into
-  its successor and the old door goes.
+  its successor and the old subpath goes.
 - A future stranger reads one changelog entry per removal, each naming where the thing went.
   That is the same information the `@deprecated` note carried, delivered once instead of
   published for a release.
@@ -85,18 +85,18 @@ no vocabulary impact.
 ## Amendments
 
 - **#83 — item 2: a collapse moves a part to an internal folder built to public standard, never
-  to a grouped public door; a part is exported only on a real external callsite. Item 1's
+  to a grouped public subpath; a part is exported only on a real external callsite. Item 1's
   `./retry-backoff` → `./resilience` `{ retryBackoff }` example reads as that internal-folder
-  move — `./retry-backoff` stays a bare public door, and no `./resilience` door exists. Ruling:
+  move — `./retry-backoff` stays a bare public subpath, and no `./resilience` subpath exists. Ruling:
   epic #41's 2026-09-04 grilling session, recorded at
   https://github.com/kamp-us/demlik/issues/41#issuecomment-5556466033 (2026-09-06).**
 
 - **#205 — supersedes the #83 amendment above. `./resilience` exists, and so do `./idempotency`,
   `./flow`, `./timing`, `./persistence`, `./paginate` and `./work-queue`: seven grouped public
-  doors at `battery` tier, each a re-export file over the modules that stay in `src/internal/`.
+  subpaths at `battery` tier, each a re-export file over the modules that stay in `src/internal/`.
   Item 1's `./retry-backoff` → `./resilience` `{ retryBackoff }` example therefore reads as
   written again. A part is exported when it is finished and built to public standard, not only
   on a real external callsite. What this does not change is the removal ritual itself: a
-  `battery` door is removable, and its removal lands in one minor with a changeset callout,
+  `battery` subpath is removable, and its removal lands in one minor with a changeset callout,
   exactly as this ADR requires. Ruling: the Ruling section of
   https://github.com/kamp-us/demlik/issues/205 (Can, 2026-09-14).**

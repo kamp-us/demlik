@@ -1,9 +1,9 @@
-// Type-level test for the `@demlik/tea/parity` door's own signature types
+// Type-level test for the `@demlik/tea/parity` subpath's own signature types
 // (#107). Compiled by `pnpm typecheck` (tsc over `src/**` INCLUDES
 // `*.test-d.ts`), so if `Trace` or `RecorderOptions` stops being re-exported
 // from this entry point, the build fails here rather than in a consumer.
 //
-// The recorder is internal, so this module is the ONLY door either type can be
+// The recorder is internal, so this module is the ONLY subpath either type can be
 // named through. Every import below therefore goes through `./index` — the
 // entry point — never through `../internal/persistence/recorder`.
 

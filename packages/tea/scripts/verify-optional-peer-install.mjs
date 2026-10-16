@@ -8,11 +8,11 @@
 //
 // So this runs the missing case for real — pack the tarball, install it into a
 // throwaway project that declares only the tutorial's dependencies, and import
-// the door. No mock of a clean install; the clean install itself.
+// the subpath. No mock of a clean install; the clean install itself.
 //
 // `@opentelemetry/api` is the second optional peer held to the same rule
 // (#331): `@demlik/tea/agent` must import without it, and only
-// `@demlik/tea/otel` may name it — and once a consumer installs it, that door
+// `@demlik/tea/otel` may name it — and once a consumer installs it, that subpath
 // must import and hand back `traceAgent`.
 //
 // `effect` is the third (#321): `.`, `./promise`, `./testing` and
@@ -41,15 +41,15 @@ const fail = (msg) => {
 };
 
 // ── 1. The static-import check, read straight off the built artifact. ────────
-const doorPath = join(pkgDir, "dist/node/index.js");
-if (!existsSync(doorPath)) fail(`${doorPath} missing — run \`pnpm build\` first`);
-const door = readFileSync(doorPath, "utf8");
-if (/^\s*import\s[^;]*?["']ws["']/m.test(door)) {
+const nodeEntryPath = join(pkgDir, "dist/node/index.js");
+if (!existsSync(nodeEntryPath)) fail(`${nodeEntryPath} missing — run \`pnpm build\` first`);
+const nodeEntry = readFileSync(nodeEntryPath, "utf8");
+if (/^\s*import\s[^;]*?["']ws["']/m.test(nodeEntry)) {
   fail('dist/node/index.js has a static top-level import of "ws"');
 }
 
-// Every built file but the otel door must leave `@opentelemetry/api` alone. A
-// shared chunk naming it would pull it into every door that loads the chunk.
+// Every built file but the otel subpath must leave `@opentelemetry/api` alone. A
+// shared chunk naming it would pull it into every subpath that loads the chunk.
 const OTEL_API = /from\s*["']@opentelemetry\/api["']|import\s*\(?\s*["']@opentelemetry\/api["']/;
 const builtJs = readdirSync(join(pkgDir, "dist"), { recursive: true })
   .map(String)
@@ -109,7 +109,7 @@ writeFileSync(
 );
 run("node", [probe], project);
 
-// ── 3. The Effect-free doors import with no `effect` installed. ─────────────
+// ── 3. The Effect-free subpaths import with no `effect` installed. ─────────────
 // `effect` is the optional peer only `./effect` and `./testing/effect` may
 // import (#321). `./testing` and `./testing/promise` need `vitest`, their own
 // optional peer, so it goes in first — and must not bring `effect` with it.
@@ -133,7 +133,7 @@ writeFileSync(
 );
 run("node", [effectFreeProbe], project);
 
-// ── 4. With the peer installed, the otel door imports. ─────────────────────
+// ── 4. With the peer installed, the otel subpath imports. ─────────────────────
 run(
   "npm",
   ["install", "--no-audit", "--no-fund", "@opentelemetry/api@^1.9.0"],

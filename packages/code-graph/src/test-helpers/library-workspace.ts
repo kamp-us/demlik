@@ -56,7 +56,7 @@ function manifest(dir: string): [string, string] {
 }
 
 // A library's clean files: each imports a library its type allows, and an adapter uses a world
-// library and a world door, which an adapter may.
+// library and a world global, which an adapter may.
 function libraryFiles(type: TypeName, n: number): Record<string, string> {
   const dir = libDir(type, n);
   const allowed = TYPES[type].imports.filter((t): t is TypeName => t in TYPES && t !== type);
@@ -106,9 +106,9 @@ function planted(): { files: Record<string, string>; found: Planted[] } {
   for (let k = 0; k < IMPURE_LIBRARIES; k++) {
     const type = pure[k % pure.length] ?? "util";
     const from = `${libDir(type, Math.floor(k / pure.length))}/src/impure.ts`;
-    const door = k % 2 === 0;
-    files[from] = door ? "export const now = Date.now();\n" : 'import "hono";\n';
-    found.push(["impure-library", from, door ? "Date.now" : "hono"]);
+    const usesGlobal = k % 2 === 0;
+    files[from] = usesGlobal ? "export const now = Date.now();\n" : 'import "hono";\n';
+    found.push(["impure", from, usesGlobal ? "Date.now" : "hono"]);
   }
   SCOPES.forEach((scope, s) => {
     for (let k = 0; k < OUTSIDE_PER_SCOPE; k++) {
@@ -141,18 +141,16 @@ export function libraryWorkspace(): LibraryWorkspace {
   ];
   for (const dir of dirs) Object.assign(manifests, Object.fromEntries([manifest(dir)]));
   const features = Object.fromEntries(SCOPES.map((scope) => [scope, FEATURES]));
-  const layout = Object.fromEntries(SCOPES.map((scope) => [scope, "hexagonal"]));
   return {
     files: { ...manifests, ...sources },
     rules: {
       features,
-      layout,
       libraryRoots: ["packages"],
       libraryTypes: TYPES,
       libraries,
       worldLibraries: ["drizzle-orm", "hono", "@sentry/*"],
     },
-    rulesWithoutLibraries: { features, layout },
+    rulesWithoutLibraries: { features },
     planted: plant.found,
     sourceFiles: Object.keys(sources).length,
   };

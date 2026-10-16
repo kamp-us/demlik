@@ -28,22 +28,6 @@ exit 0
           "typeOnly": false
         },
         {
-          "feature": "findings",
-          "from": "services/svc/src/findings/rules/score.ts",
-          "kind": "impure-rules",
-          "specifier": "../store/repo.js",
-          "to": "services/svc/src/findings/store/repo.ts",
-          "typeOnly": false
-        },
-        {
-          "feature": "findings",
-          "from": "services/svc/src/findings/rules/score.ts",
-          "kind": "impure-rules",
-          "specifier": "zod",
-          "to": null,
-          "typeOnly": false
-        },
-        {
           "from": "services/svc/src/lib/util.ts",
           "kind": "lib-imports-feature",
           "specifier": "../findings/index.js",
@@ -57,6 +41,38 @@ exit 0
           "specifier": "./findings/store/repo.js",
           "to": "services/svc/src/findings/store/repo.ts",
           "toFeature": "findings",
+          "typeOnly": false
+        },
+        {
+          "feature": "audit-runs",
+          "from": "services/svc/src/audit-runs/store",
+          "kind": "unknown-zone",
+          "specifier": "store",
+          "to": null,
+          "typeOnly": false
+        },
+        {
+          "feature": "findings",
+          "from": "services/svc/src/findings/flows",
+          "kind": "unknown-zone",
+          "specifier": "flows",
+          "to": null,
+          "typeOnly": false
+        },
+        {
+          "feature": "findings",
+          "from": "services/svc/src/findings/rules",
+          "kind": "unknown-zone",
+          "specifier": "rules",
+          "to": null,
+          "typeOnly": false
+        },
+        {
+          "feature": "findings",
+          "from": "services/svc/src/findings/store",
+          "kind": "unknown-zone",
+          "specifier": "store",
+          "to": null,
           "typeOnly": false
         }
       ]

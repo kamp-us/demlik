@@ -137,7 +137,7 @@ function expenseMachine(ask: Ask) {
 }
 
 // ---------------------------------------------------------------------------
-// The one seam that touches the network: the handler you write. The door holds
+// The one seam that touches the network: the handler you write. jev holds
 // no key — this closure does, which is what lets a test hand the same type a
 // scripted function.
 // ---------------------------------------------------------------------------

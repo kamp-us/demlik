@@ -129,7 +129,7 @@ describe("B15 judges an entry file of a declared library and of a hexagonal feat
     ]);
   });
 
-  it("judges neither an inner barrel, a file not named index.ts, nor a rules-layout feature", () => {
+  it("judges neither an inner barrel nor a file not named index.ts", () => {
     repo = apiRepo(
       files({
         "src/orders/application/index.ts": "export const x = 1;\n",
@@ -138,10 +138,6 @@ describe("B15 judges an entry file of a declared library and of a hexagonal feat
       }),
       RULES,
     );
-    expect(crossings(repo)).toEqual([]);
-    const rules = { ...RULES, layout: { [API]: "rules" } };
-    repo.dispose();
-    repo = apiRepo(files({ "src/orders/index.ts": "export const x = 1;\n" }), rules);
     expect(crossings(repo)).toEqual([]);
   });
 

@@ -51,7 +51,6 @@ describe("the five keys are parsed at the config boundary", () => {
   // A rules file for `services/api`, hexagonal, with the keys under test added.
   const api = (keys: Record<string, unknown>) => ({
     features: { [API]: ["orders", "billing"] },
-    layout: { [API]: "hexagonal" },
     ...keys,
   });
   const allowance = (entry: Record<string, unknown>) => ({
@@ -104,19 +103,10 @@ describe("the five keys are parsed at the config boundary", () => {
     expect(refused(api({ strictDriving: [API] }))).toContain("strictDriving");
   });
 
-  it("refuses a readAllowance scope that declares no features, or is not hexagonal", () => {
+  it("refuses a readAllowance scope that declares no features", () => {
     const entry = { driven: [DRIVEN], decidedBy: ["kernel"] };
     expect(refused({ ...LIBRARIES, readAllowance: { "services/other": entry } })).toBe(
       '"readAllowance" declares scope "services/other", which declares no "features": it rides a scope that declares features.',
-    );
-    const rules = {
-      features: { [API]: ["orders"] },
-      layout: { [API]: "rules" },
-      ...LIBRARIES,
-      readAllowance: { [API]: entry },
-    };
-    expect(refused(rules)).toBe(
-      `"readAllowance" declares scope "${API}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
     );
   });
 
@@ -157,15 +147,6 @@ describe("the five keys are parsed at the config boundary", () => {
       "a scope that declares no features",
       { readAllowance: { "services/other": { driven: [DRIVEN] } } },
       '"readAllowance" declares scope "services/other", which declares no "features": it rides a scope that declares features.',
-    ],
-    [
-      "a scope that is not hexagonal",
-      {
-        features: { [API]: ["orders"] },
-        layout: { [API]: "rules" },
-        readAllowance: { [API]: { driven: [DRIVEN] } },
-      },
-      `"readAllowance" declares scope "${API}", whose "layout" is not "hexagonal": it judges a hexagonal feature's zones.`,
     ],
   ])("refuses %s when decidedBy is omitted", (_, rules, message) => {
     expect(refused(rules)).toBe(message);

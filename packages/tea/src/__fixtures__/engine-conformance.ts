@@ -138,21 +138,21 @@ const owned = defineMachine({
   identity: { ofState: (s) => s.owner, ofMsg: (msg) => msg.to },
 });
 
-// === door: a Msg the current State has no cell for is refused, and the run goes on ===
+// === latch: a Msg the current State has no cell for is refused, and the run goes on ===
 
-type DoorState = { readonly type: "closed" } | { readonly type: "open" };
-type DoorMsg = { readonly type: "open" } | { readonly type: "close" };
+type LatchState = { readonly type: "closed" } | { readonly type: "open" };
+type LatchMsg = { readonly type: "open" } | { readonly type: "close" };
 
 // Each phase has a cell for one Msg only, so the other one is refused there.
-const doorUpdate: Transitions<DoorState, DoorMsg, never> = {
+const latchUpdate: Transitions<LatchState, LatchMsg, never> = {
   closed: { open: () => [{ type: "open" }, []] },
   open: { close: () => [{ type: "closed" }, []] },
 };
 
-const door = defineMachine({
-  types: { model: {} as DoorState, msg: {} as DoorMsg },
+const latch = defineMachine({
+  types: { model: {} as LatchState, msg: {} as LatchMsg },
   init: (loaded) => [loaded ?? { type: "closed" }, []],
-  update: doorUpdate,
+  update: latchUpdate,
 });
 
 // === burst: a plain handler returns a list of Msgs (#324) ===
@@ -238,12 +238,12 @@ export const conformanceMachines = {
     machine: burst,
     script: [{ type: "fire" }],
   } satisfies ConformanceCase<{ log: readonly string[] }, BurstMsg>,
-  door: {
-    machine: door,
+  latch: {
+    machine: latch,
     // `close` while closed has no cell: refused, and the `open` after it lands.
     script: [{ type: "close" }, { type: "open" }, { type: "close" }],
     refusals: 1,
-  } satisfies ConformanceCase<DoorState, DoorMsg>,
+  } satisfies ConformanceCase<LatchState, LatchMsg>,
 } as const;
 
-export { burst, clock, counter, door, lookup, owned };
+export { burst, clock, counter, latch, lookup, owned };

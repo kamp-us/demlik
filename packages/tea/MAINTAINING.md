@@ -28,7 +28,7 @@ a separate consumer repo, off the export map.
 
 Canonical stamp per subpath. One row per entry in `package.json` `exports`; a new
 export is not done until it has a row here. The list itself is pinned by
-`src/public-doors.test.ts` — a door added or removed without that diff fails the suite.
+`src/public-subpaths.test.ts` — a subpath added or removed without that diff fails the suite.
 
 | Subpath | Tier stamp | Notes |
 |---|---|---|
@@ -38,7 +38,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./testing` | stable | testing infra is kernel: the engine-neutral helpers (`expectFinalState`, `step`, `expectReplayDeterministic`, …); it imports no engine |
 | `./testing/promise` | stable | `drive` for the Promise engine, moved off `./testing` (#321) |
 | `./testing/effect` | stable | `drive` for the Effect engine: Effect handlers, Layers for `R`, Subs; graduated with `./effect`, and is the one entry besides it that may import `effect` |
-| `./pbt` | stable | arbitraries + runners, one door |
+| `./pbt` | stable | arbitraries + runners, one subpath |
 | `./do` | stable | durable/host seam |
 | `./react` | stable | |
 | `./node` | stable | |
@@ -61,7 +61,7 @@ export is not done until it has a row here. The list itself is pinned by
 | `./agent` | experimental | agent layer; the brain migration graduates it |
 | `./otel` | experimental | an agent run as OpenTelemetry spans (GenAI conventions + Langfuse's observation attributes); `@opentelemetry/api` is an optional peer, and only this entry may import it. Graduates with `./agent`, whose events it reads |
 
-**A new export added to an existing door inherits that door's stamp** and earns no row of its
+**A new export added to an existing subpath inherits that subpath's stamp** and earns no row of its
 own — the table is per subpath, and a per-export list here would drift the moment a module is
 split. So the agent layer's `transcript` collector is `experimental`, on `./agent`'s promise,
 and graduates with the rest of the layer rather than separately.
@@ -71,15 +71,15 @@ and graduates with the rest of the layer rather than separately.
 Everything under `src/internal/` is **not** a tier and carries no promise: the flow family, the
 resilience and timing families, the persistence ops, the journal, prediction, the chart compiler.
 A part lives there when it is real code the package depends on but not something a consumer is
-invited to import — the way in is a published door that re-exports what it chooses to. Moving,
+invited to import — the way in is a published subpath that re-exports what it chooses to. Moving,
 renaming or deleting an internal part is not a break and needs no changelog entry.
 
 Prose that names an internal part points at its **in-tree path** (`src/internal/journal/`), never
-at a `@demlik/tea/…` specifier — `src/closed-door-specifiers.test.ts` fails any tracked file under
+at a `@demlik/tea/…` specifier — `src/closed-subpath-specifiers.test.ts` fails any tracked file under
 `.patterns/` or `src/` that names a subpath `exports` does not carry.
 
-Promoting an internal part to a door is the deliberate act this file governs: it earns a row in
-the table above, a line in `src/public-doors.test.ts`, an entry in `tsup.config.ts` and a
+Promoting an internal part to a subpath is the deliberate act this file governs: it earns a row in
+the table above, a line in `src/public-subpaths.test.ts`, an entry in `tsup.config.ts` and a
 changeset.
 
 ## Store factory per host
@@ -105,7 +105,7 @@ says so in its JSDoc: `chrome.storage` has no atomic compare-and-swap, and a fen
 success while both writers win is worse than none. Adding fencing to a factory is a **minor**;
 `Store<S>` itself is unchanged, so no implementor breaks.
 
-**Deletion is the same kind of widening.** `DeletableStore<S>` (root subpath, beside
+**Deletion is the same kind of widening.** `DeletableStore<S>` (root entry, beside
 `FencedStore`) adds `delete(): Promise<void>`, and `fileStore`, `memoryStore` and `doStore`
 return one in both forms. `chromeStorageStore` does not yet. Adding `delete` to a factory is a
 **minor**; moving it onto `Store<S>` would break every external implementor, so it stays off.
@@ -160,8 +160,8 @@ deprecated re-export is published first
    changeset is `minor` for a `stable` or `battery` subpath and its breaking-change note
    names where each thing went (`drive` from `./testing` → `./testing/promise`).
    `experimental` removes silently, as its tier allows.
-2. A collapse **moves parts, never drops them**: the grouped door re-exports every
-   primitive of the doors it replaces. Only a genuinely dead twin — a superseded
+2. A collapse **moves parts, never drops them**: the grouped subpath re-exports every
+   primitive of the subpaths it replaces. Only a genuinely dead twin — a superseded
    implementation, an inverted-name alias — is deleted, with its migration named.
 3. A `@deprecated` stamp is not a holding pattern. If the removal can land now, it lands.
 

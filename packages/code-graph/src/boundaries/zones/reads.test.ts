@@ -323,7 +323,6 @@ describe("a read allowance that omits decidedBy licenses a listed read-only file
       {
         ...RULES,
         features: { [API]: ["orders"], [ADMIN]: ["orders"] },
-        layout: { [API]: "hexagonal", [ADMIN]: "hexagonal" },
         readAllowance: {
           [API]: { driven: [DRIVEN], decidedBy: ["kernel"] },
           [ADMIN]: { driven: [DRIVEN] },

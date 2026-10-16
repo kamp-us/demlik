@@ -166,7 +166,6 @@ export function workerWorkspace(): WorkerWorkspace {
   const scopes = Array.from({ length: WORKERS }, (_, n) => dir(n));
   const base = {
     features: Object.fromEntries(scopes.map((scope) => [scope, FEATURES])),
-    layout: Object.fromEntries(scopes.map((scope) => [scope, "hexagonal"])),
   };
   return {
     files: { ...manifests, ...sources },

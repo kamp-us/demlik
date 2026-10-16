@@ -2,7 +2,7 @@ import { SHOP_TYPES, shopManifests } from "./shop-workspace.js";
 
 // The synthetic workspace the application-shape rules are tested against: five libraries of the
 // five types, and one hexagonal scope, `services/api`, with the features `orders`, `billing` and
-// `shipping`. Every name is made up. It plants fourteen crossings across B1, B8, B9, B15 and B16,
+// `shipping`. Every name is made up. It plants fourteen crossings across B1, B7, B8, B15 and B16,
 // and clean files beside them that must produce nothing: entry files of named re-exports, an
 // `application/` file using everything its allowlist lets it, a read through a declared file, and
 // four test files that carry code that would be a crossing outside the test role.
@@ -96,7 +96,7 @@ const CLEAN: Record<string, string> = {
   ),
 };
 
-// The four test files: code that is a B10, B7, B8, B9 or B6 crossing anywhere else, and clean here.
+// The four test files: code that is a B10, B7, B8 or B6 crossing anywhere else, and clean here.
 const TESTS: Record<string, string> = {
   [`${ORDERS}/orders.test.ts`]: 'import { place } from "./index";\nexport const t = place;\n',
   [`${ORDERS}/application/place.test.ts`]: lines(
@@ -179,7 +179,6 @@ export const SHAPE_READ_ALLOWANCE = {
 // The rules file with every new key declared, and the same with none of them.
 export const SHAPE_RULES_WITHOUT_SHAPE = {
   features: { [API]: ["orders", "billing", "shipping"] },
-  layout: { [API]: "hexagonal" },
   libraryRoots: ["packages"],
   libraryTypes: SHOP_TYPES,
   libraries: LIBRARIES,
@@ -244,6 +243,6 @@ export const SHAPE_CROSSINGS: readonly (readonly [string, string, string, string
     `${SHIPPING}/adapters/driving/shipping-http.ts`,
     `${SHIPPING}/adapters/driven/shipment-reads.ts`,
   ],
-  [API, "door-outside-driven-adapter", `${BILLING}/adapters/driving/billing-log.ts`, "console"],
+  [API, "impure", `${BILLING}/adapters/driving/billing-log.ts`, "console"],
   [API, "cross-feature", `${SHIPPING}/shipping.test.ts`, `${BILLING}/application/charge.ts`],
 ];

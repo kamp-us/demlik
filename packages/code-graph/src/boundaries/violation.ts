@@ -1,6 +1,6 @@
-// What a boundary verdict is: one variant per rule B1-B19, and the two tables that say what kind of
-// crossing each is. `analyze.ts` judges a scope into these; the ledger, the report and the
-// migration read them.
+// What a boundary verdict is: one variant per rule (B1-B19, with B2, B5, B9 and B13 retired and not
+// reused), and the table that says what kind of crossing each is. `analyze.ts` judges a scope into
+// these; the ledger, the report and the migration read them.
 
 // An import of a file of the importer's own feature, judged by the importer's zone.
 export type ZoneEdge = {
@@ -19,15 +19,6 @@ export type WriteSite = {
   readonly binding: string;
 };
 
-// A world door used in a zone that judges it itself: `specifier` is the door.
-export type ZoneDoor = {
-  readonly from: string;
-  readonly feature: string;
-  readonly to: null;
-  readonly specifier: string;
-  readonly typeOnly: false;
-};
-
 export type BoundaryViolation =
   | {
       readonly kind: "cross-feature";
@@ -39,15 +30,14 @@ export type BoundaryViolation =
       readonly typeOnly: boolean;
     }
   | {
-      readonly kind: "impure-rules";
+      // A file whose place may not touch the outside world, or that sits in a pure library, doing
+      // so. `specifier` is the `IMPURE_GLOBALS` row it used or opened, or for a pure library the
+      // world library as the import wrote it, which `typeOnly` marks as a type-only import.
+      readonly kind: "impure";
       readonly from: string;
-      readonly feature: string;
-      readonly to: string | null;
+      readonly to: null;
       readonly specifier: string;
       readonly typeOnly: boolean;
-      // A world door read by name (`process.env`, `fetch`), not an import. `specifier` is then the
-      // door, which an import of a package of that name must not collide with.
-      readonly global?: true;
     }
   | {
       readonly kind: "lib-imports-feature";
@@ -65,15 +55,7 @@ export type BoundaryViolation =
       readonly specifier: string;
       readonly typeOnly: boolean;
     }
-  | {
-      readonly kind: "door-outside-owner";
-      readonly from: string;
-      readonly to: null;
-      readonly specifier: string;
-      readonly typeOnly: false;
-    }
   | ({ readonly kind: "application-imports-adapter" } & ZoneEdge)
-  | ({ readonly kind: "impure-application" } & ZoneDoor)
   | ({
       readonly kind: "driving-reaches-driven";
       // Set when the target is a file a read allowance lists and that file writes: the allowance
@@ -81,7 +63,6 @@ export type BoundaryViolation =
       // the shape and key of any B8.
       readonly write?: WriteSite;
     } & ZoneEdge)
-  | ({ readonly kind: "door-outside-driven-adapter" } & ZoneDoor)
   | {
       // An entry file (a declared library's `src/index.ts`, a hexagonal feature's
       // `src/<feature>/index.ts`) that holds more than named re-exports. `specifier` is the first
@@ -131,15 +112,6 @@ export type BoundaryViolation =
       readonly typeOnly: boolean;
     }
   | {
-      // A pure library using a world door or importing a world library: `specifier` is the door,
-      // or the library as the import wrote it.
-      readonly kind: "impure-library";
-      readonly from: string;
-      readonly to: null;
-      readonly specifier: string;
-      readonly typeOnly: boolean;
-    }
-  | {
       // An import of a library that names where it may be imported from, from anywhere else. `to`
       // is the target library's directory.
       readonly kind: "adapter-library-imported-outside-driven";
@@ -181,23 +153,20 @@ export type BoundaryViolation =
 
 export type BoundaryKind = BoundaryViolation["kind"];
 
-// What a crossing is: an import edge, a world door used by name or opened (a worker binding used is
-// one too), or an entry (a feature's, a package under a library root, a loop of workers, an entry
-// file that holds more than re-exports) that no rule places.
-type Crossing = "import" | "door" | "entry";
+// What a crossing is: an import edge, an impure use (a row of `IMPURE_GLOBALS` used or opened, a
+// world library imported, a worker binding used), or an entry (a feature's, a package under a
+// library root, a loop of workers, an entry file that holds more than re-exports) that no rule
+// places.
+type Crossing = "import" | "impure" | "entry";
 
-const CROSSINGS = {
+export const CROSSINGS = {
   "adapter-library-imported-outside-driven": "import",
   "application-import-outside-allowlist": "import",
   "application-imports-adapter": "import",
-  "binding-outside-driven-adapter": "door",
+  "binding-outside-driven-adapter": "impure",
   "cross-feature": "import",
-  "door-outside-driven-adapter": "door",
-  "door-outside-owner": "door",
   "driving-reaches-driven": "import",
-  "impure-application": "door",
-  "impure-library": "door",
-  "impure-rules": "import",
+  impure: "impure",
   "index-not-exports-only": "entry",
   "lib-imports-feature": "import",
   "library-imports-up": "import",
@@ -208,15 +177,6 @@ const CROSSINGS = {
   "worker-call-cycle": "entry",
 } as const satisfies Record<BoundaryKind, Crossing>;
 
-// A `global` impure-rules entry is a door read by name, not the import its kind otherwise is.
-export function crossingOf(entry: {
-  readonly kind: BoundaryKind;
-  readonly global?: true;
-}): Crossing {
-  return entry.global === true ? "door" : CROSSINGS[entry.kind];
-}
-
-// What `boundary-ceilings.json` never counted: a world door used by name, an import edge it is not.
-export function isDoorUse(entry: { readonly kind: BoundaryKind; readonly global?: true }): boolean {
-  return crossingOf(entry) === "door";
+export function crossingOf(entry: { readonly kind: BoundaryKind }): Crossing {
+  return CROSSINGS[entry.kind];
 }

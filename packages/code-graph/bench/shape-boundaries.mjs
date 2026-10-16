@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// What the shape rules of `--boundaries` (B15, B16, the test role, strict doors and the read
+// What the shape rules of `--boundaries` (B15, B16, the test role and the read
 // allowance) cost on a repo of hexagonal features over libraries (#525). It writes the generated
 // workspace the scale test gates (`src/test-helpers/shape-workspace.ts`: three hexagonal scopes of
 // eight features, 40 libraries, 2,000+ source files, 300+ of them tests, 109 planted crossings) and

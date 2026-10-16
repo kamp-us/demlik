@@ -18,7 +18,7 @@
  *   - The `resilient_run` handler calls Jev and returns
  *     `ask.decode(cmd.input, { status, body })` — or `ask.rejected(cause)` when
  *     the call itself threw. The key lives in your handler's closure, never in
- *     config: the door never reads an env var or holds a key.
+ *     config: this module never reads an env var or holds a key.
  *   - `fallback?: (request) => JevAnswers<Q> | JevErr` — a PURE deterministic
  *     decider. It answers on the two paths where the network cannot: a handler
  *     with no key returns `ask.offline(cmd.input)`, and the resilient retry
@@ -156,7 +156,7 @@ export type JevFallback<Q extends JevQuestionMap> = (
 ) => JevAnswers<Q> | JevErr;
 
 // ===========================================================================
-// Failures — the protocol's, plus the three this door adds.
+// Failures — the protocol's, plus the three this module adds.
 // ===========================================================================
 
 /**
@@ -213,7 +213,7 @@ function reject(jev: JevAskErr): Outcome<never, JevRejected> {
  * Read a settled failure back as a {@link JevAskErr}. PURE.
  *
  * A {@link JevRejected} yields its `jev`. Anything else a handler returned —
- * a bare `port_rejected`, a `deadline_exceeded` — is a failure this door did
+ * a bare `port_rejected`, a `deadline_exceeded` — is a failure this module did
  * not classify, and it reads as the transient `port_threw`, exactly as a
  * foreign throw always has.
  */
@@ -235,7 +235,7 @@ export function jevAskErrOf(error: unknown): JevAskErr {
 // Config, request and result.
 // ===========================================================================
 
-/** The model the door asks for when config names none. */
+/** The model the ask uses when config names none. */
 export const DEFAULT_JEV_MODEL = "jev-latest";
 
 /** No tokens were spent — what a fallback answer's usage is. */
@@ -373,7 +373,7 @@ export function offlineJevAnswer<Q extends JevQuestionMap>(
  * The one effect this knob emits: run the ask for `key` with the plain-data
  * {@link JevRequest} (ADR 0014 — a Cmd is DECLARED, so its input, ok and err
  * channels are types on the constructor rather than a convention). It is
- * resilient-call's `runCmdDef` specialized to this door's input and result, the
+ * resilient-call's `runCmdDef` specialized to this module's input and result, the
  * same way `../../idempotency/idempotent-intake` mints its defs per knob: `Q` is
  * a type parameter, so the def is a factory and not a module constant. `name`
  * is the knob's name; omit it for the `resilient` family.
@@ -399,7 +399,7 @@ export type JevSucceedMsg<
 
 /**
  * The failure settle Msg the engine mints — resilient-call's. Its `error` is a
- * {@link JevRejected} when your handler used this door's builders; `fail`
+ * {@link JevRejected} when your handler used this module's builders; `fail`
  * reads it with {@link jevAskErrOf}.
  */
 export type JevFailMsg<N extends string = DefaultResilientName> = FailMsg<N>;
@@ -600,11 +600,11 @@ export type JevCmd<
 /**
  * Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice
  * lives at `state.resilience` — resilient-call's convenience, re-typed for this
- * door's slice so a consumer wires one import. Pure.
+ * module's slice so a consumer wires one import. Pure.
  *
- * The record rebuild is `liftSlice` from the root door (#231), the same helper
+ * The record rebuild is `liftSlice` from the root entry (#231), the same helper
  * `liftResilience` is expressed over — this stays as the named, pre-keyed
- * convenience for this door, unchanged in name, signature and subpath.
+ * convenience for this module, unchanged in name, signature and subpath.
  */
 export function liftJevAsk<
   S extends { resilience: ResilientState<JevRequest<Q>, JevOk<Q>> },

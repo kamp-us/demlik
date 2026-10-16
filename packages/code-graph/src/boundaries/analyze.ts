@@ -2,7 +2,7 @@ import type { ImportEdge, ModuleNode } from "../schema.js";
 import type { SiteRow } from "./deployables/census.js";
 import { type BindingSite, type Deployables, isWorkerMain } from "./deployables/deployables.js";
 import { judgeDeployables } from "./deployables/judge.js";
-import type { DoorUse } from "./door-uses.js";
+import type { ImpureUse } from "./impure-uses.js";
 import { type Libraries, ownerOf } from "./libraries/libraries.js";
 import type { ImportedFrom } from "./libraries/schema.js";
 import { judgeLibraries, undeclaredLibraries } from "./libraries/violations.js";
@@ -17,16 +17,16 @@ import {
 } from "./rules.js";
 import { judgeShape } from "./shape/judge.js";
 import type { Shape, ShapeFacts } from "./shape/shape.js";
-import { type BoundaryViolation, isDoorUse, type ZoneEdge } from "./violation.js";
-import { doorViolations } from "./zones/door-violations.js";
+import type { BoundaryViolation, ZoneEdge } from "./violation.js";
+import { impureViolations } from "./zones/impure-violations.js";
 import { type DrivenReads, drivenReadsOf, type ScopeReads, scopeReadsOf } from "./zones/reads.js";
 import { isTestFile, judgedInTestFile } from "./zones/test-role.js";
 
 export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> &
   ShapeFacts & {
-    readonly doorUses: readonly DoorUse[];
+    readonly impureUses: readonly ImpureUse[];
     // The specifiers the file opens when it runs. `importEdges` is the graph's and keeps a type-only
-    // `import { type Stats }` as a value import; a module door asks this.
+    // `import { type Stats }` as a value import; a module row of `IMPURE_GLOBALS` asks this.
     readonly runtimeSpecifiers: ReadonlySet<string>;
     // The bindings of the worker that owns the file that it references, read only when the rules
     // file lists a deployable kind.
@@ -42,42 +42,15 @@ export type ScopeBoundaryReport = {
   readonly workers?: readonly string[];
 };
 
-function isContract(specifier: string, contracts: readonly string[]): boolean {
-  return contracts.some((c) => specifier === c || specifier.startsWith(`${c}/`));
-}
-
-function isBare(specifier: string): boolean {
-  return !specifier.startsWith(".") && !specifier.startsWith("/");
-}
-
 type EdgeContext = {
   readonly scope: string;
   readonly from: string;
   readonly fromPlace: Place;
   readonly edge: ImportEdge;
   readonly zoning: ScopeZoning;
-  readonly contracts: readonly string[];
   // Whether the scope's read allowance licenses a driving file's import of a driven file.
   readonly reads: DrivenReads;
 };
-
-function rulesViolation(ctx: EdgeContext, feature: string): BoundaryViolation | null {
-  const { edge } = ctx;
-  if (edge.target === null) {
-    if (isBare(edge.specifier) && isContract(edge.specifier, ctx.contracts)) return null;
-  } else {
-    const to = placeOf(edge.target, ctx.zoning);
-    if (to.kind === "feature" && to.feature === feature && to.zone.name === "rules") return null;
-  }
-  return {
-    kind: "impure-rules",
-    from: inScope(ctx.scope, ctx.from),
-    feature,
-    to: edge.target === null ? null : inScope(ctx.scope, edge.target),
-    specifier: edge.specifier,
-    typeOnly: edge.typeOnly,
-  };
-}
 
 // An import between two files of one feature: only the importer's zone can forbid it.
 function withinFeature(
@@ -96,7 +69,6 @@ function withinFeature(
   const kind = from.zone.rule.imports;
   switch (kind) {
     case null:
-    case "impure-rules":
       return null;
     case "application-imports-adapter":
       return to.zone.entry.startsWith("adapters/") ? { kind, ...edge } : null;
@@ -145,10 +117,7 @@ function crossingFrom(
 }
 
 function violationOf(ctx: EdgeContext): BoundaryViolation | null {
-  const { fromPlace, edge } = ctx;
-  if (fromPlace.kind === "feature" && fromPlace.zone.rule.imports === "impure-rules") {
-    return rulesViolation(ctx, fromPlace.feature);
-  }
+  const { edge } = ctx;
   if (edge.target === null) return null;
   const to = placeOf(edge.target, ctx.zoning);
   return to.kind === "feature" ? crossingFrom(ctx, edge.target, to) : null;
@@ -227,7 +196,7 @@ function acrossDeployables(
 // judge a test file (`zones/test-role.ts`). One verdict per import: the edges B1 and B6 judged are
 // left to them by B16.
 function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Place): Found {
-  const { scope, rules, zoning, libraries, shape } = ctx;
+  const { scope, zoning, libraries, shape } = ctx;
   const reads = drivenReadsOf(ctx.allowance, module, libraries);
   const edges = module.importEdges.map((edge) => ({
     edge,
@@ -237,23 +206,17 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
       fromPlace,
       edge,
       zoning,
-      contracts: rules.contracts,
       reads,
     }),
   }));
   const judged = new Set(edges.filter((e) => e.violation !== null).map((e) => e.edge));
-  const doors = doorViolations({
-    scope,
-    module,
-    place: fromPlace,
-    doors: rules.doors[scope] ?? {},
-  });
+  const impure = impureViolations({ scope, module, place: fromPlace });
   const file = { ...module, file: inScope(scope, module.file) };
   const libs = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
   const across = acrossDeployables(ctx, module, fromPlace);
   const violations = [
     ...edges.flatMap((e) => e.violation ?? []),
-    ...doors,
+    ...impure,
     ...libs.violations,
     ...across.violations,
     ...judgeShape(ctx, module, fromPlace, judged),
@@ -307,8 +270,7 @@ export function analyzeBoundaries(
     (a, b) =>
       a.kind.localeCompare(b.kind) ||
       a.from.localeCompare(b.from) ||
-      a.specifier.localeCompare(b.specifier) ||
-      Number(isDoorUse(a)) - Number(isDoorUse(b)),
+      a.specifier.localeCompare(b.specifier),
   );
   const features = [...ctx.zoning.features].sort((a, b) => a.localeCompare(b));
   return {

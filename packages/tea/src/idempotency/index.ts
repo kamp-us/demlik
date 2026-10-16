@@ -3,7 +3,7 @@
  * @demlik/tea/idempotency — do-it-once: dedupe by key, cache the result, and
  * replay that result to every duplicate arrival.
  *
- * A DOOR, not a module. Every name here is declared under
+ * A SUBPATH, not a module. Every name here is declared under
  * `src/internal/idempotency/` and re-exported unchanged; nothing moved and
  * nothing was renamed to open it. The modules behind it:
  *

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// What the library rules of `--boundaries` (B11-B14) cost on a repo of libraries (#523). It writes the
+// What the library rules of `--boundaries` (B11, B12, B14 and B7 on pure libraries) cost on a repo of libraries (#523). It writes the
 // generated workspace the scale test gates (`src/test-helpers/library-workspace.ts`: 40 libraries over
 // five types, three hexagonal feature scopes, 2,000+ source files, 110 planted crossings) and times
 // `code-graph <root> --boundaries --ci` over it twice: with the library keys declared, and with none

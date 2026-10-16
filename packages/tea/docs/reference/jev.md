@@ -25,7 +25,7 @@ import { … } from "@demlik/tea/jev";
 | [`createJevAsk`](#createJevAsk) | Function | battery | Build a jev-ask knob from `config`. |
 | [`decodeJevReply`](#decodeJevReply) | Function | battery | Turn an HTTP reply into the run Cmd's outcome. |
 | [`DEFAULT_CLASSIFY_MAX_ITEMS`](#DEFAULT_CLASSIFY_MAX_ITEMS) | Variable | battery | The default page size — the one the grill settled on for Jev. |
-| [`DEFAULT_JEV_MODEL`](#DEFAULT_JEV_MODEL) | Variable | battery | The model the door asks for when config names none. |
+| [`DEFAULT_JEV_MODEL`](#DEFAULT_JEV_MODEL) | Variable | battery | The model the ask uses when config names none. |
 | [`isJevErr`](#isJevErr) | Function | battery | Is `value` a JevErr? |
 | [`isTransientJevAskErr`](#isTransientJevAskErr) | Function | battery | Does this failure deserve another attempt? |
 | [`ItemAnswer`](#ItemAnswer) | Type | battery | The answer one item's question yields. |
@@ -70,7 +70,7 @@ import { … } from "@demlik/tea/jev";
 | [`JevTimerMsg`](#JevTimerMsg) | Type | battery | The retry / deadline timer Msg — resilient-call's. |
 | [`JevUsage`](#JevUsage) | Interface | battery | Token usage for the request. |
 | [`KeyAnswer`](#KeyAnswer) | Type | battery | What ClassifyBatchKnob.answerFor reports about one key. |
-| [`liftJevAsk`](#liftJevAsk) | Function | battery | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience` — resilient-call's convenience, re-typed for this door's slice so a consumer wires one import. |
+| [`liftJevAsk`](#liftJevAsk) | Function | battery | Lift a knob result `[slice, cmds]` into a host `[State, cmds]` where the slice lives at `state.resilience` — resilient-call's convenience, re-typed for this module's slice so a consumer wires one import. |
 | [`offlineJevAnswer`](#offlineJevAnswer) | Function | battery | The outcome with no network at all: the fallback's answer, or its refusal, or `no_answer_path` when there is no fallback. |
 | [`parseAnswers`](#parseAnswers) | Function | battery | Turn an `unknown` response body into the typed answers for `questions`, or into one `JevErr`. |
 | [`ResilientState`](#ResilientState) | Interface | battery | The slice. |

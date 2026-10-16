@@ -6,7 +6,7 @@ const ImportedFromSchema = z.enum(["driven", "configurator", "any"]);
 export type ImportedFrom = z.infer<typeof ImportedFromSchema>;
 
 // One library type: the types it may import (its own included, when it says so), whether it must
-// stay free of world doors and world libraries, and where it may be imported from. The type names
+// stay free of impure globals and world libraries, and where it may be imported from. The type names
 // are the rules file's; nothing here knows `contract` from `ui`.
 const LibraryTypeSchema = z
   .object({

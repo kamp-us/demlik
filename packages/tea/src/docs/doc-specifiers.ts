@@ -21,7 +21,7 @@ const GENERATED_DIR = join(DOCS_DIR, "reference");
 
 /**
  * Every `@demlik/tea` specifier a markdown source names, bare package included
- * (as `.`, the export map's own spelling for the root door).
+ * (as `.`, the export map's own spelling for the root entry).
  */
 const SPECIFIER = /@demlik\/tea(\/[A-Za-z0-9._/-]+)?/g;
 
@@ -85,7 +85,7 @@ export function unknownSpecifiersIn(
   return hits;
 }
 
-/** Every closed door the hand-authored quadrants still point a reader at. */
+/** Every closed subpath the hand-authored quadrants still point a reader at. */
 export async function collectSpecifierDrift(): Promise<
   readonly SpecifierHit[]
 > {

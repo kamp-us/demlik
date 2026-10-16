@@ -196,7 +196,7 @@ describe("defineAgent — the three-line program (ADR 0015's pass/fail test)", (
     expect(state.instructions).toBe(INSTRUCTIONS);
   });
 
-  it("machine(input) is the door down: the raw kernel run drives the same Model", async () => {
+  it("machine(input) is the way down: the raw kernel run drives the same Model", async () => {
     const { model } = scripted([ASK, ANSWER]);
     const agent = defineAgent({
       model,
@@ -1421,7 +1421,7 @@ describe("onToolError — the lid's typed failure seam (#115)", () => {
 // #136 — `.with({ interpret })`: the ramp between the lid's three intents and
 // `createAgent`'s fourteen fields. One wrap point over the handlers `defineAgent`
 // built, so a single unusual requirement costs one cell rather than the whole
-// wiring. The assertions are the ones the door has to keep: the named cell is
+// wiring. The assertions are the ones the wrapper has to keep: the named cell is
 // wrapped and no other is, the wrapped cell still settles through the same
 // typed Cmd→Msg edge (so a replay of a wrapped run is the unwrapped run's),
 // wrapping is composable in a stated order, and the agent it was called on is

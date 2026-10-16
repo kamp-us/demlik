@@ -5,7 +5,7 @@
  * `MAINTAINING.md`'s tier table is the canonical stamp per subpath, and
  * `scripts/check-export-stamps.mjs` holds it to the export map. The
  * explanation page names tiers a second time, for consumers: a row per
- * battery door, and the experimental subpaths in one paragraph. Nothing held
+ * battery subpath, and the experimental subpaths in one paragraph. Nothing held
  * the two together, and the page fell behind when `./jev` and `./otel` were
  * stamped. Here every battery and experimental stamp must be named on the
  * page under that tier, and the page must name no other subpath there.
@@ -41,12 +41,12 @@ describe("docs/explanation/export-tiers.md agrees with MAINTAINING.md", async ()
   const maintaining = await read("MAINTAINING.md");
   const page = await read("docs/explanation/export-tiers.md");
 
-  it("gives every battery subpath a door row, and no other subpath one", () => {
-    const doors = [...page.matchAll(/^\| `@demlik\/tea\/([^`]+)` \|/gm)]
+  it("gives every battery subpath a subpath row, and no other subpath one", () => {
+    const subpaths = [...page.matchAll(/^\| `@demlik\/tea\/([^`]+)` \|/gm)]
       .map((row) => `./${row[1]}`)
       .sort();
 
-    expect(doors).toEqual(stamped(maintaining, "battery"));
+    expect(subpaths).toEqual(stamped(maintaining, "battery"));
   });
 
   it("names every experimental subpath in the experimental paragraph, and no other", () => {

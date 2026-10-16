@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: A world door is named for what a use read, and Node's own process judges a declaration
-status: accepted
+status: superseded by [0027](0027-one-impure-kind-and-one-word-per-concept.md)
 date: 2026-10-01
 tags: []
 ---

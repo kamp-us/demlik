@@ -129,15 +129,13 @@ describe("the shape kinds are off until listed", () => {
     ...extra,
   });
 
-  it("reports B8, B9 and B1 as before and nothing for B15 and B16 when applicationShape lists none", () => {
+  it("reports B8, B7 and B1 as before and nothing for B15 and B16 when applicationShape lists none", () => {
     const rules = shapeless({
       testFiles: SHAPE_RULES.testFiles,
       readAllowance: SHAPE_RULES.readAllowance,
     });
     const kinds = new Set(listed(open(rules)).map(([, kind]) => kind));
-    expect(kinds).toEqual(
-      new Set(["driving-reaches-driven", "door-outside-driven-adapter", "cross-feature"]),
-    );
+    expect(kinds).toEqual(new Set(["driving-reaches-driven", "impure", "cross-feature"]));
   });
 
   it("lists one kind without the other", () => {

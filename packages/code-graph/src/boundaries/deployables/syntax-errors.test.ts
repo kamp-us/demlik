@@ -36,7 +36,6 @@ function workersRepo(auth: string) {
     },
     {
       features: { "services/api": ["orders"] },
-      layout: { "services/api": "hexagonal" },
       acrossDeployables: ["binding-outside-driven-adapter", "worker-call-cycle"],
     },
   );

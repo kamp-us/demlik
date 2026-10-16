@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// A DOOR CARRIES EVERY MODULE BEHIND IT — BY SYMBOL, NOT BY NAME.
+// A SUBPATH CARRIES EVERY MODULE BEHIND IT — BY SYMBOL, NOT BY NAME.
 //
-// The `battery` doors — the seven grouped ones from #205 plus `./jev` (#219) —
+// The `battery` subpaths — the seven grouped ones from #205 plus `./jev` (#219) —
 // are re-export files over `src/internal/`, and the two ways one silently stops
 // carrying a module are both quiet:
 //
@@ -9,18 +9,18 @@
 //     the honest fix is to name a winner. The dishonest one is to star one
 //     module and enumerate the other, which compiles, picks a winner nobody
 //     chose, and leaves the loser's type unreachable under its own name.
-//   - a hand-enumerated module (this door has one: `resilient-call`) drifts
+//   - a hand-enumerated module (this subpath has one: `resilient-call`) drifts
 //     the moment someone adds an export to it. Nothing fails; the name is
-//     simply not on the door.
+//     simply not on the subpath.
 //
 // So the check is per SYMBOL, not per name: every symbol a module behind a
-// door exports must be reachable through that door, under its own name or a
-// rename this file records. Comparing names would pass a door that exports the
+// subpath exports must be reachable through that subpath, under its own name or a
+// rename this file records. Comparing names would pass a subpath that exports the
 // right spelling of the wrong declaration — which is exactly the `TS2308` fix
 // done wrong.
 //
-// The module list is the ruling's table, transcribed. Deriving it from the door
-// file instead would make a module dropped from the door invisible here, which
+// The module list is the ruling's table, transcribed. Deriving it from the subpath
+// file instead would make a module dropped from the subpath invisible here, which
 // is the failure this file exists to catch.
 // ═══════════════════════════════════════════════════════════════════════════
 import { dirname, join, relative, resolve } from "node:path";
@@ -31,10 +31,10 @@ import { describe, expect, it } from "vitest";
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * Door → the modules it re-exports, from the ruling on #205. A path is
+ * Subpath → the modules it re-exports, from the ruling on #205. A path is
  * relative to `src/`, so it names the file a reader opens.
  */
-const DOORS: ReadonlyMap<string, readonly string[]> = new Map([
+const SUBPATHS: ReadonlyMap<string, readonly string[]> = new Map([
   [
     "idempotency",
     [
@@ -107,8 +107,8 @@ const DOORS: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /**
- * The renames a door applies, `door → module-side name → door-side name`.
- * Every entry here is a collision the door had to resolve, and recording it is
+ * The renames a subpath applies, `subpath → module-side name → subpath-side name`.
+ * Every entry here is a collision the subpath had to resolve, and recording it is
  * what keeps "renamed deliberately" distinguishable from "quietly dropped".
  */
 const RENAMED: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
@@ -130,8 +130,10 @@ function sourceFileFor(relPath: string): string {
 }
 
 const entryFiles = [
-  ...[...DOORS.keys()].map((door) => join(PKG_ROOT, "src", door, "index.ts")),
-  ...[...DOORS.values()].flat().map(sourceFileFor),
+  ...[...SUBPATHS.keys()].map((subpath) =>
+    join(PKG_ROOT, "src", subpath, "index.ts"),
+  ),
+  ...[...SUBPATHS.values()].flat().map(sourceFileFor),
 ];
 
 const config = ts.parseJsonConfigFileContent(
@@ -155,9 +157,10 @@ function declared(symbol: ts.Symbol): ts.Symbol {
 /** `name → declaration` for every export of the module at `file`. */
 function exportsOf(file: string): Map<string, ts.Symbol> {
   const source = program.getSourceFile(file);
-  if (!source) throw new Error(`battery doors: no source file for ${file}`);
+  if (!source) throw new Error(`battery subpaths: no source file for ${file}`);
   const moduleSymbol = checker.getSymbolAtLocation(source);
-  if (!moduleSymbol) throw new Error(`battery doors: ${file} is not a module`);
+  if (!moduleSymbol)
+    throw new Error(`battery subpaths: ${file} is not a module`);
   return new Map(
     checker
       .getExportsOfModule(moduleSymbol)
@@ -171,20 +174,20 @@ function declaredIn(symbol: ts.Symbol): string {
   return decl ? relative(PKG_ROOT, decl.getSourceFile().fileName) : "?";
 }
 
-describe.each([...DOORS])("@demlik/tea/%s", (door, modules) => {
-  const doorExports = exportsOf(join(PKG_ROOT, "src", door, "index.ts"));
-  const renames = RENAMED.get(door) ?? new Map<string, string>();
+describe.each([...SUBPATHS])("@demlik/tea/%s", (subpath, modules) => {
+  const subpathExports = exportsOf(join(PKG_ROOT, "src", subpath, "index.ts"));
+  const renames = RENAMED.get(subpath) ?? new Map<string, string>();
 
   it.each(modules)("carries every export of src/%s", (relPath) => {
     const unreachable: string[] = [];
     for (const [name, symbol] of exportsOf(sourceFileFor(relPath))) {
       const expected = renames.get(`${name}@${relPath}`) ?? name;
-      const onDoor = doorExports.get(expected);
-      if (onDoor === undefined) {
-        unreachable.push(`${name} — no \`${expected}\` on the door`);
-      } else if (onDoor !== symbol) {
+      const onSubpath = subpathExports.get(expected);
+      if (onSubpath === undefined) {
+        unreachable.push(`${name} — no \`${expected}\` on the subpath`);
+      } else if (onSubpath !== symbol) {
         unreachable.push(
-          `${name} — the door's \`${expected}\` is ${declaredIn(onDoor)}, not ${declaredIn(symbol)}`,
+          `${name} — the subpath's \`${expected}\` is ${declaredIn(onSubpath)}, not ${declaredIn(symbol)}`,
         );
       }
     }

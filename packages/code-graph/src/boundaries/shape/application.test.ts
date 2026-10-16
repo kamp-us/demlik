@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { API, apiRepo, at } from "../../test-helpers/api-repo.js";
+import { apiRepo, at } from "../../test-helpers/api-repo.js";
 import type { BoundaryRepo } from "../../test-helpers/boundary-repo.js";
 import { SHOP_TYPES, shopManifests } from "../../test-helpers/shop-workspace.js";
 import type { BoundaryViolation } from "../violation.js";
@@ -133,7 +133,7 @@ describe("B16 judges what an application/ file imports against an allowlist", ()
       outside("@cloudflare/workers-types", null, true),
     ],
     [
-      "a node: builtin that is no door",
+      "a node: builtin that is no impure global",
       'import { join } from "node:path";\nexport const o = join;\n',
       outside("node:path"),
     ],
@@ -212,10 +212,10 @@ describe("one import, one verdict: another kind's import is that kind's alone", 
     ]);
   });
 
-  it("leaves a module door opened at run time to B7, and judges a type-only one itself", () => {
+  it("leaves a module global opened at run time to B7, and judges a type-only one itself", () => {
     expect(
       judge('import { readFileSync } from "node:fs";\nexport const o = readFileSync;\n'),
-    ).toEqual([["impure-application", null, "node:fs", false]]);
+    ).toEqual([["impure", null, "node:fs", false]]);
     expect(judge('import type { Stats } from "node:fs";\nexport type S = Stats;\n')).toEqual([
       outside("node:fs", null, true),
     ]);
@@ -234,10 +234,6 @@ describe("B16 runs only where it is asked to", () => {
     repo?.dispose();
     const other = { ...NARROWING, applicationShape: ["index-not-exports-only"] };
     expect(judge(SOURCE, other)).toEqual([]);
-  });
-
-  it("never runs in a rules-layout feature", () => {
-    expect(judge(SOURCE, { layout: { [API]: "rules" } })).toEqual([]);
   });
 
   it.each([

@@ -1229,7 +1229,7 @@ export function createResilientCall<
  * host; consumers with a differently-named field spread by hand. Pure — a thin
  * record rebuild, no clock / RNG.
  *
- * The record rebuild itself is `liftSlice` from the root door (#231) — this
+ * The record rebuild itself is `liftSlice` from the root entry (#231) — this
  * stays as the named, pre-keyed convenience for the `state.resilience` field,
  * unchanged in name, signature and subpath.
  */

@@ -23,10 +23,10 @@ promise you are buying if you build a product on the library.
 minor says so. The point of the tier is that a battery break never forces a
 major on someone who never imported it.
 
-The batteries are grouped, one door per group. Each door is a re-export file
-over `src/internal/`, so nothing about a battery moves when its door opens:
+The batteries are grouped, one subpath per group. Each subpath is a re-export file
+over `src/internal/`, so nothing about a battery moves when its subpath opens:
 
-| Door | What is behind it |
+| Subpath | What is behind it |
 |---|---|
 | `@demlik/tea/idempotency` | dedupe by key, cache the result, replay it to every duplicate arrival |
 | `@demlik/tea/flow` | fan-out, saga, workflow, poller, reconciler, batch window, monitored run, await-terminal |
@@ -38,9 +38,9 @@ over `src/internal/`, so nothing about a battery moves when its door opens:
 | `@demlik/tea/retry-backoff` | exponential backoff with jitter and a cap, plus the retry-attempt state |
 | `@demlik/tea/jev` | a typed question to Jev: the wire contract, the one `ask` Cmd over it, and the batching composition |
 
-Grouped rather than one door per module on purpose: a door is a permanent
+Grouped rather than one subpath per module on purpose: a subpath is a permanent
 promise and a maintenance cost, so a few of them is a bill this library can pay
-where forty was not. Within a door, the whole group moves at the group's tier.
+where forty was not. Within a subpath, the whole group moves at the group's tier.
 
 **`experimental` — no stability promise.** Today `./agent`, and `./otel`, which
 reads the agent's events and graduates with it. Either may change or disappear
@@ -56,8 +56,8 @@ that happens by drift.
 - **Reaching for `./agent`?** Do it — it is the headline surface — but pin an
   exact version and read the changelog before you bump. Treat an upgrade as a
   small migration rather than a routine patch.
-- **Reaching for a battery?** Import it through its door, never through a deep
-  path into `src/internal/`. The door is the promise; the file layout behind it
+- **Reaching for a battery?** Import it through its subpath, never through a deep
+  path into `src/internal/`. The subpath is the promise; the file layout behind it
   is not, and the two are deliberately allowed to diverge.
 - **An import that is not in the export map is not a public API.** The package
   has real internal code — the journal, the prediction and LLM-call plumbing —
@@ -114,8 +114,8 @@ maintenance promise nobody meant to make.
 
 There is no deprecation holding pattern. When something is replaced, the removal,
 every internal rewrite and the changelog entry land in the same change, and the
-changelog names where each thing went. A collapse of several doors into one
-**moves the parts, never drops them** — the surviving door re-exports what the
+changelog names where each thing went. A collapse of several subpaths into one
+**moves the parts, never drops them** — the surviving subpath re-exports what the
 old ones did. Only a genuinely dead twin gets deleted outright, with its
 migration named.
 

@@ -4,7 +4,7 @@
  * fire, cap a stream to one fire per window, and gate a high-frequency input
  * into a settled, rate-capped, optionally deduped sequence of emits.
  *
- * A DOOR, not a module. Every name here is declared under
+ * A SUBPATH, not a module. Every name here is declared under
  * `src/internal/timing/` and re-exported unchanged; nothing moved and nothing
  * was renamed to open it. The modules behind it:
  *

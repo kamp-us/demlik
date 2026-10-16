@@ -6,6 +6,8 @@ import {
   BOUNDARY_KINDS,
   type BoundaryLedger,
   type BoundaryLedgerEntry,
+  type BoundaryRules,
+  BoundaryRulesSchema,
   boundaryLedgerOf,
   ledgerKey,
   parseBoundaryLedger,
@@ -29,8 +31,8 @@ const crossing: BoundaryLedgerEntry = {
 };
 const bare: BoundaryLedgerEntry = {
   scope: S,
-  kind: "impure-rules",
-  from: "apps/web/src/billing/rules/price.ts",
+  kind: "impure",
+  from: "apps/web/src/billing/application/price.ts",
   to: null,
   specifier: "zod",
 };
@@ -99,10 +101,9 @@ describe("the ledger file", () => {
     expect(parseBoundaryLedger(JSON.stringify({ entries: [{ ...crossing, to: null }] }))).toEqual({
       kind: "invalid",
       message:
-        "entries.0.to: only a bare-specifier import, a world door or a feature's entry may have " +
+        "entries.0.to: only a bare-specifier import, an impure use or a feature's entry may have " +
         "a null `to` (kinds application-import-outside-allowlist, binding-outside-driven-adapter, " +
-        "door-outside-driven-adapter, door-outside-owner, impure-application, impure-library, " +
-        "impure-rules, index-not-exports-only, library-undeclared, unknown-zone, worker-call-cycle)",
+        "impure, index-not-exports-only, library-undeclared, unknown-zone, worker-call-cycle)",
     });
     expect(parseBoundaryLedger(JSON.stringify({ entries: [crossing], extra: 1 })).kind).toBe(
       "invalid",
@@ -135,34 +136,23 @@ describe("the ledger file", () => {
   });
 });
 
-describe("a world door is a ledger entry with no target file", () => {
-  const door: BoundaryLedgerEntry = {
+describe("an impure use is a ledger entry with no target file", () => {
+  const use: BoundaryLedgerEntry = {
     scope: S,
-    kind: "door-outside-owner",
-    from: "apps/web/src/billing/flows/charge.ts",
+    kind: "impure",
+    from: "apps/web/src/billing/application/charge.ts",
     to: null,
     specifier: "process.env",
   };
-  const imported: BoundaryLedgerEntry = {
-    scope: S,
-    kind: "impure-rules",
-    from: "apps/web/src/billing/rules/price.ts",
-    to: null,
-    specifier: "fetch",
-  };
-  const read: BoundaryLedgerEntry = { ...imported, global: true };
+  const fetched: BoundaryLedgerEntry = { ...use, specifier: "fetch" };
 
   it("lists the kind, accepts a null `to` on it, and refuses one on every kind naming a file", () => {
-    expect(BOUNDARY_KINDS).toContain("door-outside-owner");
-    expect(parseBoundaryLedger(JSON.stringify({ entries: [door] })).kind).toBe("read");
+    expect(BOUNDARY_KINDS).toContain("impure");
+    expect(parseBoundaryLedger(JSON.stringify({ entries: [use] })).kind).toBe("read");
     const mayHaveNoFile: readonly string[] = [
       "application-import-outside-allowlist",
       "binding-outside-driven-adapter",
-      "door-outside-driven-adapter",
-      "door-outside-owner",
-      "impure-application",
-      "impure-library",
-      "impure-rules",
+      "impure",
       "index-not-exports-only",
       "library-undeclared",
       "unknown-zone",
@@ -176,34 +166,35 @@ describe("a world door is a ledger entry with no target file", () => {
     }
   });
 
-  it("re-keys a door entry whose importer moved and leaves its null `to` alone", () => {
-    const moved = rekeyBoundaryLedger(boundaryLedgerOf([door, read]), [
-      { from: door.from, to: "apps/web/src/billing/charge.ts" },
+  it("re-keys an impure entry whose importer moved and leaves its null `to` alone", () => {
+    const moved = rekeyBoundaryLedger(boundaryLedgerOf([use, fetched]), [
+      { from: use.from, to: "apps/web/src/billing/application/pay.ts" },
     ]);
-    expect(moved.entries).toContainEqual({ ...door, from: "apps/web/src/billing/charge.ts" });
-    expect(moved.entries).toContainEqual(read);
+    expect(moved.entries).toEqual([
+      { ...fetched, from: "apps/web/src/billing/application/pay.ts" },
+      { ...use, from: "apps/web/src/billing/application/pay.ts" },
+    ]);
     expect(moved.entries.map((e) => e.to)).toEqual([null, null]);
   });
 
-  it("keeps a global read and a bare import of the same name as two entries", () => {
-    expect(ledgerKey(read)).not.toBe(ledgerKey(imported));
-    const both = boundaryLedgerOf([read, imported, read]);
-    expect(both.entries).toEqual([imported, read]);
-    expect(boundaryLedgerOf([...both.entries].reverse())).toEqual(both);
+  it("keys a use by its file and row: two rows of one file are two entries, one row twice is one", () => {
+    expect(ledgerKey(use)).not.toBe(ledgerKey(fetched));
+    const both = boundaryLedgerOf([use, fetched, use]);
+    expect(both.entries).toEqual([fetched, use]);
     expect(parseBoundaryLedger(serializeBoundaryLedger(both))).toEqual({
       kind: "read",
       ledger: both,
     });
   });
 
-  it("accepts `global` only as `true` on an impure-rules entry with no file", () => {
-    const refused = [
-      { ...door, global: true },
-      { ...crossing, global: true },
-      { ...imported, to: "apps/web/src/http.ts", global: true },
-      { ...imported, global: false },
+  it("rejects the kinds and the flag a release before this one wrote, with no alias", () => {
+    const old = [
+      { ...use, kind: "impure-application" },
+      { ...use, kind: "impure-library" },
+      { ...use, kind: "impure-rules" },
+      { ...use, global: true },
     ];
-    for (const entry of refused) {
+    for (const entry of old) {
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");
     }
   });
@@ -225,35 +216,25 @@ describe("the hexagonal kinds are ledger entries", () => {
     specifier,
   });
   const parses = (entry: unknown) => parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind;
-  const DOOR_OR_ENTRY = [
-    "impure-application",
-    "door-outside-driven-adapter",
-    "unknown-zone",
-  ] as const;
+  const IMPURE_OR_ENTRY = ["impure", "unknown-zone"] as const;
   const FILE_EDGES = ["application-imports-adapter", "driving-reaches-driven"] as const;
 
-  it("lists all five", () => {
-    expect(BOUNDARY_KINDS).toEqual(expect.arrayContaining([...DOOR_OR_ENTRY, ...FILE_EDGES]));
+  it("lists all four", () => {
+    expect(BOUNDARY_KINDS).toEqual(expect.arrayContaining([...IMPURE_OR_ENTRY, ...FILE_EDGES]));
   });
 
-  it("accepts a null `to` on a door or an entry, and refuses one on an import of a file", () => {
-    for (const kind of DOOR_OR_ENTRY) expect(parses(noFile(kind, "process.env"))).toBe("read");
+  it("accepts a null `to` on an impure use or an entry, and refuses one on an import of a file", () => {
+    for (const kind of IMPURE_OR_ENTRY) expect(parses(noFile(kind, "process.env"))).toBe("read");
     for (const kind of FILE_EDGES) {
       expect(parses(edge(kind))).toBe("read");
       expect(parses({ ...edge(kind), to: null })).toBe("invalid");
     }
   });
 
-  it("keeps `global` to impure-rules", () => {
-    for (const kind of DOOR_OR_ENTRY) {
-      expect(parses({ ...noFile(kind, "fetch"), global: true })).toBe("invalid");
-    }
-  });
-
   it("re-keys a moved file in a new-kind entry", () => {
     const zoneEdge = edge("application-imports-adapter");
-    const door = noFile("impure-application", "Date.now");
-    const moved = rekeyBoundaryLedger(boundaryLedgerOf([zoneEdge, door]), [
+    const use = noFile("impure", "Date.now");
+    const moved = rekeyBoundaryLedger(boundaryLedgerOf([zoneEdge, use]), [
       { from: zoneEdge.from, to: "apps/web/src/billing/application/pay.ts" },
       {
         from: "apps/web/src/billing/adapters/driven/stripe.ts",
@@ -266,7 +247,7 @@ describe("the hexagonal kinds are ledger entries", () => {
         from: "apps/web/src/billing/application/pay.ts",
         to: "apps/web/src/billing/adapters/driven/card.ts",
       },
-      { ...door, from: "apps/web/src/billing/application/pay.ts" },
+      { ...use, from: "apps/web/src/billing/application/pay.ts" },
     ]);
   });
 });
@@ -282,7 +263,7 @@ describe("the library kinds are ledger entries", () => {
   };
   const impure: BoundaryLedgerEntry = {
     scope: LIB,
-    kind: "impure-library",
+    kind: "impure",
     from: `${LIB}/src/log.ts`,
     to: null,
     specifier: "@sentry/node",
@@ -303,18 +284,12 @@ describe("the library kinds are ledger entries", () => {
   };
   const parses = (entry: unknown) => parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind;
 
-  it("accepts a null `to` on B11 and B13, and refuses one on B12 and B14, which name a directory", () => {
+  it("accepts a null `to` on B11 and B7, and refuses one on B12 and B14, which name a directory", () => {
     for (const entry of [impure, undeclared, up, outside]) expect(parses(entry)).toBe("read");
     for (const entry of [up, outside]) expect(parses({ ...entry, to: null })).toBe("invalid");
   });
 
-  it("keeps `global` to impure-rules", () => {
-    for (const entry of [impure, undeclared]) {
-      expect(parses({ ...entry, global: true })).toBe("invalid");
-    }
-  });
-
-  it("re-keys a moved importer file in a B12, B13 and B14 entry, and leaves a library directory", () => {
+  it("re-keys a moved importer file in a B12, B7 and B14 entry, and leaves a library directory", () => {
     const moved = rekeyBoundaryLedger(boundaryLedgerOf([up, impure, outside, undeclared]), [
       { from: up.from, to: `${LIB}/src/y.ts` },
       { from: impure.from, to: `${LIB}/src/trace.ts` },
@@ -362,14 +337,8 @@ describe("the deployable kinds are ledger entries", () => {
     expect(parses({ ...binding, to: "packages/string-util" })).toBe("read");
   });
 
-  it("keeps `global` to impure-rules", () => {
-    for (const entry of [binding, cycle, reach]) {
-      expect(parses({ ...entry, global: true })).toBe("invalid");
-    }
-  });
-
-  it("is a door crossing for B17, an entry for B18 and an import for B19", () => {
-    expect([binding, cycle, reach].map(crossingOf)).toEqual(["door", "entry", "import"]);
+  it("is an impure crossing for B17, an entry for B18 and an import for B19", () => {
+    expect([binding, cycle, reach].map(crossingOf)).toEqual(["impure", "entry", "import"]);
   });
 
   it("keys B17 by the file and binding, B18 by the workers and edges, B19 by the importer and workspace", () => {
@@ -433,12 +402,6 @@ describe("the shape kinds are ledger entries", () => {
     for (const value of [entry, pkg]) expect(parses({ ...value, to: null })).toBe("read");
   });
 
-  it("keeps `global` to impure-rules", () => {
-    for (const value of [entry, pkg, file]) {
-      expect(parses({ ...value, global: true })).toBe("invalid");
-    }
-  });
-
   it("is an entry crossing for B15 and an import for B16", () => {
     expect([entry, pkg, file].map(crossingOf)).toEqual(["entry", "import", "import"]);
   });
@@ -468,5 +431,40 @@ describe("the shape kinds are ledger entries", () => {
         },
       ]).entries,
     );
+  });
+});
+
+describe("the kinds the ledger reads", () => {
+  it("name one impure kind, and none of the three it replaced by name", () => {
+    expect(BOUNDARY_KINDS).toContain("impure");
+    for (const old of ["impure-application", "impure-library", "impure-rules"]) {
+      expect(BOUNDARY_KINDS).not.toContain(old);
+    }
+  });
+});
+
+describe("the rules schema the entry publishes", () => {
+  const FIXTURE = path.join(
+    import.meta.dirname,
+    "..",
+    "..",
+    "test",
+    "parity",
+    "fixture",
+    "boundary-rules.json",
+  );
+
+  it("parses a boundary-rules.json into BoundaryRules", () => {
+    const rules: BoundaryRules = BoundaryRulesSchema.parse(
+      JSON.parse(fs.readFileSync(FIXTURE, "utf8")),
+    );
+    expect(rules.features).toEqual({ "services/svc": ["audit-runs", "findings"] });
+    expect(rules.lib).toEqual(["lib"]);
+  });
+
+  it("rejects the keys that were deleted, with no alias", () => {
+    for (const key of ["layout", "contracts"]) {
+      expect(BoundaryRulesSchema.safeParse({ [key]: {} }).success, key).toBe(false);
+    }
   });
 });

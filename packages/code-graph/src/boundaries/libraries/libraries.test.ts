@@ -51,7 +51,7 @@ describe("a repo laid out as libraries of declared types gates every rule of the
         ' -> packages/orders-contract  ("@shop/orders-contract/schema")',
     );
     expect(failed.stdout).toContain(
-      "packages/orders-contract  B13 impure-library  packages/orders-contract/src/clock.ts -> Date.now\n",
+      "packages/orders-contract  B7 impure  packages/orders-contract/src/clock.ts -> Date.now\n",
     );
     expect(failed.stdout).toContain(
       "services/api  B14 adapter-library-imported-outside-driven  services/api/src/main.ts" +
@@ -251,7 +251,7 @@ describe("--migrate-ceilings seeds the library kinds without counting them", () 
       new Set([
         "library-undeclared",
         "library-imports-up",
-        "impure-library",
+        "impure",
         "adapter-library-imported-outside-driven",
       ]),
     );
@@ -298,7 +298,7 @@ describe("a library nested in another is judged once, as its own scope", () => {
     );
     try {
       expect(crossingsOf(repo.run({ json: true }))).toEqual([
-        ["impure-library", "packages/ui/icons/src/now.ts", "Date.now"],
+        ["impure", "packages/ui/icons/src/now.ts", "Date.now"],
       ]);
       repo.run({ acceptCrossings: true, reason: "nested" });
       expect(ledgerOf(repo).entries.map((entry) => entry.scope)).toEqual(["packages/ui/icons"]);
