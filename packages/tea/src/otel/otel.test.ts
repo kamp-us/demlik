@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { SpanStatusCode } from "@opentelemetry/api";
+import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -7,14 +7,18 @@ import {
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   type AgentEvent,
   type AgentMachineMsg,
+  type AgentMessage,
   type AgentTurn,
   agentEvents,
   createAgent,
+  defineAgent,
   type Schema,
   type ToolCall,
+  tool,
 } from "../agent/index";
 import type { Interpret } from "../index";
 import { run } from "../promise";
@@ -162,7 +166,11 @@ describe("traceAgent — one run as one span tree", () => {
     // The trace is the run's: its id is derived from `runId`, and the run span
     // hangs off a detached parent in it, so a resumed process lands here too.
     expect(root.spanContext().traceId).toBe(runTraceId("run-1"));
-    expect(root.parentSpanContext?.traceId).toBe(runTraceId("run-1"));
+    expect(root.parentSpanContext).toMatchObject({
+      traceId: runTraceId("run-1"),
+      spanId: sha256Hex("run-1").slice(32, 48),
+      isRemote: true,
+    });
     for (const span of spans) {
       expect(span.spanContext().traceId).toBe(runTraceId("run-1"));
       if (span !== root) expect(parentOf(span)).toBe(root.spanContext().spanId);
@@ -457,6 +465,195 @@ describe("agentSpans — the listener form", () => {
     expect(detached).toHaveLength(2);
     for (const span of detached) {
       expect(span.endTime).toEqual([0, 3_000_000]);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #690 — a host's `parent`: every run starts under the span the host gives,
+// in the host's trace, instead of under a detached parent of tea's own.
+// ---------------------------------------------------------------------------
+
+describe("agentSpans — under a host's parent", () => {
+  const lookup = tool(
+    "lookup",
+    {
+      description: "Look a word up.",
+      input: z.object({ q: z.string() }),
+      ok: z.object({ hit: z.string() }),
+      err: [],
+    },
+    async ({ q }, _ctx, { ok }) => ok({ hit: `about ${q}` }),
+  );
+
+  /** First turn asks for two lookups at once; the next one answers. */
+  const twoLookupsThenAnswer = async (
+    messages: readonly AgentMessage[],
+  ): Promise<AgentTurn> =>
+    messages.some((m) => m.role === "assistant")
+      ? ANSWER
+      : {
+          content: "looking",
+          toolCalls: [
+            { callId: "l1", name: "lookup", args: { q: "tea" } },
+            { callId: "l2", name: "lookup", args: { q: "elm" } },
+          ],
+        };
+
+  /** A host span `S` open on the exporter's tracer, as the `parent` context. */
+  function hostSpan() {
+    const { exporter, tracer } = exporterAndTracer();
+    const host = tracer.startSpan("host line");
+    return {
+      exporter,
+      tracer,
+      host,
+      parent: trace.setSpan(context.active(), host),
+    };
+  }
+
+  it("three defineAgent runs land in the host's trace, each run span a child of S", async () => {
+    const { exporter, tracer, host, parent } = hostSpan();
+    const agent = defineAgent({
+      model: twoLookupsThenAnswer,
+      tools: [lookup],
+      instructions: "Look both words up, then answer.",
+    });
+    const spans = agentSpans({ tracer, parent });
+    for (const runId of ["run-a", "run-b", "run-c"]) {
+      await agent.run("tea and elm", { runId, onEvent: spans.onEvent });
+    }
+    spans.end();
+    host.end();
+
+    const done = exporter.getFinishedSpans();
+    const hostId = host.spanContext();
+    const agentSpansOnly = done.filter((s) => s !== one(done, "host line"));
+    const runs = byName(done, "invoke_agent agent");
+    expect(runs).toHaveLength(3);
+    expect(runs.map((s) => s.attributes["tea.run.id"]).sort()).toEqual([
+      "run-a",
+      "run-b",
+      "run-c",
+    ]);
+    expect(byName(done, "execute_tool lookup")).toHaveLength(6);
+    expect(byName(done, "chat")).toHaveLength(6);
+    for (const span of agentSpansOnly) {
+      expect(span.spanContext().traceId).toBe(hostId.traceId);
+    }
+    for (const run of runs) {
+      expect(parentOf(run)).toBe(hostId.spanId);
+      expect(run.parentSpanContext?.isRemote).toBeFalsy();
+    }
+    // No dangling parent: every parent named is a span in the export.
+    const exportedIds = new Set(done.map((s) => s.spanContext().spanId));
+    for (const span of done) {
+      const parentId = parentOf(span);
+      if (parentId !== undefined) expect(exportedIds).toContain(parentId);
+    }
+  });
+
+  it("parent wins over traceIdOf, which is never called", () => {
+    const { exporter, tracer, host, parent } = hostSpan();
+    let calls = 0;
+    const spans = agentSpans<string>({
+      tracer,
+      parent,
+      traceIdOf: () => {
+        calls += 1;
+        return "0123456789abcdef0123456789abcdef";
+      },
+    });
+    spans.onEvent({
+      runId: "run-p",
+      at: 1,
+      type: "BrainStarted",
+      turn: 0,
+      purpose: "act",
+      model: null,
+      payload: null,
+    });
+    spans.onEvent({ runId: "run-p", at: 2, type: "TurnSettled", turn: ANSWER });
+    spans.onEvent({
+      runId: "run-p",
+      at: 3,
+      type: "RunDone",
+      status: { kind: "cancelled", at: 3 },
+    });
+
+    expect(calls).toBe(0);
+    const done = exporter.getFinishedSpans();
+    expect(done).toHaveLength(2);
+    for (const span of done) {
+      expect(span.spanContext().traceId).toBe(host.spanContext().traceId);
+    }
+    expect(parentOf(one(done, "invoke_agent agent"))).toBe(
+      host.spanContext().spanId,
+    );
+  });
+
+  it("end() still detaches every open span, the run span still under S", () => {
+    const { exporter, tracer, host, parent } = hostSpan();
+    const spans = agentSpans<string>({ tracer, parent });
+    spans.onEvent({
+      runId: "run-d",
+      at: 1,
+      type: "BrainStarted",
+      turn: 0,
+      purpose: "act",
+      model: null,
+      payload: null,
+    });
+    spans.onEvent({
+      runId: "run-d",
+      at: 2,
+      type: "ToolStarted",
+      callId: "c1",
+      name: "lookup",
+      args: {},
+    });
+
+    spans.end();
+    const done = exporter.getFinishedSpans();
+    expect(done.map((s) => s.name).sort()).toEqual([
+      "chat",
+      "execute_tool lookup",
+      "invoke_agent agent",
+    ]);
+    for (const span of done) {
+      expect(span.attributes["tea.run.detached"]).toBe(true);
+      expect(span.spanContext().traceId).toBe(host.spanContext().traceId);
+    }
+    expect(parentOf(one(done, "invoke_agent agent"))).toBe(
+      host.spanContext().spanId,
+    );
+  });
+
+  it("traceAgent passes parent through to the span writer", () => {
+    const { exporter, tracer, host, parent } = hostSpan();
+    const handlers = new Map<string, (event: AgentEvent<string>) => void>();
+    const source = {
+      on: (type: string, handler: (event: AgentEvent<string>) => void) => {
+        handlers.set(type, handler);
+        return () => handlers.delete(type);
+      },
+    } as AgentEventSource<string>;
+    const stop = traceAgent(source, { tracer, parent });
+    handlers.get("ToolStarted")?.({
+      runId: "run-t",
+      at: 1,
+      type: "ToolStarted",
+      callId: "c1",
+      name: "lookup",
+      args: {},
+    });
+
+    stop();
+    const done = exporter.getFinishedSpans();
+    const run = one(done, "invoke_agent agent");
+    expect(parentOf(run)).toBe(host.spanContext().spanId);
+    for (const span of done) {
+      expect(span.spanContext().traceId).toBe(host.spanContext().traceId);
     }
   });
 });
