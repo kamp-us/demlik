@@ -159,8 +159,22 @@ interface TraceAgentOptions {
    */
   readonly name?: string;
   /**
+   * The context every run span starts under — a span the host already has
+   * open, as `trace.setSpan(context.active(), span)`. The run then lands in the
+   * host's trace as that span's child, and its brain and tool spans follow.
+   *
+   * `parent` wins over `traceIdOf`: when both are given, the run is in the
+   * parent's trace and `traceIdOf` is never called. With a `parent`, the run's
+   * trace is the host's, so keeping one trace across a kill is the host's job
+   * too — a resumed run's spans go wherever the resuming host's `parent`
+   * points. Omit → each run hangs off a detached parent in the trace
+   * `traceIdOf(runId)` names, which a resumed process derives again.
+   */
+  readonly parent?: Context;
+  /**
    * The trace id a run writes into, from its `runId`. Omit → runTraceId.
-   * Must return 32 lowercase hex characters, not all zero.
+   * Must return 32 lowercase hex characters, not all zero. Not called when
+   * parent is given.
    */
   readonly traceIdOf?: (runId: string) => string;
   /** The tracer the spans are started on — `provider.getTracer("…")`. */

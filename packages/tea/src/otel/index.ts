@@ -24,6 +24,8 @@
  * `Store` writes into the same trace as the one that was killed. Spans the
  * killed process never ended are never exported; OpenTelemetry exports a span
  * when it ends. What it did end is in the trace beside the resumed leg.
+ * This holds only on the default path: a run started under a host's `parent`
+ * is in the host's trace, and keeping it one trace across a kill is the host's.
  *
  * ## Time
  *
@@ -80,9 +82,23 @@ export interface TraceAgentOptions {
   readonly name?: string;
   /**
    * The trace id a run writes into, from its `runId`. Omit → {@link runTraceId}.
-   * Must return 32 lowercase hex characters, not all zero.
+   * Must return 32 lowercase hex characters, not all zero. Not called when
+   * {@link TraceAgentOptions.parent | parent} is given.
    */
   readonly traceIdOf?: (runId: string) => string;
+  /**
+   * The context every run span starts under — a span the host already has
+   * open, as `trace.setSpan(context.active(), span)`. The run then lands in the
+   * host's trace as that span's child, and its brain and tool spans follow.
+   *
+   * `parent` wins over `traceIdOf`: when both are given, the run is in the
+   * parent's trace and `traceIdOf` is never called. With a `parent`, the run's
+   * trace is the host's, so keeping one trace across a kill is the host's job
+   * too — a resumed run's spans go wherever the resuming host's `parent`
+   * points. Omit → each run hangs off a detached parent in the trace
+   * `traceIdOf(runId)` names, which a resumed process derives again.
+   */
+  readonly parent?: Context;
 }
 
 /** Anything that delivers an agent's events by type — a runtime built with `events: agentEvents()`. */
@@ -170,6 +186,9 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
   const mask = opts.mask ?? maskBase64DataUris;
   const name = opts.name ?? "agent";
   const traceIdOf = opts.traceIdOf ?? runTraceId;
+  const { parent } = opts;
+  const parentOf = (runId: string): Context =>
+    parent ?? detachedParent(traceIdOf(runId), runId);
   const runs = new Map<string, OpenRun>();
 
   const exported = (value: unknown): string => {
@@ -180,12 +199,7 @@ export function agentSpans<R>(opts: TraceAgentOptions): AgentSpans<R> {
   const openRun = (runId: string, at: number): OpenRun => {
     const known = runs.get(runId);
     if (known !== undefined) return known;
-    const parent = trace.setSpanContext(ROOT_CONTEXT, {
-      traceId: traceIdOf(runId),
-      spanId: detachedSpanId(runId),
-      traceFlags: TraceFlags.SAMPLED,
-      isRemote: true,
-    });
+    const parent = parentOf(runId);
     const span = startSpan(
       tracer,
       `invoke_agent ${name}`,
@@ -398,11 +412,16 @@ function endSpan(span: Span, at: number): void {
   span.end(spanTime(at));
 }
 
-// The detached parent every run span hangs off. Derived from the run rather
-// than a constant so two runs never share a phantom parent; it is never
-// exported itself, only named as a parent.
-function detachedSpanId(runId: string): string {
-  return sha256Hex(runId).slice(32, 48);
+// The detached parent a run span hangs off when the host gives none. Its span
+// id is derived from the run rather than a constant so two runs never share a
+// phantom parent; it is never exported itself, only named as a parent.
+function detachedParent(traceId: string, runId: string): Context {
+  return trace.setSpanContext(ROOT_CONTEXT, {
+    traceId,
+    spanId: sha256Hex(runId).slice(32, 48),
+    traceFlags: TraceFlags.SAMPLED,
+    isRemote: true,
+  });
 }
 
 function openChildren(run: OpenRun): readonly Span[] {
