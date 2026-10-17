@@ -10,7 +10,7 @@ const B16 = "application-import-outside-allowlist";
 const DRIVEN = "src/orders/adapters/driven/reads.ts";
 const LIBRARIES = { libraryTypes: SHOP_TYPES, libraries: { "packages/domain-kernel": "kernel" } };
 
-describe("the five keys are parsed at the config boundary", () => {
+describe("the six keys are parsed at the config boundary", () => {
   let repo: BoundaryRepo;
   beforeEach(() => {
     repo = apiRepo(
@@ -97,6 +97,17 @@ describe("the five keys are parsed at the config boundary", () => {
     expect(refused(api({ testFiles: ["a}"] }))).toContain(
       '"testFiles" entry "a}" is not a valid glob',
     );
+  });
+
+  it("refuses a compositionRoots entry that is not a valid glob, or roots with no testFiles", () => {
+    const tests = ["**/*.test.ts"];
+    expect(refused(api({ testFiles: tests, compositionRoots: ["src/{index.ts"] }))).toBe(
+      '"compositionRoots" entry "src/{index.ts" is not a valid glob: unclosed "{" in glob "src/{index.ts".',
+    );
+    const needTests =
+      '"compositionRoots" says what a test may not reach, and "testFiles" lists no glob: with no file a test, the key enforces nothing.';
+    expect(refused(api({ compositionRoots: ["src/index.ts"] }))).toBe(needTests);
+    expect(refused(api({ testFiles: [], compositionRoots: ["src/index.ts"] }))).toBe(needTests);
   });
 
   it("refuses the strictDriving key, which every hexagonal scope now has by declaring features", () => {
@@ -186,13 +197,14 @@ describe("the five keys are parsed at the config boundary", () => {
     );
   });
 
-  it("accepts the five keys, and a rules file that declares none", () => {
+  it("accepts the six keys, and a rules file that declares none", () => {
     const rules = api({
       ...allowance({}),
       applicationShape: [B15, B16],
       applicationMayImport: ["kernel"],
       pureDependencies: ["zod", "@scope/*"],
       testFiles: ["**/*.test.ts", "{test,spec}/**"],
+      compositionRoots: ["src/index.ts", "services/*/src/{index,schema}.ts"],
     });
     for (const keys of [rules, api({})]) {
       const file = path.join(repo.root, "ok.json");

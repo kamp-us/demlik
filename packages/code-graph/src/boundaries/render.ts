@@ -22,8 +22,8 @@ import {
 export type BoundaryRender = { readonly stdout: string; readonly exitCode: number };
 
 // Which fix advice a kind's failure adds: `feature` is always printed, and the hexagonal, impure,
-// library, deployable and shape blocks only when a kind that needs them fails.
-type Advice = "feature" | "hexagonal" | "impure" | "library" | "deployable" | "shape";
+// library, deployable, shape and test blocks only when a kind that needs them fails.
+type Advice = "feature" | "hexagonal" | "impure" | "library" | "deployable" | "shape" | "test";
 
 // Each kind's rule label, and the advice it adds.
 const KINDS = {
@@ -42,6 +42,7 @@ const KINDS = {
   "binding-outside-driven-adapter": { rule: "B17", advice: "deployable" },
   "worker-call-cycle": { rule: "B18", advice: "deployable" },
   "relative-import-crosses-workspace": { rule: "B19", advice: "deployable" },
+  "test-reaches-composition-root": { rule: "B20", advice: "test" },
 } as const satisfies Record<BoundaryKind, { rule: string; advice: Advice }>;
 
 // An impure use, a binding and an entry are their own target: no import specifier was written for
@@ -179,6 +180,12 @@ const DEPLOYABLE_FIX_LINES = [
   "  other, and reach another workspace by its package name, never a relative path.",
 ];
 
+const TEST_FIX_LINES = [
+  "  A test drives the one feature under test and wires its own fakes: it imports that feature's",
+  "  index.ts, never a composition root (a worker entry, the module that assembles every feature) or",
+  "  a helper that opens one. A deliberate test of the wiring is accepted by name and with a reason.",
+];
+
 // What each advice adds to the lines every failure prints, in the order they print.
 const ADVICE_LINES = {
   feature: [],
@@ -187,6 +194,7 @@ const ADVICE_LINES = {
   library: LIBRARY_FIX_LINES,
   deployable: DEPLOYABLE_FIX_LINES,
   shape: SHAPE_FIX_LINES,
+  test: TEST_FIX_LINES,
 } as const satisfies Record<Advice, readonly string[]>;
 
 function fixLines(unrecorded: readonly BoundaryLedgerEntry[]): readonly string[] {

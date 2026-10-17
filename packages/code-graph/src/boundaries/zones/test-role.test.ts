@@ -25,10 +25,11 @@ const SAMPLES = {
   "binding-outside-driven-adapter": sample("binding-outside-driven-adapter"),
   "worker-call-cycle": sample("worker-call-cycle"),
   "relative-import-crosses-workspace": sample("relative-import-crosses-workspace"),
+  "test-reaches-composition-root": sample("test-reaches-composition-root"),
 } as const satisfies Record<BoundaryKind, BoundaryViolation>;
 
 describe("the table of kinds a test file is judged by", () => {
-  it("keeps B1, B3, B4, B11, B12, B14, B18 and B19, and drops B6-B8, B10, B15, B16 and B17", () => {
+  it("keeps B1, B3, B4, B11, B12, B14 and B18-B20, and drops B6-B8, B10, B15, B16 and B17", () => {
     const kept = judgedInTestFile(Object.values(SAMPLES)).map((v) => v.kind);
     expect(kept).toEqual([
       "cross-feature",
@@ -39,6 +40,7 @@ describe("the table of kinds a test file is judged by", () => {
       "adapter-library-imported-outside-driven",
       "worker-call-cycle",
       "relative-import-crosses-workspace",
+      "test-reaches-composition-root",
     ]);
   });
 

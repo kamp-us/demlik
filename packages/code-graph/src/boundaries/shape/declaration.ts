@@ -19,6 +19,16 @@ function narrowsOffKind(rules: BoundaryRules): string[] {
     );
 }
 
+// A key that names what a test may not reach does nothing while no file is a test: the same failure
+// a mistyped key is.
+function rootsNeedTests(rules: BoundaryRules): string[] {
+  return rules.compositionRoots.length > 0 && rules.testFiles.length === 0
+    ? [
+        '"compositionRoots" says what a test may not reach, and "testFiles" lists no glob: with no file a test, the key enforces nothing.',
+      ]
+    : [];
+}
+
 function typeIssues(
   rules: BoundaryRules,
   key: string,
@@ -83,7 +93,7 @@ function allowanceIssues(rules: BoundaryRules): string[] {
   });
 }
 
-// The first problem in the five keys that the rules file alone can show, or null. A kind outside the
+// The first problem in the six keys that the rules file alone can show, or null. A kind outside the
 // two is refused by the schema. What needs the repo (a listed file the scope does not load, a
 // wrangler config that cannot be parsed) is judged where the scope is loaded and the run is read.
 export function shapeDeclarationIssue(rules: BoundaryRules): string | null {
@@ -93,6 +103,8 @@ export function shapeDeclarationIssue(rules: BoundaryRules): string | null {
       ...typeIssues(rules, "applicationMayImport", rules.applicationMayImport, ""),
       ...globIssues("pureDependencies", rules.pureDependencies),
       ...globIssues("testFiles", rules.testFiles),
+      ...globIssues("compositionRoots", rules.compositionRoots),
+      ...rootsNeedTests(rules),
       ...scopeIssues(rules, "readAllowance", Object.keys(rules.readAllowance)),
       ...allowanceIssues(rules),
     ][0] ?? null

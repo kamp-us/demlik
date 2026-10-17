@@ -20,6 +20,7 @@ import type { Shape, ShapeFacts } from "./shape/shape.js";
 import type { BoundaryViolation, ZoneEdge } from "./violation.js";
 import { impureViolations } from "./zones/impure-violations.js";
 import { type DrivenReads, drivenReadsOf, type ScopeReads, scopeReadsOf } from "./zones/reads.js";
+import { type RootReach, rootReachOf, testReachViolations } from "./zones/test-reach.js";
 import { isTestFile, judgedInTestFile } from "./zones/test-role.js";
 
 export type BoundaryModule = Pick<ModuleNode, "file" | "importEdges"> &
@@ -153,6 +154,9 @@ type ScopeContext = ScopeInputs & {
   readonly zoning: ScopeZoning;
   // The scope's read allowance and the writes of the files it lists, or null for a scope with none.
   readonly allowance: ScopeReads | null;
+  // The scope's composition roots and every file that opens one when it runs, empty for a rules file
+  // that lists no `compositionRoots`.
+  readonly reach: RootReach;
 };
 
 // What one file of a scope crosses: its violations, how many imports of undeclared packages its
@@ -193,8 +197,8 @@ function acrossDeployables(
 }
 
 // One file's verdicts. Every kind judges it, and then the test role drops the kinds that do not
-// judge a test file (`zones/test-role.ts`). One verdict per import: the edges B1 and B6 judged are
-// left to them by B16.
+// judge a test file (`zones/test-role.ts`); B20 judges a test file and nothing else. One verdict per
+// import: the edges B1 and B6 judged are left to them by B16.
 function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Place): Found {
   const { scope, zoning, libraries, shape } = ctx;
   const reads = drivenReadsOf(ctx.allowance, module, libraries);
@@ -214,17 +218,17 @@ function analyzeModule(ctx: ScopeContext, module: BoundaryModule, fromPlace: Pla
   const file = { ...module, file: inScope(scope, module.file) };
   const libs = judgeLibraries(libraries, scope, file, libraryZoneOf(fromPlace));
   const across = acrossDeployables(ctx, module, fromPlace);
+  const isTest = isTestFile(shape.tests, scope, module.file);
   const violations = [
     ...edges.flatMap((e) => e.violation ?? []),
     ...impure,
     ...libs.violations,
     ...across.violations,
     ...judgeShape(ctx, module, fromPlace, judged),
+    ...(isTest ? testReachViolations(ctx.reach, scope, module) : []),
   ];
   return {
-    violations: isTestFile(shape.tests, scope, module.file)
-      ? judgedInTestFile(violations)
-      : violations,
+    violations: isTest ? judgedInTestFile(violations) : violations,
     unjudged: libs.unjudged,
     sites: across.sites,
   };
@@ -246,7 +250,8 @@ export function analyzeBoundaries(
 ): ScopeAnalysis {
   const zoning = scopeZoning(rules, scope);
   const allowance = scopeReadsOf(inputs.shape.allowance, scope, modules);
-  const ctx: ScopeContext = { ...inputs, scope, rules, zoning, allowance };
+  const reach = rootReachOf(inputs.shape.roots, scope, modules);
+  const ctx: ScopeContext = { ...inputs, scope, rules, zoning, allowance, reach };
   const violations: BoundaryViolation[] = [];
   const sites: SiteRow[] = [];
   // One per entry, however many files sit under it.

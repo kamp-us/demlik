@@ -1,4 +1,4 @@
-// What a boundary verdict is: one variant per rule (B1-B19, with B2, B5, B9 and B13 retired and not
+// What a boundary verdict is: one variant per rule (B1-B20, with B2, B5, B9 and B13 retired and not
 // reused), and the table that says what kind of crossing each is. `analyze.ts` judges a scope into
 // these; the ledger, the report and the migration read them.
 
@@ -149,6 +149,16 @@ export type BoundaryViolation =
       readonly to: string;
       readonly specifier: string;
       readonly typeOnly: boolean;
+    }
+  | {
+      // A test file that opens, when it runs, a file from which a composition root is reached. `to`
+      // is that first file, the root itself when the test opens it directly, so a route fixed
+      // prunes exactly its own entry.
+      readonly kind: "test-reaches-composition-root";
+      readonly from: string;
+      readonly to: string;
+      readonly specifier: string;
+      readonly typeOnly: false;
     };
 
 export type BoundaryKind = BoundaryViolation["kind"];
@@ -173,6 +183,7 @@ export const CROSSINGS = {
   "library-undeclared": "entry",
   "outside-imports-feature-internal": "import",
   "relative-import-crosses-workspace": "import",
+  "test-reaches-composition-root": "import",
   "unknown-zone": "entry",
   "worker-call-cycle": "entry",
 } as const satisfies Record<BoundaryKind, Crossing>;
