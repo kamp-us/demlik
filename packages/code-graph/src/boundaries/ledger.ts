@@ -33,6 +33,7 @@ const MAY_HAVE_NO_FILE = {
   "library-undeclared": true,
   "outside-imports-feature-internal": false,
   "relative-import-crosses-workspace": false,
+  "test-reaches-composition-root": false,
   "unknown-zone": true,
   "worker-call-cycle": true,
 } as const satisfies Record<BoundaryKind, boolean>;

@@ -6,7 +6,7 @@
 pnpm exec code-graph . --boundaries --boundary-rules boundary-rules.json
 ```
 
-The rules file declares features, library types, and worker constraints.
+The rules file declares features, library types, worker constraints, which files are tests, and which files are composition roots.
 The report checks declared scopes under the analyzed directory. It uses
 syntax and import resolution, without a full Graph or tsgo call analysis.
 Undeclared rules do not create a verdict.
@@ -152,7 +152,48 @@ The two allowlist keys require B16 to be enabled.
 repository-relative path. `src/**/*.test.ts` applies in every scope, and
 `services/*/test-support/**` in worker scopes alone. Matched tests are
 excluded from B6–B8, B10, and B15–B17; other import and ownership rules
-still apply. Globs support `**`, `*`, `?`, and `{a,b}`.
+still apply, and B20 judges test files only. Globs support `**`, `*`, `?`, and
+`{a,b}`.
+
+### Tests that load the whole app
+
+In Cockburn's hexagon a test is a driving adapter on one application's ports,
+and in Seemann's composition root the wiring happens in one place. A test that
+opens the worker entry, or the module that assembles every feature, tests the
+wiring and loads every feature to do it.
+
+```json
+{
+  "testFiles": ["**/*.test.ts", "**/test-support/**"],
+  "compositionRoots": ["src/index.ts", "src/schema.ts"]
+}
+```
+
+`compositionRoots` lists globs of those files, matched as `testFiles` are.
+Listing one turns the rule on; a rules file without the key runs no B20.
+
+| Rule | Kind | Violation |
+|---|---|---|
+| B20 | `test-reaches-composition-root` | A test file opens, when it runs, a file from which a composition root is reached |
+
+A file is in reach when it matches a `compositionRoots` glob or opens a file
+in reach. A static import, an `export … from` and a dynamic `import()` open a
+file. `import type`, `import { type X }`, `export { type X } from` and a
+type-position `import()` open nothing, and an import that resolves to no file
+the scope loads is no edge, so a root in another scope is out of reach.
+
+A test gets one entry per file it opens that is in reach. `to` is the first
+file on its way to a root, or the root itself when the test opens it directly.
+A test that reaches a root by two routes has two entries, and fixing a route
+removes exactly its entry. A helper that `testFiles` matches is a test too: it
+is reported for its own first file, and by every test that opens it, so fixing
+the helper clears them all. A file that matches a root glob is never reported
+as a test.
+
+Two declarations are refused with exit 2 and nothing written, each in one line
+naming `compositionRoots`: a non-empty list with an empty or absent
+`testFiles`, and an entry that is not a glob. A test that exists to test the
+wiring is accepted by name with `--accept-crossings --reason`.
 
 ### Read allowances
 
@@ -247,8 +288,8 @@ The schema validates which kinds may use `null`.
 
 Scopes outside the analyzed directory remain untouched. Invalid declarations
 exit 2 before writing. Migration refuses increases above legacy import
-ceilings; impure, structural, library, shape, and deployable entries are seeded
-without counting toward those import ceilings.
+ceilings; impure, structural, library, shape, deployable, and test-reach entries
+are seeded without counting toward those import ceilings.
 
 File movers can preserve ledger identities with
 [`@demlik/code-graph/boundaries`](./library.md#boundaries).

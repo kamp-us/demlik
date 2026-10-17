@@ -26,19 +26,23 @@ const ReadAllowanceSchema = z.record(
     .strict(),
 );
 
-// The five keys of the rules file about a feature's own files, spread into `BoundaryRulesSchema`.
+// The six keys of the rules file about a feature's own files, spread into `BoundaryRulesSchema`.
 //  - `applicationShape`: the kinds that run, empty by default.
 //  - `applicationMayImport`: library types an `application/` file may import (needs B16 listed).
 //  - `pureDependencies`: package globs an `application/` file may import (needs B16 listed).
 //  - `testFiles`: globs of the files that are tests, matched against a file's scope-relative or
 //    repo-relative path, which sit in no zone.
 //  - `readAllowance`: per scope, the driven files a driving adapter may read through.
+//  - `compositionRoots`: globs of the files that assemble the whole app, matched as `testFiles` are,
+//    which a test may not open, directly or through other files (B20, needs `testFiles`). Listing
+//    one is what turns B20 on.
 export const SHAPE_KEYS = {
   applicationShape: z.array(z.enum(SHAPE_KINDS)).default([]),
   applicationMayImport: z.array(z.string().min(1)).default([]),
   pureDependencies: z.array(z.string().min(1)).default([]),
   testFiles: z.array(z.string().min(1)).default([]),
   readAllowance: ReadAllowanceSchema.default({}),
+  compositionRoots: z.array(z.string().min(1)).default([]),
 };
 
 export type ShapeRules = z.infer<z.ZodObject<typeof SHAPE_KEYS>>;

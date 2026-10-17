@@ -159,7 +159,7 @@ describe("an impure use is a ledger entry with no target file", () => {
       "worker-call-cycle",
     ];
     const namesAFile = BOUNDARY_KINDS.filter((kind) => !mayHaveNoFile.includes(kind));
-    expect(namesAFile).toHaveLength(8);
+    expect(namesAFile).toHaveLength(9);
     for (const kind of namesAFile) {
       const entry = { ...crossing, kind, to: null };
       expect(parseBoundaryLedger(JSON.stringify({ entries: [entry] })).kind).toBe("invalid");

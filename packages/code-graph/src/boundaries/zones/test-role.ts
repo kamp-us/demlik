@@ -7,7 +7,8 @@ import type { BoundaryKind, BoundaryViolation } from "../violation.js";
 //
 // B1 and B4 still judge what a test imports across features, B3 a test in `lib`, B12 a library
 // test importing upward, B14 an adapter library imported from outside a driven adapter, and B19 a
-// relative path out of the workspace, whatever the file is named. B11 and B18 hold no file.
+// relative path out of the workspace, whatever the file is named. B11 and B18 hold no file. B20
+// exists for the test role: it judges a test, and no other file.
 const JUDGES_TEST_FILES = {
   "cross-feature": true,
   "lib-imports-feature": true,
@@ -24,13 +25,18 @@ const JUDGES_TEST_FILES = {
   "binding-outside-driven-adapter": false,
   "worker-call-cycle": true,
   "relative-import-crosses-workspace": true,
+  "test-reaches-composition-root": true,
 } as const satisfies Record<BoundaryKind, boolean>;
 
-// Whether a scope's file matches one of the `testFiles` globs, by its scope-relative path or by its
-// repo-relative one. At scope `.` the two are one path.
-export function isTestFile(tests: readonly RegExp[], scope: string, file: string): boolean {
+// Whether a scope's file matches one of the globs, by its scope-relative path or by its repo-relative
+// one. At scope `.` the two are one path.
+export function matchesGlobs(globs: readonly RegExp[], scope: string, file: string): boolean {
   const repoRelative = inScope(scope, file);
-  return tests.some((glob) => glob.test(file) || glob.test(repoRelative));
+  return globs.some((glob) => glob.test(file) || glob.test(repoRelative));
+}
+
+export function isTestFile(tests: readonly RegExp[], scope: string, file: string): boolean {
+  return matchesGlobs(tests, scope, file);
 }
 
 // What a test file is left with once the kinds that do not judge it are dropped.
