@@ -1,5 +1,16 @@
 # @demlik/code-graph
 
+## 0.9.0
+
+### Minor Changes
+
+- 752bfd1: `code-graph --boundaries` reports a test that loads the whole app. The rules file has a new key, `compositionRoots`: globs of the files that assemble the app (a worker entry, the module that builds every feature's schema), matched against a file's scope-relative or repo-relative path as `testFiles` are. Listing one turns on B20 `test-reaches-composition-root`, and a rules file without the key runs no B20.
+
+  - A test (a file `testFiles` matches) gets one entry for each file it opens that is in reach: `from` the test, `to` that file, which is the first file on the way to a root, or the root itself when the test opens it directly. A file is in reach when it matches a root glob or opens a file in reach, through a static import, an `export … from` or a dynamic `import()`. `import type`, `import { type X }`, `export { type X } from`, a type-position `import()` and an import that resolves to no file the scope loads open nothing.
+  - The entry is keyed by `(scope, kind, from, to)`, so a repo adopts B20 at today's count with `--accept-crossings --reason` and the count only goes down: fixing a shared helper prunes every entry behind it. A deliberate test of the wiring stays in the ledger by name and with a reason.
+  - A non-empty `compositionRoots` with an empty or absent `testFiles`, and a `compositionRoots` entry that is no glob, exit 2 and write nothing.
+  - `BoundaryRules` gains `compositionRoots`, and `BOUNDARY_KINDS` gains `test-reaches-composition-root`. `--migrate-ceilings` seeds a B20 crossing without counting it against a legacy ceiling.
+
 ## 0.8.0
 
 ### Minor Changes
