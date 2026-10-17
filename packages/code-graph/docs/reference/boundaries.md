@@ -6,7 +6,7 @@
 pnpm exec code-graph . --boundaries --boundary-rules boundary-rules.json
 ```
 
-The rules file declares features, library types, worker constraints, and the test files and composition roots that tests are judged against.
+The rules file declares features, library types, worker constraints, which files are tests, and which files are composition roots.
 The report checks declared scopes under the analyzed directory. It uses
 syntax and import resolution, without a full Graph or tsgo call analysis.
 Undeclared rules do not create a verdict.
@@ -152,7 +152,7 @@ The two allowlist keys require B16 to be enabled.
 repository-relative path. `src/**/*.test.ts` applies in every scope, and
 `services/*/test-support/**` in worker scopes alone. Matched tests are
 excluded from B6–B8, B10, and B15–B17; other import and ownership rules
-still apply, and B20 judges them alone. Globs support `**`, `*`, `?`, and
+still apply, and B20 judges test files only. Globs support `**`, `*`, `?`, and
 `{a,b}`.
 
 ### Tests that load the whole app
