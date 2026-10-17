@@ -1,12 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import {
-  __resetPortRegistry,
-  type Cmd,
-  defineMachine,
-  definePort,
-  type Runtime,
-} from "../../../index";
+import { type Cmd, defineMachine, type Runtime } from "../../../index";
 import { run } from "../../../promise";
 import { bindMachine } from "../../../testing";
 import {
@@ -189,28 +183,6 @@ describe("itemOk / itemErr — record + backfill", () => {
     const [s0] = fan.scatter(initFanOut<Item, Result>(), ["a"]);
     const [, cmds] = fan.itemOk(s0, "a", "A");
     expect(cmds).toEqual([]);
-  });
-});
-
-describe("completion — out-of-band completion Port", () => {
-  it("emits gathered results onto the Port iff the batch just completed", () => {
-    __resetPortRegistry();
-    const complete = definePort<readonly Result[]>("fan-out.test.complete");
-    const fan = createFanOut(baseConfig);
-    const h = fan.completion({ complete });
-
-    const emitted: (readonly Result[])[] = [];
-    const emit = <T>(_port: unknown, value: T) => {
-      emitted.push(value as readonly Result[]);
-    };
-
-    const [s0] = fan.scatter(initFanOut<Item, Result>(), ["a"]);
-    h.emitOnComplete(emit, s0); // not complete → no emit
-    expect(emitted).toEqual([]);
-
-    const [s1] = fan.itemOk(s0, "a", "A");
-    h.emitOnComplete(emit, s1); // complete → emit results
-    expect(emitted).toEqual([["A"]]);
   });
 });
 

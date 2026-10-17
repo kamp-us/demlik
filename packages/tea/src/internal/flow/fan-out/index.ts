@@ -54,19 +54,16 @@
  * Fan-out does NOT own the interpret handler for a launched `of(item)` Cmd: `of`
  * already produces a fully caller-defined Cmd, so the consumer's own
  * `interpret` performs the effect and routes Ok/Err back to the `itemOk` /
- * `itemErr` verbs. `completion(ports)` is the one piece fan-out CAN pre-wire
- * generically: emitting the gathered batch onto a typed Port when the batch
- * completes, for consumers that observe completion out-of-band rather than
- * through the `join` Cmd.
+ * `itemErr` verbs.
  *
  * NOT a substrate primitive: it depends only on `../work-queue`'s pure types +
- * blessed ops and the core `Cmd` / `Port` types. Internal since #48 — not
+ * blessed ops and the core `Cmd` type. Internal since #48 — not
  * published on any subpath; reached from inside the package as
  * `internal/flow/fan-out`.
  */
 
 import { at } from "../../../at";
-import type { Cmd, Port } from "../../../index";
+import type { Cmd } from "../../../index";
 import type { QueueItem, QueueItemStatus } from "../../work-queue";
 import { queueAdapter } from "../../work-queue/adapter";
 
@@ -164,8 +161,8 @@ export interface FanOutState<I, R> {
  * settled.
  *
  * Field optionality follows the resilient-call rule — omit `join`, omit the
- * completion Cmd (a consumer that observes `isComplete` itself, or wires the
- * `completion` Port, doesn't need one).
+ * completion Cmd (a consumer that observes `isComplete` itself doesn't need
+ * one).
  */
 export interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
   /** Max in-flight `of(item)` effects. Clamped to `>= 1` (a 0/negative cap would deadlock). */
@@ -183,7 +180,7 @@ export interface FanOutConfig<I, R, C extends Cmd, J extends Cmd> {
   /**
    * Optional: fold the gathered done-results into a single completion Cmd,
    * fired exactly once at the transition that empties `pending` + `running`.
-   * Omit to drive completion off `isComplete` (or the `completion` Port) instead.
+   * Omit to drive completion off `isComplete` instead.
    */
   readonly join?: (results: readonly R[]) => J;
 }
@@ -356,22 +353,9 @@ function settleOne<I, R>(
 }
 
 /**
- * Optional Port for observing batch completion out-of-band. When a consumer
- * passes `completion(ports)` a `complete` Port, the runtime side can emit the
- * gathered results onto it the moment `isComplete` flips true — distinct from
- * the in-band `join` Cmd (which threads back through `update`). Use the Port
- * for "tell the outside world the batch finished" without folding a completion
- * signal into the consumer's Msg union.
- */
-export interface FanOutPorts<R> {
-  /** Fires once with every gathered done-result when the batch completes. */
-  readonly complete: Port<readonly R[]>;
-}
-
-/**
  * Build the fan-out knob from `config`. Returns the uniform combinator
- * contract: `init` for the owned slice, the three settle verbs + the derived
- * `isComplete`, and `completion` for the optional out-of-band completion Port.
+ * contract: `init` for the owned slice, and the three settle verbs + the
+ * derived `isComplete`.
  *
  * No `subs` — fan-out runs no timers (the spec pins "Subs: none"). The
  * per-item effect's lifetime is owned by the consumer's `interpret`, and
@@ -534,44 +518,11 @@ export function createFanOut<I, R, C extends Cmd = Cmd, J extends Cmd = Cmd>(
     return [launched, launchCmds];
   }
 
-  /**
-   * The out-of-band completion splice. Returns an observer-shaped function the
-   * consumer calls after every settle: when the batch has just completed it
-   * emits the gathered results onto `ports.complete`. This is the Port-side
-   * analogue of the `join` Cmd — use it when completion should leave the
-   * runtime as a typed signal rather than re-enter `update`.
-   *
-   * Returns the emit-on-complete callback so the consumer wires it into its own
-   * runtime `observe` (e.g. `runtime.observe((_, s) => emit(s.fanOut))`); fan-out
-   * stays out of the dispatch loop, matching `historyTracker`'s discipline.
-   */
-  function completion(ports: FanOutPorts<R>) {
-    return {
-      /**
-       * Emit the gathered done-results onto `ports.complete` iff `state` is a
-       * just-completed batch. Idempotency is the caller's concern (call it once
-       * per transition via `observe`); emitting to a Port with no subscribers
-       * is a no-op at the runtime, so an extra call is harmless.
-       */
-      emitOnComplete(
-        emit: <T>(port: Port<T>, value: T) => void,
-        state: FanOutState<I, R>,
-      ): void {
-        if (!isComplete(state)) return;
-        emit(
-          ports.complete,
-          state.done.slice(state.waveDoneFrom).map((d) => d.result),
-        );
-      },
-    };
-  }
-
   return {
     init: initFanOut<I, R>,
     scatter,
     itemOk,
     itemErr,
     isComplete,
-    completion,
   };
 }

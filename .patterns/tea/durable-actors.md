@@ -139,7 +139,7 @@ debugging almost free.
 **The fix.** Formalize "Model → views" (SSE, report, storage) as named
 projections / read models, separate from the write model.
 
-**Today.** `sseHub`, `subscribePort` / `Port`, `observe`, `captureLastTurn` are
+**Today.** `sseHub`, `observe`, `captureLastTurn` are
 the ad-hoc projection mechanisms. **Already in the backlog:** the semantic event
 stream (#47) and first-class run result (#46) *are* the projection-formalization
 work.

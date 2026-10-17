@@ -15,8 +15,8 @@
 
 ## The four naming positions
 
-Every TEA machine has four discriminated unions to name (plus optional Port
-and Store). The canon defines what each *is* — this doc gives style rules
+Every TEA machine has four discriminated unions to name (plus an optional
+Store). The canon defines what each *is* — this doc gives style rules
 for the variant names *inside* each.
 
 | Position    | Canon reference                   | Style rule                                                       |

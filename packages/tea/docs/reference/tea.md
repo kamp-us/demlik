@@ -8,11 +8,11 @@ Tier: `stable`
 import { … } from "@demlik/tea";
 ```
 
-## Exports (158)
+## Exports (153)
 
 | Symbol | Kind | Tier | Summary |
 | --- | --- | --- | --- |
-| [`absurd`](#absurd) | Function | stable | Compile-time exhaustiveness assertion for default branches of switches over discriminated unions narrowed by hand (Sub handlers, message-bridge dispatchers, port fanouts) — TS narrows the operand to `never` only if every variant is covered, so adding one produces a compile error at the `absurd(x)` site. |
+| [`absurd`](#absurd) | Function | stable | Compile-time exhaustiveness assertion for default branches of switches over discriminated unions narrowed by hand (Sub handlers, message-bridge dispatchers) — TS narrows the operand to `never` only if every variant is covered, so adding one produces a compile error at the `absurd(x)` site. |
 | [`acceptedTypes`](#acceptedTypes) | Function | stable | The Msg types this machine would accept in this state — the same set a `NoCellError` reports, asked before anything is dispatched. |
 | [`acceptsOf`](#acceptsOf) | Function | stable | List the Msg types a machine accepts in the state named `stateType`. |
 | [`ack`](#ack) | Function | stable | Construct an `Ack` for a last-applied sequence number. |
@@ -24,7 +24,7 @@ import { … } from "@demlik/tea";
 | [`asReducer`](#asReducer) | Function | stable | Type-check a standalone reducer record and return it branded. |
 | [`AsyncSchemaError`](#AsyncSchemaError) | Class | stable | A schema whose `validate` returned a Promise where the kernel needs an answer now — the `ok` check at the interpret edge, the `args` check in a reducer. |
 | [`BootedRunHandle`](#BootedRunHandle) | Interface | stable | A RunHandle whose boot has completed, so its State exists. |
-| [`BootingRuntime`](#BootingRuntime) | Interface | stable | What the Promise engine's `run` returns, the instant it is called, while boot is still in flight: its RunHandle, widened with Ports and `dispatchOnce`. |
+| [`BootingRuntime`](#BootingRuntime) | Interface | stable | What the Promise engine's `run` returns, the instant it is called, while boot is still in flight: its RunHandle, widened with `dispatchOnce`. |
 | [`Branded`](#Branded) | Type | stable | A `Reducer` or `Transitions` value that went through `asReducer` or `defineMachine`. |
 | [`BuiltinSub`](#BuiltinSub) | Type | stable | The built-in Subs a machine over `M` may declare without declaring them. |
 | [`BuiltinSubType`](#BuiltinSubType) | Type | stable | The Sub types every engine ships a runner for. |
@@ -41,7 +41,6 @@ import { … } from "@demlik/tea";
 | [`defineMachine`](#defineMachine) | Function | stable | Define a machine: its `init`, its `update` (a reducer or a transitions table), and optionally its `subs`, `cmds` and `identity`. |
 | [`defineManagedResource`](#defineManagedResource) | Function | stable | Build the battery. |
 | [`DefineManagedResourceOpts`](#DefineManagedResourceOpts) | Interface | stable | Options for `defineManagedResource`: the resource's `name`, how to `acquire` it for a key, and how to `release` the handle. |
-| [`definePort`](#definePort) | Function | stable | Define a typed port. |
 | [`DeletableStore`](#DeletableStore) | Interface | stable | A `Store<S>` that can remove what it saved — how a host forgets a run. |
 | [`DepKeyedSub`](#DepKeyedSub) | Type | stable | One entry of a machine's `subs`: a Sub `type` plus `deps(state)`, which returns the data the runner needs, or `null` to keep the Sub off. |
 | [`describeMachine`](#describeMachine) | Function | stable | Describe a machine's update table as data: its form, its Msg types, and the per-state accept sets of a transitions machine. |
@@ -68,7 +67,6 @@ import { … } from "@demlik/tea";
 | [`fromEventSource`](#fromEventSource) | Function | stable | Build a Sub runner that opens an `EventSource` on `sub.deps.url` and dispatches a Msg for each server-sent event. |
 | [`fromEventTarget`](#fromEventTarget) | Function | stable | Build a Sub runner that listens for `eventName` on a DOM-style event target and dispatches `msgFn(event, sub)` for each event. |
 | [`fromInterval`](#fromInterval) | Function | stable | Build a Sub runner that dispatches `msgFn(sub)` every `sub.deps.intervalMs` milliseconds while the Sub is on. |
-| [`fromPort`](#fromPort) | Function | stable | Build a Sub runner that listens to a `Port` on another runtime and dispatches `msgFn(value, sub)` for each value emitted. |
 | [`fromReconnectingWebSocket`](#fromReconnectingWebSocket) | Function | stable | Build a Sub runner that keeps a WebSocket to `sub.deps.wsUrl` open, reconnecting with backoff when it drops. |
 | [`fromTimeout`](#fromTimeout) | Function | stable | Build a Sub runner that dispatches `msgFn(sub)` once, `sub.deps.delayMs` milliseconds after the Sub turns on. |
 | [`fromTransport`](#fromTransport) | Function | stable | Build the battery. |
@@ -107,9 +105,6 @@ import { … } from "@demlik/tea";
 | [`OutcomeContractError`](#OutcomeContractError) | Class | stable | A `Cmd.define`d handler returned something the engine cannot settle: any Msg (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler — ADR 0021), or any other value that is neither an Outcome nor nothing. |
 | [`OutcomeHelpers`](#OutcomeHelpers) | Interface | stable | The two builders the Promise engine hands a `Cmd.define`d handler on its ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared tags. |
 | [`partitionByAck`](#partitionByAck) | Function | stable | Partition a buffer of seq-tagged commands into ACKED and PENDING against the authoritative `lastAppliedSeq`. |
-| [`Port`](#Port) | Interface | stable | A named, typed channel for values leaving the runtime. |
-| [`PortEmitter`](#PortEmitter) | Interface | stable | Augmentation injected onto `ctx` inside Cmd handlers. |
-| [`PortNameCollisionError`](#PortNameCollisionError) | Class | stable | Thrown by `definePort` when a name has already been registered in the current process. |
 | [`QuiescenceTimeoutError`](#QuiescenceTimeoutError) | Class | stable | Raised by `idle()` when the quiescence wait hits its iteration cap without the dispatch tail stabilizing — `idle()` REJECTS rather than silently resolving, so a livelocking machine surfaces instead of masquerading as quiescent. |
 | [`readInOrder`](#readInOrder) | Function | stable | Run a composed read through `order` and return the first answer any step gives, or `absent` when every one defers. |
 | [`ReadStep`](#ReadStep) | Interface | stable | One step of a composed read: the slice it consults, under the name that slice goes by. |
@@ -359,14 +354,6 @@ interface BootingRuntime<S, M extends { type: string }, E extends { type: string
    */
   dispatchOnce(msg: M): Promise<void>;
   /**
-   * Emit a value on a Port from OUTSIDE an interpret handler — same synchronous
-   * fanout as `ctx.emit`. The canonical use is `observe`-driven emission (one
-   * runtime publishing a state-derived signal another subscribes to via
-   * `subscribePort`) without spawning a "tell the outside world" Cmd per
-   * transition.
-   */
-  emitPort<T>(port: Port<T>, value: T): void;
-  /**
    * Register a `(msg, state)` trace hook, fired for every applied transition
    * with the fold's committed State. A `dispatch` issued from the observer is
    * SCHEDULED onto the serial tail behind the fold that fired it, never folded
@@ -402,12 +389,6 @@ interface BootingRuntime<S, M extends { type: string }, E extends { type: string
    * deferral; two listeners issuing in order fold in that order.
    */
   subscribe(listener: () => void): () => void;
-  /**
-   * Subscribe to a typed Port. Multiple listeners per port; fanout is synchronous
-   * and isolated. Ports are for "data leaving the runtime selectively" (see
-   * `definePort`) — distinct from `observe` (every transition) and State.
-   */
-  subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
 }
 ```
 
@@ -768,14 +749,6 @@ interface DefineManagedResourceOpts<N extends string, TKey, Handle, Ctx> {
 }
 ```
 
-<a id="definePort"></a>
-
-### `definePort`
-
-```ts
-function definePort<T>(name: string): Port<T>
-```
-
 <a id="DeletableStore"></a>
 
 ### `DeletableStore`
@@ -1093,25 +1066,6 @@ function fromEventTarget<S extends Sub, M>(
 function fromInterval<S extends Sub<string, IntervalSubData>, M>(
   msgFn: (sub: S) => M,
 ): SubscribeHandler<S, M, unknown>
-```
-
-<a id="fromPort"></a>
-
-### `fromPort`
-
-```ts
-function fromPort<
-  S extends Sub,
-  M,
-  Ctx,
-  T,
-  RS = unknown,
-  RM extends { type: string } = { type: string },
->(
-  selectRuntime: (ctx: Ctx) => Runtime<RS, RM>,
-  port: Port<T>,
-  msgFn: (value: T, sub: S) => M | null,
-): SubscribeHandler<S, M, Ctx>
 ```
 
 <a id="fromReconnectingWebSocket"></a>
@@ -1686,40 +1640,6 @@ function partitionByAck<T>(
 ): AckPartition<T>
 ```
 
-<a id="Port"></a>
-
-### `Port`
-
-```ts
-interface Port<T> {
-  readonly __brand: "port";
-  readonly __t?: T;
-  readonly name: string;
-}
-```
-
-<a id="PortEmitter"></a>
-
-### `PortEmitter`
-
-```ts
-interface PortEmitter {
-  emit<T>(port: Port<T>, value: T): void;
-}
-```
-
-<a id="PortNameCollisionError"></a>
-
-### `PortNameCollisionError`
-
-```ts
-class PortNameCollisionError extends Error {
-  constructor(portName: string);
-  readonly _tag: "PortNameCollisionError";
-  readonly name: "PortNameCollisionError";
-}
-```
-
 <a id="QuiescenceTimeoutError"></a>
 
 ### `QuiescenceTimeoutError`
@@ -2002,7 +1922,6 @@ type RuntimeErrorPhase =
   | "observer"
   | "event"
   | "boot"
-  | "port-emit"
   | "sub-cleanup"
   | "sub"
   | "discard"

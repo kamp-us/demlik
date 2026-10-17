@@ -233,28 +233,6 @@ describe("drive", () => {
     expect(state).toEqual({ seen: "from-ctx" });
   });
 
-  it("gives a handler a no-op emit so a port-emitting handler runs unwired", async () => {
-    let emitted = false;
-    const emitting = {
-      work: async (cmd: WorkCmd, ctx: { emit: (...args: never[]) => void }) => {
-        // biome-ignore lint/suspicious/noExplicitAny: the port is irrelevant here; what is under test is that `emit` EXISTS
-        (ctx.emit as any)({ id: "noop" }, 1);
-        emitted = true;
-        return { type: "worked" as const, label: cmd.label };
-      },
-    };
-
-    const { state } = await drive(
-      counting,
-      initial,
-      { type: "start", left: 1 },
-      emitting,
-    );
-
-    expect(emitted).toBe(true);
-    expect(state).toEqual({ left: 0, done: 1 });
-  });
-
   describe("maxRounds", () => {
     it("throws a named, instanceof-checkable error instead of a half-driven state", async () => {
       const failure = await drive(

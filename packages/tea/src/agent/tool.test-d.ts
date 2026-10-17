@@ -20,9 +20,9 @@ import { z } from "zod";
 import {
   absurd,
   type ErrOf,
+  type NoCtx,
   type OkOf,
   type OutcomeHelpers,
-  type PortEmitter,
   type Settled,
 } from "../index";
 import { run } from "../promise";
@@ -187,9 +187,7 @@ void settledOnM;
 // `Cmd.define`d Cmd's cell, so its ctx carries the outcome builders (ADR 0021).
 const cell: (
   cmd: ReturnType<typeof search>,
-  ctx: KbCtx &
-    PortEmitter &
-    OutcomeHelpers<OkOf<typeof search>, ErrOf<typeof search>>,
+  ctx: KbCtx & OutcomeHelpers<OkOf<typeof search>, ErrOf<typeof search>>,
 ) => Promise<unknown> = tools.interpret.search;
 void cell;
 
@@ -216,7 +214,7 @@ const spec = {
 } as const;
 const noop = async (
   _args: object,
-  _ctx: PortEmitter,
+  _ctx: NoCtx,
   { ok }: ToolConstructors<void, never>,
 ) => ok(undefined);
 

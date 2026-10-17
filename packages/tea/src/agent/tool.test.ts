@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { Outcome, type PortEmitter } from "../index";
+import { type NoCtx, Outcome } from "../index";
 import { run } from "../promise";
 import { MsgType } from "../protocol";
 import { cmdEdgeOver } from "../pure/core";
@@ -69,10 +69,9 @@ const kb: Kb = {
 };
 const ctx = {
   kb,
-  emit: () => {},
   ok: Outcome.ok,
   err: Outcome.err,
-} as KbCtx & PortEmitter & typeof Outcome;
+} as KbCtx & typeof Outcome;
 
 /** The edge `run` mints through, over the router's defs, on a fixed clock. */
 const edge = cmdEdgeOver(tools.defs, () => 7);
@@ -148,7 +147,7 @@ describe("tool() — the interpret cell returns an outcome the engine mints", ()
     const cmd = lying({ callId: "c5", args: {} });
     const settled = cmdEdgeOver([lying], () => 7)(
       cmd,
-      await lying.interpret(cmd, {} as PortEmitter),
+      await lying.interpret(cmd, {}),
     );
     expect(settled).toMatchObject({
       type: "lying_err",
@@ -180,7 +179,7 @@ describe("tool() — a reserved name is a declaration bug, refused at constructi
   };
   const noop = async (
     _args: object,
-    _ctx: PortEmitter,
+    _ctx: NoCtx,
     { ok }: ToolConstructors<void, never>,
   ) => ok(undefined);
   const declare = (name: string) => () => tool(name, spec, noop);

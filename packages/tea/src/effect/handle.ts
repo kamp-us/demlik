@@ -9,7 +9,6 @@
 
 import { Effect } from "effect";
 import { type LiveWorkProbe, liveWork } from "../internal/engine/loop";
-import type { Port } from "../pure/core";
 import type { DispatchSettle, Runtime } from "../runtime-types";
 import { exitOf, type Stopped, type StoreFailed } from "./failures";
 
@@ -49,10 +48,6 @@ export interface EffectBootingRuntime<
     type: K,
     handler: (event: Extract<E, { type: K }>) => void,
   ): () => void;
-  /** Subscribe to a typed Port. */
-  subscribePort<T>(port: Port<T>, listener: (value: T) => void): () => void;
-  /** Emit a value on a Port from outside a Cmd handler. */
-  emitPort<T>(port: Port<T>, value: T): void;
   /**
    * Succeeds with the booted handle once boot completes. Fails with
    * `StoreFailed` when the saved state could not be restored (`"load"`) or the
@@ -121,8 +116,6 @@ export function effectHandle<
     observe: (observer) => loop.observe(observer),
     onBoot: (handler) => loop.onBoot(handler),
     on: (type, handler) => loop.on(type, handler),
-    subscribePort: (port, listener) => loop.subscribePort(port, listener),
-    emitPort: (port, value) => loop.emitPort(port, value),
     getState: () => loop.getState(),
     result: () => loop.result(),
     // Boot never passes the dispatch gate, so `ready` never fails `Stopped`.

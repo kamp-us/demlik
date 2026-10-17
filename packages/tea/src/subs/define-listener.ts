@@ -48,7 +48,7 @@
 //     substrate hands `remove` the unwrapped listener → silent leak). Carrying
 //     the platform's native `Args` tuple on the listener is what lets it be
 //     registered directly. `sub`/`ctx` let the target be pulled from `ctx` or
-//     keyed on the `sub` (the `getTarget()`-from-ctx shape fromPort needs).
+//     keyed on the `sub`.
 //
 //   - `msgFn(sub, ...args) => M | null` — the universal drop-on-null filter
 //     every factory in this subpath carries. `null` drops the dispatch; the

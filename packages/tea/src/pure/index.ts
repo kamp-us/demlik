@@ -64,8 +64,6 @@ export type {
   OkOf,
   OkOfCmd,
   OutcomeHelpers,
-  Port,
-  PortEmitter,
   Reducer,
   RunHandlers,
   Settled,

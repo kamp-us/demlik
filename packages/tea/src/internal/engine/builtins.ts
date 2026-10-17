@@ -4,7 +4,7 @@
  * from its options through {@link builtinExtensions}, which fixes their order.
  */
 
-import type { AnyCmdDef, Identity, Port } from "../../pure/core";
+import type { AnyCmdDef, Identity } from "../../pure/core";
 import {
   checkedStep,
   cmdContractOver,
@@ -224,45 +224,6 @@ export function fencing<S, M, C>(): AnyExtension<S, M, C> {
   });
 }
 
-// === ctx + handle: ports ===
-
-/**
- * Ports (`definePort`): `ctx.emit(port, value)` from a handler and
- * `emitPort` / `subscribePort` on the handle. Fanout is synchronous and
- * throw-isolated under `"port-emit"`; no subscribers is a no-op.
- */
-export function ports<S, M, C>(): AnyExtension<S, M, C> {
-  return (loop) => {
-    const registry = new Map<Port<unknown>, Set<(value: unknown) => void>>();
-    function emit<T>(port: Port<T>, value: T): void {
-      const subscribers = registry.get(port as Port<unknown>);
-      if (!subscribers || subscribers.size === 0) return;
-      loop.fanout(subscribers, "port-emit", (listener) => listener(value));
-    }
-    return {
-      ctx: { emit },
-      handle: {
-        subscribePort<T>(
-          port: Port<T>,
-          listener: (value: T) => void,
-        ): () => void {
-          const key = port as Port<unknown>;
-          const bucket = registry.get(key) ?? new Set();
-          registry.set(key, bucket);
-          const erased = listener as (value: unknown) => void;
-          bucket.add(erased);
-          return () => {
-            bucket.delete(erased);
-            if (bucket.size === 0 && registry.get(key) === bucket)
-              registry.delete(key);
-          };
-        },
-        emitPort: emit,
-      },
-    };
-  };
-}
-
 // === commit observers ===
 
 /**
@@ -467,7 +428,6 @@ export function builtinExtensions<
     devChecks(),
     cmdDefinitions(machine.cmds ?? [], clock),
     fencing(),
-    ports(),
     observation(),
     semanticEvents(opts.events),
     terminality(opts.terminal),
